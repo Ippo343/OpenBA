@@ -192,8 +192,7 @@ int SeatViaPanel(PlayerToolManager* entityUI, ComponentEntity* ent, WorkPlaceCom
             }
         }
     }
-    EditTool_CloseInfoDialog(tool,
-                             reinterpret_cast<uintptr_t>(dialog));   // LEFT: SIG EditTool_CloseInfoDialog (uintptr_t dialog; Player/edittool_funcs.h, wave X)
+    EditTool_CloseInfoDialog(tool, dialog);
     return gained;
 }
 

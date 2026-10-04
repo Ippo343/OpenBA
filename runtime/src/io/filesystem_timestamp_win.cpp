@@ -121,17 +121,14 @@ namespace IO {
 
 uint64_t FileSystem::GetFileTimeStamp(const System::Filename& path) const {
 
-    // WideString ws(*path) -- ??0WideString@System@@QEAA@AEBVString@1@@Z,
-    // constructed into the POD slot and released by hand below, as before.
-    struct { wchar_t* data; } ws = { nullptr };   // WideString::_data                     // 0x1800ae28f
-    ::new (static_cast<void*>(&ws)) System::WideString(           // B.3.x bridge
-        path.AsString());                                        // 0x1800ae294
-
-    const HANDLE h = ::CreateFileW(ws.data,
-                                   0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
-
-    RtIO::RtString_ReleaseInline(
-        reinterpret_cast<RtSystem::String*>(&ws));               // 0x1800ae2c9  // LEFT: System::WideString held as a POD slot (system/WideString, R-SYS)
+    // WideString ws(*path) -- ??0WideString@System@@QEAA@AEBVString@1@@Z; the
+    // block ends at retail's 0x1800ae2c9 release, so ~WideString runs there.
+    HANDLE h;
+    {
+        const System::WideString ws(path.AsString());            // 0x1800ae28f / 0x1800ae294
+        h = ::CreateFileW(ws._data,
+                          0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
+    }                                                            // 0x1800ae2c9
 
     // 0x1800ae2f5 — rejects exactly NULL and INVALID_HANDLE_VALUE. See banner.
     const uint64_t hm1 = reinterpret_cast<uint64_t>(h) - 1u;  // CAST-OK: ptr_int

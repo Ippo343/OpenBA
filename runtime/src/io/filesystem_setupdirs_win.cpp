@@ -146,7 +146,6 @@ using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 using RtSystem::SysFile;  //   "
 using RtSystem::RtSystem_Configuration_GetPlatformName;
 using RtSystem::RtSystem_Configuration_GetBuildName;
-using RtSystem::RtSystem_WideString_CtorFromString;
 using RtSystem::RtSystem_WideString_Set;
 using RtSystem::RtSystem_WideString_AsUTF8;
 
@@ -326,20 +325,17 @@ void FileSystem::SetupDirectories() {
         System::Filename f(cmdPath);
 
         if (_existsInPackfileGate != 0 &&
-            ExistsInPackfile(*reinterpret_cast<const RtSystem::Filename*>(&f))) {   // B.3.x bridge  // LEFT: SIG FileSystem::CreatePath / ExistsInPackfile keep the RtSystem::Filename POD parameter (outside callers: video/save_image_to_file, engine/updateloop_loadresources, object/external_path_win; wave X)
+            ExistsInPackfile(f)) {
             exists = true;
         } else if (_platformExistsGate == 0) {
             exists = false;
         } else {
-            // System::WideString is not a B.3.1 class, so its ctor still takes
-            // the POD String; the cast is the pre-existing one, now spelled
-            // from the class side of the same eight bytes.
-            RtIO::WideString ws{nullptr};
-            RtIO::RtSystem_WideString_CtorFromString(&ws,
-                reinterpret_cast<const RtSystem::String*>(&f));  // LEFT: SIG RtSystem_WideString_CtorFromString takes the RtSystem::String POD (system/, R-SYS)
+            // ??0WideString(const String&) (0x1800cab50) over the Filename read
+            // AS a String; ~WideString (0x18000a730) at the end of this arm is
+            // the inlined release retail has right after the call.
+            const System::WideString ws(f.AsString());
             // `CMP EAX,-1 ; SETNZ` — INVALID_FILE_ATTRIBUTES, not a HRESULT.
-            exists = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
-            RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+            exists = (::GetFileAttributesW(ws._data) != INVALID_FILE_ATTRIBUTES);
         }
         // ~f is retail's release at 0x1800abe02.
     }

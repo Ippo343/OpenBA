@@ -62,7 +62,7 @@
 // tradecomponent_serialize.cpp — insert/top-up one {resource, qty} pair in the
 // TradeComponent's +0x60 AVL tree, the tree the sell table is built from.
 // LEFT: a local declaration; the definition has no header (tradecomponent_serialize.cpp, COMP-8).
-extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, int qty);
+extern "C" void TradeStock_SeedForTest(TradeComponent* tradeComp, ComponentDescription* resourceEntity, int qty);
 
 namespace {
 

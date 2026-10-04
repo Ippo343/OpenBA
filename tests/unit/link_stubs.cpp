@@ -21,10 +21,10 @@
 #include <cstdlib>
 
 namespace RtObject {
-RtSystem::Filename* RtSystem_Filename_GetPathExtension(const RtSystem::Filename* self,
-                                                       RtSystem::Filename* ret) {
+System::Filename* RtSystem_Filename_GetPathExtension(const System::Filename* self,
+                                                     System::Filename* ret) {
     (void)self;
-    ret->data = nullptr;
+    ret->_data = nullptr;
     return ret;
 }
 }  // namespace RtObject

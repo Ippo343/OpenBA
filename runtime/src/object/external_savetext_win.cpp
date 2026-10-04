@@ -110,8 +110,6 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
-using RtSystem::String;
 
 namespace {
 
@@ -202,8 +200,8 @@ SaveTextCounters g_st{};
 // ============================================================================
 // Object::External::SaveText — the body.                 retail 0x1800bb9d0
 // ============================================================================
-extern "C" bool RtObject_External_SaveText(::Object::External* self, const Filename* path,
-                                           const Filename* name) {
+extern "C" bool RtObject_External_SaveText(::Object::External* self, const System::Filename* path,
+                                           const System::Filename* name) {
     ++g_st.calls;
 
     // ---- 1800bb9fd..1800bba3f -------------------------------------------
@@ -249,14 +247,12 @@ extern "C" bool RtObject_External_SaveText(::Object::External* self, const Filen
         // the destructor lands on the same instruction the release did.
         System::String typeStr(typeName);            // 1800bba4a
 
-        const String* ctorType = reinterpret_cast<const String*>(&typeStr);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-        const String* ctorName = reinterpret_cast<const String*>(name);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-        int           ctorVer  = 0;
-        if (g_stCtl == 1) { ++g_stAtt; const String* t = ctorType; ctorType = ctorName; ctorName = t; }
+        const System::String* ctorType = &typeStr;
+        const System::String* ctorName = &name->AsString();   // retail's Filename IS a String
+        int                   ctorVer  = 0;
+        if (g_stCtl == 1) { ++g_stAtt; const System::String* t = ctorType; ctorType = ctorName; ctorName = t; }
         if (g_stCtl == 2) { ++g_stAtt; ctorVer = 1; }
-        ts = ::new (tsMem) IO::TextFileStream(
-            *reinterpret_cast<const System::String*>(ctorType),  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-            *reinterpret_cast<const System::String*>(ctorName), ctorVer);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        ts = ::new (tsMem) IO::TextFileStream(*ctorType, *ctorName, ctorVer);
     }                                                // 1800bba64
 
     // ---- 1800bba85..1800bba9f -------------------------------------------
@@ -266,7 +262,7 @@ extern "C" bool RtObject_External_SaveText(::Object::External* self, const Filen
     ts->_activeEncoding  = 2;                        // 1800bba90: [+0x6c] = 2
     if (g_stCtl == 3) { ++g_stAtt; ts->_activeEncoding = 3; }  // see the control note
 
-    if (ts->IO::FileStream::Create(*reinterpret_cast<const System::Filename*>(path))) {   // B.3.9 IO: the member  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+    if (ts->IO::FileStream::Create(*path)) {   // B.3.9 IO: the member
 
         // ---- 1800bbaa3..1800bbb05 ---------------------------------------
         // The byte-order mark. `_activeEncoding` ALONE selects it — not

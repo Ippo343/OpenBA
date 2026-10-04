@@ -37,6 +37,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
+#include "Player/exe_bodies.h"   // Avl38Retrace (0x140025920)
 
 // ============================================================
 // External closure — every one of these is already ported + registered
@@ -52,11 +53,10 @@ extern void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);
 //   resizes a 16-byte-stride dynamic array to `count` elements.
 extern void ActRm_ArrayResize16_da70(int64_t* arr, int count);
 
-// 0x140025920 (ported as PlayerTrade_Retrace_25920) — the AVL retrace/rebalance.
+// 0x140025920 (Avl38Retrace, Player/exe_bodies.h) — the AVL retrace/rebalance.
 //   NOTE the argument: retail passes a pointer to the PARENT node slot
 //   (LEA RDX,[RBP+0x48], which at that point still holds the node the new child was
 //   linked under), NOT the newly created node. See the b3a0 descent loop below.
-extern "C" void PlayerTrade_Retrace_25920(int64_t* tree, int64_t* nodeSlot);
 
 // 0x140002340 (Ghidra: Object_ExternalPtr_BuildComponentRef_Serialize)
 //   serializes one ExternalPtr through the save-file string table.
@@ -231,10 +231,9 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
                 }
                 if (inserted) {
                     // 14002b4a1: retrace from the PARENT slot (RBP+0x48 still holds the
-                    // node we linked under), NOT from the new child. (The retrace takes
-                    // the header and the cursor slot as int64_t*: LEFT.)
+                    // node we linked under), NOT from the new child.
                     ClaimNode* parentSlot = cur;
-                    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree), reinterpret_cast<int64_t*>(&parentSlot));   // LEFT: SIG PlayerTrade_Retrace_25920
+                    Avl38Retrace(tree, &parentSlot);   // 0x140025920
                     *treeCount += 1;   // 14002b4ad
                 }
                 // Duplicate key falls through to 14002b4b1 WITHOUT bumping the count and

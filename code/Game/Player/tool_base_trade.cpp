@@ -283,12 +283,6 @@ void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* k
 // the generic Avl38Node (Player/exe_bodies.h): retail runs the same bodies on
 // every 0x18-element set.
 
-// B4 FORWARD: 5 outside callers (Dialog/entityui.cpp, Game/gameupdateloop_serialize.cpp,
-// Work/tradework_serialize.cpp, Work/marketwork_bst_*.cpp)
-extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor) {
-    Avl38Retrace(reinterpret_cast<Avl38Node**>(root), reinterpret_cast<Avl38Node**>(cursor));   // LEFT: B4 FORWARD
-}
-
 // B4 FORWARD: 2 outside callers (Dialog/entityui.cpp, Work/tradework.cpp)
 extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
     Avl38Remove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<Avl38Node*>(nodeArg));   // LEFT: B4 FORWARD

@@ -105,8 +105,6 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
-using RtSystem::String;
 
 namespace {
 
@@ -225,7 +223,7 @@ LoadCounters g_lc{};
 // ============================================================================
 // Object::External::Load — the body.                     retail 0x1800bc620
 // ============================================================================
-extern "C" External* RtObject_External_Load(const Filename* path, External* existing) {
+extern "C" External* RtObject_External_Load(const System::Filename* path, External* existing) {
     ++g_lc.calls;
 
     External* obj = existing;      // RDI, and it is REASSIGNED at 1800bc745
@@ -262,8 +260,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
     // crash (runtime/types/io/FileStream.h states the trap in full).
     // B3X W0: `IO::FileStream::Open`, slot 7, by name on the embedded
     // BinaryFileStream (+0x68) the real constructor above built.
-    if (!static_cast<::IO::FileStream&>(cfsObj->_file).Open(
-            *reinterpret_cast<const ::System::Filename*>(path))) {   // B.3.x bridge  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+    if (!static_cast<::IO::FileStream&>(cfsObj->_file).Open(*path)) {
         ++g_lc.openFileFailed;
     } else if (!cfsObj->IO::CompressedStream::Open(cfsObj->_file, 1)) {   // 0x1800aa560
         ++g_lc.openCompFailed;

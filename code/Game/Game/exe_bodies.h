@@ -36,7 +36,8 @@ class WeatherSimulation;   // Game/WeatherSimulation.h (Game_WeatherDtor)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
 // ---- citizen_names.cpp
-extern "C" void* NameDB_GenerateName(void* retStr, void* db, void* rng, int minLen, int maxLen);  // 0x1400a4b30
+class NameDatabase;
+extern "C" System::String* NameDB_GenerateName(System::String* retStr, const NameDatabase* db, System::Random* rng, int minLen, int maxLen);  // 0x1400a4b30
 extern "C" void* NameDB_PickAndGenerate(void* retStr, void* rng, char female);  // 0x1400a4c60
 
 // ---- citizenlist_serialize.cpp
@@ -163,7 +164,9 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 extern "C" void Reimpl_ExternalPtr_Serialize_EnvironmentDesc(void* refField, void* serializer);  // 0x1400192a0
 
 // ---- serialize_externals_array.cpp
-extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count, long long arrayBase, void* );  // 0x1400049c0
+namespace IO { class Serializer; }
+class ComponentDescription;
+extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, int count, ComponentDescription** arrayBase, void* );  // 0x1400049c0
 
 // ---- serialize_externals_typed.cpp
 extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(void* refField, void* serializer);  // 0x140007140
@@ -205,7 +208,9 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self);  // 0x140095da0  B4 F
 
 // ---- weather_particles.cpp
 extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
-extern "C" void WeatherParticle_Config(void* geo, void* descriptor);  // 0x1400d3f80
+class WeatherParticleGeometry;
+class Weather;
+extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80
 extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount);  // 0x1400198a0
 
 // ---- weather_sim.cpp
@@ -224,32 +229,19 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState, void
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 
-// SetEngineNextLoop — sets next loop on the MainLoop engine singleton
-// FUN_140097fb0(enginePtr, loaderLoop): sets UI cursor, fullscreen fade, stores next loop ptr
-// Called when self->m_loaderLoop1 (+0xE0) is null (use engine at +0xE8).
-// REPLACED: was fn_SetEngineNextLoop (ResolveAddr(Module::Exe, 0x140097fb0))
-// Now inline C++ — calls runtime UI functions (SetCursor, SetFullscreenFade).
-inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
-    void* ui = *(void**)(enginePtr + 0x98);   // LEFT: SIG SetEngineNextLoop(uintptr_t enginePtr) (callers in other blocks' files)
-    // Set the cursor: GameContainer +0x38, "Cursor/Hourglass.rsc:cursor"
-    reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge   // LEFT: the engine's +0x98 UI read through the uintptr_t above
-        ::Object::ExternalPtr<UI::Cursor>(g_gameContainer->cursorHourglass.Get()));
-    // Fade to black (fadeIn=true, color=0xFF000000=opaque black, reverse=false)
-    reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge   // LEFT: as above
-    // Store next loop pointer at engine+0xC8
-    *(void**)(enginePtr + 0xC8) = loaderLoop;   // LEFT: SIG SetEngineNextLoop(uintptr_t enginePtr)
-}
-
-// SetDialogLoaderNextLoop — FUN_14009a8f0 — NOW REIMPLEMENTED INLINE
-// Sets fullscreen fade on DialogLoaderLoopT's UI (+0x40), stores next loop at +0xb68.
-// Old typedef kept for reference:
-// typedef void (*fn_SetDialogLoaderNextLoop_t)(uintptr_t dialogLoaderLoop, void* loaderLoop);
-// extern fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop;
-inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop) {
-    reinterpret_cast<UI::UserInterface*>(dialogLoaderLoop + 0x40)->SetFullscreenFade(  // B.3.6 bridge   // LEFT: SIG SetDialogLoaderNextLoop(uintptr_t) (callers in other blocks' files)
-        true, 0xFF000000, false);
-    *(void**)(dialogLoaderLoop + 0xb68) = loaderLoop;   // LEFT: SIG SetDialogLoaderNextLoop(uintptr_t)
-}
+// SetEngineNextLoop — FUN_140097fb0(game, loaderLoop): the running game's UI
+// (GameUpdateLoop::m_userInterface +0x98) gets the hourglass cursor and a fade to
+// black, then the loop is queued in GameUpdateLoop::m_nextLoop (+0xC8).
+// SetDialogLoaderNextLoop — FUN_14009a8f0(menuLoop, loaderLoop): the menu loop's UI
+// (DialogLoopT::GetUserInterface, +0x40) fades to black, then the loop is queued in
+// MenuDialogLoopT::_pendingLoop (+0xb68).
+// Both are defined in Game/worldsetup_reload.cpp (they were inline here, reached
+// through uintptr_t offsets).
+class GameUpdateLoop;
+class MenuDialogLoopT;
+namespace Engine { class UpdateLoop; }
+void SetEngineNextLoop(GameUpdateLoop* game, Engine::UpdateLoop* loaderLoop);            // 0x140097fb0
+void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* loaderLoop);  // 0x14009a8f0
 
 // GetLoadingSoundString — FUN_140099130 — NOW REIMPLEMENTED INLINE
 // Creates a Random, generates rand 0-11, formats "Dialog/Loading.rsc:gameLoad%i".

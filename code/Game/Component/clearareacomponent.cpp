@@ -154,19 +154,18 @@ DEFINE_EXE_TYPE(ClearAreaComponent, "ControllerComponent")
 // Harness probe: does this building entity carry a live ClearAreaComponent? Scans the
 // entity's component list for the ClearAreaComponent type-id and returns the component
 // ptr (or null). outFlags gets the component's +0x20 capability flags (bit 0x4 = ticked).
-extern "C" void* ClearAreaComponent_HarnessFind(void* entityV, uint32_t* outFlags) {
+extern "C" ClearAreaComponent* ClearAreaComponent_HarnessFind(ComponentEntity* entity, uint32_t* outFlags) {
     if (outFlags) *outFlags = 0;
-    if (!entityV) return nullptr;
+    if (!entity) return nullptr;
     uint32_t wantTid = ClearAreaComponent::TypeId();
     if (!wantTid) return nullptr;
-    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // LEFT: B4 FORWARD (tool_harness.cpp)
     if (!entity->_components) return nullptr;
     for (int i = 0; i < entity->_componentCount; ++i) {
         Component* c = entity->_components[i].Get();
         if (!c) continue;
         if (c->Type() == wantTid) {
             if (outFlags) *outFlags = c->_flags;
-            return c;
+            return static_cast<ClearAreaComponent*>(c);   // the exact type id matched
         }
     }
     return nullptr;
@@ -174,24 +173,24 @@ extern "C" void* ClearAreaComponent_HarnessFind(void* entityV, uint32_t* outFlag
 
 // Harness entry: run the footprint sweep on a REAL live ClearAreaComponent (reads its
 // own +0x10 owner) — exactly what a de-inerted component's Update tick would do.
-extern "C" int ClearAreaComponent_HarnessSweepComp(void* realComp) {
-    return reinterpret_cast<ClearAreaComponent*>(realComp)->FootprintSweep();   // LEFT: B4 FORWARD (tool_harness.cpp)
+extern "C" int ClearAreaComponent_HarnessSweepComp(ClearAreaComponent* realComp) {
+    return realComp->FootprintSweep();
 }
 
 // Read a live component's +0x10 owner field (to confirm it's wired to its entity).
-extern "C" void* ClearAreaComponent_HarnessOwner(void* realComp) {
+extern "C" ComponentEntity* ClearAreaComponent_HarnessOwner(ClearAreaComponent* realComp) {
     if (!realComp) return nullptr;
-    return reinterpret_cast<ClearAreaComponent*>(realComp)->_entity;   // LEFT: B4 FORWARD (tool_harness.cpp)
+    return realComp->_entity;
 }
 
 // Harness entry: run the footprint sweep for a given building entity. Builds a
 // synthetic ClearAreaComponent whose owner (+0x10) is the building, then sweeps —
 // exactly what the live component's driver does on placement. Returns entities marked.
 // The raw zeroed buffer (no constructor) is the harness's own; it is kept.
-extern "C" int ClearAreaComponent_HarnessSweep(void* ownerEntity) {
+extern "C" int ClearAreaComponent_HarnessSweep(ComponentEntity* ownerEntity) {
     alignas(8) uint8_t buf[sizeof(ClearAreaComponent)];
     std::memset(buf, 0, sizeof(buf));
     ClearAreaComponent* comp = reinterpret_cast<ClearAreaComponent*>(buf);        // harness-only
-    comp->_entity = reinterpret_cast<ComponentEntity*>(ownerEntity);             // LEFT: B4 FORWARD (tool_harness.cpp)
+    comp->_entity = ownerEntity;
     return comp->FootprintSweep();
 }

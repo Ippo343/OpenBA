@@ -70,7 +70,6 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
 using RtSystem::Sys;
 
 CompiledCounters g_cc = {};
@@ -105,12 +104,10 @@ inline const ::IO::FileSystem* FileSystemSingleton() {
 // `out` is raw on entry in retail (a stack slot) and is written before it is
 // read, so callers pass an uninitialised `Filename`.
 // ---------------------------------------------------------------------------
-void BuildCompiledPath(const Filename* path, Filename* out) {
+void BuildCompiledPath(const System::Filename* path, System::Filename* out) {
     ++g_cc.buildCalls;
 
-    // ENDGAME B.3.1 step 2. `path` is the C entry point's POD parameter, so it
-    // reaches the class through the one transitional bridge.
-    const System::Filename& in = Sys(*path);
+    const System::Filename& in = *path;
 
     System::Filename ext   = in.GetPathExtension();              // [RBP-0x18]
     (void)ext;                                     // value UNUSED, see banner
@@ -152,7 +149,8 @@ void BuildCompiledPath(const Filename* path, Filename* out) {
 // 0x1800bee98). Getting this wrong is the shipped defect
 // reference_hidden_retslot_wild_write.md describes: an fn_* typedef that omits
 // the slot is a wild write that still returns the right answer.
-Filename* RtObject_ExternalFactory_GetCompiledPath(Filename* ret, const Filename* path) {
+System::Filename* RtObject_ExternalFactory_GetCompiledPath(System::Filename* ret,
+                                                           const System::Filename* path) {
     ++g_cc.getCompiledCalls;
 
     BuildCompiledPath(path, ret);
@@ -196,7 +194,7 @@ Filename* RtObject_ExternalFactory_GetCompiledPath(Filename* ret, const Filename
 // `External::Load` (0x1800bc620) are ported and called by name.
 
 const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
-                                                    const Filename* path) {
+                                                    const System::Filename* path) {
     ++g_cc.findOrLoadCalls;
 
     // The scheduling seam for BOTH of this lane's self-tests. FindOrLoad is the
@@ -209,7 +207,7 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
     // 0x1800bf339 / 0x1800bf345 — `GetLength` (0x1800063c0) is retail's own
     // pair of tests: it returns 0 for a null buffer and otherwise reads the
     // dword at data-8, which is the field the `CMP [RAX-0x8],0x0` reads.
-    if (Sys(*path).GetLength() == 0) {
+    if (path->GetLength() == 0) {
         ++g_cc.emptyPath;
         return nullptr;
     }
@@ -217,11 +215,9 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
     // ExpandRelativePath writes a hidden return slot; the null local it is
     // handed is constructed into, not assigned to.
     System::Filename expanded;                                   // [RBP+0x38]
-    RtObject_ExternalFactory_ExpandRelativePath(
-        self, reinterpret_cast<Filename*>(&expanded), path, true);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+    RtObject_ExternalFactory_ExpandRelativePath(self, &expanded, path, true);
 
-    External* found = RtObject_ExternalFactory_Find(
-        self, reinterpret_cast<const Filename*>(&expanded));    // private Find  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+    External* found = RtObject_ExternalFactory_Find(self, &expanded);    // private Find
 
     const External* result = nullptr;
 
@@ -239,8 +235,7 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
         // ---- 0x1800bf390: the MISS ----------------------------------------
         ++g_cc.cacheMiss;
         System::Filename compiled;                               // [RBP+0x40]
-        BuildCompiledPath(reinterpret_cast<const Filename*>(&expanded),  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
-                          reinterpret_cast<Filename*>(&compiled));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        BuildCompiledPath(&expanded, &compiled);
 
         // ---- THE ONE INDEPENDENT ORACLE THIS BODY HAS ----------------------
         // The string `compiled` is the whole of the miss path's own work: what
@@ -250,8 +245,7 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
         // against it is not a self-check. It is the reason the two functions
         // share a file.
 
-        External* loaded = RtObject_External_Load(
-            reinterpret_cast<const Filename*>(&compiled), nullptr);  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+        External* loaded = RtObject_External_Load(&compiled, nullptr);
 
         if (loaded != nullptr) {
             ++g_cc.loaded;

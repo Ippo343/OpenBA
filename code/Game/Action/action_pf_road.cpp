@@ -439,10 +439,6 @@ void WorldGeometry::MarkChunksDirty(int x, int y) {
     Pf_AvlInsertA_a4f0(tree, &outNode, key);   // 0x14001a4f0
 }
 
-// B4 FORWARD: 1 outside caller (Component/terraformcomponent.cpp)
-void Pf_RegionDirty4_b150(int64_t self, int x, int y) {
-    reinterpret_cast<WorldGeometry*>(self)->MarkChunksDirty(x, y);   // LEFT: SIG Pf_RegionDirty4_b150
-}
 
 // ============================================================
 // FUN_1400a8c90 — mark a fine cell + its 3x3 neighbourhood dirty.
@@ -507,12 +503,6 @@ void RegionGraph::MarkCellDirty(int x, int y) {
     }
 }
 
-// B4 FORWARD: 7 outside callers (cemeterycomponent, citizen_lifeevent_handler,
-// pasturecomponent, quarrycomponent_deform, terraformcomponent, starttown,
-// keystone_a_removalcalcpath)
-void Pf_FineCellDirty_a8c90(int64_t self, int x, int y) {
-    reinterpret_cast<RegionGraph*>(self)->MarkCellDirty(x, y);   // LEFT: SIG Pf_FineCellDirty_a8c90
-}
 
 // ============================================================
 // FUN_140122e20 — the world position of an interact node.
@@ -1010,25 +1000,20 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: 2 outside callers (Game/gamegrid_serialize.cpp, Player/keystone_a_removalcalcpath.cpp)
-void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
-    reinterpret_cast<WorldGeometry*>(param_1)->RebuildRoadMesh(reinterpret_cast<Map*>(param_2));   // LEFT: SIG Pf_RoadMeshRebuild_f370
-}
-
 // B4 FORWARD: 1 outside caller (Player/tool_base_highlight_tess.cpp)
 void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend) {
     BuildRoadQuad(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<RoadVertex*>(outQuad), dirIdx, blend);   // LEFT: SIG Pf_RoadQuad_cc10
 }
 
-// B4 FORWARD: 2 outside callers (Component/quarrycomponent_deform.cpp, Player/tool_base_ray.cpp)
-int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4, float* p5, float* p6, float* p7, float* p8, uint32_t* p9) {
-    return RayTestCell(reinterpret_cast<WorldGeometry*>(self), x, y, reinterpret_cast<const float*>(p4),   // LEFT: SIG Pf_CellQuadRay_aa20
-                       p5, p6, p7, p8, reinterpret_cast<float*>(p9));   // LEFT: SIG Pf_CellQuadRay_aa20
+// The exported names of the two file-static bodies (callers: Component/quarrycomponent_deform.cpp,
+// Player/tool_base_ray.cpp; Player/tool_base_tilerender.cpp).
+int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin,
+                        const float* maxT, float* outHit, float* outT, float* outNormal) {
+    return RayTestCell(geo, x, y, dir, origin, maxT, outHit, outT, outNormal);
 }
 
-// B4 FORWARD: 1 outside caller (Player/tool_base_tilerender.cpp)
-float Pf_CellQuadRayWrap_0f90(int64_t self, float* param_2, uint32_t* param_3) {
-    return TerrainHeightUnder(reinterpret_cast<WorldGeometry*>(self), param_2, reinterpret_cast<float*>(param_3));   // LEFT: SIG Pf_CellQuadRayWrap_0f90
+float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal) {
+    return TerrainHeightUnder(geo, point, outNormal);
 }
 
 // B4 FORWARD: outside callers in ~20 files (Component, Dialog, Game, Player, Work)

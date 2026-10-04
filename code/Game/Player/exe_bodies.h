@@ -43,7 +43,6 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int sta
 extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int param_3);  // 0x1400f8d50 B4 FORWARD -> WorkScheduler::FindWorkAtCell: 2 outside callers (Action/action_base_cnr.cpp, Component/destroycomponent_states.cpp)
 extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1);  // 0x14011dfa0 B4 FORWARD -> DestroyComponent::RunStateMachine: 1 outside caller (Dialog/upgradeui.cpp)
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14009c700
-extern "C" void RemovalCalc_CitizenAI_9ad0(int64_t param_1, int param_2);  // 0x1400f9ad0 B4 FORWARD -> WorkScheduler::PrioritizeWork: 1 outside caller (Component/firecomponent_ignite.cpp)
 
 // ---- tool_base_createbar.cpp
 void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);  // 0x1400ffc60
@@ -124,7 +123,8 @@ extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x
 // 0x1400fda00 is PlacementTool::GetPlacement (PlacementTool.h).
 
 // ---- tool_base_render.cpp
-extern "C" void HighlightSelect_Impl(void* self);  // 0x1400fc9e0
+class EditTool;
+extern "C" void HighlightSelect_Impl(EditTool* self);  // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(void* self);  // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 
@@ -146,7 +146,6 @@ extern "C" void PlayerTileRender_BuildRecords_1380(const void* /*never read*/, V
 extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* owner, UI::DialogInstance** ret, ComponentDescription* description);  // 0x1400ff9e0
 
 // ---- tool_base_trade.cpp
-extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor);  // 0x140025920 B4 FORWARD -> Avl38Retrace<TrackedEntityNode>
 extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg);  // 0x140025740 B4 FORWARD -> Avl38Remove<TrackedEntityNode>
 extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP);  // 0x14002c690 B4 FORWARD -> Avl38FindRemove<TrackedEntityNode>
 extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1);  // 0x1400666b0 B4 FORWARD -> EntityUI::SyncPin

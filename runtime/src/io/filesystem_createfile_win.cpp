@@ -326,14 +326,14 @@ void RtIoFileSystemCreateFileCounters(unsigned long long* out) {
 // destructor order.
 namespace IO {
 
-bool FileSystem::CreatePath(const RtSystem::Filename& pathRef) const {
-    const RtSystem::Filename* const path = &pathRef;
+bool FileSystem::CreatePath(const System::Filename& pathRef) const {
+    const System::Filename* const path = &pathRef;
     ++RtIO::g_fcc.createPath;
     // detail 4 — retail reads no field of `this`
 
     // Retail passes the Filename straight into String's members, which is what
     // AsString() spells (Filename.h).
-    const System::String& src = RtIO::Sys(*path).AsString();
+    const System::String& src = path->AsString();
     const int32_t len = src.GetLength();                    // 1800ae459
 
     int32_t created = 0;

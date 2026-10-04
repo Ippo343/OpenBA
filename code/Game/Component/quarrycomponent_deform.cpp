@@ -309,9 +309,8 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 // "improve" this into a hit check.
                 float probe[3]  = { 0.0f, 0.0f, 0.0f };
 
-                Pf_CellQuadRay_aa20(reinterpret_cast<int64_t>(terrainGrid), cellX, cellY,   // LEFT: SIG Pf_CellQuadRay_aa20
-                                    dir, origin, &maxT, outHit, &outT,
-                                    reinterpret_cast<uint32_t*>(probe));   // LEFT: SIG Pf_CellQuadRay_aa20 (its body RayTestCell is file-static in action_pf_road.cpp)
+                Pf_CellQuadRay_aa20(terrainGrid, cellX, cellY,
+                                    dir, origin, &maxT, outHit, &outT, probe);
 
                 if (!(probe[2] < s_slopeCut)) continue;
 

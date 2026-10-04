@@ -385,7 +385,6 @@ using RtSystem::RtString_ReleaseInline;
 using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 using RtSystem::RtSystem_WideString_Set;
 using RtSystem::RtSystem_WideString_AsUTF8;
-using RtSystem::RtSystem_WideString_CtorFromString;
 
 // Retail's `Collection::Array<Filename>` — {_data, _size, _capacity}, the same
 // 16-byte header every Array in this engine has (runtime/types/collection/
@@ -395,13 +394,7 @@ using RtSystem::RtSystem_WideString_CtorFromString;
 // `FilenameArray` (the 16-byte out-parameter header) is defined in
 // runtime/types/io/FileSystem.h, with the 0x180026880 pins that stood here.
 
-// The one remaining POD reinterpretation this file needs: System::WideString is
-// not a B.3.1 class, so its ctor still takes the POD `RtSystem::String*` and the
-// class values here have to be handed over as those same eight bytes.
-static const String* AsString(const Filename* f) { return reinterpret_cast<const String*>(f); }  // LEFT: RtSystem_WideString_CtorFromString takes the RtSystem::String POD (system/, R-SYS)
-static const String* AsPodString(const System::String& s) {
-    return reinterpret_cast<const String*>(&s);  // LEFT: RtSystem_WideString_CtorFromString takes the RtSystem::String POD (system/, R-SYS)
-}
+
 
 // Case-insensitive ASCII compare, sign-preserving. Duplicated from
 // filesystem.cpp for the reason that file gives: runtime/src stays free of a
@@ -516,16 +509,16 @@ static void AppendFilename(FilenameArray* out, const System::Filename* value) {
 // a section-D-bound body for no gain.
 namespace IO {
 
-bool FileSystem::ExistsInPackfile(const RtSystem::Filename& pathRef) const {
-    const RtSystem::Filename* const path = &pathRef;
+bool FileSystem::ExistsInPackfile(const System::Filename& pathRef) const {
+    const System::Filename* const path = &pathRef;
 
     bool ours = false;
 
     // 0x1800ab1a0-0x1800ab1c2. Both lengths come from the allocation header at
     // `data-8` when data is non-null and are 0 otherwise, and the test is
     // `JLE`: proceed only when the path is STRICTLY longer.
-    const char* pathData = path->data;
-    const int pathLen = pathData ? RtIO::Sys(*path).GetLength() : 0;
+    const char* pathData = path->_data;
+    const int pathLen = pathData ? path->GetLength() : 0;
     const int dataDirLen = _dataDirectory.data
                          ? RtIO::Sys(_dataDirectory).GetLength() : 0;
 
@@ -577,14 +570,18 @@ bool FileSystem::ExistsInPackfile(const RtSystem::Filename& pathRef) const {
 // would resolve NULL forever. DIFF: full oracle; GetFileAttributesW is a stat,
 // so running both sides mutates nothing.
 // ============================================================================
-bool FileSystem::PlatformExists(const RtSystem::Filename& pathRef) const {
-    const RtSystem::Filename* const path = &pathRef;
+bool FileSystem::PlatformExists(const System::Filename& pathRef) const {
+    const System::Filename* const path = &pathRef;
     // retail never reads `this`; RCX is destroyed at 0x1800adc7f
 
-    RtIO::WideString ws{nullptr};
-    RtIO::RtSystem_WideString_CtorFromString(&ws, RtIO::AsString(path));
-    const bool ours = (::GetFileAttributesW(ws.data) != INVALID_FILE_ATTRIBUTES);
-    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+    // ??0WideString(const String&) (0x1800cab50) over the Filename read AS a
+    // String, GetFileAttributesW, then the inlined release: ~WideString
+    // (0x18000a730) at the end of the block, the point the release stood.
+    bool ours;
+    {
+        const System::WideString ws(path->AsString());
+        ours = (::GetFileAttributesW(ws._data) != INVALID_FILE_ATTRIBUTES);
+    }
 
     return ours;
 }
@@ -621,12 +618,10 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
     HANDLE h;
     {
         System::String search = *dir + *pattern;   // 0x1800c9440
-        WideString w{nullptr};
-        RtSystem_WideString_CtorFromString(&w, AsPodString(search));
-        h = ::FindFirstFileW(w.data, &fd);
+        const System::WideString w(search);         // 0x1800cab50
+        h = ::FindFirstFileW(w._data, &fd);
         // Retail's release order: the WideString first (0x1800ad823), then the
-        // concatenation (~search, 0x1800ad850).
-        RtString_ReleaseInline(reinterpret_cast<String*>(&w));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+        // concatenation (~search, 0x1800ad850) -- reverse declaration order.
     }
 
     // --- 0x1800ad888-0x1800ad9f1: the FILE loop -----------------------------
@@ -663,11 +658,9 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
         HANDLE h2;
         {
             System::String star = *dir + "*";   // 0x1800c92d0, literal 0x1801557e0
-            WideString w2{nullptr};
-            RtSystem_WideString_CtorFromString(&w2, AsPodString(star));
-            h2 = ::FindFirstFileW(w2.data, &fd);
-            RtString_ReleaseInline(reinterpret_cast<String*>(&w2));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
-            // ~star is retail's second release here.
+            const System::WideString w2(star);   // 0x1800cab50
+            h2 = ::FindFirstFileW(w2._data, &fd);
+            // ~w2 then ~star: retail's two releases here, in that order.
         }
 
         if (h2 != INVALID_HANDLE_VALUE) {

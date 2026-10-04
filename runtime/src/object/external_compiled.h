@@ -11,17 +11,16 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
-
 // ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z
 //                                                          retail 0x1800bec10
 // A STATIC returning by value: RCX = the hidden return slot, RDX = the path.
-Filename* RtObject_ExternalFactory_GetCompiledPath(Filename* ret, const Filename* path);
+System::Filename* RtObject_ExternalFactory_GetCompiledPath(System::Filename* ret,
+                                                           const System::Filename* path);
 
 // ?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z
 //                                                          retail 0x1800bf320
 const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
-                                                    const Filename* path);
+                                                    const System::Filename* path);
 
 // Effectiveness control: every counter is a branch taken INSIDE a ported body.
 struct CompiledCounters {

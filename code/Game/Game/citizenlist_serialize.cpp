@@ -705,7 +705,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
             GameColl::AsArray<GameColl::Ptr8>(&field_0x110).SetSize(count);
         // LEFT: the array body takes the element base as long long (Game/exe_bodies.h,
         // serialize_externals_array.cpp).
-        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x110), nullptr);   // 0x1400049c0   // LEFT: SIG Reimpl_ExternalPtrArray_Serialize(long long) (wave X)
+        Reimpl_ExternalPtrArray_Serialize(ser, count, field_0x110, nullptr);   // 0x1400049c0
     }
     {
         int32_t count = field_0x128;
@@ -714,7 +714,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
             GameColl::AsArray<GameColl::Ptr8>(&field_0x120).SetSize(count);
-        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x120), nullptr);   // 0x1400049c0   // LEFT: SIG Reimpl_ExternalPtrArray_Serialize(long long) (wave X)
+        Reimpl_ExternalPtrArray_Serialize(ser, count, field_0x120, nullptr);   // 0x1400049c0
     }
 
     // LEFT: the three clocks are declared int64_t (CitizenBehavior.h, block WORK-a).
@@ -873,9 +873,7 @@ void CitizenBehavior::PostLoad() {
                         side * side);
                 std::fflush(stderr);
             }
-            // LEFT: the cell-map insert takes the town manager as int64_t
-            // (Component/wellcomponent_funcs.h).
-            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80   // LEFT: SIG WellComp_AddCellEntry_88a80(int64_t) (wave X)
+            AddCellEntry(cell % mapWidth, cell / mapWidth, idx);   // 0x140088a80
         }
     }
 
@@ -910,7 +908,7 @@ void CitizenBehavior::PostLoad() {
             MapComponent* chosenVal = chosenRef.Get();
             int16_t cx = chosenVal ? static_cast<int16_t>(chosenVal->tileX0) : 0;
             int16_t cy = chosenVal ? static_cast<int16_t>(chosenVal->tileY0) : 0;
-            WellComp_AddCellEntry_88a80(reinterpret_cast<int64_t>(this), cx, cy, slot);   // 0x140088a80   // LEFT: SIG WellComp_AddCellEntry_88a80(int64_t) (wave X)
+            AddCellEntry(cx, cy, slot);   // 0x140088a80
         }
     }
 }

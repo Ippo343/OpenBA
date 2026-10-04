@@ -106,8 +106,6 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
-using RtSystem::Sys;
 
 namespace {
 
@@ -121,17 +119,16 @@ const char* const kResourceSuffix = ":resource";
 // ?ForceUnload@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z
 //                                                          retail 0x1800beec0
 // ============================================================================
-void RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const Filename* path) {
+void RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const System::Filename* path) {
     // ---- 0x1800beedc-0x1800bef29: `Filename key = path`, then adjust again --
     // ENDGAME B.3.1 step 2. Null-init + operator= + the redundant second
     // AdjustDelimiters IS the copy constructor (0x1800067d0), whose ported body
     // normalises exactly twice for that reason: 0x1800bef20 and 0x1800bef25 are
-    // both still spent. `path` is the registered entry point's POD parameter and
-    // comes through the one transitional bridge.
-    System::Filename key(Sys(*path));                    // [RBP+0x28]
+    // both still spent.
+    System::Filename key(*path);                         // [RBP+0x28]
 
     // ---- 0x1800bef2f: the identifier comes from `path`, NOT from `key` ------
-    System::Filename ident = Sys(*path).GetPathIdentifer();   // [RBP+0x38]
+    System::Filename ident = path->GetPathIdentifer();   // [RBP+0x38]
 
     // ---- 0x1800bef3c-0x1800befd2: no identifier -> append ":resource" -------
     // `GetLength` (0x1800063c0) returns 0 for a null buffer, so it is retail's
@@ -153,11 +150,9 @@ void RtObject_ExternalFactory_ForceUnload(ExternalFactory* self, const Filename*
         System::Filename probe(key);                     // [RBP+0x30], reused
                                                          // 0x1800bf028 / 0x1800bf031
         // ---- 0x1800bf037: descend `this->_resources` (this + 0x10) ---------
-        // TRANSITIONAL CAST, the class->POD direction: `rtresset::Find` is an
-        // unconverted C body (external_set.cpp) whose key parameter is the POD.
         node = rtresset::Find(
             reinterpret_cast<const rtresset::Set*>(&self->_resources),  // CAST-OK: elem_stride
-            reinterpret_cast<const Filename*>(&probe));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+            &probe);
     }   // 0x1800bf04f — probe's release, still ahead of the store
 
     // ---- 0x1800bf078: the whole point of the function ----------------------

@@ -140,8 +140,7 @@ static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Attendan
     slot = nullptr;
 }
 
-void AttendanceComponent_ReleaseLink1650(void* workerP) {
-    CitizenComponent* self = reinterpret_cast<CitizenComponent*>(workerP);   // LEFT: SIG AttendanceComponent_ReleaseLink1650 (void*; outside callers)
+void AttendanceComponent_ReleaseLink1650(CitizenComponent* self) {
     AttendanceComponent_ReleaseLinkSlot(self, self->field_0x230);
 }
 void AttendanceComponent_ReleaseLink59b0(void* workerP) {

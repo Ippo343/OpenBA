@@ -85,7 +85,6 @@
 namespace rtresset {
 
 using RtObject::ResourceEntry;
-using RtSystem::Filename;
 
 ProbeCounters g_rc = {};
 
@@ -465,11 +464,11 @@ Node** InsertCore(Set* set, Node** out, const ResourceEntry* pair) {
 // hit would leak one string reference per cache hit — and `FindOrLoad` reaches
 // this ~22.6k times in one menu-to-gameplay run.
 // ---------------------------------------------------------------------------
-Node** Insert(Set* set, Node** out, const Filename* key, const EntryValue* value) {
+Node** Insert(Set* set, Node** out, const System::Filename* key, const EntryValue* value) {
     ResourceEntry tmp;
     // The copy ctor member-initialises `_data` to null before it adopts, so
     // retail's explicit pre-null is inside it now.
-    new (&tmp.path) System::Filename(RtSystem::Sys(*key));
+    new (&tmp.path) System::Filename(*key);
     tmp.external    = value->external;
     tmp.usageMask   = value->usageMask;
     tmp.referenceId = value->referenceId;
@@ -615,11 +614,11 @@ void Erase(Set* set, Node* z) {
 // file another lane owns mid-wave — and THIS is the registered entry point.
 // The two are checked against each other in the probe, which drives this one.
 // ---------------------------------------------------------------------------
-Node* Find(const Set* set, const Filename* key) {
+Node* Find(const Set* set, const System::Filename* key) {
     Node* n = set->root;
     while (n != nullptr) {
-        if (FilenameLess(key->data, Elem(n)->path.data))      n = n->left;
-        else if (FilenameLess(Elem(n)->path.data, key->data)) n = n->right;
+        if (FilenameLess(key->_data, Elem(n)->path.data))      n = n->left;
+        else if (FilenameLess(Elem(n)->path.data, key->_data)) n = n->right;
         else                                                  return n;
     }
     return nullptr;
@@ -631,9 +630,9 @@ Node* Find(const Set* set, const Filename* key) {
 // The whole body is guarded on `count > 0` (0x18002e3d0 `TEST R8D,R8D / JLE` to
 // the RET). First parameter ignored, node-free shape again.
 // ---------------------------------------------------------------------------
-void ArrayDestroyRange(void* /*ignored*/, Filename* first, int count) {
+void ArrayDestroyRange(void* /*ignored*/, System::Filename* first, int count) {
     if (count <= 0) return;
-    for (int i = 0; i < count; ++i) ReleaseInline(first + i);
+    for (int i = 0; i < count; ++i) first[i].~Filename();
 }
 
 // ---------------------------------------------------------------------------
@@ -663,27 +662,27 @@ void ArrayDestroyRange(void* /*ignored*/, Filename* first, int count) {
 // and the array SHRANK, destroy the tail. Both arms kept even though `Clean`
 // only ever reaches the first.
 // ---------------------------------------------------------------------------
-void ArrayResize(FilenameArray* self, int newSize, const Filename* fill) {
+void ArrayResize(FilenameArray* self, int newSize, const System::Filename* fill) {
     int oldSize = self->size;
     if (newSize == oldSize) return;
 
-    Filename* oldData = self->data;
+    System::Filename* oldData = self->data;
     self->size = newSize;
 
     if (newSize > self->capacity) {
         ++g_rc.cleanArrayGrow;
         self->capacity = newSize;
         if (newSize == oldSize + 1 && oldSize != 0) self->capacity = newSize * 3;
-        self->data = static_cast<Filename*>(
+        self->data = static_cast<System::Filename*>(
             System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->capacity) * 8, 8));
     }
 
     int i = (oldData == self->data) ? oldSize : 0;
     for (; i < newSize; ++i) {
-        Filename* dst = self->data + i;
+        System::Filename* dst = self->data + i;
         if (dst == nullptr) continue;                 // 0x18002e07b, from ADD's ZF
-        const Filename* src = (i < oldSize) ? (oldData + i) : fill;
-        new (dst) System::Filename(RtSystem::Sys(*src));
+        const System::Filename* src = (i < oldSize) ? (oldData + i) : fill;
+        new (dst) System::Filename(*src);
     }
 
     if (oldData != self->data) {
@@ -771,7 +770,7 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
             if (Elem(n)->usageMask == 0 || self->_cleanBitIndex < 0) {
                 ++g_rc.cleanEvicted;
                 rtresset::ArrayResize(&evicted, collected + 1,
-                                      &Elem(n)->path);   // ResourceEntry::path, the key at +0x00
+                                      RtSystem::Sys(&Elem(n)->path));   // ResourceEntry::path, the key at +0x00 (a POD member: H5)
                 collected = evicted.size;    // 0x1800be396, RE-READ from the array
             }
             // in-order successor, transcribed from 0x1800be39a..0x1800be3e6
@@ -785,11 +784,11 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
             }
         }
     }
-    RtSystem::Filename* keys = evicted.data; // 0x1800be3ef, R14
+    System::Filename* keys = evicted.data;   // 0x1800be3ef, R14
 
     // ---- phase 2: destroy and erase, one key at a time ---------------------
     if (collected > 0) {
-        RtSystem::Filename* k = keys;
+        System::Filename* k = keys;
         for (int remaining = collected; remaining != 0; --remaining, ++k) {
             Node* hit = rtresset::Find(set, k);
             // UNGUARDED, and retail's: 0x1800be454 reads [hit+8] on the

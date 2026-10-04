@@ -556,8 +556,7 @@ extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* a
 // *availPtr is 0) -> c5f0 (most-laborer house) -> c4b0 (first idle laborer, writes
 // `out` itself). First nonzero winner's 8-byte result is copied into out+0x0 only,
 // exactly like the original (out+0x8 is left untouched on those paths).
-// Defined below; AddWorker (0x140091130) calls it.
-extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);
+// Defined below (declared in Component/exe_bodies.h); AddWorker (0x140091130) calls it.
 
 // ============================================================================
 // CitizenList::AddWorker (0x140091130) — the public one-call seat: find a building
@@ -580,9 +579,9 @@ extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64
 // W_OnRemove, BuilderPool_Tick, CitizenAssignCitizens); this is a call site, so it
 // holds it too. Drop the guard here if WorkPlaceComponent is ever promoted to a live
 // controller with real scene objects.
-extern "C" void CitizenList_AddWorker_91130(int64_t townMgr, uint64_t professionKey) {
+extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession) {
     EnsureFns();
-    if (townMgr == 0 || professionKey == 0) return;
+    if (townMgr == nullptr || profession == nullptr) return;
 
     extern bool g_wpcRosterOnly;
     struct RosterGuard {
@@ -591,20 +590,18 @@ extern "C" void CitizenList_AddWorker_91130(int64_t townMgr, uint64_t profession
         ~RosterGuard() { g_wpcRosterOnly = prev; }
     } _rosterGuard;
 
-    int64_t avail[2] = { 0, 0 };
-    FindAvailableBuilding(townMgr, avail, professionKey);
+    ComponentEntity* avail[2] = { nullptr, nullptr };
+    FindAvailableBuilding(reinterpret_cast<int64_t>(townMgr), avail,   // LEFT: SIG FindAvailableBuilding (Game/exe_bodies.h: int64_t town)
+                          reinterpret_cast<uint64_t>(profession));     // LEFT: SIG FindAvailableBuilding (uint64_t key)
 
-    int64_t availArg = avail[0];                 // fresh copy — c3d0 anchors through it
-    alignas(8) uint8_t out[16] = { 0 };          // local_18[16] in the original
-    CitizenList_AssignWorker_c3d0(townMgr, out, &availArg, static_cast<int64_t>(professionKey));
+    ComponentEntity* availArg = avail[0];        // fresh copy — c3d0 anchors through it
+    CitizenComponent* out[2] = { nullptr, nullptr };   // local_18[16] in the original
+    CitizenList_AssignWorker_c3d0(townMgr, out, &availArg, profession);
 }
 
-extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgrV, void* outV, int64_t* availPtrV, int64_t profKeyV) {
+extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out,
+                                                           ComponentEntity** availPtr, Profession* profKey) {
     EnsureFns();
-    CitizenBehavior*   townMgr  = reinterpret_cast<CitizenBehavior*>(townMgrV);     // LEFT: SIG CitizenList_AssignWorker_c3d0 (Component/exe_bodies.h, wave X)
-    CitizenComponent** out      = reinterpret_cast<CitizenComponent**>(outV);       // LEFT: SIG CitizenList_AssignWorker_c3d0
-    ComponentEntity**  availPtr = reinterpret_cast<ComponentEntity**>(availPtrV);   // LEFT: SIG CitizenList_AssignWorker_c3d0
-    Profession*        profKey  = reinterpret_cast<Profession*>(profKeyV);          // LEFT: SIG CitizenList_AssignWorker_c3d0
     alignas(8) CitizenComponent* local[2] = { nullptr, nullptr };
     ComponentEntity* avail = *availPtr;
     CitizenComponent** r = Strat_cbf0(townMgr, local, &avail, profKey);

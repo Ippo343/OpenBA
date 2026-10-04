@@ -56,9 +56,6 @@ void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 // ---- eventnotifydialog.cpp
 extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const void* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140068ab0
 
-// ---- messagedialog.cpp
-void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);  // 0x14006d300
-
 // ---- optionsdialog.cpp
 // Free: reads the GameContainer (Game/game.h) through its first argument.
 struct GameContainer;

@@ -57,7 +57,7 @@
 //   [0x140152b60] System::MemoryAllocator::MemAlloc (static 2-arg: size, align)
 //   [0x140152b68] System::MemoryAllocator::MemFree  (static 1-arg)
 //   0x14000d9d0   ActRm_VectorClone_d9d0     (Action/exe_bodies.h)
-//   0x140025920   PlayerTrade_Retrace_25920  (Player/exe_bodies.h)
+//   0x140025920   Avl38Retrace               (Player/exe_bodies.h)
 
 #include "Work/marketwork_bst_a9f0.h"
 #include "Action/exe_bodies.h"
@@ -218,8 +218,8 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree,
     }
 
     // ac0e — AVL retrace/rebalance starting from the PARENT (retraceSlot), not the new
-    // node. (The retrace takes the header and the cursor slot as int64_t*: LEFT.)
-    PlayerTrade_Retrace_25920(reinterpret_cast<int64_t*>(tree), reinterpret_cast<int64_t*>(&retraceSlot));   // LEFT: SIG PlayerTrade_Retrace_25920
+    // node. 0x140025920 is the shared AVL retrace (Avl38Retrace, Player/exe_bodies.h).
+    Avl38Retrace(tree, &retraceSlot);   // 0x140025920
 
     *out = newNode;                                        // ac1e
     *reinterpret_cast<int32_t*>(tree + 1) += 1;            // ac21   // LEFT: the claim Set is two raw MarketWork fields

@@ -23,6 +23,7 @@
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "collection/Collection.h"   // rtcoll::SetSizeCore row (StorageComponent_DynArrayResize)
 #include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -94,47 +95,39 @@ int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity) {
 // Reimpl of FUN_14000f090 (StorageComponent dynamic-array resize:
 //   grow/shrink an array of 0x10-byte slot entries, plain memcpy of survivors)
 // ============================================================
-// LEFT (every cast in this body): ERASED hand-expanded Array<T>::SetSize over 0x10-byte
-// elements, shared by four element types (storage items, the trade manifest, the notify
-// entries); its callers hand the array in as void* (wave X; policy: typed wrappers over
-// the one core, never a container swap).
+// B4 X-G1-3: retail 0x14000f090 is Array<{u64,u64}>::SetSize, step for step the erased core
+// `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp): exact-equal early return, `_size`
+// first, cap = n (n * 3 when growing by one from non-empty), MemAlloc(cap << 4, 8), copy the
+// prefix (two qwords) only when the block moved else start at the old count, zero the new tail
+// (two qwords), the computed-address null test, no element destroy, MemFree(old) only when the
+// block moved (null test inside MemFree). The hand copy is replaced by that core through the
+// row below (the same row gameupdateloop_load.cpp carries file-locally as kSpec_Pod16).
+namespace {
+void ZeroStoragePod16(uint64_t* w) {
+    w[0] = 0;
+    w[1] = 0;
+}
+void AssignStoragePod16(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 2>>(d, s);
+}
+void InitStoragePod16(uint8_t* d) {
+    rtcoll::InitAs<uint64_t, &ZeroStoragePod16>(d);
+}
+const rtcoll::ArraySpec kSpec_StoragePod16 = {           // exe 0x14000f090
+    "Array<{u64,u64}>", 0x10, 8,
+    &AssignStoragePod16, &InitStoragePod16, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+using StoragePod16Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
+                                            Collection::ExplicitSpec<&kSpec_StoragePod16>>;
+}  // namespace
+
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
-    int64_t* field = (int64_t*)arrayBase;     // [0]=ptr, [1] low=count, high=capacity
-    int oldCount = (int)field[1];
-    if (newCount == oldCount) return;
-
-    int64_t* oldBuf = (int64_t*)field[0];
-    *(int*)((uintptr_t)field + 8) = newCount;
-    if (*(int*)((uintptr_t)field + 0xc) < newCount) {
-        *(int*)((uintptr_t)field + 0xc) = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            *(int*)((uintptr_t)field + 0xc) = newCount * 3;
-        }
-        void* nb = System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
-        field[0] = (int64_t)nb;
-    }
-
-    int start = (oldBuf == (int64_t*)field[0]) ? oldCount : 0;
-    if (start < newCount) {
-        int64_t off = (int64_t)start * 0x10;
-        for (int i = start; i < newCount; i++) {
-            int64_t* dst = (int64_t*)(field[0] + off);
-            if (dst) {
-                if (i < oldCount) {
-                    dst[0] = *(int64_t*)((uintptr_t)oldBuf + off);
-                    dst[1] = *(int64_t*)((uintptr_t)oldBuf + off + 8);
-                } else {
-                    dst[0] = 0;
-                    dst[1] = 0;
-                }
-            }
-            off += 0x10;
-        }
-    }
-
-    if (oldBuf != (int64_t*)field[0]) {
-        if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
-    }
+    // LEFT: its four callers' arrays (StorageComponent::storageSlots, the trade manifest, the
+    // notify entries) are raw {data, count, capacity} triples (H5): the one erased core is
+    // reached through the header view (the body's original C-style entry cast).
+    ((StoragePod16Array*)arrayBase)->SetSize(newCount);
 }
 
 // ============================================================================

@@ -32,7 +32,7 @@ extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount);  // 0x
 
 // ---- attendancecomponent.cpp
 void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll);  // 0x140115a50
-void AttendanceComponent_ReleaseLink1650(void* workerP);  // 0x140111650
+void AttendanceComponent_ReleaseLink1650(CitizenComponent* worker);  // 0x140111650
 void AttendanceComponent_ReleaseLink59b0(void* workerP);  // 0x1401159b0
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0x140002e10 (returns outPtr)
 
@@ -57,7 +57,11 @@ extern "C" void* CitizenEmploy_Strat_cbf0(int64_t townMgr, void* out, int64_t* a
 extern "C" void* CitizenEmploy_Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008ca20
 extern "C" void* CitizenEmploy_Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008c5f0
 extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008c4b0
-extern "C" void* CitizenList_AssignWorker_c3d0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey);  // 0x14008c3d0
+class CitizenBehavior;   // Entity/CitizenBehavior.h
+class Profession;        // Game/Profession.h
+class ComponentEntity;   // Entity/ComponentEntity.h
+extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c3d0
+extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);  // 0x140091130
 
 // ---- citizen_lifeevent.cpp
 
@@ -192,7 +196,6 @@ extern "C" void ModelComponentNotify_Reimpl(void* entity, int param);  // 0x1400
 void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP);  // 0x140005200
 
 // ---- nomadcomponent.cpp
-void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 
 // ---- orchardcomponent.cpp
 // B.4 COMP-6: OrchardComponent_ValidateRefs had no caller left: deleted.
@@ -200,7 +203,9 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2);  // 0x140103480
 // ---- pasturecomponent.cpp
 
 // ---- pasturecomponent_spawn.cpp
-extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);  // 0x140128670
+class PastureComponent;
+class AnimalComponent;
+extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 
 // ---- pasturecomponent_states.cpp
@@ -283,7 +288,7 @@ int fn_StorageCountQuery(void* component);  // 0x14012e5c0 B4 FORWARD -> WorkCom
 void ResolveExternalByName_Impl(void* nameString);  // 0x14001b1d0
 
 // ---- keystone_a_map.cpp (B3R G-Game: read by code/Game/Game/gamegrid_serialize.cpp)
-int CreateNaturalResource_helper_e2c0(int* param_1, int param_2);  // 0x14009e2c0
+int CreateNaturalResource_helper_e2c0(Map* map, int cellIndex);  // 0x14009e2c0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h, its "TO MOVE: Component"
 // section; no .cpp. B3R Leftovers. Storage_AddItem, the third body there, had no caller

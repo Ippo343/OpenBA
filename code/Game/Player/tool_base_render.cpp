@@ -893,7 +893,7 @@ void Impl_HighlightFollow(EditTool* self) {
 // ===========================================================================
 // B4 FORWARD: their callers (Dialog/edittool_select.cpp, Player/edittool.cpp,
 // Player/pathtool_setselected.cpp, ...) hand the tool / component over as void*.
-extern "C" void HighlightSelect_Impl(void* self)   { Impl_c9e0(reinterpret_cast<EditTool*>(self)); }  // 0x1400fc9e0
+extern "C" void HighlightSelect_Impl(EditTool* self) { Impl_c9e0(self); }  // 0x1400fc9e0 (caller: Dialog/edittool_select.cpp)
 extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<EditTool*>(self)); }  // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(HighlightComponent* self) { Impl_c4a0(self); }  // 0x14004c4a0 (callers: Player/pathtool_setselected.cpp)
 

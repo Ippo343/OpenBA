@@ -80,8 +80,6 @@
 
 namespace RtObject {
 
-using RtSystem::Filename;
-using RtSystem::Sys;
 
 FindCounters g_fc = {};
 
@@ -109,7 +107,7 @@ const char* const kResourceSuffix = ":resource";
 // directory (reference_aeaa_is_private_not_unexported.md). Verified with
 // pefile before this body was written, not inferred from the mangling.
 // ============================================================================
-External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* path) {
+External* RtObject_ExternalFactory_Find(ExternalFactory* self, const System::Filename* path) {
     ++g_fc.calls;
 
     // ---- 0x1800be0fc-0x1800be149: `Filename key = path`, then adjust again --
@@ -118,16 +116,15 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
     // QEAA@AEBV01@@Z, 0x1800067d0), whose ported body normalises exactly twice
     // for that reason. So this one line still spends 0x1800be140 AND
     // 0x1800be145, and all four of the header's AdjustDelimiters calls are
-    // accounted for inside the two copies. `path` is the registered entry
-    // point's POD parameter, so it comes through the one transitional bridge.
-    System::Filename key(Sys(*path));                    // [RBP+0x28]
+    // accounted for inside the two copies.
+    System::Filename key(*path);                         // [RBP+0x28]
 
     // ---- 0x1800be14f: the identifier comes from `path`, NOT from `key` ------
     // Retail passes RBX (the argument) here, not the normalised copy. It cannot
     // matter — AdjustDelimiters does not touch ':' — but it is transcribed the
     // way it is written, because "it cannot matter" is how a port acquires a
     // difference nobody can find later.
-    System::Filename ident = Sys(*path).GetPathIdentifer();   // [RBP+0x38]
+    System::Filename ident = path->GetPathIdentifer();   // [RBP+0x38]
 
     // ---- 0x1800be15c-0x1800be1f6: no identifier -> append ":resource" -------
     // `GetLength` is retail's own null-or-empty test (0x1800063c0 returns 0 for
@@ -151,11 +148,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
     // ---- 0x1800be257: descend `this->_resources` (this + 0x10) -------------
     rtsetavl24::Set* const tree =
         reinterpret_cast<rtsetavl24::Set*>(&self->_resources);  // CAST-OK: elem_stride
-    // TRANSITIONAL CAST, the class->POD direction: `rtresset::Find` is an
-    // unconverted C body (external_set.cpp) whose key parameter is the POD.
-    // Same eight bytes, same single field; it goes when that file converts.
-    rtsetavl24::Node* const node =
-        rtresset::Find(tree, reinterpret_cast<const Filename*>(&probe));  // LEFT: H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)
+    rtsetavl24::Node* const node = rtresset::Find(tree, &probe);
 
     // (probe's 0x1800be26f release is its destructor now. It runs at the end of
     // the function instead of here — nothing between the two reads its buffer,

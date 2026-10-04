@@ -42,7 +42,7 @@
 
 // FUN_1400049c0(Serializer* s, int count, longlong arrayBase, void* deadInit)
 extern "C" void Reimpl_ExternalPtrArray_Serialize(
-    void* serializer, int count, long long arrayBase, void* /*deadInit*/) {
+    IO::Serializer* serializer, int count, ComponentDescription** arrayBase, void* /*deadInit*/) {
 
 
     if (count <= 0 || !arrayBase || !serializer) return;
@@ -53,10 +53,9 @@ extern "C" void Reimpl_ExternalPtrArray_Serialize(
     const uint32_t tid = ComponentDescription::TypeId();
     const uint32_t* typeIdPtr = tid ? &tid : nullptr;
 
-    void** base = reinterpret_cast<void**>(arrayBase);
     for (int i = 0; i < count; ++i) {
         // &arr[i] — 8-byte stride, matching (param_3 + i*8) in the disasm.
-        ExternalPtrSerializeGeneric(base + i, serializer, typeIdPtr,
+        ExternalPtrSerializeGeneric(arrayBase + i, serializer, typeIdPtr,
                                     "ComponentDescription");
     }
 }

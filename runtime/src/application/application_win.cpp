@@ -52,7 +52,6 @@
 // ENDGAME B.3.7: `Application::Application` is the real class; a global
 // `using RtApplication::Application;` is ill-formed next to the namespace.
 using App = Application::Application;
-using RtSystem::WideString;
 
 namespace {
 
@@ -341,14 +340,14 @@ bool Application::Application::LaunchProcess(const char* cmd, bool wait) {
         std::memcpy(buf, cmd, copyLen);                       // 0x18009f71a
         if (len > 0x104) buf[0x103] = 0;                       // 0x18009f72c, truncated
 
-        WideString cmdLine;
-        RtSystem::RtSystem_WideString_CtorFromChars(&cmdLine, buf);  // 0x18009f73d
+        BOOL created;
+        {
+            const System::WideString cmdLine(buf);             // 0x18009f73d
 
-        const BOOL created = CreateProcessW(
-            nullptr, cmdLine.data, nullptr, nullptr, FALSE, 0,
-            nullptr, nullptr, &si, &pi);                      // 0x18009f773
-
-        RtSystem::RtSystem_WideString_Dtor(&cmdLine);          // 0x18009f78a..7ac
+            created = CreateProcessW(
+                nullptr, cmdLine._data, nullptr, nullptr, FALSE, 0,
+                nullptr, nullptr, &si, &pi);                  // 0x18009f773
+        }                                                      // ~WideString 0x18009f78a..7ac
 
         if (!created) {
             ok = false;
@@ -358,16 +357,14 @@ bool Application::Application::LaunchProcess(const char* cmd, bool wait) {
             ok = true;                                         // pi.hThread leaked, faithfully
         }
     } else {
-        WideString file;
-        RtSystem::RtSystem_WideString_CtorFromChars(&file, cmd);          // 0x18009f617
-        WideString verb;
-        RtSystem::RtSystem_WideString_CtorFromChars(&verb, kLaunchVerbOpen); // 0x18009f62d
+        HINSTANCE result;
+        {
+            const System::WideString file(cmd);                // 0x18009f617
+            const System::WideString verb(kLaunchVerbOpen);    // 0x18009f62d
 
-        HINSTANCE result = ShellExecuteW(nullptr, verb.data, file.data,
-                                         nullptr, nullptr, 10);            // 0x18009f64d
-
-        RtSystem::RtSystem_WideString_Dtor(&verb);              // 0x18009f78a..7ac (shared epilogue)
-        RtSystem::RtSystem_WideString_Dtor(&file);               // 0x18009f694..6b2
+            result = ShellExecuteW(nullptr, verb._data, file._data,
+                                   nullptr, nullptr, 10);      // 0x18009f64d
+        }   // ~verb (0x18009f78a..7ac, the shared epilogue), then ~file (0x18009f694..6b2)
 
         ok = reinterpret_cast<INT_PTR>(result) > 32;             // 0x18009f6b7..6ba  CAST-OK: win32
     }

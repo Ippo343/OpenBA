@@ -62,6 +62,7 @@
 
 #include <new>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/PlayerToolManager.h"   // PlayerToolManager::OnEntityRemoved (0x140103480)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -210,15 +211,11 @@ void CitizenComponent::OnRemove() {
         ProfessionList* professionRoot = gw->m_professionList;
         Profession* defaultProfession = professionRoot ? professionRoot->field_0x30 : nullptr;
         if (professionRoot && profession != defaultProfession) {
-            alignas(8) uint8_t retbuf[16] = {0};
+            CitizenComponent* retbuf[2] = { nullptr, nullptr };
             ComponentEntity* nearIBP = formerHouse;
-            // CitizenList_AssignWorker_c3d0 is CitizenBehavior's body (LEFT free,
-            // int64_t receiver and key).
-            void* result = CitizenList_AssignWorker_c3d0(
-                reinterpret_cast<int64_t>(gw->m_citizenList), retbuf,   // LEFT: SIG CitizenList_AssignWorker_c3d0 (Component/exe_bodies.h, wave X)
-                reinterpret_cast<int64_t*>(&nearIBP),   // LEFT: SIG CitizenList_AssignWorker_c3d0
-                reinterpret_cast<int64_t>(profession));      // 0x14008c3d0  LEFT: SIG CitizenList_AssignWorker_c3d0
-            CitizenComponent* replacement = result ? *reinterpret_cast<CitizenComponent**>(result) : nullptr;   // LEFT: SIG CitizenList_AssignWorker_c3d0 (void* return)
+            CitizenComponent** result = CitizenList_AssignWorker_c3d0(
+                gw->m_citizenList, retbuf, &nearIBP, profession);   // 0x14008c3d0
+            CitizenComponent* replacement = result ? *result : nullptr;
 
             CitizenComponent* target;
             int   eventType;
@@ -236,8 +233,7 @@ void CitizenComponent::OnRemove() {
 
         // ---- 7. trade-work list + any dialog bound to our entity ---------------
         ComponentEntity* ownerIBP = _entity;
-        // NomadComp_FUN_140103480 is the tool manager's body (LEFT free, int64_t receiver).
-        NomadComp_FUN_140103480(reinterpret_cast<int64_t>(gw->m_toolManager), &ownerIBP);   // 0x140103480  LEFT: SIG NomadComp_FUN_140103480 (Component/exe_bodies.h, wave X)
+        gw->m_toolManager->OnEntityRemoved(&ownerIBP);   // 0x140103480
 
         // ---- 8. the town citizen list (townMgr+0xa0) — the whole point ---------
         CitizenComponent* selfIBP = this;
