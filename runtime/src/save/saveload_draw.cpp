@@ -615,8 +615,8 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // receiver is PROVED — it is `Video::Context::_contextData` (+0x2160), which
     // Context.h types as `ContextData*`. The concrete subclass and the dx11 seam
     // stay as they are (B35_RULES section 11).
-    reinterpret_cast<Video::ContextData*>(ctx->_contextData)
-        ->Clear(1u, 0xffff6000u, 1.0f, 0);                   // B.3.5 bridge
+    ctx->_contextData
+        ->Clear(1u, 0xffff6000u, 1.0f, 0);
 
     // ---- the orthographic camera ------------------------------------------
     // Six planes and an "orthographic" flag, all literals except the two that
