@@ -451,8 +451,8 @@ char DestroyComponent::State3Enter(StateMachine* sm) {
 
     // Stop pending production work on the yard (FUN_14012ead0/FUN_14012eb50).
     WorkComponent* yard = FindOn<WorkComponent>(_entity);
-    if (yard && WorkComponent_CheckWorkSlot(yard))
-        WorkComponent_RegisterWorkSlot(yard);
+    if (yard && yard->IsWorkPosted())
+        yard->CancelWork();
 
     // STANDALONE: status-icon strip (StatusIconComponent_helper_c2a0) and the
     // render-scene mesh removal / rubble swap are skipped — visual-only, and the
@@ -537,7 +537,7 @@ char DestroyComponent::State4Tick(StateMachine* sm) {
     WorkComponent* yard = FindOn<WorkComponent>(_entity);
     if (!Destroy_ReclaimPending_ea20(yard)) {
         ::ControllerLive::RequestStateTransition(sm, 5);
-        if (yard) WorkComponent_RegisterWorkSlot(yard);
+        if (yard) yard->CancelWork();
     }
     return 1;
 }
@@ -625,7 +625,7 @@ char DestroyComponent::State5Tick() {
     // (FUN_140003050 -> FUN_14012eb50) before capturing the footprint.
     {
         WorkComponent* yard = FindOn<WorkComponent>(entity);
-        if (yard) WorkComponent_RegisterWorkSlot(yard);
+        if (yard) yard->CancelWork();
     }
 
     // 1) Capture the OLD footprint (grid cell + rotation) and world transform.
@@ -888,7 +888,7 @@ char DestroyComponent::CancelDemolition(StateMachine* sm) {
     StatusIconComponent* mesh = FindOn<StatusIconComponent>(entity);
     mesh->SetFlag(5, 0);   // 0x14012c3f0
     WorkComponent* yard = FindOn<WorkComponent>(entity);
-    WorkComponent_RegisterWorkSlot(yard);
+    yard->CancelWork();
 
     // comp+0x50 — the burning flag BeginBurning sets. Cancelling leaves nothing
     // standing, so the machine goes to the destroyed-building rest state instead.

@@ -75,9 +75,10 @@ void WorldGeometry::RemoveDecal(int decalId) {
     }
 }
 
-// B4 FORWARD: radiusui.cpp, placementtool.cpp (they hold the WorldGeometry as void*).
-void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
-    reinterpret_cast<WorldGeometry*>(terrainDecalSys)->RemoveDecal(decalId);   // LEFT: B4 FORWARD radiusui.cpp / placementtool.cpp (other agents') hold the WorldGeometry as void*
+// B4 FORWARD: radiusui.cpp, placementtool.cpp (they hold the WorldGeometry typed; the
+// closing wave calls RemoveDecal there).
+void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decalId) {
+    terrainDecalSys->RemoveDecal(decalId);   // LEFT: B4 FORWARD radiusui.cpp / placementtool.cpp (other agents') hold the WorldGeometry as void*
 }
 
 // ============================================================
@@ -361,11 +362,10 @@ static void DecalComponent_EnterBuiltState(DecalComponent* cc) {
 
 // Find the owner entity's DecalComponent and run the completion ramp on it.
 // B4 FORWARD: buildcomponent_state8.cpp, starttown.cpp (they pass the entity as void*).
-extern "C" void DecalComponent_MarkOwnerBuilt(void* entityV) {
-    if (!entityV) return;
+extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity) {
+    if (!entity) return;
     uint32_t tid = DecalComponent::TypeId();
     if (!tid) return;
-    ComponentEntity* entity = reinterpret_cast<ComponentEntity*>(entityV);   // LEFT: B4 FORWARD buildcomponent_state8.cpp / starttown.cpp (other agents') pass the entity as void*
     if (!entity->_components) return;
     for (int i = 0; i < entity->_componentCount; ++i) {
         Component* comp = entity->_components[i].Get();

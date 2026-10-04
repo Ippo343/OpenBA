@@ -939,7 +939,7 @@ static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceCo
     fn_FindComponent_Work(workplaceComp->_entity, &sl);
     if (sl == nullptr) return false;
     if (sl->workState == 0) {
-        int cap = fn_StorageCountQuery(sl);
+        int cap = sl->CalcMaxWorkers();
         sl->workState = cap;
     }
     return roster < sl->workState;
@@ -1079,7 +1079,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
 
             // Calculate worker slots (lazy-compute cached at +0x30)
             if (slc->workState == 0) {
-                slc->workState = fn_CalcWorkerSlots(slc);
+                slc->workState = slc->CalcMaxWorkers();
             }
             int workerSlots = slc->workState;
 

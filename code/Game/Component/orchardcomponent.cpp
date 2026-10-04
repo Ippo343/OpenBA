@@ -483,7 +483,7 @@ uint32_t OrchardComponent::CommandMask(int cmdId) {
     uint8_t result = 0;
     switch (cmdId) {
     case 0: {
-        const bool busy = WorkComponent_CheckWorkSlot(wc) != 0;   // 0x14012ead0
+        const bool busy = wc->IsWorkPosted() != 0;   // 0x14012ead0
         if ((!busy && planted < slotCount) || slotCount == 0) result = hasType ? 1 : 0;
         break;
     }

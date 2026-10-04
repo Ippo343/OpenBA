@@ -326,7 +326,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     int64_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
     // LEFT: 0x140117080's port takes the component as int64 (Component/exe_bodies.h).
-    CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(comp), pos,   // 0x140117080   // LEFT: 0x140117080's port takes the component as int64 (Component/exe_bodies.h).
+    CitizenComp_DeferredInit_117080(comp, pos,   // 0x140117080
                                     static_cast<uint32_t>(genderSel == '\0'),
                                     isChild ? '\x01' : '\0', age, educated, &nullIBP,
                                     laborerProf);

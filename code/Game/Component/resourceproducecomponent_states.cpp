@@ -135,8 +135,8 @@ static char RP_State14Enter(ResourceProduceComponent* self, StateMachine* /*sm*/
 
     WorkComponent* workComp = owner->FindComponent<WorkComponent>();   // 0x140003050
     if (workComp != nullptr) {
-        if (WorkComponent_CheckWorkSlot(workComp)) {
-            WorkComponent_RegisterWorkSlot(workComp);
+        if (workComp->IsWorkPosted()) {
+            workComp->CancelWork();
         }
     }
 

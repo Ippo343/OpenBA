@@ -260,13 +260,13 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
 
 // B4 FORWARD: 3 outside caller(s) (Component/immigrationcomponent_states.cpp,
 // Dialog/debugui.cpp, Game/founding_spawn.cpp).
-void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
+void CitizenComp_DeferredInit_117080(CitizenComponent* self, const float* pos, uint32_t gender,
                                      char isElder, float age, char forceEmploy,
                                      int64_t* parentIBP, int64_t spawnKey) {
-    reinterpret_cast<CitizenComponent*>(selfV)->Initialize(   // LEFT: B4 FORWARD C signature (wave X)
-        reinterpret_cast<const float*>(pos), gender, isElder, age, forceEmploy,   // LEFT: B4 FORWARD C signature (wave X)
-        parentIBP ? reinterpret_cast<CitizenComponent*>(*parentIBP) : nullptr,   // LEFT: B4 FORWARD C signature (wave X)
-        reinterpret_cast<Profession*>(spawnKey));   // LEFT: B4 FORWARD C signature (wave X)
+    self->Initialize(
+        pos, gender, isElder, age, forceEmploy,
+        parentIBP ? reinterpret_cast<CitizenComponent*>(*parentIBP) : nullptr,   // LEFT: SIG CitizenComp_DeferredInit_117080: debugui.cpp:507 / founding_spawn.cpp:326 hold the parent InternalBasePtr as int64_t (X3-GAME's files)
+        reinterpret_cast<Profession*>(spawnKey));   // LEFT: SIG CitizenComp_DeferredInit_117080: founding_spawn.cpp:318 holds the profession key as int64_t (X3-GAME's file)
 }
 
 // [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,

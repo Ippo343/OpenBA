@@ -145,7 +145,7 @@ char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2); 
 // ---- citizencomponent_lifecycle.cpp
 
 void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0
-void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender, char isElder, float age, char forceEmploy, int64_t* parentIBP, int64_t spawnKey);  // 0x140117080
+void CitizenComp_DeferredInit_117080(CitizenComponent* self, const float* pos, uint32_t gender, char isElder, float age, char forceEmploy, int64_t* parentIBP, int64_t spawnKey);  // 0x140117080
 
 // ---- cropfieldcomponent.cpp
 struct CropSlot;
@@ -159,11 +159,13 @@ class CropFieldComponent;
 extern "C" float CropFieldComponent_Maturity(CropFieldComponent* comp);  // 0x14011b410 -> CropFieldComponent::Maturity, with a null guard (cropui_promote.cpp)
 
 // ---- decalcomponent.cpp
-void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId);  // 0x1400b0d00
+class WorldGeometry;
+void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decalId);  // 0x1400b0d00
 
 // ---- destroycomponent_workerrelease.cpp
-extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax);  // 0x14012fb00
-extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc);  // 0x14012f520
+// B4 X3-COMP: WorkPlaceComponent_SetMaxWorkers (0x14012fb00, its one caller calls the
+// member now) and WorkPlaceComponent_EnterBuilderProfession (0x14012f520, no caller):
+// deleted.
 
 // ---- entity_finders_disaster.cpp
 // B4 X-G1-2b: deleted with its file. Entity_FindComponent_Fire_5840 (0x140005840),
@@ -230,7 +232,7 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, 
 // ---- statusiconcomponent.cpp
 
 // ---- storagecomponent.cpp
-int StorageComponent_QueryAvailable(void* storageComp, int64_t materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
+int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount);  // 0x14000f090
 
 // ---- toolbardescription.cpp
@@ -245,8 +247,9 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
 // B.4 COMP-f: 0x140091ba0 is CitizenBehavior::UnregisterWell.
 
 // ---- workcomponent.cpp
-bool WorkComponent_CheckWorkSlot(void* selfP);  // 0x14012ead0 B4 FORWARD -> WorkComponent::IsWorkPosted (outside callers)
-void WorkComponent_RegisterWorkSlot(void* selfP);  // 0x14012eb50 B4 FORWARD -> WorkComponent::CancelWork (outside callers)
+// B4 X3-COMP: WorkComponent_CheckWorkSlot (0x14012ead0), _RegisterWorkSlot (0x14012eb50) and
+// fn_StorageCountQuery / fn_CalcWorkerSlots (0x14012e5c0): their callers call IsWorkPosted /
+// CancelWork / CalcMaxWorkers; deleted.
 
 // ---- workplacecomponent.cpp
 void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);  // 0x14012fc00 B4 FORWARD -> WorkPlaceComponent::SetAccepting (outside callers)
@@ -280,9 +283,8 @@ int fn_StorageComponent_QueryCount(void* storageComp);  // 0x14012cf10 B4 FORWAR
 //   +0x28 _minWorkerCount, +0x2c _maxWorkerCount, +0x30 _maxArea, +0x34 _scaleWorkersWithSize.
 // If _scaleWorkersWithSize (+0x34) == 0: return _defaultWorkers (+0x24) flat.
 // Else: trunc(w*h / _maxArea * _defaultWorkers + 1) clamped to [1, _defaultWorkers].
-// Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
-int fn_StorageCountQuery(void* component);  // 0x14012e5c0 B4 FORWARD -> WorkComponent::CalcMaxWorkers (NOT the registered body: that is
-                                            // WorkComponent_CalcMaxWorkers, tutorial_base.cpp; R5, two bodies)
+// (WorkComponent::CalcMaxWorkers; NOT the registered body, WorkComponent_CalcMaxWorkers in
+// tutorial_base.cpp: R5, two bodies.)
 
 // ---- componentdescription.cpp
 // ResolveExternalByName (FUN_14001b1d0 in exe) — REPLACED with inline C++
@@ -304,10 +306,4 @@ int CreateNaturalResource_helper_e2c0(Map* map, int cellIndex);  // 0x14009e2c0
 // section; no .cpp. B3R Leftovers. Storage_AddItem, the third body there, had no caller
 // and was deleted.)
 #include "Entity/exe_bodies.h"   // fn_FindComponent_Work (read by citizencomponent.cpp's fn_CitizenComponent_HasVacancy)
-
-// ---- inline body (no .cpp)
-// Alias used by professionui.cpp
-inline int fn_CalcWorkerSlots(void* storageLocComp) {
-    return fn_StorageCountQuery(storageLocComp);
-}
 

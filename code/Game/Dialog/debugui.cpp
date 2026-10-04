@@ -513,7 +513,7 @@ static void Game_SpawnCitizens_Impl() {
                             float age = randAge * (maxAge - minAge) + minAge;
 
                             // LEFT: the body takes int64_t for its receiver and key (COMP-b's declaration).
-                            CitizenComp_DeferredInit_117080(reinterpret_cast<int64_t>(citizen), spawnPos,   // LEFT: SIG CitizenComp_DeferredInit_117080 (int64_t receiver; citizencomponent_lifecycle.cpp, founding_spawn.cpp)
+                            CitizenComp_DeferredInit_117080(citizen, spawnPos,
                                                       genderFlag, '\0',
                                                       age, '\x01', &parentIBP,
                                                       reinterpret_cast<int64_t>(profList));   // 0x140117080   // LEFT: SIG CitizenComp_DeferredInit_117080 (int64_t spawn key)

@@ -15,7 +15,8 @@
 // ---- leaf bodies, firecomponent_ignite.cpp ----
 // FireComponent::Ignite / SpreadToNeighbors / Extinguish / MarkDanger are members
 // (FireComponent.h). B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp).
-extern "C" void FireComponent_Ignite_610(void* self);          // 0x140049610
+class FireComponent;
+extern "C" void FireComponent_Ignite_610(FireComponent* self);   // 0x140049610
 // 0x14009fa80 is Map::StampDanger (Game/Map.h), defined in firecomponent_ignite.cpp.
 class AmbientEmitterComponent; class DestroyComponent;
 namespace System { class Time; }

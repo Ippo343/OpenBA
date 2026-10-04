@@ -234,7 +234,7 @@ void WorkPlaceUI::AdjustJobCount(int delta) {
     // No g_wpcRosterOnly wrapper here: the ported SetMaxWorkers body holds that guard
     // across its own eviction loop (destroycomponent_workerrelease.cpp).
     const int rosterBefore = workPlace->workerCount;
-    WorkPlaceComponent_SetMaxWorkers(reinterpret_cast<int64_t>(workPlace), cur + delta);   // 0x14012fb00  LEFT: takes int64_t (Component/exe_bodies.h)
+    workPlace->SetMaxWorkers(cur + delta);   // 0x14012fb00
 
     fprintf(stderr, "[WorkPlaceUI] jobCount delta=%+d %s WorkComponent+0x30 %d->%d (asked %d) "
                     "roster %d->%d\n",

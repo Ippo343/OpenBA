@@ -322,7 +322,7 @@ char OrchardComponent::TickPlanting(StateMachine* sm) {
     if (planted != count) return 1;
 
     WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    WorkComponent_RegisterWorkSlot(wc);   // 0x14012eb50
+    wc->CancelWork();   // 0x14012eb50
     OrchardRequestState(sm, 10);
     return 1;
 }
@@ -399,7 +399,7 @@ void OrchardPostTendArea(ComponentEntity* entity) {
 // Is the work component currently holding a work slot for us? (0x14012ead0)
 bool OrchardHasWork(ComponentEntity* entity) {
     WorkComponent* wc = entity->FindComponent<WorkComponent>();   // 0x140003050
-    return WorkComponent_CheckWorkSlot(wc) != 0;   // 0x14012ead0
+    return wc->IsWorkPosted() != 0;   // 0x14012ead0
 }
 
 }  // namespace
@@ -521,7 +521,7 @@ char OrchardComponent::EnterTending(StateMachine* sm) {
 char OrchardComponent::UpdateTending() {
     if (OrchardHasWork(_entity)) {
         WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
-        WorkComponent_RegisterWorkSlot(wc);   // 0x14012eb50
+        wc->CancelWork();   // 0x14012eb50
     }
     return 1;
 }
@@ -564,7 +564,7 @@ char OrchardComponent::TickTending(StateMachine* sm) {
     }
     if (hasWork && !inSeason) {
         WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
-        WorkComponent_RegisterWorkSlot(wc);   // 0x14012eb50
+        wc->CancelWork();   // 0x14012eb50
     } else if (!hasWork && inSeason) {
         OrchardPostTendArea(_entity);
     }
@@ -709,7 +709,7 @@ char OrchardComponent::TickHarvesting(StateMachine* sm) {
     // Retail inlines the WorkComponent scan here; FindComponent<WorkComponent> is the same
     // scan. Note the release is unconditional — no HasWorkSlot test.
     WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    WorkComponent_RegisterWorkSlot(wc);   // 0x14012eb50
+    wc->CancelWork();   // 0x14012eb50
     OrchardRequestState(sm, 10);
     return 1;
 }
@@ -765,8 +765,8 @@ ClearAreaDescription* FindClearAreaDescription(ComponentEntity* entity) {
 // ============================================================
 char OrchardComponent::EnterClearing() {
     WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    if (WorkComponent_CheckWorkSlot(wc)) {   // 0x14012ead0
-        WorkComponent_RegisterWorkSlot(wc);   // 0x14012eb50
+    if (wc->IsWorkPosted()) {   // 0x14012ead0
+        wc->CancelWork();   // 0x14012eb50
     }
 
     ComponentEntity* entity = _entity;
@@ -807,7 +807,7 @@ char OrchardComponent::EnterClearing() {
 // ============================================================
 char OrchardComponent::UpdateClearing() {
     WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    WorkComponent_RegisterWorkSlot(wc);   // 0x14012eb50
+    wc->CancelWork();   // 0x14012eb50
     return 1;
 }
 

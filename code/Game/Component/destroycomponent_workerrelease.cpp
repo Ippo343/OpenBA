@@ -254,13 +254,3 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     std::fflush(stderr);
 }
 
-// ---- B4 FORWARD: outside callers in Dialog/workplaceui.cpp (SetMaxWorkers),
-// Component/workplacecomponent.cpp and standalone/tool_harness.cpp
-// (EnterBuilderProfession); the closing wave rewires them. The null test is the tree's.
-extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
-    reinterpret_cast<WorkPlaceComponent*>(wpc)->SetMaxWorkers(newMax);   // LEFT: B4 FORWARD (workplaceui.cpp)
-}
-extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
-    if (!wpc) return;
-    reinterpret_cast<WorkPlaceComponent*>(wpc)->EnterBuilderProfession();   // LEFT: B4 FORWARD (workplacecomponent.cpp, tool_harness.cpp)
-}
