@@ -38,8 +38,8 @@ extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extR
 // (callers use ComponentEntity::FindComponent<CitizenAIComponent>()).
 
 // ---- edittool_select.cpp
-// B4 FORWARD to EditTool::SelectEntity (Player/EditTool.h) for the outside callers.
-extern "C" void EditTool_SelectEntity_Impl(void* self, void* entity);  // 0x1400fd3b0
+// B.4 P2 DLG-1: EditTool_SelectEntity_Impl (0x1400fd3b0) had no caller left; deleted
+// (callers use EditTool::SelectEntity, Player/EditTool.h).
 
 // ---- entityui.cpp
 // fn_EntityUI_SetEditMode — reimplemented in entityui.cpp as EntityUI_SetEditMode_Impl
