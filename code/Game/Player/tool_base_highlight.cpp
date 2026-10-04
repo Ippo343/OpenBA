@@ -263,7 +263,7 @@ haveSlot:
     entry->field_0x40 = static_cast<int32_t>(param_7);
     // LEFT: +0x44 / +0x5D are `bool` fields (GAME-b's WorldGeometryElements.h);
     // retail stores the caller's raw byte, which a bool store would normalise (H8).
-    *reinterpret_cast<uint8_t*>(&entry->field_0x44) = param_9;   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    *reinterpret_cast<uint8_t*>(&entry->field_0x44) = param_9;   // LEFT: OTHER H8 +0x44 is a bool field (WorldGeometryElements.h); retail stores the caller's raw byte, which a bool store would normalise
     // LEFT: +0x48..+0x58 are floats; retail stores the caller's raw 32-bit words
     // (the callers pass the bits in integer registers / stack slots).
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;  // CAST-OK: float_bits
@@ -272,7 +272,7 @@ haveSlot:
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[3]) = param_13;  // CAST-OK: float_bits
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;  // CAST-OK: float_bits
     entry->field_0x5C = true;
-    *reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;   // LEFT: as +0x44
+    *reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;   // LEFT: OTHER H8 alternateKey is a bool field (WorldGeometryElements.h); retail stores the caller's raw byte, which a bool store would normalise
     // LEFT: 0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.
     TradeWork_impl_ace40(reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     return iVar3;

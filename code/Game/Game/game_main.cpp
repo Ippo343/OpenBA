@@ -202,13 +202,13 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
         // LEFT: the XAudio2 interfaces are held as void* (Audio/Device.h); the two
         // calls are IXAudio2MasteringVoice::DestroyVoice and IXAudio2::Release.
         if (void* sub1 = ad->_masteringVoice) {                  // +0xa90
-            void** vt = *reinterpret_cast<void***>(sub1);   // LEFT: Audio/Device.h: the XAudio2 interfaces are void* (vtable read by index; owner R-AUDIO / wave X)
-            reinterpret_cast<void(*)(void*)>(vt[0x90/8])(sub1);   // LEFT: Audio/Device.h: the XAudio2 interfaces are void* (vtable read by index; owner R-AUDIO / wave X)
+            void** vt = *reinterpret_cast<void***>(sub1);   // LEFT: FLOOR? COM vtable read by index: Audio/Device.h (RT) keeps the XAudio2 interfaces as void*
+            reinterpret_cast<void(*)(void*)>(vt[0x90/8])(sub1);   // LEFT: FLOOR? COM vtable read by index: Audio/Device.h (RT) keeps the XAudio2 interfaces as void*
         }
         ad->_masteringVoice = nullptr;
         if (void* sub2 = ad->_xaudio2) {                         // +0xa88
-            void** vt = *reinterpret_cast<void***>(sub2);   // LEFT: Audio/Device.h: the XAudio2 interfaces are void* (vtable read by index; owner R-AUDIO / wave X)
-            reinterpret_cast<void(*)(void*)>(vt[0x10/8])(sub2);   // LEFT: Audio/Device.h: the XAudio2 interfaces are void* (vtable read by index; owner R-AUDIO / wave X)
+            void** vt = *reinterpret_cast<void***>(sub2);   // LEFT: FLOOR? COM vtable read by index: Audio/Device.h (RT) keeps the XAudio2 interfaces as void*
+            reinterpret_cast<void(*)(void*)>(vt[0x10/8])(sub2);   // LEFT: FLOOR? COM vtable read by index: Audio/Device.h (RT) keeps the XAudio2 interfaces as void*
         }
         ad->_xaudio2 = nullptr;
     }

@@ -112,10 +112,9 @@ void FollowDialog::OnOpened() {
 
         textFollow = elem;
 
-        // LEFT: CitizenComponent::name is the String's raw storage (H5, block COMP).
         CitizenComponent* entity = citizen;
         if (entity && elem) {
-            elem->SetParameter(0, *reinterpret_cast<const System::String*>(&entity->name));   // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage (Component/CitizenComponent.h)
+            elem->SetParameter(0, entity->name);   // +0x28 System::String
         }
     }
 
