@@ -155,7 +155,9 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 extern "C" void Reimpl_ExternalPtr_Serialize_EnvironmentDesc(void* refField, void* serializer);  // 0x1400192a0
 
 // ---- serialize_externals_array.cpp
-extern "C" void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count, long long arrayBase, void* );  // 0x1400049c0
+namespace IO { class Serializer; }
+class ComponentDescription;
+extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, int count, ComponentDescription** arrayBase, void* );  // 0x1400049c0
 
 // ---- serialize_externals_typed.cpp
 extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(void* refField, void* serializer);  // 0x140007140

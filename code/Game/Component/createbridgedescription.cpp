@@ -63,7 +63,7 @@ bool CreateBridgeDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_u24, nullptr);
     ser.Serialize(_u30, nullptr);
     ser.Serialize(_i34, nullptr);
-    Reimpl_ExternalPtrArray_Serialize(&ser, 5, reinterpret_cast<long long>(_refs), nullptr);   // ExtPtr[5] +0x38 (0x1400049c0)
+    Reimpl_ExternalPtrArray_Serialize(&ser, 5, _refs, nullptr);   // ExtPtr[5] +0x38 (0x1400049c0)
     return true;
 }
 

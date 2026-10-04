@@ -121,7 +121,7 @@ extern "C" void PopulationComponent_Serialize_Real(void* selfP, IO::Stream& stre
     // registered type-id cell (INVENTORY_C Table 1); ExternalPtrSerializeGeneric
     // (code/Game/Game, out of C1's file set) still wants a pointer.
     const uint32_t tidPopDesc = PopulationDescription::TypeId();
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(&self->description), &ser,   // LEFT: SIG ExternalPtrSerializeGeneric (void** field, Game/serialize_externals.h)
+    ExternalPtrSerializeGeneric(&self->description, &ser,
                                 &tidPopDesc, "PopulationDescription");
     ser.Serialize(self->habitatDim, nullptr);
     ser.Serialize(self->herdDim, nullptr);

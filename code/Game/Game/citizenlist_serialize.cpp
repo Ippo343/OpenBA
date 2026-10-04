@@ -705,7 +705,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
             GameColl::AsArray<GameColl::Ptr8>(&field_0x110).SetSize(count);
         // LEFT: the array body takes the element base as long long (Game/exe_bodies.h,
         // serialize_externals_array.cpp).
-        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x110), nullptr);   // 0x1400049c0   // LEFT: SIG Reimpl_ExternalPtrArray_Serialize(long long) (wave X)
+        Reimpl_ExternalPtrArray_Serialize(ser, count, field_0x110, nullptr);   // 0x1400049c0
     }
     {
         int32_t count = field_0x128;
@@ -714,7 +714,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
             GameColl::AsArray<GameColl::Ptr8>(&field_0x120).SetSize(count);
-        Reimpl_ExternalPtrArray_Serialize(ser, count, reinterpret_cast<long long>(field_0x120), nullptr);   // 0x1400049c0   // LEFT: SIG Reimpl_ExternalPtrArray_Serialize(long long) (wave X)
+        Reimpl_ExternalPtrArray_Serialize(ser, count, field_0x120, nullptr);   // 0x1400049c0
     }
 
     // LEFT: the three clocks are declared int64_t (CitizenBehavior.h, block WORK-a).

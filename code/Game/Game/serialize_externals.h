@@ -18,12 +18,26 @@
 
 #pragma once
 #include <cstdint>
+#include <type_traits>
+#include "object/External.h"   // Object::External (the typed wrapper's base check)
 
+namespace IO { class Serializer; }
+
+// The one body, on the slot as what it holds (an External*).
+void ExternalPtrSerializeGeneric(::Object::External** refField, IO::Serializer* serializer,
+                                 const uint32_t* typeIdPtr, const char* typeName);
+// The untyped spelling the void*-fed callers (tutorial / component / array helpers) still hold.
 void ExternalPtrSerializeGeneric(void** refField, void* serializer,
                                  const uint32_t* typeIdPtr, const char* typeName);
-
-namespace Object { class External; }
-namespace IO { class Serializer; }
+// The typed wrapper over that one body for an ExternalPtr<T> member held as `T*`
+// (T derives from Object::External; the slot holds the External* retail serializes).
+template <class T, class = std::enable_if_t<std::is_base_of_v<::Object::External, T> &&
+                                            !std::is_same_v<T, ::Object::External>>>
+inline void ExternalPtrSerializeGeneric(T** refField, IO::Serializer* serializer,
+                                        const uint32_t* typeIdPtr, const char* typeName) {
+    ExternalPtrSerializeGeneric(reinterpret_cast<::Object::External**>(refField), serializer,   // LEFT: an ExternalPtr<T> slot reached as its External* (a T** is not an External**)
+                                typeIdPtr, typeName);
+}
 // B.4 GAME-b: the typed per-reference body (serialize_externals.cpp). The Checked
 // form adds the factory / type-id preamble and its one-shot warnings (tagged).
 void SerializeExternalRef(Object::External*& ref, IO::Serializer& serializer,

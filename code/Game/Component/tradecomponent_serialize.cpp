@@ -387,9 +387,7 @@ void TradeComponent::Persist(IO::Stream& stream) {
             // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
             if (Loading(ser))
                 GameColl::AsArray<GameColl::Ptr8>(&elem->goods).SetSize(innerCount);
-            // LEFT: 0x1400049c0 takes the array base as an integer (Game block's declaration).
-            Reimpl_ExternalPtrArray_Serialize(&ser, innerCount,
-                reinterpret_cast<long long>(elem->goods), nullptr);
+            Reimpl_ExternalPtrArray_Serialize(&ser, innerCount, elem->goods, nullptr);   // 0x1400049c0
             ser.Serialize(elem->orderKind, nullptr);
         }
     }
