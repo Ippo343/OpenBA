@@ -229,7 +229,8 @@ extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const S
 extern "C" float fn_Random_RandFloatTol(void* self);
 
 // ---- worldsetup_reload.cpp
-extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState, void* scenarioIdx, void* retvalIbpPtr);  // 0x1400b49f0
+class MainMenuDialog; namespace Save { class SavedState; }
+extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState, int32_t scenarioIdx, const Object::InternalBasePtr* retvalIbpPtr);  // 0x1400b49f0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
 

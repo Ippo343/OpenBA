@@ -302,7 +302,7 @@ void MainMenuDialog::OpenScenario() {
     ScenarioDialog* dlgObj = nullptr;
     void* dlgMem = System::MemoryAllocator::MemAlloc(0xE8, 8);
     if (dlgMem) {
-        Object::InternalPtr<UI::DialogInstance> parentIBP(this);
+        Object::InternalPtr<MainMenuDialog> parentIBP(this);
         Object::InternalPtr<UI::DialogInstance> nullIBP;
         dlgObj = ScenarioDialog_Ctor(dlgMem,   // 0x1400786b0
                                      _ui, extRes, &nullIBP,
@@ -349,7 +349,7 @@ void MainMenuDialog::OpenTutorial() {
     void* dlgMem = System::MemoryAllocator::MemAlloc(0xE8, 8);
     printf("[MainMenuDialog] OpenTutorial: dlgMem=%p\n", dlgMem);
     if (dlgMem) {
-        Object::InternalPtr<UI::DialogInstance> parentIBP(this);
+        Object::InternalPtr<MainMenuDialog> parentIBP(this);
         Object::InternalPtr<UI::DialogInstance> nullIBP;
         dlgObj = ScenarioDialog_Ctor(dlgMem,   // 0x1400786b0
                                      _ui, extRes, &nullIBP,

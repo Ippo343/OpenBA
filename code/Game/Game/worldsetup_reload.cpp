@@ -52,6 +52,7 @@
 #include <new>
 #include "Game/exe_bodies.h"
 #include "Game/MenuDialogLoopT.h"   // SetDialogLoaderNextLoop
+#include "Dialog/MainMenuDialog.h"    // the receiver's game / menuLoop
 #include "Game/game.h"             // g_gameContainer (the hourglass cursor)
 #include "ui/UserInterface.h"
 
@@ -70,10 +71,9 @@ void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* load
     menuLoop->_pendingLoop = loaderLoop;              // +0xb68
 }
 
-extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
-                                        void* scenarioIdx, void* retvalIbpPtr) {
+extern "C" void WorldSetup_LoadFromSave(MainMenuDialog* worldSetup, Save::SavedState* savedState,
+                                        int32_t scenarioIdx, const Object::InternalBasePtr* retvalIbpPtr) {
     if (!worldSetup) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(worldSetup);  // LEFT: SIG the reload entry's receiver is not settled (MainMenuDialog by its callers' types; outside callers in Dialog hold it as an integer)
 
     // Caller batch CB6: the three loops are built by their real ctors (below),
     // which stamp the compiler tables and chain the Runtime base ctors
@@ -88,10 +88,10 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 
     // The IBP the caller handed us is copied to a local BEFORE the ctor runs, and
     // the ctor stores that copy at gameLoop+0x150 (retail: local_40 = *param_4).
-    uint64_t ibpCopy = retvalIbpPtr ? *reinterpret_cast<uint64_t*>(retvalIbpPtr) : 0;   // LEFT: void* parameter of outside callers (Dialog)
+    uint64_t ibpCopy = retvalIbpPtr ? *reinterpret_cast<const uint64_t*>(retvalIbpPtr) : 0;   // LEFT: SIG GameUpdateLoop's ctor takes the scenario IBP as uint64_t (GameUpdateLoop.h)
 
-    // The scenario index arrives in a pointer-typed parameter; retail keeps its low dword.
-    const int32_t scenario = static_cast<int32_t>(reinterpret_cast<uintptr_t>(scenarioIdx) & 0xFFFFFFFFu);   // CAST-OK: ptr_int
+    // The scenario index: retail keeps R8's low dword.
+    const int32_t scenario = scenarioIdx;
 
     // --- Step 1: inner GameUpdateLoop (0x160) --------------------------------
     GameUpdateLoop* pGameLoop = nullptr;
@@ -103,7 +103,7 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
         // '\0' at this call site, so retail writes 0xF0 at +0xD0 (NOT 0).
         const System::String emptyName;
         pGameLoop = ::new (gameLoop) GameUpdateLoop(
-            static_cast<Save::SavedState*>(savedState), ibpCopy,   // LEFT: void* parameter of outside callers (Dialog)
+            savedState, ibpCopy,
             scenario,
             emptyName, 0, 0, /*disasters (p8)=*/false, nullptr, nullptr, nullptr);
     }
@@ -140,9 +140,9 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
 
     // --- Step 4: publish the next loop ---------------------------------------
     // Retail tests +0xC0 first (inverse of 0x1400b4790 - see the header comment).
-    MenuDialogLoopT* dialogLoader = *reinterpret_cast<MenuDialogLoopT**>(s + 0xC0);   // LEFT: +0xC0 of the unsettled receiver
+    MenuDialogLoopT* dialogLoader = worldSetup->menuLoop;   // +0xC0
     if (dialogLoader == nullptr) {
-        GameUpdateLoop* gameWorld = *reinterpret_cast<GameUpdateLoop**>(s + 0xB8);   // LEFT: +0xB8 of the unsettled receiver
+        GameUpdateLoop* gameWorld = worldSetup->game;   // +0xB8
         SetEngineNextLoop(gameWorld, pOuterLoop);   // UI at +0x98, next loop at +0xC8
     } else {
         SetDialogLoaderNextLoop(dialogLoader, pOuterLoop);

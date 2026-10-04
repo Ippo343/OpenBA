@@ -612,7 +612,7 @@ void ModDialog::Apply() {
                 Object::InternalPtr<UI::DialogInstance> nullRef2;
 
                 // Trigger game reload with saved state
-                WorldSetup_LoadFromSave(parentMenu.Get(), statePtr, (void*)(uintptr_t)-1, &nullRef2);   // 0x1400b49f0   // LEFT: SIG WorldSetup_LoadFromSave (void* scenarioIdx: -1 = none; Game/exe_bodies.h, worldsetup_reload.cpp)
+                WorldSetup_LoadFromSave(parentMenu.Get(), statePtr, -1, &nullRef2);   // 0x1400b49f0
             }
         } else {
             // User cancelled: refresh list to undo changes

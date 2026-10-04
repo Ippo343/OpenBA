@@ -23,6 +23,7 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "runtime/types/collection/Collection.h"
 #include "Object/exe_type.h"
+class MainMenuDialog;
 
 class Scenario;   // Game/Scenario.h
 namespace UI { class Element; class ImageElement; class TextElement; }
@@ -55,7 +56,7 @@ public:
     ScenarioDialog();                                               // create 0x140013970
     ScenarioDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                    Object::InternalPtr<UI::DialogInstance> parent,
-                   UI::DialogInstance* parentMenu, uint8_t difficulty);  // 0x1400786b0
+                   MainMenuDialog* parentMenu, uint8_t difficulty);  // 0x1400786b0
 
     // 0x140013af0's body: the entries Array's dtor (MemFree(+0xd8), +0xd8/+0xe0 = 0)
     ~ScenarioDialog() override = default;                          // [0] 0x140013af0
@@ -74,7 +75,7 @@ public:
 public:
     uint8_t  difficulty;                   // +0xB8: 0 scenario, 1 tutorial (Scenario +0x69)
     uint8_t  _padB9[7];                    // +0xB9
-    UI::DialogInstance* parentMenu;        // +0xC0: InternalPtr, the MainMenuDialog that opened it
+    MainMenuDialog* parentMenu;            // +0xC0: InternalPtr, the MainMenuDialog that opened it (both opening paths pass `this`)
     int32_t  selectedIndex;                // +0xC8: ctor -1
     uint8_t  _padCC[4];                    // +0xCC
     UI::Element* buttonOk;                 // +0xD0: "buttonOk", id 101, enabled with a selection
@@ -93,5 +94,5 @@ static_assert(alignof(ScenarioDialog) == 8, "ScenarioDialog is qword-aligned");
 // ScenarioDialog ctor (retail 0x1400786b0).
 ScenarioDialog* ScenarioDialog_Ctor(void* self, UI::UserInterface* ui, const UI::Dialog* extRes,
                                     const Object::InternalPtr<UI::DialogInstance>* parentIBP,
-                                    const Object::InternalPtr<UI::DialogInstance>* parentMenuIBP,
+                                    const Object::InternalPtr<MainMenuDialog>* parentMenuIBP,
                                     uint8_t difficulty);

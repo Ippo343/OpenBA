@@ -311,7 +311,7 @@ void ModDialog::CloseAndReload() {
 
     Object::InternalPtr<UI::DialogInstance> nullIbp;
     WorldSetup_LoadFromSave(parentMenu.Get(), statePtr,   // 0x1400b49f0
-                            reinterpret_cast<void*>(static_cast<uintptr_t>(-1)),  // CAST-OK: ptr_int
+                            -1,
                             &nullIbp);
 }
 
