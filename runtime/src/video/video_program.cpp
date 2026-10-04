@@ -174,17 +174,11 @@ namespace Video {
 void VideoProgram::SetupShaders(Context& context) const {
     Context* ctx = &context;
 
-    // Context+0x200 is `_videoProgram`, a POINTER that lives in the first eight
-    // bytes of the `_pixelConstantStaging` array — see the WAVE 9 LANE CTX note
-    // in runtime/types/video/Context.h. It is reached through memcpy rather
-    // than a reinterpret_cast so this file does not depend on the array staying
-    // suitably aligned for a void* if the header is ever re-divided.
-    void* videoProgramSlot = nullptr;
-    std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));  // LEFT: Context +0x200 videoProgram lives in _pixelConstantStaging (Context.h, outside indexers)
-    if (videoProgramSlot != static_cast<const void*>(this)) {
+    // Context+0x200 is `_videoProgram`, the first member of
+    // Context::PixelConstantStaging (runtime/types/video/Context.h).
+    if (ctx->_pixelConstantStaging.videoProgram != this) {
         ctx->_dirty |= kDirtyVideoProgram;
-        const VideoProgram* me = this;
-        std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));  // LEFT: Context +0x200 videoProgram lives in _pixelConstantStaging (Context.h, outside indexers)
+        ctx->_pixelConstantStaging.videoProgram = this;
     }
 
     Apply(ctx, ctx->_vertexLayout,  _vertexLayout.Get(),  RtVideo::kDirtyVertexLayout);

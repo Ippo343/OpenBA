@@ -122,7 +122,7 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
     // 0x180120329 -- note the argument SWAP: retail is a static taking
     // (time, ui) and Update is a member taking (this=ui, time). `ui` is the
     // callback's `void*` user data (retail's `PEAX`).
-    UserInterface* const self = static_cast<UserInterface*>(ui);   // LEFT: SIG retail's callback user data is void* (PEAX, 0x180120310)
+    UserInterface* const self = static_cast<UserInterface*>(ui);  // LEFT: FLOOR? callback context: retail's message-callback user data is void* (PEAX, 0x180120310), viewed as the UserInterface that registered it
     self->Update(timeRef);
 
     // 0x180120336..0x180120386 -- the inlined System::Random default ctor.
@@ -168,7 +168,7 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
 // ============================================================================
 void UI::UserInterface::DrawStandAloneUI(Video::Context& context, void* ui) {
     ++g_drawEntries;
-    static_cast<UserInterface*>(ui)->Draw(context);                    // the tail JMP  // LEFT: SIG retail's callback user data is void* (PEAX, 0x1801203f0)
+    static_cast<UserInterface*>(ui)->Draw(context);                    // the tail JMP  // LEFT: FLOOR? callback context: retail's draw-callback user data is void* (PEAX, 0x1801203f0), viewed as the UserInterface that registered it
 }
 
 // ============================================================================

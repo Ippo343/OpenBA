@@ -141,7 +141,6 @@ using Input::BindingNode;
 // IO::Persistence::Set(section, key, int) — our Wave 4 port, registered at
 // 0x1800b80c0. Called DIRECTLY: a resolver call would be a door, and this one
 // has a body on our side already.
-void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, int value);
 
 namespace {
 
@@ -206,9 +205,9 @@ void Record(const char* key, int value) {
 // The body's one write point. It ALWAYS performs the real write — the oracle
 // observes through the read-back, it does not divert the write — and records
 // the pair when the diff arm asked it to.
-void EmitSetting(void* persistence, const char* key, int value) {
+void EmitSetting(::IO::Persistence* persistence, const char* key, int value) {
     if (g_recording) Record(key, value);
-    RtIo_Persistence_SetInt(persistence, kSection, key, value);
+    persistence->Set(kSection, key, value);
 }
 
 }  // namespace
@@ -233,7 +232,7 @@ namespace Input {
 void KeyMap::Save() {
 
     // ENDGAME B.3.9 SS1 (B39_RULES D7): the class static now, read fresh.
-    void* persistence = ::IO::Persistence::_singleton;
+    ::IO::Persistence* const persistence = ::IO::Persistence::_singleton;
 
     // KeyMap::_root is at +0x08 (0x1800a7548 `MOV RBX,[RCX+8]`).
     BindingNode* root = _root;

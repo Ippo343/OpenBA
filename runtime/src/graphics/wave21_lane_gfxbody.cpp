@@ -321,8 +321,9 @@ void MaterialInstance::Setup(Video::Context& context, int32_t shader) const {
     for (int32_t i = 0; i < set->constants._size; ++i) {
         const RtGraphics::MaterialBinding& b = set->constants._data[i];
         const float* src = _constants._data[b.sourceIndex].value;
-        float* dst = reinterpret_cast<float*>(  // LEFT: Context::_pixelConstantStaging stays bytes (outside indexers, Context.h)
-            &context._pixelConstantStaging[kMaterialStagingOffset + b.shaderSlot * 0x10]);
+        // ctx +0x208 + slot * 0x10, stepped flat as retail does (no bound on
+        // the slot, so not `material[b.shaderSlot]`).
+        float* dst = &context._pixelConstantStaging.material[0][0] + b.shaderSlot * 4;
 
         // (c) unordered counts as different, and all four are compared before
         // any is written — retail bails to the copy on the FIRST mismatch and

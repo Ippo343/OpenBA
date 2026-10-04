@@ -261,7 +261,7 @@ void ModelComponent::SetMaterialSet(int materialSetIdx) {
     int    n    = list->_size;
     if (!data || n <= 0) return;
     for (int i = 0; i < n; ++i)
-        meshInstance.SetMaterialInstance(i, Graphics::ExternalPtrHandle{data[i].Get()});
+        meshInstance.SetMaterialInstance(i, Object::ExternalPtr<Graphics::MaterialInstance>(data[i].Get()));
 }
 
 // ============================================================
@@ -319,7 +319,7 @@ void DestroyComponent::RubbleStep() {
             ModelDescription* modelDesc = AsType<ModelDescription>(modelComp->_description);
             Graphics::GraphicsMesh* mesh = MeshFromModelDesc(modelDesc, modelComp->meshGroup,
                                            static_cast<int16_t>(next));
-            modelComp->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
+            modelComp->meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
             model->OnAdded();
         }
         if (Milestone()) {

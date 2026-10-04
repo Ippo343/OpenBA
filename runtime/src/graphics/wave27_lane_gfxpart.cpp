@@ -495,14 +495,12 @@ void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
 // reset). Written below with that exact shape rather than as `!= 0.0f`, which a
 // compiler is free to reassociate.
 //
-// LEFT: the ExternalPtr arrives as the untyped `ExternalPtrHandle` (Geometry.h's
-// slot signature, which code/Game's callers hold), viewed once as the Particle.
 // ============================================================================
 
 namespace Graphics {
 
-void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
-    Particle* const p = static_cast<Particle*>(particle.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner)
+void ParticleInstance::SetParticle(Object::ExternalPtr<Particle> particle) {
+    Particle* const p = particle.Get();
     ++g_piSetParticle;
 
     // ?RemoveState@ParticleInstance@Graphics@@IEAAXXZ (retail 0x1801040b0), the
@@ -592,7 +590,7 @@ void ParticleInstance::SetParticle(ExternalPtrHandle particle) {
 
 namespace Graphics {
 
-void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
+void ParticleSystemInstance::SetParticle(Object::ExternalPtr<Particle> particle) {
     ++g_psiSetParticle;
 
     // Retail CALLs 0x180104a00 directly, so this calls OUR body directly too --
@@ -610,9 +608,8 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
 
     // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z (0x1800c0390), the member, against
     // the ParticleSystem type record's id (ENDGAME B.3.9 TI-REST), read fresh.
-    // LEFT: the handle is untyped (see ParticleInstance::SetParticle); the
-    // derivation test is what licenses the downcast.
-    const Particle* const asParticle = static_cast<const Particle*>(particle.p);   // LEFT: ParticleInstance's handle (ExternalPtrHandle::p, one alias for five types) is untyped; IsDerivedFrom just above licenses the downcast
+    // The derivation test is what licenses the downcast.
+    const Particle* const asParticle = particle.Get();
     const ParticleSystem* const sys =
         asParticle->IsDerivedFrom(ParticleSystem::GetTypeInfo().typeId)
             ? static_cast<const ParticleSystem*>(asParticle) : nullptr;

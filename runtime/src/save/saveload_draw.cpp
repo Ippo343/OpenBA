@@ -644,21 +644,20 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // 0xd8 bytes, pinned twice in runtime/types/graphics/Camera.h. The ctor
     // copies the frustum and the transform in and calls SetFrustum, which fills
     // the projection at +0x94.
-    RtGraphics::Camera camera;
     // ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
-    RtGraphics_Camera_Ctor(&camera, &frustum, &cameraToWorld, false);
+    ::Graphics::Camera camera(frustum, cameraToWorld, false);   // 0x1800fe960
 
     // The view matrix is the camera's Transform3 widened to 4x4 with the
     // fourth column {0,0,0,1}; the projection is copied out whole.
     Matrix view;
-    const float* const t = &camera.cameraToWorld.axisX.x;
+    const float* const t = &camera._cameraToWorld.axisX.x;
     view.m[0]  = t[0];  view.m[1]  = t[1];  view.m[2]  = t[2];  view.m[3]  = 0.0f;
     view.m[4]  = t[3];  view.m[5]  = t[4];  view.m[6]  = t[5];  view.m[7]  = 0.0f;
     view.m[8]  = t[6];  view.m[9]  = t[7];  view.m[10] = t[8];  view.m[11] = 0.0f;
     view.m[12] = t[9];  view.m[13] = t[10]; view.m[14] = t[11]; view.m[15] = 1.0f;
 
     Matrix projection;
-    std::memcpy(&projection, &camera.projection, sizeof(Matrix));
+    std::memcpy(&projection, &camera._projection, sizeof(Matrix));
 
     ctx->SetCamera(view, projection);
 

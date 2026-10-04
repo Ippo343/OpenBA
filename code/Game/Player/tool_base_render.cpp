@@ -538,7 +538,7 @@ void Impl_c4a0(HighlightComponent* hc) {
         if (r && desc && desc->_ref0 != nullptr) {
             Impl_b930(hc);
             reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
-                ->SetMesh(Graphics::ExternalPtrHandle{hc->fieldF8},
+                ->SetMesh(Object::ExternalPtr<Graphics::EdgeMesh>(hc->fieldF8),
                           nullptr);   // B.3.5 bridge
             reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here where retail's ctor builds it (known_port_issues row 573; HighlightComponent.h, X6-CW partition)
                 ->SetTransform(hc->transform);

@@ -543,11 +543,17 @@ public:
     Math::Vector3   RootAnimationOffset() const;                          // 0x180016ef0 RETSLOT
     bool            IsAnimating() const;                                  // 0x1800ff7d0
     void            UpdateHierarchy();                                    // 0x1800ff910
-    void            SetMaterialInstance(int index, ExternalPtrHandle value); // 0x1800ffe80
-    void            SetMesh(ExternalPtrHandle mesh);                      // 0x1800ffea0
-    void            PlayAnimation(ExternalPtrHandle group, int index,
+    void            SetMaterialInstance(int index, Object::ExternalPtr<MaterialInstance> value); // 0x1800ffe80
+    void            SetMesh(Object::ExternalPtr<GraphicsMesh> mesh);      // 0x1800ffea0
+    // B4 FORWARD: action_base_complete.cpp, buildcomponent_state8.cpp, gameupdateloop_load.cpp still call this (their mesh is a void*)
+    void            SetMesh(ExternalPtrHandle mesh);
+    void            PlayAnimation(Object::ExternalPtr<AnimationGroup> group, int index,
                                   const System::Time* startTime, const System::Time* blendTime,
                                   float weight);                          // 0x1800ff840
+    // B4 FORWARD: action_base_movedeps.cpp still calls this (its group is a void*)
+    void            PlayAnimation(ExternalPtrHandle group, int index,
+                                  const System::Time* startTime, const System::Time* blendTime,
+                                  float weight);
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined -
     // Each is one to a dozen instructions in retail over offsets this header
@@ -564,18 +570,15 @@ public:
     // Both keep their registered doors, which delegate. Every OTHER declaration
     // under this heading really is undefined on purpose.
     // 0x180016a20: the ExternalPtr at +0xc0 through the hidden return slot.
-    // B.4: PORTED, inline, with retail's return type. The ONE view of the
-    // untyped `_mesh` handle as the GraphicsMesh it holds: `_mesh` stays the
-    // `RtGraphics::ExternalPtr` handle because `SetMesh(ExternalPtrHandle)` is
-    // the signature ~20 callers in code/Game hold (LEFT).
+    // B.4: PORTED, inline, with retail's return type.
     Object::ExternalPtr<GraphicsMesh> GetMesh() const {
-        return static_cast<GraphicsMesh*>(_mesh.p);   // LEFT: POD RtGraphics::ExternalPtr keeps its pointee as void* (X-RL left)
+        return _mesh;
     }
     int      GetNodeCount() const;                           // 0x180016a30
     void     SetVisualScale(const Math::Vector4& scale);     // 0x180016fa0
     Math::Vector4 GetVisualScale() const;                    // 0x180016fd0 RETSLOT
     int      GetMaterialInstanceCount() const;               // 0x180017000
-    ExternalPtrHandle GetMaterialInstance(int index) const;  // 0x180017010
+    Object::ExternalPtr<MaterialInstance> GetMaterialInstance(int index) const;  // 0x180017010
     void     SetSortKey(int key);                            // 0x180017030
     void     Serialize(IO::Serializer& serializer);          // 0x1800ff680
     float    GetAnimationElapsed() const;                    // 0x1800ff700
@@ -585,7 +588,7 @@ public:
     int      GetCurrentAnimationIndex() const;               // 0x1800ff7b0
     void     ResetAnimationState();                          // 0x1800ff810
     void     CopyHierarchy(const MeshInstance& src);         // 0x1800ffd80
-    int      GetMaterialIndex(ExternalPtrHandle material);   // 0x1800ffe30
+    int      GetMaterialIndex(Object::ExternalPtr<MaterialInstance> material);   // 0x1800ffe30
     int      GetBones(float t, const Math::Transform& xf,
                       Math::Matrix* out) const;              // 0x180100070
 
@@ -614,7 +617,7 @@ public:
 
 
 public:
-    RtGraphics::ExternalPtr                        _mesh;         // +0xc0  ExternalPtr<GraphicsMesh>
+    Object::ExternalPtr<GraphicsMesh>              _mesh;         // +0xc0  retail ??0 0x1800fffc0 zeroes it first (0x1800fffe8); ~ 0x180017060 leaves it
     // B.4: typed. `Object::ExternalPtr<T>` is one trivially copyable,
     // trivially destructible pointer (External.h), so the implicit member dtor
     // is the same Clear-then-J1 and the element bytes are the same.
@@ -718,10 +721,12 @@ public:
     // slots 4, 5, 7 and 8 are Geometry's own bodies, inherited unchanged.
 
     // PORTED, body in `mesh.cpp`. `MeshInstance*` is the outline's back-pointer.
-    void SetMesh(ExternalPtrHandle mesh, MeshInstance* followed);         // 0x1800a3a20
+    void SetMesh(Object::ExternalPtr<EdgeMesh> mesh, MeshInstance* followed);  // 0x1800a3a20
+    // B4 FORWARD: tool_base_render.cpp:607 still calls this (its mesh is a void*)
+    void SetMesh(ExternalPtrHandle mesh, MeshInstance* followed);
 
     // Exported, NOT PORTED, no caller: declared, deliberately undefined.
-    ExternalPtrHandle GetMesh() const;                                    // 0x1800174c0
+    Object::ExternalPtr<EdgeMesh> GetMesh() const;                        // 0x1800174c0
 
     // `??2`/`??3` operator new/delete (0x1800173e0 / 0x180017450 / 0x180017460)
     // are deliberately not declared; see MeshInstance's note above.

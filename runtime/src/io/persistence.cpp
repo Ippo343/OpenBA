@@ -107,21 +107,10 @@ bool RetailValueIsTrue(const char* value) {
 // needed: `IO::Persistence` has no vtable of its own -- the vptr at +0x10 is
 // the EMBEDDED worker's (runtime/types/io/Persistence.h) -- so B34_BRIEFS
 // section A.1's re-entry hazard cannot arise.
-bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, int* out) {
-    return reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);  // B4 FORWARD: 1 outside caller(s)  // LEFT: B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)
-}
-
-bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out) {
-    return reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);  // B4 FORWARD: 2 outside caller(s)  // LEFT: B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)
-}
-
-void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, int value) {
-    reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);  // B4 FORWARD: 1 outside caller(s)  // LEFT: B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)
-}
-
-void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value) {
-    reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);  // B4 FORWARD: 1 outside caller(s)  // LEFT: B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)
-}
+// B4 wave X round 6: the four `RtIo_Persistence_{Get,Set}{Int,Bool}(void*
+// self, ...)` one-line forwarders that stood here are deleted; their callers
+// (input.cpp Configuration::Save, keymap_save.cpp EmitSetting) call the
+// members on a typed `IO::Persistence*`.
 
 // ============================================================================
 // `IO::Persistence`'s member bodies for this file

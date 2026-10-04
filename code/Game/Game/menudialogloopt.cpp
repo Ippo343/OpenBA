@@ -206,7 +206,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
 
     // SetMesh(meshArray[meshIdx]) — value passed is the 8-byte ExternalPtr.
     Graphics::GraphicsMesh* mesh = meshArr[meshIdx];
-    inst->SetMesh(Graphics::ExternalPtrHandle{mesh});
+    inst->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
 
     // Geometry::SetTransform(FromYawPitchOffset(yaw, pitch=0, offset=elem.position)).
     Math::Transform transformBuf = Math::Transform::FromYawPitchOffset(
@@ -229,7 +229,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
         // The `mats.GetData()` term is the old `&& matData`, kept because
         // nothing here proves GetSize() is 0 whenever _data is null.
         for (int32_t m = 0; m < mats.GetSize() && mats.GetData(); ++m) {
-            inst->SetMaterialInstance(m, Graphics::ExternalPtrHandle{mats[m].Get()});
+            inst->SetMaterialInstance(m, Object::ExternalPtr<Graphics::MaterialInstance>(mats[m].Get()));
         }
         matSlots = mats.GetSize();
     }
@@ -401,7 +401,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(MenuDialogLoopT* self, MenuScene* menu
         Graphics::Particle* particleResource = resArr[elem.particleIndex];
 
         // `?SetParticle@ParticleInstance@Graphics@@` @0x180104a00 (slot 9).
-        inst->SetParticle(Graphics::ExternalPtrHandle{particleResource});
+        inst->SetParticle(Object::ExternalPtr<Graphics::Particle>(particleResource));
 
         // SetTransform(FromYawPitchOffset(yaw, pitch=0, offset=elem.position)).
         Math::Transform transformBuf = Math::Transform::FromYawPitchOffset(
@@ -590,7 +590,7 @@ bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
     // --- SetMesh from MenuScene::terrainMesh (the GraphicsMesh ExternalPtr) ---
     Graphics::GraphicsMesh* meshExt = menuScene->terrainMesh;
     if (mainMesh && meshExt) {
-        mainMesh->SetMesh(Graphics::ExternalPtrHandle{meshExt});
+        mainMesh->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshExt));
     }
 
     // --- Time(0.0f) construction + Update vtable[+0x08] dispatch on the MeshInstance ---
@@ -727,9 +727,8 @@ void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video:
     //   ctx[+0x288..+0x294] = same 4 dwords             (mirrored)
     //   ctx[+0x10] |= 0x10800                            (fog/sky enable bits)
     context->_unknown03b8 = menuScene->field_0x1B4;
-    // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in
-    // R-VIDEO's header).
-    std::memcpy(reinterpret_cast<uint8_t*>(context) + 0x288, &menuScene->field_0x1B4, 16);   // LEFT: Context +0x288 lies inside `_pixelConstantStaging` (raw bytes in R-VIDEO's header).
+    // Context +0x288: Context::PixelConstantStaging::pixel[4] (Video/Context.h).
+    std::memcpy(context->_pixelConstantStaging.pixel[4], &menuScene->field_0x1B4, 16);
     context->_dirty |= 0x10800;
 
     // Fog color Vector4 — the skyColor's RGB; the 4th component is fog density.

@@ -4479,7 +4479,7 @@ static void ApplyResourceModelVariant(ComponentEntity* entity, uint32_t tidModel
     if (modelVariant >= 0) {
         Graphics::GraphicsMesh* mesh = ResMeshFromModelDesc(modelDesc, variantIdx, modelVariant);
         if (mesh)
-            m->meshInstance.SetMesh(Graphics::ExternalPtrHandle{mesh});
+            m->meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
     }
 }
 

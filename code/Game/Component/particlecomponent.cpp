@@ -240,7 +240,7 @@ void ParticleComponent::Place(int index) {
     // ParticleInstance itself is abstract, so no live object has a pure slot here.
     Graphics::ParticleInstance* inst = ge->instance;
     if (em.particle)
-        inst->SetParticle(Graphics::ExternalPtrHandle{em.particle});   // slot 9
+        inst->SetParticle(Object::ExternalPtr<Graphics::Particle>(em.particle));   // slot 9
 
     ge->sceneId = -1;
     ge->nodeIndex = em.followNode ? followIdx : -1;

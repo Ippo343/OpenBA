@@ -700,8 +700,7 @@ void AnimationState::UpdateNodes(float speed,
 // ---------------------------------------------------------------------------
 int MeshInstance::GetBones(float t, const Math::Transform& rootRef,
                            Math::Matrix* out) const {
-    // LEFT: `_mesh` is the `RtGraphics::ExternalPtr` handle (Geometry.h).
-    const GraphicsMesh* mesh = static_cast<const GraphicsMesh*>(_mesh.p);   // LEFT: POD RtGraphics::ExternalPtr keeps its pointee as void* (Mesh.h MeshInstance::_mesh, X-RL left)
+    const GraphicsMesh* mesh = _mesh.Get();
     const Collection::Array<GraphicsMesh::Node>& meshNodes = mesh->GetNodes();
     const int32_t boneCount = meshNodes._size;
 

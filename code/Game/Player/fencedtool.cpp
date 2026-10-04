@@ -677,7 +677,7 @@ void FencedTool::Startup() {
     Graphics::GraphicsMesh* lastMesh = modelData[modelCount - 1];  // last entry
 
     if (meshInst) {
-        meshInst->SetMesh(Graphics::ExternalPtrHandle{lastMesh});
+        meshInst->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(lastMesh));
     }
 
     // 8. UpdateHierarchy — tail call in original (JMP to dispatch slot)

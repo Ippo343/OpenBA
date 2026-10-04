@@ -201,7 +201,7 @@ void AnimalComponent::Place(const Math::Vector3* position, float yaw, bool pose)
                     Graphics::GraphicsMesh** meshList = groups2[model->meshGroup].meshes;
                     Graphics::GraphicsMesh* mesh = meshList ? meshList[model->meshIndex] : nullptr;
                     model->meshInstance
-                        .SetMesh(Graphics::ExternalPtrHandle{mesh});
+                        .SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
                 }
 
                 model->OnAdded();   // slot 6

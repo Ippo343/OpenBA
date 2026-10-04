@@ -850,9 +850,9 @@ void DestroyStringPair10Range(void* ignoredThis, uint8_t* base, int count) {
 
 static void ExtArrayElemAssign(RtObject::ExternalArrayElement* d,
                                const RtObject::ExternalArrayElement* s) {
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(&d->owned),        // 18002c773  // LEFT: ExternalArrayElement::owned is char* (External.h), retail's Filename
-                                         reinterpret_cast<const RtSystem::Filename*>(&s->owned));  // LEFT: ExternalArrayElement::owned is char* (External.h), retail's Filename
-    d->opaque = s->opaque;                   // 18002c779
+    RtSystem::RtSystem_Filename_CtorCopy(&d->owned, &s->owned);   // 18002c773
+    d->field_0x08 = s->field_0x08;           // 18002c779: one qword in retail (H7)
+    d->field_0x0c = s->field_0x0c;
 }
 void AssignExtArrayElem(uint8_t* d, const uint8_t* s) {
     AssignAs<RtObject::ExternalArrayElement, &ExtArrayElemAssign>(d, s);
