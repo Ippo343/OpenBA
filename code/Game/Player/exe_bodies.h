@@ -46,7 +46,6 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14
 
 // ---- tool_base_createbar.cpp
 void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);  // 0x1400ffc60
-extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void* param_4, char param_5, char param_6, char param_7, int param_8, int param_9, int param_10, void* param_11, void* param_12);  // 0x1400ffc60 B4 FORWARD -> UpdateCreateBar: 1 outside caller (standalone/tool_harness.cpp)
 extern "C" uint32_t UpdateToolUI_ebb0(const void* /*never read*/, const ::Box* box, const Math::Transform* transform, Math::Vector3* outCorners);  // 0x1400febb0
 
 // ---- tool_base_drag.cpp
