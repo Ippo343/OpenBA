@@ -338,8 +338,7 @@ void MeshInstance::Draw(Video::Context& context, const Camera& camera,
 //      the draw call is the LITERAL 1 rather than the pass number.
 //
 // The bone buffer's 48 matrices and the 0x18 record stride are the same.
-// LEFT: `_mesh` is the untyped `RtGraphics::ExternalPtr` handle (Mesh.h keeps
-// `SetMesh`'s signature for its code/Game callers), viewed once as the EdgeMesh.
+// B.4 (X-RL): `_mesh` is the typed `Object::ExternalPtr<EdgeMesh>` (Mesh.h).
 // ============================================================================
 
 namespace Graphics {
@@ -352,7 +351,7 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
     const bool edgePass = ((static_cast<uint32_t>(flags) >> 15) & 1u) != 0;   // SHR/AND
     const int32_t sub = flags & 0x7fff;
 
-    const EdgeMesh* const mesh = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
+    const EdgeMesh* const mesh = _mesh.Get();
     const GraphicsMesh::TriangleList& rec =
         (edgePass ? mesh->_edgeLists : mesh->_triangleLists)._data[sub];
     const int32_t boneNode = rec._f14;
@@ -400,7 +399,7 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
     // The base is `this->_mesh`, RE-READ from the object for each of the two
     // bindings exactly as retail reloads it.
     {
-        const EdgeMesh* const g1 = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
+        const EdgeMesh* const g1 = _mesh.Get();
         const bool skinned = boneNode < 0;
         const Video::VertexBuffer* const vb =
             edgePass ? (skinned ? &g1->_edgeSkinVertexBuffer : &g1->_edgeVertexBuffer)
@@ -409,7 +408,7 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
                                           : (skinned ? 0x10 : 0x08);
         context.SetVertexBuffer(vb, 0, 0, vbStride);
 
-        const EdgeMesh* const g2 = static_cast<const EdgeMesh*>(_mesh.p);  // LEFT: ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner, wave X)
+        const EdgeMesh* const g2 = _mesh.Get();
         const Video::IndexBuffer* const ib =
             edgePass ? (skinned ? &g2->_edgeSkinIndexBuffer : &g2->_edgeIndexBuffer)
                      : (skinned ? &g2->_skinIndexBuffer     : &g2->_indexBuffer);
