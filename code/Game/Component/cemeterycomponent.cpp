@@ -223,7 +223,7 @@ char CemeteryComponent::EnterBuilt() {
         const bool walkableZone = ((1u << zone) & 0x1e0u) != 0;
         *reinterpret_cast<uint8_t*>(&world->field_0xA2) |= walkableZone ? 1 : 0;   // LEFT: Map.h (DLG-1) field_0xA2 is bool, retail ORs the byte (row 311)
         cell->terrainType = 2;
-        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror   // LEFT: SIG PerfX::TerrainNoteWrite (SA)
+        PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
 
         if (walkableZone) {
             const int mapWidth = world->size;

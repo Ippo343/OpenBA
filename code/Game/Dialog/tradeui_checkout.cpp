@@ -186,9 +186,8 @@ extern "C" void TradeComponent_RemoveBuyOrder(TradeComponent* tradeComp,
 // field's integer source might suggest.
 //
 // The multiplier 300.0f is DAT_140172234, read from the image.
-extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
-    if (!tradeComp) return;
-    TradeComponent* trade = reinterpret_cast<TradeComponent*>(tradeComp);   // LEFT: the C signature (outside caller tradecomponent_dock.cpp)
+extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade) {
+    if (!trade) return;
 
     Description* desc = trade->_description;
     // 0x1401c4bb8 is TradeDescription's type-id cell (Table 1).

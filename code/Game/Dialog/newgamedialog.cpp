@@ -541,8 +541,8 @@ void NewGameDialog::StartGame() {
     void* mapGenItem = comboCondition->GetItemData(condIdx);
     ::Object::External** mapPtrArray = mapGeneratorList->_resources;
     ::Object::External* mapGenResource = mapPtrArray[(intptr_t)mapGenItem];  // CAST-OK: ptr_int
-    ::Object::External* mapGen = nullptr;
-    if (ResourceIsType(mapGenResource, MapGenerator::TypeId())) mapGen = mapGenResource;
+    MapGenerator* mapGen = nullptr;
+    if (ResourceIsType(mapGenResource, MapGenerator::TypeId())) mapGen = static_cast<MapGenerator*>(mapGenResource);
 
     // --- Difficulty / StartCondition override (standalone autostart + testing) ---
     // The autostart harness auto-clicks "OK" without choosing a difficulty, and the
@@ -572,7 +572,7 @@ void NewGameDialog::StartGame() {
             if (wantIdx < listCount) {
                 ::Object::External* r = mapPtrArray[wantIdx];
                 if (ResourceIsType(r, MapGenerator::TypeId())) {
-                    mapGen = r;
+                    mapGen = static_cast<MapGenerator*>(r);
                     fprintf(stderr, "[NewGameDialog] difficulty override -> listIdx=%d (0=Hard 1=Medium 2=Easy) mapGen=%p\n",
                             wantIdx, (void*)mapGen);
                     fflush(stderr);
@@ -583,13 +583,13 @@ void NewGameDialog::StartGame() {
 
     void* climateItem = comboClimate->GetItemData(climateIdx);
     ::Object::External* climateResource = climateGeneratorList->_resources[(intptr_t)climateItem];  // CAST-OK: ptr_int
-    ::Object::External* climateGen = nullptr;
-    if (ResourceIsType(climateResource, ClimateGenerator::TypeId())) climateGen = climateResource;
+    ClimateGenerator* climateGen = nullptr;
+    if (ResourceIsType(climateResource, ClimateGenerator::TypeId())) climateGen = static_cast<ClimateGenerator*>(climateResource);
 
     void* terrainItem = comboTerrain->GetItemData(terrainIdx);
     ::Object::External* terrainResource = terrainGeneratorList->_resources[(intptr_t)terrainItem];  // CAST-OK: ptr_int
-    ::Object::External* terrainGen = nullptr;
-    if (ResourceIsType(terrainResource, TerrainGenerator::TypeId())) terrainGen = terrainResource;
+    TerrainGenerator* terrainGen = nullptr;
+    if (ResourceIsType(terrainResource, TerrainGenerator::TypeId())) terrainGen = static_cast<TerrainGenerator*>(terrainResource);
 
     // Terrain size index
     uint32_t terrainSize = (uint32_t)comboTerrainSize->_currentItem;
@@ -645,8 +645,7 @@ void NewGameDialog::StartGame() {
     }
 
     // The map name: the name edit box's String.
-    // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
-    const System::String& nameStr = *reinterpret_cast<const System::String*>(&editName->_text);  // LEFT: H5 EditElement::_text is the String's raw char* (EditElement.h: a String member changes the class's ctor / dtor)
+    const System::String& nameStr = editName->GetText();
 
     // Save combo selections to game settings
     GameSettings* settings = g_gameSettings;
@@ -676,7 +675,8 @@ void NewGameDialog::StartGame() {
 // A new sandbox game passes scenarioResIdx = -1 and a null saved-state IBP, while a
 // scenario passes its resource index and (for a saved scenario) the restored state.
 void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, uint32_t terrainSize,
-                                   bool disastersOff, void* mapGen, void* terrainGen, void* climateGen,
+                                   bool disastersOff, MapGenerator* mapGen, TerrainGenerator* terrainGen,
+                                   ClimateGenerator* climateGen,
                                    uint32_t scenarioResIdx, const void* savedStateIBP) {
     {
         fprintf(stderr, "[StartNewGame] ENTER worldSetup=%p seed=%u size=%u disastersOff=%d "
@@ -700,7 +700,7 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
                 nullptr, ibp, (int32_t)scenarioResIdx,
                 name,
                 (int32_t)seed, (int32_t)terrainSize, /*p8=*/!disastersOff,
-                static_cast<MapGenerator*>(mapGen), static_cast<TerrainGenerator*>(terrainGen), static_cast<ClimateGenerator*>(climateGen));  // LEFT: B10 downcast after ResourceIsType (the generators are Object::External resources); castmetric reads the operand as void*
+                mapGen, terrainGen, climateGen);
         }
 
         // Step 2: GameLoadDialogLoopT (0xB60 bytes) — retail inlines the subclass
@@ -787,8 +787,7 @@ void NewGameDialog::OnClosed() {}
 
 void NewGameDialog::OnUpdateLayout() {
     // The name edit box's text length (0 when empty).
-    // LEFT: EditElement::_text is the String's raw char* (H5, runtime UI header).
-    int len = reinterpret_cast<const System::String*>(&editName->_text)->GetLength();  // LEFT: H5 EditElement::_text is the String's raw char* (EditElement.h: a String member changes the class's ctor / dtor)
+    int len = editName->GetText().GetLength();
 
     // Element slot 8: Enable(bool)
     buttonOk->Enable(len > 0 ? 1 : 0);

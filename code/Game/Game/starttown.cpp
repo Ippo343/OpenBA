@@ -4593,7 +4593,7 @@ static void StartTown_WriteCellType(Map* game, MapCell* cells, int idx, uint8_t 
         dirty = 1;
     game->field_0xA2 |= dirty;
     cell->terrainType = newType;
-    PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror  // LEFT: SIG PerfX::TerrainNoteWrite takes the cell as bytes (standalone/perf_terrain.h: the mirror keeps its base and 0x30 stride as bytes; typing it is the whole TerrainGet / TerrainGetSlow / TerrainNoteWrite family)
+    PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
     const int dim = game->size;
     RegionGraph* regionObj = game->regionGraph;
     if (dirty && regionObj && dim > 0)

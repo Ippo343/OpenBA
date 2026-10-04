@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
+#include "collection/Collection.h"   // the +0x40 / +0x50 arrays
 #include "Object/exe_type.h"
 
 class ComponentDescription;
@@ -45,24 +46,18 @@ public:
     ComponentDescription* description = nullptr;
     uint32_t field_0x38 = 1;           // +0x38: initialized to 1 by the factory
     uint8_t _pad3C[4] = {};            // +0x3C: gap
-    // +0x40 Collection::Array<InternalPtr<Element>>: the "labelBuild%i" labels;
-    // +0x50 Collection::Array<int32_t>: each cost's quantity. Both as their raw
-    // members (H5: retail's dtor frees them, the tree's does not).
-    UI::Element** labelData = nullptr; // +0x40
-    int32_t labelCount = 0;            // +0x48
-    int32_t labelCapacity = 0;         // +0x4C
-    int32_t* countData = nullptr;      // +0x50
-    int32_t countCount = 0;            // +0x58
-    int32_t countCapacity = 0;         // +0x5C
+    // +0x40 the "labelBuild%i" labels; +0x50 each cost's quantity. Create
+    // 0x1400107f0 zeroes the four qwords +0x40..+0x58 (0x14001083b..0x140010847);
+    // the dtor 0x140010860 MemFrees +0x50 and zeroes its qwords (0x140010890 ..
+    // 0x14001089c), then +0x40 (0x1400108a4 .. 0x1400108ae), then ~DialogController
+    // (0x1400108b5): the two members' own dtors, in reverse declaration order.
+    Collection::Array<UI::Element*> labels;   // +0x40
+    Collection::Array<int32_t>      counts;   // +0x50
 };
 
 static_assert(sizeof(BuildRequirementUI) == 0x60, "BuildRequirementUI is 0x60 (create 0x1400107f0 MemAlloc(0x60))");
 static_assert(alignof(BuildRequirementUI) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(BuildRequirementUI, description) == 0x30, "BuildRequirementUI::description @ +0x30");
 static_assert(offsetof(BuildRequirementUI, field_0x38) == 0x38, "BuildRequirementUI::field_0x38 @ +0x38");
-static_assert(offsetof(BuildRequirementUI, labelData) == 0x40, "BuildRequirementUI::labelData @ +0x40");
-static_assert(offsetof(BuildRequirementUI, labelCount) == 0x48, "BuildRequirementUI::labelCount @ +0x48");
-static_assert(offsetof(BuildRequirementUI, labelCapacity) == 0x4C, "BuildRequirementUI::labelCapacity @ +0x4C");
-static_assert(offsetof(BuildRequirementUI, countData) == 0x50, "BuildRequirementUI::countData @ +0x50");
-static_assert(offsetof(BuildRequirementUI, countCount) == 0x58, "BuildRequirementUI::countCount @ +0x58");
-static_assert(offsetof(BuildRequirementUI, countCapacity) == 0x5C, "BuildRequirementUI::countCapacity @ +0x5C");
+static_assert(offsetof(BuildRequirementUI, labels) == 0x40, "BuildRequirementUI::labels @ +0x40");
+static_assert(offsetof(BuildRequirementUI, counts) == 0x50, "BuildRequirementUI::counts @ +0x50");
