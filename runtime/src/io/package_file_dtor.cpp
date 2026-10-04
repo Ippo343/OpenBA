@@ -226,21 +226,10 @@ IO::PackageFile::~PackageFile() {
     RtIO::RtColl_ArrayU8Dtor_1800112a0(&_previewData);   // 0x1800b4586  ~Array<uint8> 0x1800112a0, +0x98
     RtIO::RtColl_ArrayI32Dtor_1800111a0(&_iconData);     // 0x1800b4593  ~Array<int32> 0x1800111a0, +0x80
 
-    // 0x1800b4599..0x1800b4658 — five copies of the release idiom, in RETAIL'S
-    // RELEASE ORDER (descending offsets). Reproduced, not sorted — see §2(i).
-    RtSystem::RtString_ReleaseInline(&_string60);        // +0x60
-    RtSystem::RtString_ReleaseInline(&_string58);        // +0x58
-    RtSystem::RtString_ReleaseInline(&_description);     // +0x50
-    RtSystem::RtString_ReleaseInline(&_author);          // +0x48
-    RtSystem::RtString_ReleaseInline(&_name);            // +0x40
-
-    // retail 0x180010ab0 — `~Array<System::String>` at +0x30 and +0x20 (stride
-    // 8, array_destroy.cpp's kD_Str_08): the trait-derived
-    // `Collection::Array<System::String>` over the two POD headers.
-    // LEFT: the two headers stay loose {data, size, capacity} fields
-    // (tests/unit/b39_io_classes_test.cpp pins `_stringArray30Count`).
-    reinterpret_cast<Collection::Array<System::String>*>(&_stringArray30)->~Array();  // B.3.2 bridge  // LEFT: H5 PackageFile::_stringArray20 / _stringArray30 are raw storage of Collection::Array<String>
-    reinterpret_cast<Collection::Array<System::String>*>(&_stringArray20)->~Array();  // B.3.2 bridge  // LEFT: H5 PackageFile::_stringArray20 / _stringArray30 are raw storage of Collection::Array<String>
+    // 0x1800b4599..0x1800b4658 (the five Strings, +0x60 down to +0x40) and
+    // 0x1800b465c / 0x1800b4666 (`~Array<System::String>` 0x180010ab0 on +0x30
+    // then +0x20) are the members' own destructors, which the compiler runs
+    // after this body in reverse declaration order: retail's order (B4 X-R3).
 
     // 0x1800b4679 — the tail into ~External is the compiler's.
 }

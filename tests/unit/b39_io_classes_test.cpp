@@ -561,11 +561,11 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     alignas(8) uint8_t mem[0xf0];
     std::memset(mem, 0xCD, sizeof mem);
     IO::PackageFile* pf = ::new (mem) IO::PackageFile();
-    CHECK(pf->_path.data == nullptr);
-    CHECK(pf->_stringArray20 == nullptr);
-    CHECK_EQ(pf->_stringArray30Count, 0);
-    CHECK(pf->_name.data == nullptr);
-    CHECK(pf->_string60.data == nullptr);
+    CHECK(pf->_path._data == nullptr);
+    CHECK(pf->_stringArray20._data == nullptr);
+    CHECK_EQ(pf->_stringArray30._size, 0);
+    CHECK(pf->_name._data == nullptr);
+    CHECK(pf->_string60._data == nullptr);
     CHECK_EQ(pf->_version, 0);
     CHECK_EQ(pf->_priority, 0x2710);
     CHECK_EQ(pf->_platform, 0);

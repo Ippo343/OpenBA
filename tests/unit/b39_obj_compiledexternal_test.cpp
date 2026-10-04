@@ -76,7 +76,7 @@ UNIT_TEST(b39_obj_compiledexternal_ctor_and_own_type_slots) {
     alignas(8) uint8_t buf[0x20];
     std::memset(buf, 0xCD, sizeof buf);
     TestCompiled* c = ::new (buf) TestCompiled();
-    CHECK(c->_path.data == nullptr);
+    CHECK(c->_path._data == nullptr);
     CHECK(c->_refs._data == nullptr);
     CHECK_EQ(c->_refs._size, 0);
     CHECK_EQ(c->_refs._capacity, 0);

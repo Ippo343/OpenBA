@@ -110,16 +110,19 @@
 // `TypeId()` and `TypeName()` read the class's own record.
 //
 // ----------------------------------------------------------------------------
-// THE FIVE `RtSystem::String` MEMBERS STAY PODs
+// THE FIVE STRINGS AND THE TWO STRING ARRAYS ARE MEMBERS (B4 X-R3, H5)
 // ----------------------------------------------------------------------------
-// +0x40, +0x48, +0x50, +0x58 and +0x60 are the five slots `~PackageFile`
-// (0x1800b4540) releases with the inlined refcount idiom, in descending order.
-// Retyping them to real `System::String` members would give this class a
-// non-trivial destructor that runs IN ADDITION to that transcribed body — the
-// `RtSystem::String` double-free lesson (B31_RULES). The destructor is not in
-// this commit's scope (see above), so the precondition "no ported body still
-// destroys that member by hand" is not met and the PODs stay. They are reached
-// through `pod_bridge.h`'s `Sys()` at each use, exactly as they were.
+// Retail's ctor 0x1800b4440 zeroes +0x20 / +0x30 (the two Array<String>
+// headers, 0x1800b4489..95) and then +0x40 .. +0x60 (0x1800b4499..a9) before
+// any other field. Retail's dtor 0x1800b4540: ~FileInfo on +0xc0
+// (0x1800b456c), the entry array +0xb0 (0x1800b4579), the preview +0x98 and
+// icon +0x80 arrays (0x1800b4586 / 0x1800b4593), THEN the inlined String
+// release on +0x60, +0x58, +0x50, +0x48, +0x40 (0x1800b4599..0x1800b4658),
+// THEN ~Array<String> on +0x30 and +0x20 (0x1800b465c / 0x1800b4666), then
+// ~External (0x1800b4679). Typed, the compiler constructs these seven in
+// declaration order before the ctor body and destroys them in reverse
+// declaration order after the dtor body (whose four hand-written steps are
+// the four raw members above them): exactly retail's sequence.
 // ============================================================================
 
 #include <cstdint>
@@ -149,14 +152,9 @@ public:
     // in retail's order -- including the FileInfo's out-of-order +0x18 last.
     // NOT written: +0x78/+0x7c, +0x90/+0x94, +0xad..+0xaf, FileInfo +0x04 and
     // +0x14 (i.e. +0xc4 and +0xd4).
+    // The two Arrays (1800b4489..95) and the five Strings (1800b4499..a9) are
+    // their members' own constructors, run in declaration order first.
     PackageFile() : Object::External() {
-        _stringArray20 = nullptr; _stringArray20Count = 0; _stringArray20Cap = 0;  // 1800b4489/8d
-        _stringArray30 = nullptr; _stringArray30Count = 0; _stringArray30Cap = 0;  // 1800b4491/95
-        _name.data = nullptr;                                   // 1800b4499
-        _author.data = nullptr;                                 // 1800b449d
-        _description.data = nullptr;                            // 1800b44a1
-        _string58.data = nullptr;                               // 1800b44a5
-        _string60.data = nullptr;                               // 1800b44a9
         _version = 0; _userVersion = 0;                         // 1800b44ad (one qword)
         _priority = 0x2710; _platform = 0;                      // 1800b44b1 (one qword 0x2710)
         _iconData = nullptr;                                    // 1800b44b9
@@ -182,9 +180,10 @@ public:
     // 0x1800251e0 (PackageFile's operator delete: the locked MemFree) on
     // `flags & 1`. Nothing `new[]`s a PackageFile.
     // ??1PackageFile@IO@@UEAA@XZ 0x1800b4540 — ENDGAME B.3.9 IO: retail's
-    // body, moved from the retired door into package_file_dtor.cpp. Every
-    // member above is a POD, so the compiler adds nothing but the tail into
-    // ~External (retail's JMP at 0x1800b4679). Virtual (B3X W1).
+    // body, moved from the retired door into package_file_dtor.cpp. After it
+    // the compiler destroys the five Strings and the two String Arrays (the
+    // banner) and tails into ~External (retail's JMP at 0x1800b4679).
+    // Virtual (B3X W1).
     ~PackageFile() override;
 
     // [1] 0x180025150 TypeName / [2] 0x180025130 Type, the static TypeId
@@ -302,21 +301,16 @@ public:
     // +0x58/+0x60. What IS known: the serializer writes each as
     // count-then-elements through `StringArraySerialize`, and sizes the array
     // from the count on the reading side only.
-    RtSystem::String* _stringArray20;  // +0x20  data
-    int32_t  _stringArray20Count; // +0x28  size
-    int32_t  _stringArray20Cap;   // +0x2c  capacity
-    RtSystem::String* _stringArray30;  // +0x30  data
-    int32_t  _stringArray30Count; // +0x38  size
-    int32_t  _stringArray30Cap;   // +0x3c  capacity
+    Collection::Array<System::String> _stringArray20;  // +0x20  ctor 0x1800b4489, dtor 0x1800b4666
+    Collection::Array<System::String> _stringArray30;  // +0x30  ctor 0x1800b4491, dtor 0x1800b465c
 
-    // The five refcounted String slots ~PackageFile releases, in the order the
-    // three getters and the serializer name them. They keep the POD spelling —
-    // see the banner.
-    RtSystem::String _name;         // +0x40
-    RtSystem::String _author;       // +0x48
-    RtSystem::String _description;  // +0x50
-    RtSystem::String _string58;     // +0x58 — purpose unknown; type from ~PackageFile
-    RtSystem::String _string60;     // +0x60 — purpose unknown; type from ~PackageFile
+    // The five refcounted Strings ~PackageFile releases, in the order the
+    // three getters and the serializer name them (see the banner).
+    System::String _name;         // +0x40
+    System::String _author;       // +0x48
+    System::String _description;  // +0x50
+    System::String _string58;     // +0x58 — purpose unknown; type from ~PackageFile
+    System::String _string60;     // +0x60 — purpose unknown; type from ~PackageFile
 
     int32_t  _version;      // +0x68
     int32_t  _userVersion;  // +0x6c
@@ -390,10 +384,10 @@ static_assert(sizeof(Object::External) == 0x20,
               "PackageFile's own fields start where External's end");
 
 static_assert(offsetof(PackageFile, _stringArray20)      == 0x20, "ctor 1800b4489 PutQ(0x20,0)");
-static_assert(offsetof(PackageFile, _stringArray20Count) == 0x28,
+static_assert(offsetof(PackageFile, _stringArray20) + offsetof(Collection::Array<System::String>, _size) == 0x28,
               "Serialize 1800b6153 reads the count at +0x28");
 static_assert(offsetof(PackageFile, _stringArray30)      == 0x30, "ctor 1800b4491 PutQ(0x30,0)");
-static_assert(offsetof(PackageFile, _stringArray30Count) == 0x38,
+static_assert(offsetof(PackageFile, _stringArray30) + offsetof(Collection::Array<System::String>, _size) == 0x38,
               "Serialize 1800b6193 reads the count at +0x38");
 static_assert(offsetof(PackageFile, _name)        == 0x40, "GetName 0x18002532a MOV RAX,[RCX+0x40]");
 static_assert(offsetof(PackageFile, _author)      == 0x48, "GetAuthor 0x18002536a");

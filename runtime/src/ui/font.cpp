@@ -92,8 +92,8 @@ namespace {
 
 // LEFT (H5): the four Strings are held as RtSystem::String raw storage, so
 // System::String's member is reached through a view of that storage.
-void StringSerialize(RtSystem::String& str, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(&str)->Serialize(ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+void StringSerialize(System::String& str, IO::Serializer* ser) {
+    str.Serialize(ser);
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z — 0x1800c7ad0. Retail inlines the
@@ -221,17 +221,13 @@ Object::Base* Font::CreateInPlaceObject(void* place) {
 //     Array<int32>::~Array   (this + 0x30)    0x18001c750 ; 18011765e
 //     release String +0x20                                ; 180117664
 //     JMP ~External                           0x1800bc950 ; 180117697
-// Here the two ~Array are the MEMBERS' own destructors (Collection::Array:
-// free `_data`, `_capacity` left alone — the same body both retail copies
-// compile to), which the compiler runs AFTER this body, then ~External. So the
-// one visible difference is ORDER: the +0x20 release now precedes the two
-// array frees instead of following them. The four releases and two frees are
-// of independent blocks; nothing reads between them.
+// That is exactly the members' destructors in reverse declaration order
+// (the four Strings are System::String members since B4 X-R3, the two Arrays
+// Collection::Array members: free `_data`, `_capacity` left alone — the same
+// body both retail copies compile to), which the compiler runs after this
+// empty body, then ~External. The +0x20 release follows the two array frees,
+// as in retail.
 Font::~Font() {
-    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string88));   // 1801175c5  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string80));   // 1801175f8  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string78));   // 18011762a  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-    System::StringPrivateAccess::Release(*reinterpret_cast<System::String*>(&_string20));   // 180117664  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 }  // namespace UI

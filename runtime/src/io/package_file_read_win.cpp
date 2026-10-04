@@ -211,6 +211,7 @@
 #include "../../src/system/string.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"
+#include "../system/pod_bridge.h"   // Sys(tmp): the POD String locals ReadStringUtf16 / ReadStringRaw fill
 
 // Lane String's port. Forward-declared rather than pulled in from a header for
 // the same reason filesystem_openfile_win.cpp does it: that lane publishes
@@ -560,29 +561,29 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
         if (formatVersion <= 2) {
             // ---- PATH A (§81): UTF-16 metadata, with the §76 over-read -----
             ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b4e1f  group 1
-            AssignStringField(&_name, &tmp);              // 1800b5044  +0x40
+            _name = RtSystem::Sys(tmp);                   // 1800b5044  +0x40
             RtString_ReleaseInline(&tmp);                      // 1800b507b
 
             ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b530d  group 2
-            AssignStringField(&_author, &tmp);            // 1800b52b4  +0x48
+            _author = RtSystem::Sys(tmp);                 // 1800b52b4  +0x48
             RtString_ReleaseInline(&tmp);
 
             ReadStringUtf16(cs, buf60, buf860, &tmp);      // group 3
-            AssignStringField(&_description, &tmp);       // 1800b5536  +0x50
+            _description = RtSystem::Sys(tmp);            // 1800b5536  +0x50
             RtString_ReleaseInline(&tmp);
             // 1800b558e / 559a  JMP 0x1800b5b6c  (reloads formatVersion; §92(c))
         } else {
             // ---- PATH B (§81): the bytes are already UTF-8 -----------------
             ReadStringRaw(cs, buf60, &tmp);                // 1800b559f  group 4
-            AssignStringField(&_name, &tmp);              // 1800b5726  +0x40
+            _name = RtSystem::Sys(tmp);                   // 1800b5726  +0x40
             RtString_ReleaseInline(&tmp);
 
             ReadStringRaw(cs, buf60, &tmp);                // 1800b5783  group 5
-            AssignStringField(&_author, &tmp);            // 1800b58f6  +0x48
+            _author = RtSystem::Sys(tmp);                 // 1800b58f6  +0x48
             RtString_ReleaseInline(&tmp);
 
             ReadStringRaw(cs, buf60, &tmp);                // 1800b5953  group 6
-            AssignStringField(&_description, &tmp);       // 1800b5ac6  +0x50
+            _description = RtSystem::Sys(tmp);            // 1800b5ac6  +0x50
             RtString_ReleaseInline(&tmp);
             // 1800b5b1a / 5b23  JMP 0x1800b5b73
         }
