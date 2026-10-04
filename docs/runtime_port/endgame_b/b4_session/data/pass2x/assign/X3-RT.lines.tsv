@@ -7,8 +7,6 @@ runtime/src/application/platform_startup_win.cpp	168	OTHER	the message-callback 
 runtime/src/application/platform_startup_win.cpp	180	OTHER	the message-callback set's node is walked as its element (Application::_messageCallbacks' node type is the owner's header)	reinterpret_cast<const Element*>(found)->callback;
 runtime/src/audio/audio_stream_win.cpp	322	H5	H5 Audio::Stream::_buffers is the raw Array<Block> triple (Stream.h, +0x30/+0x38/+0x3c), viewed as the erased core's header for its J1 destroy (retail 0x18000c4a0)	reinterpret_cast<rtcoll::ArrayHdr*>(&_buffers));
 runtime/src/audio/wave29_lane_avbody.cpp	325	FLOOR?	FLOOR? callback void* context: Audio::Device's channel-end callback hands back the userData the Scene registered (retail PEAX)	static_cast<Scene*>(userData);
-runtime/src/collection/array.cpp	853	OTHER	ExternalArrayElement::owned is char* (External.h), retail's Filename	reinterpret_cast<RtSystem::Filename*>(&d->owned),
-runtime/src/collection/array.cpp	854	OTHER	ExternalArrayElement::owned is char* (External.h), retail's Filename	reinterpret_cast<const RtSystem::Filename*>(&s->owned));
 runtime/src/collection/array.cpp	1087	OTHER	PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename	reinterpret_cast<RtSystem::Filename*>(&d->name),
 runtime/src/collection/array.cpp	1088	OTHER	PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename	reinterpret_cast<const RtSystem::Filename*>(&s->name));
 runtime/src/collection/array.cpp	2009	ERASED	type-erased J1 body takes ArrayHdr*; RendererDrawGroup::items are Array<RendererDrawItem> (Collection core)	reinterpret_cast<ArrayHdr*>(e + 0x1e0));
@@ -59,14 +57,10 @@ runtime/src/collection/array_graphics_anim.cpp	423	OTHER	void* door (the graphic
 runtime/src/collection/array_graphics_anim.cpp	427	OTHER	void* door (the graphics readers hold void*; AnimationState.h declarations)	static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),
 runtime/src/collection/array_graphics_anim.cpp	427	OTHER	void* door (the graphics readers hold void*; AnimationState.h declarations)	static_cast<const ArrayHdr*>(s),
 runtime/src/collection/avl_trees.cpp	268	OTHER	void* door (the Array<T*> operator= / dtor pair; outside callers hold void*)	static_cast<PtrArrayHdr*>(self);
-runtime/src/collection/avl_trees.cpp	296	OTHER	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x48);
-runtime/src/collection/avl_trees.cpp	296	OTHER	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<uint8_t*>(n) + 0x48);
-runtime/src/collection/avl_trees.cpp	299	OTHER	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(n) + 0x4a);
-runtime/src/collection/avl_trees.cpp	299	OTHER	TypeInfo.h (R-OBJ): RtObject::TypeNode's balance/height are int16 at +0x48/+0x4a in retail, one int32 in the header	reinterpret_cast<uint8_t*>(n) + 0x4a);
-runtime/src/collection/avl_trees.cpp	833	POD	POD RtSystem::Filename — FilenamePair's key is the mirror (RtSystem_Filename_CtorCopy); the caller holds a System::Filename	static_cast<const RtSystem::Filename*>(key));
-runtime/src/collection/avl_trees.cpp	837	SIG	SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them	reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(o
-runtime/src/collection/avl_trees.cpp	837	SIG	SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them	reinterpret_cast<FilenamePairNode**>(outSlot), &temp);
-runtime/src/collection/avl_trees.cpp	886	SIG	SIG SubtreeFree (outside caller holds the erased rtsetavl::Node: filesystem_createfile_win.cpp)	reinterpret_cast<FilenamePairNode*>(node);
+runtime/src/collection/avl_trees.cpp	831	POD	POD RtSystem::Filename — FilenamePair's key is the mirror (RtSystem_Filename_CtorCopy); the caller holds a System::Filename	static_cast<const RtSystem::Filename*>(key));
+runtime/src/collection/avl_trees.cpp	835	SIG	SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them	reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(o
+runtime/src/collection/avl_trees.cpp	835	SIG	SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them	reinterpret_cast<FilenamePairNode**>(outSlot), &temp);
+runtime/src/collection/avl_trees.cpp	884	SIG	SIG SubtreeFree (outside caller holds the erased rtsetavl::Node: filesystem_createfile_win.cpp)	reinterpret_cast<FilenamePairNode*>(node);
 runtime/src/collection/introsort.cpp	104	OTHER	SortByKey70 sorts R-IO's void** packfile list; the element is PackageFile (FileSystem.h PackageFileView::priority)	reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(elem) + 0x70);
 runtime/src/collection/introsort.cpp	104	OTHER	SortByKey70 sorts R-IO's void** packfile list; the element is PackageFile (FileSystem.h PackageFileView::priority)	static_cast<uint8_t*>(elem) + 0x70);
 runtime/src/collection/introsort.cpp	353	OTHER	void* door (audio.cpp / audio_scene_update.cpp hold void*)	static_cast<EmitterArray*>(dstRaw);
@@ -74,7 +68,6 @@ runtime/src/collection/introsort.cpp	354	OTHER	void* door (audio.cpp / audio_sce
 runtime/src/collection/set_clear.cpp	210	FLOOR?	FLOOR? the settings map header (RtIo::SettingsMap) viewed as the Collection::Set<Pair<String,String>> instantiation whose Clear IS 0x18000f7d0: its owners (Persistence, Configuration) hold the three-w	reinterpret_cast<PairSet*>(set)->Clear();
 runtime/src/engine/engine_lifecycle.cpp	615	OTHER	the class operator-new door returns void* (an allocation result castmetric does not recognise: ledger close)	static_cast<Video::Device*>(RtVideo_Device_OperatorNew(0x108));
 runtime/src/engine/engine_lifecycle.cpp	889	POD	POD the ??1 body takes the RtIO::Modification POD (Modification.h, not this set's)	reinterpret_cast<RtIO::Modification*>(p));
-runtime/src/engine/loops.cpp	911	OTHER	Context::_pixelConstantStaging is one 0x98-byte block (+0x200 videoProgram, +0x208 material, +0x248 pixel constants); ~10 readers in runtime/video and code/ index it by byte: splitting it is its own s	reinterpret_cast<float*>(&ctx->_pixelConstantStaging[0x88]);
 runtime/src/engine/mainloop_video.cpp	345	FLOOR?	FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit	reinterpret_cast<VideoResourceEntry*>(dst);
 runtime/src/engine/mainloop_video.cpp	346	FLOOR?	FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit	reinterpret_cast<const VideoResourceEntry*>(src);
 runtime/src/engine/mainloop_video.cpp	489	CONST	FindNext returns the walk const (Factory::FindNext); retail drops the const in inlined code (the close decides const_cast, ledger S3)	const_cast< ::Object::External*>(e);
@@ -87,8 +80,7 @@ runtime/src/graphics/animationstate.cpp	169	FLOOR?	FLOOR? the erased container c
 runtime/src/graphics/animationstate.cpp	201	SIG	SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)	static_cast<AnimationManager::Instance*>(dstv);
 runtime/src/graphics/animationstate.cpp	203	SIG	SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)	static_cast<const AnimationManager::Instance*>(srcv);
 runtime/src/graphics/animationstate.cpp	278	H5	H5 GraphicsMesh::Node::_name is the RtSystem::String POD (GraphicsMesh.h), viewed as the real System::String	reinterpret_cast<System::String*>(&p->_name)->Serialize(ser);
-runtime/src/graphics/animationstate_transforms.cpp	704	POD	POD RtGraphics::ExternalPtr keeps its pointee as void* (Mesh.h MeshInstance::_mesh, X-RL left)	static_cast<const GraphicsMesh*>(_mesh.p);
-runtime/src/graphics/animationstate_transforms.cpp	964	H5	H5 AnimationState::tmpStorage, raw stack storage never constructed	reinterpret_cast<Instance*>(tmpStorage);
+runtime/src/graphics/animationstate_transforms.cpp	963	H5	H5 AnimationState::tmpStorage, raw stack storage never constructed	reinterpret_cast<Instance*>(tmpStorage);
 runtime/src/graphics/batchc_gfx_leaves.cpp	668	OTHER	allocation result of Video::RenderBuffer::operator new: castmetric's tier-I shape does not recognise a class operator new (ledger: decide at the close)	static_cast<Video::RenderBuffer*>(Video::RenderBuffer::operator new(0x30));
 runtime/src/graphics/batchc_gfx_leaves.cpp	805	OTHER	const_cast ExternalPtrHandle takes a non-const MaterialInstance* (X-RL left the handle parameters)	const_cast<MaterialInstance*>(item._instance) },
 runtime/src/graphics/closure_batch2b.cpp	252	SIG	SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)	static_cast<Graphics::RendererDrawGroup*>(self);
@@ -98,20 +90,19 @@ runtime/src/graphics/graphicsmesh_vtable.cpp	94	H5	H5 the caller's field is the 
 runtime/src/graphics/graphicsmesh_vtable.cpp	539	H5	H5 GraphicsMesh::_nodes is Array<uint8_t> raw storage of Array<Node> (GraphicsMesh.h: an Array<Node> member instantiates the element destroy)	reinterpret_cast<Node*>(_nodes._data));
 runtime/src/graphics/imagebuffer_derived.cpp	459	OTHER	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::ImageBuffer*>(ImageBufferOperatorNew(0x68));
 runtime/src/graphics/imagebuffer_derived.cpp	487	OTHER	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::RenderBuffer*>(RenderBufferOperatorNew(0x30));
-runtime/src/graphics/imagebuffer_derived.cpp	617	OTHER	retail's const (UEBA) slot writes _generation (see above)	const_cast<ReflectionImageBuffer*>(this);
-runtime/src/graphics/mesh.cpp	801	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<TriangleVertex*>(self);
-runtime/src/graphics/mesh.cpp	802	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<const Math::Vector3*>(vec3);
-runtime/src/graphics/mesh.cpp	828	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<EdgeVertex*>(self);
-runtime/src/graphics/mesh.cpp	829	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<const TriangleVertex*>(a);
-runtime/src/graphics/mesh.cpp	830	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<const TriangleVertex*>(b);
-runtime/src/graphics/mesh.cpp	2004	SIG	SIG the ExternalPtrHandle parameter keeps its pointee as void* (its code/Game callers hold the handle)	static_cast<MaterialInstance*>(value.p);
-runtime/src/graphics/mesh.cpp	2018	SIG	SIG ExternalPtrHandle (as SetMaterialInstance)	static_cast<const GraphicsMesh*>(mesh.p);
-runtime/src/graphics/mesh.cpp	2035	POD	POD _animation is the RtGraphics::MeshAnimationState mirror of Graphics::AnimationState	reinterpret_cast<::Graphics::AnimationState*>(&_animation)
-runtime/src/graphics/mesh.cpp	2069	POD	POD as SetMesh	reinterpret_cast<::Graphics::AnimationState*>(&_animation)
-runtime/src/graphics/mesh.cpp	2072	SIG	SIG ExternalPtrHandle (as SetMaterialInstance)	static_cast<::Graphics::AnimationGroup*>(group.p)),
-runtime/src/graphics/mesh.cpp	2312	SIG	SIG ExternalPtrHandle (as SetMaterialInstance)	static_cast<EdgeMesh*>(mesh.p);
-runtime/src/graphics/mesh.cpp	2479	SIG	SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)	static_cast<const GraphicsMesh::TriangleList*>(triLists);
-runtime/src/graphics/mesh.cpp	2481	SIG	SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)	static_cast<const GraphicsMesh::TriangleList*>(edgeLists);
+runtime/src/graphics/imagebuffer_derived.cpp	617	OTHER	retail's Render slot is const (UEBA) and its body writes _generation (0x1800a6e91): the const_cast is retail's own disagreement	const_cast<ReflectionImageBuffer*>(this);
+runtime/src/graphics/mesh.cpp	799	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<TriangleVertex*>(self);
+runtime/src/graphics/mesh.cpp	800	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<const Math::Vector3*>(vec3);
+runtime/src/graphics/mesh.cpp	826	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<EdgeVertex*>(self);
+runtime/src/graphics/mesh.cpp	827	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<const TriangleVertex*>(a);
+runtime/src/graphics/mesh.cpp	828	SIG	SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples	static_cast<const TriangleVertex*>(b);
+runtime/src/graphics/mesh.cpp	2031	POD	POD _animation is the RtGraphics::MeshAnimationState mirror of Graphics::AnimationState	reinterpret_cast<::Graphics::AnimationState*>(&_animation)
+runtime/src/graphics/mesh.cpp	2054	FORWARD	B4 FORWARD for the three void* callers	static_cast<GraphicsMesh*>(mesh.p)));
+runtime/src/graphics/mesh.cpp	2059	FORWARD	B4 FORWARD for the void* caller (action_base_movedeps.cpp)	static_cast<AnimationGroup*>(group.p)),
+runtime/src/graphics/mesh.cpp	2077	POD	POD MeshInstance::_animation is the 0x18-byte RtGraphics::MeshAnimationState held raw (Mesh.h), viewed as Graphics::AnimationState	reinterpret_cast<::Graphics::AnimationState*>(&_animation)
+runtime/src/graphics/mesh.cpp	2332	FORWARD	B4 FORWARD for the void* caller (tool_base_render.cpp:607)	static_cast<EdgeMesh*>(mesh.p)), followed);
+runtime/src/graphics/mesh.cpp	2489	SIG	SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)	static_cast<const GraphicsMesh::TriangleList*>(triLists);
+runtime/src/graphics/mesh.cpp	2491	SIG	SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)	static_cast<const GraphicsMesh::TriangleList*>(edgeLists);
 runtime/src/graphics/scene.cpp	524	POD	POD Geometry ctor writes through the RtGraphics view (closing wave)	reinterpret_cast<RtGraphics::Geometry*>(this);
 runtime/src/graphics/scene.cpp	594	ERASED	ERASED the core takes rtcoll::ArrayHdr (Collection.h, R-COLL)	reinterpret_cast<rtcoll::ArrayHdr*>(&_attached));
 runtime/src/graphics/scene.cpp	1188	SIG	SIG rtpickgrid::BoxTransform takes the six floats (its scene_grid caller hands it a float[6] copy; a typed ::Box local would run Vector3's zeroing ctor)	reinterpret_cast<const float*>(&_localBounds));
@@ -122,7 +113,6 @@ runtime/src/graphics/scene.cpp	1424	POD	POD the grid helpers (picking/scene_grid
 runtime/src/graphics/sunlight.cpp	198	FLOOR?	FLOOR? allocation result: the 0x30 bytes OperatorNew returns for the RenderBuffer built next (castmetric's allocation shape does not know OperatorNew)	static_cast<Video::RenderBuffer*>(p);
 runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	182	H5	H5 the caller's field is raw char* storage of a System::String (Animation.h keeps the names raw)	static_cast<System::String*>(str)->Serialize(ser);
 runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp	234	FLOOR?	FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit	static_cast<AnimationClip*>(datav);
-runtime/src/graphics/wave21_lane_gfxbody.cpp	324	OTHER	Context::_pixelConstantStaging stays bytes (outside indexers, Context.h)	reinterpret_cast<float*>(
 runtime/src/graphics/wave23_lane_gfxbody.cpp	620	FLOOR?	FLOOR? retail's const (UEBA) Generate slot writes _generation; GeneratedImageBuffer.h keeps the const_cast at the two sites on purpose (no `mutable`)	const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;
 runtime/src/graphics/wave24_lane_gfxmat.cpp	362	H5	H5 the caller's field is raw storage of a System::String (MaterialTexture::name / MaterialConstant::_head: a String member changes the element array's lifecycle rows)	static_cast<System::String*>(field)->Serialize(ser);
 runtime/src/graphics/wave24_lane_gfxmat.cpp	497	H5	H5 MeshInstance::_animation is retail's 0x18-byte AnimationState held raw (Mesh.h); the tree's Graphics::AnimationState is its 0x48 prefix-compatible superset (ledger finding)	reinterpret_cast<Graphics::AnimationState*>(&_animation)
@@ -132,12 +122,10 @@ runtime/src/graphics/wave27_lane_gfxbig.cpp	252	SIG	SIG element op of a collecti
 runtime/src/graphics/wave27_lane_gfxbig.cpp	263	SIG	SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)	reinterpret_cast<MaterialParameterSet*>(base);
 runtime/src/graphics/wave27_lane_gfxbig.cpp	1074	OTHER	RendererDrawable::_object is a Geometry or a Light (void*; the drawable's kind decides): this arm is the Light's	static_cast<const Light*>(d._object)->DrawShadowMap(
 runtime/src/graphics/wave27_lane_gfxbig.cpp	1121	OTHER	RendererDrawable::_object is a Geometry or a Light (void*; the drawable's kind decides): this arm is the Light's	static_cast<const Light*>(d._object)->DrawLight(
-runtime/src/graphics/wave27_lane_gfxpart.cpp	505	OTHER	ExternalPtrHandle::p is void* (one alias serves five T; Geometry.h banner)	static_cast<Particle*>(particle.p);
-runtime/src/graphics/wave27_lane_gfxpart.cpp	615	OTHER	ParticleInstance's handle (ExternalPtrHandle::p, one alias for five types) is untyped; IsDerivedFrom just above licenses the downcast	static_cast<const Particle*>(particle.p);
-runtime/src/graphics/wave27_lane_gfxpart.cpp	630	OTHER	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<RtGraphics::ParticleEmitter*>(RtGraphics_Emitter_OperatorNew());
-runtime/src/graphics/wave27_lane_gfxpart.cpp	823	OTHER	Context::_unknown20f0 is uint64_t: code/ readers step it by bytes (geometry_draw.cpp) and as short / void* (statusicon_geometry.cpp, weather_particle_draw.cpp): typing it is a cross-file decision	reinterpret_cast<uint16_t*>(context._unknown20f0);
-runtime/src/graphics/wave27_lane_gfxpart.cpp	832	OTHER	Context::_unknown20f0 stays uint64_t (outside readers step it as bytes and as uint16)	reinterpret_cast<uint64_t>(ip);
-runtime/src/graphics/wave27_lane_gfxpart.cpp	913	SIG	SIG the pool-record ctor door takes the pool's raw slot (void* recv) and builds the record in it	static_cast<RtGraphics::ParticleBoundsRecord*>(recv);
+runtime/src/graphics/wave27_lane_gfxpart.cpp	627	OTHER	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<RtGraphics::ParticleEmitter*>(RtGraphics_Emitter_OperatorNew());
+runtime/src/graphics/wave27_lane_gfxpart.cpp	820	OTHER	Context::_unknown20f0 is uint64_t: code/ readers step it by bytes (geometry_draw.cpp) and as short / void* (statusicon_geometry.cpp, weather_particle_draw.cpp): typing it is a cross-file decision	reinterpret_cast<uint16_t*>(context._unknown20f0);
+runtime/src/graphics/wave27_lane_gfxpart.cpp	829	OTHER	Context::_unknown20f0 stays uint64_t (outside readers step it as bytes and as uint16)	reinterpret_cast<uint64_t>(ip);
+runtime/src/graphics/wave27_lane_gfxpart.cpp	910	SIG	SIG the pool-record ctor door takes the pool's raw slot (void* recv) and builds the record in it	static_cast<RtGraphics::ParticleBoundsRecord*>(recv);
 runtime/src/graphics/wave29_lane_slots.cpp	124	OTHER	the table's storage is raw bytes so it zero-initialises as retail's .data does (a Math::Transform array is constant-initialised to identity); the one view as the Transforms	reinterpret_cast<Math::Transform*>(g_identityTable); }
 runtime/src/graphics/wave29_lane_slots.cpp	291	H5	H5 MeshInstance::_animation raw storage	reinterpret_cast<::Graphics::AnimationState*>(&_animation)
 runtime/src/graphics/wave9_lane_gfx.cpp	399	OTHER	retail does not bound `pass`; `group->_items[pass]` (declared [3]) would let the compiler assume pass < 3	reinterpret_cast<Collection::Array<RendererDrawItem>*>(
@@ -149,7 +137,7 @@ runtime/src/graphics/wave9_lane_gfxd.cpp	334	SIG	SIG element op of a collection 
 runtime/src/graphics/wave9_lane_gfxd.cpp	351	SIG	SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)	std::memcpy(dst + 0x08, &zero, 4);
 runtime/src/graphics/wave9_lane_gfxd.cpp	581	SIG	SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)	reinterpret_cast<RendererSceneEntry*>(raw);
 runtime/src/input/input_platform_shutdown_win.cpp	207	ERASED	ERASED rtsetavl::Node keeps its element opaque: the message key is the node's first dword (erased AVL core)	reinterpret_cast<const unsigned*>(n);
-runtime/src/input/keymap_save.cpp	309	ERASED	ERASED KeyMap's {_root, _count, _pad14} viewed as the rtsetavl24 core's Set header (the core's nodes are untyped, set_avl_e24.h)	reinterpret_cast<rtsetavl24::Set*>(&self->_root);
+runtime/src/input/keymap_save.cpp	308	ERASED	ERASED KeyMap's {_root, _count, _pad14} viewed as the rtsetavl24 core's Set header (the core's nodes are untyped, set_avl_e24.h)	reinterpret_cast<rtsetavl24::Set*>(&self->_root);
 runtime/src/io/file_stream.cpp	194	H5	H5 TextFileStream::_objectName / _objectType are char* raw storage of a System::String (not in X-RH's assignment)	reinterpret_cast<System::String*>(slot)->~String();
 runtime/src/io/filesystem_createfile_win.cpp	396	OTHER	System::WideString held as a POD slot (system/WideString, R-SYS)	reinterpret_cast<System::WideString*>(&w)->Set(
 runtime/src/io/filesystem_createfile_win.cpp	404	OTHER	System::WideString held as a POD slot (system/WideString, R-SYS)	reinterpret_cast<const System::WideString*>(&w)->AsUTF8());
@@ -187,38 +175,24 @@ runtime/src/io/modification_refresh.cpp	789	H5	H5 Mod::set is the ModSet POD, no
 runtime/src/io/modification_setupfilesystem.cpp	360	OTHER	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);
 runtime/src/io/modification_setupfilesystem.cpp	456	CONST	FindNext returns the walk const (Factory::FindNext); retail drops the const in inlined code	const_cast<::Object::External*>(ext);
 runtime/src/io/modification_setupfilesystem.cpp	512	OTHER	the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)	reinterpret_cast<void* (*)(void*)>(info->inPlaceFactoryFn)(ext);
-runtime/src/io/package_file_serialize.cpp	158	OTHER	H8 PackageFile::_overridable is uint8_t, retail serializes the byte through SerializeBool (bool&)	static_cast<bool*>(v), nullptr);
-runtime/src/io/persistence.cpp	111	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
-runtime/src/io/persistence.cpp	115	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
-runtime/src/io/persistence.cpp	119	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
-runtime/src/io/persistence.cpp	123	FORWARD	B4 FORWARD (void* self: the outside callers in input/ declare it locally; wave X)	reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
 runtime/src/io/persistence_savelist_job.cpp	191	OTHER	this job reads the elements as System::Filename, RtIO::FilenameArray holds the RtSystem::Filename POD (system/Filename, R-SYS)	reinterpret_cast<RtIO::FilenameArray*>(&found));
 runtime/src/io/persistence_saves.cpp	252	H5	H5 Persistence::_workerVtable is the embedded PersistenceWorker held as loose fields	reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();
 runtime/src/io/persistence_saves_win.cpp	60	H5	H5 Persistence::_blockDescData (raw Array storage; behaviour commit owed)	reinterpret_cast<Collection::Array<BlockDesc12>*>(&p->_blockDescData)->~Array();
 runtime/src/io/persistence_saves_win.cpp	63	H5	H5 Persistence::_blockPtrData (raw Array storage; behaviour commit owed)	reinterpret_cast<Collection::Array<void*>*>(&p->_blockPtrData)->~Array();
-runtime/src/io/persistence_worker_win.cpp	281	OTHER	see above	static_cast<IO::PersistenceWorker*>(worker);
+runtime/src/io/persistence_worker_win.cpp	281	H5	H5 the receiver is &Persistence::_workerVtable, the embedded PersistenceWorker IO::Persistence holds as loose fields (typing it is the Persistence behaviour commit: _savePath, worker, settings map tog	static_cast<IO::PersistenceWorker*>(worker);
 runtime/src/io/serializer.cpp	166	SIG	SIG the RtSerializer_* forwarders take the rt::io::Serializer POD (the exe import-slot family)	reinterpret_cast<IO::Serializer*>(self);
 runtime/src/io/text_codec.cpp	488	SIG	SIG RtIo_SerializeStringArray: two element types by caller (System::String* from PackageFile / Pixel- / VertexProgram, char* from AnimatedImageDescription::_frameNames / DocumentTextDescription::_fram	static_cast<char**>(datav);
 runtime/src/io/text_codec.cpp	507	SIG	SIG RtString_SetLength takes the RtSystem::String POD (system/, R-SYS)	reinterpret_cast<RtSystem::String*>(slot),
 runtime/src/io/text_codec.cpp	538	SIG	SIG RtString_SetLength takes the RtSystem::String POD (system/, R-SYS)	reinterpret_cast<RtSystem::String*>(slot),
-runtime/src/object/external_load.cpp	170	OTHER	R-IO the file-local SerU32/SerI32 keep retail's slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<int32_t*>(v), nullptr);
-runtime/src/object/external_load.cpp	174	OTHER	R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<uint32_t*>(v), nullptr);
-runtime/src/object/external_load.cpp	315	ERASED	ERASED the factory slot returns Object::Base*; retail uses the result as the External with no type check, so there is no checked downcast to spell	reinterpret_cast<::Object::External*>(created);
-runtime/src/object/external_load.cpp	348	OTHER	R-IO the file-local SerU32/SerI32 keep retail\'s slot (SerializeInt +0xa0 / SerializeUInt +0x98) over the other-signed local: a signedness pun, H8	reinterpret_cast<uint32_t*>(&depCount));
-runtime/src/object/external_load.cpp	359	OTHER	External.h ExternalArrayElement {char* owned; uint64_t opaque}: splitting `opaque` into its two int32s (0x1800bc7fc / 0x1800bc811) breaks array.cpp:854's one-qword copy (R-COLL); `owned` is retail's F	reinterpret_cast<uint8_t*>(obj->_refs._data);
-runtime/src/object/external_load.cpp	362	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<::System::String*>(elem)->Serialize(ser);
-runtime/src/object/external_load.cpp	363	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<int32_t*>(elem + 0x08));
-runtime/src/object/external_load.cpp	364	POD	H10 RtSystem::Filename / String POD API (the mirror is named tree-wide; pod_bridge.h, R-SYS-2)	reinterpret_cast<int32_t*>(elem + 0x0c));
+runtime/src/object/external_load.cpp	313	ERASED	ERASED the factory slot returns Object::Base*; retail uses the result as the External with no type check, so there is no checked downcast to spell	reinterpret_cast<::Object::External*>(created);
 runtime/src/object/external_path_stack.cpp	351	OTHER	H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)	reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;
 runtime/src/object/external_path_stack.cpp	358	OTHER	H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)	reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;
 runtime/src/object/external_path_stack.cpp	363	OTHER	H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)	reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;
-runtime/src/object/external_path_stack.cpp	390	OTHER	H10 as RemoveAt's	reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;
-runtime/src/object/external_path_stack.cpp	392	OTHER	H10 as RemoveAt's	reinterpret_cast<RtObject::PathStackElement*>(out);
+runtime/src/object/external_path_stack.cpp	390	OTHER	H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)	reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;
+runtime/src/object/external_path_stack.cpp	392	OTHER	H10 the out slot is a PathStackEntry whose halves are the RtSystem::Filename POD (External.h)	reinterpret_cast<RtObject::PathStackElement*>(out);
 runtime/src/object/external_ptr_serialize.cpp	303	CONST	const_cast FindOrLoad returns a const External* (ledger S3: retail drops the const in inlined template code; decide at the close)	const_cast<External*>(found);
 runtime/src/object/factory_dtors.cpp	390	POD	H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)	reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();
-runtime/src/object/factory_dtors.cpp	419	OTHER	H10 as ReferenceSubtreeFree's	reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();
-runtime/src/object/internal.cpp	228	OTHER	R-IO SerializeBool takes bool&; retail passes the one-byte char (H8: a bool would normalise it)	reinterpret_cast<bool*>(&present), nullptr);
-runtime/src/object/internal.cpp	247	SIG	SIG the door's `const uint32_t& gen` against SerializeUInt(uint32_t&) (R-IO / wave X)	const_cast<uint32_t&>(gen), nullptr);
+runtime/src/object/factory_dtors.cpp	419	POD	H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)	reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();
 runtime/src/object/internal_class.cpp	167	OTHER	R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)	static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();
 runtime/src/object/internal_class.cpp	204	FLOOR?	FLOOR? allocation: InternalMemAlloc returns void* (the tier-I MemAlloc shape does not match this allocator)	static_cast<Internal**>(
 runtime/src/object/internal_class.cpp	230	FLOOR?	FLOOR? allocation: InternalMemAlloc returns void* (the tier-I MemAlloc shape does not match this allocator)	static_cast<Internal**>(
@@ -227,7 +201,7 @@ runtime/src/object/internal_class.cpp	286	OTHER	InternalMemAlloc is the inlined 
 runtime/src/object/internal_class.cpp	487	POD	RtIo:: POD mirror of the IO stream class (H10, R-IO)	reinterpret_cast<IO::Stream*>(&writeStream));
 runtime/src/object/internal_class.cpp	507	POD	RtIo:: POD mirror of the IO stream class (H10, R-IO)	reinterpret_cast<IO::Stream*>(&readStream));
 runtime/src/object/type_reflection.cpp	209	OTHER	Object::BaseTypeInfo::factoryFn stays void* (standalone/main.cpp prints it with %p, tests/unit/b39_ti_* compare it with void*)	reinterpret_cast<void*>(factory);
-runtime/src/object/type_reflection.cpp	213	OTHER	as factoryFn above	reinterpret_cast<void*>(inPlace);
+runtime/src/object/type_reflection.cpp	213	OTHER	Object::BaseTypeInfo::inPlaceFactoryFn stays void* (standalone/main.cpp prints it with %p, tests/unit/b39_ti_* compare it)	reinterpret_cast<void*>(inPlace);
 runtime/src/object/type_reflection.cpp	336	POD	H10 POD mirror; TypeRecord::info is RtObject::BaseTypeInfo* and five files of other blocks read it as the POD	reinterpret_cast<RtObject::BaseTypeInfo*>(info);
 runtime/src/object/type_reflection.cpp	409	OTHER	TypeChildAlloc (TypeInfo.h) is the inlined Array<TypeRecord*> growth allocator (void*); an allocation result by meaning, not by the tier-I name shape	static_cast<TypeRecord**>(TypeChildAlloc(
 runtime/src/object/type_system.cpp	97	SIG	SIG RtObject_Base_IsDerivedFrom takes const void* self (its callers hand in untyped refs)	reinterpret_cast<const ::Object::Base*>(self);
@@ -236,7 +210,7 @@ runtime/src/object/type_system.cpp	206	SIG	SIG Type.h `(void*, void*)`: caller c
 runtime/src/picking/pickingmesh.cpp	171	H5	H5 PickingMesh.h SubMesh::_name is raw char* storage of a String (its ctor / dtor would run: a behaviour commit)	reinterpret_cast<System::String&>(s->_name).Serialize(*ser);
 runtime/src/picking/scene.cpp	587	OTHER	void* door, GAME-b's gameupdateloop_load.cpp passes raw MemAlloc storage	reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(kCellSize);
 runtime/src/save/closure_batch2b.cpp	113	FORWARD	B4 FORWARD RtSave_MetaData_CopyCtor: array.cpp's kSpec_MetaData58 row hands raw element bytes (an elem_stride floor candidate at the close)	static_cast<const Save::SaveLoad::SaveInfo*>(src));
-runtime/src/save/saveload_draw.cpp	695	OTHER	Context::_renderBuffer is void* (runtime/types/video/Context.h, X-RL FIELD left)	static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
+runtime/src/save/saveload_draw.cpp	694	OTHER	Context::_renderBuffer is void* (runtime/types/video/Context.h, X-RL FIELD left)	static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
 runtime/src/system/compression.cpp	469	OTHER	an alloc result; the tier-I shape does not match the RtMemAlloc spelling	static_cast<uint32_t*>(p);
 runtime/src/system/filename.cpp	45	POD	POD String / Filename bridge (H10)	reinterpret_cast<System::Filename*>(f);
 runtime/src/system/filename.cpp	48	POD	POD String / Filename bridge (H10)	reinterpret_cast<const System::Filename*>(f);
@@ -302,16 +276,13 @@ runtime/src/ui/elementdescription_serialize.cpp	158	OTHER	the int32 _id through 
 runtime/src/ui/elementdescription_serialize.cpp	165	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<System::String*>(&_textName)->Serialize(ser);
 runtime/src/ui/labeldescription.cpp	124	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<const System::String*>(&_spriteName));
 runtime/src/ui/labelelement.cpp	64	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<const System::String*>(&field);
-runtime/src/ui/layoutdescription.cpp	149	OTHER	H8 the int32 enum through retail's uint overload (vt+0x98)	reinterpret_cast<uint32_t&>(e->horizontal), nullptr);
-runtime/src/ui/layoutdescription.cpp	150	OTHER	H8 the int32 enum through retail's uint overload (vt+0x98)	reinterpret_cast<uint32_t&>(e->vertical), nullptr);
-runtime/src/ui/numberdescription.cpp	109	OTHER	H8 a uint8_t flag through retail's bool overload (bool would normalise the byte)	reinterpret_cast<bool&>(_b7c), nullptr);
 runtime/src/ui/numbereditdescription.cpp	210	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<System::String*>(&tmp)->Set(set);
 runtime/src/ui/scrolldescription.cpp	105	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(ser);
 runtime/src/ui/scrolldescription.cpp	153	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<const System::String*>(&_spriteNames[i]));
 runtime/src/ui/sprite_debug.cpp	73	SIG	SIG the code/Game extern passes void* (debug harness; wave X)	reinterpret_cast<const UI::Sprite*>(sprite);
 runtime/src/ui/spritecapture.cpp	167	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<System::String*>(&tmp)->Set("");
 runtime/src/ui/spritecapture.cpp	185	H5	H5 SpriteCapture::_sprites (+0x40): ~SpriteCapture destroys it FIRST (1800d91d4), then _entries, _sheets; a typed member would be destroyed after the body (last): order reversed unless all three are t	reinterpret_cast<Collection::Array<Sprite>&>(_sprites)
-runtime/src/ui/spritecapture.cpp	320	H5	H5 SpriteCapture::_sprites: see line 185 (dtor order)	reinterpret_cast<Collection::Array<Sprite>&>(_sprites)
+runtime/src/ui/spritecapture.cpp	320	H5	H5 SpriteCapture::_sprites (+0x40): ~SpriteCapture destroys it FIRST (1800d91d4), then _entries, _sheets; a typed member would be destroyed last	reinterpret_cast<Collection::Array<Sprite>&>(_sprites)
 runtime/src/ui/spritecapture_class.cpp	198	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<const System::String*>(&entries[i].name));
 runtime/src/ui/spritecapture_class.cpp	382	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<System::String*>(&e->name)->Serialize(*ser);
 runtime/src/ui/spritecontext.cpp	177	OTHER	FIELD Video::Context::_renderBuffer is void* (Context.h, R-GFX-1)	static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
@@ -327,13 +298,13 @@ runtime/src/ui/textelement_cachetext.cpp	163	OTHER	TextElement::ParamArray::_dat
 runtime/src/ui/userinterface.cpp	636	SIG	SIG the extern "C" door takes void** (pinned by tests/unit/ui_userinterface_abi_test.cpp:122)	reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
 runtime/src/ui/userinterface.cpp	1230	OTHER	the tree guards a null Encoding before CreateWriter, which IO::Serializer's ctor (0x1800b9960) does not: a real Serializer would drop that guard	reinterpret_cast<IO::Serializer*>(&ser);
 runtime/src/ui/userinterface.cpp	1255	OTHER	the tree guards a null Encoding before CreateWriter, which IO::Serializer's ctor (0x1800b9960) does not: a real Serializer would drop that guard	reinterpret_cast<IO::Serializer*>(&ser2);
-runtime/src/ui/userinterface_draw.cpp	287	H5	H5 UserInterface's SpriteContext is raw stack storage (its ctor / dtor would start to run)	reinterpret_cast<SpriteContext*>(scStorage);
-runtime/src/ui/userinterface_draw.cpp	317	OTHER	_captureViewport is raw bytes (typing it embeds Video::Viewport, which pulls Context.h into UserInterface.h)	reinterpret_cast<Video::Viewport*>(_captureViewport));
+runtime/src/ui/userinterface_draw.cpp	283	H5	H5 UserInterface's SpriteContext is raw stack storage (its ctor / dtor would start to run)	reinterpret_cast<SpriteContext*>(scStorage);
+runtime/src/ui/userinterface_draw.cpp	313	OTHER	_captureViewport is raw bytes (typing it embeds Video::Viewport, which pulls Context.h into UserInterface.h)	reinterpret_cast<Video::Viewport*>(_captureViewport));
 runtime/src/ui/userinterface_frame.cpp	400	OTHER	NOCLASS the frame's value-initialised 0x30-byte record (see dialog.cpp:1172)	reinterpret_cast<uint8_t*>(&st));
 runtime/src/ui/userinterface_showdialog.cpp	352	OTHER	the defect-2 control reads the low dword of _parent (+0x28), which is no field	reinterpret_cast<int*>(
 runtime/src/ui/userinterface_showdialog.cpp	353	OTHER	the defect-2 control reads the low dword of _parent (+0x28), which is no field	reinterpret_cast<uintptr_t>(dialogArg->Get()) + 0x28);
-runtime/src/ui/userinterface_standalone.cpp	125	SIG	SIG retail's callback user data is void* (PEAX, 0x180120310)	static_cast<UserInterface*>(ui);
-runtime/src/ui/userinterface_standalone.cpp	171	SIG	SIG retail's callback user data is void* (PEAX, 0x1801203f0)	static_cast<UserInterface*>(ui)->Draw(context);
+runtime/src/ui/userinterface_standalone.cpp	125	FLOOR?	FLOOR? callback context: retail's message-callback user data is void* (PEAX, 0x180120310), viewed as the UserInterface that registered it	static_cast<UserInterface*>(ui);
+runtime/src/ui/userinterface_standalone.cpp	171	FLOOR?	FLOOR? callback context: retail's draw-callback user data is void* (PEAX, 0x1801203f0), viewed as the UserInterface that registered it	static_cast<UserInterface*>(ui)->Draw(context);
 runtime/src/ui/widgets_input.cpp	291	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<System::String*>(dst) =
 runtime/src/ui/widgets_input.cpp	292	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<const System::String*>(src);
 runtime/src/ui/widgets_layout.cpp	92	H5	H5 a System::String held as raw char* storage (class not converted this pass)	reinterpret_cast<System::String*>(self) =
@@ -347,8 +318,7 @@ runtime/src/video/batchc_context_setlight.cpp	145	SIG	SIG SetLight raw pointers 
 runtime/src/video/batchc_context_setlight.cpp	146	SIG	SIG SetLight raw pointers (callers pass float arrays and fields; see banner)	static_cast<const uint32_t*>(colourRaw);
 runtime/src/video/batchc_context_setlight.cpp	147	SIG	SIG SetLight raw pointers (callers pass float arrays and fields; see banner)	static_cast<const uint32_t*>(positionRaw);
 runtime/src/video/context_bind.cpp	255	OTHER	FIELD Context::_imageBuffers is void* (X-RL left it: its readers outside this set index it raw)	static_cast<const ImageBuffer*>(img)->_data->Bind(this, static_cast<unsigned>(i));
-runtime/src/video/context_bind.cpp	319	OTHER	FIELD Context::_pixelConstantStaging stays one byte block (X-RL left it: engine/loops.cpp and wave21_lane_gfxbody.cpp index it by byte)	reinterpret_cast<const VideoProgram* const*>(_pixelConstantStaging);
-runtime/src/video/context_bind.cpp	420	SIG	SIG Context::SetVertexBuffer keeps its const void* parameter (dx11/src/contextdata.cpp and code/Game/Game/geometry_draw.cpp hand it one)	static_cast<const Video::VertexBuffer*>(vb);
+runtime/src/video/context_bind.cpp	418	SIG	SIG Context::SetVertexBuffer keeps its const void* parameter (dx11/src/contextdata.cpp and code/Game/Game/geometry_draw.cpp hand it one)	static_cast<const Video::VertexBuffer*>(vb);
 runtime/src/video/context_ctor.cpp	396	OTHER	the class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::RenderBuffer*>(
 runtime/src/video/context_ctor.cpp	408	OTHER	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
 runtime/src/video/context_ctor.cpp	413	OTHER	class operator new returns void*; retail allocates raw and constructs by hand (not the tier-I shape)	static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
@@ -359,8 +329,6 @@ runtime/src/video/imagebuffer_platform_serialize.cpp	337	H5	H5 ImageBuffer::leve
 runtime/src/video/imagebuffer_platform_serialize.cpp	345	ERASED	ERASED the core takes bytes (Collection.h)	reinterpret_cast<uint8_t*>(levels.GetData()),
 runtime/src/video/shaderprogram.cpp	176	H5	H5 Parameter::name is raw storage of a String (a String member would release every name twice)	reinterpret_cast<System::String&>(e->name).Serialize(ser);
 runtime/src/video/vertexlayout.cpp	135	H5	H5 Element::name is raw storage of a String (a String member would release it twice)	reinterpret_cast<System::String&>(e->name).Serialize(ser);
-runtime/src/video/video_program.cpp	183	OTHER	Context +0x200 videoProgram lives in _pixelConstantStaging (Context.h, outside indexers)	std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));
-runtime/src/video/video_program.cpp	187	OTHER	Context +0x200 videoProgram lives in _pixelConstantStaging (Context.h, outside indexers)	std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));
 runtime/types/collection/Collection.h	451	FLOOR?	FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)	reinterpret_cast<rtcoll::ArrayHdr*>(this));
 runtime/types/collection/Collection.h	460	FLOOR?	FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)	reinterpret_cast<rtcoll::ArrayHdr*>(this),
 runtime/types/collection/Collection.h	468	FLOOR?	FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)	reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,
@@ -368,7 +336,6 @@ runtime/types/collection/Collection.h	474	FLOOR?	FLOOR? Array<T> hands its own h
 runtime/types/collection/Collection.h	480	FLOOR?	FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)	reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,
 runtime/types/graphics/AnimationGroup.h	159	H5	H5 _clips is Array<uint8_t> raw storage of Array<Animation> (Animation has no C++ dtor body)	reinterpret_cast<const Animation*>(_clips._data)[index];
 runtime/types/graphics/GraphicsMesh.h	439	H5	H5 _nodes is Array<uint8_t> raw storage of Array<Node> (see `Node`)	reinterpret_cast<const Collection::Array<Node>*>(&_nodes);
-runtime/types/graphics/Mesh.h	572	POD	POD RtGraphics::ExternalPtr keeps its pointee as void* (X-RL left)	static_cast<GraphicsMesh*>(_mesh.p);
 runtime/types/object/Internal.h	363	ERASED	ERASED InternalPtr<T> is instantiated over T that are not Object::Internal subclasses (RtObject::Internal in the tests, Work records), so the upcast cannot be a static_cast for every T	reinterpret_cast<Internal*>(p)) {}
 runtime/types/object/Internal.h	372	ERASED	ERASED the downcast from Object::Internal* to a T that is not a subclass for every instantiation (the ctor's reason)	reinterpret_cast<T*>(InternalBasePtr::Get()); }
 runtime/types/object/TypeInfo.h	405	SIG	SIG `const void* p` (callers tree-wide hand in untyped refs)	reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);
