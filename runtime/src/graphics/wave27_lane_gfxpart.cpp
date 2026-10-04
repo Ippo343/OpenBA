@@ -612,7 +612,7 @@ void ParticleSystemInstance::SetParticle(ExternalPtrHandle particle) {
     // the ParticleSystem type record's id (ENDGAME B.3.9 TI-REST), read fresh.
     // LEFT: the handle is untyped (see ParticleInstance::SetParticle); the
     // derivation test is what licenses the downcast.
-    const Particle* const asParticle = static_cast<const Particle*>(particle.p);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+    const Particle* const asParticle = static_cast<const Particle*>(particle.p);   // LEFT: ParticleInstance's handle (ExternalPtrHandle::p, one alias for five types) is untyped; IsDerivedFrom just above licenses the downcast
     const ParticleSystem* const sys =
         asParticle->IsDerivedFrom(ParticleSystem::GetTypeInfo().typeId)
             ? static_cast<const ParticleSystem*>(asParticle) : nullptr;
@@ -910,7 +910,7 @@ extern "C" void* RtGraphics_ParticlePool_OperatorNew() {
 extern "C" RtGraphics::ParticleBoundsRecord* RtGraphics_ParticlePoolRecord_Ctor(
         void* recv, const Graphics::Particle* particle) {
     RtGraphics::ParticleBoundsRecord* const r =
-        static_cast<RtGraphics::ParticleBoundsRecord*>(recv);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+        static_cast<RtGraphics::ParticleBoundsRecord*>(recv);   // LEFT: SIG the pool-record ctor door takes the pool's raw slot (void* recv) and builds the record in it
     r->_bounds.min.x = 1e8f;   r->_bounds.min.y = 1e8f;   r->_bounds.min.z = 1e8f;
     r->_bounds.max.x = -1e8f;  r->_bounds.max.y = -1e8f;  r->_bounds.max.z = -1e8f;
     r->_records._data     = nullptr;   // +0x18

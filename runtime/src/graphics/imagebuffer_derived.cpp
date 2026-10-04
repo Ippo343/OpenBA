@@ -619,8 +619,8 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
     // LEFT: the slot's three references arrive as `void*` (the declaration
     // GeneratedImageBuffer.h and tests/unit/rb_graphics_abi_test.cpp share);
     // each is viewed once as retail's `Renderer&` / `const Scene&` / `const Camera&`.
-    Graphics::Renderer& rend = *static_cast<Graphics::Renderer*>(renderer);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
-    const Graphics::Camera& cam = *static_cast<const Graphics::Camera*>(camera);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+    Graphics::Renderer& rend = *static_cast<Graphics::Renderer*>(renderer);   // LEFT: SIG GeneratedImageBuffer slot [11] Render declares retail's Renderer& as void* (GeneratedImageBuffer.h, rb_graphics_abi_test.cpp)
+    const Graphics::Camera& cam = *static_cast<const Graphics::Camera*>(camera);   // LEFT: SIG GeneratedImageBuffer slot [11] Render declares retail's const Camera& as void* (GeneratedImageBuffer.h, rb_graphics_abi_test.cpp)
 
     if (p->_generation == generation) return;      // CMP [RCX+0x68],ESI / JZ
 

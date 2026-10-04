@@ -1071,7 +1071,7 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
         for (int32_t j = 0; j < e->_drawableIds._size; ++j) {
             const int32_t id = e->_drawableIds._data[j];
             RendererDrawable& d = _drawables._data[id];
-            static_cast<const Light*>(d._object)->DrawShadowMap(   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+            static_cast<const Light*>(d._object)->DrawShadowMap(   // LEFT: RendererDrawable::_object is a Geometry or a Light (void*; the drawable's kind decides): this arm is the Light's
                 context, *this, d._value, 1);
         }
 
@@ -1118,7 +1118,7 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
             for (int32_t j = 0; j < e->_drawableIds._size; ++j) {
                 const int32_t id = e->_drawableIds._data[j];
                 RendererDrawable& d = _drawables._data[id];
-                static_cast<const Light*>(d._object)->DrawLight(   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+                static_cast<const Light*>(d._object)->DrawLight(   // LEFT: RendererDrawable::_object is a Geometry or a Light (void*; the drawable's kind decides): this arm is the Light's
                     context, *this, e->_drawGroupIndex, d._value, k, e->_shader);
             }
         }

@@ -213,8 +213,7 @@ EffectSlot* FindEffectSlot(const Scene* self, uint32_t id) {
 // Build oracle only (no diff target: constructing the live object twice would
 // leak the first allocation).
 // ============================================================================
-void* RtAudio_Scene_Ctor(void* selfPtr) {
-    auto* self = static_cast<Scene*>(selfPtr);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
+Scene* RtAudio_Scene_Ctor(Scene* self) {
     self->time = 0;
     self->playGeneration = 1;
     // ENDGAME B.3.2 closing pass: retail's three zero stores, written out.
