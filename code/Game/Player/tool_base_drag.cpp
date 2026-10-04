@@ -57,12 +57,6 @@ ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* d
     return ret;
 }
 
-// B4 FORWARD: 1 outside caller (Component/diseasecomponent.cpp), the old signature.
-void* DragTool_FindDescription_5160(uintptr_t descList, void* retval) {
-    return DragTool_FindDescription_5160(
-        reinterpret_cast<const ComponentDescription*>(descList),   // B4 FORWARD: the caller's spelling   // LEFT: B4 FORWARD dragtool.cpp / placementtool.cpp (other agents') hold the list as uintptr_t
-        reinterpret_cast<ToolbarDescription**>(retval));           // B4 FORWARD: the caller's spelling   // LEFT: B4 FORWARD (as above)
-}
 
 // ============================================================
 // CloseToolDialog (BridgeTool_Draw_sub_f980, 0x1400ff980) — closure-safe

@@ -44,8 +44,7 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(void* refField, void* seria
 Toolbar::Toolbar() {
     _field20      = nullptr;  // +0x20: ExternalPtr
     _field28      = nullptr;  // +0x28: ExternalPtr
-    _field30      = nullptr;  // +0x30: String (zeroed = empty)
-    _field38      = nullptr;  // +0x38: String (zeroed = empty)
+    // +0x30 / +0x38: the two String members' ctors (retail inlines them as the zero stores)
     _field40      = 8;        // +0x40: default 8
     _field44      = true;     // +0x44: default true (0x101 as uint16 = both bytes set)
     _field45      = true;     // +0x45: default true
@@ -60,12 +59,9 @@ Toolbar::Toolbar() {
 // ============================================================
 // Original: 0x140024c10
 // Destroys two String fields (+0x38, +0x30) in reverse order; External::
-// ~External is the compiler's chain; MemFree if flags & 1.
+// ~External is the compiler's chain; MemFree if flags & 1. The two String
+// members' dtors are that order (reverse declaration).
 Toolbar::~Toolbar() {
-    // LEFT (H5): the two Strings are raw storage in Toolbar.h until a behaviour
-    // commit declares them System::String (their ctor would then run).
-    reinterpret_cast<System::String*>(&_field38)->~String();   // LEFT: H5 raw String storage
-    reinterpret_cast<System::String*>(&_field30)->~String();   // LEFT: H5 raw String storage
 }
 
 // ============================================================
@@ -82,8 +78,8 @@ bool Toolbar::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_field28, serializer);
 
     // String fields
-    reinterpret_cast<System::String*>(&_field30)->Serialize(serializer);   // LEFT: H5 raw String storage
-    reinterpret_cast<System::String*>(&_field38)->Serialize(serializer);   // LEFT: H5 raw String storage
+    _field30.Serialize(serializer);
+    _field38.Serialize(serializer);
 
     // Encoding vcall 0x98 (the uint door) for +0x48
     serializer->Serialize(_field48, nullptr);

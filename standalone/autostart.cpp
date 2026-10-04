@@ -274,7 +274,7 @@ void TickMenu(MenuDialogLoopT* menuDLT) {
         // DLG); a typed read here would raise this file's static_void column.
         bool setupDone = newGame &&
             *reinterpret_cast<void**>(   // LEFT: SIG g_StandaloneNewGameDialog is void* (NewGameDialog.h / mainmenudialog.cpp, not this set's)
-                reinterpret_cast<uintptr_t>(newGame) + kNewGame_ButtonOk) != nullptr;   // LEFT: as above
+                reinterpret_cast<uintptr_t>(newGame) + kNewGame_ButtonOk) != nullptr;   // LEFT: SIG g_StandaloneNewGameDialog is void* (NewGameDialog.h / mainmenudialog.cpp, not this set's)
 
         if (setupDone) {
             fprintf(stderr, "[AutoStart] NewGameDialog ready (self=%p) — injecting "

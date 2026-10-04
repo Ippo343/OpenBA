@@ -297,7 +297,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     // feeds its upper bytes through a register-passthrough byte argument.
     uint16_t* ppvVar9 = batch->indices.data;
     reinterpret_cast<TessVertexArray*>(&batch->vertices)->~Array();   // LEFT: GeometryBatch's lists are RawArray, not Collection::Array (Game/WorldGeometryElements.h)
-    reinterpret_cast<TessIndexArray*>(&batch->indices)->~Array();     // LEFT: as above
+    reinterpret_cast<TessIndexArray*>(&batch->indices)->~Array();     // LEFT: GeometryBatch's lists are RawArray, not Collection::Array (Game/WorldGeometryElements.h)
 
     DecalVertexNode* outNode;
 

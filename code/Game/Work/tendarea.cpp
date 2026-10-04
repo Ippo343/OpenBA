@@ -94,7 +94,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
     int currentWorkers = _citizens._count;
 
     if (workComp->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: C signature
+        int maxWorkers = WorkComponent_CalcMaxWorkers(workComp);
         workComp->workState = maxWorkers;
     }
 

@@ -294,7 +294,7 @@ void ScenarioDialog::LoadSelected() {
         uint32_t scenarioResIdx = static_cast<uint32_t>(selectedEntry.resourceIndex);
 
         // The parent MainMenuDialog (+0xC0)
-        UI::DialogInstance* parentCtrl = parentMenu;
+        MainMenuDialog* parentCtrl = parentMenu;
 
         // The saved-state InternalPtr: null
         ::Object::InternalBasePtr nullIBP(nullptr);
@@ -375,14 +375,14 @@ void ScenarioDialog::LoadSelected() {
         // savePathBuf's scope ends below.
 
         // The parent MainMenuDialog and a null InternalPtr
-        UI::DialogInstance* parentCtrl = parentMenu;
+        MainMenuDialog* parentCtrl = parentMenu;
         ::Object::InternalBasePtr nullIBP(nullptr);
 
         uint32_t scenarioResIdx = static_cast<uint32_t>(selectedEntry.resourceIndex);
         Save::SavedState* savedState = saveLoad->GetSaveState();
 
         WorldSetup_LoadFromSave(parentCtrl, savedState,   // 0x1400b49f0
-                                reinterpret_cast<void*>(static_cast<uintptr_t>(scenarioResIdx)),  // CAST-OK: ptr_int
+                                static_cast<int32_t>(scenarioResIdx),
                                 &nullIBP);
     }
 }
@@ -454,7 +454,7 @@ ScenarioDialog::ScenarioDialog()
 // dtor: MemFree(+0xD8), the header cleared (the entries are plain copies).
 ScenarioDialog::ScenarioDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
                                Object::InternalPtr<UI::DialogInstance> parent,
-                               UI::DialogInstance* parentMenuArg, uint8_t difficultyArg)
+                               MainMenuDialog* parentMenuArg, uint8_t difficultyArg)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
       difficulty(difficultyArg), parentMenu(parentMenuArg), selectedIndex(-1),
       buttonOk(nullptr) {}
@@ -478,7 +478,7 @@ void* ScenarioDialog::CreateInPlaceObject(void* storage) {
 // B4 FORWARD: mainmenudialog.cpp's two calls, the old signature.
 ScenarioDialog* ScenarioDialog_Ctor(void* self, UI::UserInterface* ui, const UI::Dialog* extRes,
                                     const Object::InternalPtr<UI::DialogInstance>* parentIBP,
-                                    const Object::InternalPtr<UI::DialogInstance>* parentMenuIBP,
+                                    const Object::InternalPtr<MainMenuDialog>* parentMenuIBP,
                                     uint8_t difficulty) {
     if (!self) return nullptr;
     Object::InternalPtr<UI::DialogInstance> parent;

@@ -157,7 +157,7 @@ void SegTree_Insert(AvlNode28** root, int* pCount, const PathSegment& seg) {
     AvlNode28* cur = *root;
     for (;;) {
         // LEFT: AvlNode28's element as the 8-byte segment (see AvlNodeAlloc above).
-        const PathSegment& nodeSeg = *reinterpret_cast<const PathSegment*>(cur);   // LEFT: POD AvlNode28 (as above)
+        const PathSegment& nodeSeg = *reinterpret_cast<const PathSegment*>(cur);   // LEFT: POD AvlNode28: the tree reads AvlNode28's element as the 8-byte segment (AvlNodeAlloc in this file)
         int nmin = nodeSeg.minCell;
         int nmax = nodeSeg.maxCell;
         bool goLeft = false, skip = false;
@@ -450,7 +450,7 @@ void PathTool::BuildRoutes() {
     }
     for (AvlNode28* n = InorderFirst(segTree); n; n = InorderNext(n)) {
         // LEFT: AvlNode28's element as the 8-byte segment (see AvlNodeAlloc above).
-        segments.SetSize(segments._size + 1, *reinterpret_cast<const PathSegment*>(n));   // LEFT: POD AvlNode28 (as above)
+        segments.SetSize(segments._size + 1, *reinterpret_cast<const PathSegment*>(n));   // LEFT: POD AvlNode28: the tree reads AvlNode28's element as the 8-byte segment (AvlNodeAlloc in this file)
     }
 
 

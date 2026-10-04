@@ -40,17 +40,16 @@ extern "C" int BridgeTool_SnapEndCell_Impl(const BridgeTool* self, int endCell);
 extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int startCell, int endCell, int* outLength);  // 0x1400fb2d0
 
 // ---- keystone_a_removalcalcpath.cpp
-extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1);  // 0x14011dfa0 B4 FORWARD -> DestroyComponent::RunStateMachine: 1 outside caller (Dialog/upgradeui.cpp)
+class DestroyComponent;
+extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component);  // 0x14011dfa0 -> DestroyComponent::RunStateMachine (its address is printed by Dialog/upgradeui.cpp)
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14009c700
 
 // ---- tool_base_createbar.cpp
 void UpdateCreateBar(PlayerToolManager* owner, int width, int height, const System::String* cost, char valid, char hideSize, char single, int multiplier, int startCell, int endCell, const ::Box* box, const Math::Transform* transform);  // 0x1400ffc60
-extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void* param_4, char param_5, char param_6, char param_7, int param_8, int param_9, int param_10, void* param_11, void* param_12);  // 0x1400ffc60 B4 FORWARD -> UpdateCreateBar: 1 outside caller (standalone/tool_harness.cpp)
 extern "C" uint32_t UpdateToolUI_ebb0(const void* /*never read*/, const ::Box* box, const Math::Transform* transform, Math::Vector3* outCorners);  // 0x1400febb0
 
 // ---- tool_base_drag.cpp
 ToolbarDescription** DragTool_FindDescription_5160(const ComponentDescription* description, ToolbarDescription** ret);  // 0x140005160
-void* DragTool_FindDescription_5160(uintptr_t descList, void* retval);  // 0x140005160 B4 FORWARD: 1 outside caller (Component/diseasecomponent.cpp)
 void DragTool_CloseToolDialog_ff980(PlayerToolManager* owner);  // 0x1400ff980
 void DragTool_PlayTickSound_ffbf0(PlayerToolManager* owner);  // 0x1400ffbf0
 void DragTool_PlayPlaceSound_1000f0(const void* /*unused*/);  // 0x1401000f0
@@ -92,7 +91,6 @@ static_assert(offsetof(DecalVertexNode, height) == 0x32, "DecalVertexNode::heigh
 DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalVertexNode** out, const DecalVertexKey* key);  // 0x14001f6b0
 DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const DecalVertexKey* key);  // 0x14001fc00
 
-extern "C" void TradeWork_impl_4b40(int64_t* param_1, int64_t* param_2);  // 0x140014b40 B4 FORWARD -> Avl38Retrace<Avl38Node>
 namespace Graphics { class MaterialInstance; }
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
@@ -105,8 +103,6 @@ int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  /
 extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3, int param_4, int param_5);  // 0x1400ace40
 
 // ---- tool_base_path.cpp
-void* PlayerPath_FindComponent_3ea0(uintptr_t entity, void* retIBP);  // 0x140003ea0
-uint64_t PlayerPath_Sub_11e710(uintptr_t param_1);  // 0x14011e710 B4 FORWARD -> DestroyComponent::InRemovalState: 2 outside callers (Component/firecomponent_ignite.cpp, Component/workplacecomponent.cpp)
 bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t param_4, float param_5, float param_6, float param_7, char param_8, char param_9, const ComponentDescription* param_10);  // 0x14009f5d0
 // 0x140104670 / 0x140104770 / 0x1401048a0 are RemovalTool::CanRemoveBuilding / CanRemoveRoad / CanRemoveField (RemovalTool.h).
 
@@ -145,7 +141,6 @@ extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* o
 // ---- tool_base_trade.cpp
 extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg);  // 0x140025740 B4 FORWARD -> Avl38Remove<TrackedEntityNode>
 extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP);  // 0x14002c690 B4 FORWARD -> Avl38FindRemove<TrackedEntityNode>
-extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1);  // 0x1400666b0 B4 FORWARD -> EntityUI::SyncPin
 
 // The two rotations of the 0x38-byte AVL nodes (an 0x18-byte element; parent
 // +0x18, left +0x20, right +0x28, balance +0x30, height +0x32). Retail's one

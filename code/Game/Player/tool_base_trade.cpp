@@ -344,7 +344,3 @@ void EntityUI::SetPinned() {
     SyncPin();
 }
 
-// B4 FORWARD: 1 outside caller (Dialog/toolbardialog.cpp) holds the EntityUI as an integer.
-extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
-    reinterpret_cast<EntityUI*>(param_1)->SyncPin();   // LEFT: B4 FORWARD Dialog/toolbardialog.cpp (another agent's) holds the EntityUI as an integer
-}

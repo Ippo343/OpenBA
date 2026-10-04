@@ -114,7 +114,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
     // Step 3: Check max workers
     int treeCount = _cells._count;
     if (workComp->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));  // LEFT: SIG WorkComponent_CalcMaxWorkers (wave X family across two agents)
+        int maxWorkers = WorkComponent_CalcMaxWorkers(workComp);
         workComp->workState = maxWorkers;
     }
     if (treeCount >= workComp->workState) {

@@ -254,7 +254,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // If the worker capacity cache is 0, calculate it (the tree's port of 0x14012e5c0
     // called here takes the component as an integer: LEFT)
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(matDesc));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        int maxWorkers = WorkComponent_CalcMaxWorkers(matDesc);
         matDesc->workState = maxWorkers;
     }
 
@@ -268,9 +268,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // -------------------------------------------------------
     System::Random* rng = gameWorld->m_random;
     Map* map = gameWorld->m_game;
-    // The map helpers 0x14009c480, 0x14009f5d0 and 0x14009f3e0 take the map as int* /
-    // void*: LEFT (0x140008830, 0x14009ccf0, 0x1400a00f0 take the Map).
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: SIG Pf_ZoneRefresh_9c480 takes the Map as int* (Action/exe_bodies.h)
+    // (0x140008830, 0x14009ccf0, 0x1400a00f0, 0x14009c480 take the Map.)
 
     int workplaceRadius = materialComp->_radius;
     int radiusSq = workplaceRadius * workplaceRadius;
@@ -350,7 +348,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                 // Map invalidation for connectivity
                 // Retail 0x1400eb303: `MOV RCX,R15; CALL 0x14009c480` -- only RCX is set,
                 // and the body has no other parameter.
-                Pf_ZoneRefresh_9c480(mapGrid);
+                map->FillZones();   // 0x14009c480
 
                 // Read fresh grid data after invalidation
                 MapCell* gridData2 = map->cells;

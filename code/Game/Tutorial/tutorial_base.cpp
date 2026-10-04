@@ -212,14 +212,10 @@ static int CalcMaxWorkersGuarded(const WorkComponent* work) {
 // (B4 TUT compared both with retail 2026-10-02: the same function; this copy
 // only adds the two guards above). The body is the member's; the C name stays
 // for the callers in other blocks' files.
-// B4 FORWARD: 21 outside callers (Component/citizencomponent.cpp,
-// destroycomponent_workerrelease.cpp, huntcomponent.cpp, workplacecomponent.cpp;
-// Game/town_workplace_registry.cpp; Work/buildstructure.cpp, cleararea.cpp,
-// foresterwork.cpp, harvestarea.cpp, harvestorchard.cpp, herbalistwork.cpp,
-// huntwork.cpp, marketwork.cpp, pasturework.cpp, plantarea.cpp,
-// plantorchard.cpp, tendarea.cpp, tradework.cpp).
-extern "C" int WorkComponent_CalcMaxWorkers(uintptr_t workComp) {
-    return CalcMaxWorkersGuarded(reinterpret_cast<const WorkComponent*>(workComp));   // B4 FORWARD: the old signature   // LEFT: SIG WorkComponent_CalcMaxWorkers (X-G2-WAIT, ~20 caller files)
+// Not a pure forwarder (it carries the two guards): it stays, typed, for its 21
+// callers in Component/, Game/ and Work/.
+extern "C" int WorkComponent_CalcMaxWorkers(const WorkComponent* workComp) {
+    return CalcMaxWorkersGuarded(workComp);
 }
 
 // 0x14012fbb0 — WorkPlaceComponent::GetMaxWorkers. Finds the owner entity's

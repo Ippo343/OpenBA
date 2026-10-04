@@ -986,13 +986,13 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
 
         // Get toolbar item's display string and sprite
         UI::String uiString(Object::ExternalPtr<UI::StringTable>(item->_field20),
-                            *reinterpret_cast<const System::String*>(&item->_field30));   // LEFT: H5 ToolbarItem::_field30 is void* String storage (Game/Toolbar.h)
+                            item->_field30);
 #ifdef _DEBUG
         UI::Sprite uiSprite;
-        Debug_Sprite_Ctor(&uiSprite, item->_field28, reinterpret_cast<const System::String*>(&item->_field38));   // LEFT: H5 ToolbarItem::_field38 is void* String storage (Game/Toolbar.h)
+        Debug_Sprite_Ctor(&uiSprite, item->_field28, &item->_field38);
 #else
         UI::Sprite uiSprite(Object::ExternalPtr<UI::SpriteSheet>(item->_field28),
-                            *reinterpret_cast<const System::String*>(&item->_field38));   // LEFT: H5 ToolbarItem::_field38 is void* String storage (Game/Toolbar.h)
+                            item->_field38);
 #endif
 
         // --- Configure button element (skip for SpeedDisplay) ---
@@ -1557,8 +1557,7 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
                 // Pin the panel (it follows the entity)
                 panelController->checkPin->_checked = 1;
 
-                // LEFT: 0x1400666b0's declaration takes the EntityUI as int64_t (PLAYER's header).
-                PlayerTrade_EntityUI_66b0(reinterpret_cast<int64_t>(panelController));   // 0x1400666b0   // LEFT: SIG PlayerTrade_EntityUI_66b0 (int64_t; Player/exe_bodies.h)
+                panelController->SyncPin();   // 0x1400666b0
             }
         }
     }

@@ -108,7 +108,6 @@ uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 // ---- action_pf_astar.cpp
 
 // ---- action_pf_avl.cpp
-extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node);  // 0x14001a8c0
 struct PathGraph;
 extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
@@ -173,7 +172,6 @@ void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best,
 void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 
 // ---- action_pf_roots_road.cpp
-void Pf_ZoneRefresh_9c480(int* param_1);  // 0x14009c480
 
 // ---- action_pf_roots_route.cpp
 bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80

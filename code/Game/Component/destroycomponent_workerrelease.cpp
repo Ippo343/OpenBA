@@ -228,7 +228,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
 
     int capacity = 0;
     if (buildComp == nullptr) {
-        if (workComp) capacity = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        if (workComp) capacity = WorkComponent_CalcMaxWorkers(workComp);
     } else {
         // 0x140002ed0's component class is not settled here: the finder stays (LEFT).
         int64_t posComp = 0;

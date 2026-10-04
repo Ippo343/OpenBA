@@ -470,8 +470,8 @@ void Impl_c4a0(HighlightComponent* hc) {
     // vtable is the "fresh/inert" tell — construct the sub-object and reset +0x120 to
     // -1. (Without the -1, the RemoveObject block below would delete live scene
     // object id 0 — e.g. the storage barn — and corrupt the scene / freeze.)
-    if (*reinterpret_cast<void**>(self + 0x28) == nullptr) {   // LEFT: H5 as above (the null vptr is the inert tell)
-        ::new (reinterpret_cast<void*>(self + 0x28)) Graphics::EdgeMeshInstance();   // B.3.9 GFX: the real ctor   // LEFT: H5 as above
+    if (*reinterpret_cast<void**>(self + 0x28) == nullptr) {   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's) (the null vptr is the inert tell)
+        ::new (reinterpret_cast<void*>(self + 0x28)) Graphics::EdgeMeshInstance();   // B.3.9 GFX: the real ctor   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
         hc->highlightId = -1;
     }
 
@@ -537,18 +537,18 @@ void Impl_c4a0(HighlightComponent* hc) {
         MapComponent* r = hc->_entity->FindComponent<MapComponent>();   // 0x140004680
         if (r && desc && desc->_ref0 != nullptr) {
             Impl_b930(hc);
-            reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 as above
+            reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
                 ->SetMesh(Graphics::ExternalPtrHandle{hc->fieldF8},
                           nullptr);   // B.3.5 bridge
-            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 as above
+            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
                 ->SetTransform(hc->transform);
             System::Time time;
             RtSystem_Time_Ctor(&time, 0.0f);
-            void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 as above
-            reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 as above
+            void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+            reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
                 time);   // slot 1
             hc->highlightId = static_cast<int32_t>(
-                scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst)));   // B.3.5 bridge   // LEFT: H5 as above
+                scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst)));   // B.3.5 bridge   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
             return;
         }
     }
@@ -603,7 +603,7 @@ add_prebuilt:
         if (srcInst->_nodes._data == nullptr) {
             srcInst = nullptr;
         }
-        reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 as above
+        reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
             ->SetMesh(Graphics::ExternalPtrHandle{cellMesh}, srcInst);   // B.3.5 bridge
 
         // The source instance is not only what the outline FOLLOWS, it is what POSITIONS
@@ -618,15 +618,15 @@ add_prebuilt:
         // 0x20-byte Math::Transform that BridgeTool::CalcPath writes per segment). Same
         // call the BUILD branch above makes with the HighlightComponent's +0x100.
         if (srcInst == nullptr) {
-            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 as above
+            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
                 ->SetTransform(charComp->transform);
         }
         System::Time time;
         RtSystem_Time_Ctor(&time, 0.0f);
-        void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 as above
-        reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 as above
+        void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
+        reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
             time);   // slot 1
-        uint32_t id = scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge   // LEFT: H5 as above
+        uint32_t id = scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
         uint32_t f0 = hc->_flags;
         hc->highlightId = static_cast<int32_t>(id);
         uint32_t f1 = f0 | 4;
@@ -680,8 +680,8 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
     // LEFT: `self` stays an integer: as an EditTool* (a final class) GCC devirtualises
     // Type() to EditTool's own id, and this tripwire exists to ask a possibly-recycled
     // block's REAL table (B11, X-G1-3b).
-    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(self), &::Object::Base::Type)) {   // LEFT: FLOOR? vtable probe (as above; the integer self keeps GCC from devirtualising Type())
-        uint32_t tid = reinterpret_cast< ::Object::Base*>(self)->Type();   // B.3.x bridge (slot 2)   // LEFT: FLOOR? vtable probe (as above)
+    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(self), &::Object::Base::Type)) {   // LEFT: FLOOR? vtable probe: `self` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)
+        uint32_t tid = reinterpret_cast< ::Object::Base*>(self)->Type();   // B.3.x bridge (slot 2)   // LEFT: FLOOR? vtable probe: `self` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)
         const char* n = ::Object::GetTypeNameById(tid);
         std::fprintf(stderr, "[HighlightClear]   tool typeId=%u ('%s')\n", tid, n ? n : "?");
         std::fflush(stderr);
@@ -871,14 +871,14 @@ void Impl_HighlightFollow(EditTool* self) {
 
     // LEFT: the embedded EdgeMeshInstance (+0x28) is raw storage (block COMP, H5).
     const int64_t hi = reinterpret_cast<int64_t>(hc);   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0)
-    void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance   // LEFT: H5 as above
-    if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip   // LEFT: H5 as above (the null vptr is the inert tell)
+    void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0)
+    if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0) (the null vptr is the inert tell)
 
     System::Time time;
     RtSystem_Time_Ctor(&time, 0.0f);
     // vtable slot [1] = EdgeMeshInstance::Update(time): pulls the current transform
     // from the bound MeshInstance (+0xc8 -> +0x84) and Geometry::SetTransform's it.
-    reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 as above
+    reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0)
         time);   // slot 1
 
 }

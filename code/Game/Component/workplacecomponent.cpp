@@ -520,7 +520,7 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     // address).
     WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
     if (workComp)
-        workComp->workState = WorkComponent_CalcMaxWorkers(reinterpret_cast<uintptr_t>(workComp));   // LEFT: SIG WorkComponent_CalcMaxWorkers
+        workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
 
     // The natural profession comes from the linked WorkPlaceDescription (+0x20). Retail
     // reads it through IsDerivedFrom(desc, DAT_1401c8118) — and if that check FAILS retail

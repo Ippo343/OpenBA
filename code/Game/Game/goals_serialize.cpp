@@ -62,7 +62,7 @@
 #include "Game/exe_bodies.h"
 #include "Action/exe_bodies.h"   // Pf_AvlRebalanceA_a8c0
 #include "Action/PathAvl.h"      // AvlRebalance (0x140013480)
-#include "Player/exe_bodies.h"   // TradeWork_impl_4b40
+#include "Player/exe_bodies.h"   // Avl38Retrace (0x140014b40)
 #include "Work/exe_bodies.h"     // WorkBST / WorkCellBST removes, WorkBase_TreeNodeFree_*
 
 
@@ -77,10 +77,10 @@ void RebalanceIdTree(WorkSchedulerIdNode** root, WorkSchedulerIdNode* from) {   
     AvlRebalance(root, &from);
 }
 void RebalanceCountTree(WorkSchedulerCountNode** root, WorkSchedulerCountNode* from) { // 0x14001a8c0
-    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));  // LEFT: SIG Pf_AvlRebalanceA_a8c0 (wave X family across two agents)
+    AvlRebalance(root, &from);
 }
 void RebalanceBucketTree(WorkSchedulerBucketNode** root, WorkSchedulerBucketNode* from) { // 0x140014b40
-    TradeWork_impl_4b40(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));  // LEFT: SIG TradeWork_impl_4b40 (wave X family across two agents)
+    Avl38Retrace(root, &from);
 }
 void EraseIdNode(WorkSchedulerTree* tree, WorkSchedulerIdNode* node) {               // 0x14001ca60
     WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF)

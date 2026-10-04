@@ -49,7 +49,7 @@
 #include "Dialog/UpgradeUI.h"
 #include "Player/RemovalTool.h"
 #include "Player/Tool.h"
-#include "Player/exe_bodies.h"            // UpdateToolUI_fc60 (0x1400ffc60)
+#include "Player/exe_bodies.h"            // UpdateCreateBar (0x1400ffc60)
 #include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, ActHunt_DynArraySetCount_3110
 #include "Dialog/exe_bodies.h"
 #include "Dialog/dialog_exe_helpers.h"    // Dialog_FindComponent_d6c0 (0x14000d6c0)
@@ -793,20 +793,19 @@ void FirePreviewPlacement(PlayerToolManager* entityUI) {
         Graphics::MeshInstance* mesh = static_cast<PlacementTool*>(tool)->meshInstance;
         if (controller && mesh &&
             controller->field_0x00 != nullptr /*dialog open*/) {
-            void* box = &mesh->_localBounds;   // Geometry +0x34
+            const ::Box* box = &mesh->_localBounds;   // Geometry +0x34
             // Geometry::GetTransform(mesh) -> Transform by value (member; import slot
             // 0x140151460 ?GetTransform@Geometry@Graphics@@, 0x180015800).
-            uint8_t xf[96] = {};
-            ::new (static_cast<void*>(xf)) Math::Transform(mesh->GetTransform());
+            const Math::Transform xf(mesh->GetTransform());
             System::String costStr("");   // empty System::String
             fprintf(stderr, "[ToolHarness] driving operator_fc60 (CreateBar populate+position) "
                    "controller=%p mesh=%p...\n", controller, mesh);
-            UpdateToolUI_fc60(controller, 0, 0, &costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
-                              /*startCell*/-1, /*endCell*/-1, box, xf);   // 0x1400ffc60
+            UpdateCreateBar(controller, 0, 0, &costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
+                            /*startCell*/-1, /*endCell*/-1, box, &xf);   // 0x1400ffc60
             fprintf(stderr, "[ToolHarness] operator_fc60 returned — CreateBar populate ran crash-free\n");
         } else {
             fprintf(stderr, "[ToolHarness] operator_fc60 probe skipped (fc60=%p controller=%p mesh=%p "
-                   "dialogOpen=%d)\n", reinterpret_cast<void*>(&UpdateToolUI_fc60), controller, mesh,
+                   "dialogOpen=%d)\n", reinterpret_cast<void*>(&UpdateCreateBar), controller, mesh,
                    controller ? (controller->field_0x00 != nullptr) : 0);
         }
     }
