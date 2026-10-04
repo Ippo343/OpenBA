@@ -106,9 +106,7 @@ extern "C" MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim
     n->element.carries.capacity = 0;                  // one 8-byte store in retail
 
     // 0x14000d9d0 — deep-copy the 16-byte-element dynamic array from src+0x08.
-    // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries),   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
-                           reinterpret_cast<int64_t*>(&src->carries));   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
+    MaterialArrayAssign(&n->element.carries, &src->carries);
 
     n->parent  = parent;    // aeb5
     n->left    = nullptr;   // aeb9 — left
@@ -270,8 +268,7 @@ extern "C" MarketWork::ClaimNode** MarketBst_a9f0(MarketWork::ClaimNode** tree,
     tmp.carries.count = 0;                          // aa27 — one 8-byte zero covers count
     tmp.carries.capacity = 0;                       //        AND cap in retail
 
-    // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&tmp.carries), reinterpret_cast<int64_t*>(vec)); // aa32   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
+    MaterialArrayAssign(&tmp.carries, vec); // aa32
 
     MarketBst_ab60(tree, out, &tmp);                // aa43 (return value discarded here)
 

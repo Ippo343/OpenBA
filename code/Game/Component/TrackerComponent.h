@@ -53,14 +53,11 @@ public:
         int32_t capacity;   // +0x0C
     };
 
-    // Two Array<Entry> (H5: raw triples). ProductionUI 0x140075a50 moves the produced
-    // list into the displayed one when the world's generation changes.
-    Entry*   displayed;           // +0x28 the list the production panel shows (freed by the retail dtor)
-    int32_t  displayedCount;      // +0x30
-    int32_t  displayedCapacity;   // +0x34
-    Entry*   produced;            // +0x38 the list the producers upsert into (freed by the retail dtor)
-    int32_t  producedCount;       // +0x40
-    int32_t  producedCapacity;    // +0x44
+    // Two Array<Entry> (H5: raw triples, held as the EntryArray POD). ProductionUI
+    // 0x140075a50 moves the produced list into the displayed one when the world's
+    // generation changes.
+    EntryArray displayed;         // +0x28 the list the production panel shows (freed by the retail dtor)
+    EntryArray produced;          // +0x38 the list the producers upsert into (freed by the retail dtor)
     int32_t  trackerId;    // +0x48 game-world item-count generation stamp (ctor -1)
     uint8_t  _pad4C[4];    // +0x4C
 };
@@ -71,10 +68,10 @@ static_assert(sizeof(TrackerComponent::Entry) == 0x10, "tracker entry stride 0x1
 static_assert(sizeof(TrackerComponent::EntryArray) == 0x10, "Array<Entry> is {data, count, capacity}");
 static_assert(offsetof(TrackerComponent::EntryArray, count) == 0x08, "EntryArray::count @ +0x08");
 static_assert(offsetof(TrackerComponent::EntryArray, capacity) == 0x0C, "EntryArray::capacity @ +0x0C");
-static_assert(offsetof(TrackerComponent, displayedCapacity) == 0x34, "");
-static_assert(offsetof(TrackerComponent, producedCapacity) == 0x44, "");
 static_assert(offsetof(TrackerComponent, displayed) == 0x28, "");
-static_assert(offsetof(TrackerComponent, displayedCount) == 0x30, "");
+static_assert(offsetof(TrackerComponent, displayed.count) == 0x30, "");
+static_assert(offsetof(TrackerComponent, displayed.capacity) == 0x34, "");
 static_assert(offsetof(TrackerComponent, produced) == 0x38, "");
-static_assert(offsetof(TrackerComponent, producedCount) == 0x40, "");
+static_assert(offsetof(TrackerComponent, produced.count) == 0x40, "");
+static_assert(offsetof(TrackerComponent, produced.capacity) == 0x44, "");
 static_assert(offsetof(TrackerComponent, trackerId) == 0x48, "");

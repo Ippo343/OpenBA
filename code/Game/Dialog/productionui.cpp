@@ -244,19 +244,19 @@ void ProductionUI::UpdateList(int listIndex) {
     if (gameItemCount != tracker->trackerId) {
         // Call tracker rebuild: FUN_14000d9d0 moves data from +0x38 to +0x28
         fn_TrackerComponent_Rebuild(&tracker->produced, &tracker->displayed);
-        System::MemoryAllocator::MemFree(tracker->displayed);
-        tracker->displayed = nullptr;
-        tracker->displayedCount = 0;      // retail: one qword store over count / capacity
-        tracker->displayedCapacity = 0;
+        System::MemoryAllocator::MemFree(tracker->displayed.data);
+        tracker->displayed.data = nullptr;
+        tracker->displayed.count = 0;      // retail: one qword store over count / capacity
+        tracker->displayed.capacity = 0;
         tracker->trackerId = gameItemCount;
     }
 
     // Get item count for this list
     int itemCount;
     if (listIndex == 0) {
-        itemCount = tracker->displayedCount;
+        itemCount = tracker->displayed.count;
     } else {
-        itemCount = tracker->producedCount;
+        itemCount = tracker->produced.count;
     }
 
     // Get element array for this list (+0x30 consumed, +0x40 produced)
@@ -274,9 +274,9 @@ void ProductionUI::UpdateList(int listIndex) {
         // Get item array from tracker
         TrackerComponent::Entry* itemArray;
         if (listIndex == 0) {
-            itemArray = tracker->displayed;
+            itemArray = tracker->displayed.data;
         } else {
-            itemArray = tracker->produced;
+            itemArray = tracker->produced.data;
         }
 
         ComponentDescription* item = itemArray[i]._resource;
@@ -300,9 +300,9 @@ void ProductionUI::UpdateList(int listIndex) {
 
         // Get count from item entry (+0x08 relative to item array base)
         if (listIndex == 0) {
-            itemArray = tracker->displayed;
+            itemArray = tracker->displayed.data;
         } else {
-            itemArray = tracker->produced;
+            itemArray = tracker->produced.data;
         }
         int count = itemArray[i]._count;
         // Create sprite from the RawMaterialDescription

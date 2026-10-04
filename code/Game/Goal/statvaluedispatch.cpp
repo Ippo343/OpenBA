@@ -557,9 +557,9 @@ uint32_t StatGoal::CountDistinctTracked(const Object::External* ext) const {
             if (ext != nullptr) {
                 if (entityRef->_description != ext) continue;
             }
-            int childN = tracker->displayedCount;
+            int childN = tracker->displayed.count;
             for (int ci = 0; ci < childN; ci++) {
-                const ComponentDescription* childObj = tracker->displayed[ci]._resource;
+                const ComponentDescription* childObj = tracker->displayed.data[ci]._resource;
                 RawMaterialDescription* prof = FindSubDescription<RawMaterialDescription>(childObj);
                 uint32_t selfFlags = (uint32_t)statFlags;
                 uint32_t profFlags = prof ? prof->_flags : 0;
@@ -640,14 +640,14 @@ uint32_t StatGoal::SumTrackedForProfession(const Object::External* ext) const {
         }
         TrackerComponent* tracker = entityRef->FindComponent<TrackerComponent>();
         if (tracker == nullptr) continue;
-        int childN = tracker->displayedCount;
+        int childN = tracker->displayed.count;
         for (int ci = 0; ci < childN; ci++) {
-            const ComponentDescription* childObj = tracker->displayed[ci]._resource;
+            const ComponentDescription* childObj = tracker->displayed.data[ci]._resource;
             RawMaterialDescription* prof = FindSubDescription<RawMaterialDescription>(childObj);
             uint32_t selfFlags = (uint32_t)statFlags;
             uint32_t profFlags = prof ? prof->_flags : 0;
             if ((selfFlags & profFlags) != 0) {
-                total += tracker->displayed[ci]._count;
+                total += tracker->displayed.data[ci]._count;
             }
         }
     }

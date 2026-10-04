@@ -31,6 +31,13 @@ public:
         int32_t               count;      // +0x08
         int32_t               reserved;   // +0x0C
     };
+    // The Array<Entry> header {data, count, capacity} as a POD (no ctor, no dtor: the
+    // class's ctor zeroes it and its dtor frees it, as retail's 0x140022130 does).
+    struct EntryList {
+        Entry*  data;       // +0x00
+        int32_t count;      // +0x08
+        int32_t capacity;   // +0x0C
+    };
 
     ConsumeRawMaterial();                                                   // create 0x1400220c0
     ConsumeRawMaterial(ComponentEntity* const* storage, ComponentDescription* material,
@@ -47,10 +54,8 @@ public:
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
     Object::InternalPtr<ComponentEntity> _field20;   // +0x20 storage entity (Persist checks ComponentEntity)
-    // +0x28 Array<Entry> (H5: a raw triple; the dtor frees the data as retail's does)
-    Entry*    _field28;          // +0x28 consume list data (stride 0x10), freed by the dtor
-    int32_t   _field30;          // +0x30 consume list count
-    int32_t   _field34;          // +0x34 consume list capacity
+    // +0x28 Array<Entry> (H5: the raw triple as a POD; the dtor frees the data as retail's does)
+    EntryList _field28;          // +0x28 consume list {data (stride 0x10), count +0x30, capacity +0x34}
     bool      _field38;          // +0x38 reserve flag (Persist: the bool overload)
     uint8_t   _pad39[7];         // +0x39 padding
 };
@@ -62,6 +67,7 @@ static_assert(sizeof(ConsumeRawMaterial) == 0x40, "ConsumeRawMaterial is 0x40 (c
 static_assert(alignof(ConsumeRawMaterial) == 8, "ConsumeRawMaterial is 8-aligned");
 static_assert(offsetof(ConsumeRawMaterial, _field20) == 0x20, "ConsumeRawMaterial +0x20");
 static_assert(offsetof(ConsumeRawMaterial, _field28) == 0x28, "ConsumeRawMaterial +0x28");
-static_assert(offsetof(ConsumeRawMaterial, _field30) == 0x30, "ConsumeRawMaterial +0x30");
-static_assert(offsetof(ConsumeRawMaterial, _field34) == 0x34, "ConsumeRawMaterial +0x34");
+static_assert(offsetof(ConsumeRawMaterial, _field28.count) == 0x30, "ConsumeRawMaterial +0x30");
+static_assert(offsetof(ConsumeRawMaterial, _field28.capacity) == 0x34, "ConsumeRawMaterial +0x34");
+static_assert(sizeof(ConsumeRawMaterial::EntryList) == 0x10, "Array<Entry> header");
 static_assert(offsetof(ConsumeRawMaterial, _field38) == 0x38, "ConsumeRawMaterial +0x38");

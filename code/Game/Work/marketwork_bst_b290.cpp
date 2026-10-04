@@ -102,9 +102,9 @@ void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer) {
     int count = arr->count;
     serializer->Serialize(count, nullptr);
 
-    // 14002b618..b628 (0x14000da70 takes the array header as int64_t*: LEFT)
+    // 14002b618..b628
     if (SerIsLoading(serializer)) {
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
+        MaterialArraySetSize(arr, count);   // 0x14000da70
     }
 
     // 14002b62d..b662: element loop. Note retail reloads the buffer pointer AFTER the
@@ -135,8 +135,7 @@ static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryLis
     n->element.carries.data = nullptr;
     n->element.carries.count = 0;      // with capacity: one 8-byte zero
     n->element.carries.capacity = 0;
-    // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
+    MaterialArrayAssign(&n->element.carries, srcArray);   // 0x14000d9d0
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
@@ -266,7 +265,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             if (SerIsLoading(serializer)) {
                 // 14002b540..b54c. Dead in this arm (we only get here when NOT loading),
                 // but present in retail, so it is kept rather than "cleaned up".
-                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
+                MaterialArraySetSize(&node->element.carries, count);   // 0x14000da70
             }
             MarketWork::Carry* p = node->element.carries.data;
             for (int i = 0; i < count; ++i) {

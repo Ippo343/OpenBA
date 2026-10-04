@@ -90,8 +90,32 @@ int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
 void PositionRawMaterial(Component* self, int cellIndex, float rotation);  // 0x140129760
-void ActRm_ArrayResize16_da70(int64_t* arr, int newCount);  // 0x14000da70
-void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);  // 0x14000d9d0
+// 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
+// {material, count, pad} element: ONE retail body each serving four element types
+// (TrackerComponent::Entry, ConsumeRawMaterial::Entry, PickupStoredRawMaterial::Entry,
+// MarketWork::Carry). The core works on its own element view; callers use the typed
+// wrappers MaterialArraySetSize / MaterialArrayAssign over their {data, count, capacity}
+// holder.
+template <class T> struct RawArray;   // Action/PathSearch.h
+struct MaterialCount16 {               // the core's own 16-byte element view
+    ComponentDescription* material;    // +0x00 ExternalPtr<ComponentDescription>
+    int32_t               count;       // +0x08
+    int32_t               pad0C;       // +0x0C (the SetSize tail leaves it unwritten)
+};
+static_assert(sizeof(MaterialCount16) == 0x10, "16-byte stride (0x14000da70)");
+void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70
+void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0
+template <class Holder>
+inline void MaterialArraySetSize(Holder* arr, int newCount) {
+    static_assert(sizeof(Holder) == 0x10 && sizeof(*arr->data) == 0x10, "an Array<16-byte element> {data, count, capacity}");
+    ActRm_ArrayResize16_da70(reinterpret_cast<RawArray<MaterialCount16>*>(arr), newCount);   // LEFT: FLOOR? the typed wrapper hands its holder to the one erased core (0x14000da70 serves four 16-byte element types)
+}
+template <class Holder>
+inline void MaterialArrayAssign(Holder* dst, const Holder* src) {
+    static_assert(sizeof(Holder) == 0x10 && sizeof(*dst->data) == 0x10, "an Array<16-byte element> {data, count, capacity}");
+    ActRm_VectorClone_d9d0(reinterpret_cast<RawArray<MaterialCount16>*>(dst),   // LEFT: FLOOR? the typed wrapper hands its holder to the one erased core (0x14000d9d0 serves four 16-byte element types)
+                           reinterpret_cast<const RawArray<MaterialCount16>*>(src));   // LEFT: FLOOR? the typed wrapper hands its holder to the one erased core (0x14000d9d0 serves four 16-byte element types)
+}
 
 // ---- action_child_ctors.cpp
 class ComponentEntity;        // Entity/ComponentEntity.h

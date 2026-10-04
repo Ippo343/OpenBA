@@ -39,8 +39,8 @@
 // would compare gameWorld item count 0 == stamp 0 on the very first frame of a
 // fresh world and SKIP the one-shot array rebuild the -1 sentinel forces.
 TrackerComponent::TrackerComponent()
-    : displayed(nullptr), displayedCount(0), displayedCapacity(0),
-      produced(nullptr), producedCount(0), producedCapacity(0),
+    : displayed{nullptr, 0, 0},
+      produced{nullptr, 0, 0},
       trackerId(-1), _pad4C{} {}
 
 // [3] ============================================================
@@ -54,18 +54,17 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // === the displayed list ===
-    int localCount1 = displayedCount;
+    int localCount1 = displayed.count;
     ser.Serialize(localCount1, nullptr);
 
     // If loading, resize the array
     if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        // LEFT: SIG ActRm_ArrayResize16_da70 (takes the array header as int64_t*; TrackerComponent.h, DLG-1, holds a raw triple).
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&displayed), localCount1);   // 0x14000da70   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
+        MaterialArraySetSize(&displayed, localCount1);   // 0x14000da70
     }
 
     // Serialize each (ExternalPtr + int) entry
     if (localCount1 > 0) {
-        Entry* entry = displayed;
+        Entry* entry = displayed.data;
         for (int i = 0; i < localCount1; i++) {
             Reimpl_ExternalPtr_Serialize_StringTable(&entry->_resource, &ser);   // 0x140002340
             ser.Serialize(entry->_count, nullptr);
@@ -74,15 +73,15 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     }
 
     // === the produced list ===
-    int localCount2 = producedCount;
+    int localCount2 = produced.count;
     ser.Serialize(localCount2, nullptr);
 
     if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&produced), localCount2);   // 0x14000da70  LEFT: SIG ActRm_ArrayResize16_da70 (TrackerComponent.h holds a raw triple, DLG-1)   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
+        MaterialArraySetSize(&produced, localCount2);   // 0x14000da70
     }
 
     if (localCount2 > 0) {
-        Entry* entry = produced;
+        Entry* entry = produced.data;
         for (int i = 0; i < localCount2; i++) {
             Reimpl_ExternalPtr_Serialize_StringTable(&entry->_resource, &ser);   // 0x140002340
             ser.Serialize(entry->_count, nullptr);

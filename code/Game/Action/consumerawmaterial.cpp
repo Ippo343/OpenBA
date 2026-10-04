@@ -84,18 +84,18 @@ void ConsumeRawMaterial::Persist(IO::Stream& stream) {
         ser.Serialize(legacyCount, nullptr);
     } else {
         // v1+ format: material count + material list array
-        int matCount = _field30;
+        int matCount = _field28.count;
         ser.Serialize(matCount, nullptr);
 
         // If loading, resize the material array
         if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
             // LEFT: the shared 16-byte Array SetSize 0x14000da70 is ACT-a's file-local body,
             // reached only through its int64_t* forwarder.
-            ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&_field28), matCount);   // 0x14000da70   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
+            MaterialArraySetSize(&_field28, matCount);   // 0x14000da70
         }
 
         // Serialize each material entry (ExternalPtr + int count, 0x10 bytes each)
-        Entry* entry = _field28;
+        Entry* entry = _field28.data;
         if (matCount > 0) {
             uint64_t remaining = (uint64_t)matCount;
             do {
@@ -129,7 +129,7 @@ void ConsumeRawMaterial::Persist(IO::Stream& stream) {
 int  ConsumeRawMaterial::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
-    int matCount = _field30;
+    int matCount = _field28.count;
     if (matCount == 0) {
         return 2;
     }
@@ -144,7 +144,7 @@ int  ConsumeRawMaterial::AbstractImpl(ActionStack* actionStack) {
     }
 
     do {
-        Entry* matEntry = &_field28[matIdx];
+        Entry* matEntry = &_field28.data[matIdx];
         int requestedCount = matEntry->count;
 
         if (!_field38) {
@@ -198,7 +198,7 @@ int  ConsumeRawMaterial::AbstractImpl(ActionStack* actionStack) {
         }
 
         matIdx++;
-    } while (matIdx < _field30);
+    } while (matIdx < _field28.count);
 
     return 0;
 }
@@ -217,11 +217,11 @@ void ConsumeRawMaterial::CheckEntity() {
     // Find StorageComponent on target entity (+0x20)
     StorageComponent* storage = _field20->FindComponent<StorageComponent>();   // 0x140006270
 
-    int matCount = _field30;
+    int matCount = _field28.count;
     if (matCount <= 0) return;
 
     for (int i = 0; i < matCount; i++) {
-        const Entry& entry = _field28[i];
+        const Entry& entry = _field28.data[i];
 
         int slotCount = storage->slotCount;
         if (slotCount > 0) {
@@ -261,9 +261,7 @@ bool ConsumeRawMaterial::GetTarget(ComponentEntity** param) {
 // +0x10; kept (not a behaviour change of this step).
 ConsumeRawMaterial::ConsumeRawMaterial()
     : _field20(nullptr),
-      _field28(nullptr),
-      _field30(0),
-      _field34(0),
+      _field28{nullptr, 0, 0},
       _field38(false),
       _pad39{} {}
 
@@ -272,10 +270,10 @@ ConsumeRawMaterial::ConsumeRawMaterial()
 //   [this+0x28] = 0; [this+0x30] = 0 (the qword: count +0x30 and capacity +0x34).
 // The tree's shared Action_ScalarDtor skipped it and leaked the consume list.
 ConsumeRawMaterial::~ConsumeRawMaterial() {
-    Object::detail::InternalMemFree(_field28);
-    _field28 = nullptr;
-    _field30 = 0;   // H7: retail clears count and capacity with one qword store
-    _field34 = 0;
+    Object::detail::InternalMemFree(_field28.data);
+    _field28.data = nullptr;
+    _field28.count = 0;   // H7: retail clears count and capacity with one qword store
+    _field28.capacity = 0;
 }
 
 // [3] 0x1400c6120
@@ -302,9 +300,7 @@ void* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
 // +0x38 untouched).
 ConsumeRawMaterial::ConsumeRawMaterial(ComponentEntity* const* storage)
     : _field20(*storage),
-      _field28(nullptr),
-      _field30(0),
-      _field34(0) {}
+      _field28{nullptr, 0, 0} {}
 
 // ============================================================
 // FUN_1400c64b0 — ConsumeRawMaterial::AddMaterial (the consume-list append).
@@ -336,7 +332,7 @@ void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) 
     }
 
     // append {material, count} to +0x28 (count +0x30, cap +0x34, stride 0x10)
-    uint32_t oldCount = static_cast<uint32_t>(_field30);
+    uint32_t oldCount = static_cast<uint32_t>(_field28.count);
     uint32_t newCount = oldCount + 1;
     if (newCount == oldCount) return;  // overflow guard (never)
 
@@ -346,21 +342,21 @@ void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) 
     newEntry.count = count;
     newEntry.reserved = 0;
 
-    Entry* oldArr = _field28;
-    _field30 = static_cast<int32_t>(newCount);
-    if (_field34 < (int)newCount) {
-        _field34 = static_cast<int32_t>(newCount);
-        if (oldCount != 0) _field34 = static_cast<int32_t>(newCount * 3);
-        _field28 = System::MemoryAllocator::_singleton
-            ? static_cast<Entry*>(System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)_field34 << 4), 8))
+    Entry* oldArr = _field28.data;
+    _field28.count = static_cast<int32_t>(newCount);
+    if (_field28.capacity < (int)newCount) {
+        _field28.capacity = static_cast<int32_t>(newCount);
+        if (oldCount != 0) _field28.capacity = static_cast<int32_t>(newCount * 3);
+        _field28.data = System::MemoryAllocator::_singleton
+            ? static_cast<Entry*>(System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)_field28.capacity << 4), 8))
             : nullptr;
     }
     int copyStart = 0;
-    if (oldArr == _field28) copyStart = (int)oldCount;
+    if (oldArr == _field28.data) copyStart = (int)oldCount;
     int64_t i = copyStart;
     if (i < (int)newCount) {
         do {
-            Entry* dst = &_field28[i];
+            Entry* dst = &_field28.data[i];
             if (dst != nullptr) {
                 const Entry* src = (i < (int)oldCount) ? &oldArr[i] : &newEntry;
                 *dst = *src;
@@ -368,7 +364,7 @@ void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) 
             i++;
         } while (i < (int)newCount);
     }
-    if (oldArr != _field28) System::MemoryAllocator::MemFree(oldArr);
+    if (oldArr != _field28.data) System::MemoryAllocator::MemFree(oldArr);
 }
 
 // ============================================================
@@ -381,9 +377,7 @@ void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) 
 ConsumeRawMaterial::ConsumeRawMaterial(ComponentEntity* const* storage,
                                        ComponentDescription* material, bool reserve)
     : _field20(*storage),
-      _field28(nullptr),
-      _field30(0),
-      _field34(0),
+      _field28{nullptr, 0, 0},
       _field38(reserve) {
     AddMaterial(material, 1);
 }
