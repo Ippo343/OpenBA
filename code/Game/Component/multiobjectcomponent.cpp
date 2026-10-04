@@ -36,8 +36,7 @@ void MultiObjectComponent::OnRemove() {
 
     for (int i = 0; i < childCount; i++) {
         ComponentEntity* entityPtr = children[i].Get();
-        // LEFT: GameUpdateLoop::m_entityList is void* (W0 header).
-        EntityList* entityList = reinterpret_cast<EntityList*>(GameUpdateLoop::_singleton->m_entityList);
+        EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;   // +0xE8
 
         if (entityPtr != nullptr && ((entityPtr->_entityFlags >> 10) & 1) == 0) {
             ActHunt_MarkEntityRemoval_c2ea0(entityPtr);   // 0x1400c2ea0
@@ -87,7 +86,7 @@ char MultiObjectComponent::EnterState2() {
         MapComponent* map = child->FindComponent<MapComponent>();
         map->AddToMap();   // 0x1401241b0
         FloorComponent* floor = child->FindComponent<FloorComponent>();
-        if (floor) FloorComponent_SubF390(floor);   // 0x14011f390
+        if (floor) floor->PlaceFloor();   // 0x14011f390
     }
     return 0;
 }

@@ -59,15 +59,13 @@ void HighlightComponent::OnRemove() {
     // the embedded EdgeMeshInstance was never constructed, so nothing of ours is
     // in the Scene and +0x120 is not a real object id. Must precede the sceneId
     // read — an inert component's +0x120 is 0, not -1.
-    // LEFT: the embedded EdgeMeshInstance is raw storage (H5); its first word is the vptr.
-    if (*reinterpret_cast<void* const*>(edgeMeshInstance) == nullptr) return;
+    if (*reinterpret_cast<void* const*>(edgeMeshInstance) == nullptr) return;   // LEFT: the embedded EdgeMeshInstance is raw storage (HighlightComponent.h, PLAYER; H5); its first word is the vptr
     int32_t sceneId = highlightId;
     if (sceneId < 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
-    void* scene = GameUpdateLoop::_singleton->m_graphicsScene;
+    Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;   // +0x60
     if (!scene) return;
-    // LEFT: GameUpdateLoop::m_graphicsScene is void* (W0 header).
-    reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(static_cast<uint32_t>(sceneId));
+    scene->RemoveObject(static_cast<uint32_t>(sceneId));
     highlightId = -1;
 }
 

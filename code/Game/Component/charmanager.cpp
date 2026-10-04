@@ -261,37 +261,34 @@ void CharacterGrid::Place(int idx) {
     }
 }
 
-// B4 FORWARD: 1 outside caller (citizenai_executor.cpp) holds the grid as float*.
-extern "C" void CharMgr_sub_8660(float* mgrF, int idx) {
-    reinterpret_cast<CharacterGrid*>(mgrF)->Place(idx);
-}
-
 // ===========================================================================
 // 0x1400021d0  FUN_1400021d0 — generic int-array resize to `newCount` (grow x3 on
 //   first realloc, copy survivors, free old). Used by Register to pop the free-list.
-//   arr layout: [0]=int* data, +0x08 int count, +0x0c int capacity.
-// LEFT: a Collection::Array<int> instance the tree has not matched to the template.
+//   The array is the {int* data, int count, int capacity} triple; its one caller hands
+//   it CharacterGrid's freeList / freeCount / freeCapacity (+0x20 / +0x28 / +0x2C).
+// A Collection::Array<int> instance the tree has not matched to the template (kept
+// hand-expanded: the template's first allocation and growth are not proven equal).
 // ===========================================================================
-extern "C" void CharMgr_IntArrayResize_21d0(int64_t* arr, int newCount) {
-    int oldCount = static_cast<int>(arr[1]);
+extern "C" void CharMgr_IntArrayResize_21d0(int32_t*& data, int32_t& count, int32_t& capacity,
+                                           int newCount) {
+    int oldCount = count;
     if (newCount == oldCount) return;
-    void* oldData = reinterpret_cast<void*>(arr[0]);
-    *reinterpret_cast<int*>(arr + 1) = newCount;            // count = newCount (low 32 of arr[1])
-    if (*reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc) < newCount) {
-        *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc) = newCount;
+    int32_t* oldData = data;
+    count = newCount;
+    if (capacity < newCount) {
+        capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0)
-            *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc) = newCount * 3;
-        int cap = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(arr) + 0xc);
-        void* nd = ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cap) << 2, 4);
-        arr[0] = reinterpret_cast<int64_t>(nd);
+            capacity = newCount * 3;
+        int cap = capacity;
+        data = static_cast<int32_t*>(::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cap) << 2, 4));
     }
-    int start = (oldData == reinterpret_cast<void*>(arr[0])) ? oldCount : 0;
-    int* dst = reinterpret_cast<int*>(arr[0]);
+    int start = (oldData == data) ? oldCount : 0;
+    int32_t* dst = data;
     for (int i = start; i < newCount; ++i) {
         if (i < oldCount && dst)
-            dst[i] = reinterpret_cast<int*>(oldData)[i];
+            dst[i] = oldData[i];
     }
-    if (oldData != reinterpret_cast<void*>(arr[0]))
+    if (oldData != data)
         ::System::MemoryAllocator::MemFree(oldData);
 }
 
@@ -348,7 +345,7 @@ int64_t CharacterGrid::Register(Object::InternalPtr<CharacterComponent>* ibp) {
     } else {
         // ---- free-list pop path ----
         index = static_cast<uint32_t>(freeList[fc - 1]);
-        CharMgr_IntArrayResize_21d0(reinterpret_cast<int64_t*>(&freeList), fc - 1);
+        CharMgr_IntArrayResize_21d0(freeList, freeCount, freeCapacity, fc - 1);
         CharacterGridSlot* slot = &slots[index];
         slot->character = *ibp;
         slot->prev = 0;

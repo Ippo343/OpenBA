@@ -89,36 +89,35 @@ static T* FindOn(ComponentEntity* entity) {
 // grid = int*; grid[0] = width; *(char*)grid+0x80 = tile array base; tile stride
 // 0x30; tile+0x08 = occupant entity IBP; tile+0x29 flags byte, +0x2a byte;
 // *(void**)((char*)grid+0xe8) = reserved-cell BST root {key@0, left@0x10, right@0x18}.
-// GameUpdateLoop::m_game is still void* (GAME-a) and Map's cells are untyped (GAME-b):
-// every grid read below is LEFT.
+// By name: Map::cells (MapCell), Map::field_0xE8 (AvlNode28).
 // ============================================================
-static inline uintptr_t GridTiles(const Map* grid) {
-    return reinterpret_cast<uintptr_t>(grid->cells);   // Map +0x80
+static inline const MapCell* GridTiles(const Map* grid) {
+    return grid->cells;   // Map +0x80
 }
 
 // tile+0x08: the cell's occupant entity.
-static inline ComponentEntity* GridOccupant(uintptr_t tiles, int cell) {
-    return *reinterpret_cast<ComponentEntity**>(tiles + static_cast<uintptr_t>(cell) * 0x30 + 8);
+static inline ComponentEntity* GridOccupant(const MapCell* tiles, int cell) {
+    return tiles[static_cast<uintptr_t>(cell)].occupant;
 }
 
 // FUN_14009d860 — ground cells are clear & unreserved. Returns true if every cell in
 // the rect is passable (flags bit0/1 clear, +0x2a == 0xff) and not in the reserved BST.
 static bool Grid_GroundClear(const Map* grid, int x1, int y1, int w, int h) {
     int width = grid->size;
-    uintptr_t tiles = GridTiles(grid);
-    void* bstRoot = grid->field_0xE8;   // the reserved-cell BST root (Map +0xE8)
+    const MapCell* tiles = GridTiles(grid);
+    const AvlNode28* bstRoot = grid->field_0xE8;   // the reserved-cell BST root (Map +0xE8)
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             int cell = width * row + col;
-            uintptr_t t = tiles + static_cast<uintptr_t>(cell) * 0x30;
-            uint32_t f = 1u << (*reinterpret_cast<uint8_t*>(t + 0x29) & 0x1f);
-            if ((f & 2) || (f & 1) || *reinterpret_cast<int8_t*>(t + 0x2a) != -1)
+            const MapCell& t = tiles[static_cast<uintptr_t>(cell)];
+            uint32_t f = 1u << (t.terrainType & 0x1f);   // +0x29
+            if ((f & 2) || (f & 1) || static_cast<int8_t>(t.field_0x2A) != -1)
                 return false;
-            for (void* node = bstRoot; node;) {
-                int nk = *reinterpret_cast<int*>(node);
-                if (cell < nk)      node = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x10);
+            for (const AvlNode28* node = bstRoot; node;) {
+                int nk = node->key;
+                if (cell < nk)      node = node->left;    // +0x10
                 else if (cell <= nk) return false;   // reserved
-                else                node = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x18);
+                else                node = node->right;   // +0x18
             }
         }
     }
@@ -141,7 +140,7 @@ static bool Grid_GroundClear(const Map* grid, int x1, int y1, int w, int h) {
 // way; this makes the two agree.
 static bool Grid_AllEmpty(const Map* grid, int x1, int y1, int w, int h, ComponentEntity* selfEntity) {
     int width = grid->size;
-    uintptr_t tiles = GridTiles(grid);
+    const MapCell* tiles = GridTiles(grid);
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             ComponentEntity* occ = GridOccupant(tiles, width * row + col);
@@ -157,7 +156,7 @@ static bool Grid_AllEmpty(const Map* grid, int x1, int y1, int w, int h, Compone
 static bool Grid_NoTargetResource(const Map* grid, int x1, int y1, int w, int h,
                                   const ComponentDescription* filter) {
     int width = grid->size;
-    uintptr_t tiles = GridTiles(grid);
+    const MapCell* tiles = GridTiles(grid);
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             ComponentEntity* occ = GridOccupant(tiles, width * row + col);
@@ -201,7 +200,7 @@ bool ClearAreaComponent::IsDone() {
     int w  = static_cast<int16_t>(mc->tileX1);
     int h  = static_cast<int16_t>(mc->tileY1);
 
-    const Map* grid = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);   // LEFT (GAME-a)
+    const Map* grid = GameUpdateLoop::_singleton->m_game;
     if (!grid) return false;
 
     bool groundOK = !clearGround || Grid_GroundClear(grid, x1, y1, w, h);
@@ -227,10 +226,10 @@ int ClearAreaComponent::CountRemaining() {
     int y1 = static_cast<int16_t>(mc->tileY0);
     int w  = static_cast<int16_t>(mc->tileX1);
     int h  = static_cast<int16_t>(mc->tileY1);
-    const Map* grid = reinterpret_cast<const Map*>(GameUpdateLoop::_singleton->m_game);   // LEFT (GAME-a)
+    const Map* grid = GameUpdateLoop::_singleton->m_game;
     if (!grid) return 0;
     int width = grid->size;
-    uintptr_t tiles = GridTiles(grid);
+    const MapCell* tiles = GridTiles(grid);
     int n = 0;
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
@@ -255,7 +254,7 @@ static uint32_t ClearArea_ScanKindFlags(const Map* grid, int x1, int y1, int w, 
     const uint32_t tidNatResDesc = NaturalResourceDescription::TypeId();
     const uint32_t tidRawMatDesc = RawMaterialDescription::TypeId();
     int width = grid->size;
-    uintptr_t tiles = GridTiles(grid);
+    const MapCell* tiles = GridTiles(grid);
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
             ComponentEntity* occ = GridOccupant(tiles, (y1 + row) * width + (x1 + col));
@@ -339,7 +338,7 @@ char ClearAreaComponent::State0Enter(void* sm) {
     WorkComponent* workComp = FindOn<WorkComponent>(_entity);   // 0x140003050
     MapComponent* mc = FindOn<MapComponent>(_entity);           // 0x140004680
 
-    const Map* grid = reinterpret_cast<const Map*>(gw->m_game);   // LEFT (GAME-a)
+    const Map* grid = gw->m_game;
     uint32_t kind = 1;
     if (mc && grid) {
         int x1 = static_cast<int16_t>(mc->tileX0);
@@ -360,11 +359,11 @@ char ClearAreaComponent::State0Enter(void* sm) {
     uint8_t f3 = desc ? desc->_priority : 0;
     void* ownerIBP = _entity;   // retail: local_res10 = *param_2 (the entity IBP)
     // ClearArea's ctor (WORK-a) takes the ExternalPtr as a raw uint64_t: LEFT.
-    ClearArea* work = ::new (mem) ClearArea(&ownerIBP, reinterpret_cast<uint64_t>(target), f0, f1, f2);
+    ClearArea* work = ::new (mem) ClearArea(&ownerIBP, reinterpret_cast<uint64_t>(target), f0, f1, f2);   // LEFT: SIG ClearArea ctor (Work/ClearArea.h, WORK-1)
 
     ::Object::InternalPtr<ClearArea> workIBP(work);
     // CitizenAI_WorkScheduler_Post (COMP-b) takes the WorkComponent as uintptr_t: LEFT.
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), kind, static_cast<char>(f3), &workIBP);
+    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), kind, static_cast<char>(f3), &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
 
     return 1;
 }
@@ -438,13 +437,12 @@ void ClearAreaComponent::FinishClear() {
     if (GameUpdateLoop::_singleton != nullptr) {
         MapComponent* mc = FindOn<MapComponent>(_entity);   // 0x140004680
         if (mc) {
-            // Map (m_game) is still void* (GAME-a): LEFT.
-            unsigned int* map = reinterpret_cast<unsigned int*>(GameUpdateLoop::_singleton->m_game);
+            Map* map = GameUpdateLoop::_singleton->m_game;
             int x1 = static_cast<int16_t>(mc->tileX0);
             int y1 = static_cast<int16_t>(mc->tileY0);
             int x2 = static_cast<int16_t>(mc->tileX1) + x1;
             int y2 = static_cast<int16_t>(mc->tileY1) + y1;
-            Pf_RefreshRegionHeight_9e0e0(map, x1, y1, x2, y2);
+            map->ResetTerrainHeights(x1, y1, x2, y2);   // 0x14009e0e0
         }
     }
     ClearArea_BroadcastEvent(_entity, 5);
@@ -453,7 +451,7 @@ void ClearAreaComponent::FinishClear() {
 // B4 FORWARD: buildcomponent_state1.cpp.
 void ClearArea_Finalize8270(void* comp) {
     if (!comp) return;
-    reinterpret_cast<ClearAreaComponent*>(comp)->FinishClear();
+    reinterpret_cast<ClearAreaComponent*>(comp)->FinishClear();   // LEFT: B4 FORWARD (buildcomponent_state1.cpp)
 }
 
 // ============================================================
@@ -487,7 +485,7 @@ static char CA_State2Enter(ClearAreaComponent* c, void* /*sm*/)              { r
 // B4 FORWARD: tool_harness.cpp drives state 0's enter directly.
 extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     if (!data) return 1;
-    return reinterpret_cast<ClearAreaComponent*>(data)->State0Enter(sm);
+    return reinterpret_cast<ClearAreaComponent*>(data)->State0Enter(sm);   // LEFT: B4 FORWARD (tool_harness.cpp)
 }
 
 // ============================================================
@@ -541,7 +539,7 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
 // B4 FORWARD: orchardcomponent_states.cpp. The tree answers true for a null component.
 extern "C" bool ClearAreaCtrl_IsDone(void* comp) {
     if (!comp) return true;
-    return reinterpret_cast<ClearAreaComponent*>(comp)->IsDone();
+    return reinterpret_cast<ClearAreaComponent*>(comp)->IsDone();   // LEFT: B4 FORWARD (orchardcomponent_states.cpp)
 }
 
 extern "C" void* ClearAreaCtrl_BuildWork(void* work, void* ownerEnt, uint64_t descRef,

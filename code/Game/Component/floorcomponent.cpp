@@ -110,22 +110,22 @@
 // Reimpl of FUN_140004680 (FindComponentByType on owner+0x30 array; returns IBP wrapping found component)
 void* FloorComponent_FindResData(void* owner, void* outIBP) {
     return new (outIBP) ::Object::InternalPtr<MapComponent>(
-        reinterpret_cast<ComponentEntity*>(owner)->FindComponent<MapComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(owner)->FindComponent<MapComponent>());   // LEFT: SIG FloorComponent_FindResData (B4 FORWARD, callers in other blocks' files)
 }
 
 // Map::RemoveFloor — FUN_14009cba0: decrement the per-cell floor counter (cell +0x2d)
-// over the w*h footprint, then Picking::Scene::RemoveMesh. Map's cells (0x30-byte
-// records) and its embedded Picking::Scene are raw storage (GAME-b, H5): LEFT.
+// over the w*h footprint, then Picking::Scene::RemoveMesh. Map's embedded
+// Picking::Scene is raw storage (Map.h, DLG-1; H5): LEFT.
 void Map::RemoveFloor(uint32_t floorId, int x, int y, int w, int h) {
-    uint8_t* grid = reinterpret_cast<uint8_t*>(cells);
+    MapCell* grid = cells;   // +0x80
     for (int j = 0; j < h; ++j) {
         for (int i = 0; i < w; ++i) {
             int cell = (j + y) * size + i;
-            uint8_t* p = grid + 0x2d + static_cast<uintptr_t>(cell + x) * 0x30;
-            *p = static_cast<uint8_t>(*p - 1);
+            int8_t* p = &grid[static_cast<uintptr_t>(cell + x)].floorCount;   // +0x2d
+            *p = static_cast<int8_t>(*p - 1);
         }
     }
-    reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh(floorId);   // +0x08
+    reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh(floorId);   // +0x08  LEFT: Map.h pickingScene raw (H5, DLG-1)
 }
 
 // FloorComponent::PlaceFloor — FUN_14011f390: increment the footprint's per-cell floor
@@ -136,8 +136,7 @@ void FloorComponent::PlaceFloor() {
         OnRemove();
     }
 
-    // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): LEFT.
-    Map* map = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
+    Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
 
     MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
     // [SA-GUARD] Retail reads the footprint shorts unguarded — its MapComponent is always
@@ -177,26 +176,22 @@ void FloorComponent::PlaceFloor() {
         return;
     }
 
-    uint8_t* grid = reinterpret_cast<uint8_t*>(map->cells);   // LEFT (GAME-b)
+    MapCell* grid = map->cells;   // +0x80
     int mapW = map->size;
     for (int j = 0; j < (int)fh; ++j) {
         for (int i = 0; i < (int)fw; ++i) {
             int cell = (j + baseY) * mapW + i + (int)baseX;
-            uint8_t* p = grid + 0x2d + static_cast<uintptr_t>(cell) * 0x30;
-            *p = static_cast<uint8_t>(*p + 1);
+            int8_t* p = &grid[static_cast<uintptr_t>(cell)].floorCount;   // +0x2d
+            *p = static_cast<int8_t>(*p + 1);
         }
     }
 
-    uint32_t meshId = reinterpret_cast<Picking::Scene*>(map->pickingScene)->AddMesh(   // LEFT (Map +0x08 raw, H5)
+    uint32_t meshId = reinterpret_cast<Picking::Scene*>(map->pickingScene)->AddMesh(   // LEFT: Map.h pickingScene raw (H5, DLG-1)
         Object::ExternalPtr<Picking::PickingMesh>(mesh), xform, nullptr, 0, 0, nullptr);
     floorFlag = true;
     floorId = static_cast<int32_t>(meshId);
 }
 
-// B4 FORWARD: multiobjectcomponent.cpp.
-void FloorComponent_SubF390(void* selfV) {
-    reinterpret_cast<FloorComponent*>(selfV)->PlaceFloor();
-}
 
 
 // ===== Standalone factory =====
@@ -308,8 +303,7 @@ void FloorComponent::OnAdded() {
 // [7] 0x14011f2a0
 void FloorComponent::OnRemove() {
     if (floorId >= 0) {
-        // GameUpdateLoop::m_game (+0xF8) is still void* (GAME-a): LEFT.
-        Map* map = reinterpret_cast<Map*>(GameUpdateLoop::_singleton->m_game);
+        Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
 
         MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140004680
 

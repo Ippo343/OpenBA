@@ -265,3 +265,12 @@ Metric at `9732f3fe`: **6,006** to remove.
 | 67 | P2-R-IO | `33d41e34` | ReaderWriter fields typed, `ModArrayOf<T>`, `ModSetNode` int16 balance / height, FileSystem entry points take the real String / Filename; byte-level views marked `byte_io`: 215 -> 104 in 31 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
 
 Metric at `33d41e34`: **5,291** to remove.
+
+| 68 | P2-ACT-1 | `7e297bb2` | the pool elements are `GeometryBatchVertex` / `GeometryBatch` (retail 0x14001ee40, 0x14001fa80), `ActionStack::field_0x10` is `InternalPtr<Action>`, 36 dead forwarders deleted, `SIG_ACT.tsv`: 296 -> 129 | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok | 0 |
+| 69 | P2-COMP-8 | `951339e8` | workcomponent, workplacecomponent, zonecomponent, tradecomponent by name; `WorkScheduler::field_0x20` typed (rows 360-361): 111 -> 40 | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 70 | P2-COMP-1 | `c85bf00a` | boat route, build, animal, attendance, absorb, ambient components by name (rows 350-352; two never-firing guards dropped, recorded): 202 -> 70 in 25 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+| 71 | P2-R-UI | `7d9c0eb0` | `Element::_border`, `DialogInstancePtr`, `Sprite::spriteSheet`, `UI::String::table`, `SpriteSheet::m_field30` typed; `behaviour:` Progress / Slider / Tab descriptions hold `System::String` members (retail ctors 0x18011a210 / 0x1800d7b60 / 0x1800daa00) (rows 370-371): 295 -> 146 in 90 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+| 72 | P2-PLAYER | `66cf85e3` | the highlight tessellation on `GeometryBatch`, `HighlightComponent::fieldF8` is `EdgeMesh*`, `EditTool::entityRef` / `lastEntityRef` typed, `PlayerToolManager` +0x08 / +0x0C two floats (row 380): 282 -> 189 in 22 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok · ui ok | 0 |
+| 73 | P2-COMP-4+5 | `360a066f` | growth, herd, floor, immigration, map, nomad components by name; five dead forwarders deleted (row 400): 135 -> 47 in 49 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+
+Metric at `360a066f`: **4,584** to remove.

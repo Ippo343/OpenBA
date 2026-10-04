@@ -67,6 +67,8 @@
 #include "Game/PlayerToolManager.h"
 #include "Game/GameSettings.h"
 #include "Entity/ComponentEntity.h"
+#include "Game/WorkScheduler.h"
+#include "Game/WeatherSimulation.h"
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp),
 // declared in Game/exe_bodies.h. The three shared SM-state helpers are ported once
@@ -130,8 +132,8 @@ static inline FireDescription* FireDesc(const Component* self) {
 // per-cell fire-danger counter, and grid byte 0x9c (grid[0x27] as int16) is the
 // town-wide count of active fires. `delta` is +1 on ignite, -1 on extinguish.
 // param_2 in the listing is dead (the caller passes yMax twice).
-// Its receiver is the Map (GameUpdateLoop +0xf8): Map::StampDanger. The Map's cells are
-// raw 0x30-byte records (GAME-b): the cell read is LEFT. The active-fire count is
+// Its receiver is the Map (GameUpdateLoop +0xf8): Map::StampDanger. The cell's +0x22 is
+// MapCell::field_0x1C[6] (the 9 serialized bytes at +0x1C). The active-fire count is
 // Map::field_0x90[6] (+0x9c), one of the per-kind shorts StampInfluence also keeps.
 void Map::StampDanger(int xMin, int yMin, int xMax, int yMax, short delta) {
     if (yMin <= yMax) {
@@ -139,9 +141,8 @@ void Map::StampDanger(int xMin, int yMin, int xMax, int yMax, short delta) {
             for (int x = xMin; x <= xMax; ++x) {
                 const int w = size;
                 if (x >= 0 && y >= 0 && x < w && y < w) {
-                    char* cell = reinterpret_cast<char*>(cells) +
-                                 static_cast<int64_t>(w * y + x) * 0x30 + 0x22;
-                    *cell = static_cast<char>(*cell + static_cast<char>(delta));
+                    uint8_t* cell = &cells[static_cast<int64_t>(w * y + x)].field_0x1C[6];   // +0x22
+                    *cell = static_cast<uint8_t>(*cell + static_cast<char>(delta));
                 }
             }
         }
@@ -167,8 +168,7 @@ void FireComponent::MarkDanger(short delta) {
 
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): LEFT.
-    Map* grid = reinterpret_cast<Map*>(gw->m_game);
+    Map* grid = gw->m_game;   // +0xf8
     if (!grid) return;   // the tree's (retail passes the map unguarded)
     grid->StampDanger(ox - r, oy - r, ox - 1 + w + r, static_cast<int>(yMax), delta);   // 0x14009fa80
 }
@@ -192,11 +192,10 @@ void FireComponent::MarkDanger(short delta) {
 extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientCompV, int idx) {
     if (!ambientCompV) return;
     // B4 FORWARD: the callers (and citizen_assignworkplace.cpp) hand the component in untyped.
-    AmbientEmitterComponent* ac = reinterpret_cast<AmbientEmitterComponent*>(ambientCompV);
+    AmbientEmitterComponent* ac = reinterpret_cast<AmbientEmitterComponent*>(ambientCompV);   // LEFT: B4 FORWARD signature (void*)
     GameUpdateLoop* gw = GameWorld();
     if (!gw) return;
-    // GameUpdateLoop::m_audioScene (+0x78) is still void* (GAME-a): LEFT.
-    Audio::Scene* scene = reinterpret_cast<Audio::Scene*>(gw->m_audioScene);
+    Audio::Scene* scene = gw->m_audioScene;   // +0x78
     if (!scene) return;
 
     Description* obj = ac->_description;
@@ -226,7 +225,7 @@ extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientCompV, int idx) {
     }
     // AmbientEmitterComponent::position is a Math::Vector3; Audio::Scene takes the
     // engine's POD ::Vector3 (the same 12 bytes): the one bridge is LEFT.
-    scene->AddEmitter(entry.handle, *reinterpret_cast<const Vector3*>(&ac->position), entry.volume);
+    scene->AddEmitter(entry.handle, *reinterpret_cast<const Vector3*>(&ac->position), entry.volume);   // LEFT: Audio::Scene takes the engine POD ::Vector3
 }
 
 // ============================================================
@@ -285,7 +284,7 @@ void FireComponent::Ignite() {
     if (FireComponent_IsBeingDemolished_11e690(destroyComp)) {
         return;
     }
-    if (PlayerPath_Sub_11e710(reinterpret_cast<uintptr_t>(destroyComp)) != 0) {
+    if ((destroyComp->InRemovalState() ? 1 : 0) != 0) {   // 0x14011e710 (the PlayerPath_Sub_11e710 forwarder's member)
         return;
     }
 
@@ -330,11 +329,10 @@ void FireComponent::Ignite() {
     ::Object::InternalPtr<FireWork> workIbp(work);
 
     if (workComp) {
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x4000, 0, &workIbp);
+        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x4000, 0, &workIbp);   // LEFT: SIG CitizenAI_WorkScheduler_Post
     }
     if (workComp) {
-        // GameUpdateLoop +0x118 is still void* (GAME-a): the scheduler handle is LEFT.
-        RemovalCalc_CitizenAI_9ad0(reinterpret_cast<int64_t>(gw->m_tutorial), workComp->workId);
+        gw->m_tutorial->PrioritizeWork(workComp->workId);   // 0x1400f9ad0 (+0x118)
     }
 
     // --- first-fire-in-town announcement ---
@@ -348,9 +346,8 @@ void FireComponent::Ignite() {
     //   local_60    = -1          == PopupIndex(0x1F)   => -1         (agrees)
     //   EventArray_Grow(eventLog+0x18, *(int*)(eventLog+0x20) + 1, entry)
     // All five literals reproduce, so the call is the inline.
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): LEFT. The Map's
-    // active-fire count is Map::field_0x90[6] (+0x9c).
-    const Map* grid = reinterpret_cast<const Map*>(gw->m_game);
+    // The Map's active-fire count is Map::field_0x90[6] (+0x9c).
+    const Map* grid = gw->m_game;
     if (grid && grid->field_0x90[6] < 1) {
         void* eventLog = gw->m_eventNotifier;   // +0x138
         ComponentEntity* entityIbp = _entity;
@@ -383,8 +380,7 @@ void FireComponent::SpreadToNeighbors() {
     if (!gw) return;
 
     FireDescription* myDesc = FireDesc(this);
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a): the grid reads are LEFT.
-    const Map* grid = reinterpret_cast<const Map*>(gw->m_game);
+    const Map* grid = gw->m_game;   // +0xf8
     if (!grid) return;
 
     MapComponent* map = _entity->FindComponent<MapComponent>();   // 0x140004680
@@ -430,11 +426,9 @@ void FireComponent::SpreadToNeighbors() {
         int cx = rng->Rand(static_cast<int32_t>(xMin), static_cast<int32_t>(xMax));
         int cy = rng->Rand(static_cast<int32_t>(oy - pad), static_cast<int32_t>(yMax));
 
-        // Fine-cell array at grid+0x80, stride 0x30; +0x00 is the occupant (the Map's
-        // cells are untyped: LEFT).
-        ComponentEntity* occupant = *reinterpret_cast<ComponentEntity* const*>(
-            reinterpret_cast<uintptr_t>(grid->cells) +
-            (static_cast<int64_t>(grid->size) * cy + cx) * 0x30);
+        // Fine-cell array at grid+0x80, stride 0x30; +0x00 is MapCell::blocker.
+        ComponentEntity* occupant =
+            grid->cells[static_cast<int64_t>(grid->size) * cy + cx].blocker;
 
         // Retail inlines the exact-id scan here (no IsDerivedFrom): the generic find.
         FireComponent* neighbourFire = nullptr;
@@ -455,9 +449,8 @@ void FireComponent::SpreadToNeighbors() {
 
             float chance = nDesc->spreadChance;
             // Half the chance while the game is at its slowest speed step.
-            // GameUpdateLoop::m_weather (+0x130) is still void* (GAME-a): LEFT.
-            int64_t speedObj = reinterpret_cast<int64_t>(gw->m_weather);
-            if (speedObj && *reinterpret_cast<int*>(speedObj + 0x10) == 0) chance *= kRdata_140172114;
+            const WeatherSimulation* speedObj = gw->m_weather;   // +0x130
+            if (speedObj && speedObj->field_0x10 == 0) chance *= kRdata_140172114;
             // Half it again once the brigade is visibly winning here.
             if (nDesc->bucketsToOut / 5 < bucketsApplied - bucketsAtSpread)
                 chance *= kRdata_140172114;
@@ -503,5 +496,5 @@ void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
 // rewires it. The null test is the tree's.
 extern "C" void FireComponent_Ignite_610(void* self) {
     if (!self) return;
-    reinterpret_cast<FireComponent*>(self)->Ignite();
+    reinterpret_cast<FireComponent*>(self)->Ignite();   // LEFT: B4 FORWARD (debugui.cpp)
 }

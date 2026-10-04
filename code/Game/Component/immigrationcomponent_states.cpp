@@ -46,11 +46,8 @@
 // Faithful offset-by-offset port of 0x14004cd00 .. 0x14004e4b0 and 0x140050030 /
 // 0x1400501a0 (nomad -> citizen conversion).
 //
-// LEFT (B.4 COMP-d): GameUpdateLoop m_citizenList / m_game / m_dayCounter /
-// m_entityList are void* (W0 header); the Map's cell record and CitizenBehavior's
-// +0x160 tree nodes have no type; StateMachineComponent::controllerSelf is void*
-// (COMP-e); PointList / Pf_ / ModelComponent bodies owned by other blocks take int*
-// or int64_t*.
+// LEFT (B.4 P2 COMP-45): the Pf_ / ModelComponent bodies owned by other blocks take
+// int64_t / uintptr_t receivers (wave X); the controller hands the tick its time as void*.
 
 // graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
 // `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
@@ -76,6 +73,8 @@
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
+#include "Game/Calendar.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // Pf_*, ActCNR_NR_SetVariant_1253d0
 #include "Component/exe_bodies.h"
@@ -126,10 +125,8 @@ uint32_t TidInteractDesc() { static uint32_t t = 0; if (!t) t = InteractDescript
 
 // ---------------------------------------------------------------- small accessors
 inline GameUpdateLoop* GW() { return GameUpdateLoop::_singleton; }
-// LEFT: GameUpdateLoop::m_citizenList is void* (W0 header).
-inline CitizenBehavior* TownMgr(GameUpdateLoop* gw) { return reinterpret_cast<CitizenBehavior*>(gw->m_citizenList); }
-// LEFT: GameUpdateLoop::m_game is void* (W0 header); the Map functions take int*.
-inline int*     Grid(GameUpdateLoop* gw) { return reinterpret_cast<int*>(gw->m_game); }
+inline CitizenBehavior* TownMgr(GameUpdateLoop* gw) { return gw->m_citizenList; }   // +0xF0
+inline Map*     Grid(GameUpdateLoop* gw) { return gw->m_game; }   // +0xF8
 
 // desc = comp->_description if IsDerivedFrom(ImmigrationDescription) else null — retail
 // dereferences the null; a town hall without its description is a broken template.
@@ -142,11 +139,10 @@ ImmigrationDescription* ImmDesc(ImmigrationComponent* comp) {
 }
 
 // The month of the in-game year: the clock at gw+0x128 holds {year int, Time-in-year}.
-// LEFT: GameUpdateLoop::m_dayCounter is void* (W0 header; no DayCounter class yet).
 int MonthOfYear(GameUpdateLoop* gw) {
-    void* clock = gw->m_dayCounter;
+    Calendar* clock = gw->m_dayCounter;   // +0x128
     if (!clock) return 0;
-    float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(clock) + 8)->AsSeconds();
+    float secs = clock->yearTime.AsSeconds();   // +0x08
     int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
     if (m > 11) m = 0;
     return m;
@@ -179,18 +175,18 @@ bool ImmigrationComponent::CanAccept() {
     if (tm->citizenCount < desc->_minPopulation) return false;
     int req = desc->_requiredBuildingCount;
     if (req < 1) return true;
-    // LEFT: CitizenBehavior::field_0x160 is the raw root of a tree with no node type (WORK-a).
-    uint64_t* root = reinterpret_cast<uint64_t*>(tm->field_0x160);
+    // The +0x160 template bucket tree (key compared as an unsigned qword, 0x1400172f0).
+    TemplateBucket* root = tm->field_0x160;
     ComponentDescription** keys = desc->_requiredBuildings;
     for (int i = 0; i < req; ++i) {
-        uint64_t key = reinterpret_cast<uint64_t>(keys[i]);   // LEFT: the node key is a raw word
-        uint64_t* n = root;
+        ComponentDescription* key = keys[i];
+        TemplateBucket* n = root;
         while (n) {
-            if (key < n[0])       n = reinterpret_cast<uint64_t*>(n[4]);
-            else if (key <= n[0]) break;
-            else                  n = reinterpret_cast<uint64_t*>(n[5]);
+            if (key < n->key)       n = n->left;    // +0x20
+            else if (key <= n->key) break;
+            else                    n = n->right;   // +0x28
         }
-        if (!n || *reinterpret_cast<int*>(&n[2]) == 0) return false;
+        if (!n || n->count == 0) return false;   // +0x10
     }
     return true;
 }
@@ -206,8 +202,8 @@ int ImmigrationComponent::FindSpawnCell(int x, int y, int hallCell) {
     ImmigrationDescription* desc = ImmDesc(this);
     if (!gw || !desc) return -1;
     System::Random* rng = gw->m_random;
-    int* grid = Grid(gw);
-    const int W = *grid;
+    Map* grid = Grid(gw);
+    const int W = grid->size;
     const int reach = desc->_spawnEdgeDistance;
     for (int t = 0; t < 50; ++t) {
         int cx = x + rng->RandTol(static_cast<int32_t>(reach));
@@ -215,22 +211,21 @@ int ImmigrationComponent::FindSpawnCell(int x, int y, int hallCell) {
         if (cx < 0) cx = 0; else if (cx >= W) cx = W - 1;
         if (cy < 0) cy = 0; else if (cy >= W) cy = W - 1;
         int c = W * cy + cx;
-        // LEFT: the Map's 0x30-byte cell record (array at +0x80) has no type yet (GAME-b).
-        const uint8_t* tiles = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(grid) + 0x80);
-        uint32_t fc = 1u << (tiles[static_cast<uintptr_t>(c) * 0x30 + 0x29] & 0x1f);
+        const MapCell* tiles = grid->cells;   // Map +0x80
+        uint32_t fc = 1u << (tiles[static_cast<uintptr_t>(c)].terrainType & 0x1f);
         if ((fc & 0xe07u) == 0) continue;
-        Pf_ZoneRefresh_9c480(grid);   // 0x14009c480 (RCX only)
-        tiles = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(grid) + 0x80);
-        const uint8_t* tc = tiles + static_cast<uintptr_t>(c) * 0x30;
-        const uint8_t* th = tiles + static_cast<uintptr_t>(hallCell) * 0x30;
-        uint32_t mh = 1u << (th[0x29] & 0x1f);
-        uint32_t mc = 1u << (tc[0x29] & 0x1f);
+        grid->FillZones();   // 0x14009c480 (RCX only)
+        tiles = grid->cells;
+        const MapCell* tc = &tiles[static_cast<uintptr_t>(c)];
+        const MapCell* th = &tiles[static_cast<uintptr_t>(hallCell)];
+        uint32_t mh = 1u << (th->terrainType & 0x1f);
+        uint32_t mc = 1u << (tc->terrainType & 0x1f);
         uint32_t u = mc | mh;
         uint32_t u8 = u | 0xe1fu;
         if ((u8 & mc) && (u8 & mh)) {
             if (u & 0x1e0u) return c;
-            int16_t zc = *reinterpret_cast<const int16_t*>(tc + 0x26);
-            int16_t zh = *reinterpret_cast<const int16_t*>(th + 0x26);
+            int16_t zc = static_cast<int16_t>(tc->zone);   // +0x26
+            int16_t zh = static_cast<int16_t>(th->zone);
             if (zc != 0 && zh != 0 && zc == zh) return c;
         }
     }
@@ -259,10 +254,8 @@ void NomadComponent::Init(ComponentEntity* const* hallEntity, const Math::Vector
     ModelComponent* model = _entity->FindComponent<ModelComponent>();   // DAT_1401c7a50
     if (!model) return;
     float yaw = rng->RandFloatTol() * kYawRange;
-    // LEFT: 0x140003870 / 0x1401253d0 (ModelComponent's transform-from-yaw and mesh
-    // select) are other blocks' free bodies taking an integer receiver.
-    ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(model), &spawnPoint, yaw);   // 0x140003870
-    ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(model),   // 0x1401253d0
+    ToolTile_SetTransformFromYaw_3870(reinterpret_cast<uintptr_t>(model), &spawnPoint, yaw);   // 0x140003870  LEFT: SIG ToolTile_SetTransformFromYaw_3870
+    ActCNR_NR_SetVariant_1253d0(reinterpret_cast<int64_t*>(model),   // 0x1401253d0  LEFT: SIG ActCNR_NR_SetVariant_1253d0
                                 static_cast<uint16_t>(gender), 0);
     if (ndesc) {
         Graphics::MaterialInstance* mat = (gender == 0) ? ndesc->_materialGender0 : ndesc->_materialGender1;
@@ -283,8 +276,8 @@ void ImmigrationComponent::Spawn() {
     ImmigrationDescription* desc = ImmDesc(this);
     if (!gw || !desc) return;
     System::Random* rng = gw->m_random;
-    int* grid = Grid(gw);
-    const int W = *grid;
+    Map* grid = Grid(gw);
+    const int W = grid->size;
     const int edge = desc->_spawnEdgeDistance;
 
     InteractComponent* pc = _entity->FindComponent<InteractComponent>();   // 0x140002ed0
@@ -332,10 +325,9 @@ void ImmigrationComponent::Spawn() {
                                          ? h->FindComponent<ResidenceComponent>() : nullptr;
             if (!rc) continue;
             int slots = rc->residentSlotCount;
-            // LEFT: ResidenceComponent::residentSlots is void* (COMP-e's header; 0x10 stride).
-            const uint8_t* arr = reinterpret_cast<const uint8_t*>(rc->residentSlots);
+            const ResidenceComponent::Family* arr = rc->residentSlots;   // +0x50, stride 0x10
             for (int s = 0; s < slots; ++s)
-                if (*reinterpret_cast<const int*>(arr + static_cast<uintptr_t>(s) * 0x10 + 8) == 0) ++emptySlots;
+                if (arr[static_cast<uintptr_t>(s)].count == 0) ++emptySlots;   // Family +0x08
         }
     }
     // Retail calls Rand(emptySlots*2) unguarded; skipped only when the range is 0.
@@ -355,9 +347,8 @@ void ImmigrationComponent::Spawn() {
         uint32_t nPts = id ? static_cast<uint32_t>(id->_createNodes.count) : 0;
         int nChildren = pc->useLocationCount;
         for (int ci = 0; ci < nChildren; ++ci) {
-            // LEFT: 0x140123070 takes the InteractComponent as an int64_t (ACT's signature).
             nPts += static_cast<uint32_t>(Pf_RecursiveChildSum_123070(
-                reinterpret_cast<int64_t>(pc->useLocations[ci]), 2));   // 0x140123070
+                reinterpret_cast<int64_t>(pc->useLocations[ci]), 2));   // 0x140123070  LEFT: SIG Pf_RecursiveChildSum_123070
         }
         uint32_t ptIdx = rng->Rand(static_cast<uint32_t>(nPts));
         Math::Vector3 meet(0.0f, 0.0f, 0.0f);
@@ -379,7 +370,6 @@ void ImmigrationComponent::Spawn() {
         if (ent) {
             int category = ent->_description->_category;
             ComponentEntity* regIBP = ent;
-            // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
             EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP, category);
         }
         // Append to the group array (+0x58/+0x60/+0x64) — retail inlines this
@@ -453,7 +443,6 @@ CitizenComponent* NomadComponent::ConvertToCitizen(CitizenComponent** out, Citiz
     ComponentEntity* regIBP = ent;
     {
         int category = ndesc->_citizen->_category;
-        // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
         EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP, category);
     }
     return *out;
@@ -555,8 +544,7 @@ char ImmigrationComponent::TickWaiting(void* sm, void* time) {
     GameUpdateLoop* gw = GW();
     ImmigrationDescription* desc = ImmDesc(this);
     if (!gw || !desc) return 1;
-    // LEFT: the controller hands the tick its elapsed System::Time as void*.
-    waitTimer._ticks -= time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;
+    waitTimer._ticks -= time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;   // LEFT: SIG the controller tick handler's void* time (controller_state_table.h, COMP-2+3)
     int month = MonthOfYear(gw);
     bool inSeason = (desc->_arrivalMonthFirst <= month && month <= desc->_arrivalMonthLast);
     if (waitTimer._ticks < 1 && inSeason) {

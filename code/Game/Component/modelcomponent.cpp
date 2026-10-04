@@ -69,7 +69,7 @@ void ComponentEntity::SendEvent(int eventId) {
 // citizen_assignworkplace.cpp, destroycomponent_state6.cpp, workplacecomponent.cpp,
 // tool_base_tile.cpp; declared in Component/exe_bodies.h).
 extern "C" void ModelComponentNotify_Reimpl(void* entity, int param) {
-    reinterpret_cast<ComponentEntity*>(entity)->SendEvent(param);
+    reinterpret_cast<ComponentEntity*>(entity)->SendEvent(param);   // LEFT: SIG ModelComponentNotify_Reimpl (B4 FORWARD, wave X)
 }
 
 // ============================================================
@@ -306,8 +306,7 @@ void ModelComponent::OnAdded() {
 
         // Add to scene
         if (GameUpdateLoop::_singleton) {
-            // LEFT: GameUpdateLoop::m_graphicsScene is void* (W0 header).
-            Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
+            Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;   // +0x60
             if (scene) {
                 uint32_t id = scene->AddObject(mesh);
                 modelId = static_cast<int32_t>(id);
@@ -336,8 +335,7 @@ void ModelComponent::OnRemove() {
     if (index >= 0 && id0 >= 0) {
         // Remove from scene
         if (GameUpdateLoop::_singleton) {
-            // LEFT: GameUpdateLoop::m_graphicsScene is void* (W0 header).
-            Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(GameUpdateLoop::_singleton->m_graphicsScene);
+            Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;   // +0x60
             if (scene) {
                 scene->RemoveObject((uint32_t)id0);
             }

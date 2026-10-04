@@ -33,6 +33,7 @@
 #include "Component/GrowthComponent.h"
 #include "Component/GrowthDescription.h"
 #include "Component/WorkPlaceComponent.h"
+#include "Game/Map.h"
 #include "Component/StateMachineComponent.h"
 
 // ============================================================
@@ -69,9 +70,7 @@
 // entry is reset to state 2 with null IBPs.
 void CropFieldComponent::ValidateEntityRefs() {
     if (GameUpdateLoop::_singleton == nullptr) return;
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a) and the Map's cells are
-    // untyped: the cell's entity read is LEFT.
-    uintptr_t map = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
+    const Map* map = GameUpdateLoop::_singleton->m_game;   // +0xf8
 
     int count = slots.count;
     CropSlot* arr = slots.data;
@@ -80,8 +79,7 @@ void CropFieldComponent::ValidateEntityRefs() {
         if (entry->state != 1) continue;
 
         int id = entry->cell;
-        ComponentEntity* obj = *reinterpret_cast<ComponentEntity**>(
-            *reinterpret_cast<uintptr_t*>(map + 0x80) + 8 + (int64_t)id * 0x30);
+        ComponentEntity* obj = map->cells[(int64_t)id].occupant;   // cell +0x08
         bool keep = false;
         if (obj != nullptr) {
             if (obj->IsA(ComponentEntity::TypeId())) {
@@ -300,14 +298,13 @@ void CropFieldComponent::Startup() { cropDescription = nullptr; }
 // "Has slots" is self+0x50 != 0 — the slot array state 9 builds. An unplanted field
 // therefore greys everything, which is retail behaviour, not a defect.
 uint32_t CropFieldComponent::CommandMask(int command) {
-    // The StateMachine bytes at StateMachineComponent +0x50 / +0x52 are raw in
-    // COMP-e's header: LEFT.
-    uintptr_t smc = reinterpret_cast<uintptr_t>(
-        _entity->FindComponent<StateMachineComponent>());   // 0x140003ea0
+    // The StateMachine's pending state (+0x52), else its current input (+0x50).
+    StateMachineComponent* smc =
+        _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
     if (!smc) return 0;
 
-    int8_t cur = *reinterpret_cast<int8_t*>(smc + 0x52);
-    if (cur < 0) cur = *reinterpret_cast<int8_t*>(smc + 0x50);
+    int8_t cur = smc->stateMachine.pendingState;
+    if (cur < 0) cur = smc->stateMachine.currentInput;
     const bool hasSlots = (cropDescription != nullptr);
 
     switch (command) {
@@ -335,24 +332,22 @@ void CropFieldComponent::Command(int command) {
         workEnabled = !workEnabled;
         WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();
         if (!wpc) return;
-        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), workEnabled);
+        wpc->SetAccepting(workEnabled);   // 0x14012fc00
         return;
     }
 
-    // The StateMachine sub-object (+0x48..+0x53) is raw in COMP-e's header: LEFT.
-    uintptr_t smc = reinterpret_cast<uintptr_t>(
-        _entity->FindComponent<StateMachineComponent>());
+    StateMachineComponent* smc = _entity->FindComponent<StateMachineComponent>();
     if (!smc) return;
 
     // The current node is a ControllerComponent::Controller; its slot 2 is PostEvent
     // (retail `CALL [RAX+0x10]`). Every node in the tree is a compiler-tabled
     // Controller, so the old null-vtable / null-slot tests could never fire.
-    const uintptr_t sm = smc + 0x48;
-    ControllerComponent::Controller* node = *reinterpret_cast<ControllerComponent::Controller**>(sm);
+    StateMachine* const sm = &smc->stateMachine;   // +0x48
+    ControllerComponent::Controller* node = sm->current;
     if (!node) return;
-    const int curIdx  = *reinterpret_cast<int8_t*>(smc + 0x51);
+    const int curIdx  = sm->activeState;   // +0x51
     const int eventId = (command == 0) ? 3 : 4;
-    node->PostEvent(reinterpret_cast<void*>(sm), curIdx, eventId);
+    node->PostEvent(sm, curIdx, eventId);
 }
 // ── slot 15 — OnMessage — retail 0x14011ab50 ──────────────────────────────────────
 // OnMessage(self, msgId, sender, slotIndex). Two messages, both addressed at ONE slot
@@ -378,27 +373,24 @@ void CropFieldComponent::Command(int command) {
 void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, uint32_t /*arg1*/) {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    // GameUpdateLoop::m_game (+0xf8) is still void* (GAME-a) and the Map's cells are
-    // untyped: the cell's entity read is LEFT.
-    const uintptr_t map = reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton->m_game);
+    const Map* const map = GameUpdateLoop::_singleton->m_game;   // +0xf8
     if (!map) return;
-    const uintptr_t grid = *reinterpret_cast<uintptr_t*>(map + 0x80);
+    const MapCell* const grid = map->cells;
     if (!grid || !slots.data) return;
 
     CropSlot* slot = &slots.data[arg0];
     const int cell = slot->cell;
     ComponentEntity* const entity =
-        *reinterpret_cast<ComponentEntity**>(grid + 8 + (uintptr_t)cell * 0x30);
+        grid[(uintptr_t)cell].occupant;   // cell +0x08
 
     if (message == 0) {
         NaturalResourceComponent* nr = entity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
         slot->state    = 1;          // growing
         slot->entity   = entity;
         slot->resource = nr;
-        // +0x2d is the high byte of NaturalResourceComponent::resourceFlags (COMP-d): LEFT.
+        // +0x2d NaturalResourceComponent::harvestable: a byte copy (both bool).
         if (nr)
-            *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(nr) + 0x2d) =
-                static_cast<char>(slot->plantHere);
+            nr->harvestable = slot->plantHere;
         return;
     }
 

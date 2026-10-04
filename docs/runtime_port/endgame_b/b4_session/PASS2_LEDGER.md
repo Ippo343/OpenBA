@@ -244,3 +244,55 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - `byte_io` markers: R-IO added 10 (ceiling 17); `cast_ok` total rises with every runtime block: compare all
   categories against FLOOR.md at the close and re-cut the ceilings in writing.
 - CAI-1 row 290: `SortByPriority` is a stable insertion sort where the banner says retail is an introsort.
+
+## Round 5 hand-ins (ACT-1, COMP-8, COMP-1, R-UI, PLAYER, COMP-4+5)
+### Facts for later blocks
+- `GeometryBatch` (0x60) / `GeometryBatchVertex` (0x14) in `Game/WorldGeometryElements.h` are the pool records;
+  action_pf_road.cpp still has local `RoadBatch` / `RoadVertex` copies (ACT-2 / wave X).
+- R-UI typed: `Element::_border`, `DialogInstancePtr` = `DialogInstance*`, `Sprite::spriteSheet`,
+  `UI::String::table`, `SpriteSheet::m_field30` = `MaterialInstance*`, `GraphElement::_seriesData`,
+  `ComboElement::_openDialog`. Not typed: `Element::_name` / `_toolTipString` (H5), `_captureViewport`,
+  `TextElement::ParamArray::_data` (citizenui.cpp reads it as `char**`), the H5 Strings of Font, Text, Scroll,
+  Number, Combo, DocumentText, CharacterSet, StringTable, SpriteCapture, Label, Border, Dialog (about 60 casts).
+- PLAYER typed: `EditTool::entityRef` = `UI::DialogInstance*`, `lastEntityRef` = `ComponentEntity*`,
+  `HighlightComponent::fieldF8` = `Graphics::EdgeMesh*`, the three `Create*Description::_refs`.
+### SA (standalone) additions
+- The `EditTool_Harness*` declarations could not go into `Player/edittool_funcs.h`: panel_hold_harness.cpp and
+  panel_staffing_driver.cpp include it AND declare the same `extern "C"` names locally with `void*`. SA deletes
+  the local externs in the four harnesses and adds the typed declarations to the header (coordinator allows
+  that one append to PLAYER's header). Same for the `RemovalTool` / `PlacementTool` factories (tool_harness.cpp
+  declares them locally with `void*`).
+### GAME-3 / GAME-4 additions
+- `PlayerToolManager::cameraViews` (H5), the +0x60 set as an `AvlTreeHead` (about ten sites in load, serialize,
+  teardown, entityui), `currentTool`'s `DeletePtr` (teardown).
+- `HighlightDescription::_ref0` / `_ref1` are `void*`.
+### DLG additions
+- `ToolRegistryNode` / `ToolModeTree` view in tool_activation_standalone.cpp; `DialogInstance::_ui`.
+### Wave X additions
+- `SIG_ACT.tsv` (60 rows). Left with outside callers: `ActRm_*`, `ActCNR_*`, `Pf_Avl*`, `PathBST_Insert_25a10`,
+  `PathPairs_Clear_25b30`, `Pf_Enqueue*`, `Pf_EntityAnchorCell` / `ResolvePos`.
+- COMP-8: `WorkComponent_CheckWorkSlot`, `_RegisterWorkSlot`, `fn_StorageCountQuery`,
+  `WorkPlaceComponent_SetAccepting` / `_OnCreateInit` / `_LeaveBuilderProfession`,
+  `WorkplaceComponent_ApplyOccupiedVisual`, `WellComp_AddCellEntry_88a80`,
+  `TradeComponent_SpawnPurchasedLivestock`, `ResidenceComponent_impl_95a0` / `_7230`, `ZoneComponent_sub_d360`.
+- COMP-1: `RoadTool_helper_6e30`, `BuildComponent_FindInQueue`, `TownRegistry_RegisterWorkplace`,
+  `BuildStructure_CreateInPlaceFull`, `GatherRawMaterials_Ctor_Impl`, `BuildComponent_HaveAllMaterials`,
+  `AttendanceComponent_GetJobHostComponent`, `PopulationComponent_Serialize_Real`,
+  `AmbientEnvironmentComponent_InitRegion`; the two hand-expanded `SetSize` bodies (ambientemitter,
+  ambientenvironmentdescription: 40 casts) whose defaults differ from the shared core.
+- COMP-4+5: `ActCNR_SetAnimIndex` / `SetupModelAtCell` / `SetGrowthProgress` / `NR_SetVariant`,
+  `WorkLeaf_FootprintOwnerCheck_120c30`, `Pf_RecursiveChildSum_123070`, `CreateNaturalResource_helper_e2c0`,
+  `PlayerTrade_BSTFindRemove_2c690`, `GrowthComponent_ModifyFlags`, `MapComponent_DetachOccupancy_4750`,
+  `ModelComponentNotify_Reimpl` (7 files), `FloorComponent_FindResData`, `ModelComponent_RandomizeVariant`.
+- PLAYER: `RemovalCalc_*`, `PlayerTrade_*`, `ToolTile_SetTransformFromYaw_3870`, `TradeWork_helper_14b00`,
+  `TradeWork_impl_4b40` / `_0d80`, `Player_HighlightAdd_55430`, `HighlightSelect_Impl` / `Clear_Impl`,
+  `Pf_VectorResize14*`, `Pf_RoadQuad_cc10`, `EditTool_CloseInfoDialog`, Tool slot [10] `IsSelected`.
+- R-UI: the ExternalPtr serialize thunks (about 55 casts in ui), `DialogInstance::Update(..., uint8_t*)`.
+- `Component::Update(void* time)` / the controller tick handlers' `void* time` (growth, herd, fruit, hunt,
+  livestock, immigration, nomad, animal): one sweep.
+### Close
+- COMP-1 dropped two guards that can never fire (rows 350, 352: a compiler vtable slot is never null); later
+  prompts say to list, not drop.
+- COMP-4+5: `GrowthComponent::PostUpdate` writes the four colour floats as one 16-byte store where retail does
+  four dword stores (same bytes).
+- `InternalMemAlloc` results are not recognised as tier I (combodialog_ctor.cpp:406, internal_class.cpp:286).

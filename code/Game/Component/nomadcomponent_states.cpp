@@ -36,6 +36,7 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Component/CharacterComponent.h"
 #include "Component/ControllerComponent.h"
@@ -75,8 +76,7 @@ constexpr float kMoveSpeed       = -1.0f;   // DAT_140172280 (MoveTo speed arg: 
 inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 
 inline GameUpdateLoop* GW() { return GameUpdateLoop::_singleton; }
-// LEFT: GameUpdateLoop::m_entityList is void* (W0 header).
-inline EntityList* Entities(GameUpdateLoop* gw) { return reinterpret_cast<EntityList*>(gw->m_entityList); }
+inline EntityList* Entities(GameUpdateLoop* gw) { return gw->m_entityList; }   // +0xE8
 
 // `character->currentAction + 1 < 1` — the action stack is empty. The character is the
 // entity's CharacterComponent (Entity_FindComponent_Family 0x1400012d0, DAT_1401c7078).
@@ -118,8 +118,7 @@ void NomadComponent::MoveTo(Math::Vector3* dest) {
         act = Pf_MoveToCtor_9170(mem, &ownerIBP, 1 /*Slow*/, 0, &dest->x, 0xe1f, 0, kMoveSpeed);
     }
     void* actIBP = act;
-    // LEFT: 0x1400c54e0 takes the action stack as int64_t* (ACT's signature).
-    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0
+    Pf_ActStackPush_54e0(reinterpret_cast<int64_t*>(&chr->actions), &actIBP);   // 0x1400c54e0  LEFT: SIG Pf_ActStackPush_54e0 (CharacterComponent +0x48 is no ActionStack yet, wave X)
 }
 
 // ============================================================
@@ -161,8 +160,7 @@ char NomadComponent::OnLeave(void* sm) {
 // state 1 tick 0x14004f600: loiter around the meeting point
 char NomadComponent::TickLoiter(void* time) {
     if (!Idle(this)) return 1;
-    // LEFT: the controller hands the tick its elapsed System::Time as void*.
-    wanderTimer._ticks -= time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;
+    wanderTimer._ticks -= time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;   // LEFT: SIG the controller tick handler's void* time (controller_state_table.h, COMP-2+3)
     if (wanderTimer._ticks >= 0) return 1;
     GameUpdateLoop* gw = GW();
     if (!gw) return 1;
@@ -174,9 +172,8 @@ char NomadComponent::TickLoiter(void* time) {
     RtSystem_Time_Ctor(&t, secs);
     wanderTimer = t;
 
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header); the Map functions take int*.
-    int* grid = reinterpret_cast<int*>(gw->m_game);
-    const int W = *grid;
+    Map* grid = gw->m_game;   // +0xF8
+    const int W = grid->size;
     int cx = static_cast<int>(meetPoint.x + static_cast<float>(W >> 1));
     int cy = static_cast<int>(meetPoint.y + static_cast<float>(W >> 1));
     if (cx < 0) cx = 0;
@@ -186,8 +183,7 @@ char NomadComponent::TickLoiter(void* time) {
     int centre = W * cy + cx;
     int x0 = centre % W - 8;
     int y0 = centre / W - 8;
-    // LEFT: the Map's 0x30-byte cell record (array at +0x80) has no type yet (GAME-b).
-    const uint8_t* tiles = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(grid) + 0x80);
+    const MapCell* tiles = grid->cells;   // Map +0x80
     // Retail grows a DynArray<int> of candidates; a fixed 16x16 buffer holds them all.
     int cand[256];
     int nc = 0;
@@ -197,7 +193,7 @@ char NomadComponent::TickLoiter(void* time) {
             int xx = x0 + rx;
             if (xx < 0 || xx >= W || yy < 0 || yy >= W) continue;
             int c = yy * W + xx;
-            if (tiles[static_cast<uintptr_t>(c) * 0x30 + 0x29] < 3) cand[nc++] = c;
+            if (tiles[static_cast<uintptr_t>(c)].terrainType < 3) cand[nc++] = c;   // +0x29
         }
     }
     if (nc != 0) {
