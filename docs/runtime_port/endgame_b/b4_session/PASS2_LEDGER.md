@@ -296,3 +296,44 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - COMP-4+5: `GrowthComponent::PostUpdate` writes the four colour floats as one 16-byte store where retail does
   four dword stores (same bytes).
 - `InternalMemAlloc` results are not recognised as tier I (combodialog_ctor.cpp:406, internal_class.cpp:286).
+
+## Round 6 hand-ins (COMP-2+3, DLG-3, GAME-1, COMP-6+7)
+### Facts
+- `Disease::_stringTable` is `UI::StringTable*`, `_name` a `System::String`: the casts in citizen_updatehealth.cpp,
+  citizencomponent.cpp, debugui.cpp can go (wave X / DLG-1).
+- The "fire / ambient audio emitter record" is `AmbientEmitterComponent` (0x140002280 returns it); the "BST node"
+  of `Map::field_0xE8` is `AvlNode28`; the "ClearArea resource list" is `EntityList::removalList`.
+- `UpgradeUIConfig::_target` is `ComponentDescription*`; `TradeStockEntry` in `TradeUI.h`.
+### Coordinator / wave X: the state-machine parameter
+- `ControllerComponent.h`'s Controller slots take `void* stateMachine` and the handlers `void* time`
+  (`Controller::Tick`, `StateMachine::Tick`, `Component::Update` / `Tick`): typing them changes every Controller
+  slot and every handler template (orchard, residence heat tick, destroy state 6, immigration, nomad, growth,
+  herd, fruit, hunt, livestock, animal, boat): ONE sweep, alone, like wave S.
+### GAME-2 second visit / coordinator
+- gameupdateloop_load.cpp:603 / :608 `static_assert` `EventLog` and `Minimap` trivially constructible: that
+  blocks typing `EventLog::entries` and Minimap's arrays as real Arrays (H5).
+- `CitizenBehavior.h` (ENT): the raw +0x130 / +0x140 / +0x170 headers and five int64 clocks retail types as
+  `System::Time` (citizenlist_serialize.cpp); `CharacterGrid.h`'s arrays are raw triples.
+### Wave X additions
+- COMP-2+3: `WorkLeaf_GetTilesInArea_9fc00`, `CitizenComp_sub_ffc0` / `_0470`,
+  `TownMgr_AbortCitizenActionsFor_89e30`, `CemeteryListErase_Reimpl` (callers in nine files), the ClearArea ctor's
+  `uint64_t` argument; no caller left: `DragTool_FindDescription_5160` (the `uintptr_t` overload),
+  `Pf_RefreshRegionHeight_9e0e0`. `Component/exe_bodies.h`'s inline body (6 casts) needs `WorkPlaceComponent` /
+  `WorkComponent` pulled into that header.
+- DLG-3: `TradeUI_GetResourcePrice_a520`, `TradeDescription_ExtendMerchantStay`, `TradeUI_GetBuyEntries_59670`,
+  `ToolbarUtility_BstInsert_4890`, `TownHall_RemoveWorker`, `WorkPlaceComponent_SetMaxWorkers`,
+  `RemovalCalc_StateMachine_dfa0`; five `TradeUI_*` forwarders called from standalone/trade_buy_harness.cpp;
+  `TradeComponent` +0x60 is two members, not one tree header.
+- COMP-6+7: `ClearAreaCtrl_BuildWork`, `TownRegistry_RegisterResidence`, `Pf_CellQuadRay_aa20`,
+  `Pf_AvlInsertA_a4f0`, `Reimpl_MapGetTerrainPos` (const), `PerfX::TerrainNoteWrite` / `NoteDeferred`,
+  `CitizenComp_Storage_GetResourceCount`, `ActRm_ArrayResize16_da70`; `StorageComponent_DynArrayResize` (20
+  casts) and toolbardescription's String-array resize (14): hand-written resizes kept as they are;
+  `CitizenComp_FUN_14012c3f0` has one caller left (destroycomponent_states.cpp).
+- GAME-1: `ResizeStride0x10` / `0x20`, the `int64_t` storage helpers, `WellComp_*`; `exe_type.h`'s two factory
+  casts sit inside a `\`-continued macro (no room for a marker).
+### Close
+- GAME-1 marked three vtable-pointer reads in game_main log lines `vslot` and two `win32`; `ptr_int` x3, `vslot`
+  x3 in force_work.cpp: compare with FLOOR.md.
+- DLG-3: GCC turned a typed 16-byte element-shift loop into a `memmove` call in `RemoveBuyOrder` (a call that
+  appeared; same bytes moved). COMP-1's State8OneShot likewise.
+- DLG-3 M1 move: `UpgradeUIConfig::_target` typing: upgradeui.cpp -2, upgradeuiconfig.cpp +1.
