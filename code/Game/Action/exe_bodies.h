@@ -172,7 +172,6 @@ void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best,
 void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 
 // ---- action_pf_roots_road.cpp
-void Pf_ZoneRefresh_9c480(int* param_1);  // 0x14009c480
 
 // ---- action_pf_roots_route.cpp
 bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80

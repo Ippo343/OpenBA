@@ -1743,7 +1743,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
                     if (mw <= wpX) wpX = mw - 1;
                     if (wpY < 0) wpY = 0;
                     if (mw <= wpY) wpY = mw - 1;
-                    Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(mapInfo));   // 0x14009c480 (RCX only)  // LEFT: SIG Pf_ZoneRefresh_9c480 (Action/exe_bodies.h, wave X)
+                    mapInfo->FillZones();   // 0x14009c480 (RCX only)
                     MapCell* cellBase = mapInfo->cells;
                     MapCell* homeCellPtr = cellBase + homeCellIdx;
                     MapCell* wpCellPtr = cellBase + static_cast<int64_t>(wpY * mw + wpX);

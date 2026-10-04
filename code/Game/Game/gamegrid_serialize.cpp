@@ -63,7 +63,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Entity/ComponentEntity.h"
 #include "Game/exe_bodies.h"
-#include "Action/exe_bodies.h"      // ActCNR_CheckTerrain_cb00, Pf_RoadMeshRebuild_f370, Pf_ZoneRefresh_9c480
+#include "Action/exe_bodies.h"      // ActCNR_CheckTerrain_cb00, Pf_RoadMeshRebuild_f370
 #include "Component/exe_bodies.h"   // CreateNaturalResource_helper_e2c0
 
 // ============================================================
@@ -313,8 +313,7 @@ void Map::Serialize(IO::Stream& stream) {
         // (0x14009c170) spills R9D to a home slot that is rewritten before it is read
         // (0x14009c365 / 0x14009c3e8) and overwrites R9D at 0x14009c26f. The body takes
         // this one argument.
-        // LEFT: the zone refresh takes the map as int* (Action/exe_bodies.h).
-        Pf_ZoneRefresh_9c480(reinterpret_cast<int*>(this));   // LEFT: SIG Pf_ZoneRefresh_9c480(int*) (Action/exe_bodies.h, wave X)
+        FillZones();   // 0x14009c480
 
         // PORT GAP 0x14009e8c0 RegionSystem build: not ported; retail calls it here
         // (0x14009f2a6, RCX = this grid). The null arm is: nothing.

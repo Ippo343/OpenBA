@@ -89,12 +89,7 @@ void Map::FillZones() {
     }
 }
 
-// B4 FORWARD: 11 outside callers (citizenai_findhelpers, citizenai_leisure,
-// citizencomponent, immigrationcomponent_states, gamegrid_serialize, buildstructure,
-// consumeproduce, foresterwork, marketwork, work_base_accessor, work_base_reimpl)
-void Pf_ZoneRefresh_9c480(int* param_1) {
-    reinterpret_cast<Map*>(param_1)->FillZones();  // LEFT: SIG Pf_ZoneRefresh_9c480 (wave X family across two agents: callers hold the Map as int*)
-}
+
 
 // ============================================================
 // 0x14009f2f0 — set a cell's terrain type + dirty/enqueue. (Ghidra: FUN_14009f2f0.)
