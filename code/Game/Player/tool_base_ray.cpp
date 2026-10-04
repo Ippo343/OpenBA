@@ -223,7 +223,7 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(const void* /*param_1*/, float* 
     // LEFT: PlayerController::camera (+0x34) is raw storage (H5) in block GAME-b's
     // header; the Graphics::Camera is read through it.
     const Graphics::Camera* camera =
-        reinterpret_cast<const Graphics::Camera*>(controller->camera);
+        reinterpret_cast<const Graphics::Camera*>(controller->camera);   // LEFT: H5 PlayerController::camera is raw storage of a Graphics::Camera (Game/PlayerController.h, not this set's)
 
     // Copy the 48-byte camera Transform3 (controller +0x98 = camera +0x64) onto the stack.
     Math::Transform3 xform = camera->_cameraToWorld;

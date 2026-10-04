@@ -404,9 +404,9 @@ void UpdateCreateBar(PlayerToolManager* param_1, int param_2, int param_3,
 extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void* param_4,
                                   char param_5, char param_6, char param_7, int param_8,
                                   int param_9, int param_10, void* param_11, void* param_12) {
-    UpdateCreateBar(reinterpret_cast<PlayerToolManager*>(param_1), param_2, param_3,   // B4 FORWARD
-                    reinterpret_cast<const System::String*>(param_4),                  // B4 FORWARD
+    UpdateCreateBar(reinterpret_cast<PlayerToolManager*>(param_1), param_2, param_3,   // B4 FORWARD   // LEFT: B4 FORWARD standalone/tool_harness.cpp (another agent's) calls and takes the address of the old C signature
+                    reinterpret_cast<const System::String*>(param_4),                  // B4 FORWARD   // LEFT: B4 FORWARD (as above)
                     param_5, param_6, param_7, param_8, param_9, param_10,
-                    reinterpret_cast<const ::Box*>(param_11),                         // B4 FORWARD
-                    reinterpret_cast<const Math::Transform*>(param_12));              // B4 FORWARD
+                    reinterpret_cast<const ::Box*>(param_11),                         // B4 FORWARD   // LEFT: B4 FORWARD (as above)
+                    reinterpret_cast<const Math::Transform*>(param_12));              // B4 FORWARD   // LEFT: B4 FORWARD (as above)
 }

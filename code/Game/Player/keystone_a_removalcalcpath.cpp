@@ -358,7 +358,7 @@ void DestroyComponent::RunStateMachine() {
 
 // B4 FORWARD: 1 outside caller (Dialog/upgradeui.cpp) holds the component as an integer.
 extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
-    reinterpret_cast<DestroyComponent*>(param_1)->RunStateMachine();   // LEFT: B4 FORWARD
+    reinterpret_cast<DestroyComponent*>(param_1)->RunStateMachine();   // LEFT: B4 FORWARD Dialog/upgradeui.cpp (another agent's) holds the component as an integer
 }
 
 // ============================================================
@@ -427,7 +427,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
                     n2 = n2->right;
                 } else {
                     // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&param_1->field_0xE8), n2);
+                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&param_1->field_0xE8), n2);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                     break;
                 }
             }
@@ -517,7 +517,7 @@ void WorkScheduler::PrioritizeWork(int workId) {
                     pk = pk->right;
                 } else {
                     // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_0x10), pk);
+                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_0x10), pk);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
                     break;
                 }
             }
@@ -586,8 +586,8 @@ void WorkScheduler::PrioritizeWork(int workId) {
                 {
                     // LEFT: 0x14001a8c0 is a C door in block ACT-b's Action/exe_bodies.h
                     // taking the root slot and the cursor as integers.
-                    int64_t res18local = reinterpret_cast<int64_t>(prev);
-                    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&field_0x10), &res18local);
+                    int64_t res18local = reinterpret_cast<int64_t>(prev);   // LEFT: SIG Pf_AvlRebalanceA_a8c0 (X-G2-WAIT) takes the walk slot as int64_t*
+                    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&field_0x10), &res18local);   // LEFT: SIG Pf_AvlRebalanceA_a8c0 (X-G2-WAIT)
                 }
             }
             field_0x18 = field_0x18 + 1;

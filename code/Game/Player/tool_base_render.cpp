@@ -461,7 +461,7 @@ void Impl_b930(HighlightComponent* hc) {
 void Impl_c4a0(HighlightComponent* hc) {
     // LEFT: edgeMeshInstance (+0x28) and transform (+0x100) are raw storage in
     // block COMP's HighlightComponent (B.4 H5); they are reached from this integer.
-    const int64_t self = reinterpret_cast<int64_t>(hc);
+    const int64_t self = reinterpret_cast<int64_t>(hc);   // LEFT: H5 HighlightComponent::edgeMeshInstance (+0x28) is raw storage, built lazily here (HighlightComponent.h, not this set's)
     Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
 
     // Standalone: the HighlightComponent is created via COMPONENT_INERT_FACTORY
@@ -470,8 +470,8 @@ void Impl_c4a0(HighlightComponent* hc) {
     // vtable is the "fresh/inert" tell — construct the sub-object and reset +0x120 to
     // -1. (Without the -1, the RemoveObject block below would delete live scene
     // object id 0 — e.g. the storage barn — and corrupt the scene / freeze.)
-    if (*reinterpret_cast<void**>(self + 0x28) == nullptr) {
-        ::new (reinterpret_cast<void*>(self + 0x28)) Graphics::EdgeMeshInstance();   // B.3.9 GFX: the real ctor
+    if (*reinterpret_cast<void**>(self + 0x28) == nullptr) {   // LEFT: H5 as above (the null vptr is the inert tell)
+        ::new (reinterpret_cast<void*>(self + 0x28)) Graphics::EdgeMeshInstance();   // B.3.9 GFX: the real ctor   // LEFT: H5 as above
         hc->highlightId = -1;
     }
 
@@ -537,18 +537,18 @@ void Impl_c4a0(HighlightComponent* hc) {
         MapComponent* r = hc->_entity->FindComponent<MapComponent>();   // 0x140004680
         if (r && desc && desc->_ref0 != nullptr) {
             Impl_b930(hc);
-            reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)
+            reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 as above
                 ->SetMesh(Graphics::ExternalPtrHandle{hc->fieldF8},
                           nullptr);   // B.3.5 bridge
-            reinterpret_cast<Graphics::Geometry*>(self + 0x28)
+            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 as above
                 ->SetTransform(hc->transform);
             System::Time time;
             RtSystem_Time_Ctor(&time, 0.0f);
-            void* inst = reinterpret_cast<void*>(self + 0x28);
-            reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+            void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 as above
+            reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 as above
                 time);   // slot 1
             hc->highlightId = static_cast<int32_t>(
-                scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst)));   // B.3.5 bridge
+                scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst)));   // B.3.5 bridge   // LEFT: H5 as above
             return;
         }
     }
@@ -603,7 +603,7 @@ add_prebuilt:
         if (srcInst->_nodes._data == nullptr) {
             srcInst = nullptr;
         }
-        reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)
+        reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)   // LEFT: H5 as above
             ->SetMesh(Graphics::ExternalPtrHandle{cellMesh}, srcInst);   // B.3.5 bridge
 
         // The source instance is not only what the outline FOLLOWS, it is what POSITIONS
@@ -618,15 +618,15 @@ add_prebuilt:
         // 0x20-byte Math::Transform that BridgeTool::CalcPath writes per segment). Same
         // call the BUILD branch above makes with the HighlightComponent's +0x100.
         if (srcInst == nullptr) {
-            reinterpret_cast<Graphics::Geometry*>(self + 0x28)
+            reinterpret_cast<Graphics::Geometry*>(self + 0x28)   // LEFT: H5 as above
                 ->SetTransform(charComp->transform);
         }
         System::Time time;
         RtSystem_Time_Ctor(&time, 0.0f);
-        void* inst = reinterpret_cast<void*>(self + 0x28);
-        reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+        void* inst = reinterpret_cast<void*>(self + 0x28);   // LEFT: H5 as above
+        reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 as above
             time);   // slot 1
-        uint32_t id = scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
+        uint32_t id = scene->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge   // LEFT: H5 as above
         uint32_t f0 = hc->_flags;
         hc->highlightId = static_cast<int32_t>(id);
         uint32_t f1 = f0 | 4;
@@ -655,13 +655,13 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
     static int budget = 8;
     if (budget <= 0) return;
     --budget;
-    void** vt = *reinterpret_cast<void***>(self);
+    void** vt = *reinterpret_cast<void***>(self);   // LEFT: FLOOR? vtable probe (the tripwire reads a possibly-recycled block's vptr)
     // Print the raw facts FIRST: if `self` is a freed/recycled block, the virtual
     // GetTypeId below can itself fault, and a dump that never printed proves nothing.
     std::fprintf(stderr, "[HighlightClear] BAD selection ref: tool=%p vtbl=%p self+0x30=0x%llx\n",
                  reinterpret_cast<void*>(self), reinterpret_cast<void*>(vt),
                  static_cast<unsigned long long>(ref));
-    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);
+    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);  // CAST-OK: crash_walk   // LEFT: FLOOR? crash_walk raw dump of the tool block (operand is the integer self: audit)
     std::fprintf(stderr, "[HighlightClear]   tool[0x00..0x38] = %016llx %016llx %016llx "
                  "%016llx %016llx %016llx %016llx %016llx\n",
                  (unsigned long long)w[0], (unsigned long long)w[1], (unsigned long long)w[2],
@@ -680,8 +680,8 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
     // LEFT: `self` stays an integer: as an EditTool* (a final class) GCC devirtualises
     // Type() to EditTool's own id, and this tripwire exists to ask a possibly-recycled
     // block's REAL table (B11, X-G1-3b).
-    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(self), &::Object::Base::Type)) {
-        uint32_t tid = reinterpret_cast< ::Object::Base*>(self)->Type();   // B.3.x bridge (slot 2)
+    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(self), &::Object::Base::Type)) {   // LEFT: FLOOR? vtable probe (as above; the integer self keeps GCC from devirtualising Type())
+        uint32_t tid = reinterpret_cast< ::Object::Base*>(self)->Type();   // B.3.x bridge (slot 2)   // LEFT: FLOOR? vtable probe (as above)
         const char* n = ::Object::GetTypeNameById(tid);
         std::fprintf(stderr, "[HighlightClear]   tool typeId=%u ('%s')\n", tid, n ? n : "?");
         std::fflush(stderr);
@@ -742,7 +742,7 @@ void Impl_cb40(EditTool* self) {
     {
         const uint64_t ref = reinterpret_cast<uint64_t>(self->lastEntityRef);   // CAST-OK: ptr_int (the tree's tripwire range probe)
         if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
-            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);
+            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);   // LEFT: the tripwire takes the tool as an integer (ReportBadSelectionRef above)
         } else {
             // The pointer itself can look fine while the ENTITY behind it is freed and
             // its allocation recycled — that is the other shape the reported crash can
@@ -870,15 +870,15 @@ void Impl_HighlightFollow(EditTool* self) {
     }
 
     // LEFT: the embedded EdgeMeshInstance (+0x28) is raw storage (block COMP, H5).
-    const int64_t hi = reinterpret_cast<int64_t>(hc);
-    void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance
-    if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip
+    const int64_t hi = reinterpret_cast<int64_t>(hc);   // LEFT: H5 HighlightComponent::edgeMeshInstance raw storage (as Impl_c4a0)
+    void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance   // LEFT: H5 as above
+    if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip   // LEFT: H5 as above (the null vptr is the inert tell)
 
     System::Time time;
     RtSystem_Time_Ctor(&time, 0.0f);
     // vtable slot [1] = EdgeMeshInstance::Update(time): pulls the current transform
     // from the bound MeshInstance (+0xc8 -> +0x84) and Geometry::SetTransform's it.
-    reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+    reinterpret_cast<Graphics::Geometry*>(inst)->Update(   // LEFT: H5 as above
         time);   // slot 1
 
 }
@@ -894,7 +894,7 @@ void Impl_HighlightFollow(EditTool* self) {
 // B4 FORWARD: their callers (Dialog/edittool_select.cpp, Player/edittool.cpp,
 // Player/pathtool_setselected.cpp, ...) hand the tool / component over as void*.
 extern "C" void HighlightSelect_Impl(EditTool* self) { Impl_c9e0(self); }  // 0x1400fc9e0 (caller: Dialog/edittool_select.cpp)
-extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<EditTool*>(self)); }  // 0x1400fcb40
+extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<EditTool*>(self)); }  // 0x1400fcb40   // LEFT: B4 FORWARD edittool.cpp / edittool_select.cpp / toolui.cpp (other agents') pass void*
 extern "C" void HighlightRepaint_Impl(HighlightComponent* self) { Impl_c4a0(self); }  // 0x14004c4a0 (callers: Player/pathtool_setselected.cpp)
 
 // Per-frame follow re-sync (NOT an exe address). Called directly from
