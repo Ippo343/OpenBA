@@ -420,7 +420,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         if (found == nullptr) {
             // ---- cooldown + status-icon branch ----
             int64_t stamp = CooldownStamp(citizen, kMultEmpty);
-            timers[6] = stamp;
+            timers[6]._ticks = stamp;
             citizen->happinessFlags |= 4;
             HideRenderWorkplaceMesh(citizen, &CitizenComp_Storage_GetResourceCount, 0x40);   // 0x14012a9d0
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
@@ -463,7 +463,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
 
     // ---- no reachable home: cooldown(_fd8 * 75.0) -> timers[6] ----
     int64_t stamp = CooldownStamp(citizen, kMultInvalid);
-    timers[6] = stamp;
+    timers[6]._ticks = stamp;
     return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
 }
 
@@ -519,7 +519,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
             // ---- cooldown + status-icon branch ----
             citizen->happinessFlags |= 4;
             int64_t stamp = CooldownStamp(citizen, kMultEmpty);
-            timers[7] = stamp;
+            timers[7]._ticks = stamp;
             HideRenderWorkplaceMesh(citizen, &Storage_GetResourceCount2, 0x80);   // 0x14012ab00
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
         }
@@ -573,7 +573,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
 
     // ---- no reachable home: cooldown(_fd8 * 75.0) -> timers[7] ----
     int64_t stamp = CooldownStamp(citizen, kMultInvalid);
-    timers[7] = stamp;
+    timers[7]._ticks = stamp;
     return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
 }
 

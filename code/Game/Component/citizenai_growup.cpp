@@ -475,7 +475,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
     // find the best food source via dd30, then scan its storage for an eatable item.
     System::Time cd{};
     RtSystem_Time_Ctor(&cd, s_walkScale);
-    timers[4] = cd._ticks;
+    timers[4] = cd;
 
     ComponentEntity* resEntity = citizen->home;
     uint32_t bGoal;
@@ -577,7 +577,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
                     }
                     System::Time cd2{};
                     RtSystem_Time_Ctor(&cd2, wt * s_walkScale);
-                    timers[4] = cd2._ticks;
+                    timers[4] = cd2;
 
                     return 1;  // low byte 1
                 }

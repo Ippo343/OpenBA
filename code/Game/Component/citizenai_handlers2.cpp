@@ -139,7 +139,7 @@ uint64_t CitizenAIComponent::State_Education() {
     // cooldown stamp: Time(DAT_1721fc) -> timers[3]
     System::Time timeStamp{};
     RtSystem_Time_Ctor(&timeStamp, kRdata_1401721fc);
-    timers[3] = timeStamp._ticks;
+    timers[3] = timeStamp;
 
     if (citizen->clothingLevel != 0) {
         return 0;  // low byte 0 (retail's RAX carries the citizen pointer above it)
@@ -205,7 +205,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
 
     System::Time timeStamp{};
     RtSystem_Time_Ctor(&timeStamp, kRdata_1401721fc);
-    timers[8] = timeStamp._ticks;
+    timers[8] = timeStamp;
 
     if (0 < citizen->field_0xAC) {
         return 0;  // low byte 0

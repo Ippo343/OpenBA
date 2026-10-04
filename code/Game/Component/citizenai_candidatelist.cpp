@@ -533,7 +533,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
                 System::Time timeBuf = {};
                 float c172234 = kRdata_140172234;
                 RtSystem_Time_Ctor(&timeBuf, c172234);
-                int64_t acc = dataC8;
+                int64_t acc = dataC8._ticks;
                 ltpPrio = (timeBuf._ticks < acc) ? 3 : 1;
                 AppendCandidate(outList, 0xd, ltpPrio);
             }
@@ -582,7 +582,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
 
 int CitizenAIComponent::ValidateAndEnterState(int id) {
     // Cooldown gate: timers[id] < 1
-    if (timers[id] < 1) {
+    if (timers[id]._ticks < 1) {
         uint64_t r = 0;
         switch (id) {
             case 0:  case 0xe: r = State_AdultTransition(); break;  // 0x14010cd80 EAT/GetFood (Ghidra "AdultTransition"=MISNOMER; +0x44=hunger, drains via msg2->EatFromStorage 0x1401152e0)

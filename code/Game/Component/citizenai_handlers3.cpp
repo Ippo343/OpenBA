@@ -164,9 +164,9 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
     // cooldown stamp -> timers[1] & timers[15]
     System::Time stamp{};
     RtSystem_Time_Ctor(&stamp, kCooldown);
-    timers[1] = stamp._ticks;
+    timers[1] = stamp;
     RtSystem_Time_Ctor(&stamp, kCooldown);
-    timers[15] = stamp._ticks;
+    timers[15] = stamp;
     return static_cast<uint64_t>(stamp._ticks) & 0xffffffffffffff00ULL;
 }
 
@@ -249,9 +249,9 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
                 // no target -> cooldown stamp (timers[0] & timers[14]) + return 0
                 System::Time stamp{};
                 RtSystem_Time_Ctor(&stamp, kCooldown);
-                timers[0] = stamp._ticks;
+                timers[0] = stamp;
                 RtSystem_Time_Ctor(&stamp, kCooldown);
-                timers[14] = stamp._ticks;
+                timers[14] = stamp;
                 return static_cast<uint64_t>(stamp._ticks) & 0xffffffffffffff00ULL;
             }
         }
