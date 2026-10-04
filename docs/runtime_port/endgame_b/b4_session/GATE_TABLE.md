@@ -294,3 +294,5 @@ Metric at `46fbb17e`: **3,312** to remove.
 | 84 | P2-R-SYS | `3b606e4b` | Configuration's settings map root and platform / language / build dwords typed, `MemoryAllocator::freeLists` typed, four Serialize bodies build the real `IO::Serializer`; `behaviour:` `PointList::Point::name` is a `System::String`, `pos` a `Vector3` (retail ctor 0x18010f980, dtor 0x18010f8e0): 149 -> 107 in 45 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
 
 Metric at `3b606e4b`: **3,136** to remove (of which `dx11/` 240). **Waves S, L and R of the second pass are done: every block of `PASS2_FILEMAP.md` is merged (40 gated merges, rows 45-84, 0 problems each).**
+
+`sa-stress` at `3b606e4b`, QUIET machine (no agent building): exit 0, update 1.73 ms/frame, p95 2.21, draw 1.25 (base 1.92 / 2.40 / 1.38). Recorded, not chased.
