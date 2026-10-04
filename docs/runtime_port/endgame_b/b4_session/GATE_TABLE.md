@@ -288,3 +288,9 @@ Metric at `c8ad99b8`: **3,876** to remove.
 | 81 | P2-DLG-1 | `46fbb17e` | `Map::regionPairCache` typed, `Map::field_0xA2` `uint8_t`, `TrackerComponent::EntryArray`; debugui, eventnotify, follow, citizen, build dialogs by name; `behaviour:` EventLogUI, CitizenUI, HelpUI, BuildUI hold `Collection::Array` members whose dtors free them as retail (rows 440-447): 233 -> 59 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `46fbb17e`: **3,312** to remove.
+
+| 82 | P2-ACT-2 + TUT | `b77b4460` | fourteen dead Action forwarders deleted, the goal / tutorial bucket walks on `ProfessionBucket` / `TemplateBucket`; `behaviour:` TutorialSetupDialog's two String arrays are `Array` members (retail ctor 0x1400e2cc0, dtor 0x1400e2bf0): 115 -> 78 in 54 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+| 83 | P2-SA | `4b4f2d26` | the standalone harnesses and boot code by name; `EditTool_Harness*` declared once in `edittool_funcs.h`, local externs deleted; floor casts marked: 187 -> 97 in 25 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | tools ok · ui ok | 0 |
+| 84 | P2-R-SYS | `3b606e4b` | Configuration's settings map root and platform / language / build dwords typed, `MemoryAllocator::freeLists` typed, four Serialize bodies build the real `IO::Serializer`; `behaviour:` `PointList::Point::name` is a `System::String`, `pos` a `Vector3` (retail ctor 0x18010f980, dtor 0x18010f8e0): 149 -> 107 in 45 files | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok | 0 |
+
+Metric at `3b606e4b`: **3,136** to remove (of which `dx11/` 240). **Waves S, L and R of the second pass are done: every block of `PASS2_FILEMAP.md` is merged (40 gated merges, rows 45-84, 0 problems each).**

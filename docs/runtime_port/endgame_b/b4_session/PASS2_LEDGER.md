@@ -374,3 +374,37 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - GAME-4 changed two diagnostic log formats in starttown.cpp (`0x%llx` -> `%p` for the template / profession
   pointer in the laborer and house-seed lines); no gate or tool greps them.
 - DLG-1 row 447: `hasNewEvents` now copies the filter byte (identical while it is 0 / 1).
+
+## Round 8 hand-ins (ACT-2 + TUT, SA, R-SYS) — the end of waves L and R
+### Facts
+- `Configuration` +0x10 is `RtIo::SettingsMapNode*`; `RtSystem_ConfigMap_Find` takes the root slot and a
+  `System::String*`; `UpdateLoop.h` (`_dialogExternal`, `MainLoop::_context`) was already typed: DLG-1's LEFT
+  comments about them are stale. `PointList::Point::name` is a `System::String`, `pos` a `Math::Vector3`.
+- The harness ticks take `PlayerToolManager*`, `SaveLoadHarness_Tick` takes `GameUpdateLoop*`:
+  gameupdateloop.cpp's local `extern "C"` declarations still say `void*`; `g_StandaloneSaveLoadDialog` /
+  `g_StandaloneScenarioDialog` are typed in autostart.cpp while mainmenudialog.cpp declares them locally as
+  `extern void*` (same symbols; the declarations must be unified: wave X).
+### Wave X additions
+- `MainLoopCallback::_func` / `_context`: one element type serves two arrays with different function types
+  (R-UI's registered callbacks, SA's modal_driver.cpp): split the element.
+- `Filename` is-a `String` (H5, its own `behaviour:` commit); `pod_bridge.h`: `Sys(...)` about 99 calls in 29
+  files (io 52, object 34, system 7, engine 2), `SysFile(...)` 36 calls in 6 io files.
+- The type-erased AVL core's callers in engine / application / input / system (about 20 casts);
+  `Serialize(void*)` of `Math::Vector*`, `Transform`, `Audio::Scene`, `String` (the Serializer-typed family).
+- TUT: TutorialStep's Strings and arrays, the `Tutorial` steps array, TutorialGoalButton / Count / Dialog
+  Strings, `NamedExternalRef::name` (H5: retail's ctor writes zero inline and frees in an order the typed
+  members would reverse).
+- SA: `EntityUI_SetEditMode_Impl` (uint64), `EditTool_CloseInfoDialog`, the CitizenEmploy int64 casts in the
+  harnesses, CompProf `void*`, the factory `void*` returns, `ModDialog_LastOpened` / `ModDetailsDialog_LastOpened`
+  / `EntityUI_OpenPauseMenu`, `g_StandaloneNewGameDialog`, `TradeStock_SeedForTest` (no header).
+### Close / audit
+- **A by-retail-address lookup is left in `runtime/src/engine/engine_platform_win.cpp:72-73, 91-92`**: it reads
+  the retail DLL's launcher bytes and dialog procedure by module base + retail address. Reachable only if
+  `Runtime-x64.dll` is loaded, which the standalone never does. R-SYS marked it `win32`; it is a door by the
+  project's definition (CLAUDE.md "No doors"): delete it at the closing wave (the audit confirms no caller).
+- Floor counts now: `crash_walk` 109 in standalone alone (ceiling 86), `byte_io` over 17 (R-IO 10 + R-SYS 11 +
+  R-UI 2 + SA 1), `elem_stride` 53+ (ceiling 18), `win32`, `ptr_int`, `vslot` grew: FLOOR.md's ceilings are
+  re-cut at the close from a per-category READ of every marked line (the audit's job).
+- SA: the boot factory self-test's vtable / field-default probes in main.cpp are marked `crash_walk` (FLOOR §5
+  says factory self-test reads are not floor); stress_harness.cpp's profiler keys on the vtable word (no
+  category): decide at the audit.
