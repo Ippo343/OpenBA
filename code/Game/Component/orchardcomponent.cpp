@@ -25,6 +25,7 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"              // Map::cells (GameUpdateLoop::m_game)
+#include "Game/Calendar.h"         // GameUpdateLoop::m_dayCounter
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/exe_bodies.h"     // Reimpl_ExternalPtr_Serialize_StringTable
 #include "Game/exe_constants.h"  // kRdata_*
@@ -110,19 +111,19 @@ static void SerializeSlots(IO::Serializer& ser, int count, OrchardSlot* slot) {
         ser.Serialize(slot->state, nullptr);
 
         // LEFT: InternalBasePtr has no typed view of a bare pointer member.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->tree)->Serialize(ser);
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->tree)->Serialize(ser);   // LEFT: InternalPtr member held as T* (wave X)
         if (slot->tree != nullptr &&
             !(::Object::IsDerivedFromNullSafe(slot->tree, ComponentEntity::TypeId())))
             slot->tree = nullptr;
 
         // LEFT: as above.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->resource)->Serialize(ser);
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->resource)->Serialize(ser);   // LEFT: as above
         if (slot->resource != nullptr &&
             !(::Object::IsDerivedFromNullSafe(slot->resource, NaturalResourceComponent::TypeId())))
             slot->resource = nullptr;
 
         // LEFT: as above.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->fruit)->Serialize(ser);
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->fruit)->Serialize(ser);   // LEFT: as above
         if (slot->fruit != nullptr &&
             !(::Object::IsDerivedFromNullSafe(slot->fruit, FruitComponent::TypeId())))
             slot->fruit = nullptr;
@@ -135,17 +136,14 @@ static void SerializeSlots(IO::Serializer& ser, int count, OrchardSlot* slot) {
 void OrchardComponent::ValidateRefs() {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header); Map::cells is untyped (GAME-b).
-    const uint8_t* cells = reinterpret_cast<const uint8_t*>(reinterpret_cast<const Map*>(world->m_game)->cells);
+    const MapCell* cells = world->m_game->cells;
     const int count = slotCount;
     for (int i = 0; i < count; ++i) {
         OrchardSlot& slot = slots[i];
         if (slot.state != 1) continue;
 
         const int32_t tile = slot.tile;
-        // LEFT: the cell's +0x08 is the entity standing on it (no cell type yet).
-        ComponentEntity* live = *reinterpret_cast<ComponentEntity* const*>(
-            cells + 8 + (uintptr_t)tile * 0x30);
+        ComponentEntity* live = cells[tile].occupant;   // the entity standing on the cell
         bool ok = false;
         if (live) {
             if (live->IsA(ComponentEntity::TypeId())) {   // slot 0x140151410
@@ -179,11 +177,6 @@ void OrchardComponent::ValidateRefs() {
     }
 }
 
-// B4 FORWARD: 2 outside caller files (Work/plantorchard.cpp, Work/plantorchard_ctor.cpp).
-void OrchardComponent_ValidateRefs(void* selfV) {
-    reinterpret_cast<OrchardComponent*>(selfV)->ValidateRefs();
-}
-
 // ============================================================
 // OrchardComponent::GetGrowth (0x140051640) -> float
 // ============================================================
@@ -207,11 +200,9 @@ float OrchardComponent::GetGrowth() const {
 
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return 0.0f;
-    // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-    const Map* map = reinterpret_cast<const Map*>(world->m_game);
+    const Map* map = world->m_game;
     if (!map) return 0.0f;
-    // LEFT: Map::cells is untyped (GAME-b).
-    const uint8_t* cells = reinterpret_cast<const uint8_t*>(map->cells);
+    const MapCell* cells = map->cells;
     if (!cells) return 0.0f;
 
     const uint32_t tidEntity = ComponentEntity::TypeId();   // cell 0x1401c5d70 (D5)
@@ -223,9 +214,7 @@ float OrchardComponent::GetGrowth() const {
     for (int i = 0; i < count; ++i) {
         const OrchardSlot& slot = slots[i];
 
-        // LEFT: the cell's +0x08 is the entity standing on it (no cell type yet).
-        ComponentEntity* entity = *reinterpret_cast<ComponentEntity* const*>(
-            cells + 8 + static_cast<uintptr_t>(slot.tile) * 0x30);
+        ComponentEntity* entity = cells[slot.tile].occupant;   // the entity standing on the cell
         if (!entity) continue;
         if (!entity->IsA(tidEntity)) continue;
 
@@ -246,7 +235,7 @@ float OrchardComponent::GetGrowth() const {
 // B4 FORWARD: 2 outside caller files (Dialog/orchardui.cpp, standalone/orchard_diag.cpp).
 float OrchardComponent_GetGrowth(void* selfV) {
     if (!selfV) return 0.0f;
-    return reinterpret_cast<const OrchardComponent*>(selfV)->GetGrowth();
+    return reinterpret_cast<const OrchardComponent*>(selfV)->GetGrowth();   // LEFT: B4 FORWARD (wave X: standalone/orchard_diag.cpp holds void*)
 }
 
 // ============================================================
@@ -334,11 +323,10 @@ int OrchardPlantedCount(const OrchardComponent* s) {
 }
 
 // The in-game year: the first int of the day counter at GameUpdateLoop+0x128.
-// LEFT: GameUpdateLoop::m_dayCounter is void* (W0 header; no DayCounter class yet).
 int OrchardYearOrZero() {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    void* cal = world ? world->m_dayCounter : nullptr;
-    return cal ? *reinterpret_cast<const int32_t*>(cal) : 0;
+    Calendar* cal = world ? world->m_dayCounter : nullptr;
+    return cal ? cal->year : 0;
 }
 
 // Reports what the panel was told, and WHY, one line per change of the deciding inputs.
@@ -366,9 +354,8 @@ void TraceCanCommand(int cmdId, int curState, int planted, int slotCount, bool h
     prev = k;
 
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    void* cal = world ? world->m_dayCounter : nullptr;
-    // LEFT: GameUpdateLoop::m_dayCounter is void* (W0 header; no DayCounter class yet).
-    const int curYear = cal ? *reinterpret_cast<const int32_t*>(cal) : -1;
+    Calendar* cal = world ? world->m_dayCounter : nullptr;
+    const int curYear = cal ? cal->year : -1;
 
     // Name the gate that actually decided it, so a greyed button reports its own reason.
     const char* why = "enabled";
@@ -389,18 +376,6 @@ void TraceCanCommand(int cmdId, int curState, int planted, int slotCount, bool h
 }
 
 }  // namespace
-
-// 0x140051c90 door: called by name from standalone/orchard_cut_harness.cpp.
-extern "C" uint8_t OrchardComponent_CanCommand(void* selfV, int cmdId) {
-    if (!selfV) return 0;
-    return static_cast<uint8_t>(reinterpret_cast<OrchardComponent*>(selfV)->OrchardComponent::CommandMask(cmdId));   // B.3.8 bridge
-}
-
-// 0x140051ba0 door: called by name from standalone/orchard_cut_harness.cpp.
-extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
-    if (!selfV) return;
-    reinterpret_cast<OrchardComponent*>(selfV)->OrchardComponent::Command(cmdId);   // B.3.8 bridge
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-B — OrchardComponent as a REAL class (OrchardComponent.h).
@@ -559,8 +534,7 @@ void OrchardComponent::Command(int cmdId) {
         // no event is posted for this command.
         enabled = !enabled;
         WorkPlaceComponent* wp = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
-        // LEFT: WorkPlaceComponent_SetAccepting takes the component as int64_t (COMP-f's body).
-        WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wp), enabled);   // 0x14012fc00
+        wp->SetAccepting(enabled);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
         std::fprintf(stderr, "[OrchardCmd] Command(2) toggle -> enabled=%d\n", (int)enabled);
         std::fflush(stderr);
         return;
@@ -604,12 +578,10 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
     if (msgId == 0) {
         if (!slots) return;
         OrchardSlot& slot = slots[idx];
-        // LEFT: GameUpdateLoop::m_game is void* (W0 header); Map::cells is untyped (GAME-b).
-        const uint8_t* cells = reinterpret_cast<const uint8_t*>(reinterpret_cast<const Map*>(world->m_game)->cells);
-        // The cell record is stride 0x30; its +0x08 is the entity standing on it — the
-        // tree the plant action just created. LEFT: no cell type yet.
-        ComponentEntity* entity = *reinterpret_cast<ComponentEntity* const*>(
-            cells + 8 + static_cast<int64_t>(slot.tile) * 0x30);
+        const MapCell* cells = world->m_game->cells;
+        // The cell's occupant (+0x08) is the entity standing on it — the tree the plant
+        // action just created.
+        ComponentEntity* entity = cells[slot.tile].occupant;
         NaturalResourceComponent* natRes = entity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
         FruitComponent* fruit = entity->FindComponent<FruitComponent>();   // 0x14000a0b0
 
@@ -649,14 +621,10 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
     }
 
     if (msgId == 2) {
-        // LEFT: GameUpdateLoop::m_game is void* (W0 header).
-        const Map* mapGrid = reinterpret_cast<const Map*>(world->m_game);
+        const Map* mapGrid = world->m_game;
         ValidateRefs();
         if (!slots) return;
-        // LEFT: Map::cells is untyped and the cell's +0x08 is the entity (GAME-b).
-        ComponentEntity* entity = *reinterpret_cast<ComponentEntity* const*>(
-            reinterpret_cast<const uint8_t*>(mapGrid->cells) + 8 +
-            static_cast<int64_t>(slots[idx].tile) * 0x30);
+        ComponentEntity* entity = mapGrid->cells[slots[idx].tile].occupant;
         if (entity == nullptr) return;
         FruitComponent* fruit = entity->FindComponent<FruitComponent>();   // 0x14000a0b0
         if (fruit == nullptr) return;

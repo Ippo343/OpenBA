@@ -62,6 +62,9 @@
 // via RegisterExeAddr so the other resolve-by-address callers pick it up.
 // 1:1 port of the disassembly; closure = MemAlloc/MemFree + String copy-ctor/dtor,
 // all of which resolve in standalone.
+// LEFT (every cast in this body): ERASED hand-expanded Array<System::String>::SetSize; its
+// callers (here and Tutorial/tutorialsetupdialog.cpp) hand the array in as void* (wave X;
+// policy: typed wrappers over the one core, never a container swap).
 extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount) {
     uint8_t* h = reinterpret_cast<uint8_t*>(hdr);
     unsigned oldCount = *reinterpret_cast<unsigned*>(h + 8);

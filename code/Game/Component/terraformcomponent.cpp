@@ -25,8 +25,9 @@
 #include <cstdio>
 #include <new>
 #include <cstring>
-#include "Action/exe_bodies.h"      // Pf_RegionDirty4_b150, Pf_AvlInsertA_a4f0, Pf_FineCellDirty_a8c90,
-                                    // Pf_EnqueueCmd2_a6fe0
+#include "Action/exe_bodies.h"      // Pf_AvlInsertA_a4f0
+#include "Action/PathSearch.h"       // RegionGraph::MarkCellDirty
+#include "Game/PathfinderThread.h"   // PathfinderThread::SetCellTerrain
 #include "Component/TerraformComponent.h"
 #include "Component/ModelComponent.h"
 #include "Component/MapComponent.h"
@@ -71,7 +72,7 @@ void TerraformComponent_RegionRecalc(WorldGeometry* terrain, int x, int y) {
     int gy = y / cell;
     int dim = terrain->_gridSize / cell;
 
-    int64_t* regionMgr = reinterpret_cast<int64_t*>(&terrain->_dirtyTreeRoot);   // Pf_AvlInsertA_a4f0 takes the root slot as int64_t*
+    int64_t* regionMgr = reinterpret_cast<int64_t*>(&terrain->_dirtyTreeRoot);   // LEFT: SIG Pf_AvlInsertA_a4f0 (takes the root slot as int64_t*)
     uint64_t scratch = 0;
     uint32_t cellIdx;
 
@@ -166,7 +167,7 @@ static uint8_t TerraformCellType(Map* map, float wx, float wy) {
 // The terrain heightmap sample at (mapX, mapY): WorldGeometry's +0xD8 int16 array,
 // row stride +0xD0.
 static int16_t& TerraformHeightAt(WorldGeometry* terrain, int mapX, int mapY) {
-    int16_t* heights = reinterpret_cast<int16_t*>(terrain->_arrayD8);   // LEFT: WorldGeometry::_arrayD8 is void* (its header)
+    int16_t* heights = terrain->_arrayD8;
     return heights[static_cast<int64_t>(terrain->_fieldD0) * mapY + mapX];
 }
 
@@ -230,7 +231,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
         // Transform::operator*(const Vector3&) — slot 0x140151470. LEFT: the picking
         // mesh's element is the global engine Vector3, Math::Vector3's layout twin.
         const Math::Vector3 world =
-            xform * *reinterpret_cast<const Math::Vector3*>(&localVtx);
+            xform * *reinterpret_cast<const Math::Vector3*>(&localVtx);   // LEFT: POD ::Vector3 (PickingMesh.h) vs Math::Vector3 (wave X)
 
         // p = transformed vertex, nudged a quarter cell so it lands inside a cell
         // rather than exactly on the shared corner.
@@ -238,7 +239,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
 
         // Original terrain point under p: (x, y, currentHeight). This is the undo record.
         Math::Vector3 original(0.0f, 0.0f, 0.0f);
-        Reimpl_MapGetTerrainPos(map, &original.x, const_cast<float*>(p), '\0', nullptr);   // 0x14009f3e0
+        Reimpl_MapGetTerrainPos(map, &original.x, const_cast<float*>(p), '\0', nullptr);   // 0x14009f3e0  LEFT: SIG Reimpl_MapGetTerrainPos (takes float*)
 
         // Every cell sharing this heightmap vertex must be a terrain type the mask allows.
         // NOTE: retail samples (x,y), (x-1,y), (x-1,y-1) and then (x-1,y) AGAIN — the
@@ -264,7 +265,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
         TerraformHeightAt(terrain, mapX, mapY) =
             static_cast<int16_t>(static_cast<int>(p[2] * heightScale));
 
-        Pf_RegionDirty4_b150(reinterpret_cast<int64_t>(terrain), mapX, mapY);   // 0x1400ab150
+        terrain->MarkChunksDirty(mapX, mapY);   // 0x1400ab150 (Pf_RegionDirty4_b150's body)
         ++applied;
 
         if (ceiling) {
@@ -301,10 +302,10 @@ void TerraformComponent::ApplyFootprint() {
 
             map->field_0xA2 |= 1;
             *type = 6;
-            Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->regionGraph),
-                idx % map->size, idx / map->size);   // 0x1400a8c90
+            map->regionGraph->MarkCellDirty(
+                idx % map->size, idx / map->size);   // 0x1400a8c90 (Pf_FineCellDirty_a8c90's body)
             // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only.
-            Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->pathfinder), idx, 6);   // 0x1400a6fe0
+            map->pathfinder->SetCellTerrain(idx, 6);   // 0x1400a6fe0 (Pf_EnqueueCmd2_a6fe0's body)
             TerraformArrayPush(tileRecord, tileCount, tileCap, static_cast<int32_t>(idx));
             ++converted;
         }
@@ -400,7 +401,7 @@ void TerraformComponent::OnRemove() {
             TerraformHeightAt(terrain, (int)mapX, (int)mapY) = (int16_t)heightIdx;
 
             // Recalculate terrain at this position
-            Pf_RegionDirty4_b150(reinterpret_cast<int64_t>(terrain), (int)mapX, (int)mapY);   // 0x1400ab150
+            terrain->MarkChunksDirty((int)mapX, (int)mapY);   // 0x1400ab150 (Pf_RegionDirty4_b150's body)
         }
     }
 
@@ -427,12 +428,12 @@ void TerraformComponent::OnRemove() {
 
             // Update terrain visuals if was buildable
             if (isBuildable) {
-                Pf_FineCellDirty_a8c90(reinterpret_cast<int64_t>(map->regionGraph),
-                                       tileIndex % gridWidth, tileIndex / gridWidth);   // 0x1400a8c90
+                map->regionGraph->MarkCellDirty(
+                    tileIndex % gridWidth, tileIndex / gridWidth);   // 0x1400a8c90 (Pf_FineCellDirty_a8c90's body)
             }
 
             // Set terrain type (0x1400a6fe0; args 3/4 cast as above)
-            Pf_EnqueueCmd2_a6fe0(reinterpret_cast<int64_t>(map->pathfinder), static_cast<int>(tileIndex), 10);
+            map->pathfinder->SetCellTerrain(static_cast<int>(tileIndex), 10);   // 0x1400a6fe0 (Pf_EnqueueCmd2_a6fe0's body)
         }
     }
 }

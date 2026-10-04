@@ -425,7 +425,7 @@ void PopulationComponent::OnRemove() {
 // PopulationComponent::Update (0x140054070)
 // ============================================================
 void PopulationComponent::Update(void* timeV) {
-    const System::Time* pDeltaTime = reinterpret_cast<const System::Time*>(timeV);   // B.3.8 bridge (Update takes void*)
+    const System::Time* pDeltaTime = reinterpret_cast<const System::Time*>(timeV);   // B.3.8 bridge (Update takes void*)  LEFT: SIG Component::Update(void* time)
     // Accumulate delta time into +0x60
     smoothTimer._ticks += pDeltaTime->_ticks;
 

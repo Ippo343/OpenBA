@@ -76,6 +76,7 @@
 #include "Component/TornadoDescription.h"
 #include "Component/ParticleDescription.h"
 #include "Component/ParticleComponent.h"
+#include "graphics/ParticleInstance.h"   // ParticleEmitterSlot::instance is-a Graphics::Geometry
 #include "Component/AmbientEmitterComponent.h"
 #include "Component/FireComponent.h"
 #include "Component/BuildComponent.h"
@@ -496,7 +497,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
             NaturalResourceComponent* probe = cellEntity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
             if (probe != nullptr) {
                 ComponentEntity* ibp = cellEntity;
-                Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(cellEntity), &ibp, &hitTree, &hitTreeNoKnock,
+                Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(cellEntity), &ibp, &hitTree, &hitTreeNoKnock,   // LEFT: the dead first argument holds what retail's register holds
                                      &hitBuilding, &hitBuildingNoFire, &hitAnimal, &hitCitizen);
             }
         }
@@ -524,8 +525,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
         // than fault. Every other deref in this function stays unguarded.
         void* quadtree = gw->m_characterGrid;
         if (quadtree)
-            // LEFT: Map_RadiusQuery_92990 takes the grid as float* (COMP-b's declaration).
-            Map_RadiusQuery_92990(reinterpret_cast<float*>(quadtree), &scratch, pos, &radius, 0, &found);
+            Map_RadiusQuery_92990(reinterpret_cast<float*>(quadtree), &scratch, pos, &radius, 0, &found);   // LEFT: SIG Map_RadiusQuery_92990 (float* map)
         else
             queryState = "SKIPPED(GameWorld+0x88 quadtree is null - "
                          "CharManager_Seed gated off by MoveTickEnabled)";
@@ -533,7 +533,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
         for (int i = 0; i < found.count; i++) {
             Component** slot = &found.data[i];
             ComponentEntity* ownerEntity = (*slot)->_entity;
-            Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,
+            Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: as above (dead first argument)
                                  &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
                                  &hitAnimal, &hitCitizen);
         }
@@ -608,7 +608,7 @@ void ParticleComponent::FadeOutEmitter(int index) {
 
 // B4 FORWARD: 1 outside caller (Component/firecomponent_ignite.cpp).
 extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
-    reinterpret_cast<ParticleComponent*>(particleComp)->FadeOutEmitter(index);
+    reinterpret_cast<ParticleComponent*>(particleComp)->FadeOutEmitter(index);   // LEFT: B4 FORWARD (wave X: firecomponent_ignite.cpp)
 }
 
 // AmbientEmitterComponent::MoveTo (0x140042960): move every live emitter to `newPos`,
@@ -810,7 +810,7 @@ void TornadoComponent::Startup() {
 // audio position out.
 void TornadoComponent::Tick(void* time) {
     Tornado_ReportArmsOnce();
-    const System::Time* dt = reinterpret_cast<const System::Time*>(time);   // B.3.8 bridge (Tick takes void*)
+    const System::Time* dt = reinterpret_cast<const System::Time*>(time);   // B.3.8 bridge (Tick takes void*)  LEFT: SIG Component::Tick(void* time)
     TornadoDescription* desc = TornadoDesc(this);
 
     GameUpdateLoop* gw = GameWorld();
@@ -895,9 +895,8 @@ void TornadoComponent::Tick(void* time) {
         transform.translation.x = position.x;
         transform.translation.y = position.y;
         transform.translation.z = position.z;
-        // LEFT: the emitter's ParticleInstance is incomplete here; retail calls the
-        // geometry's SetTransform (the instance is-a Graphics::Geometry).
-        reinterpret_cast<Graphics::Geometry*>(pc->emitters[0].instance)->SetTransform(transform);   // B.3.5 bridge
+        // Retail calls the geometry's SetTransform (the instance is-a Graphics::Geometry).
+        pc->emitters[0].instance->SetTransform(transform);
     }
 
     // --- move the audio emitters and refresh the volume ---
@@ -914,7 +913,7 @@ void TornadoComponent::Tick(void* time) {
         // emitters[0].instance (**(pc+0x38) + 0x7c). The value only feeds the PORT GAP audio
         // branch below (never taken), so no run can see the difference; listed, not changed.
         const float volume =
-            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pc->emitters) + 0x7c);
+            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pc->emitters) + 0x7c);   // LEFT: retail DIFFERENCE (known_port_issues row 430): retail reads emitters[0].instance->_opacity
 
         AmbientEmitterComponent* audio2 = nullptr;   // PORT GAP 0x140002280 (see above)
         if (audio2) {
