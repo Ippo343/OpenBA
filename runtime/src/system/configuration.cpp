@@ -256,7 +256,7 @@ extern "C" RtIo::SettingsMapNode* RtSystem_ConfigMap_Find(
 
 void System::Configuration::SetCommandLine(const System::String& cmd) {
 
-    void* map = &_mapRoot;
+    RtIo::SettingsMap* map = &_map;
 
     // ENDGAME B.3.4b: the B.3.1 step-2 bridge is gone from this body — `cmd` IS
     // the class now, because the parameter is. The POD-to-class conversion
@@ -297,11 +297,12 @@ void System::Configuration::SetCommandLine(const System::String& cmd) {
                     // 0x18002a090 is `rtavl::StringMapInsert`
                     // (runtime/src/collection/avl_trees.cpp), the
                     // `Collection::Set<Pair<String,String>>::Insert` body. `map`
-                    // here is a raw `void*` (`self + 0x10`), so it is the free
-                    // body, called by name (B3R), not a member.
-                    rtsetavl::Node* node = nullptr;
+                    // here is the map's {root, count} header (`self + 0x10`,
+                    // RtIo::SettingsMap), so it is the free body, called by
+                    // name (B3R), not a member.
+                    RtIo::SettingsMapNode* node = nullptr;
                     rtavl::StringMapInsert(
-                        static_cast<rtsetavl::Set*>(map), &node,  // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
+                        map, &node,
                         &key._data, &val._data);
                 }
 
@@ -492,7 +493,7 @@ System::String System::Configuration::GetCommandLineString(
 
     // The find takes the MAP, not `this` — `configuration + 0x10`, whose first
     // qword is the root — which is why it is not a member of this class.
-    const RtIo::SettingsMapNode* node = RtSystem_ConfigMap_Find(&_mapRoot, &key);
+    const RtIo::SettingsMapNode* node = RtSystem_ConfigMap_Find(&_map.root, &key);
 
     // 0x1800c533b: the found node's VALUE, and the temporary's reference.
     char* temp = (node != nullptr) ? node->value._data : nullptr;
@@ -568,7 +569,7 @@ System::Configuration::~Configuration() {
     //
     // 0x1800c518f -- the string->string map at +0x10: rtsetclear::Clear
     // (0x18000f7d0).
-    rtsetclear::Clear(reinterpret_cast<rtsetavl::Set*>(&_mapRoot));  // LEFT: SIG rtsetclear::Clear takes the erased rtsetavl::Set (R-COLL)
+    rtsetclear::Clear(&_map);
 
     // 0x1800c519d -- the tail call, on `this` itself:
     // rtcoll::RtColl_ArrayDtorElem_180010ab0.

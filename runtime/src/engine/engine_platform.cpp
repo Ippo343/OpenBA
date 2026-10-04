@@ -144,8 +144,8 @@ bool CommandLineHasValue(const System::Configuration* cfg, const char* keyText) 
 bool CommandLineHasKey(System::Configuration* cfg, const char* keyText) {
     if (cfg == nullptr) return false;
     String key(keyText);       // 0x18000b630: zero, then Set
-    // The map sub-object at +0x10 starts with `_mapRoot`.
-    const bool found = RtSystem_ConfigMap_Find(&cfg->_mapRoot, &key) != nullptr;
+    // The map sub-object at +0x10 starts with `_map.root`.
+    const bool found = RtSystem_ConfigMap_Find(&cfg->_map.root, &key) != nullptr;
     // `key` releases here — retail's 0x1800a1934, now ~String.
     return found;
 }
@@ -178,16 +178,12 @@ void ResetConfigurations(EngineT* self) {
     //
     // NOT CONVERTED (ENDGAME B.3.2 step 2): 0x18000f7d0 is `rtsetclear::Clear`,
     // a `Collection::Set<Pair<String,String>>::Clear` door. Calling it as a
-    // member needs `Persistence::settingsMapRoot` (runtime/types/io/
-    // Persistence.h, currently a raw `void* settingsMapRoot` + a separate
-    // `settingsMapCount`) to be a real `Collection::Set<Pair<String,String>,
-    // DefaultAllocator, Pair<String,String>, AVLCompare>` member — that header
-    // is outside this batch's file list (runtime/types/io, not runtime/src/
-    // engine), so it stays the free body.
-    // LEFT: the Set helper takes the rtsetavl::Set POD over the Persistence
-    // object's settings map (Persistence.h / Collection.h, not this block's).
-    if (void* ps = ::IO::Persistence::_singleton) {
-        rtsetclear::Clear(static_cast<rtsetavl::Set*>(ps));       // 0x18000f7d0   // LEFT: H5 IO::Persistence holds its settings map as loose fields (_settingsMapRoot / _settingsMapCount at +0x00 / +0x08), so the erased Set core takes the object as its rtsetavl::Set header (typed with _savePath and the worker: ledger)
+    // member needs `Persistence::_settingsMap` (the three-word
+    // `RtIo::SettingsMap` header, B.4 wave X) to be a real
+    // `Collection::Set<Pair<String,String>, ...>` member (H5), so it stays the
+    // free body, handed the header.
+    if (::IO::Persistence* ps = ::IO::Persistence::_singleton) {
+        rtsetclear::Clear(&ps->_settingsMap);                     // 0x18000f7d0
     }
 
     // Each Configuration below is freed without its destructor and rebuilt with

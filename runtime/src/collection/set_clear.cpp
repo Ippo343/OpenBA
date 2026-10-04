@@ -92,6 +92,7 @@
 #include "../../types/collection/Collection.h"
 #include "set_avl.h"
 #include "array_destroy_internal.h"
+#include "../../types/io/Persistence.h"   // RtIo::SettingsMap: the header Clear takes
 
 
 namespace rtsetclear {
@@ -200,13 +201,13 @@ static_assert(sizeof(PairSet::Node) == 0x30, "0x18000f970 allocates 0x30");
 // "cleanup" that skipped it would differ from retail on any Set whose count was
 // stale.
 // ---------------------------------------------------------------------------
-void Clear(Set* set) {
+void Clear(RtIo::SettingsMap* set) {
     // ONE LINE ONTO THE INSTANTIATION (ENDGAME B.3.2 step 1). The template's
     // `Clear` is retail's 0x18000f7d0 arm for arm: both of the root's subtrees
     // post-order, then the root's element, then the root's node, then the two
     // zero stores — which retail performs even when the tree was already empty
     // (it branches to a second copy of them rather than skipping).
-    reinterpret_cast<PairSet*>(set)->Clear();  // LEFT: SIG rtsetclear::Clear (its callers hold the erased rtsetavl::Set)
+    reinterpret_cast<PairSet*>(set)->Clear();  // LEFT: FLOOR? the settings map header (RtIo::SettingsMap) viewed as the Collection::Set<Pair<String,String>> instantiation whose Clear IS 0x18000f7d0: its owners (Persistence, Configuration) hold the three-word header, not the class (H5)
 }
 
 }  // namespace rtsetclear

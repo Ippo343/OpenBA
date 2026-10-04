@@ -352,8 +352,8 @@ IO::FileSystem* Ctor_FileSystem(IO::FileSystem* self) {
 // something this body can fix, and a silent `if (v)` here would only hide it.
 // ===========================================================================
 IO::Persistence* Ctor_Persistence(IO::Persistence* self) {
-    self->_settingsMapRoot  = nullptr;
-    self->_settingsMapCount = 0;
+    self->_settingsMap.root  = nullptr;
+    self->_settingsMap.count = 0;
     // ENDGAME B.3.9 IO (W2, foreign site): the embedded worker is the REAL
     // class -- ??0Thread(0x10000), its vptr, the +0x40..+0x88 stores
     // (runtime/types/io/PersistenceWorker.h), the same steps in the same order.

@@ -1930,8 +1930,9 @@ rtsetavl::Node** Insert(rtsetavl::Set* set, rtsetavl::Node** outSlot, char* cons
 void SubtreeFree(void* ignoredThis, rtsetavl::Node* node);  // 0x180027970
 }  // namespace rtpathid
 
+namespace RtIo { struct SettingsMap; }   // io/Persistence.h
 namespace rtsetclear {
 // ---- collection/set_clear.cpp
-void Clear(rtsetavl::Set* set);  // 0x18000f7d0
+void Clear(RtIo::SettingsMap* set);  // 0x18000f7d0
 }  // namespace rtsetclear
 // ==== end B3R W0-P0c ====

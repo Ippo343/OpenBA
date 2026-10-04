@@ -75,11 +75,11 @@
 // are what get replaced, and the `offsetof` asserts below are what stops the
 // replacement from moving anything.
 //
-// **THE MAP'S ROOT IS `_mapRoot`.** `RtSystem_ConfigMap_Find` (0x18002ace0),
+// **THE MAP'S ROOT IS `_map.root`.** `RtSystem_ConfigMap_Find` (0x18002ace0),
 // `IO::FileSystem::Startup` and `FileSystem::SetupDirectories` all read the
 // map as "a `void*` at `configuration + 0x10` whose first qword is the root".
 // That spelling does not change in this commit; the member bodies now reach it
-// as `&_mapRoot`, which is the same address by construction.
+// as `&_map.root`, which is the same address by construction.
 //
 // ⚠ THE GREP HAZARD (B34_RULES §7.2) is armed for this name: inside a
 // `namespace System { ... }` block a bare `Configuration` binds this class.
@@ -96,7 +96,7 @@
 // every namespace block, never inside an `#if` (B31 hygiene / B34_BRIEFS §A.8).
 #include "String.h"
 
-namespace RtIo { struct SettingsMapNode; }   // io/Persistence.h: the map's node
+#include "../io/Persistence.h"   // RtIo::SettingsMapNode / SettingsMap: the map's node and header
 
 namespace System {
 
@@ -173,9 +173,9 @@ public:
     // `Set<Pair<String,String>>` in this DLL shares (Map_Find 0x18002ace0 and
     // Map_Insert 0x18002a090 serve this map and IO::Persistence's alike): two
     // Strings, then parent / left / right (io/Persistence.h).
-    RtIo::SettingsMapNode* _mapRoot;  // +0x10
-    int32_t  _mapCount;      // +0x18
-    uint32_t _pad1c;         // +0x1c  ⚠ NEVER WRITTEN by the constructor
+    // The map's {root, count, pad} header (RtIo::SettingsMap): root +0x10,
+    // count +0x18, and +0x1c  ⚠ NEVER WRITTEN by the constructor.
+    RtIo::SettingsMap _map;  // +0x10
     // B.4 R-SYS: +0x20..+0x2b are THREE DWORDS, not a {ptr,int} sub-object.
     // Named by the exported one-line accessors (Runtime-x64.dll):
     //   ?SetCurrentPlatform@ 0x1800c4c20  MOV dword [RCX+0x20],EDX
@@ -196,9 +196,9 @@ public:
 static_assert(sizeof(Configuration) == 0x30, "System::Configuration is 0x30 bytes");
 static_assert(offsetof(Configuration, _entries)     == 0x00, "Array data @ +0x00");
 static_assert(offsetof(Configuration, _entryCount)  == 0x08, "0x180010ab0 reads [this+0x8]");
-static_assert(offsetof(Configuration, _mapRoot)     == 0x10, "LEA RAX,[RCX+0x10]");
-static_assert(offsetof(Configuration, _mapCount)    == 0x18, "MOV dword [RAX+0x08],EDX");
-static_assert(offsetof(Configuration, _pad1c)       == 0x1c, "never written -- keep it named");
+static_assert(offsetof(Configuration, _map)         == 0x10, "LEA RAX,[RCX+0x10]");
+static_assert(offsetof(Configuration, _map) + offsetof(RtIo::SettingsMap, count) == 0x18, "MOV dword [RAX+0x08],EDX");
+static_assert(offsetof(Configuration, _map) + offsetof(RtIo::SettingsMap, pad0c) == 0x1c, "never written -- keep it named");
 static_assert(offsetof(Configuration, _currentPlatform) == 0x20, "GetCurrentPlatform 0x1800c5270 MOV EAX,[RCX+0x20]");
 static_assert(offsetof(Configuration, _currentLanguage) == 0x24, "GetCurrentLanguage 0x1800c4c30 MOV EAX,[RCX+0x24]");
 static_assert(offsetof(Configuration, _currentBuild)    == 0x28, "GetCurrentBuild 0x1800c52f0 MOV EAX,[RCX+0x28]");
@@ -290,8 +290,8 @@ namespace RtSystem { struct String; }   // system/String.h
 namespace System { class String; }       // system/String.h
 
 // ---- system/configuration.cpp
-// B.4 R-SYS: typed. `root` is the map's first qword (Configuration::_mapRoot,
-// IO::Persistence::_settingsMapRoot): retail loads `node = [RCX]`. The key is
+// B.4 R-SYS: typed. `root` is the map's first qword (Configuration::_map.root,
+// IO::Persistence::_settingsMap.root): retail loads `node = [RCX]`. The key is
 // the real String (`MOV R9,[RDX]` reads its data pointer); the result is the
 // node or null.
 extern "C" RtIo::SettingsMapNode* RtSystem_ConfigMap_Find(

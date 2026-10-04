@@ -166,7 +166,7 @@ bool RetailKeyLess(const char* a, const char* b) {
 const char* FindSettingValue(const ::IO::Persistence* persistence, const char* key) {
     // The tree's own guard; retail's `TEST R11,R11` is the root test the loop makes.
     if (persistence == nullptr) return nullptr;
-    const RtIo::SettingsMapNode* node = persistence->_settingsMapRoot;   // +0x00
+    const RtIo::SettingsMapNode* node = persistence->_settingsMap.root;   // +0x00
     while (node != nullptr) {
         const char* nodeKey = node->key._data;                            // +0x00
         if (RetailKeyLess(key, nodeKey)) {

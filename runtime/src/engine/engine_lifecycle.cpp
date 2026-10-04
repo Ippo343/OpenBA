@@ -295,8 +295,8 @@ extern "C" System::Configuration* RtSystem_Configuration_Ctor(System::Configurat
     self->_entries     = nullptr;   // +0x00
     self->_entryCount  = 0;         // +0x08
     self->_pad0c       = 0;         // +0x0c
-    self->_mapRoot     = nullptr;   // +0x10
-    self->_mapCount    = 0;         // +0x18
+    self->_map.root     = nullptr;   // +0x10
+    self->_map.count    = 0;         // +0x18
     self->_currentPlatform = 0;     // +0x20  \ retail's one qword zero (H7)
     self->_currentLanguage = 0;     // +0x24  /
     self->_currentBuild    = 0;     // +0x28

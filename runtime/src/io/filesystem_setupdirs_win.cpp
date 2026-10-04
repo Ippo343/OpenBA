@@ -192,7 +192,7 @@ bool ConfigHasKey(::System::Configuration* cfg, const char* key) {
     System::String k(key);
     // Configuration + 0x10. Unexported (no name in either build): 0x18002ace0
     // is RtSystem_ConfigMap_Find (runtime/src/system/configuration.cpp).
-    return RtSystem_ConfigMap_Find(&cfg->_mapRoot, &k) != nullptr;
+    return RtSystem_ConfigMap_Find(&cfg->_map.root, &k) != nullptr;
 }
 
 // The `-pathres` / `-pathdat` / `-pathpkg` override, which retail emits three

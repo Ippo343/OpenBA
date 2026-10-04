@@ -540,7 +540,8 @@ using rtsetavl::Set;
 // the one retrace / erase core serves them both.
 static_assert(sizeof(StringPair) == 0x10, "the element of a 0x30-byte node");
 static_assert(sizeof(StringPairNode) == 0x30, "0x18000f970 allocates 0x30");
-static_assert(offsetof(StringPairNode, element) == 0x00, "StringPairNode::element @ +0x00");
+static_assert(offsetof(StringPairNode, key)     == 0x00, "StringPairNode::key @ +0x00");
+static_assert(offsetof(StringPairNode, value)   == 0x08, "StringPairNode::value @ +0x08");
 static_assert(offsetof(StringPairNode, parent)  == offsetof(Node, parent),  "StringPairNode::parent @ +0x10");
 static_assert(offsetof(StringPairNode, left)    == offsetof(Node, left),    "StringPairNode::left @ +0x18");
 static_assert(offsetof(StringPairNode, right)   == offsetof(Node, right),   "StringPairNode::right @ +0x20");
@@ -558,8 +559,10 @@ static_assert(offsetof(FilenamePairNode, right)   == offsetof(Node, right),   "F
 static_assert(offsetof(FilenamePairNode, balance) == offsetof(Node, balance), "FilenamePairNode::balance @ +0x28");
 static_assert(offsetof(FilenamePairNode, height)  == offsetof(Node, height),  "FilenamePairNode::height @ +0x2a");
 static_assert(offsetof(FilenamePairNode, pad2c)   == 0x2c, "FilenamePairNode::pad2c @ +0x2c");
-static_assert(sizeof(KeyedSet<StringPairNode>) == sizeof(Set), "the {root, count} header");
-static_assert(offsetof(KeyedSet<StringPairNode>, count) == offsetof(Set, count), "KeyedSet::count @ +0x08");
+static_assert(sizeof(RtIo::SettingsMap) == sizeof(Set), "the {root, count} header");
+static_assert(offsetof(RtIo::SettingsMap, count) == offsetof(Set, count), "SettingsMap::count @ +0x08");
+static_assert(sizeof(KeyedSet<FilenamePairNode>) == sizeof(Set), "the {root, count} header");
+static_assert(offsetof(KeyedSet<FilenamePairNode>, count) == offsetof(Set, count), "KeyedSet::count @ +0x08");
 
 // ---------------------------------------------------------------------------
 // The inline strcmp of 0x18002a1c4 / 0x18002a223. See the banner.
@@ -602,8 +605,8 @@ static int StrCmpSigned(const char* a, const char* b) {
 // ---------------------------------------------------------------------------
 StringPairNode* StringPairCtor(StringPairNode* node, const StringPair* src,
                                StringPairNode* parent) {
-    StringAddRefInto(&node->element.key,   src->key);
-    StringAddRefInto(&node->element.value, src->value);
+    StringAddRefInto(&node->key._data,   src->key);
+    StringAddRefInto(&node->value._data, src->value);
 
     node->parent  = parent;
     node->left    = nullptr;
@@ -635,7 +638,7 @@ namespace {
 // the node allocator, and the retrace reached through its own address door.
 struct StringPolicy : Collection::detail::NoCounters {
     using Node    = StringPairNode;
-    using SetT    = KeyedSet<StringPairNode>;
+    using SetT    = RtIo::SettingsMap;
     using Element = StringPair;
 
     static Node*&   Root(SetT* s)  { return s->root; }
@@ -643,7 +646,7 @@ struct StringPolicy : Collection::detail::NoCounters {
     // Retail re-reads the node's key (`MOV R8,[RDI]`, 0x18002a1b4) and the
     // search key (0x18002a1bc, and AGAIN at 0x18002a212) every iteration; the
     // shared pattern calls these at exactly those points.
-    static char* NodeKey(const Node* n) { return n->element.key; }
+    static char* NodeKey(const Node* n) { return n->key._data; }
     static char* SearchKey(const Element* p) { return p->key; }
     static bool  IsNull(char* k) { return k == nullptr; }
     static bool  Less(char* a, char* b) { return StrCmpSigned(a, b) < 0; }
@@ -669,7 +672,7 @@ struct StringPolicy : Collection::detail::NoCounters {
 };
 }  // namespace
 
-StringPairNode** StringInsertCore(KeyedSet<StringPairNode>* set, StringPairNode** outSlot,
+StringPairNode** StringInsertCore(RtIo::SettingsMap* set, StringPairNode** outSlot,
                                   const StringPair* pair) {
     return Collection::detail::InsertCorePattern<StringPolicy>(set, outSlot, pair);
 }
@@ -689,8 +692,8 @@ StringPairNode** StringInsertCore(KeyedSet<StringPairNode>* set, StringPairNode*
 //
 // RAX at the RET is RBX == the SECOND parameter.
 // ---------------------------------------------------------------------------
-Node** StringMapInsert(Set* map, Node** outSlot,
-                       char* const* key, char* const* value) {
+StringPairNode** StringMapInsert(RtIo::SettingsMap* map, StringPairNode** outSlot,
+                                 char* const* key, char* const* value) {
     // The probe ALLOCATES, so it cannot run from a *PortInit (WAVE9.md, lane
     // PKG2). It self-schedules here instead: this moment is provably safe
     // because the caller is itself about to allocate a node.
@@ -698,7 +701,7 @@ Node** StringMapInsert(Set* map, Node** outSlot,
     StringAddRefInto(&temp.key,   *key);
     StringAddRefInto(&temp.value, *value);
 
-    StringInsertCore(reinterpret_cast<KeyedSet<StringPairNode>*>(map), reinterpret_cast<StringPairNode**>(outSlot), &temp);  // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
+    StringInsertCore(map, outSlot, &temp);
 
     StringReleaseInline(&temp.value);
     StringReleaseInline(&temp.key);

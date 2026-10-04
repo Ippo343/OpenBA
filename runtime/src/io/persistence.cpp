@@ -51,15 +51,14 @@ namespace {
 // (runtime/src/collection/avl_trees.cpp). The node each hands back IS
 // `RtIo::SettingsMapNode` (Persistence.h).
 const SettingsMapNode* CallMapFind(const IO::Persistence* self, const System::String& key) {
-    return RtSystem_ConfigMap_Find(&self->_settingsMapRoot, &key);   // Map_Find, retail 0x18002ace0
+    return RtSystem_ConfigMap_Find(&self->_settingsMap.root, &key);   // Map_Find, retail 0x18002ace0
 }
-SettingsMapNode* CallMapInsert(void* map, const System::String& key,
+SettingsMapNode* CallMapInsert(RtIo::SettingsMap* map, const System::String& key,
                                const System::String& value) {
-    rtsetavl::Node* node = nullptr;
+    SettingsMapNode* node = nullptr;
     rtavl::StringMapInsert(                                           // Map_Insert, retail 0x18002a090
-        static_cast<rtsetavl::Set*>(map),                             // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
-        &node, &key._data, &value._data);
-    return reinterpret_cast<SettingsMapNode*>(node);   // LEFT: SIG rtavl::StringMapInsert — StringPairNode (avl_trees.h, char* pair) and RtIo::SettingsMapNode (Persistence.h, String pair) are two declarations of one node: unify them
+        map, &node, &key._data, &value._data);
+    return node;
 }
 
 // Retail's key encoding: bare concatenation, no separator. "Game" + "StatusIconEnable"
@@ -197,7 +196,7 @@ void Persistence::Set(const char* section, const char* key, int value) {
     System::String valStr = System::String::Format("%i", value);
     System::String keyStr = ::MakeSettingsKey(section, key);
 
-    SettingsMapNode* const node = ::CallMapInsert(this, keyStr, valStr);
+    SettingsMapNode* const node = ::CallMapInsert(&_settingsMap, keyStr, valStr);
 
     // Retail's asymmetric release-then-adopt, transcribed exactly
     // (0x1800b80c0 + 0x50..0x90): Map_Insert only installs the value on a
@@ -221,7 +220,7 @@ void Persistence::Set(const char* section, const char* key, bool value) {
     System::String valStr = System::String::Format("%s", value ? "true" : "false");
     System::String keyStr = ::MakeSettingsKey(section, key);
 
-    SettingsMapNode* const node = ::CallMapInsert(this, keyStr, valStr);
+    SettingsMapNode* const node = ::CallMapInsert(&_settingsMap, keyStr, valStr);
 
     // Same shape as Set(int) above -- `String::operator=`.
     if (node->value._data != valStr._data) {
