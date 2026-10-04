@@ -581,7 +581,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
             bool blocked = false;
             if (occupant != nullptr) {
-                int64_t buildingIBP = 0;
+                TradeComponent* buildingIBP = nullptr;
                 fn_FindComponent_Building(occupant, &buildingIBP);
                 // ⚠ fn_FindComponent_Building is a MISLABEL — retail 0x140015140
                 // matches DWORD_1401c4b80, which is TradeComponent, not any notion of
@@ -592,7 +592,7 @@ void AnimalComponent::Update(const System::Time* time) {
                 // BANISHED_LIVE_TRADE_TIDS on animal pathing — the only tiles whose
                 // verdict changes when 0x1401c4b80 is registered are trading-post
                 // tiles. See reference_misnamed_component_finders.
-                blocked = (buildingIBP == 0);
+                blocked = (buildingIBP == nullptr);
             }
 
             if ((cells && CellTerrain(cells, cell) != 0x02) || blocked) {

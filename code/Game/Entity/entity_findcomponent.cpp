@@ -54,15 +54,12 @@
 // B3R W2-EZ: moved here from engine/funcs/engine_funcs.cpp. Its `fn_IsDerivedFrom`
 // read (the null-safe trampoline EngineFuncsInit installed) is
 // Object::IsDerivedFromNullSafe, the same trampoline by name (B3R_RULES §3).
-void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr) {
-    // The out slot is an InternalPtr<Component> (retval is void* for the callers of
-    // other blocks: LEFT). Zero it (InternalBasePtr = nullptr).
-    Component** out = (Component**)retval;   // LEFT: SIG fn_FindComponent_* (void* out; callers in other blocks, wave X)
-    *out = nullptr;
-    if (!entity || !typeIdPtr) return;
+Component* Entity_FindComponentByExeTypeId(ComponentEntity* e, const uint32_t* typeIdPtr) {
+    // The caller's out slot (an InternalPtr<T>, held as T*) is written by the typed
+    // wrapper (Entity/exe_bodies.h) with what this returns: null on every miss.
+    if (!e || !typeIdPtr) return nullptr;
 
     uint32_t targetTypeId = *typeIdPtr;
-    ComponentEntity* e = (ComponentEntity*)entity;   // LEFT: SIG fn_FindComponent_* (void* entity; wave X)
 
     // Component array ComponentEntity::_components (+0x30), count _componentCount (+0x38)
     Object::InternalPtr<Component>* compArray = e->_components;
@@ -85,124 +82,132 @@ void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeI
         }
     }
 
-    // Store result (InternalBasePtr::InternalBasePtr(retval, found): one qword store)
-    *out = found;
+    // The wrapper stores it (InternalBasePtr::InternalBasePtr(retval, found): one qword store)
+    return found;
 }
 
 namespace {
-inline void FindByTypeId(void* entity, void* retval, uint32_t typeId) {
+template <class T>
+inline void FindByTypeId(ComponentEntity* entity, T** retval) {
+    uint32_t typeId = T::TypeId();
     Entity_FindComponentByExeTypeId(entity, retval, &typeId);
 }
 }  // namespace
 
+// B4 FORWARD: Dialog/residenceui.cpp still calls this (its local holds the
+// StorageComponent as uintptr_t: known_port_issues 14a row 452 reads it as another class).
+void fn_FindComponent_Storage(ComponentEntity* entity, uintptr_t* retval) {
+    fn_FindComponent_Storage(entity, (StorageComponent**)retval);   // LEFT: SIG residenceui.cpp:460 holds the component as uintptr_t (X3-GAME's file)
+}
+
 // fn_FindComponent_Build -- MapComponent (cell 0x1401c79e0), retail FUN_140004680. MISNOMER: the cell is MapComponent, not BuildComponent.
-void fn_FindComponent_Build(void* entity, void* retval) {
-    FindByTypeId(entity, retval, MapComponent::TypeId());
+void fn_FindComponent_Build(ComponentEntity* entity, MapComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_BuildState -- StateMachineComponent (cell 0x1401c7d98), retail FUN_140003ea0.
-void fn_FindComponent_BuildState(void* entity, void* retval) {
-    FindByTypeId(entity, retval, StateMachineComponent::TypeId());
+void fn_FindComponent_BuildState(ComponentEntity* entity, StateMachineComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_ConsumeProduce -- ConsumeProduceComponent (cell 0x1401c7350), retail FUN_14000b6f0.
-void fn_FindComponent_ConsumeProduce(void* entity, void* retval) {
-    FindByTypeId(entity, retval, ConsumeProduceComponent::TypeId());
+void fn_FindComponent_ConsumeProduce(ComponentEntity* entity, ConsumeProduceComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Position -- BuildComponent (cell 0x1401c7008), retail FUN_14000d6c0.
-void fn_FindComponent_Position(void* entity, void* retval) {
-    FindByTypeId(entity, retval, BuildComponent::TypeId());
+void fn_FindComponent_Position(ComponentEntity* entity, BuildComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Destroy -- DestroyComponent (cell 0x1401c75f0), retail FUN_140005780.
-void fn_FindComponent_Destroy(void* entity, void* retval) {
-    FindByTypeId(entity, retval, DestroyComponent::TypeId());
+void fn_FindComponent_Destroy(ComponentEntity* entity, DestroyComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Building -- TradeComponent (cell 0x1401c4b80), retail FUN_140015140. MISNOMER: a TRADING-POST finder, not a "building" finder.
-void fn_FindComponent_Building(void* entity, void* retval) {
-    FindByTypeId(entity, retval, TradeComponent::TypeId());
+void fn_FindComponent_Building(ComponentEntity* entity, TradeComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Work -- WorkComponent (cell 0x1401c8070), retail FUN_140003050. WorkComponent, not WorkPlaceComponent (see fn_FindComponent_WorkPlace).
-void fn_FindComponent_Work(void* entity, void* retval) {
-    FindByTypeId(entity, retval, WorkComponent::TypeId());
+void fn_FindComponent_Work(ComponentEntity* entity, WorkComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Attendance -- AttendanceComponent (cell 0x1401c3f40), retail FUN_1400105e0.
-void fn_FindComponent_Attendance(void* entity, void* retval) {
-    FindByTypeId(entity, retval, AttendanceComponent::TypeId());
+void fn_FindComponent_Attendance(ComponentEntity* entity, AttendanceComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Pasture -- PastureComponent (cell 0x1401c7ba0), retail FUN_140004fe0.
-void fn_FindComponent_Pasture(void* entity, void* retval) {
-    FindByTypeId(entity, retval, PastureComponent::TypeId());
+void fn_FindComponent_Pasture(ComponentEntity* entity, PastureComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Orchard -- OrchardComponent (cell 0x1401c46b0), retail FUN_140005440.
-void fn_FindComponent_Orchard(void* entity, void* retval) {
-    FindByTypeId(entity, retval, OrchardComponent::TypeId());
+void fn_FindComponent_Orchard(ComponentEntity* entity, OrchardComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_WorkPlace -- WorkPlaceComponent (cell 0x1401c80e0), retail FUN_140002e10.
-void fn_FindComponent_WorkPlace(void* entity, void* retval) {
-    FindByTypeId(entity, retval, WorkPlaceComponent::TypeId());
+void fn_FindComponent_WorkPlace(ComponentEntity* entity, WorkPlaceComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_SM -- ClearAreaComponent (cell 0x1401c71c8), retail FUN_14000a170.
-void fn_FindComponent_SM(void* entity, void* retval) {
-    FindByTypeId(entity, retval, ClearAreaComponent::TypeId());
+void fn_FindComponent_SM(ComponentEntity* entity, ClearAreaComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Citizen -- CitizenComponent (cell 0x1401c7158), retail FUN_140009790.
-void fn_FindComponent_Citizen(void* entity, void* retval) {
-    FindByTypeId(entity, retval, CitizenComponent::TypeId());
+void fn_FindComponent_Citizen(ComponentEntity* entity, CitizenComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Storage -- StorageComponent (cell 0x1401c7e78), retail FUN_140006270.
-void fn_FindComponent_Storage(void* entity, void* retval) {
-    FindByTypeId(entity, retval, StorageComponent::TypeId());
+void fn_FindComponent_Storage(ComponentEntity* entity, StorageComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Cemetery -- CemeteryComponent (cell 0x1401c4090), retail FUN_140010a00.
-void fn_FindComponent_Cemetery(void* entity, void* retval) {
-    FindByTypeId(entity, retval, CemeteryComponent::TypeId());
+void fn_FindComponent_Cemetery(ComponentEntity* entity, CemeteryComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Immigration -- ImmigrationComponent (cell 0x1401c4480), retail FUN_140012020.
-void fn_FindComponent_Immigration(void* entity, void* retval) {
-    FindByTypeId(entity, retval, ImmigrationComponent::TypeId());
+void fn_FindComponent_Immigration(ComponentEntity* entity, ImmigrationComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Tracker -- TrackerComponent (cell 0x1401c4b10), retail FUN_140013320.
-void fn_FindComponent_Tracker(void* entity, void* retval) {
-    FindByTypeId(entity, retval, TrackerComponent::TypeId());
+void fn_FindComponent_Tracker(ComponentEntity* entity, TrackerComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_MeshInstance -- StatusIconComponent (cell 0x1401c7e08), retail FUN_140002f90. MISNOMER: finds StatusIconComponent.
-void fn_FindComponent_MeshInstance(void* entity, void* retval) {
-    FindByTypeId(entity, retval, StatusIconComponent::TypeId());
+void fn_FindComponent_MeshInstance(ComponentEntity* entity, StatusIconComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Character -- ModelComponent (cell 0x1401c7a50), retail FUN_140003f60. MISNOMER: finds ModelComponent.
-void fn_FindComponent_Character(void* entity, void* retval) {
-    FindByTypeId(entity, retval, ModelComponent::TypeId());
+void fn_FindComponent_Character(ComponentEntity* entity, ModelComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_MultiObject -- MultiObjectComponent (cell 0x1401c7ac0), retail FUN_140004740.
-void fn_FindComponent_MultiObject(void* entity, void* retval) {
-    FindByTypeId(entity, retval, MultiObjectComponent::TypeId());
+void fn_FindComponent_MultiObject(ComponentEntity* entity, MultiObjectComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Fire -- FireComponent (cell 0x1401c41e0).
-void fn_FindComponent_Fire(void* entity, void* retval) {
-    FindByTypeId(entity, retval, FireComponent::TypeId());
+void fn_FindComponent_Fire(ComponentEntity* entity, FireComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // fn_FindComponent_Unknown7ee8 -- StorageLocationComponent (cell 0x1401c7ee8). MISNOMER: the cell is StorageLocationComponent.
-void fn_FindComponent_Unknown7ee8(void* entity, void* retval) {
-    FindByTypeId(entity, retval, StorageLocationComponent::TypeId());
+void fn_FindComponent_Unknown7ee8(ComponentEntity* entity, StorageLocationComponent** retval) {
+    FindByTypeId(entity, retval);
 }
 
 // ============================================================
