@@ -556,7 +556,7 @@ void TutorialInstance::RefreshStepUI() {
 // ===========================================================================
 extern "C" { int g_TutUndoDepth = 0; int g_TutUndoIndex = -1; }
 
-void TutorialInstance::StepExecute(void* param2, void* param3, uint64_t param4) {
+void TutorialInstance::StepExecute(const System::Time* param2, const Achievement::GoalList* param3, uint64_t param4) {
     Tutorial* tutorial = tutorialDef;
     if (!tutorial) {
         // Both of retail's early returns are silent, which is fine in retail and

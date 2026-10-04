@@ -26,6 +26,7 @@
 #include <cstdint>
 #include "object/External.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
+namespace System { class Time; }
 
 class TutorialSetup : public Object::External {
     DECLARE_EXE_TYPE(TutorialSetup)
@@ -37,7 +38,7 @@ public:
     bool          Serialize(IO::Stream& stream) override;                // [5] 0x1400e2000
     // [6] Reconstruct, [7] Destruct: pure (External's)
     virtual void  Begin() = 0;                                     // [8] pure
-    virtual void  Update(void* time) = 0;                          // [9] pure
+    virtual void  Update(const System::Time* time) = 0;                          // [9] pure
     virtual void  End() = 0;                                       // [10] pure
 
 protected:

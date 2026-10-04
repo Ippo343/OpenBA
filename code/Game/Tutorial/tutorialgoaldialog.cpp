@@ -92,7 +92,7 @@ Object::External* TutorialGoalDialog::Construct() {
 // Finds the open dialog by name (+0x20). Met when it is open and either no
 // target description is named, or the dialog's data source is that
 // description (directly, or through a ComponentEntity's +0x28 Description).
-bool TutorialGoalDialog::IsComplete(void* /*time*/, void* /*instance*/) {
+bool TutorialGoalDialog::IsComplete(const System::Time* /*time*/, void* /*instance*/) {
     Object::InternalPtr<UI::DialogInstance> dialogPtr;
     FindDialogByName_Impl(&dialogPtr, &DialogName());
     if (dialogPtr.Get() == nullptr) return false;   // dialog not open

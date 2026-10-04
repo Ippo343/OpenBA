@@ -82,7 +82,7 @@ void TutorialGoalButton::Destruct() { this->~TutorialGoalButton(); }
 // TutorialGoalButton::IsComplete (vtable +0x40, 0x1400dece0)
 // ============================================================
 // Finds the UI element by path, checks its flag bits.
-bool TutorialGoalButton::IsComplete(void* /*time*/, void* /*instance*/) {
+bool TutorialGoalButton::IsComplete(const System::Time* /*time*/, void* /*instance*/) {
     // Find UI element by elementPath (+0x20)
     Object::InternalPtr<UI::Element> elementIBP;
     FindUIElementByPath_Impl(&elementIBP, &ElementPath(), nullptr);   // 0x1400e1870

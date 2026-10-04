@@ -39,7 +39,7 @@ public:
     bool              Serialize(IO::Stream& stream) override;            // [5] 0x1400defd0
     Object::External* Reconstruct() override;                      // [6] 0x140027520
     void              Destruct() override;                         // [7] 0x140001640
-    bool              IsComplete(void* time, void* instance) override;  // [8] 0x1400deee0
+    bool              IsComplete(const System::Time* time, void* instance) override;  // [8] 0x1400deee0
     virtual Object::External* Construct();                         // [9] 0x1400274b0
 
 public:

@@ -181,7 +181,7 @@ void TutorialSetupDialog::Begin() {
 // ============================================================
 // Every tick: re-show the listed elements, re-open the highlight unless one
 // is already open. `time` is unused.
-void TutorialSetupDialog::Update(void* /*time*/) {
+void TutorialSetupDialog::Update(const System::Time* /*time*/) {
     ShowListedElements();          // 0x1400e29f0
     OpenHighlightDialog('\x01');   // 0x1400e2700
 }

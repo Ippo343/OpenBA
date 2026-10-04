@@ -36,7 +36,7 @@ public:
     Object::External* Reconstruct() override;                      // [6] 0x1400284d0
     void              Destruct() override;                         // [7] 0x140001640
     void              Begin() override;                            // [8] 0x1400e20d0
-    void              Update(void* /*time*/) override {}           // [9] 0x1400e20c0 RET
+    void              Update(const System::Time* /*time*/) override {}           // [9] 0x1400e20c0 RET
     void              End() override {}                            // [10] 0x1400e20b0 RET
     virtual Object::External* Construct();                         // [11] 0x140028470
 
