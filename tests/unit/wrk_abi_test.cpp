@@ -293,8 +293,8 @@ UNIT_TEST(wrk_leaf_plantorchard) {
 
 UNIT_TEST(wrk_leaf_tendarea) {
     WRK_LEAF_SHAPE(TendArea, Work, 0x60);
-    CHECK_EQ(offsetof(TendArea, bstRoot), (size_t)0x48);
-    CHECK_EQ(offsetof(TendArea, workerCount), (size_t)0x50);
+    CHECK_EQ(offsetof(TendArea, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(TendArea, _citizens) + offsetof(TendArea::CitizenSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(TendArea, tendMode), (size_t)0x58);
 }
 

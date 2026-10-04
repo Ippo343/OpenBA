@@ -232,8 +232,8 @@ Work* CF_MakeTendArea(CropFieldComponent* comp) {
     ComponentEntity* entity = comp->_entity;
     TendArea* work = new (mem) TendArea();
     work->InitFromEntity(&entity);
-    work->bstRoot = nullptr;
-    work->workerCount = 0;
+    work->_citizens._root = nullptr;
+    work->_citizens._count = 0;
     work->tendMode = 0;
     return work;
 }
