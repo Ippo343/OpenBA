@@ -156,8 +156,9 @@ class PopulationComponent;    // Component/PopulationComponent.h
 int Pf_PastureTargetPick_53ca0(const PopulationComponent* population, int herdCell);  // 0x140053ca0
 
 // ---- action_pf_pools.cpp
-void Pf_VectorResize14_ee40(int64_t* param_1, int param_2);  // 0x14001ee40
-void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001f8d0
+struct GeometryBatchVertex;   // Game/WorldGeometryElements.h
+void Pf_VectorResize14_ee40(RawArray<GeometryBatchVertex>* arr, int newCount);  // 0x14001ee40
+void Pf_VectorResize14Fill_f8d0(RawArray<GeometryBatchVertex>* arr, int newCount, const GeometryBatchVertex* fill);  // 0x14001f8d0
 void Pf_VectorResize60_fa80(int64_t* param_1, int param_2, uint64_t* param_3);  // 0x14001fa80
 
 // ---- action_pf_region.cpp

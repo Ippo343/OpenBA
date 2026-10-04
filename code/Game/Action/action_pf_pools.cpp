@@ -301,8 +301,7 @@ void RegionNodesFree(RegionNode* first, int count) {
 // are the vertex-array serializer 0x14001f9c0, the decal / road builders 0x1400ace40,
 // 0x1400b0d00 and 0x1400af370; the copy is retail's qword, qword, dword
 // (0x14001eec4..0x14001eed9).
-void Pf_VectorResize14_ee40(int64_t* param_1, int param_2) {
-    RawArray<GeometryBatchVertex>* arr = reinterpret_cast<RawArray<GeometryBatchVertex>*>(param_1);   // LEFT: SIG Pf_VectorResize14_ee40
+void Pf_VectorResize14_ee40(RawArray<GeometryBatchVertex>* arr, int param_2) {
     int iVar1 = arr->size;
     if (param_2 != iVar1) {
         GeometryBatchVertex* old = arr->data;
@@ -344,9 +343,7 @@ void Pf_VectorResize14_ee40(int64_t* param_1, int param_2) {
 // from the template. MemFree old. The loop counts (param_2-iVar4) iterations and walks
 // the dst and the old-buffer cursor in lockstep. Callers: the decal tessellator
 // 0x1400ace40 (twelve sites) and the road mesh rebuild 0x1400af370.
-void Pf_VectorResize14Fill_f8d0(int64_t* param_1, int param_2, uint64_t* param_3) {
-    RawArray<GeometryBatchVertex>* arr = reinterpret_cast<RawArray<GeometryBatchVertex>*>(param_1);   // LEFT: SIG Pf_VectorResize14Fill_f8d0
-    const GeometryBatchVertex* fill = reinterpret_cast<const GeometryBatchVertex*>(param_3);          // LEFT: SIG Pf_VectorResize14Fill_f8d0
+void Pf_VectorResize14Fill_f8d0(RawArray<GeometryBatchVertex>* arr, int param_2, const GeometryBatchVertex* fill) {
     int iVar1 = arr->size;
     if (param_2 != iVar1) {
         GeometryBatchVertex* old = arr->data;

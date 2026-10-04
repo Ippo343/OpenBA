@@ -133,7 +133,7 @@ inline void EmitVertex(GeometryBatch* batch, AvlTreeHead<DecalVertexNode>* set,
         // descriptor bytes; every shared-corner dedup hit then returns a wild index and the
         // triangle stretches off toward the bogus vertex (the "sliver to map center" bug).
         DecalVertexSetInsert(set, outNode, reinterpret_cast<const DecalVertexKey*>(rec));   // 0x14001f6b0 (key = rec) LEFT: as above
-        Pf_VectorResize14Fill_f8d0(reinterpret_cast<int64_t*>(pool), curCount + 1, reinterpret_cast<uint64_t*>(desc));   // 0x14001f8d0 (vertex = desc) LEFT: SIG Pf_VectorResize14Fill_f8d0
+        Pf_VectorResize14Fill_f8d0(pool, curCount + 1, reinterpret_cast<const GeometryBatchVertex*>(desc));   // 0x14001f8d0 (vertex = desc) LEFT: the corner record is raw dwords (above)
     } else {
         idx = (uint16_t)node->key.index;   // the low word (retail reads a word at node+0x14)
     }
@@ -282,7 +282,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     int iVar13 = (int)kDAT_1401c23cf;
     fVar33 = (float)((batch->maxX + batch->minX) >> 1);
     int iVar25 = (batch->maxY + batch->minY) >> 1;
-    int64_t* plVar30 = reinterpret_cast<int64_t*>(&batch->vertices);   // LEFT: SIG Pf_VectorResize14_ee40 takes int64_t*
+    int64_t* plVar30 = reinterpret_cast<int64_t*>(&batch->vertices);   // LEFT: the 8+8+4 record copy below reads the vertex buffer through it
     local_2b0_0 = iVar13;
     local_2a0   = iVar25;
     local_29c   = fVar33;
@@ -393,7 +393,7 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     }
 
     // finalize: copy pooled vertices into the slot's vertex buffer.
-    Pf_VectorResize14_ee40(plVar30, pool.size);
+    Pf_VectorResize14_ee40(&batch->vertices, pool.size);
     int     total   = pool.size;
     int64_t vbBase  = *plVar30;
     int64_t srcBase = reinterpret_cast<int64_t>(pool.data);   // LEFT: the 8+8+4 record copy below is retail's (0x1400ace40); a GeometryBatchVertex assignment would change its store widths
