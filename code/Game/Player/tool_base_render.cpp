@@ -651,17 +651,17 @@ add_prebuilt:
 // EditTool_HarnessAcquire in edittool.cpp, plus the ToolUI close-button gate). These two
 // reporters stay as a tripwire — nothing should reach them now, and if something does,
 // the line names the tool class rather than leaving an unexplained AV.
-void ReportBadSelectionRef(EditTool* self, int64_t ref) {
+void ReportBadSelectionRef(int64_t self, int64_t ref) {
     static int budget = 8;
     if (budget <= 0) return;
     --budget;
-    void** vt = *reinterpret_cast<void***>(self);   // LEFT: the tripwire prints the raw vptr of a possibly-recycled block
+    void** vt = *reinterpret_cast<void***>(self);
     // Print the raw facts FIRST: if `self` is a freed/recycled block, the virtual
     // GetTypeId below can itself fault, and a dump that never printed proves nothing.
     std::fprintf(stderr, "[HighlightClear] BAD selection ref: tool=%p vtbl=%p self+0x30=0x%llx\n",
-                 static_cast<void*>(self), static_cast<void*>(vt),
+                 reinterpret_cast<void*>(self), reinterpret_cast<void*>(vt),
                  static_cast<unsigned long long>(ref));
-    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);   // LEFT: the tripwire dumps the tool's first 0x40 bytes raw
+    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);
     std::fprintf(stderr, "[HighlightClear]   tool[0x00..0x38] = %016llx %016llx %016llx "
                  "%016llx %016llx %016llx %016llx %016llx\n",
                  (unsigned long long)w[0], (unsigned long long)w[1], (unsigned long long)w[2],
@@ -677,8 +677,11 @@ void ReportBadSelectionRef(EditTool* self, int64_t ref) {
     // Only now the virtual probe (a live EditTool answers; a recycled block may not).
     // (Tripwire probe of possibly-recycled memory: a null vptr, or a null Type()
     // entry in the table it names, skips the call; the slot comes from the member.)
-    if (vt && ::Object::SlotAddressOf(self, &::Object::Base::Type)) {
-        uint32_t tid = self->Type();   // slot 2
+    // LEFT: `self` stays an integer: as an EditTool* (a final class) GCC devirtualises
+    // Type() to EditTool's own id, and this tripwire exists to ask a possibly-recycled
+    // block's REAL table (B11, X-G1-3b).
+    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(self), &::Object::Base::Type)) {
+        uint32_t tid = reinterpret_cast< ::Object::Base*>(self)->Type();   // B.3.x bridge (slot 2)
         const char* n = ::Object::GetTypeNameById(tid);
         std::fprintf(stderr, "[HighlightClear]   tool typeId=%u ('%s')\n", tid, n ? n : "?");
         std::fflush(stderr);
@@ -739,7 +742,7 @@ void Impl_cb40(EditTool* self) {
     {
         const uint64_t ref = reinterpret_cast<uint64_t>(self->lastEntityRef);   // CAST-OK: ptr_int (the tree's tripwire range probe)
         if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
-            ReportBadSelectionRef(self, (int64_t)ref);
+            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);
         } else {
             // The pointer itself can look fine while the ENTITY behind it is freed and
             // its allocation recycled — that is the other shape the reported crash can
