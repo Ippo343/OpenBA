@@ -92,16 +92,9 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
 // ============================================================
 void* ActCNR_FindComponent_3f60(uintptr_t entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<ModelComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<ModelComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
+        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<ModelComponent>());   // B4 FORWARD: receiver typed by the callers' blocks   // LEFT: SIG ActCNR_FindComponent_3f60
 }
 
-// ============================================================
-// Reimpl of FUN_14000c460 — FindComponent, type 0x1401c77b0 (GrowthComponent).
-// ============================================================
-void* ActCNR_FindComponent_c460(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<GrowthComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<GrowthComponent>());   // B4 FORWARD: receiver typed by the callers' blocks
-}
 
 // ============================================================
 // Reimpl of CreateNaturalResource_helper_cb00 (FUN_14009cb00) — cell terrain
@@ -125,7 +118,7 @@ uint64_t CheckCellTerrain(const Map* map, int cellIndex) {
         }
         // LEFT: retail returns the node pointer's bits with the low byte replaced by 1
         // (callers read only the low byte as the bool).
-        high = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(node));
+        high = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(node));   // CAST-OK: ptr_int
     }
     // CONCAT71(high>>8, 1)
     return (high & ~0xffull) | 1u;
@@ -351,7 +344,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     // LEFT: 0x140006330's C declaration (Work/exe_bodies.h, WORK-a's header) takes the
     // template as an integer.
     const RawMaterialDescription* raw = nullptr;
-    WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(material), &raw);   // 0x140006330
+    WorkAcc_FindComponent_6330(reinterpret_cast<uintptr_t>(material), &raw);   // 0x140006330   // LEFT: SIG WorkAcc_FindComponent_6330
     if (!self->mature) {
         amount = raw->_lowCreateCount;
     } else {
@@ -377,10 +370,10 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     // LEFT: 0x1400f8d50's C declaration (Player/exe_bodies.h) takes the scheduler as an
     // integer; the object it returns (+0x24 read) has no settled class.
     int64_t surfIBP = 0;
-    RemovalCalc_helper_8d50(reinterpret_cast<int64_t>(gameWorld->m_tutorial), reinterpret_cast<void**>(&surfIBP), cell);   // 0x1400f8d50
+    RemovalCalc_helper_8d50(reinterpret_cast<int64_t>(gameWorld->m_tutorial), reinterpret_cast<void**>(&surfIBP), cell);   // 0x1400f8d50   // LEFT: SIG RemovalCalc_helper_8d50 (Player/exe_bodies.h)
     uint32_t surfMatId = 0xffffffff;
     if (surfIBP != 0) {
-        surfMatId = *reinterpret_cast<uint32_t*>(surfIBP + 0x24);
+        surfMatId = *reinterpret_cast<uint32_t*>(surfIBP + 0x24);   // LEFT: the returned object's class is not settled (0x1400f8d50)
     }
 
     // Spawn a new raw-material entity cloned from the resource description's template.
@@ -455,41 +448,37 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
 
 // B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Component/spawncomponent.cpp)
 uint64_t ActCNR_CheckTerrain_cb00(void* mapGrid, int cellIndex) {
-    return CheckCellTerrain(reinterpret_cast<const Map*>(mapGrid), cellIndex);
+    return CheckCellTerrain(reinterpret_cast<const Map*>(mapGrid), cellIndex);   // LEFT: SIG ActCNR_CheckTerrain_cb00
 }
 
 // B4 FORWARD: outside callers (Component/growthcomponent.cpp)
 void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
-    SetGrowthProgress(reinterpret_cast<GrowthComponent*>(self), progress);
+    SetGrowthProgress(reinterpret_cast<GrowthComponent*>(self), progress);   // LEFT: SIG ActCNR_SetGrowthProgress_120db0
 }
 
-// B4 FORWARD: outside callers (Action/createnaturalresource.cpp)
-uint32_t ActCNR_NR_GetVariantCount_1252f0(int64_t comp) {
-    return ModelMeshGroupCount(reinterpret_cast<const ModelComponent*>(comp));
-}
 
 // B4 FORWARD: outside callers (Action/createnaturalresource.cpp)
 uint32_t ActCNR_NR_GetSubVariantCount_125320(int64_t comp, int variant) {
-    return ModelMeshCount(reinterpret_cast<const ModelComponent*>(comp), variant);
+    return ModelMeshCount(reinterpret_cast<const ModelComponent*>(comp), variant);   // LEFT: SIG ActCNR_NR_GetSubVariantCount_125320
 }
 
 // B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Component files)
 void ActCNR_NR_SetVariant_1253d0(int64_t* comp, uint16_t variant, int16_t subVariant) {
-    ModelSelectMesh(reinterpret_cast<ModelComponent*>(comp), variant, subVariant);
+    ModelSelectMesh(reinterpret_cast<ModelComponent*>(comp), variant, subVariant);   // LEFT: SIG ActCNR_NR_SetVariant_1253d0
 }
 
 // B4 FORWARD: outside callers (Action/animatenaturalresource.cpp; Component files)
 void ActCNR_SetAnimIndex_126440(int64_t self, uint32_t animIdx) {
-    NaturalResourceSetAnimation(reinterpret_cast<NaturalResourceComponent*>(self), animIdx);
+    NaturalResourceSetAnimation(reinterpret_cast<NaturalResourceComponent*>(self), animIdx);   // LEFT: SIG ActCNR_SetAnimIndex_126440
 }
 
 // B4 FORWARD: outside callers (Action/createnaturalresource.cpp; Game/starttown.cpp)
 uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
-    return NaturalResourcePlaceAtCell(reinterpret_cast<NaturalResourceComponent*>(self), cellIndex);
+    return NaturalResourcePlaceAtCell(reinterpret_cast<NaturalResourceComponent*>(self), cellIndex);   // LEFT: SIG ActCNR_SetupModelAtCell_126540
 }
 
 // B4 FORWARD: outside callers (Action/removenaturalresource.cpp; Component, Work files)
 void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag) {
-    RemoveNaturalResourceCore(reinterpret_cast<NaturalResourceComponent*>(self),
-                              reinterpret_cast<ComponentEntity* const*>(citizenIBP), harvestFlag);
+    RemoveNaturalResourceCore(reinterpret_cast<NaturalResourceComponent*>(self),   // LEFT: SIG ActCNR_RemoveNatRes_1260f0
+                              reinterpret_cast<ComponentEntity* const*>(citizenIBP), harvestFlag);   // LEFT: SIG ActCNR_RemoveNatRes_1260f0
 }

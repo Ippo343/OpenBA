@@ -103,7 +103,8 @@ struct ActionStack {
     ::Object::InternalPtr<Action>* actions;   // +0x00 Array<InternalPtr<Action>> data
     int32_t  count;                           // +0x08 Array count
     int32_t  capacity;                        // +0x0C Array capacity
-    Action*  field_0x10;                      // +0x10 InternalPtr<Action>
+    ::Object::InternalPtr<Action> field_0x10; // +0x10 (the executor 0x1400c4c50 and the stack clear
+                                              //       0x1400c5400 DeletePtr it; a trivial type: layout-neutral)
     int32_t  current;                         // +0x18 index of the running entry (-1 = none)
     uint8_t  _pad1C[4];                       // +0x1C
 };

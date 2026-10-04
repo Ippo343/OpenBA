@@ -63,7 +63,7 @@ bool AnimalDescription::Serialize(IO::Stream& stream) {
     int n = _refCount;
     // IO::Serializer::GetDirection (retail 0x180006210: the stream's +0x08 word), 0 = reading.
     if (static_cast<int>(ser.GetDirection()) == 0 && n > 0 && ::System::MemoryAllocator::_singleton) {
-        void** buf = static_cast<void**>(::System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8));
+        ComponentDescription** buf = static_cast<ComponentDescription**>(::System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8));
         _refs = buf;
         _refCap = n;
         if (buf) for (int i = 0; i < n; ++i) buf[i] = nullptr;

@@ -36,6 +36,7 @@
 #include "Component/CharacterDescription.h"
 #include "Component/CitizenComponent.h"
 #include "Component/ModelComponent.h"
+#include "Action/MoveTo.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/Profession.h"
 #include "Game/WorkScheduler.h"
@@ -63,16 +64,6 @@ static_assert(offsetof(WorkIdNode, right) == 0x20, "WorkIdNode::right @ +0x20");
 // 0x1401512c0 Math::Vector3::Normalize, 0x1401512d8 Math::Vector3::Heading. Those
 // slots were the DLL boundary's shape; the calls are now direct members on the real
 // Math:: classes (runtime/types/math/Math.h), same bodies, same operand order.
-
-// ============================================================
-// g_pGameWorldSingleton accessor (DAT_1401c3dd8 — declared in engine_funcs.h)
-// The original reads `g_pGameWorldSingleton` directly as a byte* base (it is the
-// GameWorld instance pointer, not a pointer-to-pointer). In our headers it is typed
-// `void** g_pGameWorldSingleton` and dereferenced once to obtain the instance.
-// ============================================================
-static inline uintptr_t GameWorld() {
-    return reinterpret_cast<uintptr_t>(GameUpdateLoop::_singleton);
-}
 
 // ============================================================
 // FUN_1400012d0 — Entity_FindComponent_Family
@@ -106,7 +97,7 @@ CharacterComponent* FindCharacterComponent(const ComponentEntity* entity) {
 // B4 FORWARD: outside callers in ~20 files (Action, Component, Work)
 void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
     return new (retIBP) ::Object::InternalPtr<CharacterComponent>(
-        FindCharacterComponent(reinterpret_cast<const ComponentEntity*>(entity)));
+        FindCharacterComponent(reinterpret_cast<const ComponentEntity*>(entity)));   // LEFT: SIG ActMv_FindComponentFamily_12d0
 }
 
 // ============================================================
@@ -138,24 +129,25 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
 //   0x140151238 String::Serialize            -> System::String::Serialize (B.3.1)
 //   0x1401c70b0 type-ID                       -> local resolve (NOT in engine_funcs.h)
 void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
-    uintptr_t* pSlot = reinterpret_cast<uintptr_t*>(extPtrSlot);
+    // The one caller (MoveTo::Persist, moveto.cpp) hands &description and the Serializer.
+    CharacterDescription** pSlot = reinterpret_cast<CharacterDescription**>(extPtrSlot);   // LEFT: SIG ActMv_ExternalPtrSerialize_22970
+    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(serializer);                   // LEFT: SIG ActMv_ExternalPtrSerialize_22970
     uint32_t typeId = CharacterDescription::TypeId();
 
-    // GetEncoding -> encoding->vtable[+0x10](encoding) == 3 ?
+    // GetEncoding -> encoding->GetKind() (slot 2, +0x10) == 3 ?
     int encType = -1;
-    void* enc = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
+    const IO::Encoding* enc = &ser->GetEncoding();
     if (enc)
-        encType = (*reinterpret_cast<int(**)(void*)>(*reinterpret_cast<uintptr_t*>(enc) + 0x10))(enc);
+        encType = enc->GetKind();
 
     if (encType == 3) {
         // Read-only text path: drop the External; re-resolve by its current path.
-        if (*pSlot == 0) return;
+        if (*pSlot == nullptr) return;
         System::Filename fnStorage;  // Filename retbuf (local_res18 in the original)
-        fnStorage = reinterpret_cast<const ::Object::External*>(*pSlot)->GetPath();  // B.3.3 bridge
+        fnStorage = (*pSlot)->GetPath();
         if (::Object::ExternalFactory::_singleton) {
-            ::Object::ExternalFactory* efactory =
-                ::Object::ExternalFactory::_singleton;  // B.3.3 bridge
-            void* found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnStorage)));
+            ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+            const ::Object::External* found = efactory->FindOrLoad(fnStorage);
             if (found) ::Object::IsDerivedFromNullSafe(found, typeId);
         }
         return;   // ~Filename releases fnStorage (was the manual fn_Filename_Dtor)
@@ -164,33 +156,30 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
     // Filename local (default-constructed) used to carry the path through the stream.
     System::Filename fnLocal;
 
-    void* factory = ::Object::ExternalFactory::_singleton;
-    ::Object::ExternalFactory* efactory =
-        reinterpret_cast<::Object::ExternalFactory*>(factory);  // B.3.3 bridge
-    bool refMode = (factory)
+    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
+    bool refMode = (efactory)
                        ? efactory->IsReferenceModeEnabled() : false;
 
     uint32_t refId = 0xffffffff;
     bool didFind = false;  // whether we fall through to the FindOrLoad write-back block
 
     if (refMode) {
-        if (*pSlot == 0) {
+        if (*pSlot == nullptr) {
             refId = 0xffffffff;
-        } else if (factory) {
-            refId = efactory->GetReferenceId(
-                reinterpret_cast<const ::Object::External*>(*pSlot));  // B.3.3 bridge
+        } else if (efactory) {
+            refId = efactory->GetReferenceId(*pSlot);
         }
         // Stream-dirty flag = *(serializer+0)->[+8]. (RAX=[RBX]; [RAX+8])
-        int streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        if (*pSlot != 0 && streamFlag == 0 && refId == 0xffffffff) {
+        int streamFlag = static_cast<int>(ser->GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
+        if (*pSlot != nullptr && streamFlag == 0 && refId == 0xffffffff) {
             // Special case: present but no ref id and writing -> just serialize the (-1) id.
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
+            ser->Serialize(refId, nullptr);
             // (no write-back)
         } else {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
+            ser->Serialize(refId, nullptr);
             if ((int)refId != -1) {
-                streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-                if (streamFlag == 0 && factory) {
+                streamFlag = static_cast<int>(ser->GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
+                if (streamFlag == 0 && efactory) {
                     System::Filename pathBuf = efactory->GetPathForReferenceId(refId);
                     fnLocal = pathBuf;
                 }   // ~Filename releases pathBuf
@@ -199,30 +188,29 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         }
     } else {
         // Reference mode off: bool "present" flag then the path String.
-        uint8_t present = (*pSlot != 0) ? 1 : 0;
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // B.3.4 bridge
+        uint8_t present = (*pSlot != nullptr) ? 1 : 0;
+        ser->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // LEFT: H8 the byte is read back raw (`!= 0`), a bool local would normalise it
         if (present != 0) {
-            if (*pSlot != 0) {
-                System::Filename pathBuf =
-                    reinterpret_cast<const ::Object::External*>(*pSlot)->GetPath();  // B.3.3 bridge
+            if (*pSlot != nullptr) {
+                System::Filename pathBuf = (*pSlot)->GetPath();
                 fnLocal = pathBuf;
             }   // ~Filename releases pathBuf
             // Retail serializes the Filename through String::Serialize (the two
             // classes are layout-identical and it casts between them).
-            fnLocal.AsString().Serialize(serializer);
+            fnLocal.AsString().Serialize(ser);
             didFind = true;
         }
     }
 
     if (didFind) {
-        int streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        int streamFlag = static_cast<int>(ser->GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
         if (streamFlag == 0) {
-            void* found = nullptr;
+            const ::Object::External* found = nullptr;
             if (::Object::ExternalFactory::_singleton)
-                found = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fnLocal)));
-            uintptr_t result = 0;
+                found = efactory->FindOrLoad(fnLocal);
+            CharacterDescription* result = nullptr;
             if (found && ::Object::IsDerivedFromNullSafe(found, typeId))
-                result = reinterpret_cast<uintptr_t>(found);
+                result = static_cast<CharacterDescription*>(const_cast<::Object::External*>(found));   // LEFT: CONST FindOrLoad returns const (S3: floor decision at the close)
             *pSlot = result;
         }
     }
@@ -245,10 +233,6 @@ void SetFacingDirection(CharacterComponent* character, const Math::Vector3& dir)
     character->field_0x3C = dir.Heading();
 }
 
-// B4 FORWARD: outside callers (Action/performwork.cpp, playanimation.cpp; Component, Work files)
-void ActMv_SetFacingDirection_a060(void* comp, void* vector3) {
-    SetFacingDirection(reinterpret_cast<CharacterComponent*>(comp), *reinterpret_cast<const Math::Vector3*>(vector3));
-}
 
 // ============================================================
 // FUN_1400c8d20 — MoveTo_sub_8d20 (UpdateFacing toward next waypoint)
@@ -265,22 +249,23 @@ void ActMv_SetFacingDirection_a060(void* comp, void* vector3) {
 //   conversion. DAT_140172114 = 0.5f (kRdata_140172114).
 // Caller signature: void fn(void* self)
 void ActMv_UpdateFacing_c8d20(void* selfp) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(selfp);
-    int* grid = reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(GameWorld() + 0xf8));
+    MoveTo* self = reinterpret_cast<MoveTo*>(selfp);   // LEFT: SIG ActMv_UpdateFacing_c8d20
+    Map* grid = GameUpdateLoop::_singleton->m_game;    // +0xF8
     float halfCell = kRdata_140172114;   // 0x140172114
 
-    // Resolve the citizen movement sub-object: self+0x28 -> +0x68.
-    uintptr_t citizen = *reinterpret_cast<uintptr_t*>(self + 0x28);
-    uintptr_t move = *reinterpret_cast<uintptr_t*>(citizen + 0x68);
+    // The character's model (character +0x68), whose transform translation (+0x148 + 0x10)
+    // is the current world position.
+    const CharacterComponent* character = self->character.Get();
+    const ModelComponent* model = character->modelComponent;
 
-    float curX = *reinterpret_cast<float*>(move + 0x158);
-    float curY = *reinterpret_cast<float*>(move + 0x15c);
+    float curX = model->transform.translation.x;   // +0x158
+    float curY = model->transform.translation.y;   // +0x15C
 
     // Target cell index from the path array (self+0x68 + curIdx*4).
-    int curIdx = *reinterpret_cast<int*>(self + 0x60);
-    int targetCell = *reinterpret_cast<int*>(self + 0x68 + static_cast<int64_t>(curIdx) * 4);
+    int curIdx = self->pathIndex;
+    int targetCell = self->path[curIdx];
 
-    int gridW = *grid;
+    int gridW = grid->size;
     float center = static_cast<float>(gridW >> 1) - halfCell;
     float inGrid[3];
     inGrid[0] = static_cast<float>(targetCell % gridW) - center;  // local_58
@@ -294,19 +279,19 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
     Math::Vector2 dir2in(outWorld[0] - curX, outWorld[1] - curY);
     Math::Vector2 dir2 = dir2in.Normalize();
 
-    // Re-check the IBP, store normalized 3D facing into the movement sub-object.
-    uintptr_t citizen2 = *reinterpret_cast<uintptr_t*>(self + 0x28);
-    *reinterpret_cast<uint8_t*>(citizen2 + 0x28) = 0;
+    // Re-read the character, store the normalized 3D facing into it.
+    CharacterComponent* character2 = self->character.Get();
+    character2->field_0x28 = false;
 
     // local_58/54/50 = (dir2.x, dir2.y, 0) from the Vector2::Normalize result.
     Math::Vector3 dir3(dir2.x, dir2.y, 0.0f);
     Math::Vector3 n = dir3.Normalize();
-    *reinterpret_cast<float*>(citizen2 + 0x2c) = n.x;
-    *reinterpret_cast<float*>(citizen2 + 0x30) = n.y;
-    *reinterpret_cast<float*>(citizen2 + 0x34) = n.z;
+    character2->field_0x2C.x = n.x;
+    character2->field_0x2C.y = n.y;
+    character2->field_0x2C.z = n.z;
 
     Math::Vector3 head3(dir2.x, dir2.y, 0.0f);
-    *reinterpret_cast<float*>(citizen2 + 0x3c) = head3.Heading();
+    character2->field_0x3C = head3.Heading();
 }
 
 // ============================================================
@@ -325,13 +310,13 @@ void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, floa
     PlayModelAnimation(character->modelComponent, animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
     // LEFT: ModelComponent +0x13c lies inside the embedded Graphics::MeshInstance (+0x28),
     // at MeshInstance +0x114, which Runtime's header does not name.
-    const uint8_t* model = reinterpret_cast<const uint8_t*>(character->modelComponent);
-    character->field_0x38 = *reinterpret_cast<const float*>(model + 0x13c) * p4;
+    const uint8_t* model = reinterpret_cast<const uint8_t*>(character->modelComponent);   // LEFT: Graphics::MeshInstance +0x114 unnamed (R-GFX)
+    character->field_0x38 = *reinterpret_cast<const float*>(model + 0x13c) * p4;   // LEFT: Graphics::MeshInstance +0x114 unnamed (R-GFX)
 }
 
 // B4 FORWARD: outside callers (Action/moveto.cpp, performwork.cpp, playanimation.cpp; Component files)
 void ActMv_SetAnimation_a1f0(void* selfp, uint32_t animId, float p3, float p4) {
-    SetAnimation(reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);
+    SetAnimation(reinterpret_cast<CharacterComponent*>(selfp), animId, p3, p4);   // LEFT: SIG ActMv_SetAnimation_a1f0
 }
 
 // ============================================================
@@ -363,7 +348,7 @@ uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
     // The scheduler's first id tree (WorkScheduler::trees[0], +0x30): int key at +0x00,
     // the Work at +0x08, children at +0x18 / +0x20.
     // LEFT: WorkSchedulerTree::root (Game/WorkScheduler.h) is declared void*.
-    const WorkIdNode* node = reinterpret_cast<const WorkIdNode*>(gw->m_tutorial->trees[0].root);
+    const WorkIdNode* node = reinterpret_cast<const WorkIdNode*>(gw->m_tutorial->trees[0].root);   // LEFT: Game/WorkScheduler.h (COMP-8)
     Work* value = nullptr;       // local_res10
     bool haveValue = false;
     while (node != nullptr) {
@@ -398,7 +383,7 @@ uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
     duePair[1] = outRec->skillMult2;
     // LEFT: CitizenComponent::field_0x200 (block COMP-b's header) is declared int64_t, not
     // System::Time.
-    bool ok = BreakTimeCheck(reinterpret_cast<System::Time*>(&citizen->field_0x200), duePair, gw->m_random);   // 0x1400a9290
+    bool ok = BreakTimeCheck(reinterpret_cast<System::Time*>(&citizen->field_0x200), duePair, gw->m_random);   // 0x1400a9290 LEFT: Component/CitizenComponent.h (CIT-4)
     if (ok) {
         citizen->pendingProfession = outRec;
         return 1;
@@ -406,10 +391,6 @@ uint8_t CitizenBreakCheck(CitizenComponent* citizen) {
     return 0;
 }
 
-// B4 FORWARD: outside callers (Action/performwork.cpp; Work files)
-uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
-    return CitizenBreakCheck(reinterpret_cast<CitizenComponent*>(entityp));
-}
 
 // ============================================================
 // FUN_14009e550 — MoveTo_helper_e550 (SetTerrainCosts by movement profile)
@@ -478,10 +459,6 @@ void Map::SetMovementCosts(PathfinderThread* pathfinder, int profile) {
     this->pathfinder->SetSearchFlags(roadFlag, 0, 0);   // 0x1400a68b0 (DL, R8B = 0, R9B = 0)
 }
 
-// B4 FORWARD: 1 outside caller (Action/moveto.cpp)
-void ActMv_SetTerrainCosts_e550(void* mapGrid, void* pathfinder, int profile, void*) {
-    reinterpret_cast<Map*>(mapGrid)->SetMovementCosts(reinterpret_cast<PathfinderThread*>(pathfinder), profile);
-}
 
 // ============================================================
 // FUN_1400a6d50 — MoveTo_helper_6d50 (CopyPathFromFinder)
@@ -509,11 +486,6 @@ int PathfinderThread::TakePath(PathTicket* ticket, int32_t* path, int maxNodes) 
     return count;
 }
 
-// B4 FORWARD: 2 outside callers (Action/keystone_a_zone.cpp, Action/moveto.cpp)
-int ActMv_CopyPathFromFinder_a6d50(void* pathfinder, void* slotIdPtr, void* pathArray, int maxNodes) {
-    return reinterpret_cast<PathfinderThread*>(pathfinder)->TakePath(reinterpret_cast<PathTicket*>(slotIdPtr),
-                                                                reinterpret_cast<int32_t*>(pathArray), maxNodes);
-}
 
 // ============================================================
 // FUN_14009cfb0 — PathfinderQuery (cell-to-cell reachability + path-cost build)
@@ -564,11 +536,6 @@ PathTicket* Map::RequestPath(PathTicket* out, uint64_t flags, uint32_t destCell,
     return out;
 }
 
-// B4 FORWARD: 2 outside callers (Action/moveto.cpp, Player/pathtool_setselected.cpp)
-void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
-                                  uint32_t destCell, uint32_t srcCell) {
-    return reinterpret_cast<Map*>(gridp)->RequestPath(reinterpret_cast<PathTicket*>(outResultp), flags, destCell, srcCell);
-}
 
 // ============================================================
 // FUN_1400c8c10 — MoveTo_helper_8c10 (PathSetup: world pos -> cells -> query)
@@ -582,8 +549,8 @@ void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
 // Caller signature: void* fn(void* self, void* worldPos, void* param3, void* param4)
 //   (returns a truthy nonzero; original returns (1 in low byte) | high garbage.)
 void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void* /*param3*/, void* /*param4*/) {
-    uintptr_t self = reinterpret_cast<uintptr_t>(selfp);
-    float* worldPos = reinterpret_cast<float*>(worldPosp);
+    MoveTo* self = reinterpret_cast<MoveTo*>(selfp);          // LEFT: SIG ActMv_PathSetup_c8c10
+    float* worldPos = reinterpret_cast<float*>(worldPosp);    // LEFT: SIG ActMv_PathSetup_c8c10
     Map* grid = GameUpdateLoop::_singleton->m_game;
     int width = grid->size;
     float center = static_cast<float>(width >> 1);
@@ -599,25 +566,25 @@ void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void* /*param3*/, void
     int ty = clamp(worldPos[1] + center);
     uint32_t destCell = static_cast<uint32_t>(width * ty + tx);
 
-    int cx = clamp(*reinterpret_cast<float*>(self + 0x38) + center);
-    int cy = clamp(*reinterpret_cast<float*>(self + 0x3c) + center);
+    int cx = clamp(self->destination.x + center);   // +0x38
+    int cy = clamp(self->destination.y + center);   // +0x3C
     uint32_t srcCell = static_cast<uint32_t>(width * cy + cx);
 
-    *reinterpret_cast<int*>(self + 0x60) = -1;
+    self->pathIndex = -1;
 
     if (destCell == srcCell) {
-        *reinterpret_cast<int*>(self + 0x64) = 1;
-        *reinterpret_cast<uint32_t*>(self + 0x68) = destCell;
-        *reinterpret_cast<int*>(self + 0x60) = 0;
+        self->pathCount = 1;
+        self->path[0] = static_cast<int32_t>(destCell);
+        self->pathIndex = 0;
     } else {
-        grid->SetMovementCosts(grid->pathfinder, *reinterpret_cast<int*>(self + 0x470));   // 0x14009e550
+        grid->SetMovementCosts(grid->pathfinder, self->movementProfile);   // 0x14009e550
         // Original writes the query result into a 2-int stack scratch (local_res8),
         // then copies the 8-byte result into self+0x20.
         PathTicket scratch = {0, 0};
-        PathTicket* res = grid->RequestPath(&scratch, *reinterpret_cast<uint32_t*>(self + 0x5c), destCell, srcCell);   // 0x14009cfb0
-        *reinterpret_cast<PathTicket*>(self + 0x20) = *res;
+        PathTicket* res = grid->RequestPath(&scratch, self->passFlags, destCell, srcCell);   // 0x14009cfb0
+        self->ticket = *res;
     }
-    return reinterpret_cast<void*>(static_cast<uintptr_t>(1));
+    return reinterpret_cast<void*>(static_cast<uintptr_t>(1));   // LEFT: SIG ActMv_PathSetup_c8c10 returns void* (retail: AL = 1)
 }
 
 // ============================================================

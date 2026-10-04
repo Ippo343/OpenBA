@@ -305,8 +305,8 @@ static void MaterialCountArrayAssign(RawArray<TrackerComponent::Entry>* dst, con
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value) {
     // LEFT: TrackerComponent (block COMP-? header) keeps its two lists as raw
     // {data, count, capacity} triples.
-    RawArray<TrackerComponent::Entry>* live = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->displayed);
-    RawArray<TrackerComponent::Entry>* archive = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->produced);
+    RawArray<TrackerComponent::Entry>* live = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->displayed);   // LEFT: Component/TrackerComponent.h displayed raw (DLG-1)
+    RawArray<TrackerComponent::Entry>* archive = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->produced);   // LEFT: Component/TrackerComponent.h produced raw (DLG-1)
     int gen = GameUpdateLoop::_singleton->m_dayCounter->year;
     if (gen != tracker->trackerId) {
         MaterialCountArrayAssign(archive, live);   // 0x14000d9d0
@@ -437,63 +437,42 @@ void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
 
 // B4 FORWARD: outside callers in ~8 files (Action, Component, Dialog)
 void ActRm_StorageSubtract_d150(uintptr_t storage, int64_t resType, int count) {
-    StorageSubtract(reinterpret_cast<StorageComponent*>(storage), reinterpret_cast<const ComponentDescription*>(resType), count);
+    StorageSubtract(reinterpret_cast<StorageComponent*>(storage), reinterpret_cast<const ComponentDescription*>(resType), count);   // LEFT: SIG ActRm_StorageSubtract_d150
 }
 
 // B4 FORWARD: outside callers in ~12 files (Action, Component, Dialog, Game)
 void ActRm_StorageAdd_d000(uintptr_t storage, int64_t resType, int count) {
-    StorageAdd(reinterpret_cast<StorageComponent*>(storage), reinterpret_cast<ComponentDescription*>(resType), count);
+    StorageAdd(reinterpret_cast<StorageComponent*>(storage), reinterpret_cast<ComponentDescription*>(resType), count);   // LEFT: SIG ActRm_StorageAdd_d000
 }
 
 // B4 FORWARD: outside callers (Action/consumerawmaterial, pickupstoredrawmaterial;
 // Component/trackercomponent; Work/marketwork_bst_b290)
 void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
-    MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);
+    MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);   // LEFT: SIG ActRm_ArrayResize16_da70
 }
 
 // B4 FORWARD: outside callers (Action/action_base_cnr.cpp, Component/pasturecomponent_states.cpp)
 void ActRm_DynArrayPush4_44810(uintptr_t self, uint32_t value) {
-    AutoPickupAppend(reinterpret_cast<AutoPickupComponent*>(self), value);
+    AutoPickupAppend(reinterpret_cast<AutoPickupComponent*>(self), value);   // LEFT: SIG ActRm_DynArrayPush4_44810
 }
 
 // B4 FORWARD: outside callers in ~8 files; the first argument is never read.
 int ActRm_GetResourceCategory_88f90(void*, uintptr_t entity) {
-    return ResourceCategory(reinterpret_cast<const ComponentDescription*>(entity));
+    return ResourceCategory(reinterpret_cast<const ComponentDescription*>(entity));   // LEFT: SIG ActRm_GetResourceCategory_88f90
 }
 
 // B4 FORWARD: outside callers (Work/marketwork_bst_a9f0, marketwork_bst_b290)
 void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
-    MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),
-                             reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));
+    MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),   // LEFT: SIG ActRm_VectorClone_d9d0
+                             reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));   // LEFT: SIG ActRm_VectorClone_d9d0
 }
 
 // B4 FORWARD: 1 outside caller (Component/pasturecomponent_states.cpp)
 void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
-    TrackerUpsert(reinterpret_cast<TrackerComponent*>(self), reinterpret_cast<ComponentDescription*>(key), value);
-}
-
-// B4 FORWARD: outside callers (Action/action_base_cnr.cpp, Action/createrawmaterial.cpp)
-void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
-                                     char placeNear, int64_t descEntity, int quantity) {
-    RegisterRawMaterial(reinterpret_cast<CitizenBehavior*>(entityList),
-                        reinterpret_cast<ComponentEntity* const*>(sourceIBP), placeNear,
-                        reinterpret_cast<ComponentDescription*>(descEntity), quantity);
+    TrackerUpsert(reinterpret_cast<TrackerComponent*>(self), reinterpret_cast<ComponentDescription*>(key), value);   // LEFT: SIG ActRm_ArrayUpsert_58fd0
 }
 
 // B4 FORWARD: outside callers (Action/createrawmaterial, action_base_cnr; Component files)
 void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
-    PositionRawMaterial(reinterpret_cast<Component*>(param_1), cellIndex, rotation);
-}
-
-// B4 FORWARD: FUN_1400223c0 == ComponentEntity::FindComponent<RawMaterialComponent>
-// (outside callers: Action/action_base_cnr.cpp, Action/pickuprawmaterial.cpp)
-void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<RawMaterialComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<RawMaterialComponent>());
-}
-
-// B4 FORWARD: FUN_140013320 == ComponentEntity::FindComponent<TrackerComponent>
-void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
-    return new (retIBP) ::Object::InternalPtr<TrackerComponent>(
-        reinterpret_cast<ComponentEntity*>(self)->FindComponent<TrackerComponent>());
+    PositionRawMaterial(reinterpret_cast<Component*>(param_1), cellIndex, rotation);   // LEFT: SIG ActRm_PositionEntity_9760
 }

@@ -23,6 +23,7 @@
 #include "Object/exe_type.h"
 
 class Profession;
+namespace Graphics { class GraphicsMesh; }   // graphics/GraphicsMesh.h (the _refs entries)
 
 class CitizenDescription final : public Description {
     DECLARE_EXE_TYPE(CitizenDescription)
@@ -113,7 +114,10 @@ public:
     float _f12c;                                // +0x12c
     float _f130;                                // +0x130
     uint8_t _pad134[4];                         // +0x134 never written by the ctor
-    void* _refs;                                // +0x138 Array<External*> data (entries are non-owning)
+    Graphics::GraphicsMesh** _refs;             // +0x138 Array<ExternalPtr<GraphicsMesh>> data (entries are
+                                                //        non-owning; Serialize streams it through 0x14001bcc0,
+                                                //        the GraphicsMesh ExternalPtr array; ShowTool 0x1401173b0
+                                                //        hands an entry to MeshInstance::SetMesh)
     int32_t _refCount;                          // +0x140 Array count
     int32_t _refCap;                            // +0x144 Array capacity
 };
