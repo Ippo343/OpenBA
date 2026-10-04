@@ -234,13 +234,11 @@ void PathTool::Draw(Video::Context* context, char) {
 // to the selected entity value. Returns true if they match.
 //
 // Original: 0x1400de8d0
-bool PathTool::IsSelected(uint64_t* param2) {
+bool PathTool::IsSelected(ComponentEntity* const* param2) {
     // Call CheckPtr on self->selectedEntity to resolve any lazy pointer
 
     // Compare the stream value to the selected entity
-    // LEFT: Tool slot 10 takes the handle as a uint64_t (Tool.h; its caller
-    // Component/nomadcomponent.cpp, COMP, passes it so).
-    return *param2 == reinterpret_cast<uint64_t>(selectedEntity);
+    return *param2 == selectedEntity;
 }
 
 // [13] 0x140026b60 `MOV RAX,[RCX+0x28]; MOV [RDX],RAX; MOV RAX,RDX; RET`.

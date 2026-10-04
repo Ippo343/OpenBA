@@ -72,11 +72,11 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 // left RDX holding stale garbage and faulted here on every citizen death.
 //
 // Original: 0x1400fd290
-bool EditTool::IsSelected(uint64_t* ref) {
+bool EditTool::IsSelected(ComponentEntity* const* ref) {
     // CheckPtr on self->lastEntityRef to resolve lazy/weak pointers
 
     // Compare: does *ref match self->lastEntityRef?
-    return *ref == reinterpret_cast<uint64_t>(lastEntityRef);   // LEFT: SIG Tool slot [10] takes the handle as uint64_t* (Player/Tool.h, every tool overrides it)
+    return *ref == lastEntityRef;
 }
 
 // ============================================================

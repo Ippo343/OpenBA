@@ -48,6 +48,7 @@
 class PlayerToolManager;      // Game/PlayerToolManager.h
 class ToolSetting;            // Player/ToolSetting.h
 class ComponentDescription;   // Component/ComponentDescription.h
+class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Video { class Context; }
 
 class Tool : public Object::Internal {
@@ -65,7 +66,7 @@ public:
     virtual void  Update(void* time, char active) = 0;                 // [7]  pure
     virtual void  Draw(Video::Context* context, char active) = 0;      // [8]  pure (the frame's Video::Context, GameUpdateLoop::Draw)
     virtual char  OnCancel() = 0;                                      // [9]  pure
-    virtual bool  IsSelected(uint64_t* entityRef);                     // [10] 0x1400268a0 false
+    virtual bool  IsSelected(ComponentEntity* const* entityRef);       // [10] 0x1400268a0 false (the entity's InternalPtr slot)
     // [11] RETSLOT (B8-11): the ToolSetting type this tool wants, 0 = none.
     virtual Object::Type* GetSettingType(Object::Type* ret) const;     // [11] 0x140004950
     virtual int   GetCursor() const;                                   // [12] 0x140105860 1
