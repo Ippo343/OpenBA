@@ -46,9 +46,6 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x
 class Action;
 void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, void* deltaTime);  // 0x1400c4f80
 
-// ---- charmanager.cpp
-extern "C" void CharMgr_sub_8660(float* mgrF, int idx);  // 0x140018660
-
 // ---- citizen_assign_citizens.cpp
 extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0
 
