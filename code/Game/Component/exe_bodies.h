@@ -16,6 +16,7 @@
 // Must compile when included first in an otherwise empty translation unit.
 
 #include <cstdint>
+#include "Entity/CitizenBehavior.h"   // CitizenPtrList<T> (BuildComponent_FindInQueue)
 
 class CitizenComponent;
 
@@ -37,7 +38,7 @@ void AttendanceComponent_ReleaseLink59b0(CitizenComponent* worker);  // 0x140115
 void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0x140002e10 (returns outPtr)
 
 // ---- buildcomponent.cpp
-int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr);  // 0x140017550
+int BuildComponent_FindInQueue(const CitizenPtrList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550
 
 // ---- cemeterycomponent.cpp
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0

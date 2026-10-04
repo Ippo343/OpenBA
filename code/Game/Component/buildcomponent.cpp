@@ -72,17 +72,17 @@ extern "C" void* g_pConstructionDemoSite;
 // Reimpl of FUN_140017550 (BuildComponent_helper_7550:
 //   linear search of an InternalBasePtr array for a matching entity)
 // ============================================================
-// param_1 = {void* ptr (+0), int count (+8)}. param_2 = InternalBasePtr* to match.
-// Returns the index of the slot whose pointer equals *param_2, or -1.
-// LEFT (its three casts): SIG BuildComponent_FindInQueue takes the array header and the
-// IBP as void* (Component/exe_bodies.h, wave X); every caller passes the town manager's
-// buildComponents header (CitizenBehavior +0xD0).
-int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
-    int64_t* arr = (int64_t*)arrayBase;   // LEFT: SIG BuildComponent_FindInQueue takes the array and the IBP as void* (Component/exe_bodies.h; caller buildcomponent_state8.cpp is another agent's)
-    int count = (int)arr[1];
+// param_1 = the Array<InternalPtr<BuildComponent>> {data (+0), count (+8)}; every caller
+// passes the town manager's buildComponents (CitizenBehavior +0xD0). param_2 = the
+// InternalPtr to match. Returns the index of the slot whose pointer equals *param_2, or -1.
+// The compare is the two pointer words (InternalPtr::Get is a reinterpretation, no
+// base adjustment).
+int BuildComponent_FindInQueue(const CitizenPtrList<BuildComponent>* list,
+                               const Object::InternalPtr<BuildComponent>* key) {
+    int count = list->_size;
     for (int i = 0; i < count; i++) {
-        int64_t base = arr[0];
-        if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {   // LEFT: SIG BuildComponent_FindInQueue (0x140017550) takes retail's Array<InternalPtr<BuildComponent>>*; its callers pass &CitizenBehavior::buildComponents._data (a Collection::Array member since X5-COMP) and an InternalPtr's address, so the header and the slot are void*
+        BuildComponent* const* base = list->_data;
+        if (base[i] == key->Get()) {
             return i;
         }
     }
@@ -456,7 +456,7 @@ void BuildComponent::OnRemove() {
     CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
 
     // Find in removal queue (CitizenBehavior::buildComponents, +0xD0 / +0xD8)
-    int idx = BuildComponent_FindInQueue(&worldData->buildComponents._data, &ptrBuf);
+    int idx = BuildComponent_FindInQueue(&worldData->buildComponents, &ptrBuf);
 
     if (idx >= 0) {
         int count = worldData->buildComponents._size;

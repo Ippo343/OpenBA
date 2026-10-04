@@ -1019,7 +1019,7 @@ float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* out
 // (citizenai_findhelpers.cpp:251 / :442, citizenai_leisure.cpp:253) or as a BuildComponent*
 // (clearstorage.cpp:202, known_port_issues row 643); the rest call InteractNodePosition.
 void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5) {
-    return InteractNodePosition(reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);   // LEFT: SIG Pf_EntityResolvePos_2e20: three callers hand the InteractComponent as the Component* of a type-id scan (citizenai_findhelpers.cpp:251 / :442, citizenai_leisure.cpp:253) and clearstorage.cpp:202 hands a BuildComponent* (known_port_issues row 643: retail passes the same object)
+    return InteractNodePosition(reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);   // LEFT: SIG Pf_EntityResolvePos_2e20: three callers hand the InteractComponent as the Component* of a type-id scan (citizenai_findhelpers.cpp:251 / :442, citizenai_leisure.cpp:253) and clearstorage.cpp:202 hands a BuildComponent* (known_port_issues row 643)
 }
 
 

@@ -251,7 +251,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
     Object::InternalPtr<BuildComponent> siteIbp(this);
     if (townMgr) {
-        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents._data, &siteIbp);
+        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &siteIbp);
         if (idx < 0) {
             // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             int newCount = townMgr->buildComponents._size + 1;

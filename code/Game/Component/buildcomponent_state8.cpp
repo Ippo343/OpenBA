@@ -443,7 +443,7 @@ char BuildComponent::State8OneShot(StateMachine* /*sm*/) {
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
     Object::InternalPtr<BuildComponent> selfIBP(this);
     if (townMgr) {
-        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents._data, &selfIBP);
+        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &selfIBP);
         if (idx >= 0) {
             int count = townMgr->buildComponents._size;
             BuildComponent** base = townMgr->buildComponents._data;
