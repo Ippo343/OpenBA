@@ -237,8 +237,8 @@ UNIT_TEST(wrk_leaf_harvestorchard) {
 
 UNIT_TEST(wrk_leaf_herbalistwork) {
     WRK_LEAF_SHAPE(HerbalistWork, AutoPickupWork, 0x60);
-    CHECK_EQ(offsetof(HerbalistWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(HerbalistWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HerbalistWork, _citizens), (size_t)0x48);
+    CHECK_EQ(offsetof(HerbalistWork, _citizens) + offsetof(HerbalistWork::CitizenSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HerbalistWork, _field58), (size_t)0x58);
 }
 
