@@ -661,7 +661,7 @@ void ReportBadSelectionRef(int64_t self, int64_t ref) {
     std::fprintf(stderr, "[HighlightClear] BAD selection ref: tool=%p vtbl=%p self+0x30=0x%llx\n",
                  reinterpret_cast<void*>(self), reinterpret_cast<void*>(vt),
                  static_cast<unsigned long long>(ref));
-    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);  // CAST-OK: crash_walk   // LEFT: FLOOR? crash_walk raw dump of the tool block (operand is the integer self: audit)
+    const uint64_t* w = reinterpret_cast<const uint64_t*>(self);   // LEFT: FLOOR? crash_walk raw dump of the tool block (operand is the integer self: audit)
     std::fprintf(stderr, "[HighlightClear]   tool[0x00..0x38] = %016llx %016llx %016llx "
                  "%016llx %016llx %016llx %016llx %016llx\n",
                  (unsigned long long)w[0], (unsigned long long)w[1], (unsigned long long)w[2],
