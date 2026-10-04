@@ -168,7 +168,6 @@ extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 
 // ---- growthcomponent.cpp
 void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask);  // 0x140118950  B4 FORWARD: Component::ModifyFlags (animalcomponent.cpp)
-void GrowthComponent_ResetGrowthState(void* entityPtr);  // 0x140126780  B4 FORWARD: NaturalResourceComponent::ResetGrowthState (tornadocomponent.cpp)
 
 // ---- happinesscomponent.cpp
 
