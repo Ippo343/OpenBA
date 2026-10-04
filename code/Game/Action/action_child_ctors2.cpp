@@ -55,7 +55,3 @@ uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self) {
     return result;
 }
 
-// B4 FORWARD: outside callers (Work/consumeproduce.cpp, Work/work_act_consume.cpp)
-uint64_t WeightedRandomIndex_119470(int64_t param_1) {
-    return PickConsumeRecipe(reinterpret_cast<const ConsumeProduceComponent*>(param_1));
-}

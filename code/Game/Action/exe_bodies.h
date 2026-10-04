@@ -130,7 +130,6 @@ void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2);  // 0x1400c
 void* Entity_FindConsumeProduce_b6f0(int64_t param_1, void* param_2);  // 0x14000b6f0
 class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
-uint64_t WeightedRandomIndex_119470(int64_t param_1);  // 0x140119470
 
 // ---- action_pf_astar.cpp
 void Pf_EnqueueCmd2_a6fe0(int64_t param_1, int cell, int terrainType);  // 0x1400a6fe0 -> PathfinderThread::SetCellTerrain
@@ -203,9 +202,6 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
 void SpillAllStorage(DropOffRawMaterial* self);  // 0x1400c7570
 uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageComponent* const* target, ComponentDescription* material);  // 0x1400c7620
 void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, float* destination, uint32_t createFlag, Component* const* animal, const AnimalDescription* description, uint32_t gate);  // 0x1400bbea0
-void Pf_SpillAllStorage_7570(int64_t param_1);  // 0x1400c7570 B4 FORWARD -> SpillAllStorage
-uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, uint64_t param_4);  // 0x1400c7620 B4 FORWARD -> DropOffExec
-void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_3, uint32_t param_4, void* param_5, int64_t param_6, uint32_t param_7);  // 0x1400bbea0 B4 FORWARD -> RemoveAnimalActions
 
 // ---- action_pf_roots_misc.cpp
 class CharacterComponent;     // Component/CharacterComponent.h
@@ -214,8 +210,6 @@ class HerdComponent;          // Component/HerdComponent.h
 namespace Math { class Scalar; }
 void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best, const float* point, const Math::Scalar* radius, int typeId, CharacterComponent* const* exclude);  // 0x140092260
 void HerdStartMigration(HerdComponent* herd);  // 0x140122340
-int Pf_FindPlacementCell_bd40(int* param_1, int param_2, char param_3, int64_t* param_4, uint32_t param_5);  // 0x14009bd40 B4 FORWARD -> Map::FindPlacementCell
-int64_t* Pf_SpatialProximityQuery_92260(float* param_1, int64_t* param_2, float* param_3, void* param_4, int param_5, void* param_6);  // 0x140092260 B4 FORWARD -> QueryNearestCharacter
 void Pf_HerdStartMigration_122340(void* param_1);  // 0x140122340 B4 FORWARD -> HerdStartMigration
 
 // ---- action_pf_roots_road.cpp

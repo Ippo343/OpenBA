@@ -125,7 +125,7 @@ static inline void CallExit(Action* node, ActionStack* stack) {
 // ===========================================================================
 // B4 P2 CAI-2: no declaration outside this file; the stack is typed (Action.h ActionStack).
 extern "C" void CitizenAI_ActionFlush_c4bb0(ActionStack* param_1) {
-    Action* node = param_1->field_0x10;
+    Action* node = param_1->field_0x10.Get();
     if (node != nullptr) {
         do {
             node->_status = true;                                // node+0x18 = 1

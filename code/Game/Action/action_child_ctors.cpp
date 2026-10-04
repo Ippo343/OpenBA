@@ -92,5 +92,5 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP) {
 
 // B4 FORWARD: outside callers (Component/citizenai_actionctors.cpp; Work files)
 float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
-    return HeadingToward(worldPos, reinterpret_cast<ComponentEntity* const*>(param_2));
+    return HeadingToward(worldPos, reinterpret_cast<ComponentEntity* const*>(param_2));   // LEFT: SIG ActChild_Entity29a0_c29a0
 }

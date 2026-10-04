@@ -194,7 +194,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         if (size <= iVar5) iVar5 = size - 1;
         // LEFT: CitizenBehavior (block WORK-a's header) keeps its two entity lists as raw
         // {data, count, capacity} triples at +0x00 / +0x10.
-        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(&world->m_citizenList->field_0x00),
+        PickBestDropTarget(reinterpret_cast<const RawArray<ComponentEntity*>*>(&world->m_citizenList->field_0x00),   // LEFT: Entity/CitizenBehavior.h field_0x00 raw (ENT)
                            &found, static_cast<uint32_t>(size * iVar5 + iVar8), material, iVar9, '\x01',
                            dropPos, &exclude);   // 0x14008d590
         if (found == nullptr) {
@@ -232,8 +232,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
     CitizenComponent* citizen = *citizenIBP;
     CharacterComponent* character = citizen->character;
     // CharacterComponent's +0x48..+0x67 action list (Action/Action.h ActionStack).
-    // LEFT: CharacterComponent (block COMP-a's header) keeps the stack as raw fields.
-    ActionStack* stack = reinterpret_cast<ActionStack*>(&character->actions);
+    ActionStack* stack = reinterpret_cast<ActionStack*>(&character->actions);   // LEFT: Component/CharacterComponent.h keeps +0x48 as raw fields (WORK-3)
 
     if (static_cast<char>(gate) != '\0') {
         WorkBase_TaskListCleanup_c5400(stack);   // 0x1400c5400
@@ -247,8 +246,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
             message = new (mem) SendComponentMessage(&entity, &msgId, 0, &nullIBP, 0);   // 0x1400cb1d0
         }
         if (character->field_0x58 != nullptr) {
-            // LEFT: CharacterComponent::field_0x58 is declared Action*, not InternalPtr<Action>.
-            reinterpret_cast< ::Object::InternalBasePtr*>(&character->field_0x58)->DeletePtr();   // B.3.3 bridge
+            character->field_0x58.DeletePtr();
         }
         character->field_0x58 = message;
         // --- CompleteTask child action ---
@@ -365,24 +363,3 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
 
-// B4 FORWARD: outside caller Action/dropoffrawmaterial.cpp (block ACT-b)
-void Pf_SpillAllStorage_7570(int64_t param_1) {
-    SpillAllStorage(reinterpret_cast<DropOffRawMaterial*>(param_1));
-}
-
-// B4 FORWARD: outside caller Action/dropoffrawmaterial.cpp (block ACT-b)
-uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, uint64_t param_4) {
-    return DropOffExec(reinterpret_cast<DropOffRawMaterial*>(param_1),
-                       reinterpret_cast<ActionStack*>(param_2),
-                       reinterpret_cast<StorageComponent* const*>(param_3),
-                       reinterpret_cast<ComponentDescription*>(param_4));
-}
-
-// B4 FORWARD: outside callers Action/huntanimal.cpp (block ACT-b), Work/pasturework.cpp
-void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_3, uint32_t param_4,
-                               void* param_5, int64_t param_6, uint32_t param_7) {
-    RemoveAnimalActions(reinterpret_cast<CitizenComponent* const*>(param_1), param_2,
-                        reinterpret_cast<float*>(param_3), param_4,
-                        reinterpret_cast<Component* const*>(param_5),
-                        reinterpret_cast<const AnimalDescription*>(param_6), param_7);
-}
