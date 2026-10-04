@@ -143,18 +143,12 @@ inline float AbsF(float v) {
 // order and re-spelling it as `axisX.x` per term would invite a reader to
 // re-group a float sum (reference_moved_term_hides_where_terms_cancel.md).
 //
-// THE ONE PLACE THIS MEMBER IS NOT A STRAIGHT MOVE. Retail constructs the result
-// DIRECTLY IN THE HIDDEN RETURN SLOT (`MOV RCX,R12` immediately before
-// `CALL 0x1800fe960`). A C++ member returning by value cannot do that here,
-// because `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`
-// is a registered DOOR and NOT a real C++ constructor — RULE B5-4 ("ctor doors
-// stay doors") and B35_RULES §11's leave list keep it that way, so
-// `return Camera(f, xf, true);` is not available. The member therefore runs the
-// door into zeroed local storage and returns a copy of it, which is ONE extra
-// 0xd8 trivially-copyable blit per shadow-map camera (twice a frame at most) and
-// leaves `Camera::_pad_d5` — the three bytes at +0xd5..+0xd7 that NO Camera body
-// in the DLL writes — reading back as ZERO where retail leaves the caller's own
-// content. Recorded rather than hidden; nothing reads those bytes (Camera.h).
+// The result is constructed DIRECTLY IN THE HIDDEN RETURN SLOT, as retail does
+// (`MOV RCX,R12` immediately before `CALL 0x1800fe960`): the Camera
+// constructor is a member since B.4 wave X round 4, so `return Camera(f, xf,
+// true);` is the retail shape. `Camera::_pad_d5` (+0xd5..+0xd7) keeps the
+// caller's own content, as in retail; before, the body built the camera in
+// zeroed local storage and returned a copy.
 // ############################################################################
 
 namespace Graphics {
@@ -336,13 +330,9 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
     f.planes[5] = { kZero,  kZero, kOne,   w     };
     f.isOrthographic = true;
 
-    // The constructor DOOR, into zeroed local storage — see the banner's "one
-    // place this member is not a straight move". The zero-fill is deliberate:
-    // it makes `_pad_d5` deterministic instead of an indeterminate read.
-    // LEFT: the door builds the POD; the one view of it as the class is here.
-    RtGraphics::Camera slot = {};
-    RtGraphics_Camera_Ctor(&slot, &f, &xf, true);   // 0x1800fe960
-    return *reinterpret_cast<const Camera*>(&slot);   // LEFT: H10 the RtGraphics_Camera_Ctor door builds the RtGraphics::Camera POD; the one view of it as Graphics::Camera (its protected default ctor: the H5 item)
+    // Constructed in the return slot, as retail (`MOV RCX,R12` then
+    // `CALL 0x1800fe960`).
+    return Camera(f, xf, true);
 }
 
 }  // namespace Graphics
