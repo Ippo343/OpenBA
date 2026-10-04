@@ -98,8 +98,6 @@
 // The platform seam. runtime/src/engine/engine_platform_win.cpp.
 bool RtEnginePlatformShiftHeld();
 long long RtEnginePlatformShowLauncherDialog();
-bool RtEnginePlatformLauncherFlagNoMods();
-bool RtEnginePlatformLauncherFlagReset();
 
 // ENDGAME B.3.7: `Engine::Engine` is the real class; a global
 // `using RtEngine::Engine;` is ill-formed next to `namespace Engine`.
@@ -332,14 +330,14 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
     _videoConfiguration->Save();
     _persistence->WriteSettings();                            // 0x1800b88e0
 
-    // 0x1800a17ff / 0x1800a18bf. The `||` short-circuit is retail's: the
-    // command line is consulted ONLY when the checkbox byte is zero.
-    if (RtEnginePlatformLauncherFlagNoMods()
-            || CommandLineHasKey(_configuration, "nomods"))
+    // 0x1800a17ff / 0x1800a18bf. Retail ORs the launcher dialog's checkbox
+    // byte (0x1801fc699 / 0x1801fc698) before the command line; with no
+    // launcher dialog in the standalone that byte is always 0, so only the
+    // command line decides.
+    if (CommandLineHasKey(_configuration, "nomods"))
         DisableAllModifications();
 
-    if (RtEnginePlatformLauncherFlagReset()
-            || CommandLineHasKey(_configuration, "reset"))
+    if (CommandLineHasKey(_configuration, "reset"))
         ResetConfigurations(this);
 
     return result == 1;   // 0x1800a1a97: IDOK from the launcher template
