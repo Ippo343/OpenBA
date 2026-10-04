@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "math/Math.h"   // Math::Vector3 (the saved camera view's position)
+#include "collection/Collection.h"   // Collection::Array (the camera views, +0x70)
 
 class ComponentEntity;
 class ComponentDescription;
@@ -83,6 +84,15 @@ static_assert(offsetof(TrackedEntityNode, height) == 0x32, "TrackedEntityNode::h
 class Tool;
 class ComponentEntity;
 
+// The +0x70 camera views grow through 0x14002e000: stride 0x1c, align 4; the
+// copy writes +0x00..+0x18 (six dwords and the byte), the new tail's init three
+// zero qwords and a zero byte (+0x00..+0x18): +0x19..+0x1b stay unwritten in
+// both. No element destroy. The row is defined in gameupdateloop_load.cpp.
+namespace PlayerToolManagerRows { extern const rtcoll::ArraySpec kSpec_CamView; }   // 0x14002e000
+using PlayerCameraViewArray = Collection::Array<PlayerCameraView, Collection::DefaultAllocator,
+                                                Collection::ExplicitSpec<&PlayerToolManagerRows::kSpec_CamView>>;
+static_assert(sizeof(PlayerCameraViewArray) == 0x10, "{data, count, capacity}");
+
 class PlayerToolManager {
 public:
     // 0x1401025c0 — the ctor Load runs in the MemAlloc(0xb0, 4) block (body in
@@ -113,9 +123,10 @@ public:
     TrackedEntityNode* field_0x60; // +0x60 ctor 0; the open-entity set's root (EntityUI::OnClosed removes)
     int32_t  field_0x68;         // +0x68 ctor 0; its count
     uint8_t  _pad6C[4];          // +0x6C
-    PlayerCameraView* cameraViews; // +0x70 Array data (sized to 5 by the ctor; saved views 1-5)
-    int32_t  cameraViewCount;    // +0x78 Array count
-    int32_t  cameraViewCapacity; // +0x7C Array capacity
+    // +0x70 Array<CameraView> (sized to 5 by the ctor; saved views 1-5). Retail's
+    // ctor 0x1401025c0 zeroes it inline and SetSizes it to 5; its dtor 0x1401024d0
+    // frees it (inlined ~Array) after the current tool and before the two sets.
+    PlayerCameraViewArray cameraViews;
     bool     field_0x80;         // +0x80 pending-tool flag (ctor 0)
     uint8_t  _pad81[7];          // +0x81
     ComponentDescription* field_0x88; // +0x88 pending tool (ctor 0): the group SelectTool 0x140102b60 forces while +0x80 is set (B4 H4: typed, DLG-d)
@@ -182,9 +193,7 @@ static_assert(offsetof(PlayerToolManager, _pad5C) == 0x5C, "+0x5C");
 static_assert(offsetof(PlayerToolManager, field_0x60) == 0x60, "+0x60");
 static_assert(offsetof(PlayerToolManager, field_0x68) == 0x68, "+0x68");
 static_assert(offsetof(PlayerToolManager, _pad6C) == 0x6C, "+0x6C");
-static_assert(offsetof(PlayerToolManager, cameraViews) == 0x70, "PlayerToolManager::cameraViews @ +0x70");
-static_assert(offsetof(PlayerToolManager, cameraViewCount) == 0x78, "PlayerToolManager::cameraViewCount @ +0x78");
-static_assert(offsetof(PlayerToolManager, cameraViewCapacity) == 0x7C, "PlayerToolManager::cameraViewCapacity @ +0x7C");
+static_assert(offsetof(PlayerToolManager, cameraViews) == 0x70, "PlayerToolManager::cameraViews @ +0x70 (count +0x78, capacity +0x7C)");
 static_assert(offsetof(PlayerToolManager, field_0x80) == 0x80, "+0x80");
 static_assert(offsetof(PlayerToolManager, _pad81) == 0x81, "+0x81");
 static_assert(offsetof(PlayerToolManager, field_0x88) == 0x88, "+0x88");

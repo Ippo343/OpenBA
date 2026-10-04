@@ -309,7 +309,7 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
 // Apply one camera preset (port of FUN_1400fe8d0)
 // ============================================================
 void PlayerToolManager::ApplyCameraView(int index) {
-    PlayerCameraView* table = cameraViews;
+    PlayerCameraView* table = cameraViews._data;
     if (!table) return; // no preset table in standalone yet
     const PlayerCameraView* p = &table[index];
     if (!p->used) return; // preset slot not set

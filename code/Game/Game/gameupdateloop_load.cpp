@@ -387,16 +387,16 @@ void AssignCamView(uint8_t* d, const uint8_t* s) {
 void InitCamView(uint8_t* d) {
     rtcoll::InitAs<PlayerCameraView, &ZeroCamView>(d);
 }
-const rtcoll::ArraySpec kSpec_CamViewLoad = {            // exe 0x14002e000
+
+}  // namespace
+
+// PlayerToolManager::cameraViews' row (PlayerToolManager.h).
+const rtcoll::ArraySpec PlayerToolManagerRows::kSpec_CamView = {   // exe 0x14002e000
     "Array<CameraView>", 0x1c, 4,
     &AssignCamView, &InitCamView, nullptr, false,
     /*assign unwritten*/ 0x19, 0x1c,
     /*init   unwritten*/ 0x19, 0x1c,
     /*seed zero       */ 0,    0 };
-using CamViewLoadArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                           Collection::ExplicitSpec<&kSpec_CamViewLoad>>;
-
-}  // namespace
 
 // FUN_1400191f0 — stride-8 pointer-array resize; copies existing, does NOT zero new slots.
 static void* Reimpl_FUN_1400191f0(void* hdr, int n) {
@@ -405,12 +405,6 @@ static void* Reimpl_FUN_1400191f0(void* hdr, int n) {
     return hdr;
 }
 
-// FUN_14002e000 — stride-0x1c (28-byte) struct-array resize; copies existing, zero-fills new.
-static void* Reimpl_FUN_14002e000(void* hdr, int n) {
-    // B.3.2 bridge: EntityUI+0x70 is still a raw header.
-    reinterpret_cast<CamViewLoadArray*>(hdr)->SetSize(n);   // LEFT: the callers' headers are raw {data, count, capacity} triples (CitizenBehavior.h ENT, PlayerToolManager.h PLAYER, WeatherSimulation.h), not a Collection::Array (H5)
-    return hdr;
-}
 
 
 // (B4 X5-COMP: the three CitizenBehavior element rows this file carried —
@@ -618,9 +612,7 @@ PlayerToolManager::PlayerToolManager() {
     field_0x58 = 0;
     field_0x60 = nullptr;
     field_0x68 = 0;
-    cameraViews = nullptr;
-    cameraViewCount = 0;                      // +0x78 / +0x7c: one qword store
-    cameraViewCapacity = 0;
+    // +0x70: the Array member's own ctor zeroes data / count / capacity.
     field_0x80 = false;
     field_0x88 = nullptr;
     field_0x90 = nullptr;
@@ -628,7 +620,7 @@ PlayerToolManager::PlayerToolManager() {
     field_0x9C = -1;
     field_0xA0 = -1;
     field_0xA4 = false;
-    Reimpl_FUN_14002e000(&cameraViews, 5);
+    cameraViews.SetSize(5);   // 0x14002e000
 }
 
 // ============================================================

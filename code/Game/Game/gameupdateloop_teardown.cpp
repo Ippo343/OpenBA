@@ -270,7 +270,7 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
             );   // LEFT: PlayerToolManager.h (PLAYER): currentTool is a bare Tool*, retail an InternalPtr<Tool> (H5)
     }
 
-    Arr(self, 0x70).~Array();   // LEFT: PlayerToolManager.h (PLAYER): cameraViews is three raw fields, not a Collection::Array (H5)
+    self->cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)
 
     // Two trees with kids at +0x20/+0x28 (+0x60 then +0x50).
     struct EntitySet { TrackedEntityNode** root; int32_t* count; };
