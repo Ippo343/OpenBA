@@ -148,11 +148,11 @@ static inline int GetSerializerVersion(IO::Serializer* serializer) {
 // ============================================================
 // Pattern from TerrainGenerator Slot5: Filename ctor, String::Serialize,
 // if version==0 resolve filename (FUN_14001fd10), Filename dtor.
-static void SerializeFilenameString(void* self_offset, IO::Serializer* serializer) {
+static void SerializeFilenameString(System::String* self_offset, IO::Serializer* serializer) {
     System::Filename filenameObj;   // retail's scope temp; only ctor + dtor
     (void)filenameObj;
 
-    reinterpret_cast<System::String*>(self_offset)->Serialize(serializer);   // LEFT: H5 raw String storage
+    self_offset->Serialize(serializer);
 
     if (GetSerializerVersion(serializer) == 0) {
         Game_TerrainResolveMaterial(self_offset);
@@ -164,20 +164,18 @@ static void SerializeFilenameString(void* self_offset, IO::Serializer* serialize
 // ============================================================
 // External() and the 0x14015f170 stamp are the compiler's; then the defaults.
 TerrainGenerator::TerrainGenerator() {
+    // The four Strings (+0x28 / +0x38 / +0x50 / +0x68) are members: String()
+    // stores the null data pointer retail's inlined ctor stores.
     _field20 = nullptr;          // ExternalPtr
-    _field28 = nullptr;          // String
     _field30 = 1;                // enabled
 
     // Noise layer 1: String, sentinel, ptr
-    _field38 = nullptr;
     _field40 = -1;
     _field48 = nullptr;
     // Noise layer 2
-    _field50 = nullptr;
     _field58 = -1;
     _field60 = nullptr;
     // Noise layer 3
-    _field68 = nullptr;
     _field70 = -1;
     _field78 = nullptr;
 
@@ -199,11 +197,8 @@ TerrainGenerator::~TerrainGenerator() {
     // no destroy step). B.3.2 bridge: +0x80/+0x88 are still two void* fields.
     reinterpret_cast<TerrainSizeRowArray*>(&_field80)->~Array();   // LEFT: H5 raw Array triple (+0x80)
 
-    // Destroy strings in reverse order: +0x68, +0x50, +0x38, +0x28
-    reinterpret_cast<System::String*>(&_field68)->~String();   // LEFT: H5 raw String storage (the COW pointers)
-    reinterpret_cast<System::String*>(&_field50)->~String();   // LEFT: H5 raw String storage
-    reinterpret_cast<System::String*>(&_field38)->~String();   // LEFT: H5 raw String storage
-    reinterpret_cast<System::String*>(&_field28)->~String();   // LEFT: H5 raw String storage
+    // The member Strings are destroyed after this body in reverse order:
+    // +0x68, +0x50, +0x38, +0x28 (retail 0x140020663..0x140020697).
 }
 
 // ============================================================
@@ -233,7 +228,7 @@ bool TerrainGenerator::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
 
     // Serialize String at +0x28
-    reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);   // LEFT: H5 raw String storage
+    _field28.Serialize(serializer);
 
     // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
     s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);   // LEFT: H8 (a bool field would normalise the byte)

@@ -66,7 +66,7 @@ class EditTool;            // Player/EditTool.h (included below)
 class PlayerToolManager;   // Game/PlayerToolManager.h
 extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI);   // B4 P2 T1: typed (edittool.cpp)
 extern "C" bool  EditTool_IsEditTool(void* tool);
-extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
+extern "C" class ComponentDescription* StartTown_ResolveTemplateByPath(const char* path);
 // EntityUI_SetEditMode_Impl: Dialog/exe_bodies.h.
 // Retail close path (port of Entity_impl_cc90 0x1400fcc90) — destroys the
 // DialogInstance and runs every controller's teardown. C++ linkage taking EditTool*,

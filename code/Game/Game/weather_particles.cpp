@@ -265,7 +265,7 @@ void WeatherParticleGeometry::Configure(Weather* d) {
 // descriptor as untyped pointers). The null test is the old body's.
 extern "C" void WeatherParticle_Config(void* geo, void* descriptor) {
     if (!geo || !descriptor) return;
-    static_cast<WeatherParticleGeometry*>(geo)->Configure(static_cast<Weather*>(descriptor));
+    static_cast<WeatherParticleGeometry*>(geo)->Configure(static_cast<Weather*>(descriptor));   // LEFT: SIG WeatherParticle_Config (B4 FORWARD, debugui.cpp)
 }
 
 // ============================================================
@@ -393,7 +393,7 @@ void WeatherSimulation::SetEffectEnabled(int slot, bool enable) {
 // extern declares the receiver void*). The null test is the old body's.
 extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable) {
     if (!sim) return;
-    static_cast<WeatherSimulation*>(sim)->SetEffectEnabled(slot, enable != 0);
+    static_cast<WeatherSimulation*>(sim)->SetEffectEnabled(slot, enable != 0);   // LEFT: SIG WeatherEffect_SetEnabled (B4 FORWARD)
 }
 
 // ============================================================
@@ -422,5 +422,5 @@ using WeatherEntryArray = Collection::Array<WeatherEntryElem>;
 
 extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {
     // B.3.2 bridge: EnvironmentDescription's weather array is still a raw triple.
-    reinterpret_cast<WeatherEntryArray*>(hdr)->SetSize(newCount);
+    reinterpret_cast<WeatherEntryArray*>(hdr)->SetSize(newCount);   // LEFT: SIG Reimpl_WeatherArray_Resize (raw triple of outside callers)
 }
