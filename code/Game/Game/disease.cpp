@@ -42,29 +42,25 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* s
 // create 0x14008fd0 — the field defaults (External() and the stamp are the
 // compiler's).
 Disease::Disease()
-    : _stringTable(nullptr), _name(nullptr),     // ExternalPtr (weak), empty COW String
+    : _stringTable(nullptr), _name(),            // ExternalPtr (weak), empty String (qword 0)
       _field30(1.0f), _field34(0.0f), _field38(1.0f), _field3C(10.0f), _field40(0.0f) {}
 
-// Dtor 0x140018f60's body: ~String(+0x28); ~External is the compiler's chain.
-Disease::~Disease() {
-    reinterpret_cast<System::String*>(&_name)->~String();   // B.3.1 bridge: the field is the COW pointer
-}
+// Dtor 0x140018f60: ~String(+0x28) (the member's), then ~External: the
+// compiler's chain, in that order.
+Disease::~Disease() {}
 
 // [5] 0x1400932d0 — returns AL=1.
 bool Disease::Serialize(IO::Stream& stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, serializer);
-    // B.3.1 bridge: the String field is its COW pointer.
-    reinterpret_cast<System::String*>(&_name)->Serialize(serializer);
-    IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
+    IO::Serializer s(stream, 0);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &s);
+    _name.Serialize(&s);
     s.Serialize(_field30, nullptr);
     s.Serialize(_field34, nullptr);
     s.Serialize(_field38, nullptr);
     s.Serialize(_field3C, nullptr);
     s.Serialize(_field40, nullptr);
-    s.~Serializer();
-    return true;
+    return true;   // ~Serializer runs here, after the last field, as before
+
 }
 
 // [6] 0x1400190a0 — slot 0 with flags 0 (destroy, no free), then the ctor
