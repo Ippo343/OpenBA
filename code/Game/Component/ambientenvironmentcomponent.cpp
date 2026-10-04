@@ -52,6 +52,8 @@
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/Map.h"
+#include "Game/WeatherSimulation.h"
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include <cstdint>
 #include <cstdlib>
@@ -96,9 +98,8 @@ AmbientEmitterComponent* FindSiblingEmitter(AmbientEnvironmentComponent* self) {
 }
 
 // The tile grid (the Game object at gameWorld+0xf8): +0x00 width, +0x80 cells.
-// LEFT: GameUpdateLoop::m_game is void* (W0 header): the grid reads stay by offset.
-inline uint8_t* TileGrid() {
-    return reinterpret_cast<uint8_t*>(GameUpdateLoop::_singleton->m_game);
+inline Map* TileGrid() {
+    return GameUpdateLoop::_singleton->m_game;
 }
 
 }  // namespace
@@ -128,9 +129,9 @@ void AmbientEnvironmentComponent::InitRegion(int gridX, int gridY, int rw, int r
     regionHeight = rh;
 
     if (GameUpdateLoop::_singleton == nullptr) return;
-    uint8_t* grid = TileGrid();
+    Map* grid = TileGrid();
     if (!grid) return;
-    int gridWidth = *reinterpret_cast<int*>(grid + 0x00);
+    int gridWidth = grid->size;
     if (gridWidth <= 0) return;
 
     long long center = (long long)(gridY + (rh >> 1)) * gridWidth + gridX + (rw >> 1);
@@ -203,10 +204,10 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
     if (!s_tidEnvDesc || !::System::MemoryAllocator::_singleton) return;
 
     // Grid (Game object at gameWorld+0xf8): +0x00 width, +0x80 cells (stride 0x30).
-    uint8_t* grid = TileGrid();
+    Map* grid = TileGrid();
     if (!grid) return;
-    int gridWidth = *reinterpret_cast<int*>(grid + 0x00);
-    uint8_t* cells = *reinterpret_cast<uint8_t**>(grid + 0x80);
+    int gridWidth = grid->size;
+    MapCell* cells = grid->cells;
 
     // Biome config description at +0x18.
     Description* descRaw = _description;
@@ -249,12 +250,12 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
         for (int y = 0; y < rh; ++y) {
             for (int x = 0; x < rw; ++x) {
                 intptr_t ci = (intptr_t)(gridY + y) * gridWidth + (gridX + x);
-                uint8_t* cell = cells + ci * 0x30;
-                uint8_t bits = cell[0x29];
+                MapCell* cell = cells + ci;
+                uint8_t bits = cell->terrainType;
 
                 // Cell's entity reference (cell+0x00, else cell+0x08).
-                ComponentEntity* ent = *reinterpret_cast<ComponentEntity**>(cell + 0x00);
-                if (!ent) ent = *reinterpret_cast<ComponentEntity**>(cell + 0x08);
+                ComponentEntity* ent = cell->blocker;
+                if (!ent) ent = cell->occupant;
 
                 for (int k = 0; k < count; ++k) {
                     AmbientEnvironmentBiome* bt = &table[k];
@@ -291,12 +292,11 @@ void AmbientEnvironmentComponent::Update(void* /*time*/) {
     }
 
     // Temperature crossfade factor: (temp - lo) / (hi - lo), clamped [0,1].
-    // LEFT: GameUpdateLoop::m_weather is void* (W0 header): the temperature read stays by offset.
     float unit = kRdata_14017214c;
-    void* weather = GameUpdateLoop::_singleton->m_weather;
+    WeatherSimulation* weather = GameUpdateLoop::_singleton->m_weather;
     float f = 0.0f;
     if (weather) {
-        float temp = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(weather) + 0x18);
+        float temp = weather->temperature;
         float lo = desc->_f30;
         float hi = desc->_f34;
         float denom = hi - lo;
