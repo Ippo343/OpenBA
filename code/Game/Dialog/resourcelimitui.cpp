@@ -27,6 +27,7 @@
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Entity/CitizenBehavior.h"
 #include <cstdio>
 #include "system/String.h"
 #include <cstdint>
@@ -55,22 +56,22 @@ static int GetResourceLimitByIdx(int resourceIndex) {
     if (!GameUpdateLoop::_singleton) return 0;
     GameUpdateLoop* worldSingleton = GameUpdateLoop::_singleton;
     if (!worldSingleton) return 0;
-    void* subObj = worldSingleton->m_citizenList;   // LEFT: void* (GAME-a)
+    CitizenBehavior* subObj = worldSingleton->m_citizenList;
     if (!subObj) return 0;
-    uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
+    ProfessionResourceEntry* arrayBase = subObj->professionResources;
     if (!arrayBase) return 0;
-    return *(int*)(arrayBase + (int64_t)resourceIndex * 0x20 + 8);
+    return arrayBase[resourceIndex].maxCount;
 }
 
 static void SetResourceLimitByIdx(int resourceIndex, int value) {
     if (!GameUpdateLoop::_singleton) return;
     GameUpdateLoop* worldSingleton = GameUpdateLoop::_singleton;
     if (!worldSingleton) return;
-    void* subObj = worldSingleton->m_citizenList;   // LEFT: void* (GAME-a)
+    CitizenBehavior* subObj = worldSingleton->m_citizenList;
     if (!subObj) return;
-    uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
+    ProfessionResourceEntry* arrayBase = subObj->professionResources;
     if (!arrayBase) return;
-    *(int*)(arrayBase + (int64_t)resourceIndex * 0x20 + 8) = value;
+    arrayBase[resourceIndex].maxCount = value;
 }
 
 // Read the live default/limit for a row (used by the trace + external checks).
