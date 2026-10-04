@@ -37,11 +37,9 @@
 static int CemeteryGetBurialCount_Impl(CemeteryComponent* cemetery) {
     int burials = 0;
     for (int i = 0; i < cemetery->plotCount; i++) {
-        // LEFT: GameUpdateLoop::m_game is void* and Map::cells has no cell type
-        // (GAME-a's headers): the occupant is the 0x30-byte cell's +0x08 entity.
-        const uint8_t* cells = (const uint8_t*)((Map*)GameUpdateLoop::_singleton->m_game)->cells;
-        ComponentEntity* occupant =
-            *(ComponentEntity* const*)(cells + (int64_t)cemetery->plots[i] * 0x30 + 8);
+        // The occupant is the 0x30-byte cell's +0x08 entity.
+        const MapCell* cells = GameUpdateLoop::_singleton->m_game->cells;
+        ComponentEntity* occupant = cells[(int64_t)cemetery->plots[i]].occupant;
         if (occupant == nullptr) continue;
         if (occupant->FindComponent<TombstoneComponent>() != nullptr) burials++;
     }
