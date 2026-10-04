@@ -46,19 +46,10 @@ namespace RtObject {
 
 using RtSystem::Filename;
 
-// ============================================================
-// Object::ExternalPtr<T> — one raw pointer, no refcount.
-//
-// PINNED by ?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@...
-// (0x1800bf700), which returns one BY VALUE through a hidden return slot and
-// whose entire payload write is `*(qword*)retval = list->_data[i]` on a hit and
-// `*(qword*)retval = 0` on a miss. Nothing bumps a refcount on the way out.
-// ============================================================
-template <class T>
-struct ExternalPtr {
-    T* ptr;   // +0x00
-};
-static_assert(sizeof(ExternalPtr<void>) == 8, "ExternalPtr<T> is one pointer");
+// (B.4 P2 wave X: the `RtObject::ExternalPtr<T>` POD that stood here had no
+// user left; the one ExternalPtr is `Object::ExternalPtr<T>` below, pinned by
+// ?Find@ExternalList@Object@@ (0x1800bf700), which returns one BY VALUE whose
+// whole payload is a single qword store.)
 
 // ============================================================
 // Object::External — vtable + path + a 0x10-stride owning array.
@@ -308,14 +299,9 @@ using ExternalFactory = ::Object::ExternalFactory;
 // offsets above and every other array in this engine, but no decompiled body in
 // scope touches it.
 // ============================================================
-struct ExternalList {
-    External   _base;      // +0x00
-    External** _resources; // +0x20
-    int32_t    _count;     // +0x28
-    int32_t    _pad2c;     // +0x2c — NOT PINNED; probably Array<T>::_capacity
-};
-static_assert(offsetof(ExternalList, _resources) == 0x20, "ExternalList::_resources @ +0x20");
-static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count @ +0x28");
+// (B.4 P2 wave X: the `RtObject::ExternalList` POD that stood here had no user
+// left but its own cross-assertions; the class is `Object::ExternalList` below,
+// with the same pins.)
 
 // (B.4 P2 R-OBJ: the `FactoryTypeNodeOffsets` byte offsets that external.cpp's
 // inlined IsDerivedFrom walk used are gone with their last reader: that walk
@@ -327,12 +313,8 @@ static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count 
 // ENDGAME B.3.1 step 1 — the REAL class, under retail's name.
 // ============================================================================
 //
-// `RtObject::ExternalPtr<T>` above stays declared: it is the POD that
-// not-yet-converted structs (Achievement::Goal::_stringTable, ...) and the C
-// bodies still spell, and B31_RULES step 1 keeps every existing vocabulary
-// working. `Object::ExternalPtr<T>` is the same eight bytes with retail's
-// members on them; step 2 moves the callers over one directory at a time and
-// the POD is deleted when its last user is gone.
+// `Object::ExternalPtr<T>` is one raw pointer with retail's members on it (the
+// `RtObject::ExternalPtr<T>` POD it replaced is gone, B.4 P2 wave X).
 //
 // TRIVIALLY COPYABLE AND TRIVIALLY DESTRUCTIBLE, ON PURPOSE AND BY ASSERTION.
 // `Collection::Array<{String, ExternalPtr}>` bulk-moves these eight bytes with
@@ -738,8 +720,6 @@ public:
 };
 static_assert(sizeof(ExternalList) == 0x30,
               "Object::ExternalList is 0x30 bytes -- the element size of its deleting dtor 0x180007800");
-static_assert(offsetof(ExternalList, _resources) == offsetof(RtObject::ExternalList, _resources), "alias _resources");
-static_assert(offsetof(ExternalList, _count)     == offsetof(RtObject::ExternalList, _count),     "alias _count");
 static_assert(offsetof(ExternalList, _resources) == 0x20, "ExternalList::_resources @ +0x20");
 static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count @ +0x28");
 
