@@ -429,14 +429,14 @@ static void Game_SpawnCitizens_Impl() {
                             // Sum occupant counts from the use locations (+0x28 / +0x30)
                             int childCount = resComp->useLocationCount;
                             if (childCount > 0) {
-                                InteractComponent** childArrayBase = resComp->useLocations;
+                                Object::InternalPtr<InteractComponent>* childArrayBase = resComp->useLocations;
                                 int si = 0;
                                 do {
-                                    InteractComponent* const* pChild = childArrayBase + si;
+                                    const Object::InternalPtr<InteractComponent>* pChild = childArrayBase + si;
                                     // 0x140123070 InteractNodeCount (the forwarder
                                     // Pf_RecursiveChildSum_123070's body; door misnamed
                                     // fn_ResidenceComponent_GetOccupantCount)
-                                    int occResult = InteractNodeCount(*pChild, 0);
+                                    int occResult = InteractNodeCount(pChild->Get(), 0);
                                     capacityAccum += occResult;
                                     si++;
                                 } while (si < childCount);

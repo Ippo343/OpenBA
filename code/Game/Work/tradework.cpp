@@ -395,10 +395,10 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         // The null arm is the tree's guard; retail reads +0x30 of the result unguarded.
         uint32_t range = interactDesc ? static_cast<uint32_t>(interactDesc->_useNodes.count) : 0;
         if (posComp->useLocationCount > 0) {
-            InteractComponent** parts = posComp->useLocations;
+            Object::InternalPtr<InteractComponent>* parts = posComp->useLocations;
             int cn = posComp->useLocationCount;
             for (int k = 0; k < cn; k++) {
-                range += InteractNodeCount(parts[k], 0);   // 0x140123070
+                range += InteractNodeCount(parts[k].Get(), 0);   // 0x140123070
             }
         }
         System::Random* rng = gw ? gw->m_random : nullptr;

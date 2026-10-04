@@ -71,7 +71,7 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
     // 0x14004fc40: IBP +0x28 (validated ComponentEntity), Vector3 +0x30 / +0x3c, int
     // +0x50, Time +0x48.
-    ComponentEntity* hall;         // +0x28 the town hall entity the nomad walks to
+    Object::InternalPtr<ComponentEntity> hall;   // +0x28 the town hall entity the nomad walks to
     Math::Vector3    spawnPoint;   // +0x30 map-edge cell it arrived at (and leaves by)
     Math::Vector3    meetPoint;    // +0x3C the hall's use point it stands at
     System::Time     wanderTimer;  // +0x48 loiter countdown

@@ -953,7 +953,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             uint32_t weight = static_cast<uint32_t>(icDesc->_useNodes.count);
             const int icChildren = interact->useLocationCount;
             for (int k = 0; k < icChildren; ++k) {
-                weight += InteractNodeCount(interact->useLocations[k], 0);   // 0x140123070
+                weight += InteractNodeCount(interact->useLocations[k].Get(), 0);   // 0x140123070
             }
             const uint32_t roll = GameUpdateLoop::_singleton->m_random->Rand(weight);
             float marketPos[3] = {0.0f, 0.0f, 0.0f};
@@ -1202,7 +1202,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
         uint32_t weight = static_cast<uint32_t>(micDesc->_useNodes.count);
         const int micChildren = mic->useLocationCount;
         for (int k = 0; k < micChildren; ++k) {
-            weight += InteractNodeCount(mic->useLocations[k], 0);   // 0x140123070
+            weight += InteractNodeCount(mic->useLocations[k].Get(), 0);   // 0x140123070
         }
         const uint32_t roll2 = GameUpdateLoop::_singleton->m_random->Rand(weight);
         float marketPos2[3] = {0.0f, 0.0f, 0.0f};

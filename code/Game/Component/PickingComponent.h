@@ -47,7 +47,7 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1).
     int32_t  pickingId;    // +0x28 Picking::Scene mesh id (ctor -1 = none)
     uint8_t  _pad2C[4];    // +0x2C
-    ComponentEntity* userData; // +0x30 InternalPtr<ComponentEntity>: the entity a pick answers (Startup: the owner)
+    Object::InternalPtr<ComponentEntity> userData; // +0x30 the entity a pick answers (Startup: the owner)
 };
 
 static_assert(sizeof(PickingComponent) == 0x38, "PickingComponent is 0x38 (create 0x140036da0)");

@@ -138,7 +138,7 @@ int InteractNodeCount(const InteractComponent* self, int kind) {
     // harness (Leisure/Work anchor a citizen on an inert workplace building's position comp).
     int total = interact ? (&interact->_useNodes)[kind].count : 0;
     for (int i = 0; i < self->useLocationCount; ++i) {
-        total = total + InteractNodeCount(self->useLocations[i], kind);
+        total = total + InteractNodeCount(self->useLocations[i].Get(), kind);
     }
     return total;
 }

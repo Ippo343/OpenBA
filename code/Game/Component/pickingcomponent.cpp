@@ -57,7 +57,7 @@ void PickingComponent::RefreshMesh() {
     // selects the whole bridge. Fusing Startup+OnAdded here must not undo that, so only
     // default userData when nothing has claimed it.
     if (!userData) userData = entity;
-    ComponentEntity* pickUserData = userData;
+    ComponentEntity* pickUserData = userData.Get();
     // Retail's OnAdded (0x140128f50) is a REFRESH, not a one-shot. Its very first act is to
     // call its OWN vtable +0x38 — PickingComponent::OnRemove, i.e. "if pickingId >= 0,
     // Picking::Scene::RemoveMesh it and reset to -1" — and only then does it re-register
@@ -189,7 +189,7 @@ void PickingComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // Serialize the userData InternalPtr
-    reinterpret_cast<Object::InternalBasePtr*>(&userData)->Serialize(ser);   // H5: the member is the raw pointer the IBP holds   // LEFT: POD PickingComponent::userData is the InternalPtr retail holds, declared as a bare pointer
+    userData.InternalBasePtr::Serialize(ser);
 
     // Validate: if not ComponentEntity, null it out
     // ENDGAME B.3.9 CB: retail validates this IBP with IsDerivedFrom(ptr, [0x1401c5d70]) =
@@ -198,7 +198,7 @@ void PickingComponent::Persist(IO::Stream& stream) {
     // TypeName slot 0x140031c60 -- which is unregistered, so the check never ran.
     if (userData != nullptr) {
         // ?IsDerivedFrom@Base@Object@@ (import slot 0x140152a98)
-        if (!Object::IsDerivedFromNullSafe(userData, ComponentEntity::TypeId())) {
+        if (!Object::IsDerivedFromNullSafe(userData.Get(), ComponentEntity::TypeId())) {
             userData = nullptr;
         }
     }

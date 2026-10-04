@@ -340,7 +340,7 @@ static int RegisterCitizenPickMesh(CharacterComponent* self) {
     Math::Transform xform = model->transform;
 
     Picking::Scene* scene = GameUpdateLoop::_singleton->m_pickingScene;   // +0x70
-    void* owner = pickComp->userData;   // +0x30 entity IBP value
+    void* owner = pickComp->userData.Get();   // +0x30 entity IBP value
     uint32_t id = scene->AddMesh(
         Object::ExternalPtr<Picking::PickingMesh>(meshHandle),
         xform, owner, 0, 0, nullptr);

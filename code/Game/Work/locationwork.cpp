@@ -141,10 +141,10 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // Also check the parts' use locations
     int subCount = interact->useLocationCount;
     if (subCount > 0) {
-        InteractComponent** subArray = interact->useLocations;
+        Object::InternalPtr<InteractComponent>* subArray = interact->useLocations;
         for (int i = 0; i < subCount; i++) {
             uint8_t subFound = WorkImpl_WalkablePosRecursive_122b00(
-                subArray[i], 0, srcPosArr, bestPos, &bestDist);
+                subArray[i].Get(), 0, srcPosArr, bestPos, &bestDist);
             found = found | subFound;
         }
     }

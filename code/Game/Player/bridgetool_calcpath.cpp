@@ -196,7 +196,7 @@ void SeatSegmentPickOwner(ComponentEntity* seg, ComponentEntity* masterEntity,
 
     Picking::Scene* scene = gameWorld ? gameWorld->m_pickingScene : nullptr;
     if (scene)
-        scene->SetMeshUserData(static_cast<uint32_t>(meshId), pc->userData, 0, 0, nullptr);
+        scene->SetMeshUserData(static_cast<uint32_t>(meshId), pc->userData.Get(), 0, 0, nullptr);
 }
 
 // Construct a ComponentEntity (0x48 bytes) from a template/description.

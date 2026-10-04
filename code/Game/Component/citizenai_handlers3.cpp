@@ -329,7 +329,7 @@ uint64_t CitizenAIComponent::State_Work() {
         int count = posComp->useLocationCount;
         int i = 0;
         while (i < count) {
-            InteractComponent* child = posComp->useLocations[i];
+            InteractComponent* child = posComp->useLocations[i].Get();
             uint8_t got = WorkImpl_WalkablePosRecursive_122b00(child, 0, pos, walkOut, &bestCost);
             any = static_cast<uint8_t>(any | got);
             ++i;

@@ -37,7 +37,7 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
     // 0x140123340 (int count +0x30 with the +0x28 IBP array, each validated against
     // InteractComponent 0x1401c7900) and OnAdded 0x140123110.
-    InteractComponent** useLocations;       // +0x28 the parts' InteractComponents (Array data, freed by the retail dtor)
+    Object::InternalPtr<InteractComponent>* useLocations;       // +0x28 the parts' InteractComponents (Array data, freed by the retail dtor)
     int32_t             useLocationCount;   // +0x30
     int32_t             useLocationCapacity;// +0x34
 };

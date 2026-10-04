@@ -104,14 +104,12 @@ void InteractComponent::Persist(IO::Stream& stream) {
     }
 
     // Serialize each InternalBasePtr element and validate
-    InteractComponent** arrayBase = useLocations;
+    Object::InternalPtr<InteractComponent>* arrayBase = useLocations;
     for (int i = 0; i < count; i++) {
-        // LEFT: the array holds InternalPtr<InteractComponent>; InternalBasePtr has no
-        // typed view of a bare pointer slot.
-        reinterpret_cast<Object::InternalBasePtr*>(&arrayBase[i])->Serialize(ser);   // LEFT: POD InteractComponent::useLocations holds InternalPtr<InteractComponent> declared as InteractComponent*
+        arrayBase[i].InternalBasePtr::Serialize(ser);
 
         // Validate with IsDerivedFrom
-        InteractComponent* ptr = arrayBase[i];
+        InteractComponent* ptr = arrayBase[i].Get();
         if (ptr != nullptr) {
             bool valid = ptr->IsDerivedFrom(InteractComponent::TypeId());   // slot 0x140152a98
             if (!valid) {
@@ -143,19 +141,19 @@ void InteractComponent::OnAdded() {
             uint32_t oldCount = (uint32_t)useLocationCount;
             uint32_t newCount = oldCount + 1;
             if (newCount != oldCount) {
-                InteractComponent** oldBuf = useLocations;
+                Object::InternalPtr<InteractComponent>* oldBuf = useLocations;
                 useLocationCount = (int32_t)newCount;
                 if (useLocationCapacity < (int)newCount) {
                     useLocationCapacity = (int32_t)newCount;
                     if (oldCount != 0) useLocationCapacity = (int32_t)(newCount * 3);
-                    useLocations = static_cast<InteractComponent**>(
+                    useLocations = static_cast<Object::InternalPtr<InteractComponent>*>(
                         System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)useLocationCapacity << 3), 8));
                 }
                 int start = (oldBuf == useLocations) ? (int)oldCount : 0;
-                InteractComponent** nbArr = useLocations;
-                InteractComponent** oldArr = oldBuf;
+                Object::InternalPtr<InteractComponent>* nbArr = useLocations;
+                Object::InternalPtr<InteractComponent>* oldArr = oldBuf;
                 for (int i = start; i < (int)newCount; i++) {
-                    InteractComponent** dst = nbArr + i;
+                    Object::InternalPtr<InteractComponent>* dst = nbArr + i;
                     if (dst) {
                         *dst = nullptr;
                         *dst = (i < (int)oldCount) ? oldArr[i] : interact;

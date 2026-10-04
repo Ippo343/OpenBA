@@ -556,9 +556,9 @@ float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p
         int i = 0;
         if (0 < childN) {
             do {
-                int n = InteractNodeCount(self->useLocations[i], p3);   // 0x140123070
+                int n = InteractNodeCount(self->useLocations[i].Get(), p3);   // 0x140123070
                 if (local_68 <= p4 && p4 < n + local_68) {
-                    InteractNodePosition(self->useLocations[i], retVec3, p3, p4 - local_68, p5);   // 0x140122e20
+                    InteractNodePosition(self->useLocations[i].Get(), retVec3, p3, p4 - local_68, p5);   // 0x140122e20
                     return retVec3;
                 }
                 i++;

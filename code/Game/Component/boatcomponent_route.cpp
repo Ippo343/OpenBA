@@ -131,7 +131,7 @@ extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System:
         // Not on this component — try each child (comp+0x28 array of IBPs, +0x30 count).
         const int childCount = comp->useLocationCount;
         for (int i = 0; i < childCount; ++i) {
-            InteractComponent* child = comp->useLocations[i];
+            InteractComponent* child = comp->useLocations[i].Get();
             if (BoatRoute_FindAttachPoint(child, nameStr, outPos, outYaw)) return true;
         }
         return false;

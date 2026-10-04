@@ -2539,7 +2539,7 @@ void BridgeDumpEntity(const char* what, ComponentEntity* ent) {
         if (tidPicking && tid == tidPicking)
             fprintf(stderr, "{pickId=%d userData=%p master=%p}",
                    static_cast<PickingComponent*>(comp)->pickingId,
-                   static_cast<PickingComponent*>(comp)->userData,
+                   static_cast<PickingComponent*>(comp)->userData.Get(),
                    g_BridgeLastMaster);
     }
     fprintf(stderr, "\n");

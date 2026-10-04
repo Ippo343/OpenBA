@@ -234,9 +234,8 @@ void NomadComponent::Persist(IO::Stream& stream) {
     // Main data serializer
     IO::Serializer ser(*st, 0);
 
-    // Serialize the hall IBP at +0x28. LEFT: InternalBasePtr has no typed view of a
-    // bare pointer member.
-    reinterpret_cast<Object::InternalBasePtr*>(&hall)->Serialize(ser);   // LEFT: POD NomadComponent::hall holds the InternalPtr retail keeps, declared as a bare pointer
+    // Serialize the hall IBP at +0x28.
+    hall.InternalBasePtr::Serialize(ser);
 
     // Validate IBP after deserialize
     // ENDGAME B.3.9 CB: retail validates this IBP with IsDerivedFrom(ptr, [0x1401c5d70]) =

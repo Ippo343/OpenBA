@@ -341,7 +341,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
     if (0 < childCount) {
         int i = 0;
         do {
-            InteractComponent* child = posComp->useLocations[i];
+            InteractComponent* child = posComp->useLocations[i].Get();
             uint8_t r = WorkImpl_WalkablePosRecursive_122b00(child, 0, pos, outVec, &bestCost);
             found |= r;
             i++;
