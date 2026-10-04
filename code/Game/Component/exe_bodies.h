@@ -147,9 +147,6 @@ extern "C" float CropFieldComponent_Maturity(void* comp);  // 0x14011b410  B4 FO
 // ---- decalcomponent.cpp
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId);  // 0x1400b0d00
 
-// ---- destroycomponent_state6.cpp
-extern "C" void* Destroy_FindDecalComponent_b630(uintptr_t entity, void* retIBP);  // 0x14000b630
-
 // ---- destroycomponent_workerrelease.cpp
 extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax);  // 0x14012fb00
 extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc);  // 0x14012f520
