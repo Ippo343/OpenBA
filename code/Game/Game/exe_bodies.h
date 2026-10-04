@@ -190,7 +190,7 @@ extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const Ge
 
 // ---- town_storage_seed.cpp
 class Component; class MapGenerator;
-extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);  // 0x14012d230
+extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLocationComp);  // 0x14012d230
 extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntity);  // 0x140107ff0
 extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig);  // 0x1400a1f00
 
@@ -224,7 +224,8 @@ extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const S
 // extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
 // the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
 // reused by callers that need the tolerance-range primitive.
-extern "C" float fn_Random_RandFloatTol(void* self);
+namespace System { class Random; }
+extern "C" float fn_Random_RandFloatTol(System::Random* self);
 
 // ---- worldsetup_reload.cpp
 class MainMenuDialog; namespace Save { class SavedState; }

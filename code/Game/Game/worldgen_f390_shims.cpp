@@ -18,10 +18,10 @@
 extern "C" {
 
 // System::Random::RandFloatTol() — Runtime export; advances RNG state, returns ~[-1,1].
-// The receiver stays void*: its callers outside GAME-c (Component, starttown,
-// founding_spawn) still hold the Random as void*.
-float fn_Random_RandFloatTol(void* self) {
-    return reinterpret_cast<System::Random*>(self)->RandFloatTol();   // LEFT: void* receiver of outside callers (Component blocks, starttown, founding_spawn)
+// B4 FORWARD: its callers (Component blocks, founding_spawn, the river pass) hold a
+// System::Random*; the call lines in X6-CW's files are rewired at the close.
+float fn_Random_RandFloatTol(System::Random* self) {
+    return self->RandFloatTol();
 }
 
 // vector<int> bucket deep-copy ({data@+0, count@+8, cap@+0xC}, stride-4 elements).
