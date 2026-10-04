@@ -82,7 +82,7 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
     int count = (int)arr[1];
     for (int i = 0; i < count; i++) {
         int64_t base = arr[0];
-        if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {   // LEFT: SIG as above
+        if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {   // LEFT: SIG BuildComponent_FindInQueue takes the array header and the IBP as void* (Component/exe_bodies.h); its callers pass CitizenBehavior's buildComponents raw triple (H5)
             return i;
         }
     }

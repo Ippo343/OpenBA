@@ -109,8 +109,8 @@ void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll)
     slot = nullptr;
 
     if (reroll != '\0') {
-        int64_t exclIbp = 0;   // a null InternalBasePtr
-        char found = CitizenComp_TryEnrolInSchool(self, &exclIbp);
+        AttendanceComponent* exclIbp = nullptr;   // a null InternalPtr<AttendanceComponent>
+        char found = self->TryEnrolInSchool(exclIbp);   // 0x140111840
         if (found == '\0') {
             slot = nullptr;
         }

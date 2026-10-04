@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "collection/Collection.h"   // Collection::Array<int32_t> (the +0x140 buckets)
+#include "system/Value.h"            // System::Time (the five clocks)
 
 class ComponentEntity;
 class CemeteryComponent;
@@ -71,7 +72,7 @@ struct ProfessionResourceEntry {
     int32_t  field_0x0C;      // +0x0C: int, serialized
     int32_t  _field10;        // +0x10
     int32_t  _field14;        // +0x14: not serialized
-    int64_t  timer;           // +0x18: System::Time
+    System::Time timer;       // +0x18: System::Time
 };
 static_assert(sizeof(ProfessionResourceEntry) == 0x20, "ProfessionResourceEntry size");
 static_assert(offsetof(ProfessionResourceEntry, currentCount)  == 0x00, "");
@@ -89,7 +90,7 @@ static_assert(offsetof(ProfessionResourceEntry, timer)         == 0x18, "");
 struct ResourceNotifyEntry {
     int32_t  current;         // +0x00: current count
     int32_t  maxCapacity;     // +0x04: max capacity (5% threshold = max/20)
-    int64_t  timer;           // +0x08: System::Time, countdown to the next notification
+    System::Time timer;       // +0x08: System::Time, countdown to the next notification
 };
 static_assert(sizeof(ResourceNotifyEntry) == 0x10, "ResourceNotifyEntry size");
 static_assert(offsetof(ResourceNotifyEntry, current)     == 0x00, "");
@@ -168,7 +169,9 @@ static_assert(offsetof(PathCostNode, _pad2C)     == 0x2C, "");
 // ============================================================
 // Node ctor 0x140017460: MemAlloc(0x38, 8); +0x00 = the key (qword), +0x08 /
 // +0x10 = 0 then the element Array copied in by 0x140015ec0, +0x18 = the parent,
-// +0x20 / +0x28 = 0, dword +0x30 = 0. Find / insert 0x1400172f0 compares the key
+// +0x20 / +0x28 = 0, dword +0x30 = 0 (the int16 balance and height, H7: two
+// named stores). The retrace 0x140014b40 reads +0x30 / +0x32 as two int16
+// (MOVSX). Find / insert 0x1400172f0 compares the key
 // as an UNSIGNED qword (the key is the object's address), +0x20 left, +0x28
 // right. The element is an Array<InternalPtr<ComponentEntity>>, held as its
 // three trivial fields (H5, as CitizenBehavior's own arrays). Nodes are built
@@ -182,7 +185,8 @@ struct CitizenBucketNode {
     CitizenBucketNode* parent;     // +0x18
     CitizenBucketNode* left;       // +0x20
     CitizenBucketNode* right;      // +0x28
-    int32_t            balance;    // +0x30 the ctor's dword store
+    int16_t            balance;    // +0x30 rightHeight - leftHeight (the retrace 0x140014b40)
+    int16_t            height;     // +0x32 (the ctor zeroes both with one dword store)
     uint8_t            _pad34[4];  // +0x34
 };
 static_assert(sizeof(CitizenBucketNode<Profession>) == 0x38, "bucket node is MemAlloc(0x38, 8) (0x140017460)");
@@ -194,6 +198,7 @@ static_assert(offsetof(CitizenBucketNode<Profession>, parent)   == 0x18, "");
 static_assert(offsetof(CitizenBucketNode<Profession>, left)     == 0x20, "");
 static_assert(offsetof(CitizenBucketNode<Profession>, right)    == 0x28, "");
 static_assert(offsetof(CitizenBucketNode<Profession>, balance)  == 0x30, "");
+static_assert(offsetof(CitizenBucketNode<Profession>, height)   == 0x32, "");
 static_assert(offsetof(CitizenBucketNode<Profession>, _pad34)   == 0x34, "");
 static_assert(sizeof(CitizenBucketNode<ComponentDescription>) == 0x38, "");
 
@@ -319,9 +324,9 @@ public:
     ResourceNotifyEntry* notifyEntries;    // +0x180 Array data; the ctor sizes it to 2
     int32_t  notifyEntryCount;             // +0x188
     int32_t  notifyEntryCapacity;          // +0x18C
-    int64_t  field_0x190;                  // +0x190 System::Time: += dt; drives the path graph (Update)
-    int64_t  field_0x198;                  // +0x198 System::Time: -= dt; < 1 -> 0x14008a730 (Update)
-    int64_t  field_0x1A0;                  // +0x1A0 System::Time: -= dt; < 0 -> +0x1A8 = 0 (Update)
+    System::Time field_0x190;              // +0x190 System::Time: += dt; drives the path graph (Update)
+    System::Time field_0x198;              // +0x198 System::Time: -= dt; < 1 -> 0x14008a730 (Update)
+    System::Time field_0x1A0;              // +0x1A0 System::Time: -= dt; < 0 -> +0x1A8 = 0 (Update)
     float    field_0x1A8;                  // +0x1A8 float (serialized by the float overload; Update
                                            //        stores dword 0)
     int32_t  field_0x1AC;                  // +0x1AC int (version > 1)

@@ -328,11 +328,11 @@ void CitizenUI::OnUpdateLayout() {
     // Guard both the destination element AND the source name String (+0x28), which is
     // uninitialized on a standalone citizen and would fault when SetParameter bumps its
     // ref-count.
-    bool okName = CitUI_OkString(&ai->name);
+    bool okName = CitUI_OkString(reinterpret_cast<const uint64_t*>(&ai->name));   // LEFT: the file-local SA guard CitUI_OkString reads the String's data word as uint64_t (citizenui.cpp:92, X3-GAME's)
     bool okParam = CitUI_OkTextParam(textName);
     // LEFT: CitizenComponent::name is raw String storage (H5, COMP-b's header).
     if (okName && okParam)
-        textName->SetParameter(0, *reinterpret_cast<const System::String*>(&ai->name));  // B.3.6 bridge   // LEFT: H5 CitizenComponent::name (+0x28) is raw String storage (Component/CitizenComponent.h)
+        textName->SetParameter(0, ai->name);
 
     // --- Age number ---
     float ageFloat = ai->age;

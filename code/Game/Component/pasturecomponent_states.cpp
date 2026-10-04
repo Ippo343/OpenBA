@@ -694,7 +694,7 @@ void PastureComponent::Command(int cmd) {
         const bool cur = wpc->isAccepting;
         wpc->SetAccepting(!cur);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
         if (!wpc->isAccepting) {
-            WorkComponent_RegisterWorkSlot(wc);   // 0x14012eb50
+            wc->CancelWork();   // 0x14012eb50
             wpc->SetAccepting(false);
         } else {
             ComponentEntity* entRef = _entity;

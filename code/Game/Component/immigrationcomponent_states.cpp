@@ -348,7 +348,7 @@ void ImmigrationComponent::Spawn() {
         int nChildren = pc->useLocationCount;
         for (int ci = 0; ci < nChildren; ++ci) {
             nPts += static_cast<uint32_t>(Pf_RecursiveChildSum_123070(
-                reinterpret_cast<int64_t>(pc->useLocations[ci]), 2));   // 0x140123070  LEFT: SIG Pf_RecursiveChildSum_123070
+                reinterpret_cast<int64_t>(pc->useLocations[ci]), 2));   // 0x140123070   // LEFT: SIG Pf_RecursiveChildSum_123070
         }
         uint32_t ptIdx = rng->Rand(static_cast<uint32_t>(nPts));
         Math::Vector3 meet(0.0f, 0.0f, 0.0f);
@@ -467,7 +467,7 @@ void ImmigrationComponent::Accept() {
     System::Time dur;
     dur._ticks = 0;
     RtSystem_Time_Ctor(&dur, static_cast<float>(desc->_diseaseMonths) * kSecondsPerMonth);
-    if (tm->field_0x1A0 < dur._ticks) tm->field_0x1A0 = dur._ticks;
+    if (tm->field_0x1A0._ticks < dur._ticks) tm->field_0x1A0._ticks = dur._ticks;
 
     const int n = groupCount;
     TownMgr(gw)->field_0x1B0 += n;

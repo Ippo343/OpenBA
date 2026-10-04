@@ -86,15 +86,15 @@ void CitizenAIComponent::Decide(const System::Time* time) {
 
     // --- Phase 1: count the 16 per-state timers down, clamped at 0 ---
     for (int i = 0; i < 16; i++) {
-        timers[i] -= dt;
-        if (timers[i] < 0) {
-            timers[i] = 0;
+        timers[i]._ticks -= dt;
+        if (timers[i]._ticks < 0) {
+            timers[i]._ticks = 0;
         }
     }
 
     // --- Phase 2: the two accumulators ---
     leisureTimer._ticks += dt;
-    dataC8 += dt;
+    dataC8._ticks += dt;
 
     // --- Phase 3: the citizen's own StorageComponent (what it carries) ---
     StorageComponent* storageComp = citizen->_entity->FindComponent<StorageComponent>();
@@ -108,7 +108,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
         storageCount = fn_StorageComponent_QueryCount(storageComp);
     }
     if (storageCount == 0) {
-        dataC8 = 0;
+        dataC8._ticks = 0;
     }
 
     // --- Phase 4: the seeking flags ---
@@ -129,7 +129,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
 
     if (health <= *pHungerThresh || health == *pHungerThresh || isInNeedState ||
         ((uint32_t)(aiState - 0x0E) < 2) ||
-        timers[14] > 0) {
+        timers[14]._ticks > 0) {
         // Not hungry enough to transition, or in special state
         if (hungerFlag != 0) {
             citizenData = citizen;
@@ -175,7 +175,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
 
     if (hydration <= *pThirstThresh || hydration == *pThirstThresh || isInNeedState ||
         ((uint32_t)(aiState - 0x0E) < 2) ||
-        timers[15] > 0) {
+        timers[15]._ticks > 0) {
         // Not cold enough or in special state
         if (thirstFlag != 0) {
             citizenData = citizen;
@@ -542,7 +542,7 @@ static std::atomic<int> s_caiForceWorkLog{0};   // the [ForceWork] trace cap
 // re-writes them, as it did when the inert factory zero-filled them.
 CitizenAIComponent::CitizenAIComponent()
     : state(0xc), queuedState(-1), seekingFood(false), seekingWarmth(false), _pad32{},
-      citizen(nullptr), timers{}, leisureTimer{0}, dataC8(0) {
+      citizen(nullptr), timers{}, leisureTimer{0}, dataC8{0} {
     OrFlagsInCtor(0x89);
 }
 

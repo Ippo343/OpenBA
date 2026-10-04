@@ -147,12 +147,12 @@ void WorkPlaceComponent::SetMaxWorkers(int newMax) {
         // [STANDALONE GUARD] Retail derefs citizen+0x1f0 (the profession record) unguarded;
         // a standalone worker can still be professionless, which reads through null+0x4c.
         Profession* profession = citizen->profession;
-        int64_t targetIBP = 0;
+        ComponentEntity* targetIBP = nullptr;   // the InternalPtr<ComponentEntity> the finders return
         if (profession) {
             if (!profession->field4C) {
-                CitizenComp_sub_ffc0(reinterpret_cast<int64_t>(citizen), &targetIBP);   // LEFT: SIG CitizenComp_sub_ffc0 (the int64_t IBP CitizenComp_AssignHousing takes)
+                targetIBP = citizen->FindWorkplace();         // 0x14010ffc0
             } else {
-                CitizenComp_sub_0470(reinterpret_cast<int64_t>(citizen), &targetIBP);   // LEFT: SIG CitizenComp_sub_0470 (as above)
+                targetIBP = citizen->FindRankedWorkplace();   // 0x140110470
             }
         }
 
@@ -162,7 +162,7 @@ void WorkPlaceComponent::SetMaxWorkers(int newMax) {
         if (!Plausible(rosterNow)) break;
         if (!Plausible(rosterNow[0].Get())) break;
 
-        CitizenComp_AssignHousing(rosterNow[0].Get(), &targetIBP);
+        rosterNow[0].Get()->SetWorkplace(targetIBP);   // 0x140111ee0
 
         // [STANDALONE GUARD] Retail's `while` assumes the finder never hands back THIS
         // workplace. If it did, an unterminated loop here is an in-world FREEZE rather than
@@ -191,7 +191,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
 
     // 1. Release every seated worker (ee60). This is the piece whose absence left the
     //    roster half-torn-down: +0x60 non-zero over a clobbered +0x58.
-    WorkPlaceComponent_OnCreateInit(this);
+    ReleaseWorkers();   // 0x14012ee60
 
     // 2. The owner entity's WorkComponent.
     WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
@@ -254,13 +254,3 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     std::fflush(stderr);
 }
 
-// ---- B4 FORWARD: outside callers in Dialog/workplaceui.cpp (SetMaxWorkers),
-// Component/workplacecomponent.cpp and standalone/tool_harness.cpp
-// (EnterBuilderProfession); the closing wave rewires them. The null test is the tree's.
-extern "C" void WorkPlaceComponent_SetMaxWorkers(int64_t wpc, int newMax) {
-    reinterpret_cast<WorkPlaceComponent*>(wpc)->SetMaxWorkers(newMax);   // LEFT: B4 FORWARD (workplaceui.cpp)
-}
-extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc) {
-    if (!wpc) return;
-    reinterpret_cast<WorkPlaceComponent*>(wpc)->EnterBuilderProfession();   // LEFT: B4 FORWARD (workplacecomponent.cpp, tool_harness.cpp)
-}

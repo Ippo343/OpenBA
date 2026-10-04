@@ -380,7 +380,7 @@ static void StartTown_PickMeshProbe(ComponentEntity* entity) {
 // removal-side cell clear stays disarmed (bit 0x100000).
 // decalcomponent.cpp — retail DecalComponent Slot12(msg=1): ramp a completed
 // building's footprint decal from _initialAlpha to full opacity.
-extern "C" void DecalComponent_MarkOwnerBuilt(void* entity);
+extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity);
 
 extern "C" void StartTown_RegisterRuntimeBuilding(ComponentEntity* entity) {
     if (!entity || GameUpdateLoop::_singleton == nullptr) return;

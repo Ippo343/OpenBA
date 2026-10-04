@@ -244,17 +244,17 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     // --- Accumulate timers ---
     foodTimer._ticks += dt_ticks;        // food timer
     happinessTimer._ticks += dt_ticks;   // happiness timer
-    clothingTimer -= dt_ticks;           // clothing wear timer
+    clothingTimer._ticks -= dt_ticks;           // clothing wear timer
     if (school != nullptr) {
         schoolTime._ticks += dt_ticks;   // school timer
     }
     field_0x200._ticks += dt_ticks;      // general timer
-    field_0x60 += dt_ticks;              // work timer
+    field_0x60._ticks += dt_ticks;              // work timer
 
     // Clothing worn out: back to no clothing
-    if (clothingTimer < 0) {
+    if (clothingTimer._ticks < 0) {
         clothingLevel = 0;
-        clothingTimer = 0;
+        clothingTimer._ticks = 0;
     }
 
     // --- Adult transition: post became-adult event (10 = found partner, 9 = alone) ---
@@ -541,7 +541,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                         dk = td->terrainType; dr = td->zone;
                     }
                 }
-                const char* nm = *reinterpret_cast<const char**>(&name);   // LEFT: H5 CitizenComponent::name (System::String raw storage)
+                const char* nm = name._data;
                 fprintf(stderr, "[HomeInvalid] citizen=%p name=%s pos=(%.2f,%.2f) cell=%u(%d,%d) kind=%u region=%u"
                                 " | home=%p cell=%d(%d,%d) kind=%u region=%u | age=%.2f hunger=%.1f\n",
                         (void*)this, nm ? nm : "?", cx, cy, czCell, tx, ty, sk, sr,
@@ -939,7 +939,7 @@ static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceCo
     fn_FindComponent_Work(workplaceComp->_entity, &sl);
     if (sl == nullptr) return false;
     if (sl->workState == 0) {
-        int cap = fn_StorageCountQuery(sl);
+        int cap = sl->CalcMaxWorkers();
         sl->workState = cap;
     }
     return roster < sl->workState;
@@ -1079,7 +1079,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
 
             // Calculate worker slots (lazy-compute cached at +0x30)
             if (slc->workState == 0) {
-                slc->workState = fn_CalcWorkerSlots(slc);
+                slc->workState = slc->CalcMaxWorkers();
             }
             int workerSlots = slc->workState;
 
@@ -2368,14 +2368,14 @@ static Component* CitizenComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, 
 // PORT GAP (retail 0x140114808): retail runs Graphics::MeshInstance::MeshInstance()
 // on +0xb8; the tree keeps those 0x120 bytes zero-filled (CitizenComponent.h).
 CitizenComponent::CitizenComponent()
-    : name(0), field_0x30(-1), field_0x34(0), gender(0), age(0), maxAge(0), hunger(0),
+    : name(), field_0x30(-1), field_0x34(0), gender(0), age(0), maxAge(0), hunger(0),
       coldness(0), pregnancyTimer(0), health(0), statusFlags(0), foodTimer{0},
-      field_0x60(0), disease(nullptr), field_0x70(0), field_0x78(0), happiness(0),
+      field_0x60{0}, disease(nullptr), field_0x70{0}, field_0x78{0}, happiness(0),
       field_0x84(0), happinessFlags(0), _pad8C{}, happinessTimer{0},
       consumedTypes(nullptr), consumedTypeCount(0), consumedTypeCapacity(0),
       field_0xA8(-1), field_0xAC(0), field_0xB0(0), _padB4{},
       meshInstance{}, toolId(-1), toolSceneId(-1), field_0x1E0(4), clothingLevel(0),
-      clothingTimer(0), profession(nullptr), pendingProfession(nullptr),
+      clothingTimer{0}, profession(nullptr), pendingProfession(nullptr),
       field_0x200{0}, school(nullptr), education(0), _pad214{}, schoolTime{0},
       field_0x220(false), _pad221{}, careBuilding(nullptr), field_0x230(nullptr),
       home(nullptr), homeSlot(0), _pad244{}, workplace(nullptr), spouse(nullptr),
@@ -2458,32 +2458,18 @@ DEFINE_EXE_TYPE(CitizenComponent, "Component")
 // ============================================================
 
 
-// B4 FORWARD: 2 outside caller(s) (Component/workplacecomponent.cpp,
-// Component/destroycomponent_workerrelease.cpp)
-int64_t* CitizenComp_sub_ffc0(int64_t param_1, int64_t* param_2) {
-    *reinterpret_cast<ComponentEntity**>(param_2) =   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-        reinterpret_cast<CitizenComponent*>(param_1)->FindWorkplace();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-    return param_2;
-}
-
-// B4 FORWARD: 2 outside caller(s) (Component/workplacecomponent.cpp,
-// Component/destroycomponent_workerrelease.cpp)
-int64_t* CitizenComp_sub_0470(int64_t param_1, int64_t* param_2) {
-    *reinterpret_cast<ComponentEntity**>(param_2) =   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-        reinterpret_cast<CitizenComponent*>(param_1)->FindRankedWorkplace();   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
-    return param_2;
-}
+// B4 X3-COMP: CitizenComp_sub_ffc0 (0x14010ffc0) and CitizenComp_sub_0470 (0x140110470):
+// their one caller calls FindWorkplace / FindRankedWorkplace; deleted.
 
 
-// B4 FORWARD: 6 outside caller(s) (Component/destroycomponent_workerrelease.cpp,
-// Component/workplacecomponent.cpp, Dialog/townhall_helpers.cpp, Entity/citizenbehavior.cpp,
-// Game/gameupdateloop.cpp, Game/starttown.cpp) and the town-manager bodies of this block
+// B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp:1969, whose null InternalBasePtr is
+// an int64_t local of X3-GAME's file).
 void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
-    param_1->SetWorkplace(*reinterpret_cast<ComponentEntity**>(param_2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
+    param_1->SetWorkplace(*reinterpret_cast<ComponentEntity**>(param_2));   // LEFT: SIG CitizenComp_AssignHousing: gameupdateloop.cpp:1964 holds the InternalBasePtr as int64_t[1]
 }
 
-// B4 FORWARD: 2 outside caller(s) (Component/attendancecomponent.cpp,
-// standalone/food_panel_harness.cpp)
+// B4 FORWARD: 1 outside caller (standalone/food_panel_harness.cpp:740, whose InternalBasePtr
+// is an int64_t local of X3-GAME's file).
 char CitizenComp_TryEnrolInSchool(CitizenComponent* param_1, int64_t* param_2) {
-    return param_1->TryEnrolInSchool(*reinterpret_cast<AttendanceComponent**>(param_2));   // LEFT: B4 FORWARD C signature (Component/exe_bodies.h, wave X)
+    return param_1->TryEnrolInSchool(*reinterpret_cast<AttendanceComponent**>(param_2));   // LEFT: SIG CitizenComp_TryEnrolInSchool: food_panel_harness.cpp:740 holds the InternalBasePtr as int64_t
 }

@@ -125,7 +125,7 @@ void Map::RemoveFloor(uint32_t floorId, int x, int y, int w, int h) {
             *p = static_cast<int8_t>(*p - 1);
         }
     }
-    reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh(floorId);   // +0x08  LEFT: Map.h pickingScene raw (H5, DLG-1)
+    reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh(floorId);   // +0x08   // LEFT: Map.h pickingScene raw (H5, DLG-1)
 }
 
 // FloorComponent::PlaceFloor — FUN_14011f390: increment the footprint's per-cell floor

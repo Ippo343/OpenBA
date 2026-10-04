@@ -257,7 +257,7 @@ void FireComponent::Extinguish() {
     // FireWork Ignite posted).
     {
         WorkComponent* work = _entity->FindComponent<WorkComponent>();   // 0x140003050
-        WorkComponent_RegisterWorkSlot(work);
+        work->CancelWork();
     }
 
     // AmbientEmitterComponent: stop the crackle.
@@ -492,7 +492,7 @@ void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
 
 // ---- B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp); the closing wave
 // rewires it. The null test is the tree's.
-extern "C" void FireComponent_Ignite_610(void* self) {
+extern "C" void FireComponent_Ignite_610(FireComponent* self) {
     if (!self) return;
-    reinterpret_cast<FireComponent*>(self)->Ignite();   // LEFT: B4 FORWARD (debugui.cpp)
+    self->Ignite();   // LEFT: B4 FORWARD (debugui.cpp)
 }

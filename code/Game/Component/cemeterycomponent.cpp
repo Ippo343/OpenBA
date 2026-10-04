@@ -149,12 +149,12 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
     int i = 0;
     while (i < (int)list[1]) {
         int64_t arr = list[0];
-        if (*(int64_t*)(arr + (int64_t)i * 8) == *(int64_t*)ptrValue) {   // LEFT: ERASED as above
+        if (*(int64_t*)(arr + (int64_t)i * 8) == *(int64_t*)ptrValue) {   // LEFT: ERASED the one erase body every 8-byte-pointer town list shares (callers in 15 other agents' files pass void*)
             for (int j = i + 1; j < (int)list[1]; ++j) {
-                int64_t* slot = (int64_t*)(list[0] + (int64_t)(j - 1) * 8);   // LEFT: ERASED as above
+                int64_t* slot = (int64_t*)(list[0] + (int64_t)(j - 1) * 8);   // LEFT: ERASED the one erase body every 8-byte-pointer town list shares (callers in 15 other agents' files pass void*)
                 if (slot) slot[0] = slot[1];
             }
-            *(int*)(list + 1) = (int)list[1] - 1;   // LEFT: ERASED as above
+            *(int*)(list + 1) = (int)list[1] - 1;   // LEFT: ERASED the one erase body every 8-byte-pointer town list shares (callers in 15 other agents' files pass void*)
             --i;
         }
         ++i;
@@ -223,7 +223,7 @@ char CemeteryComponent::EnterBuilt() {
         const bool walkableZone = ((1u << zone) & 0x1e0u) != 0;
         *reinterpret_cast<uint8_t*>(&world->field_0xA2) |= walkableZone ? 1 : 0;   // LEFT: Map.h (DLG-1) field_0xA2 is bool, retail ORs the byte (row 311)
         cell->terrainType = 2;
-        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror  LEFT: SIG PerfX::TerrainNoteWrite (SA)
+        PerfX::TerrainNoteWrite(reinterpret_cast<const uint8_t*>(cell));   // [PerfX] mirror   // LEFT: SIG PerfX::TerrainNoteWrite (SA)
 
         if (walkableZone) {
             const int mapWidth = world->size;

@@ -117,13 +117,13 @@ static void SerializeSlots(IO::Serializer& ser, int count, OrchardSlot* slot) {
             slot->tree = nullptr;
 
         // LEFT: as above.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->resource)->Serialize(ser);   // LEFT: as above
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->resource)->Serialize(ser);   // LEFT: POD the orchard slot holds its InternalPtr<ComponentEntity> as a bare pointer (OrchardComponent.h); InternalBasePtr has no typed view of it
         if (slot->resource != nullptr &&
             !(::Object::IsDerivedFromNullSafe(slot->resource, NaturalResourceComponent::TypeId())))
             slot->resource = nullptr;
 
         // LEFT: as above.
-        reinterpret_cast<Object::InternalBasePtr*>(&slot->fruit)->Serialize(ser);   // LEFT: as above
+        reinterpret_cast<Object::InternalBasePtr*>(&slot->fruit)->Serialize(ser);   // LEFT: POD the orchard slot holds its InternalPtr<ComponentEntity> as a bare pointer (OrchardComponent.h); InternalBasePtr has no typed view of it
         if (slot->fruit != nullptr &&
             !(::Object::IsDerivedFromNullSafe(slot->fruit, FruitComponent::TypeId())))
             slot->fruit = nullptr;
@@ -483,7 +483,7 @@ uint32_t OrchardComponent::CommandMask(int cmdId) {
     uint8_t result = 0;
     switch (cmdId) {
     case 0: {
-        const bool busy = WorkComponent_CheckWorkSlot(wc) != 0;   // 0x14012ead0
+        const bool busy = wc->IsWorkPosted() != 0;   // 0x14012ead0
         if ((!busy && planted < slotCount) || slotCount == 0) result = hasType ? 1 : 0;
         break;
     }

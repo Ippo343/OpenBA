@@ -347,8 +347,8 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     WorldGeometry* wgeo = gw->m_worldGeometry;
     if (!terrain || !wgeo) return;
 
-    const uintptr_t poly = reinterpret_cast<uintptr_t>(wgeo->_arrays[4].data);   // record 0 — retail  LEFT: WorldGeometry.h _arrays H5 raw storage (GAME-2)
-    const int   polyCount = poly ? *reinterpret_cast<int*>(poly + 8) : 0; // int32 (140045840)  LEFT: WorldGeometry.h _arrays H5 (GAME-2)
+    const uintptr_t poly = reinterpret_cast<uintptr_t>(wgeo->_arrays[4].data);   // record 0 — retail   // LEFT: WorldGeometry.h _arrays H5 raw storage (GAME-2)
+    const int   polyCount = poly ? *reinterpret_cast<int*>(poly + 8) : 0; // int32 (140045840)   // LEFT: WorldGeometry.h _arrays H5 raw storage (GAME-2)
     const float* polyPts  = poly ? *reinterpret_cast<const float**>(poly) : nullptr;   // LEFT: WorldGeometry.h _arrays H5 (GAME-2)
 
     // ── 1. the approach lane: every polyline point before the map ────────────────

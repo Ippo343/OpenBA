@@ -158,7 +158,8 @@ public:
     void  LongTermPlan();                                         // 0x140115e60 (AI state 0xd)
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint64_t name;                 // +0x28 System::String (H5 raw storage): the citizen's name;
+    System::String name;           // +0x28 the citizen's name (ctor 0x140114770 stores its null
+                                   //       data inline; dtor 0x1401146f0 runs ~String at 0x14011473f);
                                    //       serialized first (0x140151238), handed to the event log
                                    //       by PostLifeEvent (EventLog_AddCitizenEvent's name
                                    //       argument), ~String in the dtor
@@ -174,10 +175,10 @@ public:
     float    health;               // +0x50 birth-risk ratio health / desc->maxHealth
     uint32_t statusFlags;          // +0x54 |= 1 hungry, |= 2 cold (Update)
     System::Time foodTimer;        // +0x58 += dt; each desc->foodInterval -> ConsumeFood
-    int64_t  field_0x60;           // +0x60 System::Time ticks: += dt (Update)
+    System::Time field_0x60;       // +0x60 System::Time: += dt (Update)
     Disease* disease;              // +0x68 ExternalPtr<Disease> (serialize helper 0x140030790)
-    int64_t  field_0x70;           // +0x70 System::Time ticks, serialized
-    int64_t  field_0x78;           // +0x78 System::Time ticks, serialized
+    System::Time field_0x70;       // +0x70 System::Time, serialized
+    System::Time field_0x78;       // +0x78 System::Time, serialized
     float    happiness;            // +0x80 the happiness update 0x140112ae0, clamped to [0, desc->maxHappiness]
     int32_t  field_0x84;           // +0x84 int, NOT written by the ctor, not serialized; the happiness
                                    //       update compares it with desc+0xB0
@@ -201,7 +202,7 @@ public:
     int32_t  toolSceneId;          // +0x1DC int, ctor -1; NOT serialized; HideTool 0x1401176e0 guards >= 0
     int32_t  field_0x1E0;          // +0x1E0 int, ctor 4 (one qword store with +0x1E4); serialized (version > 1)
     int32_t  clothingLevel;        // +0x1E4 indexes desc->coldRate[]; reset to 0 when clothingTimer < 0
-    int64_t  clothingTimer;        // +0x1E8 System::Time ticks: -= dt; < 0 -> clothingLevel = 0
+    System::Time clothingTimer;    // +0x1E8 System::Time: -= dt; < 0 -> clothingLevel = 0
     Profession* profession;        // +0x1F0 ExternalPtr<Profession> (0x140018020); Update reads its +0x4C
     Profession* pendingProfession; // +0x1F8 ExternalPtr<Profession>; != 0 -> HandleLifeEvent(7, its name)
     System::Time field_0x200;      // +0x200 += dt (Update), not serialized

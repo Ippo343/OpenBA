@@ -386,8 +386,8 @@ void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenC
 void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComponent>* citizenIBP) {
     // --- Material reserve (guarded; the WorkComponent may be absent). ---
     WorkComponent* work = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    if (work && WorkComponent_CheckWorkSlot(work)) {
-        WorkComponent_RegisterWorkSlot(work);
+    if (work && work->IsWorkPosted()) {
+        work->CancelWork();
     }
 
     // --- Inert: house was empty -> move emitter to model position + set volume. ---

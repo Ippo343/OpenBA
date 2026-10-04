@@ -397,7 +397,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         StorageComponent* storageComp = nullptr;
         fn_FindComponent_Storage((*entityIBP)->_entity, &storageComp);
 
-        int available = StorageComponent_QueryAvailable(storageComp, (int64_t)field_50);   // LEFT: SIG StorageComponent_QueryAvailable (the forwarder's null guard)
+        int available = StorageComponent_QueryAvailable(storageComp, field_50);   // the forwarder holds the tree's null test
 
         if (available > 0) {
             ComponentEntity* actionRef = nullptr;   // a null InternalBasePtr

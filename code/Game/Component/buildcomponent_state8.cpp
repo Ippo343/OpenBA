@@ -109,7 +109,7 @@ static bool BC8_IsDemo(BuildComponent* bc) { return g_pConstructionDemoSite && b
 // before requesting the 1->8 / 8->2 transition.
 static void BC8_StopWorker(BuildComponent* bc) {
     WorkComponent* wc = bc->_entity->FindComponent<WorkComponent>();
-    if (wc) WorkComponent_RegisterWorkSlot(wc);
+    if (wc) wc->CancelWork();
 }
 
 // the ModelDescription of a model (its +0x18, gated to ModelDescription DAT_1401c7a88).
@@ -286,7 +286,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
                 uintptr_t bsIBP = 0;
                 new (&bsIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge  LEFT: SIG BuildStructure_CreateInPlaceFull returns void* (Work/exe_bodies.h)
+                    reinterpret_cast<RtObject::Internal*>(bsWork));   // B.3.3 bridge   // LEFT: SIG BuildStructure_CreateInPlaceFull returns void* (Work/exe_bodies.h)
                 // find the site WorkComponent (c8070) the work posts under
                 WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
                 if (workComp != nullptr) {
@@ -469,7 +469,7 @@ char BuildComponent::State8OneShot(StateMachine* /*sm*/) {
 // ==================================================================================
 // decalcomponent.cpp — retail DecalComponent Slot12(msg=1): ramp the finished building's
 // footprint decal from _initialAlpha to full opacity. Inert component, so driven here.
-extern "C" void DecalComponent_MarkOwnerBuilt(void* entity);
+extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity);
 
 void BuildComponent::State8Finalize() {
     // Retail order: the 8->2 transition puts every controller into state 2, so the

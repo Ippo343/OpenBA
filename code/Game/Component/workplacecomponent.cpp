@@ -614,25 +614,20 @@ char WorkPlaceComponent::EnterDemolish() {
     return 0;
 }
 
-// ---- B4 FORWARD: the C spellings outside callers still use; the closing wave rewires
-// them. SetAccepting: attendancecomponent(_states),
-// cropfieldcomponent(_states), destroycomponent_workerrelease, orchardcomponent(_states),
-// pasturecomponent_states, resourceproducecomponent_states, Dialog/buildui.cpp,
-// Game/starttown.cpp. OnCreateInit: destroycomponent_workerrelease.
-// LeaveBuilderProfession: destroycomponent_states (the null test is the tree's).
-// ApplyOccupiedVisual: Game/starttown.cpp.
-void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
-    ((WorkPlaceComponent*)comp)->SetAccepting(accepting);   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
+// ---- B4 FORWARD: the C spellings callers still use. SetAccepting: its address is taken
+// by Dialog/buildui.cpp:488 (a function-pointer table). LeaveBuilderProfession:
+// destroycomponent_states (the null test is the tree's). ApplyOccupiedVisual:
+// Game/starttown.cpp (its deferred list holds the components as int64_t).
+// (WorkPlaceComponent_OnCreateInit 0x14012ee60: its one caller calls ReleaseWorkers; deleted.)
+void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting) {
+    comp->SetAccepting(accepting);
 }
-void WorkPlaceComponent_OnCreateInit(void* selfP) {
-    ((WorkPlaceComponent*)selfP)->ReleaseWorkers();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
-}
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
+extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* selfP) {
     if (!selfP) return;
-    ((WorkPlaceComponent*)selfP)->LeaveBuilderProfession();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
+    selfP->LeaveBuilderProfession();
 }
 void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
-    ((WorkPlaceComponent*)comp)->ApplyOccupiedVisual();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
+    ((WorkPlaceComponent*)comp)->ApplyOccupiedVisual();   // B4 FORWARD   // LEFT: SIG WorkplaceComponent_ApplyOccupiedVisual: starttown.cpp's g_pendingOccupiedVisuals holds the components as int64_t (X3-GAME's file)
 }
 
 // ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====

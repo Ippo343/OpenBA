@@ -77,9 +77,9 @@ extern "C" void BuilderPool_Tick();
 // Original: Entity_impl_c2b0
 void CitizenBehavior::Update(int64_t* deltaTime) {
     // Advance timers
-    field_0x190 += *deltaTime;       // pathAccumTimer
-    field_0x198 -= *deltaTime;       // statsTimer
-    field_0x1A0 -= *deltaTime;       // notifyTimer
+    field_0x190._ticks += *deltaTime;       // pathAccumTimer
+    field_0x198._ticks -= *deltaTime;       // statsTimer
+    field_0x1A0._ticks -= *deltaTime;       // notifyTimer
 
     // CountResources â€” Entity_helper_9ed0(self)
     CountResources();
@@ -96,7 +96,7 @@ void CitizenBehavior::Update(int64_t* deltaTime) {
     const int64_t pathInterval = pathIntervalTime._ticks;
 
 
-    if (pathInterval <= field_0x190) {
+    if (pathInterval <= field_0x190._ticks) {
         // Try to process pending paths. The null tests on the path graph are the
         // tree's (the ctor always allocates it; retail has none): listed, kept.
         bool pathsDone = false;
@@ -106,7 +106,7 @@ void CitizenBehavior::Update(int64_t* deltaTime) {
         if (!pathsDone) {
             // Build new path graph
             if (pg) pg->BuildPathGraph();
-        } else if (pg && pg->m_pendingIdx < 0 && pathInterval < field_0x190) {
+        } else if (pg && pg->m_pendingIdx < 0 && pathInterval < field_0x190._ticks) {
             // Clamp accumulated time: subtract intervals until within one interval.
             // Guard against pathInterval <= 0 (BANISHED_PATHGRAPH_FAST forces 0, or a failed
             // interval resolve) â€” `acc -= 0` would spin forever. This branch is reached only
@@ -114,33 +114,33 @@ void CitizenBehavior::Update(int64_t* deltaTime) {
             // be non-empty (e.g. a registered construction site) â€” so it stayed latent until
             // the natural builder flow first populated that BST.
             if (pathInterval > 0) {
-                int64_t acc = field_0x190;
+                int64_t acc = field_0x190._ticks;
                 do {
                     acc -= pathInterval;
                 } while (pathInterval < acc);
-                field_0x190 = acc;
+                field_0x190._ticks = acc;
             } else {
-                field_0x190 = 0;   // no positive interval to modulo by -> reset the accumulator
+                field_0x190._ticks = 0;   // no positive interval to modulo by -> reset the accumulator
             }
         }
     }
 
     // Stats collection (periodic)
-    if (field_0x198 < 1) {
+    if (field_0x198._ticks < 1) {
         CollectStats();
         // Reset timer from DAT_1401721fc (float seconds)
         {
             System::Time newTime;
             newTime._ticks = 0;
             RtSystem_Time_Ctor(&newTime, kRdata_1401721fc);   // 0x1401721fc
-            field_0x198 = newTime._ticks;
+            field_0x198._ticks = newTime._ticks;
         }
     }
 
     // Notification timer reset: retail stores a dword 0 into +0x1A8 (the float's bits)
-    if (field_0x1A0 < 0) {
+    if (field_0x1A0._ticks < 0) {
         field_0x1A8 = 0.0f;
-        field_0x1A0 = 0;
+        field_0x1A0._ticks = 0;
     }
 
     // Tick-driven Builder pool (BANISHED_BUILDER_NATURAL, opt-in): keep registered
@@ -261,7 +261,7 @@ bool PathGraph::ProcessPaths() {
             PathCostNode* outNode = nullptr;
             PathCostTreeInsert(   // 0x140025a10
                 reinterpret_cast<AvlTreeHead<AvlNode30>*>(&pg->m_bstRoot),   // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
-                reinterpret_cast<AvlNode30**>(&outNode),                     // LEFT: as above
+                reinterpret_cast<AvlNode30**>(&outNode),                     // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
                 &key.high);
             foundNode = outNode;
         }
@@ -543,7 +543,7 @@ void PathGraph::BuildPathGraph() {
                         void* dummy = nullptr;
                         PathCostTreeInsert(   // 0x140025a10
                             reinterpret_cast<AvlTreeHead<AvlNode30>*>(&pg->m_bstRoot),   // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
-                            reinterpret_cast<AvlNode30**>(&dummy),                       // LEFT: as above
+                            reinterpret_cast<AvlNode30**>(&dummy),                       // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
                             &bstKey.high);
                     }
                 }
@@ -868,7 +868,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
 
     // Part 1: Check profession resource thresholds (21 entries)
     for (int i = 0; i < 21; i++) {
-        int64_t* timer = &professionResources[i].timer;
+        int64_t* timer = &professionResources[i].timer._ticks;
 
         // Decrement timer
         *timer -= *deltaTime;
@@ -916,7 +916,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
     for (int i = 0; i < 2; i++) {
         ResourceNotifyEntry* notifyBase = notifyEntries;
         if (!notifyBase) break;
-        int64_t* timer = &notifyBase[i].timer;
+        int64_t* timer = &notifyBase[i].timer._ticks;
 
         // Decrement timer
         *timer -= *deltaTime;

@@ -257,8 +257,8 @@ void CF_PostWork(CropFieldComponent* comp, Work* work) {
 void CF_ReleaseWorkSlot(CropFieldComponent* comp) {
     WorkComponent* workComp = comp->_entity->FindComponent<WorkComponent>();   // 0x140003050
     if (!workComp) return;
-    if (WorkComponent_CheckWorkSlot(workComp))
-        WorkComponent_RegisterWorkSlot(workComp);
+    if (workComp->IsWorkPosted())
+        workComp->CancelWork();
 }
 
 // Count slots in a given state.

@@ -265,7 +265,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     NaturalResourceComponent_FindComponentByType(newEnt, &acc4);   // 0x140005200
     ModelComponent* variantWrite = reinterpret_cast<ModelComponent*>(acc4);   // LEFT: row 400 (the ParticleComponent finder's result read as the ModelComponent)
 
-    uint32_t range = ModelMeshCount(reinterpret_cast<const ModelComponent*>(variantTarget), (int)variantSeed);   // 0x140125320  LEFT: row 400 (as above)
+    uint32_t range = ModelMeshCount(reinterpret_cast<const ModelComponent*>(variantTarget), (int)variantSeed);   // 0x140125320  // LEFT: row 400 (the ParticleComponent finder's result read as the ModelComponent)
     // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
     // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
     uint32_t roll2 = rng->Rand(static_cast<uint32_t>(range));

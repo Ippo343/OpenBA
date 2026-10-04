@@ -108,12 +108,12 @@ public:
     uint8_t  _pad32[6];          // +0x32
     CitizenComponent* citizen;   // +0x38 InternalPtr, validated against cell 0x1401c7158 on load;
                                  //       Startup 0x14010f920 finds the sibling CitizenComponent
-    int64_t  timers[16];         // +0x40 System::Time per state: ValidateAndEnterState enters a
+    System::Time timers[16];     // +0x40 System::Time per state: ValidateAndEnterState enters a
                                  //       state only while its timer is < 1; Decide counts them down
                                  //       (version < 5 streams carry 14, +0xB0/+0xB8 then = Time(0))
     System::Time leisureTimer;   // +0xC0 System::Time (version > 2): += dt (Decide); the leisure
                                  //       candidate's priority reads its seconds
-    int64_t  dataC8;             // +0xC8 System::Time (version > 3): += dt (Decide), reset to 0
+    System::Time dataC8;         // +0xC8 System::Time (version > 3): += dt (Decide), reset to 0
                                  //       while the citizen carries nothing; the LongTermPlan
                                  //       candidate's priority compares it
 };

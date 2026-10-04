@@ -164,7 +164,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     alignas(8) uint8_t ser[24];
     IO::Serializer* s = ::new (static_cast<void*>(ser)) IO::Serializer(stream, 3);
 
-    reinterpret_cast<System::String*>(&name)->Serialize(ser);   // B.3.1 bridge  // LEFT: H5 CitizenComponent::name (System::String raw storage)
+    name.Serialize(ser);
     s->Serialize(gender, nullptr);
     s->Serialize(age, nullptr);
     s->Serialize(maxAge, nullptr);
@@ -174,7 +174,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     s->Serialize(health, nullptr);
     s->Serialize(statusFlags, nullptr);
     foodTimer.Serialize(*s);
-    reinterpret_cast<System::Time*>(&field_0x60)->Serialize(*s);   // B.3.4b bridge   // LEFT: FIELD CitizenComponent::field_0x60 is int64_t where retail holds System::Time; citizencomponent.cpp / citizen_updatehealth.cpp (not this set) do integer arithmetic
+    field_0x60.Serialize(*s);
 
     {
         // ENDGAME B.3.9 C1 (D5): 0x1401c5948 is Disease's registered type-id cell
@@ -184,8 +184,8 @@ void CitizenComponent::Persist(IO::Stream& stream) {
                                     &tid, "CitizenDisease");
     }
 
-    reinterpret_cast<System::Time*>(&field_0x70)->Serialize(*s);   // B.3.4b bridge   // LEFT: FIELD field_0x70 int64_t (as above; citizen_needsupdate.cpp too)
-    reinterpret_cast<System::Time*>(&field_0x78)->Serialize(*s);   // B.3.4b bridge   // LEFT: FIELD field_0x78 int64_t (as above)
+    field_0x70.Serialize(*s);
+    field_0x78.Serialize(*s);
     s->Serialize(happiness, nullptr);
     s->Serialize(happinessFlags, nullptr);
     happinessTimer.Serialize(*s);
@@ -211,7 +211,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
         if (v > 0) s->Serialize(field_0xA8, nullptr);
     }
     s->Serialize(clothingLevel, nullptr);
-    reinterpret_cast<System::Time*>(&clothingTimer)->Serialize(*s);   // B.3.4b bridge   // LEFT: FIELD clothingTimer int64_t (as above; citizencomponent.cpp / citizen_needsupdate.cpp assign ticks)
+    clothingTimer.Serialize(*s);
     {
         int v = s->GetVersion();
         if (v > 1) s->Serialize(field_0x1E0, nullptr);

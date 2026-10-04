@@ -102,7 +102,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
     }
 
     ComponentEntity* key = *entity;
-    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&field_0x60), &key);   // 0x14002c690  LEFT: SIG PlayerTrade_BSTFindRemove_2c690 (Player/exe_bodies.h, wave X)
+    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&field_0x60), &key);   // 0x14002c690   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 (Player/exe_bodies.h, wave X)
 
     UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
     // HISTORY, kept because it cost two bugs. Retail reaches this list through

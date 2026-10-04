@@ -395,8 +395,8 @@ char ClearAreaComponent::State0PerFrame(StateMachine* sm) {
 // ============================================================
 char ClearAreaComponent::State0Update() {
     WorkComponent* wc = FindOn<WorkComponent>(_entity);   // 0x140003050
-    if (wc && WorkComponent_CheckWorkSlot(wc)) {
-        WorkComponent_RegisterWorkSlot(wc);
+    if (wc && wc->IsWorkPosted()) {
+        wc->CancelWork();
     }
     return 1;
 }
@@ -481,9 +481,9 @@ static char CA_State1Enter(ClearAreaComponent* c, StateMachine* sm)    { return 
 static char CA_State2Enter(ClearAreaComponent* c, StateMachine* /*sm*/)              { return c->State2Enter(); }       // 0x1401177f0
 
 // B4 FORWARD: tool_harness.cpp drives state 0's enter directly.
-extern "C" char ClearArea_State0Enter(void* data, StateMachine* sm) {
+extern "C" char ClearArea_State0Enter(ClearAreaComponent* data, StateMachine* sm) {
     if (!data) return 1;
-    return reinterpret_cast<ClearAreaComponent*>(data)->State0Enter(sm);   // LEFT: B4 FORWARD standalone/tool_harness.cpp still passes void*
+    return data->State0Enter(sm);
 }
 
 // ============================================================
