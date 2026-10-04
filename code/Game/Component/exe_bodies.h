@@ -110,9 +110,10 @@ extern "C" int Storage_GetResourceCount2(int64_t param_1);  // 0x14012ab00
 extern "C" void CitizenAI_Reg_helper_e360(int64_t* a, int64_t* b);  // 0x14000e360
 
 // ---- citizenai_work_scheduler.cpp
-extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
-extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, char flag, void* pWorkIBP);  // 0x14012ec60
-extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId, uint64_t oldKey, uint64_t newKey);  // 0x1400f8400
+class WorkScheduler; class WorkComponent; class Work; class Profession;
+extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* sched, Object::InternalPtr<Work>* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
+extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* workComp, uint32_t code, char flag, Object::InternalPtr<Work>* pWorkIBP);  // 0x14012ec60
+extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t workId, Profession* oldKey, Profession* newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
 void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP);  // 0x140008090

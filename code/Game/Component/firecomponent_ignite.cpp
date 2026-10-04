@@ -326,10 +326,10 @@ void FireComponent::Ignite() {
         }
     }
 
-    ::Object::InternalPtr<FireWork> workIbp(work);
+    ::Object::InternalPtr<Work> workIbp(work);
 
     if (workComp) {
-        CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), 0x4000, 0, &workIbp);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+        CitizenAI_WorkScheduler_Post(workComp, 0x4000, 0, &workIbp);
     }
     if (workComp) {
         gw->m_tutorial->PrioritizeWork(workComp->workId);   // 0x1400f9ad0 (+0x118)

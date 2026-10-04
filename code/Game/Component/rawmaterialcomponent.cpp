@@ -289,12 +289,11 @@ void RawMaterialComponent::OnAdded() {
     }
 
     // Wrap in InternalBasePtr
-    Object::InternalPtr<Pickup> itemRef(pickupItemResult);
+    Object::InternalPtr<Work> itemRef(pickupItemResult);
 
     // POST the Pickup work to the citizen work-scheduler — a laborer then claims it and
     // hauls this pile away. This is the pile-pickup trigger.
-    // LEFT: CitizenAI_WorkScheduler_Post takes the WorkComponent as uintptr_t (COMP-b's declaration).
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), category, '\x01', &itemRef);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+    CitizenAI_WorkScheduler_Post(workComp, category, '\x01', &itemRef);
 }
 
 // [9] 0x140129130. PORT GAP (retail 0x140129130) — B38 D9: the body is ported

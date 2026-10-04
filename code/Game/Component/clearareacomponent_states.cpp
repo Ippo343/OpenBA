@@ -361,9 +361,8 @@ char ClearAreaComponent::State0Enter(StateMachine* sm) {
     // ClearArea's ctor (WORK-a) takes the ExternalPtr as a raw uint64_t: LEFT.
     ClearArea* work = ::new (mem) ClearArea(&ownerIBP, reinterpret_cast<uint64_t>(target), f0, f1, f2);   // LEFT: SIG ClearArea ctor (Work/ClearArea.h, WORK-1)
 
-    ::Object::InternalPtr<ClearArea> workIBP(work);
-    // CitizenAI_WorkScheduler_Post (COMP-b) takes the WorkComponent as uintptr_t: LEFT.
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(workComp), kind, static_cast<char>(f3), &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+    ::Object::InternalPtr<Work> workIBP(work);
+    CitizenAI_WorkScheduler_Post(workComp, kind, static_cast<char>(f3), &workIBP);
 
     return 1;
 }

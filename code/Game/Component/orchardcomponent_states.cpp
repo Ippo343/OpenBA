@@ -293,8 +293,7 @@ char OrchardComponent::EnterPlanting() {
             std::fflush(stderr);
         }
     }
-    // LEFT: CitizenAI_WorkScheduler_Post takes the work component as uintptr_t.
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(target), 1, 0, &workIBP);
+    CitizenAI_WorkScheduler_Post(target, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG the *_CtorFromEntity work builders return void*
     O9_STEP(7, "DONE - state 9 enter completed");
     return 1;
 }
@@ -392,8 +391,7 @@ void OrchardPostTendArea(ComponentEntity* entity) {
     void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
 
     WorkComponent* target = entity->FindComponent<WorkComponent>();   // 0x140003050
-    // LEFT: CitizenAI_WorkScheduler_Post takes the work component as uintptr_t.
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(target), 1, 0, &workIBP);
+    CitizenAI_WorkScheduler_Post(target, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG the *_CtorFromEntity work builders return void*
 }
 
 // Is the work component currently holding a work slot for us? (0x14012ead0)
@@ -604,8 +602,7 @@ char OrchardComponent::EnterReplanting() {
             std::fflush(stderr);
         }
     }
-    // LEFT: CitizenAI_WorkScheduler_Post takes the work component as uintptr_t.
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(target), 1, 0, &workIBP);
+    CitizenAI_WorkScheduler_Post(target, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG the *_CtorFromEntity work builders return void*
     return 1;
 }
 
@@ -650,8 +647,7 @@ char OrchardComponent::EnterHarvesting() {
     void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
 
     WorkComponent* target = _entity->FindComponent<WorkComponent>();   // 0x140003050
-    // LEFT: CitizenAI_WorkScheduler_Post takes the work component as uintptr_t.
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(target), 1, 0, &workIBP);
+    CitizenAI_WorkScheduler_Post(target, 1, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG the *_CtorFromEntity work builders return void*
 
     // Footprint stamp. Retail passes the Map (GameUpdateLoop::m_game) and the rect as
     // four int16s off the MapComponent.
@@ -805,7 +801,7 @@ char OrchardComponent::EnterClearing() {
     if (!work) return 1;
 
     void* workIBP = work;   // InternalPtr<Work> (the ctor is a plain store)
-    CitizenAI_WorkScheduler_Post(reinterpret_cast<uintptr_t>(wc), 0x401, 0, &workIBP);   // LEFT: SIG CitizenAI_WorkScheduler_Post
+    CitizenAI_WorkScheduler_Post(wc, 0x401, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG ClearAreaCtrl_BuildWork returns void*
     return 1;
 }
 
