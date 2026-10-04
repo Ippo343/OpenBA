@@ -43,13 +43,10 @@
 // flag and the direction flag; returns the path length (retail's EAX: the tail call
 // 0x1400a6e30's int). Retail reads the direction flag as a byte (MOVZX at
 // 0x14009cef1).
-// LEFT: 0x14009ce00 is a C door in block ACT-b's Action/exe_bodies.h taking the map
-// and the buffer as integers; this one call site holds the two casts.
 // ============================================================
 int RoadAStar(Map* map, uint32_t mask, uint32_t sc, uint32_t ec, int* pathBuf,
                      uint8_t modifier, uint8_t strict) {
-    return RoadTool_sub_ce00(reinterpret_cast<int64_t>(map), mask, sc, ec, nullptr,
-                             reinterpret_cast<int64_t>(pathBuf), modifier, strict);
+    return RoadTool_sub_ce00(map, mask, sc, ec, nullptr, pathBuf, modifier, strict);
 }
 
 // ============================================================
