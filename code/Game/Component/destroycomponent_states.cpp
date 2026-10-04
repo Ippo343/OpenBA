@@ -575,7 +575,7 @@ char DestroyComponent::State5Enter() {
                 BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1);
                 int64_t workIBP = 0;
                 new (&workIBP) ::Object::InternalBasePtr(
-                    reinterpret_cast<RtObject::Internal*>(mem));   // LEFT: SIG BuildStructure_CreateInPlaceFull (Work/exe_bodies.h) builds into void*
+                    reinterpret_cast<::Object::Internal*>(mem));   // LEFT: SIG BuildStructure_CreateInPlaceFull (Work/exe_bodies.h) builds into void*
                 CitizenAI_WorkScheduler_Post(yard, 0x2001, 0, reinterpret_cast<Object::InternalPtr<Work>*>(&workIBP));   // LEFT: SIG BuildStructure_CreateInPlaceFull builds into void* (the work held as int64_t)
             }
         }

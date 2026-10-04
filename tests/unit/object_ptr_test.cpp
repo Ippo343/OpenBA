@@ -26,6 +26,7 @@
 // ============================================================================
 #include "unit.h"
 
+#include <memory>
 #include <type_traits>
 
 #include "../../runtime/types/object/External.h"
@@ -37,12 +38,16 @@ namespace {
 // here; only the pointer value is ever observed.
 RtObject::External  g_extA;
 RtObject::External  g_extB;
-RtObject::Internal  g_intA;
-RtObject::Internal  g_intB;
 
 using ExtPtr  = Object::ExternalPtr<RtObject::External>;
 using BasePtr = Object::InternalBasePtr;
-using IntPtr  = Object::InternalPtr<RtObject::Internal>;
+using IntPtr  = Object::InternalPtr<Object::Internal>;
+
+// `InternalBasePtr` holds an `Object::Internal*`. Two never-constructed slots
+// of that type give the pointer values (Object::Internal's ctor registers with
+// the InternalFactory, which this file does not install).
+Object::Internal* const g_objA = std::allocator<Object::Internal>().allocate(1);
+Object::Internal* const g_objB = std::allocator<Object::Internal>().allocate(1);
 
 }  // namespace
 
@@ -141,67 +146,67 @@ UNIT_TEST(internal_base_ptr_default_ctor_is_null) {
 
 UNIT_TEST(internal_base_ptr_value_ctor_and_accessors) {
     // ??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z (0x1800062a0).
-    BasePtr p(&g_intA);
-    CHECK(p.Get() == &g_intA);
+    BasePtr p(g_objA);
+    CHECK(p.Get() == g_objA);
     CHECK(static_cast<bool>(p));
-    CHECK(p.operator->() == &g_intA);
-    CHECK(&(*p) == &g_intA);
+    CHECK(p.operator->() == g_objA);
+    CHECK(&(*p) == g_objA);
 }
 
 UNIT_TEST(internal_base_ptr_copy_is_a_plain_alias) {
     // ?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z (0x1800062b0) is
     // `mov rax,[rdx]; mov [rcx],rax`. The two pointers are then ALIASES —
     // no refcount, no ownership transfer.
-    BasePtr a(&g_intA);
+    BasePtr a(g_objA);
     BasePtr b(a);
-    CHECK(b.Get() == &g_intA);
+    CHECK(b.Get() == g_objA);
     CHECK(a == b);
 
     BasePtr c;
     c = a;
-    CHECK(c.Get() == &g_intA);
+    CHECK(c.Get() == g_objA);
 
-    BasePtr d(&g_intB);
+    BasePtr d(g_objB);
     CHECK(a != d);
 }
 
 UNIT_TEST(internal_base_ptr_shim_copy_matches_assignment) {
     // The registered C shim (RtObject_InternalBasePtr_Copy) goes through this
     // forwarder because retail's `Copy` is protected (`IEAA`).
-    BasePtr src(&g_intB);
+    BasePtr src(g_objB);
     BasePtr dst;
     BasePtr::Shim_Copy(&dst, &src);
-    CHECK(dst.Get() == &g_intB);
+    CHECK(dst.Get() == g_objB);
 }
 
 UNIT_TEST(internal_base_ptr_checkptr_and_assignid_are_no_ops) {
     // Bare RETs in retail AND in the profile build. They must never validate:
     // a stale InternalBasePtr does not self-invalidate in any shipped build
     // (memory reference_checkptr_is_a_ret_in_every_build).
-    BasePtr p(&g_intA);
+    BasePtr p(g_objA);
     BasePtr::Shim_CheckPtr(&p);
     BasePtr::Shim_AssignId(&p);
-    CHECK(p.Get() == &g_intA);   // unchanged, and no validation happened
+    CHECK(p.Get() == g_objA);   // unchanged, and no validation happened
 
-    BasePtr stale(&g_intA);
-    stale = BasePtr(reinterpret_cast<RtObject::Internal*>(0x1234));
+    BasePtr stale(g_objA);
+    stale = BasePtr(reinterpret_cast<Object::Internal*>(0x1234));
     BasePtr::Shim_CheckPtr(&stale);
-    CHECK(stale.Get() == reinterpret_cast<RtObject::Internal*>(0x1234));
+    CHECK(stale.Get() == reinterpret_cast<Object::Internal*>(0x1234));
 }
 
 UNIT_TEST(internal_ptr_typed_wrapper_shares_the_base_bytes) {
-    IntPtr p(&g_intA);
-    CHECK(p.Get() == &g_intA);
+    IntPtr p(g_objA);
+    CHECK(p.Get() == g_objA);
     CHECK(static_cast<bool>(p));
-    CHECK(static_cast<const BasePtr&>(p).Get() == &g_intA);
+    CHECK(static_cast<const BasePtr&>(p).Get() == g_objA);
 
     IntPtr q;
     CHECK(q.Get() == nullptr);
     q = p;
-    CHECK(q.Get() == &g_intA);
+    CHECK(q.Get() == g_objA);
 
     // and the same bulk-copy invariant as the base
     IntPtr r;
     std::memcpy(&r, &p, sizeof(IntPtr));
-    CHECK(r.Get() == &g_intA);
+    CHECK(r.Get() == g_objA);
 }

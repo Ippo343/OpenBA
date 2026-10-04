@@ -172,7 +172,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(CitizenComponent* citizen) {
         static void* s_gather = nullptr;
         if (!s_gather) {
             int64_t siteIBP = 0;
-            new (&siteIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(site));   // B.3.3 bridge   // LEFT: POD:RtObject::Internal (object/Internal.h)
+            new (&siteIBP) ::Object::InternalBasePtr(site);   // ComponentEntity is-an Object::Internal
             s_gather = GatherRawMaterials_ConstructForSite(&siteIBP);
             if (!s_gather) return true;   // own it, retry construction next tick
             fprintf(stderr, "[ForceConstruct] constructed GatherRawMaterials=%p for site=%p\n",

@@ -185,7 +185,7 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
         s_fw = reinterpret_cast<Work*>(ForesterWork::CreateNewObject());   // LEFT: the factory slot's type returns void* (Object/exe_type.h FactoryFn)
         if (!s_fw) return true;
         new (&s_fw->field_10) ::Object::InternalBasePtr(
-            reinterpret_cast<RtObject::Internal*>(lodge));   // B.3.3 bridge  // +0x10 work-area IBP  // LEFT: POD:RtObject::Internal (Internal.h)
+            lodge);   // +0x10 work-area IBP; ComponentEntity is-an Object::Internal
         int cell = ForceWork::WorkAreaCenterCell(lodge);
         if (cell >= 0) s_fw->field_28 = cell;   // +0x28 target cell
         fprintf(stderr, "[ForceForester] constructed ForesterWork=%p work+0x10=lodge "

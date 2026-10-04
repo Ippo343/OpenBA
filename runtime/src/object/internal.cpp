@@ -219,7 +219,7 @@ namespace Object {
 // offsets (0x78 / 0x98 / 0xa0), one spelling. B3X W0: the minted tables are
 // retired (B.3.9), so the ReaderWriter and the object's Type() are called by
 // name -- the same slots.
-void InternalBasePtrSerializeBody(RtObject::Internal** self,
+void InternalBasePtrSerializeBody(Internal** self,
                                   ::IO::Serializer& ser) {
     ::IO::ReaderWriter* const enc = ser._readerWriter;
 
@@ -233,15 +233,15 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
 
     int      index;
     uint32_t type;
-    RtObject::Internal* p = *self;
+    Internal* p = *self;
     if (p == nullptr) {
         index = 0;
         type  = 0xffffffffu;
     } else {
-        index = p->factoryIndex;
-        type = reinterpret_cast<const Base*>(p)->Type();   // slot 2 +0x10 (B.3.x bridge)  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
+        index = p->_factoryIndex;
+        type = p->Type();   // slot 2 +0x10
     }
-    const uint32_t gen = (*self != nullptr) ? (*self)->generation : 0u;
+    const uint32_t gen = (*self != nullptr) ? (*self)->_generation : 0u;
 
     enc->SerializeInt(index, nullptr);                          // +0xa0
     enc->SerializeUInt(const_cast<uint32_t&>(gen), nullptr);    // +0x98  // LEFT: SIG the door's `const uint32_t& gen` against SerializeUInt(uint32_t&) (R-IO / wave X)
@@ -249,8 +249,7 @@ void InternalBasePtrSerializeBody(RtObject::Internal** self,
 
     // ?PersistObject@InternalFactory@Object@@ (0x1800bff10), the member by
     // name (B3R RT-Core) on `Object::InternalFactory::Get()`.
-    *self = reinterpret_cast<RtObject::Internal*>(  // LEFT: H10 RtObject:: POD mirror of the Object:: class (named in other blocks' files; wave X)
-        ::Object::InternalFactory::Get()->PersistObject(*ser._stream, gen, index, type));
+    *self = ::Object::InternalFactory::Get()->PersistObject(*ser._stream, gen, index, type);
 }
 
 }  // namespace Object

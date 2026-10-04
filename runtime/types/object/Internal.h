@@ -267,7 +267,9 @@ namespace Object {
 // `Object::Base` and `InternalFactory` are all still unconverted
 // (SMARTPTR_INVENTORY.md section 4), so the body keeps reaching them exactly as
 // the C body does.
-void InternalBasePtrSerializeBody(RtObject::Internal** self,
+class Internal;   // below; `_ptr` holds one
+
+void InternalBasePtrSerializeBody(Internal** self,
                                   ::IO::Serializer& ser);
 // Object::Base::IsDerivedFrom's ancestor walk, reached by name from
 // runtime/src/object/type_system.cpp -- the typed half of InternalPtr<T>.
@@ -278,16 +280,16 @@ public:
     // 0x1800062c0 -- one instruction, `mov qword ptr [rcx], 0`.
     InternalBasePtr() : _ptr(nullptr) {}
     // 0x1800062a0 -- one instruction, `mov qword ptr [rcx], rdx`.
-    InternalBasePtr(RtObject::Internal* p) : _ptr(p) {}
+    InternalBasePtr(Internal* p) : _ptr(p) {}
 
     // Trivial by construction and by assertion; see the banner.
     InternalBasePtr(const InternalBasePtr&) = default;
     InternalBasePtr& operator=(const InternalBasePtr&) = default;
     ~InternalBasePtr() = default;
 
-    RtObject::Internal* Get() const        { return _ptr; }
-    RtObject::Internal* operator->() const { return _ptr; }
-    RtObject::Internal& operator*()  const { return *_ptr; }
+    Internal* Get() const        { return _ptr; }
+    Internal* operator->() const { return _ptr; }
+    Internal& operator*()  const { return *_ptr; }
     explicit operator bool() const { return _ptr != nullptr; }
     bool operator==(const InternalBasePtr& o) const { return _ptr == o._ptr; }
     bool operator!=(const InternalBasePtr& o) const { return _ptr != o._ptr; }
@@ -298,9 +300,8 @@ public:
     // ~Internal (and therefore InternalFactory's swap-remove) and frees the
     // block.
     //
-    // B3X W0: the call is `delete` (slot 0, flags 1) BY NAME on `Object::Internal`,
-    // through one bridge cast from the `RtObject::Internal*` POD `_ptr` still
-    // holds. The body is defined below `class Internal` (the class must be
+    // B3X W0: the call is `delete` (slot 0, flags 1) BY NAME on `Object::Internal`.
+    // The body is defined below `class Internal` (the class must be
     // complete for the member call); the declaration and signature are
     // unchanged for every InternalPtr<T> instantiation.
     inline void DeletePtr();
@@ -334,7 +335,7 @@ protected:
     // ?AssignId@... 0x1800c0280 -- the same three bytes. Likewise empty.
     void AssignId() {}
 
-    RtObject::Internal* _ptr;   // +0x00
+    Internal* _ptr;   // +0x00
 };
 
 static_assert(sizeof(InternalBasePtr) == 0x08, "Object::InternalBasePtr is 8 bytes");
@@ -359,7 +360,7 @@ template <class T>
 class InternalPtr : public InternalBasePtr {
 public:
     InternalPtr() : InternalBasePtr() {}
-    InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<RtObject::Internal*>(p)) {}   // LEFT: H10 InternalBasePtr::_ptr is the RtObject::Internal POD; `T` is not yet an Object::Internal subclass tree-wide
+    InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<Internal*>(p)) {}   // LEFT: ERASED InternalPtr<T> is instantiated over T that are not Object::Internal subclasses (RtObject::Internal in the tests, Work records), so the upcast cannot be a static_cast for every T
 
     InternalPtr(const InternalPtr&) = default;
     InternalPtr& operator=(const InternalPtr&) = default;
@@ -368,7 +369,7 @@ public:
     // TRANSITIONAL CAST, same reason as ExternalPtr<T>::Serialize: `T` is not a
     // class deriving from `Object::Internal` in this tree yet, so the downcast
     // cannot be spelled `static_cast` here. It becomes one in B.3 step 3.
-    T* Get() const        { return reinterpret_cast<T*>(InternalBasePtr::Get()); }   // LEFT: as the ctor above
+    T* Get() const        { return reinterpret_cast<T*>(InternalBasePtr::Get()); }   // LEFT: ERASED the downcast from Object::Internal* to a T that is not a subclass for every instantiation (the ctor's reason)
     T* operator->() const { return Get(); }
     T& operator*()  const { return *Get(); }
 
@@ -561,9 +562,9 @@ static_assert(sizeof(Internal) == sizeof(RtObject::Internal),
 // ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ 0x1800c0150 -- see the
 // declaration. Slot 0, flags 1, by name (B3X W0).
 inline void InternalBasePtr::DeletePtr() {
-    RtObject::Internal* p = _ptr;
+    Internal* p = _ptr;
     if (p != nullptr) {
-        delete reinterpret_cast<Internal*>(p);   // B.3.x bridge  // LEFT: H10 InternalBasePtr::_ptr is the RtObject::Internal POD
+        delete p;
         _ptr = nullptr;
     }
 }
