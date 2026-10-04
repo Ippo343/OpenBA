@@ -189,7 +189,7 @@ void ResetConfigurations(EngineT* self) {
     // LEFT: the Set helper takes the rtsetavl::Set POD over the Persistence
     // object's settings map (Persistence.h / Collection.h, not this block's).
     if (void* ps = ::IO::Persistence::_singleton) {
-        rtsetclear::Clear(static_cast<rtsetavl::Set*>(ps));       // 0x18000f7d0
+        rtsetclear::Clear(static_cast<rtsetavl::Set*>(ps));       // 0x18000f7d0   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     }
 
     // Each Configuration below is freed without its destructor and rebuilt with

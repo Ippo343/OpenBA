@@ -428,7 +428,7 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
     // (perf_terrain.h) instead of the 0x30-stride cell record -- raw read when off.
     // LEFT: PerfX::TerrainGet (standalone/perf_terrain.h, STANDALONE) takes the cell array
     // as bytes.
-    uint8_t terrainType = PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(map->cells),
+    uint8_t terrainType = PerfX::TerrainGet(reinterpret_cast<const uint8_t*>(map->cells),   // LEFT: SIG PerfX::TerrainGet — its slow path TerrainGetSlow and g_terrainSCBase (standalone/perf_terrain.cpp) hold the cell array as bytes
                                             map->cellCount, curCell);
 
     float speed;

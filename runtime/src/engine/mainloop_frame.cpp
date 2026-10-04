@@ -446,7 +446,7 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
             void* context = _postDraw._data[i]._context;                   // +0x80's data
             // LEFT: MainLoopCallback::_func is `void*` for both arrays (UI's
             // userinterface_showdialog.cpp appends through one element type).
-            auto fn = reinterpret_cast<PostUpdateFunc>(_postUpdate._data[i]._func);
+            auto fn = reinterpret_cast<PostUpdateFunc>(_postUpdate._data[i]._func);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
             fn(_deltaTime, context);
         }
 

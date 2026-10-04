@@ -91,7 +91,7 @@ using Graphics::GraphicsMesh;
 // (GraphicsMesh.h keeps both trivially destructible; see its `_name` note), so
 // the one view of either as the real `System::String` is here.
 void StringSerialize(void* str, IO::Serializer& ser) {
-    static_cast<System::String*>(str)->Serialize(&ser);
+    static_cast<System::String*>(str)->Serialize(&ser);   // LEFT: SIG the Serialize(void*) helper family (String / Vector / Transform: ledger, Serializer-typed family)
 }
 
 
@@ -536,7 +536,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
         rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005aa30(&_nodes, n);
         // LEFT: `_nodes` stays a raw header (GraphicsMesh.h's `Node` note).
-        RtGraphics_SerializeMeshNodes(ser, n, reinterpret_cast<Node*>(_nodes._data));  // 0x18005c120
+        RtGraphics_SerializeMeshNodes(ser, n, reinterpret_cast<Node*>(_nodes._data));  // 0x18005c120   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     }
 
     rw->SerializeFloatArray(3, &_aabb.min.x, nullptr);

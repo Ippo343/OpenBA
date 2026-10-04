@@ -216,7 +216,7 @@ void EditTool_CloseInfoDialog(EditTool* self, UI::DialogInstance* dialog) {
     if (!userInterface) return;
     Object::InternalPtr<UI::DialogInstance> dialogRef(dialog);
     // LEFT: DialogInstance::_ui is `void*` (runtime/types/ui/DialogInstance.h, R-UI).
-    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(&dialogRef);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(&dialogRef);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     // Fires on entity-death AND on right-click deselect (vtable slot 5), so this
     // must not claim a cause it cannot know.
     printf("[EditTool] deselect -> closed info dialog %p\n", (void*)dialogPtr);
@@ -408,7 +408,7 @@ void EditTool::Update(void*, char) {
 
     // Get UI scale factor from dialog's UI instance (dialog+0x10 = UI, UI+0xdc = scale).
     // LEFT: DialogInstance::_ui is `void*` (runtime/types/ui/DialogInstance.h, R-UI).
-    float uiScale = reinterpret_cast<const UI::UserInterface*>(dialog->_ui)->_uiScale;
+    float uiScale = reinterpret_cast<const UI::UserInterface*>(dialog->_ui)->_uiScale;   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 
     // Apply scale and set position
     int scaledX = (int)((float)posX / uiScale);
@@ -584,7 +584,7 @@ char EditTool::OnKey(char param2) {
             // Get the entity associated with this picking hit.
             // LEFT: Picking::Scene's user data is `void*` (block R-GFX); the picking
             // component stores the owning ComponentEntity there.
-            foundEntity = reinterpret_cast<ComponentEntity*>(
+            foundEntity = reinterpret_cast<ComponentEntity*>(   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
                 pickingScene->GetUserData(static_cast<uint32_t>(hitId)));
         }
         if (SelDiagOn())
@@ -758,7 +758,7 @@ extern "C" int EditTool_HarnessSelectCitizen(EditTool* editTool) {
         if (!userData) continue;
         printf("[EditSel] citizen pick-id %d -> entity=%p; selecting...\n", id, userData);
         // LEFT: Picking::Scene's user data is `void*` (block R-GFX).
-        Object::InternalPtr<ComponentEntity> entityParam(reinterpret_cast<ComponentEntity*>(userData));
+        Object::InternalPtr<ComponentEntity> entityParam(reinterpret_cast<ComponentEntity*>(userData));   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
         tool->SelectEntity(&entityParam);   // 0x1400fd3b0
         void* dlg = tool->entityRef;
         printf("[EditSel] citizen select entity=%p -> dialog=%p (%s)\n",

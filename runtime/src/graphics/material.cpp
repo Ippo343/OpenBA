@@ -125,7 +125,7 @@ bool Material::Serialize(IO::Stream& streamv) {
 
     // `_type` goes through +0x98 `SerializeUInt` (retail's slot). LEFT: the
     // field is the int32 `GetType` returns, viewed as the uint32 the slot takes.
-    rw->SerializeUInt(*reinterpret_cast<uint32_t*>(&_type), nullptr);
+    rw->SerializeUInt(*reinterpret_cast<uint32_t*>(&_type), nullptr);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     int32_t n = _passes._size;
     rw->SerializeInt(n, nullptr);
 

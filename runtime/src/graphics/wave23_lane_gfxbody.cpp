@@ -617,7 +617,7 @@ void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
     _destTarget->platformData   // faithful: unguarded
         ->Resolve(context, _sourceTarget, true);
 
-    const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;  // [RBX+0x68]
+    const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;  // [RBX+0x68]   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 }
 
 }  // namespace Graphics

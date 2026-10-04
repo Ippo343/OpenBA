@@ -342,8 +342,8 @@ namespace {
 // the element once each side, then written field by field (the +0x04 window
 // stays unwritten).
 void AssignVideoResource(uint8_t* dst, const uint8_t* src) {
-    VideoResourceEntry* const d = reinterpret_cast<VideoResourceEntry*>(dst);          // ArraySpec byte callback
-    const VideoResourceEntry* const e = reinterpret_cast<const VideoResourceEntry*>(src);
+    VideoResourceEntry* const d = reinterpret_cast<VideoResourceEntry*>(dst);          // ArraySpec byte callback   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+    const VideoResourceEntry* const e = reinterpret_cast<const VideoResourceEntry*>(src);   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
     d->_typeId = e->_typeId;
     d->_object = e->_object;
     new (&d->_path) System::Filename(e->_path);
@@ -486,7 +486,7 @@ void Engine::MainLoop::OnVideoError() {
                 rec._typeId = static_cast<int32_t>(e->Type());
                 // FindNext hands the walk out const; the record keeps the object
                 // it will Destruct and reload.
-                rec._object = const_cast< ::Object::External*>(e);
+                rec._object = const_cast< ::Object::External*>(e);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
                 // 0x1800dcac0: retail zeroes the slot, adopts, and normalises —
                 // `operator=` (0x180006770) is release-adopt-normalise, and the
                 // release arm is a no-op on the null the default ctor just put
@@ -664,7 +664,7 @@ void Engine::MainLoop::OnVideoRestart() {
             // Retail's unguarded load when the walk fell off the tree — see the
             // banner. `node + 0x10` is the record's BaseTypeInfo, and retail
             // calls its in-place factory DIRECTLY (`CALL [RDX+0x28]`).
-            reinterpret_cast<void (*)(void*)>(node->element.record.info->inPlaceFactoryFn)(r->_object);
+            reinterpret_cast<void (*)(void*)>(node->element.record.info->inPlaceFactoryFn)(r->_object);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 
             // `object->_path = entry.path`: the inlined String assign, then
             // AdjustDelimiters. +0x08 is Object::External's own Filename, read
@@ -701,14 +701,14 @@ void Engine::MainLoop::OnVideoRestart() {
             // External::Load's entry point still takes the RtObject::External
             // POD (external_load.cpp; X-R1's mirror family).
             RtObject::RtObject_External_Load(&compiled,
-                                             reinterpret_cast<RtObject::External*>(r->_object));
+                                             reinterpret_cast<RtObject::External*>(r->_object));   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
             // `compiled` releases here — retail's 0x1800dc4fe, now ~Filename.
         }
     }
 
     // ---- 7: drop the record -------------------------------------------------------
     // kSpec_VideoResource's destroy arm takes raw element storage.
-    RtEngine_VideoResourceDestroyRange_180034440(nullptr, reinterpret_cast<uint8_t*>(arr._data), arr._size);
+    RtEngine_VideoResourceDestroyRange_180034440(nullptr, reinterpret_cast<uint8_t*>(arr._data), arr._size);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     if (arr._data != nullptr) rtcoll::MemFree(arr._data);
     arr._data = nullptr;
     arr._size = 0;

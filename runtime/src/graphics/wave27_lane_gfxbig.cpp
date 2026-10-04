@@ -234,7 +234,7 @@ void Array8Assign(Collection::Array<MaterialBinding>* dst,
 // signature); each views it ONCE as the `MaterialParameterSet` it is (LEFT).
 void PassAssign(uint8_t* dstv, const uint8_t* srcv) {
     MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
-    const MaterialParameterSet* const src = reinterpret_cast<const MaterialParameterSet*>(srcv);
+    const MaterialParameterSet* const src = reinterpret_cast<const MaterialParameterSet*>(srcv);   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
 
     dst->textures._data = nullptr;                        // MOV [RBX],R8 (R8==0)
     dst->textures._size = 0;                              // MOV [RBX+8],0 (one qword)
@@ -1071,7 +1071,7 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
         for (int32_t j = 0; j < e->_drawableIds._size; ++j) {
             const int32_t id = e->_drawableIds._data[j];
             RendererDrawable& d = _drawables._data[id];
-            static_cast<const Light*>(d._object)->DrawShadowMap(
+            static_cast<const Light*>(d._object)->DrawShadowMap(   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
                 context, *this, d._value, 1);
         }
 
@@ -1118,7 +1118,7 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
             for (int32_t j = 0; j < e->_drawableIds._size; ++j) {
                 const int32_t id = e->_drawableIds._data[j];
                 RendererDrawable& d = _drawables._data[id];
-                static_cast<const Light*>(d._object)->DrawLight(
+                static_cast<const Light*>(d._object)->DrawLight(   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
                     context, *this, e->_drawGroupIndex, d._value, k, e->_shader);
             }
         }

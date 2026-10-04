@@ -149,7 +149,7 @@ void SerializeGroupPtr(Graphics::AnimationGroup*& group, IO::Serializer& ser) {
 // element pointers (`rtcoll::ElemAssign`); that signature is the collection
 // block's, so the two element views stay here (LEFT).
 extern "C" void* RtGraphics_MeshNode_CopyCtor(void* dstv, const void* srcv) {
-    return new (dstv) GraphicsMesh::Node(*static_cast<const GraphicsMesh::Node*>(srcv));
+    return new (dstv) GraphicsMesh::Node(*static_cast<const GraphicsMesh::Node*>(srcv));   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
 }
 
 // 0x18005b660 — Graphics::AnimationState's copy constructor.
@@ -165,8 +165,8 @@ extern "C" void* RtGraphics_MeshNode_CopyCtor(void* dstv, const void* srcv) {
 // the two named dwords, H7), then assigned. The `void*` pair is the element-op
 // signature of the collection block's spec row (LEFT).
 extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
-    AnimationState* d = static_cast<AnimationState*>(dstv);
-    const AnimationState* s = static_cast<const AnimationState*>(srcv);
+    AnimationState* d = static_cast<AnimationState*>(dstv);   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+    const AnimationState* s = static_cast<const AnimationState*>(srcv);   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
 
     d->_needsUniqueCopy = s->_needsUniqueCopy;
 
@@ -275,7 +275,7 @@ void RtGraphics_SerializeMeshNodes(IO::Serializer& ser, int count, GraphicsMesh:
     IO::ReaderWriter* rw = ser._readerWriter;
     for (int i = 0; i < count; ++i, ++p) {
         // LEFT (H5): `_name` is the RtSystem::String POD (GraphicsMesh.h's note).
-        reinterpret_cast<System::String*>(&p->_name)->Serialize(&ser);
+        reinterpret_cast<System::String*>(&p->_name)->Serialize(&ser);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
         rw->SerializeInt(p->_parent, nullptr);
         rw->SerializeFloatArray(4, &p->_local.rotation.x, nullptr);
         rw->SerializeFloatArray(3, &p->_local.translation.x, nullptr);

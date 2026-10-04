@@ -156,7 +156,7 @@ public:
     //   an `Array<Animation>` member would instantiate the element destroy of an
     //   `Animation` whose destructor has no C++ body (LEFT, H5).
     const Animation& GetAnimation(int index) const {
-        return reinterpret_cast<const Animation*>(_clips._data)[index];
+        return reinterpret_cast<const Animation*>(_clips._data)[index];   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
     }
 
     // ?GetAnimationFromName@…QEBAHPEBD@Z 0x1800fb340 — NOT PORTED

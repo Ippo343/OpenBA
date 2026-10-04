@@ -246,16 +246,16 @@ UNIT_TEST(mib_rp_controller_member_raw_dispatch) {
     ::ControllerLive::TableAddTransition(t, 14, nullptr);
 
     alignas(8) unsigned char owner[0x58] = {};
-    Ctl node(reinterpret_cast<Component*>(owner));
-    void** vt = *reinterpret_cast<void***>(&node);
-    CHECK_EQ(reinterpret_cast<int (*)(void*, int)>(vt[0])(&node, 13), 0);          // FindState
+    Ctl node(reinterpret_cast<Component*>(owner));   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
+    void** vt = *reinterpret_cast<void***>(&node);   // LEFT: FLOOR? vtable-word probe of the ABI test (not vslot), for the audit
+    CHECK_EQ(reinterpret_cast<int (*)(void*, int)>(vt[0])(&node, 13), 0);          // FindState   // LEFT: FLOOR? vtable-word probe of the ABI test (not vslot), for the audit
     int desired = 14;
-    CHECK_EQ(reinterpret_cast<int (*)(void*, int, int*)>(vt[1])(&node, 0, &desired), 0);
+    CHECK_EQ(reinterpret_cast<int (*)(void*, int, int*)>(vt[1])(&node, 0, &desired), 0);   // LEFT: FLOOR? vtable-word probe of the ABI test (not vslot), for the audit
     int smToken = 0;
-    CHECK_EQ((int)reinterpret_cast<char (*)(void*, void*, int)>(vt[3])(&node, &smToken, 0), 7);
+    CHECK_EQ((int)reinterpret_cast<char (*)(void*, void*, int)>(vt[3])(&node, &smToken, 0), 7);   // LEFT: FLOOR? vtable-word probe of the ABI test (not vslot), for the audit
     CHECK(g_mibSeenData == static_cast<void*>(owner));                             // RCX = [node+0x18]
     CHECK(g_mibSeenSm == static_cast<void*>(&smToken));
-    CHECK_EQ((int)reinterpret_cast<char (*)(void*)>(vt[8])(&node), 1);            // HasStates
+    CHECK_EQ((int)reinterpret_cast<char (*)(void*)>(vt[8])(&node), 1);            // HasStates   // LEFT: FLOOR? vtable-word probe of the ABI test (not vslot), for the audit
     t = saved;
 }
 

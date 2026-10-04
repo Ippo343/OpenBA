@@ -622,17 +622,17 @@ char WorkPlaceComponent::EnterDemolish() {
 // LeaveBuilderProfession: destroycomponent_states (the null test is the tree's).
 // ApplyOccupiedVisual: Game/starttown.cpp.
 void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
-    ((WorkPlaceComponent*)comp)->SetAccepting(accepting);   // B4 FORWARD
+    ((WorkPlaceComponent*)comp)->SetAccepting(accepting);   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
 }
 void WorkPlaceComponent_OnCreateInit(void* selfP) {
-    ((WorkPlaceComponent*)selfP)->ReleaseWorkers();   // B4 FORWARD
+    ((WorkPlaceComponent*)selfP)->ReleaseWorkers();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
 }
 extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     if (!selfP) return;
-    ((WorkPlaceComponent*)selfP)->LeaveBuilderProfession();   // B4 FORWARD
+    ((WorkPlaceComponent*)selfP)->LeaveBuilderProfession();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
 }
 void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
-    ((WorkPlaceComponent*)comp)->ApplyOccupiedVisual();   // B4 FORWARD
+    ((WorkPlaceComponent*)comp)->ApplyOccupiedVisual();   // B4 FORWARD   // LEFT: SIG B4 FORWARD C entry (outside callers hold the component as void*)
 }
 
 // ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====

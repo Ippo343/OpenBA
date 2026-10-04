@@ -268,7 +268,7 @@ Graphics::Camera* RtGraphics_Camera_DefaultCtor(Graphics::Camera* self) {
 uint8_t* SceneEntryAssign(uint8_t* dstv, const uint8_t* srcv) {
     Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);  // LEFT: SIG element op of a collection spec row takes void* (collection core, wave X)
     const Graphics::RendererSceneEntry* const src =
-        reinterpret_cast<const Graphics::RendererSceneEntry*>(srcv);
+        reinterpret_cast<const Graphics::RendererSceneEntry*>(srcv);   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
     dst->_scene        = src->_scene;                  // +0x00
     dst->_renderBuffer = src->_renderBuffer;           // +0x08
     RtGraphics_Camera_CopyCtor(&dst->_camera, &src->_camera);

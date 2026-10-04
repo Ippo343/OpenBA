@@ -319,7 +319,7 @@ Audio::Stream::~Stream() {
         reinterpret_cast<CRITICAL_SECTION*>(_lock));  // CAST-OK: win32
     // 0x1800a0dd4 CALL 0x18000c4a0 — the +0x30 `Array<Block>::~Array`, a J1
     // body (free the buffer, zero the header; no element destroy).
-    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(&_buffers));
+    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(&_buffers));   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 }
 
 // ENDGAME B.3.9 ENG W2: the `??0Stream` / `??1Stream` DOORS and their name +

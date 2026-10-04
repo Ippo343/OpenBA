@@ -214,7 +214,7 @@ EffectSlot* FindEffectSlot(const Scene* self, uint32_t id) {
 // leak the first allocation).
 // ============================================================================
 void* RtAudio_Scene_Ctor(void* selfPtr) {
-    auto* self = static_cast<Scene*>(selfPtr);
+    auto* self = static_cast<Scene*>(selfPtr);   // LEFT: FLOOR? a callback's void* context (the engine / scene callback table's signature), for the audit
     self->time = 0;
     self->playGeneration = 1;
     // ENDGAME B.3.2 closing pass: retail's three zero stores, written out.
@@ -246,7 +246,7 @@ void RtAudio_Scene_Dtor(void* selfPtr) {
     // B.3.7: the IMPLICIT destructor IS retail's body (Audio.h banner):
     // ~Array<AttenutedEffect> (each slot's `positions`, then the buffer, +0x20)
     // then ~Array<Channel> (+0x10), reverse declaration order.
-    reinterpret_cast<Audio::Scene*>(selfPtr)->~Scene();   // B.3.7 bridge
+    reinterpret_cast<Audio::Scene*>(selfPtr)->~Scene();   // B.3.7 bridge   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 }
 
 // ============================================================================
@@ -677,7 +677,7 @@ bool Configuration::Startup() {
 void Scene::Serialize(void* serializer) {
     // LEFT: the parameter is retail's `IO::Serializer&`; the one caller
     // (code/Game/Game/gameupdateloop_serialize.cpp) still hands a `void*`.
-    auto* ser = static_cast<IO::Serializer*>(serializer);
+    auto* ser = static_cast<IO::Serializer*>(serializer);   // LEFT: not examined this round (X-G2-4 out of budget): blocker to be read
 
     // Retail's stack-local Serializer: the caller's Stream, a null ReaderWriter
     // until the Encoding's factory (+0x20 writing, +0x18 reading, version 0)
