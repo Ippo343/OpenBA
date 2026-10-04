@@ -440,10 +440,10 @@ extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self) {
 
     // Tree at +0x20 (kids +0x18/+0x20).
     {
-        void* root = self->field_0x20;
+        WorkSchedulerNode20* root = self->field_0x20;
         if (root) {
-            WorkBase_TreeNodeFree_e320(&self->field_0x20, P(root, 0x18));   // LEFT: WorkScheduler.h (COMP-8): field_0x20 is void*
-            WorkBase_TreeNodeFree_e320(&self->field_0x20, P(root, 0x20));   // LEFT: WorkScheduler.h (COMP-8): field_0x20 is void*
+            WorkBase_TreeNodeFree_e320(&self->field_0x20, root->left);
+            WorkBase_TreeNodeFree_e320(&self->field_0x20, root->right);
             MemFree(root);
         }
         self->field_0x20 = nullptr;

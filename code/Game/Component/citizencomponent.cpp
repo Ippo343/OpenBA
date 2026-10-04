@@ -1420,10 +1420,10 @@ void CitizenComponent::GiveBirth() {
     }
 
     // allocate + copy-construct the child entity
-    void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
+    ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     ComponentEntity* child = nullptr;
     if (mem) {
-        child = ComponentEntity_CtorFromDescription(static_cast<ComponentEntity*>(mem), _entity->_description);
+        child = ComponentEntity_CtorFromDescription(mem, _entity->_description);
     }
 
     // Find the newborn's CitizenComponent — retail reads the type id from DAT_1401c7158,

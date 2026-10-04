@@ -199,8 +199,7 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
     }
     stack->current = -1;
     if (stack->field_0x10 != nullptr) {
-        // LEFT: Action.h (ACT) declares ActionStack +0x10 as Action*, not InternalPtr<Action>.
-        reinterpret_cast< ::Object::InternalBasePtr*>(&stack->field_0x10)->DeletePtr();   // B.3.3 bridge
+        stack->field_0x10.DeletePtr();
         Action* nul = nullptr;
         new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         stack->field_0x10 = nul;

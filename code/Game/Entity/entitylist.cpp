@@ -693,7 +693,7 @@ static void EntityList_CloseDialogsForDyingEntities() {
     auto& dialogs = ui->_dialogs;
     for (auto it = dialogs.GetFirst(); it && nClose < 16; ++it) {
         // node[0] = DialogInstance*
-        UI::DialogInstance* dialog = reinterpret_cast<UI::DialogInstance*>(*it);   // LEFT: UserInterface.h DialogInstancePtr is void* (R-UI-4)
+        UI::DialogInstance* dialog = *it;
         if (dialog) {
             Object::InternalPtr<UI::DialogController> ctrlRef = dialog->GetController(s_tidEntityUI);
             UI::DialogController* ctrl = ctrlRef.Get();
@@ -745,7 +745,7 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
     if (tool->lastEntityRef == 0) return;
     uintptr_t ent = reinterpret_cast<uintptr_t>(tool->lastEntityRef);   // CAST-OK: ptr_int (the tree's address-range probe below)
     if (ent < 0x10000 || ent > 0x00007FFFFFFFFFFFULL) return;
-    if (((*reinterpret_cast<uint32_t*>(ent + 0x40) >> 10) & 1) == 0) return;   // LEFT: EditTool.h lastEntityRef is uint64_t (SA)
+    if (((tool->lastEntityRef->_entityFlags >> 10) & 1) == 0) return;   // ComponentEntity +0x40
 
     // Drop both the dialog ref (+0x28) and the selected-entity ref (+0x30), exactly as
     // EditTool_CloseInfoDialog does — leaving +0x30 set would keep the follow chasing it.

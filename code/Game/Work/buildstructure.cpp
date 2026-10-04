@@ -425,7 +425,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                         }
 
                         // Search the region pair cache's index (Map +0x78; index +0x28)
-                        RegionPairCache* pathCache = reinterpret_cast<RegionPairCache*>(map->regionPairCache);   // LEFT: Map.h regionPairCache is int64_t* (DLG-1)
+                        RegionPairCache* pathCache = map->regionPairCache;
                         AvlNode30* node = pathCache->index.root;
                         dist = -1;
                         bool cached = false;
@@ -457,7 +457,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                             // the cache-key normalisation; 0x1400a8ba0 forwards R9 to 0x14001dc00 untouched.
                             // (the forwarder of 0x1400a8ba0 never read its fourth argument, lo)
                             dist = map->regionGraph->PathLength(regionCenter, static_cast<uint32_t>(regionTest));   // 0x1400a8ba0
-                            reinterpret_cast<RegionPairCache*>(map->regionPairCache)->Store(regionCenter, regionTest, dist);   // 0x1400a5b30  // LEFT: Map.h regionPairCache is int64_t* (DLG-1)
+                            map->regionPairCache->Store(regionCenter, regionTest, dist);   // 0x1400a5b30
                         }
 
                         if (dist < 0) continue;

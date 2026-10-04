@@ -2450,7 +2450,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                                 const Pathfinding::PointList::Point& e = tbl->_points[i];
                                 System::String nameBuf("boat");
                                 const bool hit =
-                                    *reinterpret_cast<const System::String*>(&e.name) == nameBuf;   // LEFT: PointList::Point::name is the String's raw char* (runtime/types/pathfinding/PointList.h, R-owned)
+                                    e.name == nameBuf;
                                 if (!hit) continue;
                                 pierX = e.pos.x;
                                 pierY = e.pos.y;

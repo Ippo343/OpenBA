@@ -1744,7 +1744,7 @@ void GameUpdateLoop::Startup() {
 
         // Allocate and construct ToolbarDialog (0x108 bytes). [GUARD-M5]
         void* mem = System::MemoryAllocator::MemAlloc(0x108, 8);
-        void* toolbar = nullptr;
+        ToolbarDialog* toolbar = nullptr;
         // Retail (0x140097cf1) constructs whenever the allocation succeeded; the
         // `dialogRes != nullptr` skip that sat here coped with a failed type-id
         // resolution, which cannot happen now (ENDGAME B.3.9 CB).
@@ -1762,9 +1762,9 @@ void GameUpdateLoop::Startup() {
             m_userInterface->AddDialog(  // B.3.6 bridge
                 reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
             fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p itemCount(+0xD8)=%d "
-                    "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", toolbar,
-                    *(int32_t*)((uintptr_t)toolbar + 0xD8), *(int32_t*)((uintptr_t)toolbar + 0xC8),
-                    *(int32_t*)((uintptr_t)toolbar + 0x100));
+                    "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", static_cast<void*>(toolbar),
+                    toolbar->toolbarItems.GetSize(), toolbar->buttonElements.GetSize(),
+                    toolbar->speedValues.GetSize());
         } else {
             fprintf(stderr, "[HUD] Toolbar NOT constructed (mem=%p) — freeing\n", mem);
             if (mem) System::MemoryAllocator::MemFree(mem);
