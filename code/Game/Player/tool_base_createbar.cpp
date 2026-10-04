@@ -173,7 +173,7 @@ void BuildRequirementUI::SetStatusText(const System::String* costStr) {
 // array +0x40, quantity array +0x50): text = "%i" of quantity[i] * multiplier.
 void BuildRequirementUI::SetSizeMultiplier(uint32_t param_8) {
     field_0x38 = param_8;
-    int count = countCount;
+    int count = counts._size;
     if (count <= 0) return;
     // Retail indexes the label-element array (+0x40, count at +0x48) using the REQUIREMENT
     // count (+0x58) and never null-checks the element — safe only because the two arrays
@@ -187,18 +187,18 @@ void BuildRequirementUI::SetSizeMultiplier(uint32_t param_8) {
             s_logged = true;
             fprintf(stderr, "[e700] ctrl=%p reqCount(+0x58)=%d labelCount(+0x48)=%u "
                     "labelArr(+0x40)=%p sizeArr(+0x50)=%p\n",
-                    static_cast<void*>(this), count, static_cast<uint32_t>(labelCount),
-                    static_cast<void*>(labelData), static_cast<void*>(countData));
+                    static_cast<void*>(this), count, static_cast<uint32_t>(labels._size),
+                    static_cast<void*>(labels._data), static_cast<void*>(counts._data));
             fflush(stderr);
         }
     }
     for (int i = 0; i < count; i++) {
         int mult = static_cast<int>(field_0x38);
-        int val = countData[i] * mult;
+        int val = counts._data[i] * mult;
 
         System::String s = System::String::Format("%i", static_cast<uint64_t>(static_cast<uint32_t>(val)));
 
-        UI::Element** elemArr = labelData;
+        UI::Element** elemArr = labels._data;
         UI::Element* elem = nullptr;
         if (elemArr) {
             elem = elemArr[i];
