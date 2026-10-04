@@ -77,7 +77,7 @@ void RebalanceIdTree(WorkSchedulerIdNode** root, WorkSchedulerIdNode* from) {   
     AvlRebalance(root, &from);
 }
 void RebalanceCountTree(WorkSchedulerCountNode** root, WorkSchedulerCountNode* from) { // 0x14001a8c0
-    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));  // LEFT: SIG Pf_AvlRebalanceA_a8c0 (wave X family across two agents)
+    AvlRebalance(root, &from);
 }
 void RebalanceBucketTree(WorkSchedulerBucketNode** root, WorkSchedulerBucketNode* from) { // 0x140014b40
     TradeWork_impl_4b40(reinterpret_cast<int64_t*>(root), reinterpret_cast<int64_t*>(&from));  // LEFT: SIG TradeWork_impl_4b40 (wave X family across two agents)

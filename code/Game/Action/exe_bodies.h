@@ -108,7 +108,6 @@ uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self);  // 0x140119470
 // ---- action_pf_astar.cpp
 
 // ---- action_pf_avl.cpp
-extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node);  // 0x14001a8c0
 struct PathGraph;
 extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 

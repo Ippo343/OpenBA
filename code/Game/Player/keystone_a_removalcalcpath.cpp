@@ -584,10 +584,8 @@ void WorkScheduler::PrioritizeWork(int workId) {
                 }
             balance:
                 {
-                    // LEFT: 0x14001a8c0 is a C door in block ACT-b's Action/exe_bodies.h
-                    // taking the root slot and the cursor as integers.
-                    int64_t res18local = reinterpret_cast<int64_t>(prev);   // LEFT: SIG Pf_AvlRebalanceA_a8c0 (X-G2-WAIT) takes the walk slot as int64_t*
-                    Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&field_0x10), &res18local);   // LEFT: SIG Pf_AvlRebalanceA_a8c0 (X-G2-WAIT)
+                    WorkSchedulerCountNode* res18local = prev;
+                    AvlRebalance(&field_0x10, &res18local);   // 0x14001a8c0
                 }
             }
             field_0x18 = field_0x18 + 1;

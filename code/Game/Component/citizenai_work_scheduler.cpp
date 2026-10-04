@@ -289,7 +289,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
         }
         if (linked) {
             WorkSchedulerCountNode* tmp = parent;
-            Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&ws->field_0x10), reinterpret_cast<int64_t*>(&tmp));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
+            AvlRebalance(&ws->field_0x10, &tmp);   // 0x14001a8c0
             ws->field_0x18 += 1;   // +0x18 primary count
         }
     }

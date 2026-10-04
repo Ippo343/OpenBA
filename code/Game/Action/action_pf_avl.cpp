@@ -24,6 +24,7 @@
 #include "Game/LegacyKeyIntNode.h"     // LegacyKeyIntNode
 #include "Component/TradeComponent.h"  // TradeResourceNode
 #include "Work/Work.h"                 // WorkEntitySetNode
+#include "Component/LeisureCandidateSet.h"   // LeisureHomeNode
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>
 
@@ -228,6 +229,10 @@ template void AvlRebalance<AvlNode28>(AvlNode28**, AvlNode28**);
 // 0x140013480 bodies, B13).
 template void AvlRebalance<WorkSchedulerIdNode>(WorkSchedulerIdNode**, WorkSchedulerIdNode**);
 template void AvlRebalance<WorkEntitySetNode>(WorkEntitySetNode**, WorkEntitySetNode**);
+// The 0x28 nodes of other modules' trees (retail: the same 0x14001a8c0 body, B13): the work
+// scheduler's +0x10 count tree and CitizenAI leisure's home set.
+template void AvlRebalance<WorkSchedulerCountNode>(WorkSchedulerCountNode**, WorkSchedulerCountNode**);
+template void AvlRebalance<LeisureHomeNode>(LeisureHomeNode**, LeisureHomeNode**);
 template WorkCandidateNode* AvlRotateLeft<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode*);
 template WorkCandidateNode* AvlRotateRight<WorkCandidateNode>(WorkCandidateNode**, WorkCandidateNode*);
 // The other trees of 0x14000e360's walk (CitizenAI_Reg_helper_e360): the trade stock tree
@@ -475,11 +480,6 @@ LAB_140025afa:
 // ===========================================================================
 // B4 FORWARD: the C spellings other blocks' files still call, one line each.
 // ===========================================================================
-// B4 FORWARD: 4 outside callers (citizenai_leisure.cpp, citizenai_work_scheduler.cpp,
-// goals_serialize.cpp, keystone_a_removalcalcpath.cpp)
-extern "C" void Pf_AvlRebalanceA_a8c0(int64_t* root, int64_t* node) {
-    AvlRebalance(reinterpret_cast<AvlNode28**>(root), reinterpret_cast<AvlNode28**>(node));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
-}
 
 // 0x140025b30 — PathPairs_Clear: reset the pairs scratch array (pg+0x00 header
 // {data@+0, count@+8, capacity@+0xC}) count to 0. Ghidra dropped the second

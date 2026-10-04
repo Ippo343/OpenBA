@@ -491,7 +491,7 @@ LAB_14010a846:
                                 LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
                                 if (nd) { nd->element = keyVal; nd->parent = ins; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
                                 ins->right = nd;
-                                Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
+                                AvlRebalance(&local_d8, &ins);   // 0x14001a8c0
                                 local_d0 = local_d0 + 1; done = true; break;
                             }
                         } else {
@@ -500,7 +500,7 @@ LAB_14010a846:
                                 LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
                                 if (nd) { nd->element = keyVal; nd->parent = ins; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
                                 ins->left = nd;
-                                Pf_AvlRebalanceA_a8c0(reinterpret_cast<int64_t*>(&local_d8), reinterpret_cast<int64_t*>(&ins));   // LEFT: SIG Pf_AvlRebalanceA_a8c0
+                                AvlRebalance(&local_d8, &ins);   // 0x14001a8c0
                                 local_d0 = local_d0 + 1; done = true; break;
                             }
                         }
