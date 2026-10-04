@@ -694,7 +694,7 @@ void EditElement::SetText(const System::String& text) {
         // ??9String@System@@QEBA_NAEBV01@@Z  retail 0x18003ffe0 — the body is
         // System::String::operator== negated, so this is the class operator.
         const bool notEqual =
-            *reinterpret_cast<const System::String*>(&_text) != text;   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+            *reinterpret_cast<const System::String*>(&_text) != text;   // LEFT: H5 EditElement::_text (see EditElement.h GetText: blocked by an X-GS reader, noiseui.cpp:154)
         if (notEqual) {
             MarkNeedsSizeCalcUpToRoot(this);
         }

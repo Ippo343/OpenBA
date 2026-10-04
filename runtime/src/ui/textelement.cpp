@@ -69,7 +69,7 @@ namespace UI {
 // member ~Array follows); then the compiler chains ~Element (0x1801161a0).
 TextElement::~TextElement() {
     System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_cachedText));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        *reinterpret_cast<System::String*>(&_cachedText));   // LEFT: H5 TextElement::_cachedText: retail dtor 0x18011eda0 releases +0xf8 BEFORE destroying the +0xc8 _params array; a String member would release it AFTER this body, i.e. after _params, unless _params (the kSpec_StringRefZ erased core) is typed in the same commit
     rtcoll::RtColl_ArrayDtorElem_180010ab0(&_params);
 }
 
