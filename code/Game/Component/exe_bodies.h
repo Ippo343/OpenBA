@@ -45,7 +45,8 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x
 // ---- charactercomponent.cpp
 class Action;
 namespace System { class Time; }
-void Character_UpdateAnimation_Reimpl(void* arrayBase, Action** ptrRef, const System::Time* deltaTime);  // 0x1400c4f80
+struct ActionStack;
+void Character_UpdateAnimation_Reimpl(ActionStack* arrayBase, Action** ptrRef, const System::Time* deltaTime);  // 0x1400c4f80
 
 // ---- citizen_assign_citizens.cpp
 extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0

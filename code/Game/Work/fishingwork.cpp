@@ -776,7 +776,7 @@ int FishingWork::Cleanup() {
             CharacterComponent* character = citizenRefs[i]->character;
 
             // Cancel pending actions on the character's action list (+0x48)
-            WorkBase_TaskListCleanup_c5400(&character->actions);
+            WorkBase_TaskListCleanup_c5400(&character->actionStack);
         }
 
         i++;

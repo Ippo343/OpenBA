@@ -938,7 +938,7 @@ int ConsumeProduce::Cleanup() {
         CharacterComponent* character = ibpArray[i]->character;
 
         // Call task list cleanup on the character's action list (+0x48)
-        WorkBase_TaskListCleanup_c5400(&character->actions);
+        WorkBase_TaskListCleanup_c5400(&character->actionStack);
     }
     return 0;
 }

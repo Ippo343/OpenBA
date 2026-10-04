@@ -559,7 +559,7 @@ void AnimalComponent::Update(const System::Time* time) {
         return;
     }
 
-    if (character->currentAction + 1 > 0) return;  // action queued
+    if (character->actionStack.current + 1 > 0) return;  // action queued
 
     moveTimer._ticks -= deltaTime->_ticks;
     if (moveTimer._ticks > 0) return;
@@ -714,9 +714,7 @@ void AnimalComponent::Update(const System::Time* time) {
             }
 
             if (accept) {
-                // LEFT: the action-stack helpers take the Array header as int64_t* / void*
-                // (Work/exe_bodies.h, Action/exe_bodies.h: other blocks' declarations)
-                int64_t* stack = reinterpret_cast<int64_t*>(&character->actions);   // LEFT: SIG Pf_ActStackPush_54e0 (CharacterComponent::actions is a raw Action** triple, not an ActionStack)
+                ActionStack* stack = &character->actionStack;
                 WorkBase_TaskListCleanup_c5400(stack);
 
                 void* action = nullptr;

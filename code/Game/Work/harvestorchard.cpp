@@ -436,7 +436,7 @@ int HarvestOrchard::Cleanup() {
         }
 
         CitizenComponent* citizenEntity = leftmost->element.citizen;
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
         count = _cells._count;
     }

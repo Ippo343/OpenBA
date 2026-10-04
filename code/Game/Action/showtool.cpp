@@ -294,7 +294,7 @@ ShowTool::ShowTool()
 // [3] 0x140042780
 // [4] 0x140042710
 // [7] 0x140042700 — the leaf's own `RET 0` (same bytes as the base body)
-void ShowTool::Exit(void*) {}
+void ShowTool::Exit(ActionStack*) {}
 // [8] 0x1400426d0
 // [9] 0x140042680
 

@@ -145,7 +145,7 @@ bool CitizenStackIdle(void* citizen) {
     const CitizenComponent* c = reinterpret_cast<const CitizenComponent*>(citizen);   // LEFT: SIG the harness entries (StartTown_ForcePush*Work, outside callers) hand the citizen as void*
     const CharacterComponent* charComp = c->character;   // +0x278
     if (!charComp || !Readable(charComp, kActionTopOff + 8)) return false;
-    return charComp->currentAction < 0;                 // +0x60
+    return charComp->actionStack.current < 0;                 // +0x60
 }
 
 int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
@@ -161,7 +161,7 @@ int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
     if (driveCount && *driveCount < traceMax) {
         ++*driveCount;
         const CharacterComponent* charComp = c->character;               // +0x278
-        int top = charComp ? charComp->currentAction : -999;             // +0x60
+        int top = charComp ? charComp->actionStack.current : -999;             // +0x60
         std::fprintf(stderr, "[%s] DRIVE#%d citizen=%p ret=%d newTop+0x60=%d\n",
                      tag ? tag : "ForceWork", *driveCount, citizen, rc, top);
         std::fflush(stderr);

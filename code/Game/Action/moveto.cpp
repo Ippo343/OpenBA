@@ -482,7 +482,7 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
 // Queries the CharacterGrid for the nearest other character within 0.5; if one is found
 // at a higher address facing our way (dot > 0), sets +0x474.
 // ============================================================
-void MoveTo::Enter(void*, const System::Time*) {
+void MoveTo::Enter(ActionStack*, const System::Time*) {
     // Read current position
     const Math::Vector3& cur = character->modelComponent->transform.translation;
     float position[3];
@@ -532,7 +532,7 @@ void MoveTo::Enter(void*, const System::Time*) {
 // MoveTo::Exit (0x1400c8520)
 // Plays the stop animation (+0x46c).
 // ============================================================
-void MoveTo::Exit(void* actionStack) {
+void MoveTo::Exit(ActionStack* actionStack) {
     (void)actionStack;
     SetAnimation(character.Get(), static_cast<uint32_t>(stopAnimation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }

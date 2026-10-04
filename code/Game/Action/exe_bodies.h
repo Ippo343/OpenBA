@@ -111,7 +111,8 @@ struct PathGraph;
 extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
 
 // ---- action_pf_ctors.cpp
-void Pf_ActStackPush_54e0(int64_t* param_1, void* param_2_);  // 0x1400c54e0
+struct ActionStack;
+void Pf_ActStackPush_54e0(ActionStack* stack, void* param_2_);  // 0x1400c54e0
 void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType, int64_t time, uint8_t param_6, int param_7);  // 0x1400c9720
 class Component;              // Component/Component.h
 class ComponentDescription;   // Component/ComponentDescription.h

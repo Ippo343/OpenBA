@@ -360,8 +360,8 @@ extern "C" void CharacterComponent_SinCosf(float x, float* s, float* c);   // ch
 extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, const System::Time* time) {
     // ---- HEAD (exercised) -------------------------------------------------
     // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
-    if (-1 < self->currentAction) {
-        CitizenAI_ActionExecutor_c4c50(reinterpret_cast<ActionStack*>(&self->actions), time);   // LEFT: CharacterComponent.h declares +0x48 as separate fields, not an ActionStack
+    if (-1 < self->actionStack.current) {
+        CitizenAI_ActionExecutor_c4c50(&self->actionStack, time);
     }
     // Crash-safety gate: char render-index < 0 (always in standalone) → skip the tail.
     if (self->characterIndex < 0) {
@@ -562,7 +562,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
                     slot, (void*)self, self->characterIndex,
                     pos[0], pos[1], pos[2], dx, dy, dz, speed,
                     self->field_0x38,
-                    self->currentAction,
+                    self->actionStack.current,
                     desiredFacing, appliedYaw);
                 fflush(stderr);
             }

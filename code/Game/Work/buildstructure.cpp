@@ -150,7 +150,7 @@ int BuildStructure::Cleanup() {
         // The node's citizen; its CharacterComponent's action list (+0x48)
         CitizenComponent* citizen = node2->element;
 
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
 }
 
@@ -557,12 +557,12 @@ static bool CheckCitizenHasTask(BuildStructure* self, CitizenComponent** citizen
     CharacterComponent* character = (*citizenIBP)->character;
 
     // Iterate action stack: +0x48 = array, +0x60 = the running index
-    int actionCount = character->currentAction + 1;  // original: 0x60 field + 1
+    int actionCount = character->actionStack.current + 1;  // original: 0x60 field + 1
     if (actionCount <= 0) return false;
 
-    Action** actionArray = character->actions;
+    ::Object::InternalPtr<Action>* actionArray = character->actionStack.actions;
     for (int i = 0; i < actionCount; i++) {
-        Action* action = actionArray[i];
+        Action* action = actionArray[i].Get();
 
         // Check if this action is a CompleteTask
         bool isCompleteTask = Object::IsDerivedFromNullSafe(action, taskTypeId);

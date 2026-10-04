@@ -143,7 +143,7 @@ static ActionStack* PrologueResolveStack(CitizenComponent* const* citizenRef, Ch
                                          bool doCleanup = true) {
     CharacterComponent* ch = (*citizenRef)->character;
     *outChar = ch;
-    ActionStack* stack = reinterpret_cast<ActionStack*>(&ch->actions);   // LEFT: CharacterComponent.h (WORK-3) keeps the +0x48 ActionStack as raw fields
+    ActionStack* stack = &ch->actionStack;
     if (doCleanup) WorkBase_TaskListCleanup_c5400(stack);
     return stack;
 }
@@ -159,11 +159,11 @@ static void InstallLeadMessage(CitizenComponent* const* citizenRef, CharacterCom
         ComponentEntity* entityIBP = (*citizenRef)->_entity;
         act = new (mem) SendComponentMessage(&entityIBP, &msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
-    if (ch->field_0x58 != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&ch->field_0x58)->DeletePtr(   // LEFT: POD CharacterComponent::field_0x58 is declared Action*, retail an InternalPtr<Action> (header not this set's)
+    if (ch->actionStack.field_0x10 != nullptr) {
+        reinterpret_cast< ::Object::InternalBasePtr*>(&ch->actionStack.field_0x10)->DeletePtr(   // LEFT: POD CharacterComponent::field_0x58 is declared Action*, retail an InternalPtr<Action> (header not this set's)
             );
     }
-    ch->field_0x58 = act;
+    ch->actionStack.field_0x10 = act;
 }
 
 // Push an action (null when its allocation failed) on the stack: the InternalPtr retail

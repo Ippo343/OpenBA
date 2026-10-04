@@ -232,7 +232,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
     CitizenComponent* citizen = *citizenIBP;
     CharacterComponent* character = citizen->character;
     // CharacterComponent's +0x48..+0x67 action list (Action/Action.h ActionStack).
-    ActionStack* stack = reinterpret_cast<ActionStack*>(&character->actions);   // LEFT: Component/CharacterComponent.h keeps +0x48 as raw fields (WORK-3)
+    ActionStack* stack = &character->actionStack;
 
     if (static_cast<char>(gate) != '\0') {
         WorkBase_TaskListCleanup_c5400(stack);   // 0x1400c5400
@@ -245,10 +245,10 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
             ComponentEntity* entity = citizen->_entity;
             message = new (mem) SendComponentMessage(&entity, &msgId, 0, &nullIBP, 0);   // 0x1400cb1d0
         }
-        if (character->field_0x58 != nullptr) {
-            character->field_0x58.DeletePtr();
+        if (character->actionStack.field_0x10 != nullptr) {
+            character->actionStack.field_0x10.DeletePtr();
         }
-        character->field_0x58 = message;
+        character->actionStack.field_0x10 = message;
         // --- CompleteTask child action ---
         void* mem2 = MemAlloc(0x38, 8);
         Action* complete = nullptr;

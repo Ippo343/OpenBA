@@ -345,7 +345,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     float hungerCap = desc->maxHunger;
     if (hungerCap <= hunger) {
         hunger = desc->maxHunger;
-        if (character->currentAction + 1 < 1) {
+        if (character->actionStack.current + 1 < 1) {
             char r = HandleLifeEvent(0, nullptr);
             if (r != 0) return;
         }
@@ -355,7 +355,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     float thirstCap = desc->maxColdness;
     if (thirstCap <= coldness) {
         coldness = desc->maxColdness;
-        if (character->currentAction + 1 < 1) {
+        if (character->actionStack.current + 1 < 1) {
             char r = HandleLifeEvent(1, nullptr);
             if (r != 0) return;
         }
@@ -509,7 +509,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     // → citizens never got housed/employed. Restore the original component.
 
     // --- Validate the home ---
-    if (character->currentAction + 1 < 1 && workplaceRef != nullptr) {
+    if (character->actionStack.current + 1 < 1 && workplaceRef != nullptr) {
         char valid = CanReach(workplaceRef);
         if (valid == 0) {
             // [DIAG] This is the ONLY writer that clears a citizen's home (+0x238) in
@@ -602,7 +602,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     adultAge = description->adultAge;
     bool isChildOrStudent = (newAge < adultAge) || (school != nullptr);
     if (isChildOrStudent) {
-        if (character->currentAction + 1 < 1) {
+        if (character->actionStack.current + 1 < 1) {
             // No home, check the parent (+0x258)
             if (workplaceRef == nullptr && _parent != nullptr) {
                 if (_parent->home != nullptr) {
@@ -624,7 +624,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     // and the census can only see two of them. The third is the AI action index at
     // character+0x60: retail runs the whole section only while it is -1 (no action in
     // flight).
-    if (isChildOrStudent || (character->currentAction + 1 >= 1))
+    if (isChildOrStudent || (character->actionStack.current + 1 >= 1))
         goto LAB_140113873;
 
     // --- Workplace assignment ---

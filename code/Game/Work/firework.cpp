@@ -450,7 +450,7 @@ int FireWork::Cleanup() {
 
         // CheckPtr on the node, read the citizen; its CharacterComponent's action list (+0x48)
         CitizenComponent* citizen = node2->element;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
     }
 }
 

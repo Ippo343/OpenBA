@@ -178,7 +178,7 @@ Census TakeCensus(GameUpdateLoop* gw) {
         if (cz->home) ++c.home238;                     // +0x238
         if (cz->workplace) ++c.work248;                // +0x248
         CharacterComponent* ch = cz->character;        // +0x278
-        if (Readable(ch) && ch->currentAction >= 0)    // +0x60
+        if (Readable(ch) && ch->actionStack.current >= 0)    // +0x60
             ++c.busy;
     }
     if (c.citizens) { c.ageMean = age / c.citizens; c.hungerMean = hunger / c.citizens; }
@@ -224,7 +224,7 @@ std::vector<std::pair<CitizenComponent*, ComponentEntity*>> s_homeShadow;   // (
 void LogHomeLoss(CitizenComponent* cz, const char* where) {
     if (++s_homeLossLogged > 400) return;
     CharacterComponent* ch = cz->character;                                // +0x278
-    const int depth = Readable(ch) ? ch->currentAction : -99;              // +0x60
+    const int depth = Readable(ch) ? ch->actionStack.current : -99;              // +0x60
     CitizenDescription* desc = cz->description;                            // +0x288
     const float adultAge = Readable(desc) ? desc->adultAge : 0.f;          // +0x44
     const char* name = cz->name._data;                                     // +0x28 String's character data

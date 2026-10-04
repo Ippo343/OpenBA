@@ -314,7 +314,7 @@ int PlantOrchard::Cleanup() {
         }
 
         CitizenComponent* citizen = leftmost->element.citizen;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
 
         count = _cells._count;
     }

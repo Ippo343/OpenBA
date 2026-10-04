@@ -485,7 +485,7 @@ int HerbalistWork::Cleanup() {
 
         // Cancel the work item: the citizen's action list (CharacterComponent +0x48)
         CitizenComponent* citizenEntity = leftmost->element;
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actions);
+        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
         count = _citizens._count;
     }

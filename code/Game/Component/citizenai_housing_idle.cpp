@@ -742,7 +742,7 @@ void Helper_7830(WorkScheduler* param_1, CitizenComponent* const* param_2) {
 // (the caller reads the low byte)
 static uint64_t HandlerEpilogue(CitizenComponent* citizen) {
     CharacterComponent* ch = citizen->character;
-    int truth = (0 < ch->currentAction + 1) ? 1 : 0;
+    int truth = (0 < ch->actionStack.current + 1) ? 1 : 0;
     return static_cast<uint64_t>(truth);
 }
 
