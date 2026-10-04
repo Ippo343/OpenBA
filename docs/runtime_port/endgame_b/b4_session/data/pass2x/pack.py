@@ -16,7 +16,7 @@ NAG = int(sys.argv[2]) if len(sys.argv) > 2 else 4
 MAXF = int(sys.argv[3]) if len(sys.argv) > 3 else 70
 
 fams = {}
-for p in glob.glob('out/*_families.tsv'):
+for p in glob.glob(sys.argv[4]):
     for r in csv.DictReader(open(p, encoding='utf-8', errors='replace'), delimiter='\t'):
         k = (r.get('family') or '').strip()
         if not k:
@@ -28,7 +28,7 @@ for p in glob.glob('out/*_families.tsv'):
         files = set()
         for f in (r.get('all_caller_files') or '').split(';'):
             f = re.sub(r'\(\d+\)', '', f).strip().replace('\\', '/')
-            if re.match(r'^(code|runtime|standalone|engine|tests|dx11)/', f):
+            if re.match(sys.argv[5], f):
                 files.add(f)
         for x in ('declared_at', 'defined_at'):
             for m in re.finditer(r'((?:code|runtime|standalone|engine|tests)/[\w/\.\-]+\.(?:h|cpp))', r.get(x) or ''):
@@ -95,7 +95,7 @@ while todo and rnd < 6:
         for k in c[2]:
             out.append((rnd, i + 1, k, fams[k][0], ';'.join(sorted(cpp(fams[k][1])))))
     todo = wait
-with open('out/PACK.tsv', 'w', encoding='utf-8', newline='') as fh:
+with open(sys.argv[6], 'w', encoding='utf-8', newline='') as fh:
     w = csv.writer(fh, delimiter='\t')
     w.writerow(['round', 'agent', 'family', 'casts', 'files'])
     w.writerows(out)

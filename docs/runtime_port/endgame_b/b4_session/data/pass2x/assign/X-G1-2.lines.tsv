@@ -1,0 +1,504 @@
+file	line	family	note
+code/Game/Component/animalcomponent.cpp	457	SLOT:Component::Update	void* time/data slot param
+code/Game/Component/animalcomponent.cpp	718	SIG:Pf_ActStackPush_54e0	Pf_ActStackPush_54e0 (CharacterComponent::actions is a raw Action** triple, not 
+code/Game/Component/animalcomponent.cpp	736	SIG:Pf_MoveToCtor_9170	Pf_MoveToCtor_9170 returns void*
+code/Game/Component/attendancecomponent_states.cpp	181	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/buildcomponent.cpp	81	SIG:BuildComponent_FindInQueue	BuildComponent_FindInQueue takes the array header and the
+code/Game/Component/buildcomponent.cpp	85	SIG:BuildComponent_FindInQueue	BuildComponent_FindInQueue takes the array header and the; 2 casts on this line
+code/Game/Component/buildcomponent_state1.cpp	281	SIG:GatherRawMaterials_Ctor_Impl	GatherRawMaterials_Ctor_Impl returns void*
+code/Game/Component/buildcomponent_state1.cpp	292	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/buildcomponent_state1.cpp	449	SIG:TownRegistry_RegisterWorkplace	TownRegistry_RegisterWorkplace (int64_t, town_workplace_registry.cpp)
+code/Game/Component/buildcomponent_state8.cpp	294	SIG:BuildStructure_CreateInPlaceFull	BuildStructure_CreateInPlaceFull returns void* (Work/exe_bodies.h)
+code/Game/Component/buildcomponent_state8.cpp	298	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/charactercomponent.cpp	302	SIG:CharacterComponent_MoveTick_1094c0	CharacterComponent_MoveTick_1094c0 (defined in citizenai_executor.cpp, CAI-2)
+code/Game/Component/citizen_lifeevent.cpp	76	OTHER:raw UI::String storage	typed local would run ~UI::String (retail never does)
+code/Game/Component/citizen_updatehealth.cpp	366	SIG:Map_RadiusQuery_92990	Map_RadiusQuery_92990 (float* map)
+code/Game/Component/citizen_updatehealth.cpp	368	SIG:Map_RadiusQuery_92990	Map_RadiusQuery_92990 (void* outArr)
+code/Game/Component/citizen_updatehealth.cpp	507	FIELD:Disease::_stringTable	void* read as UI::StringTable
+code/Game/Component/citizen_updatehealth.cpp	508	H5:Disease::_name	raw String storage
+code/Game/Component/citizen_updatehealth.cpp	554	SIG:CitizenComp_Infect	void* self / disease (2 outside callers); 2 casts on this line
+code/Game/Component/citizen_updatehealth.cpp	666	SIG:Map_RadiusQuery_92990	Map_RadiusQuery_92990 (float* map)
+code/Game/Component/citizen_updatehealth.cpp	785	FIELD:CitizenComponent::field_0x60	int64 ticks read as System::Time
+code/Game/Component/citizenai_executor.cpp	136	FIELD:ActionStack::field_0x10	Action* where retail has InternalPtr<Action>
+code/Game/Component/citizenai_executor.cpp	147	SIG:CitizenAI_ActionExecutor_c4c50	CitizenAI_ActionExecutor_c4c50
+code/Game/Component/citizenai_executor.cpp	270	SIG:PerfX::PickCullSkip	PerfX::PickCullSkip (standalone/perf_experimental.h, SA)
+code/Game/Component/citizenai_executor.cpp	276	SIG:PerfX::PickCullSkip	PerfX::PickCullSkip (standalone/perf_experimental.h, SA); 2 casts on this line
+code/Game/Component/citizenai_executor.cpp	361	SIG:CharacterComponent_MoveTick_1094c0	CharacterComponent_MoveTick_1094c0 (charactercomponent.cpp's extern)
+code/Game/Component/citizenai_executor.cpp	365	SIG:CitizenAI_ActionExecutor_c4c50	CitizenAI_ActionExecutor_c4c50
+code/Game/Component/citizenai_executor.cpp	456	SIG:PerfX::TerrainGet	PerfX::TerrainGet (standalone/perf_terrain.h, SA)
+code/Game/Component/citizenai_handlers.cpp	77	SIG:Pf_ActStackPush_54e0	Pf_ActStackPush_54e0 (int64_t* stack; Action/exe_bodies.h)
+code/Game/Component/citizenai_handlers.cpp	88	SIG:Pf_SendComponentMessageCopyCtor_b1d0	Pf_SendComponentMessageCopyCtor_b1d0 (uint64_t* IBP; Action/exe_bodies.h)
+code/Game/Component/citizenai_handlers.cpp	93	SIG:Pf_SendComponentMessageCopyCtor_b1d0	Pf_SendComponentMessageCopyCtor_b1d0 returns void*
+code/Game/Component/citizenai_handlers.cpp	95	FIELD:CharacterComponent::field_0x58	Action*, not an InternalPtr
+code/Game/Component/citizenai_handlers.cpp	125	SIG:ActMv_FindComponentFamily_12d0	ActMv_FindComponentFamily_12d0 (uintptr_t entity; Action/exe_bodies.h)
+code/Game/Component/citizenai_handlers.cpp	138	SIG:Pf_MoveToCtor_9170	Pf_MoveToCtor_9170 returns void*
+code/Game/Component/citizenai_handlers.cpp	202	SIG:WorkGrid_FindCell_9ccf0	WorkGrid_FindCell_9ccf0 (int* map; Work/exe_bodies.h)
+code/Game/Component/citizenai_housing_idle.cpp	178	SIG:Pf_AvlRotateB_e450	Pf_AvlRotateB_e450 / _e580 (int64_t* root)
+code/Game/Component/citizenai_housing_idle.cpp	197	SIG:Pf_AvlRotateB_e580	Pf_AvlRotateB_e580
+code/Game/Component/citizenai_housing_idle.cpp	200	SIG:Pf_AvlRotateB_e450	Pf_AvlRotateB_e450
+code/Game/Component/citizenai_housing_idle.cpp	209	SIG:Pf_AvlRotateB_e450	Pf_AvlRotateB_e450
+code/Game/Component/citizenai_housing_idle.cpp	212	SIG:Pf_AvlRotateB_e580	Pf_AvlRotateB_e580
+code/Game/Component/citizenai_housing_idle.cpp	823	SIG:CitizenAI_Reg_helper_e360	CitizenAI_Reg_helper_e360 (wave X: callers in citizenlist_serialize / action_pf_; 2 casts on this line
+code/Game/Component/citizenai_work_scheduler.cpp	204	SIG:CitizenAI_WorkScheduler_Insert	CitizenAI_WorkScheduler_Insert
+code/Game/Component/citizenai_work_scheduler.cpp	205	SIG:CitizenAI_WorkScheduler_Insert	CitizenAI_WorkScheduler_Insert
+code/Game/Component/citizenai_work_scheduler.cpp	293	SIG:Pf_AvlRebalanceA_a8c0	Pf_AvlRebalanceA_a8c0; 2 casts on this line
+code/Game/Component/citizenai_work_scheduler.cpp	302	SIG:WorkCellBST_Insert_9a40	WorkCellBST_Insert_9a40
+code/Game/Component/citizenai_work_scheduler.cpp	367	SIG:Pf_AvlRebalanceB_13480	Pf_AvlRebalanceB_13480; 2 casts on this line
+code/Game/Component/citizenai_work_scheduler.cpp	471	SIG:Pf_AvlRebalanceB_13480	Pf_AvlRebalanceB_13480; 2 casts on this line
+code/Game/Component/citizenai_work_scheduler.cpp	491	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/citizenai_work_scheduler.cpp	506	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/citizenai_work_scheduler.cpp	507	SIG:CitizenAI_WorkScheduler_Insert	CitizenAI_WorkScheduler_Insert
+code/Game/Component/citizenai_work_scheduler.cpp	560	SIG:CitizenAI_WorkScheduler_Rekey	CitizenAI_WorkScheduler_Rekey
+code/Game/Component/citizenai_work_scheduler.cpp	561	SIG:CitizenAI_WorkScheduler_Rekey	CitizenAI_WorkScheduler_Rekey
+code/Game/Component/citizenai_work_scheduler.cpp	562	SIG:CitizenAI_WorkScheduler_Rekey	CitizenAI_WorkScheduler_Rekey
+code/Game/Component/citizenai_work_scheduler.cpp	614	SIG:WorkCellBST_Remove_ca60	WorkCellBST_Remove_ca60
+code/Game/Component/citizenai_work_scheduler.cpp	647	SIG:WorkCellBST_Insert_9a40	WorkCellBST_Insert_9a40
+code/Game/Component/clearareacomponent_states.cpp	362	SIG:ClearArea::ClearArea	ClearArea ctor (Work/ClearArea.h, WORK-1)
+code/Game/Component/clearareacomponent_states.cpp	366	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/clearareacomponent_states.cpp	454	SIG:ClearArea_Finalize8270	B4 FORWARD receiver/arg cast
+code/Game/Component/clearareacomponent_states.cpp	488	SIG:ClearArea_State0Enter	B4 FORWARD receiver/arg cast
+code/Game/Component/clearareacomponent_states.cpp	542	SIG:ClearAreaCtrl_IsDone	B4 FORWARD receiver/arg cast
+code/Game/Component/cropfieldcomponent_states.cpp	251	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/cropfieldcomponent_states.cpp	301	SIG:CropFieldComponent_Maturity	B4 FORWARD receiver/arg cast
+code/Game/Component/destroycomponent_states.cpp	210	FLOOR:vslot	tree-only vptr guard (retail has none, known_port_issues row 391)
+code/Game/Component/destroycomponent_states.cpp	524	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/destroycomponent_states.cpp	578	SIG:BuildStructure_CreateInPlaceFull	BuildStructure_CreateInPlaceFull (Work/exe_bodies.h) builds into void*
+code/Game/Component/destroycomponent_states.cpp	579	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/destroycomponent_states.cpp	977	SLOT:Controller::Tick(void* time)	DestroyState6Tick takes System::Time*, table Tick carries void*
+code/Game/Component/destroycomponent_workerrelease.cpp	153	SIG:CitizenComp_sub_ffc0	CitizenComp_sub_ffc0 (the int64_t IBP CitizenComp_AssignHousing takes)
+code/Game/Component/destroycomponent_workerrelease.cpp	155	SIG:CitizenComp_sub_0470	CitizenComp_sub_0470 (as above)
+code/Game/Component/destroycomponent_workerrelease.cpp	206	SIG:CitizenAI_WorkScheduler_Rekey	CitizenAI_WorkScheduler_Rekey (uintptr_t scheduler)
+code/Game/Component/destroycomponent_workerrelease.cpp	209	SIG:CitizenAI_WorkScheduler_Rekey	CitizenAI_WorkScheduler_Rekey (uint64_t keys); 2 casts on this line
+code/Game/Component/destroycomponent_workerrelease.cpp	218	SIG:ResidenceComponent_impl_95a0	ResidenceComponent_impl_95a0 (int64_t town manager)
+code/Game/Component/destroycomponent_workerrelease.cpp	222	SIG:ResidenceComponent_impl_95a0	ResidenceComponent_impl_95a0 (uint64_t key)
+code/Game/Component/destroycomponent_workerrelease.cpp	232	SIG:WorkComponent_CalcMaxWorkers	WorkComponent_CalcMaxWorkers
+code/Game/Component/destroycomponent_workerrelease.cpp	236	SIG:WorkBase_FindComponent_2ed0	WorkBase_FindComponent_2ed0 / Pf_RecursiveChildSum_123070 (int64_t)
+code/Game/Component/destroycomponent_workerrelease.cpp	262	SIG:WorkPlaceComponent_SetMaxWorkers	B4 FORWARD receiver/arg cast
+code/Game/Component/destroycomponent_workerrelease.cpp	266	SIG:WorkPlaceComponent_EnterBuilderProfession	B4 FORWARD receiver/arg cast
+code/Game/Component/diseasecomponent.cpp	269	SIG:WorkLeaf_GetTilesInArea_9fc00	WorkLeaf_GetTilesInArea_9fc00
+code/Game/Component/diseasecomponent.cpp	360	SIG:WorkLeaf_GetTilesInArea_9fc00	WorkLeaf_GetTilesInArea_9fc00
+code/Game/Component/diseasecomponent.cpp	447	OTHER:raw UI::String storage	typed local would run ~UI::String (retail never does)
+code/Game/Component/diseasecomponent.cpp	544	SIG:WorkLeaf_GetTilesInArea_9fc00	WorkLeaf_GetTilesInArea_9fc00
+code/Game/Component/diseasecomponent.cpp	879	SLOT:Component::Update	void* time/data slot param
+code/Game/Component/entity_finders_disaster.cpp	83	SIG:FindInto	template FindInto takes the entity untyped
+code/Game/Component/firecomponent_ignite.cpp	195	SIG:FireComp_StartAudioEmitter_42c60	B4 FORWARD receiver/arg cast
+code/Game/Component/firecomponent_ignite.cpp	228	POD:::Vector3 (Audio::Scene::AddEmitter)	Audio::Scene takes the engine POD ::Vector3, the component holds Math::Vector3
+code/Game/Component/firecomponent_ignite.cpp	332	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/firecomponent_ignite.cpp	499	SIG:FireComponent_Ignite_610	B4 FORWARD receiver/arg cast
+code/Game/Component/firecomponent_smstate.cpp	166	SIG:FireComponent_IsBeingDemolished_11e690	B4 FORWARD receiver/arg cast
+code/Game/Component/firecomponent_smstate.cpp	170	SIG:FireComponent_BeginBurning_11e7b0	B4 FORWARD receiver/arg cast
+code/Game/Component/firecomponent_smstate.cpp	171	SIG:FireComponent_BeginBurning_11e7b0	B4 FORWARD receiver/arg cast
+code/Game/Component/firecomponent_smstate.cpp	175	SIG:FireComponent_StopBurning_11ea10	B4 FORWARD receiver/arg cast
+code/Game/Component/herdcomponent.cpp	172	SIG:ToolTile_SetTransformFromYaw_3870	ToolTile_SetTransformFromYaw_3870
+code/Game/Component/herdcomponent.cpp	615	SLOT:Component::Update	void* time/data slot param
+code/Game/Component/immigrationcomponent_states.cpp	257	SIG:ToolTile_SetTransformFromYaw_3870	ToolTile_SetTransformFromYaw_3870
+code/Game/Component/immigrationcomponent_states.cpp	258	SIG:ActCNR_NR_SetVariant_1253d0	ActCNR_NR_SetVariant_1253d0
+code/Game/Component/immigrationcomponent_states.cpp	351	SIG:Pf_RecursiveChildSum_123070	Pf_RecursiveChildSum_123070
+code/Game/Component/immigrationcomponent_states.cpp	547	SLOT:Controller::Tick(void* time)	tick handler time void*
+code/Game/Component/mapcomponent.cpp	277	SIG:MapComponent_DetachOccupancy_4750	MapComponent_DetachOccupancy_4750 (B4 FORWARD, cropfieldcomponent_states.cpp)
+code/Game/Component/nomadcomponent_states.cpp	121	SIG:Pf_ActStackPush_54e0	Pf_ActStackPush_54e0 (CharacterComponent +0x48 is no ActionStack yet, wave X)
+code/Game/Component/nomadcomponent_states.cpp	163	SLOT:Controller::Tick(void* time)	tick handler time void*
+code/Game/Component/orchardcomponent_states.cpp	128	SLOT:Controller::StateHandler(void* sm)	handlers pass the machine as void*
+code/Game/Component/orchardcomponent_states.cpp	298	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/orchardcomponent_states.cpp	397	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/orchardcomponent_states.cpp	450	SLOT:Controller::StateHandler(void* sm)	handlers pass the machine as void*
+code/Game/Component/orchardcomponent_states.cpp	609	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/orchardcomponent_states.cpp	655	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/orchardcomponent_states.cpp	787	SIG:ClearAreaCtrl_BuildWork	ClearAreaCtrl_BuildWork
+code/Game/Component/orchardcomponent_states.cpp	809	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/pasturecomponent.cpp	79	SIG:PastureComponent_AnimalSetBounds	B4 FORWARD receiver/arg cast
+code/Game/Component/pasturecomponent.cpp	113	SIG:PastureComponent_ComputeCapacity	B4 FORWARD receiver/arg cast
+code/Game/Component/pasturecomponent.cpp	287	H5:PastureComponent::animals	InternalPtr<LivestockComponent> slots held as T*
+code/Game/Component/pasturecomponent_states.cpp	430	SIG:WorkAcc_FindComponent_6330	WorkAcc_FindComponent_6330
+code/Game/Component/pasturecomponent_states.cpp	703	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/rawmaterialcomponent.cpp	149	SIG:RawMaterialComponent_RegisterRawMaterial	void* worldMgr (B4 FORWARD)
+code/Game/Component/rawmaterialcomponent.cpp	150	SIG:RawMaterialComponent_RegisterRawMaterial	void* entityChain (B4 FORWARD)
+code/Game/Component/rawmaterialcomponent.cpp	297	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/residencecomponent.cpp	501	SIG:TownRegistry_RegisterResidence	TownRegistry_RegisterResidence (takes the IBP value as int64_t; citizen_employ_c
+code/Game/Component/residencecomponent.cpp	552	SLOT:Controller::Tick(void* time)	ResidenceHeatTick takes System::Time*, table Tick carries void*
+code/Game/Component/resourceproducecomponent_states.cpp	117	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/statusiconcomponent.cpp	63	FLOOR:vslot	vptr test of the raw billboard storage (always-true guard; retail ctor differs)
+code/Game/Component/statusiconcomponent.cpp	301	SIG:CitizenComp_FUN_14012c3f0	B4 FORWARD receiver/arg cast
+code/Game/Component/statusiconcomponent.cpp	710	SIG:PerfX::NoteDeferred	callback takes void* (standalone perf, SA)
+code/Game/Component/tornadocomponent.cpp	500	LOCAL:Tornado_StrikeEntityCounted dead first argument	static fn in this file only: drop the dead int64_t first parameter (retail register)
+code/Game/Component/tornadocomponent.cpp	528	SIG:Map_RadiusQuery_92990	Map_RadiusQuery_92990 (float* map)
+code/Game/Component/tornadocomponent.cpp	536	LOCAL:Tornado_StrikeEntityCounted dead first argument	static fn in this file only: drop the dead int64_t first parameter (retail register)
+code/Game/Component/tornadocomponent.cpp	611	SIG:Tornado_ParticleReverse_53720	B4 FORWARD receiver/arg cast
+code/Game/Component/tornadocomponent.cpp	813	SLOT:Component::Tick	void* time/data slot param
+code/Game/Component/tornadocomponent.cpp	916	OTHER:retail DIFFERENCE (known_port_issues row 430)	tree reads +0x7c of the emitter ARRAY; retail reads emitters[0].instance->_opacity; 2 casts on this line
+code/Game/Component/tradecomponent.cpp	439	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/tradecomponent_livestock.cpp	229	SIG:TradeComponent_SpawnPurchasedLivestock	void* selfV (B4 FORWARD)
+code/Game/Component/tradecomponent_livestock.cpp	230	SIG:TradeComponent_SpawnPurchasedLivestock	void* tmpl (B4 FORWARD)
+code/Game/Component/tradecomponent_states.cpp	233	SIG:CitizenAI_WorkScheduler_Post	work component as uintptr_t
+code/Game/Component/tradecomponent_states.cpp	410	SLOT:Controller::StateHandler(void* sm)	TickIdle(void* sm,...) views the StateMachine bytes
+code/Game/Component/tradecomponent_states.cpp	465	SLOT:Controller::Tick(void* time)	handler dt void*
+code/Game/Component/tradecomponent_states.cpp	472	SLOT:Controller::Tick(void* time)	handler dt void*
+code/Game/Component/workcomponent.cpp	136	SIG:WorkComponent_CheckWorkSlot	void* selfP (B4 FORWARD)
+code/Game/Component/workcomponent.cpp	139	SIG:WorkComponent_RegisterWorkSlot	void* selfP (B4 FORWARD)
+code/Game/Component/workcomponent.cpp	294	SIG:fn_StorageCountQuery	void* component (B4 FORWARD)
+code/Game/Component/workplacecomponent.cpp	524	SIG:WorkComponent_CalcMaxWorkers	WorkComponent_CalcMaxWorkers
+code/Game/Component/workplacecomponent.cpp	553	SIG:CitizenAI_WorkScheduler_Rekey	CitizenAI_WorkScheduler_Rekey
+code/Game/Component/workplacecomponent.cpp	556	SIG:CitizenAI_WorkScheduler_Rekey	CitizenAI_WorkScheduler_Rekey; 2 casts on this line
+code/Game/Component/workplacecomponent.cpp	597	SIG:ResidenceComponent_impl_95a0	ResidenceComponent_impl_95a0
+code/Game/Component/workplacecomponent.cpp	600	SIG:ResidenceComponent_impl_95a0	ResidenceComponent_impl_95a0
+code/Game/Component/workplacecomponent.cpp	628	SIG:WorkPlaceComponent_SetAccepting	int64_t comp (B4 FORWARD)
+code/Game/Component/workplacecomponent.cpp	631	SIG:WorkPlaceComponent_OnCreateInit	void* selfP (B4 FORWARD)
+code/Game/Component/workplacecomponent.cpp	635	SIG:WorkPlaceComponent_LeaveBuilderProfession	void* selfP (B4 FORWARD)
+code/Game/Component/workplacecomponent.cpp	638	SIG:WorkplaceComponent_ApplyOccupiedVisual	int64_t comp (B4 FORWARD)
+code/Game/Action/action_base_complete.cpp	103	LOCAL:WorkScheduler node types	STALE LEFT: WorkScheduler.h now types root/field_0x10/field_0x120 (WorkSchedulerIdNode*/CountNode*/BucketNode*); cast converts to the file own node struct, use the header node types
+code/Game/Action/action_base_complete.cpp	125	SIG:WorkCellBST_Remove_ca60	tree head cast (also WorkBST_BSTRemove_a6e0)
+code/Game/Action/action_base_complete.cpp	212	LOCAL:WorkScheduler node types	STALE LEFT: WorkScheduler.h now types root/field_0x10/field_0x120 (WorkSchedulerIdNode*/CountNode*/BucketNode*); cast converts to the file own node struct, use the header node types
+code/Game/Action/action_base_complete.cpp	222	SIG:WorkBST_BSTRemove_a6e0	
+code/Game/Action/action_base_complete.cpp	235	LOCAL:WorkScheduler node types	STALE LEFT: WorkScheduler.h now types root/field_0x10/field_0x120 (WorkSchedulerIdNode*/CountNode*/BucketNode*); cast converts to the file own node struct, use the header node types
+code/Game/Action/action_base_complete.cpp	283	H5:CitizenComponent::meshInstance	raw MeshInstance storage
+code/Game/Action/action_base_complete.cpp	366	OTHER:fence _meshGroup read (known_port_issues 14)	tree differs from retail
+code/Game/Action/action_base_complete.cpp	397	H5:CitizenComponent::meshInstance	raw MeshInstance storage
+code/Game/Action/action_base_complete.cpp	415	FIELD:Graphics::MeshInstance::_mesh	ExternalPtrHandle (R-GFX)
+code/Game/Action/action_base_complete.cpp	420	H5:CitizenComponent::meshInstance	raw MeshInstance storage
+code/Game/Action/action_base_complete.cpp	442	SIG:ActCt_TaskCleanup_8e30	
+code/Game/Action/action_base_complete.cpp	447	SIG:ActCt_HideTool_1176e0	
+code/Game/Action/action_base_move.cpp	100	SIG:ActMv_FindComponentFamily_12d0	
+code/Game/Action/action_base_move.cpp	133	SIG:ActMv_ExternalPtrSerialize_22970	
+code/Game/Action/action_base_move.cpp	134	SIG:ActMv_ExternalPtrSerialize_22970	
+code/Game/Action/action_base_move.cpp	192	H8:ActMv_ExternalPtrSerialize_22970 present flag	serialized through a bool& overload; must stay
+code/Game/Action/action_base_move.cpp	213	CONST:FindOrLoad	FindOrLoad const_cast
+code/Game/Action/action_base_move.cpp	252	SIG:ActMv_UpdateFacing_c8d20	
+code/Game/Action/action_base_move.cpp	313	FIELD:Graphics::MeshInstance::+0x114..+0x13c	unnamed MeshInstance fields (R-GFX)
+code/Game/Action/action_base_move.cpp	314	FIELD:Graphics::MeshInstance::+0x114..+0x13c	unnamed MeshInstance fields (R-GFX)
+code/Game/Action/action_base_move.cpp	319	SIG:ActMv_SetAnimation_a1f0	
+code/Game/Action/action_base_move.cpp	351	LOCAL:WorkScheduler node types	STALE LEFT: WorkScheduler.h now types root/field_0x10/field_0x120 (WorkSchedulerIdNode*/CountNode*/BucketNode*); cast converts to the file own node struct, use the header node types
+code/Game/Action/action_base_move.cpp	386	FIELD:CitizenComponent::break-time field	System::Time hidden in field (CIT-4)
+code/Game/Action/action_base_move.cpp	552	SIG:ActMv_PathSetup_c8c10	
+code/Game/Action/action_base_move.cpp	553	SIG:ActMv_PathSetup_c8c10	
+code/Game/Action/action_base_move.cpp	587	SIG:ActMv_PathSetup_c8c10	(2 casts on the line)
+code/Game/Action/action_pf_avl.cpp	448	SIG:CitizenAI_Reg_helper_e360	
+code/Game/Action/action_pf_avl.cpp	449	SIG:CitizenAI_Reg_helper_e360	
+code/Game/Action/action_pf_avl.cpp	461	SIG:Pf_AvlRotateB_e450	(3 casts on the line)
+code/Game/Action/action_pf_avl.cpp	465	SIG:Pf_AvlRotateB_e580	(3 casts on the line)
+code/Game/Action/action_pf_avl.cpp	470	SIG:Pf_AvlRebalanceB_13480	(2 casts on the line)
+code/Game/Action/action_pf_avl.cpp	475	SIG:Pf_AvlRebalanceA_a8c0	(2 casts on the line)
+code/Game/Action/action_pf_avl.cpp	479	SIG:Pf_AvlInsertA_a4f0	(4 casts on the line)
+code/Game/Action/action_pf_avl.cpp	483	SIG:PathBST_Insert_25a10	(4 casts on the line)
+code/Game/Action/action_pf_avl.cpp	497	SIG:PathPairs_Clear_25b30	
+code/Game/Action/action_pf_pools.cpp	305	SIG:Pf_VectorResize14_ee40	
+code/Game/Action/action_pf_pools.cpp	348	SIG:Pf_VectorResize14Fill_f8d0	
+code/Game/Action/action_pf_pools.cpp	349	SIG:Pf_VectorResize14Fill_f8d0	
+code/Game/Action/action_pf_pools.cpp	469	SIG:Pf_VectorResize60_fa80	
+code/Game/Action/action_pf_pools.cpp	470	SIG:Pf_VectorResize60_fa80	
+code/Game/Action/action_pf_region.cpp	836	SIG:WorkCellBST_Remove_ca60	
+code/Game/Action/action_pf_roots_misc.cpp	470	SIG:Pf_HerdStartMigration_122340	
+code/Game/Action/completetask.cpp	190	SIG:Pf_CompleteTaskCopyCtor_5da0	argument cast at the call
+code/Game/Action/completetask.cpp	191	SIG:Pf_CompleteTaskCopyCtor_5da0	cast inside the C body of Pf_CompleteTaskCopyCtor_5da0
+code/Game/Action/moveto.cpp	431	OTHER:PerfX terrain byte API	standalone/perf_terrain.h takes bytes
+code/Game/Action/moveto.cpp	626	SIG:Pf_MoveToCtor_9170	cast inside the C body of Pf_MoveToCtor_9170
+code/Game/Action/region_graph_build.cpp	311	SIG:Pf_RegionGraphCtor_8670	forwarder whose caller holds the object as an integer (2 casts on the line)
+code/Game/Action/region_paircache.cpp	179	SIG:WorkCellBST_Remove_ca60	
+code/Game/Action/region_paircache.cpp	211	SIG:Pf_RegionPairCacheTick_5d10	forwarder, caller holds cache as int64_t*
+code/Game/Action/sendcomponentmessage.cpp	242	SIG:Pf_SendComponentMessageCopyCtor_b1d0	argument cast at the call
+code/Game/Action/sendcomponentmessage.cpp	243	SIG:Pf_SendComponentMessageCopyCtor_b1d0	cast inside the C body of Pf_SendComponentMessageCopyCtor_b1d0
+code/Game/Entity/citizenbehavior.cpp	262	SIG:PathBST_Insert_25a10	
+code/Game/Entity/citizenbehavior.cpp	263	SIG:PathBST_Insert_25a10	
+code/Game/Entity/citizenbehavior.cpp	264	SIG:PathBST_Insert_25a10	
+code/Game/Entity/citizenbehavior.cpp	284	SIG:PathPairs_Clear_25b30	
+code/Game/Entity/citizenbehavior.cpp	395	SIG:PathPairs_Clear_25b30	
+code/Game/Entity/citizenbehavior.cpp	544	SIG:PathBST_Insert_25a10	
+code/Game/Entity/citizenbehavior.cpp	545	SIG:PathBST_Insert_25a10	
+code/Game/Entity/citizenbehavior.cpp	546	SIG:PathBST_Insert_25a10	
+code/Game/Entity/entity_findcomponent.cpp	60	SIG:Entity_FindComponentByExeTypeId	void* entity/out
+code/Game/Entity/entity_findcomponent.cpp	65	SIG:Entity_FindComponentByExeTypeId	void* entity/out
+code/Game/Entity/entity_findcomponent.cpp	218	SIG:Entity_FindConsumeProduce_b6f0	forwarder: int64_t receiver
+code/Game/Work/build_actions.cpp	99	SIG:Pf_ActStackPush_54e0	
+code/Game/Work/build_actions.cpp	117	SIG:Pf_SendComponentMessageCopyCtor_b1d0	
+code/Game/Work/build_actions.cpp	120	LOCAL:CharacterComponent::field_0x58	STALE LEFT: field_0x58 is InternalPtr<Action> now; drop the InternalBasePtr view
+code/Game/Work/build_actions.cpp	122	SIG:Pf_SendComponentMessageCopyCtor_b1d0	
+code/Game/Work/build_actions.cpp	140	SIG:Pf_CompleteTaskCopyCtor_5da0	
+code/Game/Work/build_actions.cpp	155	SIG:Pf_SendComponentMessageCopyCtor_b1d0	
+code/Game/Work/cleararea.cpp	91	SIG:ClearArea::ClearArea(descRef)	uint64_t param
+code/Game/Work/cleararea.cpp	147	H8:ClearArea::field_70	serialized through a bool& overload; must stay
+code/Game/Work/cleararea.cpp	153	SIG:WorkCellBST_Serialize_9de0	
+code/Game/Work/cleararea.cpp	156	H8:ClearArea::field_71	serialized through a bool& overload; must stay
+code/Game/Work/cleararea.cpp	159	H8:ClearArea::field_72	serialized through a bool& overload; must stay
+code/Game/Work/cleararea.cpp	203	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/cleararea.cpp	332	SIG:WorkComponent_CalcMaxWorkers	
+code/Game/Work/cleararea.cpp	372	SIG:WorkBase_ValidateCell_a00f0	Map handed as leading int* to: WorkBase_ValidateCell_a00f0, WorkGrid_FindCell_9ccf0, WorkLeaf_GetTilesInArea_9fc00, WorkLeaf_SortTilesByDistance_9d7c0
+code/Game/Work/cleararea.cpp	623	SIG:WorkAct_PerformWorkCtor_bffd0	
+code/Game/Work/cleararea.cpp	626	SIG:WorkAct_PerformWorkCtor_bffd0	
+code/Game/Work/cleararea.cpp	649	SIG:WorkCellBST_Insert_9a40	
+code/Game/Work/cleararea.cpp	682	SIG:WorkGrid_TryAssignWorkplace_f8620	
+code/Game/Work/cleararea.cpp	744	OTHER:known_port_issues 220 removal list	citizen vs entity list
+code/Game/Work/cleararea.cpp	861	OTHER:known_port_issues 220 removal list	citizen vs entity list
+code/Game/Work/cleararea.cpp	867	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/harvestarea.cpp	173	SIG:WorkComponent_CalcMaxWorkers	
+code/Game/Work/harvestarea.cpp	184	SIG:WorkBase_ValidateCell_a00f0	Map handed as leading int* to: WorkBase_ValidateCell_a00f0, WorkGrid_FindCell_9ccf0
+code/Game/Work/harvestarea.cpp	314	SIG:WorkAct_HarvestAreaCtor_c1530	
+code/Game/Work/harvestarea.cpp	341	SIG:WorkCellBST_Insert_9a40	
+code/Game/Work/harvestarea.cpp	353	SIG:WorkCellBST_Insert_9a40	
+code/Game/Work/harvestarea.cpp	387	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/harvestarea.cpp	609	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/harvestarea.cpp	650	SIG:WorkCellBST_Serialize_9de0	
+code/Game/Work/harvestorchard.cpp	142	SIG:WorkComponent_CalcMaxWorkers	
+code/Game/Work/harvestorchard.cpp	166	SIG:WorkBase_ValidateCell_a00f0	Map handed as leading int* to: WorkBase_ValidateCell_a00f0, WorkGrid_FindCell_9ccf0
+code/Game/Work/harvestorchard.cpp	240	SIG:WorkAcc_FindComponent_6330	
+code/Game/Work/harvestorchard.cpp	298	SIG:WorkAct_GatherWorkCtor_bb7b0	
+code/Game/Work/harvestorchard.cpp	300	SIG:WorkAct_GatherWorkCtor_bb7b0	
+code/Game/Work/harvestorchard.cpp	336	SIG:WorkCellBST_Insert_9a40	
+code/Game/Work/harvestorchard.cpp	385	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/harvestorchard.cpp	411	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/harvestorchard.cpp	553	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/harvestorchard.cpp	589	SIG:WorkCellBST_Serialize_9de0	
+code/Game/Work/plantarea.cpp	108	SIG:WorkComponent_CalcMaxWorkers	
+code/Game/Work/plantarea.cpp	118	SIG:WorkBase_ValidateCell_a00f0	Map handed as leading int* to: WorkBase_ValidateCell_a00f0, WorkGrid_FindCell_9ccf0
+code/Game/Work/plantarea.cpp	254	SIG:WorkCellBST_Insert_9a40	
+code/Game/Work/plantarea.cpp	266	SIG:WorkCellBST_Insert_9a40	
+code/Game/Work/plantarea.cpp	326	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/plantarea.cpp	357	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/plantarea.cpp	386	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/plantarea.cpp	407	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/plantarea.cpp	551	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/plantarea.cpp	597	SIG:WorkCellBST_Serialize_9de0	
+code/Game/Work/plantorchard.cpp	117	SIG:WorkComponent_CalcMaxWorkers	
+code/Game/Work/plantorchard.cpp	126	SIG:WorkBase_ValidateCell_a00f0	Map handed as leading int* to: WorkBase_ValidateCell_a00f0, WorkGrid_FindCell_9ccf0
+code/Game/Work/plantorchard.cpp	201	SIG:WorkAct_PlantWorkCtor_be6e0	entity ref passed as int64_t*
+code/Game/Work/plantorchard.cpp	232	SIG:WorkCellBST_Insert_9a40	
+code/Game/Work/plantorchard.cpp	263	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/plantorchard.cpp	288	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/plantorchard.cpp	427	SIG:WorkCellBST_Remove_ca60	
+code/Game/Work/plantorchard.cpp	468	SIG:WorkCellBST_Serialize_9de0	
+code/Game/Work/work_act_clear.cpp	148	SIG:WorkAct_HarvestAreaCtor_c1530	
+code/Game/Work/work_act_clear.cpp	149	SIG:WorkAct_HarvestAreaCtor_c1530	
+code/Game/Work/work_act_clear.cpp	199	FIELD:CharacterComponent::actionStack(+0x48)	declared as fields, not ActionStack
+code/Game/Work/work_act_clear.cpp	211	FIELD:CharacterComponent::actionStack(+0x48)	declared as fields, not ActionStack
+code/Game/Work/work_base_cellbst.cpp	145	SIG:WorkCellBST_Insert_9a40	argument cast at the call
+code/Game/Work/work_base_cellbst.cpp	146	SIG:WorkCellBST_Insert_9a40	argument cast at the call
+code/Game/Work/work_base_cellbst.cpp	147	SIG:WorkCellBST_Insert_9a40	argument cast at the call
+code/Game/Work/work_base_cellbst.cpp	187	SIG:WorkCellBST_Remove_ca60	argument cast at the call
+code/Game/Work/work_base_cellbst.cpp	188	SIG:WorkCellBST_Remove_ca60	argument cast at the call
+code/Game/Work/work_base_cellbst.cpp	261	SIG:WorkCellBST_Serialize_9de0	argument cast at the call
+code/Game/Work/work_base_cellbst.cpp	262	SIG:WorkCellBST_Serialize_9de0	argument cast at the call
+code/Game/Work/work_base_cellbst.cpp	274	SIG:WorkCellBST_Serialize_9de0	cast inside the C body of WorkCellBST_Serialize_9de0
+code/Game/Work/work_base_cellbst.cpp	295	SIG:WorkCellBST_Serialize_9de0	cast inside the C body of WorkCellBST_Serialize_9de0
+code/Game/Work/work_leaf_clear.cpp	100	SIG:WorkLeaf_BstRemoveByIBP_298a0	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	101	SIG:WorkLeaf_BstRemoveByIBP_298a0	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	110	SIG:WorkCellBST_Remove_ca60	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	148	SIG:WorkLeaf_BstInsertByIBP_29920	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	149	SIG:WorkLeaf_BstInsertByIBP_29920	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	150	SIG:WorkLeaf_BstInsertByIBP_29920	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	204	SIG:Pf_AvlRebalanceB_13480	(2 casts on the line)
+code/Game/Work/work_leaf_clear.cpp	223	SIG:WorkLeaf_BstSerializeIBPpair_29c10	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	224	SIG:WorkLeaf_BstSerializeIBPpair_29c10	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	246	SIG:WorkLeaf_BstSerializeIBPpair_29c10	cast inside the C body of WorkLeaf_BstSerializeIBPpair_29c10
+code/Game/Work/work_leaf_clear.cpp	250	SIG:WorkLeaf_BstSerializeIBPpair_29c10	cast inside the C body of WorkLeaf_BstSerializeIBPpair_29c10
+code/Game/Work/work_leaf_clear.cpp	270	SIG:WorkLeaf_BstSerializeIBPpair_29c10	cast inside the C body of WorkLeaf_BstSerializeIBPpair_29c10
+code/Game/Work/work_leaf_clear.cpp	276	SIG:WorkLeaf_BstSerializeIBPpair_29c10	cast inside the C body of WorkLeaf_BstSerializeIBPpair_29c10
+code/Game/Work/work_leaf_clear.cpp	335	SIG:WorkLeaf_SortTilesByDistance_9d7c0	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	403	SIG:WorkLeaf_GetTilesInArea_9fc00	definition casts its leading int* parameter to Map*
+code/Game/Work/work_leaf_clear.cpp	404	SIG:WorkLeaf_GetTilesInArea_9fc00	argument cast at the call
+code/Game/Work/work_leaf_clear.cpp	434	SIG:WorkLeaf_GetTilesInArea_9fc00	cast inside the C body of WorkLeaf_GetTilesInArea_9fc00
+code/Game/Dialog/mainmenudialog.cpp	91	CONST:FindOrLoad	
+code/Game/Dialog/mainmenudialog.cpp	216	LOCAL:redundant cast MenuDialogLoopT::_saveLoad	redundant cast: the member is already typed (stale LEFT: MenuDialogLoopT.h:72 declares Save::SaveLoad*; the void* local is only for MemFree)
+code/Game/Dialog/mainmenudialog.cpp	313	SIG:ScenarioDialog_Ctor	return void* cast to DialogInstance*
+code/Game/Dialog/mainmenudialog.cpp	368	SIG:ScenarioDialog_Ctor	return void* cast to DialogInstance*
+code/Game/Dialog/mainmenudialog.cpp	861	SIG:MainMenuDialog_FromMenuDLT	C entry takes the loop as void*
+code/Game/Dialog/mainmenudialog.cpp	863	FIELD:DialogLoopT::_dialogExternal	void* (runtime Engine header)
+code/Game/Dialog/mod_dialog_vtables.cpp	314	FLOOR:ptr_int	2 casts; -1 sentinel handed as a pointer
+code/Game/Dialog/professionui.cpp	812	SIG:CitizenEmploy_Strat_cbf0	receiver/profession as int64_t; the same two values feed _ca20 and _c5f0
+code/Game/Dialog/professionui.cpp	813	SIG:CitizenEmploy_Strat_cbf0	receiver/profession as int64_t; the same two values feed _ca20 and _c5f0
+code/Game/Dialog/professionui.cpp	824	SIG:CitizenEmploy_Strat_cbf0	result void* read as int64_t
+code/Game/Dialog/professionui.cpp	831	SIG:CitizenEmploy_Strat_ca20	result void* read as int64_t
+code/Game/Dialog/professionui.cpp	837	SIG:CitizenEmploy_Strat_c5f0	result void* read as int64_t
+code/Game/Dialog/professionui.cpp	856	SIG:TownHall_RemoveWorker	profession as uint64_t
+code/Game/Dialog/residenceui.cpp	319	H5:CitizenComponent::name	raw String storage
+code/Game/Dialog/residenceui.cpp	465	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	468	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	469	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	474	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	475	OTHER:retail StorageComponent over-read	2 casts; retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/residenceui.cpp	479	OTHER:retail StorageComponent over-read	retail reads a 0x40-byte StorageComponent at +0x50/+0x58 (known_port_issues 14a row 452); raw offset reads kept faithfully
+code/Game/Dialog/scenariodialog.cpp	349	POD:RtSystem::String	Persistence::_savePath is the runtime String POD
+code/Game/Dialog/scenariodialog.cpp	484	SIG:ScenarioDialog_Ctor	C entry takes self/ui/extRes/parentIBP/parentMenuIBP as void*
+code/Game/Dialog/scenariodialog.cpp	485	SIG:ScenarioDialog_Ctor	C entry takes self/ui/extRes/parentIBP/parentMenuIBP as void*
+code/Game/Dialog/scenariodialog.cpp	486	SIG:ScenarioDialog_Ctor	C entry takes self/ui/extRes/parentIBP/parentMenuIBP as void*
+code/Game/Dialog/scenariodialog.cpp	487	SIG:ScenarioDialog_Ctor	C entry takes self/ui/extRes/parentIBP/parentMenuIBP as void*
+code/Game/Dialog/townhall_helpers.cpp	79	SIG:TownHall_GroupRatingInit	
+code/Game/Dialog/townhall_helpers.cpp	81	SIG:TownHall_GroupRatingInit	
+code/Game/Dialog/townhall_helpers.cpp	102	SIG:TownHall_GroupRatingUpdate	
+code/Game/Dialog/townhall_helpers.cpp	179	SIG:TownHall_ProfArrayPush	
+code/Game/Dialog/townhall_helpers.cpp	180	SIG:TownHall_ProfArrayPush	
+code/Game/Dialog/townhall_helpers.cpp	226	SIG:TownHall_ProdArrayPush	
+code/Game/Dialog/townhall_helpers.cpp	227	SIG:TownHall_ProdArrayPush	
+code/Game/Dialog/townhall_helpers.cpp	305	SIG:TownHall_AvlRebalance28	
+code/Game/Dialog/townhall_helpers.cpp	306	SIG:TownHall_AvlRebalance28	
+code/Game/Dialog/townhall_helpers.cpp	338	SIG:TownHall_QueryProductionStat	
+code/Game/Dialog/townhall_helpers.cpp	417	SIG:TownHall_InventorySortAsc	
+code/Game/Dialog/townhall_helpers.cpp	420	SIG:TownHall_InventorySortDesc	
+code/Game/Dialog/townhall_helpers.cpp	464	SIG:TownHall_RemoveWorker	citizenList void*, professionId uint64_t
+code/Game/Dialog/townhallui.cpp	175	CONST:FindOrLoad	StringTable members are non-const
+code/Game/Dialog/townhallui.cpp	181	CONST:FindOrLoad	StringTable members are non-const
+code/Game/Dialog/townhallui.cpp	317	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Dialog/townhallui.cpp	335	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Dialog/townhallui.cpp	448	CONST:FindOrLoad	StringTable members are non-const
+code/Game/Dialog/townhallui.cpp	531	CONST:FindOrLoad	StringTable members are non-const
+code/Game/Dialog/townhallui.cpp	1086	FLOOR:ptr_int	2 casts; STANDALONE pointer-range guard
+code/Game/Dialog/townhallui.cpp	1090	FLOOR:vslot	STANDALONE vtable-null guard
+code/Game/Dialog/townhallui.cpp	1541	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, record uint64_t*
+code/Game/Dialog/townhallui.cpp	1542	SIG:ToolbarUtility_BstInsert_4890	root int64_t*, record uint64_t*
+code/Game/Dialog/townhallui.cpp	1650	SIG:FindAvailableBuilding	town manager and profession as int64_t (also the CitizenEmploy_Strat_* seat functions)
+code/Game/Dialog/townhallui.cpp	1651	SIG:FindAvailableBuilding	town manager and profession as int64_t (also the CitizenEmploy_Strat_* seat functions)
+code/Game/Dialog/townhallui.cpp	1685	SIG:TownHall_RemoveWorker	profession as uint64_t
+code/Game/Dialog/tradeui_checkout.cpp	191	SIG:TradeDescription_ExtendMerchantStay	tradeComp as void*
+code/Game/Dialog/tradeui_checkout.cpp	252	SIG:ActRm_StorageSubtract_d150	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_checkout.cpp	253	SIG:ActRm_StorageSubtract_d150	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_checkout.cpp	259	SIG:ActRm_StorageSubtract_d150	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_checkout.cpp	296	SIG:ActRm_StorageAdd_d000	storage uintptr_t, entity int64_t
+code/Game/Dialog/tradeui_checkout.cpp	297	SIG:ActRm_StorageAdd_d000	storage uintptr_t, entity int64_t
+code/Game/Dialog/workplaceui.cpp	237	SIG:WorkPlaceComponent_SetMaxWorkers	receiver int64_t
+code/Game/Dialog/workplaceui.cpp	456	SIG:Pf_RecursiveChildSum_123070	receiver int64_t
+code/Game/Dialog/workplaceui.cpp	459	SIG:Pf_RecursiveChildSum_123070	receiver int64_t
+code/Game/Dialog/workplaceui.cpp	483	FLOOR:vslot	diagnostic prints the vptr
+code/Game/Dialog/workplaceui.cpp	549	SIG:FindAvailableBuilding	town manager and profession as int64_t (also the CitizenEmploy_Strat_* seat functions)
+code/Game/Dialog/workplaceui.cpp	550	SIG:FindAvailableBuilding	town manager and profession as int64_t (also the CitizenEmploy_Strat_* seat functions)
+code/Game/Game/eventlog.cpp	125	H5:EventLog::entries	three raw fields, not a Collection::Array
+code/Game/Game/eventlog.cpp	133	SIG:EventLog_EventArray_Destroy	arrBase void*; EventLog H5 entries
+code/Game/Game/eventlog.cpp	212	SIG:EventLog_TileIndex_Reg	entityIBP void*
+code/Game/Game/eventlog.cpp	302	OTHER:raw stack EventLogEntry	H5 stack block: a real local would run String ctor/dtor
+code/Game/Game/eventlog.cpp	347	SIG:EventLog_AddEvent	eventLog / entityIBP void*
+code/Game/Game/eventlog.cpp	348	SIG:EventLog_AddEvent	eventLog / entityIBP void*
+code/Game/Game/eventlog.cpp	386	SIG:EventLog_AddCitizenEvent	eventLog / IBP / three Strings as void*
+code/Game/Game/eventlog.cpp	387	SIG:EventLog_AddCitizenEvent	eventLog / IBP / three Strings as void*
+code/Game/Game/eventlog.cpp	388	SIG:EventLog_AddCitizenEvent	2 casts; eventLog / IBP / three Strings as void*
+code/Game/Game/eventlog.cpp	389	SIG:EventLog_AddCitizenEvent	eventLog / IBP / three Strings as void*
+code/Game/Game/eventlog.cpp	404	SIG:EventLog_ArrayGrow_Reg	arrBase / newEntry void*
+code/Game/Game/eventlog.cpp	405	SIG:EventLog_ArrayGrow_Reg	arrBase / newEntry void*
+code/Game/Game/eventlog.cpp	410	SIG:EventLog_YearString_Reg	gameWorld void*
+code/Game/Game/eventlog.cpp	414	SIG:EventLog_SeasonString_Reg	gameWorld / eventLog void*
+code/Game/Game/eventlog.cpp	415	SIG:EventLog_SeasonString_Reg	gameWorld / eventLog void*
+code/Game/Game/gameupdateloop_load.cpp	156	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	200	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	228	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	281	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	402	SIG:Reimpl_FUN_1400191f0	hdr void*; callers hold raw {data,count,cap} triples
+code/Game/Game/gameupdateloop_load.cpp	409	SIG:Reimpl_FUN_14002e000	hdr void* (PlayerToolManager cameraViews raw header)
+code/Game/Game/gameupdateloop_load.cpp	537	SIG:Reimpl_FUN_140017640	hdr void*
+code/Game/Game/gameupdateloop_load.cpp	544	SIG:Reimpl_TradeComponent_sub_77c0	hdr void*
+code/Game/Game/gameupdateloop_load.cpp	551	SIG:Reimpl_FUN_14000f090	hdr void*
+code/Game/Game/gameupdateloop_load.cpp	591	POD:RtGraphics::Camera	Camera ctor door takes the POD mirror; +0x34 raw storage
+code/Game/Game/gameupdateloop_load.cpp	684	POD:RtSystem::Random	2520-byte stack buffers, wider than System::Random
+code/Game/Game/gameupdateloop_load.cpp	685	POD:RtSystem::Random	2520-byte stack buffers, wider than System::Random
+code/Game/Game/gameupdateloop_load.cpp	686	POD:RtSystem::Random	2520-byte stack buffers, wider than System::Random
+code/Game/Game/gameupdateloop_load.cpp	687	POD:RtSystem::Random	2520-byte stack buffers, wider than System::Random
+code/Game/Game/gameupdateloop_load.cpp	775	OTHER:raw stack Frustum buffer	0xC0-byte stack buffer wider than ::Frustum (0x64)
+code/Game/Game/gameupdateloop_load.cpp	778	H5:PlayerController::camera	raw Camera storage (default ctor protected)
+code/Game/Game/gameupdateloop_load.cpp	779	H5:PlayerController::camera	raw Camera storage (default ctor protected)
+code/Game/Game/gameupdateloop_load.cpp	872	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	1008	OTHER:raw stack Frustum buffer	0xC0-byte stack buffer wider than ::Frustum (0x64)
+code/Game/Game/gameupdateloop_load.cpp	1018	POD:RtGraphics::Renderer	ctor door takes the POD mirror
+code/Game/Game/gameupdateloop_load.cpp	1101	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	1133	POD:RtGraphics::Scene	ctor door takes the POD mirror
+code/Game/Game/gameupdateloop_load.cpp	1162	POD:RtGraphics::AnimationManager	ctor door takes the POD mirror
+code/Game/Game/gameupdateloop_load.cpp	1265	CONST:FindOrLoad	
+code/Game/Game/gameupdateloop_load.cpp	1364	H5:TerrainGenerator::_field80	2 casts; raw Array triple of 0x44-byte rows
+code/Game/Game/gameupdateloop_load.cpp	1365	H5:TerrainGenerator::_field80	2 casts; raw Array triple of 0x44-byte rows
+code/Game/Game/goals_serialize.cpp	76	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Game/goals_serialize.cpp	79	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Game/goals_serialize.cpp	82	SIG:Pf_AvlRebalanceB_13480	2 casts; int64_t* root and node slot
+code/Game/Game/goals_serialize.cpp	85	SIG:WorkCellBST_Remove_ca60	uintptr_t* tree
+code/Game/Game/goals_serialize.cpp	88	SIG:WorkBST_BSTRemove_a6e0	uintptr_t* root
+code/Game/Game/region_seed.cpp	48	SIG:Region_Seed	gameObjV void*
+code/Game/Game/region_seed.cpp	61	SIG:Pf_RegionGraphCtor_8670	2 casts; graph int*, map int64_t
+code/Game/Game/region_seed.cpp	73	SIG:Pf_RegionPairCache_Build	returns void*
+code/Game/Game/serialize_struct60b.cpp	229	SIG:Reimpl_Struct60B_Resize	arrayHeader void*
+code/Game/Game/serialize_struct60b.cpp	234	SIG:Reimpl_Struct60B_CopyCtor	dst / src void*
+code/Game/Game/serialize_struct60b.cpp	235	SIG:Reimpl_Struct60B_CopyCtor	dst / src void*
+code/Game/Game/serialize_struct60b.cpp	240	SIG:Reimpl_Struct60B_DtorRange	first void*
+code/Game/Game/worldgen.cpp	473	CONST:FindOrLoad	Find result
+code/Game/Game/worldgen.cpp	772	SIG:WorldGen_BuildTerrain	2 casts; wg / gen void*
+code/Game/Goal/goal_exe_helpers.cpp	40	H5:NamedExternalRef::name	raw String
+code/Game/Goal/goal_exe_helpers.cpp	43	H5:NamedExternalRef::name	raw String
+code/Game/Goal/goal_exe_helpers.cpp	87	CONST:FindOrLoad	
+code/Game/Goal/goal_exe_helpers.cpp	135	ERASED:rtcoll::ArraySpec element callbacks (uint8_t*)	NamedExternalRef ops
+code/Game/Goal/goal_exe_helpers.cpp	136	ERASED:rtcoll::ArraySpec element callbacks (uint8_t*)	NamedExternalRef ops
+code/Game/Goal/goal_exe_helpers.cpp	148	ERASED:rtcoll::ArraySpec element callbacks (uint8_t*)	NamedExternalRef ops
+code/Game/Goal/goal_exe_helpers.cpp	155	ERASED:rtcoll::ArraySpec element callbacks (uint8_t*)	NamedExternalRef ops
+code/Game/Goal/goal_exe_helpers.cpp	179	ERASED:Goal_RefArray_Resize	typed SetSize reached through the uint8_t ArraySpec row
+code/Game/Player/roadtool_calcpath.cpp	134	FIELD:WorldGeometry::_arrays	+0x220/+0x230 untyped headers read as uint32_t* / void**
+code/Game/Player/roadtool_calcpath.cpp	140	FIELD:WorldGeometry::_arrays	+0x220/+0x230 untyped headers read as uint32_t* / void**
+code/Game/Player/roadtool_calcpath.cpp	206	SIG:CitizenAI_WorkScheduler_Insert	scheduler int*
+code/Game/Player/roadtool_calcpath.cpp	216	FIELD:Map::field_0xE8	Set header typed as AvlTreeHead<AvlNode28>
+code/Game/Player/roadtool_calcpath.cpp	290	SIG:RoadTool_PlaceRoadSegment_9c960	roadDescExtra as uint64_t
+code/Game/Player/tool_base_highlight_tess.cpp	67	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	68	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	2 casts; file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	72	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	73	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	2 casts; file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	77	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	78	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	2 casts; file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	82	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	83	LOCAL:T2Ctor/T2FromYawOffset/T2MulT2/T2MulVec bridges	2 casts; file-local void* bridges to Math::Transform2 / Vector2
+code/Game/Player/tool_base_highlight_tess.cpp	108	H5:GeometryBatch::indices	RawArray, not a Collection::Array
+code/Game/Player/tool_base_highlight_tess.cpp	120	OTHER:raw stack decal corner block	corner records are raw dwords of a 0x60-byte stack block
+code/Game/Player/tool_base_highlight_tess.cpp	135	SIG:Pf_VectorResize14Fill_f8d0	pool int64_t*, vertex uint64_t* (desc)
+code/Game/Player/tool_base_highlight_tess.cpp	136	SIG:Pf_VectorResize14Fill_f8d0	2 casts; pool int64_t*, vertex uint64_t* (desc)
+code/Game/Player/tool_base_highlight_tess.cpp	152	H5:WorldGeometry::_arrays	decals data pointer read at +0x1f0
+code/Game/Player/tool_base_highlight_tess.cpp	160	H5:WorldGeometry::_arrays	decals data pointer read at +0x1f0
+code/Game/Player/tool_base_highlight_tess.cpp	199	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	200	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	203	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	205	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	206	FLOOR:float_bits	2 casts; float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	215	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	217	FLOOR:float_bits	float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	218	FLOOR:float_bits	2 casts; float register bits packed into qwords
+code/Game/Player/tool_base_highlight_tess.cpp	267	OTHER:raw stack decal corner block	qword views of corner buffers
+code/Game/Player/tool_base_highlight_tess.cpp	270	OTHER:raw stack decal corner block	qword views of corner buffers
+code/Game/Player/tool_base_highlight_tess.cpp	285	SIG:Pf_VectorResize14_ee40	vertices header int64_t*
+code/Game/Player/tool_base_highlight_tess.cpp	299	H5:GeometryBatch::vertices/indices	RawArray, not a Collection::Array
+code/Game/Player/tool_base_highlight_tess.cpp	300	H5:GeometryBatch::vertices/indices	RawArray, not a Collection::Array
+code/Game/Player/tool_base_highlight_tess.cpp	333	FLOOR:ptr_int	2 casts; tagged pointer (low byte flag)
+code/Game/Player/tool_base_highlight_tess.cpp	342	SIG:Pf_RoadQuad_cc10	descBlock as int64_t
+code/Game/Player/tool_base_highlight_tess.cpp	348	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	349	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	350	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	351	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	352	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	358	OTHER:raw stack decal corner block	2 casts; 0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	366	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	367	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	368	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	369	OTHER:raw stack decal corner block	0x60-byte descBlock written by dword/qword/word offsets
+code/Game/Player/tool_base_highlight_tess.cpp	399	OTHER:retail 8+8+4 vertex record copy	kept to preserve store widths (0x1400ace40)
+code/Game/Player/tool_base_highlight_tess.cpp	401	OTHER:retail 8+8+4 vertex record copy	2 casts; kept to preserve store widths (0x1400ace40)
+code/Game/Player/tool_base_highlight_tess.cpp	402	OTHER:retail 8+8+4 vertex record copy	2 casts; kept to preserve store widths (0x1400ace40)
+code/Game/Player/tool_base_highlight_tess.cpp	403	OTHER:retail 8+8+4 vertex record copy	2 casts; kept to preserve store widths (0x1400ace40)
+code/Game/Player/tool_base_screenrect.cpp	153	H5:PlayerController::camera	raw Camera storage
+code/Game/Player/tool_base_screenrect.cpp	362	SIG:PlayerScreenRect_Entity_0380	param_2 void*, param_3 void*
+code/Game/Player/tool_base_screenrect.cpp	363	SIG:PlayerScreenRect_Entity_0380	param_2 void*, param_3 void*
+code/Game/Player/tool_base_tile.cpp	75	SIG:ToolTile_SetTransformFromYaw_3870	self uintptr_t, offset void*
+code/Game/Player/tool_base_tile.cpp	76	SIG:ToolTile_SetTransformFromYaw_3870	self uintptr_t, offset void*
+code/Game/Player/tool_base_tile.cpp	195	FIELD:ModelComponent::_description	void*
+code/Game/Player/tool_base_tile.cpp	281	SIG:ComponentEntity_CtorFromDescription	self as raw MemAlloc void*
+code/Game/Tutorial/tutorialhighlightdialog.cpp	349	SIG:PlayerScreenRect_Entity_0380	rectangle as uintptr_t / uint64_t*
+code/Game/Tutorial/tutorialhighlightdialog.cpp	350	SIG:PlayerScreenRect_Entity_0380	rectangle as uintptr_t / uint64_t*
+standalone/autostart.cpp	125	SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return)	OnElementEvent on a void* dialog (g_StandaloneNewGameDialog void* + the two LastOpened returns)
+standalone/autostart.cpp	275	FIELD:g_StandaloneNewGameDialog	NewGameDialog held as void* (NewGameDialog.h:92, mainmenudialog.cpp:137); button read by offset kNewGame_ButtonOk
+standalone/autostart.cpp	276	FIELD:g_StandaloneNewGameDialog	NewGameDialog held as void* (NewGameDialog.h:92, mainmenudialog.cpp:137); button read by offset kNewGame_ButtonOk
+standalone/autostart.cpp	356	SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return)	ModDialog_LastOpened returns void*
+standalone/pausemenu_harness.cpp	149	SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return)	LastOpened returns void*
+standalone/pausemenu_harness.cpp	161	SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return)	LastOpened returns void*
+standalone/pausemenu_harness.cpp	162	OTHER:InternalPtr-raw-local	nullElem passed as InternalPtr<Element>*
+standalone/pausemenu_harness.cpp	265	SIG:EntityUI_OpenPauseMenu (void* return)	EntityUI_OpenPauseMenu returns void*
+standalone/perf_experimental.cpp	112	OTHER:bool-flag-as-byte-pointer	MeshInstance::_rootOnlyUpdates (bool) as uint8_t* flag
+standalone/perf_experimental.cpp	142	LOCAL:perf_experimental Frustum view	worldFrustum void* param cast to Frustum*
+standalone/perf_experimental.cpp	206	SIG:PerfX::PickCullSkip / PerfX::ModelCulled (void* model)	model void* offset reads (+0x148 / +0x158) [2 casts on the line]
+standalone/perf_experimental.cpp	258	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	259	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	260	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	264	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	278	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	279	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	281	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	287	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	290	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	291	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	293	LOCAL:perf_experimental raw model/anim reads	Graphics::AnimationState / MeshInstance / AnimationGroup types exist; harness reads +0x4c/+0x50/+0x60/+0x28.. by offset
+standalone/perf_experimental.cpp	403	SIG:PerfX::PickCullSkip / PerfX::ModelCulled (void* model)	model void* offset reads (+0x148 / +0x158) [2 casts on the line]
+standalone/perf_experimental.cpp	417	SLOT:Component::Update(void* time)	ModelComponent time param is void*
+standalone/perf_experimental.cpp	445	SIG:PerfX::PickCullSkip / PerfX::ModelCulled (void* model)	model void* offset reads (+0x148 / +0x158) [2 casts on the line]
