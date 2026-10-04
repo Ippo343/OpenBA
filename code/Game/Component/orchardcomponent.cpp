@@ -232,11 +232,6 @@ float OrchardComponent::GetGrowth() const {
     return total / static_cast<float>(count);
 }
 
-// B4 FORWARD: 2 outside caller files (Dialog/orchardui.cpp, standalone/orchard_diag.cpp).
-float OrchardComponent_GetGrowth(void* selfV) {
-    if (!selfV) return 0.0f;
-    return reinterpret_cast<const OrchardComponent*>(selfV)->GetGrowth();   // LEFT: B4 FORWARD (wave X: standalone/orchard_diag.cpp holds void*)
-}
 
 // ============================================================
 // OrchardComponent::OnMessage — primary vtable idx15 (+0x78), retail 0x140051990.

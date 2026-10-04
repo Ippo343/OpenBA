@@ -444,7 +444,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
                 return 1;
             }
 
-            int remainingCapacity = WorkLeaf_FreeStorageCapacity_116540(reinterpret_cast<intptr_t>(*entityIBP));   // LEFT: SIG WorkLeaf_FreeStorageCapacity_116540
+            int remainingCapacity = WorkLeaf_FreeStorageCapacity_116540(*entityIBP);
 
             // (0x140006330 returns a RawMaterialDescription whose +0x48 is the weight)
             if (remainingCapacity < *(int32_t*)(foundStorageIBP + 0x48)) {   // LEFT: the scratch slot is reused for three types

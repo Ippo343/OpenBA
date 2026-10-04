@@ -226,10 +226,12 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         ComponentEntity* destEntityCopy = destEntity;
         uint32_t pathFlags = (availCount << 8) | 0;  // flags from local_res20[0]
 
-        uint32_t pathResult = 0;
-        WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, pathType, reinterpret_cast<uint64_t*>(&destEntityCopy),   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                                searchPos, reinterpret_cast<void**>(&workEntity), destPos,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                                (int64_t)itemEntity, availCount, pathFlags, 0, 1, 0, 0);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+        // 0x1400bf790's hidden return slot; the tree's slot was a 4-byte uint32_t the 8-byte
+        // InternalPtr store overran (the value is never read).
+        ::Object::InternalPtr<Action> pathResult;
+        WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, pathType, &destEntityCopy,
+                                searchPos, &workEntity, destPos,
+                                itemEntity, availCount, pathFlags, 0, 1, 0, 0);
 
         // Get the Slot10 result (vtable +0x50)
         CitizenComponent* citizenPtr = *citizenAI;

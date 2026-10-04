@@ -26,16 +26,18 @@
 
 #include <cstdint>
 
+namespace UI { class UserInterface; }
+
 namespace UIFade {
 
 // Read the current fade alpha from a UI::UserInterface ([+0xF4]).
 // 0.0 = no overlay, 1.0 = fully opaque overlay. Used for log-based verification.
-float GetCurrentAlpha(const void* userInterface);
+float GetCurrentAlpha(const UI::UserInterface* userInterface);
 
 // Read the current fade rate from a UI::UserInterface ([+0xF0]).
 // 0.0 = no animation in progress, +1.0 = fading IN (toward opaque),
 // -1.0 = fading OUT (toward transparent).
-float GetCurrentRate(const void* userInterface);
+float GetCurrentRate(const UI::UserInterface* userInterface);
 
 // Install the fullscreen fade sprite onto a UI::UserInterface, copied from
 // KeyMap+0xA8 (the engine-wide white-pixel sprite reference loaded by the
@@ -44,7 +46,7 @@ float GetCurrentRate(const void* userInterface);
 //
 // Returns true if the sprite was installed (or was already non-zero), false
 // if KeyMap singleton or required fn pointers are not yet resolved.
-bool EnsureFadeSprite(void* userInterface);
+bool EnsureFadeSprite(UI::UserInterface* userInterface);
 
 // Trigger the standard "Startup reveal" curve: instant fade IN to opaque
 // black, then animated fade OUT (transparent) over ~0.25s. Mirrors the
@@ -55,17 +57,17 @@ bool EnsureFadeSprite(void* userInterface);
 // covered by the overlay then revealed.
 //
 // color: packed 0xRRGGBBAA. Pass 0xFF000000 for black (the game's default).
-void TriggerReveal(void* userInterface, uint32_t color = 0xFF000000);
+void TriggerReveal(UI::UserInterface* userInterface, uint32_t color = 0xFF000000);
 
 // Trigger a fade IN (toward opaque) over ~0.25s. Mirrors the call in
 // FUN_140098DA0 (LoaderLoop::Update) when IsFinished first transitions:
 //   SetFullscreenFade(ui, true, color, false);    // animated: rate = +1.0
 // Use when leaving a loop (after fade completes the loop transitions).
-void TriggerFadeIn(void* userInterface, uint32_t color = 0xFF000000);
+void TriggerFadeIn(UI::UserInterface* userInterface, uint32_t color = 0xFF000000);
 
 // Diagnostic — log "[UIFade::tag] alpha=X rate=Y" exactly once per call (no
 // throttling). Caller is responsible for throttling. Useful from Stub_Draw
 // to capture the fade curve in the standalone log.
-void LogState(const char* tag, const void* userInterface);
+void LogState(const char* tag, const UI::UserInterface* userInterface);
 
 } // namespace UIFade

@@ -128,7 +128,7 @@ void CitizenComponent::WarmAt(ComponentEntity* target) {
     if (r1 == nullptr) return;
 
     ResidenceComponent* r2 = target->FindComponent<ResidenceComponent>();
-    if (ResidenceCheck_2ac30(reinterpret_cast<int64_t>(r2))) {   // LEFT: SIG ResidenceCheck_2ac30 (Component/exe_bodies.h, wave X)
+    if (ResidenceCheck_2ac30(r2)) {
         coldness = 0.0f;
     }
 }

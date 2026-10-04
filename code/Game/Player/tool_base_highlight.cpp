@@ -42,25 +42,8 @@
 // DecalVertexNode (Player/exe_bodies.h); its rotations / retrace are the shared
 // Avl38 templates (0x140015000 / 0x140014ed0 / 0x140014b40).
 
-// ============================================================
-// 0x140014b00 — recursive BST free: free left (+0x20), right (+0x28), then self.
-// 1:1 port of FUN_140014b00.
-// ============================================================
-template <class Node>
-void Avl38FreeSubtree(const void* context, Node* node) {
-    if (node != nullptr) {
-        Avl38FreeSubtree(context, node->left);
-        Avl38FreeSubtree(context, node->right);
-        System::MemoryAllocator::MemFree(node);
-    }
-}
+// 0x140014b00 — recursive BST free: Avl38FreeSubtree (Player/exe_bodies.h).
 template void Avl38FreeSubtree<DecalVertexNode>(const void*, DecalVertexNode*);
-
-// B4 FORWARD: outside callers (Game/gameupdateloop_teardown.cpp, Work/marketwork.cpp,
-// Work/tradework.cpp) hold their sets as integers / void*.
-extern "C" void TradeWork_helper_14b00(int64_t param_1, void* node) {
-    Avl38FreeSubtree(reinterpret_cast<const void*>(param_1), reinterpret_cast<Avl38Node*>(node));   // LEFT: B4 FORWARD
-}
 
 namespace {
 
@@ -238,9 +221,8 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 // template (slot -1); write the decal; tessellate it via 0x1400ace40. Returns the
 // slot index (or -1 if the material is null). 1:1 port (19 args; param_18 is
 // unused/dead). A WorldGeometry member in retail; LEFT free: WorldGeometry.h is
-// block GAME-c-2's (running).
+// block GAME-c-2's (running). Declared in Player/exe_bodies.h (DecalComponent calls it).
 // ============================================================
-namespace {
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
              uint8_t param_9, uint32_t param_10, uint32_t param_11,
@@ -305,22 +287,6 @@ haveSlot:
     // LEFT: 0x1400ace40 (tool_base_highlight_tess.cpp) still takes the geometry as an integer.
     TradeWork_impl_ace40(reinterpret_cast<int64_t>(geom), iVar3, param_15, param_16, param_17);
     return iVar3;
-}
-}  // namespace
-
-// B4 FORWARD: 1 outside caller (Component/decalcomponent.cpp binds it by a local
-// extern "C" of this shape, the geometry and the material as integers).
-extern "C" int TradeWork_impl_0d80(int64_t param_1, int param_2, int param_3, int param_4,
-                                   int param_5, uint8_t param_6, uint32_t param_7, int64_t param_8,
-                                   uint8_t param_9, uint32_t param_10, uint32_t param_11,
-                                   uint32_t param_12, uint32_t param_13, uint32_t param_14,
-                                   char param_15, int param_16, int param_17,
-                                   uint64_t /*param_18 unused*/, uint8_t param_19) {
-    return AddDecal(reinterpret_cast<WorldGeometry*>(param_1), param_2, param_3, param_4,   // LEFT: B4 FORWARD
-                    param_5, param_6, param_7,
-                    reinterpret_cast<Graphics::MaterialInstance*>(param_8),   // LEFT: B4 FORWARD
-                    param_9, param_10, param_11, param_12, param_13, param_14,
-                    param_15, param_16, param_17, param_19);
 }
 
 // ============================================================

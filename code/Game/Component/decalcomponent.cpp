@@ -32,6 +32,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
 #include <cstring>
+#include "Player/exe_bodies.h"   // AddDecal 0x1400b0d80
 
 // ============================================================
 // Helpers, called directly: IsDerivedFrom (import slot 0x140152a98) is
@@ -119,12 +120,8 @@ void DecalComponent_Serialize(DecalComponent* self) {
 // BANISHED_LIVE_DECAL is set; the b0d80 → ace40 closure must be registered
 // (reg_player_highlight.cpp) and the Transform2/Vector2 slots wired.
 
-// AddDecal (0x1400b0d80, tool_base_highlight.cpp) — 19-arg tile-slot manager + tessellate.
-extern "C" int TradeWork_impl_0d80(int64_t sys, int minX, int minY, int maxX, int maxY,
-                                   uint8_t alpha, uint32_t rot, int64_t material,
-                                   uint8_t tiledFlag, uint32_t p10, uint32_t uv0, uint32_t uv1,
-                                   uint32_t uv2, uint32_t uv3, char p15, int p16, int p17,
-                                   uint64_t p18, uint8_t p19);
+// AddDecal (0x1400b0d80, tool_base_highlight.cpp; Player/exe_bodies.h) — 19-arg
+// tile-slot manager + tessellate.
 
 // Draw-path helpers, called directly: 0x140004680 FindComponent(MapComponent)
 // (FloorComponent_FindResData), 0x140003f60 FindComponent(ModelComponent)
@@ -304,15 +301,15 @@ void DecalComponent::OnAdded() {
     uint32_t p10       = FloatBits(decalDesc->_sizeB);
     int alpha = static_cast<int>(decalScale * 255.0f);   // DAT_14017222c = 255.0f
 
-    // AddDecal (tool_base_highlight.cpp) takes the WorldGeometry and the material as
-    // int64_t: those two bridges are LEFT.
-    int id = TradeWork_impl_0d80(
-        reinterpret_cast<int64_t>(decalSys), minX, minY,
+    // AddDecal 0x1400b0d80 (was its TradeWork_impl_0d80 forwarder; its dead param_18 is gone).
+    int id = AddDecal(
+        decalSys, minX, minY,
         width - 1 + minX, height - 1 + minY,
-        static_cast<uint8_t>(alpha), rotation, reinterpret_cast<int64_t>(material), tiledFlag,
-        p10,
+        static_cast<uint8_t>(alpha), rotation,
+        reinterpret_cast<Graphics::MaterialInstance*>(material),   // LEFT: Component/DecalDescription.h _materials is void** (its serializer takes void**)
+        tiledFlag, p10,
         FloatBits(uv.u0), FloatBits(uv.v0), FloatBits(uv.u1), FloatBits(uv.v1),
-        '\0', 0, 0, 0, p19);
+        '\0', 0, 0, p19);
     decalId = id;
 }
 // [7] 0x14011b510 — OnCreate: release the decal slot.

@@ -156,8 +156,7 @@ static Description* ScanCompList2(ComponentDescription* base, uint32_t tid) {
 //   value (gw+0x130 -> +0x18), OR there is still pending capacity (param_1+0x48 > 0).
 // ============================================================
 //   (B4 P2 CAI-2: the receiver is the ResidenceComponent every caller passes.)
-bool ResidenceCheck_2ac30(int64_t param_1) {
-    ResidenceComponent* self = reinterpret_cast<ResidenceComponent*>(param_1);   // LEFT: SIG ResidenceCheck_2ac30 (Component/exe_bodies.h, wave X)
+bool ResidenceCheck_2ac30(ResidenceComponent* self) {
     EnsureInit();
     Description* obj = self->_description;
     float cur = GameUpdateLoop::_singleton->m_weather->temperature;   // +0x130 -> +0x18
@@ -234,15 +233,13 @@ static uint32_t WorldToCell(const Map* map, const float* vec) {
 // ============================================================
 //   (B4 P2 CAI-2: param_1 is the CitizenBehavior every caller passes, GameUpdateLoop +0xF0;
 //    the list is its +0x20 entity array.)
-int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, float* param_4) {
-    CitizenBehavior* list = reinterpret_cast<CitizenBehavior*>(param_1);    // LEFT: SIG Entity_impl_ec70 (Component/exe_bodies.h, wave X)
-    ComponentEntity** found = reinterpret_cast<ComponentEntity**>(param_2); // LEFT: SIG Entity_impl_ec70 (the out entity)
+ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, float* param_4) {
     EnsureInit();
     Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
     Map* mapGrid = map;
     int best = 0x7fffffff;
     *found = nullptr;
-    if (list->field_0x28 < 1) return param_2;
+    if (list->field_0x28 < 1) return found;
 
     int idx = 0;
     do {
@@ -261,7 +258,7 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
                 ComponentEntity* self_00 = list->field_0x20[idx];
                 // 0x140008090 (was its CitizenComp_Entity_FindComponent_Storage forwarder)
                 ResidenceComponent* storComp = self_00->FindComponent<ResidenceComponent>();
-                bool ok = storComp ? ResidenceCheck_2ac30(reinterpret_cast<int64_t>(storComp)) : false;   // LEFT: SIG ResidenceCheck_2ac30 takes int64_t (wave X)
+                bool ok = storComp ? ResidenceCheck_2ac30(storComp) : false;
                 if (ok && (-1 < cost)) {
                     *found = cand;
                     param_4[0] = vec[0];
@@ -273,7 +270,7 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
         }
         ++idx;
     } while (idx < list->field_0x28);
-    return param_2;
+    return found;
 }
 
 // ============================================================
@@ -291,18 +288,15 @@ int64_t* Entity_impl_ec70(int64_t param_1, int64_t* param_2, uint32_t param_3, f
 //   param_6 is an unused incoming reg the original repurposes as the running "best cost".
 //   Returns param_2 (callers ignore the return).
 // ============================================================
-int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t param_3,
-                               int64_t* param_4, float* param_5, uint64_t /*param_6*/,
-                               int64_t* param_7) {
-    // (B4 P2 CAI-2: param_1 is the CitizenBehavior, GameUpdateLoop +0xF0: [0]/[1] its +0x00
-    //  list, [2]/[3] +0x10, [4]/[5] +0x20; param_2 / param_7 hold a ComponentEntity*.)
-    CitizenBehavior* list = reinterpret_cast<CitizenBehavior*>(param_1);       // LEFT: SIG CitizenAI_helper_e370 (Component/exe_bodies.h, wave X)
-    ComponentEntity** found = reinterpret_cast<ComponentEntity**>(param_2);    // LEFT: SIG CitizenAI_helper_e370 (the out entity)
-    ComponentEntity** origP7 = reinterpret_cast<ComponentEntity**>(param_7);   // LEFT: SIG CitizenAI_helper_e370 (the preferred entity)
+ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3,
+                                        ComponentDescription** param_4, float* param_5, uint64_t /*param_6*/,
+                                        ComponentEntity** origP7) {
+    // (B4 P2 CAI-2: list is the CitizenBehavior, GameUpdateLoop +0xF0: [0]/[1] its +0x00
+    //  list, [2]/[3] +0x10, [4]/[5] +0x20.)
     EnsureInit();
     Map* map = GameUpdateLoop::_singleton->m_game;   // +0xF8
     Map* mapGrid = map;
-    int64_t* ret = param_2;
+    ComponentEntity** ret = found;
     *found = nullptr;
     int best = 0x7fffffff;
 
@@ -316,9 +310,9 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
         if (static_cast<char>(valid) != '\0') {
             int dist = WorkBase_CalcDistance_8830(mapGrid, cell, param_3);
             ComponentEntity* candA = *origP7;
-            int64_t outSlot = 0;
+            ComponentDescription* outSlot = nullptr;
             CitizenComp_Entity_impl_ef40(candA, &outSlot, &candA, 0);
-            if (outSlot != 0) {
+            if (outSlot != nullptr) {
                 *found = *origP7;
                 param_5[0] = vec[0];
                 param_5[1] = vec[1];
@@ -338,10 +332,10 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
             int cost = CellCost(map, cell, param_3);
             if (cost < best) {
                 ComponentEntity* candE = cand;
-                int64_t outSlot = 0;
+                ComponentDescription* outSlot = nullptr;
                 CitizenComp_Entity_impl_ef40(map, &outSlot, &candE, 0);
-                int64_t slot = outSlot;
-                if (outSlot != 0) {
+                ComponentDescription* slot = outSlot;
+                if (outSlot != nullptr) {
                     float vec[4] = {0, 0, 0, 0};
                     ::Object::InternalPtr<MarketLocationComponent> marketIBP[2];
                     ::Object::InternalPtr<MarketLocationComponent>* mp = CitizenAI_sub_78c0(cand, marketIBP);
@@ -372,13 +366,13 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
             int cost = CellCost(map, cell, param_3);
             if (cost < best) {
                 ComponentEntity* candE = cand;
-                int64_t slotOut[2] = {0, 0};
+                ComponentDescription* slotOut[2] = {nullptr, nullptr};
                 CitizenComp_Entity_impl_ef40(map, slotOut, &candE, 0);
-                int64_t slot = slotOut[0];
-                if (slot != 0) {
+                ComponentDescription* slot = slotOut[0];
+                if (slot != nullptr) {
                     // RawMaterialDescription on the ef40-picked slot's comp-list2 (slot+0x28 / +0x30)
                     Description* rawMat = ScanCompList2(
-                        reinterpret_cast<ComponentDescription*>(slot), s_tid_RawMaterialDesc);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (the slot out is int64_t*, wave X)
+                        slot, s_tid_RawMaterialDesc);
 
                     // StorageLocationComponent on the candidate entity (comp-list1)
                     Component* storComp = ScanCompList1(cand, s_tid_StorageLocationComp);
@@ -481,9 +475,9 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                         }
                         if (proceed) {
                             ComponentEntity* entHolder[2] = {cand, nullptr};
-                            int64_t outSlot = 0;
-                            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (arg 1 ignored; the tree passes the flags register)
-                            if ((outSlot != 0) && (-1 < cost)) {
+                            ComponentDescription* outSlot = nullptr;
+                            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);   // LEFT: ef40 ignores its first argument; the tree passes the flags register retail leaves in RCX
+                            if ((outSlot != nullptr) && (-1 < cost)) {
                                 *found = cand;
                                 param_5[0] = vec[0];
                                 param_5[1] = vec[1];

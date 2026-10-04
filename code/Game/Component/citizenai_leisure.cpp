@@ -707,7 +707,7 @@ LAB_14010ae8a:
 
             CitizenComponent* local_a8h = citizen;   // holder citizen (PlayAnimation self IBP)
             float fVar39t = pRVar6->RandFloatTol();
-            CitizenAI_PlayAnimationCtor4_ba6b0(&local_a8h, reinterpret_cast<int64_t*>(&local_res18), reinterpret_cast<uint32_t*>(dest),   // LEFT: SIG CitizenAI_PlayAnimationCtor4_ba6b0
+            CitizenAI_PlayAnimationCtor4_ba6b0(&local_a8h, &local_res18, dest,
                                        fVar39t * kAgeMult + kAnimTimeBase,
                                        static_cast<uint32_t>(static_cast<unsigned char>(cVar12)));
 

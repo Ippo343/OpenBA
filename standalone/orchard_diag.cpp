@@ -239,7 +239,7 @@ void DumpOrchards(int frameNum) {
             }
         }
 
-        float avgGrowth = OrchardComponent_GetGrowth(orchComp);
+        float avgGrowth = orchComp->GetGrowth();   // 0x140051640 (was its OrchardComponent_GetGrowth forwarder; orchComp is non-null here)
 
         // Sibling WorkPlaceComponent on the same entity, via the owner-entity scan
         // (owner = comp+0x10, CheckPtr'd per the project's raw-owner-pointer convention —

@@ -45,6 +45,7 @@
 #include "Entity/CitizenBehavior.h"
 #include "Game/Map.h"
 #include "Game/WorkScheduler.h"
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode (Pickup_FindTypeWork)
 #include "Game/ProfessionList.h"
 #include "collection/Collection.h"
 
@@ -147,17 +148,9 @@ struct PickupCandidate {
 };
 static_assert(sizeof(PickupCandidate) == 0x20, "PickupCandidate must be 32 bytes");
 
-// One element of the WorkScheduler's per-type work trees (+0x30, 0x10 stride): the
-// work type id and the posted Work (node 0x30: left +0x18, right +0x20, read by the
+// The WorkScheduler's per-type work trees (+0x30, 0x10 stride) hold WorkSchedulerIdNode
+// (Game/WorkSchedulerNodes.h: key +0x00, work +0x08, left +0x18, right +0x20, read by the
 // descent at 0x1400f33b0).
-struct PickupWorkEntry {
-    int32_t typeId;      // +0x00 the key
-    int32_t _pad04;
-    Work*   work;        // +0x08
-};
-using PickupWorkNode = Collection::Set<PickupWorkEntry>::Node;
-static_assert(offsetof(PickupWorkNode, left) == 0x18, "work tree node left @ +0x18");
-static_assert(offsetof(PickupWorkNode, right) == 0x20, "work tree node right @ +0x20");
 
 // 0x14002c070 is MSVC's inlined std::sort over these 32-byte records, ordering
 // ascending on the int32 at +0x08 (distance): median-of-3 introsort with an
@@ -215,17 +208,16 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
 }
 
 // The per-type Pickup work in the WorkScheduler's first tree (+0x30), by type id
-// (the descent retail inlines twice). (WorkSchedulerTree::root is void* in
-// WorkScheduler.h: LEFT.)
+// (the descent retail inlines twice): WorkSchedulerIdNode, key = the type id.
 static Work* Pickup_FindTypeWork(WorkScheduler* scheduler, int typeId) {
-    PickupWorkNode* node = (PickupWorkNode*)scheduler->trees[0].root;   // LEFT: Game/WorkScheduler.h (COMP-8) WorkSchedulerTree::root is untyped
+    const WorkSchedulerIdNode* node = scheduler->trees[0].root;
     while (node != nullptr) {
-        if (typeId < node->element.typeId) {
+        if (typeId < node->key) {
             node = node->left;
-        } else if (typeId > node->element.typeId) {
+        } else if (typeId > node->key) {
             node = node->right;
         } else {
-            return node->element.work;
+            return node->work.Get();
         }
     }
     return nullptr;
@@ -269,7 +261,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     StorageComponent* storageIBP = citizen->_entity->FindComponent<StorageComponent>();
     int cap = storageIBP->capacity;
     // (0x14012cf10 takes the storage as an integer: LEFT)
-    int freeCap = cap - static_cast<int>(CitizenComp_StorageComponent_QueryCount(reinterpret_cast<int64_t>(storageIBP)));   // LEFT: SIG CitizenComp_StorageComponent_QueryCount
+    int freeCap = cap - static_cast<int>(CitizenComp_StorageComponent_QueryCount(storageIBP));
 
     // desc+0x48 = per-unit size, rawMat+0x28 = amount in the pile. (The original
     // dereferences desc unguarded here; kept faithful -- desc is non-null whenever

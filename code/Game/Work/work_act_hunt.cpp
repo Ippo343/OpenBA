@@ -93,12 +93,10 @@ static inline void  WAH_Append(void* list, const ::Object::InternalPtr<Action>* 
 //   else          : append MoveTo(family, Slow(1), 0, param_4, 0xe1f, 0, speed=DAT_140172280(-1.0))
 //   HuntAnimal(entityInner=*param_1, innerVal=*param_3) -> stored as the chain link
 //                          (+0x10) of the stack's running action (NOT appended)
-void WorkAct_HuntWorkCtor_bbbc0(void* citizenIBP, uint32_t workId, int64_t* targetInnerPtr,
+void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t workId, HuntComponent* const* huntRef,
                                 float* worldPos, float performWorkTime, char selectMoveTo) {
 
-    // LEFT: the outside callers (WORK-b) hand the citizen reference untyped.
-    CitizenComponent* citizen = *reinterpret_cast<CitizenComponent**>(citizenIBP);   // LEFT: SIG WorkAct_HuntWorkCtor_bbbc0
-    HuntComponent* const* huntRef = reinterpret_cast<HuntComponent* const*>(targetInnerPtr);   // LEFT: SIG WorkAct_HuntWorkCtor_bbbc0 (param_3 is the hunt's InternalPtr)
+    CitizenComponent* citizen = *citizenIBP;
     // --- the action stack = character + 0x48 ---  (disasm 0x1400bbbf3..0x1400bbc17)
     CharacterComponent* character = citizen->character;
     WorkBase_TaskListCleanup_c5400(&character->actions);

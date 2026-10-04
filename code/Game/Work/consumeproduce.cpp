@@ -327,7 +327,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     ConsumeProduceComponent* smComp2 = field_10->FindComponent<ConsumeProduceComponent>();
 
     // Check produce threshold
-    uint64_t canProduce = WorkLeaf_ConsumeProduce_93a0(reinterpret_cast<uintptr_t>(smComp2));   // LEFT: SIG WorkLeaf_ConsumeProduce_93a0
+    uint64_t canProduce = WorkLeaf_ConsumeProduce_93a0(smComp2);
     // [CPWork] the gate that decides whether the tavern is allowed to make more at
     // all (retail 0x1401193a0 -- a stock-vs-limit test against the "Alcohol Limit 500"
     // the panel shows). Printed on CHANGE only; a permanent 0 here means the work runs
@@ -529,11 +529,14 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                             uintptr_t destEntity = foundEntity;
                             CitizenComponent* destEntityRef = *citizenIBP;
 
+                            // The hidden return slot: retail reuses the town-list slot, whose
+                            // value is dead past this call; the tree gives the slot its own local.
+                            ::Object::InternalPtr<Action> pickup;
                             WorkAct_GatherRawMatCtor_bf790(
-                                &worldEntityList, &destEntityRef,
-                                field_20, &destEntity,
-                                searchPos, reinterpret_cast<void**>(&entityRef), terrainPos,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                                (int64_t)matEntity, available, slot, 0, '\x01', 0, 0);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                &pickup, &destEntityRef,
+                                field_20, reinterpret_cast<ComponentEntity* const*>(&destEntity),   // LEFT: row 260 (the 8-byte slot doubles as the float[3] position out)
+                                searchPos, &entityRef, terrainPos,
+                                matEntity, available, slot, 0, '\x01', 0, 0);
 
                             int priority = field_20;
                             return FinalizeAction(this, citizenIBP, &destEntityRef, priority, slot);
@@ -623,11 +626,14 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                         // call at 0x1400e83f4 passes.
                                         CitizenComponent* pathCitizen = *citizenIBP;
 
+                                        // The hidden return slot: retail reuses foundStorage's
+                                        // slot (dead past this call); the tree gives it its own local.
+                                        ::Object::InternalPtr<Action> pickup;
                                         WorkAct_GatherRawMatCtor_bf790(
-                                            &foundStorage, &pathCitizen,
-                                            field_20, reinterpret_cast<uint64_t*>(&pathSrc),   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                                            fetchPos, reinterpret_cast<void**>(&fetchDest), searchPos2,   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
-                                            (int64_t)matEntity2, -1, slot, 1, '\0', 0, 0);   // LEFT: SIG WorkAct_GatherRawMatCtor_bf790
+                                            &pickup, &pathCitizen,
+                                            field_20, &pathSrc,
+                                            fetchPos, &fetchDest, searchPos2,
+                                            matEntity2, -1, slot, 1, '\0', 0, 0);
 
                                         int priority2 = field_20;
                                         return FinalizeAction(this, citizenIBP, &fetchDest, priority2, slot);
@@ -799,8 +805,8 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     &workEntityRef,
                     producePos,
                     produceHeading[0],
-                    reinterpret_cast<int64_t>(field_10->_description),   // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
-                    (uint64_t)recipe->product,   // +0x10  // LEFT: SIG WorkAct_ConsumeProduceCtor_bef70
+                    field_10->_description,
+                    recipe->product,   // +0x10
                     (uint32_t)canFinish,
                     &actionPriority,
                     (uint32_t)field_54,
@@ -851,7 +857,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     // The !depleted && !canProduce path (the goto above) still reaches b310, since
     // canProduce == 0 there — which is retail's intent: nothing to make, so stand down.
     if ((char)canProduce == '\0') {
-        WorkLeaf_ConsumeProduce_b310(reinterpret_cast<uintptr_t>(smComp));   // LEFT: SIG WorkLeaf_ConsumeProduce_b310
+        WorkLeaf_ConsumeProduce_b310(smComp);
     }
 
     // Set active state = 3, disabled

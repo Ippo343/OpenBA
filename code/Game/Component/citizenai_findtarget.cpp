@@ -153,13 +153,11 @@ done:
 //   StorageLocationDescription sub-object: (found+0x18) -> base for IsDerivedFrom(+0x20 mask)
 //   if mask==0: Entity_FindComponent_Storage(found+0x10) -> *ptr +0x3c = mask
 // ============================================================
-int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint32_t param_3,
-                                       uint32_t param_4, int64_t* param_5, float* param_6,
-                                       uint32_t param_7) {
-    // (B4 P2 CAI-2: param_1 is the CitizenBehavior every caller passes, GameUpdateLoop +0xF0:
-    //  [0]/[1] its +0x00 list, [2]/[3] its +0x10 list; param_2 holds a ComponentEntity*.)
-    CitizenBehavior* list = reinterpret_cast<CitizenBehavior*>(param_1);       // LEFT: SIG CitizenAI_FindBestTarget_dd30 (Component/exe_bodies.h, wave X)
-    ComponentEntity** found = reinterpret_cast<ComponentEntity**>(param_2);    // LEFT: SIG CitizenAI_FindBestTarget_dd30 (the out entity)
+CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3,
+                                               uint32_t param_4, ComponentDescription** param_5, float* param_6,
+                                               uint32_t param_7) {
+    // (B4 P2 CAI-2: list is the CitizenBehavior every caller passes, GameUpdateLoop +0xF0:
+    //  [0]/[1] its +0x00 list, [2]/[3] its +0x10 list.)
     EnsureInit();
 
     // (B4 P2 CAI-2: Map::PathDistance 0x14009f810, PickReachableCell 0x14004edb0,
@@ -223,9 +221,9 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
 
             if (iVar15cost < local_a8_best) {
                 local_90 = local_a0;
-                int64_t local_88 = 0;
+                ComponentDescription* local_88 = nullptr;
                 CitizenComp_Entity_impl_ef40(local_80, &local_88, &local_90, param_7);  // pick free slot
-                if (local_88 != 0) {
+                if (local_88 != nullptr) {
                     uint32_t newFlag = local_98_flag & 0xff;
                     if (bVar5) newFlag = 1;
                     local_98_flag = newFlag;
@@ -251,7 +249,7 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
 
         // If a "B"-qualified primary hit was found, return immediately (skip fallback).
         if ((static_cast<char>(local_98_flag) != '\0') && (*found != nullptr)) {
-            return param_1;
+            return list;
         }
     }
 
@@ -276,12 +274,12 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
 
             if (iVar8 < iVar15loop) {
                 local_58 = local_a0;
-                int64_t local_50[2] = {0, 0};
+                ComponentDescription* local_50[2] = {nullptr, nullptr};
                 CitizenComp_Entity_impl_ef40(local_80, local_50, &local_58, param_7);  // pick free slot
-                int64_t lVar21 = local_50[0];
-                if (local_50[0] != 0) {
+                ComponentDescription* lVar21 = local_50[0];
+                if (local_50[0] != nullptr) {
                     // -- find RawMaterialDescription (DWORD_1401c7cb8) in slot's list (lVar21+0x28) --
-                    ComponentDescription* slotDesc = reinterpret_cast<ComponentDescription*>(lVar21);   // LEFT: SIG CitizenComp_Entity_impl_ef40 (the slot out is int64_t*, wave X)
+                    ComponentDescription* slotDesc = lVar21;
                     RawMaterialDescription* pvVar12 = nullptr;
                     {
                         int n = slotDesc->_subDescCount;
@@ -389,6 +387,6 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
         } while (iVar20 < list->field_0x08);
     }
 
-    return param_1;
+    return list;
 }
 

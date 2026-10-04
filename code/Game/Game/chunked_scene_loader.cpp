@@ -64,8 +64,8 @@ void Init(MenuDialogLoopT* menuDltSelf) {
     }
 
     // Re-read menuScene/scene from MenuDLT struct fields (set by LoadSceneA1).
-    void* menuScene = menuDltSelf->_menuScene;   // +0xb90
-    void* scene = menuDltSelf->_scene;           // +0xba0
+    MenuScene* menuScene = menuDltSelf->_menuScene;   // +0xb90
+    Graphics::Scene* scene = menuDltSelf->_scene;     // +0xba0
 
     MenuDialogLoopT_PhaseB_InitState(&g_state, menuDltSelf, menuScene, scene);
     if (g_state.totalCount <= 0) {

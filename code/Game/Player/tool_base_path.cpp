@@ -167,16 +167,6 @@ bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t p
     return false;
 }
 
-// B4 FORWARD: 3 outside callers (Component/growthcomponent.cpp,
-// Component/spawncomponent.cpp, Work/foresterwork.cpp) pass the map as int*.
-bool PlayerPath_CharComp_f5d0(int* param_1, int param_2, int param_3, uint32_t param_4,
-                              float param_5, float param_6, float param_7,
-                              char param_8, char param_9, int64_t param_10) {
-    return PlayerPath_CharComp_f5d0(reinterpret_cast<Map*>(param_1),   // B4 FORWARD: the callers' spelling
-                                    param_2, param_3, param_4, param_5, param_6, param_7,
-                                    param_8, param_9,
-                                    reinterpret_cast<const ComponentDescription*>(param_10));   // B4 FORWARD
-}
 
 // ============================================================
 // RemovalTool::CanRemoveBuilding (0x140104670) — building-removal eligibility.

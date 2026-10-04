@@ -194,9 +194,9 @@ extern "C" void ActionStack_AbortForEntity_c52c0(ActionStack* stack, ComponentEn
 // count @+0xa8) — the same array citizen_employ_cascade.cpp and citizen_onremove.cpp
 // walk — and runs the abort above on each citizen's CitizenAIComponent action stack
 // (citizen+0x278, list at +0x48).
-extern "C" void TownMgr_AbortCitizenActionsFor_89e30(void* townMgr, ComponentEntity** pEntityIbp) {
+extern "C" void TownMgr_AbortCitizenActionsFor_89e30(CitizenBehavior* townMgr, ComponentEntity** pEntityIbp) {
     if (!townMgr || !pEntityIbp) return;
-    CitizenBehavior* tm = reinterpret_cast<CitizenBehavior*>(townMgr);   // LEFT: SIG TownMgr_AbortCitizenActionsFor_89e30 (componententity.cpp declares it with void*)
+    CitizenBehavior* tm = townMgr;
     int n = tm->citizenCount;
     if (n <= 0) return;
     CitizenComponent** base = tm->citizens;
@@ -370,8 +370,7 @@ char DestroyComponent::State6Enter() {
     // empty the storage outright (the goods burn; state 4's haul-away never runs).
     if (FindOn<StorageComponent>(_entity) != nullptr) {
         if (GameUpdateLoop::_singleton != nullptr) {
-            // GameUpdateLoop::m_citizenList (+0xf0) is still void* (GAME-a): LEFT.
-            void* townMgr = GameUpdateLoop::_singleton->m_citizenList;
+            CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
             ComponentEntity* entityCopy = _entity;
             if (townMgr) TownMgr_AbortCitizenActionsFor_89e30(townMgr, &entityCopy);
         }

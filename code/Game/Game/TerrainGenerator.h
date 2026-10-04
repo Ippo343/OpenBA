@@ -22,6 +22,8 @@
 #include "system/String.h"   // System::String members
 #include "Object/exe_type.h"
 
+namespace UI { class StringTable; }
+
 struct TerrainSizeRow;   // Game/TerrainHeightfield.h
 
 class TerrainGenerator final : public Object::External {
@@ -39,7 +41,7 @@ public:
     virtual Object::External* Construct();                        // [8] 0x1400205d0
 
 public:
-    void*    _field20;           // +0x20: ExternalPtr (serialized via FUN_14000bf40)
+    UI::StringTable* _field20;   // +0x20: ExternalPtr<StringTable> (serialized via FUN_14000bf40, as Map / Climate)
     System::String _field28;     // +0x28: String (ctor 0x1400b1810 stores 0; dtor 0x140020630 ~String)
     uint8_t  _field30;           // +0x30: 1 (bool, enabled?)
     uint8_t  _pad31[7];          // +0x31: padding

@@ -65,13 +65,6 @@
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 #include "audio/SoundEffect.h" // Audio::SoundEffect : Object::External (the menu music)
 
-// ============================================================
-// The loop handed as `void*`
-// ============================================================
-// LEFT: chunked_scene_loader.cpp (STANDALONE) holds the menu loop as `void*`.
-static inline MenuDialogLoopT* Loop(void* self) {
-    return reinterpret_cast<MenuDialogLoopT*>(self);
-}
 
 // ============================================================
 // Constants from the original exe (.rdata)
@@ -258,11 +251,10 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
 // validates fn pointers + array bounds. Sets state->totalCount=0 (so
 // PhaseB_TickChunk early-exits) on any failure.
 void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
-                                      void* self, void* menuScene, void* scene) {
-    // LEFT: chunked_scene_loader.cpp (STANDALONE) hands all three as `void*`.
-    state->self           = Loop(self);
-    state->menuScene      = reinterpret_cast<MenuScene*>(menuScene);
-    state->scene          = reinterpret_cast<Graphics::Scene*>(scene);
+                                      MenuDialogLoopT* self, MenuScene* menuScene, Graphics::Scene* scene) {
+    state->self           = self;
+    state->menuScene      = menuScene;
+    state->scene          = scene;
     state->elemArr        = nullptr;
     state->meshArr        = nullptr;
     state->meshArrCount   = 0;
@@ -488,8 +480,7 @@ void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* ti
 // Standalone calls this from the Loading splash's Stub_Startup so the
 // MenuScene External + scene-graph fields are populated before the heavy
 // PhaseB chunked iteration starts.
-bool MenuDialogLoopT_LoadSceneA1(void* selfV) {
-    MenuDialogLoopT* self = Loop(selfV);
+bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
     // Required Runtime functions
     // B.3.5: SetMesh and Scene::AddGlobalObject are members now; B3R: the
     // Renderer / Scene / Time ctors are called by name.
@@ -656,8 +647,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* selfV) {
 // Thin wrapper around PhaseC for symmetry with A1. Standalone calls this
 // from ChunkedSceneLoader after the chunked PhaseB completes; DLL-mode
 // calls it from MenuDialogLoopT_LoadScene_PhaseA below.
-void MenuDialogLoopT_LoadSceneA3(void* selfV) {
-    MenuDialogLoopT* self = Loop(selfV);
+void MenuDialogLoopT_LoadSceneA3(MenuDialogLoopT* self) {
     MenuScene* menuScene = self->_menuScene;
     Graphics::Scene* gScene = self->_scene;
     if (!menuScene || !gScene) {

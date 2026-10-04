@@ -27,32 +27,25 @@ namespace UIFade {
 // The fields are UI::UserInterface's (ui/UserInterface.h): _fadeSpriteSheet
 // +0xE0, _fadeSpriteIndex +0xE8, _fadeVelocity +0xF0 (the rate, +-1.0 or 0.0),
 // _fadeAmount +0xF4 (the alpha), _fadeColor +0xF8 — confirmed via Runtime
-// 0x18011F500 (SetFullscreenFade) and 0x180121890 (Draw). The callers
-// (standalone's loop stubs) hold the UI as `void*`: each entry takes one view.
-static const UI::UserInterface* UiOf(const void* userInterface) {
-    return reinterpret_cast<const UI::UserInterface*>(userInterface);   // LEFT: void* parameter of the STANDALONE loop stubs
-}
-static UI::UserInterface* UiOf(void* userInterface) {
-    return reinterpret_cast<UI::UserInterface*>(userInterface);         // LEFT: void* parameter of the STANDALONE loop stubs
-}
+// 0x18011F500 (SetFullscreenFade) and 0x180121890 (Draw).
 
 // The fade sprite is GameContainer::spriteWhite (+0xA8, the 16-byte UI::Sprite
 // SetFullscreenFadeSprite expects; optionsdialog.cpp copies the same two qwords).
 constexpr uintptr_t kKeyMapFadeSpriteOffset = 0xA8;   // (for the log line)
 
-float GetCurrentAlpha(const void* userInterface) {
+float GetCurrentAlpha(const UI::UserInterface* userInterface) {
     if (!userInterface) return 0.0f;
-    return UiOf(userInterface)->_fadeAmount;
+    return userInterface->_fadeAmount;
 }
 
-float GetCurrentRate(const void* userInterface) {
+float GetCurrentRate(const UI::UserInterface* userInterface) {
     if (!userInterface) return 0.0f;
-    return UiOf(userInterface)->_fadeVelocity;
+    return userInterface->_fadeVelocity;
 }
 
-bool EnsureFadeSprite(void* userInterface) {
+bool EnsureFadeSprite(UI::UserInterface* userInterface) {
     if (!userInterface) return false;
-    UI::UserInterface* ui = UiOf(userInterface);
+    UI::UserInterface* ui = userInterface;
 
     // Skip if already non-zero (idempotent — Startup may run multiple times
     // across loops).
@@ -84,37 +77,37 @@ bool EnsureFadeSprite(void* userInterface) {
     return installedSheet != nullptr;
 }
 
-void TriggerReveal(void* userInterface, uint32_t color) {
+void TriggerReveal(UI::UserInterface* userInterface, uint32_t color) {
     if (!userInterface) return;
 
     // 1. Instant set — alpha jumps to 1.0 (opaque) so the very next Draw
     //    fully covers whatever the loop renders behind it.
-    UiOf(userInterface)->SetFullscreenFade(/*fadeIn=*/true,  color, /*instant=*/true);
+    userInterface->SetFullscreenFade(/*fadeIn=*/true,  color, /*instant=*/true);
     // 2. Animated reverse — rate becomes -1.0; UI::Update advances alpha
     //    from 1.0 toward 0.0 over ~0.25s, revealing the loop.
-    UiOf(userInterface)->SetFullscreenFade(/*fadeIn=*/false, color, /*instant=*/false);
+    userInterface->SetFullscreenFade(/*fadeIn=*/false, color, /*instant=*/false);
 
     printf("[UIFade::TriggerReveal] ui=%p color=0x%08x alpha=%.3f rate=%.3f\n",
            userInterface, color, GetCurrentAlpha(userInterface), GetCurrentRate(userInterface));
 }
 
-void TriggerFadeIn(void* userInterface, uint32_t color) {
+void TriggerFadeIn(UI::UserInterface* userInterface, uint32_t color) {
     if (!userInterface) return;
     // Animated forward — rate becomes +1.0; UI::Update advances alpha from
     // current value toward 1.0 over ~0.25s. Caller typically sequences this
     // before transitioning to the next loop, so the screen fades to black
     // first.
-    UiOf(userInterface)->SetFullscreenFade(/*fadeIn=*/true, color, /*instant=*/false);
+    userInterface->SetFullscreenFade(/*fadeIn=*/true, color, /*instant=*/false);
     printf("[UIFade::TriggerFadeIn] ui=%p color=0x%08x alpha=%.3f rate=%.3f\n",
            userInterface, color, GetCurrentAlpha(userInterface), GetCurrentRate(userInterface));
 }
 
-void LogState([[maybe_unused]] const char* tag, const void* userInterface) {
+void LogState([[maybe_unused]] const char* tag, const UI::UserInterface* userInterface) {
     if (!userInterface) return;
     [[maybe_unused]] float alpha = GetCurrentAlpha(userInterface);
     [[maybe_unused]] float rate  = GetCurrentRate(userInterface);
-    [[maybe_unused]] void* sheet = UiOf(userInterface)->_fadeSpriteSheet;
-    [[maybe_unused]] int32_t idx = UiOf(userInterface)->_fadeSpriteIndex;
+    [[maybe_unused]] void* sheet = userInterface->_fadeSpriteSheet;
+    [[maybe_unused]] int32_t idx = userInterface->_fadeSpriteIndex;
     printf("[UIFade::%s] ui=%p alpha=%.3f rate=%.3f sheet=%p idx=%d\n",
            (tag ? tag : ""), userInterface, alpha, rate, sheet, idx);
 }

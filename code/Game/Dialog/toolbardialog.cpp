@@ -90,7 +90,7 @@
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
-extern void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName);
+#include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern void* Debug_Sprite_DefaultCtor(void* retval);
 extern bool Debug_Sprite_IsValid(void* sprite);
 extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
@@ -585,17 +585,6 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
     return dialogInst;
 }
 
-// B4 FORWARD: 2 outside caller(s) (Player/tool_activation_standalone.cpp,
-// Tutorial/tutorialsetupdialog.cpp). Retail entry point for FUN_140101a80:
-//   arg1 = the tool manager at gameWorld+0x120
-//   arg2 = InternalPtr<DialogInstance>* retval (non-trivial return)
-//   arg3 = ComponentDescription*
-extern "C" void* Toolbar_Utility_Reg(void* gameSubsys, void* retBuf, uint64_t param) {
-    UI::DialogInstance* dialog = reinterpret_cast<PlayerToolManager*>(gameSubsys)->ToggleUtilityDialog(
-        reinterpret_cast<ComponentDescription*>(param));
-    *reinterpret_cast<UI::DialogInstance**>(retBuf) = dialog;
-    return retBuf;   // retail returns the retval pointer it was handed
-}
 
 // Captures the last DialogInstance created by ToggleUtilityDialog so the harness
 // can reach its controllers (e.g. drive MapUI::SetupImage after open).
@@ -1001,7 +990,7 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
                             *reinterpret_cast<const System::String*>(&item->_field30));
 #ifdef _DEBUG
         UI::Sprite uiSprite;
-        Debug_Sprite_Ctor(&uiSprite, reinterpret_cast<uint64_t>(item->_field28), &item->_field38);
+        Debug_Sprite_Ctor(&uiSprite, item->_field28, reinterpret_cast<const System::String*>(&item->_field38));   // LEFT: H5 the String is raw storage, as on the release arm
 #else
         UI::Sprite uiSprite(Object::ExternalPtr<UI::SpriteSheet>(item->_field28),
                             *reinterpret_cast<const System::String*>(&item->_field38));
@@ -1039,9 +1028,8 @@ ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog*
 
                     // Override the sprite (the description's sheet and _name)
 #ifdef _DEBUG
-                    // LEFT (debug arm): Debug_Sprite_Ctor takes the sheet as uint64_t.
-                    UI::Sprite overrideSpr;
-                    Debug_Sprite_Ctor(&overrideSpr, reinterpret_cast<uint64_t>(buildReqComp->_spriteSheet),
+                                        UI::Sprite overrideSpr;
+                    Debug_Sprite_Ctor(&overrideSpr, buildReqComp->_spriteSheet,
                                       &buildReqComp->_name);
 #else
                     UI::Sprite overrideSpr(Object::ExternalPtr<UI::SpriteSheet>(buildReqComp->_spriteSheet),
@@ -1166,14 +1154,15 @@ found_speed:
 // B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp). The door at 0x1400b9910
 // (fn_ToolbarDialog_Ctor in GameUpdateLoop::Startup): placement-news the class.
 // parentPtr is an InternalPtr* the ctor copies, as retail does.
-ToolbarDialog* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
-                                       void* parentPtr, void* toolbarData) {
+ToolbarDialog* ToolbarDialog_Ctor_Impl(void* self, UI::UserInterface* userInterface, const void* dialog,
+                                       const Object::InternalPtr<UI::DialogInstance>* parentPtr,
+                                       const Toolbar* toolbarData) {
     Object::InternalPtr<UI::DialogInstance> parent;
     if (parentPtr)
-        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentPtr);
-    return ::new (self) ToolbarDialog(static_cast<UI::UserInterface*>(userInterface),
-                                      static_cast<const UI::Dialog*>(dialog), parent,
-                                      reinterpret_cast<const Toolbar*>(toolbarData));
+        parent = *parentPtr;
+    return ::new (self) ToolbarDialog(userInterface,
+                                      static_cast<const UI::Dialog*>(dialog), parent,   // LEFT: the caller holds the found resource as void* (ExternalList::Find's _ptr, GameUpdateLoop::Startup)
+                                      toolbarData);
 }
 
 // ============================================================

@@ -119,9 +119,7 @@ static void PopulateGeneratorCombo(UI::ComboElement* combo, ::Object::ExternalLi
         // Check the visibility flag
         if (typed && typed->*visible != 0) {
             // UI::String from the resource's name: its StringTable (+0x20) and name key (+0x28).
-            // LEFT: the generator headers declare both as void* (block GAME).
-            UI::String uiStr(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(typed->_field20)),
-                             *reinterpret_cast<const System::String*>(&typed->_field28));
+            UI::String uiStr(Object::ExternalPtr<UI::StringTable>(typed->_field20), typed->_field28);
 
             // Convert UI::String to System::String
             System::String sysStr(uiStr.operator System::String());
@@ -272,17 +270,14 @@ void NewGameDialog::UpdateDescription() {
     }
 
     // UI::String from the description: StringTable (+0x20), description key (+0x30).
-    // LEFT: MapGenerator declares both as void* (block GAME).
-    UI::String uiStr(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(mapGen->_field20)),
-                     *reinterpret_cast<const System::String*>(&mapGen->_field30));
+    UI::String uiStr(Object::ExternalPtr<UI::StringTable>(mapGen->_field20), mapGen->_field30);
 
     textDescription->SetText(&uiStr);
 }
 
 // The start condition's name key (MapGenerator +0x28), for the log lines.
-// LEFT: MapGenerator declares the String as void* (block GAME).
 static const char* GeneratorName(const ::Object::External* res) {
-    return reinterpret_cast<const System::String*>(&static_cast<const MapGenerator*>(res)->_field28)->_data;
+    return static_cast<const MapGenerator*>(res)->_field28._data;
 }
 
 // ============================================================
