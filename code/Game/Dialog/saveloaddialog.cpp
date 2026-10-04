@@ -254,10 +254,9 @@ void SaveLoadDialog::PopulateFileList() {
                         static_cast<const Graphics::Material*>(matExternal))));
 
             // Add texture: "diffuse" -> saveInfo's ImageBuffer at +0x18
-            // LEFT: AddTexture takes the RtSystem::String POD mirror.
             System::String diffuseStr("diffuse");
             matInstFinal->AddTexture(
-                *reinterpret_cast<const RtSystem::String*>(&diffuseStr),  // LEFT: POD RtSystem::String: MaterialInstance::AddTexture takes the POD mirror (runtime header outside this set)
+                diffuseStr,
                 Object::ExternalPtr<Video::ImageBuffer>(saveInfo.imageBuffer));
 
             matInstFinal->BuildParameters();

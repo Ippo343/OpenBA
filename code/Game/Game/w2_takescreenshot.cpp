@@ -158,8 +158,7 @@ void GameUpdateLoop::TakeScreenshot() {
         System::String full(base.AsString() + suffix);
         path = full;
         ++index;
-    } while (fileSys->Exists(
-                 *reinterpret_cast<const RtSystem::Filename*>(&path)));   // LEFT: Exists takes the RtSystem::Filename mirror (R-IO's signature)
+    } while (fileSys->Exists(path));
 
     // --- Read the pixels back and write the file -----------------------------
     unsigned int* pixels = static_cast<unsigned int*>(
