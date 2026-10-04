@@ -65,7 +65,7 @@ public:
     virtual uintptr_t* CreateWork(uintptr_t* out) = 0;              // [18] _purecall
     virtual char  OnEnterProducing() { return 0; }                  // [19] 0x140006b10
     virtual char  OnExitProducing() { return 0; }                   // [20] 0x140006b10
-    virtual char  ProduceTick(void* time) { (void)time; return 0; } // [21] 0x140006b10
+    virtual char  ProduceTick(const System::Time* time) { (void)time; return 0; } // [21] 0x140006b10
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the shared RP controller (D6)

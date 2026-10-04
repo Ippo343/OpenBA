@@ -74,7 +74,7 @@ bool LabelDescription::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(*stream, 0);  // ??0Serializer (0x1800b9960) inlined
     IO::ReaderWriter* rw = ser._readerWriter;
 
-    RtObject_ExternalPtrSerialize_SpriteSheet(ExtField(&_spriteSheet), IoSer(&ser)); // 1800d287b ExternalPtr<SpriteSheet>
+    Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet); // 1800d287b ExternalPtr<SpriteSheet>
     StringSerialize(&_spriteName, &ser);  // 1800d288c System::String
 
     rw->SerializeUInt(_word90, nullptr);                     // 1800d28a3

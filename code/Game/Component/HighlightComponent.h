@@ -51,7 +51,7 @@ public:
     ~HighlightComponent() override = default;                     // [0]  0x140007040
     void Persist(IO::Stream& stream) override;                          // [3]  0x14004c880
     void OnRemove() override;                                     // [7]  = Component's in retail; TREE DIVERGENCE
-    void Tick(void* time) override;                               // [8]  0x14004c850 PORT GAP
+    void Tick(const System::Time* time) override;                               // [8]  0x14004c850 PORT GAP
     void OnEvent(int eventId) override;                           // [12] 0x14004c870 PORT GAP
 
     // PUBLIC while the ported bodies read them (B38 decision 1).

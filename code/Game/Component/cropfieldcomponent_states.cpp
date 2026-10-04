@@ -310,7 +310,7 @@ char CropFieldComponent::State2Enter() {
 
 // ── event 3 on state 2 — 0x14011a7b0 — the panel's PLANT command ──────────────────
 // Publish accepting, then request state 9.
-char CropFieldComponent::Event3Plant(void* sm) {
+char CropFieldComponent::Event3Plant(StateMachine* sm) {
     PushAccepting();
     ::ControllerLive::RequestStateTransition(sm, 9);
     return 1;
@@ -331,7 +331,7 @@ char CropFieldComponent::Event3Plant(void* sm) {
 // silently drop the entire v < 3 arm and the field would only ever plant late in the
 // year. Kept as an explicit unsigned cast so the behaviour cannot drift.
 // The year clock is GameUpdateLoop::m_dayCounter (Calendar), the temperature m_weather's.
-char CropFieldComponent::State2PerFrame(void* sm) {
+char CropFieldComponent::State2PerFrame(StateMachine* sm) {
     if (!workEnabled) return 1;
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 
@@ -440,7 +440,7 @@ char CropFieldComponent::State9Enter() {
 
 // ── state 9 per-frame — 0x14011a1e0 ───────────────────────────────────────────────
 // Refresh the slots, then: all done -> 21; all either growing or done -> 10 (tend).
-char CropFieldComponent::State9PerFrame(void* sm) {
+char CropFieldComponent::State9PerFrame(StateMachine* sm) {
     ValidateEntityRefs();
     const int total   = slots.count;
     const int growing = CountSlots(this, 1);
@@ -478,7 +478,7 @@ char CropFieldComponent::State10Update() {
 
 // ── event 4 on state 10 — 0x140119f00 — the panel's HARVEST command ───────────────
 // It reads no field of the component (RCX unused): it stays a free function (B1).
-static char CropField_Event4Harvest(CropFieldComponent* /*self*/, void* sm) {
+static char CropField_Event4Harvest(CropFieldComponent* /*self*/, StateMachine* sm) {
     std::fprintf(stderr, "[CropXition] event 4 -> STATE 11 HARVEST\n");
     std::fflush(stderr);
     ::ControllerLive::RequestStateTransition(sm, 11);
@@ -493,7 +493,7 @@ static char CropField_Event4Harvest(CropFieldComponent* /*self*/, void* sm) {
 // The (unsigned)(month - 6) > 5 test is again retail's "outside [6,11]" idiom — true
 // for month < 6 via underflow as well as for month > 11.
 // The year clock is GameUpdateLoop::m_dayCounter (Calendar), the temperature m_weather's.
-char CropFieldComponent::State10PerFrame(void* sm) {
+char CropFieldComponent::State10PerFrame(StateMachine* sm) {
     ValidateEntityRefs();
 
     const int total = slots.count;
@@ -535,7 +535,7 @@ char CropFieldComponent::State11Enter() {
 
 // ── state 11 per-frame — 0x140119d80 ──────────────────────────────────────────────
 // When every slot reads done, release the work slot and go to 21.
-char CropFieldComponent::State11PerFrame(void* sm) {
+char CropFieldComponent::State11PerFrame(StateMachine* sm) {
     ValidateEntityRefs();
     if (CountSlots(this, 2) == slots.count) {
         CF_ReleaseWorkSlot(this);
@@ -546,16 +546,16 @@ char CropFieldComponent::State11PerFrame(void* sm) {
 
 // The table holds one-line adapters: the dispatcher hands the handler `[node+0x18]`
 // (the CropFieldComponent) and the state machine.
-static char CropField_State2Enter(CropFieldComponent* c, void* /*sm*/)                 { return c->State2Enter(); }        // 0x14011a920
-static char CropField_Event3Plant(CropFieldComponent* c, void* sm)       { return c->Event3Plant(sm); }     // 0x14011a7b0
-static char CropField_State2PerFrame(CropFieldComponent* c, void* sm, void* /*time*/)    { return c->State2PerFrame(sm); }  // 0x14011a860
-static char CropField_State9Enter(CropFieldComponent* c, void* /*sm*/)                 { return c->State9Enter(); }       // 0x14011a310
-static char CropField_State9PerFrame(CropFieldComponent* c, void* sm, void* /*time*/)    { return c->State9PerFrame(sm); }  // 0x14011a1e0
-static char CropField_State10Enter(CropFieldComponent* c, void* /*sm*/)                { return c->State10Enter(); }      // 0x14011a100
-static char CropField_State10Update(CropFieldComponent* c, void* /*sm*/)               { return c->State10Update(); }     // 0x140119f70
-static char CropField_State10PerFrame(CropFieldComponent* c, void* sm, void* /*time*/)   { return c->State10PerFrame(sm); } // 0x140119fd0
-static char CropField_State11Enter(CropFieldComponent* c, void* /*sm*/)                { return c->State11Enter(); }      // 0x140119e60
-static char CropField_State11PerFrame(CropFieldComponent* c, void* sm, void* /*time*/)   { return c->State11PerFrame(sm); } // 0x140119d80
+static char CropField_State2Enter(CropFieldComponent* c, StateMachine* /*sm*/)                 { return c->State2Enter(); }        // 0x14011a920
+static char CropField_Event3Plant(CropFieldComponent* c, StateMachine* sm)       { return c->Event3Plant(sm); }     // 0x14011a7b0
+static char CropField_State2PerFrame(CropFieldComponent* c, StateMachine* sm, const System::Time* /*time*/)    { return c->State2PerFrame(sm); }  // 0x14011a860
+static char CropField_State9Enter(CropFieldComponent* c, StateMachine* /*sm*/)                 { return c->State9Enter(); }       // 0x14011a310
+static char CropField_State9PerFrame(CropFieldComponent* c, StateMachine* sm, const System::Time* /*time*/)    { return c->State9PerFrame(sm); }  // 0x14011a1e0
+static char CropField_State10Enter(CropFieldComponent* c, StateMachine* /*sm*/)                { return c->State10Enter(); }      // 0x14011a100
+static char CropField_State10Update(CropFieldComponent* c, StateMachine* /*sm*/)               { return c->State10Update(); }     // 0x140119f70
+static char CropField_State10PerFrame(CropFieldComponent* c, StateMachine* sm, const System::Time* /*time*/)   { return c->State10PerFrame(sm); } // 0x140119fd0
+static char CropField_State11Enter(CropFieldComponent* c, StateMachine* /*sm*/)                { return c->State11Enter(); }      // 0x140119e60
+static char CropField_State11PerFrame(CropFieldComponent* c, StateMachine* sm, const System::Time* /*time*/)   { return c->State11PerFrame(sm); } // 0x140119d80
 
 // Replica of the populator at 0x14011b150, in registration order. Order matters: it
 // fixes the state INDEX that StateMachine::Tick carries in its +0x09/+0x0a/+0x0b bytes.

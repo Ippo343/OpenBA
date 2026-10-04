@@ -83,7 +83,7 @@ public:
     void Persist(IO::Stream& stream) override;                          // [3]  0x14012bff0
     void Startup() override;                                      // [4]  0x14012bed0
     void OnRemove() override;                                     // [7]  0x14012beb0 TREE DIVERGENCE
-    void Tick(void* time) override;                               // [8]  0x14012bbd0
+    void Tick(const System::Time* time) override;                               // [8]  0x14012bbd0
     void Slot11() override;                                       // [11] 0x14012bf40 PORT GAP
 
     // 0x14012c3f0 (the tree's CitizenComp_FUN_14012c3f0): set / clear icon bit

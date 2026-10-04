@@ -105,7 +105,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
     // Step 2: Get game world singletons
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     Map* map = gameWorld->m_game;
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: the grid callees take the Map as its leading int
+    Map* mapGrid = map;
     System::Random* rng = gameWorld->m_random;
 
     // Step 3: Get citizen position (the model's translation, character +0x68)

@@ -662,7 +662,7 @@ int PickReachableCell(const Component* target, uint32_t param_2, float* param_3)
 
     // LEFT: 0x1400a00f0 / 0x140008830's C declarations (Work/exe_bodies.h, WORK-a's header)
     // take the Map as int*.
-    int* mapGrid = reinterpret_cast<int*>(map);   // LEFT: SIG WorkBase_ValidateCell_a00f0 / WorkBase_CalcDistance_8830 (Map as int*)
+    Map* mapGrid = map;
     uint64_t ok = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_2, static_cast<int>(cell));   // 0x1400a00f0
     if (static_cast<char>(ok) == '\0') return -1;
     return WorkBase_CalcDistance_8830(mapGrid, param_2, cell);   // 0x140008830

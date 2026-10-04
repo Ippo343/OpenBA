@@ -193,7 +193,7 @@ void MoveTo::Persist(IO::Stream& stream) {
 // Checks distance to destination. If close enough (< 0.05), returns 0 (arrived).
 // Otherwise sets up A* path and returns 1 (moving) or 2 (no path).
 // ============================================================
-int  MoveTo::AbstractImpl(void* actionStack) {
+int  MoveTo::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
     // Current character position (CharacterComponent -> ModelComponent translation)
@@ -275,7 +275,7 @@ int  MoveTo::AbstractImpl(void* actionStack) {
 // Vector3::Dot still evaluates (y, x, z) in that order, so the float result is
 // unchanged to the bit.
 
-int  MoveTo::Execute(void* actionStack, void* time) {
+int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
     (void)time;
 
     Map* map = GameUpdateLoop::_singleton->m_game;
@@ -482,7 +482,7 @@ int  MoveTo::Execute(void* actionStack, void* time) {
 // Queries the CharacterGrid for the nearest other character within 0.5; if one is found
 // at a higher address facing our way (dot > 0), sets +0x474.
 // ============================================================
-void MoveTo::Enter(void*, void*) {
+void MoveTo::Enter(void*, const System::Time*) {
     // Read current position
     const Math::Vector3& cur = character->modelComponent->transform.translation;
     float position[3];

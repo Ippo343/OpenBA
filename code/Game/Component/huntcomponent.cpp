@@ -57,8 +57,10 @@ void HuntComponent::Persist(IO::Stream& stream) {
 // update ticking; Fishing and Herbalist do neither. The slot receives the Time by
 // VALUE (an 8-byte tick count in a register): the base declares that register as
 // `void*`, so its bits are the tick count.
-void HuntComponent::Update(void* time) {
-    const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));   // LEFT: SIG Component::Update (Component.h): the elapsed ticks travel in the pointer slot (see above)
+void HuntComponent::Update(const System::Time* time) {
+    // LEFT: the tree reads the POINTER's bits as the tick count; retail 0x1401227c8 passes RDX
+    // (the Time*) to Time::AsSeconds (known_port_issues 14, row 511).
+    const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));   // LEFT: the pointer bits read as ticks (row 511)
 
     // The owner's workplace: its worker count is the speed numerator
     WorkPlaceComponent* workplace = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10

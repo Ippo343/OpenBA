@@ -2133,7 +2133,7 @@ void FireClearPlaceOver() {
 // null sm is safe). Verifies: (a) it runs crash-free over a real resource footprint,
 // (b) if the owner has a WorkComponent, a ClearArea work-action is posted to the
 // citizen work-scheduler (gw+0x118, primary count at sched[6]). Restores the footprint.
-extern "C" char ClearArea_State0Enter(void* data, void* sm);
+extern "C" char ClearArea_State0Enter(void* data, StateMachine* sm);
 void FireClearHarvest() {
     GameUpdateLoop* gw = GetGW();
     if (!gw) { fprintf(stderr, "[ClearHarvest] ERROR: gameWorld null\n"); return; }

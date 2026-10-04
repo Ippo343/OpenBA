@@ -182,7 +182,7 @@ UNIT_TEST(mia_component_own_slots_land_on_retail_indices) {
 // ===========================================================================
 void* g_miaSeenData = nullptr;
 void* g_miaSeenSm   = nullptr;
-char MiaEnterHandler(ClearResourceComponent* data, void* sm) { g_miaSeenData = data; g_miaSeenSm = sm; return 5; }
+char MiaEnterHandler(ClearResourceComponent* data, ::StateMachine* sm) { g_miaSeenData = data; g_miaSeenSm = sm; return 5; }
 
 UNIT_TEST(mia_controller_member_raw_dispatch) {
     using Ctl = ClearResourceComponent::StateController;

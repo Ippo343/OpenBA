@@ -84,11 +84,11 @@ public:
     // The state handlers of the controller's table. The node dispatchers call
     // them as `MOV RCX,[node+0x18]; JMP h` with RDX = the state machine: RCX is
     // the controller's back-pointer (+0x40), i.e. this component.
-    int  State1Enter(void* sm);                                   // 0x140108290
-    char State1Update(void* sm);                                  // 0x1401081e0 (per frame)
-    char State8Enter(void* sm);                                   // 0x140107ae0
-    char State8Update(void* sm);                                  // 0x1401076e0 (per frame)
-    char State8OneShot(void* sm);                                 // 0x140107600 (state 8 exit)
+    int  State1Enter(StateMachine* sm);                                   // 0x140108290
+    char State1Update(StateMachine* sm);                                  // 0x1401081e0 (per frame)
+    char State8Enter(StateMachine* sm);                                   // 0x140107ae0
+    char State8Update(StateMachine* sm);                                  // 0x1401076e0 (per frame)
+    char State8OneShot(StateMachine* sm);                                 // 0x140107600 (state 8 exit)
     char State8To2Action();                                       // 0x1401075e0 (the 8->2 action)
     void State8Finalize();                                        // 0x140107ff0
 

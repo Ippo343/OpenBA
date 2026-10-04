@@ -215,7 +215,7 @@ static void BC8_EnsureMeshList(BuildComponent* bc) {
 // ==================================================================================
 // State1Update — sub_81e0 (per-frame while in state 1). trans38Handler for state 1.
 // ==================================================================================
-char BuildComponent::State1Update(void* sm) {
+char BuildComponent::State1Update(StateMachine* sm) {
     if (BuildComponent_DemoGateSkip(this)) return 1;   // don't self-advance completed/non-demo
 
     bool haveAll = HaveAllMaterials();
@@ -242,7 +242,7 @@ char BuildComponent::State1Update(void* sm) {
 // entered directly (bypassing the gate, which is set precisely when this path runs).
 // See notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
 // ==================================================================================
-char BuildComponent::State8Enter(void* sm) {
+char BuildComponent::State8Enter(StateMachine* sm) {
     if (BuildComponent_DemoGateSkip(this)) return 1;
 
     uint8_t instant = 0;
@@ -346,7 +346,7 @@ char BuildComponent::State8Enter(void* sm) {
 // Advances mesh frames proportional to progress/target; on completion snaps to final +
 // requests 8 -> 2.
 // ==================================================================================
-char BuildComponent::State8Update(void* sm) {
+char BuildComponent::State8Update(StateMachine* sm) {
     if (BuildComponent_DemoGateSkip(this)) return 1;
 
     BuildDescription* matComp = BC8_MatComp(this);
@@ -439,7 +439,7 @@ char BuildComponent::State8Update(void* sm) {
 // Model mode 4 + remove site from the pending-build registry (townMgr+0xd0) + finalize
 // the site MeshInstance.
 // ==================================================================================
-char BuildComponent::State8OneShot(void* /*sm*/) {
+char BuildComponent::State8OneShot(StateMachine* /*sm*/) {
     if (BuildComponent_DemoGateSkip(this)) return 1;
 
     ModelComponentNotify_Reimpl(_entity, 4);

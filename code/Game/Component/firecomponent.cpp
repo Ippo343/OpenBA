@@ -88,8 +88,8 @@ void FireComponent::Persist(IO::Stream& stream) {
 // ============================================================
 // FireComponent::Update (vtable slot 9, 0x140048fb0)
 // ============================================================
-void FireComponent::Update(void* time) {
-    System::Time* pDeltaTime = static_cast<System::Time*>(time);
+void FireComponent::Update(const System::Time* time) {
+    const System::Time* pDeltaTime = time;
     if (!pDeltaTime) return;
 
     const int64_t dt = pDeltaTime->_ticks;

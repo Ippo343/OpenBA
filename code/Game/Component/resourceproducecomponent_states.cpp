@@ -71,7 +71,7 @@ using RPDispatch = ::ControllerLive::Dispatcher<RPCtrlTag>;
 // ── state 2 enter — 0x14012b1b0 ───────────────────────────────────────────────────
 // target = (self+0x48 == 0) ? 13 : 14, then request it. +0x48 is the produceFlag
 // (the panel's pause bit), zeroed by ResourceProduceComponent_Ctor.
-static char RP_State2Enter(ResourceProduceComponent* self, void* sm) {
+static char RP_State2Enter(ResourceProduceComponent* self, StateMachine* sm) {
     const bool paused = self->produceFlag;
     const int target = paused ? 14 : 13;
     ::ControllerLive::RequestStateTransition(sm, target);
@@ -85,7 +85,7 @@ static char RP_State2Enter(ResourceProduceComponent* self, void* sm) {
 //   CitizenAI_impl_ec60(workComp, 1, 0, &work)
 //   SetAccepting(wpc, 1)
 //   return self->vtable[19](self)            OnEnterProducing
-static char RP_State13Enter(ResourceProduceComponent* self, void* sm) {
+static char RP_State13Enter(ResourceProduceComponent* self, StateMachine* sm) {
     ResourceProduceComponent* rp = self;
 
     // Entry trace as well as the outcome trace below: without it a crash anywhere in
@@ -130,7 +130,7 @@ static char RP_State13Enter(ResourceProduceComponent* self, void* sm) {
 
 // ── state 14 enter — 0x14012ad20 ──────────────────────────────────────────────────
 // Release the held work slot if occupied, stop accepting, then OnExitProducing.
-static char RP_State14Enter(ResourceProduceComponent* self, void* /*sm*/) {
+static char RP_State14Enter(ResourceProduceComponent* self, StateMachine* /*sm*/) {
     ComponentEntity* owner = self->_entity;
 
     WorkComponent* workComp = owner->FindComponent<WorkComponent>();   // 0x140003050
@@ -170,7 +170,7 @@ static char RP_State14Enter(ResourceProduceComponent* self, void* /*sm*/) {
 // ── state 13 per-frame — 0x14012b190 ──────────────────────────────────────────────
 // A one-line forward to the component's ProduceTick (slot 21). The base leaves it a
 // no-op; FishingComponent is the only subclass in this wave that installs a real one.
-static char RP_State13PerFrame(ResourceProduceComponent* self, void* /*sm*/, void* time) {
+static char RP_State13PerFrame(ResourceProduceComponent* self, StateMachine* /*sm*/, const System::Time* time) {
     return self->ProduceTick(time);
 }
 
@@ -182,7 +182,7 @@ static void RP_Trans13to3(ResourceProduceComponent* self) {
 }
 
 // ── event 3 on state 13 — 0x14012adf0 — panel PAUSE ───────────────────────────────
-static char RP_Event3Pause(ResourceProduceComponent* /*self*/, void* sm) {
+static char RP_Event3Pause(ResourceProduceComponent* /*self*/, StateMachine* sm) {
     // Event 0 TOGGLES (13 -> pause, 14 -> resume), so a single stray post closes a
     // producing workplace: state 14 calls SetAccepting(false), which raises the
     // "work is disabled at this location" sign AND evicts the roster. Trace the
@@ -194,7 +194,7 @@ static char RP_Event3Pause(ResourceProduceComponent* /*self*/, void* sm) {
 // ── event 3 on state 14 — 0x14012acb0 — panel RESUME ──────────────────────────────
 // Retail gates the resume on +0x48 == 0: a component whose produceFlag is set stays
 // paused, so the event is a no-op rather than a toggle. Faithful, not a guard.
-static char RP_Event3Resume(ResourceProduceComponent* self, void* sm) {
+static char RP_Event3Resume(ResourceProduceComponent* self, StateMachine* sm) {
     const bool paused = self->produceFlag;
     if (!paused) {
         ::ControllerLive::RequestStateTransition(sm, 13);

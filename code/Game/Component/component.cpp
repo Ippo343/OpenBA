@@ -81,8 +81,8 @@ void     Component::Startup() {}                                   // 0x140118a5
 void     Component::Slot5() {}                                     // 0x140118a60
 void     Component::OnAdded() {}                                   // 0x140118820
 void     Component::OnRemove() {}                                  // 0x140118830
-void     Component::Tick(void*) {}                                 // 0x140118a70
-void     Component::Update(void*) {}                               // 0x140118a80
+void     Component::Tick(const System::Time*) {}                                 // 0x140118a70
+void     Component::Update(const System::Time*) {}                               // 0x140118a80
 void     Component::PostUpdate() {}                                // 0x140118a90
 void     Component::Slot11() {}                                    // 0x140118aa0
 void     Component::OnEvent(int) {}                                // 0x140118ab0

@@ -44,7 +44,7 @@ void CompleteRoad::Persist(IO::Stream& stream) {
 // Returns 0 (action complete).
 // ============================================================
 
-int CompleteRoad::AbstractImpl(void* actionStack) {                     // [4] 0x1400c5850
+int CompleteRoad::AbstractImpl(ActionStack* actionStack) {                     // [4] 0x1400c5850
     (void)actionStack;
     GameUpdateLoop::_singleton->m_game->FinishRoadCell(roadTileIndex, roadDirection, roadType);   // 0x14009c640
     return 0;

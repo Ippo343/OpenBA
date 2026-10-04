@@ -47,8 +47,8 @@ public:
     void Startup() override;                                      // [4] 0x140109a30
     void OnAdded() override;                                      // [6] 0x1401099c0 PORT GAP
     void OnRemove() override;                                     // [7] 0x140109980
-    void Tick(void* time) override;                               // [8] 0x1401094c0
-    void Update(void* time) override;                             // [9] 0x140109480
+    void Tick(const System::Time* time) override;                               // [8] 0x1401094c0
+    void Update(const System::Time* time) override;                             // [9] 0x140109480
 
     // ---- non-virtual members (retail addresses) ----
     // 0x14010a0e0: steer toward `target` under mover control (+0x28 = 1).

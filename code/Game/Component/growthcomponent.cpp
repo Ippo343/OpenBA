@@ -375,8 +375,8 @@ void GrowthComponent::OnRemove() {}
 
 // [9] 0x140120050. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
-void GrowthComponent::Update(void* time) {
-    System::Time* deltaTime = static_cast<System::Time*>(time);   // LEFT: SIG Component::Update (Component.h)
+void GrowthComponent::Update(const System::Time* time) {
+    const System::Time* deltaTime = time;
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless Startup ran. config(+0x38) and the resource

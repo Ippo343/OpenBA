@@ -496,7 +496,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                 if (foundEntity != 0) {
                     // Check passability
-                    uint64_t passable = WorkBase_ValidateCell_a00f0((int*)map, 0xe1f, (uint32_t)citizenCell,   // LEFT: SIG WorkBase_ValidateCell_a00f0
+                    uint64_t passable = WorkBase_ValidateCell_a00f0(map, 0xe1f, (uint32_t)citizenCell,
                                                              (uint32_t)field_28);
                     if ((char)passable == '\0') {
                         return 1;

@@ -116,7 +116,7 @@ void NaturalResourceComponent::Persist(IO::Stream& stream) {
 // [8] 0x140125c40. PORT GAP (retail 0x140125c40) — B38 D9: the body is ported
 // above (NaturalResourceComponent_OnRemove) but the tree's table never
 // installed it; the inert stub is kept here (see the NOT INSTALLED note above).
-void NaturalResourceComponent::Tick(void*) {}
+void NaturalResourceComponent::Tick(const System::Time*) {}
 
 // create 0x140036550: MemAlloc(0x30, 8), then the (inlined) ctor.
 void* NaturalResourceComponent::CreateNewObject() {

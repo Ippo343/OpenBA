@@ -55,6 +55,7 @@
 #include "../../types/io/Stream.h"                  // B.4: IO::Stream::_direction
 #include "../../types/object/External.h"
 #include "../../types/graphics/Material.h"   // the real Graphics::Material
+#include "../../types/video/VideoProgram.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 namespace {
 
@@ -131,10 +132,7 @@ bool Material::Serialize(IO::Stream& streamv) {
     if (ser._stream->_direction == IO::kReading) {
         rtcoll::RtColl_ArraySetSize_1800604e0(&_passes, n);             // 0x1800604e0
     }
-    // LEFT: External.h's POD spellings (the serializer and the element array).
-    RtObject_ExternalPtrArraySerialize_VideoProgram(                     // 0x1800605e0
-        reinterpret_cast<rt::io::Serializer*>(&ser), n,
-        reinterpret_cast<RtObject::External**>(_passes._data));
+    Object::ExternalPtr<Video::VideoProgram>::SerializeArray(ser, n, _passes._data);   // 0x1800605e0
 
     return true;                                         // ~Serializer: `if (rw) delete rw`
 }

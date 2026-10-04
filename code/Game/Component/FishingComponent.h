@@ -34,7 +34,7 @@ public:
     uintptr_t*  CreateWork(uintptr_t* out) override;                    // [18] 0x14011efe0
     char        OnEnterProducing() override;                            // [19] 0x14011ee80
     char        OnExitProducing() override;                             // [20] 0x14011ee50
-    char        ProduceTick(void* time) override;                       // [21] 0x14011ec10
+    char        ProduceTick(const System::Time* time) override;                      // [21] 0x14011ec10
 
     bool     fishingFlag;       // +0x50: the dock's coverage-registered latch (Persist 0x14011f050: Serialize(bool&))
     uint8_t  _pad51[3];         // +0x51

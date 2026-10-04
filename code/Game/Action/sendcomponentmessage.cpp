@@ -71,7 +71,7 @@ void SendComponentMessage::Persist(IO::Stream& stream) {
 // message handler virtual method (vtable+0x78).
 // Returns 0 on success, 2 if component not found.
 // ============================================================
-int  SendComponentMessage::AbstractImpl(void* actionStack) {
+int  SendComponentMessage::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
     uint32_t componentTypeId = _field30;

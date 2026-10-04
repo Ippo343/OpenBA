@@ -392,8 +392,8 @@ void SpawnComponent::Startup() {
 
 // [9] 0x140055ad0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
-void SpawnComponent::Update(void* timeV) {
-    const System::Time* pDeltaTime = reinterpret_cast<const System::Time*>(timeV);   // B.3.8 bridge (Update takes void*)  LEFT: SIG Component::Update(void* time)
+void SpawnComponent::Update(const System::Time* timeV) {
+    const System::Time* pDeltaTime = timeV;
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless the OnCreate/Startup ran. The per-entry timer array is

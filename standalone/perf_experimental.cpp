@@ -412,9 +412,8 @@ void SetIteration(int index, int count) {
     if (index == 0) ++s_batchSerial;   // new sim frame: every per-model skip count is stale
 }
 
-bool AnimBatchDecide(ModelComponent* model, const void* time, int64_t* timeOut) {
-    // LEFT: `time` is the void* Component::Update hands ModelComponent (COMP's signature).
-    const int64_t tick = *reinterpret_cast<const int64_t*>(time);   // LEFT: Component::Update's void* time (wave X sweep)
+bool AnimBatchDecide(ModelComponent* model, const System::Time* time, int64_t* timeOut) {
+    const int64_t tick = time->_ticks;
     *timeOut = tick;
     if (s_iterCount <= 1) return false;                       // speed 1: nothing to batch
     const bool last = (s_iterIndex >= s_iterCount - 1);

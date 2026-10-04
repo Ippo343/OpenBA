@@ -214,9 +214,9 @@ char AttendanceComponent::State3Enter() {
 // The table (controller_state_table.h) holds plain handler addresses called as
 // handler([node+0x18], sm, time): [node+0x18] is the controller's back-pointer,
 // this component, so each entry is a one-line adapter that calls the member.
-static char Attendance_State2Enter(AttendanceComponent* a, void* /*sm*/) { return a->State2Enter(); }   // 0x140043c90
-static char Attendance_State2Frame(AttendanceComponent* a, void* /*sm*/, void* /*time*/) { return a->State2Frame(); }   // 0x140043c30
-static char Attendance_State3Enter(AttendanceComponent* a, void* /*sm*/) { return a->State3Enter(); }   // 0x140043bd0
+static char Attendance_State2Enter(AttendanceComponent* a, StateMachine* /*sm*/) { return a->State2Enter(); }   // 0x140043c90
+static char Attendance_State2Frame(AttendanceComponent* a, StateMachine* /*sm*/, const System::Time* /*time*/) { return a->State2Frame(); }   // 0x140043c30
+static char Attendance_State3Enter(AttendanceComponent* a, StateMachine* /*sm*/) { return a->State3Enter(); }   // 0x140043bd0
 
 extern "C" void AttendanceCtrl_PopulateTable() {
     using namespace ::ControllerLive;

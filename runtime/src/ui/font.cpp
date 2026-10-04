@@ -76,6 +76,9 @@
 #include "../../types/object/External.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"
+#include "../../types/ui/CharacterSet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/ui/SpriteSheet.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
+#include "../../types/graphics/Material.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 #include <new>
 
 namespace {
@@ -281,9 +284,9 @@ bool Font::Serialize(IO::Stream& streamv) {
 
     // LEFT: the ExternalPtr<T>::Serialize thunks take RtObject::External** and
     // the rt::io::Serializer POD (External.h, block R-IO).
-    RtObject_ExternalPtrSerialize_CharacterSet(reinterpret_cast<RtObject::External**>(&_field28), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177a2  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-    RtObject_ExternalPtrSerialize_SpriteSheet(reinterpret_cast<RtObject::External**>(&_spriteSheet), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177af  ExternalPtr<SpriteSheet>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
-    RtObject_ExternalPtrSerialize_MaterialInstance(reinterpret_cast<RtObject::External**>(&_material), reinterpret_cast<rt::io::Serializer*>(&ser));                  // 1801177bc  ExternalPtr<MaterialInstance>  // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    Object::SerializeExternal<UI::CharacterSet>(ser, _field28);                  // 1801177a2
+    _spriteSheet.Serialize(ser);                  // 1801177af  ExternalPtr<SpriteSheet>
+    Object::SerializeExternal<Graphics::MaterialInstance>(ser, _material);                  // 1801177bc  ExternalPtr<MaterialInstance>
 
     const int32_t version = rw->GetVersion();                        // 1801177c8
 

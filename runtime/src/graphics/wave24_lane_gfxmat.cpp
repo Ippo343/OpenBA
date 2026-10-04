@@ -181,6 +181,7 @@
 #include "../../types/collection/Collection.h"     // rtcoll:: the array instantiations
 #include "../../types/object/External.h"           // the ExternalPtr serializers
 #include "../../types/system/String.h"
+#include "../../types/video/ImageBuffer.h"   // B.4 P2 X: T::GetTypeInfo() for Object::SerializeExternal<T>
 
 
 namespace {
@@ -353,12 +354,6 @@ namespace {
 // GFXMAT24_PROBE -- a define nothing in the tree sets, for a
 // tools/gfxmat24_probe that does not exist.
 //
-// LEFT: the ExternalPtr serializers take object's POD spellings (External.h),
-// so the Serializer is viewed once per call as `rt::io::Serializer`.
-inline rt::io::Serializer* PodSerializer(IO::Serializer& ser) {
-    return reinterpret_cast<rt::io::Serializer*>(&ser);
-}
-
 // 0x1800c9930, `System::String::Serialize`: each element's leading String.
 // LEFT: `MaterialTexture::name` / `MaterialConstant::_head` stay raw (a
 // `System::String` member would make the element non-trivial and change its
@@ -430,8 +425,7 @@ bool MaterialInstance::Serialize(IO::Stream& streamv) {
     IO::ReaderWriter* const rw = ser._readerWriter;
 
     // The ExternalPtr<Material> at +0x28 (0x180061100).
-    RtObject_ExternalPtrSerialize_Material(
-        reinterpret_cast<RtObject::External**>(&_material), PodSerializer(ser));  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
+    _material.Serialize(ser);
 
     // --- textures, stride 0x10 --------------------------------------------
     int32_t n = _textures._size;
@@ -443,8 +437,7 @@ bool MaterialInstance::Serialize(IO::Stream& streamv) {
         RtGraphics::MaterialTexture* p = _textures._data;
         for (int32_t i = 0; i < n; ++i) {
             SerString(&p->name, ser);                       // 0x1800c9930
-            RtObject_ExternalPtrSerialize_ImageBuffer(      // 0x18005d0f0
-                reinterpret_cast<RtObject::External**>(&p->image), PodSerializer(ser));  // LEFT: POD ExternalPtr serialize thunk takes RtObject::External** (External.h, R-OBJ / wave X)
+            Object::SerializeExternal<Video::ImageBuffer>(ser, p->image);   // 0x18005d0f0
             ++p;
             ++g_matSerTextures;
         }
@@ -512,10 +505,7 @@ void MeshInstance::Serialize(IO::Serializer& serializer) {
     if (serializer._stream->_direction == IO::kReading)
         rtcoll::RtColl_ArraySetSize_18005cc60(&_materials, n);     // +0xc8
 
-    // LEFT: External.h's POD spellings (the serializer and the element array).
-    RtObject_ExternalPtrArraySerialize_MaterialInstance(          // 0x18005d4a0
-        PodSerializer(serializer), n,
-        reinterpret_cast<RtObject::External**>(_materials._data));
+    Object::ExternalPtr<MaterialInstance>::SerializeArray(serializer, n, _materials._data);   // 0x18005d4a0
 }
 
 }  // namespace Graphics

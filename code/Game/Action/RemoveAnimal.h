@@ -27,7 +27,7 @@ public:
     explicit RemoveAnimal(ComponentEntity* animal);   // inlined in 0x1400bbea0 (action_pf_roots_drop.cpp)
     ~RemoveAnimal() override = default;                        // [0] 0x140022ee0
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400ca870
-    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400ca7f0
+    int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400ca7f0
     void CheckEntity() override;                               // [8] 0x1400ca760
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400ca720
 

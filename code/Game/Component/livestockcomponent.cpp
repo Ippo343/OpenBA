@@ -96,8 +96,8 @@ void LivestockComponent::OnRemove() {
 
 // [9] 0x140123b50. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af); the ported body takes the Time by value.
-void LivestockComponent::Update(void* time) {
-    const int64_t deltaTime = time ? reinterpret_cast<const System::Time*>(time)->_ticks : 0;   // LEFT: SIG Component::Update (Component.h)
+void LivestockComponent::Update(const System::Time* time) {
+    const int64_t deltaTime = time ? time->_ticks : 0;
 
     // Early out: no pasture
     if (pasture == nullptr) {

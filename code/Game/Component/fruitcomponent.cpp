@@ -119,8 +119,8 @@ void FruitComponent::Startup() {
 
 // [9] 0x140049de0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
-void FruitComponent::Update(void* time) {
-    const System::Time* pDeltaTime = static_cast<const System::Time*>(time);   // LEFT: SIG Component::Update (Component.h)
+void FruitComponent::Update(const System::Time* time) {
+    const System::Time* pDeltaTime = time;
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless Startup ran. _unk18(+0x18) is the FruitDescription set

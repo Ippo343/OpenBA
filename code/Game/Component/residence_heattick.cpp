@@ -66,7 +66,7 @@
 
 // The state-2 per-frame handler (the table's thunk in residencecomponent.cpp passes
 // the Time* dt of the Trans38 dispatcher tail-call).
-char ResidenceComponent::HeatTick(System::Time* dt) {
+char ResidenceComponent::HeatTick(const System::Time* dt) {
     // 1. Heat countdown -= frame dt (unconditional, every tick).
     if (dt) {   // a guard of the tree's
         heatRemaining._ticks -= dt->_ticks;

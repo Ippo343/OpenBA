@@ -32,7 +32,7 @@ public:
                       uint32_t placementFlags);   // 0x1400c71a0
     ~CreateRawMaterial() override = default;                   // [0] 0x140022350
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c6f30
-    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6b40
+    int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c6b40
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c6aa0
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----

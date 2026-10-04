@@ -29,7 +29,7 @@ public:
                           uint32_t cellIndex);                                 // 0x1400c6a20
     ~CreateNaturalResource() override = default;               // [0] 0x140022240
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c6890
-    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6650
+    int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c6650
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c6610
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----

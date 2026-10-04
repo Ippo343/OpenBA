@@ -85,8 +85,6 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-// The generic Object::ExternalPtr<T>::Serialize body (Wave 10 lane EXTPTR).
-extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser, const void* typeInfo);
 
 using CollisionMesh = Collision2D::CollisionMesh;
 using Vec2    = CollisionMesh::Vec2;
@@ -295,11 +293,10 @@ bool CollisionMesh::Serialize(IO::Stream& stream) {
     int32_t nS = self->_surfaces._size;
     rwc->SerializeInt(nS, nullptr);
     if (reading) PtsBSetSize(&self->_surfaces, nS);
-    const void* surfaceTypeInfo = &Collision2D::Surface::GetTypeInfo();   // retail: [0x1801fa820]
+    // ExternalPtr<Surface>::Serialize per element; T's record is retail's
+    // [0x1801fa820] (`?_typeInfo@Surface@Collision2D@@`).
     for (int32_t i = 0; i < nS; ++i) {
-        RtObject_ExternalPtr_Serialize(
-            reinterpret_cast<RtObject::External**>(&self->_surfaces._data[i]),  // LEFT: ExternalPtr array serialized through the External** door (Object block)
-            reinterpret_cast<Serializer*>(&ser), surfaceTypeInfo);  // LEFT: SIG RtObject_ExternalPtr_Serialize takes the rt::io::Serializer POD (R-OBJ, wave X)
+        Object::SerializeExternal<Collision2D::Surface>(ser, self->_surfaces._data[i]);
     }
 
     return true;   // ~Serializer deletes the ReaderWriter

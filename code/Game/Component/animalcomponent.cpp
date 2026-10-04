@@ -453,8 +453,8 @@ void AnimalComponent::OnAdded() {
 
 // [9] 0x140106420. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
-void AnimalComponent::Update(void* time) {
-    const System::Time* deltaTime = static_cast<const System::Time*>(time);   // LEFT: SIG Component::Update(void* time) (Component.h, wave X)
+void AnimalComponent::Update(const System::Time* time) {
+    const System::Time* deltaTime = time;
     if (!deltaTime) return;
 
     // ---- 1. aging + death ------------------------------------------------

@@ -46,7 +46,7 @@ public:
     void Startup() override;                                      // [4]  0x140054220
     void OnAdded() override;                                      // [6]  0x1400541c0
     void OnRemove() override;                                     // [7]  0x140054180
-    void Update(void* time) override;                             // [9]  0x140054070
+    void Update(const System::Time* time) override;                             // [9]  0x140054070
     void Slot11() override;                                       // [11] 0x140054210 (RET)
     float HerdCellFood(int cell) const;                           // 0x140053f20 (body: herdcomponent.cpp)
 

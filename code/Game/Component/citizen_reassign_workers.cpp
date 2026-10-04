@@ -166,7 +166,7 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,
     Map* map = gw->m_game;
     ProfessionList* reg = gw->m_professionList;
     if (!map || !reg) return 0;
-    int* pathData = reinterpret_cast<int*>(map);   // LEFT: SIG WorkBase_ValidateCell_a00f0 / WorkBase_CalcDistance_8830 (int* map)
+    Map* pathData = map;
 
     // --- target cell from param_3's owner-entity position ---
     // The InteractComponent find (0x140002ed0) and the node position (0x140122e20) are

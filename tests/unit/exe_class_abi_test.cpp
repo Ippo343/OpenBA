@@ -191,7 +191,7 @@ using TestDispatch = ::ControllerLive::Dispatcher<B38TestCtrlTag>;
 
 void* g_seenData = nullptr;
 void* g_seenSm   = nullptr;
-char  EnterHandler(Component* data, void* sm) { g_seenData = data; g_seenSm = sm; return 7; }
+char  EnterHandler(Component* data, ::StateMachine* sm) { g_seenData = data; g_seenSm = sm; return 7; }
 
 UNIT_TEST(exe_controller_member_raw_dispatch) {
     auto& t = TestDispatch::table;

@@ -534,9 +534,9 @@ char ResidenceComponent::EnterDemolish() {
 }
 
 // The table's handler thunks: the dispatcher calls (component, sm[, time]).
-static char ResidenceEnterBuilt(ResidenceComponent* c, void* /*sm*/)    { return c->EnterBuilt(); }      // 0x140129de0
-static char ResidenceEnterDemolish(ResidenceComponent* c, void* /*sm*/) { return c->EnterDemolish(); }   // 0x140129920
-static char ResidenceHeatTick(ResidenceComponent* c, void* /*sm*/, System::Time* dt) {
+static char ResidenceEnterBuilt(ResidenceComponent* c, StateMachine* /*sm*/)    { return c->EnterBuilt(); }      // 0x140129de0
+static char ResidenceEnterDemolish(ResidenceComponent* c, StateMachine* /*sm*/) { return c->EnterDemolish(); }   // 0x140129920
+static char ResidenceHeatTick(ResidenceComponent* c, StateMachine* /*sm*/, const System::Time* dt) {
     if (!c) return 1;   // a guard of the tree's
     return c->HeatTick(dt);                                                                             // 0x140129970
 }
@@ -549,7 +549,7 @@ static void ResidenceComponent_PopulateStateTable() {
     auto& t = ResidenceCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
     TableRegisterState(t, 2, &ResidenceEnterBuilt,
-                       nullptr, reinterpret_cast<::ControllerLive::StateHandlers<ResidenceComponent>::Tick>(&ResidenceHeatTick),   // LEFT: controller_state_table.h / StateMachineComponent.h (COMP-2+3): its time is System::Time*, the table's Tick carries it as void*
+                       nullptr, &ResidenceHeatTick,
                        nullptr);
     TableAddTransition(t, 3, nullptr);
     TableRegisterState(t, 3, &ResidenceEnterDemolish,

@@ -355,7 +355,7 @@ void AttendanceComponent::OnRemove() {
 // ============================================================
 // AttendanceComponent::Update (vtable slot [9], 0x140044370)
 // ============================================================
-void AttendanceComponent::Update(void* /*time*/) {
+void AttendanceComponent::Update(const System::Time* /*time*/) {
     // Check if queue count at +0x30 (as int32) is nonzero
     int32_t count = queueCount;
     if (count == 0)

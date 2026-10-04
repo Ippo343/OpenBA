@@ -37,6 +37,7 @@
 #include <cstdint>
 
 class ModelComponent;                    // Component/ModelComponent.h
+namespace System { class Time; }         // runtime/types/system/Value.h
 namespace Graphics { class Renderer; }   // runtime/types/graphics/Camera.h
 
 namespace PerfX {
@@ -90,7 +91,7 @@ void SetIteration(int index, int count);
 // on the last iteration when intermediate ones were skipped for this model). A model whose
 // root-motion offset the move tick samples per tick (blend, non-instanced root motion) is
 // never skipped, so walk speed matches the unbatched sim exactly.
-bool AnimBatchDecide(ModelComponent* modelComponent, const void* time, int64_t* timeOut);
+bool AnimBatchDecide(ModelComponent* modelComponent, const System::Time* time, int64_t* timeOut);
 // ModelComponent tick: decide whether this model's animation pose update may stay
 // root-only this iteration. Records the model for a later flush.
 bool AnimCullSkip(ModelComponent* modelComponent);

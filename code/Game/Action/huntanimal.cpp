@@ -116,7 +116,7 @@ void HuntAnimal::Persist(IO::Stream& stream) {
 // Slot 4: AbstractImpl (0x1400c8250) -- unhookable (9 bytes)
 // Returns 1 if hunt not started (keep running), 0 if hunt completed.
 // ============================================================
-int  HuntAnimal::AbstractImpl(void* actionStack) {
+int  HuntAnimal::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
     return (!_field38) ? 1 : 0;
 }
@@ -125,7 +125,7 @@ int  HuntAnimal::AbstractImpl(void* actionStack) {
 // Slot 5: Execute (0x1400c8240) -- unhookable (9 bytes)
 // Same logic as AbstractImpl: returns 1 if hunt not started, 0 if completed.
 // ============================================================
-int  HuntAnimal::Execute(void* actionStack, void* time) {
+int  HuntAnimal::Execute(ActionStack* actionStack, const System::Time* time) {
     (void)actionStack;
     (void)time;
     return (!_field38) ? 1 : 0;
@@ -149,7 +149,7 @@ int  HuntAnimal::Execute(void* actionStack, void* time) {
 //    c. Build the removal actions (0x1400bbea0)
 //    d. Find the WildAnimalComponent and start its herd's migration
 
-void HuntAnimal::Enter(void*, void*) {
+void HuntAnimal::Enter(void*, const System::Time*) {
 
     // If hunt already started, return early
     if (_field38) {
@@ -238,7 +238,7 @@ void HuntAnimal::Enter(void*, void*) {
     int fromCell = mapSize * foundCellY + foundCellX;
 
     // LEFT: 0x14009ccf0 / 0x1400a00f0 are declared in Work/exe_bodies.h (WORK) taking int*.
-    int* mapGrid = reinterpret_cast<int*>(map);
+    Map* mapGrid = map;
 
     // Check path cost between the two cells
     uint32_t pathCost = (uint32_t)WorkGrid_FindCell_9ccf0(mapGrid, fromCell, toCell, 0xe1f);   // 0x14009ccf0

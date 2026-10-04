@@ -50,8 +50,8 @@ public:
     // chain's tail, FindState, Enter) while one is pending, then, when `run`, the
     // per-frame column (Tick when `useAlt` is 0, TickAlt when 1) with `time`.
     // Retail passes `const System::Time&` (RDX = &time, 0x14012b67b); the node slots
-    // take it as the opaque `void* time` they forward.
-    void Tick(void* time, char useAlt, char run);
+    // forward the pointer.
+    void Tick(const System::Time* time, char useAlt, char run);
 
     ControllerComponent::Controller* current;   // +0x00 current node (component +0x48; retail ctor this+0x28)
     int8_t   currentInput;        // +0x08 the state the machine was asked for last (component +0x50)
@@ -87,13 +87,13 @@ public:
 
         int  FindState(int stateId) override;                                    // [0] 0x140038630
         int  FindTransition(int stateIndex, int* desiredStateId) override;       // [1] 0x140038660
-        char PostEvent(void* stateMachine, int stateIndex, int eventId) override; // [2] 0x1400386c0
-        char Enter(void* stateMachine, int stateIndex) override;                 // [3] 0x140038710
-        char Update(void* stateMachine, int stateIndex) override;                // [4] 0x140038740
-        void OnTransition(void* stateMachine, int stateIndex,
+        char PostEvent(StateMachine* stateMachine, int stateIndex, int eventId) override; // [2] 0x1400386c0
+        char Enter(StateMachine* stateMachine, int stateIndex) override;                 // [3] 0x140038710
+        char Update(StateMachine* stateMachine, int stateIndex) override;                // [4] 0x140038740
+        void OnTransition(StateMachine* stateMachine, int stateIndex,
                           int transitionIndex) override;                         // [5] 0x140038770
-        char Tick(void* stateMachine, void* time, int stateIndex) override;      // [6] 0x1400387a0
-        char TickAlt(void* stateMachine, void* time, int stateIndex) override;   // [7] 0x1400387d0
+        char Tick(StateMachine* stateMachine, const System::Time* time, int stateIndex) override;      // [6] 0x1400387a0
+        char TickAlt(StateMachine* stateMachine, const System::Time* time, int stateIndex) override;   // [7] 0x1400387d0
         char HasStates() override;                                               // [8] 0x140038800
     };
 
@@ -104,8 +104,8 @@ public:
     void Persist(IO::Stream& stream) override;                          // [3]  0x14012b940
     void Startup() override;                                      // [4]  0x14012b6a0
     void OnAdded() override;                                      // [6]  0x14012b660
-    void Tick(void* time) override;                               // [8]  0x14012b640
-    void Update(void* time) override;                             // [9]  0x14012b620
+    void Tick(const System::Time* time) override;                               // [8]  0x14012b640
+    void Update(const System::Time* time) override;                             // [9]  0x14012b620
     void Slot11() override;                                       // [11] 0x14012b7d0 PORT GAP
 
     // PUBLIC while the ported bodies read them (B38 decision 1).

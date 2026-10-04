@@ -99,7 +99,8 @@ void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg);  // 0x14001ca60
 void WorkCellBST_Serialize_9de0(uintptr_t* root, void* serializer);  // 0x140029de0
 
 // ---- work_base_grid.cpp
-int WorkGrid_FindCell_9ccf0(int* mapGrid, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
+class Map;   // Game/Map.h
+int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
 uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef, int cellId, char flag);  // 0x1400f8620
 
 // ---- work_base_impl2.cpp
@@ -111,8 +112,8 @@ void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP);  // 0x1400062
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 void WorkBase_TaskListCleanup_c5400(void* self);  // 0x1400c5400
-int WorkBase_CalcDistance_8830(int* mapGrid, uint32_t cellA, uint32_t cellB);  // 0x140008830
-uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
+int WorkBase_CalcDistance_8830(Map* map, uint32_t cellA, uint32_t cellB);  // 0x140008830
+uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
 
 // ---- work_base_walkpos.cpp
 bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2, float* param_3, float* param_4, int* param_5);  // 0x140122be0

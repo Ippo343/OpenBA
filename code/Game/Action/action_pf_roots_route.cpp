@@ -124,7 +124,7 @@ const T* FindDescriptionSkippingNull(const ComponentDescription* material) {
 int Map::PathDistance(uint32_t param_2, uint32_t param_3, char param_4) {
     // LEFT: 0x1400a00f0's C declaration (Work/exe_bodies.h, WORK-a's header) takes the
     // Map as int*.
-    uint64_t uVar4 = WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(this), 0xe1f, param_2, (int)param_3);   // 0x1400a00f0
+    uint64_t uVar4 = WorkBase_ValidateCell_a00f0(this, 0xe1f, param_2, (int)param_3);   // 0x1400a00f0
     if ((char)uVar4 != '\0') {
         uint32_t uVar1 = static_cast<uint32_t>(cells[(int)param_2].regionId);
         uint32_t uVar2 = static_cast<uint32_t>(cells[(int)param_3].regionId);
@@ -230,7 +230,7 @@ int FindBestAdjacentCell(const Component* target, uint32_t param_2, float* param
                                         (cell.zone == goal.zone)))))) {
                                     // LEFT: 0x140008830's C declaration (Work/exe_bodies.h,
                                     // WORK-a's header) takes the Map as int*.
-                                    int iVar8 = WorkBase_CalcDistance_8830(reinterpret_cast<int*>(map), uVar14, param_2);   // 0x140008830
+                                    int iVar8 = WorkBase_CalcDistance_8830(map, uVar14, param_2);   // 0x140008830
                                     if (iVar8 < iVar15) {
                                         uVar9 = (uint64_t)uVar14;
                                         iVar15 = iVar8;
@@ -276,7 +276,7 @@ LAB_14012d8ce:;
                 if (iVar13 <= iVar5) iVar5 = iVar13 + -1;
                 uint32_t uVar16 = iVar13 * iVar5 + iVar4b;
                 // LEFT: 0x1400a00f0's C declaration (Work/exe_bodies.h) takes the Map as int*.
-                uint64_t uVar9 = WorkBase_ValidateCell_a00f0(reinterpret_cast<int*>(map), 0xe1f, param_2, (int)uVar16);   // 0x1400a00f0
+                uint64_t uVar9 = WorkBase_ValidateCell_a00f0(map, 0xe1f, param_2, (int)uVar16);   // 0x1400a00f0
                 if ((char)uVar9 != '\0') {
                     int iVar4c = map->PathDistance(param_2, uVar16, '\x01');   // 0x14009f810
                     if (iVar4c < 0) {

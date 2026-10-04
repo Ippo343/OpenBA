@@ -300,8 +300,8 @@ char WellComponent::EnterDemolish() {
 
 using WellCtrlDispatch = ::ControllerLive::Dispatcher<WellCtrlTag>;
 
-static char WellComponent_EnterBuiltState(WellComponent* c, void* /*sm*/)    { return c->EnterBuilt(); }      // 0x14005cf20
-static char WellComponent_EnterDemolishState(WellComponent* c, void* /*sm*/) { return c->EnterDemolish(); }   // 0x14005cee0
+static char WellComponent_EnterBuiltState(WellComponent* c, StateMachine* /*sm*/)    { return c->EnterBuilt(); }      // 0x14005cf20
+static char WellComponent_EnterDemolishState(WellComponent* c, StateMachine* /*sm*/) { return c->EnterDemolish(); }   // 0x14005cee0
 
 // The retail table, transcribed from 0x14014bc20 call for call. Retail runs it
 // ONCE from a static initializer; the tree ran it (idempotently, unsynchronised)

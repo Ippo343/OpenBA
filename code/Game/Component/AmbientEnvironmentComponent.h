@@ -33,7 +33,7 @@ public:
     // no own work
     ~AmbientEnvironmentComponent() override = default;            // [0] 0x140002170
     void Persist(IO::Stream& stream) override;                          // [3] 0x1400437e0
-    void Update(void* time) override;                             // [9] 0x140043690
+    void Update(const System::Time* time) override;                             // [9] 0x140043690
 
     // ---- non-virtual members (retail addresses) ----
     // The region/position half of 0x1400436a0: the grid region the biome is

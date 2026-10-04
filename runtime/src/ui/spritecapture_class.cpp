@@ -159,7 +159,7 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
     if (ser._stream->_direction == 0) {                      // 1800d95a5 (re-read)
         rtcoll::RtColl_ArraySetSize_18003ea50(&_sheets, n);      // 1800d95b2
     }
-    RtObject_ExternalPtrArraySerialize_SpriteSheet(reinterpret_cast<rt::io::Serializer*>(&ser), n, reinterpret_cast<RtObject::External**>(_sheets.data));   // LEFT: SIG ExternalPtr<T>::Serialize thunks take RtObject::External** / rt::io::Serializer* (External.h, R-OBJ; wave X)
+    Object::SerializeExternalArray<UI::SpriteSheet>(ser, n, _sheets.data);
 
     rw->SerializeInt(_width, nullptr);                       // 1800d95d5  _width
     rw->SerializeInt(_height, nullptr);                      // 1800d95e9  _height

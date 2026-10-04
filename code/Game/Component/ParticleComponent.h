@@ -62,7 +62,7 @@ public:
     void Startup() override;                                      // [4]  0x140053230
     void OnAdded() override;                                      // [6]  0x140052f70
     void OnRemove() override;                                     // [7]  0x140052e80
-    void Tick(void* time) override;                               // [8]  0x140052b30
+    void Tick(const System::Time* time) override;                               // [8]  0x140052b30
     void Slot11() override;                                       // [11] 0x1400531b0
     void OnEvent(int eventId) override;                           // [12] 0x140053090
     // Fade every emitter OUT (defined in diseasecomponent.cpp, B4 COMP-c).

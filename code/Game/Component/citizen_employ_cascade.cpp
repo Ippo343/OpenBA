@@ -153,7 +153,7 @@ CitizenComponent** Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out,
 // ============================================================================
 CitizenComponent** Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
                               ComponentEntity** availPtr, Profession* profKey) {
-    int* game = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);   // LEFT: SIG WorkBase_CalcDistance_8830 (int* map; Work/exe_bodies.h, wave X)
+    Map* game = GameUpdateLoop::_singleton->m_game;
     ComponentEntity* availAnchorArg = *availPtr;
     uint32_t availCell = (uint32_t)EntityAnchorCell(&availAnchorArg, nullptr);   // 0x140087fb0
     int bestDist = 0x7ffffff;
@@ -189,7 +189,7 @@ CitizenComponent** Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
 // ============================================================================
 CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
                               ComponentEntity** availPtr, Profession* profKey) {
-    int* game = reinterpret_cast<int*>(GameUpdateLoop::_singleton->m_game);   // LEFT: SIG WorkBase_CalcDistance_8830 (int* map; Work/exe_bodies.h, wave X)
+    Map* game = GameUpdateLoop::_singleton->m_game;
     int bestRecordIdx = -1;               // local_74
     uint32_t availCell = 0xffffffff;      // local_78
     if (*availPtr != nullptr) {

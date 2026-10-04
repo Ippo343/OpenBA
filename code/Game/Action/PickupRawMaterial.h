@@ -28,7 +28,7 @@ public:
 
     ~PickupRawMaterial() override = default;                   // [0] 0x140022cd0
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c99e0
-    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c98d0
+    int  AbstractImpl(ActionStack* actionStack) override;             // [4] 0x1400c98d0
     bool GetTarget(ComponentEntity** param) override;                      // [9] 0x1400c9860
 
     // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
