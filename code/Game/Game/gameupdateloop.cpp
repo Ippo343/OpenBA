@@ -2336,7 +2336,7 @@ GameUpdateLoop::GameUpdateLoop(Save::SavedState* savedState, uint64_t scenarioIb
     m_eventNotifier = nullptr;
     m_saveLoad      = nullptr;
     m_imageCapture  = nullptr;
-    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3  // LEFT: the ctor's scenario parameter is the IBP's raw bits (GameUpdateLoop.h ctor, W0 header outside this set)
+    m_scenarioInstance  = reinterpret_cast<Achievement::AchievementInstance*>(scenarioIbp);   // *param_3  // LEFT: the ctor takes the scenario IBP's 8 bytes by value where retail takes a const InternalPtr<AchievementInstance>& (0x140098085; known_port_issues row 663)
     m_scenarioCompleted = 0;
     m_scenarioIndex     = scenarioIndex;
 }
