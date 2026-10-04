@@ -341,15 +341,14 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return;
-    // WorldGeometry's +0x1E0 header is an untyped {data, size} pair: the polyline reads
-    // stay by offset.
+    // WorldGeometry::_contourOutlines (+0x1E0): its record 0 is the polyline.
     Map* terrain   = gw->m_game;
     WorldGeometry* wgeo = gw->m_worldGeometry;
     if (!terrain || !wgeo) return;
 
-    const uintptr_t poly = reinterpret_cast<uintptr_t>(wgeo->_arrays[4].data);   // record 0 — retail   // LEFT: WorldGeometry.h _arrays H5 raw storage (GAME-2)
-    const int   polyCount = poly ? *reinterpret_cast<int*>(poly + 8) : 0; // int32 (140045840)   // LEFT: WorldGeometry.h _arrays H5 raw storage (GAME-2)
-    const float* polyPts  = poly ? *reinterpret_cast<const float**>(poly) : nullptr;   // LEFT: WorldGeometry.h _arrays H5 (GAME-2)
+    const RawArray<Math::Vector2>* poly = wgeo->_contourOutlines.data;   // record 0 — retail
+    const int   polyCount = poly ? poly->size : 0; // int32 (140045840)
+    const float* polyPts  = poly ? reinterpret_cast<const float*>(poly->data) : nullptr;   // LEFT: the loops below index the Math::Vector2 points as a float run (polyPts[i * 2]); typing them rewrites three COMP loop lines
 
     // ── 1. the approach lane: every polyline point before the map ────────────────
     int consumed = 0;      // points examined, including the first in-map one

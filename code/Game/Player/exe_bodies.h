@@ -100,7 +100,7 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
 int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  // 0x140055430
 
 // ---- tool_base_highlight_tess.cpp
-extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3, int param_4, int param_5);  // 0x1400ace40
+extern "C" void TradeWork_impl_ace40(WorldGeometry* geometry, int param_2, char param_3, int param_4, int param_5);  // 0x1400ace40
 
 // ---- tool_base_path.cpp
 bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t param_4, float param_5, float param_6, float param_7, char param_8, char param_9, const ComponentDescription* param_10);  // 0x14009f5d0

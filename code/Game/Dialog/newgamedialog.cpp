@@ -695,8 +695,7 @@ void* MainMenuDialog::StartNewGame(const System::String& name, uint32_t seed, ui
         void* gameLoop = System::MemoryAllocator::MemAlloc(0x160, 8);
         Engine::UpdateLoop* pGameLoop = nullptr;
         if (gameLoop) {
-            // LEFT: GameUpdateLoop's ctor takes the IBP as its 8 raw bytes (W0 header).
-            const uint64_t ibp = savedStateIBP ? *(const uint64_t*)savedStateIBP : 0;  // LEFT: GameUpdateLoop's ctor takes the IBP as its 8 raw bytes (GameUpdateLoop.h, W0 header outside this set)
+            const uint64_t ibp = savedStateIBP ? *(const uint64_t*)savedStateIBP : 0;  // LEFT: the ctor takes the scenario IBP's 8 bytes by value where retail takes a const InternalPtr<AchievementInstance>& (0x140098085; known_port_issues row 663)
             pGameLoop = ::new (gameLoop) GameUpdateLoop(
                 nullptr, ibp, (int32_t)scenarioResIdx,
                 name,

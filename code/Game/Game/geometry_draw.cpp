@@ -70,40 +70,6 @@ std::atomic<bool> s_itemDrawLogged{false};
 
 
 // ============================================================
-// The nine _arrays headers by element type
-// ============================================================
-// LEFT (owner GAME-c): WorldGeometry::_arrays is nine untyped {data, size|cap}
-// headers; each accessor's cast is the one place a header is read as its
-// element type (WorldGeometryElements.h). Every caller reads them by name.
-RawArray<TerrainVertex>& WorldGeometry::ContourVertices() {
-    return *reinterpret_cast<RawArray<TerrainVertex>*>(&_arrays[0]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-RawArray<uint16_t>& WorldGeometry::ContourIndices() {
-    return *reinterpret_cast<RawArray<uint16_t>*>(&_arrays[1]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesA() {
-    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[2]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-RawArray<GeometryDrawRange>& WorldGeometry::ContourRangesB() {
-    return *reinterpret_cast<RawArray<GeometryDrawRange>*>(&_arrays[3]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-RawArray<RawArray<Math::Vector2>>& WorldGeometry::ContourOutlines() {
-    return *reinterpret_cast<RawArray<RawArray<Math::Vector2>>*>(&_arrays[4]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-RawArray<GeometryBatch>& WorldGeometry::Decals() {
-    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[5]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-RawArray<GeometryBatch>& WorldGeometry::RoadBatches() {
-    return *reinterpret_cast<RawArray<GeometryBatch>*>(&_arrays[6]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-RawArray<Object::External*>& WorldGeometry::BatchMaterials() {
-    return *reinterpret_cast<RawArray<Object::External*>*>(&_arrays[7]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-RawArray<int32_t>& WorldGeometry::BatchCounters() {
-    return *reinterpret_cast<RawArray<int32_t>*>(&_arrays[8]);   // LEFT: OTHER WorldGeometry::_arrays is nine Header {void*, uint64_t} slots (WorldGeometry.h); RawArray<T> is trivial, so nine named RawArray members are layout-neutral (not H5), but their readers sit in COMP (decalcomponent.cpp, boatcomponent_route.cpp) and WORK (action_pf_road.cpp) files and the ctor's qword sizeCap stores split (H7)
-}
-
-// ============================================================
 // Slot +0x00 — destructor (B38 D9 #12)
 // ============================================================
 //
@@ -113,10 +79,14 @@ void WorkBase_TreeNodeFree_14c30(void* root, void* node);                       
 
 namespace {
 // `MemFree(h.data); h = {}` — one of retail's free-and-zero pairs.
-void FreeHeader(WorldGeometry::Header& h) {
+// Retail zeroes size|capacity with one qword store (0x1400aedaa..): two named
+// stores here (H7).
+template <class T>
+void FreeHeader(RawArray<T>& h) {
     Object::detail::InternalMemFree(h.data);   // MemFree is null-tolerant, as retail relies on
     h.data = nullptr;
-    h.sizeCap = 0;
+    h.size = 0;
+    h.capacity = 0;
 }
 }  // namespace
 
@@ -131,19 +101,19 @@ WorldGeometry::~WorldGeometry() {
     }
     Object::detail::InternalMemFree(_heightBytes);          // +0x140 (not zeroed)
 
-    FreeHeader(_arrays[8]);                                 // +0x220 ints
-    FreeHeader(_arrays[7]);                                 // +0x210 External* refs
+    FreeHeader(_batchCounters);                             // +0x220 ints
+    FreeHeader(_batchMaterials);                            // +0x210 External* refs
     // +0x200 / +0x1f0 batches: 0x14001fb80 over the elements (retail passes the
     // header's low dword as the count), then the block.
-    GeometryBatch_DestroyRange(RoadBatches().data, RoadBatches().size);
-    FreeHeader(_arrays[6]);
-    GeometryBatch_DestroyRange(Decals().data, Decals().size);
-    FreeHeader(_arrays[5]);
-    ArrayOfArrays_Clear_175d0(&_arrays[4]);                 // +0x1e0 array of arrays
-    FreeHeader(_arrays[3]);                                 // +0x1d0
-    FreeHeader(_arrays[2]);                                 // +0x1c0
-    FreeHeader(_arrays[1]);                                 // +0x1b0
-    FreeHeader(_arrays[0]);                                 // +0x1a0
+    GeometryBatch_DestroyRange(_roadBatches.data, _roadBatches.size);
+    FreeHeader(_roadBatches);
+    GeometryBatch_DestroyRange(_decals.data, _decals.size);
+    FreeHeader(_decals);
+    ArrayOfArrays_Clear_175d0(&_contourOutlines);           // +0x1e0 array of arrays
+    FreeHeader(_contourRangesB);                            // +0x1d0
+    FreeHeader(_contourRangesA);                            // +0x1c0
+    FreeHeader(_contourIndices);                            // +0x1b0
+    FreeHeader(_contourVertices);                           // +0x1a0
 
     // ~IndexBuffer / ~VertexBuffer are `JMP PlatformDestruct` in retail
     // (0x1800f3480 / 0x1800f55e0).
@@ -191,8 +161,6 @@ void WorldGeometry::Update(const System::Time& /*time*/) {
 // contour ranges and the two batch arrays.
 void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
                                  Graphics::Renderer& renderer) const {
-    // LEFT: the _arrays accessors are non-const members (the slot is const).
-    WorldGeometry& self = const_cast<WorldGeometry&>(*this);   // LEFT: the _arrays accessors are non-const members (the slot is const).
 
     if (!s_collectLogged.exchange(true)) {
         printf("[GeomDraw_CollectDraw] first call self=%p renderer=%p\n",
@@ -259,7 +227,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 
     // The b260 contour mesh occupies VB+0x160/IB+0x180 and is drawn via the
     // +0x1c0/+0x1d0 range tables (modes 0x6000/0x8000).
-    int countA = self.ContourRangesA().size;
+    int countA = _contourRangesA.size;
     const Graphics::MaterialInstance* matInst1 = _waterMaterialA;    // +0x150
     for (int idx = 0; idx < countA; ++idx) {
         uint16_t key1 = static_cast<uint16_t>(idx | 0x3900);
@@ -267,7 +235,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
         renderer.AddDrawItem(this, matInst1, key1, key2, 0.0f, uvScale, 1, nullptr, 0);
     }
 
-    int countB = self.ContourRangesB().size;
+    int countB = _contourRangesB.size;
     const Graphics::MaterialInstance* matInst2 = _waterMaterialB;    // +0x158
     for (int idx = 0; idx < countB; ++idx) {
         uint16_t key1 = static_cast<uint16_t>(idx | 0x4000);
@@ -276,7 +244,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
     }
 
     // +0x1F0 — the decals.
-    const RawArray<GeometryBatch>& decals = self.Decals();
+    const RawArray<GeometryBatch>& decals = _decals;
     for (int idx = 0; idx < decals.size; ++idx) {
         const GeometryBatch& b = decals.data[idx];
         if (b.material == nullptr) continue;
@@ -298,7 +266,7 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
     }
 
     // +0x200 — the road batches; also skipped when the vertex count (+0x10) is 0, key1 = 2.
-    const RawArray<GeometryBatch>& roads = self.RoadBatches();
+    const RawArray<GeometryBatch>& roads = _roadBatches;
     for (int idx = 0; idx < roads.size; ++idx) {
         const GeometryBatch& b = roads.data[idx];
         if (b.material == nullptr) continue;
@@ -331,9 +299,9 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*camera*/,
                          Graphics::ExternalPtrHandle /*material*/,
                          float param5, int a, int /*b*/, int /*c*/) const {
-    // LEFT: the _arrays accessors are non-const members, and the context binds
+    // LEFT: the context binds
     // this object's buffers through its non-const `void*` _indexBuffer.
-    WorldGeometry& self = const_cast<WorldGeometry&>(*this);   // LEFT: the _arrays accessors are non-const members, and the context binds this object's buffers through its non-const `void*` _indexBuffer.
+    WorldGeometry& self = const_cast<WorldGeometry&>(*this);   // LEFT: the context binds this object's index buffers through a non-const Video::IndexBuffer* (BindIndexBuffer), in a const virtual slot.
     const uint32_t param6 = static_cast<uint32_t>(a);
 
     if (!s_itemDrawLogged.exchange(true)) {
@@ -386,13 +354,13 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     };
 
     if (mode == 0x2000) {
-        GeometryBatch* base = self.Decals().data;
+        GeometryBatch* base = self._decals.data;
         if (!base) return;
         IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
     }
     if (mode == 0x4000) {
-        GeometryBatch* base = self.RoadBatches().data;
+        GeometryBatch* base = self._roadBatches.data;
         if (!base) return;
         IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
@@ -420,13 +388,13 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     };
 
     if (mode == 0x8000) {
-        const GeometryDrawRange* ranges = self.ContourRangesB().data;   // +0x1D0
+        const GeometryDrawRange* ranges = self._contourRangesB.data;   // +0x1D0
         if (!ranges) return;
         DrawContourRange(ranges);
         return;
     }
     if (mode == 0x6000) {
-        const GeometryDrawRange* ranges = self.ContourRangesA().data;   // +0x1C0
+        const GeometryDrawRange* ranges = self._contourRangesA.data;   // +0x1C0
         if (!ranges) return;
         DrawContourRange(ranges);
         return;

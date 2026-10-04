@@ -24,7 +24,7 @@
 #include "video/Buffers.h"
 
 // B.4 GAME-b: forward declarations for the appended members.
-template <class T> struct RawArray;
+#include "Action/PathSearch.h"   // RawArray<T> (the nine arrays at +0x1A0)
 struct TerrainVertex; struct GeometryBatch; struct GeometryDrawRange; struct AvlNode28;
 class TerrainGenerator;       // Game/TerrainGenerator.h
 struct TerrainHeightfield;    // Game/TerrainHeightfield.h
@@ -62,17 +62,6 @@ public:
     void FillTerrainVertices(int colStart, int rowStart, int width, int height,
                              TerrainVertex* out) const;               // 0x1400ac880
     Math::Vector3 TerrainNormal(int col, int row) const;              // 0x1400ae270
-    // The nine _arrays headers by element type (bodies in geometry_draw.cpp; LEFT
-    // until _arrays is typed).
-    RawArray<TerrainVertex>&           ContourVertices();             // +0x1A0
-    RawArray<uint16_t>&                ContourIndices();              // +0x1B0
-    RawArray<GeometryDrawRange>&       ContourRangesA();              // +0x1C0 mode 0x6000
-    RawArray<GeometryDrawRange>&       ContourRangesB();              // +0x1D0 mode 0x8000
-    RawArray<RawArray<Math::Vector2>>& ContourOutlines();             // +0x1E0
-    RawArray<GeometryBatch>&           Decals();                      // +0x1F0 mode 0x2000
-    RawArray<GeometryBatch>&           RoadBatches();                 // +0x200 mode 0x4000
-    RawArray<Object::External*>&       BatchMaterials();              // +0x210
-    RawArray<int32_t>&                 BatchCounters();               // +0x220
     // B.4 GAME-c: the new-game terrain build (worldgen.cpp, water_contour_mesh.cpp)
     void BuildTerrain(TerrainGenerator* generator, int sizeIndex, uint32_t seed);  // 0x1400b0230
     void BuildFromHeightfield(TerrainHeightfield* heightfield);       // 0x1400ac4b0
@@ -102,13 +91,19 @@ public:
     Graphics::MaterialInstance* _waterMaterialB;  // +0x158
     Video::VertexBuffer _waterVertexBuffer;  // +0x160 water contour mesh
     Video::IndexBuffer  _waterIndexBuffer;   // +0x180
-    // Nine {data, count|cap} headers, +0x1A0..+0x22F:
-    //   +0x1A0 / +0x1B0 contour vertex / index accumulators, +0x1C0 / +0x1D0 the
-    //   int4 draw-range tables (modes 0x6000 / 0x8000), +0x1E0 array of arrays,
-    //   +0x1F0 / +0x200 the 0x60-byte decal elements (modes 0x2000 / 0x4000),
-    //   +0x210 External* refs, +0x220 ints.
-    struct Header { void* data; uint64_t sizeCap; };
-    Header   _arrays[9];          // +0x1A0
+    // Nine {data, size, capacity} arrays, +0x1A0..+0x22F (RawArray: trivial, no
+    // ctor / dtor; the ctor 0x1400b00e0 zeroes each with two qword stores, the
+    // tree writes the three named fields, H7; the dtor body 0x1400aed50 frees them
+    // by hand in reverse order). Element types: WorldGeometryElements.h.
+    RawArray<TerrainVertex>           _contourVertices;   // +0x1A0 contour vertex accumulator
+    RawArray<uint16_t>                _contourIndices;    // +0x1B0 contour index accumulator
+    RawArray<GeometryDrawRange>       _contourRangesA;    // +0x1C0 draw ranges, mode 0x6000
+    RawArray<GeometryDrawRange>       _contourRangesB;    // +0x1D0 draw ranges, mode 0x8000
+    RawArray<RawArray<Math::Vector2>> _contourOutlines;   // +0x1E0 array of point arrays
+    RawArray<GeometryBatch>           _decals;            // +0x1F0 0x60-byte batches, mode 0x2000
+    RawArray<GeometryBatch>           _roadBatches;       // +0x200 0x60-byte batches, mode 0x4000
+    RawArray<Object::External*>       _batchMaterials;    // +0x210 per-batch material refs
+    RawArray<int32_t>                 _batchCounters;     // +0x220 per-batch fill counters
 };
 
 static_assert(sizeof(WorldGeometry) == 0x230, "WorldGeometry is MemAlloc(0x230)");
@@ -127,4 +122,12 @@ static_assert(offsetof(WorldGeometry, _heightImage) == 0x148, "+0x148");
 static_assert(offsetof(WorldGeometry, _waterMaterialA) == 0x150, "+0x150");
 static_assert(offsetof(WorldGeometry, _waterVertexBuffer) == 0x160, "+0x160");
 static_assert(offsetof(WorldGeometry, _waterIndexBuffer) == 0x180, "+0x180");
-static_assert(offsetof(WorldGeometry, _arrays) == 0x1A0, "+0x1A0");
+static_assert(offsetof(WorldGeometry, _contourVertices) == 0x1A0, "+0x1A0");
+static_assert(offsetof(WorldGeometry, _contourIndices) == 0x1B0, "+0x1B0");
+static_assert(offsetof(WorldGeometry, _contourRangesA) == 0x1C0, "+0x1C0");
+static_assert(offsetof(WorldGeometry, _contourRangesB) == 0x1D0, "+0x1D0");
+static_assert(offsetof(WorldGeometry, _contourOutlines) == 0x1E0, "+0x1E0");
+static_assert(offsetof(WorldGeometry, _decals) == 0x1F0, "+0x1F0");
+static_assert(offsetof(WorldGeometry, _roadBatches) == 0x200, "+0x200");
+static_assert(offsetof(WorldGeometry, _batchMaterials) == 0x210, "+0x210");
+static_assert(offsetof(WorldGeometry, _batchCounters) == 0x220, "+0x220");

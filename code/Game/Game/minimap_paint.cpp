@@ -65,8 +65,8 @@
 // B.4 GAME-b: the painter is Minimap::PaintTerrain and reads the minimap, the
 // context, the camera and the video configuration by name. Its doors (ENDGAME
 // B.3.5 / B3R): Video_RenderBuffer_Ctor / _Dtor, RtVolume_Frustum_Ctor_General,
-// RtGraphics_Camera_Ctor, RtGraphics_Renderer_Ctor / _Dtor, RtGraphics_Scene_Ctor /
-// _Dtor (the three POD-mirror doors are LEFT).
+// RtGraphics_Renderer_Ctor / _Dtor, RtGraphics_Scene_Ctor / _Dtor (the two
+// POD-mirror doors are LEFT); the Camera is constructed directly (X5-GAME).
 
 namespace {
 
@@ -130,13 +130,10 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     // Transform3::Identity is a static that returns a Transform3 BY VALUE (48 bytes).
     Math::Transform3 identity = Math::Transform3::Identity();
 
-    // LEFT: Graphics::Camera's default ctor is protected and its (frustum,
-    // transform, bool) ctor is a door on the POD mirror (R-GFX); the camera
-    // lives in stack storage of its size.
-    alignas(16) uint8_t cameraStorage[sizeof(Graphics::Camera)];
-    RtGraphics_Camera_Ctor(reinterpret_cast<RtGraphics::Camera*>(cameraStorage), frustumRet,   // LEFT: Graphics::Camera's default ctor is protected and its (frustum, transform, bool) ctor is a door on the POD mirror (R-GFX); the camera lives in stack storage of its size.
-                           &identity, /*isPerspective*/true);
-    Graphics::Camera* camera = reinterpret_cast<Graphics::Camera*>(cameraStorage);   // LEFT: Graphics::Camera's default ctor is protected and its (frustum, transform, bool) ctor is a door on the POD mirror (R-GFX); the camera lives in stack storage of its size.
+    // Camera::Camera(frustum, transform, zUp) 0x1800fe960 on a stack local
+    // (trivially destructible: nothing runs at scope exit).
+    Graphics::Camera cameraLocal(*frustumRet, identity, /*zUp*/true);
+    Graphics::Camera* camera = &cameraLocal;
 
     // Look straight down (yaw 0, pitch -90deg), positioned at world (0,0,100).
     const float yaw   = 0.0f;
