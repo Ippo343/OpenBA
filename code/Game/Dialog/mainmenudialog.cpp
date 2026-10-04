@@ -35,6 +35,8 @@
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Dialog/ScenarioDialog.h"      // B3R: ScenarioDialog_Ctor
+#include "Dialog/SaveLoadDialog.h"      // SaveLoadDialog_Ctor_8270's result (a DialogInstance)
+#include "Dialog/OptionsDialog.h"       // OptionsDialog_Ctor_Standalone's result (a DialogInstance)
 #include "system/Configuration.h"      // B3R: System::Configuration, RtSystem_Configuration_CurrentBuildId
 #include "save/SaveLoad.h"             // B3R: RtSave_SaveLoad_Dtor
 #include "Dialog/dialog_exe_helpers.h"
@@ -153,7 +155,7 @@ void MainMenuDialog::OpenLoad() {
     GameContainer_EnsureLists();
 
     UI::Dialog* extRes = LoadDialogResource("Dialog/SaveLoad.rsc");
-    void* dlgObj = nullptr;
+    UI::DialogInstance* dlgObj = nullptr;
     void* dlgMem = System::MemoryAllocator::MemAlloc(0x160, 8);
     if (dlgMem) {
         Object::InternalPtr<UI::DialogInstance> nullIBP;
@@ -163,7 +165,7 @@ void MainMenuDialog::OpenLoad() {
                                          menuLoop,   // the menu loop
                                          game);      // the running game
     }
-    AddDialogToUI(this, static_cast<UI::DialogInstance*>(dlgObj));
+    AddDialogToUI(this, dlgObj);
     // Standalone: expose the instance so the BANISHED_AUTOLOAD driver
     // (standalone/autostart.cpp) can select a save + inject the Load click.
     extern void* g_StandaloneSaveLoadDialog;
@@ -173,7 +175,7 @@ void MainMenuDialog::OpenLoad() {
 // OpenSave (0x1400B38B0): "Dialog/SaveLoad.rsc", size 0x160, mode=0 (save)
 void MainMenuDialog::OpenSave() {
     UI::Dialog* extRes = LoadDialogResource("Dialog/SaveLoad.rsc");
-    void* dlgObj = nullptr;
+    UI::DialogInstance* dlgObj = nullptr;
     void* dlgMem = System::MemoryAllocator::MemAlloc(0x160, 8);
     if (dlgMem) {
         Object::InternalPtr<UI::DialogInstance> nullIBP;
@@ -183,21 +185,21 @@ void MainMenuDialog::OpenSave() {
                                          menuLoop,   // the menu loop
                                          game);      // the running game
     }
-    AddDialogToUI(this, static_cast<UI::DialogInstance*>(dlgObj));
+    AddDialogToUI(this, dlgObj);
 }
 
 // OpenOptions (0x1400B3A10): "Dialog/Options.rsc", size 0x1C0
 // Ctor: 0x140075150(self, ui, extRes, nullParent)
 void MainMenuDialog::OpenOptions() {
     UI::Dialog* extRes = LoadDialogResource("Dialog/Options.rsc");
-    void* dlgObj = nullptr;
+    UI::DialogInstance* dlgObj = nullptr;
     void* dlgMem = System::MemoryAllocator::MemAlloc(0x1C0, 8);
     if (dlgMem) {
         Object::InternalPtr<UI::DialogInstance> nullIBP;
         dlgObj = OptionsDialog_Ctor_Standalone(dlgMem,   // 0x140075150
                                         _ui, extRes, &nullIBP);
     }
-    AddDialogToUI(this, static_cast<UI::DialogInstance*>(dlgObj));
+    AddDialogToUI(this, dlgObj);
 }
 
 // ReturnToMenu (0x1400B4790): Destroys SaveLoad, creates MenuDialogLoopT
@@ -565,8 +567,7 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
     GameUpdateLoop* gameWorld = self->game;
     if (gameWorld != nullptr) {
         GameUpdateLoop* world = GameUpdateLoop::_singleton;
-        // LEFT: GameUpdateLoop::m_audioScene is void* (W0 header).
-        Audio::Scene* audioScene = reinterpret_cast<Audio::Scene*>(world->m_audioScene);
+        Audio::Scene* audioScene = world->m_audioScene;
 
         audioScene->Pause(4, true);
         audioScene->Pause(3, true);
@@ -612,8 +613,7 @@ void MainMenuDialog_Slot5(MainMenuDialog* self) {
         return;
 
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    // LEFT: GameUpdateLoop::m_audioScene is void* (W0 header).
-    Audio::Scene* audioScene = reinterpret_cast<Audio::Scene*>(world->m_audioScene);
+    Audio::Scene* audioScene = world->m_audioScene;
 
     audioScene->Pause(4, false);
     audioScene->Pause(3, false);
