@@ -51,7 +51,7 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- FishingWork fields (+0x48) ---
-    CitizenComponent** citizenRefs; // +0x48: Array<InternalPtr<CitizenComponent>> data (Persist
+    Object::InternalPtr<CitizenComponent>* citizenRefs; // +0x48: Array<InternalPtr<CitizenComponent>> data (Persist
                                     //        0x1400ea910 validates each against CitizenComponent)
     int32_t  citizenCount;       // +0x50: count of citizenRefs array
     int32_t  citizenCapacity;    // +0x54: capacity of citizenRefs array
