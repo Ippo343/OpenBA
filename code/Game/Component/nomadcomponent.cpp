@@ -82,8 +82,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
         // Retail's local_res8: seeded from *entity BEFORE the call, and passed by
         // address as the slot's second argument (see the typedef note above).
         ComponentEntity* entityRef = *entity;
-        // LEFT: Tool::IsSelected takes the entity InternalPtr as uint64_t* (PLAYER's header).
-        char active = currentTool->IsSelected(reinterpret_cast<uint64_t*>(&entityRef));   // slot 10
+        char active = currentTool->IsSelected(reinterpret_cast<uint64_t*>(&entityRef));   // slot 10  LEFT: SIG Tool::IsSelected takes the entity InternalPtr as uint64_t* (Player/Tool.h, PLAYER)
         // 0x140102b60 is EntityUI::SetEditMode / Toolbar::ShowGroup — resetting the
         // active tool to mode 0 when the entity it was bound to goes away. This call
         // was DEAD for the whole life of the project (0x140102b60 was ported but never
@@ -103,8 +102,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
     }
 
     ComponentEntity* key = *entity;
-    // LEFT: +0x60 is a tree root with no node type yet (GAME-b); 0x14002c690 takes int64_t*.
-    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&field_0x60), &key);   // 0x14002c690
+    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&field_0x60), &key);   // 0x14002c690  LEFT: SIG PlayerTrade_BSTFindRemove_2c690 (Player/exe_bodies.h, wave X)
 
     UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
     // HISTORY, kept because it cost two bugs. Retail reaches this list through
@@ -144,7 +142,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
             // NOT a substitute for this filter -- without it the call returns nothing
             // and the narrow never gets anything to reject.
             Object::InternalPtr<UI::DialogController> ctrl(
-                reinterpret_cast<UI::DialogInstance*>(it.node->element)->GetController(  // B.3.6 bridge
+                reinterpret_cast<UI::DialogInstance*>(it.node->element)->GetController(  // LEFT: UI::DialogInstancePtr is void* (runtime/types/ui/UserInterface.h, R-UI)
                     EntityUI::TypeId()));   // DAT_1401c4f00
             EntityUI* found = nullptr;
             if (ctrl.Get() != nullptr) {
@@ -155,7 +153,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
                 ComponentEntity* bound = found->entity;
                 if (bound == *entity) {
                     void* dlgPtr = it.node->element;
-                    ui->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgPtr));  // B.3.6 bridge
+                    ui->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgPtr));  // LEFT: UI::DialogInstancePtr is void* (UserInterface.h, R-UI)
                     closed = 1;
                     if (traceWalk) {
                         fprintf(stderr, "[NomadDlgWalk] #%d visited=%d CLOSED the removed "
@@ -176,7 +174,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
 
 // B4 FORWARD: 2 outside caller files (citizen_onremove.cpp, destroycomponent_states.cpp).
 void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
-    reinterpret_cast<PlayerToolManager*>(param_1)->OnEntityRemoved(
+    reinterpret_cast<PlayerToolManager*>(param_1)->OnEntityRemoved(   // LEFT: SIG NomadComp_FUN_140103480 (B4 FORWARD, wave X)
         reinterpret_cast<ComponentEntity* const*>(param_2));
 }
 
