@@ -290,11 +290,10 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
 // difference: retail's loader SKIPS a duplicate key (it is reading a stream it trusts
 // to be unique), whereas a fixture called every visit has to be able to top a resource
 // back up, so an existing key has its value overwritten.
-// The two parameters stay untyped for the harness's local declaration.
-extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, int qty) {
+extern "C" void TradeStock_SeedForTest(TradeComponent* tradeComp, ComponentDescription* resourceEntity, int qty) {
     if (!tradeComp || !resourceEntity) return;
-    TradeComponent& trade = *reinterpret_cast<TradeComponent*>(tradeComp);
-    ComponentDescription* const key = reinterpret_cast<ComponentDescription*>(resourceEntity);
+    TradeComponent& trade = *tradeComp;
+    ComponentDescription* const key = resourceEntity;
 
     TradeResourceNode* root = trade.stockRoot;
     if (!root) {

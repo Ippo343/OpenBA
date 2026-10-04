@@ -258,9 +258,7 @@ void Map::Serialize(IO::Stream& stream) {
                     e->occupant == nullptr) {
                     bool occupied = ActCNR_CheckTerrain_cb00(this, i) != 0;
                     if (!occupied) {
-                        // LEFT: the classify helper takes the map as int* (Component/exe_bodies.h).
-                        int cls = CreateNaturalResource_helper_e2c0(
-                            reinterpret_cast<int*>(this), i);   // LEFT: SIG the classify helper takes the map as int* (Component/exe_bodies.h, wave X)
+                        int cls = CreateNaturalResource_helper_e2c0(this, i);   // 0x14009e2c0
                         e->terrainType = static_cast<uint8_t>(cls);
                     }
                 }

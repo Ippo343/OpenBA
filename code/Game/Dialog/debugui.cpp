@@ -376,9 +376,8 @@ static void Game_SpawnItemsInStorage_Impl() {
             if (capacity <= currentCount) break;
 
             // Spawn one item
-            uint8_t retBuf[8] = {0};
-            new (retBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            Pasture_SpawnLivestock(storage, retBuf);   // 0x140128670 (door misnamed fn_StorageComponent_SpawnItem)
+            AnimalComponent* noParent = nullptr;   // the InternalBasePtr(nullptr) retail builds
+            Pasture_SpawnLivestock(storage, &noParent);   // 0x140128670 (door misnamed fn_StorageComponent_SpawnItem)
         }
     }
 }

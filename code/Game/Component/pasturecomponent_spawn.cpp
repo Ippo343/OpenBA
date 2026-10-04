@@ -197,11 +197,10 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     std::fflush(stderr);
 }
 
-// B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp).
-extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
+// The C entry Dialog/debugui.cpp calls. The null test is the old body's.
+extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP) {
     if (!pasture) return;
-    reinterpret_cast<PastureComponent*>(pasture)->SpawnLivestock(
-        reinterpret_cast<AnimalComponent* const*>(parentAnimalIBP));   // LEFT: B4 FORWARD (wave X: Dialog/debugui.cpp holds void*)
+    pasture->SpawnLivestock(parentAnimalIBP);
 }
 
 // ============================================================
