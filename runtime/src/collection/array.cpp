@@ -2470,9 +2470,9 @@ J1_ENTRY(180043cb0)   // UI:          LayoutElement::_rows       (+0xC0)
 #undef J1_ENTRY
 
 // 0x18001cdf0 — `Array<int32>::operator=`. Body and evidence above.
-void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
-    void* r = RtColl_I32ArrayAssign(static_cast<Collection::Array<int32_t>*>(dst),  // LEFT: SIG RtColl_I32ArrayAssign_18001cdf0: wave9_lane_gfxd.cpp's RtArrayAssignI32 (X-G2-4's file) hands it void*
-                                    static_cast<const Collection::Array<int32_t>*>(src));  // LEFT: SIG RtColl_I32ArrayAssign_18001cdf0: wave9_lane_gfxd.cpp's RtArrayAssignI32 (X-G2-4's file) hands it void*
+void* RtColl_I32ArrayAssign_18001cdf0(Collection::Array<int32_t>* dst,
+                                      const Collection::Array<int32_t>* src) {
+    void* r = RtColl_I32ArrayAssign(dst, src);
     return r;
 }
 

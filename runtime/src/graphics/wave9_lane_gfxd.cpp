@@ -156,9 +156,8 @@ using rtcoll::ArraySpec;
 // for a shallow one — sharing `_data` between the two records and double-
 // freeing it. B3R: a call of that SAME ported body by name,
 // `rtcoll::RtColl_I32ArrayAssign_18001cdf0`.
-void RtArrayAssignI32(void* dst, const void* src) {
-    rtcoll::RtColl_I32ArrayAssign_18001cdf0(dst, src);
-}
+// (B.4 Z RT2: the one-line `RtArrayAssignI32(void*, const void*)` forwarder
+// is gone; its caller below calls the typed body.)
 
 // ENDGAME B.3.2 step 2 (callers) — the `RtArrayDtorI32` forwarder that used to
 // sit here (0x18001c750) is GONE: it is array.cpp's J1 body, spec-independent
@@ -280,7 +279,7 @@ uint8_t* SceneEntryAssign(uint8_t* dstv, const uint8_t* srcv) {
     dst->_drawableIds._data     = nullptr;             // two zero qwords
     dst->_drawableIds._size     = 0;
     dst->_drawableIds._capacity = 0;
-    RtArrayAssignI32(&dst->_drawableIds, &src->_drawableIds);
+    rtcoll::RtColl_I32ArrayAssign_18001cdf0(&dst->_drawableIds, &src->_drawableIds);
     return dstv;
 }
 

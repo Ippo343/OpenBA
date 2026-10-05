@@ -1922,7 +1922,8 @@ void RtColl_DestroyStrings_180054ba0(void* ignoredThis, void* base, int count); 
 void RtColl_DestroyStrings_180056960(void* ignoredThis, void* base, int count);  // 0x180056960
 void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count);  // 0x180056cb0
 // ---- collection/array.cpp
-void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src);  // 0x18001cdf0
+void* RtColl_I32ArrayAssign_18001cdf0(Collection::Array<int32_t>* dst,
+                                      const Collection::Array<int32_t>* src);  // 0x18001cdf0
 // ---- collection/array_destroy.cpp
 void* RtColl_LayoutEntryAssign_180043980(uint8_t* dst, const uint8_t* src);  // 0x180043980 (B.4: the element op)
 void* RtColl_SpriteEntryAssign_180004220(uint8_t* dst, const uint8_t* src);  // 0x180004220 (B.4: the element op)
