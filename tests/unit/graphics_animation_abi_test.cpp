@@ -56,6 +56,7 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <new>
 #include <type_traits>
 
 namespace {
@@ -464,18 +465,25 @@ UNIT_TEST(graphics_animation_layout) {
 }
 
 // ---------------------------------------------------------------------------
-// PART D — Graphics::AnimationState, 0x48 (NON-polymorphic)
+// PART D — Graphics::AnimationState, 0x18, and the 0x48 record that embeds it
 // ---------------------------------------------------------------------------
 UNIT_TEST(graphics_animationstate_layout) {
-    CHECK_EQ((int)sizeof(Graphics::AnimationState), 0x48);
+    // Retail's class: ctor 0x1800fdaf0 writes +0x00 / +0x08 / +0x10, dtor
+    // 0x1800fe380 frees +0x08.
+    CHECK_EQ((int)sizeof(Graphics::AnimationState), 0x18);
     CHECK_EQ((int)alignof(Graphics::AnimationState), 8);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _needsUniqueCopy), 0x00);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _layers),          0x08);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _rootOffset),      0x18);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _pose),            0x28);
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _nodes),           0x38);
+    CHECK_EQ((int)offsetof(Graphics::AnimationState, _instanced), 0x00);
+    CHECK_EQ((int)offsetof(Graphics::AnimationState, _layers),    0x08);
     CHECK(!std::is_polymorphic<Graphics::AnimationState>::value);
-    CHECK(std::is_standard_layout<Graphics::AnimationState>::value);
+
+    // The AnimationManager's per-frame record (copy ctor 0x18005b660, element
+    // destroy 0x18005bce0).
+    CHECK_EQ((int)sizeof(Graphics::InstancedAnimationState), 0x48);
+    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _state),      0x00);
+    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _rootOffset), 0x18);
+    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _pose),       0x28);
+    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _nodes),      0x38);
+    CHECK(std::is_standard_layout<Graphics::InstancedAnimationState>::value);
 
     // The nested Layer record — stride 0x38, measured three ways inside
     // `AnimationState::Update` (AnimationState.h's banner).
@@ -490,38 +498,33 @@ UNIT_TEST(graphics_animationstate_layout) {
     CHECK_EQ((int)sizeof(Graphics::AnimationState::Layer),
              (int)sizeof(RtGraphics::AnimationLayer));
 
-    // THE THREE SPELLINGS OF ONE RECORD must stay aligned: the class, lane
-    // GFXBIG's `RtGraphics::AnimationState` POD (Update's view) and the
+    // THE THREE SPELLINGS OF THE 0x48 RECORD must stay aligned: the record,
+    // lane GFXBIG's `RtGraphics::AnimationState` POD (Update's view) and the
     // serializer's `RtGraphics::AnimStateRec`.
-    CHECK_EQ((int)sizeof(Graphics::AnimationState), (int)sizeof(RtGraphics::AnimationState));
-    CHECK_EQ((int)sizeof(Graphics::AnimationState), (int)sizeof(RtGraphics::AnimStateRec));
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _layers),
+    CHECK_EQ((int)sizeof(Graphics::InstancedAnimationState), (int)sizeof(RtGraphics::AnimationState));
+    CHECK_EQ((int)sizeof(Graphics::InstancedAnimationState), (int)sizeof(RtGraphics::AnimStateRec));
+    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _state) +
+             (int)offsetof(Graphics::AnimationState, _layers),
              (int)offsetof(RtGraphics::AnimStateRec, _layers));
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _rootOffset),
+    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _rootOffset),
              (int)offsetof(RtGraphics::AnimStateRec, _rootOffset));
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _pose),
+    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _pose),
              (int)offsetof(RtGraphics::AnimStateRec, _pose));
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _nodes),
+    CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _nodes),
              (int)offsetof(RtGraphics::AnimStateRec, _nodes));
     CHECK_EQ((int)offsetof(Graphics::AnimationState, _layers),
              (int)offsetof(RtGraphics::AnimationState, layers));
 
-    // THE 0x18-BYTE PREFIX `Mesh.h` EMBEDS IN `MeshInstance` as
-    // `MeshAnimationState`. Block E owns that header; this assert is the
-    // relationship stated as a test rather than only as a comment — the first
-    // three members of the class occupy exactly the prefix's bytes.
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _rootOffset), 0x18);
-
-    // Written through a RAW BUFFER, not a local: `??0AnimationState@Graphics@@
-    // QEAA@XZ` (0x1800fdaf0) is declared and deliberately undefined (nothing in
-    // this tree calls it), so the class is not default-constructible on purpose.
-    // Every live one is `MemAlloc`'d anyway.
-    alignas(8) uint8_t buf[0x48] = {0};
-    Graphics::AnimationState* st = reinterpret_cast<Graphics::AnimationState*>(buf);
-    st->_needsUniqueCopy = 1;
-    st->_layers._size    = 3;
-    CHECK_EQ((int)buf[0x00], 1);
-    CHECK_EQ((int)*reinterpret_cast<const int32_t*>(buf + 0x10), 3);
+    // The ctor (0x1800fdaf0, inline): the bool and the Array header zeroed,
+    // +0x01..+0x07 untouched.
+    alignas(8) uint8_t buf[0x18];
+    for (int i = 0; i < 0x18; ++i) buf[i] = 0xcd;
+    Graphics::AnimationState* st = ::new (static_cast<void*>(buf)) Graphics::AnimationState();
+    CHECK_EQ((int)buf[0x00], 0);
+    CHECK_EQ((int)buf[0x01], 0xcd);
+    CHECK(st->_layers._data == nullptr);
+    CHECK_EQ(st->_layers._size, 0);
+    CHECK_EQ(st->_layers._capacity, 0);   // nothing allocated: no dtor needed
 }
 
 // ---------------------------------------------------------------------------

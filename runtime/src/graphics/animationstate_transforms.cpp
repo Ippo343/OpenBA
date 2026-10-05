@@ -1011,7 +1011,7 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
         if (frames > 0) {
             int64_t stateIdx = 0;
             for (;;) {
-                AnimationState* st = &inst->_states._data[stateIdx];
+                InstancedAnimationState* st = &inst->_states._data[stateIdx];
 
                 rtcoll::Rt_SetSize_18005ac50(&st->_nodes, nodes._size);      // CALL 0x18005ac50
                 InterpolatedState<Math::Transform>* ip = st->_nodes._data;
@@ -1143,7 +1143,7 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
                 const System::Time zero = { SecondsToTicks(0.0) };
                 const System::Time at   = { SecondsToTicks(static_cast<double>(t)) };
                 // Graphics::AnimationState::PlayAnimation (0x1800fdf50).
-                st->PlayAnimation(Object::ExternalPtr<AnimationGroup>(group), animIndex,
+                st->_state.PlayAnimation(Object::ExternalPtr<AnimationGroup>(group), animIndex,
                                   nodes, at, zero, 1.0f, false);
 
                 for (int rep = 0; rep < 2; ++rep) {
@@ -1151,7 +1151,7 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
                     const Math::Transform ident;   // the identity: Transform()
                     // Through the door: it counts the call for the [GFXBIG27]
                     // line before it calls the member.
-                    RtGraphics_AnimationState_Update(st, &z, &inst->_nodes, &ident,
+                    RtGraphics_AnimationState_Update(&st->_state, &z, &inst->_nodes, &ident,
                                                      st->_nodes._data, st->_pose._data,
                                                      &st->_rootOffset, false, false);
                 }
@@ -1173,14 +1173,14 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
     const Instance& inst = _instances._data[idx];
     if (inst._states._size > 0) {
         const int32_t n = inst._states._size;
-        const AnimationState* sp = inst._states._data;
+        const InstancedAnimationState* sp = inst._states._data;
         const double spt = SecondsPerTick();
         do {
             float v;
-            if (sp->_layers._size == 0) {
+            if (sp->_state._layers._size == 0) {
                 v = 0.0f;
             } else {
-                v = static_cast<float>(static_cast<double>(sp->_layers._data[0]._time._ticks) * spt);
+                v = static_cast<float>(static_cast<double>(sp->_state._layers._data[0]._time._ticks) * spt);
             }
             // COMISS/JBE: an unordered compare skips, so a NaN never wins.
             if (best > v) { bestIdx = j; best = v; }

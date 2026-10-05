@@ -151,8 +151,8 @@ UNIT_TEST(graphics_renderer_family_matches_the_rt_pods) {
     CHECK_EQ(sizeof(Graphics::RendererDrawItem),   sizeof(RtGraphics::RendererDrawItem));
     CHECK_EQ(sizeof(Graphics::RendererDrawGroup),  sizeof(RtGraphics::RendererDrawGroup));
     CHECK_EQ(sizeof(Graphics::RendererSceneEntry), sizeof(RtGraphics::RendererSceneEntry));
-    CHECK_EQ(sizeof(Graphics::Scene),              sizeof(RtGraphics::Scene));
-    CHECK_EQ(sizeof(Graphics::SceneNode),          sizeof(RtGraphics::SceneNode));
+    CHECK_EQ(sizeof(Graphics::Scene),              (size_t)0x78);
+    CHECK_EQ(sizeof(Graphics::SceneNode),          (size_t)0x18);
 
     CHECK_EQ(offsetof(Graphics::Camera, _cameraToWorld),
              offsetof(RtGraphics::Camera, cameraToWorld));
@@ -170,8 +170,7 @@ UNIT_TEST(graphics_renderer_family_matches_the_rt_pods) {
              offsetof(RtGraphics::Renderer, field_48));
     CHECK_EQ(offsetof(Graphics::RendererDrawGroup, _materialTypeFlags),
              offsetof(RtGraphics::RendererDrawGroup, passMask));
-    CHECK_EQ(offsetof(Graphics::Scene, _globals),
-             offsetof(RtGraphics::Scene, _globals));
+    CHECK_EQ(offsetof(Graphics::Scene, _globals), (size_t)0x60);
 }
 
 UNIT_TEST(graphics_camera_field_offsets) {

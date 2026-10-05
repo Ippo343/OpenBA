@@ -552,7 +552,7 @@ bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
 
     // --- Allocate Graphics::Scene (0x78 bytes, alignment 8) ---
     Graphics::Scene* gScene = static_cast<Graphics::Scene*>(System::MemoryAllocator::MemAlloc(0x78, 8));
-    if (gScene) RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(gScene));   // LEFT: audit DEFERRED (ctor door; RtGraphics_Scene_Ctor is runtime/, z-RT): the Renderer / Scene ctors are doors on the POD mirrors (R-GFX).
+    if (gScene) RtGraphics_Scene_Ctor(gScene);
     self->_scene = gScene;
 
     // --- Allocate SunLight (0x108 bytes, alignment 8) ---

@@ -224,10 +224,10 @@ UNIT_TEST(graphics_instance_field_offsets) {
     CHECK_EQ(offsetof(Graphics::MeshInstance, _color),               (size_t)0x10c);
     // A WORD store, which is what fixes sizeof at 0x120 rather than 0x11c.
     CHECK_EQ(offsetof(Graphics::MeshInstance, _sortBias),            (size_t)0x11c);
-    CHECK_EQ(sizeof(Graphics::MeshInstance), sizeof(RtGraphics::MeshInstance));
+    CHECK_EQ(sizeof(Graphics::MeshInstance), (size_t)0x120);
 
     CHECK_EQ(offsetof(Graphics::EdgeMeshInstance, _followed),        (size_t)0xc8);
-    CHECK_EQ(sizeof(Graphics::EdgeMeshInstance), sizeof(RtGraphics::EdgeMeshInstance));
+    CHECK_EQ(sizeof(Graphics::EdgeMeshInstance), (size_t)0xd0);
 
     CHECK_EQ(offsetof(Graphics::ParticleInstance, _boundsPtr),       (size_t)0xc8);
     CHECK_EQ(offsetof(Graphics::ParticleInstance, _index),           (size_t)0xd0);
