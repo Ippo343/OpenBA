@@ -139,11 +139,11 @@ void PortedRetrace24(rtsetavl24::Set* set, rtsetavl24::Node** slot) {   // 0x180
 
 // ---------------------------------------------------------------------------
 // element 0x30 / node 0x50 — avl_trees.cpp group A (Object::Factory's type
-// tree). Its container header is `RtObject::Factory`, which is the same
-// {root, count} pair every other Set has.
+// tree). Its container argument is the Set's root slot (`&set._root`, +0x00 of
+// the {root, count} pair every Set has), the only word the core touches.
 // ---------------------------------------------------------------------------
-void PortedRetrace48(RtObject::Factory* set, RtObject::TypeNode** slot) {   // 0x180030540
-    rtavl::Retrace50(set, slot);
+void PortedRetrace48(RtObject::TypeNode** root, RtObject::TypeNode** slot) {   // 0x180030540
+    rtavl::Retrace50(root, slot);
 }
 
 }  // namespace detail

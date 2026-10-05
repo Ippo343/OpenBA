@@ -17,7 +17,7 @@
 #include "../../types/system/Filename.h"   // RtSystem::Filename (FilenamePair's key)
 #include "../../types/io/Persistence.h"    // RtIo::SettingsMapNode / SettingsMap (group B)
 
-namespace RtObject { struct TypeNode; struct TypeRecord; struct Factory; }
+namespace RtObject { struct TypeNode; struct TypeRecord; }
 namespace rtsetavl { struct Node; struct Set; }
 
 namespace rtavl {
@@ -60,9 +60,11 @@ extern ProbeCounters g_pc;
 
 // ---- group A: Set<Pair<uint32_t, TypeRecord>>, 0x50-byte node -------------
 void*                PtrArrayDtor  (void* self);                       // 0x1800093e0
-RtObject::TypeNode*  RotateLeft50 (RtObject::Factory*, RtObject::TypeNode*);   // 0x1800307b0
-RtObject::TypeNode*  RotateRight50(RtObject::Factory*, RtObject::TypeNode*);   // 0x1800308e0
-void                 Retrace50    (RtObject::Factory*, RtObject::TypeNode**);  // 0x180030540
+// The container argument is the Set's root slot (`&set._root`, at +0x00 of the
+// Set, so the same pointer retail passes): every body only reads / writes `[RCX]`.
+RtObject::TypeNode*  RotateLeft50 (RtObject::TypeNode** root, RtObject::TypeNode*);   // 0x1800307b0
+RtObject::TypeNode*  RotateRight50(RtObject::TypeNode** root, RtObject::TypeNode*);   // 0x1800308e0
+void                 Retrace50    (RtObject::TypeNode** root, RtObject::TypeNode**);  // 0x180030540
 // 0x180030140 (TypeSetInsert) — deleted in ENDGAME B.3.3 step 7; Object::Factory
 // is a Collection::Set. 0x1800087c0 / 0x180008440 / 0x180030380 / 0x180009350
 // (pair ctor, node alloc, insert core, Array<T*>::operator=) — deleted in B.4

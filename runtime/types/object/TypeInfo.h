@@ -170,7 +170,8 @@ static_assert(offsetof(TypeNode, _pad4c)  == 0x4c, "TypeNode tail");
 static_assert(sizeof(TypeNode)            == 0x50, "TypeNode is 0x50 (0x180008440)");
 
 // ============================================================
-// Object::Factory — only the tree root is pinned.
+// Object::Factory — the tree root (the class is below; this note is its
+// evidence).
 //
 // Every lookup starts with `MOV RAX,[RCX]`, so the Set's root pointer is at
 // +0x00. The Set's element count and allocator, and everything else Factory
@@ -182,10 +183,6 @@ static_assert(sizeof(TypeNode)            == 0x50, "TypeNode is 0x50 (0x18000844
 // "Factory singleton (LoadDialogResource)" among globals that "have no
 // export"; both halves of that are wrong.
 // ============================================================
-struct Factory {
-    TypeNode* root;   // +0x00
-};
-static_assert(offsetof(Factory, root) == 0x00, "Factory::root");
 
 // ============================================================
 // The type-id hash, as ONE function.
@@ -470,9 +467,8 @@ inline const BaseTypeInfo& Base::GetTypeInfo() { return _typeInfo; }
 //
 // `??0Factory@Object@@QEAA@XZ` (0x1800c09d0) writes `[RCX]=0` and a DWORD
 // `[RCX+8]=0` and publishes `_singleton`; the insert core INCs that dword at
-// 0x1800303ac / 0x18003043c. So the whole object IS the Set header, and
-// `RtObject::Factory`'s 8-byte `{ TypeNode* root; }` is a correct VIEW that must
-// never be used as storage (type_system.cpp's "MEASURED CORRECTIONS" banner).
+// 0x1800303ac / 0x18003043c. So the whole object IS the Set header (the
+// avl_trees.cpp group-A core takes `&_types._root`, the word at +0x00).
 //
 // NO DESTRUCTOR IS DECLARED and the implicit one is unreachable in practice:
 // the singleton is heap-allocated once and never deleted (retail's teardown is

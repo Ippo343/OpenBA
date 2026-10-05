@@ -326,9 +326,9 @@ static inline void Recompute(TypeNode* n) {
 // REUSED for the parent at 0x1800307bc, destroying it. Faithful; the set
 // pointer is not needed again.
 // ---------------------------------------------------------------------------
-TypeNode* RotateLeft50(RtObject::Factory* set, TypeNode* n) {
+TypeNode* RotateLeft50(TypeNode** root, TypeNode* n) {
     ++g_pc.rot50L;
-    if (n == set->root) set->root = n->right;
+    if (n == *root) *root = n->right;
 
     TypeNode* p = n->parent;
     if (p) {
@@ -354,9 +354,9 @@ TypeNode* RotateLeft50(RtObject::Factory* set, TypeNode* n) {
 // 0x1800308e0 and then diffed against RotateLeft50: the two disassemblies
 // differ in exactly the six link offsets (+0x38 <-> +0x40) and nowhere else.
 // ---------------------------------------------------------------------------
-TypeNode* RotateRight50(RtObject::Factory* set, TypeNode* n) {
+TypeNode* RotateRight50(TypeNode** root, TypeNode* n) {
     ++g_pc.rot50R;
-    if (n == set->root) set->root = n->left;
+    if (n == *root) *root = n->left;
 
     TypeNode* p = n->parent;
     if (p) {
@@ -411,7 +411,7 @@ TypeNode* RotateRight50(RtObject::Factory* set, TypeNode* n) {
 // loop advances by storing it back into the slot. That ordering is why a
 // rotation at the current level cannot redirect the walk.
 // ---------------------------------------------------------------------------
-void Retrace50(RtObject::Factory* set, TypeNode** slot) {
+void Retrace50(TypeNode** root, TypeNode** slot) {
     if (*slot == nullptr) return;
 
     for (;;) {
@@ -432,10 +432,10 @@ void Retrace50(RtObject::Factory* set, TypeNode** slot) {
             if (r) {
                 if (Balance50(r) < 0) {
                     ++g_pc.preRot50R;
-                    RotateRight50(set, r);
+                    RotateRight50(root, r);
                     cur = *slot;        // 0x1800305d2
                 }
-                RotateLeft50(set, cur);
+                RotateLeft50(root, cur);
             }
         }
 
@@ -445,10 +445,10 @@ void Retrace50(RtObject::Factory* set, TypeNode** slot) {
             if (l) {
                 if (Balance50(l) > 0) {
                     ++g_pc.preRot50L;
-                    RotateLeft50(set, l);
+                    RotateLeft50(root, l);
                     cur = *slot;        // 0x180030606
                 }
-                RotateRight50(set, cur);
+                RotateRight50(root, cur);
             }
         }
 
