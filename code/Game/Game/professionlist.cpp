@@ -144,11 +144,10 @@ void ProfessionList::Startup() {
     if (!profTid) return;
 
     const ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    const ::Object::External* found = efactory->FindNext(profTid, nullptr);
-    for (; found; found = efactory->FindNext(profTid, found)) {
+    ::Object::External* found = efactory->FindNextAs<::Object::External>(profTid, nullptr);
+    for (; found; found = efactory->FindNextAs<::Object::External>(profTid, found)) {
         if (!found->IsDerivedFrom(profTid)) continue;
-        // LEFT: FindNext returns a const External*; the array holds Profession*.
-        Profession* prof = const_cast<Profession*>(static_cast<const Profession*>(found));   // LEFT: FindNext returns a const External*; the array holds Profession*.
+        Profession* prof = static_cast<Profession*>(found);
         if (prof->isAvailable == 0) continue;  // +0x4e: not player-selectable
 
         // Growable push into +0x20 (buf) / +0x28 (count) / +0x2c (cap).

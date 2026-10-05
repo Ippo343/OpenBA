@@ -113,7 +113,7 @@ void NamedExternalRef::ResolveToolbar() {
     if (refGen == factoryGen) return;
 
     System::Filename filename(name);
-    const ::Object::External* found = efactory->Find(filename);
+    ::Object::External* found = efactory->FindAs<::Object::External>(filename);
 
     // STANDALONE DEVIATION, deliberate — retail uses Find() alone and would crash
     // on the null below, so this is not papering over a faithful fault: it is the
@@ -149,12 +149,12 @@ void NamedExternalRef::ResolveToolbar() {
 
             System::String   normStr(normalized);
             System::Filename normFile(normStr);
-            found = efactory->FindOrLoad(normFile);
+            found = efactory->FindOrLoadAs<::Object::External>(normFile);
         }
     }
 
     // Validate Toolbar type (cell 0x1401c6128; the global "TypeId_ToolbarItem" lies — D5).
-    const ::Object::External* result = nullptr;
+    ::Object::External* result = nullptr;
     if (found) {
         uint32_t tid = Toolbar::TypeId();
         if (Object::IsDerivedFromNullSafe(found, tid)) {
@@ -162,9 +162,7 @@ void NamedExternalRef::ResolveToolbar() {
         }
     }
 
-    // The factory hands out const Externals; the reference holds them mutable
-    // (retail's ExternalPtr<T> is a plain T*).
-    resolved   = const_cast<::Object::External*>(result);   // LEFT: FindOrLoad returns a const External*; the reference holds it mutable (PASS2_LEDGER S3, the close decides)
+    resolved   = result;
     generation = factoryGen;
 }
 

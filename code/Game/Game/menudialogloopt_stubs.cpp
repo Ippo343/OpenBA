@@ -103,9 +103,7 @@ static void EnsureCursorsLoaded() {
     auto loadAndStore = [&](Object::ExternalPtr<UI::Cursor>& slot, [[maybe_unused]] size_t offset,
                             const char* name) {
         const System::Filename fn(name);
-        // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-        UI::Cursor* ext = const_cast<UI::Cursor*>(   // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-            static_cast<const UI::Cursor*>(efactory->FindOrLoad(fn)));
+        UI::Cursor* ext = efactory->FindOrLoadAs<UI::Cursor>(fn);
         slot = ext;
         printf("[CursorLoad] %-32s -> %p (KeyMap+0x%02llx)\n",
                name, (void*)ext, (unsigned long long)offset);
@@ -157,9 +155,7 @@ static void EnsureUISoundsLoaded() {
     auto loadAndStore = [&](Object::ExternalPtr<Audio::SoundEffect>& slot, [[maybe_unused]] size_t offset,
                             const char* name) {
         const System::Filename fn(name);
-        // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-        Audio::SoundEffect* ext = const_cast<Audio::SoundEffect*>(   // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-            static_cast<const Audio::SoundEffect*>(efactory->FindOrLoad(fn)));
+        Audio::SoundEffect* ext = efactory->FindOrLoadAs<Audio::SoundEffect>(fn);
         slot = ext;
         printf("[UISoundLoad] %-34s -> %p (KeyMap+0x%02llx)\n",
                name, (void*)ext, (unsigned long long)offset);
@@ -204,9 +200,7 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 
     // Step 1: load Dialog/SpriteSheet.rsc into KeyMap+0xa0.
     const System::Filename sheetPath("Dialog/SpriteSheet.rsc");
-    // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-    UI::SpriteSheet* spriteSheet = const_cast<UI::SpriteSheet*>(   // LEFT: FindOrLoad returns const (runtime Object header); the slot holds non-const.
-        static_cast<const UI::SpriteSheet*>(efactory->FindOrLoad(sheetPath)));
+    UI::SpriteSheet* spriteSheet = efactory->FindOrLoadAs<UI::SpriteSheet>(sheetPath);
     keyMap->spriteSheet = spriteSheet;
     printf("[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> %p (KeyMap+0xa0)\n",
            (void*)spriteSheet);

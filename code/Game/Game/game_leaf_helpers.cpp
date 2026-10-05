@@ -178,7 +178,7 @@ void Game_TerrainResolveMaterial(MapGenerator::ExternalRef* ref) {
     if (ref->factoryGen == factoryGen) return;
 
     System::Filename fnameBuf(ref->strPtr);  // String @ +0
-    ::Object::External* obj = const_cast<::Object::External*>(efactory->Find(fnameBuf));  // B.3.3 bridge  // LEFT: const_cast ExternalFactory::Find returns a const External* (ledger S3: decide at the close)
+    ::Object::External* obj = efactory->FindAs<::Object::External>(fnameBuf);  // B.3.3 bridge
 
     ::Object::External* result = nullptr;
     if (obj) {

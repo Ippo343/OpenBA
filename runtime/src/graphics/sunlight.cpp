@@ -189,13 +189,12 @@ Video::ImageBuffer* NewImageBuffer() {
 // than redirected to the ctor export, because the shipped bytes at both sites
 // are the inline.
 //
-// LEFT: the raw allocation is viewed once as the RenderBuffer the inlined ctor
-// builds in it (the class's own ctor is not what retail runs here).
+// The raw allocation is typed once as the RenderBuffer the inlined ctor builds
+// in it (the class's own ctor is not what retail runs here).
 Video::RenderBuffer* NewRenderBuffer() {
-    void* p = OperatorNew(0x30);
-    if (p == nullptr)
+    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(OperatorNew(0x30));
+    if (rb == nullptr)
         return nullptr;
-    Video::RenderBuffer* const rb = static_cast<Video::RenderBuffer*>(p);   // LEFT: FLOOR? allocation result: the 0x30 bytes OperatorNew returns for the RenderBuffer built next (castmetric's allocation shape does not know OperatorNew)
     rb->colorBuffer = nullptr;   // +0x00
     rb->depthBuffer = nullptr;   // +0x08
     rb->width  = 0;              // +0x10 \ one qword store in retail

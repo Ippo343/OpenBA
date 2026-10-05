@@ -94,8 +94,7 @@ void SerializeExternalRef(::Object::External*& ref, IO::Serializer& serializer,
     // Loads one path and keeps it when it derives from the type (or the type is
     // not registered yet).
     auto load = [&](const System::Filename& path) -> ::Object::External* {
-        // LEFT: FindOrLoad returns a const External*; the slot holds External*.
-        ::Object::External* loaded = const_cast<::Object::External*>(efactory->FindOrLoad(path));   // LEFT: FindOrLoad returns a const External*; the slot holds External*.
+        ::Object::External* loaded = efactory->FindOrLoadAs<::Object::External>(path);
         if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId)))
             return loaded;
         return nullptr;
