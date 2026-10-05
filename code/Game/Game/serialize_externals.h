@@ -26,9 +26,6 @@ namespace IO { class Serializer; }
 // The one body, on the slot as what it holds (an External*).
 void ExternalPtrSerializeGeneric(::Object::External** refField, IO::Serializer* serializer,
                                  const uint32_t* typeIdPtr, const char* typeName);
-// The untyped spelling the void*-fed callers (tutorial / component / array helpers) still hold.
-void ExternalPtrSerializeGeneric(void** refField, void* serializer,
-                                 const uint32_t* typeIdPtr, const char* typeName);
 // The typed wrapper over that one body for an ExternalPtr<T> member held as `T*`
 // (T derives from Object::External; the slot holds the External* retail serializes).
 template <class T, class = std::enable_if_t<std::is_base_of_v<::Object::External, T> &&
