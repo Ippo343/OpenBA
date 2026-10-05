@@ -3345,8 +3345,8 @@ int DL_CollectAnimals(const CharacterGrid* grid, int wantType, std::vector<DL_An
                       int* outLive) {
     *outLive = 0;
     if (!grid) return 0;
-    const CharacterGridSlot* slots = grid->slots;
-    const int slotCount = grid->slotCount;
+    const CharacterGridSlot* slots = grid->slots._data;
+    const int slotCount = grid->slots._size;
     if (!slots || slotCount <= 0) return 0;
 
     for (int i = 0; i < slotCount && i < 4096; ++i) {

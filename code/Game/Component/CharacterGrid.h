@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "object/Internal.h"
+#include "collection/Collection.h"   // Collection::Array (the five arrays)
 
 class CharacterComponent;   // Component/CharacterComponent.h
 
@@ -48,21 +49,21 @@ public:
     float              centerX;           // +0x04 worldSize / 2
     float              centerY;           // +0x08
     int32_t            levels;            // +0x0C quadtree depth
-    CharacterGridSlot* slots;             // +0x10 Array data
-    int32_t            slotCount;         // +0x18
-    int32_t            slotCapacity;      // +0x1C
-    int32_t*           freeList;          // +0x20 recycled character indices (Array data)
-    int32_t            freeCount;         // +0x28
-    int32_t            freeCapacity;      // +0x2C
-    int32_t*           cellHead;          // +0x30 per cell: the head character index, -1 = empty
-    int32_t            field_0x38;        // +0x38 (no ported body reads it)
-    int32_t            field_0x3C;        // +0x3C
-    int32_t*           levelOffsets;      // +0x40 the first cell of each level, (4^L-1)/3
-    int32_t            field_0x48;        // +0x48 (no ported body reads it)
-    int32_t            field_0x4C;        // +0x4C
-    int32_t*           cellOccupancy;     // +0x50 per cell: characters in its subtree
-    int32_t            field_0x58;        // +0x58 (no ported body reads it)
-    int32_t            field_0x5C;        // +0x5C
+    Collection::Array<CharacterGridSlot> slots;      // +0x10 the character slots (count +0x18, capacity +0x1C)
+    Collection::Array<int32_t>     freeList;          // +0x20 recycled character indices (count +0x28, capacity +0x2C)
+    Collection::Array<int32_t>     cellHead;          // +0x30 per cell: the head character index, -1 = empty
+    Collection::Array<int32_t>     levelOffsets;      // +0x40 the first cell of each level, (4^L-1)/3
+    Collection::Array<int32_t>     cellOccupancy;     // +0x50 per cell: characters in its subtree
+
+    // 0x1400182b0 (Load 0x1400970dc, worldSize 2048): the qword zero stores over
+    // +0x04..+0x5F (the five Arrays' ctors), the scalars, then the level table and the
+    // two 0x5555-cell arrays (gameupdateloop_load.cpp).
+    explicit CharacterGrid(float worldSize);
+    // The port-only seed (charmanager_seed.cpp, gated): every field zero, as its memset was.
+    CharacterGrid() : worldSize(0.0f), centerX(0.0f), centerY(0.0f), levels(0) {}
+    // 0x140018220: the five ~Array, +0x50 down to +0x10 (reverse declaration order; trivial
+    // elements: MemFree, data = 0, the size + capacity qword = 0). No body.
+    ~CharacterGrid() = default;
 };
 
 static_assert(sizeof(CharacterGrid) == 0x60, "CharacterGrid is MemAlloc(0x60, 8)");
@@ -71,17 +72,17 @@ static_assert(offsetof(CharacterGrid, centerX) == 0x04, "CharacterGrid::centerX 
 static_assert(offsetof(CharacterGrid, centerY) == 0x08, "CharacterGrid::centerY @ +0x08");
 static_assert(offsetof(CharacterGrid, levels) == 0x0C, "CharacterGrid::levels @ +0x0C");
 static_assert(offsetof(CharacterGrid, slots) == 0x10, "CharacterGrid::slots @ +0x10");
-static_assert(offsetof(CharacterGrid, slotCount) == 0x18, "CharacterGrid::slotCount @ +0x18");
-static_assert(offsetof(CharacterGrid, slotCapacity) == 0x1C, "CharacterGrid::slotCapacity @ +0x1C");
+static_assert(offsetof(CharacterGrid, slots) + offsetof(Collection::Array<int32_t>, _size) == 0x18, "CharacterGrid +0x18");
+static_assert(offsetof(CharacterGrid, slots) + offsetof(Collection::Array<int32_t>, _capacity) == 0x1C, "CharacterGrid +0x1C");
 static_assert(offsetof(CharacterGrid, freeList) == 0x20, "CharacterGrid::freeList @ +0x20");
-static_assert(offsetof(CharacterGrid, freeCount) == 0x28, "CharacterGrid::freeCount @ +0x28");
-static_assert(offsetof(CharacterGrid, freeCapacity) == 0x2C, "CharacterGrid::freeCapacity @ +0x2C");
+static_assert(offsetof(CharacterGrid, freeList) + offsetof(Collection::Array<int32_t>, _size) == 0x28, "CharacterGrid +0x28");
+static_assert(offsetof(CharacterGrid, freeList) + offsetof(Collection::Array<int32_t>, _capacity) == 0x2C, "CharacterGrid +0x2C");
 static_assert(offsetof(CharacterGrid, cellHead) == 0x30, "CharacterGrid::cellHead @ +0x30");
-static_assert(offsetof(CharacterGrid, field_0x38) == 0x38, "CharacterGrid +0x38");
-static_assert(offsetof(CharacterGrid, field_0x3C) == 0x3C, "CharacterGrid +0x3C");
+static_assert(offsetof(CharacterGrid, cellHead) + offsetof(Collection::Array<int32_t>, _size) == 0x38, "CharacterGrid +0x38");
+static_assert(offsetof(CharacterGrid, cellHead) + offsetof(Collection::Array<int32_t>, _capacity) == 0x3C, "CharacterGrid +0x3C");
 static_assert(offsetof(CharacterGrid, levelOffsets) == 0x40, "CharacterGrid::levelOffsets @ +0x40");
-static_assert(offsetof(CharacterGrid, field_0x48) == 0x48, "CharacterGrid +0x48");
-static_assert(offsetof(CharacterGrid, field_0x4C) == 0x4C, "CharacterGrid +0x4C");
+static_assert(offsetof(CharacterGrid, levelOffsets) + offsetof(Collection::Array<int32_t>, _size) == 0x48, "CharacterGrid +0x48");
+static_assert(offsetof(CharacterGrid, levelOffsets) + offsetof(Collection::Array<int32_t>, _capacity) == 0x4C, "CharacterGrid +0x4C");
 static_assert(offsetof(CharacterGrid, cellOccupancy) == 0x50, "CharacterGrid::cellOccupancy @ +0x50");
-static_assert(offsetof(CharacterGrid, field_0x58) == 0x58, "CharacterGrid +0x58");
-static_assert(offsetof(CharacterGrid, field_0x5C) == 0x5C, "CharacterGrid +0x5C");
+static_assert(offsetof(CharacterGrid, cellOccupancy) + offsetof(Collection::Array<int32_t>, _size) == 0x58, "CharacterGrid +0x58");
+static_assert(offsetof(CharacterGrid, cellOccupancy) + offsetof(Collection::Array<int32_t>, _capacity) == 0x5C, "CharacterGrid +0x5C");

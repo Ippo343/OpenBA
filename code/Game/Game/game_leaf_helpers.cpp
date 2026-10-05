@@ -61,23 +61,11 @@
 // one-line forwarder Game_EventNotifierCleanup was deleted in B.4 wave X.
 
 // ------------------------------------------------------------------
-// FUN_140018220 (gameupdateloop.cpp, MusicPlayer_Dtor) — frees 5 buffers at
-// +0x50,+0x40,+0x30,+0x20,+0x10 (high to low) and zeroes each {ptr,len} pair.
-//
-// ENDGAME B.3.2 step 2: each of the five is `Collection::Array<T>::~Array` for a
-// trivially-destructible T (re-decompiled 2026-09-13: MemFree(data); data = 0;
-// one qword over size+capacity = 0 — ArrayDtorImpl exactly, no element step).
-// The element types are not pinned in the tree, and `~Array` of a trivial
-// element never reads the stride, so the header alias `rtcoll::ArrayHdr`
-// (= Array<uint8_t>, the same form runtime/src/collection/array.cpp's
-// ArrayDtorSited uses) is the honest spelling until MusicPlayer is a class.
+// FUN_140018220 — CharacterGrid::~CharacterGrid (Component/CharacterGrid.h): the five
+// `Collection::Array` members' ~Array, +0x50 down to +0x10 (reverse declaration order;
+// MemFree(data); data = 0; one qword over size+capacity = 0). The defaulted dtor is that;
+// GameUpdateLoop::Shutdown runs it by name (Game_MusicPlayerDtor, its C body, is gone).
 // ------------------------------------------------------------------
-void Game_MusicPlayerDtor(CharacterGrid* self) {
-    uint8_t* b = reinterpret_cast<uint8_t*>(self);   // LEFT: Component/CharacterGrid.h declares the five arrays as raw triples (H5): the ~Array runs over their headers by offset
-    static const uint64_t kOffsets[5] = { 0x50, 0x40, 0x30, 0x20, 0x10 };
-    for (uint64_t off : kOffsets)
-        reinterpret_cast<rtcoll::ArrayHdr*>(b + off)->~Array();   // LEFT: Component/CharacterGrid.h: the arrays are raw triples (H5)
-}
 
 // ------------------------------------------------------------------
 // FUN_1400a4fc0 (Minimap::~Minimap, run by GameUpdateLoop::Shutdown) — virtual scalar-dtor

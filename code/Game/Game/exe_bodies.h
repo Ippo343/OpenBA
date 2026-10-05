@@ -84,7 +84,6 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
 
 // ---- game_leaf_helpers.cpp
 class CharacterGrid;   // Component/CharacterGrid.h
-void Game_MusicPlayerDtor(CharacterGrid* self);  // 0x140018220
 void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 
 // ---- game_settings_persist.cpp
