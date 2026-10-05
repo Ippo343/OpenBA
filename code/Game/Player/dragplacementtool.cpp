@@ -482,7 +482,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     }
 
     // The entity's InternalBasePtr is its eight bytes
-    ComponentEntity* entityIBP = newEntity;
+    Object::InternalPtr<ComponentEntity> entityIBP = newEntity;
 
     // Find its MapComponent (0x140004680, cell 0x1401c79e0)
     MapComponent* buildComp = entityIBP->FindComponent<MapComponent>();
@@ -525,13 +525,13 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
 // [4] Startup, [8] Draw, [13] CalcPath and [14] CalcCost are defined above.
 
 // create 0x14002d8b0: MemAlloc(0x48, 8), then the ctor 0x1400fc530.
-void* DragPlacementTool::CreateNewObject() {
+::Object::Base* DragPlacementTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DragPlacementTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DragPlacementTool());
 }
 // createInPlace 0x14002d8f0: `if (storage) ctor(storage)`.
-void* DragPlacementTool::CreateInPlaceObject(void* storage) {
+::Object::Base* DragPlacementTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DragPlacementTool());
 }

@@ -142,9 +142,9 @@ static Node* CellBST_AllocNode(const WorkCellAssignment* rec, Node* parent) {
 // cell index. Prototype: void* fn(longlong* root, void* outResult, uint* keyRec).
 // keyRec = {int key@+0; ptr IBP@+8}; key = *keyRec; the node is written to *outResult.
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: FLOOR? the erased core's view of its {root, count} header: one body (ICF) over the area works' Collection::Set<T> members (reached through the typed wrappers in Work/exe_bodies.h) and the scheduler's WorkSchedulerTree / bucket entries
-    const WorkCellAssignment* rec = reinterpret_cast<const WorkCellAssignment*>(keyRec);  // LEFT: SIG WorkCellBST_Insert_9a40: the scheduler inserts {id, pad, InternalPtr<Work>} through the same body (ICF)
-    Node** pOut = reinterpret_cast<Node**>(outResult);  // LEFT: FLOOR? the erased core's view of its out slot: one body (ICF) hands back the inserted node of the area works' cell sets and of the scheduler's WorkSchedulerTree
+    CellSet* set = reinterpret_cast<CellSet*>(root);   // the erased core's view of its {root, count} header: one body (ICF) over the area works' Collection::Set<T> members (reached through the typed wrappers in Work/exe_bodies.h) and the scheduler's WorkSchedulerTree / bucket entries  // CAST-OK: elem_stride
+    const WorkCellAssignment* rec = reinterpret_cast<const WorkCellAssignment*>(keyRec);   // WorkCellBST_Insert_9a40: the scheduler inserts {id, pad, InternalPtr<Work>} through the same body (ICF)  // CAST-OK: elem_stride
+    Node** pOut = reinterpret_cast<Node**>(outResult);   // the erased core's view of its out slot: one body (ICF) hands back the inserted node of the area works' cell sets and of the scheduler's WorkSchedulerTree  // CAST-OK: elem_stride
     int key = rec->cell;
     if (set->_root == nullptr) {
         Node* node = CellBST_AllocNode(rec, nullptr);
@@ -184,8 +184,8 @@ void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
 // Same three-case structure as the simple-BST delete, cell offsets.
 // Caller: void fn(void* bstRoot, void* node).
 void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF: cell, entity, scheduler id / bucket, region pair, goals)
-    Node* node = reinterpret_cast<Node*>(nodeArg);  // LEFT: FLOOR? the erased core's view of the node it unlinks: one body (ICF) over five node types (cell, entity, scheduler id / bucket, region pair, goals)
+    CellSet* set = reinterpret_cast<CellSet*>(root);   // WorkCellBST_Remove_ca60: one body over five node / header types (ICF: cell, entity, scheduler id / bucket, region pair, goals)  // CAST-OK: elem_stride
+    Node* node = reinterpret_cast<Node*>(nodeArg);   // the erased core's view of the node it unlinks: one body (ICF) over five node types (cell, entity, scheduler id / bucket, region pair, goals)  // CAST-OK: elem_stride
     Node* local_res8 = node->parent;
     set->_count -= 1; // count--
     Node* lVar5 = node->right;
@@ -258,7 +258,7 @@ void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
 // (IBP type-checked vs CitizenComponent 0x1401c7158). SAVE is an iterative in-order
 // parent-walk writing each node's key(int @+0) then IBP(@+8). Caller: void fn(root, ser).
 void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);  // LEFT: FLOOR? the erased core's view of its {root, count} header: one body (ICF) over the area works' Collection::Set<T> members (typed wrappers in Work/exe_bodies.h) and the scheduler's raw trees
+    CellSet* set = reinterpret_cast<CellSet*>(root);   // the erased core's view of its {root, count} header: one body (ICF) over the area works' Collection::Set<T> members (typed wrappers in Work/exe_bodies.h) and the scheduler's raw trees  // CAST-OK: elem_stride
     int count = set->_count;
     ser->Serialize(count, nullptr);
     bool loading = (static_cast<int>(ser->GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210

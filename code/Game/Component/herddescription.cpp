@@ -77,13 +77,13 @@ Object::External* HerdDescription::Construct() {
 }
 
 // create 0x140034d30: MemAlloc(0x40, 8), then the (inlined) ctor.
-void* HerdDescription::CreateNewObject() {
+::Object::Base* HerdDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HerdDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HerdDescription());
 }
 // createInPlace 0x140034d90.
-void* HerdDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* HerdDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HerdDescription());
 }

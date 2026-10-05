@@ -196,7 +196,7 @@ Work* CF_MakePlantArea(CropFieldComponent* comp) {
     if (!::System::MemoryAllocator::_singleton) return nullptr;
     void* mem = ::System::MemoryAllocator::MemAlloc(0x70, 8);
     if (!mem) return nullptr;
-    ComponentEntity* entity = comp->_entity;
+    ComponentEntity* entity = comp->_entity.Get();
     PlantArea* work = new (mem) PlantArea();
     work->InitFromEntity(&entity);
     work->_cells._root = nullptr;
@@ -213,7 +213,7 @@ Work* CF_MakeHarvestArea(CropFieldComponent* comp) {
     if (!::System::MemoryAllocator::_singleton) return nullptr;
     void* mem = ::System::MemoryAllocator::MemAlloc(0x68, 8);
     if (!mem) return nullptr;
-    ComponentEntity* entity = comp->_entity;
+    ComponentEntity* entity = comp->_entity.Get();
     HarvestArea* work = new (mem) HarvestArea();
     work->InitFromEntity(&entity);
     work->_cells._root = nullptr;
@@ -229,7 +229,7 @@ Work* CF_MakeTendArea(CropFieldComponent* comp) {
     if (!::System::MemoryAllocator::_singleton) return nullptr;
     void* mem = ::System::MemoryAllocator::MemAlloc(0x60, 8);
     if (!mem) return nullptr;
-    ComponentEntity* entity = comp->_entity;
+    ComponentEntity* entity = comp->_entity.Get();
     TendArea* work = new (mem) TendArea();
     work->InitFromEntity(&entity);
     work->_citizens._root = nullptr;

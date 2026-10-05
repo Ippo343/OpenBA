@@ -846,13 +846,13 @@ NewGameDialog::NewGameDialog()
       terrainGeneratorList(nullptr), random{}, _padADC(0), mainMenu() {}
 
 // create 0x140012c70: MemAlloc(0xae8, 8), then the ctor.
-void* NewGameDialog::CreateNewObject() {
+::Object::Base* NewGameDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(NewGameDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) NewGameDialog());
 }
 // createInPlace 0x140012cb0 (the tree's in-place build is kept, B8-13).
-void* NewGameDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* NewGameDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) NewGameDialog());
 }

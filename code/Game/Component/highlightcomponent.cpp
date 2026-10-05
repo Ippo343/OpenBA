@@ -115,14 +115,14 @@ void HighlightComponent::Tick(const System::Time*) {}
 void HighlightComponent::OnEvent(int) {}
 
 // create 0x140006e40: MemAlloc(0x128, 8), then the ctor.
-void* HighlightComponent::CreateNewObject() {
+::Object::Base* HighlightComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HighlightComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HighlightComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* HighlightComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* HighlightComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HighlightComponent());
 }

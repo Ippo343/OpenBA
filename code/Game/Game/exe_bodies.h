@@ -43,14 +43,14 @@ extern "C" System::String* NameDB_PickAndGenerate(System::String* retStr, System
 
 // ---- eventlog.cpp
 struct EventLogEntry;   // Game/EventLog.h
-extern "C" void EventLog_EventArray_Destroy(EventLogEntry** arrBase);  // 0x14000a8a0
+
 class EventLog; struct EventLogEntry; class GameUpdateLoop;
 namespace Object { class InternalBasePtr; }
 // The two below keep their null-log guard (not pure forwarders).
 extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP);  // 0x140095580 -> EventLog::AddEvent
 extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP, const System::String* nameStr, const System::String* titleStr, const System::String* extraStr);  // 0x140094e00 -> EventLog::AddCitizenEvent (nameStr: &CitizenComponent::name)
 // The shared leaves the crop-infestation writer (diseasecomponent.cpp) uses.
-extern "C" void EventLog_ArrayGrow_Reg(EventLogEntry** arrBase, int newCount, const EventLogEntry* newEntry);  // 0x140019b70
+
 extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it
 extern "C" void EventLog_SeasonString_Reg(GameUpdateLoop* gameWorld, const EventLog* eventLog, System::String* retStr);
 extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)
@@ -174,7 +174,7 @@ template <void (*Core)(::Object::External*&, IO::Serializer&), class T>
 inline void ExternalPtrSerializeSlot(T* refField, IO::Serializer* serializer) {
     static_assert(sizeof(T) == 8, "an ExternalPtr slot is the eight bytes of an External*");
     if (!refField || !serializer) return;
-    Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // LEFT: audit floor elem_stride (coordinator marker): an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)
+    Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)  // CAST-OK: elem_stride
 }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_GraphicsMesh(T* f, IO::Serializer* s)     { ExternalPtrSerializeSlot<&ExternalPtrSerialize_GraphicsMesh>(f, s); }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_Weather(T* f, IO::Serializer* s)          { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Weather>(f, s); }

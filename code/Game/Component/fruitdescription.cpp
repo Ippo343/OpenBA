@@ -72,13 +72,13 @@ Object::External* FruitDescription::Construct() {
 }
 
 // create 0x140005980: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* FruitDescription::CreateNewObject() {
+::Object::Base* FruitDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FruitDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FruitDescription());
 }
 // createInPlace 0x1400059f0.
-void* FruitDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* FruitDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FruitDescription());
 }

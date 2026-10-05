@@ -140,14 +140,14 @@ void TutorialUI::OnUpdateLayout() {
     quitBtn->SetFlagsOnOff(quitHidden ? 1 : 0, quitHidden ? 0 : 1);
 }
 
-void* TutorialUI::CreateNewObject() {
+::Object::Base* TutorialUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialUI());
 }
 // Retail's createInPlace is DialogController's import and does not build a
 // controller in place (B8-13); the tree's in-place entry did, and that is kept.
-void* TutorialUI::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialUI());
 }

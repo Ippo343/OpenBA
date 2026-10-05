@@ -402,9 +402,9 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     }
 
     // --- Health status flags (via the StatusIconComponent at +0x280) ---
-    ComponentEntity* workplaceRef = home;   // +0x238: the home
+    ComponentEntity* workplaceRef = home.Get();   // +0x238: the home
 
-    CitizenStatusIcon_SetFlag(statusIcon, 0, workplaceRef == nullptr);
+    CitizenStatusIcon_SetFlag(statusIcon.Get(), 0, workplaceRef == nullptr);
 
     // Hunger warning flag
     float hungerThreshLow = desc->_fcc;
@@ -412,7 +412,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     float fVar4 = kRdata_140172114;
     float hungerWarnLevel = (hungerThreshHigh - hungerThreshLow) * fVar4 + hungerThreshLow;
     float curHunger = hunger;
-    CitizenStatusIcon_SetFlag(statusIcon, 1, hungerWarnLevel < curHunger);
+    CitizenStatusIcon_SetFlag(statusIcon.Get(), 1, hungerWarnLevel < curHunger);
 
     // Thirst warning flag
     float thirstThreshLow = desc->_fec;
@@ -420,7 +420,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     float fThirstFrac = kRdata_140172100;
     float thirstWarnLevel = (thirstThreshHigh - thirstThreshLow) * fThirstFrac + thirstThreshLow;
     float curThirst = coldness;
-    CitizenStatusIcon_SetFlag(statusIcon, 2, thirstWarnLevel < curThirst);
+    CitizenStatusIcon_SetFlag(statusIcon.Get(), 2, thirstWarnLevel < curThirst);
 
     // Unemployed flag
     char isUnemployed;
@@ -446,10 +446,10 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     } else {
         isUnemployed = 0;
     }
-    CitizenStatusIcon_SetFlag(statusIcon, 3, isUnemployed);
+    CitizenStatusIcon_SetFlag(statusIcon.Get(), 3, isUnemployed);
 
     // Flag 5: sick (the disease pointer)
-    CitizenStatusIcon_SetFlag(statusIcon, 5, disease != nullptr);
+    CitizenStatusIcon_SetFlag(statusIcon.Get(), 5, disease != nullptr);
 
     // --- Hunger/thirst urgency bit flags at +0x54 and +0x88 ---
     desc = description;  // re-read (may have changed)
@@ -522,7 +522,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                 Map* mapInfo = gameWorld->m_game;
                 const MapCell* tiles = mapInfo ? mapInfo->cells.GetData() : nullptr;
                 int mapW = mapInfo ? mapInfo->size : 0, half = mapW >> 1;
-                CharacterComponent* ch = character;
+                CharacterComponent* ch = character.Get();
                 ModelComponent* model = ch ? ch->modelComponent.Get() : nullptr;
                 float cx = model ? model->transform.translation.x : -9999.f;
                 float cy = model ? model->transform.translation.y : -9999.f;
@@ -606,10 +606,10 @@ void CitizenComponent::Update(const System::Time* timeArg) {
             // No home, check the parent (+0x258)
             if (workplaceRef == nullptr && _parent != nullptr) {
                 if (_parent->home != nullptr) {
-                    char valid = CanReach(_parent->home);
+                    char valid = CanReach(_parent->home.Get());
                     if (valid != 0) {
                         int slotIdx = _parent->homeSlot;
-                        SetHome(_parent->home, slotIdx);
+                        SetHome(_parent->home.Get(), slotIdx);
                     }
                 }
             }
@@ -672,7 +672,7 @@ FindWorkLabel:
                 }
 
                 // Re-find the ResidenceComponent of the new home
-                workplaceRef = home;
+                workplaceRef = home.Get();
                 if (workplaceRef != nullptr) {
                     localRes10 = workplaceRef->FindComponent<ResidenceComponent>();
                 }
@@ -681,7 +681,7 @@ FindWorkLabel:
     }
 
     // --- Shared home: find a home of our own if the residence holds more households ---
-    workplaceRef = home;
+    workplaceRef = home.Get();
     if (workplaceRef != nullptr) {
         ResidenceComponent* storageVal = localRes10;
         // Faithful-equivalent guard: the original reads residence+0x58 (the household
@@ -828,7 +828,7 @@ LAB_140113873:
 
             // --- CONCEPTION GATE: married + housed + idle timer + childbearing age +
             //     household has room  ->  seed the gestation timer (+0x4C = desc+0x58) ---
-            workplaceRef = home;
+            workplaceRef = home.Get();
             if (spouse != nullptr && workplaceRef != nullptr && pregnancyTimer == 0.0f) {
                 desc = description;
                 float childMinAge = desc->minPregnancyAge;
@@ -936,7 +936,7 @@ static Work* LookupRegionByID(const WorkScheduler* areaMap, int32_t regionId) {
 static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceComp) {
     int roster = workplaceComp->workerCount;
     WorkComponent* sl = nullptr;   // the InternalPtr fn_FindComponent_Work writes
-    fn_FindComponent_Work(workplaceComp->_entity, &sl);
+    fn_FindComponent_Work(workplaceComp->_entity.Get(), &sl);
     if (sl == nullptr) return false;
     if (sl->workState == 0) {
         int cap = sl->CalcMaxWorkers();
@@ -989,7 +989,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
         }
 
         // Check if current workplace is valid (reachable)
-        char valid = CanReach(workplace);
+        char valid = CanReach(workplace.Get());
         if (!valid) {
             return true; // workplace not reachable -> should switch
         }
@@ -1005,7 +1005,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
             WorkComponent* otherWork = entity->FindComponent<WorkComponent>();
 
             // Skip if this is the current workplace
-            if (entity == workplace)
+            if (entity == workplace.Get())
                 continue;
 
             // Check workplace is active (+0x50 flag)
@@ -1161,7 +1161,7 @@ CitizenComponent* CitizenComponent::FindSpouse() {
 // CitizenComponent::SetParent (0x140111fa0): leave the current parent's children ring
 // (+0x258) and join the new one's. Detach from old, attach to new.
 void CitizenComponent::SetParent(CitizenComponent* parent) {
-    if (parent != _parent) {
+    if (parent != _parent.Get()) {
         if (_parent != nullptr) {
             _parent->RemoveChild(this);
         }
@@ -1365,7 +1365,7 @@ char CitizenComponent::CanFindHousing() {
         MapComponent* res8 = workplace->FindComponent<MapComponent>();   // 0x140004680
         if (tileBuildable(res8)) return 1;
     }
-    CharacterComponent* mc = character;
+    CharacterComponent* mc = character.Get();
     if (mc == nullptr) return 0;
     ModelComponent* geom = mc->modelComponent.Get();
     // [STANDALONE BRING-UP GUARD] mc+0x68 is the citizen's geometry/transform IBP,
@@ -1456,7 +1456,7 @@ void CitizenComponent::GiveBirth() {
 
     // parent world position from ModelComponent (+0x278 -> +0x68 -> +0x158..0x160:
     // the +0x148 transform's translation)
-    CharacterComponent* mc = character;
+    CharacterComponent* mc = character.Get();
     ModelComponent* geom = mc->modelComponent.Get();
     float pos[3];
     pos[0] = geom->transform.translation.x;
@@ -1465,7 +1465,7 @@ void CitizenComponent::GiveBirth() {
 
     newborn->Initialize(pos, gender, '\x01', 0, '\0', this, spawnArg);
 
-    ComponentEntity* addArg = child;
+    Object::InternalPtr<ComponentEntity> addArg = child;
     {
         ComponentDescription* desc = _entity->_description;
         EntityList_RegisterEntity_Impl(gw->m_entityList, &addArg, desc->_category);
@@ -1625,18 +1625,18 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
     int* param_3 = slot;
     char param_4 = anyHousehold;
     int bestSlot = -1;
-    CitizenComponent* self250 = spouse;
+    CitizenComponent* self250 = spouse.Get();
     *param_3 = -1;
 
     if (self250 != nullptr) {
-        self250 = spouse;
+        self250 = spouse.Get();
         if (self250->home != nullptr) {
-            char ok = CanReach(spouse->home);
+            char ok = CanReach(spouse->home.Get());
             if (ok != '\0') {
                 ResidenceComponent* st = spouse->home->FindComponent<ResidenceComponent>();
                 if (st->residentSlots._size < 2) {
                     *param_3 = spouse->homeSlot;
-                    return spouse->home;
+                    return spouse->home.Get();
                 }
             }
         }
@@ -1681,7 +1681,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
                 if (other->home == nullptr) {
                     return nullptr;   // LAB_140111497
                 }
-                ComponentEntity* otherWp = other->home;
+                ComponentEntity* otherWp = other->home.Get();
                 ResidenceComponent* otherStore = otherWp->FindComponent<ResidenceComponent>();   // 0x140008090
                 if (ownStore->residentSlots._size == 1) {
                     if (1 < otherStore->residentSlots._size) {
@@ -1699,7 +1699,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
     // is empty the home block is dead (its result is only read inside the loop), so we
     // gate it behind count>0 — a byte-faithful no-op when townMgr+0x20 is empty.
     if (count > 0) {
-        CharacterComponent* homeEntity = character;
+        CharacterComponent* homeEntity = character.Get();
         if (homeEntity == nullptr) return nullptr;
         ModelComponent* homeComp = homeEntity->modelComponent.Get();
         if (homeComp == nullptr) return nullptr;
@@ -1788,7 +1788,7 @@ char CitizenComponent::CanReach(ComponentEntity* target) {
     Map* map = GameUpdateLoop::_singleton->m_game;
 
     // CheckPtr on the CharacterComponent IBP (+0x278), read its ModelComponent (+0x68).
-    CharacterComponent* homeEntity = character;
+    CharacterComponent* homeEntity = character.Get();
     ModelComponent* homeComp = homeEntity->modelComponent.Get();
 
     int mapW = map->size;
@@ -1982,7 +1982,7 @@ void CitizenComponent::UpdateHappiness() {
         }
     }
 
-    ComponentEntity* wpIBP = home;
+    ComponentEntity* wpIBP = home.Get();
     if (wpIBP != nullptr) {
         Map* mapInfo = gw->m_game;
         int region = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
@@ -2114,7 +2114,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
     g_sub1930_walked = g_sub1930_haveWpc = g_sub1930_profMatch =
         g_sub1930_reject40f0 = g_sub1930_accepted = 0;
     CitizenBehavior* list = GameUpdateLoop::_singleton->m_citizenList;
-    ComponentEntity* srcWp = home;
+    ComponentEntity* srcWp = home.Get();
     int bestCost = -1;
     int count = list->attendanceComponents._size;
     AttendanceComponent* best = nullptr;
@@ -2145,7 +2145,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
         }
         ++g_sub1930_accepted;
 
-        ComponentEntity* candSubIBP = cand->_entity;
+        ComponentEntity* candSubIBP = cand->_entity.Get();
         uint32_t dstRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&candSubIBP, nullptr));
         int cost = 1;
         if ((int)srcRegion >= 0) {
@@ -2396,7 +2396,7 @@ void CitizenComponent::Startup() {
     // ctor scalars moved to CitizenComponent_CtorScalars — see the note there.
 
 
-    ComponentEntity* owner = _entity;
+    ComponentEntity* owner = _entity.Get();
     if (!owner) return;   // not yet wired into an entity
 
     // +0x278 = CharacterComponent IBP ("Family" finder; CitizenAI reads its +0x60
@@ -2440,14 +2440,14 @@ void CitizenComponent::Startup() {
 
 
 // create 0x140030110: MemAlloc(0x290, 8), then the ctor.
-void* CitizenComponent::CreateNewObject() {
+::Object::Base* CitizenComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CitizenComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CitizenComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CitizenComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CitizenComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CitizenComponent());
 }

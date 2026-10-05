@@ -52,13 +52,13 @@ Object::External* TrackerDescription::Construct() {
 }
 
 // create 0x14000d830: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* TrackerDescription::CreateNewObject() {
+::Object::Base* TrackerDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TrackerDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TrackerDescription());
 }
 // createInPlace 0x14000d890.
-void* TrackerDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* TrackerDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TrackerDescription());
 }

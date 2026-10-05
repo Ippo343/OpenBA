@@ -70,13 +70,13 @@ Object::External* LivestockDescription::Construct() {
 }
 
 // create 0x1400354e0: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* LivestockDescription::CreateNewObject() {
+::Object::Base* LivestockDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(LivestockDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) LivestockDescription());
 }
 // createInPlace 0x140035550.
-void* LivestockDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* LivestockDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) LivestockDescription());
 }

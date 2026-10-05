@@ -244,7 +244,7 @@ void DumpOrchards(int frameNum) {
         // Sibling WorkPlaceComponent on the same entity, via the owner-entity scan
         // (owner = comp+0x10, CheckPtr'd per the project's raw-owner-pointer convention —
         // see e.g. code/Game/Work/cleararea.cpp:635, harvestorchard.cpp:713).
-        ComponentEntity* owner = comp->_entity;                // +0x10
+        ComponentEntity* owner = comp->_entity.Get();                // +0x10
         WorkPlaceComponent* wpc = nullptr;
         StateMachineComponent* smc = nullptr;
         if (owner && (tidWorkPlaceComp || tidStateMachineComp)) {

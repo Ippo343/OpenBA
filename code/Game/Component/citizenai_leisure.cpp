@@ -240,7 +240,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
         int idx = 0;
         do {
             HappinessComponent* const* slot = &param_1->happinessComponents._data[idx];
-            ComponentEntity* entObj = (*slot)->_entity;
+            ComponentEntity* entObj = (*slot)->_entity.Get();
 
             // find the entity's InteractComponent (scan its component array @ entObj+0x30)
             Component* interact = nullptr;
@@ -311,7 +311,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
             uint32_t pick = Rng()->Rand(static_cast<uint32_t>(matchCount));
             HappinessComponent* node = curArr[pick];
             *param_2 = nullptr;
-            *param_2 = node->_entity;
+            *param_2 = node->_entity.Get();
             if (curArr) System::MemoryAllocator::MemFree(curArr);
             return param_2;
         }
@@ -355,12 +355,12 @@ uint64_t CitizenAIComponent::State_Leisure() {
     if (citizen->home == nullptr) {
         uVar14 = 0xffffffff;
     } else {
-        ComponentEntity* homeIBP = citizen->home;
+        ComponentEntity* homeIBP = citizen->home.Get();
         uVar14 = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
     }
 
     int64_t local_a8 = static_cast<int64_t>(static_cast<int>(uVar37));   // srcCell index (retail: its byte offset, *0x30)
-    ComponentEntity* local_res20 = piVar5->cells.GetData()[local_a8].blocker;      // target entity
+    ComponentEntity* local_res20 = piVar5->cells.GetData()[local_a8].blocker.Get();      // target entity
 
     {
         float fVar39 = pRVar6->RandFloat();
@@ -448,8 +448,8 @@ LAB_14010a846:
                     if (plVar20->blocker == nullptr) {
                         if (plVar20->occupant == nullptr) { new (&cand) ::Object::InternalBasePtr(
                             nullptr); }   // B.3.3 bridge
-                        else cand = plVar20->occupant;
-                    } else cand = plVar20->blocker;
+                        else cand = plVar20->occupant.Get();
+                    } else cand = plVar20->blocker.Get();
                     if (cand != nullptr) {
                         MapComponent* mapBuf = nullptr;     // local_b0
                         FloorComponent_FindResData(cand, &mapBuf);
@@ -471,9 +471,9 @@ LAB_14010a846:
         uVar37 = static_cast<uint32_t>(w0 * rowC + colC);   // uVar37 = (uint)local_res10 = srcCell
         iVar27 = 6;
         if (citizen->home != nullptr) {
-            char ok = citizen->CanReach(citizen->home);   // local_res10 = home
+            char ok = citizen->CanReach(citizen->home.Get());   // local_res10 = home
             if (ok != '\0') {
-                ComponentEntity* key = citizen->home;
+                ComponentEntity* key = citizen->home.Get();
                 if (local_d8 == nullptr) {
                     LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
                     if (nd) { nd->element = key; nd->parent = nullptr; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
@@ -705,7 +705,7 @@ LAB_14010ae8a:
             else entIBP = local_res20;
             ComponentEntity* local_res18 = entIBP;
 
-            CitizenComponent* local_a8h = citizen;   // holder citizen (PlayAnimation self IBP)
+            CitizenComponent* local_a8h = citizen.Get();   // holder citizen (PlayAnimation self IBP)
             float fVar39t = pRVar6->RandFloatTol();
             CitizenAI_PlayAnimationCtor4_ba6b0(&local_a8h, &local_res18, dest,
                                        fVar39t * kAgeMult + kAnimTimeBase,

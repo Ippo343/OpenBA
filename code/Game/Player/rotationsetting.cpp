@@ -27,13 +27,13 @@ DEFINE_EXE_ABSTRACT_TYPE(ToolSetting, "Object::Internal")
 // ============================================================================
 
 // create 0x140026d20: MemAlloc(0x18, 8), then the (inlined) ctor.
-void* RotationSetting::CreateNewObject() {
+::Object::Base* RotationSetting::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RotationSetting), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RotationSetting());
 }
 // createInPlace 0x140026d80: the ctor on `storage`.
-void* RotationSetting::CreateInPlaceObject(void* storage) {
+::Object::Base* RotationSetting::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RotationSetting());
 }

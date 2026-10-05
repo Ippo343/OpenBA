@@ -135,13 +135,13 @@ Object::External* HighlightDescription::Construct() {
 }
 
 // create 0x140006ea0: MemAlloc(0x40, 8), then the (inlined) ctor.
-void* HighlightDescription::CreateNewObject() {
+::Object::Base* HighlightDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HighlightDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HighlightDescription());
 }
 // createInPlace 0x140006f10.
-void* HighlightDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* HighlightDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HighlightDescription());
 }

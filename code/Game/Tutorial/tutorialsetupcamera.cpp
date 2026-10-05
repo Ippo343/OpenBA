@@ -99,13 +99,13 @@ Object::External* TutorialSetupCamera::Construct() {
 }
 
 // create 0x140028400: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* TutorialSetupCamera::CreateNewObject() {
+::Object::Base* TutorialSetupCamera::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialSetupCamera), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialSetupCamera());
 }
 // createInPlace 0x140028470.
-void* TutorialSetupCamera::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialSetupCamera::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialSetupCamera());
 }

@@ -298,14 +298,14 @@ void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_
 
 // create 0x140010c00: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ControlUI::CreateNewObject() {
+::Object::Base* ControlUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ControlUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ControlUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ControlUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ControlUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ControlUI());
 }

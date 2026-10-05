@@ -82,7 +82,7 @@ inline EntityList* Entities(GameUpdateLoop* gw) { return gw->m_entityList; }   /
 // `character->currentAction + 1 < 1` — the action stack is empty. The character is the
 // entity's CharacterComponent (Entity_FindComponent_Family 0x1400012d0, DAT_1401c7078).
 bool Idle(NomadComponent* nomad) {
-    ComponentEntity* entity = nomad->_entity;
+    ComponentEntity* entity = nomad->_entity.Get();
     CharacterComponent* chr = entity ? entity->FindComponent<CharacterComponent>() : nullptr;
     if (!chr) return false;
     return chr->actionStack.current + 1 < 1;
@@ -107,7 +107,7 @@ void EntityList::QueueDestroy(ComponentEntity* const* entity) {
 // and push a MoveTo(dest) (Slow, mask 0xe1f, default speed).
 // ============================================================
 void NomadComponent::MoveTo(Math::Vector3* dest) {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     CharacterComponent* chr = entity ? entity->FindComponent<CharacterComponent>() : nullptr;
     if (!chr) return;
     WorkBase_TaskListCleanup_c5400(&chr->actionStack);   // 0x1400c5400
@@ -135,7 +135,7 @@ char NomadComponent::TickWalkIn(StateMachine* sm) {
     if (!Idle(this)) return 1;
     GameUpdateLoop* gw = GW();
     if (hall == nullptr) {
-        ComponentEntity* ibp = _entity;
+        ComponentEntity* ibp = _entity.Get();
         if (gw) Entities(gw)->QueueDestroy(&ibp);   // 0x1400c49d0
         return 1;
     }
@@ -213,7 +213,7 @@ char NomadComponent::TickLoiter(const System::Time* time) {
 // event 0 0x14004f420: DESTROY (the nomad became a citizen)
 char NomadComponent::OnDestroy() {
     GameUpdateLoop* gw = GW();
-    ComponentEntity* ibp = _entity;
+    ComponentEntity* ibp = _entity.Get();
     if (gw && ibp) Entities(gw)->QueueDestroy(&ibp);   // 0x1400c49d0
     return 1;
 }
@@ -226,7 +226,7 @@ char NomadComponent::EnterWalkOut() {
 char NomadComponent::TickWalkOut() {
     if (!Idle(this)) return 1;
     GameUpdateLoop* gw = GW();
-    ComponentEntity* ibp = _entity;
+    ComponentEntity* ibp = _entity.Get();
     if (gw && ibp) Entities(gw)->QueueDestroy(&ibp);   // 0x1400c49d0
     return 1;
 }

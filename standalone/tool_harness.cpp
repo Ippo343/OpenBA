@@ -995,7 +995,7 @@ void FireSelectCitizen(PlayerToolManager* entityUI) {
 // Drain-observation state (set by FireMarkRemoval, read each frame after).
 bool     s_mr_fired      = false;
 ComponentEntity*  s_mr_entity   = nullptr;   // the marked entity ptr (post-CheckPtr)
-ComponentEntity** s_mr_tileSlot = nullptr;   // the tile slot it came from (MapCell blocker / occupant)
+Object::InternalPtr<ComponentEntity>* s_mr_tileSlot = nullptr;   // the tile slot it came from (MapCell blocker / occupant)
 int      s_mr_fireFrame  = 0;
 
 // Pinned-panel residual-risk observer state (see FirePinPanel).
@@ -1048,8 +1048,8 @@ void FireMarkRemoval() {
             ++scanned;
             for (int slot = 8; slot >= 0; slot -= 8) {   // helper_7d60 uses +0x08; also try +0x00
                 // +0x08 MapCell::occupant, +0x00 MapCell::blocker
-                ComponentEntity** slotAddr = slot ? &cellBase->occupant : &cellBase->blocker;
-                ComponentEntity* ent = *slotAddr;
+                Object::InternalPtr<ComponentEntity>* slotAddr = slot ? &cellBase->occupant : &cellBase->blocker;
+                ComponentEntity* ent = slotAddr->Get();
                 if (!ent) continue;
                 ++occupied;
                 // Mirror helper_7d60: local = slot value; CheckPtr(&local); test +0x40 bit 0x400.
@@ -1646,7 +1646,7 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
                "BANISHED_BUILD_DEMO_PASTURE or use BANISHED_TOOL_HARNESS=pasturefull\n");
         return;
     }
-    ComponentEntity* entRef = pastureComp->_entity;
+    ComponentEntity* entRef = pastureComp->_entity.Get();
     if (!entRef) { fprintf(stderr, "[PasturePanel] pasture[0] has no entity backref\n"); return; }
 
     int opened = EditTool_HarnessSelectEntity(tool, entRef);
@@ -1986,7 +1986,7 @@ void FireClearPlace() {
     for (int row = 100; row <= 156 && rcRow < 0; ++row)
         for (int col = 100; col <= 156 && rcRow < 0; ++col) {
             int cell = width * row + col;
-            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant;
+            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant.Get();
             if (occ && !(occ->_entityFlags & 0x400)) {
                 rcRow = row; rcCol = col; resEnt = occ;
             }
@@ -2050,7 +2050,7 @@ void FireClearLive() {
     for (int row = 100; row <= 156 && rcRow < 0; ++row)
         for (int col = 100; col <= 156 && rcRow < 0; ++col) {
             int cell = width * row + col;
-            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant;
+            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant.Get();
             if (occ && !(occ->_entityFlags & 0x400)) {
                 rcRow = row; rcCol = col; resEnt = occ;
             }
@@ -2102,7 +2102,7 @@ void FireClearPlaceOver() {
     for (int row = 110; row <= 150 && rcRow < 0; ++row)
         for (int col = 110; col <= 150 && rcRow < 0; ++col) {
             int cell = width * row + col;
-            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant;
+            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant.Get();
             if (occ && !(occ->_entityFlags & 0x400)) {
                 rcRow = row; rcCol = col; resEnt = occ;
             }
@@ -2146,7 +2146,7 @@ void FireClearHarvest() {
     for (int row = 100; row <= 156 && rcRow < 0; ++row)
         for (int col = 100; col <= 156 && rcRow < 0; ++col) {
             int cell = width * row + col;
-            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant;
+            ComponentEntity* occ = tileArray[(uintptr_t)cell].occupant.Get();
             if (occ && !(occ->_entityFlags & 0x400)) {
                 rcRow = row; rcCol = col; resEnt = occ;
             }
@@ -2918,7 +2918,7 @@ extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
             if (gw) {
                 EntityList* el = gw->m_entityList;
                 int cnt = el ? el->removalList._size : -1;
-                ComponentEntity* slotVal = s_mr_tileSlot ? *s_mr_tileSlot : nullptr;
+                ComponentEntity* slotVal = s_mr_tileSlot ? s_mr_tileSlot->Get() : nullptr;
                 bool drained = s_mr_tileSlot ? (cnt == 0 && slotVal != s_mr_entity)
                                              : (cnt == 0);
                 fprintf(stderr, "[Removal] +%2d frames: removalList.count=%d  tileSlot=%p  (%s)\n",

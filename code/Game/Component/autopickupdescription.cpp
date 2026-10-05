@@ -58,13 +58,13 @@ Object::External* AutoPickupDescription::Construct() {
 }
 
 // create 0x140003420: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* AutoPickupDescription::CreateNewObject() {
+::Object::Base* AutoPickupDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AutoPickupDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AutoPickupDescription());
 }
 // createInPlace 0x140003480.
-void* AutoPickupDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* AutoPickupDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AutoPickupDescription());
 }

@@ -347,13 +347,13 @@ FollowDialog::FollowDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
       citizen(nullptr), citizenUI(nullptr), textFollow(nullptr), textAction(nullptr) {}
 
 // create 0x140011a20: MemAlloc(0xd8, 8), then the ctor.
-void* FollowDialog::CreateNewObject() {
+::Object::Base* FollowDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FollowDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) FollowDialog());
 }
 // createInPlace 0x140011a90 (the tree's in-place build is kept, B8-13).
-void* FollowDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* FollowDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) FollowDialog());
 }

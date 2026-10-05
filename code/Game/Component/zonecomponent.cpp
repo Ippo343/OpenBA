@@ -264,14 +264,14 @@ void ZoneComponent::OnRemove() {
 }
 
 // create 0x14003a6a0: MemAlloc(0x28, 8), then the ctor.
-void* ZoneComponent::CreateNewObject() {
+::Object::Base* ZoneComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ZoneComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ZoneComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ZoneComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ZoneComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ZoneComponent());
 }

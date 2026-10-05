@@ -65,13 +65,13 @@ Object::External* FloorDescription::Construct() {
 }
 
 // create 0x140034660: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* FloorDescription::CreateNewObject() {
+::Object::Base* FloorDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FloorDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FloorDescription());
 }
 // createInPlace 0x1400346d0.
-void* FloorDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* FloorDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FloorDescription());
 }

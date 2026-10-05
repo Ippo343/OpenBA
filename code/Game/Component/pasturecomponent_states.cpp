@@ -137,7 +137,7 @@ LivestockDescription* FindLivestockDescription(ComponentDescription* tmpl) {
 // ============================================================
 void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     PastureComponent* target = *pastureRef;
-    PastureComponent* cur = pasture;
+    PastureComponent* cur = pasture.Get();
     if (cur == target) return;
 
     CitizenBehavior* town = Town();
@@ -196,7 +196,7 @@ void PastureComponent::AdoptWanderers() {
     for (int i = 0; i < freeCount && nCand < kMaxCandidates && nCand < needed; ++i) {
         LivestockComponent* comp = freeList[i];
         if (!comp) continue;
-        ComponentEntity* owner = comp->_entity;
+        ComponentEntity* owner = comp->_entity.Get();
         if (!owner) continue;
         if (owner->_description != wanted) continue;
         candidates[nCand++] = comp;
@@ -227,7 +227,7 @@ void PastureComponent::Reproduce() {
         if (!arr) return;
         LivestockComponent* livestock = arr[i].Get();
         if (!livestock) continue;
-        ComponentEntity* owner = livestock->_entity;
+        ComponentEntity* owner = livestock->_entity.Get();
         AnimalComponent* animal = owner ? owner->FindComponent<AnimalComponent>() : nullptr;
         if (!animal) continue;
 
@@ -320,12 +320,12 @@ void PastureComponent::ReleaseAllAnimals() {
         if (!arr) break;
         LivestockComponent* animal = arr[animals._size - 1].Get();
         if (!animal) break;
-        PastureComponent* cur = animal->pasture;
+        PastureComponent* cur = animal->pasture.Get();
         if (cur == nullptr) break;                  // already free: retail would spin here
 
         LivestockComponent* ref = animal;
         CemeteryListErase_Reimpl(&cur->animals, &ref);
-        ComponentEntity* owner = animal->_entity;
+        ComponentEntity* owner = animal->_entity.Get();
         AnimalComponent* animalComp = owner ? owner->FindComponent<AnimalComponent>() : nullptr;
         if (animalComp) animalComp->ReleaseToWander();   // 0x140105ed0
 
@@ -470,7 +470,7 @@ void PastureProduce(PastureComponent* self) {
             const int cell = dim * gy + gx;
             const MapCell* tiles = grid->cells.GetData();
             if (!tiles) break;
-            ComponentEntity* occ = tiles[cell].occupant;   // the entity on the cell
+            ComponentEntity* occ = tiles[cell].occupant.Get();   // the entity on the cell
             if (occ == nullptr) { placedCell = cell; break; }
         }
         if (placedCell < 0) {
@@ -484,7 +484,7 @@ void PastureProduce(PastureComponent* self) {
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
         ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, produced) : nullptr;
         if (!ent) break;
-        ComponentEntity* entRef = ent;
+        Object::InternalPtr<ComponentEntity> entRef = ent;
         RawMaterialComponent* rawComp = ent->FindComponent<RawMaterialComponent>();
         if (rawComp) {
             // Position the pile on the cell with a random quarter-turn:
@@ -513,7 +513,7 @@ void PastureProduce(PastureComponent* self) {
         // ProductionUI's panel reads, so without it the production page is blank even
         // when piles are appearing. Same three-call shape as the already-ported
         // ActRm_RegisterRawMaterial_88ef0 (0x140088ef0), which is a useful cross-check.
-        ComponentEntity* pastureEntity = self->_entity;
+        ComponentEntity* pastureEntity = self->_entity.Get();
         if (pastureEntity) {
             TrackerComponent* tracker = pastureEntity->FindComponent<TrackerComponent>();   // 0x140013320
             if (tracker) {
@@ -697,7 +697,7 @@ void PastureComponent::Command(int cmd) {
             wc->CancelWork();   // 0x14012eb50
             wpc->SetAccepting(false);
         } else {
-            ComponentEntity* entRef = _entity;
+            ComponentEntity* entRef = _entity.Get();
             Work* work = PastureWork_CreateForEntity(&entRef);
             Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
             CitizenAI_WorkScheduler_Post(wc, 1, 1, &workIBP);

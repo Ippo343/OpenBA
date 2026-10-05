@@ -394,7 +394,7 @@ void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h,
         for (int col = x; col < x + w; col++) {
             int cellIdx = gridW * row + col;
             const MapCell& cell = cells[cellIdx];
-            ComponentEntity* entity = cell.occupant;
+            ComponentEntity* entity = cell.occupant.Get();
             if (entity != nullptr) {
                 GridTile rec;
                 rec.cell = cellIdx;

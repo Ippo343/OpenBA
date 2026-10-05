@@ -70,14 +70,14 @@ BoatComponent::~BoatComponent() {
 }
 
 // create 0x1400036e0: MemAlloc(0x98, 8), then the ctor.
-void* BoatComponent::CreateNewObject() {
+::Object::Base* BoatComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(BoatComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) BoatComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* BoatComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* BoatComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) BoatComponent());
 }

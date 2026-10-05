@@ -221,14 +221,14 @@ void FruitComponent::Update(const System::Time* time) {
 }
 
 // create 0x140005920: MemAlloc(0x38, 8), then the ctor.
-void* FruitComponent::CreateNewObject() {
+::Object::Base* FruitComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FruitComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FruitComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* FruitComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* FruitComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FruitComponent());
 }

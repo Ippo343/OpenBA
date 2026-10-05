@@ -457,13 +457,13 @@ ScenarioDialog::ScenarioDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
       buttonOk(nullptr) {}
 
 // create 0x140013970: MemAlloc(0xe8, 8), then the ctor.
-void* ScenarioDialog::CreateNewObject() {
+::Object::Base* ScenarioDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ScenarioDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) ScenarioDialog());
 }
 // createInPlace 0x1400139f0 (the tree's in-place build is kept, B8-13).
-void* ScenarioDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* ScenarioDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) ScenarioDialog());
 }

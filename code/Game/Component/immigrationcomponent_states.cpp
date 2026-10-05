@@ -238,7 +238,7 @@ int ImmigrationComponent::FindSpawnCell(int x, int y, int hallCell) {
 // (+0x30), meeting position (+0x3c), gender (+0x50); place the model at the spawn
 // point with a random yaw, pick the mesh variant and material for the gender.
 // ============================================================
-void NomadComponent::Init(ComponentEntity* const* hallEntity, const Math::Vector3* spawn,
+void NomadComponent::Init(const Object::InternalPtr<ComponentEntity>* hallEntity, const Math::Vector3* spawn,
                           const Math::Vector3* meet) {
     GameUpdateLoop* gw = GW();
     if (!gw) return;
@@ -369,7 +369,7 @@ void ImmigrationComponent::Spawn() {
         if (nomad) nomad->Init(&_entity, &spawn, &meet);   // 0x140050030
         if (ent) {
             int category = ent->_description->_category;
-            ComponentEntity* regIBP = ent;
+            Object::InternalPtr<ComponentEntity> regIBP = ent;
             EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP, category);
         }
         // Append to the group array (+0x58/+0x60/+0x64) — retail inlines this
@@ -440,7 +440,7 @@ CitizenComponent* NomadComponent::ConvertToCitizen(CitizenComponent** out, Citiz
     cit->Initialize(&pos.x, static_cast<uint32_t>(genderArg), isChild, age, flag,
                     parent ? *parent : nullptr, key);   // 0x140117080
 
-    ComponentEntity* regIBP = ent;
+    Object::InternalPtr<ComponentEntity> regIBP = ent;
     {
         int category = ndesc->_citizen->_category;
         EntityList_RegisterEntity_Impl(gw->m_entityList, &regIBP, category);

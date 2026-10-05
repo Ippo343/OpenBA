@@ -116,12 +116,12 @@ bool Weather::Serialize(IO::Stream& stream) {
 // ============================================================
 // Reflection: create / createInPlace, the registration
 // ============================================================
-void* Weather::CreateNewObject() {
+::Object::Base* Weather::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(Weather), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) Weather());
 }
-void* Weather::CreateInPlaceObject(void* memory) {
+::Object::Base* Weather::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) Weather());
 }

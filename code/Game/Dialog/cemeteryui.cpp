@@ -39,7 +39,7 @@ static int CemeteryGetBurialCount_Impl(CemeteryComponent* cemetery) {
     for (int i = 0; i < cemetery->plotCount; i++) {
         // The occupant is the 0x30-byte cell's +0x08 entity.
         const MapCell* cells = GameUpdateLoop::_singleton->m_game->cells.GetData();
-        ComponentEntity* occupant = cells[(int64_t)cemetery->plots[i]].occupant;
+        ComponentEntity* occupant = cells[(int64_t)cemetery->plots[i]].occupant.Get();
         if (occupant == nullptr) continue;
         if (occupant->FindComponent<TombstoneComponent>() != nullptr) burials++;
     }

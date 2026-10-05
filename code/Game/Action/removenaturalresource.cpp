@@ -135,7 +135,7 @@ int  RemoveNaturalResource::AbstractImpl(ActionStack* actionStack) {
     nrComp->mature = (threshold <= growthValue);
 
     // The citizen's workplace (+0x248)
-    ComponentEntity* workEntityIBP = _field20->workplace;
+    ComponentEntity* workEntityIBP = _field20->workplace.Get();
 
     // Call the removal helper
     RemoveNaturalResourceCore(nrComp, &workEntityIBP, _field30);   // 0x1401260f0
@@ -156,9 +156,9 @@ void RemoveNaturalResource::CheckEntity() {
     nrComp->_flags = flagsNew;
 
     if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
-        ComponentEntity* parent = nrComp->_entity;
+        ComponentEntity* parent = nrComp->_entity.Get();
         if (parent != nullptr) {
-            NotifyEntityChanged(nrComp->_entity);   // 0x1400c3470
+            NotifyEntityChanged(nrComp->_entity.Get());   // 0x1400c3470
         }
     }
 }
@@ -175,7 +175,7 @@ bool RemoveNaturalResource::GetTarget(ComponentEntity** param) {
         return true;
     }
 
-    return _field20->_entity == target;
+    return _field20->_entity.Get() == target;
 }
 
 // ============================================================
@@ -199,12 +199,12 @@ RemoveNaturalResource::RemoveNaturalResource()
 // [8] 0x1400caaa0
 // [9] 0x1400caa20
 
-void* RemoveNaturalResource::CreateNewObject() {
+::Object::Base* RemoveNaturalResource::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RemoveNaturalResource), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RemoveNaturalResource());
 }
-void* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
+::Object::Base* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RemoveNaturalResource());
 }

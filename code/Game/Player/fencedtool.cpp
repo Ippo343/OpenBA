@@ -310,7 +310,7 @@ int FencedTool::CalcCost(int startCell, int endCell,
             }
 
             // Check entity occupancy
-            const ComponentEntity* cellEntity = cellPtr->blocker;
+            const ComponentEntity* cellEntity = cellPtr->blocker.Get();
             if (allowedEntityType != nullptr) {
                 if (cellEntity != nullptr) {
                     if (cellPtr->blocker->_description != allowedEntityType) { allValid = false; break; }
@@ -499,7 +499,7 @@ void FencedTool::Draw(Video::Context* context, char param3) {
                     valid = false;
                 } else {
                     // Entity occupancy check
-                    const ComponentEntity* cellEntity = cellPtr->blocker;
+                    const ComponentEntity* cellEntity = cellPtr->blocker.Get();
                     if (allowedEntityType != nullptr) {
                         if (cellEntity != nullptr) {
                             if (cellPtr->blocker->_description != allowedEntityType) {
@@ -744,13 +744,13 @@ Object::Type* FencedTool::GetSettingType(Object::Type* ret) const {
 // sets sceneObjectId = -1 ("preview not in the scene"): the tree's zero-fill
 // once turned that into a live id 0 (the start-town barn's mesh) and
 // Scene::RemoveObject(0) spun forever.
-void* FencedTool::CreateNewObject() {
+::Object::Base* FencedTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FencedTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FencedTool());
 }
 // createInPlace 0x140026910: `if (storage) ctor(storage)`.
-void* FencedTool::CreateInPlaceObject(void* storage) {
+::Object::Base* FencedTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FencedTool());
 }

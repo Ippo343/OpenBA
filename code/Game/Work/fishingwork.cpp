@@ -186,7 +186,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             int* spotState = &spotStates[i];
             if (*spotState == 2) {
                 MapCell* mapEntryBase = map->cells.GetData();
-                const ComponentEntity* occupant = mapEntryBase[cellIdx].occupant;   // +0x08
+                const ComponentEntity* occupant = mapEntryBase[cellIdx].occupant.Get();   // +0x08
                 if (occupant == nullptr) {
                     *spotState = 0;
                 }
@@ -389,7 +389,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
             // Check if there's a structure at this cell (the cell's occupant, +0x08)
             MapCell* mapData = map->cells.GetData();
-            ComponentEntity* cellEntity = mapData[cellIdx].occupant;
+            ComponentEntity* cellEntity = mapData[cellIdx].occupant.Get();
             if (cellEntity == nullptr) continue;
 
             // ⚠ KNOWN DIVERGENCE FROM RETAIL — self-assignment guard.
@@ -775,7 +775,7 @@ int FishingWork::Cleanup() {
     do {
         if (citizenRefs[i] != nullptr) {
             // CheckPtr on citizen IBP; its CharacterComponent (+0x278)
-            CharacterComponent* character = citizenRefs[i]->character;
+            CharacterComponent* character = citizenRefs[i]->character.Get();
 
             // Cancel pending actions on the character's action list (+0x48)
             WorkBase_TaskListCleanup_c5400(&character->actionStack);
@@ -829,14 +829,14 @@ FishingWork::FishingWork()
 // _CreateInPlace, both Work_GenericCtor.
 
 // create 0x14002a280: MemAlloc(sizeof, 8), then the ctor.
-void* FishingWork::CreateNewObject() {
+::Object::Base* FishingWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FishingWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FishingWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* FishingWork::CreateInPlaceObject(void* storage) {
+::Object::Base* FishingWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FishingWork());
 }

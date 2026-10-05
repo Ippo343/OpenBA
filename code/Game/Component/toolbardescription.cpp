@@ -206,13 +206,13 @@ Object::External* ToolbarDescription::Construct() {
 }
 
 // create 0x140039490: MemAlloc(0x68, 8), then the (inlined) ctor.
-void* ToolbarDescription::CreateNewObject() {
+::Object::Base* ToolbarDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ToolbarDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ToolbarDescription());
 }
 // createInPlace 0x1400394d0.
-void* ToolbarDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ToolbarDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ToolbarDescription());
 }

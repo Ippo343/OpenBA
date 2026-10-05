@@ -277,7 +277,7 @@ void HideCitizenTool(CitizenComponent* citizen) {
 //   - Set the mesh on the tool MeshInstance, write the UV-scale vector (its _color),
 //     attach it at the model's "tool" node, then add it to the scene and record the ids.
 void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
-    ComponentEntity* parent = citizen->_entity;
+    ComponentEntity* parent = citizen->_entity.Get();
     if (((parent->_entityFlags >> 10) & 1) != 0) return;  // removed flag
 
     if (citizen->toolSceneId >= 0) HideCitizenTool(citizen);
@@ -290,7 +290,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     if (toolId < 0) {
         // find best material from storage on the citizen's entity
         StorageComponent* storage = nullptr;
-        fn_FindComponent_Storage(citizen->_entity, &storage);
+        fn_FindComponent_Storage(citizen->_entity.Get(), &storage);
         if (storage->storageSlots._size < 1) return;
 
         // pick the item with the highest count

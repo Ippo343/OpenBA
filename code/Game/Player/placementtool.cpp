@@ -743,11 +743,11 @@ Object::Type* PlacementTool::GetSettingType(Object::Type* ret) const {
 }
 
 // create 0x14002dc40: MemAlloc(0x70, 8), then the ctor 0x1400fe850.
-void* PlacementTool::CreateNewObject() {
+::Object::Base* PlacementTool::CreateNewObject() {
     return static_cast<Object::Base*>(PlacementTool_Factory_SA());
 }
 // createInPlace 0x14002dc80: `if (storage) ctor(storage)`.
-void* PlacementTool::CreateInPlaceObject(void* storage) {
+::Object::Base* PlacementTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PlacementTool());
 }

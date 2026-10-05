@@ -70,13 +70,13 @@ void CaptureBoxElement::Draw(UI::SpriteContext& context, uint8_t alpha) const {
 }
 
 // create 0x140013eb0: MemAlloc(0xe0, 8), then the (inlined) ctor.
-void* CaptureBoxElement::CreateNewObject() {
+::Object::Base* CaptureBoxElement::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CaptureBoxElement), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CaptureBoxElement());
 }
 // createInPlace 0x140013f20: the same construction on `storage`.
-void* CaptureBoxElement::CreateInPlaceObject(void* storage) {
+::Object::Base* CaptureBoxElement::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CaptureBoxElement());
 }

@@ -422,10 +422,10 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // Caller batch CB6: "is the next loop a GameUpdateLoop" compares the vptr
     // with the class's compiler table (B8-5 identity; it was the by-address
     // g_GameUpdateLoop_Vtable, which 0x14015e2f0's row served with that table).
-    // LEFT: a vptr identity compare (GameUpdateLoop is unreflected: no type id).
+    // A vptr identity compare (GameUpdateLoop is unreflected: no type id).
     bool worldReady = true;
     if (_nextLoop &&
-        *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {   // LEFT: audit floor vslot (coordinator marker): vtable probe (a vptr identity compare: GameUpdateLoop is unreflected, no type id)
+        *reinterpret_cast<const void* const*>(_nextLoop) == GameUpdateLoop::Vtable()) {   // vtable probe (a vptr identity compare: GameUpdateLoop is unreflected, no type id)  // CAST-OK: vslot
         worldReady = GameUpdateLoop_IsWorldBuilt(_nextLoop);
     }
 

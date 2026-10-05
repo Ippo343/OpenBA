@@ -170,7 +170,7 @@ void EventNotifyDialog::OnOpened() {
 
     // lastEventIndex = the event log's count (GameUpdateLoop +0x138, its +0x20).
     EventLog* eventLog = GameUpdateLoop::_singleton->m_eventNotifier;
-    lastEventIndex = eventLog->entryCount;
+    lastEventIndex = eventLog->entries.GetSize();
 }
 
 // ============================================================
@@ -208,7 +208,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
     float timerDuration;
     std::memcpy(&timerDuration, &kRdata_1401721cc, sizeof timerDuration);
     int lastEventIdx = lastEventIndex;
-    int totalEvents = eventLogPtr->entryCount - 1;
+    int totalEvents = eventLogPtr->entries.GetSize() - 1;
 
     if (lastEventIdx < totalEvents) {
         bool hasNewEvents = false;
@@ -220,7 +220,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
 
             do {
                 // The entry array is re-read per pass (0x28-byte EventLogEntry records).
-                EventLogEntry* eventArray = eventLogPtr->entries;
+                EventLogEntry* eventArray = eventLogPtr->entries.GetData();
                 int severity = eventArray[scanIdx].severity;
 
                 if (severity > 0) {
@@ -332,7 +332,7 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
                 zeroTime);
         }
 
-        totalEvents = eventLogPtr->entryCount - 1;
+        totalEvents = eventLogPtr->entries.GetSize() - 1;
     }
 
     // Update last processed event index
@@ -402,7 +402,7 @@ void EventNotifyDialog::OnUpdateLayout() {
     if (!gameWorld) return;
     EventLog* eventLogPtr = gameWorld->m_eventNotifier;
     if (!eventLogPtr) return;  // event log not initialized yet (e.g. during loading)
-    EventLogEntry* eventArray = eventLogPtr->entries;
+    EventLogEntry* eventArray = eventLogPtr->entries.GetData();
     if (!eventArray) return;
 
     UI::Element* ribbonElem = ribbonNotify.Get();
@@ -535,7 +535,7 @@ void EventNotifyDialog::NavigateToEvent(int32_t index) {
     int eventLogEntryIdx = entries._data[index].eventIndex;
 
     EventLog* eventLog = game->m_eventNotifier;
-    EventLogEntry* entryList = eventLog->entries;
+    EventLogEntry* entryList = eventLog->entries.GetData();
     int tileIdx = entryList[eventLogEntryIdx].tileIndex;
 
     if (tileIdx < 0) return;  // no valid tile position
@@ -609,13 +609,13 @@ EventNotifyDialog::EventNotifyDialog(UI::UserInterface* ui, const UI::Dialog* di
 }
 
 // create 0x140011500: MemAlloc(0xf0, 8), then the ctor.
-void* EventNotifyDialog::CreateNewObject() {
+::Object::Base* EventNotifyDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EventNotifyDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) EventNotifyDialog());
 }
 // createInPlace 0x140011540 (the tree's in-place build is kept, B8-13).
-void* EventNotifyDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* EventNotifyDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) EventNotifyDialog());
 }

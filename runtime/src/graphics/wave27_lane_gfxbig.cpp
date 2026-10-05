@@ -231,10 +231,10 @@ void Array8Assign(Collection::Array<MaterialBinding>* dst,
 // zero would hand MemFree a garbage pointer.
 //
 // B.4: the ArraySpec callbacks take the element as bytes (array_internal.h's
-// signature); each views it ONCE as the `MaterialParameterSet` it is (LEFT).
+// signature); each views it ONCE as the `MaterialParameterSet` it is (floor: elem_stride).
 void PassAssign(uint8_t* dstv, const uint8_t* srcv) {
-    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
-    const MaterialParameterSet* const src = reinterpret_cast<const MaterialParameterSet*>(srcv);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
+    const MaterialParameterSet* const src = reinterpret_cast<const MaterialParameterSet*>(srcv);   // the erased container core's element callback (void* dst / src): elem_stride  // CAST-OK: elem_stride
 
     dst->textures._data = nullptr;                        // MOV [RBX],R8 (R8==0)
     dst->textures._size = 0;                              // MOV [RBX+8],0 (one qword)
@@ -249,7 +249,7 @@ void PassAssign(uint8_t* dstv, const uint8_t* srcv) {
 
 // The INIT arm, read at 0x180060e1b: four zeroed qwords, nothing else.
 void PassInit(uint8_t* dstv) {
-    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+    MaterialParameterSet* const dst = reinterpret_cast<MaterialParameterSet*>(dstv);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
     dst->textures._data  = nullptr;  dst->textures._size  = 0;  dst->textures._capacity  = 0;
     dst->constants._data = nullptr;  dst->constants._size = 0;  dst->constants._capacity = 0;
 }
@@ -260,7 +260,7 @@ void PassInit(uint8_t* dstv) {
 // the allocator in that order and the allocator is shared state.
 void PassDestroy(void* /*ignoredThis*/, uint8_t* base, int count) {
     if (count <= 0) return;                       // TEST R8D,R8D / JLE ret
-    MaterialParameterSet* const sets = reinterpret_cast<MaterialParameterSet*>(base);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+    MaterialParameterSet* const sets = reinterpret_cast<MaterialParameterSet*>(base);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
     for (int i = 0; i < count; ++i) {
         // `e` is one `MaterialParameterSet` (Material.h): `constants` @ +0x10,
         // `textures` @ +0x00 — trait-equivalent for the same MaterialBinding

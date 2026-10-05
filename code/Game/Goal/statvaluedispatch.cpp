@@ -281,7 +281,7 @@ static int Cemetery_CountBurials_6dd0(const CemeteryComponent* cemetery) {
     int slotCount = cemetery->plotCount;
     if (slotCount > 0) {
         for (int i = 0; i < slotCount; i++) {
-            ComponentEntity* occupant = map->cells.GetData()[cemetery->plots[i]].occupant;
+            ComponentEntity* occupant = map->cells.GetData()[cemetery->plots[i]].occupant.Get();
             if (occupant != nullptr) {
                 if (occupant->FindComponent<TombstoneComponent>() != nullptr) matched++;
             }

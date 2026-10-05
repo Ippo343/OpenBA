@@ -236,13 +236,13 @@ AchievementDialog::AchievementDialog(UI::UserInterface* ui, const UI::Dialog* di
 AchievementDialog::~AchievementDialog() {}
 
 // create 0x140010320: MemAlloc(0xd0, 8), then the ctor.
-void* AchievementDialog::CreateNewObject() {
+::Object::Base* AchievementDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AchievementDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) AchievementDialog());
 }
 // createInPlace 0x140010390 (the tree's in-place build is kept, B8-13).
-void* AchievementDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* AchievementDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) AchievementDialog());
 }

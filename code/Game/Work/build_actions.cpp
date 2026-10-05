@@ -98,7 +98,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
 
     CitizenComponent* citizen = *citizenRef;
     if (!citizen) return;
-    CharacterComponent* character = citizen->character;
+    CharacterComponent* character = citizen->character.Get();
     if (!character) return;
     // The action stack (base +0x48, top +0x60), as the stack ops take it.
     ActionStack* stack = &character->actionStack;
@@ -118,7 +118,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         if (mem) {
             ComponentEntity* outIBP = nullptr;
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-            ComponentEntity* targetEntity = citizen->_entity;
+            ComponentEntity* targetEntity = citizen->_entity.Get();
             act = ::new (mem) SendComponentMessage(&targetEntity, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
         if (character->actionStack.field_0x10 != nullptr)

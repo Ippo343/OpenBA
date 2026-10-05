@@ -57,7 +57,7 @@ static CitizenBehavior* MarketTown() {
 // removal hook (0x14004ef60) and the state-3 enter below are the matching erase.
 static char MarketLoc_State2Enter(MarketLocationComponent* self, StateMachine* /*sm*/) {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    ComponentEntity* entityPtr = self->_entity;
+    ComponentEntity* entityPtr = self->_entity.Get();
     CitizenBehavior* town = MarketTown();
     // B.3.2 bridge: 0x140003110 is Collection::Array<void*>::SetSize(n, fill).
     const int count = town->field_0x10._size;
@@ -100,14 +100,14 @@ MarketLocationComponent::MarketLocationComponent() : _controller(this) {
 }
 
 // create 0x1400086c0: MemAlloc(0x48, 8), then the ctor.
-void* MarketLocationComponent::CreateNewObject() {
+::Object::Base* MarketLocationComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MarketLocationComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MarketLocationComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* MarketLocationComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* MarketLocationComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MarketLocationComponent());
 }
@@ -162,7 +162,7 @@ void MarketLocationComponent::OnRemove() {
         return;
 
     // The needle: the owner entity
-    ComponentEntity* entityPtr = _entity;
+    ComponentEntity* entityPtr = _entity.Get();
 
     // Erase the owner entity from the town's market-location list
     CemeteryListErase_Reimpl(&MarketTown()->field_0x10._data, &entityPtr);   // 0x140002cc0

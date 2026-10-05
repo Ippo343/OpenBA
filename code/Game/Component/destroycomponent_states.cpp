@@ -208,7 +208,7 @@ static char Destroy_ReclaimPending_ea20(WorkComponent* yard) {
     int key = yard->workId;
     Work* node = mgr->FindWorkAtCell(key);   // 0x1400f8d50 (the RemovalCalc_helper_8d50 forwarder's member)
     if (!node) return 0;
-    if (!*reinterpret_cast<void* const*>(node)) return 0;   // LEFT: the tree's vptr guard (retail has none: known_port_issues row 391)  // CAST-OK: crash_walk
+    if (!*reinterpret_cast<void* const*>(node)) return 0;   // LEFT: the tree's vptr guard (retail has none: known_port_issues row 391); audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
     // `node` is the gw+0x118 scheduler's work (id map filled by CitizenAI_impl_88a0
     // 0x1400f88a0 with the posted Work leaves); retail reads AL.
     return static_cast<char>(node->GetPriority());   // slot 11
@@ -284,7 +284,7 @@ static RawMaterialDescription* FindRawMatDescInTemplate(ComponentDescription* tm
 void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int depth) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     // BuildComponent + its BuildDescription (+0x18). Scatter is only reached with
@@ -451,7 +451,7 @@ char DestroyComponent::State3Enter(StateMachine* sm) {
     progress = 0;   // reset progress
 
     // Stop pending production work on the yard (FUN_14012ead0/FUN_14012eb50).
-    WorkComponent* yard = FindOn<WorkComponent>(_entity);
+    WorkComponent* yard = FindOn<WorkComponent>(_entity.Get());
     if (yard && yard->IsWorkPosted())
         yard->CancelWork();
 
@@ -488,7 +488,7 @@ char DestroyComponent::State3Enter(StateMachine* sm) {
 // State 4 enter — 0x14011cfd0 (queue the haul-away).
 // ============================================================
 char DestroyComponent::State4Enter(StateMachine* sm) {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // Re-seat the workplace onto the BUILDER profession (retail FUN_14012f520 on the 2e10
     // comp) — ported in destroycomponent_workerrelease.cpp.
@@ -535,7 +535,7 @@ char DestroyComponent::State4Enter(StateMachine* sm) {
 // ============================================================
 char DestroyComponent::State4Tick(StateMachine* sm) {
     if (!StorageEmpty()) return 1;
-    WorkComponent* yard = FindOn<WorkComponent>(_entity);
+    WorkComponent* yard = FindOn<WorkComponent>(_entity.Get());
     if (!Destroy_ReclaimPending_ea20(yard)) {
         ::ControllerLive::RequestStateTransition(sm, 5);
         if (yard) yard->CancelWork();
@@ -547,7 +547,7 @@ char DestroyComponent::State4Tick(StateMachine* sm) {
 // State 5 enter — 0x14011cc70 (refund + queue BuildStructure, or finish up).
 // ============================================================
 char DestroyComponent::State5Enter() {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     BuildComponent* prod = FindOn<BuildComponent>(entity);
 
     // Diagnostic: the refund+BuildStructure branch (which sets the +0x58 progress
@@ -616,7 +616,7 @@ char DestroyComponent::State5Tick() {
         return 1;
     }
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return 1;
 
     // 0b) Retail: stop the yard's pending work now that demolition is complete
@@ -809,7 +809,7 @@ static void Destroy_ReseatWorkplaceOnBuilder(ComponentEntity* entity) {
 // (buttonReclaim; 0x14011e400 posts the same event 0, then additionally calls the
 // component's own vtable slot 4).
 char DestroyComponent::State7Rebuild(StateMachine* sm) {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     Destroy_ReseatWorkplaceOnBuilder(entity);
 
@@ -835,7 +835,7 @@ char DestroyComponent::State7Rebuild(StateMachine* sm) {
 
 // State 7 event 1 — 0x14011d1a0. "Remove" (buttonDestroy).
 char DestroyComponent::State7Remove(StateMachine* sm) {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     Destroy_ReseatWorkplaceOnBuilder(entity);
 
@@ -876,7 +876,7 @@ extern "C" char Destroy_State6Event2_ToRubble_d390(DestroyComponent* /*data*/, S
 // always carries a MeshInstance, a production yard and (for the variant math) a model
 // component. Those derefs stay faithful.
 char DestroyComponent::CancelDemolition(StateMachine* sm) {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // Read first (retail order): does the building have a build yard at all?
     BuildComponent* build = FindOn<BuildComponent>(entity);

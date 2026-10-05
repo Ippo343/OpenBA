@@ -201,13 +201,13 @@ void TutorialSetupDialog::End() {
 }
 
 // create 0x1400285b0: MemAlloc(0x78, 8), then the ctor 0x1400e2cc0.
-void* TutorialSetupDialog::CreateNewObject() {
+::Object::Base* TutorialSetupDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialSetupDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialSetupDialog());
 }
 // createInPlace 0x1400285f0.
-void* TutorialSetupDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialSetupDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialSetupDialog());
 }

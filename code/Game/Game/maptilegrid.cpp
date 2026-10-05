@@ -61,26 +61,17 @@ extern "C" void MapTileGrid_Build(Map* game, int dim) {
     if (!game || dim <= 0) return;
     game->size = dim;
 
-    const int    count = dim * dim;
-    const size_t bytes = (size_t)count * sizeof(MapCell);
-    MapCell* cells = static_cast<MapCell*>(System::MemoryAllocator::MemAlloc(bytes, 8));
-    if (!cells) return;
+    // Retail 0x14009ef20: cells.SetSize(dim*dim) through 0x14001aa90, whose
+    // init arm (kSpec_MapCell's ZeroMapCell) builds each fresh cell: refs null,
+    // +0x18 = -1, +0x2a = 0xff, the rest zero, +0x25 / +0x2e..+0x2f unwritten.
+    // (The tree's MemAlloc + memset + header stores were a stand-in for it.)
+    const int count = dim * dim;
+    game->cells.SetSize(count);
 
-    // Fresh-cell init (sub_aa90 new-element branch): zeroed except +0x18/+0x2a.
-    memset(cells, 0, bytes);
-    for (int i = 0; i < count; ++i) {
-        cells[i].regionId   = -1;     // +0x18 dword 0xffffffff
-        cells[i].field_0x2A = 0xff;   // +0x2a
-    }
-
-    // Publish the array header {data, count, capacity} at Map +0x80 before the
-    // classify pass (classify uses flag=1 and never reads the cell array).
-    game->cells._data     = cells;
-    game->cells._size     = count;
-    game->cells._capacity = count;
-
-    // Classify pass — write the terrain type (+0x29) for every cell.
+    // Classify pass — write the terrain type (+0x29) for every cell (retail
+    // re-reads the data pointer per cell; classify uses flag=1 and never reads
+    // the cell array).
     for (int i = 0; i < count; ++i)
-        cells[i].terrainType = (uint8_t)MapTileGrid_Classify(game, dim, i);
+        game->cells[i].terrainType = (uint8_t)MapTileGrid_Classify(game, dim, i);
     PerfX::TerrainInvalidate();   // [PerfX] fresh grid: mirror rebuilds on first read
 }

@@ -205,12 +205,12 @@ Object::External* MusicList::Construct() {
 // ============================================================
 // Reflection: create / createInPlace, the registration
 // ============================================================
-void* MusicList::CreateNewObject() {
+::Object::Base* MusicList::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MusicList), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) MusicList());
 }
-void* MusicList::CreateInPlaceObject(void* memory) {
+::Object::Base* MusicList::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) MusicList());
 }

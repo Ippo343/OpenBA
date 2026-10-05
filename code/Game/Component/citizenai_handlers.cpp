@@ -75,7 +75,7 @@ namespace {
 // ============================================================
 static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1, float* dest, float animTime) {
     CitizenComponent* citizen = *param_1;
-    CharacterComponent* character = citizen->character;
+    CharacterComponent* character = citizen->character.Get();
     ActionStack* stack = &character->actionStack;
 
     WorkBase_TaskListCleanup_c5400(stack);
@@ -86,7 +86,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     if (mem) {
         ComponentEntity* destIBP = nullptr;
         uint32_t msgId[2] = { kCitizenAIMessageTargetTypeId, 0u };  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityIBP = citizen->_entity;
+        ComponentEntity* entityIBP = citizen->_entity.Get();
         msgAction = ::new (mem) SendComponentMessage(&entityIBP, msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
     Action* msgIBP = msgAction;   // the InternalPtr's ctor is a plain store
@@ -102,7 +102,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
         if (pmem) {
             System::Time timeStore{};
             RtSystem_Time_Ctor(&timeStore, animTime);
-            ComponentEntity* entityIBP = citizen->_entity;
+            ComponentEntity* entityIBP = citizen->_entity.Get();
             // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
             // two stamps); then retail's inlined leaf stores.
             PlayAnimation* a = ::new (pmem) PlayAnimation();
@@ -120,7 +120,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     Action* moveAction = nullptr;
     void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
-        CharacterComponent* familyOut = FindCharacterComponent(citizen->_entity);   // 0x1400012d0 (the InternalPtr the finder writes)
+        CharacterComponent* familyOut = FindCharacterComponent(citizen->_entity.Get());   // 0x1400012d0 (the InternalPtr the finder writes)
         if (familyOut == nullptr) {
             // Standalone: the CharacterComponent type-id global (DAT_1401c7078) read by
             // Entity_FindComponent_Family is unfilled, so the list-scan returns null. The
@@ -158,7 +158,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
 // by the position math — reproduced here as `halfMapF`.
 // ============================================================
 bool CitizenAIComponent::State_Wander() {
-    CitizenComponent* target = citizen->_parent;
+    CitizenComponent* target = citizen->_parent.Get();
     if (target == nullptr) return false;
 
     System::Random* rng = (GameUpdateLoop::_singleton != nullptr)
@@ -167,7 +167,7 @@ bool CitizenAIComponent::State_Wander() {
 
     if (target->spouse != nullptr &&
         rng && rng->Rand(1u) == 0) {
-        target = target->spouse;
+        target = target->spouse.Get();
     }
 
     Map* grid = (GameUpdateLoop::_singleton != nullptr)
@@ -208,7 +208,7 @@ bool CitizenAIComponent::State_Wander() {
     float worldPos[3] = { 0.0f, 0.0f, 0.0f };
     Reimpl_MapGetTerrainPos(grid, worldPos, inVec, '\0', nullptr);
 
-    CitizenComponent* citizenIBP = citizen;   // the CitizenComponent in a stack IBP holder
+    CitizenComponent* citizenIBP = citizen.Get();   // the CitizenComponent in a stack IBP holder
     float r = rng ? rng->RandFloat() : 0.0f;
     float animTime = r * kRdata_1401721a0 + kRdata_140172180;
     CitizenAI_PlayAnimationActionCtor5(&citizenIBP, worldPos, animTime);

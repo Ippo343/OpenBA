@@ -95,13 +95,13 @@ Object::External* TutorialSetupGameSpeed::Construct() {
 }
 
 // create 0x1400289c0: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* TutorialSetupGameSpeed::CreateNewObject() {
+::Object::Base* TutorialSetupGameSpeed::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialSetupGameSpeed), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialSetupGameSpeed());
 }
 // createInPlace 0x140028a20.
-void* TutorialSetupGameSpeed::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialSetupGameSpeed::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialSetupGameSpeed());
 }

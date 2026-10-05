@@ -120,13 +120,13 @@ Object::External* ImmigrationDescription::Construct() {
 }
 
 // create 0x140007a80: MemAlloc(0x68, 8), then the (inlined) ctor.
-void* ImmigrationDescription::CreateNewObject() {
+::Object::Base* ImmigrationDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ImmigrationDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ImmigrationDescription());
 }
 // createInPlace 0x140007ac0.
-void* ImmigrationDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ImmigrationDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ImmigrationDescription());
 }

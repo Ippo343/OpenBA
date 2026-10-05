@@ -69,7 +69,7 @@ extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, void* spriteDat
 static int CountOccupiedBuildTiles_Impl(ClearAreaComponent* clearArea)
 {
     // The owning entity (Component::_entity) = self identity
-    ComponentEntity* entityRef = clearArea->_entity;
+    ComponentEntity* entityRef = clearArea->_entity.Get();
 
     // Find the MapComponent on the entity (FindComponent<MapComponent>, 0x140004680)
     MapComponent* bc = entityRef->FindComponent<MapComponent>();
@@ -91,9 +91,9 @@ static int CountOccupiedBuildTiles_Impl(ClearAreaComponent* clearArea)
         for (int col = 0; col < width; ++col) {
             // Each tile entry is a 0x30-byte MapCell; occupant ptr is at offset +8
             int tileIndex = (originY + row) * mapWidth + originX + col;
-            const ComponentEntity* occupant = tileArrayBase[tileIndex].occupant;
+            const ComponentEntity* occupant = tileArrayBase[tileIndex].occupant.Get();
             // Count tiles occupied by other entities (not self, not null)
-            if (occupant != clearArea->_entity && occupant != nullptr) {
+            if (occupant != clearArea->_entity.Get() && occupant != nullptr) {
                 count++;
             }
         }

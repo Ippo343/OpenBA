@@ -1137,13 +1137,13 @@ SaveLoadDialog::SaveLoadDialog() {
 }
 
 // create 0x140021160: MemAlloc(0x160, 8), then the ctor.
-void* SaveLoadDialog::CreateNewObject() {
+::Object::Base* SaveLoadDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(SaveLoadDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) SaveLoadDialog());
 }
 // createInPlace 0x1400211a0 (the tree's in-place build is kept, B8-13).
-void* SaveLoadDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* SaveLoadDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) SaveLoadDialog());
 }

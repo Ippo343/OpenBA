@@ -17,13 +17,16 @@
 //     Find("Dialog/StringTable.rsc:seasons")
 //   Serialize 0x1400952c0 (version 1): Serialize(6, bool*) at +0x10; the last
 //     200 entries: uint color, String text, five ints
-//   AddEvent 0x140095580 appends through the grow 0x140019b70; Shutdown frees
-//     the array with 0x14000a8a0
+//   AddEvent 0x140095580 appends through the grow 0x140019b70 (the entry
+//     Array's SetSize(n, fill)); Serialize resizes it with 0x1400199a0 (its
+//     SetSize(n)); Shutdown 0x1400977c0 runs ~Array 0x14000a8a0 on +0x18
+//     (0x140097ab0) and frees the log: nothing else is released
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 #include "system/String.h"   // System::String (the entry's text)
+#include "collection/Collection.h"   // Collection::Array (the entry array)
 
 namespace UI { class StringTable; }
 namespace IO { class Stream; }
@@ -53,15 +56,32 @@ static_assert(offsetof(EventLogEntry, iconIndex) == 0x1C, "EventLogEntry::iconIn
 static_assert(offsetof(EventLogEntry, popup) == 0x20, "EventLogEntry::popup @ +0x20");
 static_assert(offsetof(EventLogEntry, _pad24) == 0x24, "EventLogEntry +0x24");
 
+// The entry array's one element row (eventlog.cpp): retail's grow 0x140019b70,
+// resize 0x1400199a0 and ~Array 0x14000a8a0 are three instantiations over the
+// same element (String copy-ctor assign, ~String destroy; the resize adds the
+// init arm).
+namespace EventLogRows { extern const rtcoll::ArraySpec kSpec_EventEntry; }
+
 class EventLog {
 public:
+    using EntryArray = Collection::Array<EventLogEntry, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&EventLogRows::kSpec_EventEntry>>;
+
+    // Retail constructs the log inline in Load (0x14009700c..0x14009702c):
+    // qwords +0x00 / +0x08 / +0x18 / +0x20 = 0, dword +0x10 = 0x01010101,
+    // word +0x14 = 0x0101, then byte +0x10 = 0. The dtor is implicit: retail's
+    // Shutdown releases only the entry array (~Array 0x14000a8a0 at 0x140097ab0).
+    EventLog() : events(nullptr), seasons(nullptr), entries() {
+        field_0x10[0] = true; field_0x10[1] = true; field_0x10[2] = true;
+        field_0x10[3] = true; field_0x10[4] = true; field_0x10[5] = true;
+        field_0x10[0] = false;
+    }
+
     UI::StringTable* events;      // +0x00 "Dialog/StringTable.rsc:events" (ExternalPtr)
     UI::StringTable* seasons;     // +0x08 "Dialog/StringTable.rsc:seasons" (ExternalPtr)
     bool           field_0x10[6]; // +0x10 Serialize(6, bool*); ctor {0, 1, 1, 1, 1, 1}
-    uint8_t        _pad16[2];     // +0x16
-    EventLogEntry* entries;       // +0x18 Array<Entry> data
-    int32_t        entryCount;    // +0x20
-    int32_t        entryCapacity; // +0x24
+    uint8_t        _pad16[2];     // +0x16 never written by the ctor
+    EntryArray     entries;       // +0x18 data, +0x20 count, +0x24 capacity
 
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x1400952c0
@@ -85,5 +105,3 @@ static_assert(offsetof(EventLog, seasons) == 0x08, "EventLog::seasons @ +0x08");
 static_assert(offsetof(EventLog, field_0x10) == 0x10, "EventLog +0x10");
 static_assert(offsetof(EventLog, _pad16) == 0x16, "EventLog +0x16");
 static_assert(offsetof(EventLog, entries) == 0x18, "EventLog::entries @ +0x18");
-static_assert(offsetof(EventLog, entryCount) == 0x20, "EventLog::entryCount @ +0x20");
-static_assert(offsetof(EventLog, entryCapacity) == 0x24, "EventLog::entryCapacity @ +0x24");

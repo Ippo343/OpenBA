@@ -692,14 +692,14 @@ void EntityUI::OnUpdate(const System::Time& /*time*/) {
 
 // create 0x140011270: MemAlloc(0x48, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* EntityUI::CreateNewObject() {
+::Object::Base* EntityUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EntityUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) EntityUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* EntityUI::CreateInPlaceObject(void* storage) {
+::Object::Base* EntityUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) EntityUI());
 }

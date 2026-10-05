@@ -125,13 +125,13 @@ Object::External* FrustumOutlineDescription::Construct() {
 }
 
 // create 0x1400122c0: MemAlloc(0x80, 8), then the ctor.
-void* FrustumOutlineDescription::CreateNewObject() {
+::Object::Base* FrustumOutlineDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FrustumOutlineDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FrustumOutlineDescription());
 }
 // createInPlace 0x140012330: the ctor on `storage`.
-void* FrustumOutlineDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* FrustumOutlineDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FrustumOutlineDescription());
 }

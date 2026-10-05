@@ -118,14 +118,14 @@ void NaturalResourceComponent::Persist(IO::Stream& stream) {
 void NaturalResourceComponent::Tick(const System::Time*) {}
 
 // create 0x140036550: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* NaturalResourceComponent::CreateNewObject() {
+::Object::Base* NaturalResourceComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(NaturalResourceComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) NaturalResourceComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* NaturalResourceComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* NaturalResourceComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) NaturalResourceComponent());
 }

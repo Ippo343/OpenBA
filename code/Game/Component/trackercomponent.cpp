@@ -94,14 +94,14 @@ void TrackerComponent::Persist(IO::Stream& stream) {
 }
 
 // create 0x14000d7a0: MemAlloc(0x50, 8), then the ctor.
-void* TrackerComponent::CreateNewObject() {
+::Object::Base* TrackerComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TrackerComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TrackerComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* TrackerComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* TrackerComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TrackerComponent());
 }

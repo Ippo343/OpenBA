@@ -95,13 +95,13 @@ Object::External* CreateFencedDescription::Construct() {
 }
 
 // create 0x1400048e0: MemAlloc(0x78, 8), then the (inlined) ctor.
-void* CreateFencedDescription::CreateNewObject() {
+::Object::Base* CreateFencedDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CreateFencedDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreateFencedDescription());
 }
 // createInPlace 0x140004920.
-void* CreateFencedDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CreateFencedDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreateFencedDescription());
 }

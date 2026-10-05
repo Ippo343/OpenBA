@@ -317,7 +317,7 @@ void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* c
 
     // citizen model cell (clamped row*w+col) -> uVar11
     CitizenComponent* cz = *param_2;
-    CharacterComponent* ch = cz->character;
+    CharacterComponent* ch = cz->character.Get();
     ModelComponent* model = ch->modelComponent.Get();
     int w = *mapGrid;
     int col = static_cast<int>(model->transform.translation.x + static_cast<float>(w >> 1));
@@ -517,7 +517,7 @@ uint64_t Helper_sub_79b0(WorkScheduler* param_1, CitizenComponent* const* param_
                          char param_5, char param_6) {
     Profession* local_res20 = param_4;
     CitizenComponent* citizen0 = *param_2;
-    ComponentEntity* gate = citizen0->workplace;   // pIVar5 = *(citizen+0x248)
+    ComponentEntity* gate = citizen0->workplace.Get();   // pIVar5 = *(citizen+0x248)
 
     if (param_6 != '\0') {
         ::Object::InternalPtr<ComponentEntity> freshGate(nullptr);   // the IBP ctor 0x1400f79fb
@@ -742,7 +742,7 @@ void Helper_7830(WorkScheduler* param_1, CitizenComponent* const* param_2) {
 //   CONCAT71(character>>8, 0 < character->currentAction + 1)
 // (the caller reads the low byte)
 static uint64_t HandlerEpilogue(CitizenComponent* citizen) {
-    CharacterComponent* ch = citizen->character;
+    CharacterComponent* ch = citizen->character.Get();
     int truth = (0 < ch->actionStack.current + 1) ? 1 : 0;
     return static_cast<uint64_t>(truth);
 }
@@ -752,9 +752,9 @@ static uint64_t HandlerEpilogue(CitizenComponent* citizen) {
 // ============================================================
 uint64_t CitizenAIComponent::State_FindHousing() {
     WorkScheduler* treeBase = GameUpdateLoop::_singleton->m_tutorial;
-    CitizenComponent* holder = citizen;   // local_res8[0]
+    CitizenComponent* holder = citizen.Get();   // local_res8[0]
     Helper_7550(treeBase, &holder);
-    return HandlerEpilogue(citizen);
+    return HandlerEpilogue(citizen.Get());
 }
 
 // ============================================================
@@ -762,9 +762,9 @@ uint64_t CitizenAIComponent::State_FindHousing() {
 // ============================================================
 uint64_t CitizenAIComponent::State_Idle() {
     WorkScheduler* treeBase = GameUpdateLoop::_singleton->m_tutorial;
-    CitizenComponent* holder = citizen;   // local_res8[0]
+    CitizenComponent* holder = citizen.Get();   // local_res8[0]
     Helper_7830(treeBase, &holder);
-    return HandlerEpilogue(citizen);
+    return HandlerEpilogue(citizen.Get());
 }
 
 // ============================================================

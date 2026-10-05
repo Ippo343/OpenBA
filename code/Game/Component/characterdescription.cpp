@@ -94,13 +94,13 @@ Object::External* CharacterDescription::Construct() {
 }
 
 // create 0x14002f9c0: MemAlloc(0x48, 8), then the (inlined) ctor.
-void* CharacterDescription::CreateNewObject() {
+::Object::Base* CharacterDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CharacterDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CharacterDescription());
 }
 // createInPlace 0x14002fa00.
-void* CharacterDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CharacterDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CharacterDescription());
 }

@@ -385,7 +385,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
 // ============================================================
 // Reflection: create / createInPlace, the registration
 // ============================================================
-void* MenuScene::CreateNewObject() {
+::Object::Base* MenuScene::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MenuScene), 8);
     if (!p) return nullptr;
     Object::Base* obj = ::new (p) MenuScene();
@@ -393,7 +393,7 @@ void* MenuScene::CreateNewObject() {
            p, (unsigned)sizeof(MenuScene));
     return obj;
 }
-void* MenuScene::CreateInPlaceObject(void* memory) {
+::Object::Base* MenuScene::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) MenuScene());
 }

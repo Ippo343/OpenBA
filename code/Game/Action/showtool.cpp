@@ -115,7 +115,7 @@ void ShowTool::Persist(IO::Stream& stream) {
 // ============================================================
 static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     // Skip if the entity is flagged for destruction (bit 10 of its +0x40 flags).
-    ComponentEntity* inner = citizen->_entity;
+    ComponentEntity* inner = citizen->_entity.Get();
     if (!inner) return;
     if ((inner->_entityFlags >> 10) & 1) return;
 
@@ -123,14 +123,14 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     if (citizen->toolSceneId >= 0) HideCitizenTool(citizen);   // 0x1401176e0
 
     // Character mesh holder = CharacterComponent (+0x278) -> its ModelComponent (+0x68).
-    CharacterComponent* smComp = citizen->character;
+    CharacterComponent* smComp = citizen->character.Get();
     if (!smComp) return;
     ModelComponent* charMeshHolder = smComp->modelComponent.Get();
     if (!charMeshHolder) return;
 
     // --- Storage scan: pick the highest-count item in the citizen's storage. ---
     StorageComponent* storageComp = nullptr;
-    fn_FindComponent_Storage(citizen->_entity, &storageComp);
+    fn_FindComponent_Storage(citizen->_entity.Get(), &storageComp);
     if (!storageComp) return;
     int itemCount = storageComp->storageSlots._size;
 
@@ -250,7 +250,7 @@ void ShowTool::CheckEntity() {
 bool ShowTool::GetTarget(ComponentEntity** param) {
     CitizenComponent* entity = _field20.Get();
     if (!entity) return false;  // entity gone, no match
-    return entity->_entity == *param;
+    return entity->_entity.Get() == *param;
 }
 
 // ============================================================
@@ -276,12 +276,12 @@ void ShowTool::Exit(ActionStack*) {}
 // [8] 0x1400426d0
 // [9] 0x140042680
 
-void* ShowTool::CreateNewObject() {
+::Object::Base* ShowTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ShowTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ShowTool());
 }
-void* ShowTool::CreateInPlaceObject(void* storage) {
+::Object::Base* ShowTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ShowTool());
 }

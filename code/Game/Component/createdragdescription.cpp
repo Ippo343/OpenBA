@@ -92,13 +92,13 @@ Object::External* CreateDragDescription::Construct() {
 }
 
 // create 0x140032970: MemAlloc(0x40, 8), then the (inlined) ctor.
-void* CreateDragDescription::CreateNewObject() {
+::Object::Base* CreateDragDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CreateDragDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreateDragDescription());
 }
 // createInPlace 0x1400329b0.
-void* CreateDragDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CreateDragDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreateDragDescription());
 }

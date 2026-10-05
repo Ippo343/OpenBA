@@ -101,13 +101,13 @@ Object::External* RawMaterialDescription::Construct() {
 }
 
 // create 0x1400372d0: MemAlloc(0x60, 8), then the (inlined) ctor.
-void* RawMaterialDescription::CreateNewObject() {
+::Object::Base* RawMaterialDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RawMaterialDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RawMaterialDescription());
 }
 // createInPlace 0x140037310.
-void* RawMaterialDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* RawMaterialDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RawMaterialDescription());
 }

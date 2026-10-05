@@ -98,13 +98,13 @@ Object::External* CaptureBoxDescription::Construct() {
 }
 
 // create 0x140013d90: MemAlloc(0x78, 8), then the ctor.
-void* CaptureBoxDescription::CreateNewObject() {
+::Object::Base* CaptureBoxDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CaptureBoxDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CaptureBoxDescription());
 }
 // createInPlace 0x140013df0: the ctor on `storage`.
-void* CaptureBoxDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CaptureBoxDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CaptureBoxDescription());
 }

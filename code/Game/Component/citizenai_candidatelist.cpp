@@ -339,11 +339,11 @@ static void AppendCandidate(StateCandidateList* L, int id, int prio) {
 }
 
 void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, char param3) {
-    CitizenComponent* cz = citizen;
+    CitizenComponent* cz = citizen.Get();
 
     // --- Special early branch: SICK (disease) with a care building ---
     if (cz != nullptr && cz->disease != nullptr) {
-        cz = citizen;
+        cz = citizen.Get();
         if (cz->careBuilding != nullptr) {
             // Single candidate {5 (Work), 6, 0}, no shuffle/sort (function returns).
             AppendCandidate(outList, 5, 6);
@@ -352,7 +352,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
     }
 
     // --- hunger (state 0xe, prio 7) : desc _fcc ---
-    cz = citizen;
+    cz = citizen.Get();
     {
         float fv = cz->hunger;
         float* pf = &cz->description->_fcc;
@@ -360,7 +360,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
     }
 
     // --- coldness (id 0xf, prio 7) : desc _fec ---
-    cz = citizen;
+    cz = citizen.Get();
     {
         float fv = cz->coldness;
         float* pf = &cz->description->_fec;
@@ -368,7 +368,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
     }
 
     // --- hunger-other (id 0, prio 6) : desc _fc8 ---
-    cz = citizen;
+    cz = citizen.Get();
     {
         float fv = cz->hunger;
         float* pf = &cz->description->_fc8;
@@ -376,7 +376,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
     }
 
     // --- coldness-other (id 1, prio 6) : desc _fe8 ---
-    cz = citizen;
+    cz = citizen.Get();
     {
         float fv = cz->coldness;
         float* pf = &cz->description->_fe8;
@@ -384,18 +384,18 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
     }
 
     // --- main branch: HEALTHY (no disease) vs SICK ---
-    cz = citizen;
+    cz = citizen.Get();
     if (cz->disease == nullptr) {
         // FindHousing (id 2, prio 7) if CanFindHousing
         char canHouse = citizen->CanFindHousing();
         if (canHouse != '\0') AppendCandidate(outList, 2, 7);
 
         // "Education" (id 3, prio 3) if clothingLevel == 0
-        cz = citizen;
+        cz = citizen.Get();
         if (cz->clothingLevel == 0) AppendCandidate(outList, 3, 3);
 
         // GrowUp (id 4, prio 3) if desc _f74 is in (health, ..] and (statusFlags>>9 & 1)==0
-        cz = citizen;
+        cz = citizen.Get();
         {
             float fv = cz->description->_f74;
             float work50 = cz->health;
@@ -416,7 +416,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
 
     // --- Leisure (id 0xc) : prio 2 if leisure-thresholds tripped, else prio 0 ---
     {
-        cz = citizen;
+        cz = citizen.Get();
         bool leisure = false;
         // (desc _fb8 in (happiness,..] and AsSeconds(leisureTimer) > DAT_1721fc)
         float fv1 = cz->description->_fb8;
@@ -428,7 +428,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
         }
         if (!leisure) {
             // OR (desc _fb4 in (happiness,..] and AsSeconds(leisureTimer) > DAT_172234)
-            cz = citizen;
+            cz = citizen.Get();
             float fv2 = cz->description->_fb4;
             float* pf2 = &cz->happiness;
             float c172234 = kRdata_140172234;
@@ -447,15 +447,15 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
     }
 
     // --- age / work-need block ---
-    cz = citizen;
+    cz = citizen.Get();
     float age = cz->age;
     float ageThresh = cz->description->adultAge;
     if ((age < ageThresh) || (cz->school != nullptr)) {
         // not adult yet, or at school
-        cz = citizen;
+        cz = citizen.Get();
         if (cz->school == nullptr) {
             // not at school
-            cz = citizen;
+            cz = citizen.Get();
             if (cz->disease == nullptr) {
                 AppendCandidate(outList, 0xb, 0);   // Wander (id 0xb, prio 0)
             }
@@ -476,19 +476,19 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
         }
     } else {
         // adult, not at school: the household block
-        cz = citizen;
+        cz = citizen.Get();
         if (cz->home != nullptr) {
             // --- food gather (id 6) ---
             int hsr = citizen->HasSufficientResources();
             if ((char)hsr == '\0') {
                 bool reserved6 = false;
-                cz = citizen;
+                cz = citizen.Get();
                 if (cz->spouse != nullptr) {
-                    CitizenComponent* resv = citizen->spouse;
+                    CitizenComponent* resv = citizen->spouse.Get();
                     if (resv->field_0xB0 == 1) reserved6 = true;  // skip to LAB_14010e8e7
                 }
                 if (!reserved6) {
-                    cz = citizen;
+                    cz = citizen.Get();
                     float fv = cz->hunger;
                     float* pf = &cz->description->_fcc;
                     int prio = (*pf <= fv && fv != *pf) ? 6 : 4;
@@ -500,13 +500,13 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
             int hsr2 = citizen->HasSufficientResources2();
             if ((char)hsr2 == '\0') {
                 bool reserved7 = false;
-                cz = citizen;
+                cz = citizen.Get();
                 if (cz->spouse != nullptr) {
-                    CitizenComponent* resv = citizen->spouse;
+                    CitizenComponent* resv = citizen->spouse.Get();
                     if (resv->field_0xB0 == 2) reserved7 = true;  // skip to LAB_14010ea39
                 }
                 if (!reserved7) {
-                    cz = citizen;
+                    cz = citizen.Get();
                     float fv = cz->coldness;
                     float* pf = &cz->description->_fec;
                     int prio = (*pf <= fv && fv != *pf) ? 6 : 4;
@@ -516,10 +516,10 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
         }
 
         // --- LAB_14010ea39: idle / happiness / long-term-plan tail ---
-        cz = citizen;
+        cz = citizen.Get();
         if (cz->disease == nullptr) {   // else -> LAB_14010f144 (shuffle/sort)
             // SeekHappiness (id 8, prio 5) if field_0xAC < 1
-            cz = citizen;
+            cz = citizen.Get();
             if (cz->field_0xAC < 1) AppendCandidate(outList, 8, 5);
 
             // Idle (id 9, prio 2)  -- unconditional

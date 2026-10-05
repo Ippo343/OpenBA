@@ -58,13 +58,13 @@ Object::External* PastureDescription::Construct() {
 }
 
 // create 0x1400367a0: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* PastureDescription::CreateNewObject() {
+::Object::Base* PastureDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PastureDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PastureDescription());
 }
 // createInPlace 0x140036800.
-void* PastureDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* PastureDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PastureDescription());
 }

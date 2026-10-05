@@ -122,7 +122,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     }
 
     // --- Phase 5: hunger ---
-    CitizenComponent* citizenData = citizen;
+    CitizenComponent* citizenData = citizen.Get();
     if (!citizenData) return;  // citizen entity gone, bail out
     float health = citizenData->hunger;
     float* pHungerThresh = &citizenData->description->_fcc;
@@ -132,7 +132,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
         timers[14]._ticks > 0) {
         // Not hungry enough to transition, or in special state
         if (hungerFlag != 0) {
-            citizenData = citizen;
+            citizenData = citizen.Get();
             health = citizenData->hunger;
             pHungerThresh = &citizenData->description->_fcc;
 
@@ -147,12 +147,12 @@ void CitizenAIComponent::Decide(const System::Time* time) {
             int resourceCount = CitizenComp_Storage_GetResourceCount(homeStorage);
 
             if (resourceCount > 0) {
-                citizen->EatFrom(citizen->home);
+                citizen->EatFrom(citizen->home.Get());
             }
         }
 
         // Re-check hunger after eating
-        citizenData = citizen;
+        citizenData = citizen.Get();
         health = citizenData->hunger;
         pHungerThresh = &citizenData->description->_fcc;
 
@@ -163,7 +163,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     }
 
     // --- Phase 6: coldness ---
-    citizenData = citizen;
+    citizenData = citizen.Get();
     float hydration = citizenData->coldness;
     float* pThirstThresh = &citizenData->description->_fec;
 
@@ -178,7 +178,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
         timers[15]._ticks > 0) {
         // Not cold enough or in special state
         if (thirstFlag != 0) {
-            citizenData = citizen;
+            citizenData = citizen.Get();
             hydration = citizenData->coldness;
             pThirstThresh = &citizenData->description->_fec;
 
@@ -272,7 +272,7 @@ static constexpr float kScaleElder = 0.66f;  // child / small render
 
 static void CitizenComp_SetupAgeMesh(CitizenComponent* citizen, float scale) {
     int idx = citizen->field_0x34;
-    CharacterComponent* meshIBP = citizen->character;
+    CharacterComponent* meshIBP = citizen->character.Get();
     if (meshIBP == nullptr) return;                            // no CharacterComponent
     // The ModelComponent's MeshInstance colour (+0x28 + 0x10c = +0x134..+0x140).
     ModelComponent* model = meshIBP->modelComponent.Get();
@@ -288,7 +288,7 @@ static void CitizenComp_SetupAgeMesh(CitizenComponent* citizen, float scale) {
         CitizenDescription* desc = citizen->description;
         float thresh = desc ? desc->adultAge : -1.0f;
         float age = citizen->age;
-        AttendanceComponent* state208 = citizen->school;
+        AttendanceComponent* state208 = citizen->school.Get();
         fprintf(stderr, "[SetupAgeMesh] citizen=%p scale=%.2f colour=%d age=%.2f "
                 "thresh=%.2f state208=%p\n",
                 (void*)citizen, scale, idx, age, thresh, (void*)state208);
@@ -448,7 +448,7 @@ void CitizenAIComponent::CheckEducation() {
 // description's adultAge and whether it attends a school.
 void CitizenAIComponent::CheckAge() {
     EnsureCallees();
-    CitizenComponent* d = citizen;
+    CitizenComponent* d = citizen.Get();
     float ageThresh = d->description->adultAge;
     float age = d->age;
     if (ageThresh <= age && d->school == nullptr) {
@@ -559,7 +559,7 @@ void CitizenAIComponent::Startup() {
     seekingWarmth = false;
 
     // Startup (0x14010f920): find sibling CitizenComponent -> +0x38.
-    ComponentEntity* owner = _entity;
+    ComponentEntity* owner = _entity.Get();
     citizen = owner ? CitizenAI_FindSiblingCitizen(owner) : nullptr;
 }
 
@@ -593,9 +593,9 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
     CitizenDescription* czDesc = nullptr;
     CharacterComponent* czChar = nullptr;
     if (citizen) {
-        czEntity = citizen->_entity;
+        czEntity = citizen->_entity.Get();
         czDesc   = citizen->description;
-        czChar   = citizen->character;  // CharacterComponent (alive flag)
+        czChar   = citizen->character.Get();  // CharacterComponent (alive flag)
     }
 
     // --- FORCE-WORK HARNESS (env BANISHED_FORCE_WORK, default off) -------------
@@ -620,7 +620,7 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
                 *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;   // LEFT: the force-work harness plants the ComponentEntity* in the Disease* slot (a harness pun, kept)
                 if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
                     fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p housed+0x68=%p\n",
-                            (void*)citizen, g_pForceWorkBuilding, g_pForceWorkBuilding);
+                            (void*)citizen.Get(), g_pForceWorkBuilding, g_pForceWorkBuilding);
                     fflush(stderr);
                 }
             }
@@ -642,8 +642,8 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
     // inert building ResourceProduceComponent controller. When it owns the citizen, skip
     // the competing AI state machine (Leisure/Wander would otherwise claim the idle stack
     // first) so ForesterWork::Execute keeps driving the real harvest/production chain.
-    if (StartTown_ForcePushForesterWork(citizen)) return;
-    if (StartTown_ForcePushConstructionWork(citizen)) return;
+    if (StartTown_ForcePushForesterWork(citizen.Get())) return;
+    if (StartTown_ForcePushConstructionWork(citizen.Get())) return;
 
     Decide(time);
 }
@@ -653,14 +653,14 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
 void CitizenAIComponent::OnMessage(int, void*, uint32_t, uint32_t) {}
 
 // create 0x14002fb20: MemAlloc(0xd0, 8), then the ctor.
-void* CitizenAIComponent::CreateNewObject() {
+::Object::Base* CitizenAIComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CitizenAIComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CitizenAIComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CitizenAIComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CitizenAIComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CitizenAIComponent());
 }

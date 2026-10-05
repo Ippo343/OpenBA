@@ -169,7 +169,7 @@ char AttendanceComponent::State2Enter() {
         // Retail inlines LocationWork's entity-seeded ctor here: Work_Ctor25
         // (0x1400f72e0), the 0x1401616a0 table, +0x48 = 0. ENDGAME B.3.9 OBJ:
         // the real class, not the `??0Internal` door + hand stamp.
-        ComponentEntity* entity = _entity;
+        ComponentEntity* entity = _entity.Get();
         location = ::new (work) LocationWork(&entity);
     }
     Object::InternalPtr<Work> workIbp(location);

@@ -69,13 +69,13 @@ Object::External* FishingDescription::Construct() {
 }
 
 // create 0x1400343c0: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* FishingDescription::CreateNewObject() {
+::Object::Base* FishingDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FishingDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FishingDescription());
 }
 // createInPlace 0x140034430.
-void* FishingDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* FishingDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FishingDescription());
 }

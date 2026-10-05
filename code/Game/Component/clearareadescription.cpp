@@ -89,13 +89,13 @@ Object::External* ClearAreaDescription::Construct() {
 }
 
 // create 0x140030f00: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* ClearAreaDescription::CreateNewObject() {
+::Object::Base* ClearAreaDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ClearAreaDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ClearAreaDescription());
 }
 // createInPlace 0x140030f80.
-void* ClearAreaDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ClearAreaDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ClearAreaDescription());
 }

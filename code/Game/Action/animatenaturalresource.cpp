@@ -126,12 +126,12 @@ AnimateNaturalResource::AnimateNaturalResource()
 void AnimateNaturalResource::CheckEntity() {}
 // [9] 0x1400c5560
 
-void* AnimateNaturalResource::CreateNewObject() {
+::Object::Base* AnimateNaturalResource::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AnimateNaturalResource), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AnimateNaturalResource());
 }
-void* AnimateNaturalResource::CreateInPlaceObject(void* storage) {
+::Object::Base* AnimateNaturalResource::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AnimateNaturalResource());
 }

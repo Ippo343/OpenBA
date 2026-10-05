@@ -22,7 +22,7 @@ long     s_rebuilds = 0, s_writes = 0, s_verified = 0, s_mismatch = 0;
 void Rebuild(const MapCell* cells, int count) {
     if (count > s_bufCap) {
         std::free(s_buf);
-        s_buf = static_cast<uint8_t*>(std::malloc((size_t)count));  // CAST-OK: win32
+        s_buf = static_cast<uint8_t*>(std::malloc((size_t)count));
         s_bufCap = s_buf ? count : 0;
     }
     if (!s_buf) { g_terrainSC = nullptr; g_terrainSCBase = nullptr; g_terrainSCCount = 0; return; }

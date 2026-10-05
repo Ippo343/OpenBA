@@ -250,7 +250,7 @@ namespace Graphics {
 // once as the `Graphics::RendererDrawGroup` they are.
 extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src) {
     Graphics::RendererDrawGroup* const d = static_cast<Graphics::RendererDrawGroup*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
-    const Graphics::RendererDrawGroup* const s = static_cast<const Graphics::RendererDrawGroup*>(src);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+    const Graphics::RendererDrawGroup* const s = static_cast<const Graphics::RendererDrawGroup*>(src);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
 
     d->_renderBuffer = s->_renderBuffer;                               // +0x000
     rtgfxd::RtGraphics_Camera_CopyCtor(&d->_camera, &s->_camera);          // +0x008

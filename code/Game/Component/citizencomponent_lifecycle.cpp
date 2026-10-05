@@ -73,11 +73,11 @@ void CitizenComponent::RemoveChild(CitizenComponent* child) {
         _firstChild = (*ibp)->_nextSibling;
     }
     // node.prev.next = node.next
-    CitizenComponent* nextLink = (*ibp)->_nextSibling;
+    CitizenComponent* nextLink = (*ibp)->_nextSibling.Get();
     CitizenComponent* node = *ibp;
     node->_prevSibling->_nextSibling = nextLink;
     // node.next.prev = node.prev
-    CitizenComponent* prevLink = (*ibp)->_prevSibling;
+    CitizenComponent* prevLink = (*ibp)->_prevSibling.Get();
     node = *ibp;
     node->_nextSibling->_prevSibling = prevLink;
     // node's own links -> empty
@@ -100,7 +100,7 @@ void CitizenComponent::RemoveChild(CitizenComponent* child) {
 // ============================================================
 void CitizenComponent::AddChild(CitizenComponent* child) {
     CitizenComponent** ibp = &child;
-    CitizenComponent* head = _firstChild;
+    CitizenComponent* head = _firstChild.Get();
     CitizenComponent* v;
     CitizenComponent* node;
 
@@ -112,23 +112,23 @@ void CitizenComponent::AddChild(CitizenComponent* child) {
         v = *ibp;
         node = *ibp;
     } else {
-        v = head->_prevSibling;           // head.prev
+        v = head->_prevSibling.Get();           // head.prev
         (*ibp)->_prevSibling = v;         // node.prev = head.prev
-        v = _firstChild;                  // head
+        v = _firstChild.Get();                  // head
         (*ibp)->_nextSibling = v;         // node.next = head
         v = *ibp;
         node = *ibp;
         node->_prevSibling->_nextSibling = v;   // node.prev.next = node
         v = *ibp;
         node = *ibp;
-        node = node->_nextSibling;        // node.next
+        node = node->_nextSibling.Get();        // node.next
     }
     node->_prevSibling = v;
 
     // store this as the child's parent (+0x258), then move it into the parent's home
     (*ibp)->_parent = this;
-    CitizenComponent* slotHost = (*ibp)->_parent;
-    ComponentEntity* wpIBP = (*ibp)->_parent->home;
+    CitizenComponent* slotHost = (*ibp)->_parent.Get();
+    ComponentEntity* wpIBP = (*ibp)->_parent->home.Get();
     (*ibp)->SetHome(wpIBP, slotHost->homeSlot);
 }
 
@@ -254,7 +254,7 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
     maxAge = rf * spanA + baseA;
 
     // 13. sprite/anim init on the CharacterComponent (+0x278)
-    SetAnimation(character, 0,
+    SetAnimation(character.Get(), 0,
               kRdata_14017214c, 0.0f);
 }
 

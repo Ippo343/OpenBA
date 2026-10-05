@@ -108,13 +108,13 @@ Object::External* GrowthDescription::Construct() {
 }
 
 // create 0x140034b70: MemAlloc(0x68, 8), then the (inlined) ctor.
-void* GrowthDescription::CreateNewObject() {
+::Object::Base* GrowthDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(GrowthDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) GrowthDescription());
 }
 // createInPlace 0x140034bb0.
-void* GrowthDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* GrowthDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) GrowthDescription());
 }

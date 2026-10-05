@@ -230,7 +230,7 @@ bool DropOffRawMaterial::GetTarget(ComponentEntity** param) {
         return true;
     }
 
-    return _field30->_entity == target;
+    return _field30->_entity.Get() == target;
 }
 
 // ============================================================
@@ -256,12 +256,12 @@ DropOffRawMaterial::DropOffRawMaterial()
 // [8] 0x1400c72f0 (JMP 0x1400c7570)
 // [9] 0x1400c7270
 
-void* DropOffRawMaterial::CreateNewObject() {
+::Object::Base* DropOffRawMaterial::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DropOffRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DropOffRawMaterial());
 }
-void* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
+::Object::Base* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DropOffRawMaterial());
 }

@@ -65,13 +65,13 @@ Object::External* ForesterDescription::Construct() {
 }
 
 // create 0x1400348e0: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* ForesterDescription::CreateNewObject() {
+::Object::Base* ForesterDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ForesterDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ForesterDescription());
 }
 // createInPlace 0x140034950.
-void* ForesterDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ForesterDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ForesterDescription());
 }

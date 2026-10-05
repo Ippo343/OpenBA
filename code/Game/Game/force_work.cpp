@@ -96,12 +96,12 @@ uint32_t SafeGetTypeId(void* obj) {
     if (!Readable(obj, 8)) return 0;
     // Probe the vptr's table entry for Type() -- the slot is taken from the
     // member, never a literal (B3X_RULES X3) -- then call it by name.
-    uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);   // CAST-OK: vslot
+    uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);   // CAST-OK: crash_walk
     const long typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
     if (typeSlot < 0) return 0;
-    if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;   // CAST-OK: vslot
+    if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;   // CAST-OK: crash_walk
     if (!Executable(::Object::SlotAddressOf(obj, &::Object::Base::Type))) return 0;
-    return reinterpret_cast< ::Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)   // CAST-OK: vslot
+    return reinterpret_cast< ::Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)   // CAST-OK: crash_walk
 }
 
 Component* FindComp(ComponentEntity* entity, uint32_t tid) {
@@ -141,7 +141,7 @@ int WorkAreaCenterCell(ComponentEntity* area) {
 
 bool CitizenStackIdle(const CitizenComponent* citizen) {
     if (!citizen || !Readable(citizen, kCharCompOff + 8)) return false;
-    const CharacterComponent* charComp = citizen->character;   // +0x278
+    const CharacterComponent* charComp = citizen->character.Get();   // +0x278
     if (!charComp || !Readable(charComp, kActionTopOff + 8)) return false;
     return charComp->actionStack.current < 0;                 // +0x60
 }
@@ -158,7 +158,7 @@ int DriveWhenIdle(CitizenComponent* citizen, Work* work, int (*driveFn)(Work*, C
 
     if (driveCount && *driveCount < traceMax) {
         ++*driveCount;
-        const CharacterComponent* charComp = c->character;               // +0x278
+        const CharacterComponent* charComp = c->character.Get();               // +0x278
         int top = charComp ? charComp->actionStack.current : -999;             // +0x60
         std::fprintf(stderr, "[%s] DRIVE#%d citizen=%p ret=%d newTop+0x60=%d\n",
                      tag ? tag : "ForceWork", *driveCount, static_cast<void*>(citizen), rc, top);

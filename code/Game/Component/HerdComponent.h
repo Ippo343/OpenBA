@@ -59,10 +59,10 @@ public:
     void Populate(int count);                                     // 0x140120f50
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    PopulationComponent*  population;     // +0x28 InternalPtr<PopulationComponent>
+    Object::InternalPtr<PopulationComponent> population;   // +0x28 InternalPtr<PopulationComponent>
     int32_t               populationCell; // +0x30 grid cell of the population map; the ctor leaves it
     uint8_t               _pad34[4];      // +0x34
-    WildAnimalComponent** members;        // +0x38 Array<InternalPtr<WildAnimalComponent>> data (freed by the retail dtor)
+    Object::InternalPtr<WildAnimalComponent>* members;   // +0x38 Array<InternalPtr<WildAnimalComponent>> data (freed by the retail dtor)
     int32_t               memberCount;    // +0x40
     int32_t               memberCapacity; // +0x44
     bool                  migrating;      // +0x48 phase (false grazing, true migrating)

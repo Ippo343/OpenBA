@@ -146,7 +146,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
                                    uint32_t /*param_7*/) {
 
     // --- heading = Entity_impl_29a0(param_5, &{param_4[0] entity}) → XMM6 (0x1400c1563..0x1400c158b) ---
-    ComponentEntity* firstEntityInner = targets[0]->_entity;
+    ComponentEntity* firstEntityInner = targets[0]->_entity.Get();
     float heading = 0.0f;
     heading = HeadingToward(param_5, &firstEntityInner);
 
@@ -158,7 +158,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
     if (derived) local_60 = static_cast<NaturalResourceDescription*>(targetComp);
 
     // --- the action stack = character + 0x48 ; cleanup (0x1400c15ba..0x1400c15e2) ---
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* plVar15 = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(plVar15);
 
@@ -172,7 +172,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
         if (obj) {
             ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-            ComponentEntity* entityInner = (*citizenRef)->_entity;
+            ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
             sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
         }
         ibpA = sm;
@@ -213,7 +213,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
     if (param_3 > 0) {
         int64_t loopCtr = static_cast<int64_t>(param_3); // R12=R14=param_3
         do {
-            ComponentEntity* innerR4 = (*targets)->_entity; // RDI
+            ComponentEntity* innerR4 = (*targets)->_entity.Get(); // RDI
 
             void* obj = WAC_Alloc(0x38, 8); // MOV EDX,8; LEA ECX,[RDX+0x30] @0x1400c174a = 8+0x30 = 0x38
             Action* actionObj = nullptr;    // R14 (the built action, or 0)
@@ -237,7 +237,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
             targetObj->_flags = newFlags;
             if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0 &&            // TEST CX,CX
                 targetObj->_entity != nullptr) {
-                ComponentEntity* detach = targetObj->_entity;
+                ComponentEntity* detach = targetObj->_entity.Get();
                 NotifyEntityChanged(detach);
             }
 
@@ -294,7 +294,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
                     default:                                 pathType = 1; break;
                 }
             }
-            ComponentEntity* entityInner = (*citizenRef)->_entity;
+            ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
             CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
             float speed = kRdata_140172280; // -1.0f
             Action* mv = nullptr;

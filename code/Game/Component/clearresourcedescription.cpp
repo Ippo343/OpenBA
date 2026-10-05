@@ -48,13 +48,13 @@ Object::External* ClearResourceDescription::Construct() {
 }
 
 // create 0x140031600: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* ClearResourceDescription::CreateNewObject() {
+::Object::Base* ClearResourceDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ClearResourceDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ClearResourceDescription());
 }
 // createInPlace 0x140031660.
-void* ClearResourceDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ClearResourceDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ClearResourceDescription());
 }

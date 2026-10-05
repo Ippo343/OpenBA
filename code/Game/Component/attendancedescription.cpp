@@ -57,13 +57,13 @@ Object::External* AttendanceDescription::Construct() {
 }
 
 // create 0x1400026f0: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* AttendanceDescription::CreateNewObject() {
+::Object::Base* AttendanceDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AttendanceDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AttendanceDescription());
 }
 // createInPlace 0x140002750.
-void* AttendanceDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* AttendanceDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AttendanceDescription());
 }

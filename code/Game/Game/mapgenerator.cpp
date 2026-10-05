@@ -446,12 +446,12 @@ Object::External* MapGenerator::Construct() {
 // 8: Object::External::Load gates the element Serialize on
 // `fileVersion == obj->GetFileVersion()`; a wrong constant silently drops the
 // element and the start-condition combo comes up empty.
-void* MapGenerator::CreateNewObject() {
+::Object::Base* MapGenerator::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MapGenerator), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) MapGenerator());
 }
-void* MapGenerator::CreateInPlaceObject(void* memory) {
+::Object::Base* MapGenerator::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) MapGenerator());
 }

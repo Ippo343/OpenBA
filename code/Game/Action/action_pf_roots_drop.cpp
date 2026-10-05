@@ -125,7 +125,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
         PositionRawMaterial(pile, cell, static_cast<float>(randv) * kRdata_140172204);   // 0x140129760
         pile->quantity = count;
         pile->profession = nullptr;
-        ComponentEntity* registered = created;
+        Object::InternalPtr<ComponentEntity> registered = created;
         EntityList_RegisterEntity_Impl(world->m_entityList, &registered,
                                        static_cast<int>(material->_category));   // 0x1400c48a0
     }
@@ -228,7 +228,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
                          uint32_t createFlag, Component* const* animal,
                          const AnimalDescription* description, uint32_t gate) {
     CitizenComponent* citizen = *citizenIBP;
-    CharacterComponent* character = citizen->character;
+    CharacterComponent* character = citizen->character.Get();
     // CharacterComponent's +0x48..+0x67 action list (Action/Action.h ActionStack).
     ActionStack* stack = &character->actionStack;
 
@@ -240,7 +240,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         if (mem != nullptr) {
             ComponentEntity* nullIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-            ComponentEntity* entity = citizen->_entity;
+            ComponentEntity* entity = citizen->_entity.Get();
             message = new (mem) SendComponentMessage(&entity, &msgId, 0, &nullIBP, 0);   // 0x1400cb1d0
         }
         if (character->actionStack.field_0x10 != nullptr) {
@@ -251,7 +251,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         void* mem2 = MemAlloc(0x38, 8);
         Action* complete = nullptr;
         if (mem2 != nullptr) {
-            ComponentEntity* animalEntity = (*animal)->_entity;
+            ComponentEntity* animalEntity = (*animal)->_entity.Get();
             CitizenComponent* self = *citizenIBP;
             complete = new (mem2) CompleteTask(task, &self, &animalEntity, 0);   // 0x1400c5da0
         }
@@ -283,9 +283,9 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
                 //   arg6 = <unwritten by caller — uninitialized, ctor never reads it>
                 //   arg7 = capacity (R12D), arg8 = createFlag (R13D), arg9 = 1
                 //   arg10 = &workplace (a 2nd copy), arg11 = 0xc
-                ComponentEntity* workplace2 = citizen->workplace;
+                ComponentEntity* workplace2 = citizen->workplace.Get();
                 CitizenComponent* self = citizen;
-                ComponentEntity* workplace = citizen->workplace;
+                ComponentEntity* workplace = citizen->workplace.Get();
                 create = new (mem) CreateRawMaterial(   // 0x1400c71a0
                     templates[i],
                     fVar6,   // float arg3 -> XMM2 (ctor MOVSS to +0x4c); pass the value, not its bits
@@ -306,7 +306,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         RemoveAnimal* remove = static_cast<RemoveAnimal*>(MemAlloc(0x28, 8));
         if (remove != nullptr) {
             // ENDGAME B.3.8 ACT: the real ctor (RemoveAnimal.h) — retail inlines it here.
-            new (remove) RemoveAnimal((*animal)->_entity);
+            new (remove) RemoveAnimal((*animal)->_entity.Get());
         }
         ::Object::InternalPtr<Action> pushed(remove);
         ActionStackPush(stack, &pushed);   // 0x1400c54e0
