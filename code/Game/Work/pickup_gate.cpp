@@ -44,7 +44,7 @@ namespace {
 
 // ⚠️ THE TWO SEARCHES BELOW WALK DIFFERENT STRUCTURES WITH DIFFERENT LAYOUTS. They look
 // interchangeable and are NOT — sharing one helper crashed twice, once per call site:
-//   8d3c0 searches a ComponentEntity's COMPONENTS:      _components / _componentCount
+//   8d3c0 searches a ComponentEntity's COMPONENTS:      _components / _components._size
 //   12d990 searches a description object's DESCRIPTIONS: _subDescs / _subDescCount
 // (12d990's param_2 is the entity's ComponentDescription, not the entity — and it looks
 // for RawMaterialDESCRIPTION, not a component.) Both verified in their own disassembly.
@@ -54,7 +54,7 @@ namespace {
 template <class T>
 T* PG_FindComp(ComponentEntity* entity) {
     const uint32_t tid = T::TypeId();
-    int count = entity->_componentCount;
+    int count = entity->_components._size;
     for (int i = 0; i < count; ++i) {
         Component* comp = entity->_components[i].Get();
         if (!comp) continue;

@@ -161,8 +161,8 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
         // the component array and a slot are the tree's.
         AnimalComponent* animal = nullptr;
         {
-            const int n = ent->_componentCount;
-            Object::InternalPtr<Component>* list = ent->_components;
+            const int n = ent->_components._size;
+            Object::InternalPtr<Component>* list = ent->_components._data;
             for (int c = 0; c < n && list; ++c) {
                 Component* cc = list[c].Get();
                 if (!cc) continue;

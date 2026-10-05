@@ -110,7 +110,7 @@ int  SendComponentMessage::AbstractImpl(ActionStack* actionStack) {
         ((target->_entityFlags >> 10) & 1) != 0;
     if (!entity || !canonical || dying ||
         !ForceWork::Readable(target, 0x40) ||
-        !ForceWork::Readable(target->_components, 8)) {
+        !ForceWork::Readable(target->_components._data, 8)) {
         static int s_reported = 0;
         if (s_reported++ < 20) {
             std::fprintf(stderr, "[SendCompMsg] ABORT: target entity=%p is not live "
@@ -124,8 +124,8 @@ int  SendComponentMessage::AbstractImpl(ActionStack* actionStack) {
     }
 
     // Search entity's component array for matching type
-    int32_t compCount = target->_componentCount;
-    Object::InternalPtr<Component>* compArray = target->_components;
+    int32_t compCount = target->_components._size;
+    Object::InternalPtr<Component>* compArray = target->_components._data;
     Component* foundComp = nullptr;
 
     for (int i = 0; i < compCount; i++) {

@@ -128,8 +128,8 @@ int IconMask(ComponentEntity* ent) {
 
 Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = ent->_componentCount;                          // +0x38
-    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
+    const int n = ent->_components._size;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components._data;        // +0x30
     for (int i = 0; i < n && a; ++i) {
         Component* c = a[i].Get();
         if (!c) continue;
@@ -210,14 +210,14 @@ extern "C" void PanelStaffingDriver_Tick(PlayerToolManager* entityUI, int frameN
     if (!gw) return;
     EntityList* const el = gw->m_entityList;                    // +0xe8
     if (!el) return;
-    ComponentEntity** const arr = el->masterArray._data;         // +0x08
+    Object::InternalPtr<ComponentEntity>* const arr = el->masterArray._data;         // +0x08
     const int n = el->masterArray._size;                        // +0x10
     const uint32_t tidWpc = WorkPlaceComponent::TypeId();
     const uint32_t tidWc  = WorkComponent::TypeId();
     if (!tidWpc || !arr) return;
 
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         Component* wpcP = FindComp(ent, tidWpc);
         if (!wpcP) continue;

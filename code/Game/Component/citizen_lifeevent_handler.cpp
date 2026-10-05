@@ -76,8 +76,8 @@
 // The type id is the component's vtable slot [2] (Type()).
 static Component* FindComponentByTypeId(ComponentEntity* entity, uint32_t tid) {
     Component* found = nullptr;
-    int n = entity->_componentCount;                           // +0x38
-    Object::InternalPtr<Component>* comps = entity->_components;   // +0x30
+    int n = entity->_components._size;                           // +0x38
+    Object::InternalPtr<Component>* comps = entity->_components._data;   // +0x30
     for (int i = 0; i < n; i++) {
         Component* c = comps[i].Get();
         if (c && c->Type() == tid) {

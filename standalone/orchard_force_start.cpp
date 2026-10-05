@@ -157,7 +157,7 @@ void FireForceStart(PlayerToolManager* entityUI, int frameNum) {
         fprintf(stderr, "[OrchardForceStart] frame=%d: EntityList (gw+0xe8) null — cannot run\n", frameNum);
         return;
     }
-    ComponentEntity** arr = entityList->masterArray._data;        // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = entityList->masterArray._data;        // +0x08
     int       n   = entityList->masterArray._size;               // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
@@ -168,11 +168,11 @@ void FireForceStart(PlayerToolManager* entityUI, int frameNum) {
 
     int found = 0, switched = 0, typed = 0;
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
 
-        int       cN = ent->_componentCount;                     // +0x38
-        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        int       cN = ent->_components._size;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components._data;   // +0x30
         OrchardComponent* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
             Component* comp = cA[c].Get();

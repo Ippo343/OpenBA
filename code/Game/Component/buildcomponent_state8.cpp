@@ -142,7 +142,7 @@ static Graphics::GraphicsMesh* BC8_MeshFramePtr(ModelComponent* meshElem, ModelD
 static void BC8_ReaddDrawChildren(ModelComponent* meshElem) {
     ComponentEntity* host = meshElem->_entity.Get();
     if (!host) return;
-    int hc = host->_componentCount;
+    int hc = host->_components._size;
     for (int k = 0; k < hc; ++k) {
         Component* h = host->_components[k].Get();
         if (!h) continue;
@@ -526,7 +526,7 @@ void BuildComponent::State8Finalize() {
         uint32_t tidMap = MapComponent::TypeId();
         MapComponent* mapc = nullptr;
         if (ent && tidMap) {
-            int cc = ent->_componentCount;
+            int cc = ent->_components._size;
             for (int i = 0; i < cc; ++i) {
                 Component* c = ent->_components[i].Get();
                 if (!c) continue;

@@ -133,13 +133,13 @@ static void LatchDrawTypeIds() {
     s_bcDrawResolved = true;
 }
 
-// Scan an entity's component list (_components / _componentCount) for the first
+// Scan an entity's component list (_components / _components._size) for the first
 // component whose Type() (slot 2) == typeId; verify with IsDerivedFrom. The tree's
 // null-type and null-slot guards are the tree's own (retail's inlined finder has
 // neither); they are kept, not extended.
 static Component* BC_FindComponentByType(ComponentEntity* compHost, uint32_t typeId) {
     if (!typeId) return nullptr;
-    int count = compHost->_componentCount;
+    int count = compHost->_components._size;
     for (int i = 0; i < count; i++) {
         Component* comp = compHost->_components[i].Get();
         if (!comp) continue;
@@ -219,7 +219,7 @@ void BuildComponent::FillModelLists() {
         int16_t mark = node->meshIndex;
         if (mark == -1) {
             ComponentEntity* host = node->_entity.Get();
-            int hc = host->_componentCount;
+            int hc = host->_components._size;
             for (int k = 0; k < hc; k++) {
                 // Retail passes EDX = 0 here too (0x140108a2e XOR EDX,EDX before
                 // CALL [RAX+0x60] at 0x140108a33); the old C call dropped it.
@@ -231,7 +231,7 @@ void BuildComponent::FillModelLists() {
             }
             node->meshIndex = (int16_t)0xffff;
             ComponentEntity* host = node->_entity.Get();
-            int hc = host->_componentCount;
+            int hc = host->_components._size;
             for (int k = 0; k < hc; k++) {
                 host->_components[k].Get()->OnEvent(0);   // slot 12
             }

@@ -118,8 +118,8 @@ static bool BCS1_IsModelComplete(BuildComponent* buildComp) {
     if (!entity) return false;
     uint32_t tidModel = ModelComponent::TypeId();
     if (!tidModel) return false;
-    int count = entity->_componentCount;
-    if (!entity->_components) return false;
+    int count = entity->_components._size;
+    if (!entity->_components._data) return false;
     ModelComponent* model = nullptr;
     for (int i = 0; i < count; ++i) {
         Component* comp = entity->_components[i].Get();

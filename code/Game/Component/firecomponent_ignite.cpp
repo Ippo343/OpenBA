@@ -431,7 +431,7 @@ void FireComponent::SpreadToNeighbors() {
         // Retail inlines the exact-id scan here (no IsDerivedFrom): the generic find.
         FireComponent* neighbourFire = nullptr;
         if (occupant != nullptr) {
-            const int n = occupant->_componentCount;
+            const int n = occupant->_components._size;
             for (int i = 0; i < n; ++i) {
                 Component* c = occupant->_components[i].Get();
                 uint32_t tid = c->Type();   // slot 2

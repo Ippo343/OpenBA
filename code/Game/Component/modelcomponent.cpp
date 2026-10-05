@@ -59,7 +59,7 @@
 // the IBP, then dispatch the component's slot 12 (+0x60) with `eventId`.
 // 1:1 port of the exe helper.
 void ComponentEntity::SendEvent(int eventId) {
-    int count = _componentCount;
+    int count = _components._size;
     for (int64_t i = 0; i < count; ++i) {
         _components[i].Get()->OnEvent(eventId);   // slot 12
     }

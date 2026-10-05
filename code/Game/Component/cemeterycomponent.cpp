@@ -205,7 +205,7 @@ char CemeteryComponent::EnterBuilt() {
             bool hasTombstone = false;
             if (probe) {
                 const uint32_t tidTombstone = TombstoneComponent::TypeId();
-                const int n = probe->_componentCount;
+                const int n = probe->_components._size;
                 for (int j = 0; j < n; ++j) {
                     Component* c = probe->_components[j].Get();
                     if (!c) continue;

@@ -59,7 +59,7 @@ void StateMachineComponent::LinkControllers() {
     ComponentEntity* ownerEntity = _entity.Get();
     if (!ownerEntity) return;   // a guard of the tree's
 
-    int componentCount = ownerEntity->_componentCount;
+    int componentCount = ownerEntity->_components._size;
     if (componentCount <= 0) return;
 
     for (int i = 0; i < componentCount; i++) {
@@ -91,7 +91,7 @@ void StateMachineComponent::LinkControllers() {
 
         // Re-read the count (may have changed if CheckPtr triggered lazy load)
         ownerEntity = _entity.Get();
-        componentCount = ownerEntity->_componentCount;
+        componentCount = ownerEntity->_components._size;
     }
 }
 
@@ -109,7 +109,7 @@ void StateMachineComponent::RelinkAndResume() {
     if (!ownerEntity) goto state_walk;   // a guard of the tree's
 
     {
-        int componentCount = ownerEntity->_componentCount;
+        int componentCount = ownerEntity->_components._size;
         if (componentCount <= 0) goto state_walk;
 
         for (int i = 0; i < componentCount; i++) {
@@ -132,7 +132,7 @@ void StateMachineComponent::RelinkAndResume() {
 
             // Re-read the count
             ownerEntity = _entity.Get();
-            componentCount = ownerEntity->_componentCount;
+            componentCount = ownerEntity->_components._size;
         }
     }
 
@@ -343,7 +343,7 @@ void StateMachineComponent::BodyInit() {
 void StateMachineComponent::LinkControllersStandalone() {
     ComponentEntity* owner = _entity.Get();
     if (!owner) return;
-    int cnt = owner->_componentCount;
+    int cnt = owner->_components._size;
     if (cnt <= 0) return;
 
     Controller* controllerNode = &_controller;  // SM root node (the StateMachine's first current)

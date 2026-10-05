@@ -62,10 +62,10 @@
 CharacterComponent* FindCharacterComponent(const ComponentEntity* entity) {
     CharacterComponent* found = nullptr;
     uint32_t wantId = CharacterComponent::TypeId();
-    int n = entity->_componentCount;
+    int n = entity->_components._size;
     // The tree's guard: the type-id checks (retail compares with the cell unconditionally).
     if (n > 0 && wantId != 0 && wantId != 0xFFFFFFFFu) {
-        ::Object::InternalPtr<Component>* list = entity->_components;
+        ::Object::InternalPtr<Component>* list = entity->_components._data;
         for (int i = 0; i < n; i++) {
             Component* comp = list[i].Get();
             uint32_t t = comp->Type();   // slot 2

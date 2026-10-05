@@ -85,8 +85,8 @@ void Init() {
 
 Component* FindCompOnEntity(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = ent->_componentCount;                          // +0x38
-    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
+    const int n = ent->_components._size;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components._data;        // +0x30
     for (int i = 0; i < n && a; ++i) {
         Component* c = a[i].Get();
         if (!c) continue;
@@ -122,7 +122,7 @@ extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum)
     // Scan the entity list for a trading post (an entity carrying a TradeComponent).
     const uint32_t tidTrade = TradeComponent::TypeId();
     EntityList* entityList = gw->m_entityList;   // +0xe8
-    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;   // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = entityList ? entityList->masterArray._data : nullptr;   // +0x08
     const int n = entityList ? entityList->masterArray._size : 0;   // +0x10
     if (!arr || n <= 0 || !tidTrade) {
         std::fprintf(stderr, "[TradeSell] f=%d cannot scan (arr=%p n=%d tid=%u)\n",
@@ -133,7 +133,7 @@ extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum)
 
     ComponentEntity* postEnt = nullptr;
     for (int i = 0; i < n && !postEnt; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (ent && FindCompOnEntity(ent, tidTrade)) postEnt = ent;
     }
     if (!postEnt) {

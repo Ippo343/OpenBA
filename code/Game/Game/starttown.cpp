@@ -205,8 +205,8 @@ extern "C" int StartTown_GetFoundingHouseCount() {
 template <class T = Component>
 static T* FindComponentOnEntity(const ComponentEntity* entity, uint32_t typeId) {
     if (!entity || typeId == 0) return nullptr;
-    const int count = entity->_componentCount;
-    const Object::InternalPtr<Component>* arr = entity->_components;
+    const int count = entity->_components._size;
+    const Object::InternalPtr<Component>* arr = entity->_components._data;
     for (int i = 0; i < count; ++i) {
         Component* comp = arr[i].Get();
         if (!comp) continue;
@@ -825,8 +825,8 @@ static void StartTown_RunOnCreatePass(ComponentEntity* ent) {
 
     uint32_t* entFlags = &ent->_entityFlags;
     if ((*entFlags & 2) != 0 && s_tidResidence != 0) {
-        int count = ent->_componentCount;
-        Object::InternalPtr<Component>* arr = ent->_components;
+        int count = ent->_components._size;
+        Object::InternalPtr<Component>* arr = ent->_components._data;
         for (int i = 0; i < count; ++i) {
             Object::InternalPtr<Component>* slot = &arr[i];
             Component* comp = slot->Get();
@@ -3358,8 +3358,8 @@ int DL_CollectAnimals(const CharacterGrid* grid, int wantType, std::vector<DL_An
         if (!model) continue;
         const ComponentEntity* owner = charComp->_entity.Get();
         if (!owner || wantType == 0) continue;
-        const int cnt = owner->_componentCount;
-        const Object::InternalPtr<Component>* comps = owner->_components;
+        const int cnt = owner->_components._size;
+        const Object::InternalPtr<Component>* comps = owner->_components._data;
         bool match = false;
         for (int c = 0; comps && c < cnt && c < 64; ++c) {
             const Component* comp = comps[c].Get();

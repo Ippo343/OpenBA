@@ -93,9 +93,9 @@ void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill) {
 // is set gets OnRemove (slot 7). Always finally OR 0x400 into the entity's flags.
 void MarkEntityForRemoval(ComponentEntity* entity) {
     if ((static_cast<uint8_t>(entity->_entityFlags) & 2) != 0) {
-        int count = entity->_componentCount;
+        int count = entity->_components._size;
         if (count >= 1) {
-            ::Object::InternalPtr<Component>* base = entity->_components;
+            ::Object::InternalPtr<Component>* base = entity->_components._data;
             for (int64_t i = 0; i < count; i++) {
                 Component* node = base[i].Get();
                 bool visits = ((node->_flags >> 1) & 1) != 0;
@@ -121,11 +121,11 @@ void MarkEntityForRemoval(ComponentEntity* entity) {
 // ============================================================
 void NotifyEntityChanged(ComponentEntity* entity) {
     uint32_t oldFlags = entity->_entityFlags;
-    int count = entity->_componentCount;
+    int count = entity->_components._size;
     entity->_entityFlags = 0;
 
     if (count > 0) {
-        ::Object::InternalPtr<Component>* base = entity->_components;
+        ::Object::InternalPtr<Component>* base = entity->_components._data;
         for (int64_t i = 0; i < count; i++) {
             Component* comp = base[i].Get();
             entity->_entityFlags |= static_cast<uint32_t>(static_cast<uint16_t>(comp->_flags));

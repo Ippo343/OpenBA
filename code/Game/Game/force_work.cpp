@@ -107,8 +107,8 @@ uint32_t SafeGetTypeId(void* obj) {
 Component* FindComp(ComponentEntity* entity, uint32_t tid) {
     if (!entity || !tid || !Readable(entity, 0x40)) return nullptr;
     const ComponentEntity* e = entity;   // probed before it is read
-    int count = e->_componentCount;                              // +0x38
-    const Object::InternalPtr<Component>* arr = e->_components;  // +0x30
+    int count = e->_components._size;                              // +0x38
+    const Object::InternalPtr<Component>* arr = e->_components._data;  // +0x30
     if (count <= 0 || count > 512 || !Readable(arr, (size_t)count * 8))
         return nullptr;
     for (int i = 0; i < count; ++i) {

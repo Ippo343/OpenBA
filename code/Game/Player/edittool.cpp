@@ -137,7 +137,7 @@ static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* ou
     if (!modelTid) return false;
 
     const ModelComponent* modelComp = nullptr;
-    int count = entityObj->_componentCount;
+    int count = entityObj->_components._size;
     for (int i = 0; i < count; i++) {
         Component* comp = entityObj->_components[i].Get();
         if (!comp) continue;

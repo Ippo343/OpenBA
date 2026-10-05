@@ -85,8 +85,10 @@ void RebalanceBucketTree(WorkSchedulerBucketNode** root, WorkSchedulerBucketNode
 void EraseIdNode(WorkSchedulerTree* tree, WorkSchedulerIdNode* node) {               // 0x14001ca60
     WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: audit DEFERRED (Work leaves ledger): SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF)
 }
-void EraseCountNode(WorkSchedulerCountNode** root, WorkSchedulerCountNode* node) {    // 0x14001a6e0
-    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(root), node);  // LEFT: retail difference, known_port_issues 796 (B4 H5-P2): 0x14001a6e0 takes a {root, count} header and decrements the dword at +8; retail passes the local header [RBP-0x28] (0x1400f97c5) and the scheduler's own field_0x10 (0x1400f989a), the tree passes a bare root local (localFoundRoot) and a COPY of field_0x10.root (workCountRoot2): the typed AvlTreeHead wrapper exists (Work/exe_bodies.h) but typing this root changes which bytes the remove writes
+// 0x14001a6e0 takes the tree's {root, count} header: it unlinks the node, rewrites the root
+// when it changes, and decrements the count dword at +8 (known_port_issues 796, fixed).
+void EraseCountNode(AvlTreeHead<WorkSchedulerCountNode>* tree, WorkSchedulerCountNode* node) {    // 0x14001a6e0
+    WorkBST_BSTRemove_a6e0(tree, node);
 }
 
 // ============================================================
@@ -487,49 +489,55 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
 
         // --- Stage 2: re-walk the id tree; for Works whose entity (+0x10) is set, collect the
         // bare id into a fresh 0x28-node set (retail's local_60). ---
-        WorkSchedulerCountNode* localFoundRoot = nullptr;
-        int32_t localFoundCount = 0;
+        // Retail's local Set header: root [RBP-0x28], count [RBP-0x20], both zeroed at
+        // 0x1400f94cd / 0x1400f94d1; the count increments only on a genuine insert (0x1400f9609,
+        // which the found-existing arm 0x1400f956a skips).
+        AvlTreeHead<WorkSchedulerCountNode> localFound;
+        localFound.root = nullptr;
+        localFound.count = 0;
         {
             for (WorkSchedulerIdNode* node = Leftmost(trees[0].root); node; node = Next(node)) {
                 Work* work = node->work.Get();
                 if (work->field_10 != nullptr) {
                     bool inserted = false;
-                    CountTreeInsert(&localFoundRoot, node->key, 0, &inserted); // key only; upper 32 unused by retail
-                    localFoundCount++;
+                    CountTreeInsert(&localFound.root, node->key, 0, &inserted); // key only; upper 32 unused by retail
+                    if (inserted) {
+                        localFound.count++;
+                    }
                 }
             }
         }
 
         // --- Stage 3: scan the live entity list; for each entity, find its WorkComponent,
         // look its workId up in the id tree (the world's m_tutorial +0x30 == this tree), and if
-        // present, erase the matching id from localFoundRoot (it's still alive). ---
+        // present, erase the matching id from localFound (it's still alive). ---
         if (GameUpdateLoop::_singleton != nullptr) {
             GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
             EntityList* entityList = gameWorld->m_entityList;
             int32_t entityCount = entityList->masterArray._size;
 
             for (int32_t i = 0; i < entityCount; ++i) {
-                ComponentEntity* entity = entityList->masterArray._data[i];
+                ComponentEntity* entity = entityList->masterArray._data[i].Get();
                 WorkComponent* workComponent = entity->FindComponent<WorkComponent>();
                 if (workComponent != nullptr) {
                     int32_t workId = workComponent->workId;
 
                     WorkSchedulerIdNode* slotNode = FindByKey(gameWorld->m_tutorial->trees[0].root, workId);
                     if (slotNode != nullptr) {
-                        WorkSchedulerCountNode* found = FindByKey(localFoundRoot, workId);
+                        WorkSchedulerCountNode* found = FindByKey(localFound.root, workId);
                         if (found != nullptr) {
-                            EraseCountNode(&localFoundRoot, found);
+                            EraseCountNode(&localFound, found);   // RCX = RBP-0x28 (0x1400f97c1 / 0x1400f97c5)
                         }
                     }
                 }
             }
         }
 
-        // --- Stage 4: for every id remaining in localFoundRoot (genuinely dead), remove it
+        // --- Stage 4: for every id remaining in localFound (genuinely dead), remove it
         // from the 14 other trees, the +0x10 tree and the bucket tree, then delete the Work
         // and drop it from the id tree itself. ---
-        if (localFoundRoot != nullptr) {
-            for (WorkSchedulerCountNode* idNode = Leftmost(localFoundRoot); idNode; ) {
+        if (localFound.root != nullptr) {
+            for (WorkSchedulerCountNode* idNode = Leftmost(localFound.root); idNode; ) {
                 int32_t deadId = idNode->key;
                 WorkSchedulerCountNode* nextIdNode = Next(idNode); // capture successor before any mutation below
 
@@ -546,11 +554,9 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
                     Work* work = idTreeNode->work.Get();
                     int32_t orderKey = work->field_24;
 
-                    WorkSchedulerCountNode* workCountRoot2 = field_0x10.root;
-                    WorkSchedulerCountNode* wcMatch = FindByKey(workCountRoot2, orderKey);
+                    WorkSchedulerCountNode* wcMatch = FindByKey(field_0x10.root, orderKey);
                     if (wcMatch != nullptr) {
-                        EraseCountNode(&workCountRoot2, wcMatch);
-                        field_0x10.root = workCountRoot2;
+                        EraseCountNode(&field_0x10, wcMatch);   // RCX = R13+0x10 (0x1400f9896 / 0x1400f989a)
                     }
 
                     // Slot 10 writes the Work's target Profession into the return slot (every
@@ -594,15 +600,14 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
             }
         }
 
-        // --- Stage 6: free localFoundRoot (post-order free of the children, then the root
+        // --- Stage 6: free localFound (post-order free of the children, then the root
         // node itself). ---
-        if (localFoundRoot != nullptr) {
-            WorkSchedulerCountNode* rootNode = localFoundRoot;
-            WorkBase_TreeNodeFree_14c30(&localFoundRoot, rootNode->left);
-            WorkBase_TreeNodeFree_14c30(&localFoundRoot, rootNode->right);
-            System::MemoryAllocator::MemFree(localFoundRoot);
+        if (localFound.root != nullptr) {
+            WorkSchedulerCountNode* rootNode = localFound.root;
+            WorkBase_TreeNodeFree_14c30(&localFound, rootNode->left);    // RCX = RBP-0x28 (0x1400f99ff)
+            WorkBase_TreeNodeFree_14c30(&localFound, rootNode->right);   // 0x1400f9a0c
+            System::MemoryAllocator::MemFree(localFound.root);
         }
-        (void)localFoundCount;
     }
 }
 

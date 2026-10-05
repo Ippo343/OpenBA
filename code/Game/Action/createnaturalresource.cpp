@@ -157,8 +157,8 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
             // it misses on every entity (reference_registered_but_filled_with_zero). Separate
             // them by re-scanning with the by-NAME id, which does not depend on that slot.
             const uint32_t tidByName = GrowthComponent::TypeId();
-            int compN = newEntity ? newEntity->_componentCount : 0;
-            Object::InternalPtr<Component>* compA = newEntity ? newEntity->_components : nullptr;
+            int compN = newEntity ? newEntity->_components._size : 0;
+            Object::InternalPtr<Component>* compA = newEntity ? newEntity->_components._data : nullptr;
             int growthByName = 0;
             for (int ci = 0; ci < compN && compA; ++ci) {
                 Component* c = compA[ci].Get();

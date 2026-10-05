@@ -59,8 +59,8 @@ void Init() {
 
 Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = ent->_componentCount;                          // +0x38
-    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
+    const int n = ent->_components._size;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components._data;        // +0x30
     for (int i = 0; i < n && a; ++i) {
         Component* c = a[i].Get();
         if (!c) continue;
@@ -78,7 +78,7 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
     GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     if (!gw) return;
     EntityList* entityList = gw->m_entityList;                                        // +0xe8
-    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;      // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = entityList ? entityList->masterArray._data : nullptr;      // +0x08
     const int n = entityList ? entityList->masterArray._size : 0;                     // +0x10
     if (!arr || n <= 0) return;
 
@@ -88,7 +88,7 @@ extern "C" void FinishBuildsHarness_Tick(int frameNum) {
 
     int scanned = 0, stamped = 0, alreadyBuilt = 0;
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         BuildComponent* bc = static_cast<BuildComponent*>(FindComp(ent, tidBuild));   // exact type id
         if (!bc) continue;                       // not a constructable structure

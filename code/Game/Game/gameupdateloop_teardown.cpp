@@ -211,10 +211,10 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
 
     // Mark every entity not already flagged deleted (entity+0x40 bit 10).
     for (int32_t i = 0; i < self->masterArray._size; ++i) {
-        ComponentEntity** slot = &self->masterArray._data[i];
-        ComponentEntity* entity = *slot;
+        Object::InternalPtr<ComponentEntity>* slot = &self->masterArray._data[i];
+        ComponentEntity* entity = slot->Get();
         if ((entity->_entityFlags >> 10 & 1) == 0) {
-            MarkEntityForRemoval(*slot);   // 0x1400c2ea0
+            MarkEntityForRemoval(slot->Get());   // 0x1400c2ea0
         }
         if (bracket && !bracketFired) {
             if (void* bad = RedzoneAlloc_FindCorruptBlockNative()) {
@@ -244,7 +244,7 @@ extern "C" void EntityList_Shutdown_c3d30(EntityList* self) {
     // Whatever is still in the master array goes now. RemoveEntity shrinks the
     // array, so retail re-reads the count every pass and always takes slot 0.
     while (self->masterArray._size > 0) {
-        ComponentEntity* ibp = self->masterArray._data[0];
+        ComponentEntity* ibp = self->masterArray._data[0].Get();
         self->RemoveEntity(&ibp);   // 0x1400c38e0
     }
 

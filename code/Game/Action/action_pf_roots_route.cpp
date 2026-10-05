@@ -89,7 +89,7 @@ namespace {
 // shape (ComponentEntity.h): first Type() match, then IsDerivedFrom.
 template <class T>
 T* FindComponentSkippingNull(const ComponentEntity* entity) {
-    for (int32_t i = 0; i < entity->_componentCount; ++i) {
+    for (int32_t i = 0; i < entity->_components._size; ++i) {
         Component* c = entity->_components[i].Get();
         if (c != nullptr && c->Type() == T::TypeId())
             return ::Object::IsDerivedFromNullSafe(c, T::TypeId()) ? static_cast<T*>(c) : nullptr;

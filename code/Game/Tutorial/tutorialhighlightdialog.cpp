@@ -280,8 +280,8 @@ void TutHLDiag(const ComponentEntity* entity, bool ok, const Rectangle& rect) {
     // the FIRST match, so if a type appears twice the lookups and the renderer
     // can be looking at different objects.
     {
-        int n = entity->_componentCount;
-        Object::InternalPtr<Component>* arr = entity->_components;
+        int n = entity->_components._size;
+        Object::InternalPtr<Component>* arr = entity->_components._data;
         std::fprintf(stderr, "[TutHLDiag] entity=%p roster count=%d\n",
                      static_cast<const void*>(entity), n);
         for (int i = 0; i < n && arr; ++i) {

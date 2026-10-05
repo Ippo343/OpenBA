@@ -118,8 +118,8 @@ static inline uint32_t CompTypeId(const Object::Base* comp) {
 // Scan an entity's comp-list1 (entity+0x30 array, entity+0x38 count) for a component whose
 // GetTypeId()==tid, IsDerivedFrom-confirm, return it (or null). CheckPtr each slot.
 static Component* ScanCompList1(ComponentEntity* entity, uint32_t tid) {
-    int n = entity->_componentCount;
-    Object::InternalPtr<Component>* arr = entity->_components;
+    int n = entity->_components._size;
+    Object::InternalPtr<Component>* arr = entity->_components._data;
     for (int i = 0; i < n; ++i) {
         Component* comp = arr[i].Get();
         if (comp && CompTypeId(comp) == tid) {

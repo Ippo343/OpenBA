@@ -234,8 +234,8 @@ static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
         if (!comp) continue;
         ComponentEntity* entity = comp->_entity.Get();
         if (!entity) continue;
-        int n = entity->_componentCount;
-        Object::InternalPtr<Component>* comps = entity->_components;
+        int n = entity->_components._size;
+        Object::InternalPtr<Component>* comps = entity->_components._data;
         for (int j = 0; j < n && comps; j++) {
             Component* c = comps[j].Get();
             if (!c) continue;
@@ -400,8 +400,8 @@ extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, fl
                 if (typeId != 0) {
                     accept = false;
                     ComponentEntity* entity = linkIBP->_entity.Get();
-                    int compCount = entity->_componentCount;
-                    Object::InternalPtr<Component>* comps = entity->_components;
+                    int compCount = entity->_components._size;
+                    Object::InternalPtr<Component>* comps = entity->_components._data;
                     for (int c = 0; c < compCount; c++) {
                         Component* comp = comps[c].Get();
                         if (static_cast<int>(comp->Type()) == typeId) { accept = true; break; }   // slot 2

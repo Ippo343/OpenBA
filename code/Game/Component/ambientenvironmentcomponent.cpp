@@ -85,8 +85,8 @@ inline float saturate(float x, float hi) { return x < 0.0f ? 0.0f : (x > hi ? hi
 AmbientEmitterComponent* FindSiblingEmitter(AmbientEnvironmentComponent* self) {
     ComponentEntity* owner = self->_entity.Get();
     if (!owner) return nullptr;
-    int count = owner->_componentCount;
-    if (!owner->_components || !s_tidEmitterComp) return nullptr;
+    int count = owner->_components._size;
+    if (!owner->_components._data || !s_tidEmitterComp) return nullptr;
     for (int i = 0; i < count; ++i) {
         Component* comp = owner->_components[i].Get();
         if (!comp) continue;

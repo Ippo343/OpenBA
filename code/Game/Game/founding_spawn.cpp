@@ -119,8 +119,8 @@ static CitizenComponent* FoundingSpawn_FindCitizenComp(ComponentEntity* entity) 
     Component* found = nullptr;
     uint32_t want = TidCitizenComponent();
     if (entity && want != 0) {
-        int count = entity->_componentCount;                          // +0x38
-        Object::InternalPtr<Component>* arr = entity->_components;    // +0x30
+        int count = entity->_components._size;                          // +0x38
+        Object::InternalPtr<Component>* arr = entity->_components._data;    // +0x30
         for (int i = 0; i < count && arr; ++i) {
             Component* comp = arr[i].Get();
             if (!comp) continue;

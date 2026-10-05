@@ -24,7 +24,6 @@
 #include "Component/ComponentDescription.h"
 #include "Component/Component.h"
 #include "Component/Description.h"
-#include "Component/coll_bridge.h"
 #include "options.h"
 #include <windows.h>
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -80,14 +79,8 @@ ComponentEntity::ComponentEntity()
       _handle(0x00FFFFFF),
       _lastUpdateTime(),
       _description(nullptr),
-      _components(nullptr),
-      // Retail zeroes the FULL qword at +0x38 — count AND capacity. Zeroing only
-      // the int32 count left +0x3C (cap) holding recycled heap bytes; on the
-      // load-from-save path the persist-created entity's resize then saw
-      // cap > count, skipped the alloc, and the IBP loop deref'd a null array
-      // ("a 4-byte port of an 8-byte zero strands an array at NULL").
-      _componentCount(0),
-      _componentCap(0),
+      // _components: the Array ctor zeroes data AND the full +0x38 qword (count and
+      // capacity), as retail's 0x1400c3666 / 0x1400c366a.
       _entityFlags(0) {}
 
 // Ctor from a description (0x1400c3720, retail's "CopyCtor").
@@ -98,15 +91,8 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
       _handle(0x00FFFFFF),
       _lastUpdateTime(),
       _description(description),       // +0x28
-      // The entity block comes from MemAlloc(0x48), which does NOT zero memory. The
-      // original CopyCtor zeroes the full component-array header (data/count/cap);
-      // leaving +0x3c (capacity) as heap garbage makes the SetSize below see a
-      // bogus oldCap >= newCount and skip the allocation, leaving components==null
-      // and crashing the insert. (Latent until the description +0x40 fix made
-      // validCount > 0.)
-      _components(nullptr),
-      _componentCount(0),
-      _componentCap(0),
+      // _components: the Array ctor zeroes the full header (data / count / capacity,
+      // 0x1400c377b / 0x1400c377f) on the MemAlloc(0x48) block, which is not zeroed.
       _entityFlags(0) {
     int descCompCount = description->_subDescCount;
 
@@ -131,7 +117,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
     // Allocate component array.
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte component InternalBasePtr (byte-copy).
-    GameColl::AsArray<GameColl::Ptr8>(&_components).SetSize(validCount);
+    _components.SetSize(validCount);
 
     // Second pass: create components
     int insertIdx = 0;
@@ -192,7 +178,7 @@ ComponentEntity::ComponentEntity(ComponentDescription* description)
     // standalone some components may have been skipped (missing factory), so the
     // real populated count is insertIdx. Leaving it at validCount would let the
     // readers walk past the last valid slot into uninitialised memory.
-    _componentCount = insertIdx;
+    _components._size = insertIdx;
 
     // Refresh flags and call startup on flagged components
     RefreshEntityFlags();
@@ -233,7 +219,7 @@ ComponentEntity::~ComponentEntity() {
     }
 
     // Iterate component IBPs: null each out, then delete old value
-    int count = _componentCount;
+    int count = _components._size;
     if (count > 0) {
         for (int i = 0; i < count; i++) {
             // Save old IBP value
@@ -245,14 +231,8 @@ ComponentEntity::~ComponentEntity() {
         }
     }
 
-    // Free component array memory
-    if (_components) {
-        {
-            System::MemoryAllocator::MemFree(_components);
-        }
-    }
-    _components = nullptr;
-    _componentCount = 0;
+    // The component array itself is freed by ~Array after this body (0x1400c35f2:
+    // MemFree(+0x30), then +0x30 = 0 and the +0x38 qword = 0), before ~Internal.
 }
 
 // ============================================================
@@ -263,7 +243,7 @@ ComponentEntity::~ComponentEntity() {
 void ComponentEntity::ShutdownComponents() {
     if ((_entityFlags & 0x100) == 0) return;
 
-    int count = _componentCount;
+    int count = _components._size;
     if (count <= 0) return;
 
     for (int i = 0; i < count; i++) {
@@ -287,7 +267,7 @@ void ComponentEntity::ShutdownComponents() {
 void ComponentEntity::StartupComponents() {
     if ((_entityFlags & 0x80) == 0) return;
 
-    int count = _componentCount;
+    int count = _components._size;
     if (count <= 0) return;
 
     for (int i = 0; i < count; i++) {
@@ -313,7 +293,7 @@ void ComponentEntity::RefreshEntityFlags() {
 
     // Reset entityFlags, then OR in each component's flags
     _entityFlags = 0;
-    int count = _componentCount;
+    int count = _components._size;
     if (count > 0) {
         for (int i = 0; i < count; i++) {
             Component* compPtr = _components[i].Get();
@@ -364,7 +344,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_description, &ser);
 
     // Serialize component count
-    int compCount = _componentCount;
+    int compCount = _components._size;
     ser.Serialize(compCount, nullptr);
 
     // Check if loading (encoding mode == 0)
@@ -374,15 +354,15 @@ void ComponentEntity::Persist(IO::Stream& stream) {
     if (encodingMode == 0) {
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte component InternalBasePtr (byte-copy).
-        GameColl::AsArray<GameColl::Ptr8>(&_components).SetSize(compCount);
+        _components.SetSize(compCount);
         // Save/load wave diagnostics: a garbage count (stream misalignment) or
         // a failed resize (data still null with count>0) crashes the IBP loop
         // below — log the state on the way in so the crash log has context.
-        if (s_loadLogCount.load() < 8 || _components == nullptr || static_cast<uint32_t>(compCount) > 64) {
+        if (s_loadLogCount.load() < 8 || _components._data == nullptr || static_cast<uint32_t>(compCount) > 64) {
             s_loadLogCount.fetch_add(1);
             fprintf(stderr, "[CompEnt::Serialize] LOAD ent=%p desc=%p compCount=%u "
                     "arr=%p cap=%d\n", (void*)this, (void*)_description, static_cast<uint32_t>(compCount),
-                    _components, _componentCap);
+                    _components._data, _components._capacity);
             fflush(stderr);
         }
     }
@@ -392,7 +372,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
     // what puts 0xAA-pattern objId/typeId into the stream and makes the LOAD
     // index PersistObject's id map out of bounds. Diagnostic only.
     if (encodingMode != 0)
-        EntityCompValidate(this, _description, _components, compCount);
+        EntityCompValidate(this, _description, _components._data, compCount);
 
     // Save/load wave debug (BANISHED_SERIALIZE_TRACE): per-component progress
     // marker so a stream desync pinpoints the last-good component instead of a
@@ -550,7 +530,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                 }
 
                 // Check if existing component at insertPos already matches
-                if (insertIdx < _componentCount) {
+                if (insertIdx < _components._size) {
                     Component* existComp = _components[insertPos].Get();
                     // Get existing component's type ID via vtable+0x10
                     uint32_t existTypeId = existComp->Type();
@@ -593,13 +573,13 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                 newIBP.Get()->Startup();
 
                 // Resize component array to make room
-                int oldCount = _componentCount;
+                int oldCount = _components._size;
                 // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
                 // align 8, new tail zeroed. Element is the component InternalBasePtr.
-                GameColl::AsArray<GameColl::Ptr8>(&_components).SetSize(oldCount + 1);
+                _components.SetSize(oldCount + 1);
 
                 // Shift existing components right to make room at insertPos
-                Object::InternalPtr<Component>* compArr = _components;
+                Object::InternalPtr<Component>* compArr = _components._data;
                 for (int64_t k = (int64_t)oldCount; k > insertPos; k--) {
                     compArr[k] = compArr[k - 1];
                 }
@@ -661,7 +641,7 @@ void ComponentEntity::RegisterUpdateDraw(uint32_t oldFlags) {
 void ComponentEntity::OnAddedPass() {
 
     if ((_entityFlags & 1) == 0) return;
-    int count = _componentCount;
+    int count = _components._size;
     for (int i = 0; i < count; i++) {
         Component* compPtr = _components[i].Get();
         if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
