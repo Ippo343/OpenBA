@@ -55,11 +55,6 @@
 // Display 0xCB / StatusIcon 0xC2 all have it). No-ops when no outline is
 // registered (+0x120 < 0), so it is safe on every non-selected teardown.
 void HighlightComponent::OnRemove() {
-    // A null +0x28 vtable is the "fresh/inert" tell (same test Impl_c4a0 uses):
-    // the embedded EdgeMeshInstance was never constructed, so nothing of ours is
-    // in the Scene and +0x120 is not a real object id. Must precede the sceneId
-    // read — an inert component's +0x120 is 0, not -1.
-    if (*reinterpret_cast<void* const*>(edgeMeshInstance) == nullptr) return;   // LEFT: H5 HighlightComponent::edgeMeshInstance is raw storage the tree builds lazily; its null vptr is the tree's "never outlined" test where retail constructs the member in the ctor (known_port_issues row 573)
     int32_t sceneId = highlightId;
     if (sceneId < 0) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
@@ -81,15 +76,25 @@ void HighlightComponent::OnRemove() {
 #include "Component/HighlightComponent.h"
 
 // 0x14004c930: Component() is the CALL 0x1401188b0; the 0x140159990 stamp is
-// the compiler's. TREE DIVERGENCE: the EdgeMeshInstance / Transform are left
-// zero (see the header) and flags get bit 1 (0x82). +0x120 = -1 ("not in
-// scene") is retail's and load-bearing: slot 7 runs on EVERY entity teardown,
-// and a 0 would make it Scene::RemoveObject(scene, 0) on whichever object
-// genuinely owns id 0 (live freeze 2026-07-25).
+// the compiler's; then, in retail's order, ??0EdgeMeshInstance on +0x28
+// (CALL [0x140151358]), +0xf8 = 0, ??0Transform on +0x100 (CALL [0x140151328]),
+// +0x11c = 0 (byte), +0x120 = -1. TREE DIVERGENCE: flags get bit 1 (0x82).
+// +0x120 = -1 ("not in scene") is load-bearing: slot 7 runs on EVERY entity
+// teardown, and a 0 would make it Scene::RemoveObject(scene, 0) on whichever
+// object genuinely owns id 0 (live freeze 2026-07-25).
 HighlightComponent::HighlightComponent()
-    : edgeMeshInstance{}, fieldF8(nullptr), transform(), highlightFlag(0),
+    : edgeMeshInstance(), fieldF8(nullptr), transform(), highlightFlag(0),
       _pad11D{}, highlightId(-1), _pad124{} {
     OrFlagsInCtor(0x2);
+}
+
+// 0x14004c8c0 (slot 0 0x140007040 runs it): restamp (the compiler's), delete
+// +0xf8 through its slot 0 with flag 1 when non-null, +0xf8 = 0; then
+// ~EdgeMeshInstance on +0x28 (CALL [0x1401513b0]) is the member destruction,
+// and the Component restamp + ~Internal (JMP [0x140152770]) the base's.
+HighlightComponent::~HighlightComponent() {
+    delete fieldF8;
+    fieldF8 = nullptr;
 }
 
 // [3] 0x14004c880 — Component::Persist (a direct CALL 0x1401189b0) PLUS its own
