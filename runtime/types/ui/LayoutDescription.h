@@ -56,6 +56,14 @@
 
 #include "ElementDescription.h"
 #include "../collection/Collection.h"
+#include "../system/String.h"
+
+// B4 Y RT-UI: the hand-derived row `_entries` is built and destroyed through
+// (runtime/src/collection/array.cpp, retail SetSize 0x180043d80), named here
+// so the typed member can carry it as its spec.
+namespace rtcoll {
+extern const ArraySpec kSpec_LayoutEntry38;   // 0x180043d80  Array<LayoutDescription::Entry>
+}  // namespace rtcoll
 
 namespace UI {
 
@@ -70,11 +78,17 @@ public:
     enum LayoutVertical   : int32_t {};
 
     // One child entry, `Array<Entry>` stride 0x38 (0x180043d80's spec).
+    // B4 Y RT-UI: the three names are System::String. An entry is only ever
+    // built, copied and destroyed by kSpec_LayoutEntry38's arms (init: the
+    // new-tail arm of 0x180043d80; assign 0x180043980; destroy 0x180044050,
+    // +0x18 then +0x10 then +0x08), which store `_data` raw; no C++
+    // construction or destruction of an Entry runs, so each name is released
+    // once.
     struct Entry {
         ElementDescription* desc;      // +0x00  ExternalPtr<UI::ElementDescription> (B4 H4)
-        char*            name;         // +0x08  System::String — what siblings look up
-        char*            relativeToX;  // +0x10  System::String — gated by `horizontal`
-        char*            relativeToY;  // +0x18  System::String — gated by `vertical`
+        System::String   name;         // +0x08  what siblings look up
+        System::String   relativeToX;  // +0x10  gated by `horizontal`
+        System::String   relativeToY;  // +0x18  gated by `vertical`
         LayoutHorizontal horizontal;   // +0x20  kScalarUInt; -> record +0x00
         LayoutVertical   vertical;     // +0x24  kScalarUInt; -> record +0x04
         int32_t          offsetX;      // +0x28  kScalarInt;  -> record +0x10
@@ -92,8 +106,8 @@ public:
     // [0] 0x1800431d0 -- MSVC's VECTOR deleting destructor (retail; here the
     // virtual destructor, B3X W1) (`MOV EDX,0x78` = the element size).
     // `??1LayoutDescription@UI@@UEAA@XZ` (0x1800d3a10): VIRTUAL (the normal-virtual
-    // cutover, B3X W1). Retail's body is in layoutdescription.cpp;
-    // the compiler chains the base's.
+    // cutover, B3X W1). Its body is empty: `_entries`' ~Array (0x180043a00),
+    // then the base's _textName and ~External, all compiler-chained.
     ~LayoutDescription() override;
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
@@ -117,7 +131,14 @@ private:
 
 public:
     // ---- the 0x10 bytes after ElementDescription ---------------------------
-    Collection::Array<Entry> _entries;   // +0x68 .. +0x77  ~Array 0x180043a00 (visits the Strings)
+    // B4 Y RT-UI: on retail's own row (SetSize 0x180043d80). Its ~Array is the
+    // row's destroy (0x180044050 per element, ascending) over the live range,
+    // then the J1 free and the header zeroed: retail's 0x180043a00, which
+    // ~LayoutDescription 0x1800d3a10 calls first, before the +0x60 _textName
+    // release -- the order the compiler runs the member destructors in.
+    using EntryArray = Collection::Array<Entry, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_LayoutEntry38>>;
+    EntryArray _entries;   // +0x68 .. +0x77
 };
 
 static_assert(sizeof(LayoutDescription::LayoutHorizontal) == 4, "a W4 enum is four bytes");

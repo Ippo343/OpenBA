@@ -1706,9 +1706,9 @@ void AssignLayoutEntry(uint8_t* d, const uint8_t* s) {
 // +0x31..+0x37 are NEVER WRITTEN.
 static void LayoutEntryInit(UI::LayoutDescription::Entry* d) {
     d->desc        = nullptr;
-    d->name        = nullptr;
-    d->relativeToX = nullptr;
-    d->relativeToY = nullptr;
+    d->name._data        = nullptr;
+    d->relativeToX._data = nullptr;
+    d->relativeToY._data = nullptr;
     d->horizontal  = UI::LayoutDescription::LayoutHorizontal{2};   // DWORD
     d->vertical    = UI::LayoutDescription::LayoutVertical{1};     // UNALIGNED QWORD of 1:
     d->offsetX     = 0;                                            //   vertical = 1, offsetX = 0

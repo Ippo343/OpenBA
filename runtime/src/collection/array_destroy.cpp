@@ -1009,9 +1009,9 @@ void* RtColl_SpriteEntryAssign_180004220(uint8_t* dst, const uint8_t* src) {
 using LayoutEntry = UI::LayoutDescription::Entry;
 static void LayoutEntryCopy(LayoutEntry* d, const LayoutEntry* s) {
     d->desc = s->desc;                            // +0x00, no refcount touch
-    AdoptStringSlot(d->name,        s->name);     // +0x08
-    AdoptStringSlot(d->relativeToX, s->relativeToX);  // +0x10
-    AdoptStringSlot(d->relativeToY, s->relativeToY);  // +0x18
+    AdoptStringSlot(d->name._data,        s->name._data);         // +0x08
+    AdoptStringSlot(d->relativeToX._data, s->relativeToX._data);  // +0x10
+    AdoptStringSlot(d->relativeToY._data, s->relativeToY._data);  // +0x18
     d->horizontal = s->horizontal;                // four dwords
     d->vertical   = s->vertical;
     d->offsetX    = s->offsetX;
