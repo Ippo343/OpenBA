@@ -16,45 +16,72 @@ For every file, `(the metric before E0) == total + tier_i + cast_ok`. At E0's ba
 `319bce30`, no marker yet) that was **46,733 = 46,404 + 329 + 0**; after E0's markers it is
 **46,733 = 46,222 + 329 + 182** (`data/METRIC_BASE_E0.tsv`).
 
+At the B.4 close (branch `b4z-MARKERS`, after the audit's rulings): `castmetric.py code runtime
+standalone dx11 engine --floor` reports **cast_ok 735 (681 lines), tier_i 451, BAD 0, STRAY 0**,
+and the tree metric is **502** (code runtime standalone engine: 262; dx11/ is the next step's
+scope).
+
+## Changes at the B.4 close
+
+The independent audit (`AUDIT.md`, read at `7230f96bb`; every ruling ACCEPTED by the coordinator)
+re-cut this file. Part A: `elem_stride` RE-DEFINED as the type-erased container / tree core; four
+NEW categories (`const_api`, `user_data`, `null_receiver`, `static_init`); the tier-I allocation
+shape grown to every allocator that returns fresh untyped storage (§3); the `this` / `self` bar
+lifted for `elem_stride` views as `ArrayHdr` only (§4); `null_receiver` amends §5. Part C: the five
+tree-only vptr guards marked `crash_walk` / `vslot` lost their markers (DEFERRED to the
+retail-difference task); `tool_base_highlight.cpp`'s five uint32-parameter stores lost `float_bits`
+(Ghidra typed retail's float parameters as integers: WORK, B6); six harness / log reads of a vtable
+word (`force_work.cpp`, `game_main.cpp`) were re-filed `vslot` -> `crash_walk`; the two malloc lines
+marked `win32` / `alloc_header` (`perf_terrain.cpp`, `linkedlist.cpp`) are tier I now. Every
+ceiling in §1 is the count MEASURED after those markers, not an estimate.
+
 ## 1. The ceiling, by category
 
-`acceptance.sh` line 02 fails when a category's `cast_ok` exceeds its ceiling. The ceiling is
-E0's MEASURED count in the 13 files it marked, plus inventory E's ESTIMATE for the files the W1 /
-W2 blocks will mark (E counted occurrences with its own classifier; `castmetric.py` counts per
-spelling, so a W1 block may measure a little more or less). A block that needs more than the
-ceiling says so in its hand-in with the lines; the coordinator raises the number here. A new
+`acceptance.sh` line 02 fails when a category's `cast_ok` exceeds its ceiling. Since the B.4 close
+each ceiling is the MEASURED count (`castmetric.py code runtime standalone dx11 engine --floor`,
+"cast_ok per category", casts not lines). Raising one needs the coordinator, with the lines; a new
 category needs the coordinator (M2).
 
-| category | ceiling | marked by E0 | still to mark (estimate) | what the cast does |
-|---|---:|---:|---:|---|
-| `alloc_header` | 65 | 62 | 0 | reads / writes an allocator block's boundary tag, free-list link, footer, canary or range page arithmetic: memory the allocator owns as raw bytes |
-| `ptr_int` | 62 | 10 | 52 | a pointer used as an integer: unsigned pointer compares, byte distance between two addresses, pointer bits grafted |
-| `crash_walk` | 86 | 69 | 3 | crash / hang / watchpoint diagnostics: RIP and RSP from a CONTEXT, return addresses as module offsets, raw stack words, readable-memory probes, raw memory dumps |
-| `win32` | 56 | 17 | 17 | a Win32 / CRT API's own untyped parameter or result: `LPVOID` thread parameters, `LPARAM` message structs, `BYTE*` registry buffers, `intptr_t` OS handles, a CRITICAL_SECTION kept as opaque bytes because the type header cannot include `<windows.h>` |
-| `float_bits` | 25 | 0 | 25 | a float read or written as its bit pattern |
-| `string_header` | 24 | 4 | 20 | the `System::String` `{length, refCount}` header at `data - 8` |
-| `pe_walk` | 12 | 12 | 0 | walks a loaded module's PE headers and export directory |
-| `byte_io` | 17 | 0 | 8 | a byte buffer handed to / read from a stream, CRC or file API |
-| `elem_stride` | 18 | 0 | 5 | container storage stepped by element size (`Collection.h`) |
-| `gpu_map` | 2 | 0 | 2 | memory returned by a GPU buffer map |
-| `com_iid` | 2 | 0 | 2 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID |
-| `crt` | 9 | 5 | 0 | the ported CRT's own `void*` / `char*` parameters (qsort, `_stricmp`) |
-| `hash` | 5 | 2 | 1 | a pointer hashed as an integer |
-| `vslot` | 1 | 1 | 0 | `Object::SlotAddressOf`, the one sanctioned look into a compiler vtable (diagnostics) |
-| `dx11_seam` | 39 | 0 | 27 | (raised 27 -> 39 by R-VIDEO: the 12 `DeletingDtor` vector arms in `runtime/types/video/CompanionData.h`) deferred: the VideoDX11 seam, removed by plan §4.1 (`dx11/funcs/dx11_seam.*`, `Video::*Data` self-casts, video_interface's Dx9Placeholder) |
-| **total** | **423** | **182** | **162** | |
+| category | ceiling | lines | what the cast does | change at the B.4 close |
+|---|---:|---:|---|---|
+| `alloc_header` | 64 | 61 | reads / writes an allocator block's boundary tag, free-list link, footer, canary or range page arithmetic: memory the allocator owns as raw bytes | 65 -> 64: `linkedlist.cpp`'s `malloc` line is tier I (§3) |
+| `ptr_int` | 133 | 124 | a pointer used as an integer: unsigned pointer compares, byte distance between two addresses, pointer bits grafted, a pointer printed / returned as an integer | as measured; +`founding_spawn.cpp`'s log key, +`userinterface_showdialog.cpp`'s defect-2 control (the parent pointer's low dword as the result) |
+| `crash_walk` | 128 | 110 | crash / hang / watchpoint diagnostics: RIP and RSP from a CONTEXT, return addresses as module offsets, raw stack words, readable-memory probes, raw memory dumps, harness / log reads of a vtable word | as measured; -4 tree-only guards (part C), +6 re-filed from `vslot`, +4 `tool_base_render.cpp` tripwire (`block`), +1 `stress_harness.cpp` profiler key |
+| `win32` | 85 | 83 | a Win32 / CRT API's own untyped parameter or result: `LPVOID` thread parameters, `LPARAM` message structs, `BYTE*` registry buffers, `intptr_t` OS handles, a CRITICAL_SECTION kept as opaque bytes because the type header cannot include `<windows.h>` | as measured; `perf_terrain.cpp`'s `malloc` is tier I |
+| `float_bits` | 12 | 10 | a float read or written as its bit pattern | 25 -> 12 measured: `citizencomponent.cpp`'s fabs mask (2) and `tool_base_highlight_tess.cpp`'s by-value Vector2 packing (10, which the audit calls QUESTIONABLE); the five `tool_base_highlight.cpp` stores left it |
+| `string_header` | 37 | 35 | the `System::String` `{length, refCount}` header at `data - 8` | as measured |
+| `pe_walk` | 12 | 11 | walks a loaded module's PE headers and export directory | unchanged |
+| `byte_io` | 38 | 36 | a byte buffer handed to / read from a stream, CRC or file API | as measured |
+| `elem_stride` | 172 | 157 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 172 |
+| `gpu_map` | 0 | 0 | memory returned by a GPU buffer map | nothing marked (dx11/ is the next step) |
+| `com_iid` | 2 | 2 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID | unchanged |
+| `crt` | 11 | 11 | the ported CRT's own `void*` / `char*` parameters (qsort and its comparators' `const void*`, `_stricmp`) | as measured |
+| `hash` | 5 | 5 | a pointer hashed as an integer | unchanged |
+| `vslot` | 2 | 2 | `Object::SlotAddressOf` (`VSlot.h`), the one sanctioned look into a compiler vtable, and `splash_loop_stubs.cpp`'s retail vptr identity compare (GameUpdateLoop has no type id) | 8 -> 2: six log / harness reads re-filed `crash_walk`, `buildrequirementui.cpp`'s guard unmarked |
+| `dx11_seam` | 20 | 20 | deferred: the VideoDX11 seam, removed by plan §4.1 (`CompanionData.h`'s 12 `DeletingDtor` arms, `Context.h`, `video_interface.cpp`) | 39 -> 20 measured: dx11/ itself carries no marker yet |
+| `const_api` | 3 | 3 | NEW: the const a retail Runtime API puts on its result (`PEBV`), dropped ONCE in the typed wrapper that mirrors retail's inlined template (`External.h` `FindAs` / `FindNextAs` / `FindOrLoadAs`); never at a call site | new |
+| `user_data` | 8 | 8 | NEW: a `void*` that a RETAIL engine API (signature `PEAX`) stores for its caller and hands back unchanged, or a message payload whose type the message id selects, cast back to the type the registration stored. Not for a tree-only API, nor for a `void*` a template could carry | new |
+| `null_receiver` | 2 | 2 | NEW: retail's faithful read through a null receiver, spelled as the faulting address (`work_act_consume.cpp`, §5) | new |
+| `static_init` | 1 | 1 | NEW: the view of a file-static byte table that emulates MSVC's guarded function-local static (`wave29_lane_slots.cpp` `g_identityTable`: zero `.data`, filled by the first Update; a typed array would be constant-initialised to identity) | new |
+| **total** | **735** | **681** | | |
 
-Ceilings raised 2026-10-02 after the coordinator read the marked lines (the metric tool does not
-enforce ceilings: the coordinator compares `--floor`'s marked lines per category at each merge):
-`elem_stride` 5 -> 18 (Collection.h's five element adapters, four nested-array handoffs in
-`array_destroy.cpp` / `array_graphics_anim.cpp`, ACT-a's seven path-pool link steps, `avl_trees.cpp` 2
-still to mark); `byte_io` 8 -> 17 (compression 4, crc 1, the compressed streams and the persistence
-worker 3, userinterface 1, the water weld's key hash 1; audio 4, renderer 1, context 2 still to mark);
-`alloc_header` 62 -> 65 (the list test allocator's header word, `linkedlist.cpp`); `crash_walk`
-72 -> 79 (`entity_comp_validator.cpp`'s seven vtable / object probes, to be marked by STANDALONE).
-Raised again at `6a3ccdca`: `crash_walk` 79 -> 86 (`scene_watch.cpp`'s vtable-word probes and raw
-dumps of a freed block, `entity_comp_validator.cpp` 9), `hash` 3 -> 5 (`perf_experimental.cpp`'s three
-pointer-keyed tables).
+**`elem_stride`, as re-defined at the B.4 close.** The one ported type-erased container / tree
+core: its view of a container's header, element storage or node handed to it untyped; its
+spec-row element callbacks (`void* dst / src`); and a typed wrapper's single hand-off of a typed
+container into it.
+- QUALIFIES: inside `array.cpp` / `array_destroy.cpp`, `Collection.h`, `array_graphics_anim.cpp`,
+  the avl / set cores (`set_avl.h`'s `ElementOf`), `work_base_bst.cpp` / `work_base_cellbst.cpp` /
+  `work_base_reimpl.cpp`, the one-body erase / load / buy-entries cores (`cemeterycomponent.cpp`,
+  `componentdescription.cpp`, `tradeui_buyentries.cpp`), the ExternalPtr serialize core
+  (`Game/exe_bodies.h`, `serialize_externals.h`), spec-row element ops, and typed-wrapper hand-off
+  lines (`Work/exe_bodies.h`, `imagebuffer_platform_serialize.cpp`, `mainloop_video.cpp`).
+- Does NOT qualify: a CALLER outside the core casting its own raw triple or member to a core type
+  (H5: it falls with the class); `coll_bridge.h` (an offset accessor that dies with its last
+  caller); any `+ 0x…` operand; a field write by offset inside an element op; a stack byte image
+  viewed as a record to skip its ctor (`wave9_lane_gfxd.cpp` `AddScene`'s `raw`).
+- Macro bodies: a cast on a `#define` continuation line (ending in `\`) cannot carry a `//`
+  marker; 16 such lines in `array.cpp` / `array_destroy.cpp` are floor by the ruling but stay in
+  `total` until the tool reads a marker there or the entries are written as functions.
 
 E's own names map as: `crash_diag` → `crash_walk`, `pe_image` → `pe_walk`, `value_pun` →
 `float_bits`, `container_storage` → `elem_stride`, `gpu_mapped` → `gpu_map`, `vtable_diag` →
@@ -62,6 +89,9 @@ E's own names map as: `crash_diag` → `crash_walk`, `pe_image` → `pe_walk`, `
 not markers (§3).
 
 ## 2. The floor, by file
+
+HISTORICAL: this table is E0's estimate at the start of B.4 and is not maintained. The measure is
+`castmetric.py <dirs> --floor` ("cast_ok per file and category").
 
 Measured: `castmetric.py <file> --floor` after E0. Estimate: inventory E's tier-R occurrences,
 mapped to the categories above; the W1 / W2 block that owns the file marks it and replaces the
@@ -176,13 +206,21 @@ the field's name.
    `CrashLogf("VCALL-of-0: this=%p vtable=%p\n", target, (void*)vt);`
    The value printed may itself be read by offset: `(void*)*reinterpret_cast<int64_t*>(p + 0x68)`
    exempts the outer `(void*)` only; the inner read counts.
-3. **`alloc_result`**: `static_cast<T*>(MemAlloc…(…))` / `static_cast<T*>(Allocate…(…))` and
-   `(T*)MemAlloc…(…)`, the call being the WHOLE operand (qualified or through `->`).
+3. **`alloc_result`**: `static_cast<T*>(alloc(…))` and `(T*)alloc(…)`, the call being the WHOLE
+   operand (qualified or through `->` / `::` / `.`), where `alloc` is one of the callees of
+   `castmetric.py`'s `_RE_ALLOC_CALL` (grown at the B.4 close, AUDIT.md A `alloc_shape`):
+   `(?:Rt)?MemAlloc\w*` (`MemAlloc`, `MemAllocS`, `RtMemAlloc`, …), `Allocate\w*`,
+   `InternalMemAlloc`, `TypeChildAlloc`, `\w*OperatorNew` (a class's ported `operator new`),
+   `operator new`, `malloc`, `realloc`, `calloc`.
    `runtime/src/application/message_callbacks.cpp:130`:
    `static_cast<Node*>(MemAlloc(0x30, 8));`
-   `reinterpret_cast<T*>(VirtualAlloc(…))` is not this shape (a Win32 result: `win32`).
+   The proof is the same for every callee: it returns fresh, untyped storage and the cast gives a
+   type to new memory; no existing object is reinterpreted. A cast of a `void* p` LOCAL that holds
+   the result is not the shape (put the call in the operand). `reinterpret_cast<T*>(VirtualAlloc(…))`
+   is not this shape (a Win32 result: `win32`).
 
-At E0: `print_arg` 222, `alloc_result` 106, `placement_new` 1: **329** counted casts.
+At E0: `print_arg` 222, `alloc_result` 106, `placement_new` 1: **329** counted casts. At the B.4
+close (all PROD dirs): `print_arg` 38, `alloc_result` 413, `placement_new` 0: **451**.
 
 ## 4. How to add a marker
 
@@ -203,6 +241,17 @@ A **BAD MARKER** is a marked line where one of its counted casts has an operand 
 `+ 0x…` offset, has `self` or `this` as its whole operand, is an offset-accessor call, or where
 the category is not in §1. Its casts stay in `total`. A **STRAY MARKER** is a marked line with no
 counted cast (a cast removed later, or a marker on the wrong line of a multi-line statement).
+
+**The one exception to the `this` / `self` bar (B.4 close, AUDIT.md A).** For `elem_stride` ONLY,
+a cast whose whole operand is `this` / `self` is accepted when the line views it as the erased
+core's header type `rtcoll::ArrayHdr` (= `Collection::Array<uint8_t>`): `Collection.h`'s
+`Array<T>` members handing their own header to `ArrayAssignCore` / `SetSizeCore` /
+`ClearCallback`, and `array_destroy.cpp`'s entries viewing their `void* self` receiver. It is
+safe because the operand is the container's OWN header, layout-identical to the target by
+`static_assert`, and no base class can express it: the core is `Array<uint8_t>`, a sibling
+instantiation, not a base. `castmetric.py`'s `bad_operand` keys the exception on the category and
+on `ArrayHdr` appearing on the line; any other `self` operand (an element op whose `void* dst`
+parameter is named `self`, a caller passing its receiver as an integer) stays BAD.
 
 ## 5. What is NOT a floor cast
 
@@ -240,9 +289,13 @@ them (inventory E §5, and what E0 found reading its 13 files):
   0x640` and of `MemoryRange` at `+0x00 / +0x08` (44 casts) are field reads: `_singleton->ranges`,
   `->rangeCount`, `->freeLists[b]`, `->lock`. `main.cpp`'s `Video::Configuration` / `Video::Device`
   reads at `+0x04..+0x100` likewise.
-- **The two faithful null-receiver reads** at `work_act_consume.cpp:268` / `:302`
-  (`*reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(0x50))`): they become a NAMED field read
-  through a null pointer and stay a read (hard rule: no null check).
+- **The two faithful null-receiver reads** in `work_act_consume.cpp`
+  (`*reinterpret_cast<uint32_t*>(0x50)`, `*reinterpret_cast<ConsumeProduceRecipe**>(0x28)`): AMENDED
+  at the B.4 close (AUDIT.md A, `null_receiver`). They do NOT become a named field read through a
+  null pointer: a typed `nullptr->field` is undefined behaviour that GCC rewrites into a trap
+  (`-fisolate-erroneous-paths`), not retail's access violation at the field's address. They stay
+  spelled as the faulting address, marked `null_receiver` (ceiling 2), and stay a read (hard rule:
+  no null check).
 - **Casts that are no reinterpretation at all** but that `castmetric.py` counts (its operand
   types are inferred, not compiled): identity casts between `HANDLE` and `void*`
   (`hw_watch.cpp:56`, `sampler.cpp:197`), `(uintptr_t)ctx.Rip` of a `DWORD64` (`sampler.cpp:133`),
