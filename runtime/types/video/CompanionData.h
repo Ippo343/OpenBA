@@ -106,13 +106,6 @@ using ConstantBuffer = ::Video::ConstantBuffer;
 //   Copy ctor:           0x18007dd80 (??0ImageBufferData@Video@@QEAA@AEBV01@@Z)
 //   Dtor:                0x1800f8e10 (??1ImageBufferData@Video@@UEAA@XZ)
 // ----------------------------------------------------------------------------
-struct ImageBufferData {
-    void* vtable;       // +0x00
-    void* imageBuffer;  // +0x08  owning Video::ImageBuffer* (set by the ctor, untouched by the dtor)
-};
-static_assert(sizeof(ImageBufferData) == 0x10, "ImageBufferData must be 0x10 bytes");
-static_assert(offsetof(ImageBufferData, vtable) == 0x00, "vtable at +0x00");
-static_assert(offsetof(ImageBufferData, imageBuffer) == 0x08, "imageBuffer at +0x08");
 
 }  // namespace RtVideo
 

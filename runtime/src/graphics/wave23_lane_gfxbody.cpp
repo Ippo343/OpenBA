@@ -69,7 +69,6 @@
 // went with it in B.4 R0: it could only ever print 0.)
 // ---------------------------------------------------------------------------
 
-using RtGraphics::FrameCopyImageBuffer;
 
 namespace {
 

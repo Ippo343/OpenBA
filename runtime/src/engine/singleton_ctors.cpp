@@ -107,8 +107,6 @@ static_assert(offsetof(RtObject::ExternalFactory, _referenceModeEnabled) == 0x40
               "ExternalFactory ctor 0x1800be7e0: MOV word [RCX+0x40],DX");
 static_assert(offsetof(RtObject::ExternalFactory, _simpleLoadEnabled) == 0x42,
               "ExternalFactory ctor 0x1800be7e0: MOV byte [RCX+0x42],DL");
-static_assert(offsetof(RtObject::InternalFactory, random) == 0x20,
-              "InternalFactory ctor 0x1800c0030: the Random subobject it seeds");
 static_assert(offsetof(RtVideo::Device, lock) == 0x60,
               "Video::Device ctor 0x1800f7160: ADD RCX,0x60 before InitializeCriticalSection");
 static_assert(offsetof(RtVideo::Device, activeInterface) == 0xF8,

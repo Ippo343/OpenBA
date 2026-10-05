@@ -403,16 +403,6 @@ UNIT_TEST(graphics_materialinstance_layout) {
 
     // The POD that still describes the same bytes, and has live users outside
     // block G's file set, so the two must not drift.
-    CHECK_EQ((int)sizeof(Graphics::MaterialInstance),
-             (int)sizeof(RtGraphics::MaterialInstance));
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _material),
-             (int)offsetof(RtGraphics::MaterialInstance, material));
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _parameters),
-             (int)offsetof(RtGraphics::MaterialInstance, parameters));
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _constants),
-             (int)offsetof(RtGraphics::MaterialInstance, constants));
-    CHECK_EQ((int)offsetof(Graphics::MaterialInstance, _textures),
-             (int)offsetof(RtGraphics::MaterialInstance, textures));
 
     // The four element types the arrays hold, unchanged by block G.
     CHECK_EQ((int)sizeof(RtGraphics::MaterialTexture),      0x10);
@@ -619,7 +609,6 @@ UNIT_TEST(graphics_edgemesh_slot_order_is_retails) {
 UNIT_TEST(graphics_edgemesh_layout) {
     CHECK_EQ((int)sizeof(Graphics::EdgeMesh), 0x180);
     CHECK_EQ((int)alignof(Graphics::EdgeMesh), 8);
-    CHECK_EQ((int)sizeof(Graphics::EdgeMesh), (int)sizeof(RtGraphics::EdgeMesh));
     CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _reserved20), (int)sizeof(Object::External));
     // B.3.9 GFX: concrete -- slot 0 is the class's own (vector) deleting
     // destructor, since B3X W1 the virtual destructor.
@@ -647,12 +636,6 @@ UNIT_TEST(graphics_edgemesh_layout) {
     CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeLists),            0x158);
     CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _aabb),                 0x168);
 
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinVertexBuffer),
-             (int)offsetof(RtGraphics::EdgeMesh, _edgeVerts));
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeVertexBuffer),
-             (int)offsetof(RtGraphics::EdgeMesh, _capVerts));
-    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinVertexBuffer),
-             (int)offsetof(RtGraphics::EdgeMesh, _extraVerts));
 
     // The eight offsets `EdgeMesh::Serialize` dispatches through are each
     // header+0x08 — the `_deviceData` qword. Retail's step 7 order is

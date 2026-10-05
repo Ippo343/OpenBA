@@ -107,16 +107,11 @@ public:
 static_assert(sizeof(ComboDialog) == 0xd0,
               "UI::ComboDialog is 0xd0 bytes (MOV ECX,0xd0 at 0x18011282b)");
 static_assert(alignof(ComboDialog) == 8, "qword-aligned (the vptr)");
-static_assert(sizeof(ComboDialog) == sizeof(RtUI::ComboDialog),
-              "the real class and the POD describe the same bytes");
 static_assert(offsetof(ComboDialog, _list) == sizeof(DialogInstance),
               "ComboDialog's own fields begin at the end of the DialogInstance base");
 static_assert(offsetof(ComboDialog, _list)         == 0xb8, "_list @ +0xb8");
 static_assert(offsetof(ComboDialog, _parentDialog) == 0xc0, "_parentDialog @ +0xc0");
 static_assert(offsetof(ComboDialog, _combo)        == 0xc8, "_combo @ +0xc8");
-static_assert(offsetof(ComboDialog, _parentDialog) == offsetof(RtUI::ComboDialog, _parentDialog),
-              "alias _parentDialog");
-static_assert(offsetof(ComboDialog, _combo) == offsetof(RtUI::ComboDialog, _combo), "alias _combo");
 
 }  // namespace UI
 

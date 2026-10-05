@@ -61,65 +61,9 @@
 // ############################################################################
 // RtUI::LabelElement — the old bare POD, moved (B4b-1), names corrected.
 // ############################################################################
-namespace RtUI {
 
-struct LabelElement {
-    // --- UI::Element base (0xC0 bytes) ---
-    void*       vtable;             // +0x00  vtable pointer
-    uint8_t     elementBase[0xB8];  // +0x08  UI::Element base data
 
-    // --- UI::TextElement fields (0xC0..0xFF) — TextElement.h's names ---
-    void*       _font;              // +0xC0  ExternalPtr<UI::Font>
-    void*       _paramsData;        // +0xC8  Array<System::String> data
-    int32_t     _paramsSize;        // +0xD0  Array size
-    int32_t     _paramsCapacity;    // +0xD4  Array capacity
-    void*       _textTable;         // +0xD8  UI::String table
-    int32_t     _textIndex;         // +0xE0  UI::String index (ctor -1)
-    uint32_t    _textPad;           // +0xE4  never written
-    uint8_t     _drawShadow;        // +0xE8
-    uint8_t     _wrap;              // +0xE9
-    uint16_t    _padEA;             // +0xEA  never written
-    int32_t     _lineSpacing;       // +0xEC  ctor 100
-    int32_t     _maxWidth;          // +0xF0  ctor -1
-    int32_t     _justify;           // +0xF4  ctor 0
-    void*       _cachedText;        // +0xF8  System::String (CacheText)
 
-    // --- UI::LabelElement's own fields ---
-    void*       spriteSheet;        // +0x100  SpriteSheet* (0 = none)
-    int32_t     spriteIndex;        // +0x108  sprite index (-1 = none)
-    uint32_t    spriteFlags;        // +0x10C  UI::Sprite pad (never written)
-    uint32_t    alignment;          // +0x110  _align, ctor 3
-    uint32_t    field114;           // +0x114  _mode, ctor 1
-    uint32_t    field118;           // +0x118  _minTextWidth, ctor 0
-    uint32_t    field11C;           // +0x11C  _gap, ctor 2
-    uint32_t    field120;           // +0x120  _iconWidth, ctor -1
-    uint32_t    field124;           // +0x124  _iconHeight, ctor -1
-    int32_t     field128;           // +0x128  _iconColor, ctor -1
-    uint32_t    field12C;           // +0x12C  _textWidth, ctor 0
-};
-
-static_assert(sizeof(LabelElement) == 0x130, "LabelElement must be 0x130 bytes");
-static_assert(offsetof(LabelElement, vtable)          == 0x00,  "vtable at +0x00");
-static_assert(offsetof(LabelElement, elementBase)     == 0x08,  "elementBase at +0x08");
-static_assert(offsetof(LabelElement, _font)           == 0xC0,  "_font at +0xC0");
-static_assert(offsetof(LabelElement, _paramsData)     == 0xC8,  "_paramsData at +0xC8");
-static_assert(offsetof(LabelElement, _paramsSize)     == 0xD0,  "_paramsSize at +0xD0");
-static_assert(offsetof(LabelElement, _textTable)      == 0xD8,  "_textTable at +0xD8");
-static_assert(offsetof(LabelElement, _textIndex)      == 0xE0,  "_textIndex at +0xE0");
-static_assert(offsetof(LabelElement, _lineSpacing)    == 0xEC,  "_lineSpacing at +0xEC");
-static_assert(offsetof(LabelElement, _maxWidth)       == 0xF0,  "_maxWidth at +0xF0");
-static_assert(offsetof(LabelElement, _cachedText)     == 0xF8,  "_cachedText at +0xF8");
-static_assert(offsetof(LabelElement, spriteSheet)     == 0x100, "spriteSheet at +0x100");
-static_assert(offsetof(LabelElement, spriteIndex)     == 0x108, "spriteIndex at +0x108");
-static_assert(offsetof(LabelElement, spriteFlags)     == 0x10C, "spriteFlags at +0x10C");
-static_assert(offsetof(LabelElement, alignment)       == 0x110, "alignment at +0x110");
-static_assert(offsetof(LabelElement, field114)        == 0x114, "field114 at +0x114");
-static_assert(offsetof(LabelElement, field11C)        == 0x11C, "field11C at +0x11C");
-static_assert(offsetof(LabelElement, field120)        == 0x120, "field120 at +0x120");
-static_assert(offsetof(LabelElement, field128)        == 0x128, "field128 at +0x128");
-static_assert(offsetof(LabelElement, field12C)        == 0x12C, "field12C at +0x12C");
-
-}  // namespace RtUI
 
 // ############################################################################
 // ENDGAME B.3 step 6 (block C3) — `UI::LabelElement`, the REAL C++ class
@@ -226,12 +170,5 @@ static_assert(offsetof(LabelElement, _iconHeight)   == 0x124, "");
 static_assert(offsetof(LabelElement, _iconColor)    == 0x128, "");
 static_assert(offsetof(LabelElement, _textWidth)    == 0x12c, "");
 // The class and the RtUI POD describe the same bytes.
-static_assert(sizeof(LabelElement) == sizeof(RtUI::LabelElement), "");
-static_assert(offsetof(LabelElement, _font)       == offsetof(RtUI::LabelElement, _font), "");
-static_assert(offsetof(LabelElement, _text)       == offsetof(RtUI::LabelElement, _textTable), "");
-static_assert(offsetof(LabelElement, _cachedText) == offsetof(RtUI::LabelElement, _cachedText), "");
-static_assert(offsetof(LabelElement, _sprite)     == offsetof(RtUI::LabelElement, spriteSheet), "");
-static_assert(offsetof(LabelElement, _iconColor)  == offsetof(RtUI::LabelElement, field128), "");
-static_assert(offsetof(LabelElement, _textWidth)  == offsetof(RtUI::LabelElement, field12C), "");
 
 }  // namespace UI

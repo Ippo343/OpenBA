@@ -86,7 +86,6 @@
 // bodies that used to live in the doors; nothing was reordered.
 // ============================================================================
 
-using RtSystem::CriticalSection;
 using RtSystem::Thread;
 
 

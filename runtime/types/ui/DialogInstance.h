@@ -178,18 +178,6 @@ namespace RtUI {
 // (+0x10 is `Object::Internal`'s Type slot — runtime/types/object/Internal.h
 // calls the same offset kInternalVtblType, an independent confirmation.)
 // ============================================================
-struct DialogController {
-    RtObject::Internal _base;       // +0x00 .. +0x0f
-    void*              _config;     // +0x10  ExternalPtr<DialogControllerConfig>
-    void*              _dialog;     // +0x18  DialogInstance*
-    void*              _container;  // +0x20  InternalPtr<Element>
-    void*              _dataSource; // +0x28  Object::Base*
-};
-static_assert(offsetof(DialogController, _config)     == 0x10, "DialogController::_config @ +0x10");
-static_assert(offsetof(DialogController, _dialog)     == 0x18, "DialogController::_dialog @ +0x18");
-static_assert(offsetof(DialogController, _container)  == 0x20, "DialogController::_container @ +0x20");
-static_assert(offsetof(DialogController, _dataSource) == 0x28, "DialogController::_dataSource @ +0x28");
-static_assert(sizeof(DialogController) == 0x30, "UI::DialogController is 0x30 bytes (deleting dtor 0x18003b800)");
 
 enum : int {
     kControllerVtblGetTypeId       = 0x10,
@@ -225,58 +213,7 @@ static_assert(offsetof(DialogTimer, _id) == 0x10, "DialogTimer::_id @ +0x10 (Sto
 // ============================================================
 // UI::DialogInstance
 // ============================================================
-struct DialogInstance {
-    RtObject::Internal _base;            // +0x00 .. +0x0f
-    void*    _ui;                        // +0x10  UI::UserInterface*
-    void*    _dialog;                    // +0x18  const UI::Dialog*
-    uint32_t _flags;                     // +0x20
-    int32_t  _result;                    // +0x24  the modal RESULT (GetResult 0x1800455c0)
-    void*    _parent;                    // +0x28  DialogInstance*
-    void*    _dataSource;                // +0x30  Object::Base*
-    Collection::LinkedList<RtObject::InternalBasePtr> _children;  // +0x38..0x4f
-    void*    _root;                      // +0x50  UI::Element*
-    void*    _spriteSheet;               // +0x58  UI::SpriteSheet*
-    int32_t  _spriteIndex;               // +0x60
-    int32_t  _hole64;                    // +0x64  NOT written by the ctor
-    Collection::Array<DialogTimer>       _timers;       // +0x68..0x77
-    Collection::Array<DialogController*> _controllers;  // +0x78..0x87
-    int32_t  _upperLeftX;                // +0x88
-    int32_t  _upperLeftY;                // +0x8c
-    int32_t  _hoverMouseX;               // +0x90  ctor: -1. PROVEN by ?Update@ 0x180113a1a
-    int32_t  _hoverMouseY;               // +0x94  ctor: -1. PROVEN by ?Update@ 0x180113a26
-    uint8_t  _hovering;                  // +0x98  ctor: 0.  PROVEN by ?IsHovering@
-                                         //        (0x1800455a0), a one-line accessor.
-    uint8_t  _hole99[7];                 // +0x99  NOT written by the ctor
-    int64_t  _hoverTime;                 // +0xa0  System::Time ticks; ?EndHover@ writes
-                                         //        (int64)(0.0 / _secondsPerTick) here.
-    void*    _userData;                  // +0xa8  ctor param 5
-    int32_t  _userFlags;                 // +0xb0  ctor param 6
-    int32_t  _holeB4;                    // +0xb4  NOT written by the ctor
-};
 
-static_assert(offsetof(DialogInstance, _ui)          == 0x10, "DialogInstance::_ui @ +0x10");
-static_assert(offsetof(DialogInstance, _dialog)      == 0x18, "DialogInstance::_dialog @ +0x18");
-static_assert(offsetof(DialogInstance, _flags)       == 0x20, "DialogInstance::_flags @ +0x20 (SetFlagsOnOff)");
-static_assert(offsetof(DialogInstance, _result)      == 0x24, "DialogInstance::_result @ +0x24 (GetResult 0x1800455c0)");
-static_assert(offsetof(DialogInstance, _parent)      == 0x28, "DialogInstance::_parent @ +0x28");
-static_assert(offsetof(DialogInstance, _dataSource)  == 0x30, "DialogInstance::_dataSource @ +0x30");
-static_assert(offsetof(DialogInstance, _children)    == 0x38, "DialogInstance::_children @ +0x38");
-static_assert(offsetof(DialogInstance, _root)        == 0x50, "DialogInstance::_root @ +0x50 (GetRoot)");
-static_assert(offsetof(DialogInstance, _spriteSheet) == 0x58, "DialogInstance::_spriteSheet @ +0x58");
-static_assert(offsetof(DialogInstance, _spriteIndex) == 0x60, "DialogInstance::_spriteIndex @ +0x60");
-static_assert(offsetof(DialogInstance, _timers)      == 0x68, "DialogInstance::_timers @ +0x68 (Start/StopTimer)");
-static_assert(offsetof(DialogInstance, _controllers) == 0x78, "DialogInstance::_controllers @ +0x78 (GetController)");
-static_assert(offsetof(DialogInstance, _upperLeftX)  == 0x88, "DialogInstance::_upperLeftX @ +0x88");
-static_assert(offsetof(DialogInstance, _upperLeftY)  == 0x8c, "DialogInstance::_upperLeftY @ +0x8c");
-static_assert(offsetof(DialogInstance, _hoverMouseX) == 0x90, "DialogInstance::_hoverMouseX @ +0x90 (Update 0x180113980)");
-static_assert(offsetof(DialogInstance, _hoverMouseY) == 0x94, "DialogInstance::_hoverMouseY @ +0x94 (Update 0x180113980)");
-static_assert(offsetof(DialogInstance, _hovering)    == 0x98, "DialogInstance::_hovering @ +0x98 (IsHovering 0x1800455a0)");
-static_assert(offsetof(DialogInstance, _hoverTime)   == 0xa0, "DialogInstance::_hoverTime @ +0xa0 (EndHover 0x180113d10)");
-static_assert(offsetof(DialogInstance, _userData)    == 0xa8, "DialogInstance::_userData @ +0xa8");
-static_assert(offsetof(DialogInstance, _userFlags)   == 0xb0, "DialogInstance::_userFlags @ +0xb0");
-static_assert(sizeof(DialogInstance) == 0xb8,
-              "UI::DialogInstance is 0xb8 bytes: MOV EDX,0xb8 in its deleting dtor "
-              "0x1800458c0, and 20 exe subclasses start their fields at +0xb8");
 
 // The prefix the replay oracle compares: everything the base ctor initialises.
 constexpr size_t kDialogInstanceCtorExtent = 0xb4;
@@ -316,18 +253,6 @@ constexpr size_t kDialogInstanceAllocSize = 0xc0;
 // with `MOV ECX,0xd0` at 0x18011282b, and runtime/src/ui/factory_ui1_tables.inc
 // line 540 independently records 0xd0 for this class.
 // ============================================================
-struct ComboDialog {
-    DialogInstance _base;          // +0x00 .. +0xb7
-    void*          _list;          // +0xb8  InternalPtr<UI::ListElement>
-    void*          _parentDialog;  // +0xc0  InternalPtr<UI::DialogInstance>
-    void*          _combo;         // +0xc8  InternalPtr<UI::ComboElement>
-};
-static_assert(offsetof(ComboDialog, _list)         == 0xb8, "ComboDialog::_list @ +0xb8");
-static_assert(offsetof(ComboDialog, _parentDialog) == 0xc0, "ComboDialog::_parentDialog @ +0xc0");
-static_assert(offsetof(ComboDialog, _combo)        == 0xc8, "ComboDialog::_combo @ +0xc8");
-static_assert(sizeof(ComboDialog) == 0xd0,
-              "ComboDialog is 0xd0 bytes — `MOV ECX,0xd0` at 0x18011282b, the one "
-              "call site of ??2ComboDialog@UI@@SAPEAX_K@Z");
 
 }  // namespace RtUI
 
@@ -592,13 +517,10 @@ static_assert(sizeof(DialogInstance) == 0xb8,
               "UI::DialogInstance is 0xb8 bytes (MOV EDX,0xb8 in 0x1800458c0; "
               "20 exe subclasses start at +0xb8)");
 static_assert(alignof(DialogInstance) == 8, "qword-aligned (the vptr)");
-static_assert(sizeof(DialogInstance) == sizeof(RtUI::DialogInstance),
-              "the real class and the POD describe the same bytes");
 static_assert(offsetof(DialogInstance, _ui) == sizeof(Object::Internal),
               "DialogInstance's own fields begin at the end of the Internal base");
 #define B36_DI_PIN(f, off) \
-    static_assert(offsetof(DialogInstance, f) == off, "DialogInstance::" #f " @ " #off); \
-    static_assert(offsetof(DialogInstance, f) == offsetof(RtUI::DialogInstance, f), "alias " #f);
+    static_assert(offsetof(DialogInstance, f) == off, "DialogInstance::" #f " @ " #off);
 B36_DI_PIN(_ui,          0x10)
 B36_DI_PIN(_dialog,      0x18)
 B36_DI_PIN(_flags,       0x20)
@@ -621,12 +543,5 @@ B36_DI_PIN(_userData,    0xa8)
 B36_DI_PIN(_userFlags,   0xb0)
 #undef B36_DI_PIN
 
-// DialogController's POD twin, cross-asserted here where both are in scope.
-static_assert(sizeof(DialogController) == sizeof(RtUI::DialogController),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(DialogController, _config) == offsetof(RtUI::DialogController, _config), "alias _config");
-static_assert(offsetof(DialogController, _dialog) == offsetof(RtUI::DialogController, _dialog), "alias _dialog");
-static_assert(offsetof(DialogController, _container) == offsetof(RtUI::DialogController, _container), "alias _container");
-static_assert(offsetof(DialogController, _dataSource) == offsetof(RtUI::DialogController, _dataSource), "alias _dataSource");
 
 }  // namespace UI

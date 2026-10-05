@@ -230,9 +230,6 @@
 // a raw offset with its evidence at the use site, which is the convention
 // runtime/types/ui/UserInterface.h already states for foreign offsets.
 
-using RtUI::Dialog;
-using RtUI::DialogController;
-using RtUI::DialogInstance;
 using RtUI::DialogTimer;
 using RtUI::kDialogInstanceCtorExtent;
 using RtUI::DialogNamedTemplate;   // WAVE 9 LANE UIC (?CreateElement@Dialog@)

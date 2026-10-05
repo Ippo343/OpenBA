@@ -110,9 +110,6 @@ UNIT_TEST(video_companion_data_layout) {
     // `RtVideo::ImageBufferData` and `RtVideo::CompanionData` describe the same
     // bytes as the real classes — the B4b-1 move in this block did not change
     // them, it removed the second copy (`ImageBuffer.h`'s).
-    CHECK_EQ(sizeof(RtVideo::ImageBufferData), sizeof(Video::ImageBufferData));
-    CHECK_EQ(offsetof(RtVideo::ImageBufferData, imageBuffer),
-             offsetof(Video::ImageBufferData, _owner));
     CHECK_EQ(sizeof(RtVideo::CompanionData), sizeof(Video::DeviceData));
 }
 

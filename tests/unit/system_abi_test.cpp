@@ -156,15 +156,12 @@ UNIT_TEST(system_thread_base_is_0x30_so_engine_loader_loop_stays_at_0x30) {
 
 UNIT_TEST(system_criticalsection_is_a_plain_0x28_byte_blob_with_no_vptr) {
     CHECK_EQ(sizeof(System::CriticalSection), static_cast<size_t>(0x28));
-    CHECK_EQ(sizeof(System::CriticalSection), sizeof(RtSystem::CriticalSection));
-    CHECK_EQ(alignof(System::CriticalSection), alignof(RtSystem::CriticalSection));
     CHECK(!std::is_polymorphic<System::CriticalSection>::value);
     CHECK(std::is_standard_layout<System::CriticalSection>::value);
     // B4b-2: teardown is the registered `??1CriticalSection@System@@` door, not
     // an implicit member destructor. Two of them would DeleteCriticalSection
     // twice — the `RtSystem::String` double-free in a new costume.
     CHECK(std::is_trivially_destructible<System::CriticalSection>::value);
-    CHECK(std::is_trivially_destructible<RtSystem::CriticalSection>::value);
 }
 
 // ===========================================================================

@@ -77,63 +77,6 @@ namespace RtGraphics {
 // skips, rather than re-deriving one gap per run. animation.cpp's oracle now
 // explicitly excludes both ranges from the comparison instead of masking
 // them with initialized fields.
-struct Particle {
-    void*    vtable;   // +0x00  retail final value 0x180155130 (Particle::_vftable_)
-    uint64_t _f08;     // +0x08  Object::External field, zeroed by the ctor
-    uint64_t _f10;     // +0x10  Object::External field, zeroed by the ctor
-    uint64_t _f18;     // +0x18  Object::External field, zeroed by the ctor
-    uint8_t  _active;  // +0x20  ctor stores 1
-    // +0x21..+0x23: UNINITIALISED by the ctor (measured gap, see above);
-    // C++'s natural alignment padding before _f24 happens to cover it, but
-    // that is coincidence, not the reason -- retail's own asm skips it.
-    int32_t  _f24;     // +0x24  ctor stores 1
-                       //        WAVE 27 LANE GFXPART, MEASURED: the POOL RECORD
-                       //        COUNT. ?Serialize@Particle@Graphics@@ (0x180103f00)
-                       //        passes it to Array<void*>::SetSize over +0x38 and
-                       //        then builds exactly that many records;
-                       //        ?SetParticle@ParticleInstance@ (0x180104a00) picks
-                       //        a record with `rng % this->_f24`.
-    int32_t  _f28;     // +0x28  ctor stores 0xf (15)
-                       //        WAVE 27 LANE GFXPART, MEASURED: the PER-RECORD
-                       //        SUB-ARRAY SIZE. The record ctor (0x180103bf0)
-                       //        reads `particle[+0x28]` and hands it to a second
-                       //        SetSize over the record's own +0x18 array.
-    // +0x2c..+0x2f: UNINITIALISED by the ctor (measured gap, see above);
-    // C++'s natural alignment padding before _f30 happens to cover it too,
-    // same caveat as +0x21..+0x23.
-    // *** THE THREE "UNVERIFIED" QWORDS BELOW WERE MEASURED BY WAVE 27 LANE
-    // GFXPART. *** The names are LEFT ALONE on purpose: animation.cpp's ctor
-    // oracles compare byte RANGES of this struct, and renaming is free while
-    // re-shaping is not. Read the comments, not the identifiers.
-    uint64_t _f30;     // +0x30  ExternalPtr<Graphics::MaterialInstance>.
-                       //        TWO INDEPENDENT WITNESSES, which is why this is
-                       //        MEASURED and not inferred:
-                       //        (a) ?Serialize@Particle@Graphics@@ hands `&+0x30`
-                       //            to the Object::ExternalBasePtr<T>::Serialize
-                       //            instantiation at 0x180014520 -- the same body
-                       //            shape goal_serialize.cpp already reaches;
-                       //        (b) ?AddDrawItems@ParticleInstance@Graphics@@
-                       //            (0x180104700) loads `*(void**)(particle+0x30)`
-                       //            and passes it as Renderer::AddDrawItem's
-                       //            `const MaterialInstance*` argument.
-                       //        An ExternalPtr is one pointer wide and holds the
-                       //        pointee at +0x00, which is why (b) is a plain load.
-    uint64_t _f38;     // +0x38  Collection::Array<void*>::_data -- the pool-record
-                       //        pointer array. Serialize calls SetSize (0x180062110)
-                       //        on `&+0x38` and stores through `*(void**)(this+0x38)`;
-                       //        the PROFILE build's ~Particle (0x18011cdf0) walks
-                       //        `*(void**)(this+0x38) + i*8` and MemFrees each
-                       //        element's own +0x18 buffer, then the block.
-    uint64_t _f40;     // +0x40  that Array's _size (int32 @ +0x40) and _capacity
-                       //        (int32 @ +0x44) as one qword -- SetSize writes
-                       //        arr[+0x8] and arr[+0xc] with arr = this+0x38, and
-                       //        the profile ~Particle's loop bound is
-                       //        `*(int*)(this+0x40)`.
-};
-static_assert(sizeof(Particle) == 0x48, "Graphics::Particle base must be 0x48 bytes");
-static_assert(offsetof(Particle, _active) == 0x20, "Particle::_active @ +0x20");
-static_assert(offsetof(Particle, _f28) == 0x28, "Particle::_f28 @ +0x28");
-static_assert(offsetof(Particle, _f40) == 0x40, "Particle::_f40 @ +0x40");
 
 // ============================================================================
 // The per-index record inside a ParticleResource's bounds array (see
@@ -275,17 +218,6 @@ struct GeometryBase {
 // banner above for why the base is excluded, and why +0xd4's alignment pad
 // is too).
 // ============================================================================
-struct ParticleInstance {
-    GeometryBase        base;        // +0x00, 0xc0 bytes, Graphics::Geometry
-    ParticleResource*   _resource;   // +0xc0
-    ParticleBoundsRecord* _boundsPtr;// +0xc8
-    int32_t             _index;      // +0xd0
-    int32_t             _pad_d4;     // +0xd4  alignment; not written by the ctor
-};
-static_assert(sizeof(ParticleInstance) == 0xd8, "Graphics::ParticleInstance must be 0xd8 bytes");
-static_assert(offsetof(ParticleInstance, _resource) == 0xc0, "ParticleInstance::_resource @ +0xc0");
-static_assert(offsetof(ParticleInstance, _boundsPtr) == 0xc8, "ParticleInstance::_boundsPtr @ +0xc8");
-static_assert(offsetof(ParticleInstance, _index) == 0xd0, "ParticleInstance::_index @ +0xd0");
 
 // ============================================================================
 // Graphics::ParticleSystemInstance : Graphics::ParticleInstance — 0xe0 bytes.
@@ -302,12 +234,6 @@ static_assert(offsetof(ParticleInstance, _index) == 0xd0, "ParticleInstance::_in
 // The ctor's diff oracle compares [0xc0,0xd4) (inherited) and [0xd8,0xe0)
 // (own) -- not the Geometry base, for the same measured reason given above.
 // ============================================================================
-struct ParticleSystemInstance {
-    ParticleInstance base;   // +0x00, 0xd8 bytes
-    void*            _f_d8; // +0xd8  UNVERIFIED beyond "zeroed by the ctor"
-};
-static_assert(sizeof(ParticleSystemInstance) == 0xe0, "Graphics::ParticleSystemInstance must be 0xe0 bytes");
-static_assert(offsetof(ParticleSystemInstance, _f_d8) == 0xd8, "ParticleSystemInstance::_f_d8 @ +0xd8");
 
 }  // namespace RtGraphics
 
@@ -561,11 +487,6 @@ static_assert(sizeof(Particle) == 0x48,
               "Graphics::Particle is 0x48 bytes (the MOV EDX,0x48 in its own "
               "slot-0 vector deleting destructor 0x180020160)");
 static_assert(alignof(Particle) == 8, "qword aligned (the vptr)");
-static_assert(sizeof(Particle) == sizeof(RtGraphics::Particle),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(Particle, _active)      == offsetof(RtGraphics::Particle, _active), "alias _active");
-static_assert(offsetof(Particle, _recordCount) == offsetof(RtGraphics::Particle, _f24),    "alias _f24");
-static_assert(offsetof(Particle, _subCount)    == offsetof(RtGraphics::Particle, _f28),    "alias _f28");
 static_assert(offsetof(Particle, _active)      == 0x20, "Particle::_active @ +0x20 (ctor 0x180103e80)");
 static_assert(offsetof(Particle, _recordCount) == 0x24, "Particle::_recordCount @ +0x24");
 static_assert(offsetof(Particle, _subCount)    == 0x28, "Particle::_subCount @ +0x28");

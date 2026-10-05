@@ -48,7 +48,6 @@
 // hoisted it in step 5).
 #include "TypeInfo.h"
 
-namespace RtObject {
 
 // ============================================================
 // Object::Internal — 16 bytes.
@@ -81,14 +80,6 @@ namespace RtObject {
 // InternalFactory::PersistObject calls `vtbl[0x18]` = slot 3 to persist a
 // freshly created object.
 // ============================================================
-struct Internal {
-    void*    vptr;            // +0x00
-    int32_t  factoryIndex;    // +0x08
-    uint32_t generation;      // +0x0c
-};
-static_assert(offsetof(Internal, factoryIndex) == 0x08, "Internal::_factoryIndex at +0x08");
-static_assert(offsetof(Internal, generation)   == 0x0c, "Internal::_generation at +0x0c");
-static_assert(sizeof(Internal) == 0x10, "Object::Internal is 16 bytes");
 // ENDGAME B.3.3 step 5. This POD is now an ALIAS for the real class
 // `Object::Internal` below, and it must STAY TRIVIALLY DESTRUCTIBLE: the ported
 // bodies in runtime/src/object/ hold `RtObject::Internal` by pointer and the
@@ -124,10 +115,6 @@ static_assert(sizeof(Internal) == 0x10, "Object::Internal is 16 bytes");
 // back — not for weak-reference safety. Retail clears references explicitly at
 // removal time and relies on that.
 // ============================================================
-struct InternalBasePtr {
-    Internal* ptr;            // +0x00
-};
-static_assert(sizeof(InternalBasePtr) == 0x08, "Object::InternalBasePtr is 8 bytes");
 
 // ============================================================
 // Object::InternalFactory — 0x9e4 (2532) bytes.
@@ -171,16 +158,6 @@ static_assert(sizeof(InternalBasePtr) == 0x08, "Object::InternalBasePtr is 8 byt
 // (0x18000c910) returns `*(InternalFactory**)(engine + 0x6a8)` — a pointer
 // member, not an embedded object.
 // ============================================================
-struct InternalFactory {
-    Collection::Array<Internal*> objects;      // +0x00
-    Collection::Array<int32_t>   persistIds;   // +0x10
-    ::Random                     random;       // +0x20
-};
-static_assert(offsetof(InternalFactory, objects)    == 0x00, "_objects at +0x00");
-static_assert(offsetof(InternalFactory, persistIds) == 0x10, "_persistIds at +0x10");
-static_assert(offsetof(InternalFactory, random)     == 0x20, "_random at +0x20");
-static_assert(sizeof(InternalFactory) == 0x9e8,
-              "Object::InternalFactory: 0x9e4 bytes of fields, padded to 0x9e8 by alignof 8");
 
 // ============================================================
 // `RtObject::SerializerLite` AND `kEncSerialize{Bool,Uint,Int}` LIVED HERE AND
@@ -212,7 +189,6 @@ static_assert(sizeof(InternalFactory) == 0x9e8,
 // DeletingDtor / TypeName / Type / Persist) lost its last reader when
 // internal.cpp began calling `Type()` by name; it is retired with it.
 
-}  // namespace RtObject
 
 // ============================================================================
 // ENDGAME B.3.1 step 1 -- the REAL classes, under retail's names.
@@ -388,19 +364,9 @@ public:
     }
 };
 
-static_assert(sizeof(InternalPtr<RtObject::Internal>) == 0x08,
-              "Object::InternalPtr<T> adds nothing to InternalBasePtr");
-static_assert(std::is_trivially_copyable<InternalPtr<RtObject::Internal> >::value,
-              "the typed wrapper must stay as trivial as its base");
-static_assert(std::is_trivially_destructible<InternalPtr<RtObject::Internal> >::value,
-              "the typed wrapper must stay as trivial as its base");
 
 // The POD alias's trivial destructibility, asserted where <type_traits> is in
 // scope. See the note beside `RtObject::Internal` itself.
-static_assert(std::is_trivially_destructible<RtObject::Internal>::value,
-              "RtObject::Internal is an ALIAS POD for Object::Internal and is "
-              "destroyed by hand through a vtable slot; a destructor here is a "
-              "double free (B31_RULES, the RtSystem::String lesson)");
 
 // ############################################################################
 // ENDGAME B.3.3 step 5, merged back here from runtime/types/object/internal_class.h
@@ -556,8 +522,6 @@ public:
 };
 
 static_assert(sizeof(Internal) == 0x10, "Object::Internal is 16 bytes");
-static_assert(sizeof(Internal) == sizeof(RtObject::Internal),
-              "the real class and the POD describe the same bytes");
 
 // ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ 0x1800c0150 -- see the
 // declaration. Slot 0, flags 1, by name (B3X W0).
@@ -570,10 +534,6 @@ inline void InternalBasePtr::DeletePtr() {
 }
 static_assert(offsetof(Internal, _factoryIndex) == 0x08, "Internal::_factoryIndex at +0x08");
 static_assert(offsetof(Internal, _generation)   == 0x0c, "Internal::_generation at +0x0c");
-static_assert(offsetof(Internal, _factoryIndex) == offsetof(RtObject::Internal, factoryIndex),
-              "alias _factoryIndex");
-static_assert(offsetof(Internal, _generation)   == offsetof(RtObject::Internal, generation),
-              "alias _generation");
 
 // ============================================================
 // Object::InternalFactory — 0x9e8 bytes (0x9e4 of fields, alignof 8).
@@ -656,17 +616,9 @@ public:
 
 static_assert(sizeof(InternalFactory) == 0x9e8,
               "Object::InternalFactory: 0x9e4 bytes of fields, padded to 0x9e8 by alignof 8");
-static_assert(sizeof(InternalFactory) == sizeof(RtObject::InternalFactory),
-              "the real class and the POD describe the same bytes");
 static_assert(offsetof(InternalFactory, _objects)    == 0x00, "_objects at +0x00");
 static_assert(offsetof(InternalFactory, _persistIds) == 0x10, "_persistIds at +0x10");
 static_assert(offsetof(InternalFactory, _random)     == 0x20, "_random at +0x20");
-static_assert(offsetof(InternalFactory, _objects) ==
-                  offsetof(RtObject::InternalFactory, objects),    "alias _objects");
-static_assert(offsetof(InternalFactory, _persistIds) ==
-                  offsetof(RtObject::InternalFactory, persistIds), "alias _persistIds");
-static_assert(offsetof(InternalFactory, _random) ==
-                  offsetof(RtObject::InternalFactory, random),     "alias _random");
 
 }  // namespace Object
 

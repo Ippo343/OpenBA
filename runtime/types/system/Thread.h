@@ -50,11 +50,6 @@ namespace RtSystem {
 // LockSemaphore, SpinCount — all 8-byte-aligned). A _posix twin would replace
 // this storage with e.g. a pthread_mutex_t of matching size/alignment; the
 // class has no vtable, so there is no ABI concern beyond size and alignment.
-struct CriticalSection {
-    alignas(8) uint8_t _storage[0x28];   // opaque Win32 CRITICAL_SECTION
-};
-static_assert(sizeof(CriticalSection) == 0x28,
-              "CriticalSection must be exactly sizeof(CRITICAL_SECTION) on x64");
 
 // ----------------------------------------------------------------------------
 // RtSystem::Thread — the POD
@@ -109,8 +104,6 @@ static_assert(offsetof(Thread, hStop)     == 0x20, "Thread::hStop offset");
 static_assert(offsetof(Thread, hFinished) == 0x28, "Thread::hFinished offset");
 static_assert(sizeof(Thread) == 0x30, "Thread base size");
 static_assert(std::is_trivially_destructible<Thread>::value,
-              "B34_RULES 1.5 rule 3: the POD stays trivially destructible");
-static_assert(std::is_trivially_destructible<CriticalSection>::value,
               "B34_RULES 1.5 rule 3: the POD stays trivially destructible");
 
 }  // namespace RtSystem
@@ -212,13 +205,6 @@ public:
 
 static_assert(sizeof(CriticalSection) == 0x28,
               "System::CriticalSection is sizeof(CRITICAL_SECTION) on x64");
-static_assert(sizeof(CriticalSection) == sizeof(RtSystem::CriticalSection),
-              "the class and the POD stay interchangeable");
-static_assert(offsetof(CriticalSection, _storage)
-                  == offsetof(RtSystem::CriticalSection, _storage),
-              "alias _storage");
-static_assert(alignof(CriticalSection) == alignof(RtSystem::CriticalSection),
-              "alias alignment -- a CRITICAL_SECTION must stay 8-aligned");
 // Stated as assertions so a future `virtual` fails the build rather than the
 // boot: a vptr would make this 0x30 bytes and push the storage eight bytes
 // down, under doors that are registered BY NAME.

@@ -230,8 +230,6 @@ UNIT_TEST(graphics_animationevent_layout) {
     // 0x20 — the `MOV EDX,0x20` in its own vector deleting destructor
     // (0x180011800), and `RT_DELDTOR(0x180011800, 0x1800a2120, 0x020, ...)`.
     CHECK_EQ((int)sizeof(Graphics::AnimationEvent), 0x20);
-    CHECK_EQ((int)sizeof(RtGraphics::AnimationEvent), 0x20);
-    CHECK_EQ((int)sizeof(Graphics::AnimationEvent), (int)sizeof(RtGraphics::AnimationEvent));
     CHECK_EQ((int)alignof(Graphics::AnimationEvent), 8);
 
     // AnimationEvent adds NO bytes to Object::External — the whole class is a
@@ -501,7 +499,6 @@ UNIT_TEST(graphics_animationstate_layout) {
     // THE THREE SPELLINGS OF THE 0x48 RECORD must stay aligned: the record,
     // lane GFXBIG's `RtGraphics::AnimationState` POD (Update's view) and the
     // serializer's `RtGraphics::AnimStateRec`.
-    CHECK_EQ((int)sizeof(Graphics::InstancedAnimationState), (int)sizeof(RtGraphics::AnimationState));
     CHECK_EQ((int)sizeof(Graphics::InstancedAnimationState), (int)sizeof(RtGraphics::AnimStateRec));
     CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _state) +
              (int)offsetof(Graphics::AnimationState, _layers),
@@ -512,8 +509,6 @@ UNIT_TEST(graphics_animationstate_layout) {
              (int)offsetof(RtGraphics::AnimStateRec, _pose));
     CHECK_EQ((int)offsetof(Graphics::InstancedAnimationState, _nodes),
              (int)offsetof(RtGraphics::AnimStateRec, _nodes));
-    CHECK_EQ((int)offsetof(Graphics::AnimationState, _layers),
-             (int)offsetof(RtGraphics::AnimationState, layers));
 
     // The ctor (0x1800fdaf0, inline): the bool and the Array header zeroed,
     // +0x01..+0x07 untouched.
@@ -540,14 +535,8 @@ UNIT_TEST(graphics_animationmanager_layout) {
     CHECK(std::is_standard_layout<Graphics::AnimationManager>::value);
 
     // The two PODs that still describe these bytes.
-    CHECK_EQ((int)sizeof(Graphics::AnimationManager),
-             (int)sizeof(RtGraphics::AnimationManager));
     CHECK_EQ((int)offsetof(Graphics::AnimationManager, _instances),
              (int)offsetof(RtGraphics::AnimationManagerView, _instances));
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager, _rngState),
-             (int)offsetof(RtGraphics::AnimationManager, _rngState));
-    CHECK_EQ((int)offsetof(Graphics::AnimationManager, _f10),
-             (int)offsetof(RtGraphics::AnimationManager, _f10));
 
     // The instance record the manager's array holds, stride 0x30.
     CHECK_EQ((int)sizeof(Graphics::AnimationManager::Instance), 0x30);
