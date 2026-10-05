@@ -121,8 +121,6 @@
 #include "../collection/array_destroy_internal.h"
 #include "../collection/array_internal.h"
 
-using RtGraphics::Camera;
-using RtGraphics::Renderer;
 
 namespace rtgfxd {
 

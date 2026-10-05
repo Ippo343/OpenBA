@@ -27,7 +27,6 @@
 #include "../volume/Volume.h"             // Frustum
 #include "../collection/Collection.h"     // Collection::Array
 
-namespace RtGraphics {
 
 // ============================================================
 // Graphics::Camera — a frustum, a camera-to-world transform, the projection
@@ -52,27 +51,6 @@ namespace RtGraphics {
 // Both give sizeof(Camera) == 0xd8, which is also what natural alignment of the
 // field list produces (0xd5 rounded up to 4).
 // ============================================================
-struct Camera {
-    Frustum    frustum;         // +0x00 .. +0x63
-    Transform3 cameraToWorld;   // +0x64 .. +0x93
-    Matrix     projection;      // +0x94 .. +0xd3  (frustum projection, already
-                                //                  post-multiplied when the
-                                //                  flag below is set)
-    // +0xd4 — the ctor's third argument. NOT "isPerspective", which is what
-    // engine/funcs/engine_funcs.h:3174 calls it: `Frustum` carries its own
-    // orthographic/perspective flag at its +0x60 and SetFrustum never looks at
-    // this byte for that purpose. What it actually selects is whether the
-    // projection matrix gets post-multiplied by a fixed basis swap
-    //     (x, y, z, w) -> (x, z, -y, w)
-    // i.e. a Z-up world into a Y-up clip space. See kZUpToYUp in renderer.cpp,
-    // whose four rows are built inline in SetFrustum at 0x1800fe5f0..0x1800fe6a3.
-    uint8_t    swapZUpToYUp;    // +0xd4
-    uint8_t    _pad_d5[3];      // +0xd5..+0xd7, alignment only; never read.
-};
-static_assert(sizeof(Camera) == 0xd8, "Graphics::Camera must be 0xd8 (216) bytes");
-static_assert(offsetof(Camera, cameraToWorld) == 0x64, "Camera::cameraToWorld @ +0x64");
-static_assert(offsetof(Camera, projection)    == 0x94, "Camera::projection @ +0x94");
-static_assert(offsetof(Camera, swapZUpToYUp)  == 0xd4, "Camera::swapZUpToYUp @ +0xd4");
 
 // ============================================================
 // The three element types the Renderer's arrays hold. Lane F ports only the
@@ -86,12 +64,6 @@ static_assert(offsetof(Camera, swapZUpToYUp)  == 0xd4, "Camera::swapZUpToYUp @ +
 // Pinned by Renderer::Draw (0x180104bb0): `*(void**)(base + idx*0x10)` is
 // dispatched through as an object with virtuals at +0x48 and +0x50, and
 // `*(int*)(base + idx*0x10 + 8)` is passed alongside it as an index.
-struct RendererDrawable {
-    void*   object;    // +0x00  the Geometry-side drawable
-    int32_t value;     // +0x08
-    int32_t _pad0c;    // +0x0c
-};
-static_assert(sizeof(RendererDrawable) == 0x10, "Renderer drawable entry is 0x10");
 
 // One entry of a draw group's per-pass item lists, stride 0x38.
 //
@@ -109,64 +81,16 @@ static_assert(sizeof(RendererDrawable) == 0x10, "Renderer drawable entry is 0x10
 // stores UNINITIALISED STACK BYTES into the array at those two offsets on every
 // append. A port must not zero them — and an oracle must not compare them
 // (reference_oracle_must_not_compare_unwritten_bytes.md).
-struct RendererDrawItem {
-    const void* geometry;   // +0x00  the Geometry* argument
-    const void* material;   // +0x08  MaterialInstance::material (+0x28), by value
-    const void* instance;   // +0x10  the MaterialInstance* argument
-    uint16_t    flags;      // +0x18  0x8000 when the 7th argument != 1.0f, OR'd
-                            //        with the 4th argument (a 16-bit OR)
-    uint16_t    arg5;       // +0x1a  the 5th argument
-    float       sortKey;    // +0x1c  the 6th argument
-    int32_t     arg8;       // +0x20  the 8th argument
-    int32_t     _pad24;     // +0x24  NEVER WRITTEN — see the banner above
-    const void* userData;   // +0x28  the 9th argument
-    uint32_t    arg10;      // +0x30  the 10th argument
-    int32_t     _pad34;     // +0x34  NEVER WRITTEN
-};
-static_assert(sizeof(RendererDrawItem) == 0x38, "Renderer draw item is 0x38");
-static_assert(offsetof(RendererDrawItem, flags)    == 0x18, "drawItem::flags @ +0x18");
-static_assert(offsetof(RendererDrawItem, sortKey)  == 0x1c, "drawItem::sortKey @ +0x1c");
-static_assert(offsetof(RendererDrawItem, userData) == 0x28, "drawItem::userData @ +0x28");
-static_assert(offsetof(RendererDrawItem, arg10)    == 0x30, "drawItem::arg10 @ +0x30");
 
 // One draw group, stride 0x1f0. Pinned by GetCullCamera (0x180017f90),
 // GetShader (0x180018010), AddDrawItem (0x1801057b0, which indexes
 // `group + 0x1c0 + passIndex*0x10` with passIndex from MaterialInstance+0x20)
 // and the group-array destructor at 0x18001c8c0, which runs a 3-element vector
 // destructor over `group + 0x1c0` with stride 0x10 and then frees the buffer.
-struct RendererDrawGroup {
-    uint8_t  _head[0xe0];                             // +0x000  not read by lane F
-    Camera   cullCamera;                              // +0x0e0
-    int32_t  shader;                                  // +0x1b8
-    uint32_t passMask;                                // +0x1bc
-    Collection::Array<RendererDrawItem> items[3];     // +0x1c0..+0x1ef
-};
-static_assert(sizeof(RendererDrawGroup) == 0x1f0, "Renderer draw group is 0x1f0");
-static_assert(offsetof(RendererDrawGroup, cullCamera) == 0x0e0, "drawGroup::cullCamera @ +0xe0");
-static_assert(offsetof(RendererDrawGroup, shader)     == 0x1b8, "drawGroup::shader @ +0x1b8");
-static_assert(offsetof(RendererDrawGroup, passMask)   == 0x1bc, "drawGroup::passMask @ +0x1bc");
-static_assert(offsetof(RendererDrawGroup, items)      == 0x1c0, "drawGroup::items @ +0x1c0");
 
 // One scene entry, stride 0x110. Pinned by Renderer::Draw (0x180104bb0), which
 // reads every one of these fields, and by AddDrawItem, which reads +0x00 and
 // +0x10 as the scene and its camera.
-struct RendererSceneEntry {
-    void*    scene;                            // +0x000  Graphics::Scene*
-    void*    renderBuffer;                     // +0x008  Video::RenderBuffer*
-    Camera   camera;                           // +0x010
-    int32_t  field_e8;                         // +0x0e8  copied to Renderer+0x3c
-    int32_t  field_ec;                         // +0x0ec  BeginDrawGroup arg
-    uint32_t field_f0;                         // +0x0f0  BeginDrawGroup arg
-    int32_t  drawGroupIndex;                   // +0x0f4  written back from Renderer+0x34
-    int32_t  field_f8;                         // +0x0f8  copied to Renderer+0x48
-    int32_t  _pad_fc;                          // +0x0fc
-    Collection::Array<int32_t> drawableIds;    // +0x100..+0x10f
-};
-static_assert(sizeof(RendererSceneEntry) == 0x110, "Renderer scene entry is 0x110");
-static_assert(offsetof(RendererSceneEntry, camera)         == 0x010, "sceneEntry::camera @ +0x10");
-static_assert(offsetof(RendererSceneEntry, field_e8)       == 0x0e8, "sceneEntry::field_e8 @ +0xe8");
-static_assert(offsetof(RendererSceneEntry, drawGroupIndex) == 0x0f4, "sceneEntry::drawGroupIndex @ +0xf4");
-static_assert(offsetof(RendererSceneEntry, drawableIds)    == 0x100, "sceneEntry::drawableIds @ +0x100");
 
 // ============================================================
 // Graphics::Renderer — three arrays and eight scalars, 0x50 bytes.
@@ -188,32 +112,7 @@ static_assert(offsetof(RendererSceneEntry, drawableIds)    == 0x100, "sceneEntry
 // sizeof 0x50 also matches the pre-existing note at
 // engine/funcs/engine_funcs.h:3081 ("Object size 0x50, alignment 4").
 // ============================================================
-struct Renderer {
-    Collection::Array<RendererSceneEntry> scenes;      // +0x00..+0x0f
-    Collection::Array<RendererDrawGroup>  drawGroups;  // +0x10..+0x1f
-    Collection::Array<RendererDrawable>   drawables;   // +0x20..+0x2f
-    int32_t currentScene;      // +0x30  ctor: -1
-    int32_t currentDrawGroup;  // +0x34  ctor: -1
-    int32_t field_38;          // +0x38  ctor: 0. standalone/scene_watch.h:73 reads
-                               //        this as "draw groups used this frame";
-                               //        lane F ported no function that touches it,
-                               //        so that reading is neither confirmed nor
-                               //        contradicted here.
-    int32_t field_3c;          // +0x3c  NOT written by the ctor
-    float   frameAlpha;        // +0x40  ctor: 0    (Draw's `float` argument)
-    int32_t contextSerial;     // +0x44  ctor: -1   (Draw copies Context+0x08)
-    int32_t field_48;          // +0x48  ctor: 0
-    int32_t _pad_4c;           // +0x4c  NOT written by the ctor
-};
-static_assert(sizeof(Renderer) == 0x50, "Graphics::Renderer must be 0x50 (80) bytes");
-static_assert(offsetof(Renderer, drawGroups)       == 0x10, "Renderer::drawGroups @ +0x10");
-static_assert(offsetof(Renderer, drawables)        == 0x20, "Renderer::drawables @ +0x20");
-static_assert(offsetof(Renderer, currentScene)     == 0x30, "Renderer::currentScene @ +0x30");
-static_assert(offsetof(Renderer, currentDrawGroup) == 0x34, "Renderer::currentDrawGroup @ +0x34");
-static_assert(offsetof(Renderer, frameAlpha)       == 0x40, "Renderer::frameAlpha @ +0x40");
-static_assert(offsetof(Renderer, contextSerial)    == 0x44, "Renderer::contextSerial @ +0x44");
 
-}  // namespace RtGraphics
 
 // ############################################################################
 // ENDGAME B.3 step 5 (block F) — `Graphics::Camera` and `Graphics::Renderer`,
@@ -454,8 +353,6 @@ public:
 
 static_assert(sizeof(Camera) == 0xd8, "Graphics::Camera is 0xd8 bytes");
 static_assert(alignof(Camera) == 4, "Camera's widest member is a float");
-static_assert(sizeof(Camera) == sizeof(RtGraphics::Camera),
-              "the real class and the POD describe the same bytes");
 // RULE B5-4's assert. What it buys, stated exactly: retail passes and returns a
 // `Camera` as a plain 0xd8 blob (`GetSunCamera`/`GetSpotCamera` return one
 // through a hidden return slot) and copies it with a partial dword/byte run, so
@@ -473,9 +370,6 @@ static_assert(std::is_trivially_copyable_v<Camera>,
               "RULE B5-4: Camera is held BY VALUE in two Collection::Array "
               "element types; a non-trivial copy would change how array.cpp's "
               "trait-derived TAssign moves them");
-static_assert(offsetof(Camera, _cameraToWorld) == offsetof(RtGraphics::Camera, cameraToWorld), "alias cameraToWorld");
-static_assert(offsetof(Camera, _projection)    == offsetof(RtGraphics::Camera, projection),    "alias projection");
-static_assert(offsetof(Camera, _zUp)           == offsetof(RtGraphics::Camera, swapZUpToYUp),  "alias swapZUpToYUp");
 static_assert(offsetof(Camera, _cameraToWorld) == 0x64, "Camera::_cameraToWorld @ +0x64 (GetCameraToWorld 0x180017e70)");
 static_assert(offsetof(Camera, _projection)    == 0x94, "Camera::_projection @ +0x94 (GetProjection 0x180017ed0)");
 static_assert(offsetof(Camera, _zUp)           == 0xd4, "Camera::_zUp @ +0xd4 (SetZUp 0x1800fe550)");
@@ -500,9 +394,7 @@ public:
     int32_t     _pad0c;     // +0x0c  NEVER WRITTEN — see the banner
 };
 static_assert(sizeof(RendererDrawable) == 0x10, "Renderer::Drawable is 0x10");
-static_assert(sizeof(RendererDrawable) == sizeof(RtGraphics::RendererDrawable), "alias sizeof");
 static_assert(std::is_trivially_copyable_v<RendererDrawable>, "byteCopy element");
-static_assert(offsetof(RendererDrawable, _value) == offsetof(RtGraphics::RendererDrawable, value), "alias value");
 static_assert(offsetof(RendererDrawable, _pad0c) == 0x0c, "Drawable::_pad0c @ +0x0c");
 
 // ============================================================
@@ -528,12 +420,7 @@ public:
     int32_t     _pad34;      // +0x34  NEVER WRITTEN
 };
 static_assert(sizeof(RendererDrawItem) == 0x38, "Renderer::DrawItem is 0x38");
-static_assert(sizeof(RendererDrawItem) == sizeof(RtGraphics::RendererDrawItem), "alias sizeof");
 static_assert(std::is_trivially_copyable_v<RendererDrawItem>, "byteCopy element");
-static_assert(offsetof(RendererDrawItem, _flags)    == offsetof(RtGraphics::RendererDrawItem, flags),    "alias flags");
-static_assert(offsetof(RendererDrawItem, _sortKey)  == offsetof(RtGraphics::RendererDrawItem, sortKey),  "alias sortKey");
-static_assert(offsetof(RendererDrawItem, _userData) == offsetof(RtGraphics::RendererDrawItem, userData), "alias userData");
-static_assert(offsetof(RendererDrawItem, _arg10)    == offsetof(RtGraphics::RendererDrawItem, arg10),    "alias arg10");
 static_assert(offsetof(RendererDrawItem, _pad24)    == 0x24, "DrawItem::_pad24 @ +0x24");
 static_assert(offsetof(RendererDrawItem, _pad34)    == 0x34, "DrawItem::_pad34 @ +0x34");
 
@@ -557,16 +444,11 @@ public:
     Collection::Array<RendererDrawItem> _items[3];            // +0x1c0..+0x1ef
 };
 static_assert(sizeof(RendererDrawGroup) == 0x1f0, "Renderer draw group is 0x1f0");
-static_assert(sizeof(RendererDrawGroup) == sizeof(RtGraphics::RendererDrawGroup), "alias sizeof");
 // NOT trivially copyable, and never was — see Camera's assert block.
 static_assert(!std::is_trivially_destructible_v<RendererDrawGroup>,
               "the three Collection::Array<RendererDrawItem> members are what "
               "SpecFor<T>'s destroy hook (and retail's 0x18001c8c0) free");
 static_assert(offsetof(RendererDrawGroup, _camera)           == 0x008, "drawGroup::_camera @ +0x08 (BeginDrawGroup / GetCamera)");
-static_assert(offsetof(RendererDrawGroup, _cullCamera)       == offsetof(RtGraphics::RendererDrawGroup, cullCamera), "alias cullCamera");
-static_assert(offsetof(RendererDrawGroup, _shader)           == offsetof(RtGraphics::RendererDrawGroup, shader),     "alias shader");
-static_assert(offsetof(RendererDrawGroup, _materialTypeFlags)== offsetof(RtGraphics::RendererDrawGroup, passMask),   "alias passMask");
-static_assert(offsetof(RendererDrawGroup, _items)            == offsetof(RtGraphics::RendererDrawGroup, items),      "alias items");
 static_assert(offsetof(RendererDrawGroup, _cullCamera)       == 0x0e0, "drawGroup::_cullCamera @ +0xe0 (GetCullCamera 0x180017fd0)");
 static_assert(offsetof(RendererDrawGroup, _shader)           == 0x1b8, "drawGroup::_shader @ +0x1b8 (GetShader 0x180018010)");
 static_assert(offsetof(RendererDrawGroup, _materialTypeFlags)== 0x1bc, "drawGroup::_materialTypeFlags @ +0x1bc (0x180017ff0)");
@@ -616,13 +498,8 @@ public:
     Collection::Array<int32_t> _drawableIds;       // +0x100..+0x10f
 };
 static_assert(sizeof(RendererSceneEntry) == 0x110, "Renderer::SceneGroup is 0x110");
-static_assert(sizeof(RendererSceneEntry) == sizeof(RtGraphics::RendererSceneEntry), "alias sizeof");
 static_assert(!std::is_trivially_destructible_v<RendererSceneEntry>,
               "_drawableIds is what kSpec_SceneEntry's destroy hook frees");
-static_assert(offsetof(RendererSceneEntry, _camera)        == offsetof(RtGraphics::RendererSceneEntry, camera),         "alias camera");
-static_assert(offsetof(RendererSceneEntry, _shaderDetail)  == offsetof(RtGraphics::RendererSceneEntry, field_e8),       "alias field_e8");
-static_assert(offsetof(RendererSceneEntry, _drawGroupIndex)== offsetof(RtGraphics::RendererSceneEntry, drawGroupIndex), "alias drawGroupIndex");
-static_assert(offsetof(RendererSceneEntry, _drawableIds)   == offsetof(RtGraphics::RendererSceneEntry, drawableIds),    "alias drawableIds");
 static_assert(offsetof(RendererSceneEntry, _camera)        == 0x010, "sceneGroup::_camera @ +0x10");
 static_assert(offsetof(RendererSceneEntry, _detailId)      == 0x0f8, "sceneGroup::_detailId @ +0xf8 (AddScene's out-of-order arg6)");
 static_assert(offsetof(RendererSceneEntry, _pad_fc)        == 0x0fc, "sceneGroup::+0xfc is never written");
@@ -727,18 +604,6 @@ public:
 
 static_assert(sizeof(Renderer) == 0x50, "Graphics::Renderer is 0x50 (80) bytes");
 static_assert(alignof(Renderer) == 8, "Renderer's widest member is a pointer");
-static_assert(sizeof(Renderer) == sizeof(RtGraphics::Renderer),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(Renderer, _drawGroups)        == offsetof(RtGraphics::Renderer, drawGroups),       "alias drawGroups");
-static_assert(offsetof(Renderer, _drawables)         == offsetof(RtGraphics::Renderer, drawables),        "alias drawables");
-static_assert(offsetof(Renderer, _currentSceneGroup) == offsetof(RtGraphics::Renderer, currentScene),     "alias currentScene");
-static_assert(offsetof(Renderer, _currentDrawGroup)  == offsetof(RtGraphics::Renderer, currentDrawGroup), "alias currentDrawGroup");
-static_assert(offsetof(Renderer, _drawGroupsUsed)    == offsetof(RtGraphics::Renderer, field_38),         "alias field_38");
-static_assert(offsetof(Renderer, _shaderDetail)      == offsetof(RtGraphics::Renderer, field_3c),         "alias field_3c");
-static_assert(offsetof(Renderer, _alphaT)            == offsetof(RtGraphics::Renderer, frameAlpha),       "alias frameAlpha");
-static_assert(offsetof(Renderer, _frameIndex)        == offsetof(RtGraphics::Renderer, contextSerial),    "alias contextSerial");
-static_assert(offsetof(Renderer, _detailId)          == offsetof(RtGraphics::Renderer, field_48),         "alias field_48");
-static_assert(offsetof(Renderer, _pad_4c)            == offsetof(RtGraphics::Renderer, _pad_4c),          "alias _pad_4c");
 // And against the retail bodies directly, so a POD edit cannot move both.
 static_assert(offsetof(Renderer, _sceneGroups)       == 0x00, "Renderer::_sceneGroups @ +0x00 (GetSceneGroup 0x180018090)");
 static_assert(offsetof(Renderer, _drawGroups)        == 0x10, "Renderer::_drawGroups @ +0x10 (GetCamera 0x180017f70)");

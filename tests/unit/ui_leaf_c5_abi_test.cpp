@@ -373,7 +373,6 @@ UNIT_TEST(ui_c5_progress_layout) {
     CHECK_EQ(offsetof(UI::ProgressDescription, _childDescription), (size_t)0xa8);
     CHECK_EQ(offsetof(UI::ProgressElement, _fillLeft), sizeof(UI::Element));
     CHECK_EQ(offsetof(UI::ProgressElement, _backgroundColor), (size_t)0x120);
-    CHECK_EQ(sizeof(UI::ProgressElement), sizeof(RtUI::ProgressElement));
 }
 
 UNIT_TEST(ui_c5_progress_slots) {

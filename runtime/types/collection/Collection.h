@@ -56,7 +56,7 @@
 // `detail::AvlOps<Node, W>` hands a typed `Set<T>` / `Set<T>::Node` to them.
 namespace rtsetavl   { struct Set; struct Node; }   // runtime/src/collection/set_avl.h
 namespace rtsetavl24 { struct Set; struct Node; }   // runtime/src/collection/set_avl_e24.h
-namespace RtObject   { struct Factory; struct TypeNode; }   // runtime/types/object/TypeInfo.h
+namespace RtObject   { struct TypeNode; }                  // runtime/types/object/TypeInfo.h
 namespace RtIO       { struct ModSetNode; }                 // runtime/types/io/Modification.h
 
 namespace Collection {
@@ -1223,7 +1223,7 @@ namespace detail {
 void  PortedRetrace16(rtsetavl::Set* set, rtsetavl::Node** slot);        // 0x18000adc0
 void  PortedErase16(rtsetavl::Set* set, rtsetavl::Node* z);              // 0x18000aba0
 void  PortedRetrace24(rtsetavl24::Set* set, rtsetavl24::Node** slot);    // 0x180023170
-void  PortedRetrace48(RtObject::Factory* set, RtObject::TypeNode** slot);  // 0x180030540
+void  PortedRetrace48(RtObject::TypeNode** root, RtObject::TypeNode** slot);  // 0x180030540 (root = &set._root)
 #endif
 
 template <class NodeT, unsigned ElemWidth>
@@ -1277,7 +1277,7 @@ template <class NodeT>
 struct AvlOps<NodeT, 0x30> : AvlGeneric<NodeT> {
     template <class SetT>
     static void Retrace(SetT* set, NodeT** slot) {
-        PortedRetrace48(reinterpret_cast<RtObject::Factory*>(set), reinterpret_cast<RtObject::TypeNode**>(slot));  // CAST-OK: elem_stride
+        PortedRetrace48(reinterpret_cast<RtObject::TypeNode**>(set), reinterpret_cast<RtObject::TypeNode**>(slot));  // CAST-OK: elem_stride
     }
 };
 #endif  // !BANISHED_UNIT_TEST

@@ -145,7 +145,6 @@
 
 namespace RtUi {
 
-using RtUI::DialogInstance;
 
 namespace {
 

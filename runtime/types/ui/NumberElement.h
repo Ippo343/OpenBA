@@ -112,7 +112,6 @@
 // ENDGAME B.3 step 6, block C3: the POD below moved from `UI::` to `RtUI::`
 // (B4b-1) when the real class took the retail name; widgets_input.cpp's two
 // NumberElement setters still reach the object through it.
-namespace RtUI {
 
 // The STRUCT now says what the PROSE above already said. Until the elem_B
 // batch ported the class (runtime/src/ui/numberelement.cpp, 2026-09-12) it
@@ -122,28 +121,8 @@ namespace RtUI {
 // fields now, and the size is asserted, because the ctor (0x180118C70), the
 // dtor (0x180118CE0), ComputeSize (0x180119000), Draw (0x1801191E0) and
 // CacheText (0x1801189F0) were all transcribed against them.
-struct NumberElement {
-    RtUI::Element  base;         // +0x00 .. +0xBF
-    void*    _font;              // +0xC0  ExternalPtr<UI::Font>
-    int32_t  _mode;              // +0xC8
-    uint32_t _padCC;             // +0xCC  never written by the ctor
-    char*    _cachedText;        // +0xD0  owning, refcounted System::String
-    int32_t  _intValue;          // +0xD8
-    float    _floatValue;        // +0xDC
-    uint8_t  _showSign;          // +0xE0
-    uint8_t  _padE1[0x07];       // +0xE1 .. +0xE7  tail padding
-};
 
-static_assert(sizeof(NumberElement) == 0xE8, "CreateNewObject 0x18004A910 allocates 0xE8");
-static_assert(offsetof(NumberElement, base)       == 0x00, "NumberElement::base @ +0x00");
-static_assert(offsetof(NumberElement, _font)      == 0xC0, "NumberElement::_font @ +0xC0");
-static_assert(offsetof(NumberElement, _mode)      == 0xC8, "NumberElement::_mode @ +0xC8");
-static_assert(offsetof(NumberElement, _cachedText)== 0xD0, "NumberElement::_cachedText @ +0xD0");
-static_assert(offsetof(NumberElement, _intValue)  == 0xD8, "NumberElement::_intValue @ +0xD8");
-static_assert(offsetof(NumberElement, _floatValue)== 0xDC, "NumberElement::_floatValue @ +0xDC");
-static_assert(offsetof(NumberElement, _showSign)  == 0xE0, "NumberElement::_showSign @ +0xE0");
 
-}  // namespace RtUI
 
 // ############################################################################
 // ENDGAME B.3 step 6 (block C3) — `UI::NumberElement`, the REAL C++ class
@@ -251,8 +230,5 @@ static_assert(offsetof(NumberElement, _cachedText) == 0xd0, "");
 static_assert(offsetof(NumberElement, _intValue)   == 0xd8, "");
 static_assert(offsetof(NumberElement, _floatValue) == 0xdc, "");
 static_assert(offsetof(NumberElement, _showSign)   == 0xe0, "");
-static_assert(sizeof(NumberElement) == sizeof(RtUI::NumberElement), "");
-static_assert(offsetof(NumberElement, _cachedText) == offsetof(RtUI::NumberElement, _cachedText), "");
-static_assert(offsetof(NumberElement, _showSign)   == offsetof(RtUI::NumberElement, _showSign), "");
 
 }  // namespace UI

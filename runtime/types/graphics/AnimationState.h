@@ -202,59 +202,6 @@ static_assert(sizeof(AnimationClipPrefix) == 0x60,
 // +0x18 / +0x28 / +0x38 and the 0x48 stride are INHERITED, not measured here:
 // see this file's banner.
 // ============================================================================
-struct AnimationState {
-    // +0x00  "the unique node set is stale". Set to 1 when there is exactly one
-    //        layer whose handle is >= 0; when non-zero, Update calls
-    //        CopyInstancedToUnique and clears it.
-    uint8_t  needsUniqueCopy;
-    uint8_t  _pad_01[7];
-
-    AnimationLayer* layers;    // +0x08  Array<AnimationLayer>::_data
-    int32_t         layerCount;      // +0x10  ::_size
-    int32_t         layerCapacity;   // +0x14  ::_capacity — NO reader in Update
-
-    // +0x18  Math::Vector3 the caller hands back in as Update's 6th parameter.
-    //        INHERITED from wave23_lane_gfxbody.cpp §5.1, not measured here.
-    float    rootOffset[3];
-    int32_t  _unpinned_24;
-
-    // +0x28 / +0x38  the two buffers the caller passes as Update's 4th and 5th
-    //        parameters (note the caller passes +0x38 FIRST).
-    //
-    //        *** CORRECTED 2026-09-12 (cutover closure batch 3). *** Each of
-    //        these is a 16-byte `Collection::Array` HEADER, not a bare
-    //        pointer: +0x28 is `Array<Math::Transform>` (the baked pose) and
-    //        +0x38 is `Array<InterpolatedState<Transform>>` (the per-node
-    //        interpolation state). What this header used to call `interpB` /
-    //        `interpA` is the Array's `_data` field in each case, so the
-    //        POINTER VALUE it described was right and the TYPE was wrong.
-    //
-    //        Three independent bodies say so, and all three were read for the
-    //        correction rather than inferred from each other:
-    //          * `Array<AnimationState>::Serialize` (0x18005c2c0) resizes
-    //            `this+0x38` through `Array<InterpolatedState>::SetSize`
-    //            (0x18005ac50) with the count it reads at `this+0x40`, and
-    //            hands `this+0x28` whole to `Array<Transform>::Serialize`
-    //            (0x180059820).
-    //          * `?GetPose@AnimationManager@Graphics@@` (0x1800fb8e0) loads
-    //            `state+0x28` as a BUFFER BASE and walks it at stride 0x1c.
-    //          * the element-destroy helper 0x18005bce0 — array_destroy.cpp's
-    //            `kD_InnerArr3_48` — frees three inner Array buffers per 0x48
-    //            record, at offsets {0x38, 0x28, 0x08}.
-    //        The full declaration is runtime/types/graphics/AnimationManager.h.
-    Collection::Array<uint8_t> pose;   // +0x28  Array<Math::Transform>
-    Collection::Array<uint8_t> nodes;  // +0x38  Array<InterpolatedState<Transform>>
-};
-static_assert(sizeof(AnimationState) == 0x48,
-              "Graphics::AnimationState stride is 0x48 — INHERITED from WAVE 23 "
-              "lane GFXBODY's read of AnimationManager::Update, not measured by "
-              "lane GFXBIG");
-static_assert(offsetof(AnimationState, layers)        == 0x08, "AnimationState::layers @ +0x08");
-static_assert(offsetof(AnimationState, layerCount)    == 0x10, "AnimationState::layerCount @ +0x10");
-static_assert(offsetof(AnimationState, layerCapacity) == 0x14, "AnimationState::layerCapacity @ +0x14");
-static_assert(offsetof(AnimationState, rootOffset)    == 0x18, "AnimationState::rootOffset @ +0x18");
-static_assert(offsetof(AnimationState, pose)          == 0x28, "AnimationState::pose @ +0x28");
-static_assert(offsetof(AnimationState, nodes)         == 0x38, "AnimationState::nodes @ +0x38");
 
 // B.4 Z MIRROR2 GFX: `RtGraphics::InterpolatedTransform`, the POD twin of
 // `Graphics::InterpolatedState<Math::Transform>` (InterpolatedState.h: +0x00
@@ -562,12 +509,7 @@ static_assert(offsetof(AnimationState::Layer, _fadeLength)    == 0x20, "Layer::_
 static_assert(offsetof(AnimationState::Layer, _fadeRemaining) == 0x28, "Layer::_fadeRemaining @ +0x28");
 static_assert(offsetof(AnimationState::Layer, _restarted)     == 0x30, "Layer::_restarted @ +0x30");
 // The record and the PODs describe the same bytes.
-static_assert(sizeof(InstancedAnimationState) == sizeof(RtGraphics::AnimationState), "alias GFXBIG's POD");
 static_assert(sizeof(AnimationState::Layer) == sizeof(RtGraphics::AnimationLayer), "alias Layer");
-static_assert(offsetof(InstancedAnimationState, _state) + offsetof(AnimationState, _layers) ==
-              offsetof(RtGraphics::AnimationState, layers), "alias layers");
-static_assert(offsetof(InstancedAnimationState, _rootOffset) ==
-              offsetof(RtGraphics::AnimationState, rootOffset), "alias rootOffset");
 static_assert(!std::is_polymorphic<AnimationState>::value,
               "Graphics::AnimationState must never acquire a vtable: retail exports "
               "no ??_7AnimationState@Graphics@@6B@ and its ctor/dtor are QEAA");

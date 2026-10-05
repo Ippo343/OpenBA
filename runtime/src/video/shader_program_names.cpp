@@ -178,7 +178,6 @@
 
 namespace rtvidshadername {
 
-using RtSystem::String;
 using RtSystem::StringRefCount;
 
 namespace {

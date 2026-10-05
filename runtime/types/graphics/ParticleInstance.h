@@ -254,11 +254,6 @@ static_assert(sizeof(ParticleInstance) == 0xd8,
               "Graphics::ParticleInstance is 0xd8 bytes (MOV EDX,0xd8 in its own "
               "slot-0 vector deleting destructor 0x180020310)");
 static_assert(alignof(ParticleInstance) == 8, "qword aligned (the vptr)");
-static_assert(sizeof(ParticleInstance) == sizeof(RtGraphics::ParticleInstance),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(ParticleInstance, _resource)  == offsetof(RtGraphics::ParticleInstance, _resource),  "alias _resource");
-static_assert(offsetof(ParticleInstance, _boundsPtr) == offsetof(RtGraphics::ParticleInstance, _boundsPtr), "alias _boundsPtr");
-static_assert(offsetof(ParticleInstance, _index)     == offsetof(RtGraphics::ParticleInstance, _index),     "alias _index");
 static_assert(offsetof(ParticleInstance, _resource)  == 0xc0, "ParticleInstance::_resource @ +0xc0 (??0 0x180104130)");
 static_assert(offsetof(ParticleInstance, _boundsPtr) == 0xc8, "ParticleInstance::_boundsPtr @ +0xc8 (Update 0x180104180)");
 static_assert(offsetof(ParticleInstance, _index)     == 0xd0, "ParticleInstance::_index @ +0xd0 (ctor -1)");
@@ -326,8 +321,6 @@ static_assert(sizeof(ParticleSystemInstance) == 0xe0,
               "Graphics::ParticleSystemInstance is 0xe0 bytes (MOV EDX,0xe0 in "
               "its own slot-0 vector deleting destructor 0x180020ce0)");
 static_assert(alignof(ParticleSystemInstance) == 8, "qword aligned (the vptr)");
-static_assert(sizeof(ParticleSystemInstance) == sizeof(RtGraphics::ParticleSystemInstance),
-              "the real class and the POD describe the same bytes");
 static_assert(offsetof(ParticleSystemInstance, _f_d8) == 0xd8,
               "ParticleSystemInstance::_f_d8 @ +0xd8 (the one extra field its ctor zeroes)");
 static_assert(offsetof(ParticleSystemInstance, _f_d8) == sizeof(ParticleInstance),

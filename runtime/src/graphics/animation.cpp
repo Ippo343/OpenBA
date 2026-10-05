@@ -130,17 +130,12 @@
 #include <new>
 #include "../../types/system/MemoryAllocator.h"
 
-using RtGraphics::AnimationEvent;
-using RtGraphics::AnimationManager;
 // ENDGAME B.3.5 block H1 — the GREP HAZARD this file now lives with. The two
 // `using` lines above bind the PODs at FILE scope, but inside the
 // `namespace Graphics { ... }` block at the bottom of this file a bare
 // `AnimationEvent` / `AnimationManager` binds the REAL CLASS instead. Every POD
 // spelling inside that block is qualified `RtGraphics::` for exactly that
 // reason (B34_BRIEFS section A.7, RULE B4b-5).
-using RtGraphics::Particle;
-using RtGraphics::ParticleInstance;
-using RtGraphics::ParticleSystemInstance;
 using RtGraphics::ParticleResource;
 using RtGraphics::ParticleBoundsRecord;
 

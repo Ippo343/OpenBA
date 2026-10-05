@@ -58,42 +58,9 @@
 #include "Light.h"      // ENDGAME B.3.5 block E: Graphics::Light, the real base
 #include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
 
-namespace RtGraphics {
 
-struct SunLight {
-    Geometry _base;             // +0x00 .. +0xBF  (0xC0 bytes; Light adds none)
 
-    float    _dirX;             // +0xC0  ctor 0.0f
-    float    _dirY;             // +0xC4  ctor 0.0f
-    float    _dirZ;             // +0xC8  ctor -1.0f
-    float    _sunR;             // +0xCC  ctor 1.0f
-    float    _sunG;             // +0xD0  ctor 1.0f
-    float    _sunB;             // +0xD4  ctor 1.0f
-    float    _sunA;             // +0xD8  ctor 1.0f
-    float    _ambientR;         // +0xDC  ctor 0.0f
-    float    _ambientG;         // +0xE0  ctor 0.0f
-    float    _ambientB;         // +0xE4  ctor 0.0f
-    float    _ambientA;         // +0xE8  ctor 1.0f
-    uint32_t _holdEC;           // +0xEC  NEVER WRITTEN by ctor, Set or dtor
-    void*    _colourTarget;     // +0xF0  Video::ImageBuffer*  (capability-gated)
-    void*    _depthTarget;      // +0xF8  Video::ImageBuffer*  (always built)
-    void*    _renderBuffer;     // +0x100 Video::RenderBuffer*
-};
 
-static_assert(sizeof(SunLight) == 0x108, "Graphics::SunLight is 0x108 bytes "
-              "(both exe call sites MemAlloc exactly 0x108)");
-static_assert(offsetof(SunLight, _dirX)         == 0xC0,  "SunLight::_dirX");
-static_assert(offsetof(SunLight, _dirZ)         == 0xC8,  "SunLight::_dirZ");
-static_assert(offsetof(SunLight, _sunR)         == 0xCC,  "SunLight::_sunR");
-static_assert(offsetof(SunLight, _sunA)         == 0xD8,  "SunLight::_sunA");
-static_assert(offsetof(SunLight, _ambientR)     == 0xDC,  "SunLight::_ambientR");
-static_assert(offsetof(SunLight, _ambientA)     == 0xE8,  "SunLight::_ambientA");
-static_assert(offsetof(SunLight, _holdEC)       == 0xEC,  "SunLight::+0xEC hole");
-static_assert(offsetof(SunLight, _colourTarget) == 0xF0,  "SunLight::_colourTarget");
-static_assert(offsetof(SunLight, _depthTarget)  == 0xF8,  "SunLight::_depthTarget");
-static_assert(offsetof(SunLight, _renderBuffer) == 0x100, "SunLight::_renderBuffer");
-
-}  // namespace RtGraphics
 
 // ############################################################################
 // ENDGAME B.3 step 5 (block E) — `Graphics::SunLight`, the REAL C++ class
@@ -210,16 +177,7 @@ static_assert(sizeof(SunLight) == 0x108,
               "Graphics::SunLight is 0x108 bytes (both exe call sites MemAlloc "
               "exactly 0x108, and the deleting dtor 0x180064620 agrees)");
 static_assert(alignof(SunLight) == 8, "qword aligned (the vptr)");
-static_assert(sizeof(SunLight) == sizeof(RtGraphics::SunLight),
-              "the real class and the POD describe the same bytes");
 
-static_assert(offsetof(SunLight, _dirX)         == offsetof(RtGraphics::SunLight, _dirX),         "alias _dirX");
-static_assert(offsetof(SunLight, _sunR)         == offsetof(RtGraphics::SunLight, _sunR),         "alias _sunR");
-static_assert(offsetof(SunLight, _ambientR)     == offsetof(RtGraphics::SunLight, _ambientR),     "alias _ambientR");
-static_assert(offsetof(SunLight, _holdEC)       == offsetof(RtGraphics::SunLight, _holdEC),       "alias +0xEC hole");
-static_assert(offsetof(SunLight, _colourTarget) == offsetof(RtGraphics::SunLight, _colourTarget), "alias _colourTarget");
-static_assert(offsetof(SunLight, _depthTarget)  == offsetof(RtGraphics::SunLight, _depthTarget),  "alias _depthTarget");
-static_assert(offsetof(SunLight, _renderBuffer) == offsetof(RtGraphics::SunLight, _renderBuffer), "alias _renderBuffer");
 
 static_assert(offsetof(SunLight, _dirX)         == 0xC0,  "SunLight::_dirX @ +0xC0 (??0 0x1801081f0)");
 static_assert(offsetof(SunLight, _dirZ)         == 0xC8,  "SunLight::_dirZ @ +0xC8 (-1.0f)");

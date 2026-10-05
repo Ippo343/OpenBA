@@ -228,52 +228,6 @@ struct VideoBufferHeader {
 static_assert(sizeof(VideoBufferHeader) == 0x20, "Video vertex/index buffer header must be 0x20 bytes");
 static_assert(offsetof(VideoBufferHeader, _deviceData) == 0x08, "Video buffer _deviceData @ +0x08");
 
-struct EdgeMesh {
-    void*   _vtable;                 // +0x00  ??_7EdgeMesh@Graphics@@6B@ (0x180154c70)
-    void*   _externalA;              // +0x08  Object::External, ctor: 0
-    void*   _externalB;              // +0x10  Object::External, ctor: 0
-    void*   _externalC;              // +0x18  Object::External, ctor: 0
-    void*   _reserved20;             // +0x20  ctor: 0 (no lane-E body reads it)
-    // ENDGAME B.3.5 block G: RETAIL'S OWN GETTERS NAME ALL TWELVE OF THESE, and
-    // three of the four buffer pairs were named by guess here. The POD keeps its
-    // names because bodies outside block G's file set read them; the REAL class
-    // at the bottom of this file uses the getters' names and cross-asserts every
-    // offset, and the mapping is written out in its banner. Read this pass:
-    //   +0x28 ?GetMaskMaterial@     +0x30 ?GetSkinMaskMaterial@
-    //   +0x38 ?GetEdgeMaterial@     +0x40 ?GetSkinEdgeMaterial@
-    //   +0x48/+0x68   ?GetVertexBuffer@         / ?GetIndexBuffer@
-    //   +0x88/+0xa8   ?GetSkinVertexBuffer@     / ?GetSkinIndexBuffer@
-    //   +0xc8/+0xe8   ?GetEdgeVertexBuffer@     / ?GetEdgeIndexBuffer@
-    //   +0x108/+0x128 ?GetEdgeSkinVertexBuffer@ / ?GetEdgeSkinIndexBuffer@
-    ExternalPtr _material0;          // +0x28  SetMaterials arg 1 = the MASK material
-    ExternalPtr _material1;          // +0x30  SetMaterials arg 3 = SKIN MASK  <-- see note
-    ExternalPtr _material2;          // +0x38  SetMaterials arg 2 = EDGE       <-- see note
-    ExternalPtr _material3;          // +0x40  SetMaterials arg 4 = SKIN EDGE
-    VideoBufferHeader _triVerts;     // +0x48  vertex buffer
-    VideoBufferHeader _triIndices;   // +0x68  index buffer
-    VideoBufferHeader _edgeVerts;    // +0x88   -- actually the SKIN pair
-    VideoBufferHeader _edgeIndices;  // +0xa8
-    VideoBufferHeader _capVerts;     // +0xc8   -- actually the EDGE pair
-    VideoBufferHeader _capIndices;   // +0xe8
-    VideoBufferHeader _extraVerts;   // +0x108  -- actually the EDGE-SKIN pair
-    VideoBufferHeader _extraIndices; // +0x128
-    Collection::Array<uint8_t> _triangleLists;  // +0x148 data, +0x150 size, +0x154 capacity
-    Collection::Array<uint8_t> _edgeLists;      // +0x158 data, +0x160 size, +0x164 capacity
-    Box         _bounds;             // +0x168  ctor: (+1e8 x3, -1e8 x3)
-};
-static_assert(sizeof(EdgeMesh) == 0x180, "Graphics::EdgeMesh must be 0x180 bytes");
-static_assert(offsetof(EdgeMesh, _material0)     == 0x28,  "EdgeMesh material 0 @ +0x28");
-static_assert(offsetof(EdgeMesh, _triVerts)      == 0x48,  "EdgeMesh triangle vertex buffer @ +0x48");
-static_assert(offsetof(EdgeMesh, _triIndices)    == 0x68,  "EdgeMesh triangle index buffer @ +0x68");
-static_assert(offsetof(EdgeMesh, _edgeVerts)     == 0x88,  "EdgeMesh edge vertex buffer @ +0x88");
-static_assert(offsetof(EdgeMesh, _edgeIndices)   == 0xa8,  "EdgeMesh edge index buffer @ +0xa8");
-static_assert(offsetof(EdgeMesh, _capVerts)      == 0xc8,  "EdgeMesh cap vertex buffer @ +0xc8");
-static_assert(offsetof(EdgeMesh, _capIndices)    == 0xe8,  "EdgeMesh cap index buffer @ +0xe8");
-static_assert(offsetof(EdgeMesh, _extraVerts)    == 0x108, "EdgeMesh extra vertex buffer @ +0x108");
-static_assert(offsetof(EdgeMesh, _extraIndices)  == 0x128, "EdgeMesh extra index buffer @ +0x128");
-static_assert(offsetof(EdgeMesh, _triangleLists) == 0x148, "EdgeMesh triangle lists @ +0x148");
-static_assert(offsetof(EdgeMesh, _edgeLists)     == 0x158, "EdgeMesh edge lists @ +0x158");
-static_assert(offsetof(EdgeMesh, _bounds)        == 0x168, "EdgeMesh bounds @ +0x168");
 
 // NOTE on the material slot order, because it looks like a transcription bug
 // and is not. `?SetMaterials@EdgeMesh@Graphics@@QEAAX...000@Z` (retail
@@ -900,28 +854,11 @@ static_assert(sizeof(EdgeMesh) == 0x180,
               "Graphics::EdgeMesh is 0x180 bytes (the MOV EDX,0x180 in its own "
               "slot-0 vector deleting destructor 0x1800134b0)");
 static_assert(alignof(EdgeMesh) == 8, "Graphics::EdgeMesh aligns to 8 (the vptr)");
-static_assert(sizeof(EdgeMesh) == sizeof(RtGraphics::EdgeMesh),
-              "the real class and the POD describe the same bytes");
 static_assert(offsetof(EdgeMesh, _reserved20) == sizeof(Object::External),
               "EdgeMesh's own fields begin at the end of the Object::External base");
 
 // Cross-asserts against the POD, field for field, INCLUDING the three pairs the
 // POD names differently — which is the whole point of asserting them.
-static_assert(offsetof(EdgeMesh, _maskMaterial)          == offsetof(RtGraphics::EdgeMesh, _material0),    "alias _material0");
-static_assert(offsetof(EdgeMesh, _skinMaskMaterial)      == offsetof(RtGraphics::EdgeMesh, _material1),    "alias _material1");
-static_assert(offsetof(EdgeMesh, _edgeMaterial)          == offsetof(RtGraphics::EdgeMesh, _material2),    "alias _material2");
-static_assert(offsetof(EdgeMesh, _skinEdgeMaterial)      == offsetof(RtGraphics::EdgeMesh, _material3),    "alias _material3");
-static_assert(offsetof(EdgeMesh, _vertexBuffer)          == offsetof(RtGraphics::EdgeMesh, _triVerts),     "alias _triVerts");
-static_assert(offsetof(EdgeMesh, _indexBuffer)           == offsetof(RtGraphics::EdgeMesh, _triIndices),   "alias _triIndices");
-static_assert(offsetof(EdgeMesh, _skinVertexBuffer)      == offsetof(RtGraphics::EdgeMesh, _edgeVerts),    "the POD's _edgeVerts is the SKIN pair");
-static_assert(offsetof(EdgeMesh, _skinIndexBuffer)       == offsetof(RtGraphics::EdgeMesh, _edgeIndices),  "ditto");
-static_assert(offsetof(EdgeMesh, _edgeVertexBuffer)      == offsetof(RtGraphics::EdgeMesh, _capVerts),     "the POD's _capVerts is the EDGE pair");
-static_assert(offsetof(EdgeMesh, _edgeIndexBuffer)       == offsetof(RtGraphics::EdgeMesh, _capIndices),   "ditto");
-static_assert(offsetof(EdgeMesh, _edgeSkinVertexBuffer)  == offsetof(RtGraphics::EdgeMesh, _extraVerts),   "the POD's _extraVerts is the EDGE-SKIN pair");
-static_assert(offsetof(EdgeMesh, _edgeSkinIndexBuffer)   == offsetof(RtGraphics::EdgeMesh, _extraIndices), "ditto");
-static_assert(offsetof(EdgeMesh, _triangleLists)         == offsetof(RtGraphics::EdgeMesh, _triangleLists),"alias _triangleLists");
-static_assert(offsetof(EdgeMesh, _edgeLists)             == offsetof(RtGraphics::EdgeMesh, _edgeLists),    "alias _edgeLists");
-static_assert(offsetof(EdgeMesh, _aabb)                  == offsetof(RtGraphics::EdgeMesh, _bounds),       "alias _bounds");
 
 // And against the retail getters directly, so a POD edit cannot move both.
 static_assert(offsetof(EdgeMesh, _maskMaterial)         == 0x28,  "EdgeMesh::_maskMaterial @ +0x28 (0x180012ef0)");

@@ -209,11 +209,6 @@ UNIT_TEST(graphics_geometry_field_offsets) {
     // The class and the POD must describe the same bytes: the POD still has
     // live users outside block E's file set, so a drift between the two is the
     // failure this pins.
-    CHECK_EQ(sizeof(Graphics::Geometry), sizeof(RtGraphics::Geometry));
-    CHECK_EQ(offsetof(Graphics::Geometry, _dirtyFlags),
-             offsetof(RtGraphics::Geometry, _dirtyFlags));
-    CHECK_EQ(offsetof(Graphics::Geometry, _transform),
-             offsetof(RtGraphics::Geometry, _transform));
 }
 
 UNIT_TEST(graphics_instance_field_offsets) {
@@ -231,7 +226,6 @@ UNIT_TEST(graphics_instance_field_offsets) {
 
     CHECK_EQ(offsetof(Graphics::ParticleInstance, _boundsPtr),       (size_t)0xc8);
     CHECK_EQ(offsetof(Graphics::ParticleInstance, _index),           (size_t)0xd0);
-    CHECK_EQ(sizeof(Graphics::ParticleInstance), sizeof(RtGraphics::ParticleInstance));
     CHECK_EQ(offsetof(Graphics::ParticleSystemInstance, _f_d8),      (size_t)0xd8);
 }
 
@@ -275,7 +269,6 @@ UNIT_TEST(graphics_light_field_offsets_authored_from_retail) {
     CHECK_EQ(offsetof(Graphics::SunLight, _colourTarget), (size_t)0xF0);
     CHECK_EQ(offsetof(Graphics::SunLight, _depthTarget),  (size_t)0xF8);
     CHECK_EQ(offsetof(Graphics::SunLight, _renderBuffer), (size_t)0x100);
-    CHECK_EQ(sizeof(Graphics::SunLight), sizeof(RtGraphics::SunLight));
 }
 
 // ===========================================================================

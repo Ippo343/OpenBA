@@ -39,7 +39,6 @@
 
 using RtGraphics::MaterialBinding;
 using RtGraphics::MaterialConstant;
-using RtGraphics::MaterialInstance;
 using RtGraphics::MaterialParameterSet;
 using RtGraphics::MaterialTexture;
 using RtVideo::Context;
@@ -59,10 +58,10 @@ namespace {
 // reversed Setup, wrote its layout down, and then held the body back on the
 // ground that it "read layouts this lane did not pin".
 // ============================================================================
-static_assert(offsetof(MaterialInstance, material)   == 0x28, "Setup reads this+0x28");
-static_assert(offsetof(MaterialInstance, parameters) == 0x30, "Setup reads this+0x30");
-static_assert(offsetof(MaterialInstance, constants)  == 0x40, "Setup reads this+0x40");
-static_assert(offsetof(MaterialInstance, textures)   == 0x50, "Setup reads this+0x50");
+static_assert(offsetof(Graphics::MaterialInstance, _material)   == 0x28, "Setup reads this+0x28");
+static_assert(offsetof(Graphics::MaterialInstance, _parameters) == 0x30, "Setup reads this+0x30");
+static_assert(offsetof(Graphics::MaterialInstance, _constants)  == 0x40, "Setup reads this+0x40");
+static_assert(offsetof(Graphics::MaterialInstance, _textures)   == 0x50, "Setup reads this+0x50");
 static_assert(sizeof(MaterialParameterSet) == 0x20, "shl $0x5 on the shader index");
 static_assert(sizeof(MaterialBinding)      == 0x08, "add $0x8 per binding");
 static_assert(sizeof(MaterialTexture)      == 0x10, "2*index then *8 == index*0x10");

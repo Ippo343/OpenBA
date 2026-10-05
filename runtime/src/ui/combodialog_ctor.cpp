@@ -152,8 +152,6 @@
 #include "../../types/system/MemoryAllocator.h"
 #include <new>
 
-using RtUI::ComboDialog;
-using RtUI::DialogInstance;
 
 namespace {
 

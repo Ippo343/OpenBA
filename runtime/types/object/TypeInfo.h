@@ -58,10 +58,6 @@ namespace RtObject {
 //
 // The rest of Base's layout belongs to lanes B/C; do not add fields here.
 // ============================================================
-struct Base {
-    void** vtable;   // +0x00
-};
-static_assert(offsetof(Base, vtable) == 0x00, "Base::vtable");
 
 // ============================================================
 // Object::BaseTypeInfo — 0x38 bytes, one static per registered class.
@@ -77,62 +73,6 @@ static_assert(offsetof(Base, vtable) == 0x00, "Base::vtable");
 //   Factory::GetTypeName        0x1800c0a60  returns +0x08
 //   Factory::GetTypeIdForFileExtension 0x1800c04c0  _stricmp's +0x18
 // ============================================================
-struct BaseTypeInfo {
-    // +0x00 The CRC type id. The ctor writes 0xFFFFFFFF here; ONLY
-    //       Factory::Startup overwrites it with the real id. Anything that
-    //       reads a type id before Startup gets the sentinel — this is the
-    //       trap behind the FillComponentTypeIdGlobals_* ordering comments in
-    //       code/Game/Game/game_main.cpp.
-    uint32_t typeId;
-    uint32_t _pad04;          // never written by the ctor; not padding the
-                              // compiler inserted, just an unused word.
-
-    // +0x08 The class's own name, e.g. "CitizenComponent". Stored verbatim.
-    //       This is the string Factory::Startup CRCs into the type id.
-    const char* name;
-
-    // +0x10 The parent class's name, e.g. "Component". Stored with any
-    //       namespace prefix REMOVED: the ctor scans backwards from the end
-    //       for ':' and keeps everything after it, so "Object::Base" is
-    //       stored as "Base". Only this field is stripped — `name` is not,
-    //       which is why Startup's parent lookup (CRC of the stripped parent)
-    //       can match a child's unstripped `name`.
-    const char* parentName;
-
-    // +0x18 The file extension this type loads from, or nullptr.
-    //       ***THIS IS NOT AN "abstract" FLAG OR NAME.*** It is compared with
-    //       _stricmp against a caller-supplied extension in
-    //       Factory::GetTypeIdForFileExtension (0x1800c04c0). Every
-    //       Component/Description registration in the exe passes nullptr here
-    //       (see CitizenComponent_RegisterType, exe 0x14014e7b5); the types
-    //       that pass a real string are the Externals loaded from disk.
-    //       Our own tree called this field `abstract` in three places until
-    //       Wave 3 lane A; see WAVE3_LANE_A.md.
-    const char* fileExtension;
-
-    // +0x20 `Base* (*)()` — allocates and constructs an instance.
-    //       Factory::CreateObject(id) tail-jumps here (0x1800c0b07 JMP [RCX+0x20]).
-    //       Typed by B.4 P2 R-OBJ: the signature is the BaseTypeInfo ctor's
-    //       mangled parameter `P6APEAVBase@1@XZ`.
-    ::Object::Base* (*factoryFn)();
-
-    // +0x28 `Base* (*)(void* storage)` — placement-constructs into `storage`.
-    //       Factory::CreateObject(id, void*) tail-jumps here. Mangled
-    //       `P6APEAV21@PEAX@Z` in the same ctor.
-    ::Object::Base* (*inPlaceFactoryFn)(void* storage);
-
-    // +0x30 Intrusive singly-linked list. The ctor head-inserts:
-    //       this->next = _firstTypeInfo; _firstTypeInfo = this;
-    BaseTypeInfo* next;
-};
-static_assert(offsetof(BaseTypeInfo, typeId)           == 0x00, "BaseTypeInfo::typeId");
-static_assert(offsetof(BaseTypeInfo, name)             == 0x08, "BaseTypeInfo::name");
-static_assert(offsetof(BaseTypeInfo, parentName)       == 0x10, "BaseTypeInfo::parentName");
-static_assert(offsetof(BaseTypeInfo, fileExtension)    == 0x18, "BaseTypeInfo::fileExtension");
-static_assert(offsetof(BaseTypeInfo, factoryFn)        == 0x20, "BaseTypeInfo::factoryFn");
-static_assert(offsetof(BaseTypeInfo, inPlaceFactoryFn) == 0x28, "BaseTypeInfo::inPlaceFactoryFn");
-static_assert(offsetof(BaseTypeInfo, next)             == 0x30, "BaseTypeInfo::next");
-static_assert(sizeof(BaseTypeInfo)                     == 0x38, "sizeof(BaseTypeInfo)");
 
 // ============================================================
 // Object::Factory's per-type record — the VALUE half of a tree node, 0x28
@@ -230,7 +170,8 @@ static_assert(offsetof(TypeNode, _pad4c)  == 0x4c, "TypeNode tail");
 static_assert(sizeof(TypeNode)            == 0x50, "TypeNode is 0x50 (0x180008440)");
 
 // ============================================================
-// Object::Factory — only the tree root is pinned.
+// Object::Factory — the tree root (the class is below; this note is its
+// evidence).
 //
 // Every lookup starts with `MOV RAX,[RCX]`, so the Set's root pointer is at
 // +0x00. The Set's element count and allocator, and everything else Factory
@@ -242,10 +183,6 @@ static_assert(sizeof(TypeNode)            == 0x50, "TypeNode is 0x50 (0x18000844
 // "Factory singleton (LoadDialogResource)" among globals that "have no
 // export"; both halves of that are wrong.
 // ============================================================
-struct Factory {
-    TypeNode* root;   // +0x00
-};
-static_assert(offsetof(Factory, root) == 0x00, "Factory::root");
 
 // ============================================================
 // The type-id hash, as ONE function.
@@ -379,8 +316,6 @@ private:
     static BaseTypeInfo _typeInfo;
 };
 static_assert(sizeof(Base) == 8, "Object::Base is one vtable pointer");
-static_assert(sizeof(Base) == sizeof(RtObject::Base),
-              "the real class and the POD describe the same bytes");
 
 // `Object::Destroy(p)` — retail's slot-0 call with flags 1 (destroy, then free).
 // Since the normal-virtual cutover (B3X W1) it is exactly `delete p`: the
@@ -523,15 +458,6 @@ public:
     BaseTypeInfo* next;               // +0x30  intrusive chain
 };
 static_assert(sizeof(BaseTypeInfo) == 0x38, "sizeof(Object::BaseTypeInfo)");
-static_assert(sizeof(BaseTypeInfo) == sizeof(RtObject::BaseTypeInfo),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(BaseTypeInfo, typeId)           == offsetof(RtObject::BaseTypeInfo, typeId),           "alias typeId");
-static_assert(offsetof(BaseTypeInfo, name)             == offsetof(RtObject::BaseTypeInfo, name),             "alias name");
-static_assert(offsetof(BaseTypeInfo, parentName)       == offsetof(RtObject::BaseTypeInfo, parentName),       "alias parentName");
-static_assert(offsetof(BaseTypeInfo, fileExtension)    == offsetof(RtObject::BaseTypeInfo, fileExtension),    "alias fileExtension");
-static_assert(offsetof(BaseTypeInfo, factoryFn)        == offsetof(RtObject::BaseTypeInfo, factoryFn),        "alias factoryFn");
-static_assert(offsetof(BaseTypeInfo, inPlaceFactoryFn) == offsetof(RtObject::BaseTypeInfo, inPlaceFactoryFn), "alias inPlaceFactoryFn");
-static_assert(offsetof(BaseTypeInfo, next)             == offsetof(RtObject::BaseTypeInfo, next),             "alias next");
 
 inline uint32_t Base::TypeId() { return _typeInfo.typeId; }            // 0x18007e010
 inline const BaseTypeInfo& Base::GetTypeInfo() { return _typeInfo; }
@@ -541,9 +467,8 @@ inline const BaseTypeInfo& Base::GetTypeInfo() { return _typeInfo; }
 //
 // `??0Factory@Object@@QEAA@XZ` (0x1800c09d0) writes `[RCX]=0` and a DWORD
 // `[RCX+8]=0` and publishes `_singleton`; the insert core INCs that dword at
-// 0x1800303ac / 0x18003043c. So the whole object IS the Set header, and
-// `RtObject::Factory`'s 8-byte `{ TypeNode* root; }` is a correct VIEW that must
-// never be used as storage (type_system.cpp's "MEASURED CORRECTIONS" banner).
+// 0x1800303ac / 0x18003043c. So the whole object IS the Set header (the
+// avl_trees.cpp group-A core takes `&_types._root`, the word at +0x00).
 //
 // NO DESTRUCTOR IS DECLARED and the implicit one is unreachable in practice:
 // the singleton is heap-allocated once and never deleted (retail's teardown is

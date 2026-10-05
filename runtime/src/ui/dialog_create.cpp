@@ -132,9 +132,6 @@
 #include <new>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 
-using RtUI::Dialog;
-using RtUI::DialogController;
-using RtUI::DialogInstance;
 using RtUI::DialogTimer;
 
 namespace {

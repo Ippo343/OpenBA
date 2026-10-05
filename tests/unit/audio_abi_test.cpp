@@ -263,8 +263,6 @@ UNIT_TEST(audio_stream_layout_and_shape) {
     CHECK_EQ((int)offsetof(Audio::Stream, _bytePosition), 0x78);
     CHECK_EQ((int)offsetof(Audio::Stream, _channel),      0x7c);
     CHECK_EQ((int)offsetof(Audio::Stream, _stopping),     0x80);
-    CHECK_EQ((int)sizeof(RtAudio::Stream), 0x88);
-    CHECK(std::is_trivially_destructible<RtAudio::Stream>::value);
 }
 
 UNIT_TEST(audio_device_layout_holds_the_stream_pod) {
@@ -279,9 +277,6 @@ UNIT_TEST(audio_device_layout_holds_the_stream_pod) {
     // B7-12: the Device holds the Stream POD, not the polymorphic class.
     CHECK((std::is_same<decltype(Audio::Device::_stream), Audio::Stream>::value));
     // The three Stream fields the Device bodies reach by Device offset.
-    CHECK_EQ((int)(offsetof(Audio::Device, _stream) + offsetof(RtAudio::Stream, _lock)),      0xa50);
-    CHECK_EQ((int)(offsetof(Audio::Device, _stream) + offsetof(RtAudio::Stream, _wakeEvent)), 0xa40);
-    CHECK_EQ((int)(offsetof(Audio::Device, _stream) + offsetof(RtAudio::Stream, _stopping)),  0xa80);
 }
 
 UNIT_TEST(audio_scene_and_configuration_layout) {

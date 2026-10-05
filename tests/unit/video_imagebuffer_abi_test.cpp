@@ -92,7 +92,6 @@ void Reset() { g_lastSelf = nullptr; g_lastMark = -1; g_lastArg = 0; }
 UNIT_TEST(video_imagebuffer_layout) {
     CHECK_EQ(sizeof(Video::ImageBuffer), (size_t)0x68);
     CHECK_EQ(alignof(Video::ImageBuffer), (size_t)8);
-    CHECK_EQ(sizeof(Video::ImageBuffer), sizeof(RtVideo::ImageBuffer));
 
     // The `Object::CompiledExternal` base adds no bytes over `External`'s 0x20,
     // which is what puts `_width` at +0x20 rather than anywhere else.
@@ -117,14 +116,6 @@ UNIT_TEST(video_imagebuffer_layout) {
     CHECK_EQ(offsetof(Video::ImageBuffer, _data),       (size_t)0x60);
 
     // Class and POD, field for field on the fourteen that matter.
-    CHECK_EQ(offsetof(Video::ImageBuffer, _width),
-             offsetof(RtVideo::ImageBuffer, width));
-    CHECK_EQ(offsetof(Video::ImageBuffer, _kind),
-             offsetof(RtVideo::ImageBuffer, kind));
-    CHECK_EQ(offsetof(Video::ImageBuffer, _sourceName),
-             offsetof(RtVideo::ImageBuffer, pixelData));
-    CHECK_EQ(offsetof(Video::ImageBuffer, _data),
-             offsetof(RtVideo::ImageBuffer, platformData));
 
     // `_data` is the real abstract base block A declared, not a `void*`.
     CHECK(  (std::is_same<decltype(Video::ImageBuffer::_data),
@@ -349,12 +340,6 @@ UNIT_TEST(graphics_imagebuffer_chain_layout) {
     CHECK_EQ(sizeof(Graphics::FrameCopyImageBuffer),  (size_t)0x88);
     CHECK_EQ(sizeof(Graphics::ReflectionImageBuffer), (size_t)0x90);
 
-    CHECK_EQ(sizeof(Graphics::GeneratedImageBuffer),
-             sizeof(RtGraphics::GeneratedImageBuffer));
-    CHECK_EQ(sizeof(Graphics::FrameCopyImageBuffer),
-             sizeof(RtGraphics::FrameCopyImageBuffer));
-    CHECK_EQ(sizeof(Graphics::ReflectionImageBuffer),
-             sizeof(RtGraphics::ReflectionImageBuffer));
 
     // The latch, inherited by both concretes at the SAME offset — which is why
     // `Graphics::ReflectionImageBuffer` has a field there doing the same job and

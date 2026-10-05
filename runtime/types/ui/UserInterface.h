@@ -405,8 +405,6 @@ protected:
     // RULE B5-4 / B6-4.5: NOT retail's ctor (that is the door, see banner). It
     // exists only so the two by-value holders below can declare the member.
     UserInterface() = default;
-    friend struct RtEngine::DialogLoopT;
-    friend struct RtEngine::DialogLoaderLoopT;
     // ENDGAME B.3.8 block RB: the two real loop classes' constructors
     // default-construct the member, then run the ctor door on it (InitFields).
     friend class Engine::DialogLoopT;
