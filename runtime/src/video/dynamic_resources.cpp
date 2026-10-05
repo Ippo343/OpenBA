@@ -345,7 +345,14 @@ void Video::IndexBuffer::ReleaseDynamic() {
         IndexBuffer* p = terminator;
         do {
             if (p->dynamic) {
-                ReleaseCompanion(p->platformData);
+                // B5 BUF (B5_RULES D10): IndexBufferData wears the compiler's table,
+                // so its slot-0 call with flags 1 is `delete` (virtual dtor, then
+                // the base's operator delete = MemFree); guarded on the companion
+                // and the field nulled, as ReleaseCompanion does (the template
+                // stays as is for the classes still on DeletingDtor).
+                if (IndexBufferData* companion = p->platformData)
+                    delete companion;
+                p->platformData = nullptr;
                 terminator = _firstBuffer;
             }
             p = p->listNext;
@@ -385,7 +392,14 @@ void Video::VertexBuffer::ReleaseDynamic() {
         VertexBuffer* p = terminator;
         do {
             if (p->dynamic) {
-                ReleaseCompanion(p->platformData);
+                // B5 BUF (B5_RULES D10): VertexBufferData wears the compiler's table,
+                // so its slot-0 call with flags 1 is `delete` (virtual dtor, then
+                // the base's operator delete = MemFree); guarded on the companion
+                // and the field nulled, as ReleaseCompanion does (the template
+                // stays as is for the classes still on DeletingDtor).
+                if (VertexBufferData* companion = p->platformData)
+                    delete companion;
+                p->platformData = nullptr;
                 terminator = _firstBuffer;
             }
             p = p->listNext;
