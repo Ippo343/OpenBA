@@ -91,21 +91,12 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
     // 1) Model transform = Lerp(state, t) -> AsMatrix -> Context::SetTransform(0, M).
     //    Keep the Lerp'd Transform around: its position (+0x10) is the billboard origin
     //    used by the cc!=0 camera-constant-screen-size projection below.
-    // B.3.5 bridge -- ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?A
-    // VTransform@Math@@AEBVScalar@4@@Z (0x18001aff0). The class did not exist in
-    // runtime/types/graphics until the closing pass authored
-    // `graphics/InterpolatedState.h`; it does now, and `geometry + 0x84` is one --
-    // the same 0x38-byte pair `Geometry`'s own GetInstanceTransform path reads as
-    // (cur @ +0x00, prev @ +0x1c). A hidden-retslot door became a by-value C++
-    // return, so `xf` is constructed ONCE, directly from the prvalue, in the same
-    // storage the retbuf occupied. `haveXf` is gone with the readiness guard: the
-    // transform is now unconditional, which is what the cc != 0 branch below always
-    // wanted.
-    // LEFT: Graphics::Geometry declares the pair as two Transforms (+0x84 / +0xa0), not
-    // as the InterpolatedState<Transform> retail's Lerp reads (R-GFX's header).
+    // ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@
+    // AEBVScalar@4@@Z (0x18001aff0) on Geometry's +0x84 InterpolatedState<Transform>.
+    // A hidden-retslot member returning by value in C++, so `xf` is constructed ONCE,
+    // directly from the prvalue, in the same storage the retbuf occupied.
     const Math::Transform xf =        // .translation is the billboard origin
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: waits on a runtime/ type (B4 Z LAST CODE): Graphics::Geometry's +0x84 / +0xa0 pair as one InterpolatedState<Math::Transform> (runtime/types/graphics/Geometry.h plus the RtGraphics mirror's alias asserts); ~40 reader lines in runtime/src/graphics (scene.cpp, mesh.cpp, meshinstance_draw.cpp, wave27_lane_gfxpart.cpp, closure_batch2b.cpp) and scene_watch.cpp rename with it
-            ->Lerp(Math::Scalar(t));
+        _transform.Lerp(Math::Scalar(t));
     {
         Math::Matrix mat = xf.AsMatrix();
         context.SetTransform(0, mat);

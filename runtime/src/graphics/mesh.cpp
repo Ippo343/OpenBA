@@ -1851,7 +1851,7 @@ Math::Transform MeshInstance::GetNodeToWorld(int node) const {
     } else {
         // The geometry transform, copied into a local first exactly as retail
         // does (it materialises all seven floats before either call).
-        const Math::Transform geomXf = _transform;
+        const Math::Transform geomXf = _transform._current;
 
         // The slot's `_nodes._data` is the pool entry's per-node pose array; the
         // node index strides THAT, not the slot. See RtInstancedPoolSlot.
@@ -1891,7 +1891,7 @@ Math::Transform MeshInstance::GetNodeToWorld(int node, float t) const {
         result = pair._previous.Lerp(pair._current, Math::Scalar(t));
     } else {
         Transform geomXf;
-        RtLerpTransformPair(_transform, _prevTransform, t, &geomXf);
+        RtLerpTransformPair(_transform._current, _transform._previous, t, &geomXf);
 
         const InterpolatedState<Math::Transform>& pose =
             RtInstancedPoolSlot(this)->_nodes._data[node];
@@ -1943,7 +1943,7 @@ void MeshInstance::UpdateHierarchy() {
     const GraphicsMesh* const mesh = GetMesh().Get();
 
     // Node 0: the geometry's own transform, in both halves.
-    xf[0]._current  = _transform;
+    xf[0]._current  = _transform._current;
     xf[0]._previous = xf[0]._current;
 
     const GraphicsMesh::Node* const nodes = mesh->GetNodes()._data;
@@ -2089,7 +2089,7 @@ Math::Transform* MeshInstance::GetSubTransform(Math::Transform* ret, int node) c
         *ret = this->MeshInstance::GetNodeToWorld(node);
         return ret;
     }
-    *ret = _transform;                            // seven dwords
+    *ret = _transform._current;                            // seven dwords
     return ret;
 }
 
@@ -2117,7 +2117,7 @@ Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int packed,
 
     Transform xf;
     if (node < 0) {
-        RtLerpTransformPair(_transform, _prevTransform, t, &xf);   // +0x84 cur / +0xa0 prev
+        RtLerpTransformPair(_transform._current, _transform._previous, t, &xf);   // +0x84 cur / +0xa0 prev
     } else if (!_animation._instanced) {
         const InterpolatedState<Math::Transform>& pair = _nodes._data[node];
         RtLerpTransformPair(pair._current, pair._previous, t, &xf);
@@ -2259,7 +2259,7 @@ void EdgeMeshInstance::Update(const System::Time& time) {
 
     MeshInstance* const followed = _followed;
     if (followed) {
-        const Math::Transform xf = followed->_transform;   // seven dwords
+        const Math::Transform xf = followed->_transform._current;   // seven dwords
         this->::Graphics::Geometry::SetTransform(xf);
     }
 }
@@ -2291,7 +2291,7 @@ Math::Matrix* EdgeMeshInstance::GetInstanceTransform(Math::Matrix* ret, int pack
         *ret = got.AsMatrix();
     } else {
         Transform xf;
-        RtLerpTransformPair(_transform, _prevTransform, t, &xf);
+        RtLerpTransformPair(_transform._current, _transform._previous, t, &xf);
         *ret = xf.AsMatrix();
     }
 

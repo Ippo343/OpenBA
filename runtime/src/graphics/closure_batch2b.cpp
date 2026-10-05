@@ -118,8 +118,8 @@ Geometry::Geometry(const Geometry& src) {
     _opacityPrev = src._opacityPrev;
 
     // +0x84 .. +0xbb, fourteen dwords.
-    _transform     = src._transform;
-    _prevTransform = src._prevTransform;
+    _transform._current     = src._transform._current;
+    _transform._previous = src._transform._previous;
 }
 }  // namespace Graphics
 

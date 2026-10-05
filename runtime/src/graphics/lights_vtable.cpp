@@ -426,7 +426,7 @@ void SpotLight::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     if (_shadowMap == nullptr) return;
     if (_shadowDepth == nullptr) return;
 
-    const Math::Transform xform = _transform;       // +0x84, 0x1c
+    const Math::Transform xform = _transform._current;       // +0x84, 0x1c
     const Math::Transform3 t3 = xform.AsTransform3();
 
     const Camera camera(_frustum, t3, true);   // 0x1800fe960, MOV R9B,1

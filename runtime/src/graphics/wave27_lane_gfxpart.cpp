@@ -345,8 +345,8 @@ Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* out, int inde
     (void)index;         // ignored, see the banner above
     ++g_piGetInstanceXform;
 
-    const Math::Transform& cur = _transform;
-    const Math::Transform& prv = _prevTransform;
+    const Math::Transform& cur = _transform._current;
+    const Math::Transform& prv = _transform._previous;
 
     const float t = alpha;
 
@@ -431,9 +431,9 @@ void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
     const Math::Vector3& eye =
         renderer._drawGroups._data[gi]._camera._cameraToWorld.translation;   // group + 0x90
 
-    float dx = _transform.translation.x - eye.x;
-    float dy = _transform.translation.y - eye.y;
-    float dz = _transform.translation.z - eye.z;
+    float dx = _transform._current.translation.x - eye.x;
+    float dy = _transform._current.translation.y - eye.y;
+    float dz = _transform._current.translation.z - eye.z;
     dx *= dx; dy *= dy; dz *= dz;
     // Retail: (dy + dx) + dz. ADDSS XMM2,XMM0 then ADDSS XMM2,XMM1, where XMM2
     // held the Y term, XMM0 the X term and XMM1 the Z term.
@@ -734,8 +734,8 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
     // `?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z`
     // (0x18001a400), a DEFINED member. The `instances <= 1` test is retail's.
     if (instances <= 1) {
-        const Math::Transform& cur = _transform;
-        const Math::Transform& prv = _prevTransform;
+        const Math::Transform& cur = _transform._current;
+        const Math::Transform& prv = _transform._previous;
 
         Math::Transform blended;
         const float px = prv.translation.x, py = prv.translation.y, pz = prv.translation.z;

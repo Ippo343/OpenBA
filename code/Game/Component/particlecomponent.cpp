@@ -520,7 +520,7 @@ static bool PC_Culled(ParticleComponent* self) {
     if (total <= 0 || !geoArr) return false;
     for (int i = 0; i < total; i++) {
         if (geoArr[i].instance && geoArr[i].sceneId >= 0)
-            return PerfX::ParticleCullSkip(&geoArr[i].instance->_transform.translation.x);
+            return PerfX::ParticleCullSkip(&geoArr[i].instance->_transform._current.translation.x);
     }
     return false;
 }

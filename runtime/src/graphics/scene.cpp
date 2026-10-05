@@ -553,21 +553,21 @@ Graphics::Geometry::Geometry() {
     self->_opacity     = kOne;
     self->_opacityPrev = kOne;
 
-    self->_transform.rotation.x = 0.0f;
-    self->_transform.rotation.y = 0.0f;
-    self->_transform.rotation.z = 0.0f;
-    self->_transform.rotation.w = kOne;
-    self->_transform.translation.x = 0.0f;
-    self->_transform.translation.y = 0.0f;
-    self->_transform.translation.z = 0.0f;
+    self->_transform._current.rotation.x = 0.0f;
+    self->_transform._current.rotation.y = 0.0f;
+    self->_transform._current.rotation.z = 0.0f;
+    self->_transform._current.rotation.w = kOne;
+    self->_transform._current.translation.x = 0.0f;
+    self->_transform._current.translation.y = 0.0f;
+    self->_transform._current.translation.z = 0.0f;
 
-    self->_prevTransform.rotation.x = 0.0f;
-    self->_prevTransform.rotation.y = 0.0f;
-    self->_prevTransform.rotation.z = 0.0f;
-    self->_prevTransform.rotation.w = kOne;
-    self->_prevTransform.translation.x = 0.0f;
-    self->_prevTransform.translation.y = 0.0f;
-    self->_prevTransform.translation.z = 0.0f;
+    self->_transform._previous.rotation.x = 0.0f;
+    self->_transform._previous.rotation.y = 0.0f;
+    self->_transform._previous.rotation.z = 0.0f;
+    self->_transform._previous.rotation.w = kOne;
+    self->_transform._previous.translation.x = 0.0f;
+    self->_transform._previous.translation.y = 0.0f;
+    self->_transform._previous.translation.z = 0.0f;
 }
 
 // ============================================================================
@@ -1062,9 +1062,9 @@ void Geometry::Detach(Geometry* child) { DetachBody(this, child); }
 // ---------------------------------------------------------------------------
 void Geometry::SetTransform(const Math::Transform& xf) {
     bool tailCall = false;
-    if (TransformDiffers(&_transform, &xf)) {
-        _prevTransform = _transform;
-        _transform     = xf;
+    if (TransformDiffers(&_transform._current, &xf)) {
+        _transform._previous = _transform._current;
+        _transform._current     = xf;
         _dirtyFlags   |= 3u;
         tailCall = _attached.GetSize() > 0;
     }
@@ -1126,9 +1126,9 @@ void Geometry::UpdateAttached() {
             Math::Transform sub;
             Math::Transform* p = GetSubTransform(&sub, child->_attachNode);   // slot 5
 
-            if (TransformDiffers(&child->_transform, p)) {
-                child->_prevTransform = child->_transform;
-                child->_transform     = *p;
+            if (TransformDiffers(&child->_transform._current, p)) {
+                child->_transform._previous = child->_transform._current;
+                child->_transform._current     = *p;
                 child->_dirtyFlags   |= 3u;
                 if (child->_attached.GetSize() > 0)
                     child->UpdateAttached();                                  // slot 4
@@ -1173,7 +1173,7 @@ bool Geometry::Clean() {
 
     if ((f & 1u) == 0) {
         if ((f & 8u) != 0) {
-            _prevTransform = _transform;
+            _transform._previous = _transform._current;
             _dirtyFlags &= ~8u;
             changed = true;
         }
@@ -1194,7 +1194,7 @@ bool Geometry::Clean() {
         _dirtyFlags = (f & ~2u) | 0x10u;
         // Retail copies the transform to a local before handing its address to
         // the box helper; kept so the helper never sees the live object.
-        const Math::Transform xf = _transform;
+        const Math::Transform xf = _transform._current;
         float box[6];
         const float* world = rtpickgrid::BoxTransform(box, &xf,
                                                       reinterpret_cast<const float*>(&_localBounds));  // LEFT: audit WORK, left: rtpickgrid::BoxTransform's scene_grid caller hands a float[6] copy; a typed Box local would add Vector3's zeroing ctor stores
@@ -1240,7 +1240,7 @@ void Geometry::SetBounds(const ::Box& box) {
 // hidden slot. See Geometry.h's B5-12 block for why the same is NOT true of a
 // vtable slot.
 // ---------------------------------------------------------------------------
-Math::Transform Geometry::GetTransform() const { return _transform; }
+Math::Transform Geometry::GetTransform() const { return _transform._current; }
 
 // ---------------------------------------------------------------------------
 // Graphics::Geometry::GetSubTransform(Transform*, int) const  [VIRTUAL, slot 5]
@@ -1258,7 +1258,7 @@ Math::Transform Geometry::GetTransform() const { return _transform; }
 // ---------------------------------------------------------------------------
 Math::Transform* Geometry::GetSubTransform(Math::Transform* ret, int node) const {
     (void)node;   // retail ignores it in the base body
-    *ret = _transform;
+    *ret = _transform._current;
     return ret;
 }
 
@@ -1277,16 +1277,16 @@ Math::Transform* Geometry::GetSubTransform(Math::Transform* ret, int node) const
 Math::Matrix* Geometry::GetInstanceTransform(Math::Matrix* ret, int node, float t) const {
     (void)node;   // retail ignores it in the base body
 
-    const float py = _prevTransform.translation.y;
-    const float pz = _prevTransform.translation.z;
-    const float cx = _transform.translation.x;
-    const float cy = _transform.translation.y;
-    const float cz = _transform.translation.z;
-    const float px = _prevTransform.translation.x;
+    const float py = _transform._previous.translation.y;
+    const float pz = _transform._previous.translation.z;
+    const float cx = _transform._current.translation.x;
+    const float cy = _transform._current.translation.y;
+    const float cz = _transform._current.translation.z;
+    const float px = _transform._previous.translation.x;
 
     const Scalar s = { t };
     Math::Transform tmp;
-    RtQuaternionLerp(&_prevTransform.rotation, &tmp.rotation, &_transform.rotation, &s);
+    RtQuaternionLerp(&_transform._previous.rotation, &tmp.rotation, &_transform._current.rotation, &s);
     tmp.translation.x = px + (cx - px) * t;
     tmp.translation.y = py + (cy - py) * t;
     tmp.translation.z = pz + (cz - pz) * t;

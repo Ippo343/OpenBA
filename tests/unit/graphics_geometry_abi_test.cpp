@@ -203,7 +203,8 @@ UNIT_TEST(graphics_geometry_field_offsets) {
     CHECK_EQ(offsetof(Graphics::Geometry, _opacity),           (size_t)0x7c);
     CHECK_EQ(offsetof(Graphics::Geometry, _opacityPrev),       (size_t)0x80);
     CHECK_EQ(offsetof(Graphics::Geometry, _transform),         (size_t)0x84);
-    CHECK_EQ(offsetof(Graphics::Geometry, _prevTransform),     (size_t)0xa0);
+    CHECK_EQ(offsetof(Graphics::Geometry, _transform)
+             + offsetof(Graphics::InterpolatedState<Math::Transform>, _previous), (size_t)0xa0);
     CHECK_EQ(offsetof(Graphics::Geometry, _padBC),             (size_t)0xbc);
 
     // The class and the POD must describe the same bytes: the POD still has
