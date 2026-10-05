@@ -1165,13 +1165,6 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
         it->Get()->Update(time, ui, state);
 }
 
-// B4 FORWARD: 1 outside caller(s) (runtime/src/ui/userinterface_frame.cpp,
-// block R-UI-b) still hand the UpdateState as its address.
-void DialogInstance::Update(const System::Time& time, UserInterface* ui,
-                            uint8_t* updateState) {
-    Update(time, ui, *reinterpret_cast<Element::UpdateState*>(updateState));   // LEFT: B4 FORWARD for userinterface_frame.cpp, whose 0x30-byte frame record is value-initialised where Element::UpdateState's ctor (0x180115600) writes less (NOCLASS frame state)
-}
-
 void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180114a60
     const float scale = _ui->_uiScale;
 

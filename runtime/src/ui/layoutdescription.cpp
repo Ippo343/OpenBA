@@ -142,9 +142,9 @@ extern "C" void RtUi_LayoutDescription_SerializeEntries(IO::Serializer* ser, int
 
     for (int32_t i = 0; i < count; ++i, ++e) {
         Object::SerializeExternal<UI::ElementDescription>(*ser, e->desc);   // 180043f77
-        rtdesc::StringSerialize(&e->name, ser);                // 180043f83
-        rtdesc::StringSerialize(&e->relativeToX, ser);         // 180043f8e
-        rtdesc::StringSerialize(&e->relativeToY, ser);         // 180043f9a
+        e->name.Serialize(*ser);                               // 180043f83 0x1800c9930
+        e->relativeToX.Serialize(*ser);                        // 180043f8e
+        e->relativeToY.Serialize(*ser);                        // 180043f9a
 
         rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->horizontal), nullptr);          // +0x98  // retail serializes the int32 enum through the uint slot  // CAST-OK: byte_io
         rw()->SerializeUInt(reinterpret_cast<uint32_t&>(e->vertical), nullptr);            // +0x98  // retail serializes the int32 enum through the uint slot  // CAST-OK: byte_io
@@ -190,7 +190,7 @@ bool LayoutDescription::Serialize(IO::Stream& streamv) {
     rw->SerializeInt(n, nullptr);
 
     if (ser._stream->_direction == 0) {                               // 1800d39b1 (re-read)
-        rtcoll::RtColl_ArraySetSize_180043d80(&_entries, n);       // 1800d39bf
+        _entries.SetSize(n);                                   // 1800d39bf 0x180043d80
     }
 
     RtUi_LayoutDescription_SerializeEntries(&ser, n, _entries._data);   // 1800d39d1 0x180043f50
@@ -314,7 +314,7 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
             const Entry* e = _entries._data + i;               // 1800d34b0
 
             const bool noFlags = (e->horizontal == 0 && e->vertical == 0);    // 1800d34b7
-            const bool noNames = NamesNothing(e->relativeToX) && NamesNothing(e->relativeToY);
+            const bool noNames = NamesNothing(e->relativeToX._data) && NamesNothing(e->relativeToY._data);
             if (!(noFlags || noNames)) continue;               // 1800d35a2
 
             // -1, -1: this entry is positioned relative to nothing.
@@ -335,14 +335,14 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
             // --- the FIRST named dependency -------------------------------
             int32_t relA = -2;                                 // 1800d3603
             {
-                const char* want = e->relativeToX;
+                const char* want = e->relativeToX._data;
                 if (e->horizontal == 0 || NamesNothing(want)) {
                     relA = -1;                                 // 1800d36d3  names nothing
                 } else {
                     for (int32_t j = 0; j < count; ++j) {      // 1800d3650 / 1800d36c3
                         if (order.data[j] < 0) continue;       // not placed yet
                         if (j == i) continue;                  // 1800d3657
-                        if (StringEquals(entries[j].name, want)) {   // 1800d366d..1800d36b8
+                        if (StringEquals(entries[j].name._data, want)) {   // 1800d366d..1800d36b8
                             relA = order.data[j];              // 1800d36ca
                             break;
                         }
@@ -353,7 +353,7 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
             // --- the SECOND named dependency ------------------------------
             int32_t relB;
             {
-                const char* want = e->relativeToY;
+                const char* want = e->relativeToY._data;
                 if (e->vertical == 0 || NamesNothing(want)) {
                     relB = -1;                                 // 1800d37a6  names nothing
                 } else {
@@ -362,7 +362,7 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
                     for (int32_t j = 0; j < count; ++j) {      // 1800d3720 / 1800d3795
                         if (order.data[j] < 0) continue;
                         if (j == i) continue;                  // 1800d3727
-                        if (StringEquals(entries[j].name, want)) {   // 1800d373d..1800d3788
+                        if (StringEquals(entries[j].name._data, want)) {   // 1800d373d..1800d3788
                             relB = order.data[j];              // 1800d379c
                             break;
                         }
@@ -391,14 +391,12 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
     return ret;
 }
 
-// ??1LayoutDescription@UI@@UEAA@XZ   0x1800d3a10 — retail's body, moved from
-// the retired door (ENDGAME B.3.9 UI-B): destroy the entry Array through
-// 0x180043a00 — the variant that DOES visit the elements (three String
-// releases each) and zeroes the header, so the compiler's `_entries.~Array()`
-// afterwards is a no-op. The restamps, the base's _textName (+0x60) and the
-// tail JMP into ~External are the compiler's chain.
+// ??1LayoutDescription@UI@@UEAA@XZ   0x1800d3a10 — EMPTY body (B4 Y RT-UI).
+// Retail: restamp, `_entries`' ~Array 0x180043a00 (1800d3a34: 0x180044050 per
+// element, ascending, then the J1 free and the header zeroed), restamp, the
+// base's +0x60 _textName release, tail JMP into ~External. Every one of those
+// is now a member destructor, run in that order after this body.
 LayoutDescription::~LayoutDescription() {
-    rtcoll::RtColl_ArrayDtorElem_180043a00(&_entries);           // 1800d3a34
 }
 
 // ?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ 0x180042e30 --

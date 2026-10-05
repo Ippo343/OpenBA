@@ -146,25 +146,29 @@ void SpriteCapture::AddScissor(int32_t x, int32_t y, int32_t right, int32_t bott
                                bool fullScreen) {
     // Every call does work -- this body has no early-out.
 
-    CaptureEntry e;
-    // 0x1800d8f22..0x1800d8f2e — four qword stores covering name..color.
+    // 0x1800d8f22..0x1800d8f2e — four qword stores covering name..color; the
+    // name's is the member's own String() (B4 Y RT-UI), its release at the
+    // end of the body the member's ~String (0x1800d8fc2).
     // `pad04` is deliberately NOT written: retail does not write it either,
     // and an oracle that compared it would report garbage
     // (reference_oracle_must_not_compare_unwritten_bytes.md).
-    e.name = nullptr;
+    CaptureEntry e;
     e.x1 = 0; e.y1 = 0;
     e.x2 = 0; e.y2 = 0;
     e.rotation = 0.0f; e.color = 0;
     e.sheetIndex = -1 - static_cast<int>(fullScreen);
 
     // The empty name. Set() on a null slot allocates a fresh refcounted block.
-    char* tmp = nullptr;
-    reinterpret_cast<System::String*>(&tmp)->Set("");   // System::String::Set 0x1800c95d0  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-    if (tmp) {
-        e.name = tmp;
-        ++StringRc(tmp);
+    // The temporary lives in this block: its ~String at the closing brace is
+    // retail's release at 0x1800d8f61..0x1800d8f7a, before the second store.
+    {
+        System::String tmp;                         // 0x1800d8f3c
+        tmp.Set("");                                // System::String::Set 0x1800c95d0
+        if (tmp._data) {
+            e.name._data = tmp._data;
+            ++StringRc(tmp._data);
+        }
     }
-    ReleaseString(tmp);          // retail's `TEST RCX,RCX; JZ` is inside this
 
     e.rotation = 0.0f; e.color = 0;   // the second, redundant store — see above
     e.x1 = x; e.y1 = y;
@@ -180,13 +184,12 @@ void SpriteCapture::AddScissor(int32_t x, int32_t y, int32_t right, int32_t bott
     _sprites.SetSizeFill(_sprites._size + 1, &fill);            // 0x18004bfc0
     _entries.SetSizeFill(_entries._size + 1, &e);               // 0x18004bde0
 
-    // Releases the LOCAL's reference. The stored element has its own: the
-    // entry array's element copier COPY-CONSTRUCTS the String
-    // (`INC dword ptr [RAX-0x4]` at 0x18004beac), so the balance is exactly
-    // right and nothing is left dangling. See the ownership section of
-    // runtime/types/ui/SpriteCapture.h for how this was nearly recorded
-    // backwards, and what caught it.
-    ReleaseString(e.name);
+    // `e`'s ~String here releases the LOCAL's reference (0x1800d8fc2). The
+    // stored element has its own: the entry array's element copier
+    // COPY-CONSTRUCTS the String (`INC dword ptr [RAX-0x4]` at 0x18004beac),
+    // so the balance is exactly right and nothing is left dangling. See the
+    // ownership section of runtime/types/ui/SpriteCapture.h for how this was
+    // nearly recorded backwards, and what caught it.
 }
 
 // ============================================================================
@@ -261,8 +264,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
     }
 
     // ---- (b) build the entry ------------------------------------------------
-    CaptureEntry e;
-    e.name = nullptr;                       // 0x1800d8caa
+    CaptureEntry e;                         // name: String(), 0x1800d8caa
     e.x1 = 0; e.y1 = 0;                     // 0x1800d8cae
     e.x2 = 0; e.y2 = 0;                     // 0x1800d8cb6
     e.rotation = 0.0f;                      // 0x1800d8cc1  XORPS/MOVSS
@@ -288,7 +290,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
         System::String slot = sprite.spriteSheet
                                   ->GetSpriteNameFromIndex(sprite.spriteIndex);
         name = slot._data;
-        if (name) { e.name = name; ++StringRc(name); }
+        if (name) { e.name._data = name; ++StringRc(name); }
     } else {
         // Retail does NOT call String::Set here — it open-codes an empty
         // string: MemAlloc(9, 4), length 0, refcount 1, one NUL copied from
@@ -299,7 +301,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
         RtSystem::StringRefCount(data) = 1;   // refcount
         data[0] = '\0';
         name = data;
-        e.name = name;
+        e.name._data = name;
         ++StringRc(name);
         ReleaseString(name);              // the local temporary
     }
@@ -312,8 +314,7 @@ void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
     // ---- (c) append ---------------------------------------------------------
     _sprites.SetSizeFill(_sprites._size + 1, &sprite);             // 0x18004bfc0
     _entries.SetSizeFill(_entries._size + 1, &e);                 // 0x18004bde0
-
-    ReleaseString(e.name);                // same net-zero release as AddScissor
+    // `e`'s ~String: the same net-zero release as AddScissor's.
 }
 
 // ============================================================================
