@@ -71,7 +71,6 @@
 #include "../../types/io/Modification.h"        // ENDGAME B.3.9 SS1: Modification::_singleton
 #include "../system/string.h"
 #include "../system/widestring.h"
-#include "../system/pod_bridge.h"   // B.4 R-ENG: Sys(Mod::file)
 #include "../../types/system/WideString.h"
 #include "../object/external_compiled.h"   // B3R: FindOrLoad / GetCompiledPath by name
 #include "../../types/object/TypeInfo.h"   // B3R: Object::Base::IsDerivedFrom
@@ -192,20 +191,19 @@ void Engine::UpdateLoop::LoadResources() {
     // and derefs it unguarded. The null test below is ours ONLY for the case
     // the mint leaves the slot empty; with the DLL present it is never taken.
     if (IO::Modification* mods = IO::Modification::_singleton) {
-        const int32_t count = mods->_mods.size;
-        RtIO::Mod* base = mods->_mods.data;
+        const int32_t count = mods->_mods._size;
+        RtIO::Mod* base = mods->_mods._data;
         for (int32_t i = 0; i < count; ++i) {
             RtIO::Mod& mod = base[i];
             if (mod.enabled == 0) continue;
             ++g_modsSeen;
 
             // Filename::GetPathFilename(&mod->file, &ret, /*keepSlash*/true).
-            // `Mod::file` is the RtSystem::Filename POD (Modification.h).
             System::String dir;
             {
                 // System::Filename::GetPathFilename (0x1800c6740), by name
                 // (B3R); the by-value result is constructed in `ret`.
-                System::Filename ret(RtSystem::Sys(mod.file).GetPathFilename(true));
+                System::Filename ret(mod.file.GetPathFilename(true));
                 dir = ret.AsString();   // 0x1800dd95a: AddRef, no delimiter pass
             }
 

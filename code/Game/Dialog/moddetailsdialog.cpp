@@ -5,12 +5,9 @@
 // Layout: DialogInstance base (0xB8), +0xB8 = sprite sheet, +0xC0 = mod index
 //
 // The mod is an RtIO::Mod (runtime/types/io/Modification.h): name / author /
-// description / file are String bodies (char*), i18 / i1c the version pair,
-// `set` the Filename-keyed resource set, `files` the Array<Filename> of the
-// mods this one conflicts with.
-//
-// LEFT (B.4 W1 DLG-b): the reads that view those char* / void* members as
-// System::String / System::Filename stay casts until R-IO's POD is the class.
+// description are System::Strings, file a System::Filename, i18 / i1c the
+// version pair, `set` the Filename-keyed resource set, `files` the
+// Array<Filename> of the mods this one conflicts with.
 
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -68,9 +65,9 @@ static UI::Element* FindElem(ModDetailsDialog* dialog, const char* name) {
 // ============================================================
 // Helper: BST leftmost node (in-order start)
 // ============================================================
-static const RtIO::ModSetNode* BSTLeftmost(const RtIO::ModSetNode* root) {
+static const RtIO::ModFilenameSet::Node* BSTLeftmost(const RtIO::ModFilenameSet::Node* root) {
     if (!root) return nullptr;
-    const RtIO::ModSetNode* cur = root;
+    const RtIO::ModFilenameSet::Node* cur = root;
     while (cur->left)
         cur = cur->left;
     return cur;
@@ -79,25 +76,25 @@ static const RtIO::ModSetNode* BSTLeftmost(const RtIO::ModSetNode* root) {
 // ============================================================
 // Helper: BST in-order successor
 // ============================================================
-static const RtIO::ModSetNode* BSTNext(const RtIO::ModSetNode* node) {
+static const RtIO::ModFilenameSet::Node* BSTNext(const RtIO::ModFilenameSet::Node* node) {
     if (!node) return nullptr;
 
     // If right child exists, go right then all the way left
-    const RtIO::ModSetNode* right = node->right;
+    const RtIO::ModFilenameSet::Node* right = node->right;
     if (right) {
-        const RtIO::ModSetNode* cur = right;
+        const RtIO::ModFilenameSet::Node* cur = right;
         while (cur->left)
             cur = cur->left;
         return cur;
     }
 
     // Go up: if we came from a left child, parent is next
-    const RtIO::ModSetNode* parent = node->parent;
+    const RtIO::ModFilenameSet::Node* parent = node->parent;
     if (parent) {
         if (parent->left == node)
             return parent;
         // Came from right — walk up until we come from a left child
-        const RtIO::ModSetNode* cur = node;
+        const RtIO::ModFilenameSet::Node* cur = node;
         while (parent && parent->right == cur) {
             cur = parent;
             parent = cur->parent;
@@ -109,11 +106,11 @@ static const RtIO::ModSetNode* BSTNext(const RtIO::ModSetNode* node) {
 // ============================================================
 // Helper: search BST for filename match using Filename::operator<
 // ============================================================
-static bool BSTContains(const RtIO::ModSetNode* root, const RtIO::ModSetNode* filename) {
-    const System::Filename& fnameRef = filename->key;
-    const RtIO::ModSetNode* node = root;
+static bool BSTContains(const RtIO::ModFilenameSet::Node* root, const RtIO::ModFilenameSet::Node* filename) {
+    const System::Filename& fnameRef = filename->element;
+    const RtIO::ModFilenameSet::Node* node = root;
     while (node) {
-        const System::Filename& nodeRef = node->key;
+        const System::Filename& nodeRef = node->element;
         if (fnameRef < nodeRef) {
             node = node->left;
         } else if (nodeRef < fnameRef) {
@@ -172,13 +169,13 @@ void ModDetailsDialog::OnOpened() {
     imageIcon->SetSprite(&sprite);
 
     // --- Set text parameters ---
-    textName->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
+    textName->SetParameter(0, mod.name);
 
-    textAuthor->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
+    textAuthor->SetParameter(0, mod.author);
 
     // Path (the mod's Filename, as a new String)
     {
-        System::String pathStr(mod.file.data);
+        System::String pathStr(mod.file._data);
         textPath->SetParameter(0, pathStr);
     }
 
@@ -192,13 +189,13 @@ void ModDetailsDialog::OnOpened() {
         textVersion->SetParameter(0, formatted);
     }
 
-    textDescription->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
+    textDescription->SetParameter(0, mod.description);
 
     // --- Build conflict list markup ---
-    int conflictCount = mod.files.size;
+    int conflictCount = mod.files._size;
     System::String conflictResult("^jl^f0^c0^lb");
     // The conflicting mods' filenames.
-    const System::Filename* conflictArray = mod.files.data;   // Mod +0x70 Array<Filename>
+    const System::Filename* conflictArray = mod.files._data;   // Mod +0x70 Array<Filename>
 
     for (int i = 0; i < conflictCount; i++) {
         // Find(const Filename&) takes the ADDRESS of the array element (retail
@@ -211,8 +208,8 @@ void ModDetailsDialog::OnOpened() {
         const char* prefix = (cMod.enabled != 0) ? "^li^c1" : "^li^c0";
 
         // Build entry: prefix + name + " ^n[" + path + "]^n"
-        const char* modName = cMod.name;
-        const char* modPath = cMod.file.data;
+        const char* modName = cMod.name._data;
+        const char* modPath = cMod.file._data;
         System::String entry = System::String::Format("%s%s ^n[%s]^n", prefix, modName, modPath);
         // retail's operator+= returns a copy of the new value that the
         // original discarded (see the Append note); genuinely unused here.
@@ -244,9 +241,9 @@ void ModDetailsDialog::OnOpened() {
     }
 
     // Traverse resource BST in-order
-    const RtIO::ModSetNode* bstRoot = mod.set.root;
+    const RtIO::ModFilenameSet::Node* bstRoot = mod.set._root;
     if (bstRoot) {
-        const RtIO::ModSetNode* node = BSTLeftmost(bstRoot);
+        const RtIO::ModFilenameSet::Node* node = BSTLeftmost(bstRoot);
         while (node) {
             // For each resource file, check conflicts with enabled mods
             bool hasConflict = false;
@@ -259,7 +256,7 @@ void ModDetailsDialog::OnOpened() {
                 const RtIO::Mod& cMod = modification->GetModification(cIdx);
 
                 if (cMod.enabled != 0) {
-                    const RtIO::ModSetNode* cBstRoot = cMod.set.root;
+                    const RtIO::ModFilenameSet::Node* cBstRoot = cMod.set._root;
                     if (BSTContains(cBstRoot, node)) {
                         hasConflict = true;
                         if (cIdx < modIndex) {
@@ -281,7 +278,7 @@ void ModDetailsDialog::OnOpened() {
                 prefix = "^li^c1";
 
             // Build entry: prefix + filename + "^n"
-            const char* filename = node->key._data;
+            const char* filename = node->element._data;
             System::String entryStr = System::String::Format("%s%s^n", prefix, filename);
             ModDetails_StringArrayPush_Impl(resArray, std::move(entryStr));
             // Note: ModDetails_StringArrayPush_Impl reads entryStr in place; it

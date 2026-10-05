@@ -155,16 +155,13 @@
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 step 2 — see below
 #include "../../types/system/MemoryAllocator.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
 
 // ENDGAME B.3.1 step 2: the Filename copy-ctor/AdjustDelimiters entry points
 // this file used to forward-declare here (0x1800067d0 / 0x1800c6970) are gone
 // from this translation unit. Every use was one of Filename.h's documented
-// idioms (a copy ctor, a Filename<-Filename assign-then-normalise) and is now
-// spelled as the class itself through the pod_bridge.h `Sys()` bridge --
-// `Mod::file` and `ModSetNode::key` are `RtSystem::Filename` MEMBERS of
-// not-yet-converted structs (B31_RULES.md), so they are reached through the
-// bridge rather than changing Modification.h's field types.
+// idioms (a copy ctor, a Filename<-Filename assign-then-normalise) and is
+// spelled as the class itself (B.4 acceptance MOD: `Mod::file` and the path
+// set's elements are real `System::Filename`s).
 
 namespace RtIO {
 
@@ -190,39 +187,16 @@ static inline int32_t& RefCount(char* s) {
     return RtSystem::StringRefCount(s);
 }
 
-// The release-then-adopt sequence retail inlines at every String member of Mod
-// (e.g. 0x180026f0a..0x180026f46). NOTE the difference from
-// RtString_AdoptInline: retail stores `src` UNCONDITIONALLY and only then tests
-// it, so when src is null the destination is left NULL rather than left holding
-// the `d - 8` that the freeing branch of the release wrote. Reusing
-// RtString_AdoptInline here would have kept a dangling block base in the field.
-void AssignShared(char** dst, char* src) {
-    char* cur = *dst;
-    if (cur == src) return;
-    if (cur != nullptr) {
-        if (--RefCount(cur) == 0) {
-            *dst = cur - 8;
-            ::System::MemoryAllocator::MemFree(*dst);
-        } else {
-            *dst = nullptr;
-        }
-    }
-    *dst = src;
-    if (src != nullptr) ++RefCount(src);
-}
-
-// The copy-construct half (0x18001020b..0x180010219): the destination has
-// already been zeroed by the caller, so there is nothing to release.
-static void AdoptShared(char** dst, char* src) {
-    *dst = nullptr;
-    if (src != nullptr) {
-        *dst = src;
-        ++RefCount(src);
-    }
-}
+// (B.4 acceptance MOD: `AssignShared` / `AdoptShared`, the release-then-adopt
+// and the adopt retail inlines at each String member of Mod, are gone with the
+// char* members: they ARE `System::String::operator=` (0x1800c9810's shape:
+// the pointer compare, the release that stores `d - 8` before the free or null
+// on the sharing branch, the unconditional store of the source, the AddRef)
+// and the String copy ctor (the null store, then the adopt), which Mod's
+// String members now run by name.)
 
 // ============================================================================
-// Collection internals — the seven unexported helpers the triple reaches
+// Collection internals — the unexported helpers the triple reaches
 // ============================================================================
 
 // The four ~Array bodies (0x1800111a0, 0x1800112a0, and the buffer-free tail of
@@ -249,7 +223,9 @@ static void* ArrayFreeBuffer(ModArrayOf<T>* a) {
 void DestroyFilenameArray(void* ignoredThis, uint8_t* base, int count);
 
 // 0x1800098d0 — Collection::Array<Filename>::~Array. Releases every element
-// through 0x180009af0 first, then frees the buffer.
+// through 0x180009af0 first, then frees the buffer. (FileSystem's
+// `_userPackFilenames` header; Mod::files is the class and runs the same body
+// as its own ~Array / DestroyAndFree.)
 void* RtColl_ArrayFilenameDtor_1800098d0(ModArrayOf<System::Filename>* a) {
     void* const elems = a->data;
     DestroyFilenameArray(a, static_cast<uint8_t*>(elems), a->size);   // CAST-OK: elem_stride
@@ -293,7 +269,7 @@ static void ArrayAssignGrow(ModArrayOf<T>* dst, const ModArrayOf<T>* src,
 
 // 0x180011110 — Collection::Array<int32>::operator=
 void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
-    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: audit WORK, left: two header types by caller: RtIO::ModArrayOf<uint32_t> (Mod::ints, DEFERRED with Mod; GetIconData's ret) and Collection::Array<uint32_t> (PackageFile::_iconData)
+    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: audit WORK, left: two header types by caller: RtIO::ModArrayOf<uint32_t> (GetIconData's ret) and Collection::Array<uint32_t> (Mod::ints, PackageFile::_iconData)
     const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: audit WORK, left: as line 299 (the source is PackageFile::_iconData, a Collection::Array<uint32_t>, at GetIconData)
     ArrayFreeBuffer(dst);                       // CALL 0x1800111a0
     ArrayAssignGrow(dst, src, 4, 4);
@@ -307,7 +283,7 @@ void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
 
 // 0x180011220 — Collection::Array<uint8>::operator=
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
-    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: audit WORK, left: two header types by caller: RtIO::ModArrayOf<uint8_t> (Mod::bytes, DEFERRED with Mod; GetPreviewData's ret) and Collection::Array<uint8_t> (PackageFile::_previewData, array.cpp's shader byte-code inner arrays)
+    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: audit WORK, left: two header types by caller: RtIO::ModArrayOf<uint8_t> (GetPreviewData's ret) and Collection::Array<uint8_t> (Mod::bytes, PackageFile::_previewData, array.cpp's shader byte-code inner arrays)
     const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: audit WORK, left: as line 313 (sources: PackageFile::_previewData and the inner Array<uint8> element op)
     ArrayFreeBuffer(dst);                       // CALL 0x1800112a0
     ArrayAssignGrow(dst, src, 1, 1);
@@ -319,37 +295,29 @@ void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
     return dst;
 }
 
-// 0x1800091f0 — Collection::Array<Filename>::operator=. Unlike the two above it
-// carries its own self-assignment early-out (`CMP RCX,RDX; JNZ`), because its
-// callers do not all guard.
-void* RtColl_ArrayFilenameAssign_1800091f0(ModArrayOf<System::Filename>* dst, const ModArrayOf<System::Filename>* src) {
-    if (dst == src) return dst;
-    // ENDGAME B.3.2 step 2 — retail 0x1800098d0; see the identical conversion's
-    // rationale on Mod::~Mod's +0x70 site below (trait-derived, no explicit spec).
-    reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
-    ArrayAssignGrow(dst, src, 8, 8);
-    for (int32_t i = 0; i < dst->size; ++i) {
-        System::Filename* d = dst->data + i;
-        if (d == nullptr) continue;
-        // CALL 0x1800067d0 — Filename::Filename(Filename const&). `d` is inside
-        // the buffer ArrayAssignGrow just (re)allocated: raw, uninitialised
-        // bytes, so placement-construct into it.
-        new (d) System::Filename(src->data[i]);
-    }
-    return dst;
-}
+// 0x1800091f0 — Collection::Array<Filename>::operator=: its own self-assignment
+// early-out (`CMP RCX,RDX; JNZ`), ~Array 0x1800098d0, the growth rule above at
+// stride 8, then the copy ctor 0x1800067d0 per element into the raw buffer. That
+// is `Collection::Array<System::Filename>::Assign` (rtcoll::ArrayAssignCore with
+// the trait row: self test, destroy-then-free, the same grow, placement copy per
+// element behind the same computed-address test), so Mod::files assigns through
+// it by name (B.4 acceptance MOD); the hand-written body that stood here is gone.
+
+// The mod path set's node walk, typed on the set's own node
+// (`ModFilenameSet::Node`, Modification.h).
+using ModPathNode = ModFilenameSet::Node;
 
 // 0x180010570 — Set<Filename> node alloc + init. RCX (the owning set) is
 // spilled at 0x180010570 and NEVER READ AGAIN — the same shape lane FIND
 // documented for DestroyFilenameArray, and the reason this signature carries an
 // ignored first argument at all.
-static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const System::Filename* key,
-                              ModSetNode* parent) {
-    ModSetNode* n = static_cast<ModSetNode*>(::System::MemoryAllocator::MemAlloc(0x28, 8));
+static ModPathNode* SetNodeNew(void* /*ignoredSet*/, const System::Filename* key,
+                               ModPathNode* parent) {
+    ModPathNode* n = static_cast<ModPathNode*>(::System::MemoryAllocator::MemAlloc(0x28, 8));
     if (n == nullptr) return nullptr;
     // CALL 0x1800067d0 — Filename copy ctor, into the freshly allocated node's
-    // raw `key` bytes.
-    new (&n->key) System::Filename(*key);
+    // raw element bytes.
+    new (&n->element) System::Filename(*key);
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;
@@ -358,228 +326,181 @@ static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const System::Filename* key,
     return n;
 }
 
-// The Set<Filename> instantiation whose node walk this file needs. Only
-// `DestroySubtree` is used from it, and that member touches nothing but `Node`,
-// `T::~T` and the allocator door — never `Compare`, never `KeyTraits`, never
-// `AvlOps` — so the compare policy here is immaterial and does NOT have to be
-// (and deliberately is not) `modification_refresh.cpp`'s `FilenameICompare`:
-// the keyed machinery lives in that file and stays there.
-using ModSetT = Collection::Set<System::Filename>;
-static_assert(sizeof(ModSetT::Node) == sizeof(ModSetNode),
-              "Set<Filename>::Node is ModSetNode's 0x28 bytes");
-static_assert(offsetof(ModSetT::Node, parent) == offsetof(ModSetNode, parent), "parent");
-static_assert(offsetof(ModSetT::Node, left)   == offsetof(ModSetNode, left),   "left");
-static_assert(offsetof(ModSetT::Node, right)  == offsetof(ModSetNode, right),  "right");
-
 // 0x1800104f0 — Set<Filename> clone-subtree. The `MOV word ptr [RAX+0x22]`
 // immediately after the allocation is UNGUARDED in retail: a failed node
 // allocation writes through null. Transcribed, not guarded — the project's rule
 // is that a faithful crash names an upstream problem (an exhausted heap here),
 // and a guard would silently produce a half-built tree instead.
-ModSetNode* RtColl_SetCloneSubtree_1800104f0(void* set, const ModSetNode* src) {
-    ModSetNode* dup = SetNodeNew(set, &src->key, nullptr);
+ModPathNode* RtColl_SetCloneSubtree_1800104f0(void* set, const ModPathNode* src) {
+    ModPathNode* dup = SetNodeNew(set, &src->element, nullptr);
     dup->height = src->height;       // copied in THIS order: +0x22 then +0x20
     dup->balance = src->balance;
     if (src->left != nullptr) {
-        ModSetNode* c = RtColl_SetCloneSubtree_1800104f0(set, src->left);
+        ModPathNode* c = RtColl_SetCloneSubtree_1800104f0(set, src->left);
         dup->left = c;
         c->parent = dup;
     }
     if (src->right != nullptr) {
-        ModSetNode* c = RtColl_SetCloneSubtree_1800104f0(set, src->right);
+        ModPathNode* c = RtColl_SetCloneSubtree_1800104f0(set, src->right);
         dup->right = c;
         c->parent = dup;
     }
     return dup;
 }
 
-// 0x180010470 — Set<Filename> destroy-subtree. Post-order, then the key's
-// release, then the node. The null test is at entry, which is why every caller
-// hands it a possibly-null child.
-//
-// ENDGAME B.3.2 closing pass: FOLDED onto `Collection::Set<Filename>::
-// DestroySubtree`, which is the same walk in the same order —
-//   if (!n) return; left; right; element.~T(); Free(n);
-// — and the same free: the template's `Alloc::Free` for `DefaultAllocator` is
-// `SetNodeFree` -> `rtsetavl::SetNodeFree(nullptr, n)` -> `rtcoll::DoorFree()`,
-// which is byte-for-byte where this file's own `ModMemFree` went. The node's
-// `key` is `Node::element` at +0x00 (static_asserted above), so the Filename
-// release is the same dtor on the same bytes. The set argument stays in the
-// signature because retail's 0x180010470 takes it and ignores it.
-void RtColl_SetDestroySubtree_180010470(void* set, void* nodev) {
-    (void)set;
-    ModSetT::DestroySubtree(static_cast<ModSetT::Node*>(nodev));   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
-}
+// 0x180010470 — Set<Filename> destroy-subtree: post-order, then the key's
+// release, then the node; the null test is at entry. It IS
+// `Collection::Set<Filename>::DestroySubtree` (the same walk, the same
+// `~Filename`, the same free), which Mod's operator= and the set's own ~Set
+// (Clear: the root's two subtrees through it, then the root) call by name.
 
 // ============================================================================
-// The Mod-entry lifecycle triple
+// The Mod-entry lifecycle (B.4 acceptance MOD: Mod's own members)
 // ============================================================================
+
+// RefreshList's stack record, 0x1800af790..0x1800af7d7: retail zeroes the
+// members one by one in declaration order and leaves +0x24 / +0x28 / +0x2c (icon
+// width, icon height, crc) and the pad at +0x51..+0x57 UNWRITTEN — every path
+// that appends the record writes all three first, and the two early-out paths
+// destroy it without reading them. So `i24` / `i28` / `i2c` have no initialiser
+// here. The one store this adds against retail is the set's `_pad0c`
+// (`Collection::Set()` zeroes it; retail writes only the root qword and the
+// count dword): dead, nothing reads +0x6c.
+Mod::Mod()
+    : name(), author(), description(),
+      i18(0), i1c(0),                 // one qword store in retail
+      order(0),
+      ints(), bytes(),
+      enabled(0),
+      file(),
+      set(),
+      files() {
+}
 
 // 0x1800101e0 — Mod::Mod(const Mod&)
 //
 // Retail zeroes each member immediately before filling it, member by member, in
-// declaration order, rather than zeroing the whole record up front. That is
-// reproduced literally: the Array members are zeroed and then handed to
-// operator=, which begins by FREEING dst->data — so the zero is what stops the
-// copy ctor from freeing the caller's uninitialised stack.
-void* RtIo_Mod_CopyCtor_1800101e0(Mod* dst, const Mod* src) {
+// declaration order. The member initialisers below are the zeroes and the
+// copies that need no body: the three Strings are their copy ctor (the null
+// store, then the adopt: 0x180010208..0x180010241, String's 0x18000c780 shape)
+// and the six ints are copied, in order. The body is then retail's fill order
+// from +0x30 on, statement for statement:
+//   * ints / bytes: zeroed (Array()), then retail's `ADD RCX,0x30 ; CMP RCX,RDX`
+//     self test on the sub-object and the CALL to its operator= (0x180011110 /
+//     0x180011220), which begins by freeing dst->data — the zero is what makes
+//     that free safe.
+//   * enabled: copied.
+//   * file: retail CALLs the Filename copy ctor 0x1800067d0 (null store, adopt,
+//     AdjustDelimiters twice); here the member is default-constructed (the same
+//     null store) and assigned with Filename::operator= 0x180006770 (adopt,
+//     AdjustDelimiters once). On a null destination the two leave the same
+//     buffer: AdjustDelimiters converges in one call (its last scan finds
+//     nothing to splice, and a fresh scan with lastDelim = -1 splices a subset
+//     of what that scan would), so retail's second call is a no-op on the first
+//     call's result. One AdjustDelimiters call fewer than retail; no store,
+//     refcount or free differs.
+//   * set: zeroed (Set(): root, count — and `_pad0c`, the one store retail
+//     does not make, dead: nothing reads +0x6c), then retail's self test, the
+//     clone 0x1800104f0 when the source has a root, and the count.
+//   * files: zeroed, then Array<Filename>::operator= (0x1800091f0).
+Mod::Mod(const Mod& src)
+    : name(src.name), author(src.author), description(src.description),
+      i18(src.i18), i1c(src.i1c), order(src.order),
+      i24(src.i24), i28(src.i28), i2c(src.i2c),
+      ints(), bytes(),
+      file(),
+      set(),
+      files() {
+    if (&ints != &src.ints)
+        RtColl_ArrayI32Assign_180011110(&ints, &src.ints);
+    if (&bytes != &src.bytes)
+        RtColl_ArrayU8Assign_180011220(&bytes, &src.bytes);
 
-    AdoptShared(&dst->name, src->name);
-    AdoptShared(&dst->author, src->author);
-    AdoptShared(&dst->description, src->description);
+    enabled = src.enabled;
 
-    dst->i18 = src->i18;
-    dst->i1c = src->i1c;
-    dst->order = src->order;
-    dst->i24 = src->i24;
-    dst->i28 = src->i28;
-    dst->i2c = src->i2c;
+    file = src.file;
 
-    // 0x180010265: retail advances BOTH pointers by 0x30 and then compares
-    // them, which is a self-copy guard on the sub-object, not on the record.
-    dst->ints.data = nullptr;
-    dst->ints.size = 0;
-    dst->ints.capacity = 0;
-    if (&dst->ints != &src->ints)
-        RtColl_ArrayI32Assign_180011110(&dst->ints, &src->ints);
-
-    dst->bytes.data = nullptr;
-    dst->bytes.size = 0;
-    dst->bytes.capacity = 0;
-    if (&dst->bytes != &src->bytes)
-        RtColl_ArrayU8Assign_180011220(&dst->bytes, &src->bytes);
-
-    dst->enabled = src->enabled;
-
-    // CALL 0x1800067d0 — Filename copy ctor (zeroes, adopts, AdjustDelimiters).
-    // `dst->file` is raw, uninitialised bytes here (part of the Mod the caller
-    // just zeroed member-by-member), so the value is placement-constructed.
-    new (&RtSystem::Sys(dst->file)) System::Filename(RtSystem::Sys(src->file));
-
-    dst->set.root = nullptr;
-    dst->set.count = 0;
-    if (&src->set != &dst->set) {
-        if (src->set.root != nullptr)
-            dst->set.root = RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root);
-        dst->set.count = src->set.count;
+    if (&src.set != &set) {
+        if (src.set._root != nullptr)
+            set._root = RtColl_SetCloneSubtree_1800104f0(&set, src.set._root);
+        set._count = src.set._count;
     }
 
-    dst->files.data = nullptr;
-    dst->files.size = 0;
-    dst->files.capacity = 0;
-    RtColl_ArrayFilenameAssign_1800091f0(&dst->files, &src->files);
-
-    return dst;
+    files = src.files;
 }
 
-// 0x180026ef0 — Mod::operator=(const Mod&)
-void* RtIo_Mod_Assign_180026ef0(Mod* dst, const Mod* src) {
+// 0x180026ef0 — Mod::operator=(const Mod&). No self test on the record: retail
+// tests each sub-object (the Strings and the Filename on their buffers, the
+// Arrays and the Set on their addresses).
+Mod& Mod::operator=(const Mod& src) {
+    name = src.name;                  // 0x180026f0a..0x180026f46
+    author = src.author;
+    description = src.description;
 
-    AssignShared(&dst->name, src->name);
-    AssignShared(&dst->author, src->author);
-    AssignShared(&dst->description, src->description);
+    i18 = src.i18;
+    i1c = src.i1c;
+    order = src.order;
+    i24 = src.i24;
+    i28 = src.i28;
+    i2c = src.i2c;
 
-    dst->i18 = src->i18;
-    dst->i1c = src->i1c;
-    dst->order = src->order;
-    dst->i24 = src->i24;
-    dst->i28 = src->i28;
-    dst->i2c = src->i2c;
+    if (&ints != &src.ints)
+        RtColl_ArrayI32Assign_180011110(&ints, &src.ints);
+    if (&bytes != &src.bytes)
+        RtColl_ArrayU8Assign_180011220(&bytes, &src.bytes);
 
-    if (&dst->ints != &src->ints)
-        RtColl_ArrayI32Assign_180011110(&dst->ints, &src->ints);
-    if (&dst->bytes != &src->bytes)
-        RtColl_ArrayU8Assign_180011220(&dst->bytes, &src->bytes);
+    enabled = src.enabled;
 
-    dst->enabled = src->enabled;
+    // The plain shared assign and THEN AdjustDelimiters (0x18002704a CALL
+    // 0x1800c6970): `Filename::operator=(const Filename&)`, 0x180006770.
+    file = src.file;
 
-    // The Filename at +0x58 gets the plain shared assign and THEN
-    // AdjustDelimiters (0x18002704a CALL 0x1800c6970) — not the copy ctor,
-    // because the destination already owns a string. That PAIR is
-    // `Filename::operator=(const Filename&)`, 0x180006770 (Filename.h
-    // DELIMITERS note): self-guard on the buffer, release, adopt, normalise.
-    RtSystem::Sys(dst->file) = RtSystem::Sys(src->file);
-
-    if (&src->set != &dst->set) {
-        if (dst->set.root != nullptr) {
-            RtColl_SetDestroySubtree_180010470(&dst->set, dst->set.root);
-            dst->set.root = nullptr;
-            dst->set.count = 0;
+    if (&src.set != &set) {
+        if (set._root != nullptr) {
+            ModFilenameSet::DestroySubtree(set._root);    // CALL 0x180010470
+            set._root = nullptr;
+            set._count = 0;
         }
-        if (src->set.root != nullptr)
-            dst->set.root = RtColl_SetCloneSubtree_1800104f0(&dst->set, src->set.root);
-        dst->set.count = src->set.count;
+        if (src.set._root != nullptr)
+            set._root = RtColl_SetCloneSubtree_1800104f0(&set, src.set._root);
+        set._count = src.set._count;
     }
 
-    RtColl_ArrayFilenameAssign_1800091f0(&dst->files, &src->files);
-    return dst;
+    files = src.files;                // CALL 0x1800091f0
+    return *this;
 }
 
-// 0x180011460 — Mod::~Mod(). Reverse declaration order, as MSVC emits.
-void RtIo_Mod_Dtor_180011460(Mod* self) {
+// 0x180011460 — Mod::~Mod(). No body: retail's eight releases are the member
+// destructors in reverse declaration order (Modification.h) — files'
+// ~Array (0x1800098d0), the set's Clear (0x180010470 over the tree, then root
+// and count zeroed), ~Filename on +0x58, bytes' and ints' ~Array (0x1800112a0 /
+// 0x1800111a0), then the three Strings, description first.
+Mod::~Mod() = default;
+// 0x180010b80 / 0x180010110 / 0x180028610 — Array<Mod>'s ~Array, operator= and
+// SetSize are `RtIO::ModList`'s members (DestroyAndFree / Assign / SetSize over
+// the erased core); this row is what makes them Mod's.
 
-    // ENDGAME B.3.2 step 2 — +0x70 retail 0x1800098d0. `System::Filename` is a
-    // real class (B.3.1), so `SpecFor<System::Filename>()` builds EXACTLY the
-    // row this shim hand-derives: assign is a placement copy-construct
-    // (filesystem_find_win.cpp's `AssignFilename`) and destroy is a per-element
-    // `~Filename()` loop (`DestroyFilenameArray`) — the same two bodies, so the
-    // trait-derived `Collection::Array<System::Filename>` needs no explicit
-    // spec. `files` stays the `ModArray` POD (Mod is not yet a class), so this
-    // is the transitional bridge, not a field re-type.
-    reinterpret_cast<Collection::Array<System::Filename>&>(self->files).~Array();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
+}  // namespace RtIO
 
-    RtColl_SetDestroySubtree_180010470(&self->set, self->set.root);   // +0x60
-    self->set.root = nullptr;
-    self->set.count = 0;
+namespace rtcoll {
 
-    // +0x58 — retail's Filename dtor (0x180006980), which is String::Release()
-    // on the same bytes (filename.cpp's ~Filename); byte-identical to the
-    // refcount code this replaced.
-    RtSystem::Sys(self->file).~Filename();
+// stride 0x80, align 8. byteCopy=false: the assign refcounts and clones.
+// assign = the copy ctor into the raw slot (0x1800101e0); no init arm (SetSize
+// 0x180028610 has none: its fill loop copies from the old buffer or the fill,
+// nothing else); destroy = ~Mod per element in address order (0x180010b80's
+// `for (i = size; i > 0; --i, ++p)`). seedZero is the whole element: every
+// member is a pointer the element ops dereference.
+const ArraySpec kSpec_Mod = {                 // 0x180010b80 / 0x180010110 / 0x180028610
+    "Array<IO::Modification::Mod:0x80>", 0x80, 8,
+    &TAssign<RtIO::Mod>, nullptr, &TDestroy<RtIO::Mod>,
+    /*byteCopy        */ false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0x00, 0x80 };
 
-    // ENDGAME B.3.2 step 2 — +0x40/+0x30, retail 0x1800112a0 / 0x180011110.
-    // `uint8_t`/`int32_t` are trivially destructible, so `SpecFor<T>()` sets
-    // `destroy = nullptr` and the class's dtor is exactly `ArrayFreeBuffer`
-    // (`MemFree(_data)` then zero the three fields) through the same
-    // `rtcoll::MemFree` door (0x1800c7ad0) — no explicit spec needed.
-    reinterpret_cast<Collection::Array<uint8_t>&>(self->bytes).~Array();   // +0x40  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
-    reinterpret_cast<Collection::Array<int32_t>&>(self->ints).~Array();   // +0x30  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
+}  // namespace rtcoll
 
-    char** shared[3] = { &self->description, &self->author, &self->name };
-    for (int i = 0; i < 3; ++i) {
-        char* s = *shared[i];
-        if (s == nullptr) continue;
-        if (--RefCount(s) == 0) {
-            *shared[i] = s - 8;
-            ::System::MemoryAllocator::MemFree(*shared[i]);
-        } else {
-            *shared[i] = nullptr;
-        }
-    }
-}
-
-// 0x180010b80 — Collection::Array<Mod>::~Array
-void* RtColl_ArrayModDtor_180010b80(ModArrayOf<Mod>* a) {
-    Mod* p = a->data;
-    for (int32_t i = a->size; i > 0; --i, ++p)
-        RtIo_Mod_Dtor_180011460(p);
-    return ArrayFreeBuffer(a);
-}
-
-// 0x180010110 — Collection::Array<Mod>::operator=, resolved in our tree as
-// fn_ModArrayCopy (engine_funcs.cpp:1747) and again as ModArrayCopy()
-// (runtime/src/engine/loops.cpp:230). Both doors now land here.
-ModArrayOf<Mod>* RtColl_ArrayModAssign_180010110(ModArrayOf<Mod>* dst, const ModArrayOf<Mod>* src) {
-    if (dst == src) return dst;
-    RtColl_ArrayModDtor_180010b80(dst);          // CALL 0x180010b80
-    ArrayAssignGrow(dst, src, 0x80, 8);
-    for (int32_t i = 0; i < dst->size; ++i) {
-        Mod* d = dst->data + i;
-        if (d == nullptr) continue;
-        RtIo_Mod_CopyCtor_1800101e0(d, src->data + i);
-    }
-    return dst;
-}
+namespace RtIO {
 
 // ============================================================================
 // The five Modification entry points
@@ -655,7 +576,7 @@ namespace IO {
 Modification* Modification::_singleton = nullptr;
 
 int Modification::GetCount() const {
-    return _mods.size;
+    return _mods._size;
 }
 
 // ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z      retail 0x18000da80
@@ -667,7 +588,7 @@ int Modification::GetCount() const {
 // index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
 // extension, and it is load-bearing. Unbounded, exactly as retail is.
 const RtIO::Mod& Modification::GetModification(int index) const {
-    return _mods.data[index];   // a signed int index: MOVSXD, then the 0x80 stride
+    return _mods._data[index];   // a signed int index: MOVSXD, then the 0x80 stride
 }
 
 // ?Enable@Modification@IO@@QEAAXH_N@Z                       retail 0x1800aeab0
@@ -681,7 +602,7 @@ const RtIO::Mod& Modification::GetModification(int index) const {
 // early" tidy-up would be a real behaviour change to IsDirty.
 void Modification::Enable(int index, bool value) {
     _dirty = 1;
-    _mods.data[index].enabled = static_cast<uint8_t>(value);
+    _mods._data[index].enabled = static_cast<uint8_t>(value);
 }
 
 // ?Swap@Modification@IO@@QEAAXHH@Z                          retail 0x1800aeb20
@@ -702,12 +623,10 @@ void Modification::Swap(int a, int b) {
 
     _dirty = 1;
 
-    RtIO::Mod tmp;   // a POD: uninitialised stack, as retail's
-    RtIO::RtIo_Mod_CopyCtor_1800101e0(&tmp, _mods.data + a);
-    RtIO::RtIo_Mod_Assign_180026ef0(_mods.data + a, _mods.data + b);
-    RtIO::RtIo_Mod_Assign_180026ef0(_mods.data + b, &tmp);
-    RtIO::RtIo_Mod_Dtor_180011460(&tmp);
-}
+    RtIO::Mod tmp(_mods._data[a]);       // 0x1800101e0
+    _mods._data[a] = _mods._data[b];     // 0x180026ef0
+    _mods._data[b] = tmp;                // 0x180026ef0
+}   // ~tmp: 0x180011460
 
 // ?SaveList@Modification@IO@@QEAAXXZ                        retail 0x1800b05f0
 //
@@ -734,23 +653,21 @@ void Modification::Swap(int a, int b) {
 void Modification::SaveList() {
     if (!_savingSettings) {
         // 0x1800b0619: LEA RDX,[RCX+8] ; ADD RCX,0x18 ; CALL 0x180010110
-        RtIO::RtColl_ArrayModAssign_180010110(&_savedMods, &_mods);
+        _savedMods = _mods;
         return;
     }
 
     ::IO::Persistence* p = ::IO::Persistence::_singleton;   // ENDGAME B.3.9 IO (D7): the class static
 
-    for (int i = 0; i < _mods.size; ++i) {
-        RtIO::Mod* m = _mods.data + i;
+    for (int i = 0; i < _mods._size; ++i) {
+        RtIO::Mod* m = _mods._data + i;
         m->order = i;
 
         // GetPathFilename's by-value return constructs `tmp` in place (the
-        // hidden return slot). `m->file` is a `RtSystem::Filename` MEMBER of the
-        // not-yet-converted `Mod`, so it is reached through a cast.
+        // hidden return slot).
         char* ref;
         {
-            System::Filename tmp(reinterpret_cast<const System::Filename*>(&m->file)   // B.3.x bridge  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::file is the RtSystem::Filename POD
-                                     ->GetPathFilename(true));
+            System::Filename tmp(m->file.GetPathFilename(true));
 
             // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned
             // buffer, then release the temporary. `ref` outlives the scope

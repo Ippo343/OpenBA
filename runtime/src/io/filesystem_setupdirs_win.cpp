@@ -120,7 +120,6 @@
 #include "../../types/system/Filename.h"
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
 #include "../../src/system/string.h"
-#include "../../src/system/pod_bridge.h"
 #include "../../src/system/widestring.h"
 #include "../../src/system/setupdir_helpers.h"
 

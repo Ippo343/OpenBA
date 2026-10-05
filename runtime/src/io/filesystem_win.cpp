@@ -68,7 +68,6 @@
 
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
-#include "../../src/system/pod_bridge.h"
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.4a closing: the member
 #include "../../types/system/Error.h"
 #include "../../types/system/WideString.h"

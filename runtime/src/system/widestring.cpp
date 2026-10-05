@@ -101,7 +101,6 @@
 
 #include "../../types/system/String.h"
 #include "string.h"
-#include "pod_bridge.h"
 #include "widestring.h"
 
 namespace RtSystem {

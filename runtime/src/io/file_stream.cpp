@@ -153,7 +153,6 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
 
 namespace RtIO {
 
