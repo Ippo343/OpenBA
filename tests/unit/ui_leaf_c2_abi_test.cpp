@@ -760,7 +760,7 @@ UNIT_TEST(b39_uia_image_family_ctors_make_retails_stores) {
         UI::ImageDescription* d = ::new (buf) UI::ImageDescription();
         CHECK_EQ(d->_id, -1);                         // ElementDescription() ran
         CHECK(d->_spriteSheet == nullptr);
-        CHECK(d->_spriteName == nullptr);
+        CHECK(d->_spriteName._data == nullptr);
         CHECK_EQ(d->_width, -1);
         CHECK_EQ(d->_height, -1);
         ImageDescriptionProbe probe;

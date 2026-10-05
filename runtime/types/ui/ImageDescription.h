@@ -91,7 +91,6 @@ public:
     // QWORD zero and ONE QWORD -1 at +0x78 (covering +0x78 and +0x7c).
     ImageDescription() : ElementDescription() {
         _spriteSheet = nullptr;
-        _spriteName  = nullptr;
         _width  = -1;
         _height = -1;
     }
@@ -131,7 +130,7 @@ private:
 
 public:
     SpriteSheet* _spriteSheet; // +0x68 (B4 H4: typed)  ExternalPtr<UI::SpriteSheet> (one raw pointer)
-    char*    _spriteName;     // +0x70  System::String's one pointer
+    System::String _spriteName;  // +0x70  ctor 0x1801182d0, dtor 0x180118370 (B4 Y RT-UI: a real member)
     int32_t  _width;          // +0x78  ctor -1 (one qword store with +0x7c)
     int32_t  _height;         // +0x7c  ctor -1
 };
