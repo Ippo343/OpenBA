@@ -350,6 +350,6 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
     // pointer's integer value, truncated.
     if (g_RtShowDialogDefect == 2)                                       // control
         return static_cast<int32_t>(
-            reinterpret_cast<uintptr_t>(dialogArg->Get()->_parent.Get()));   // LEFT: WORK done to ptr_int (the control's value is the parent pointer's low dword, as an integer)
+            reinterpret_cast<uintptr_t>(dialogArg->Get()->_parent.Get()));   // LEFT: ptr_int: the defect-2 control's value is the parent pointer's low dword as an integer
     return dialogArg->Get()->_result;
 }

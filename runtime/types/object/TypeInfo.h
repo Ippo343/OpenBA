@@ -403,7 +403,7 @@ inline void Destroy(Base* p) { delete p; }
 // behaviour; removing the deviation is not this step. ENDGAME B.3R, W0-P0c.
 inline bool IsDerivedFromNullSafe(const void* p, uint32_t typeId) {
     if (!p) return false;
-    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);  // LEFT: SIG `const void* p` (callers tree-wide hand in untyped refs)
+    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);  // LEFT: audit WORK, left: IsDerivedFromNullSafe has 586 call sites (mostly code/, other partitions), many holding void*; typing p needs every caller's argument Base-derived
 }
 
 using TypeRecord = RtObject::TypeRecord;

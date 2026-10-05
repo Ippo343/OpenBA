@@ -906,7 +906,7 @@ extern "C" void* RtGraphics_ParticlePool_OperatorNew() {
 extern "C" RtGraphics::ParticleBoundsRecord* RtGraphics_ParticlePoolRecord_Ctor(
         void* recv, const Graphics::Particle* particle) {
     RtGraphics::ParticleBoundsRecord* const r =
-        static_cast<RtGraphics::ParticleBoundsRecord*>(recv);   // LEFT: SIG the pool-record ctor door takes the pool's raw slot (void* recv) and builds the record in it
+        static_cast<RtGraphics::ParticleBoundsRecord*>(recv);   // LEFT: audit WORK, not executed this pass (SIG unit RtGraphics_ParticlePoolRecord_Ctor (doable)); blocker; SIG the pool-record ctor door takes the pool's raw slot (void* recv) and builds the record in it
     r->_bounds.min.x = 1e8f;   r->_bounds.min.y = 1e8f;   r->_bounds.min.z = 1e8f;
     r->_bounds.max.x = -1e8f;  r->_bounds.max.y = -1e8f;  r->_bounds.max.z = -1e8f;
     r->_records._data     = nullptr;   // +0x18

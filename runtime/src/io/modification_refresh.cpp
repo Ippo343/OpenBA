@@ -784,7 +784,7 @@ void Modification::RefreshList() {
             //   * the retrace starts at the PARENT of the new node and takes a
             //     SLOT, re-read after every rotation.
             //   * a duplicate key returns the existing node and does not count.
-            reinterpret_cast<ModFilenameSet&>(m->set).Insert(key);  // LEFT: H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
+            reinterpret_cast<ModFilenameSet&>(m->set).Insert(key);  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
             // ~key releases here, retail's 0x1800afeb5 release -- the last
             // statement of the loop body, exactly where retail's release sat.
         }

@@ -285,12 +285,12 @@ unsigned int __stdcall Thread::ThreadFunc(void* param) {
     while (r == 0) {
         using WorkFn = void (*)(RtSystem::Thread*);
 
-        void** vt = static_cast<void**>(self->vtable);  // LEFT: the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
+        void** vt = static_cast<void**>(self->vtable);  // LEFT: audit DEFERRED:System::Thread slots typed (FLOOR 5 / B34 3.1: slot 1 recursion settled first); the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
         self->runFlags |= 1u;
-        reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work  // LEFT: the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
+        reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work  // LEFT: audit DEFERRED:System::Thread slots typed (FLOOR 5 / B34 3.1: slot 1 recursion settled first); the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
 
-        void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does  // LEFT: the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
-        reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted  // LEFT: the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
+        void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does  // LEFT: audit DEFERRED:System::Thread slots typed (FLOOR 5 / B34 3.1: slot 1 recursion settled first); the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
+        reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted  // LEFT: audit DEFERRED:System::Thread slots typed (FLOOR 5 / B34 3.1: slot 1 recursion settled first); the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
 
         HANDLE finished = self->hFinished;
         self->runFlags &= ~1u;

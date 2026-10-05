@@ -427,11 +427,11 @@ Graphics::AnimationStateArray* Rt_ArrayAssign_18005b130(Graphics::AnimationState
     return d;
 }
 void* Rt_ArrayAssign_18001b700(void* d, const void* s) {   // Array<AnimationState::Layer>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
+    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: audit WORK, left: Array<AnimationState::Layer>'s callers are AnimationState::_layers and MeshInstance::_animation._layers (DEFERRED H5 member), both on the trait row, not kSpec_AnimLayer; typing the door needs both members on retail's row
                            0x38, 8, &Clear_18001c480, &Assign38Q);
 }
 void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<InterpolatedState<Transform>>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
+    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: audit WORK, left: Array<InterpolatedState<Transform>>'s callers hold two element types (AnimationState::_nodes over Graphics::InterpolatedState<Math::Transform>, MeshInstance::_nodes over the RtGraphics::InterpolatedTransform mirror): unify the twin first
                            0x38, 4, &Clear_18001c550, &Assign38D);
 }
 

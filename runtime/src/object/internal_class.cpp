@@ -164,7 +164,7 @@ void* MemoryStreamCtor(void* self) {
     return ::new (self) IO::MemoryStream();
 }
 void MemoryStreamDtor(void* self) {
-    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();  // LEFT: R-IO Encoding / ReaderWriter / Stream / Serializer views (runtime/types/io)
+    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();  // LEFT: audit WORK, left: Clone's two stream locals go through this seam because make unit links no IO::MemoryStream (the host body aborts); a real IO::MemoryStream local needs the unit build to link the stream class first
 }
 
 #endif
@@ -484,7 +484,7 @@ Internal* Internal::Clone() {
     writeStream.cursor         = 0;                       // 0x1800bfbe0  +0x24
     writeStream.base.direction = 1;                       // 0x1800bfbe7  +0x08
     writeStream.ownsData       = 1;                       // 0x1800bfbee  +0x20
-    Persist(*reinterpret_cast<IO::Stream*>(&writeStream));   // 0x1800bfbfc slot 3   // LEFT: RtIo:: POD mirror of the IO stream class (H10, R-IO)
+    Persist(*reinterpret_cast<IO::Stream*>(&writeStream));   // 0x1800bfbfc slot 3   // LEFT: audit WORK, left: the write stream is the RtIo::MemoryStream POD local of the unit-build seam (see MemoryStreamDtor); a real IO::MemoryStream local needs the stream class linked into make unit
 
     // ---- the READ stream: 0x1800bfbff .. 0x1800bfc7f -----------------------
     RtIo::MemoryStream readStream;
@@ -504,7 +504,7 @@ Internal* Internal::Clone() {
     // `Base` non-virtually at offset 0, which every raw slot call in this tree
     // already assumes.
     Internal* const result = static_cast<Internal*>(clone);
-    result->Persist(*reinterpret_cast<IO::Stream*>(&readStream));   // 0x1800bfc7f slot 3   // LEFT: RtIo:: POD mirror of the IO stream class (H10, R-IO)
+    result->Persist(*reinterpret_cast<IO::Stream*>(&readStream));   // 0x1800bfc7f slot 3   // LEFT: audit WORK, left: as line 487 (the read stream)
 
     // ---- the two inlined destructors, READ FIRST ---------------------------
     // 0x1800bfc83..0x1800bfcbc restamps 0x1801555b0 then 0x1801549a0 and frees

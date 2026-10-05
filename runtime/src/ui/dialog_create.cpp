@@ -316,7 +316,7 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
     // the second argument — the same slot the 6-arg AddController calls.
     // LEFT: `_root` is an InternalPtr<Element> in retail, held as Element*.
     dlg->_rootDescription->CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&_root),   // B.3.x bridge  // LEFT: DialogInstance::_root is Element* where retail holds InternalPtr<Element> (DialogInstance.h field spelling; the slot is passed by address)
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&_root),   // B.3.x bridge  // LEFT: audit WORK, not executed this pass (CLASS unit UI::DialogInstance (doable-with:InternalPtr<Element> trivially d); blocker; DialogInstance::_root is Element* where retail holds InternalPtr<Element> (DialogInstance.h field spelling; the slot is passed by address)
         dialogArg);
 
     _spriteSheet = dlg->_spriteSheet;             // +0x58

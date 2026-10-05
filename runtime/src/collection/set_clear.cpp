@@ -207,7 +207,7 @@ void Clear(RtIo::SettingsMap* set) {
     // post-order, then the root's element, then the root's node, then the two
     // zero stores — which retail performs even when the tree was already empty
     // (it branches to a second copy of them rather than skipping).
-    reinterpret_cast<PairSet*>(set)->Clear();  // LEFT: FLOOR? the settings map header (RtIo::SettingsMap) viewed as the Collection::Set<Pair<String,String>> instantiation whose Clear IS 0x18000f7d0: its owners (Persistence, Configuration) hold the three-word header, not the class (H5)
+    reinterpret_cast<PairSet*>(set)->Clear();  // LEFT: audit DEFERRED:RtIo::SettingsMap mirror (H10) -> the Set<Pair<String,String>> member (H5 behavio; FLOOR? the settings map header (RtIo::SettingsMap) viewed as the Collection::Set<Pair<String,String>> instantiation whose Clear IS 0x18000f7d0: its owners (Persistence, Configuration) hold the three-word header, not the class (H5)
 }
 
 }  // namespace rtsetclear

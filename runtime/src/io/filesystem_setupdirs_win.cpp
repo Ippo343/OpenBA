@@ -287,7 +287,7 @@ System::Filename FileSystem::GetRootDirectory() {
 
     // ~f and ~utf8 are retail's two releases at 0x1800ad6d1/0x1800ad6e3; only
     // the WideString, whose class does not exist yet, is still released by hand.
-    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
 
     // Safe to replay: reads no FileSystem state and allocates a fresh buffer
     // every call, so ours and theirs never share a pointer and only the TEXT

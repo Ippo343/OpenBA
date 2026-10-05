@@ -41,7 +41,7 @@ static void PrintSpriteValue(const char* label, const UI::Sprite& sprite) {
 // The void* receivers stay: code/Game declares these two with local externs.
 void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData) {
     UI::ImageElement* elem = self;
-    const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: SIG the code/Game extern passes the Sprite as a void* byte buffer (debug harness; wave X)
+    const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: audit WORK, left: buildui / buildrequirementui pass raw uint8_t[16/24] buffers the Debug Sprite ctor fills (a UI::Sprite local would construct twice)
 #ifdef _DEBUG
     printf("[ImageElement::SetSprite] this=%p\n", self);
     PrintSpriteValue("  OLD", elem->_sprite);
@@ -74,7 +74,7 @@ void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData) {
 // spriteData points to a 0x10-byte Sprite struct passed by value.
 void Debug_LabelElement_SetSprite(UI::LabelElement* self, void* spriteData) {
     UI::LabelElement* elem = self;
-    const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: SIG the code/Game extern passes the Sprite as a void* byte buffer (debug harness; wave X)
+    const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: audit WORK, left: as line 44 (the LabelElement callers pass raw uint8_t buffers)
 #ifdef _DEBUG
     printf("[LabelElement::SetSprite] this=%p\n", self);
     PrintSpriteValue("  OLD", elem->_sprite);

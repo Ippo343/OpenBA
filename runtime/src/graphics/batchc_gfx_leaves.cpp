@@ -798,7 +798,7 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
             item._geometry->Draw(
                 context,
                 group._cullCamera,
-                ExternalPtrHandle{ const_cast<MaterialInstance*>(item._instance) },  // LEFT: const_cast ExternalPtrHandle takes a non-const MaterialInstance* (X-RL left the handle parameters)
+                ExternalPtrHandle{ const_cast<MaterialInstance*>(item._instance) },  // LEFT: audit WORK, left: Geometry slot 2 Draw takes ExternalPtrHandle (non-const MaterialInstance*) across every overrider; the draw item holds const MaterialInstance*
                 _alphaT,
                 static_cast<int32_t>(item._arg5),
                 shaderIndex,

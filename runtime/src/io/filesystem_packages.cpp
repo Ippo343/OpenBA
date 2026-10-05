@@ -651,7 +651,7 @@ void FileSystem::ClosePackages() {
         // The 0x180008340 row itself is UNCHANGED and stays registered in
         // avl_trees.cpp: `code/` still reaches it by address.
         RtIO::PackfileIndexSet::DestroySubtree(
-            reinterpret_cast<RtIO::PackfileIndexSet::Node*>(root));  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
+            reinterpret_cast<RtIO::PackfileIndexSet::Node*>(root));  // LEFT: audit WORK, not executed this pass (a typed element / node accessor over the erased set (one hand-off, elem_str); blocker; the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
     }
     // Zeroed unconditionally, even when root was already null.
     _packfileIndexCount = 0;
@@ -754,7 +754,7 @@ void FileSystem::LoadPackages() {
     // B3R RT-IO: the call is rtsort::SortByKey70 by name (it was the address
     // door, which resolved to the same body).
     if (_packfiles._size > 1) {
-        rtsort::SortByKey70(reinterpret_cast<void**>(_packfiles._data), _packfiles._size);  // LEFT: SIG rtsort::SortByKey70(void**, int) (Collection.h, R-COLL); the element is IO::PackageFile, _priority +0x70
+        rtsort::SortByKey70(reinterpret_cast<void**>(_packfiles._data), _packfiles._size);  // LEFT: audit WORK, not executed this pass (SortByKey70(IO::PackageFile**, int); the element's _priority by name (one P); blocker; SIG rtsort::SortByKey70(void**, int) (Collection.h, R-COLL); the element is IO::PackageFile, _priority +0x70
     }
 
     // ---- LOOP 2: the user/mod pack filenames already on the FileSystem -----
@@ -831,8 +831,8 @@ void FileSystem::LoadPackages() {
                                         static_cast<uint32_t>(pi);
                 RtIO::PackfileIndexNode* out = nullptr;
                 rtavl::FilenameSetInsert(                                   // B.3.x bridge
-                    reinterpret_cast<rtsetavl::Set*>(&_packfileIndexRoot),  // LEFT: SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
-                    reinterpret_cast<rtsetavl::Node**>(&out), &key, &value);  // LEFT: SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
+                    reinterpret_cast<rtsetavl::Set*>(&_packfileIndexRoot),  // LEFT: audit WORK, not executed this pass (SIG unit rtavl::FilenameSetInsert (doable)); blocker; SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
+                    reinterpret_cast<rtsetavl::Node**>(&out), &key, &value);  // LEFT: audit WORK, not executed this pass (SIG unit rtavl::FilenameSetInsert (doable)); blocker; SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
                 ++inserted;
             }
 
