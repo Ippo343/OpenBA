@@ -525,7 +525,10 @@ public:
     // B.4: the element is `Graphics::InterpolatedState<Math::Transform>` (the
     // type `?GetInstanceTransforms@` / UpdateHierarchy name); trivially
     // destructible, so the member dtor is unchanged.
-    Collection::Array<InterpolatedState<Math::Transform>> _nodes;  // +0xf0
+    // B.4 Z MIRROR2 GFX: on retail's row (kSpec_InterpTransform), the one its
+    // copy ctor's 0x18001b810, SetMesh's 0x18005ac50 and ~MeshInstance's
+    // 0x18001c550 instantiate.
+    InterpTransformArray _nodes;                                   // +0xf0
     Vector3                                        _rootAnimationOffset; // +0x100
     float                                          _color[4];     // +0x10c ctor 1,1,1,1
     int16_t                                        _sortBias;     // +0x11c ctor 0

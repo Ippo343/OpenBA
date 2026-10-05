@@ -302,6 +302,9 @@ static_assert(offsetof(AnimationState, nodes)         == 0x38, "AnimationState::
 // 0x18005c8a0's init, operator= 0x18001b700, ~Array 0x18001c480.
 namespace rtcoll { namespace gfxanim {
 extern const ArraySpec kSpec_AnimLayer;
+// The row of `Array<InterpolatedState<Math::Transform>>`: SetSize 0x18005ac50's
+// identity init, operator= 0x18001b810, ~Array 0x18001c550 (J1).
+extern const ArraySpec kSpec_InterpTransform;
 } }
 
 namespace Graphics {
@@ -502,6 +505,14 @@ static_assert(sizeof(AnimationState::Layer) == 0x38,
 static_assert(offsetof(AnimationState, _instanced)  == 0x00, "AnimationState::_instanced @ +0x00");
 static_assert(offsetof(AnimationState, _layers)     == 0x08, "AnimationState::_layers @ +0x08");
 
+// B.4 Z MIRROR2 GFX: `Array<InterpolatedState<Math::Transform>>` on retail's
+// row (kSpec_InterpTransform: stride 0x38, alignment 4, no destroy step) --
+// `MeshInstance::_nodes` and `InstancedAnimationState::_nodes`, the two members
+// retail's 0x18005ac50 / 0x18001b810 / 0x18001c550 serve.
+using InterpTransformArray = Collection::Array<InterpolatedState<Math::Transform>,
+                                               Collection::DefaultAllocator,
+                                               Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_InterpTransform>>;
+
 // ============================================================================
 // Graphics::InstancedAnimationState — 0x48 bytes, the element of
 // `AnimationManager::Instance::_states` (one per frame of the instanced clip).
@@ -533,7 +544,7 @@ struct InstancedAnimationState {
     Math::Vector3 _rootOffset;           // +0x18  Update's rootOffsetOut
     int32_t  _pad24;                     // +0x24  never written by the copy ctor
     Collection::Array<Math::Transform> _pose;   // +0x28  stride 0x1c
-    Collection::Array<InterpolatedState<Math::Transform>> _nodes;  // +0x38  stride 0x38
+    InterpTransformArray _nodes;         // +0x38  stride 0x38
 };
 static_assert(sizeof(InstancedAnimationState) == 0x48,
               "the AnimationManager's per-frame record is 0x48 bytes -- the stride "
@@ -600,13 +611,12 @@ using AnimationStateArray = Collection::Array<InstancedAnimationState, Collectio
                                               Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimState>>;
 }  // namespace Graphics
 namespace rtcoll {
-void* Rt_ArrayDtor_18001c550(void* a);  // 0x18001c550 ~Array<InterpolatedState<Transform>>
 void* Rt_ArrayDtor_180014090(Graphics::GraphicsMesh::NodeArray* a);  // 0x180014090 ~Array<GraphicsMesh::Node>
 void* Rt_ArrayDtor_18005bbb0(Graphics::AnimationStateArray* a);  // 0x18005bbb0 ~Array<AnimationState>
 void Rt_SetSize_18005aa30(Graphics::GraphicsMesh::NodeArray* a, int n);  // 0x18005aa30 Array<GraphicsMesh::Node>
 void Rt_SetSize_18005b1e0(Graphics::AnimationStateArray* a, int n);  // 0x18005b1e0 Array<AnimationState>
 void Rt_SetSize_18005c8a0(Graphics::AnimationState::LayerArray* a, int n);  // 0x18005c8a0 Array<AnimationState::Layer>
-void Rt_SetSize_18005ac50(void* a, int n);  // 0x18005ac50 Array<InterpolatedState<Transform>>
+void Rt_SetSize_18005ac50(Graphics::InterpTransformArray* a, int n);  // 0x18005ac50 Array<InterpolatedState<Transform>>
 void Rt_SetSize_18005c3d0(void* a, int n);  // 0x18005c3d0 Array<Instance>
 void Rt_SetSize_18005be30(void* a, int n, const void* fill);  // 0x18005be30 Array<Instance>, fill
 Graphics::GraphicsMesh::NodeArray* Rt_ArrayAssign_180013960(Graphics::GraphicsMesh::NodeArray* d,
@@ -616,7 +626,9 @@ Graphics::AnimationStateArray* Rt_ArrayAssign_18005b130(Graphics::AnimationState
 Graphics::AnimationState::LayerArray* Rt_ArrayAssign_18001b700(
         Graphics::AnimationState::LayerArray* d,
         const Graphics::AnimationState::LayerArray* s);  // 0x18001b700 Array<AnimationState::Layer>
-void* Rt_ArrayAssign_18001b810(void* d, const void* s);  // 0x18001b810 Array<InterpolatedState<Transform>>
+Graphics::InterpTransformArray* Rt_ArrayAssign_18001b810(
+        Graphics::InterpTransformArray* d,
+        const Graphics::InterpTransformArray* s);  // 0x18001b810 Array<InterpolatedState<Transform>>
 }  // namespace rtcoll
 // ---- graphics/wave27_lane_gfxbig.cpp: the Update door (it counts its calls
 // for the [GFXBIG27] line, then calls Graphics::AnimationState::Update)

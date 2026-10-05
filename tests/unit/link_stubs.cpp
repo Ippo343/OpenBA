@@ -88,4 +88,10 @@ const ArraySpec kSpec_AnimLayer = {
     "Array<Graphics::AnimationState::Layer> (unit stub)", 0x38, 8,
     &UnlinkedLayerAssign, &UnlinkedLayerInit, nullptr, true,
     0, 0, 0, 0, 0, 0 };
+// `MeshInstance::_nodes` / `InstancedAnimationState::_nodes`: kSpec_InterpTransform,
+// likewise (real row: stride 0x38, alignment 4, no destroy step).
+const ArraySpec kSpec_InterpTransform = {
+    "Array<Graphics::InterpolatedState<Math::Transform>> (unit stub)", 0x38, 4,
+    &UnlinkedLayerAssign, &UnlinkedLayerInit, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
 } }  // namespace rtcoll::gfxanim

@@ -287,73 +287,10 @@ static_assert(kSpec_MeshNode.seedZeroHi       <= kSpec_MeshNode.stride,  "MeshNo
 static_assert(kSpec_AnimState.seedZeroHi      <= kSpec_AnimState.stride, "AnimState seed");
 static_assert(kSpec_AnimInstance.seedZeroHi   <= kSpec_AnimInstance.stride, "Instance seed");
 
-// ---------------------------------------------------------------------------
-// J4 — Collection::Array<T>::operator= for a NON-pointer element type
-// ---------------------------------------------------------------------------
-// array_destroy.cpp already owns this algorithm for `Array<T*>` (0x180003970)
-// and array.cpp owns it for `Array<int32>` (0x18001cdf0). The four addresses
-// below are the same body with a per-element copy CONSTRUCTOR instead of an
-// 8-byte move, so the shape is factored here once:
-//
-//     if (dst == &src) return dst;
-//     Clear(dst);                       ; the matching ~Array — see the table
-//     n   = src._size;
-//     old = dst._size;                  ; READ AFTER the clear, so ALWAYS 0
-//     dst._size = n;
-//     if (n > dst._capacity) {
-//         dst._capacity = n;
-//         if (n == old + 1 && old != 0) dst._capacity = n * 3;   ; DEAD, kept
-//         dst._data = MemAlloc((int64)dst._capacity * stride, align);
-//     }
-//     for (i = 0; i < dst._size; ++i) { ; bound and base RE-READ every pass
-//         p = dst._data + i*stride;
-//         if (p) ElemCopyCtor(p, src._data + i*stride);
-//     }
-//     return dst;
-//
-// BOTH of the notes those two files attach to this body apply verbatim and are
-// not repeated in full: `old` is always zero because the clear ran first, so
-// the treble-growth arm is unreachable in every one of these instantiations and
-// is transcribed anyway; and there is no "copy from the old buffer" limb
-// because the clear already freed it.
-//
-// The element copy is a CONSTRUCTOR into raw memory, not an assignment. For
-// kSpec_MeshNode that matters: 0x1800127f0 opens by storing 0 over the name
-// slot before taking the source's reference, which is only correct because the
-// destination is either fresh MemAlloc memory or memory the clear just
-// released.
-using ClearFn = void (*)(ArrayHdr*);
-
-void* ArrayAssignCore(ArrayHdr* dst, const ArrayHdr* src,
-                      uint32_t stride, int align, ClearFn clear, ElemAssign assign) {
-    if (dst == src) return dst;
-    clear(dst);
-
-    const int32_t n   = src->_size;
-    const int32_t old = dst->_size;          // always 0; see above
-    dst->_size = n;
-    if (n > dst->_capacity) {                // signed 32-bit compare
-        dst->_capacity = n;
-        if (n == static_cast<int32_t>(old + 1) && old != 0)
-            dst->_capacity = static_cast<int32_t>(n * 3);   // dead; kept faithful
-        dst->_data = static_cast<uint8_t*>(
-            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * stride,
-                     align));
-    }
-    for (int32_t i = 0; i < dst->_size; ++i) {
-        uint8_t* p = dst->_data + static_cast<int64_t>(i) * stride;
-        if (p == nullptr) continue;          // retail tests the COMPUTED address
-        assign(p, src->_data + static_cast<int64_t>(i) * stride);
-    }
-    return dst;
-}
-
-// ---- the clear functions, i.e. the ~Array bodies of the untyped doors -----
-// Both are lane Q's J1 (free + zero the header). The J2 body of
-// Array<AnimationState> (0x18005bbb0: per-element destroy, then J1) is
-// `AnimationStateArray::~Array` over kSpec_AnimState (B.4 Z RT2).
-
-void Clear_18001c550(ArrayHdr* a) { ArrayDtorImpl(a); }           // Array<InterpolatedState>
+// J4 -- Collection::Array<T>::operator= for the four non-pointer rows here is
+// array_destroy.cpp's ArrayAssignCore over the row (the typed `Assign` of each
+// alias below). B.4 Z MIRROR2 GFX: the file-local copy of that body and its two
+// J1 clear functions had no caller left and are deleted.
 
 }  // namespace gfxanim
 }  // namespace rtcoll
@@ -369,7 +306,6 @@ namespace rtcoll {
 using namespace rtcoll::gfxanim;
 
 // ---- J1 / J2: ~Array ------------------------------------------------------
-void* Rt_ArrayDtor_18001c550(void* a) { rtcoll::AsArray<&kSpec_InterpTransform>(a)->~Array(); return nullptr; }
 // B.4 Y RT: typed. `NodeArray`'s ~Array IS 0x180014090: kSpec_MeshNode's
 // destroy (ReleaseStringsCore over kD_Str_48, CALL 0x180014a40) when the size
 // is positive, then the J1 free-and-zero.
@@ -393,8 +329,8 @@ void Rt_SetSize_18005b1e0(Graphics::AnimationStateArray* a, int n) {   // Array<
 void Rt_SetSize_18005c8a0(Graphics::AnimationState::LayerArray* a, int n) {   // Array<AnimationState::Layer>
     a->SetSize(n);                                 // kSpec_AnimLayer
 }
-void Rt_SetSize_18005ac50(void* a, int n) {   // Array<InterpolatedState<Transform>>
-    rtcoll::AsArray<&kSpec_InterpTransform>(a)->SetSize(n);
+void Rt_SetSize_18005ac50(Graphics::InterpTransformArray* a, int n) {   // Array<InterpolatedState<Transform>>
+    a->SetSize(n);                                 // kSpec_InterpTransform
 }
 void Rt_SetSize_18005c3d0(void* a, int n) {   // Array<Instance>, no fill
     rtcoll::AsArray<&kSpec_AnimInstance>(a)->SetSize(n);
@@ -435,9 +371,15 @@ Graphics::AnimationState::LayerArray* Rt_ArrayAssign_18001b700(
     d->Assign(*s);
     return d;
 }
-void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<InterpolatedState<Transform>>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: audit WORK, left: Array<InterpolatedState<Transform>>'s callers hold two element types (AnimationState::_nodes over Graphics::InterpolatedState<Math::Transform>, MeshInstance::_nodes over the RtGraphics::InterpolatedTransform mirror): unify the twin first
-                           0x38, 4, &Clear_18001c550, &Assign38D);
+// B.4 Z MIRROR2 GFX: typed. `InterpTransformArray::Assign` is the same J4 body
+// (array_destroy.cpp's ArrayAssignCore: self-test, J1 clear -- what
+// Clear_18001c550 was --, grow at the row's stride 0x38 and alignment 4, then
+// the row's Assign38D per element).
+Graphics::InterpTransformArray* Rt_ArrayAssign_18001b810(
+        Graphics::InterpTransformArray* d,
+        const Graphics::InterpTransformArray* s) {   // Array<InterpolatedState<Transform>>
+    d->Assign(*s);
+    return d;
 }
 
 }  // namespace rtcoll
