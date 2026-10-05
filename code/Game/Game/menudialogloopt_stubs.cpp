@@ -244,13 +244,19 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 // deleted at B.3.9 EXA) duplicated, with the vtable store the compiler's.
 MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
     : Engine::DialogLoopT(filename) {
+    // The member initialisers have run Audio::Scene::Scene() on +0xb30
+    // (??0Scene@Audio@@ 0x1800e0160) and zeroed the three array headers
+    // +0xbd0..+0xbf8 (retail's last six qword stores). Retail calls the Random
+    // ctor first and the Scene ctor second; here the Scene member is built before
+    // this body seeds _random. The two touch disjoint bytes: the Random ctor reads
+    // the wall clock and writes only +0x168..+0xb2c, the Scene ctor allocates and
+    // writes only +0xb30..+0xb67.
     RtSystem_Random_Ctor(&_random);       // System::Random at +0x168  ??0Random@System@@ 0x1800c7f20
-    RtAudio_Scene_Ctor(AudioScene());     // Audio::Scene at +0xb30   ??0Scene@Audio@@ 0x1800e0160
-    // Zero-init the MenuDialogLoopT-specific fields (+0xb68..+0xbf8): every
-    // field from _pendingLoop to the end of the class, pad included (retail's
-    // qword stores).
+    // Zero-init the plain fields +0xb68..+0xbcf: every field from _pendingLoop up
+    // to the first array member, pad included (retail's qword stores; the
+    // memset stops before _particleArray, which its own ctor zeroed).
     std::memset(&_pendingLoop, 0,
-                sizeof(MenuDialogLoopT) - offsetof(MenuDialogLoopT, _pendingLoop));
+                offsetof(MenuDialogLoopT, _particleArray) - offsetof(MenuDialogLoopT, _pendingLoop));
 }
 
 // 0x14001a310 (read from the disassembly): MemFree the data of the three
@@ -263,14 +269,10 @@ MenuDialogLoopT::~MenuDialogLoopT() {
     // Retail 0x14001a2e0 (slot 0) calls this, then MemFree on &1 (UpdateLoop's
     // operator delete); the log line the old slot-0 body carried.
     printf("[MenuDLT::Destroy] self=%p\n", (void*)this);
-    // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing
-    // them as Collection::Array makes their dtor run; asked of the coordinator).
-    for (uint8_t* arr : {_sceneIdArray, _instanceArray, _particleArray}) {
-        System::MemoryAllocator::MemFree(*reinterpret_cast<void**>(arr));   // MemFree(null) returns   // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing them as Collection::Array makes their dtor run; asked of the coordinator).
-        *reinterpret_cast<uint64_t*>(arr)     = 0;          // _data   // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing them as Collection::Array makes their dtor run; asked of the coordinator).
-        *reinterpret_cast<uint64_t*>(arr + 8) = 0;          // _size, _capacity   // LEFT: the three arrays are raw storage in MenuDialogLoopT.h (H5: typing them as Collection::Array makes their dtor run; asked of the coordinator).
-    }
-    AudioScene()->~Scene();
+    // After this body the compiler frees _sceneIdArray (+0xbf0), _instanceArray
+    // (+0xbe0), _particleArray (+0xbd0) and runs ~Audio::Scene on +0xb30, reverse
+    // declaration order, as retail's 0x14001a310 does. (The _loadBit store below
+    // now precedes them; neither destructor reads it.)
 
     // STANDALONE DIVERGENCE (the one thing retail's 0x14001a310 does not do):
     // hand ~UpdateLoop a -1 bit so it does NOT run ExternalFactory::Clean for
@@ -462,12 +464,11 @@ void MenuDialogLoopT::Shutdown() {
     }
     // 5. every scene-grid instance: RemoveObject(id[i]) then delete object[i].
     //    Count from +0xbe8, ids from +0xbf0 (uint32), objects from +0xbe0: the
-    //    {data, count|cap} headers _instanceArray (+0xbe0) and _sceneIdArray (+0xbf0).
-    //    LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
-    for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(_instanceArray + 8); ++i) {   // LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
-        const uint32_t id = (*reinterpret_cast<const uint32_t* const*>(_sceneIdArray))[i];   // LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
+    //    Arrays _instanceArray (+0xbe0) and _sceneIdArray (+0xbf0).
+    for (int32_t i = 0; i < _instanceArray.GetSize(); ++i) {
+        const uint32_t id = _sceneIdArray[i];
         scene()->RemoveObject(id);
-        if (Graphics::Geometry* o = (*reinterpret_cast<Graphics::Geometry* const* const*>(_instanceArray))[i]) deleteGeometry(o);   // LEFT: raw-storage arrays (H5, MenuDialogLoopT.h).
+        if (Graphics::Geometry* o = _instanceArray[i]) deleteGeometry(o);
     }
     // 6. +0xbb8 (the Transform block): freed.
     if (void* t = _transform) System::MemoryAllocator::MemFree(t);

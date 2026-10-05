@@ -30,8 +30,10 @@
 #include <cstddef>
 #include "engine/UpdateLoop.h"   // -Iruntime/types: Engine::DialogLoopT
 #include "system/Value.h"        // -Iruntime/types: System::Random (by value at +0x168)
+#include "audio/Audio.h"         // -Iruntime/types: Audio::Scene (by value at +0xb30)
+#include "collection/Collection.h"
 
-namespace Audio { class Scene; class SoundEffect; }
+namespace Audio { class SoundEffect; }
 namespace Graphics { class Renderer; class Scene; class Geometry; class MeshInstance; class SunLight; }
 namespace Save { class SaveLoad; }
 namespace Engine { class UpdateLoop; }
@@ -57,17 +59,18 @@ public:
     Object::InternalPtr<UI::DialogInstance>* CreateLoopDialog(   // [12] 0x14009ba30
         Object::InternalPtr<UI::DialogInstance>* ret) override;
 
-    // The embedded Audio::Scene (constructed through its ctor door, exactly as
-    // retail's ctor calls the import; the class has no default constructor).
-    Audio::Scene* AudioScene() { return reinterpret_cast<Audio::Scene*>(_audioScene); }   // LEFT: H5 _audioScene is raw storage of an Audio::Scene (no default ctor: its ctor door runs in the loop's ctor)
-
     static const void* Vtable();
 
 
 public:
     System::Random _random;              // +0x168  ??0Random@System@@
     uint8_t        _pad0b2c[4];          // +0xb2c
-    alignas(8) uint8_t _audioScene[0x38];// +0xb30  Audio::Scene (by value)
+    // +0xb30 and +0xbd0..+0xbff are real members (behaviour: B4 wave Y): retail's
+    // ctor 0x14009bb00 runs ??0Scene@Audio@@ on +0xb30 and zeroes the three
+    // array headers; its dtor 0x14001a310 has an empty body, frees +0xbf0,
+    // +0xbe0, +0xbd0 (MemFree, then the data and size|capacity qwords zeroed)
+    // and runs ??1Scene@Audio@@ on +0xb30: reverse declaration order.
+    Audio::Scene   _audioScene;          // +0xb30  Audio::Scene (by value)
     Engine::UpdateLoop* _pendingLoop;    // +0xb68  queued loader chain (SetDialogLoaderNextLoop)
     Save::SaveLoad* _saveLoad;           // +0xb70  the menu's own (B4 STANDALONE: H4)
     float          _animYaw;             // +0xb78  live yaw of the orbit
@@ -83,9 +86,9 @@ public:
     PlayerController* _transform;        // +0xbb8  the camera controller (MemAlloc(0x10c, 4) + 0x140098800)
     Graphics::Geometry* _sceneGeometry;  // +0xbc0  MenuScene::geometry (not owned)
     void*          _dlcShip;             // +0xbc8  TradeWork* (DLC)
-    uint8_t        _particleArray[0x10]; // +0xbd0  Array<ParticleSystemInstance*> {data,count,cap}
-    uint8_t        _instanceArray[0x10]; // +0xbe0  Array<Geometry*>
-    uint8_t        _sceneIdArray[0x10];  // +0xbf0  Array<uint32> scene ids
+    Collection::Array<Graphics::Geometry*> _particleArray;  // +0xbd0  the ParticleSystemInstances (Update reads it as Geometry**, 0x14009b6e0)
+    Collection::Array<Graphics::Geometry*> _instanceArray;  // +0xbe0  every scene instance (MeshInstance / ParticleSystemInstance)
+    Collection::Array<uint32_t>            _sceneIdArray;   // +0xbf0  scene ids
 };
 
 static_assert(sizeof(MenuDialogLoopT) == 0xc00, "MenuDialogLoopT is 0xc00 (MemAlloc(0xc00, 8))");

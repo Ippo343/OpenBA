@@ -67,6 +67,37 @@ static_assert(sizeof(MenuSceneParticle) == 0x14, "MenuSceneParticle stride 0x14 
 static_assert(offsetof(MenuSceneParticle, yaw) == 0x0C, "MenuSceneParticle::yaw @ +0x0C");
 static_assert(offsetof(MenuSceneParticle, particleIndex) == 0x10, "MenuSceneParticle::particleIndex @ +0x10");
 
+// A node of the MenuSceneTreeMap's tree: only its two children are read (by
+// 0x14001b860 and the shared recursive free 0x14000e320).
+struct MenuSceneTreeNode {
+    uint8_t            _key[0x18];   // +0x00 not read by 0x14001b860
+    MenuSceneTreeNode* left;         // +0x18
+    MenuSceneTreeNode* right;        // +0x20
+};
+static_assert(offsetof(MenuSceneTreeNode, left)  == 0x18, "MenuSceneTreeNode::left @ +0x18 (0x14001b860)");
+static_assert(offsetof(MenuSceneTreeNode, right) == 0x20, "MenuSceneTreeNode::right @ +0x20 (0x14001b860)");
+
+// The {Array @+0, tree root @+0x10, int32 count @+0x18} record MenuScene holds
+// twice (+0x1C8, +0x1E8). Retail's MenuScene ctor 0x1400a3d70 zeroes the two
+// Array qwords, the root qword and the count dword of each (the pad at +0x1C is
+// not written); 0x14001b860 is its destructor: free the tree (children through
+// 0x14000e320, then the root), zero root and count, then free the Array (MemFree,
+// data and size|capacity zeroed): the body, then the Array member.
+struct MenuSceneTreeMap {
+    MenuSceneTreeMap() : array(), root(nullptr), count(0) {}
+    ~MenuSceneTreeMap();                 // 0x14001b860 (game_leaf_helpers.cpp)
+    MenuSceneTreeMap(const MenuSceneTreeMap&) = delete;
+    MenuSceneTreeMap& operator=(const MenuSceneTreeMap&) = delete;
+
+    Collection::Array<uint8_t> array;    // +0x00 trivial-element Array (element not settled)
+    MenuSceneTreeNode* root;             // +0x10
+    int32_t            count;            // +0x18
+    uint8_t            _pad1C[4];        // +0x1C not written by the ctor
+};
+static_assert(sizeof(MenuSceneTreeMap) == 0x20, "MenuScene +0x1C8 / +0x1E8 records are 0x20 apart");
+static_assert(offsetof(MenuSceneTreeMap, root)  == 0x10, "MenuSceneTreeMap::root @ +0x10 (0x14001b860)");
+static_assert(offsetof(MenuSceneTreeMap, count) == 0x18, "MenuSceneTreeMap::count @ +0x18 (0x14001b860)");
+
 class MenuScene final : public Object::External {
     DECLARE_EXE_TYPE(MenuScene)
 
@@ -110,18 +141,11 @@ public:
     Math::Vector4 field_0x1B4;   // +0x1B4: zero; serialized; copied to Video::Context +0x3b8 / +0x288
     uint8_t  _pad1C4[4];         // +0x1C4: padding
 
-    // Tree/map structure 1 at +0x1C8 ({Array, root, count}; Game_MenuSceneArrayDtor)
-    void*    _field1C8;          // +0x1C8
-    void*    _field1D0;          // +0x1D0
-    void*    _field1D8;          // +0x1D8: root
-    uint32_t _field1E0;          // +0x1E0: count
-    uint8_t  _pad1E4[4];         // +0x1E4
-    // Tree/map structure 2 at +0x1E8
-    void*    _field1E8;          // +0x1E8
-    void*    _field1F0;          // +0x1F0
-    void*    _field1F8;          // +0x1F8: root
-    uint32_t _field200;          // +0x200: count
-    uint8_t  _pad204[4];         // +0x204
+    // Two {Array, tree} records (behaviour: B4 wave Y): retail's dtor body
+    // 0x1400a3970 runs 0x14001b860 on +0x1E8 then +0x1C8 before freeing the
+    // arrays: reverse declaration order of these two members.
+    MenuSceneTreeMap _field1C8;  // +0x1C8
+    MenuSceneTreeMap _field1E8;  // +0x1E8
 };
 
 static_assert(sizeof(MenuScene) == 0x208, "MenuScene is 0x208");
@@ -148,4 +172,4 @@ static_assert(offsetof(MenuScene, field_0x1B4) == 0x1B4, "+0x1B4");
 static_assert(offsetof(MenuScene, _pad1C4) == 0x1C4, "+0x1C4");
 static_assert(offsetof(MenuScene, _field1C8) == 0x1C8, "+0x1C8");
 static_assert(offsetof(MenuScene, _field1E8) == 0x1E8, "+0x1E8");
-static_assert(offsetof(MenuScene, _field200) == 0x200, "+0x200");
+static_assert(offsetof(MenuScene, _field1E8) + offsetof(MenuSceneTreeMap, count) == 0x200, "+0x200");

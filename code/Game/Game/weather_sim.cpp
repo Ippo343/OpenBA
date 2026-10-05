@@ -167,10 +167,8 @@ void WeatherTypeStateMachine(WeatherSimulation* w, GameUpdateLoop* gw, float sec
     do {
         int type = w->field_0x10;
         int month = (kf + ((kf >> 31) & 3)) >> 2;
-        // LEFT: ClimateGenerator +0x44 is 0xC0 bytes of raw storage in GAME-a's
-        // header (retail: 48 floats); its read stays by offset.
-        float thresh = w->field_0x44 +
-                       *reinterpret_cast<float*>(c->_climateData + (size_t)(month * 4 + type) * 4);   // LEFT: H5 ClimateGenerator::_climateData (GAME-1)
+        // ClimateGenerator +0x44: 48 floats, four per month.
+        float thresh = w->field_0x44 + c->_climateData[(size_t)(month * 4 + type)];
         if (randf < thresh) break;
         w->field_0x10 = type + 1;
     } while (w->field_0x10 < 3);

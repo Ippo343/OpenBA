@@ -23,9 +23,10 @@
 #include <cstddef>
 #include <cstdint>
 #include "object/External.h"
+#include "system/String.h"
+#include "collection/Collection.h"
 #include "Object/exe_type.h"
 
-namespace System { class String; }
 namespace UI { class StringTable; }
 class TutorialImage;
 class TutorialSetup;
@@ -49,21 +50,15 @@ public:
     bool     completed;         // +0x20: step completed flag (Serialize(bool&))
     uint8_t  _pad21[7];         // +0x21: padding
     UI::StringTable* stringTable; // +0x28: ExternalPtr<StringTable>
-    void*    titleStr;          // +0x30: System::String (title text)
-    void*    descStr;           // +0x38: System::String (description text)
-    TutorialImage** images;     // +0x40: Array<ExternalPtr<TutorialImage>> data (H5 raw triple)
-    int32_t  imageCount;        // +0x48: count
-    int32_t  imageCapacity;     // +0x4C: capacity
-    TutorialSetup** setups;     // +0x50: Array<ExternalPtr<TutorialSetup>> data (H5 raw triple)
-    int32_t  setupCount;        // +0x58: count
-    int32_t  setupCapacity;     // +0x5C: capacity
-    TutorialGoal** goals;       // +0x60: Array<ExternalPtr<TutorialGoal>> data (H5 raw triple)
-    int32_t  goalCount;         // +0x68: count
-    int32_t  goalCapacity;      // +0x6C: capacity
-
-    // The +0x30 / +0x38 Strings (H5 raw storage). Defined in tutorialstep.cpp.
-    System::String& TitleText();
-    System::String& DescText();
+    // +0x30 .. +0x6F: typed together (behaviour: B4 wave Y). Retail's dtor body
+    // 0x1400e33f0 frees +0x60, +0x50, +0x40 (MemFree, then the data / size+capacity
+    // qwords zeroed) and runs ~String on +0x38 then +0x30: reverse declaration
+    // order, which is what the compiler's member destruction does after the body.
+    System::String titleStr;    // +0x30: title text
+    System::String descStr;     // +0x38: description text
+    Collection::Array<TutorialImage*> images;   // +0x40: Array<ExternalPtr<TutorialImage>>
+    Collection::Array<TutorialSetup*> setups;   // +0x50: Array<ExternalPtr<TutorialSetup>>
+    Collection::Array<TutorialGoal*>  goals;    // +0x60: Array<ExternalPtr<TutorialGoal>>
 };
 
 static_assert(offsetof(TutorialStep, completed) == 0x20, "+0x20");
@@ -71,10 +66,10 @@ static_assert(offsetof(TutorialStep, stringTable) == 0x28, "+0x28");
 static_assert(offsetof(TutorialStep, titleStr) == 0x30, "+0x30");
 static_assert(offsetof(TutorialStep, descStr) == 0x38, "+0x38");
 static_assert(offsetof(TutorialStep, images) == 0x40, "+0x40");
-static_assert(offsetof(TutorialStep, imageCount) == 0x48, "+0x48");
+static_assert(offsetof(TutorialStep, images._size) == 0x48, "+0x48");
 static_assert(offsetof(TutorialStep, setups) == 0x50, "+0x50");
-static_assert(offsetof(TutorialStep, setupCount) == 0x58, "+0x58");
+static_assert(offsetof(TutorialStep, setups._size) == 0x58, "+0x58");
 static_assert(offsetof(TutorialStep, goals) == 0x60, "+0x60");
-static_assert(offsetof(TutorialStep, goalCount) == 0x68, "+0x68");
+static_assert(offsetof(TutorialStep, goals._size) == 0x68, "+0x68");
 static_assert(sizeof(TutorialStep) == 0x70, "TutorialStep is 0x70 (create 0x140028c50 MemAlloc(0x70))");
 static_assert(alignof(TutorialStep) == 8, "qword-aligned");

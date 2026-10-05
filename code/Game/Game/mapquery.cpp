@@ -204,8 +204,7 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
                     Math::Vector3 hitNormal(0.0f, 0.0f, 0.0f);
                     // Picking::Scene::Intersect (import slot 0x140152428); the Scene is
                     // embedded at Map +0x08.
-                    // LEFT: Map::pickingScene is raw storage (H5).
-                    const int hit = reinterpret_cast<const Picking::Scene*>(mapGrid->pickingScene)->Intersect(   // LEFT: Map::pickingScene is raw storage (H5).
+                    const int hit = mapGrid->pickingScene.Intersect(
                         rayStart, rayDir, maxDist, hitPos, hitNormal);
                     if (hit >= 0 && hitPos.z > height) {
                         if (tri) {
