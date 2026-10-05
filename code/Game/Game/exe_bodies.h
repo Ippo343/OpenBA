@@ -128,7 +128,6 @@ extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, v
 
 // ---- keystone_a_gamedtor.cpp
 class Map;
-extern "C" void Game_Dtor_9ed60(Map* map);  // 0x14009ed60  // B4 FORWARD: 1 outside caller(s)
 
 // ---- mapquery.cpp
 extern "C" float* Reimpl_MapGetTerrainPos(Map* game, float* outPos3, const float* inXY2, char flag, float* outTri);  // 0x14009f3e0 (outTri: a Vector3, 0x1400aa810 writes three floats)

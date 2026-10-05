@@ -308,9 +308,3 @@ Map::~Map() {
     // 0x14009ee26), ~Array on cells (MemFree [+0x80]; [+0x80] = [+0x88] = 0,
     // 0x14009ee2c..ee40), ~Picking::Scene on +0x08 (the tail-JMP 0x14009ee5a).
 }
-
-// B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a). The caller MemFrees
-// the map afterwards.
-extern "C" void Game_Dtor_9ed60(Map* map) {
-    map->~Map();
-}
