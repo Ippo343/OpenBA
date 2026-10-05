@@ -372,3 +372,5 @@ Metric at `07d3aa4a`: **1,142** to remove (of which `dx11/` 240). Wave X round 6
 | 120 | X7-CW | `23956761` | `ResidenceComponent_impl_7230` typed under `InsertCitizenBucket<Key>`, the 16-byte material-array family the exported bodies under typed wrappers, the road mesh on `GeometryBatchVertex` (row 662 settled from retail's serializer 0x14001f9c0), MarketWork's claim tree a POD; `behaviour:` TrackerComponent's lists, `AmbientEmitterComponent::slots`, `AmbientEnvironmentDescription::_entries` are Array members freed as retail — three leaks end (rows 700-704): 215 -> 176 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 
 Metric at `23956761`: **1,052** to remove (of which `dx11/` 240). Wave X round 7 done: 76 gated merges this pass (rows 45-120), one problem (row 119, fixed).
+
+`sa-stress` at `23956761` (end of round 7; Ghidra and four read-only inventory agents running, no builds): exit 0, update 1.77 ms/frame, p95 2.51, draw 1.29 (base 1.92 / 2.40 / 1.38). Recorded, not chased (p95 +4.5% on a machine running Ghidra).
