@@ -314,7 +314,7 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
     }
 
     // The registry root
-    ToolRegistryNode* const root = field_0x10;
+    ToolRegistryNode* const root = toolRegistry.root;
 
     // Step 4: In-order traversal to find the registry node whose typeId matches a
     // sub-description of the group. The first match sets foundTypeId.

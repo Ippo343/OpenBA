@@ -584,8 +584,8 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
 // null store.
 PlayerToolManager::PlayerToolManager() {
     field_0x00 = nullptr;
-    field_0x10 = 0;
-    field_0x18 = 0;
+    toolRegistry.root = nullptr;
+    toolRegistry.count = 0;
     field_0x20 = 0;
     // +0x28 currentTool: the member's InternalPtr ctor stores the null (0x1401025fe).
     paused = false;

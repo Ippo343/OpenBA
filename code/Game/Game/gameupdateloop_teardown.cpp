@@ -58,20 +58,11 @@
 #include "Dialog/ToolRegistryNode.h"    // the tool registry node (PlayerToolManager +0x10)
 
 // B.4 P2 GAME-2: the five teardown bodies take their object typed and read it by
-// name. What still goes through the offset helpers below is LEFT, each site with
-// its reason: the arrays CitizenBehavior.h / PlayerToolManager.h
-// declare as three raw fields (not a Collection::Array, so `~Array` is reached
-// through a cast; H5 in headers owned by ENT / PLAYER), the trees whose root is
-// a `void*` there (WorkScheduler +0x20), and the tool registry's {root, count} header.
+// name (B.4 Z CODEA: the last two offset reads, PathGraph's pair array and the
+// tool registry's count, are named fields now).
 namespace {
 
-inline uint8_t*  B(void* p)               { return reinterpret_cast<uint8_t*>(p); }   // LEFT: the offset helpers of the two sites below (PathGraph::m_pairs, the tool registry count)
-inline int32_t&  I32(void* base, int off) { return *reinterpret_cast<int32_t*>(B(base) + off); }   // LEFT: the offset helpers of the two sites below (PathGraph::m_pairs, the tool registry count)
-
 inline void MemFree(void* p) { if (p) System::MemoryAllocator::MemFree(p); }
-
-// B.3.2 bridge: the owning structs are still untyped bytes.
-inline rtcoll::ArrayHdr&          Arr   (void* base, int off) { return *reinterpret_cast<rtcoll::ArrayHdr*>(B(base) + off); }   // LEFT: the offset helpers of the two sites below (PathGraph::m_pairs, the tool registry count)
 
 // MSVC's __ehvec_dtor_iter: destroy the elements of an embedded array in
 // REVERSE order. Retail reaches these through the CRT helper at 0x14003ad30;
@@ -112,7 +103,12 @@ extern "C" void ArrayPlusTree_Clear_171b0(PathGraph* self) {
     }
     self->m_bst.root = nullptr;
     self->m_bst.count = 0;
-    Arr(self, 0x00).~Array();   // LEFT: PathGraph::m_pairs (Entity/CitizenBehavior.h, X6-CW) is three raw fields, not a Collection::Array (H5)
+    // +0x00: the pair array's inlined ~Array (0x14001720a..0x140017216: MemFree,
+    // then two zero qwords; three named stores here, H7).
+    System::MemoryAllocator::MemFree(self->m_pairs);
+    self->m_pairs = nullptr;
+    self->m_pairCount = 0;
+    self->m_pairCapacity = 0;
 }
 
 // ============================================================
@@ -173,17 +169,17 @@ extern "C" void TreeNodeFree_2df90(void* hdrV, ToolRegistryNode* node) {
 // ============================================================
 // 0x14002de90 — clear a {root,count} tree of IBP-payload nodes
 // ============================================================
-extern "C" void IbpTree_Clear_2de90(ToolRegistryNode** hdrV) {
-    ToolRegistryNode* root = *hdrV;
+extern "C" void IbpTree_Clear_2de90(AvlTreeHead<ToolRegistryNode>* tree) {
+    ToolRegistryNode* root = tree->root;
     if (root) {
-        TreeNodeFree_2df90(hdrV, root->left);
-        TreeNodeFree_2df90(hdrV, root->right);
+        TreeNodeFree_2df90(tree, root->left);
+        TreeNodeFree_2df90(tree, root->right);
         if (root->toolSetting != nullptr)
             root->toolSetting.DeletePtr();
         MemFree(root);
     }
-    *hdrV = nullptr;
-    I32(hdrV, 0x08) = 0;   // LEFT: 0x14002de90 takes the {root, count} header by its root slot; PlayerToolManager +0x10 root / +0x18 count are two separate members (field_0x10 / field_0x18), so no header record exists to name the count through
+    tree->root = nullptr;
+    tree->count = 0;
 }
 
 // ============================================================
@@ -290,7 +286,7 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
     freeSet(self->field_0x50);
 
     // Tool registry tree (+0x10): nodes carry an IBP payload at +0x10.
-    IbpTree_Clear_2de90(&self->field_0x10);
+    IbpTree_Clear_2de90(&self->toolRegistry);
 }
 
 // ============================================================
