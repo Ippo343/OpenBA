@@ -103,7 +103,7 @@ void Init() {
 }
 
 // The town citizen list: array at townMgr+0xa0, count at +0xa8.
-bool TownList(CitizenComponent*** outList, int* outCount, CitizenBehavior** outTownMgr) {
+bool TownList(Object::InternalPtr<CitizenComponent>** outList, int* outCount, CitizenBehavior** outTownMgr) {
     if (GameUpdateLoop::_singleton == nullptr) return false;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     CitizenBehavior* townMgr = gw->m_citizenList;      // +0xf0
@@ -159,7 +159,7 @@ const char* const kGateName[12] = {
     "noDesc",           // 11
 };
 
-void BirthGate(int frameNum, CitizenComponent** list, int n) {
+void BirthGate(int frameNum, Object::InternalPtr<CitizenComponent>* list, int n) {
     if (s_birthTrace <= 0) return;
     // DAT_140172114 / DAT_140172100 (.rdata).
     const float hungerFrac = kRdata_140172114;
@@ -173,7 +173,7 @@ void BirthGate(int frameNum, CitizenComponent** list, int n) {
     bool  haveDesc = false;
 
     for (int i = 0; i < n; i++) {
-        CitizenComponent* c = list[i];
+        CitizenComponent* c = list[i].Get();
         if (!c) continue;
         const CitizenDescription* desc = c->description;          // +0x288
         if (!desc) { tally[11]++; continue; }
@@ -257,7 +257,7 @@ void BirthGate(int frameNum, CitizenComponent** list, int n) {
     // -(rand * desc+0x60 + desc+0x5C), the post-attempt cooldown.
     if (haveDesc) {
         for (int i = 0; i < n; i++) {
-            CitizenComponent* c = list[i];
+            CitizenComponent* c = list[i].Get();
             const CitizenDescription* d = c ? c->description : nullptr;   // +0x288
             if (!d) continue;
             std::fprintf(stderr,
@@ -271,7 +271,7 @@ void BirthGate(int frameNum, CitizenComponent** list, int n) {
 }
 
 void Census(int frameNum) {
-    CitizenComponent** list; int n; CitizenBehavior* townMgr;
+    Object::InternalPtr<CitizenComponent>* list; int n; CitizenBehavior* townMgr;
     if (!TownList(&list, &n, &townMgr)) {
         // TownList fails when the citizen array is null OR the count is 0 — i.e. an EXTINCT
         // town looks exactly like "no census at all". Silence then reads as a hung process
@@ -321,7 +321,7 @@ void Census(int frameNum) {
     int   overdue = 0, noMaxAge = 0;
     float maxAgeMin = 1e9f, maxAgeMax = -1e9f;
     for (int i = 0; i < n; i++) {
-        CitizenComponent* c = list[i];
+        CitizenComponent* c = list[i].Get();
         if (!c) continue;
         bool noSpouse = c->spouse == nullptr;                  // +0x250
         if (!noSpouse) spouse++; else unmarried++;
@@ -377,7 +377,7 @@ void Census(int frameNum) {
     // empty in standalone's start town, so report them next to the gate counts — an
     // "ELIGIBLE=0 / noGuardian=0" census means nothing without knowing whether the finder
     // it depends on had anything to find.
-    ComponentEntity** reg = townMgr->field_0x20._data;           // +0x20
+    Object::InternalPtr<ComponentEntity>* reg = townMgr->field_0x20._data;           // +0x20
     int     regN  = townMgr->field_0x20._size;                   // +0x28
     void*   bst   = townMgr->field_0x100._root;                  // +0x100
     int     bldgN = townMgr->attendanceComponents._size;     // +0x68
@@ -395,7 +395,7 @@ void Census(int frameNum) {
     // read them off the last citizen's description so the numbers have a scale.
     float hungerDeath = 0.0f, thirstDeath = 0.0f;
     for (int i = 0; i < n; i++) {
-        CitizenComponent* c = list[i];
+        CitizenComponent* c = list[i].Get();
         const CitizenDescription* d = c ? c->description : nullptr;   // +0x288
         if (d) { hungerDeath = d->maxHunger;                          // +0xd0
                  thirstDeath = d->maxColdness; break; }               // +0xf0
@@ -438,10 +438,10 @@ void Census(int frameNum) {
 // keeps the residence roster count unchanged. It does NOT touch +0x250 or the age gate;
 // everything after this is the game's own code path.
 void MoveOutGrownChildren(int frameNum) {
-    CitizenComponent** list; int n; CitizenBehavior* townMgr;
+    Object::InternalPtr<CitizenComponent>* list; int n; CitizenBehavior* townMgr;
     if (!TownList(&list, &n, &townMgr)) return;
     for (int i = 0; i < n && s_moved < s_marryHarness; i++) {
-        CitizenComponent* c = list[i];
+        CitizenComponent* c = list[i].Get();
         if (!c) continue;
         if (c->spouse != nullptr) continue;                          // already married (+0x250)
         if (c->_parent == nullptr) continue;                         // already independent (+0x258)
@@ -500,7 +500,7 @@ void MoveOutGrownChildren(int frameNum) {
 
 namespace {
 void ForceBirths(int frameNum) {
-    CitizenComponent** list; int n; CitizenBehavior* townMgr;
+    Object::InternalPtr<CitizenComponent>* list; int n; CitizenBehavior* townMgr;
     if (!TownList(&list, &n, &townMgr)) {
         std::fprintf(stderr, "[BirthHarness] frame %d: no town citizen list — nothing to do\n",
                      frameNum);
@@ -512,7 +512,7 @@ void ForceBirths(int frameNum) {
     int want = 0;
     int skippedNoDesc = 0, skippedNoModel = 0;
     for (int i = 0; i < n && want < s_forceBirth && want < 16; i++) {
-        CitizenComponent* c = list[i];
+        CitizenComponent* c = list[i].Get();
         if (!c) continue;
         if (c->description == nullptr) { skippedNoDesc++;  continue; }   // +0x288
         if (c->character == nullptr)   { skippedNoModel++; continue; }   // +0x278
@@ -555,12 +555,12 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
 
     // Targeted kill: wait for family links to exist, then take those citizens.
     if (s_killFamily > 0 && !s_firedFamily && frameNum > 300 && (frameNum % 300) == 0) {
-        CitizenComponent** list; int n; CitizenBehavior* townMgr;
+        Object::InternalPtr<CitizenComponent>* list; int n; CitizenBehavior* townMgr;
         if (TownList(&list, &n, &townMgr)) {
             CitizenComponent* victims[16];
             int want = 0;
             for (int i = 0; i < n && want < s_killFamily && want < 16; i++)
-                if (HasFamily(list[i])) victims[want++] = list[i];
+                if (HasFamily(list[i].Get())) victims[want++] = list[i].Get();
             if (want > 0) {
                 s_firedFamily = true;
                 std::fprintf(stderr, "[DeathHarness] frame %d: %d citizen(s) WITH family "
@@ -608,13 +608,13 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
                 std::fflush(stderr);
         }
         if (s_waitCemetery) {
-            CitizenBehavior* tm = nullptr; CitizenComponent** l; int c;
+            CitizenBehavior* tm = nullptr; Object::InternalPtr<CitizenComponent>* l; int c;
             int readyPlots = 0, cemN = 0;
             if (TownList(&l, &c, &tm) && tm) {
                 cemN = tm->cemeteries._size;                        // +0x48
-                CemeteryComponent** arr = tm->cemeteries._data;        // +0x40
+                Object::InternalPtr<CemeteryComponent>* arr = tm->cemeteries._data;        // +0x40
                 for (int i = 0; i < cemN && arr; ++i) {
-                    CemeteryComponent* comp = arr[i];
+                    CemeteryComponent* comp = arr[i].Get();
                     if (!comp) continue;
                     const int plots = comp->plots._size;          // +0x50
                     if (plots > readyPlots) readyPlots = plots;
@@ -637,7 +637,7 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
 
     s_fired = true;
 
-    CitizenComponent** list; int n; CitizenBehavior* townMgr;
+    Object::InternalPtr<CitizenComponent>* list; int n; CitizenBehavior* townMgr;
     if (!TownList(&list, &n, &townMgr)) return;
     std::fprintf(stderr, "[DeathHarness] frame %d: town citizen list = %d entries\n",
                  frameNum, n);
@@ -652,7 +652,7 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
     // citizen even for a whole town.
     int want = (s_count < n) ? s_count : n;
     std::vector<CitizenComponent*> victims((size_t)(want > 0 ? want : 0));
-    for (int i = 0; i < want; i++) victims[(size_t)i] = list[i];
+    for (int i = 0; i < want; i++) victims[(size_t)i] = list[i].Get();
 
     for (int i = 0; i < want; i++) {
         if (!victims[i]) continue;

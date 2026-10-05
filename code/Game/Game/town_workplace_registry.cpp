@@ -119,7 +119,7 @@ extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEnt
     // Dedup the workplace ref against the node's entity array (base +0x08, count +0x10).
     // param_2 points at the caller's InternalPtr<ComponentEntity> local.
     int count = found->element.entities._size;        // +0x10 count
-    ComponentEntity** arrBase = found->element.entities._data;   // +0x08 array data
+    Object::InternalPtr<ComponentEntity>* arrBase = found->element.entities._data;   // +0x08 array data
     for (int i = 0; i < count; ++i) {
         if (arrBase[i] == *param_2) {
             return;   // already registered — no duplicate
@@ -189,8 +189,8 @@ extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, con
     for (int64_t i = 0; i < static_cast<int>(count); ++i) {
         uint32_t j = rng->Rand(static_cast<uint32_t>(count));
         if (static_cast<uint32_t>(i) == j) continue;
-        ComponentEntity** base = found->element.entities._data;   // +0x08 array data
-        ComponentEntity* tmp = base[i];
+        Object::InternalPtr<ComponentEntity>* base = found->element.entities._data;   // +0x08 array data
+        ComponentEntity* tmp = base[i].Get();
         base[i] = base[static_cast<int>(j)];
         base[static_cast<int>(j)] = tmp;
     }
@@ -243,7 +243,7 @@ extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, cons
     int count = found->element.entities._size;             // +0x10 count
     for (int i = 0; i < count; ++i) {
         // building entity ref (InternalBasePtr value) at node.arr[i].
-        ComponentEntity* buildingIBP = found->element.entities._data[i];
+        ComponentEntity* buildingIBP = found->element.entities._data[i].Get();
         ComponentEntity* building = buildingIBP;
         if (building == nullptr) continue;
 

@@ -211,8 +211,8 @@ CitizenBehavior* TownMgr() {
 // Read one registry: the town's typed array and its count (the three registries
 // below: +0x20/+0x28, +0xA0/+0xA8, +0xF0/+0xF8).
 template <class T>
-bool Registry(CitizenPtrList<T> CitizenBehavior::*list,
-              T*** outArr, int* outCount) {
+bool Registry(CitizenIbpList<T> CitizenBehavior::*list,
+              Object::InternalPtr<T>** outArr, int* outCount) {
     CitizenBehavior* town = TownMgr();
     if (!town) return false;
     *outArr   = (town->*list)._data;
@@ -300,7 +300,7 @@ bool EntityTile(ComponentEntity* entity, int* outX, int* outY) {
 struct Cand { ComponentEntity* entity; FireComponent* fire; int x; int y; long dist2; };
 
 void ForceFire(int frameNum, int want) {
-    ComponentEntity** arr = nullptr; int n = 0;
+    Object::InternalPtr<ComponentEntity>* arr = nullptr; int n = 0;
     if (!Registry(&CitizenBehavior::field_0x20, &arr, &n)) {
         DLOG("Fire", "frame %d: structure registry (townMgr+0x20/+0x28) empty or absent "
              "— nothing to ignite\n", frameNum);
@@ -313,7 +313,7 @@ void ForceFire(int frameNum, int want) {
     int  withFire = 0, withResidence = 0, noTile = 0;
 
     for (int i = 0; i < n && nCand < 64; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         // Exact type id ("FireComponent").
         FireComponent* fire = static_cast<FireComponent*>(ComponentByName(ent, "FireComponent"));
@@ -540,7 +540,7 @@ void ForceSick(int frameNum, int want) {
         return;
     }
 
-    CitizenComponent** arr = nullptr; int n = 0;
+    Object::InternalPtr<CitizenComponent>* arr = nullptr; int n = 0;
     if (!Registry(&CitizenBehavior::citizens, &arr, &n)) {
         DLOG("Sick", "frame %d: citizen registry (townMgr+0xA0/+0xA8) empty — "
              "nobody infected\n", frameNum);
@@ -553,7 +553,7 @@ void ForceSick(int frameNum, int want) {
     const int cap = (take < 64) ? take : 64;
     int picked = 0;
     for (int i = 0; i < n && picked < cap; ++i) {
-        CitizenComponent* c = arr[i];
+        CitizenComponent* c = arr[i].Get();
         if (c) victims[picked++] = c;
     }
     DLOG("Sick", "%d citizen(s) selected from a registry of %d\n", picked, n);
@@ -607,7 +607,7 @@ void ForceSick(int frameNum, int want) {
 // "registry empty" and "infestation is broken" must never look alike in the log.
 
 void ForceInfest(int frameNum, int want) {
-    DiseaseComponent** arr = nullptr; int n = 0;
+    Object::InternalPtr<DiseaseComponent>* arr = nullptr; int n = 0;
     if (!Registry(&CitizenBehavior::diseases, &arr, &n)) {
         DLOG("Infest", "frame %d: DiseaseComponent registry (townMgr+0xF0/+0xF8) empty "
              "or absent — is BANISHED_LIVE_CROPDISEASE set? DiseaseComponent's slot 6 "
@@ -622,7 +622,7 @@ void ForceInfest(int frameNum, int want) {
     int   nPick = 0, ownerless = 0, notCropField = 0, barren = 0;
 
     for (int i = 0; i < n && nPick < 64; ++i) {
-        DiseaseComponent* comp = arr[i];
+        DiseaseComponent* comp = arr[i].Get();
         if (!comp) continue;
         // comp+0x10 = owner entity IBP.
         ComponentEntity* owner = comp->_entity.Get();

@@ -3629,10 +3629,10 @@ static void StartTown_RegisterTownCitizens() {
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
     auto alreadyListed = [&](const CitizenComponent* c) -> bool {
         if (!townMgr) return false;
-        CitizenComponent** arr = townMgr->citizens._data;
+        Object::InternalPtr<CitizenComponent>* arr = townMgr->citizens._data;
         int n = townMgr->citizens._size;
         for (int i = 0; i < n && arr; i++)
-            if (arr[i] == c) return true;
+            if (arr[i].Get() == c) return true;
         return false;
     };
     int n = 0, skipped = 0;
@@ -3700,11 +3700,11 @@ static void StartTown_SeedLaborerProfessions() {
         fflush(stderr);
         return;
     }
-    CitizenComponent** czArr = citList->citizens._data;
+    Object::InternalPtr<CitizenComponent>* czArr = citList->citizens._data;
     int      czCnt = citList->citizens._size;
     int seeded = 0, adults = 0;
     for (int i = 0; czArr && i < czCnt; ++i) {
-        CitizenComponent* cz = czArr[i];
+        CitizenComponent* cz = czArr[i].Get();
         if (!cz) continue;
         const CitizenDescription* desc = cz->description;
         if (!desc) continue;

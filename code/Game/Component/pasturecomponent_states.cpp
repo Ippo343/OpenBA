@@ -186,7 +186,7 @@ void PastureComponent::AdoptWanderers() {
     if (animals._size >= cap) return;
 
     ComponentDescription* wanted = livestockType;
-    LivestockComponent** freeList = town->livestock._data;
+    Object::InternalPtr<LivestockComponent>* freeList = town->livestock._data;
     if (!freeList) return;
 
     static const int kMaxCandidates = 64;
@@ -194,7 +194,7 @@ void PastureComponent::AdoptWanderers() {
     int nCand = 0;
     const int needed = cap - animals._size;
     for (int i = 0; i < freeCount && nCand < kMaxCandidates && nCand < needed; ++i) {
-        LivestockComponent* comp = freeList[i];
+        LivestockComponent* comp = freeList[i].Get();
         if (!comp) continue;
         ComponentEntity* owner = comp->_entity.Get();
         if (!owner) continue;
@@ -627,9 +627,9 @@ uint32_t PastureComponent::CommandMask(int cmd) {
     int freeElsewhere = 0;
     CitizenBehavior* town = Town();
     const int n = town ? town->pastures._size : 0;
-    PastureComponent** list = town ? town->pastures._data : nullptr;
+    Object::InternalPtr<PastureComponent>* list = town ? town->pastures._data : nullptr;
     for (int i = 0; i < n && list; ++i) {
-        PastureComponent* p = list[i];
+        PastureComponent* p = list[i].Get();
         if (!p || p == this) continue;
         if (p->livestockType != livestockType) continue;
         freeElsewhere += p->ComputeCapacity() - p->animals._size;
@@ -709,13 +709,13 @@ void PastureComponent::Command(int cmd) {
     // cmd 0 / cmd 1 — transfer animals out.
     CitizenBehavior* town = Town();
     const int n = town ? town->pastures._size : 0;
-    PastureComponent** list = town ? town->pastures._data : nullptr;
+    Object::InternalPtr<PastureComponent>* list = town ? town->pastures._data : nullptr;
     const int keep = (cmd != 0) ? animals._size - (animals._size >> 1) : 0;
 
     PastureComponent* best = nullptr;
     int bestFree = 0;
     for (int i = 0; i < n && list; ++i) {
-        PastureComponent* p = list[i];
+        PastureComponent* p = list[i].Get();
         if (!p || p == this) continue;
         if (p->livestockType != livestockType) continue;
         const int freeN = p->ComputeCapacity() - p->animals._size;
@@ -736,7 +736,7 @@ void PastureComponent::Command(int cmd) {
     };
     if (best) transferInto(best);
     for (int i = 0; i < n && list; ++i) {
-        PastureComponent* p = list[i];
+        PastureComponent* p = list[i].Get();
         if (!p || p == this || p == best) continue;
         if (p->livestockType != livestockType) continue;
         transferInto(p);

@@ -214,12 +214,12 @@ extern "C" int Pasture_FillAllPastures() {
     CitizenBehavior* town = w ? w->m_citizenList : nullptr;
     if (!town) return 0;
     const int nPastures = town->pastures._size;
-    PastureComponent** list = town->pastures._data;
+    Object::InternalPtr<PastureComponent>* list = town->pastures._data;
     if (nPastures <= 0 || !list) return 0;
 
     int spawned = 0;
     for (int i = 0; i < nPastures; ++i) {
-        PastureComponent* pasture = list[i];
+        PastureComponent* pasture = list[i].Get();
         if (!pasture || pasture->livestockType == nullptr) continue;
         for (int k = 0; k < 5; ++k) {
             const int cap = pasture->ComputeCapacity();   // 0x140128570

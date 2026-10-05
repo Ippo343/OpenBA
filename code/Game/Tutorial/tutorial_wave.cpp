@@ -352,7 +352,7 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
             const Object::External* key2 = TutWave_ExternalRefResolve(toolbarRef);
             TemplateBucket* found2 = BstFind(root, key2);
             if (found2 && found2->element.entities._data) {
-                targetElem = found2->element.entities._data[index];
+                targetElem = found2->element.entities._data[index].Get();
             }
             branchA = true;
         }

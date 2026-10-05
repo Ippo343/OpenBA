@@ -317,9 +317,9 @@ void ImmigrationComponent::Spawn() {
     int emptySlots = 0;
     {
         int nh = tm->field_0x20._size;
-        ComponentEntity** houses = tm->field_0x20._data;
+        Object::InternalPtr<ComponentEntity>* houses = tm->field_0x20._data;
         for (int i = 0; i < nh; ++i) {
-            ComponentEntity* h = houses[i];
+            ComponentEntity* h = houses[i].Get();
             ResidenceComponent* rc = (h && TidResidence())
                                          ? h->FindComponent<ResidenceComponent>() : nullptr;
             if (!rc) continue;

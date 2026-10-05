@@ -611,11 +611,11 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
 
     // Iterate all citizens
     int citizenCount = citizenMgr->citizens._size;
-    CitizenComponent** citizenArray = citizenMgr->citizens._data;
+    Object::InternalPtr<CitizenComponent>* citizenArray = citizenMgr->citizens._data;
 
     for (int i = 0; i < citizenCount; i++) {
         // CheckPtr on citizen IBP (original does this)
-        CitizenComponent* citizen = citizenArray[i];
+        CitizenComponent* citizen = citizenArray[i].Get();
 
         // Check if citizen is adult: age (float at +0x3C) >= adultAge (float at desc+0x44)
         CitizenDescription* citizenDesc = citizen->description;
@@ -627,7 +627,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         if (citizen->school != nullptr) continue;
 
         // CheckPtr again before reading profession (original does double CheckPtr)
-        citizen = citizenArray[i];
+        citizen = citizenArray[i].Get();
 
         // Look up profession in BST
         Profession* profKey = citizen->profession;
@@ -690,7 +690,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
         for (int e = 0; e < entityCount; e++) {
             // Re-search BST each iteration (original does this to get fresh entity list)
             ProfessionBucket* bstNode2 = citizenMgr->field_0x100._root;
-            ComponentEntity** freshEntityList = nullptr;
+            Object::InternalPtr<ComponentEntity>* freshEntityList = nullptr;
             while (bstNode2) {
                 Profession* nk = bstNode2->element.key;
                 if (profKey < nk) { bstNode2 = bstNode2->left; }
@@ -700,7 +700,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
             if (!freshEntityList) continue;
 
             // CheckPtr on entity IBP (original does this)
-            ComponentEntity* entityBP = freshEntityList[e];
+            ComponentEntity* entityBP = freshEntityList[e].Get();
             if (!entityBP) continue;
 
             // Find WorkplaceComponent on entity
@@ -882,7 +882,7 @@ void ProfessionUI::HandleButton(int profIndex) {
 
     CitizenBehavior* citizenMgr = game->m_citizenList;
     int citizenCount = citizenMgr->citizens._size;
-    CitizenComponent** citizenArray = citizenMgr->citizens._data;
+    Object::InternalPtr<CitizenComponent>* citizenArray = citizenMgr->citizens._data;
 
     // Get the profession ID for this index (compared with the citizens' raw field)
     Profession* profId = game->m_professionList->professions.GetData()[profIndex];
@@ -890,7 +890,7 @@ void ProfessionUI::HandleButton(int profIndex) {
     // Count eligible (adult, non-student) citizens
     int eligible = 0;
     for (int i = 0; i < citizenCount; i++) {
-        CitizenComponent* citizen = citizenArray[i];
+        CitizenComponent* citizen = citizenArray[i].Get();
 
         // Check adult: age >= adultAge (desc+0x44)
         CitizenDescription* citizenDesc = citizen->description;
@@ -918,11 +918,11 @@ void ProfessionUI::HandleButton(int profIndex) {
             *rotIdx = 0;
         }
 
-        CitizenComponent* citizen = citizenArray[*rotIdx];
+        CitizenComponent* citizen = citizenArray[*rotIdx].Get();
 
         // Check if citizen matches this profession
         if (citizen->profession == profId) {
-            citizen = citizenArray[*rotIdx];
+            citizen = citizenArray[*rotIdx].Get();
 
             // Check adult and not a student
             CitizenDescription* citizenDesc = citizen->description;
@@ -931,14 +931,14 @@ void ProfessionUI::HandleButton(int profIndex) {
 
             if (currentAge >= birthAge && citizen->school == nullptr) {
                 // Found matching citizen -- check if same profession still (re-read after CheckPtr)
-                citizen = citizenArray[*rotIdx];
+                citizen = citizenArray[*rotIdx].Get();
                 if (citizen->profession != profId) {
                     // Profession changed between checks -- still go to this citizen
                     return;
                 }
 
                 // Get citizen's entity (at +0x10)
-                citizen = citizenArray[*rotIdx];
+                citizen = citizenArray[*rotIdx].Get();
                 ComponentEntity* entityPtr = citizen->_entity.Get();
 
                 // Center camera on this citizen
@@ -951,12 +951,12 @@ void ProfessionUI::HandleButton(int profIndex) {
         if (scanned >= eligible) {
             // Exhausted all eligible citizens without finding a match in this profession
             // Fall through to go to the current rotation citizen anyway
-            citizen = citizenArray[*rotIdx];
+            citizen = citizenArray[*rotIdx].Get();
             if (citizen->profession != profId) {
                 return;
             }
 
-            citizen = citizenArray[*rotIdx];
+            citizen = citizenArray[*rotIdx].Get();
             ComponentEntity* entityPtr = citizen->_entity.Get();
 
             UI::DialogInstance* dialogInst = _dialog;

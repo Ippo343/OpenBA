@@ -67,12 +67,12 @@ void Init() {
 // Professions panel's "N" column does (townMgr+0xa0 array / +0xa8 count, profession
 // at citizen+0x1f0).
 int CountProfession(CitizenBehavior* townMgr, const Profession* key) {
-    CitizenComponent** arr = townMgr->citizens._data;   // +0xa0
+    Object::InternalPtr<CitizenComponent>* arr = townMgr->citizens._data;   // +0xa0
     int    n   = townMgr->citizens._size;           // +0xa8
     if (!arr || n <= 0) return 0;
     int hits = 0;
     for (int i = 0; i < n; ++i) {
-        CitizenComponent* c = arr[i];
+        CitizenComponent* c = arr[i].Get();
         if (!c) continue;
         if (c->profession == key) ++hits;         // +0x1f0
     }
@@ -106,11 +106,11 @@ extern "C" void BuilderSeat_Tick(int frameNum) {
     // citizens now holding the builder key, so a later [WorkValidate] BAD VTABLE obj=
     // can be matched against the set this harness actually converted.
     if (const char* t = Opt().workValidateTrace) if (t[0] && t[0] != '0') {
-        CitizenComponent** carr = townMgr->citizens._data;   // +0xa0
+        Object::InternalPtr<CitizenComponent>* carr = townMgr->citizens._data;   // +0xa0
         int    cn   = townMgr->citizens._size;            // +0xa8
         std::fprintf(stderr, "[BuilderSeat] converted citizens (roster %d):", cn);
         for (int i = 0; i < cn; ++i) {
-            CitizenComponent* c = carr[i];
+            CitizenComponent* c = carr[i].Get();
             if (!c) continue;
             if (c->profession == builder)               // +0x1f0
                 std::fprintf(stderr, " %p", (void*)c);

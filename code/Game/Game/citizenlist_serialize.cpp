@@ -185,7 +185,7 @@ void RegistryCensus(const CitizenBehavior* cb, const char* leg, const char* when
 // IBP array serialize — the recurring 15-times pattern (0x140008150 and its siblings):
 //   count = list.count; Serialize(count); if(loading) list.SetSize(count);
 //   for each slot: InternalBasePtr::Serialize(slot); if (!IsDerivedFrom(typeId)) slot=null;
-// `list` is a Collection::Array<InternalPtr<T>> (CitizenPtrList, kSpec_PtrZero).
+// `list` is a Collection::Array<InternalPtr<T>> (CitizenIbpList, kSpec_PtrZero).
 // ------------------------------------------------------------
 // ENDGAME B.3.9 CB: takes the type id by VALUE (the class static of the cell retail
 // reads) and validates unconditionally, as retail does (0x14008f760: every array's
@@ -193,20 +193,19 @@ void RegistryCensus(const CitizenBehavior* cb, const char* leg, const char* when
 // whenever the cell read 0 -- which it always did for Healer (0x1401c4330), Well
 // (0x1401c4c28) and Happiness (0x1401c42c0), so those three arrays were never validated.
 template <class T>
-void SerializeIBPArray(CitizenPtrList<T>& list, IO::Serializer* serializer, uint32_t typeId) {
+void SerializeIBPArray(CitizenIbpList<T>& list, IO::Serializer* serializer, uint32_t typeId) {
     int32_t count = list._size;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
     // retail 0x1400032e0 IS Collection::Array<T>::SetSize(n): stride 8 align 8,
-    // new tail zeroed (kSpec_PtrZero). Element is the 8-byte InternalBasePtr slot walked below.
+    // new tail zeroed (kSpec_PtrZero). Element is the 8-byte InternalPtr walked below.
     if (loading) list.SetSize(count);
 
-    T** arr = list._data;
+    Object::InternalPtr<T>* arr = list._data;
     for (int32_t i = 0; i < count; ++i) {
-        T** elem = &arr[i];
-        // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: B4 fin-F2 (measured, not done): the cast goes when the 16 IBP members and the bucket entity list are CitizenIbpList<T> (Array<InternalPtr<T>>, kSpec_PtrZero); that retype breaks about 170 reader lines in 49 files (code/Game Component, Dialog, Entity, Game, Goal, Tutorial, Work, Action and standalone harnesses: T* / T** reads of the elements) and was not reached
-        T* val = *elem;
+        Object::InternalPtr<T>* elem = &arr[i];
+        elem->Object::InternalBasePtr::Serialize(*serializer);   // 0x140152aa0 on the element (0x14008f7f8)
+        T* val = elem->Get();
         if (val != nullptr) {
             if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
                 *elem = nullptr;
@@ -288,13 +287,13 @@ void SerializeIntAssocArray(CitizenIntAssocArray& outer, IO::Serializer* seriali
 // (0x140017b03 / 0x140017b9a / 0x140017beb in 0x140017a40; the same in 0x140017cd0).
 template <class Key>
 CitizenBucketNode<Key>* AllocCompRefTreeNode(Key* key, CitizenBucketNode<Key>* parent,
-                                             const CitizenPtrList<ComponentEntity>& val) {
+                                             const CitizenIbpList<ComponentEntity>& val) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
     CitizenBucketNode<Key>* n =
         static_cast<CitizenBucketNode<Key>*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
     n->element.key = key;
-    ::new (&n->element.entities) CitizenPtrList<ComponentEntity>();   // +0x08 = +0x10 = 0
+    ::new (&n->element.entities) CitizenIbpList<ComponentEntity>();   // +0x08 = +0x10 = 0
     n->element.entities.Assign(val);                                 // 0x140015ec0
     n->parent = parent;              // +0x18
     n->left = nullptr;               // +0x20
@@ -340,7 +339,7 @@ void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serialize
             // the duplicate-key one included (0x140017c19 in 0x140017a40, 0x140017ea5 in
             // 0x140017cd0): ~val.
             Key* key = nullptr;
-            CitizenPtrList<ComponentEntity> val;
+            CitizenIbpList<ComponentEntity> val;
             if (keyFn) keyFn(&key, serializer);
             SerializeIBPArray(val, serializer, ComponentEntity::TypeId());
 
@@ -429,7 +428,7 @@ LegacyKeyIntNode* LegacyTreeSucc(LegacyKeyIntNode* n) {
 void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {   // LEFT: void* is the +0x160 root slot, which holds two node types (the typed bucket set's and this legacy 0x30-byte tree's): the one cast below is that FLOOR ruling's
     // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
     // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
-    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: FLOOR? (B4 H5-P2: +0x160 IS typed now, CitizenBucketSet<ComponentDescription>): the version < 2 arm (never reached at save version 6) reads that Set's root slot as a second node type, the 0x30-byte LegacyKeyIntNode; one slot, two node types, so no typed member names it; whether retail's version < 2 arm uses this node type is not read (retail-difference task)
+    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: FLOOR? (B4 H5-P2: +0x160 IS typed now, CitizenBucketSet<ComponentDescription>): the version < 2 arm (never reached at save version 6) reads that Set's root slot as a second node type, the 0x30-byte LegacyKeyIntNode; one slot, two node types, so no typed member names it. NOT FLOOR (B4 S4 IBP, retail read): retail's version < 2 arm (0x140090194..0x1400901ea in Serialize 0x14008f760) never touches +0x160: it zeroes a STACK {root qword [RSP+0x30], count dword [RSP+0x38]}, reads the legacy tree into it (0x14000ebe0: count at [RCX+8], 0x30-byte nodes MemAlloc(0x30, 8)), then frees it (0x14000e320 on root+0x18 / root+0x20, MemFree the root) and zeroes it; only version >= 2 reaches +0x160 (0x140017cd0). The cast exists because the tree's caller hands +0x160's root here (known_port_issues row 810); retail's typed local {LegacyKeyIntNode* root; int32 count} removes it in that row's behaviour: commit (retail-difference task)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -699,10 +698,10 @@ void CitizenBehavior::PostLoad() {
     idx = 0;
     int32_t entCount = wells._size;
     if (entCount > 0) {
-        WellComponent** entArr = wells._data;
+        Object::InternalPtr<WellComponent>* entArr = wells._data;
         int slot = -1;
         for (; idx < entCount; ++idx, --slot) {
-            WellComponent* entIBP = entArr[idx];
+            WellComponent* entIBP = entArr[idx].Get();
             ComponentEntity* comp = entIBP->_entity.Get();
 
             MapComponent* chosen = nullptr;

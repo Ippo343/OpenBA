@@ -832,10 +832,10 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     {
         const int entityCount = town->field_0x00._size;
         for (int e = 0; e < entityCount; ++e) {
-            ComponentEntity* entity = town->field_0x00._data[e];
+            ComponentEntity* entity = town->field_0x00._data[e].Get();
             StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
-            entity = town->field_0x00._data[e];
+            entity = town->field_0x00._data[e].Get();
             ConsumeProduceComponent* consumeProduce = entity->FindComponent<ConsumeProduceComponent>();
 
             if (consumeProduce != nullptr) continue;   // 0x1400f0812: has a consumer -> skip
@@ -1022,14 +1022,14 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     const int townEntityCount = town->field_0x00._size;
 
     for (int e = 0; e < townEntityCount; ++e) {
-        ComponentEntity** const townEntities = town->field_0x00._data;
+        Object::InternalPtr<ComponentEntity>* const townEntities = town->field_0x00._data;
 
         StorageComponent* candStorage = townEntities[e]->FindComponent<StorageComponent>();
         MapComponent* candMap = townEntities[e]->FindComponent<MapComponent>();
         (void)candMap;
 
         // 0x1400f1013: the candidate's anchor cell index.
-        ComponentEntity* anchorIBP = townEntities[e];
+        ComponentEntity* anchorIBP = townEntities[e].Get();
         const int candCell = Pf_EntityAnchorCell_7fb0(&anchorIBP, nullptr);
 
         ConsumeProduceComponent* candCP = townEntities[e]->FindComponent<ConsumeProduceComponent>();
@@ -1124,7 +1124,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // STAGE 5 -- take list, path, transfer, claim.  retail 0x1400f13a3..0x1400f1c15
     // ======================================================================
     if (bestIndex >= 0) {   // 0x1400f0e8a-era check: local_160 < 0 -> straight to epilogue
-        ComponentEntity* const winner = town->field_0x00._data[bestIndex];
+        ComponentEntity* const winner = town->field_0x00._data[bestIndex].Get();
         StorageComponent* winStorage = winner->FindComponent<StorageComponent>();
 
         // --- 0x1400f1425..0x1400f16a0: build the take list ------------------

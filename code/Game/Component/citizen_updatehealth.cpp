@@ -227,10 +227,10 @@ static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
     // Registry is populated — an answer here is now meaningful.
     s_censusDone = true;
     uint32_t tidWpc = WorkPlaceComponent::TypeId();
-    AttendanceComponent** arr = mgr->attendanceComponents._data;
+    Object::InternalPtr<AttendanceComponent>* arr = mgr->attendanceComponents._data;
     int withWpc = 0, matches = 0;
     for (int i = 0; i < attendance && arr && tidWpc; i++) {
-        AttendanceComponent* comp = arr[i];
+        AttendanceComponent* comp = arr[i].Get();
         if (!comp) continue;
         ComponentEntity* entity = comp->_entity.Get();
         if (!entity) continue;
@@ -307,9 +307,9 @@ extern "C" char CitizenComp_AnyCitizenSick(const CitizenBehavior* mgr) {
     EnsureInit();
     if (!mgr) return 0;
     int count = mgr->citizens._size;
-    CitizenComponent* const* arr = mgr->citizens._data;
+    const Object::InternalPtr<CitizenComponent>* arr = mgr->citizens._data;
     for (int i = 0; i < count; i++) {
-        const CitizenComponent* citizen = arr[i];
+        const CitizenComponent* citizen = arr[i].Get();
         if (citizen->disease != nullptr) return 1;
     }
     return 0;

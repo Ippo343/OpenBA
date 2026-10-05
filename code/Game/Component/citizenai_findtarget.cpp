@@ -172,7 +172,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
     if (0 < list->field_0x10._size) {
         int iVar20 = 0;
         do {
-            ComponentEntity* local_a0 = list->field_0x10._data[iVar20];                // candidate entity
+            ComponentEntity* local_a0 = list->field_0x10._data[iVar20].Get();                // candidate entity
             ComponentEntity* local_90 = local_a0;                                // IBP scratch
             uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_90, nullptr);        // entity -> cell idx
 
@@ -258,7 +258,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
         int iVar20 = 0;
         int iVar15loop = local_a8_best;
         do {
-            ComponentEntity* local_a0 = list->field_0x00._data[iVar20];               // candidate entity
+            ComponentEntity* local_a0 = list->field_0x00._data[iVar20].Get();               // candidate entity
             ComponentEntity* local_58 = local_a0;                               // IBP scratch
             uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_58, nullptr);
 

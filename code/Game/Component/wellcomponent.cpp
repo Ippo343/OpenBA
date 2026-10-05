@@ -198,7 +198,7 @@ void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
     int index = -1;
     const int count = wells._size;
     if (count > 0) {
-        WellComponent** arr = wells._data;
+        Object::InternalPtr<WellComponent>* arr = wells._data;
         for (int i = 0; i < count; ++i) {
             if (arr[i] != nullptr) continue;
             arr[i] = well->Get();

@@ -238,7 +238,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
     ComponentEntity* bestEntity = nullptr;   // lVar12
 
     int n = param_1->healers._size;
-    HealerComponent* const* arr = param_1->healers._data;
+    const Object::InternalPtr<HealerComponent>* arr = param_1->healers._data;
     for (int idx = 0; idx < n; ++idx) {
         ComponentEntity* entity = arr[idx]->_entity.Get();   // *plVar11 + 0x10
         // scan entity's components for a WorkPlaceComponent (_components._size, _components)

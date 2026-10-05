@@ -846,7 +846,7 @@ void TownHallUI::UpdateGeneral() {
     float perCitizen = (totalCitizens > 0) ? (1.0f / (float)totalCitizens) : 0.0f;
 
     for (int i = 0; i < totalCitizens; i++) {
-        CitizenComponent* citizen = town->citizens._data[i];
+        CitizenComponent* citizen = town->citizens._data[i].Get();
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
@@ -926,7 +926,7 @@ void TownHallUI::UpdateGeneral() {
         TownHall_GroupRatingUpdate(&groupHearts, 0.0f, 1.0f);   // 0x14006aed0
         TownHall_GroupRatingUpdate(&groupStars, 0.0f, 1.0f);   // 0x14006aed0
     } else {
-        CitizenComponent* firstCitizen = town->citizens._data[0];
+        CitizenComponent* firstCitizen = town->citizens._data[0].Get();
         Description* desc = firstCitizen->_description;
         CitizenDescription* citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
             ? static_cast<CitizenDescription*>(desc) : nullptr;
@@ -935,7 +935,7 @@ void TownHallUI::UpdateGeneral() {
                               citizenDesc->maxHealth);
 
         // Re-read first citizen for the happiness maximum
-        firstCitizen = town->citizens._data[0];
+        firstCitizen = town->citizens._data[0].Get();
         desc = firstCitizen->_description;
         citizenDesc = ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
             ? static_cast<CitizenDescription*>(desc) : nullptr;
@@ -1407,7 +1407,7 @@ void TownHallUI::UpdateInventory() {
 
         // For each slot in the profession BST node
         for (int slot = 0; slot < slotCount; slot++) {
-            ComponentEntity* entity = bstNode->element.entities._data[slot];
+            ComponentEntity* entity = bstNode->element.entities._data[slot].Get();
 
             // Push the entity into this profession row's entity array at +0x30.
             Collection::Array<ComponentEntity*>& profEntities = professionRows[p].entities;
@@ -1452,7 +1452,7 @@ void TownHallUI::UpdateInventory() {
     // Phase 3: Count adult citizens per profession
     int citizenCount = town->citizens._size;
     for (int c = 0; c < citizenCount; c++) {
-        CitizenComponent* citizen = town->citizens._data[c];
+        CitizenComponent* citizen = town->citizens._data[c].Get();
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
@@ -1532,11 +1532,11 @@ void TownHallUI::UpdateAll() {
     // The town's first four arrays (+0x00/+0x10/+0x20/+0x30, each {data, count})
     Collection::Array<ComponentEntity*> entityArr;
 
-    ComponentEntity** const lists[4] = { town->field_0x00._data, town->field_0x10._data, town->field_0x20._data, town->field_0x30._data };
+    Object::InternalPtr<ComponentEntity>* const lists[4] = { town->field_0x00._data, town->field_0x10._data, town->field_0x20._data, town->field_0x30._data };
     const int32_t listCounts[4] = { town->field_0x00._size, town->field_0x10._size, town->field_0x20._size, town->field_0x30._size };
     for (int listIdx = 0; listIdx < 4; listIdx++) {
         for (int j = 0; j < listCounts[listIdx]; j++) {
-            entityArr.SetSize(entityArr.GetSize() + 1, lists[listIdx][j]);
+            entityArr.SetSize(entityArr.GetSize() + 1, lists[listIdx][j].Get());
         }
     }
 

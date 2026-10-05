@@ -42,10 +42,10 @@ static void PastureTendHarness_Tick(int frameNum) {
     CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
     if (!gs) return;
     int n = gs->pastures._size;                                         // +0x98
-    PastureComponent** list = gs->pastures._data;                           // +0x90
+    Object::InternalPtr<PastureComponent>* list = gs->pastures._data;                           // +0x90
     if (n <= 0 || !list) return;
     for (int i = 0; i < n; ++i) {
-        PastureComponent* pasture = list[i];
+        PastureComponent* pasture = list[i].Get();
         if (!pasture) continue;
         if (pasture->livestockType == nullptr) continue;              // +0x28
         // gameState+0x90 is the world pasture registry (pasture state 2 adds the
@@ -91,10 +91,10 @@ static void PastureProduceHarness_Tick(int frameNum) {
     CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
     if (!gs) return;
     int n = gs->pastures._size;                                         // +0x98
-    PastureComponent** list = gs->pastures._data;                           // +0x90
+    Object::InternalPtr<PastureComponent>* list = gs->pastures._data;                           // +0x90
     if (n <= 0 || !list) return;
     for (int i = 0; i < n; ++i) {
-        PastureComponent* pasture = list[i];
+        PastureComponent* pasture = list[i].Get();
         if (!pasture) continue;
         if (pasture->livestockType == nullptr) continue;              // +0x28
         pasture->production += 8;                                     // +0x44

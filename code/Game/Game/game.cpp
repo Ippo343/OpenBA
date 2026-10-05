@@ -250,7 +250,7 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
 
                 do {
                     // Each citizen entry is an InternalBasePtr — load then CheckPtr
-                    ComponentEntity* citizen = citizenList->field_0x00._data[citizenIdx];
+                    ComponentEntity* citizen = citizenList->field_0x00._data[citizenIdx].Get();
 
                     // Find StorageComponent on citizen
                     // Citizen component array is IBP entries at citizen+0x30, count at citizen+0x38

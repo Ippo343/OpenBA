@@ -163,7 +163,7 @@ static TemplateBucket* Toolbar_FindTemplateNode(const CitizenBehavior* town, con
 static ComponentEntity* Toolbar_FindEntity_Impl(const CitizenBehavior* town, const void* key, int index) {
     TemplateBucket* node = Toolbar_FindTemplateNode(town, key);
     if (node != nullptr) {
-        return node->element.entities._data[index];
+        return node->element.entities._data[index].Get();
     }
     return nullptr;
 }

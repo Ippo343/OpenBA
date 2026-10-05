@@ -276,7 +276,7 @@ void StatusBarUI::OnUpdateLayout() {
 
     // Iterate all citizens
     for (int i = 0; i < citizenCount; i++) {
-        const CitizenComponent* citizen = town->citizens._data[i];
+        const CitizenComponent* citizen = town->citizens._data[i].Get();
 
         if (citizen->age < citizen->description->adultAge || citizen->school != nullptr) {
             if (citizen->school == nullptr) {
@@ -487,7 +487,7 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
     int citizenCount = town->citizens._size;
     if (citizenCount <= 0) return;
 
-    CitizenComponent* const* citizens = town->citizens._data;
+    const Object::InternalPtr<CitizenComponent>* citizens = town->citizens._data;
     uint32_t bitMask = 1u << (iconIndex & 0x1F);
 
     // Increment cycling index
@@ -506,7 +506,7 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
             // Continue outer loop (wrap and keep searching)
         }
 
-        const CitizenComponent* citizen = citizens[self->statusCitizenIndex];
+        const CitizenComponent* citizen = citizens[self->statusCitizenIndex].Get();
         if (!citizen) goto next;
 
         {

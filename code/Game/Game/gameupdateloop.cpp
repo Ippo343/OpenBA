@@ -1922,10 +1922,10 @@ void GameUpdateLoop::Shutdown() {
     {
         CitizenBehavior* citizenList = m_citizenList;
         int32_t citizenCount = citizenList->citizens._size;       // +0xa8
-        CitizenComponent** citizenArray = citizenList->citizens._data;   // +0xa0
+        Object::InternalPtr<CitizenComponent>* citizenArray = citizenList->citizens._data;   // +0xa0
 
         for (int i = 0; i < citizenCount; i++) {
-            CitizenComponent* citizen = citizenArray[i];
+            CitizenComponent* citizen = citizenArray[i].Get();
 
             // An adult (age +0x3c >= the description's adultAge +0x44) with no
             // school (+0x208) goes back to the list's default profession and

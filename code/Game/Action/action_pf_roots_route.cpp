@@ -341,7 +341,7 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
     int pass = 0;
     do {
         // Retail steps the two adjacent lists +0x00 / +0x10 by their 0x10 stride.
-        const CitizenPtrList<ComponentEntity>* list = &(&lists->field_0x00)[pass];
+        const CitizenIbpList<ComponentEntity>* list = &(&lists->field_0x00)[pass];
         // Collection::Array's copy into the empty local: MemFree of its (null) buffer,
         // MemAlloc(count * 8), then each element constructed in place.
         ComponentEntity** snapshot = nullptr;
@@ -354,7 +354,7 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
             for (int i = 0; i < n; ++i, ++slot) {
                 if (slot != nullptr) {
                     *slot = nullptr;
-                    *slot = list->_data[i];
+                    *slot = list->_data[i].Get();
                 }
             }
         }

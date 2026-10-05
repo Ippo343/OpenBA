@@ -320,7 +320,7 @@ void PathGraph::BuildPathGraph() {
     // entries of *(longlong*)(lVar3+0x20) — the CitizenBehavior/town RESIDENCE
     // list, NOT gw+0xb0 (that is the ProfessionList, used only in Step 4 keys).
     int buildingCount = town->field_0x20._size;
-    ComponentEntity** buildingArray = town->field_0x20._data;
+    Object::InternalPtr<ComponentEntity>* buildingArray = town->field_0x20._data;
 
     // Dynamic array for building grid IDs
     int* buildingCells = nullptr;
@@ -329,7 +329,7 @@ void PathGraph::BuildPathGraph() {
 
     for (int i = 0; i < buildingCount; i++) {
         // Get InternalBasePtr for this building
-        ComponentEntity* entityIBP = buildingArray[i];
+        ComponentEntity* entityIBP = buildingArray[i].Get();
 
         // Get grid cell ID for the building
         int gridId = -1;
@@ -439,7 +439,7 @@ void PathGraph::BuildPathGraph() {
             if (!foundNode) break;
 
             // Get entity IBP from the profession node's entity array
-            ComponentEntity* entityIBP = foundNode->element.entities._data[ei];
+            ComponentEntity* entityIBP = foundNode->element.entities._data[ei].Get();
 
             // Get grid cell ID for this entity
             int entityCell = -1;
@@ -724,7 +724,7 @@ void CitizenBehavior::CountResources() {
     int64_t firstCount = static_cast<int64_t>(field_0x00._size);
     for (int64_t idx = 0; idx < firstCount; idx++) {
         // Find StorageComponent on this entity
-        Component* storageComp = findComponent(field_0x00._data[idx], StorageComponent::TypeId());
+        Component* storageComp = findComponent(field_0x00._data[idx].Get(), StorageComponent::TypeId());
         // (found by the type id and IsDerivedFrom above: B10)
         StorageComponent* storage = static_cast<StorageComponent*>(storageComp);
 
@@ -801,7 +801,7 @@ void CitizenBehavior::CountResources() {
     int64_t secondCount = static_cast<int64_t>(field_0x10._size);
     for (int64_t idx = 0; idx < secondCount; idx++) {
         // Find StorageComponent on this entity
-        Component* storageComp = findComponent(field_0x10._data[idx], StorageComponent::TypeId());
+        Component* storageComp = findComponent(field_0x10._data[idx].Get(), StorageComponent::TypeId());
         StorageComponent* storage = static_cast<StorageComponent*>(storageComp);
 
         // Read item count from storage (+0x30)
@@ -984,7 +984,7 @@ void CitizenBehavior::CollectStats() {
     // (`health`), `healthSum` sums +0x80 (`happiness`), `dead` counts a non-null
     // +0x208 (`school`), `working` a non-zero +0x1E4 (`clothingLevel`).
     int citizenCount = this->citizens._size;
-    CitizenComponent** citizenArray = citizens._data;
+    Object::InternalPtr<CitizenComponent>* citizenArray = citizens._data;
 
     float happinessSum = 0.0f;
     float healthSum = 0.0f;
@@ -995,7 +995,7 @@ void CitizenBehavior::CollectStats() {
     int working = 0;   // +0x1E4 != 0
 
     for (int i = 0; i < citizenCount; i++) {
-        CitizenComponent* c = citizenArray[i];
+        CitizenComponent* c = citizenArray[i].Get();
 
         // SA-guard: skip an entry that is not a readable citizen. Retail's array holds
         // only live citizens, so this can only trip on a standalone list-integrity bug

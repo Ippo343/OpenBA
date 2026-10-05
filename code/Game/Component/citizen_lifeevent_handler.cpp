@@ -146,8 +146,8 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
     int count = listMgr->cemeteries._size;                          // +0x48
     uint32_t tidInteract = InteractComponent::TypeId();
     for (int i = 0; i < count; i++) {
-        CemeteryComponent** slot = &listMgr->cemeteries._data[i];      // +0x40
-        CemeteryComponent* comp = *slot;
+        Object::InternalPtr<CemeteryComponent>* slot = &listMgr->cemeteries._data[i];      // +0x40
+        CemeteryComponent* comp = slot->Get();
         if (!comp) continue;   // [STANDALONE GUARD]
         ComponentEntity* entity = comp->_entity.Get();                 // +0x10
         // The cemetery's map position = its InteractComponent's resolved position.
@@ -171,8 +171,8 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
         }
         if (dist < best
             && (WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
-            if (static_cast<int>(Cemetery_PickFreeSlot_6c60(*slot)) >= 0) {
-                *out = *slot;
+            if (static_cast<int>(Cemetery_PickFreeSlot_6c60(slot->Get())) >= 0) {
+                *out = slot->Get();
                 best = dist;
             }
         }

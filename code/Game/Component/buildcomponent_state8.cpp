@@ -445,7 +445,7 @@ char BuildComponent::State8OneShot(StateMachine* /*sm*/) {
         int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &selfIBP);
         if (idx >= 0) {
             int count = townMgr->buildComponents._size;
-            BuildComponent** base = townMgr->buildComponents._data;
+            Object::InternalPtr<BuildComponent>* base = townMgr->buildComponents._data;
             for (int j = idx; j + 1 < count; ++j)
                 base[j] = base[j + 1];
             townMgr->buildComponents._size = count - 1;
