@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "system/Value.h"   // System::Time (8 bytes, trivial)
+#include "Action/PathAvl.h"   // AvlTreeHead (the +0x10 queue-order tree header)
 class Work;
 struct WorkSchedulerIdNode; struct WorkSchedulerCountNode; struct WorkSchedulerBucketNode;   // Game/WorkSchedulerNodes.h
 namespace IO { class Stream; }
@@ -75,9 +76,7 @@ public:
     int32_t           field_0x04;       // +0x04 (Serialize int) the queue-order counter
     uint32_t          stepCount;        // +0x08 ctor 1 (Serialize uint); +1 per simulation step
     uint8_t           _pad0C[4];        // +0x0C
-    WorkSchedulerCountNode* field_0x10; // +0x10 tree root (int key; rebuilt on load) the queue-order tree
-    int32_t           field_0x18;       // +0x18 tree count (the queue-order tree's)
-    uint8_t           _pad1C[4];        // +0x1C
+    AvlTreeHead<WorkSchedulerCountNode> field_0x10;   // +0x10 the queue-order tree {root (int key; rebuilt on load), count +0x18}
     WorkSchedulerNode20* field_0x20;    // +0x20 ctor 0; tree root (freed by the dtor only)
     int32_t           field_0x28;       // +0x28 ctor 0; its count
     uint8_t           _pad2C[4];        // +0x2C
@@ -99,8 +98,6 @@ static_assert(offsetof(WorkScheduler, field_0x04) == 0x04, "WorkScheduler +0x04"
 static_assert(offsetof(WorkScheduler, stepCount) == 0x08, "WorkScheduler::stepCount @ +0x08");
 static_assert(offsetof(WorkScheduler, _pad0C) == 0x0C, "WorkScheduler +0x0C");
 static_assert(offsetof(WorkScheduler, field_0x10) == 0x10, "WorkScheduler +0x10");
-static_assert(offsetof(WorkScheduler, field_0x18) == 0x18, "WorkScheduler +0x18");
-static_assert(offsetof(WorkScheduler, _pad1C) == 0x1C, "WorkScheduler +0x1C");
 static_assert(offsetof(WorkScheduler, field_0x20) == 0x20, "WorkScheduler +0x20");
 static_assert(offsetof(WorkScheduler, field_0x28) == 0x28, "WorkScheduler +0x28");
 static_assert(offsetof(WorkScheduler, _pad2C) == 0x2C, "WorkScheduler +0x2C");

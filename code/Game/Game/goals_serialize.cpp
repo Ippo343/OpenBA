@@ -459,7 +459,7 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
 
     bool loading = (static_cast<int>(stream.GetDirection()) == 0);   // IO::Stream::GetDirection, retail 0x180006200
     if (loading) {
-        WorkSchedulerCountNode* workCountRoot = field_0x10;
+        WorkSchedulerCountNode* workCountRoot = field_0x10.root;
 
         // --- Stage 1: walk the id tree (+0x30), notify each Work (slot 12), and for
         // version==2 entries build the +0x10 tree keyed by the running counter at +0x18. ---
@@ -473,16 +473,16 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
 
                 int32_t ver = ser.GetVersion();
                 if (ver == 2) {
-                    int32_t counter = field_0x18;
+                    int32_t counter = field_0x10.count;
                     uint32_t workId = static_cast<uint32_t>(node->work->field_20);
                     bool inserted = false;
                     CountTreeInsert(&workCountRoot, counter, workId, &inserted);
                     if (inserted) {
-                        field_0x18 = counter + 1;
+                        field_0x10.count = counter + 1;
                     }
                 }
             }
-            field_0x10 = workCountRoot;
+            field_0x10.root = workCountRoot;
         }
 
         // --- Stage 2: re-walk the id tree; for Works whose entity (+0x10) is set, collect the
@@ -546,11 +546,11 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
                     Work* work = idTreeNode->work.Get();
                     int32_t orderKey = work->field_24;
 
-                    WorkSchedulerCountNode* workCountRoot2 = field_0x10;
+                    WorkSchedulerCountNode* workCountRoot2 = field_0x10.root;
                     WorkSchedulerCountNode* wcMatch = FindByKey(workCountRoot2, orderKey);
                     if (wcMatch != nullptr) {
                         EraseCountNode(&workCountRoot2, wcMatch);
-                        field_0x10 = workCountRoot2;
+                        field_0x10.root = workCountRoot2;
                     }
 
                     // Slot 10 writes the Work's target Profession into the return slot (every

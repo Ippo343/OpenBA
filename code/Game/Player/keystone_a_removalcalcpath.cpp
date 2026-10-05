@@ -498,9 +498,9 @@ void WorkScheduler::PrioritizeWork(int workId) {
             Object::InternalPtr<Work>& self = piVar4->work;
             WorkSchedulerCountNode* puVar7 = nullptr;
             int iVar6 = 0;
-            if (field_0x18 != 0) {
-                WorkSchedulerCountNode* p3 = field_0x10;
-                WorkSchedulerCountNode* p4 = field_0x10;
+            if (field_0x10.count != 0) {
+                WorkSchedulerCountNode* p3 = field_0x10.root;
+                WorkSchedulerCountNode* p4 = field_0x10.root;
                 while (p3 != nullptr) {
                     WorkSchedulerCountNode* p2 = p3;
                     p4 = p2;
@@ -509,7 +509,7 @@ void WorkScheduler::PrioritizeWork(int workId) {
                 iVar6 = p4->key + -1;
             }
             // erase any node already keyed by the work's +0x24
-            WorkSchedulerCountNode* pk = field_0x10;
+            WorkSchedulerCountNode* pk = field_0x10.root;
             while (pk != nullptr) {
                 int entId = self->field_24;
                 if (entId < pk->key) {
@@ -518,14 +518,14 @@ void WorkScheduler::PrioritizeWork(int workId) {
                     pk = pk->right;
                 } else {
                     // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_0x10), pk);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                    WorkBST_BSTRemove_a6e0(&field_0x10, pk);   // 0x14001a6e0
                     break;
                 }
             }
             self->field_24 = iVar6;
             uint32_t uVar1 = static_cast<uint32_t>(self->field_20);
 
-            WorkSchedulerCountNode* cur = field_0x10;
+            WorkSchedulerCountNode* cur = field_0x10.root;
             if (cur == nullptr) {
                 WorkSchedulerCountNode* nodeMem = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(0x28, 8));
                 if (nodeMem != nullptr) {
@@ -536,7 +536,7 @@ void WorkScheduler::PrioritizeWork(int workId) {
                     nodeMem->workId = uVar1;
                     puVar7 = nodeMem;
                 }
-                field_0x10 = puVar7;
+                field_0x10.root = puVar7;
             } else {
                 WorkSchedulerCountNode* localRes18 = cur;
                 WorkSchedulerCountNode* prev;
@@ -586,10 +586,10 @@ void WorkScheduler::PrioritizeWork(int workId) {
             balance:
                 {
                     WorkSchedulerCountNode* res18local = prev;
-                    AvlRebalance(&field_0x10, &res18local);   // 0x14001a8c0
+                    AvlRebalance(&field_0x10.root, &res18local);   // 0x14001a8c0
                 }
             }
-            field_0x18 = field_0x18 + 1;
+            field_0x10.count = field_0x10.count + 1;
             return;
         }
         if (piVar4 == nullptr) return;

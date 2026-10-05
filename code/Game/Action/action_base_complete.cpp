@@ -188,7 +188,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
     {
         // The Work's queue-order key (Work::field_24, +0x24).
         int wantKey = task->work->field_24;
-        WorkSchedulerCountNode* n = sched->field_0x10;
+        WorkSchedulerCountNode* n = sched->field_0x10.root;
         while (n != nullptr) {
             int k = n->key;
             // Retail 8e30 step: `want < nodeKey -> node+0x10`, `nodeKey < want ->
@@ -198,7 +198,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
             } else if (k < wantKey) {
                 n = n->right;   // greater
             } else {
-                WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&sched->field_0x10),  // LEFT: SIG WorkBST_BSTRemove_a6e0: WorkScheduler +0x10 / +0x18 is a raw root + count pair (Game/WorkScheduler.h, GAME), handed to the one erased core
+                WorkBST_BSTRemove_a6e0(&sched->field_0x10,
                                        n);   // 0x14001a6e0
                 break;
             }

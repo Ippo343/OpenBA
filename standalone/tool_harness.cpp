@@ -2173,13 +2173,13 @@ void FireClearHarvest() {
 
     // Work scheduler: gw+0x118; primary AVL count at +0x18 (sched[6]).
     WorkScheduler* sched = gw->m_tutorial;
-    int schedBefore = sched ? sched->field_0x18 : -1;
+    int schedBefore = sched ? sched->field_0x10.count : -1;
 
     fprintf(stderr, "[ClearHarvest] house[0]=%p ClearAreaComp=%p resource=(%d,%d) ent=%p — driving "
            "State0Enter (harvest dispatch)...\n", house, caComp, rcCol, rcRow, resEnt);
     ClearArea_State0Enter(caComp, nullptr);   // not-done path: sm unused
 
-    int schedAfter = sched ? sched->field_0x18 : -1;
+    int schedAfter = sched ? sched->field_0x10.count : -1;
 
     // Restore footprint.
     bc->tileX0 = sCol;

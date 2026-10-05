@@ -130,6 +130,11 @@ template <class Node>
 inline void WorkBST_BST_Serialize_296b0(AvlTreeHead<Node>* head, IO::Serializer* serializer) {
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(head), serializer);  // CAST-OK: elem_stride
 }
+// The same core unlinking a node of a raw {root, count} tree (WorkScheduler's queue-order tree).
+template <class Node>
+inline void WorkBST_BSTRemove_a6e0(AvlTreeHead<Node>* head, Node* node) {
+    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(head), node);  // CAST-OK: elem_stride
+}
 
 // ---- work_base_cellbst.cpp
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40
