@@ -130,11 +130,6 @@ void* MemAlloc(uint64_t bytes, int align) {
     return System::MemoryAllocator::MemAlloc(bytes, align);
 }
 
-// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`, 0x1800c7ad0 — the matching
-// lock/Free/unlock triple.
-void MemFree(void* p) {
-    System::MemoryAllocator::MemFree(p);
-}
 
 }  // namespace
 
@@ -158,10 +153,6 @@ extern "C" void* RtUi_SpriteSheet_OperatorNew(uint64_t bytes) {
 // and its class's three per-TU `operator delete` copies.
 // ============================================================================
 
-// The exported `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` wrapper, MemFree
-// above, is `static`-cached per translation unit already; these three rows
-// all reuse that one cache rather than each keeping their own, since it is
-// the SAME shipped body (0x1800c7ad0) underneath every one of them.
 
 // ============================================================================
 // `??1SpriteSheet@UI@@UEAA@XZ` — retail 0x18011d670, ord 686. The REAL
