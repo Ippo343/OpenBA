@@ -241,7 +241,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     MapCell* cellRec = map->cells;                               // +0x80, stride 0x30
     uint8_t oldState = cellRec[cell].terrainType;                // +0x29
     bool stateWasWalk = ((1u << (oldState & 0x1f)) & 0x1e0u) != 0;   // old state 5..8
-    *reinterpret_cast<uint8_t*>(&map->field_0xA2) |= static_cast<uint8_t>(stateWasWalk);   // LEFT: Map::field_0xA2 is bool (Game/Map.h, not this block's); the tree ORs the byte
+    map->field_0xA2 |= static_cast<uint8_t>(stateWasWalk);   // the tree ORs the byte (Map::field_0xA2 is uint8_t)
     cellRec[cell].terrainType = 2;
     int size = map->size;
     if (stateWasWalk)

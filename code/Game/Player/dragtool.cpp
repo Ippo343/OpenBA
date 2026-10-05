@@ -184,12 +184,12 @@ char DragTool::OnKey(char key) {
 
             if (descResult != nullptr) {
                 // The description's cost-string array: data +0x50, count +0x58.
-                bool costOverflow = (segmentCount >= descResult->_entryCount);
+                bool costOverflow = (segmentCount >= descResult->_entries._size);
 
                 if (!costOverflow) {
                     // Retail copy-constructs a temporary from the array slot, copies that
                     // into costString, then releases the temporary. The scope does both.
-                    System::String tempString(descResult->_entries[segmentCount]);
+                    System::String tempString(descResult->_entries._data[segmentCount]);
                     costString = tempString;
                 }
                 // else: retail's srcString is the null String, so costString stays empty

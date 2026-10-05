@@ -20,6 +20,7 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+namespace Graphics { class MaterialInstance; }
 
 // One per-variant UV rect of the decal's atlas (Serialize 0x14011b980: four floats,
 // default {0, 0, 1, 1}); DecalComponent::OnAdded 0x14011b560 picks it by the
@@ -48,7 +49,7 @@ public:
     bool _tiled;                                // +0x24 AddDecal's tiled flag
     bool _flagB;                                // +0x25 AddDecal's last argument
     uint8_t _pad26[2];                          // +0x26 never written by the ctor
-    void** _materials;                          // +0x28 ExternalPtr array (0x14001bcc0, typeInfo import
+    Graphics::MaterialInstance** _materials;    // +0x28 ExternalPtr<MaterialInstance> array (0x14001bcc0, typeInfo import
                                                 //       0x140151f20), indexed by DecalComponent::decalState
     int32_t _materialCount;                     // +0x30
     int32_t _materialCap;                       // +0x34

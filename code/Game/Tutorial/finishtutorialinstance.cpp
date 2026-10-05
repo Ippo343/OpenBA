@@ -157,7 +157,7 @@ void FinishTutorialInstance::Startup() {
 
         // The tutorial's setup description (tutDef +0x20)
         Tutorial* tutDef = tutInst->tutorialDef;
-        const ComponentDescription* tutorialId = nullptr;
+        ComponentDescription* tutorialId = nullptr;
         if (tutDef) {
             tutorialId = tutDef->setup;
         }

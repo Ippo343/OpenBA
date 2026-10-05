@@ -424,12 +424,13 @@ void DiseaseComponent::Infect() {
         ToolbarDescription* found = nullptr;
         if (entityDesc) DragTool_FindDescription_5160(entityDesc, &found);   // 0x140005160
         if (found) {
-            uint8_t uiStr[16] = {0};
-            ::new (uiStr) UI::String(
+            // UI::String is trivially destructible; retail 0x1400483a0 builds it
+            // in an unzeroed stack slot (CALL [0x140151300] 0x140048434) and never
+            // destroys it. (The tree's raw buffer was zeroed first: a stack-only store.)
+            UI::String uiStr(
                 Object::ExternalPtr<UI::StringTable>(found->_stringTable),   // B.3.6 bridge
                 found->_str2);
-            ::new (&cropName) System::String(
-                reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // LEFT: raw storage, the UI::String's dtor never runs here (a typed local would run it)
+            ::new (&cropName) System::String(uiStr.operator System::String());
             haveName = true;
         }
     }

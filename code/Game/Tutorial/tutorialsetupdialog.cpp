@@ -37,7 +37,7 @@
 TutorialSetupDialog::TutorialSetupDialog()
     : shownPaths(), dialogNames(),
       highlightPath(), arrowRotation(0), _pad4C{}, highlightDialog(nullptr),
-      toolbarRef{{}, -1, {}, nullptr},
+      toolbarRef(),
       toolbarIndex(0), _pad74{} {}
 
 // B4 X7-GAME-A (H5): the +0x40 String is a member: String() is the qword 0 the
@@ -53,8 +53,8 @@ System::String& TutorialSetupDialog::HighlightPath() {
 // compiler re-stamps TutorialSetup and runs ~External (the tree ran a guarded
 // ~Internal instead).
 TutorialSetupDialog::~TutorialSetupDialog() {
-    toolbarRef.Name().~String();
-    // +0x40: the member's ~String, after this body
+    // B4 Y GAMEA: +0x58 toolbarRef's ~String (0x1400e2c20), then +0x40 (0x1400e2c2b)
+    // and the two Arrays: the members', after this empty body.
 }
 
 // ============================================================
@@ -115,7 +115,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     System::Filename tempFilename;
     (void)tempFilename;
 
-    toolbarRef.Name().Serialize(ser);
+    toolbarRef.name.Serialize(ser);
 
     // On load: resolve the ExternalRef at +0x58 (FUN_14001b1d0 inlined): when
     // the factory generation moved, Find the name and keep it if it IsDerivedFrom
@@ -123,7 +123,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     if (static_cast<int>(ser.GetDirection()) == 0) {
         ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
         if (toolbarRef.generation != efactory->_generation) {
-            System::Filename filenameBuf(toolbarRef.Name());
+            System::Filename filenameBuf(toolbarRef.name);
             const ::Object::External* found = efactory->Find(filenameBuf);
             bool valid = found && Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId());
             // The factory hands out const Externals; the reference holds them mutable.

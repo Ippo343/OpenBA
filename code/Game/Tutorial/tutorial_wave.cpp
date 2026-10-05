@@ -131,7 +131,7 @@ void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) 
 }
 
 extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: TutWave_SerializeDialogRef's callers hand the slot as void*
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: the one caller's slot is TutorialSetupDialog::highlightDialog, a `const UI::Dialog*`, which the typed wrapper's T** -> External** cannot take without casting the const away
                                 nullptr, "UI::Dialog");
 }
 
@@ -143,16 +143,16 @@ extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
 // Upsert keyed by the tutorial's setup description. Existing node: active
 // byte at +0x10 = 1, dword +0x08 = value, dword +0x0C = 0x20. Absent: build
 // that same 0x18-byte record on the stack and hand it to the shared BST
-// inserter at 0x140014890 (ToolbarUtility_BstInsert_4890).
+// inserter at 0x140014890 (Avl38SetInsert, Dialog/exe_bodies.h).
 // ===========================================================================
-void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, const ComponentDescription* tutorialId,
+void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, ComponentDescription* tutorialId,
                                 void* /*param3*/, uint32_t value) {
     if (!treeOwner) return;
     const void* key = tutorialId;
 
-    // Walk. The node is TrackedEntityNode (Game/PlayerToolManager.h), keyed by
+    // Walk. The node is PinnedToolNode (Game/PlayerToolManager.h), keyed by
     // address.
-    TrackedEntityNode* node = treeOwner->field_0x50;
+    PinnedToolNode* node = treeOwner->field_0x50.root;
     while (node) {
         const void* nodeKey = node->key;
         if (key < nodeKey) { node = node->left; continue; }
@@ -163,18 +163,14 @@ void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, const ComponentDes
         return;
     }
 
-    struct { const ComponentDescription* key; uint32_t value; uint32_t flags; uint8_t on; uint8_t _pad[7]; } rec;
-    rec.key   = tutorialId;
-    rec.value = value;
-    rec.flags = 0x20;
-    rec.on    = 1;
-    for (int i = 0; i < 7; ++i) rec._pad[i] = 0;
+    PinnedToolEntry rec;
+    rec.key    = tutorialId;
+    rec.x      = static_cast<int32_t>(value);
+    rec.y      = 0x20;
+    rec.active = 1;
+    for (int i = 0; i < 7; ++i) rec._pad11[i] = 0;
 
-    void* out[4] = {};
-    // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record
-    // as uint64_t* (DLG-d's B4 FORWARD signature).
-    ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&treeOwner->field_0x50), out,   // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record as uint64_t* (DLG-d's B4 FORWARD signature).
-                                  reinterpret_cast<uint64_t*>(&rec));   // 0x140014890   // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record as uint64_t* (DLG-d's B4 FORWARD signature).
+    Avl38SetInsert(&treeOwner->field_0x50, rec);   // 0x140014890
 }
 
 // ===========================================================================
@@ -285,26 +281,16 @@ Object::InternalPtr<UI::DialogInstance> TutorialSetupDialog::FindHighlightDialog
 }
 
 // ===========================================================================
-// 0x14001AF90 — copy-construct a NamedExternalRef {String, generation, cached*}.
-// 0x14001AFE0 — resolve one and hand back the cached External*, destroying the
-//               temporary String the copy owns.
+// 0x14001AF90 — copy-construct a NamedExternalRef {String, generation, cached*}
+//               (B4 Y GAMEA: NamedExternalRef's copy ctor, Goal/goal_exe_helpers.h).
+// 0x14001AFE0 — resolve one and hand back the cached External*; it takes the
+//               reference BY VALUE, so the copy's String dies with the call.
 // Used as a pair by OpenHighlightDialog to look the toolbar External up
 // without disturbing the setup's own cached reference.
 // ===========================================================================
-static NamedExternalRef* TutWave_ExternalRefCopy(NamedExternalRef* dst, const NamedExternalRef* src) {
-    if (!dst || !src) return dst;
-    new (dst->name) System::String(src->Name());
-    dst->generation = src->generation;
-    dst->resolved   = src->resolved;
-    return dst;
-}
-
-static const Object::External* TutWave_ExternalRefResolve(NamedExternalRef* ref) {
-    if (!ref) return nullptr;
-    ResolveExternalByName_Impl(ref);
-    const Object::External* out = ref->resolved;
-    ref->Name().~String();
-    return out;
+static const Object::External* TutWave_ExternalRefResolve(NamedExternalRef ref) {
+    ResolveExternalByName_Impl(&ref);
+    return ref.resolved;
 }
 
 // ===========================================================================
@@ -355,18 +341,14 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
         CitizenBehavior* mgr = gw ? gw->m_citizenList : nullptr;
         TemplateBucket* root = mgr ? mgr->field_0x160._root : nullptr;
 
-        NamedExternalRef refCopy{};
-        TutWave_ExternalRefCopy(&refCopy, &toolbarRef);
-        const Object::External* key = TutWave_ExternalRefResolve(&refCopy);
+        const Object::External* key = TutWave_ExternalRefResolve(toolbarRef);
 
         TemplateBucket* found = BstFind(root, key);
         int count = found ? found->element.entities._size : 0;
         int index = toolbarIndex;
 
         if (count > index) {
-            NamedExternalRef refCopy2{};
-            TutWave_ExternalRefCopy(&refCopy2, &toolbarRef);
-            const Object::External* key2 = TutWave_ExternalRefResolve(&refCopy2);
+            const Object::External* key2 = TutWave_ExternalRefResolve(toolbarRef);
             TemplateBucket* found2 = BstFind(root, key2);
             if (found2 && found2->element.entities._data) {
                 targetElem = found2->element.entities._data[index];

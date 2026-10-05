@@ -236,11 +236,13 @@ static Description* FindDescriptionOnObject(const ComponentDescription* obj, uin
 // The citizen slot handed to Execute is an InternalPtr<CitizenComponent> (its
 // +0x10 entity, +0x30, +0x54, +0x88, +0xB0, +0x1F0 and +0x278 reads are
 // CitizenComponent's fields).
-static int FinalizeAction(ConsumeProduce* self, CitizenComponent** citizenIBP, void* actionIBP, int priority, int slotIndex) {
+static int FinalizeAction(ConsumeProduce* self, CitizenComponent** citizenIBP, int priority, int slotIndex) {
     CitizenComponent* citizen = *citizenIBP;
 
-    // Call vtable slot +0x50 (GetTarget): the workplace's profession
-    Profession* actionPtr = *self->GetTarget(static_cast<Profession**>(actionIBP));   // LEFT: the return buffer is the caller's reused scratch slot (FinalizeAction takes it as void*)
+    // Call vtable slot +0x50 (GetTarget): the workplace's profession. Retail writes it
+    // into the caller's reused scratch stack slot (dead after this read); a typed local.
+    Profession* targetBuf;
+    Profession* actionPtr = *self->GetTarget(&targetBuf);
 
     citizen->statusFlags |= 4;
     citizen->field_0x30 = priority;
@@ -539,7 +541,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 matEntity, available, slot, 0, '\x01', 0, 0);
 
                             int priority = field_20;
-                            return FinalizeAction(this, citizenIBP, &destEntityRef, priority, slot);
+                            return FinalizeAction(this, citizenIBP, priority, slot);
                         }
                     }
                 }
@@ -636,7 +638,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                             matEntity2, -1, slot, 1, '\0', 0, 0);
 
                                         int priority2 = field_20;
-                                        return FinalizeAction(this, citizenIBP, &fetchDest, priority2, slot);
+                                        return FinalizeAction(this, citizenIBP, priority2, slot);
                                     }
                                 }
                                 break;
@@ -820,7 +822,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 }
 
                 int priority3 = field_20;
-                return FinalizeAction(this, citizenIBP, &actionPriority, priority3, slot);
+                return FinalizeAction(this, citizenIBP, priority3, slot);
             }
         }
         return 1;

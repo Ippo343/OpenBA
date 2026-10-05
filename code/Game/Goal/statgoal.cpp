@@ -42,15 +42,13 @@
 // ctor 0x1400daa80: Goal(), the vptr, then the stat defaults.
 StatGoal::StatGoal()
     : statTypeA(5), statTypeB(5), comparisonType(10), fixedValue(1),
-      requireOtherGoalsMet(false), _pad41{}, statA{{}, -1, {}, nullptr},
-      statB{{}, -1, {}, nullptr}, statFlags(0x20), statSubType(1) {}
+      requireOtherGoalsMet(false), _pad41{}, statA(),
+      statB(), statFlags(0x20), statSubType(1) {}
 
-// The dtor inside [0] 0x140026540: the two name Strings (B then A); the
-// compiler then runs ~Goal. The names are raw storage (NamedExternalRef, H5).
-StatGoal::~StatGoal() {
-    statB.Name().~String();
-    statA.Name().~String();
-}
+// The dtor inside [0] 0x140026540: the two name Strings (B then A, 0x140026570 /
+// 0x140026580), then ~Goal. B4 Y GAMEA (H5): they are the members' ~String,
+// run after this empty body in reverse declaration order.
+StatGoal::~StatGoal() {}
 
 // ============================================================
 // StatGoal::Serialize (vtable +0x28, 0x1400da8b0)
@@ -81,7 +79,7 @@ bool StatGoal::Serialize(IO::Stream& stream) {
     {
         System::Filename filenameBuf;
         (void)filenameBuf;
-        statA.Name().Serialize(ser);
+        statA.name.Serialize(ser);
 
         // If loading (mode == 0), resolve the reference. Original (0x1400da960):
         // RAX = *(serializer+0) [the stream], then *(int*)(RAX+8) == 0.
@@ -94,7 +92,7 @@ bool StatGoal::Serialize(IO::Stream& stream) {
     {
         System::Filename filenameBuf;
         (void)filenameBuf;
-        statB.Name().Serialize(ser);
+        statB.name.Serialize(ser);
 
         if (ser._stream && static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
             statB.Resolve();
@@ -134,14 +132,9 @@ void StatGoal::Destruct() { this->~StatGoal(); }
 // Retail copies the WHOLE 0x18 by-name reference to the stack, resolves the
 // COPY and reads the External back out of it: the member is left untouched.
 static const Object::External* ResolveCopy(const NamedExternalRef& ref) {
-    NamedExternalRef local;
-    new (local.name) System::String(ref.Name());
-    local.generation = ref.generation;
-    local.resolved   = ref.resolved;
+    NamedExternalRef local(ref);   // retail's stack copy of the reference
     local.Resolve();
-    const Object::External* ext = local.resolved;
-    local.Name().~String();
-    return ext;
+    return local.resolved;         // then the copy's ~String
 }
 
 void StatGoal::ComputeOperands(int& statValueA, int& comparisonValue) const {

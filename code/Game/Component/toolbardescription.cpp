@@ -66,10 +66,7 @@
 // B4 X-G1-3: kept as the tree's body, not replaced by the erased core: it counts unsigned and
 // tests the BASE pointer (`buf`) where SetSizeCore counts signed and tests the computed
 // element address, so it is not provably the same SetSize. Typed by element.
-extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount) {
-    // LEFT: H5 the callers' String arrays (ToolbarDescription::_entries, TutorialSetupDialog's
-    // two) are raw {data, count, capacity} triples
-    auto* arr = reinterpret_cast<Collection::Array<System::String>*>(hdr);   // LEFT: H5 the callers' String arrays (ToolbarDescription::_entries, tutorialsetupdialog.cpp's two) are raw triples
+extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount) {
     unsigned oldCount = static_cast<unsigned>(arr->_size);
     if (newCount == oldCount) return;
     System::String* oldBuf = arr->_data;
@@ -115,27 +112,16 @@ ToolbarDescription::ToolbarDescription()
     : Description(),
       _spriteSheet(nullptr),
       _stringTable(nullptr),
-      _entries(nullptr),
-      _entryCount(0),
-      _entryCap(0),
+      _entries(),
       _val0(-1),
       _val1(0) {}
 
-// dtor (slot 0 0x140039500 minus the stamps): destroys the String array's elements and frees it; the four String members follow (0x14012db70).
-// The compiler then chains ~Description -> ~External.
-ToolbarDescription::~ToolbarDescription() {
-    {
-        System::String* buf = _entries;
-        int n = _entryCount;
-        if (buf) {
-            for (int i = 0; i < n; ++i) buf[i].~String();
-        }
-    }
-    System::MemoryAllocator::MemFree(_entries);
-    _entries = nullptr;
-    _entryCount = 0;
-    _entryCap = 0;
-}
+// dtor (slot 0 0x140039500 minus the stamps; body 0x14012db70): ~String over the
+// +0x50 array's count (0x14012dba1 tests the count only), MemFree(+0x50), zero
+// +0x50 / +0x58, then ~String +0x48 / +0x40 / +0x38 / +0x28. That is the members'
+// own destructors in reverse declaration order (~Array first); the compiler then
+// chains ~Description -> ~External.
+ToolbarDescription::~ToolbarDescription() {}
 
 // [5] 0x14012da30: stream order as retail.
 bool ToolbarDescription::Serialize(IO::Stream& stream) {
@@ -156,7 +142,7 @@ bool ToolbarDescription::Serialize(IO::Stream& stream) {
     //    new count there first, the resize below would see oldCount==newCount and
     //    skip the allocation (leaving +0x50 NULL — the "cost ???" bug). The resize
     //    itself writes +0x58 once it has grown the buffer.
-    int count = _entryCount;
+    int count = _entries._size;
     ser.Serialize(count, nullptr);
     
     // 8. on load, resize the String array (+0x50) to count. ResolveAddr(Exe, 0x140028860)
@@ -184,7 +170,7 @@ bool ToolbarDescription::Serialize(IO::Stream& stream) {
     }
     
     // 9. per-element String::Serialize (stride 8)
-    System::String* buf = _entries;
+    System::String* buf = _entries._data;
     if (buf) {
         for (int i = 0; i < count; ++i) {
             buf[i].Serialize(ser);

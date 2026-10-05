@@ -440,8 +440,6 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                 {
                     void* strm = ser._stream;
                     if (strm) {
-                        pos   = *(uint32_t*)((uint8_t*)strm + 0x8C);   // LEFT: the trace probes two stream classes' cursors (CompressedMemoryStream +0x8C, MemoryStream +0x24) on a stream of unknown class
-                        pos24 = *(uint32_t*)((uint8_t*)strm + 0x24);   // LEFT: the trace probes two stream classes' cursors (CompressedMemoryStream +0x8C, MemoryStream +0x24) on a stream of unknown class
                         // Neither documented cursor moves for THIS stream type, so
                         // find the real one instead of guessing a third offset:
                         // snapshot the first 0x100 bytes and report which dwords
@@ -450,6 +448,10 @@ void ComponentEntity::Persist(IO::Stream& stream) {
                         uint32_t cur[64];
                         for (int k = 0; k < 64; ++k)
                             cur[k] = *(uint32_t*)((uint8_t*)strm + k * 4);  // CAST-OK: crash_walk
+                        // The two documented cursors, read out of the same walk:
+                        // CompressedMemoryStream +0x8C and MemoryStream +0x24.
+                        pos   = cur[0x8C / 4];
+                        pos24 = cur[0x24 / 4];
                         if (s_traceHavePrev) {
                             char buf[512]; int n = 0;
                             for (int k = 0; k < 64 && n < 400; ++k)
@@ -714,8 +716,8 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
     masterArray.SetSize(id + 1, fill);
 
     // The category byte +0x1F (the handle's high byte): retail stores the BYTE.
-    // ComponentEntity.h declares +0x1C..+0x1F as one uint32 `_handle`: LEFT.
-    reinterpret_cast<int8_t*>(&(*entityIBP)->_handle)[3] = (int8_t)category;   // LEFT: _handle's byte store vs its 32-bit sites
+    // ComponentEntity::_handleBytes[3] is that byte of the +0x1C dword.
+    (*entityIBP)->_handleBytes[3] = (int8_t)category;
     if (category == 6) {
         (*entityIBP)->_handle |= 0xFFFFFF;               // no category bucket
     } else {

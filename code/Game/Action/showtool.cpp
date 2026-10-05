@@ -162,26 +162,9 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     if (!meshSlot) return;
     Graphics::GraphicsMesh* mesh = *meshSlot;
 
-    // LEFT: CitizenComponent +0xB8 is raw storage for a Graphics::MeshInstance (H5, owned
-    // by CIT; declaring it makes its ctor / dtor run).
-    Graphics::MeshInstance* held = reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);  // LEFT: H5 CitizenComponent::meshInstance (+0xB8) is raw storage for a Graphics::MeshInstance (CitizenComponent.h; declaring it makes its ctor / dtor run)
-
-    // Ensure the held-item MeshInstance (citizen +0xb8) is a constructed object.
-    // Retail treats +0xb8 as an embedded, already-constructed Graphics::MeshInstance
-    // and only SetMesh's it; but in standalone the character's held-item slot may
-    // never have been initialized (this is the first carried item), leaving it
-    // zeroed. SetMesh/Attach tolerate a zeroed object, but MeshInstance::Update is
-    // then skipped (null vtable) and Graphics::Scene::AddObject faults on the
-    // uninitialized geometry (READ of +0x40). Default-construct it in place — the
-    // same MeshInstance default-ctor the StorageDisplayComponent pile renderer uses
-    // before its own SetMesh+AddObject — and store -1 at +0xb8 + 0x120 (which is the
-    // citizen's toolId, +0x1D8).
-    void* heldVt = *reinterpret_cast<void* const*>(citizen->meshInstance);  // LEFT: H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls when the member is typed)
-    if (!heldVt) {
-        ::new (static_cast<void*>(citizen->meshInstance)) Graphics::MeshInstance();   // B.3.9 EXA: the real class
-        citizen->toolId = -1;
-    }
-
+    // The citizen's held-item MeshInstance (+0xB8), built by the citizen's ctor
+    // (0x140114808); retail 0x1401173b0 only SetMesh's it.
+    Graphics::MeshInstance* held = &citizen->meshInstance;
 
     // --- Assign the mesh to the citizen's held-item MeshInstance (+0xb8). ---
     held->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
@@ -200,15 +183,10 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
                 : -1;
     charMeshHolder->meshInstance.Attach(held, nodeIdx);
 
-    // MeshInstance::Update(held, &time0) — slot 1 of `Graphics::Geometry`. The receiver is
-    // a PROVED `Graphics::MeshInstance`: +0xb8 was just constructed above if it was not
-    // and SetMesh'd as one. The `meshVt` test stays: it tests the OBJECT (a
-    // never-constructed held-item slot is zeroed), not a door pointer.
+    // MeshInstance::Update(held, &time0) — slot 1 of `Graphics::Geometry`, called
+    // unconditionally as retail (0x140117688 CALL [RAX+0x8]).
     const System::Time time0{0};
-    void* meshVt = *reinterpret_cast<void* const*>(citizen->meshInstance);  // LEFT: H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls when the member is typed)
-    if (meshVt) {
-        held->Update(time0);
-    }
+    held->Update(time0);
 
     // Add the held-item geometry to the live Graphics::Scene (GameUpdateLoop +0x60).
     Graphics::Scene* scene = (GameUpdateLoop::_singleton != nullptr)
