@@ -33,7 +33,6 @@
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Game/exe_constants.h"     // B3R: kRdata_140172114
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -177,12 +176,12 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     uint32_t citizenGridCell = mapSz * citizenCellY + citizenCellX;
 
     // Step 4: Iterate orchard slots
-    int fieldCellCount = _field60;
+    int fieldCellCount = _field58._size;
     [[maybe_unused]] float cellFloat = 0.0f;
 
     if (fieldCellCount > 0) {
         for (int i = 0; i < fieldCellCount; i++) {
-            bool* validityArray = _field58;
+            bool* validityArray = _field58._data;
             if (validityArray[i] == 0) {
                 goto next_cell;
             }
@@ -412,7 +411,7 @@ int HarvestOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*
     }
 
     // Mark slot as valid
-    bool* validityArray = _field58;
+    bool* validityArray = _field58._data;
     validityArray[param4] = 1;
     return 0;
 }
@@ -509,7 +508,7 @@ int HarvestOrchard::Validate() {
                 collectCount = newCount;
             }
 
-            bool* validityArray = _field58;
+            bool* validityArray = _field58._data;
             validityArray[node->element.slot] = 1;
         }
 
@@ -586,13 +585,13 @@ void HarvestOrchard::Persist(IO::Stream& stream) {
     // (the helper takes the container as uintptr_t*: LEFT)
     WorkCellBST_Serialize_9de0(&_cells, &serializer2);
 
-    int cellCount = _field60;
+    int cellCount = _field58._size;
     int cellCountBuf[2] = { cellCount, 0 };
     serializer2.Serialize(cellCountBuf[0], nullptr);
 
-    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
+    // 0x14000a590 == Collection::Array<bool>::SetSize.
     if (static_cast<int>(serializer2.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::U8>(&_field58).SetSize(cellCountBuf[0]);
+        _field58.SetSize(cellCountBuf[0]);
     }
 
     // Serialize validity array through the BOOL-ARRAY door.
@@ -610,19 +609,16 @@ void HarvestOrchard::Persist(IO::Stream& stream) {
     // the old `s_fn_Serializer_SerializeBoolArray` alias pointed at (removed with
     // its door in the B.3.4a closing sweep). See
     // harvestarea.cpp for the full argument.
-    serializer2.Serialize(cellCountBuf[0], _field58, nullptr);   // slot 0x140151458 = bool-array door
+    serializer2.Serialize(cellCountBuf[0], _field58._data, nullptr);   // slot 0x140151458 = bool-array door
 }
 
 
 // The HarvestOrchard / AutoPickupWork / Work stamps and the `~Internal` call are the
 // compiler's chain.
 HarvestOrchard::~HarvestOrchard() {
-    System::MemoryAllocator::MemFree(_field58);
-    _field58 = nullptr;
-    _field60 = 0;   // with +0x64: one qword store in retail
-    _field64 = 0;
-
-    // The +0x48 set's Clear is the `_cells` member's ~Set, after this body (0x1400edf60).
+    // The +0x58 flags are the `_field58` member's ~Array (MemFree, then +0x58 = +0x60 = 0),
+    // then the +0x48 set's Clear is the `_cells` member's ~Set: reverse declaration order
+    // after this empty body (0x1400edf60).
 }
 
 
@@ -636,7 +632,7 @@ int HarvestOrchard::GetPriority() {
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
 HarvestOrchard::HarvestOrchard()
-    : AutoPickupWork(), _field58(nullptr), _field60(0), _field64(0) {
+    : AutoPickupWork() {
 }
 
 // ============================================================

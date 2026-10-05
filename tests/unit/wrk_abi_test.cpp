@@ -229,7 +229,7 @@ UNIT_TEST(wrk_leaf_harvestorchard) {
     CHECK_EQ(offsetof(HarvestOrchard, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(HarvestOrchard, _cells) + offsetof(HarvestOrchard::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestOrchard, _field58), (size_t)0x58);
-    CHECK_EQ(offsetof(HarvestOrchard, _field60), (size_t)0x60);
+    CHECK_EQ(offsetof(HarvestOrchard, _field58) + offsetof(HarvestOrchard::SlotFlags, _size), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_herbalistwork) {
