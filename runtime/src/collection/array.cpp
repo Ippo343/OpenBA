@@ -831,8 +831,8 @@ void DestroyCfgEntry20(void* ignoredThis, uint8_t* base, int count) {
 // +0x08, the destroy (0x180005570) walks +0x08 then +0x00. Each was read from
 // its own body; neither was inferred from the other.
 static void TextEntryAssign(UI::StringTable::TextEntry* d, const UI::StringTable::TextEntry* s) {
-    AdoptString(d->name, s->name);          // 180078d33
-    AdoptString(d->text, s->text);          // 180078d44
+    AdoptString(d->name._data, s->name._data);  // 180078d33
+    AdoptString(d->text._data, s->text._data);  // 180078d44
 }
 void AssignStringPair10(uint8_t* d, const uint8_t* s) {
     AssignAs<UI::StringTable::TextEntry, &TextEntryAssign>(d, s);
