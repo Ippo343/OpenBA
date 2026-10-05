@@ -491,7 +491,7 @@ void Modification::SetupFileSystem() {
             if (node->element.typeId >= typeId) { found = node; break; }
             node = node->right;
         }
-        RtObject::BaseTypeInfo* const info = found->element.record.info;   // 0x1800af330
+        ::Object::BaseTypeInfo* const info = found->element.record.info;   // 0x1800af330
         // IN-PLACE factory, +0x28 — not the allocating one at +0x20.
         info->inPlaceFactoryFn(ext);   // the returned Base* is not read
 

@@ -753,7 +753,7 @@ Internal* InternalFactory::PersistObject(IO::Stream& stream, uint32_t generation
                 node = node->right;
             }
             // A MISS LEAVES `found` NULL AND RETAIL DEREFERENCES IT.
-            RtObject::BaseTypeInfo* const info = found->element.record.info;   // node + 0x10
+            ::Object::BaseTypeInfo* const info = found->element.record.info;   // node + 0x10
             // Zero-argument: retail leaves `info` in RCX at the call site but
             // the factory is a static that reads nothing.
             Base* const created = info->factoryFn();                  // CALL [RCX+0x20]
