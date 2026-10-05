@@ -163,10 +163,11 @@ struct RbElement final : UI::Element {
 };
 // A shared (refcount 2) String buffer: ~ElementDescription's member ~String
 // takes the SHARING arm (decrement, null the field), so one run leaves 1.
+// The test hands the probe's field one reference of its own (refcount 2).
 struct SharedName {
-    alignas(8) unsigned char block[16] = {};
-    char* data() { return reinterpret_cast<char*>(block + 8); }   // the String's data pointer
-    SharedName() { RtSystem::StringRefCount(data()) = 2; }
+    System::String s{"name"};
+    char* data() { return s._data; }
+    SharedName() { ++RtSystem::StringRefCount(s._data); }
 };
 
 struct RbElementDesc final : UI::ElementDescription {
