@@ -64,6 +64,7 @@ public:
 };
 
 static_assert(sizeof(EventLogUI) == 0x80, "EventLogUI is 0x80 (create 0x1400113e0 MemAlloc(0x80))");
+static_assert(offsetof(EventLogUI, _pad4C) == 0x4C, "EventLogUI::_pad4C");
 static_assert(alignof(EventLogUI) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(EventLogUI, buttonBottom) == 0x30, "EventLogUI::buttonBottom @ 0x30");
 static_assert(offsetof(EventLogUI, buttonPrevious) == 0x38, "EventLogUI::buttonPrevious @ 0x38");

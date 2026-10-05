@@ -92,6 +92,8 @@ public:
 };
 
 static_assert(sizeof(MenuDialogLoopT) == 0xc00, "MenuDialogLoopT is 0xc00 (MemAlloc(0xc00, 8))");
+static_assert(offsetof(MenuDialogLoopT, _pad0b2c) == 0xB2C, "MenuDialogLoopT::_pad0b2c");
+static_assert(offsetof(MenuDialogLoopT, _pad0b84) == 0xB84, "MenuDialogLoopT::_pad0b84");
 static_assert(alignof(MenuDialogLoopT) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(MenuDialogLoopT, _random)        == 0x168, "+0x168 System::Random");
 static_assert(offsetof(MenuDialogLoopT, _audioScene)    == 0xb30, "+0xb30 Audio::Scene");

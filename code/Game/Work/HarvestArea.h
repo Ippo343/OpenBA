@@ -78,6 +78,9 @@ public:
 };
 
 static_assert(sizeof(HarvestArea::Claim) == 0x10, "HarvestArea claim element 0x10");
+static_assert(offsetof(HarvestArea::Claim, slot) == 0x0, "Claim::slot");
+static_assert(offsetof(HarvestArea::Claim, _pad04) == 0x4, "Claim::_pad04");
+static_assert(offsetof(HarvestArea::Claim, citizen) == 0x8, "Claim::citizen");
 static_assert(sizeof(HarvestArea::ClaimNode) == 0x30, "HarvestArea claim node 0x30");
 static_assert(offsetof(HarvestArea::ClaimNode, parent) == 0x10, "claim node parent @ +0x10");
 static_assert(offsetof(HarvestArea::ClaimNode, left) == 0x18, "claim node left @ +0x18");

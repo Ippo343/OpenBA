@@ -96,4 +96,6 @@ static_assert(offsetof(TutorialSetupDialog, toolbarRef) + offsetof(NamedExternal
 static_assert(offsetof(TutorialSetupDialog, toolbarRef) + offsetof(NamedExternalRef, resolved) == 0x68, "+0x68");
 static_assert(offsetof(TutorialSetupDialog, toolbarIndex) == 0x70, "+0x70");
 static_assert(sizeof(TutorialSetupDialog) == 0x78, "TutorialSetupDialog is 0x78 (create 0x1400285b0)");
+static_assert(offsetof(TutorialSetupDialog, _pad4C) == 0x4C, "TutorialSetupDialog::_pad4C");
+static_assert(offsetof(TutorialSetupDialog, _pad74) == 0x74, "TutorialSetupDialog::_pad74");
 static_assert(alignof(TutorialSetupDialog) == 8, "qword-aligned");

@@ -74,6 +74,7 @@ public:
 };
 
 static_assert(sizeof(MultiObjectComponent) == 0x60, "MultiObjectComponent is 0x60 (create 0x140035ef0)");
+static_assert(offsetof(MultiObjectComponent, _pad5C) == 0x5C, "MultiObjectComponent::_pad5C");
 static_assert(alignof(MultiObjectComponent) == 8, "MultiObjectComponent alignment");
 static_assert(offsetof(MultiObjectComponent, _controller) == 0x28,
               "MultiObjectComponent's controller member at +0x28 (slot 17 0x140004080)");

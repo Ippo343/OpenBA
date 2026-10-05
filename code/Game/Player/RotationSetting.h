@@ -41,5 +41,6 @@ public:
 };
 
 static_assert(sizeof(RotationSetting) == 0x18, "RotationSetting is 0x18 (create 0x140026d20 MemAlloc(0x18))");
+static_assert(offsetof(RotationSetting, _pad14) == 0x14, "RotationSetting::_pad14");
 static_assert(alignof(RotationSetting) == 8, "RotationSetting is 8-aligned");
 static_assert(offsetof(RotationSetting, rotation) == 0x10, "RotationSetting +0x10 rotation (0x140026d68)");

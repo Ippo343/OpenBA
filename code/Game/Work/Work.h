@@ -172,6 +172,7 @@ public:
 };
 
 static_assert(sizeof(Work) == 0x48, "Work is 0x48 bytes (0x10 Internal + 0x38)");
+static_assert(offsetof(Work, _pad44) == 0x44, "Work::_pad44");
 static_assert(alignof(Work) == 8, "Work is 8-aligned");
 static_assert(offsetof(Work, field_10) == 0x10, "Work +0x10 entity InternalPtr (Persist 0x1400f7400)");
 static_assert(offsetof(Work, field_18) == 0x18, "Work +0x18 WorkComponent InternalPtr");

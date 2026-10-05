@@ -59,6 +59,7 @@ public:
 };
 
 static_assert(sizeof(GameLoadDialogLoopT) == 0xb60, "GameLoadDialogLoopT is 0xb60 (MemAlloc(0xb60, 4) at every site)");
+static_assert(offsetof(GameLoadDialogLoopT, _pad191) == 0x191, "GameLoadDialogLoopT::_pad191");
 static_assert(alignof(GameLoadDialogLoopT) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(GameLoadDialogLoopT, _fadeColor1) == 0x188, "+0x188");
 static_assert(offsetof(GameLoadDialogLoopT, _fadeColor2) == 0x18c, "+0x18c");

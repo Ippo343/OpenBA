@@ -44,6 +44,7 @@ struct NamedExternalRef {
     void ResolveToolbar();
 };
 static_assert(sizeof(NamedExternalRef) == 0x18, "the by-name reference is 0x18");
+static_assert(offsetof(NamedExternalRef, _pad0C) == 0xC, "NamedExternalRef::_pad0C");
 static_assert(offsetof(NamedExternalRef, generation) == 0x08, "NamedExternalRef +0x08 generation");
 static_assert(offsetof(NamedExternalRef, name) == 0x00, "NamedExternalRef +0x00 name");
 static_assert(offsetof(NamedExternalRef, resolved) == 0x10, "NamedExternalRef +0x10 resolved");

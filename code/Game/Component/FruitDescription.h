@@ -46,6 +46,7 @@ public:
 };
 
 static_assert(sizeof(FruitDescription) == 0x38, "FruitDescription is 0x38 (create 0x140005980 MemAlloc(0x38))");
+static_assert(offsetof(FruitDescription, _pad2c) == 0x2C, "FruitDescription::_pad2c");
 static_assert(alignof(FruitDescription) == 8, "FruitDescription alignment");
 static_assert(offsetof(FruitDescription, _ripenSeasons) == 0x20, "FruitDescription::_ripenSeasons @ +0x20");
 static_assert(offsetof(FruitDescription, _optimalTemp) == 0x24, "FruitDescription::_optimalTemp @ +0x24");

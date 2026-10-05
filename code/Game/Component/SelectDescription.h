@@ -48,6 +48,7 @@ public:
 };
 
 static_assert(sizeof(SelectDescription) == 0x48, "SelectDescription is 0x48 (create 0x14000bb90 MemAlloc(0x48))");
+static_assert(offsetof(SelectDescription, _pad44) == 0x44, "SelectDescription::_pad44");
 static_assert(alignof(SelectDescription) == 8, "SelectDescription alignment");
 static_assert(offsetof(SelectDescription, _ref20) == 0x20, "SelectDescription::_ref20 @ +0x20");
 static_assert(offsetof(SelectDescription, _s28) == 0x28, "SelectDescription::_s28 @ +0x28");

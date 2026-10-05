@@ -92,6 +92,8 @@ public:
 };
 
 static_assert(sizeof(BoatComponent) == 0x98, "BoatComponent is 0x98 (create 0x1400036e0)");
+static_assert(offsetof(BoatComponent, _pad5C) == 0x5C, "BoatComponent::_pad5C");
+static_assert(offsetof(BoatComponent, _pad74) == 0x74, "BoatComponent::_pad74");
 static_assert(alignof(BoatComponent) == 8, "BoatComponent alignment");
 static_assert(offsetof(BoatComponent, _controller) == 0x78,
               "BoatComponent's controller member at +0x78 (slot 17 0x140003720: LEA RAX,[RCX+0x78])");

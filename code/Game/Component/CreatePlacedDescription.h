@@ -51,6 +51,8 @@ public:
 };
 
 static_assert(sizeof(CreatePlacedDescription) == 0x58, "CreatePlacedDescription is 0x58 (create 0x140032a60 MemAlloc(0x58))");
+static_assert(offsetof(CreatePlacedDescription, _pad24) == 0x24, "CreatePlacedDescription::_pad24");
+static_assert(offsetof(CreatePlacedDescription, _pad4c) == 0x4C, "CreatePlacedDescription::_pad4c");
 static_assert(alignof(CreatePlacedDescription) == 8, "CreatePlacedDescription alignment");
 static_assert(offsetof(CreatePlacedDescription, _category) == 0x20, "CreatePlacedDescription::_category @ +0x20");
 static_assert(offsetof(CreatePlacedDescription, _name) == 0x28, "CreatePlacedDescription::_name @ +0x28");

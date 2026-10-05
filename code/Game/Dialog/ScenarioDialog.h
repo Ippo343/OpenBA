@@ -42,6 +42,8 @@ struct ScenarioDialogEntry {
     uint8_t           _pad34[4];        // +0x34
 };
 static_assert(sizeof(ScenarioDialogEntry) == 0x38, "ScenarioDialogEntry stride 0x38");
+static_assert(offsetof(ScenarioDialogEntry, element) == 0x0, "ScenarioDialogEntry::element");
+static_assert(offsetof(ScenarioDialogEntry, _pad34) == 0x34, "ScenarioDialogEntry::_pad34");
 static_assert(offsetof(ScenarioDialogEntry, selectSave) == 0x08, "");
 static_assert(offsetof(ScenarioDialogEntry, imageIcon) == 0x10, "");
 static_assert(offsetof(ScenarioDialogEntry, textTitle) == 0x18, "");
@@ -88,6 +90,8 @@ static_assert(offsetof(ScenarioDialog, selectedIndex) == 0xC8, "ScenarioDialog +
 static_assert(offsetof(ScenarioDialog, buttonOk) == 0xD0, "ScenarioDialog +0xd0");
 static_assert(offsetof(ScenarioDialog, entries) == 0xD8, "ScenarioDialog +0xd8");
 static_assert(sizeof(ScenarioDialog) == 0xE8, "ScenarioDialog is 0xe8 (create 0x140013970)");
+static_assert(offsetof(ScenarioDialog, _padB9) == 0xB9, "ScenarioDialog::_padB9");
+static_assert(offsetof(ScenarioDialog, _padCC) == 0xCC, "ScenarioDialog::_padCC");
 static_assert(alignof(ScenarioDialog) == 8, "ScenarioDialog is qword-aligned");
 
 // B4 FORWARD: 1 outside caller file (mainmenudialog.cpp, two calls) -> the

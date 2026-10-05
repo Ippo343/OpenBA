@@ -74,6 +74,8 @@ public:
 };
 
 static_assert(sizeof(MoveTo) == 0x480, "MoveTo is 0x480 (create 0x1400228c0 MemAlloc)");
+static_assert(offsetof(MoveTo, _pad475) == 0x475, "MoveTo::_pad475");
+static_assert(offsetof(MoveTo, _pad47C) == 0x47C, "MoveTo::_pad47C");
 static_assert(alignof(MoveTo) == 8, "MoveTo is 8-aligned");
 static_assert(offsetof(MoveTo, ticket) == 0x20, "MoveTo +0x20");
 static_assert(offsetof(MoveTo, character) == 0x28, "MoveTo +0x28");

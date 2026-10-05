@@ -44,4 +44,5 @@ public:
 
 static_assert(offsetof(TutorialImageInputKey, _inputId) == 0x30, "+0x30");
 static_assert(sizeof(TutorialImageInputKey) == 0x38, "TutorialImageInputKey is 0x38 (create 0x140027ea0)");
+static_assert(offsetof(TutorialImageInputKey, _pad34) == 0x34, "TutorialImageInputKey::_pad34");
 static_assert(alignof(TutorialImageInputKey) == 8, "qword-aligned");

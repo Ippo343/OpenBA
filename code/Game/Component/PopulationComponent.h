@@ -83,8 +83,14 @@ public:
 };
 
 static_assert(sizeof(PopulationComponent) == 0x70, "PopulationComponent is 0x70 (create 0x14000af50)");
+static_assert(offsetof(PopulationComponent, _pad34) == 0x34, "PopulationComponent::_pad34");
+static_assert(offsetof(PopulationComponent, _pad4C) == 0x4C, "PopulationComponent::_pad4C");
+static_assert(offsetof(PopulationComponent, herdCapacity) == 0x5C, "PopulationComponent::herdCapacity");
 static_assert(alignof(PopulationComponent) == 8, "PopulationComponent alignment");
 static_assert(sizeof(PopulationComponent::Cell) == 0xC, "cell stride 0xC (0x14000b0d0)");
+static_assert(offsetof(PopulationComponent::Cell, density) == 0x0, "Cell::density");
+static_assert(offsetof(PopulationComponent::Cell, smoothed) == 0x4, "Cell::smoothed");
+static_assert(offsetof(PopulationComponent::Cell, minimum) == 0x8, "Cell::minimum");
 static_assert(offsetof(PopulationComponent, description) == 0x28, "");
 static_assert(offsetof(PopulationComponent, habitatDim) == 0x30, "");
 static_assert(offsetof(PopulationComponent, cells) == 0x38, "");

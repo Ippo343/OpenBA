@@ -49,6 +49,8 @@ public:
 };
 
 static_assert(sizeof(CropUI) == 0x60, "CropUI is 0x60 (create 0x140020b10 MemAlloc(0x60))");
+static_assert(offsetof(CropUI, data48) == 0x48, "CropUI::data48");
+static_assert(offsetof(CropUI, data58) == 0x58, "CropUI::data58");
 static_assert(alignof(CropUI) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(CropUI, yield) == 0x38, "yield @ +0x38 (0x1400b2b50)");
 static_assert(offsetof(CropUI, data40) == 0x40, "+0x40");

@@ -64,6 +64,7 @@ public:
 };
 
 static_assert(sizeof(HerbalistWork) == 0x60, "HerbalistWork is 0x60 (retail create MemAlloc)");
+static_assert(offsetof(HerbalistWork, _pad5C) == 0x5C, "HerbalistWork::_pad5C");
 static_assert(alignof(HerbalistWork) == 8, "HerbalistWork is 8-aligned");
 static_assert(offsetof(HerbalistWork, _citizens) == 0x48, "HerbalistWork +0x48");
 static_assert(offsetof(HerbalistWork, _citizens) + offsetof(HerbalistWork::CitizenSet, _count) == 0x50, "HerbalistWork +0x50");

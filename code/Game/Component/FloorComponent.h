@@ -49,6 +49,7 @@ public:
 };
 
 static_assert(sizeof(FloorComponent) == 0x30, "FloorComponent is 0x30 (create 0x140034600)");
+static_assert(offsetof(FloorComponent, _pad29) == 0x29, "FloorComponent::_pad29");
 static_assert(alignof(FloorComponent) == 8, "FloorComponent alignment");
 static_assert(offsetof(FloorComponent, floorFlag) == 0x28, "");
 static_assert(offsetof(FloorComponent, floorId) == 0x2C, "");

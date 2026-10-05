@@ -32,6 +32,8 @@ struct CharacterGridSlot {
     uint8_t _pad14[4];                                   // +0x14
 };
 static_assert(sizeof(CharacterGridSlot) == 0x18, "slot stride 0x18 (0x140018c40)");
+static_assert(offsetof(CharacterGridSlot, character) == 0x0, "CharacterGridSlot::character");
+static_assert(offsetof(CharacterGridSlot, _pad14) == 0x14, "CharacterGridSlot::_pad14");
 static_assert(offsetof(CharacterGridSlot, prev) == 0x08, "CharacterGridSlot::prev @ +0x08");
 static_assert(offsetof(CharacterGridSlot, next) == 0x0C, "CharacterGridSlot::next @ +0x0C");
 static_assert(offsetof(CharacterGridSlot, cell) == 0x10, "CharacterGridSlot::cell @ +0x10");

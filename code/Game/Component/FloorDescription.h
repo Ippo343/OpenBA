@@ -44,6 +44,7 @@ public:
 };
 
 static_assert(sizeof(FloorDescription) == 0x30, "FloorDescription is 0x30 (create 0x140034660 MemAlloc(0x30))");
+static_assert(offsetof(FloorDescription, _pad29) == 0x29, "FloorDescription::_pad29");
 static_assert(alignof(FloorDescription) == 8, "FloorDescription alignment");
 static_assert(offsetof(FloorDescription, _mesh) == 0x20, "FloorDescription::_mesh @ +0x20");
 static_assert(offsetof(FloorDescription, _addOnCreate) == 0x28, "FloorDescription::_addOnCreate @ +0x28");

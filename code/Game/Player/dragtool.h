@@ -68,6 +68,7 @@ protected:
 
 
 static_assert(sizeof(DragTool) == 0x38, "DragTool is 0x38 bytes");
+static_assert(offsetof(DragTool, _pad2A) == 0x2A, "DragTool::_pad2A");
 static_assert(alignof(DragTool) == 8, "DragTool is 8-aligned");
 static_assert(offsetof(DragTool, dragState)   == 0x28, "DragTool +0x28 dragState (word store 0x1400fb8cb)");
 static_assert(offsetof(DragTool, singleClick) == 0x29, "DragTool +0x29 singleClick");

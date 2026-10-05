@@ -71,6 +71,9 @@ public:
 };
 
 static_assert(sizeof(AnimalComponent) == 0x58, "AnimalComponent is 0x58 (create 0x14002f020)");
+static_assert(offsetof(AnimalComponent, _pad2C) == 0x2C, "AnimalComponent::_pad2C");
+static_assert(offsetof(AnimalComponent, _pad41) == 0x41, "AnimalComponent::_pad41");
+static_assert(offsetof(AnimalComponent, _pad4C) == 0x4C, "AnimalComponent::_pad4C");
 static_assert(alignof(AnimalComponent) == 8, "AnimalComponent alignment");
 static_assert(offsetof(AnimalComponent, habitatCell) == 0x28, "AnimalComponent::habitatCell @ +0x28 (Serialize int&)");
 static_assert(offsetof(AnimalComponent, moveTimer) == 0x30, "AnimalComponent::moveTimer @ +0x30 (Time::Serialize)");

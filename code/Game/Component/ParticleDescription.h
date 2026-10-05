@@ -43,6 +43,8 @@ struct ParticleEmitterDescription {
     System::Time        fadeTime;       // +0x20 fade in / out duration (default 1 s)
 };
 static_assert(sizeof(ParticleEmitterDescription) == 0x28, "ParticleDescription emitter stride 0x28");
+static_assert(offsetof(ParticleEmitterDescription, particle) == 0x0, "ParticleEmitterDescription::particle");
+static_assert(offsetof(ParticleEmitterDescription, _pad14) == 0x14, "ParticleEmitterDescription::_pad14");
 static_assert(offsetof(ParticleEmitterDescription, name) == 0x08, "");
 static_assert(offsetof(ParticleEmitterDescription, followNode) == 0x10, "");
 static_assert(offsetof(ParticleEmitterDescription, autoStart) == 0x11, "");

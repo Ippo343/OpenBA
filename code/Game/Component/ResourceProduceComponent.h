@@ -83,6 +83,7 @@ protected:
 };
 
 static_assert(sizeof(ResourceProduceComponent) == 0x50, "ResourceProduceComponent is 0x50 (Market/Herbalist add nothing)");
+static_assert(offsetof(ResourceProduceComponent, _pad49) == 0x49, "ResourceProduceComponent::_pad49");
 static_assert(alignof(ResourceProduceComponent) == 8, "ResourceProduceComponent alignment");
 static_assert(offsetof(ResourceProduceComponent, _controller) == 0x28,
               "RP controller member at +0x28 (slot 17 0x140004080: LEA RAX,[RCX+0x28])");

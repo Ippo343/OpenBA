@@ -50,6 +50,7 @@ struct SaveLoadEntry {
     UI::SpriteSheet*  spriteSheet;               // +0x38 owned (the thumbnail's)
 };
 static_assert(sizeof(SaveLoadEntry) == 0x40, "SaveLoadEntry is 0x40 (stride in 0x1400b80f0)");
+static_assert(offsetof(SaveLoadEntry, labelSaveName) == 0x0, "SaveLoadEntry::labelSaveName");
 static_assert(offsetof(SaveLoadEntry, labelSaveDate) == 0x08, "SaveLoadEntry +0x08");
 static_assert(offsetof(SaveLoadEntry, imageSaveIcon) == 0x10, "SaveLoadEntry +0x10");
 static_assert(offsetof(SaveLoadEntry, borderSave) == 0x18, "SaveLoadEntry +0x18");
@@ -147,4 +148,6 @@ static_assert(offsetof(SaveLoadDialog, buttonLoad) == 0x148, "SaveLoadDialog +0x
 static_assert(offsetof(SaveLoadDialog, buttonCancel) == 0x150, "SaveLoadDialog +0x150");
 static_assert(offsetof(SaveLoadDialog, buttonDelete) == 0x158, "SaveLoadDialog +0x158");
 static_assert(sizeof(SaveLoadDialog) == 0x160, "SaveLoadDialog is 0x160 (create 0x140021160)");
+static_assert(offsetof(SaveLoadDialog, _padBD) == 0xBD, "SaveLoadDialog::_padBD");
+static_assert(offsetof(SaveLoadDialog, _padCC) == 0xCC, "SaveLoadDialog::_padCC");
 static_assert(alignof(SaveLoadDialog) == 8, "SaveLoadDialog is qword-aligned");

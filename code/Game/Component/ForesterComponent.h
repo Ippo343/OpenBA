@@ -43,6 +43,7 @@ public:
 };
 
 static_assert(sizeof(ForesterComponent) == 0x58, "ForesterComponent is 0x58 (create 0x140034870)");
+static_assert(offsetof(ForesterComponent, _pad52) == 0x52, "ForesterComponent::_pad52");
 static_assert(alignof(ForesterComponent) == 8, "ForesterComponent alignment");
 static_assert(offsetof(ForesterComponent, plantTrees) == 0x50, "ForesterComponent +0x50");
 static_assert(offsetof(ForesterComponent, cutTrees) == 0x51, "ForesterComponent +0x51");

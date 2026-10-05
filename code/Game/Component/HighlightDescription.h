@@ -31,6 +31,9 @@ struct HighlightGroup {
     int32_t            refCapacity;   // +0x0C
 };
 static_assert(sizeof(HighlightGroup) == 0x10, "HighlightGroup stride 0x10");
+static_assert(offsetof(HighlightGroup, refs) == 0x0, "HighlightGroup::refs");
+static_assert(offsetof(HighlightGroup, refCount) == 0x8, "HighlightGroup::refCount");
+static_assert(offsetof(HighlightGroup, refCapacity) == 0xC, "HighlightGroup::refCapacity");
 
 class HighlightDescription final : public Description {
     DECLARE_EXE_TYPE(HighlightDescription)

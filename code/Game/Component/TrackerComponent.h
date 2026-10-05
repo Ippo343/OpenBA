@@ -62,8 +62,12 @@ public:
 };
 
 static_assert(sizeof(TrackerComponent) == 0x50, "TrackerComponent is 0x50 (create 0x14000d7a0)");
+static_assert(offsetof(TrackerComponent, _pad4C) == 0x4C, "TrackerComponent::_pad4C");
 static_assert(alignof(TrackerComponent) == 8, "TrackerComponent alignment");
 static_assert(sizeof(TrackerComponent::Entry) == 0x10, "tracker entry stride 0x10 (0x14000da70)");
+static_assert(offsetof(TrackerComponent::Entry, _resource) == 0x0, "Entry::_resource");
+static_assert(offsetof(TrackerComponent::Entry, _count) == 0x8, "Entry::_count");
+static_assert(offsetof(TrackerComponent::Entry, _pad0C) == 0xC, "Entry::_pad0C");
 static_assert(offsetof(TrackerComponent, displayed) == 0x28, "");
 static_assert(offsetof(TrackerComponent, displayed._size) == 0x30, "");
 static_assert(offsetof(TrackerComponent, displayed._capacity) == 0x34, "");

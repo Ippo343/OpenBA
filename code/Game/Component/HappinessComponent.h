@@ -78,6 +78,7 @@ constexpr uint32_t kHappinessMessageTargetTypeId =
     /* HappinessComponent::TypeId() once HappinessComponent::OnMessage (0x14004a780) is ported */ 0u;
 
 static_assert(sizeof(HappinessComponent) == 0x50, "HappinessComponent is 0x50 (create 0x140005ba0)");
+static_assert(offsetof(HappinessComponent, _pad29) == 0x29, "HappinessComponent::_pad29");
 static_assert(alignof(HappinessComponent) == 8, "HappinessComponent alignment");
 static_assert(offsetof(HappinessComponent, _controller) == 0x30,
               "HappinessComponent's controller member at +0x30 (slot 17 0x140005be0: LEA RAX,[RCX+0x30])");

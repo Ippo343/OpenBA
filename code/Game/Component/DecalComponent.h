@@ -57,6 +57,7 @@ public:
 };
 
 static_assert(sizeof(DecalComponent) == 0x38, "DecalComponent is 0x38 (create 0x1400337c0)");
+static_assert(offsetof(DecalComponent, _pad34) == 0x34, "DecalComponent::_pad34");
 static_assert(alignof(DecalComponent) == 8, "DecalComponent alignment");
 static_assert(offsetof(DecalComponent, decalState) == 0x28, "");
 static_assert(offsetof(DecalComponent, decalId) == 0x2C, "");

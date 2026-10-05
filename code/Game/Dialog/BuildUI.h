@@ -57,6 +57,7 @@ public:
 static_assert(sizeof(BuildUI) == 0x50, "BuildUI is 0x50 (create 0x1400209e0 MemAlloc(0x50))");
 static_assert(alignof(BuildUI) == 8, "qword-aligned (the vptr)");
 static_assert(sizeof(BuildUI::StorageRow) == 0x10, "BuildUI::StorageRow stride 0x10");
+static_assert(offsetof(BuildUI::StorageRow, label) == 0x0, "StorageRow::label");
 static_assert(offsetof(BuildUI::StorageRow, total) == 0x08, "BuildUI::StorageRow::total @ +0x08");
 static_assert(offsetof(BuildUI, rows) == 0x30, "BuildUI::rows @ +0x30");
 static_assert(sizeof(Collection::Array<BuildUI::StorageRow>) == 0x10, "Array is {data, count, capacity}");

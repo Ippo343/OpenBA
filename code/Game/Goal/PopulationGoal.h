@@ -42,4 +42,5 @@ public:
 
 static_assert(offsetof(PopulationGoal, targetPop) == 0x30, "PopulationGoal +0x30 targetPop");
 static_assert(sizeof(PopulationGoal) == 0x38, "PopulationGoal is 0x38 (create 0x140025f00 MemAlloc(0x38))");
+static_assert(offsetof(PopulationGoal, _pad34) == 0x34, "PopulationGoal::_pad34");
 static_assert(alignof(PopulationGoal) == 8, "PopulationGoal is qword-aligned");

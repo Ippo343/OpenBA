@@ -66,6 +66,8 @@ public:
 };
 
 static_assert(sizeof(StorageDisplayComponent::Pile) == 0x128, "pile stride 0x128 (0x14000ca10)");
+static_assert(offsetof(StorageDisplayComponent::Pile, mesh) == 0x0, "Pile::mesh");
+static_assert(offsetof(StorageDisplayComponent::Pile, _pad124) == 0x124, "Pile::_pad124");
 static_assert(offsetof(StorageDisplayComponent::Pile, sceneId) == 0x120, "");
 
 static_assert(sizeof(StorageDisplayComponent) == 0x38, "StorageDisplayComponent is 0x38 (create 0x14000c770)");

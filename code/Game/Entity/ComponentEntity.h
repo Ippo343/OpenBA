@@ -128,6 +128,7 @@ public:
 };
 
 static_assert(sizeof(ComponentEntity) == 0x48, "ComponentEntity is 0x48 (create 0x1400219c0 MemAlloc(0x48))");
+static_assert(offsetof(ComponentEntity, _pad44) == 0x44, "ComponentEntity::_pad44");
 static_assert(alignof(ComponentEntity) == 8, "ComponentEntity alignment");
 static_assert(offsetof(ComponentEntity, _entityList)     == 0x10, "ComponentEntity::_entityList @ +0x10");
 static_assert(offsetof(ComponentEntity, _entityId)       == 0x18, "ComponentEntity::_entityId @ +0x18");

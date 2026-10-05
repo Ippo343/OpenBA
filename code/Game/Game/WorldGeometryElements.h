@@ -37,6 +37,7 @@ struct TerrainVertex {
     uint8_t normal[4];     // +0x0C (n + 1) * 127.5 per component, then 0
 };
 static_assert(sizeof(TerrainVertex) == 0x10, "TerrainVertex stride 0x10");
+static_assert(offsetof(TerrainVertex, position) == 0x0, "TerrainVertex::position");
 static_assert(offsetof(TerrainVertex, uv) == 0x08, "TerrainVertex::uv @ +0x08");
 static_assert(offsetof(TerrainVertex, normal) == 0x0C, "TerrainVertex::normal @ +0x0C");
 
@@ -49,6 +50,7 @@ struct GeometryBatchVertex {
     uint8_t normal[4];     // +0x10
 };
 static_assert(sizeof(GeometryBatchVertex) == 0x14, "GeometryBatchVertex stride 0x14");
+static_assert(offsetof(GeometryBatchVertex, position) == 0x0, "GeometryBatchVertex::position");
 static_assert(offsetof(GeometryBatchVertex, uv) == 0x08, "GeometryBatchVertex::uv @ +0x08");
 static_assert(offsetof(GeometryBatchVertex, normal) == 0x10, "GeometryBatchVertex::normal @ +0x10");
 
@@ -75,6 +77,12 @@ struct GeometryBatch {
     uint8_t  _pad5E[2];                            // +0x5E
 };
 static_assert(sizeof(GeometryBatch) == 0x60, "GeometryBatch stride 0x60");
+static_assert(offsetof(GeometryBatch, material) == 0x0, "GeometryBatch::material");
+static_assert(offsetof(GeometryBatch, minY) == 0x30, "GeometryBatch::minY");
+static_assert(offsetof(GeometryBatch, maxX) == 0x34, "GeometryBatch::maxX");
+static_assert(offsetof(GeometryBatch, _pad3D) == 0x3D, "GeometryBatch::_pad3D");
+static_assert(offsetof(GeometryBatch, _pad45) == 0x45, "GeometryBatch::_pad45");
+static_assert(offsetof(GeometryBatch, _pad5E) == 0x5E, "GeometryBatch::_pad5E");
 static_assert(offsetof(GeometryBatch, vertices) == 0x08, "GeometryBatch::vertices @ +0x08");
 static_assert(offsetof(GeometryBatch, indices) == 0x18, "GeometryBatch::indices @ +0x18");
 static_assert(offsetof(GeometryBatch, slot) == 0x28, "GeometryBatch::slot @ +0x28");
@@ -93,6 +101,7 @@ struct GeometryDrawRange {
     int32_t values[4];
 };
 static_assert(sizeof(GeometryDrawRange) == 0x10, "GeometryDrawRange stride 0x10");
+static_assert(offsetof(GeometryDrawRange, values) == 0x0, "GeometryDrawRange::values");
 
 namespace IO { class Serializer; }
 

@@ -51,6 +51,7 @@ public:
 };
 
 static_assert(sizeof(PickingComponent) == 0x38, "PickingComponent is 0x38 (create 0x140036da0)");
+static_assert(offsetof(PickingComponent, _pad2C) == 0x2C, "PickingComponent::_pad2C");
 static_assert(alignof(PickingComponent) == 8, "PickingComponent alignment");
 static_assert(offsetof(PickingComponent, pickingId) == 0x28, "");
 static_assert(offsetof(PickingComponent, userData) == 0x30, "");

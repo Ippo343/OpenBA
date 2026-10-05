@@ -36,6 +36,7 @@ struct AmbientEmitterSlot {
     Audio::SoundEffect* sound;    // +0x08 ExternalPtr<SoundEffect>
 };
 static_assert(sizeof(AmbientEmitterSlot) == 0x10, "AmbientEmitterSlot stride 0x10 (0x140001770)");
+static_assert(offsetof(AmbientEmitterSlot, handle) == 0x0, "AmbientEmitterSlot::handle");
 static_assert(offsetof(AmbientEmitterSlot, volume) == 0x04, "AmbientEmitterSlot::volume @ +0x04");
 static_assert(offsetof(AmbientEmitterSlot, sound) == 0x08, "AmbientEmitterSlot::sound @ +0x08");
 
@@ -76,6 +77,7 @@ public:
 };
 
 static_assert(sizeof(AmbientEmitterComponent) == 0x48, "AmbientEmitterComponent is 0x48 (create 0x1400014b0)");
+static_assert(offsetof(AmbientEmitterComponent, _pad34) == 0x34, "AmbientEmitterComponent::_pad34");
 static_assert(alignof(AmbientEmitterComponent) == 8, "AmbientEmitterComponent alignment");
 static_assert(offsetof(AmbientEmitterComponent, position) == 0x28, "AmbientEmitterComponent::position @ +0x28 (Vector3::Serialize)");
 static_assert(offsetof(AmbientEmitterComponent, slots) == 0x38, "AmbientEmitterComponent::slots @ +0x38");

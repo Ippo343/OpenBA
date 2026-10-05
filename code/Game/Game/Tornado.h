@@ -66,6 +66,14 @@ public:
 };
 
 static_assert(sizeof(Tornado) == 0x90, "Tornado is MemAlloc(0x90)");
+static_assert(offsetof(Tornado, _tornadoHeight) == 0x4C, "Tornado::_tornadoHeight");
+static_assert(offsetof(Tornado, _funnelWidth) == 0x50, "Tornado::_funnelWidth");
+static_assert(offsetof(Tornado, _particleSpinSpeed) == 0x58, "Tornado::_particleSpinSpeed");
+static_assert(offsetof(Tornado, _particleLifeTime) == 0x60, "Tornado::_particleLifeTime");
+static_assert(offsetof(Tornado, _particleLifeTimeTol) == 0x64, "Tornado::_particleLifeTimeTol");
+static_assert(offsetof(Tornado, _particleStartSize) == 0x68, "Tornado::_particleStartSize");
+static_assert(offsetof(Tornado, _particleEndSize) == 0x6C, "Tornado::_particleEndSize");
+static_assert(offsetof(Tornado, _pad7c) == 0x7C, "Tornado::_pad7c");
 static_assert(offsetof(Tornado, _tornadoWidth) == 0x48, "+0x48");
 static_assert(offsetof(Tornado, _funnelSpin) == 0x54, "+0x54");
 static_assert(offsetof(Tornado, _emissionRate) == 0x5c, "+0x5c");
@@ -92,4 +100,5 @@ public:
 };
 
 static_assert(sizeof(TornadoInstance) == 0xe0, "TornadoInstance is MemAlloc(0xe0)");
+static_assert(offsetof(TornadoInstance, _padDC) == 0xDC, "TornadoInstance::_padDC");
 static_assert(offsetof(TornadoInstance, _funnelSpinDegrees) == 0xd8, "+0xd8");

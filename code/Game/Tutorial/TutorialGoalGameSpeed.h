@@ -44,4 +44,5 @@ public:
 
 static_assert(offsetof(TutorialGoalGameSpeed, targetSpeed) == 0x20, "targetSpeed offset");
 static_assert(sizeof(TutorialGoalGameSpeed) == 0x28, "TutorialGoalGameSpeed is 0x28 (create 0x140027630)");
+static_assert(offsetof(TutorialGoalGameSpeed, _pad24) == 0x24, "TutorialGoalGameSpeed::_pad24");
 static_assert(alignof(TutorialGoalGameSpeed) == 8, "qword-aligned");

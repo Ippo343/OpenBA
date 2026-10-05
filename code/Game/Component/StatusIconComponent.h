@@ -67,6 +67,8 @@ public:
 };
 
 static_assert(sizeof(StatusIconGeometry) == 0xd8, "the billboard spans component +0x28..+0x100");
+static_assert(offsetof(StatusIconGeometry, spriteCount) == 0xC4, "StatusIconGeometry::spriteCount");
+static_assert(offsetof(StatusIconGeometry, _padCD) == 0xCD, "StatusIconGeometry::_padCD");
 static_assert(offsetof(StatusIconGeometry, iconSize) == 0xc0, "billboard +0xc0 (0x14012c10a)");
 static_assert(offsetof(StatusIconGeometry, activeMask) == 0xc8, "billboard +0xc8 (0x14012c111)");
 static_assert(offsetof(StatusIconGeometry, constantSize) == 0xcc, "billboard +0xcc (0x14012c117)");
@@ -104,6 +106,7 @@ public:
 };
 
 static_assert(sizeof(StatusIconComponent) == 0x108, "StatusIconComponent is 0x108 (create 0x1400388c0)");
+static_assert(offsetof(StatusIconComponent, _pad104) == 0x104, "StatusIconComponent::_pad104");
 static_assert(alignof(StatusIconComponent) == 8, "StatusIconComponent alignment");
 static_assert(offsetof(StatusIconComponent, _geometry) == 0x28, "member billboard at +0x28 (0x14012c0eb)");
 static_assert(offsetof(StatusIconComponent, iconId) == 0x100, "scene id +0x100 (0x14012c124)");

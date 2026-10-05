@@ -47,6 +47,8 @@ struct AvlNode30 {                     // 0x30: a 0x10-byte element
     uint8_t    _pad2C[4];              // +0x2C
 };
 static_assert(sizeof(AvlNode30) == 0x30, "AvlNode30 is 0x30");
+static_assert(offsetof(AvlNode30, _pad0C) == 0xC, "AvlNode30::_pad0C");
+static_assert(offsetof(AvlNode30, _pad2C) == 0x2C, "AvlNode30::_pad2C");
 static_assert(offsetof(AvlNode30, key0) == 0x00, "AvlNode30::key0 @ +0x00");
 static_assert(offsetof(AvlNode30, key1) == 0x04, "AvlNode30::key1 @ +0x04");
 static_assert(offsetof(AvlNode30, key2) == 0x08, "AvlNode30::key2 @ +0x08");
@@ -67,6 +69,8 @@ struct AvlNode28 {                     // 0x28: an 8-byte element
     uint8_t    _pad24[4];              // +0x24
 };
 static_assert(sizeof(AvlNode28) == 0x28, "AvlNode28 is 0x28");
+static_assert(offsetof(AvlNode28, _pad04) == 0x4, "AvlNode28::_pad04");
+static_assert(offsetof(AvlNode28, _pad24) == 0x24, "AvlNode28::_pad24");
 static_assert(offsetof(AvlNode28, key) == 0x00, "AvlNode28::key @ +0x00");
 static_assert(offsetof(AvlNode28, parent) == 0x08, "AvlNode28::parent @ +0x08");
 static_assert(offsetof(AvlNode28, left) == 0x10, "AvlNode28::left @ +0x10");

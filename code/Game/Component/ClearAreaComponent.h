@@ -65,6 +65,7 @@ public:
 };
 
 static_assert(sizeof(ClearAreaComponent) == 0x50, "ClearAreaComponent is 0x50 (create 0x140030ea0)");
+static_assert(offsetof(ClearAreaComponent, _pad4C) == 0x4C, "ClearAreaComponent::_pad4C");
 static_assert(alignof(ClearAreaComponent) == 8, "ClearAreaComponent alignment");
 static_assert(offsetof(ClearAreaComponent, _controller) == 0x28,
               "ClearAreaComponent's controller member at +0x28 (slot 17 0x140004080: LEA RAX,[RCX+0x28])");

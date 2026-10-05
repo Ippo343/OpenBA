@@ -76,10 +76,14 @@ public:
 };
 
 static_assert(sizeof(TornadoComponent) == 0x68, "TornadoComponent is 0x68 (create 0x14000d500)");
+static_assert(offsetof(TornadoComponent, _pad64) == 0x64, "TornadoComponent::_pad64");
 static_assert(alignof(TornadoComponent) == 8, "TornadoComponent alignment");
 static_assert(offsetof(TornadoComponent, damageCountdown) == 0x28, "");
 static_assert(offsetof(TornadoComponent, path)            == 0x30, "the path block (0x1400a71e0's receiver)");
 static_assert(sizeof(TornadoComponent::Path)              == 0x28, "");
+static_assert(offsetof(TornadoComponent::Path, target) == 0x0, "Path::target");
+static_assert(offsetof(TornadoComponent::Path, _pad0C) == 0xC, "Path::_pad0C");
+static_assert(offsetof(TornadoComponent::Path, _pad24) == 0x24, "Path::_pad24");
 static_assert(offsetof(TornadoComponent::Path, points)    == 0x10, "path +0x40 (the retail dtor frees it)");
 static_assert(offsetof(TornadoComponent::Path, count)     == 0x18, "path count +0x48");
 static_assert(offsetof(TornadoComponent::Path, capacity)  == 0x1C, "path capacity +0x4C");

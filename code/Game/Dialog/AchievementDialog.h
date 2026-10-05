@@ -64,6 +64,7 @@ public:
 };
 
 static_assert(sizeof(AchievementDialog::Entry) == 0x20, "AchievementDialog::Entry stride 0x20");
+static_assert(offsetof(AchievementDialog::Entry, icon) == 0x0, "Entry::icon");
 static_assert(offsetof(AchievementDialog::Entry, star) == 0x08, "Entry::star @ +0x08");
 static_assert(offsetof(AchievementDialog::Entry, title) == 0x10, "Entry::title @ +0x10");
 static_assert(offsetof(AchievementDialog::Entry, description) == 0x18, "Entry::description @ +0x18");

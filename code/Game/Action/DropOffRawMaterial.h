@@ -44,6 +44,7 @@ public:
 };
 
 static_assert(sizeof(DropOffRawMaterial) == 0x40, "DropOffRawMaterial is 0x40 (create 0x140022600 MemAlloc)");
+static_assert(offsetof(DropOffRawMaterial, _pad21) == 0x21, "DropOffRawMaterial::_pad21");
 static_assert(alignof(DropOffRawMaterial) == 8, "DropOffRawMaterial is 8-aligned");
 static_assert(offsetof(DropOffRawMaterial, _field20) == 0x20, "DropOffRawMaterial +0x20");
 static_assert(offsetof(DropOffRawMaterial, _field24) == 0x24, "DropOffRawMaterial +0x24");

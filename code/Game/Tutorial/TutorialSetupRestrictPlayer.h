@@ -65,4 +65,8 @@ static_assert(offsetof(TutorialSetupRestrictPlayer, cameraRef) == 0x50, "+0x50")
 static_assert(offsetof(TutorialSetupRestrictPlayer, cameraRef) + offsetof(NamedExternalRef, generation) == 0x58, "+0x58");
 static_assert(offsetof(TutorialSetupRestrictPlayer, cameraRef) + offsetof(NamedExternalRef, resolved) == 0x60, "+0x60");
 static_assert(sizeof(TutorialSetupRestrictPlayer) == 0x68, "TutorialSetupRestrictPlayer is 0x68 (create 0x140028b40)");
+static_assert(offsetof(TutorialSetupRestrictPlayer, restrictMinChunkRow) == 0x24, "TutorialSetupRestrictPlayer::restrictMinChunkRow");
+static_assert(offsetof(TutorialSetupRestrictPlayer, restrictMaxX) == 0x28, "TutorialSetupRestrictPlayer::restrictMaxX");
+static_assert(offsetof(TutorialSetupRestrictPlayer, restrictMaxChunkCol) == 0x2C, "TutorialSetupRestrictPlayer::restrictMaxChunkCol");
+static_assert(offsetof(TutorialSetupRestrictPlayer, _pad34) == 0x34, "TutorialSetupRestrictPlayer::_pad34");
 static_assert(alignof(TutorialSetupRestrictPlayer) == 8, "qword-aligned");

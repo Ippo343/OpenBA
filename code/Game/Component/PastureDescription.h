@@ -41,5 +41,6 @@ public:
 };
 
 static_assert(sizeof(PastureDescription) == 0x28, "PastureDescription is 0x28 (create 0x1400367a0 MemAlloc(0x28))");
+static_assert(offsetof(PastureDescription, _pad24) == 0x24, "PastureDescription::_pad24");
 static_assert(alignof(PastureDescription) == 8, "PastureDescription alignment");
 static_assert(offsetof(PastureDescription, _type) == 0x20, "PastureDescription::_type @ +0x20");

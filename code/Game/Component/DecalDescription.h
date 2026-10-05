@@ -29,6 +29,10 @@ struct DecalUVRect {
     float u0, v0, u1, v1;
 };
 static_assert(sizeof(DecalUVRect) == 0x10, "DecalUVRect stride 0x10");
+static_assert(offsetof(DecalUVRect, u0) == 0x0, "DecalUVRect::u0");
+static_assert(offsetof(DecalUVRect, v0) == 0x4, "DecalUVRect::v0");
+static_assert(offsetof(DecalUVRect, u1) == 0x8, "DecalUVRect::u1");
+static_assert(offsetof(DecalUVRect, v1) == 0xC, "DecalUVRect::v1");
 
 class DecalDescription final : public Description {
     DECLARE_EXE_TYPE(DecalDescription)
@@ -61,6 +65,8 @@ public:
 };
 
 static_assert(sizeof(DecalDescription) == 0x50, "DecalDescription is 0x50 (create 0x140033820 MemAlloc(0x50))");
+static_assert(offsetof(DecalDescription, _pad26) == 0x26, "DecalDescription::_pad26");
+static_assert(offsetof(DecalDescription, _pad4c) == 0x4C, "DecalDescription::_pad4c");
 static_assert(alignof(DecalDescription) == 8, "DecalDescription alignment");
 static_assert(offsetof(DecalDescription, _initialAlpha) == 0x20, "DecalDescription::_initialAlpha @ +0x20");
 static_assert(offsetof(DecalDescription, _tiled) == 0x24, "DecalDescription::_tiled @ +0x24");

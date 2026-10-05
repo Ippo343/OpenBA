@@ -58,4 +58,5 @@ static_assert(offsetof(TutorialGoalCount, typeRef) + offsetof(NamedExternalRef, 
 static_assert(offsetof(TutorialGoalCount, typeRef) + offsetof(NamedExternalRef, resolved) == 0x40, "typeRef resolved External");
 static_assert(offsetof(TutorialGoalCount, elementName) == 0x48, "elementName offset");
 static_assert(sizeof(TutorialGoalCount) == 0x50, "TutorialGoalCount is 0x50 (create 0x1400277b0)");
+static_assert(offsetof(TutorialGoalCount, _pad29) == 0x29, "TutorialGoalCount::_pad29");
 static_assert(alignof(TutorialGoalCount) == 8, "qword-aligned");

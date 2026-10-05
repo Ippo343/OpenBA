@@ -147,6 +147,10 @@ public:
 };
 
 static_assert(sizeof(WorldGeometry) == 0x230, "WorldGeometry is MemAlloc(0x230)");
+static_assert(offsetof(WorldGeometry, _fieldC4) == 0xC4, "WorldGeometry::_fieldC4");
+static_assert(offsetof(WorldGeometry, _fieldCC) == 0xCC, "WorldGeometry::_fieldCC");
+static_assert(offsetof(WorldGeometry, _fieldD0) == 0xD0, "WorldGeometry::_fieldD0");
+static_assert(offsetof(WorldGeometry, _waterMaterialB) == 0x158, "WorldGeometry::_waterMaterialB");
 static_assert(alignof(WorldGeometry) == 8, "qword-aligned");
 static_assert(offsetof(WorldGeometry, _gridSize) == 0xC0, "+0xC0");
 static_assert(offsetof(WorldGeometry, _chunkSize) == 0xC8, "+0xC8");

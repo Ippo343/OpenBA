@@ -64,6 +64,7 @@ public:
 };
 
 static_assert(sizeof(ForesterWork) == 0x60, "ForesterWork is 0x60 (retail create MemAlloc)");
+static_assert(offsetof(ForesterWork, _pad5C) == 0x5C, "ForesterWork::_pad5C");
 static_assert(alignof(ForesterWork) == 8, "ForesterWork is 8-aligned");
 static_assert(offsetof(ForesterWork, _citizens) == 0x48, "ForesterWork +0x48");
 static_assert(offsetof(ForesterWork, _citizens) + offsetof(ForesterWork::CitizenSet, _count) == 0x50, "ForesterWork +0x50");
