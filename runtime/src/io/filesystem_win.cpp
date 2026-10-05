@@ -87,11 +87,6 @@ void    RtString_ReleaseInline(String* self);
 namespace RtIO {
 
 
-// WideString is not modelled as its own type (out of this lane's 7-symbol
-// scope): every use here goes through System::WideString by cast, and the only fact
-// this file relies on is the single-pointer, String-shaped release idiom
-// documented above — RtSystem::String already models exactly that.
-using WideStringHandle = RtSystem::String;
 
 // (B.4 Z LAST IO: the unused `SameFilenameText` that stood here is gone.)
 
@@ -142,13 +137,13 @@ System::Filename FileSystem::GetSaveDirectory() const {
         return System::Filename();
     }
 
-    RtIO::WideStringHandle ws{nullptr};
-    reinterpret_cast<System::WideString*>(&ws)->Set(buf);          // B.3.x bridge  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
+    // 0x1800ad034: the WideString slot is zeroed, then Set (0x1800caf40) —
+    // the `const wchar_t*` ctor is exactly that pair.
+    System::WideString ws(buf);
 
-    // AsUTF8 returns the String by value: `utf8` IS its hidden return slot,
-    // and exactly one release happens, `utf8`'s destructor.
-    System::String utf8 =
-        reinterpret_cast<const System::WideString*>(&ws)->AsUTF8();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
+    // AsUTF8 (0x1800cacd0) returns the String by value: `utf8` IS its hidden
+    // return slot.
+    System::String utf8 = ws.AsUTF8();
 
     System::String formatted = System::String::Format(
         "%s\\%s\\", utf8._data ? utf8._data : "", "Banished");
@@ -159,12 +154,10 @@ System::Filename FileSystem::GetSaveDirectory() const {
     // (0x1800acfd0: `*(longlong*)in_RDX = lVar2; *(int*)(lVar2-4) += 1;`).
     System::Filename result(formatted);
 
-    // ~formatted and ~utf8 are retail's last two releases; only the WideString,
-    // whose class does not exist yet, is still released by hand. It is released
-    // BEFORE the return for the same reason retail releases it before its
-    // epilogue: the order of the three releases is retail's, not ours.
-    RtSystem::RtString_ReleaseInline(&ws);
-
+    // The three releases are the locals' destructors in reverse declaration
+    // order, which is retail's: `formatted` ([RSP+0x288], 0x1800ad0a3), `utf8`
+    // ([RSP+0x38], 0x1800ad0dc), then the WideString ([RSP+0x280], 0x1800ad109,
+    // its own DEC / JNZ idiom).
     return result;
 }
 
