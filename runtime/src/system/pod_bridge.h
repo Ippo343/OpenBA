@@ -41,10 +41,8 @@
 namespace RtSystem {
 
 // ---- String ---------------------------------------------------------------
-inline System::String&       Sys(String& s)        { return reinterpret_cast<System::String&>(s); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
-inline const System::String& Sys(const String& s)  { return reinterpret_cast<const System::String&>(s); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
-inline System::String*       Sys(String* s)        { return reinterpret_cast<System::String*>(s); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
-inline const System::String* Sys(const String* s)  { return reinterpret_cast<const System::String*>(s); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
+// (B.4 Z LAST IO: the four String overloads are gone: no POD String is read as
+// the class any more outside the graphics files, which spell their own.)
 
 // (B.4 Z MIRROR2: the four WideString overloads are gone with the
 // `RtSystem::WideString` POD.)
@@ -55,13 +53,8 @@ inline const System::Filename& Sys(const Filename& f) { return reinterpret_cast<
 inline System::Filename*       Sys(Filename* f)       { return reinterpret_cast<System::Filename*>(f); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
 inline const System::Filename* Sys(const Filename* f) { return reinterpret_cast<const System::Filename*>(f); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
 
-// ---- a String field read AS a Filename ------------------------------------
-// Retail does this at real call sites, not as a convenience: `IO::FileSystem`
-// declares `sourceDirectory`/`dataDirectory` as Strings and `GetSourceDirectory`
-// (0x180007b90) / `GetDataDirectory` (0x180007bd0) pass their addresses straight
-// into `??0Filename@System@@QEAA@AEBV01@@Z`. Same eight bytes, same single
-// field; the conversion retail performs by pointer cast, spelled once.
-inline System::Filename&       SysFile(String& s)       { return reinterpret_cast<System::Filename&>(s); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
-inline const System::Filename& SysFile(const String& s) { return reinterpret_cast<const System::Filename&>(s); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
+// (B.4 Z LAST IO: the two `SysFile` overloads are gone: the FileSystem
+// directories, FileInfo's names and the package entry's name are real
+// Filenames, so no String field is read as a Filename any more.)
 
 }  // namespace RtSystem
