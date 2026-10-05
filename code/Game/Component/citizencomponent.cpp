@@ -2413,7 +2413,7 @@ void CitizenComponent::Startup() {
     // but that is unreliable in standalone's partial factory tree (GrowthComponent
     // precedent), so trust the +0x18 pointer directly (Component::_description, a
     // Description*): the pointer is taken as the description it holds.
-    description = reinterpret_cast<CitizenDescription*>(_description);   // LEFT: the tree skips retail's IsDerivedFrom 0x1401c7190 (a checked downcast once Component's _description is read as Description)
+    description = reinterpret_cast<CitizenDescription*>(_description);   // LEFT: the tree skips retail's IsDerivedFrom 0x1401c7190 (known_port_issues row 705: a retail difference, recorded not fixed)
     if (description) {
         health = description->_f6c;
         happiness = description->maxHappiness;
