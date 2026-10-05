@@ -70,7 +70,7 @@ UNIT_TEST(mib_rp_member_and_fields) {
     CHECK_EQ(offsetof(ResourceProduceComponent, produceFlag), (size_t)0x48);
     CHECK_EQ(offsetof(ConsumeProduceComponent, consumeResourceId), (size_t)0x50);
     CHECK_EQ(offsetof(ConsumeProduceComponent, consumeRates),      (size_t)0x58);
-    CHECK_EQ(offsetof(ConsumeProduceComponent, consumeCount),      (size_t)0x60);
+    CHECK_EQ(offsetof(ConsumeProduceComponent, consumeRates) + offsetof(Collection::Array<float>, _size), (size_t)0x60);
     CHECK_EQ(offsetof(ConsumeProduceComponent, consumeState),      (size_t)0x68);
     CHECK_EQ(offsetof(FishingComponent, fishingFlag),   (size_t)0x50);
     CHECK_EQ(offsetof(FishingComponent, fishingRate),   (size_t)0x54);

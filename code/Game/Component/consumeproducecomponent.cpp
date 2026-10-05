@@ -9,7 +9,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/consumeproducecomponent_funcs.h"
-#include "Component/coll_bridge.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -29,9 +28,8 @@
 // with a derived row that DEVIATES from the header's zero-tail assumption: the
 // retail body has NO else-arm write for the new tail at all — it leaves the grown
 // slots holding whatever MemAlloc returned. That is exactly SpecFor<float>'s
-// behaviour for a trivially default-constructible T (init == nullptr), so the call
-// sites below go through GameColl::AsArray<float> (a bare scalar, not GameColl::F32
-// which would zero). (The free ConsumeProduceComponent_ResizeArray copy and its
+// behaviour for a trivially default-constructible T (init == nullptr), so the member is
+// a Collection::Array<float> (a bare scalar, not a zeroing element). (The free ConsumeProduceComponent_ResizeArray copy and its
 // reader-less 0x140023a00 row went at the B.3.8 close.)
 
 // The IsDerivedFrom import slot 0x140152a98 is Object::Base::IsDerivedFrom.
@@ -41,7 +39,7 @@
 // ============================================================
 // Calls parent ResourceProduceComponent_Shutdown, then serializes:
 //   - consumeResourceId (+0x50)
-//   - consumeCount (+0x60) via local copy, with array resize on load
+//   - consumeRates._size (+0x60) via local copy, with array resize on load
 //   - float array at consumeRates (+0x58)
 //   - consumeState (+0x68)
 //   - Version-0 migration: if consumeResourceId < 0 on load, reset to 0
@@ -67,7 +65,7 @@
 //       break
 //   ResizeConsumeArray(self+0x58, *(desc+0x30))   // count from description
 //   self->consumeResourceId = *(desc+0x4c)        // resource ID from description
-//   for i in range(self->consumeCount):
+//   for i in range(self->consumeRates._size):
 //     consumeRates[i] = 1.0f
 
 // ============================================================================
@@ -91,18 +89,15 @@
 // set by Component()). +0x50 = -1 is "no recipe selected" until Startup (slot 4)
 // reads the description's +0x4c; the tree's factory zero-filled it (recipe 0).
 ConsumeProduceComponent::ConsumeProduceComponent()
-    : ResourceProduceComponent(), consumeResourceId(-1), _pad54{}, consumeRates(nullptr),
-      consumeCount(0), consumeCapacity(0), consumeState(0), _pad6C{} {
+    : ResourceProduceComponent(), consumeResourceId(-1), _pad54{},
+      consumeState(0), _pad6C{} {
     OrFlagsInCtor(0x80);
 }
 
-// 0x140118fd0: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
-// (the compiler chain).
+// 0x140118fd0: the body is empty. ~consumeRates is MemFree(+0x58), +0x58 = +0x60 = 0
+// (0x140118ff0..0x140119000), then the bases' restamps and ~Internal (the compiler
+// chain).
 ConsumeProduceComponent::~ConsumeProduceComponent() {
-    Object::detail::InternalMemFree(consumeRates);
-    consumeRates = nullptr;
-    consumeCount = 0;
-    consumeCapacity = 0;
 }
 
 // create 0x140032300: MemAlloc(0x70, 8), then the ctor.
@@ -134,18 +129,18 @@ void       ConsumeProduceComponent::Persist(IO::Stream& stream) {
     // On load, the resize function reads +0x60 internally as old count to decide
     // whether reallocation is needed. Writing directly to +0x60 before resize would
     // make old == new, causing resize to skip reallocation.
-    int localCount = consumeCount;
+    int localCount = consumeRates._size;
     ser.Serialize(localCount, nullptr);
 
     // On load (the stream's direction word, IO::Serializer::GetDirection == 0): resize.
     if (static_cast<int>(ser.GetDirection()) == 0) {
-        // B.3.2 bridge: exe 0x140023a00 IS Collection::Array<float>::SetSize(n)
+        // exe 0x140023a00 IS Collection::Array<float>::SetSize(n)
         // (bare float — see the derived-row note above the typedefs).
-        GameColl::AsArray<float>(&consumeRates).SetSize(localCount);
+        consumeRates.SetSize(localCount);
     }
 
     // Serialize float array using local count and rates pointer
-    ser.Serialize(localCount, consumeRates, nullptr);
+    ser.Serialize(localCount, consumeRates._data, nullptr);
 
     // Serialize consumeState at +0x68
     ser.Serialize(consumeState, nullptr);
@@ -196,16 +191,16 @@ void       ConsumeProduceComponent::Startup() {
 
     // Resize consume array from the description's recipe count
     int descCount = desc->_recipeCount;
-    // B.3.2 bridge: exe 0x140023a00 IS Collection::Array<float>::SetSize(n).
-    GameColl::AsArray<float>(&consumeRates).SetSize(descCount);
+    // exe 0x140023a00 IS Collection::Array<float>::SetSize(n).
+    consumeRates.SetSize(descCount);
 
     // The recipe the description selects by default
     consumeResourceId = desc->_defaultRecipe;
 
     // Initialize all consume rates to 1.0f
-    float* rates = consumeRates;
-    if (rates && consumeCount > 0) {
-        for (int i = 0; i < consumeCount; i++) {
+    float* rates = consumeRates._data;
+    if (rates && consumeRates._size > 0) {
+        for (int i = 0; i < consumeRates._size; i++) {
             rates[i] = 1.0f;
         }
     }
