@@ -170,7 +170,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
                                       uint32_t param_13) {
 
     // the action stack = character + 0x48  (0x1400befaf..0x1400befd1)
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;          // RSI / plVar15
     WorkBase_TaskListCleanup_c5400(list);
 
@@ -182,7 +182,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm1 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ::Object::InternalPtr<Action> ibpSm1;
@@ -216,7 +216,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
         if (obj) {
             ComponentEntity* local60 = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot   // ctor(&local_60, 0)  (p10)
             CitizenComponent* local70 = *citizenRef;           // *param_1  -> p4
-            ComponentEntity* local68 = local70->workplace;     // *(*param_1+0x248) -> p5
+            ComponentEntity* local68 = local70->workplace.Get();     // *(*param_1+0x248) -> p5
             float xmm2 = kRdata_14017214c;                    // [0x14017214c]==1.0f (g_fUVScale)
             // p6 = leftover 0 in [RSP+0x28]; p7=uVar1; p8=param_11; p9=0; p10=&local60; p11=4.
             crm = new (obj) CreateRawMaterial(rawMatDesc, xmm2, &local70, &local68,
@@ -259,9 +259,9 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
     ConsumeProduceDescription* foundComp1 = WCP_FindComponentDerived((*entityRef)->_description);
     // toolType = found->_u50. When none is found retail reads [0 + 0x50] (RCX = R14 = 0):
     // a read through the null receiver that faults exactly as retail's does. Not guarded.
-    // LEFT: the null-receiver read is spelled as the address it faults on.
+    // The null-receiver read is spelled as the address it faults on.
     uint32_t toolType = foundComp1 ? foundComp1->_u50
-                                   : *reinterpret_cast<uint32_t*>(0x50);   // LEFT: the null-receiver read is spelled as the address it faults on.
+                                   : *reinterpret_cast<uint32_t*>(0x50);   // the null-receiver read is spelled as the address it faults on.  // CAST-OK: null_receiver
     // actionType = (toolType <= 0xa) ? toolType+9 : 8   (0x1400bf307..0x1400bf312)
     int actionType = 8;
     if (toolType <= 0xa) actionType = static_cast<int>(toolType) + 9;
@@ -293,9 +293,9 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
 
         // the recipe array (*(foundComp2+0x28)); when none is found retail reads [0 + 0x28]:
         // the second read through the null receiver, faulting as retail's does. Not guarded.
-        // LEFT: the null-receiver read is spelled as the address it faults on.
+        // The null-receiver read is spelled as the address it faults on.
         ConsumeProduceRecipe* recBase = foundComp2 ? foundComp2->_recipes
-                                                   : *reinterpret_cast<ConsumeProduceRecipe**>(0x28);   // LEFT: the null-receiver read is spelled as the address it faults on.
+                                                   : *reinterpret_cast<ConsumeProduceRecipe**>(0x28);   // the null-receiver read is spelled as the address it faults on.  // CAST-OK: null_receiver
         if (recBase[idx].inputCount > 0) {
             // ConsumeRawMaterial_Action_Ctor3(self, &(*param_3)) (0x1400bf446..)
             obj = WCP_Alloc(0x38);            // LEA ECX,[RDX+0x30] => 0x38
@@ -342,7 +342,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
                 default:                                        pathType = 1; break;  // case 0 -> Slow
             }
         }
-        ComponentEntity* entityInner = (*citizenRef)->_entity;  // *(*param_1+0x10)
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();  // *(*param_1+0x10)
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;          // [0x140172280]==-1.0f
         mv = new (obj) MoveTo(&family, pathType, 0, param_4, 0xe1f, 0, speed);   // 0x1400c9170

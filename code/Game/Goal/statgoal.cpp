@@ -200,13 +200,13 @@ Object::External* StatGoal::Construct() {
 }
 
 // create 0x1400264d0: MemAlloc(0x80, 8), then the ctor (0x1400daa80).
-void* StatGoal::CreateNewObject() {
+::Object::Base* StatGoal::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StatGoal), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) StatGoal());
 }
 // createInPlace 0x140026510.
-void* StatGoal::CreateInPlaceObject(void* storage) {
+::Object::Base* StatGoal::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) StatGoal());
 }

@@ -554,7 +554,7 @@ static bool CheckCitizenHasTask(BuildStructure* self, CitizenComponent** citizen
     if (!isEntity) return false;
 
     // The citizen's CharacterComponent (+0x278)
-    CharacterComponent* character = (*citizenIBP)->character;
+    CharacterComponent* character = (*citizenIBP)->character.Get();
 
     // Iterate action stack: +0x48 = array, +0x60 = the running index
     int actionCount = character->actionStack.current + 1;  // original: 0x60 field + 1
@@ -765,14 +765,14 @@ done_empty:
 // registration goes with it.
 
 // create 0x140029630: MemAlloc(sizeof, 8), then the ctor.
-void* BuildStructure::CreateNewObject() {
+::Object::Base* BuildStructure::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(BuildStructure), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) BuildStructure());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* BuildStructure::CreateInPlaceObject(void* storage) {
+::Object::Base* BuildStructure::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) BuildStructure());
 }

@@ -71,13 +71,13 @@ Object::External* AnimAudioEvent::ConstructInPlace() {
 }
 
 // create 0x140016f00: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* AnimAudioEvent::CreateNewObject() {
+::Object::Base* AnimAudioEvent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AnimAudioEvent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AnimAudioEvent());
 }
 // createInPlace 0x140016f60: placement construction.
-void* AnimAudioEvent::CreateInPlaceObject(void* storage) {
+::Object::Base* AnimAudioEvent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AnimAudioEvent());
 }

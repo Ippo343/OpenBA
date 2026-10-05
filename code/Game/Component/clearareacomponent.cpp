@@ -52,7 +52,7 @@ int ClearAreaComponent::FootprintSweep() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return 0;
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return 0;
 
     // The MapComponent holds the footprint rect (retail MOVSX: the fields are signed).
@@ -78,10 +78,10 @@ int ClearAreaComponent::FootprintSweep() {
         for (int col = 0; col < width; ++col) {
             int cell = (startRow + row) * gridWidth + (startCol + col);
             // entity ptr slot at cell*0x30 + 0x08 (matches 7d60's "+ 8 + (...)*0x30")
-            ComponentEntity* occ = tileArray[static_cast<uintptr_t>(cell)].occupant;
+            ComponentEntity* occ = tileArray[static_cast<uintptr_t>(cell)].occupant.Get();
 
             // Skip empty cells and the building's own entity.
-            if (occ == nullptr || occ == _entity) continue;
+            if (occ == nullptr || occ == _entity.Get()) continue;
             if (occ->_entityFlags & 0x400) continue;   // already marked for removal
 
             // Mark + push (the proven backend).
@@ -127,14 +127,14 @@ ClearAreaComponent::ClearAreaComponent() : _controller(this), clearState(0), _pa
 ClearAreaComponent::~ClearAreaComponent() = default;
 
 // create 0x140030ea0: MemAlloc(0x50, 8), then the ctor.
-void* ClearAreaComponent::CreateNewObject() {
+::Object::Base* ClearAreaComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ClearAreaComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ClearAreaComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ClearAreaComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ClearAreaComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ClearAreaComponent());
 }
@@ -180,7 +180,7 @@ extern "C" int ClearAreaComponent_HarnessSweepComp(ClearAreaComponent* realComp)
 // Read a live component's +0x10 owner field (to confirm it's wired to its entity).
 extern "C" ComponentEntity* ClearAreaComponent_HarnessOwner(ClearAreaComponent* realComp) {
     if (!realComp) return nullptr;
-    return realComp->_entity;
+    return realComp->_entity.Get();
 }
 
 // Harness entry: run the footprint sweep for a given building entity. Builds a

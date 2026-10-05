@@ -146,13 +146,13 @@ Object::InternalPtr<UI::Element>* TutorialImageInputKey::CreateElement(Object::I
 }
 
 // create 0x140027ea0: MemAlloc(0x38, 8), then the ctor.
-void* TutorialImageInputKey::CreateNewObject() {
+::Object::Base* TutorialImageInputKey::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialImageInputKey), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialImageInputKey());
 }
 // createInPlace 0x140027f00.
-void* TutorialImageInputKey::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialImageInputKey::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialImageInputKey());
 }

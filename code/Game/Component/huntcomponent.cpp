@@ -109,14 +109,14 @@ HuntComponent::HuntComponent() : ResourceProduceComponent(), huntProgress{0} {
 }
 
 // create 0x140034f30: MemAlloc(0x58, 8), then the ctor.
-void* HuntComponent::CreateNewObject() {
+::Object::Base* HuntComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HuntComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HuntComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* HuntComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* HuntComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HuntComponent());
 }

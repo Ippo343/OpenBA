@@ -97,13 +97,13 @@ bool Tutorial::Serialize(IO::Stream& stream) {
 }
 
 // create 0x140026e50: MemAlloc(0x40, 8), then the (inlined) ctor.
-void* Tutorial::CreateNewObject() {
+::Object::Base* Tutorial::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(Tutorial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) Tutorial());
 }
 // createInPlace 0x140026eb0.
-void* Tutorial::CreateInPlaceObject(void* storage) {
+::Object::Base* Tutorial::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) Tutorial());
 }

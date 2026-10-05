@@ -43,7 +43,7 @@ constexpr int kFishingCoverageState = 8;
 // an unguarded deref. We return -1 instead ONLY because the standalone can legitimately
 // build a dock whose description set is still partly inert; see the callers.
 int RadiusOf(const FishingComponent* comp) {
-    const ComponentEntity* entity = comp->_entity;
+    const ComponentEntity* entity = comp->_entity.Get();
     if (!entity) return -1;
     const ComponentDescription* list = entity->_description;
     if (!list) return -1;
@@ -62,7 +62,7 @@ int RadiusOf(const FishingComponent* comp) {
 //   cx = (w >> 1) + x ,  cy = (h >> 1) + y
 // (tileX0/tileY0 are the footprint origin, tileX1/tileY1 its extent, all read as int16.)
 bool TileCentre(const FishingComponent* comp, int* cx, int* cy) {
-    ComponentEntity* entity = comp->_entity;
+    ComponentEntity* entity = comp->_entity.Get();
     if (!entity) return false;
     MapComponent* mc = entity->FindComponent<MapComponent>();   // 0x140004680
     if (!mc) return false;

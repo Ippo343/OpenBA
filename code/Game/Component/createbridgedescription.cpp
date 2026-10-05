@@ -91,13 +91,13 @@ Object::External* CreateBridgeDescription::Construct() {
 }
 
 // create 0x140032880: MemAlloc(0x60, 8), then the (inlined) ctor.
-void* CreateBridgeDescription::CreateNewObject() {
+::Object::Base* CreateBridgeDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CreateBridgeDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreateBridgeDescription());
 }
 // createInPlace 0x1400328c0.
-void* CreateBridgeDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CreateBridgeDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreateBridgeDescription());
 }

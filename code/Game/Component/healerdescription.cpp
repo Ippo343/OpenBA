@@ -49,13 +49,13 @@ Object::External* HealerDescription::Construct() {
 }
 
 // create 0x1400064f0: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* HealerDescription::CreateNewObject() {
+::Object::Base* HealerDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HealerDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HealerDescription());
 }
 // createInPlace 0x140006550.
-void* HealerDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* HealerDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HealerDescription());
 }

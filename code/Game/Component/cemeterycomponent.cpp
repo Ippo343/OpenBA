@@ -142,19 +142,19 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
 // down by one slot and decrementing the count. Calls CheckPtr on the search key
 // before comparing (resolves lazy/weak pointers, mirroring the original). The exe
 // shifts via a quirky `*p=0; *p=p[1]` (effectively `p[0]=p[1]`). 1:1 port.
-// LEFT: ERASED, the one erase body every 8-byte-pointer town list shares (callers in
+// The one erase body every 8-byte-pointer town list shares (callers in
 // nine files hand it their Array as void*; wave X types the signature).
 extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
-    int64_t* list = reinterpret_cast<int64_t*>(listBase);   // LEFT: FLOOR? the one erase body (0x140002cc0) over every 8-byte-pointer list: its callers hand CitizenPtrList<T> data slots and raw InternalPtr<T> triples of a dozen element types
+    int64_t* list = reinterpret_cast<int64_t*>(listBase);   // the one erase body (0x140002cc0) over every 8-byte-pointer list: its callers hand CitizenPtrList<T> data slots and raw InternalPtr<T> triples of a dozen element types  // CAST-OK: elem_stride
     int i = 0;
     while (i < (int)list[1]) {
         int64_t arr = list[0];
-        if (*(int64_t*)(arr + (int64_t)i * 8) == *(int64_t*)ptrValue) {   // LEFT: FLOOR? the one erase body (0x140002cc0) over every 8-byte-pointer list: its callers hand CitizenPtrList<T> data slots and raw InternalPtr<T> triples of a dozen element types
+        if (*(int64_t*)(arr + (int64_t)i * 8) == *(int64_t*)ptrValue) {   // the one erase body (0x140002cc0) over every 8-byte-pointer list: its callers hand CitizenPtrList<T> data slots and raw InternalPtr<T> triples of a dozen element types  // CAST-OK: elem_stride
             for (int j = i + 1; j < (int)list[1]; ++j) {
-                int64_t* slot = (int64_t*)(list[0] + (int64_t)(j - 1) * 8);   // LEFT: FLOOR? the one erase body (0x140002cc0) over every 8-byte-pointer list: its callers hand CitizenPtrList<T> data slots and raw InternalPtr<T> triples of a dozen element types
+                int64_t* slot = (int64_t*)(list[0] + (int64_t)(j - 1) * 8);   // the one erase body (0x140002cc0) over every 8-byte-pointer list: its callers hand CitizenPtrList<T> data slots and raw InternalPtr<T> triples of a dozen element types  // CAST-OK: elem_stride
                 if (slot) slot[0] = slot[1];
             }
-            *(int*)(list + 1) = (int)list[1] - 1;   // LEFT: FLOOR? the one erase body (0x140002cc0) over every 8-byte-pointer list: its callers hand CitizenPtrList<T> data slots and raw InternalPtr<T> triples of a dozen element types
+            *(int*)(list + 1) = (int)list[1] - 1;   // the one erase body (0x140002cc0) over every 8-byte-pointer list: its callers hand CitizenPtrList<T> data slots and raw InternalPtr<T> triples of a dozen element types  // CAST-OK: elem_stride
             --i;
         }
         ++i;
@@ -201,7 +201,7 @@ char CemeteryComponent::EnterBuilt() {
         MapCell* const cell = &cells[static_cast<uintptr_t>(cellIdx)];
 
         // Already occupied by a grave? Leave the plot as it stands.
-        ComponentEntity* occupant = cell->occupant;
+        ComponentEntity* occupant = cell->occupant.Get();
         if (occupant) {
             ComponentEntity* probe = occupant;
             bool hasTombstone = false;
@@ -323,14 +323,14 @@ CemeteryComponent::~CemeteryComponent() {
 }
 
 // create 0x140004040: MemAlloc(0x58, 8), then the ctor.
-void* CemeteryComponent::CreateNewObject() {
+::Object::Base* CemeteryComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CemeteryComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CemeteryComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CemeteryComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CemeteryComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CemeteryComponent());
 }
@@ -357,7 +357,7 @@ void CemeteryComponent::Persist(IO::Stream& stream) {
 
 // [6] 0x140047200 — build the grave-plot grid from the footprint.
 void CemeteryComponent::OnAdded() {
-    CEM_TRACE("enter comp=%p owner=%p", (void*)this, _entity);
+    CEM_TRACE("enter comp=%p owner=%p", (void*)this, (void*)_entity.Get());
     if (GameUpdateLoop::_singleton == nullptr) {
         CEM_TRACE("BAIL deps: gs=%p",
                   (void*)(GameUpdateLoop::_singleton));

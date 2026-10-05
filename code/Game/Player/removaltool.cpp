@@ -264,8 +264,8 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
                 const MapCell* cellBase = &mapGrid->cells.GetData()[tileIndex];
 
                 // Get entity occupying this tile: the blocker, else the occupant
-                ComponentEntity* entityPtr = cellBase->blocker;
-                ComponentEntity* entityPtr2 = cellBase->occupant;
+                ComponentEntity* entityPtr = cellBase->blocker.Get();
+                ComponentEntity* entityPtr2 = cellBase->occupant.Get();
                 ComponentEntity* entity;
                 if (entityPtr == nullptr) {
                     if (entityPtr2 == nullptr) {
@@ -404,11 +404,11 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
 // keystone_a_removalcalcpath.cpp.
 
 // create 0x14002e7a0: MemAlloc(0x40, 8), then the ctor 0x140104cc0.
-void* RemovalTool::CreateNewObject() {
+::Object::Base* RemovalTool::CreateNewObject() {
     return static_cast<Object::Base*>(RemovalTool_Factory_SA());
 }
 // createInPlace 0x14002e7e0: `if (storage) ctor(storage)`.
-void* RemovalTool::CreateInPlaceObject(void* storage) {
+::Object::Base* RemovalTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RemovalTool());
 }

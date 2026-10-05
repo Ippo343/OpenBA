@@ -444,8 +444,6 @@ PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float p
 // runs their ctor body on it.
 static_assert(std::is_trivially_default_constructible<Calendar>::value,
               "placement new of Calendar runs no code");
-static_assert(std::is_trivially_default_constructible<EventLog>::value,
-              "placement new of EventLog runs no code");
 static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
               "placement new of MusicPlayer runs no code");
 
@@ -904,22 +902,11 @@ void GameUpdateLoop::Load() {
         m_weather->Bind(envRes, /*climateGen*/m_climateConfig);   // 0x140093e30
     }
 
-    // Step 17 — StringTable-pair struct (+0x138, 0x28) zero + flag bytes.
+    // Step 17 — the event log (+0x138, 0x28): retail constructs it inline
+    // (0x14009700c..0x14009702c), EventLog::EventLog.
     {
         void* mem = AllocSub<void>(0x28, 4);
-        EventLog* eventLog = mem ? new (mem) EventLog : nullptr;
-        if (eventLog) {
-            memset(eventLog, 0, sizeof(EventLog));
-            // Retail: dword 0x01010101 at +0x10, word 0x0101 at +0x14, then byte
-            // +0x10 = 0 (H7: the six named bytes, in address order, final values).
-            eventLog->field_0x10[0] = false;
-            eventLog->field_0x10[1] = true;
-            eventLog->field_0x10[2] = true;
-            eventLog->field_0x10[3] = true;
-            eventLog->field_0x10[4] = true;
-            eventLog->field_0x10[5] = true;
-        }
-        m_eventNotifier = eventLog;
+        m_eventNotifier = mem ? new (mem) EventLog : nullptr;
     }
 
     // Step 18 — Graphics::Scene (+0x60, 0x78).

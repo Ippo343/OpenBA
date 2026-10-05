@@ -202,7 +202,7 @@ void QuarryComponent::ApplyDepth(float depth) {
 // msg 4 = build complete: carve the pit once at _initialDepth.
 void QuarryComponent::OnEvent(int msgId) {
     if (msgId != 4) return;
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     QuarryDescription* desc = QuarryFindDescription(entity);
     if (!desc) { QuarryBail("Slot12(msg4)", "no QuarryDescription in the entity description list"); return; }
@@ -223,7 +223,7 @@ void QuarryComponent::OnEvent(int msgId) {
 //   1. re-carve the floor at lerp(_initialDepth, _maxDepth, produced/_maximumProduction)
 //   2. walk the footprint and convert the dug cells' terrain type to 5 (quarried rock)
 void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // ---- production progress -> depth -------------------------------------------
     ConsumeProduceComponent* cp = entity ? entity->FindComponent<ConsumeProduceComponent>() : nullptr;   // 0x14000b6f0

@@ -62,13 +62,13 @@ Object::External* CemeteryDescription::Construct() {
 }
 
 // create 0x1400040b0: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* CemeteryDescription::CreateNewObject() {
+::Object::Base* CemeteryDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CemeteryDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CemeteryDescription());
 }
 // createInPlace 0x140004110.
-void* CemeteryDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CemeteryDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CemeteryDescription());
 }

@@ -146,7 +146,7 @@ bool DestroyComponent::BeginBurning(const System::Time* time) {
     burning = true;
     burnTime._ticks = time ? time->_ticks : 0;
 
-    ForceSMState(_entity, 3, "begin");
+    ForceSMState(_entity.Get(), 3, "begin");
     return true;
 }
 
@@ -156,7 +156,7 @@ bool DestroyComponent::BeginBurning(const System::Time* time) {
 // param_1 = the DestroyComponent. Drives the entity's state machine to state 7.
 // Note it does NOT clear +0x50 / +0x48; the state-7 handler owns that.
 void DestroyComponent::StopBurning() {
-    ForceSMState(_entity, 7, "stop");
+    ForceSMState(_entity.Get(), 7, "stop");
 }
 
 // ---- B4 FORWARD: 1 outside caller file (Component/tornadocomponent.cpp); the

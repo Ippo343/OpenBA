@@ -84,13 +84,13 @@ Object::External* ValueDescription::Construct() {
 }
 
 // create 0x14000faa0: MemAlloc(0x50, 8), then the (inlined) ctor.
-void* ValueDescription::CreateNewObject() {
+::Object::Base* ValueDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ValueDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ValueDescription());
 }
 // createInPlace 0x14000fb10.
-void* ValueDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ValueDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ValueDescription());
 }

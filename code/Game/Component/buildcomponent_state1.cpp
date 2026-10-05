@@ -114,7 +114,7 @@ extern "C" { ComponentEntity* g_pConstructionDemoEntity = nullptr; }
 // variant (+0x166) at the final sub-mesh of a multi-stage group; a genuine foundation
 // sits at variant 0. Foundation / single-mesh buildings -> false (i.e. "build me").
 static bool BCS1_IsModelComplete(BuildComponent* buildComp) {
-    ComponentEntity* entity = buildComp->_entity;
+    ComponentEntity* entity = buildComp->_entity.Get();
     if (!entity) return false;
     uint32_t tidModel = ModelComponent::TypeId();
     if (!tidModel) return false;
@@ -272,7 +272,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
                         ? ::System::MemoryAllocator::MemAlloc(0x78, 8) : nullptr;
         Work* work = nullptr;
         if (mem) {
-            ComponentEntity* entIbp = _entity;
+            ComponentEntity* entIbp = _entity.Get();
             work = GatherRawMaterials_Ctor_Impl(mem, &entIbp);
         }
         ::Object::InternalPtr<Work> workIbp(work);

@@ -830,13 +830,13 @@ MainMenuDialog::MainMenuDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
       game(gameLoop), menuLoop(loop) {}
 
 // create 0x140020d10: MemAlloc(0xc8, 8), then the ctor.
-void* MainMenuDialog::CreateNewObject() {
+::Object::Base* MainMenuDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MainMenuDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) MainMenuDialog());
 }
 // createInPlace 0x140020d60 (the tree's in-place build is kept, B8-13).
-void* MainMenuDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* MainMenuDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) MainMenuDialog());
 }

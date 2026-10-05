@@ -165,10 +165,10 @@ inline void WorkCellBST_Remove_ca60(AvlTreeHead<Node>* head, Node* node) {
 // scheduler +0x30 and every bucket's entries) are handed to the same two cores.
 struct WorkSchedulerTree;   // Game/WorkScheduler.h
 inline void* WorkCellBST_Insert_9a40(WorkSchedulerTree* tree, void* outResult, void* keyRec) {
-    return WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(tree), outResult, keyRec);  // LEFT: elem_stride (the typed wrapper's one hand-off into the erased core; audit WORK row: marker for the coordinator)
+    return WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(tree), outResult, keyRec);   // (the typed wrapper's one hand-off into the erased core)  // CAST-OK: elem_stride
 }
 inline void WorkCellBST_Remove_ca60(WorkSchedulerTree* tree, void* node) {
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: elem_stride (the typed wrapper's one hand-off into the erased core; audit WORK row: marker for the coordinator)
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);   // (the typed wrapper's one hand-off into the erased core)  // CAST-OK: elem_stride
 }
 template <class T>
 inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* ser) {

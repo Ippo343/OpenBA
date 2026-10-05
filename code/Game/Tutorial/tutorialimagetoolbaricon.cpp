@@ -216,13 +216,13 @@ Object::InternalPtr<UI::Element>* TutorialImageToolbarIcon::CreateElement(Object
 }
 
 // create 0x140028020: MemAlloc(0x48, 8), then the ctor.
-void* TutorialImageToolbarIcon::CreateNewObject() {
+::Object::Base* TutorialImageToolbarIcon::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialImageToolbarIcon), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialImageToolbarIcon());
 }
 // createInPlace 0x140028060.
-void* TutorialImageToolbarIcon::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialImageToolbarIcon::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialImageToolbarIcon());
 }

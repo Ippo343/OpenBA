@@ -113,13 +113,13 @@ bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t p
     if ((~param_4 & (1u << (passByte & 0x1f))) != 0)
         return false;
 
-    const ComponentEntity* owner = cell->blocker;
+    const ComponentEntity* owner = cell->blocker.Get();
     bool ownOk;
     if (param_10 != nullptr) {
         if (owner == nullptr) {
             ownOk = true;
         } else {
-            owner = cell->blocker;
+            owner = cell->blocker.Get();
             ownOk = (owner->_description == param_10);
         }
     } else {

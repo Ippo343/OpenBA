@@ -116,13 +116,13 @@ Object::External* AmbientEmitterDescription::Construct() {
 }
 
 // create 0x140001510: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* AmbientEmitterDescription::CreateNewObject() {
+::Object::Base* AmbientEmitterDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AmbientEmitterDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AmbientEmitterDescription());
 }
 // createInPlace 0x140001580.
-void* AmbientEmitterDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* AmbientEmitterDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AmbientEmitterDescription());
 }

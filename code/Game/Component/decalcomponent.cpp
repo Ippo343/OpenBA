@@ -194,7 +194,7 @@ static void DecalComponent_SetDrawFlag(DecalComponent* c, bool on) {
     if (newFlags == oldFlags) return;
     c->_flags = newFlags;
     if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && c->_entity) {
-        NotifyEntityChanged(c->_entity);
+        NotifyEntityChanged(c->_entity.Get());
     }
 }
 
@@ -377,14 +377,14 @@ extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity) {
 }
 
 // create 0x1400337c0: MemAlloc(0x38, 8), then the ctor.
-void* DecalComponent::CreateNewObject() {
+::Object::Base* DecalComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DecalComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DecalComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* DecalComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* DecalComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DecalComponent());
 }

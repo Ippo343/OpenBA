@@ -315,7 +315,7 @@ extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
 extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     // B.3.2 bridge: SpawnDescription+0x20 is still a raw header.
-    reinterpret_cast<SpawnEntryArray*>(arrayHeader)->SetSize(newCount);   // LEFT: audit WORK (SIG; SpawnDescription is Component/, z-CODEB): H5 SpawnDescription+0x20 is a raw triple (other owner's header)
+    reinterpret_cast<SpawnEntryArray*>(arrayHeader)->SetSize(newCount);   // LEFT: audit WORK (SIG; blocked by the SpawnDescription +0x20 raw triple: type that holder first, not reached in B4 Z SWEEP): H5 SpawnDescription+0x20 is a raw triple (other owner's header)
 }
 
 // ============================================================

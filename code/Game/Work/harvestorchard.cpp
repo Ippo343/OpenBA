@@ -200,7 +200,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 MapCell* gridData = map->cells.GetData();
                 // Orchard slot stride is 0x28 (different from HarvestArea's 0x20)
                 int cellGridIdx = orchard->slots[i].tile;
-                ComponentEntity* entityAtCell = gridData[cellGridIdx].occupant;
+                ComponentEntity* entityAtCell = gridData[cellGridIdx].occupant.Get();
 
                 if (entityAtCell == nullptr) {
                     validityArray[i] = 0;
@@ -259,7 +259,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 Reimpl_MapGetTerrainPos(map, pathPos, &targetPos.x, 0, nullptr);
 
                                 // The orchard component's entity (+0x10)
-                                ComponentEntity* entityRef = orchard->_entity;
+                                ComponentEntity* entityRef = orchard->_entity.Get();
 
                                 // Create orchard harvest action
                                 CitizenComponent* actionBuf[2] = { *citizenIBP, nullptr };
@@ -649,7 +649,7 @@ HarvestOrchard::HarvestOrchard()
 // now), so its registration goes with the table.
 
 // create 0x14002a520: MemAlloc(sizeof, 8), then the ctor.
-void* HarvestOrchard::CreateNewObject() {
+::Object::Base* HarvestOrchard::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HarvestOrchard), 8);
     if (!p) return nullptr;
     Object::Base* r = new (p) HarvestOrchard();
@@ -658,7 +658,7 @@ void* HarvestOrchard::CreateNewObject() {
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* HarvestOrchard::CreateInPlaceObject(void* storage) {
+::Object::Base* HarvestOrchard::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     Object::Base* r = new (storage) HarvestOrchard();
     OrchardDiag_NoteHarvestConstructed();

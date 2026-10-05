@@ -147,9 +147,9 @@ void SerializeGroupPtr(Graphics::AnimationGroup*& group, IO::Serializer& ser) {
 //
 // B.4: the element op array_graphics_anim.cpp's spec row calls with untyped
 // element pointers (`rtcoll::ElemAssign`); that signature is the collection
-// block's, so the two element views stay here (LEFT).
+// block's, so the two element views stay here (floor: elem_stride).
 extern "C" void* RtGraphics_MeshNode_CopyCtor(void* dstv, const void* srcv) {
-    return new (dstv) GraphicsMesh::Node(*static_cast<const GraphicsMesh::Node*>(srcv));   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+    return new (dstv) GraphicsMesh::Node(*static_cast<const GraphicsMesh::Node*>(srcv));   // the erased container core's element callback (void* dst / src): elem_stride  // CAST-OK: elem_stride
 }
 
 // 0x18005b660 — Graphics::AnimationState's copy constructor.
@@ -163,10 +163,10 @@ extern "C" void* RtGraphics_MeshNode_CopyCtor(void* dstv, const void* srcv) {
 // B.4: the same stores, by name. Each Array header is zeroed as the two qword
 // stores retail makes (`_data`, then `_size` + `_capacity` — written here as
 // the two named dwords, H7), then assigned. The `void*` pair is the element-op
-// signature of the collection block's spec row (LEFT).
+// signature of the collection block's spec row (floor: elem_stride).
 extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
-    Graphics::InstancedAnimationState* d = static_cast<Graphics::InstancedAnimationState*>(dstv);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
-    const Graphics::InstancedAnimationState* s = static_cast<const Graphics::InstancedAnimationState*>(srcv);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+    Graphics::InstancedAnimationState* d = static_cast<Graphics::InstancedAnimationState*>(dstv);   // the erased container core's element callback (void* dst / src): elem_stride  // CAST-OK: elem_stride
+    const Graphics::InstancedAnimationState* s = static_cast<const Graphics::InstancedAnimationState*>(srcv);   // the erased container core's element callback (void* dst / src): elem_stride  // CAST-OK: elem_stride
 
     // AnimationState's copy ctor 0x1800168d0, inlined by retail.
     d->_state._instanced = s->_state._instanced;
@@ -199,9 +199,9 @@ extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
 // instance table is a cache keyed by the pointer, and the reference that keeps
 // the group alive is the LAYER's, not the cache entry's.
 extern "C" void* RtGraphics_AnimInstance_CopyCtor(void* dstv, const void* srcv) {
-    AnimationManager::Instance* d = static_cast<AnimationManager::Instance*>(dstv);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+    AnimationManager::Instance* d = static_cast<AnimationManager::Instance*>(dstv);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
     const AnimationManager::Instance* s =
-        static_cast<const AnimationManager::Instance*>(srcv);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+        static_cast<const AnimationManager::Instance*>(srcv);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
 
     d->_group     = s->_group;
     d->_animIndex = s->_animIndex;

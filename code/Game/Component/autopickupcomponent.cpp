@@ -87,14 +87,14 @@ uint32_t AutoPickupComponent::CommandMask(int) { return 0; }
 void AutoPickupComponent::Command(int) {}
 
 // create 0x1400033c0: MemAlloc(0x40, 8), then the ctor.
-void* AutoPickupComponent::CreateNewObject() {
+::Object::Base* AutoPickupComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AutoPickupComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AutoPickupComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AutoPickupComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AutoPickupComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AutoPickupComponent());
 }

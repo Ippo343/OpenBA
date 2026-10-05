@@ -69,13 +69,13 @@ Object::External* QuarryDescription::Construct() {
 }
 
 // create 0x14000b430: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* QuarryDescription::CreateNewObject() {
+::Object::Base* QuarryDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(QuarryDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) QuarryDescription());
 }
 // createInPlace 0x14000b4a0.
-void* QuarryDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* QuarryDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) QuarryDescription());
 }

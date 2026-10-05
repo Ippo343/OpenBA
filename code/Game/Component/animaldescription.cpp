@@ -103,13 +103,13 @@ Object::External* AnimalDescription::Construct() {
 }
 
 // create 0x14002f080: MemAlloc(0x58, 8), then the (inlined) ctor.
-void* AnimalDescription::CreateNewObject() {
+::Object::Base* AnimalDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AnimalDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AnimalDescription());
 }
 // createInPlace 0x14002f0c0.
-void* AnimalDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* AnimalDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AnimalDescription());
 }

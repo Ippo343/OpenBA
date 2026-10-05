@@ -94,13 +94,13 @@ Object::External* HerbalistDescription::Construct() {
 }
 
 // create 0x140006bb0: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* HerbalistDescription::CreateNewObject() {
+::Object::Base* HerbalistDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HerbalistDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HerbalistDescription());
 }
 // createInPlace 0x140006c20.
-void* HerbalistDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* HerbalistDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HerbalistDescription());
 }

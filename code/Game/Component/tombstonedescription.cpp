@@ -61,13 +61,13 @@ Object::External* TombstoneDescription::Construct() {
 }
 
 // create 0x14000d2e0: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* TombstoneDescription::CreateNewObject() {
+::Object::Base* TombstoneDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TombstoneDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TombstoneDescription());
 }
 // createInPlace 0x14000d350.
-void* TombstoneDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* TombstoneDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TombstoneDescription());
 }

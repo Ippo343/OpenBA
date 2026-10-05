@@ -131,12 +131,12 @@ Object::External* NameDatabase::Construct() {
 // ============================================================
 // Reflection: create / createInPlace, the registration
 // ============================================================
-void* NameDatabase::CreateNewObject() {
+::Object::Base* NameDatabase::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(NameDatabase), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) NameDatabase());
 }
-void* NameDatabase::CreateInPlaceObject(void* memory) {
+::Object::Base* NameDatabase::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) NameDatabase());
 }

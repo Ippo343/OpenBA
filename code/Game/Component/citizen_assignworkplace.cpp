@@ -63,11 +63,11 @@
 // ============================================================
 void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
     void* selfV = this;
-    ComponentEntity** pWorkplace = &home;  // current home
+    Object::InternalPtr<ComponentEntity>* pWorkplace = &home;  // current home
     int32_t* pSlot = &homeSlot;
     ComponentEntity* newWp = newHome;
 
-    if (*pWorkplace == newWp && *pSlot == slotIndex)
+    if (pWorkplace->Get() == newWp && *pSlot == slotIndex)
         return;   // no change
 
     // [diag] A citizen losing its home is how "everyone froze after a load"
@@ -75,13 +75,13 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
     // Only the UN-assignment is interesting, and only its CALLER identifies which
     // rule decided the home was invalid -- so report the return address and let nm
     // name it (image base 0x140000000).
-    if (*pWorkplace != nullptr && newWp == nullptr) {
+    if (pWorkplace->Get() != nullptr && newWp == nullptr) {
         static int n = 0;
         if (n < 25) {
             ++n;
             std::fprintf(stderr, "[Unassign] #%d citizen=%p oldWp=%p slot %d->%d "
                          "caller=%p (static 0x%llx)\n", n, selfV,
-                         (void*)*pWorkplace, *pSlot, slotIndex,
+                         (void*)pWorkplace->Get(), *pSlot, slotIndex,
                          __builtin_return_address(0),
                          (unsigned long long)((uintptr_t)__builtin_return_address(0)   // CAST-OK: ptr_int
                              - (uintptr_t)GetModuleHandleW(nullptr) + 0x140000000ULL));   // CAST-OK: ptr_int
@@ -90,8 +90,8 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
     }
 
     // --- Remove from the old residence roster. ---
-    if (*pWorkplace != nullptr) {
-        ResidenceComponent* storage = (*pWorkplace)->FindComponent<ResidenceComponent>();
+    if (pWorkplace->Get() != nullptr) {
+        ResidenceComponent* storage = pWorkplace->Get()->FindComponent<ResidenceComponent>();
         Object::InternalPtr<CitizenComponent> selfIBP(this);
         // Guard: a force-assigned / partially-built home may lack a ResidenceComponent
         // (null); the original relies on the invariant that an assigned home always
@@ -105,8 +105,8 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
     *pSlot = slotIndex;
 
     // --- Add to the new residence roster. ---
-    if (*pWorkplace != nullptr) {
-        ResidenceComponent* storage = (*pWorkplace)->FindComponent<ResidenceComponent>();
+    if (pWorkplace->Get() != nullptr) {
+        ResidenceComponent* storage = pWorkplace->Get()->FindComponent<ResidenceComponent>();
         Object::InternalPtr<CitizenComponent> selfIBP(this);
         if (storage != nullptr)
             storage->AddResident(*pSlot, &selfIBP);   // 0x14012a710
@@ -114,12 +114,12 @@ void CitizenComponent::SetHome(ComponentEntity* newHome, int32_t slotIndex) {
 
     // --- Propagate to the children on the +0x260 circular ring. ---
     // head = _firstChild; each node's next = _nextSibling; loop until next wraps to head.
-    CitizenComponent* node = _firstChild;
+    CitizenComponent* node = _firstChild.Get();
     if (node != nullptr) {
         do {
             node->SetHome(newHome, *pSlot);
-            node = node->_nextSibling;
-        } while (node != _firstChild);
+            node = node->_nextSibling.Get();
+        } while (node != _firstChild.Get());
     }
 }
 

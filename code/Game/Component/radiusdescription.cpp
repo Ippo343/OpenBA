@@ -70,13 +70,13 @@ Object::External* RadiusDescription::Construct() {
 }
 
 // create 0x14000b9e0: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* RadiusDescription::CreateNewObject() {
+::Object::Base* RadiusDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RadiusDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RadiusDescription());
 }
 // createInPlace 0x14000ba50.
-void* RadiusDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* RadiusDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RadiusDescription());
 }

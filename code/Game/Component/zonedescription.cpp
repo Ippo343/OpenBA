@@ -56,13 +56,13 @@ Object::External* ZoneDescription::Construct() {
 }
 
 // create 0x14003a700: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* ZoneDescription::CreateNewObject() {
+::Object::Base* ZoneDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ZoneDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ZoneDescription());
 }
 // createInPlace 0x14003a760.
-void* ZoneDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ZoneDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ZoneDescription());
 }

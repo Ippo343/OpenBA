@@ -104,7 +104,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     float posX = 0.0f, posY = 0.0f;
     CharacterComponent* parentCharacter = nullptr;
     if (parent && *parent != nullptr) {
-        ComponentEntity* parentOwner = (*parent)->_entity;
+        ComponentEntity* parentOwner = (*parent)->_entity.Get();
         parentCharacter = parentOwner->FindComponent<CharacterComponent>();   // 0x1400012d0
     }
 
@@ -187,7 +187,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
         animal->UpdateBehavior();   // 0x140107320
     }
 
-    ComponentEntity* regRef = ent;
+    Object::InternalPtr<ComponentEntity> regRef = ent;
     // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
     EntityList_RegisterEntity_Impl(w->m_entityList, &regRef, tmpl->_category);
 
@@ -347,7 +347,7 @@ extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre
             animal->UpdateBehavior();   // 0x140107320
         }
 
-        ComponentEntity* regRef = ent;
+        Object::InternalPtr<ComponentEntity> regRef = ent;
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
         EntityList_RegisterEntity_Impl(w->m_entityList, &regRef, templ->_category);
         ++spawned;

@@ -233,8 +233,8 @@ bool Map::HasIdentityInRect(int x, int y, int w, int h,
 // slot) from an InternalPtr<ComponentEntity> (RDX): it reads no DiseaseComponent
 // field, so it stays a free function (B1).
 extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription** out,
-                                                           ComponentEntity* const* entitySlot) {
-    ComponentEntity* entity = *entitySlot;
+                                                           const Object::InternalPtr<ComponentEntity>* entitySlot) {
+    ComponentEntity* entity = entitySlot->Get();
     if (entity == nullptr) { *out = nullptr; return out; }
 
     PastureComponent* pasture = entity->FindComponent<PastureComponent>();   // 0x140004fe0
@@ -470,8 +470,8 @@ void DiseaseComponent::Infect() {
             {},            // _pad24
         };
 
-        int count = eventLog->entryCount;
-        EventLog_ArrayGrow_Reg(&eventLog->entries, count + 1, &entry);
+        int count = eventLog->entries.GetSize();
+        eventLog->entries.SetSize(count + 1, entry);   // the grow, 0x140019b70
     }
 
     // Drop to 1x speed if the settings' auto-slow byte (+0x17) is on. Retail
@@ -589,7 +589,7 @@ void DiseaseComponent::KillOneAnimal() {
         AnimalComponent* animal = member->_entity->FindComponent<AnimalComponent>();
 
         if (((animal->_flags >> 0x14) & 1) == 0) {
-            ComponentEntity* victim = member->_entity;
+            ComponentEntity* victim = member->_entity.Get();
             if (victim == nullptr) break;
             if (((victim->_entityFlags >> 10) & 1) != 0) break;
             MarkEntityForRemoval(victim);
@@ -727,12 +727,12 @@ void DiseaseComponent::ActiveDisease(const System::Time* deltaTime) {
 
         const MapCell* cell = &map->cells.GetData()[(uintptr_t)(width * ty + tx)];
 
-        ComponentEntity* target = nullptr;
+        Object::InternalPtr<ComponentEntity> target;   // retail's InternalPtr local
         if (cell->blocker != nullptr)       target = cell->blocker;    // +0x00 wins
         else if (cell->occupant != nullptr) target = cell->occupant;   // else +0x08
 
         const char* outcome = "empty-cell";
-        if (target != _entity && target != nullptr) {
+        if (target.Get() != _entity.Get() && target != nullptr) {
             if (target->FindComponent<DiseaseComponent>() != nullptr) {   // 0x1400050a0
                 ComponentDescription* theirId = nullptr;
                 ComponentDescription* myId = nullptr;
@@ -827,7 +827,7 @@ void DiseaseComponent::Startup() {
 
     if (CDTrace()) {
         printf("[CropDisease] STARTUP this=%p pasture=%d desc=%p entity=%p\n",
-               (void*)this, (int)isPasture, _description, _entity);
+               (void*)this, (int)isPasture, _description, (void*)_entity.Get());
         fflush(stdout);
     }
 }
@@ -869,14 +869,14 @@ void DiseaseComponent::Update(const System::Time* time) {
 }
 
 // create 0x140004db0: MemAlloc(0x58, 8), then the ctor.
-void* DiseaseComponent::CreateNewObject() {
+::Object::Base* DiseaseComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DiseaseComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DiseaseComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* DiseaseComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* DiseaseComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DiseaseComponent());
 }

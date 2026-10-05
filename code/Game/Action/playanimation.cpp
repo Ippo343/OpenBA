@@ -80,7 +80,7 @@ static bool PlayAnim_TargetLooksLive(const ComponentEntity* target) {
     }
     // Readable: capture the vtable + factory index/gen so the object type can be
     // identified offline (match vtable vs registered vtables / nm reimpl-x64.exe).
-    void* vt = *reinterpret_cast<void* const*>(target);  // CAST-OK: crash_walk
+    void* vt = *reinterpret_cast<void* const*>(target);  // LEFT: audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
     if (!ForceWork::Readable(vt, 0x18)) {
         static int n = 0;
         if (n < 16) { ++n;
@@ -168,12 +168,12 @@ PlayAnimation::PlayAnimation()
 void PlayAnimation::CheckEntity() {}
 // [9] 0x1400423b0
 
-void* PlayAnimation::CreateNewObject() {
+::Object::Base* PlayAnimation::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PlayAnimation), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PlayAnimation());
 }
-void* PlayAnimation::CreateInPlaceObject(void* storage) {
+::Object::Base* PlayAnimation::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PlayAnimation());
 }

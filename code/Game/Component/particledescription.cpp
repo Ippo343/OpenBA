@@ -148,13 +148,13 @@ Object::External* ParticleDescription::Construct() {
 }
 
 // create 0x14000a3c0: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* ParticleDescription::CreateNewObject() {
+::Object::Base* ParticleDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ParticleDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ParticleDescription());
 }
 // createInPlace 0x14000a430.
-void* ParticleDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ParticleDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ParticleDescription());
 }

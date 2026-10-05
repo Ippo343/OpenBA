@@ -33,12 +33,12 @@ ComponentEntity** PlayerEdit_EntityAtCell_a0280(const Map* map, ComponentEntity*
     const MapCell* cell = &map->cells.GetData()[cellIndex];
     if (cell->blocker != nullptr) {
         *retIBP = nullptr;
-        *retIBP = cell->blocker;
+        *retIBP = cell->blocker.Get();
         return retIBP;
     }
     if (cell->occupant != nullptr) {
         *retIBP = nullptr;
-        *retIBP = cell->occupant;
+        *retIBP = cell->occupant.Get();
         return retIBP;
     }
     *retIBP = nullptr;   // InternalBasePtr(nullptr) (0x140152a90)

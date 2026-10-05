@@ -84,13 +84,13 @@ Object::InternalPtr<UI::Element>* TutorialImage::CreateElement(Object::InternalP
 }
 
 // create 0x140027980: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* TutorialImage::CreateNewObject() {
+::Object::Base* TutorialImage::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialImage), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialImage());
 }
 // createInPlace 0x1400279e0.
-void* TutorialImage::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialImage::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialImage());
 }

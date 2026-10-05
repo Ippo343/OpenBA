@@ -311,7 +311,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         return 1;
     }
 
-    ComponentEntity* structEntity = map->cells.GetData()[(int64_t)targetCell].occupant;   // MapCell +0x08
+    ComponentEntity* structEntity = map->cells.GetData()[(int64_t)targetCell].occupant.Get();   // MapCell +0x08
 
     if (structEntity != nullptr) {
         ++g_brExecStructOnCell;
@@ -399,7 +399,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
     } else {
         // The citizen's entity (+0x10) storage, through the guarded finder
         StorageComponent* storageComp = nullptr;
-        fn_FindComponent_Storage((*entityIBP)->_entity, &storageComp);
+        fn_FindComponent_Storage((*entityIBP)->_entity.Get(), &storageComp);
 
         int available = StorageComponent_QueryAvailable(storageComp, field_50);   // the forwarder holds the tree's null test
 
@@ -490,14 +490,14 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 // registration goes with it.
 
 // create 0x140029560: MemAlloc(0x70, 8), then the ctor 0x1400e4ad0.
-void* BuildRoad::CreateNewObject() {
+::Object::Base* BuildRoad::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(BuildRoad), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) BuildRoad());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* BuildRoad::CreateInPlaceObject(void* storage) {
+::Object::Base* BuildRoad::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) BuildRoad());
 }

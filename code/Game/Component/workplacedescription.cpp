@@ -77,13 +77,13 @@ Object::External* WorkPlaceDescription::Construct() {
 }
 
 // create 0x14003a090: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* WorkPlaceDescription::CreateNewObject() {
+::Object::Base* WorkPlaceDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(WorkPlaceDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) WorkPlaceDescription());
 }
 // createInPlace 0x14003a100.
-void* WorkPlaceDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* WorkPlaceDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) WorkPlaceDescription());
 }

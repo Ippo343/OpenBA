@@ -1574,13 +1574,13 @@ void OptionsDialog::ZeroFields() {
 }
 
 // create 0x140012df0: MemAlloc(0x1c0, 8), then the ctor.
-void* OptionsDialog::CreateNewObject() {
+::Object::Base* OptionsDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(OptionsDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) OptionsDialog());
 }
 // createInPlace 0x140012e30 (the tree's in-place build is kept, B8-13).
-void* OptionsDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* OptionsDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) OptionsDialog());
 }

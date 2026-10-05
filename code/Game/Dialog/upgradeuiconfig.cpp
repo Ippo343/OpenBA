@@ -76,13 +76,13 @@ void UpgradeUIConfig::Destruct() { this->~UpgradeUIConfig(); }
 Object::External* UpgradeUIConfig::Construct() { return new (this) UpgradeUIConfig(); }
 
 // create 0x140016c00: MemAlloc(0x28, 8), then the ctor.
-void* UpgradeUIConfig::CreateNewObject() {
+::Object::Base* UpgradeUIConfig::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(UpgradeUIConfig), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) UpgradeUIConfig());
 }
 // createInPlace 0x140016c60.
-void* UpgradeUIConfig::CreateInPlaceObject(void* storage) {
+::Object::Base* UpgradeUIConfig::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) UpgradeUIConfig());
 }

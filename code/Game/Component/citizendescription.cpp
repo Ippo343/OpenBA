@@ -240,13 +240,13 @@ Object::External* CitizenDescription::Construct() {
 }
 
 // create 0x140030170: MemAlloc(0x148, 8), then the (inlined) ctor.
-void* CitizenDescription::CreateNewObject() {
+::Object::Base* CitizenDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CitizenDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CitizenDescription());
 }
 // createInPlace 0x1400301b0.
-void* CitizenDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CitizenDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CitizenDescription());
 }

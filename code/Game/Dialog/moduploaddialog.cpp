@@ -16,13 +16,13 @@ ModUploadDialog::ModUploadDialog(UI::UserInterface* ui, const UI::Dialog* dialog
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0) {}
 
 // create 0x140012bc0: MemAlloc(0xb8, 8), then the ctor.
-void* ModUploadDialog::CreateNewObject() {
+::Object::Base* ModUploadDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ModUploadDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) ModUploadDialog());
 }
 // createInPlace 0x140012c10 (the tree's in-place build is kept, B8-13).
-void* ModUploadDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* ModUploadDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) ModUploadDialog());
 }

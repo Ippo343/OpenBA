@@ -53,13 +53,13 @@ Object::External* CreatePathDescription::Construct() {
 }
 
 // create 0x140004c30: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* CreatePathDescription::CreateNewObject() {
+::Object::Base* CreatePathDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CreatePathDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreatePathDescription());
 }
 // createInPlace 0x140004c90.
-void* CreatePathDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CreatePathDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreatePathDescription());
 }

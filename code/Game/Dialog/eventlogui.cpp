@@ -141,7 +141,7 @@ void EventLogUI::OnOpened() {
 // [7] 0x140067440
 void EventLogUI::OnUpdateLayout() {
     EventLog* eventLog = EventLogAddress();
-    int totalEvents = eventLog->entryCount;  // total event count
+    int totalEvents = eventLog->entries.GetSize();  // total event count
 
     int displayCount = displayTexts._size;  // number of display rows
     int scroll = scrollOffset;
@@ -153,7 +153,7 @@ void EventLogUI::OnUpdateLayout() {
     int firstIdx = totalEvents - scroll - 1;
     if (firstIdx >= 0) {
         int base = firstIdx - (displayCount - 1);
-        EventLogEntry* eventArray = eventLog->entries;
+        EventLogEntry* eventArray = eventLog->entries.GetData();
         for (int row = displayCount - 1; row >= 0; row--) {
             int eventIdx = base + row;
 
@@ -211,10 +211,10 @@ void EventLogUI::ToggleNotification(int32_t btnIdx) {
 void EventLogUI::NavigateToRow(int32_t rowIdx) {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
     EventLog* eventLog = EventLogAddress();
-    int totalEvents = eventLog->entryCount;
+    int totalEvents = eventLog->entries.GetSize();
     int eventIdx = (totalEvents - displayTexts._size - scrollOffset) + rowIdx;
     // Tile index from the event entry (+0x18)
-    EventLogEntry* entryArray = eventLog->entries;
+    EventLogEntry* entryArray = eventLog->entries.GetData();
     int tileIdx = entryArray[eventIdx].tileIndex;
     if (tileIdx >= 0) {
         // Map::size at +0.
@@ -314,14 +314,14 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, i
 
 // create 0x1400113e0: MemAlloc(0x80, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* EventLogUI::CreateNewObject() {
+::Object::Base* EventLogUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EventLogUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) EventLogUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* EventLogUI::CreateInPlaceObject(void* storage) {
+::Object::Base* EventLogUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) EventLogUI());
 }

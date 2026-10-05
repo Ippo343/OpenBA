@@ -125,14 +125,14 @@ MultiObjectComponent::~MultiObjectComponent() {
 }
 
 // create 0x140035ef0: MemAlloc(0x60, 8), then the ctor.
-void* MultiObjectComponent::CreateNewObject() {
+::Object::Base* MultiObjectComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MultiObjectComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MultiObjectComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* MultiObjectComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* MultiObjectComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MultiObjectComponent());
 }

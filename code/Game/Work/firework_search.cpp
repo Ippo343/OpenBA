@@ -90,7 +90,7 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
             uint32_t uVar7;
             if (id < 0) {
                 // Negative id -> the well at wells[-1-id].
-                ComponentEntity* wellEntity = wells._data[-1 - id]->_entity;
+                ComponentEntity* wellEntity = wells._data[-1 - id]->_entity.Get();
                 InteractComponent* interact = wellEntity->FindComponent<InteractComponent>();
 
                 float pos[3] = {0.0f, 0.0f, 0.0f};
@@ -257,7 +257,7 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
     }
 
     // A well was found: its entity's InteractComponent (the inlined FindComponent).
-    ComponentEntity* wellEntity = found->_entity;
+    ComponentEntity* wellEntity = found->_entity.Get();
     InteractComponent* chosen = wellEntity->FindComponent<InteractComponent>();
 
     // Random-index a sub-entity of it, resolve its position.

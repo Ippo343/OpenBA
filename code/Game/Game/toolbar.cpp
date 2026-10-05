@@ -131,12 +131,12 @@ Object::External* Toolbar::Construct() {
 // Original registration (Toolbar_RegisterType @0x14014d410):
 //   BaseTypeInfo(&TypeInfo_Toolbar, "Toolbar", "Object::External",
 //                null, Toolbar_Factory(0x140024ba0), Toolbar_Cleanup).
-void* Toolbar::CreateNewObject() {
+::Object::Base* Toolbar::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(Toolbar), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) Toolbar());
 }
-void* Toolbar::CreateInPlaceObject(void* memory) {
+::Object::Base* Toolbar::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) Toolbar());
 }

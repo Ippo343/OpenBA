@@ -36,14 +36,14 @@ void MineComponent::OnAdded() {}
 void MineComponent::OnRemove() {}
 
 // create 0x140008dd0: MemAlloc(0x28, 8), then the ctor.
-void* MineComponent::CreateNewObject() {
+::Object::Base* MineComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MineComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MineComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* MineComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* MineComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MineComponent());
 }

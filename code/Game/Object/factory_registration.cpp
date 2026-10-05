@@ -91,7 +91,7 @@ int VerifyExeTypeInfos() {
 // a _purecall stub (0x140003730) -- they are never instantiated, they only
 // exist as parents in the type hierarchy. Moved here from the deleted
 // factory_registrations_bulk.cpp (ENDGAME B.3.9 RF); same text, same stream.
-void* AbstractTypeFactory(const char* typeName) {
+Base* AbstractTypeFactory(const char* typeName) {
     std::fprintf(stderr,
         "[AbstractFactory] Unexpected instantiate of abstract type: %s\n", typeName);
     std::fflush(stderr);

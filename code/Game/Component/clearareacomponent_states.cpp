@@ -97,7 +97,7 @@ static inline const MapCell* GridTiles(const Map* grid) {
 
 // tile+0x08: the cell's occupant entity.
 static inline ComponentEntity* GridOccupant(const MapCell* tiles, int cell) {
-    return tiles[static_cast<uintptr_t>(cell)].occupant;
+    return tiles[static_cast<uintptr_t>(cell)].occupant.Get();
 }
 
 // FUN_14009d860 — ground cells are clear & unreserved. Returns true if every cell in
@@ -193,7 +193,7 @@ bool ClearAreaComponent::IsDone() {
         target         = desc->_target;
     }
 
-    MapComponent* mc = FindOn<MapComponent>(_entity);   // 0x140004680
+    MapComponent* mc = FindOn<MapComponent>(_entity.Get());   // 0x140004680
     if (!mc) return false;
     int x1 = static_cast<int16_t>(mc->tileX0);
     int y1 = static_cast<int16_t>(mc->tileY0);
@@ -207,7 +207,7 @@ bool ClearAreaComponent::IsDone() {
     if (!groundOK) return false;
     // Owner entity — skipped by the AllEmpty scan; see the note on Grid_AllEmpty.
     const bool allEmptyBranch = (!clearTrees || clearBuildings);
-    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h, _entity)
+    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h, _entity.Get())
                                      : Grid_NoTargetResource(grid, x1, y1, w, h, target);
 
     return done;
@@ -220,7 +220,7 @@ bool ClearAreaComponent::IsDone() {
 // ============================================================
 int ClearAreaComponent::CountRemaining() {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
-    MapComponent* mc = FindOn<MapComponent>(_entity);   // 0x140004680
+    MapComponent* mc = FindOn<MapComponent>(_entity.Get());   // 0x140004680
     if (!mc) return 0;
     int x1 = static_cast<int16_t>(mc->tileX0);
     int y1 = static_cast<int16_t>(mc->tileY0);
@@ -234,7 +234,7 @@ int ClearAreaComponent::CountRemaining() {
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
             ComponentEntity* occ = GridOccupant(tiles, (y1 + row) * width + (x1 + col));
-            if (occ != _entity && occ != nullptr) ++n;
+            if (occ != _entity.Get() && occ != nullptr) ++n;
         }
     }
     return n;
@@ -335,8 +335,8 @@ char ClearAreaComponent::State0Enter(StateMachine* sm) {
     }
 
     // (3) dispatch the harvest work-action to the citizen work-scheduler.
-    WorkComponent* workComp = FindOn<WorkComponent>(_entity);   // 0x140003050
-    MapComponent* mc = FindOn<MapComponent>(_entity);           // 0x140004680
+    WorkComponent* workComp = FindOn<WorkComponent>(_entity.Get());   // 0x140003050
+    MapComponent* mc = FindOn<MapComponent>(_entity.Get());           // 0x140004680
 
     const Map* grid = gw->m_game;
     uint32_t kind = 1;
@@ -357,7 +357,7 @@ char ClearAreaComponent::State0Enter(StateMachine* sm) {
     bool f0 = desc ? desc->_clearTrees : true, f1 = desc ? desc->_clearGround : false;
     bool f2 = desc ? desc->_clearBuildings : true;
     uint8_t f3 = desc ? desc->_priority : 0;
-    ComponentEntity* ownerIBP = _entity;   // retail: local_res10 = *param_2 (the entity IBP)
+    ComponentEntity* ownerIBP = _entity.Get();   // retail: local_res10 = *param_2 (the entity IBP)
     ClearArea* work = ::new (mem) ClearArea(&ownerIBP, target, f0, f1, f2);
 
     ::Object::InternalPtr<Work> workIBP(work);
@@ -394,7 +394,7 @@ char ClearAreaComponent::State0PerFrame(StateMachine* sm) {
 //   FUN_14012eb50 = stop-slot (WorkComponent_RegisterWorkSlot).
 // ============================================================
 char ClearAreaComponent::State0Update() {
-    WorkComponent* wc = FindOn<WorkComponent>(_entity);   // 0x140003050
+    WorkComponent* wc = FindOn<WorkComponent>(_entity.Get());   // 0x140003050
     if (wc && wc->IsWorkPosted()) {
         wc->CancelWork();
     }
@@ -433,7 +433,7 @@ void ClearAreaComponent::FinishClear() {
     if (!desc->_regrowTerrain) return;
 
     if (GameUpdateLoop::_singleton != nullptr) {
-        MapComponent* mc = FindOn<MapComponent>(_entity);   // 0x140004680
+        MapComponent* mc = FindOn<MapComponent>(_entity.Get());   // 0x140004680
         if (mc) {
             Map* map = GameUpdateLoop::_singleton->m_game;
             int x1 = static_cast<int16_t>(mc->tileX0);
@@ -443,7 +443,7 @@ void ClearAreaComponent::FinishClear() {
             map->ResetTerrainHeights(x1, y1, x2, y2);   // 0x14009e0e0
         }
     }
-    ClearArea_BroadcastEvent(_entity, 5);
+    ClearArea_BroadcastEvent(_entity.Get(), 5);
 }
 
 // B4 FORWARD: buildcomponent_state1.cpp.
@@ -468,7 +468,7 @@ char ClearAreaComponent::State1Enter(StateMachine* sm) {
 //   icon, finishes the model). The SM then rests in state 2 (terminal for the flow).
 // ============================================================
 char ClearAreaComponent::State2Enter() {
-    ClearArea_BroadcastEvent(_entity, 1);
+    ClearArea_BroadcastEvent(_entity.Get(), 1);
     return 1;
 }
 

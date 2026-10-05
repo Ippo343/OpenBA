@@ -286,13 +286,13 @@ Object::External* TutorialSetupRestrictPlayer::Construct() {
 }
 
 // create 0x140028b40: MemAlloc(0x68, 8), then the ctor.
-void* TutorialSetupRestrictPlayer::CreateNewObject() {
+::Object::Base* TutorialSetupRestrictPlayer::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialSetupRestrictPlayer), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialSetupRestrictPlayer());
 }
 // createInPlace 0x140028b80.
-void* TutorialSetupRestrictPlayer::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialSetupRestrictPlayer::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialSetupRestrictPlayer());
 }

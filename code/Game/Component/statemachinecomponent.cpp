@@ -56,7 +56,7 @@ void StateMachineComponent::LinkControllers() {
     bool gotDefaultState = false;
 
     // Get owner entity
-    ComponentEntity* ownerEntity = _entity;
+    ComponentEntity* ownerEntity = _entity.Get();
     if (!ownerEntity) return;   // a guard of the tree's
 
     int componentCount = ownerEntity->_componentCount;
@@ -64,7 +64,7 @@ void StateMachineComponent::LinkControllers() {
 
     for (int i = 0; i < componentCount; i++) {
         // Re-read the owner each iteration (CheckPtr may update it)
-        ownerEntity = _entity;
+        ownerEntity = _entity.Get();
 
         // The component, IsDerivedFrom(ControllerComponent)
         Component* comp = ownerEntity->_components[i].Get();
@@ -90,7 +90,7 @@ void StateMachineComponent::LinkControllers() {
         }
 
         // Re-read the count (may have changed if CheckPtr triggered lazy load)
-        ownerEntity = _entity;
+        ownerEntity = _entity.Get();
         componentCount = ownerEntity->_componentCount;
     }
 }
@@ -105,7 +105,7 @@ void StateMachineComponent::LinkControllers() {
 void StateMachineComponent::RelinkAndResume() {
     Controller* controllerNode = &_controller;
 
-    ComponentEntity* ownerEntity = _entity;
+    ComponentEntity* ownerEntity = _entity.Get();
     if (!ownerEntity) goto state_walk;   // a guard of the tree's
 
     {
@@ -113,7 +113,7 @@ void StateMachineComponent::RelinkAndResume() {
         if (componentCount <= 0) goto state_walk;
 
         for (int i = 0; i < componentCount; i++) {
-            ownerEntity = _entity;
+            ownerEntity = _entity.Get();
             Component* comp = ownerEntity->_components[i].Get();
 
             ControllerComponent* candidate = nullptr;
@@ -131,7 +131,7 @@ void StateMachineComponent::RelinkAndResume() {
             }
 
             // Re-read the count
-            ownerEntity = _entity;
+            ownerEntity = _entity.Get();
             componentCount = ownerEntity->_componentCount;
         }
     }
@@ -341,7 +341,7 @@ void StateMachineComponent::BodyInit() {
 
 
 void StateMachineComponent::LinkControllersStandalone() {
-    ComponentEntity* owner = _entity;
+    ComponentEntity* owner = _entity.Get();
     if (!owner) return;
     int cnt = owner->_componentCount;
     if (cnt <= 0) return;
@@ -416,7 +416,7 @@ void StateMachineComponent::LinkControllersStandalone() {
     int linked = 0;
 
     for (int i = 0; i < cnt; ++i) {
-        owner = _entity;
+        owner = _entity.Get();
         if (!owner) break;
         Component* comp = owner->_components[i].Get();
         if (!comp) continue;
@@ -646,14 +646,14 @@ char StateMachineComponent::RootController::TickAlt(StateMachine*, const System:
 char StateMachineComponent::RootController::HasStates() { return 0; }
 
 // create 0x1400382d0: MemAlloc(0x58, 8), then the ctor.
-void* StateMachineComponent::CreateNewObject() {
+::Object::Base* StateMachineComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StateMachineComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StateMachineComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* StateMachineComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* StateMachineComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StateMachineComponent());
 }

@@ -144,7 +144,7 @@ void CitizenComponent::WarmAt(ComponentEntity* target) {
 // (0x1400caef0) dispatches: EDX = message id, R8 = &target entity IBP, R9D =
 // extra (read from the retail body's jump table).
 void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t /*arg1*/) {
-    ComponentEntity* const* param_3 = static_cast<ComponentEntity* const*>(data);   // LEFT: SIG Component::OnMessage (void* data, Component.h)
+    ComponentEntity* const* param_3 = static_cast<ComponentEntity* const*>(data);   // Component::OnMessage (void* data, Component.h)  // CAST-OK: user_data
     int param_4 = static_cast<int>(arg0);
     if (static_cast<unsigned>(message) > 8) return;   // retail: CMP EDX,8 / JA ret
 

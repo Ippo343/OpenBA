@@ -84,13 +84,13 @@ Object::External* TutorialGoalGameSpeed::Construct() {
 }
 
 // create 0x140027630: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* TutorialGoalGameSpeed::CreateNewObject() {
+::Object::Base* TutorialGoalGameSpeed::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialGoalGameSpeed), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialGoalGameSpeed());
 }
 // createInPlace 0x140027690.
-void* TutorialGoalGameSpeed::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialGoalGameSpeed::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialGoalGameSpeed());
 }

@@ -51,13 +51,13 @@ Object::External* MineDescription::Construct() {
 }
 
 // create 0x140008e30: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* MineDescription::CreateNewObject() {
+::Object::Base* MineDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MineDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MineDescription());
 }
 // createInPlace 0x140008e90.
-void* MineDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* MineDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MineDescription());
 }

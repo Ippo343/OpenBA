@@ -164,7 +164,7 @@ uint64_t CitizenAIComponent::State_Education() {
     if (citizen->home == nullptr) {
         bGoal = 0xffffffff;
     } else {
-        ComponentEntity* wpIBP = citizen->home;
+        ComponentEntity* wpIBP = citizen->home.Get();
         bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
     }
 
@@ -181,7 +181,7 @@ uint64_t CitizenAIComponent::State_Education() {
 
     // found: Ctor10(citizen, &foundEntity, dest, foundComponent)
     ComponentEntity* foundEntity = outBest;
-    CitizenComponent* ibpHolder = citizen;   // the CitizenComponent in a stack IBP holder
+    CitizenComponent* ibpHolder = citizen.Get();   // the CitizenComponent in a stack IBP holder
     CitizenAI_PerformWorkCtor10_bccb0(&ibpHolder, &foundEntity, dest, local_res8);
 
     citizen->statusFlags |= 4;
@@ -228,7 +228,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
     if (citizen->home == nullptr) {
         bGoal = 0xffffffff;
     } else {
-        ComponentEntity* wpIBP = citizen->home;
+        ComponentEntity* wpIBP = citizen->home.Get();
         bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
     }
 
@@ -244,7 +244,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
 
         StatusIconComponent* mi = citizen->_entity->FindComponent<StatusIconComponent>();
         if (mi) {
-            ComponentEntity* inner = mi->_entity;
+            ComponentEntity* inner = mi->_entity.Get();
             // gated by ((inner->_entityFlags >> 10) & 1) == 0  (disasm: SHR 0xa; TEST CL,1).
             // inner is just-CheckPtr'd by the original (never 0 with valid data); guard
             // it to stay crash-safe (skip rather than fault, matching nothing-to-do).
@@ -282,7 +282,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
                     changed = after ^ before;
                 }
                 if ((changed & 0xffff) != 0 && mi->_entity != nullptr) {
-                    NotifyEntityChanged(mi->_entity);
+                    NotifyEntityChanged(mi->_entity.Get());
                 }
             }
         }
@@ -291,7 +291,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
 
     // found: Ctor5(citizen, &foundEntity, dest, foundComponent)
     ComponentEntity* foundEntity = outBest;
-    CitizenComponent* ibpHolder = citizen;
+    CitizenComponent* ibpHolder = citizen.Get();
     CitizenAI_PerformWorkCtor5_bd070(&ibpHolder, &foundEntity, dest, local_res8);
 
     citizen->statusFlags |= 4;
@@ -314,7 +314,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
 uint64_t CitizenAIComponent::State_FindWork() {
     EnsureInit();
 
-    AttendanceComponent* anchor = citizen->school;
+    AttendanceComponent* anchor = citizen->school.Get();
     InteractComponent* posComp = anchor->_entity->FindComponent<InteractComponent>();
 
     float outVec[3] = { 0.0f, 0.0f, 0.0f };   // local_58 (target out)
@@ -353,7 +353,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
         Description* descRaw = citizen->_description;
         const CitizenDescription* desc = (descRaw && Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription))
                      ? static_cast<const CitizenDescription*>(descRaw) : nullptr;
-        CitizenComponent* ibpHolder = citizen;
+        CitizenComponent* ibpHolder = citizen.Get();
         // [STANDALONE GUARD] the desc null-check is ours; the original derefs +0x120
         // unconditionally (would fault if the description type-check failed).
         float walkTime = desc ? desc->_f120 : 0.0f;
@@ -368,7 +368,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
 
     // 0x140115a50 returns nothing; the only caller (ValidateAndEnterState)
     // reads the low byte, which is 0.
-    AttendanceComponent_ReleasePartnerSlot(citizen, '\x01');
+    AttendanceComponent_ReleasePartnerSlot(citizen.Get(), '\x01');
     return 0;  // low byte 0
 }
 

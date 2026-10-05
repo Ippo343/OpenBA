@@ -54,7 +54,7 @@ public:
     Controller* GetController() override { return &_controller; }  // [17] 0x140009060
 
     // ---- non-virtual members (retail addresses) ----
-    void Init(ComponentEntity* const* hall, const Math::Vector3* spawn,
+    void Init(const Object::InternalPtr<ComponentEntity>* hall, const Math::Vector3* spawn,
               const Math::Vector3* meet);                         // 0x140050030
     CitizenComponent* ConvertToCitizen(CitizenComponent** out, CitizenComponent* const* parent,
                                        int gender, char isChild); // 0x1400501a0

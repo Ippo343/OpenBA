@@ -240,13 +240,13 @@ GoalDialog::GoalDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 // buffer and zero the header, then ~DialogInstance (GoalDialog.h).
 
 // create 0x140011b60: MemAlloc(0xc8, 8), then the ctor.
-void* GoalDialog::CreateNewObject() {
+::Object::Base* GoalDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(GoalDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) GoalDialog());
 }
 // createInPlace 0x140011bc0 (the tree's in-place build is kept, B8-13).
-void* GoalDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* GoalDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) GoalDialog());
 }

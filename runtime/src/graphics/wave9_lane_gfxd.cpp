@@ -263,11 +263,11 @@ Graphics::Camera* RtGraphics_Camera_DefaultCtor(Graphics::Camera* self) {
 // assignment safe against a destination holding a foreign pointer.
 //
 // B.4: the element views, once each, as the `Graphics::RendererSceneEntry` it is
-// (LEFT: the ArraySpec callback hands bytes, array_internal.h), then its fields.
+// (the ArraySpec callback hands bytes, array_internal.h), then its fields.
 uint8_t* SceneEntryAssign(uint8_t* dstv, const uint8_t* srcv) {
-    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
     const Graphics::RendererSceneEntry* const src =
-        reinterpret_cast<const Graphics::RendererSceneEntry*>(srcv);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+        reinterpret_cast<const Graphics::RendererSceneEntry*>(srcv);   // the erased container core's element callback (void* dst / src): elem_stride  // CAST-OK: elem_stride
     dst->_scene        = src->_scene;                  // +0x00
     dst->_renderBuffer = src->_renderBuffer;           // +0x08
     RtGraphics_Camera_CopyCtor(&dst->_camera, &src->_camera);
@@ -286,7 +286,7 @@ uint8_t* SceneEntryAssign(uint8_t* dstv, const uint8_t* srcv) {
 // Retail 0x180062860 — default construct. Returns `dst` (`MOV RAX,RBX`).
 // +0xf8 is 0x40 and +0xf4 is -1; +0xfc is not written.
 uint8_t* SceneEntryInit(uint8_t* dstv) {
-    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+    Graphics::RendererSceneEntry* const dst = reinterpret_cast<Graphics::RendererSceneEntry*>(dstv);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
     dst->_scene        = nullptr;
     dst->_renderBuffer = nullptr;
     RtGraphics_Camera_DefaultCtor(&dst->_camera);
@@ -330,7 +330,7 @@ void SceneEntryInitSpec(uint8_t* dst) { SceneEntryInit(dst); }
 // +0x24..+0x2f and +0x34..+0x37 alone.
 void DrawItemAssign(uint8_t* dst, const uint8_t* src) { std::memcpy(dst, src, 0x38); }
 void DrawItemInit(uint8_t* dstv) {
-    Graphics::RendererDrawItem* const dst = reinterpret_cast<Graphics::RendererDrawItem*>(dstv);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+    Graphics::RendererDrawItem* const dst = reinterpret_cast<Graphics::RendererDrawItem*>(dstv);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
     dst->_geometry = nullptr;                          // +0x00
     dst->_material = nullptr;                          // +0x08
     dst->_instance = nullptr;                          // +0x10

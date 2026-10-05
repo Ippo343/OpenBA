@@ -49,13 +49,13 @@ Object::External* WellDescription::Construct() {
 }
 
 // create 0x14000fce0: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* WellDescription::CreateNewObject() {
+::Object::Base* WellDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(WellDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) WellDescription());
 }
 // createInPlace 0x14000fd40.
-void* WellDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* WellDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) WellDescription());
 }

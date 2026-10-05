@@ -206,13 +206,13 @@ Object::External* TradeDescription::Construct() {
 }
 
 // create 0x14000dbd0: MemAlloc(0x70, 8), then the (inlined) ctor.
-void* TradeDescription::CreateNewObject() {
+::Object::Base* TradeDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TradeDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TradeDescription());
 }
 // createInPlace 0x14000dc10.
-void* TradeDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* TradeDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TradeDescription());
 }

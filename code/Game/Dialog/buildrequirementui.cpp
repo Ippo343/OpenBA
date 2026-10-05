@@ -81,7 +81,7 @@ static Object::Base* FindCompInDesc(const ComponentDescription* desc, uint32_t t
         // NOT necessarily 8-aligned — only require it be non-null, not SaneHeapPtr,
         // or every component gets skipped.
         // The standalone sanity probe reads the vptr word.
-        void** vtable = *(void***)comp;  // CAST-OK: vslot
+        void** vtable = *(void***)comp;  // LEFT: audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
         if (!SaneHeapPtr(vtable) ||
             Object::SlotAddressOf(comp, &Object::Base::Type) == nullptr) continue;   // B.3.x: slot from the member
         Object::Base* compBase = comp;

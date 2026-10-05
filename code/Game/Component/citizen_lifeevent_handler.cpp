@@ -93,16 +93,16 @@ static Component* FindComponentByTypeId(ComponentEntity* entity, uint32_t tid) {
 // CitizenComponent::OrFamilyFlags: walk the circular children ring (+0x260 head,
 // +0x268 next) OR-ing the life-event flag into each child's +0x88 status word.
 void CitizenComponent::OrFamilyFlags(uint32_t flags) {
-    CitizenComponent** head = &_firstChild;
-    CitizenComponent* cur = *head;
+    Object::InternalPtr<CitizenComponent>* head = &_firstChild;
+    CitizenComponent* cur = head->Get();
     if (!cur) return;
     do {
         cur->happinessFlags |= flags;
-        cur = cur->_nextSibling;
+        cur = cur->_nextSibling.Get();
         // [STANDALONE GUARD] retail rings are always circular; a half-built ring
         // would spin *(0+0x88) here, so bail instead.
         if (!cur) return;
-    } while (cur != *head);
+    } while (cur != head->Get());
 }
 
 // ---------------------------------------------------------------- 0x140046c60
@@ -121,7 +121,7 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(CemeteryComponent* self) {
     uint32_t tid = TombstoneComponent::TypeId();
     for (int tries = 0; tries < count; tries++) {
         int cell = self->plots[idx];                             // +0x48
-        ComponentEntity* occupant = map->cells.GetData()[cell].occupant;   // +0x80 -> +0x08, stride 0x30
+        ComponentEntity* occupant = map->cells.GetData()[cell].occupant.Get();   // +0x80 -> +0x08, stride 0x30
         if (!occupant) return static_cast<uint32_t>(idx);      // empty cell — free slot
         Component* ts = FindComponentByTypeId(occupant, tid);
         Component* tsIBP = ts;
@@ -150,7 +150,7 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
         CemeteryComponent** slot = &listMgr->cemeteries._data[i];      // +0x40
         CemeteryComponent* comp = *slot;
         if (!comp) continue;   // [STANDALONE GUARD]
-        ComponentEntity* entity = comp->_entity;                 // +0x10
+        ComponentEntity* entity = comp->_entity.Get();                 // +0x10
         // The cemetery's map position = its InteractComponent's resolved position.
         Component* ic = FindComponentByTypeId(entity, tidInteract);
         InteractComponent* icIBP = static_cast<InteractComponent*>(ic);   // IsDerivedFrom-checked above
@@ -200,7 +200,7 @@ extern "C" void Entity_PlaceAtCell_7b20(TombstoneComponent* self, int cell, floa
     if (!world || !self) return;
     Map* map = world->m_game;                                    // +0xf8
     int size = map->size;
-    ComponentEntity* entity = self->_entity;                     // +0x10
+    ComponentEntity* entity = self->_entity.Get();                     // +0x10
     MapComponent* posIBP = entity->FindComponent<MapComponent>();        // 0x140004680
     ModelComponent* modelIBP = entity->FindComponent<ModelComponent>();  // 0x140003f60
     if (!posIBP || !modelIBP) return;   // [STANDALONE GUARD] retail derefs unguarded
@@ -271,7 +271,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     TombstoneComponent* tsIBP = nullptr;
     ComponentEntity_FindTombstoneComp_4800(entIBP, &tsIBP);
     if (tsIBP) Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));
-    ComponentEntity* regIBP = entIBP;
+    Object::InternalPtr<ComponentEntity> regIBP = entIBP;
     EntityList_RegisterEntity_Impl(world->m_entityList, &regIBP,   // +0xe8
                                    static_cast<int>(tombDesc->_category));   // +0x20
 }
@@ -289,7 +289,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
     // citizen's own model (+0x278 -> +0x68, raw transform storage) ---
     float pos[3] = {0.0f, 0.0f, 0.0f};
     if (home == nullptr) {
-        CharacterComponent* ch = character;
+        CharacterComponent* ch = character.Get();
         if (ch) {   // [STANDALONE GUARD] retail derefs unguarded
             ModelComponent* homeEnt = ch->modelComponent.Get();
             if (homeEnt) {
@@ -376,7 +376,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
 
     // --- Queue the citizen entity for removal (the EntityList's removal list at
     //     +0xd0) ---
-    ComponentEntity* entIBP = _entity;
+    ComponentEntity* entIBP = _entity.Get();
     EntityList* loop = world->m_entityList;
     if (entIBP != nullptr && loop) {
         if ((entIBP->_entityFlags >> 10 & 1) == 0) {

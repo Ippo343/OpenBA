@@ -61,13 +61,13 @@ Object::External* CropFieldDescription::Construct() {
 }
 
 // create 0x140032f30: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* CropFieldDescription::CreateNewObject() {
+::Object::Base* CropFieldDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CropFieldDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CropFieldDescription());
 }
 // createInPlace 0x140032f90.
-void* CropFieldDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CropFieldDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CropFieldDescription());
 }

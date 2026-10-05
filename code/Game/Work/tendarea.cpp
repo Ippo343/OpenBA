@@ -433,14 +433,14 @@ TendArea::TendArea() : Work(), tendMode(0) {
 // Work_GenericCtor), plus two vtable-pointer statics for the dtor's stamps.
 
 // create 0x14002c590: MemAlloc(sizeof, 8), then the ctor.
-void* TendArea::CreateNewObject() {
+::Object::Base* TendArea::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TendArea), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TendArea());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* TendArea::CreateInPlaceObject(void* storage) {
+::Object::Base* TendArea::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TendArea());
 }

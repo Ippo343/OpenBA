@@ -79,7 +79,7 @@ void CropFieldComponent::ValidateEntityRefs() {
         if (entry->state != 1) continue;
 
         int id = entry->cell;
-        ComponentEntity* obj = map->cells.GetData()[(int64_t)id].occupant;   // cell +0x08
+        ComponentEntity* obj = map->cells.GetData()[(int64_t)id].occupant.Get();   // cell +0x08
         bool keep = false;
         if (obj != nullptr) {
             if (obj->IsA(ComponentEntity::TypeId())) {
@@ -223,14 +223,14 @@ CropFieldComponent::~CropFieldComponent() {
 }
 
 // create 0x140032ed0: MemAlloc(0x68, 8), then the ctor.
-void* CropFieldComponent::CreateNewObject() {
+::Object::Base* CropFieldComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CropFieldComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CropFieldComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CropFieldComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CropFieldComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CropFieldComponent());
 }
@@ -381,7 +381,7 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
     CropSlot* slot = &slots.data[arg0];
     const int cell = slot->cell;
     ComponentEntity* const entity =
-        grid[(uintptr_t)cell].occupant;   // cell +0x08
+        grid[(uintptr_t)cell].occupant.Get();   // cell +0x08
 
     if (message == 0) {
         NaturalResourceComponent* nr = entity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0

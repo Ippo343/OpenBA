@@ -110,13 +110,13 @@ bool TutorialStep::Serialize(IO::Stream& stream) {
     return true;
 }
 
-void* TutorialStep::CreateNewObject() {
+::Object::Base* TutorialStep::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialStep), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialStep());
 }
 // createInPlace 0x140028c90.
-void* TutorialStep::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialStep::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialStep());
 }

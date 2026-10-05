@@ -81,13 +81,13 @@ Object::External* SelectDescription::Construct() {
 }
 
 // create 0x14000bb90: MemAlloc(0x48, 8), then the (inlined) ctor.
-void* SelectDescription::CreateNewObject() {
+::Object::Base* SelectDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(SelectDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) SelectDescription());
 }
 // createInPlace 0x14000bc00.
-void* SelectDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* SelectDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) SelectDescription());
 }

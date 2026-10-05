@@ -362,7 +362,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     // --- Compute reference tile index for distance sorting ---
     {
         // CheckPtr on the citizen slot; CharacterComponent (+0x278) -> ModelComponent (+0x68)
-        CharacterComponent* charComp = (*citizenIBP)->character;
+        CharacterComponent* charComp = (*citizenIBP)->character.Get();
 
         // ModelComponent's transform translation (+0x148 + 0x10)
         const Math::Vector3& pos = charComp->modelComponent->transform.translation;
@@ -841,14 +841,14 @@ int ClearArea::Validate() {
 // lazily cached id), REGISTER_TYPE over ClearArea_Factory / ClearArea_CreateInPlace.
 
 // create 0x140029820: MemAlloc(sizeof, 8), then the ctor.
-void* ClearArea::CreateNewObject() {
+::Object::Base* ClearArea::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ClearArea), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ClearArea());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* ClearArea::CreateInPlaceObject(void* storage) {
+::Object::Base* ClearArea::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ClearArea());
 }

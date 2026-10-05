@@ -351,14 +351,14 @@ void ModelComponent::Tick(const System::Time* time) {
 }
 
 // create 0x1400358d0: MemAlloc(0x170, 8), then the ctor.
-void* ModelComponent::CreateNewObject() {
+::Object::Base* ModelComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ModelComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ModelComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ModelComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ModelComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ModelComponent());
 }

@@ -165,14 +165,14 @@ void InteractComponent::OnAdded() {
     }
 }
 // create 0x1400351a0: MemAlloc(0x38, 8), then the ctor.
-void* InteractComponent::CreateNewObject() {
+::Object::Base* InteractComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(InteractComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) InteractComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* InteractComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* InteractComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) InteractComponent());
 }

@@ -182,7 +182,7 @@ extern "C" bool StartTown_ForcePushForesterWork(CitizenComponent* citizen) {
     // then we set the Work_Ctor25 work-area-dependent fields (+0x10 work-area IBP, +0x28 cell).
     static Work* s_fw = nullptr;
     if (!s_fw) {
-        s_fw = reinterpret_cast<Work*>(ForesterWork::CreateNewObject());   // LEFT: audit WORK (DECLARE_EXE_TYPE's CreateNewObject returns void*, exe_type.h; factoryFn itself is typed since b4z-RT): the factory slot's type returns void* (Object/exe_type.h FactoryFn)
+        s_fw = static_cast<Work*>(ForesterWork::CreateNewObject());   // a ForesterWork
         if (!s_fw) return true;
         new (&s_fw->field_10) ::Object::InternalBasePtr(
             lodge);   // +0x10 work-area IBP; ComponentEntity is-an Object::Internal

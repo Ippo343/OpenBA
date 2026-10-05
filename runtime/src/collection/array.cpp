@@ -2318,7 +2318,7 @@ namespace rtcoll {
 
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* CAST-OK: elem_stride (block-comment marker: a macro line cannot end in //) macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
@@ -3280,7 +3280,7 @@ const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
 
 #define D1_J1_ENTRY(ADDR)                                                     \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* CAST-OK: elem_stride (block-comment marker: a macro line cannot end in //) macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
@@ -3396,7 +3396,7 @@ void RtColl_ArraySetSize_18003d430(void* a) {
 // unchanged and one body still serves them all.
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* CAST-OK: elem_stride (block-comment marker: a macro line cannot end in //) macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 

@@ -125,13 +125,13 @@ Object::External* NaturalResourceDescription::Construct() {
 }
 
 // create 0x1400365d0: MemAlloc(0x88, 8), then the (inlined) ctor.
-void* NaturalResourceDescription::CreateNewObject() {
+::Object::Base* NaturalResourceDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(NaturalResourceDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) NaturalResourceDescription());
 }
 // createInPlace 0x140036610.
-void* NaturalResourceDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* NaturalResourceDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) NaturalResourceDescription());
 }

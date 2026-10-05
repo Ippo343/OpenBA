@@ -294,13 +294,13 @@ MapParamsDialog::MapParamsDialog(UI::UserInterface* ui, const UI::Dialog* dialog
       textClimate(nullptr), textCondition(nullptr), textDisaster(nullptr), buttonOk(nullptr) {}
 
 // create 0x140012100: MemAlloc(0xf8, 8), then the ctor.
-void* MapParamsDialog::CreateNewObject() {
+::Object::Base* MapParamsDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MapParamsDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) MapParamsDialog());
 }
 // createInPlace 0x140012140 (the tree's in-place build is kept, B8-13).
-void* MapParamsDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* MapParamsDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) MapParamsDialog());
 }

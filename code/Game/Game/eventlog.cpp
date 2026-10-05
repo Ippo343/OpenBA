@@ -47,18 +47,15 @@
 #include "Game/exe_bodies.h"
 
 // ============================================================
-// EventArray_Grow (0x140019b70) — grow-and-append primitive
+// EventLog::entries' element row — grow 0x140019b70, resize 0x1400199a0, ~Array 0x14000a8a0
 // ============================================================
-// arr points to {data* @+0, count @+8, capacity @+0xc}. 0x28-byte stride, a
-// System::String at each entry +0x08. Faithful port: triple-capacity heuristic on
-// a single-element grow, copy preserved entries (String copy-ctor), append the new
-// entry, then destruct/free the old buffer's Strings.
-//
-// ENDGAME B.3.2 step 2: the body below WAS a hand-written copy of
-// `rtcoll::SetSizeCore` in its three-argument (fill) form. It is now one
-// `Collection::Array<>::SetSizeFill` driven by this instantiation's element ops,
-// spelled as an `ArraySpec` row. Compared arm for arm against retail 0x140019b70
-// (re-decompiled 2026-09-13) and against SetSizeCore before the swap:
+// Retail instantiates the entry Array three times over ONE element: the grow
+// (SetSize(n, fill), AddEvent's append), the resize (SetSize(n), Serialize's
+// load) and ~Array (Shutdown). Their assign (String copy-ctor) and destroy
+// (~String) are identical; only the resize reaches the init arm. One row, one
+// typed member (EventLog::EntryArray).
+// The grow, compared arm for arm against retail 0x140019b70 (re-decompiled
+// 2026-09-13) and against SetSizeCore:
 //   * exact-equal early return; `_size` stored before the capacity test;
 //   * capacity = newSize, trebled when newSize == oldSize+1 && oldSize != 0;
 //   * MemAlloc(capacity * 0x28, align 8);
@@ -66,33 +63,37 @@
 //     computed element address; i < oldSize copies old[i], else copies `fill`
 //     (retail's else arm is UNCONDITIONALLY the fill — there is no init arm);
 //   * moved: ~String on every old element, then MemFree(old) — retail calls
-//     MemFree without an `if (old)` (the null test is inside 0x1800c7ad0); the
-//     previous port's `else if (oldData)` was equivalent, not extra;
+//     MemFree without an `if (old)` (the null test is inside 0x1800c7ad0);
 //   * in place and shrinking: ~String on the truncated tail.
+// The resize (0x1400199a0) is the same core with the init arm (the seed below).
 // Two deliberate differences, both out-of-memory-only: the allocation goes
-// through the LOCKING static `?MemAlloc@MemoryAllocator@System@@` instead of
-// the unlocked instance `Allocate` this body reached through `fn_MemAlloc`
-// (same heap), and a null `fill` no longer faults (retail would; SetSizeCore
-// falls through to the empty init arm). Every caller in the tree passes a
-// non-null entry (AddEventCore below, eventlog_achievement.cpp,
-// Component/diseasecomponent.cpp).
+// through the LOCKING static `?MemAlloc@MemoryAllocator@System@@` (same heap),
+// and a null `fill` does not fault (retail would). Every grow caller passes a
+// non-null entry (AddEventCore below, Component/diseasecomponent.cpp).
 namespace {
 
 // The element: EventLogEntry (EventLog.h), stride 0x28, align 8.
-// +0x04..+0x07 is padding retail's assign never writes. This is a fill-only
-// instantiation (init == nullptr): retail 0x140019b70 has no default arm.
-// The element ops are written on EventLogEntry and reach the erased core
-// through Collection.h's element adapters (B4 P2 GAME-1).
+// +0x04..+0x07 and +0x24..+0x27 are touched by NEITHER arm.
 void CopyEventEntry(EventLogEntry* dst, const EventLogEntry* src) {
     dst->color = src->color;
     new (&dst->text) System::String(src->text);
-    dst->eventType = src->eventType;
+    dst->eventType = src->eventType;   // +0x10..+0x23: five ints
     dst->severity = src->severity;
     dst->tileIndex = src->tileIndex;
     dst->iconIndex = src->iconIndex;
     dst->popup = src->popup;
 }
-
+// The resize's init arm (0x1400199a0). Seed values are load-bearing:
+// color=-1, tileIndex=iconIndex=popup=-1, eventType=severity=0.
+void ZeroEventEntry(EventLogEntry* dst) {
+    dst->color = 0xffffffff;
+    dst->text._data = nullptr;         // null String (retail: one qword 0)
+    dst->eventType = 0;                // retail: one qword store, H7
+    dst->severity  = 0;
+    dst->tileIndex = -1;               // retail: one qword store, H7
+    dst->iconIndex = -1;
+    dst->popup     = -1;
+}
 void DestroyEventEntries(EventLogEntry* entries, int count) {
     for (int i = 0; i < count; ++i)
         entries[i].text.~String();
@@ -100,38 +101,24 @@ void DestroyEventEntries(EventLogEntry* entries, int count) {
 void AssignEventEntry(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<EventLogEntry, &CopyEventEntry>(d, s);
 }
+void InitEventEntry(uint8_t* dst) {
+    rtcoll::InitAs<EventLogEntry, &ZeroEventEntry>(dst);
+}
 void DestroyEventEntry(void* ignoredThis, uint8_t* base, int count) {
     rtcoll::DestroyAs<EventLogEntry, &DestroyEventEntries>(ignoredThis, base, count);
 }
 
-// stays explicit: byteCopy=false with a String copy-ctor `assign`, a real
-// `destroy`, and an `assign unwritten` extent ([0x04,0x08) padding) — a
-// combination no C++ element type can express.
-const rtcoll::ArraySpec kSpec_EventEntry = {            // exe 0x140019b70 (grow),
-    "Array<EventLog::Entry>", 0x28, 8,                  //     0x14000a8a0 (~Array)
-    &AssignEventEntry, nullptr, &DestroyEventEntry, false,
-    /*assign unwritten*/ 0x04, 0x08,
-    /*init   unwritten*/ 0,    0,
-    /*seed zero       */ 0,    0 };
-
-using EventArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                     Collection::ExplicitSpec<&kSpec_EventEntry>>;
-
 }  // namespace
 
-// `arrBase` is the log's {entries, entryCount, entryCapacity} header.
-static void EventArray_Grow(EventLogEntry** arrBase, int newCount, const EventLogEntry* newEntry) {
-    // B.3.2 bridge: EventLog +0x18 is declared as the Array's three fields.
-    reinterpret_cast<EventArray*>(arrBase)->SetSizeFill(newCount, newEntry);   // LEFT: audit DEFERRED (two specs + memset; B4 Z CODEA: the two rows ARE one element, assign and destroy identical, the resize row adds init: the unit is one typed member + Load's memset replaced by retail's inline stores + ~12 reader lines in Dialog/ and Component/, not done): H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (this one, grow 0x140019b70; gameupdateloop_serialize.cpp's, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
-}
-
-// The matching destructor, FUN_14000a8a0 (retail's EventNotifier cleanup): ~String
-// on each live entry's +0x08, MemFree the buffer, zero the header. Exported for
-// game_leaf_helpers.cpp's Game_EventNotifierCleanup so the element row lives in
-// exactly one place. Called by name from GameUpdateLoop::Shutdown (the forwarder is gone).
-extern "C" void EventLog_EventArray_Destroy(EventLogEntry** arrBase) {
-    reinterpret_cast<EventArray*>(arrBase)->~Array();   // LEFT: audit DEFERRED (as the grow line above): H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (this one, grow 0x140019b70; gameupdateloop_serialize.cpp's, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
-}
+// stays explicit: byteCopy=false with a String copy-ctor `assign`, a real
+// `destroy`, and two unwritten holes ([0x04,0x08) and [0x24,0x28)) — a
+// combination no C++ element type can express.
+const rtcoll::ArraySpec EventLogRows::kSpec_EventEntry = {   // exe 0x140019b70 (grow),
+    "Array<EventLogEntry>", 0x28, 8,                         //     0x1400199a0 (resize),
+    &AssignEventEntry, &InitEventEntry, &DestroyEventEntry, false,   // 0x14000a8a0 (~Array)
+    /*assign unwritten*/ 0x24, 0x28,   // plus +0x04..+0x07
+    /*init   unwritten*/ 0x24, 0x28,   // plus +0x04..+0x07
+    /*seed zero       */ 0,    0 };
 
 // ============================================================
 // Helpers
@@ -309,8 +296,8 @@ void EventLog::AddEventCore(int eventType, int severity, const ::Object::Interna
     entry->iconIndex = iconIndex;
     entry->popup = popup;
 
-    int count = entryCount;
-    EventArray_Grow(&entries, count + 1, entry);
+    int count = entries.GetSize();
+    entries.SetSize(count + 1, *entry);   // the grow, 0x140019b70
 
     // Cleanup the entry's String (the grow copied it); yearStr/seasonStr/
     // templateStr/formatted are released by their own scope.
@@ -395,9 +382,6 @@ extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int 
 // lets the two copies diverge (see reference_one_retail_fn_ported_twice_diverges).
 // B4 FORWARD: the three below have 1 outside caller file (Component/diseasecomponent.cpp).
 
-extern "C" void EventLog_ArrayGrow_Reg(EventLogEntry** arrBase, int newCount, const EventLogEntry* newEntry) {
-    EventArray_Grow(arrBase, newCount, newEntry);
-}
 
 extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr) {
     // Retail constructs the result String in the caller's return slot.

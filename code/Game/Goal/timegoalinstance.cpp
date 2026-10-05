@@ -103,14 +103,14 @@ Achievement::Goal::GoalState TimeGoalInstance::CheckGoalState() const {
 }
 
 // create 0x140026670: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* TimeGoalInstance::CreateNewObject() {
+::Object::Base* TimeGoalInstance::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TimeGoalInstance), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TimeGoalInstance());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (null);
 // the tree's in-place build is kept (B38_RULES B8-13).
-void* TimeGoalInstance::CreateInPlaceObject(void* storage) {
+::Object::Base* TimeGoalInstance::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TimeGoalInstance());
 }

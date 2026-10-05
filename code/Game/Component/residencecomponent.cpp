@@ -73,7 +73,7 @@ void ResidenceComponent::EvictAndUnregister() {
         return;
 
     // The owner entity, as the InternalBasePtr value retail builds on the stack
-    ComponentEntity* entityPtr = _entity;
+    ComponentEntity* entityPtr = _entity.Get();
 
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
@@ -274,10 +274,10 @@ int RosterCompare_9e20(const void* pa, const void* pb) {
     const CitizenComponent* ea = *reinterpret_cast<CitizenComponent* const*>(pa);   // CAST-OK: crt
     const CitizenComponent* eb = *reinterpret_cast<CitizenComponent* const*>(pb);   // CAST-OK: crt
 
-    const CitizenComponent* a258 = ea->_parent;   // +0x258 parent
+    const CitizenComponent* a258 = ea->_parent.Get();   // +0x258 parent
     int a38 = ea->gender;                         // +0x38 gender
 
-    const CitizenComponent* b258 = eb->_parent;
+    const CitizenComponent* b258 = eb->_parent.Get();
     int b38 = eb->gender;
 
     uint32_t ub = (b38 == 1) ? 0x100u : 0u;
@@ -496,7 +496,7 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
 // the SM Enter walk continues past this node (Build's state-2 has no enter) — keep
 // that return value.
 char ResidenceComponent::EnterBuilt() {
-    TownRegistry_RegisterResidence(_entity);
+    TownRegistry_RegisterResidence(_entity.Get());
     {
         static int n = 0;
         if (n < 12) { ++n;
@@ -507,7 +507,7 @@ char ResidenceComponent::EnterBuilt() {
             // itself ([TownRegistry] lines); read those, not this one.
             fprintf(stderr, "[Residence] state-2 enter FIRED: house comp=%p entityIBP=%llx "
                     "-> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)\n",
-                    static_cast<void*>(this), reinterpret_cast<unsigned long long>(_entity));   // CAST-OK: ptr_int (the entity logged as an integer)
+                    static_cast<void*>(this), reinterpret_cast<unsigned long long>(_entity.Get()));   // CAST-OK: ptr_int (the entity logged as an integer)
             fflush(stderr);
         }
     }
@@ -584,14 +584,14 @@ ResidenceComponent::~ResidenceComponent() {
 }
 
 // create 0x140037440: MemAlloc(0x60, 8), then the ctor.
-void* ResidenceComponent::CreateNewObject() {
+::Object::Base* ResidenceComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ResidenceComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ResidenceComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ResidenceComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ResidenceComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ResidenceComponent());
 }

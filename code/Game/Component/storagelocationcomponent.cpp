@@ -88,7 +88,7 @@ static char StorageLoc_State3Enter(StorageLocationComponent* data, StateMachine*
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
     StorageLocationComponent* self = data;   // the dispatcher's [node+0x18]
-    ComponentEntity* entityRef = self->_entity;
+    ComponentEntity* entityRef = self->_entity.Get();
     CemeteryListErase_Reimpl(&townMgr->field_0x00._data, &entityRef);
     return 0;
 }
@@ -116,14 +116,14 @@ StorageLocationComponent::StorageLocationComponent() : _controller(this) {
 }
 
 // create 0x140038df0: MemAlloc(0x48, 8), then the ctor.
-void* StorageLocationComponent::CreateNewObject() {
+::Object::Base* StorageLocationComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StorageLocationComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StorageLocationComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* StorageLocationComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* StorageLocationComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StorageLocationComponent());
 }

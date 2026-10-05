@@ -189,13 +189,13 @@ Object::External* UIDescription::Construct() {
 }
 
 // create 0x1400395b0: MemAlloc(0x48, 8), then the (inlined) ctor.
-void* UIDescription::CreateNewObject() {
+::Object::Base* UIDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(UIDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) UIDescription());
 }
 // createInPlace 0x140039620.
-void* UIDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* UIDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) UIDescription());
 }

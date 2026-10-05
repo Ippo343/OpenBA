@@ -56,13 +56,13 @@ Object::External* AbsorbResourceDescription::Construct() {
 }
 
 // create 0x14002ea80: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* AbsorbResourceDescription::CreateNewObject() {
+::Object::Base* AbsorbResourceDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AbsorbResourceDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AbsorbResourceDescription());
 }
 // createInPlace 0x14002eae0.
-void* AbsorbResourceDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* AbsorbResourceDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AbsorbResourceDescription());
 }

@@ -57,13 +57,13 @@ Object::External* StateMachineDescription::Construct() {
 }
 
 // create 0x140038330: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* StateMachineDescription::CreateNewObject() {
+::Object::Base* StateMachineDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StateMachineDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StateMachineDescription());
 }
 // createInPlace 0x140038390.
-void* StateMachineDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* StateMachineDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StateMachineDescription());
 }

@@ -196,7 +196,7 @@ void BirthGate(int frameNum, CitizenComponent** list, int n) {
         const float hunger = c->hunger;                            // +0x44
         const float warmth = c->coldness;                          // +0x48
         const float timer  = c->pregnancyTimer;                    // +0x4C
-        ComponentEntity* const home = c->home;                     // +0x238
+        ComponentEntity* const home = c->home.Get();                     // +0x238
         const int   slotIdx = c->homeSlot;                         // +0x240
 
         int gate = 0;
@@ -445,7 +445,7 @@ void MoveOutGrownChildren(int frameNum) {
         if (!c) continue;
         if (c->spouse != nullptr) continue;                          // already married (+0x250)
         if (c->_parent == nullptr) continue;                         // already independent (+0x258)
-        ComponentEntity* home = c->home;                             // +0x238
+        ComponentEntity* home = c->home.Get();                             // +0x238
         if (home == nullptr) continue;                               // no home to move back into
         const CitizenDescription* desc = c->description;            // +0x288
         if (!desc) continue;
@@ -454,9 +454,9 @@ void MoveOutGrownChildren(int frameNum) {
 
         int slot = c->homeSlot;                                      // +0x240
         c->SetParent(nullptr);                                       // 0x140111fa0 (null IBP)
-        CitizenComponent* guardian = c->_parent;                     // +0x258
+        CitizenComponent* guardian = c->_parent.Get();                     // +0x258
         c->SetHome(home, slot);                                      // 0x1401163d0
-        ComponentEntity* homeAfter = c->home;                        // +0x238
+        ComponentEntity* homeAfter = c->home.Get();                        // +0x238
         std::fprintf(stderr, "[MarryHarness] frame %d: moved out comp=%p age=%.2f gender=%d "
                      "— guardian(+0x258) %s, home(+0x238) %p -> %p\n", frameNum,
                      static_cast<void*>(c), age, c->gender,
@@ -571,8 +571,8 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
                     CitizenComponent* v = victims[i];
                     std::fprintf(stderr, "[DeathHarness] killing family citizen comp=%p "
                                  "spouse=%p ring=%p\n", static_cast<void*>(v),
-                                 static_cast<void*>(v->spouse),          // +0x250
-                                 static_cast<void*>(v->_firstChild));    // +0x260
+                                 static_cast<void*>(v->spouse.Get()),          // +0x250
+                                 static_cast<void*>(v->_firstChild.Get()));    // +0x260
                     std::fflush(stderr);
                     v->HandleLifeEvent(3, nullptr);                      // 0x140116dd0
                 }

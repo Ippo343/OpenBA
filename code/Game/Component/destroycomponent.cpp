@@ -59,14 +59,14 @@ DestroyComponent::DestroyComponent()
 DestroyComponent::~DestroyComponent() = default;
 
 // create 0x140033bc0: MemAlloc(0x68, 8), then the ctor.
-void* DestroyComponent::CreateNewObject() {
+::Object::Base* DestroyComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DestroyComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DestroyComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* DestroyComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* DestroyComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DestroyComponent());
 }

@@ -240,7 +240,7 @@ int HomeDoorCell(CitizenComponent* const* citizen) {
 // identical inlined pushes of 0x1400dd770). `entry` is the caller's scratch
 // record: only its first three ints are written, the tail is whatever it held.
 void PushRoute(Collection::Array<PathRoute>& routes, PathRoute& entry, CitizenComponent* citizen) {
-    ComponentEntity* workplace = citizen->workplace;
+    ComponentEntity* workplace = citizen->workplace.Get();
     int anchorCell = EntityAnchorCell(&workplace, nullptr);
     CitizenComponent* copy = citizen;   // retail passes a COPY (local_2080), not the live slot
     int homeCell = HomeDoorCell(&copy);

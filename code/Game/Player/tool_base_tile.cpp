@@ -314,7 +314,7 @@ uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int para
     }
 
     // Register the new entity in the world entity list.
-    ComponentEntity* local_48 = entity;
+    Object::InternalPtr<ComponentEntity> local_48 = entity;
     EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &local_48,
                                    static_cast<int>(descriptionPtr->_category));
 

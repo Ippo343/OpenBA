@@ -138,9 +138,9 @@ char PathTool::OnKey(char key) {
             Math::Scalar(distance[0]),
             hitNormal, hitPos));
         if ((int)hitIdx >= 0) {
-            // LEFT: Picking::Scene's user data is `void*` (block R-GFX); the bridge and
+            // Picking::Scene's user data is `void*` (retail's API); the bridge and
             // the picking component store the owning ComponentEntity there.
-            entityIBP = reinterpret_cast<ComponentEntity*>(pickingScene->GetUserData(hitIdx));   // LEFT: Picking::Scene keeps its user data as void* (runtime header, not this set's); the owner stored there is the ComponentEntity
+            entityIBP = reinterpret_cast<ComponentEntity*>(pickingScene->GetUserData(hitIdx));   // Picking::Scene keeps its user data as void* (runtime header, not this set's); the owner stored there is the ComponentEntity  // CAST-OK: user_data
         }
     }
 
@@ -263,13 +263,13 @@ ComponentEntity** PathTool::GetSelected(ComponentEntity** ret) const {
 // pathtool_setselected.cpp next to the helper it jumps to.
 
 // create 0x140026b10: MemAlloc(0x60, 8), then the ctor 0x1400de9e0.
-void* PathTool::CreateNewObject() {
+::Object::Base* PathTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PathTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PathTool());
 }
 // createInPlace 0x140026b50: `if (storage) ctor(storage)`.
-void* PathTool::CreateInPlaceObject(void* storage) {
+::Object::Base* PathTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PathTool());
 }

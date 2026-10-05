@@ -106,7 +106,7 @@ public:
                                  //       Decide sets it when the hunger transition enters state 0xe
     bool     seekingWarmth;      // +0x31 bool (version > 0): the same for coldness and state 0xf
     uint8_t  _pad32[6];          // +0x32
-    CitizenComponent* citizen;   // +0x38 InternalPtr, validated against cell 0x1401c7158 on load;
+    Object::InternalPtr<CitizenComponent> citizen;   // +0x38 InternalPtr, validated against cell 0x1401c7158 on load;
                                  //       Startup 0x14010f920 finds the sibling CitizenComponent
     System::Time timers[16];     // +0x40 System::Time per state: ValidateAndEnterState enters a
                                  //       state only while its timer is < 1; Decide counts them down

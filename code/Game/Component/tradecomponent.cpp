@@ -322,14 +322,14 @@ TradeStockTree::~TradeStockTree() {
 }
 
 // create 0x14000db60: MemAlloc(0xa8, 8), then the ctor.
-void* TradeComponent::CreateNewObject() {
+::Object::Base* TradeComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TradeComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TradeComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* TradeComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* TradeComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TradeComponent());
 }
@@ -359,7 +359,7 @@ void TradeComponent::OnAdded() {
     if (GameUpdateLoop::_singleton == nullptr)
         return;
 
-    ComponentEntity* entityPtr = _entity;
+    ComponentEntity* entityPtr = _entity.Get();
 
     // The town manager (GameUpdateLoop::m_citizenList).
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
@@ -390,7 +390,7 @@ void TradeComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr)
         return;
 
-    ComponentEntity* entityPtr = _entity;
+    ComponentEntity* entityPtr = _entity.Get();
 
     // The town manager (GameUpdateLoop::m_citizenList).
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
@@ -436,7 +436,7 @@ void TradeComponent::Command(int /*command*/) {
         // Work_Ctor25's body (0x1400f72e0). No more read-back of 0x140161a10.
         void* mem = System::MemoryAllocator::MemAlloc(0x58, 8);
         if (mem) {
-            ComponentEntity* entityIBP = _entity;
+            ComponentEntity* entityIBP = _entity.Get();
             work = new (mem) TradeWork();
             work->InitFromEntity(&entityIBP);
         }

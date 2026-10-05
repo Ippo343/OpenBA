@@ -74,7 +74,7 @@ public:
     int32_t  cellCapacity; // +0x44
     int32_t  herdDim;      // +0x48 herd cells per edge (map size / _herdBlock)
     uint8_t  _pad4C[4];    // +0x4C
-    ComponentEntity** herds; // +0x50 Array<InternalPtr<ComponentEntity>> data
+    Object::InternalPtr<ComponentEntity>* herds; // +0x50 Array<InternalPtr<ComponentEntity>> data
     int32_t  herdCount;    // +0x58
     int32_t  herdCapacity; // +0x5C
     System::Time smoothTimer; // +0x60 SmoothDensity every 300 s

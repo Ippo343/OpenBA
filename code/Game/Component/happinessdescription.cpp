@@ -73,13 +73,13 @@ Object::External* HappinessDescription::Construct() {
 }
 
 // create 0x140005c10: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* HappinessDescription::CreateNewObject() {
+::Object::Base* HappinessDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HappinessDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HappinessDescription());
 }
 // createInPlace 0x140005c80.
-void* HappinessDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* HappinessDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HappinessDescription());
 }

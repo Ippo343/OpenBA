@@ -332,7 +332,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                                 static uint32_t s_tidStorageComp = 0;
                                 if (s_tidStorageComp == 0)
                                     s_tidStorageComp = StorageComponent::TypeId();
-                                ComponentEntity* ownEnt = lVarComp->_entity;
+                                ComponentEntity* ownEnt = lVarComp->_entity.Get();
                                 if (ownEnt && s_tidStorageComp) {
                                     int n2 = ownEnt->_componentCount;
                                     Object::InternalPtr<Component>* arr2 = ownEnt->_components;

@@ -69,13 +69,13 @@ Object::External* NomadDescription::Construct() {
 }
 
 // create 0x140009090: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* NomadDescription::CreateNewObject() {
+::Object::Base* NomadDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(NomadDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) NomadDescription());
 }
 // createInPlace 0x140009100.
-void* NomadDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* NomadDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) NomadDescription());
 }

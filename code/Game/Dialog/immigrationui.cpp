@@ -136,7 +136,7 @@ void ImmigrationUI::OnUpdateLayout() {
     uint32_t immigCount = static_cast<uint32_t>(immigComp->groupCount);
 
     // The StateMachineComponent on the component's entity
-    StateMachineComponent* buildState = immigrationui_sa::FindStateMachine(immigComp->_entity);
+    StateMachineComponent* buildState = immigrationui_sa::FindStateMachine(immigComp->_entity.Get());
 
     // Check build state: byte at +0x52, if negative use +0x50, compare to 0x11.
     // Guard the sub-entity's BuildState too (unbuilt/absent nomad camp in SA).
@@ -200,7 +200,7 @@ void ImmigrationUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/
     if (immigComp == nullptr) return;   // no component bound (standalone safety)
 
     // The StateMachineComponent on the component's entity
-    StateMachineComponent* buildState = immigrationui_sa::FindStateMachine(immigComp->_entity);
+    StateMachineComponent* buildState = immigrationui_sa::FindStateMachine(immigComp->_entity.Get());
     if (buildState == nullptr) return;
 
     // The current node's Controller::PostEvent (slot 2) (&SMC[0x48], active byte, mode)

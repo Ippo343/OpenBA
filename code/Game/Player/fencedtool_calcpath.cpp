@@ -135,7 +135,7 @@ void AppendChild(MultiObjectComponent* multi, ComponentEntity* entity) {
 
 // Register the entity with the EntityList under its template's category (+0x20).
 void RegisterWithList(GameUpdateLoop* gw, ComponentEntity* entity, const ComponentDescription* tmpl) {
-    ComponentEntity* val = entity;
+    Object::InternalPtr<ComponentEntity> val = entity;
     int prio = static_cast<int>(tmpl->_category);
     EntityList_RegisterEntity_Impl(gw->m_entityList, &val, prio);
 }

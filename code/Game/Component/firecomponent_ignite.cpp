@@ -319,7 +319,7 @@ void FireComponent::Ignite() {
     if (::System::MemoryAllocator::_singleton) {
         void* mem = ::System::MemoryAllocator::MemAlloc(0x60, 8);
         if (mem) {
-            ComponentEntity* entityIbp = _entity;
+            ComponentEntity* entityIbp = _entity.Get();
             work = ::new (mem) FireWork(&entityIbp, static_cast<uint32_t>(desc->maxFirefighters));
         }
     }
@@ -426,7 +426,7 @@ void FireComponent::SpreadToNeighbors() {
 
         // Fine-cell array at grid+0x80, stride 0x30; +0x00 is MapCell::blocker.
         ComponentEntity* occupant =
-            grid->cells.GetData()[static_cast<int64_t>(grid->size) * cy + cx].blocker;
+            grid->cells.GetData()[static_cast<int64_t>(grid->size) * cy + cx].blocker.Get();
 
         // Retail inlines the exact-id scan here (no IsDerivedFrom): the generic find.
         FireComponent* neighbourFire = nullptr;
