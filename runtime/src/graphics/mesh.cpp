@@ -174,8 +174,7 @@ namespace {
 // used to sit here (`AnimResetFn`, `AnimPlayFn`) are gone with their doors.
 // ENDGAME B.3.1 step 2: Math::Quaternion's operator* and Rotate, called as
 // members. The `(self, ret, arg)` SHAPE is kept because the call sites below
-// work on raw offsets into GraphicsMesh's untyped node/pool storage; those
-// B.3.1 bridges go when THAT class is converted.
+// work on raw offsets into GraphicsMesh's untyped node/pool storage.
 //
 // B.4: the two `(self, ret, arg)` wrappers (QuaternionMultiply /
 // QuaternionRotate) that viewed raw node / pool storage as those classes are
@@ -1161,7 +1160,7 @@ namespace {
 // transform, R8 = the TO transform, R9 = &t — the argument order
 // wave9_lane_gfx.cpp records from the shipped call site, kept in the shape
 // below because the caller works on raw offsets into the interpolated-state
-// pair (a B.3.1 bridge that goes with Graphics::MeshInstance).
+// pair.
 // B.4: called as `prev.Lerp(cur, t)` on the typed pair; the wrapper is gone.
 
 // ?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z — retail

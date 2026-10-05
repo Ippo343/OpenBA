@@ -225,7 +225,7 @@ void System::Random::NextGroup() {
 // 624-entry uint32 array.
 void System::Random::Serialize(::IO::Serializer& s) {
     s.Serialize(_index, nullptr);   // slot +0x98, the uint overload
-    s.Serialize(0x270, _mt, nullptr);   // B.3.4 bridge  (0x40 = uint-array door)
+    s.Serialize(0x270, _mt, nullptr);   // (0x40 = uint-array door)
 }
 
 // ============================================================
@@ -282,7 +282,7 @@ void System::Time::Serialize(::IO::Serializer& s) {
 // ?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c4150
 // Slot +0x98 serializes the packed 4-byte `value`.
 void System::Color::Serialize(::IO::Serializer& s) {
-    s.Serialize(_value, nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    s.Serialize(_value, nullptr);   // (0x98 = uint door)
 }
 
 // ============================================================

@@ -253,7 +253,6 @@ bool PickingMesh::Serialize(IO::Stream& stream) {
     // ReaderWriter at scope exit, where the hand-written `delete` stood.
     IO::Serializer ser(stream, 0);
 
-    // B.3.1 bridge: the two Strings are the POD spelling (PickingMesh.h).
     _string20.Serialize(ser);
     _string28.Serialize(ser);
 

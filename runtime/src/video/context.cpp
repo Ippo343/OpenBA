@@ -234,7 +234,7 @@ static_assert(RtVideo::kSlotEndInstancedIndexedVertices   / 8 == 19, "ContextDat
 // early-out is observable state, not an optimisation.
 //
 // The bodies are UNCHANGED by the conversion except that `self->x` became `x`
-// and the three B.3.1 bridge helpers became direct member calls on
+// and the three bridge helpers became direct member calls on
 // `Math::Matrix`. Each one's registered door is below, under its old name.
 namespace Video {
 

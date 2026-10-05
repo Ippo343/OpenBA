@@ -14,7 +14,7 @@
 // The layout below is Wave 6 lane A's, byte for byte, with three type changes
 // and no offset changes:
 //
-//   * `RtVideo::MatrixRaw`  -> `Math::Matrix`   (B.3.1's bridge, now retired)
+//   * `RtVideo::MatrixRaw`  -> `Math::Matrix`   (retired)
 //   * `RtVideo::Vector4Raw` -> `Math::Vector4`  (ditto)
 //   * `RtVideo::ConstantBufferOpaque` (0x48 opaque bytes) -> the real
 //     `Video::ConstantBuffer` (runtime/types/video/ConstantBuffer.h), whose
@@ -708,7 +708,7 @@ using ConstantBufferOpaque = ::Video::ConstantBuffer;
 
 // Math::Matrix / Math::Vector4 replaced `MatrixRaw` / `Vector4Raw` in B.3.5:
 // the two pairs were the same 64 and 16 bytes, both are trivially copyable, and
-// `runtime/src/video/context.cpp`'s three B.3.1 bridge helpers
+// `runtime/src/video/context.cpp`'s three bridge helpers
 // (`MatrixInverse`, `MatrixMul`, `MatrixNotEqual`) and their
 // `sizeof(MatrixRaw) == sizeof(Math::Matrix)` bridge assert are gone with them.
 // The aliases are kept because a grep for either name should land here rather

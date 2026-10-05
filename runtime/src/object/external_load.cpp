@@ -328,7 +328,7 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 // ---- 1800bc767..1800bc78a -----------------------------------
                 int32_t version;
                 SerInt(rw, &version);
-                const int32_t objVersion =          // slot 3 +0x18 (B.3.x bridge)
+                const int32_t objVersion =          // slot 3 +0x18
                     obj->GetFileVersion();
                 if (version != objVersion) {
                     ++g_lc.badVersion;

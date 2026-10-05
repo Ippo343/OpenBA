@@ -263,7 +263,7 @@ void ButtonElement::Update(const System::Time& time, UserInterface* ui,
     if (!fire) {
         const int32_t key = _keyIndex;
         if (key < 0) return;                                   // 1801112d4 JS -> end
-        if (!state.config->Pressed(0, key)) return;  // B.3.7 bridge
+        if (!state.config->Pressed(0, key)) return;
     }
 
     StoreFlags(this, _flags & ~kFlagPressStarted);

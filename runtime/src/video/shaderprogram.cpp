@@ -37,9 +37,7 @@
 // `RtVideo_ShaderProgram_*` function is now a member of that class, defined in
 // the `namespace Video` block at the bottom of this file (B34_BRIEFS A.2: a
 // member of `Video::X` cannot be defined inside a sibling namespace), and each
-// registered DOOR is a one-line QUALIFIED non-virtual delegation through a
-// `reinterpret_cast` bridge (`// B.3.5 bridge`, which is what the B.4 metric
-// counts).
+// registered DOOR is a one-line QUALIFIED non-virtual delegation.
 //
 // WHY THE QUALIFICATION IS LOAD-BEARING (B34_BRIEFS A.1): a live ShaderProgram
 // subclass wears the MINTED `??_7VertexProgram@Video@@6B@` / `??_7PixelProgram@`
