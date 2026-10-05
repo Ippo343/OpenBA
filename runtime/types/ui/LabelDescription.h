@@ -67,7 +67,7 @@ public:
         _worda0 = -1;
         _worda4 = -1;
         _spriteSheet = nullptr;
-        _spriteName  = nullptr;
+        // +0xb0 `_spriteName`: its own String() (the zero store) runs as a member.
     }
 
     // [0] 0x180042730 — MSVC's VECTOR deleting destructor, both arms exactly as
@@ -107,7 +107,7 @@ public:
     int32_t      _worda0;        // +0xa0  kScalarInt,  ctor -1
     int32_t      _worda4;        // +0xa4  kScalarInt,  ctor -1
     SpriteSheet* _spriteSheet;   // +0xa8  ExternalPtr<UI::SpriteSheet>
-    char*        _spriteName;    // +0xb0  System::String (refcounted char*)
+    System::String _spriteName;  // +0xb0  ctor 0x1800d29d0 zero store, dtor 0x1800d2960 release
 };
 
 static_assert(sizeof(LabelDescription) == 0xb8,

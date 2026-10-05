@@ -174,7 +174,7 @@ namespace UI {
 // `Video::Context::SetTransform`; and finally store `_scale`.
 void SpriteContext::Begin(float scale, SpriteCapture* capture, Video::Viewport* clipRegion) {
     Video::Context* const ctx = _context;
-    const auto* rb = static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);   // LEFT: FIELD Video::Context::_renderBuffer is void* (Context.h, R-GFX-1)
+    const Video::RenderBuffer* rb = ctx->_renderBuffer;
     const int32_t w = rb->width;
     const int32_t h = rb->height;
 
@@ -368,8 +368,7 @@ Video::Viewport SpriteContext::SetScissor(const Video::Viewport& v) {
     // its +0x10/+0x14 are the target's width and height, and the flag says the
     // new scissor covers the whole target.
     if (SpriteCapture* capture = _spriteCapture) {
-        const auto* target =
-            static_cast<const RtVideo::RenderBufferPrefix*>(_context->_renderBuffer);   // LEFT: FIELD Video::Context::_renderBuffer is void* (Context.h, R-GFX-1)
+        const Video::RenderBuffer* target = _context->_renderBuffer;
         const int tw = target->width;
         const int th = target->height;
         const bool fullScreen = (nw == tw && nh == th);

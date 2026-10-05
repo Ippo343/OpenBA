@@ -39,6 +39,8 @@
 
 #include "../system/Filename.h"
 
+namespace Object { class External; }   // ReloadEntry::external
+
 namespace RtIO {
 
 // Collection::Array<T> header, 16 bytes and T-independent (Collection.h in the
@@ -127,6 +129,25 @@ static_assert(offsetof(Mod, file)    == 0x58,
               "Find() 0x1800aea10: `*(char**)(*(this+8) + 0x58 + lVar3)`");
 static_assert(offsetof(Mod, set)     == 0x60, "CopyCtor 0x1800102ae LEA R14,[RDI+0x60]");
 static_assert(offsetof(Mod, files)   == 0x70, "CopyCtor 0x1800102e0 LEA RCX,[RBX+0x70]");
+
+// The reload queue's element in ?SetupFileSystem@Modification@IO@@ —
+// `{uint32 typeId, External*, Filename}`, stride 0x18, built at [RBP-0x71]
+// (modification_setupfilesystem.cpp) and copied by the array's assign arm
+// 0x180028cd0 (collection/array.cpp kSpec_ModExternal18). THE FOUR BYTES AT
+// +0x04 ARE NEVER WRITTEN by anybody (retail's first store is a DWORD and the
+// next is at +0x08). `file` STAYS the POD (`RtSystem::Filename`): the array
+// holding these is grown by the erased core, which copies and releases the
+// element through its spec row, so a member with a destructor would be
+// released twice.
+struct ReloadEntry {
+    uint32_t             typeId;    // +0x00
+    uint32_t             _hole04;   // +0x04 — NEVER WRITTEN
+    ::Object::External*  external;  // +0x08
+    RtSystem::Filename   file;      // +0x10
+};
+static_assert(offsetof(ReloadEntry, external) == 0x08, "0x1800af058 MOV [RBP-0x69],R14");
+static_assert(offsetof(ReloadEntry, file)     == 0x10, "0x1800af064 MOV [RBP-0x61],R13");
+static_assert(sizeof(ReloadEntry) == 0x18, "0x180028d2d stride, cap*3*8");
 
 struct Modification {
     uint8_t  dirty;           // +0x00 — IsDirty 0x18000daa0

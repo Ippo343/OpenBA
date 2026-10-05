@@ -492,7 +492,10 @@ static_assert(offsetof(Camera, _pad_d5)        == 0xd5, "Camera's three never-wr
 // ============================================================
 class RendererDrawable {
 public:
-    const void* _object;    // +0x00  the Geometry / Light the entry names
+    // Both writers store a Light (Renderer::AddLight 0x1801051d0's `{Light*,
+    // int}` pair; the lights' AddDrawItems `MOV [RSP+0x20],RBX` = this); both
+    // readers call Light slots (DrawShadowMap / DrawLight).
+    const Light* _object;   // +0x00
     int32_t     _value;     // +0x08  AddLight stores Renderer::_drawGroupsUsed
     int32_t     _pad0c;     // +0x0c  NEVER WRITTEN — see the banner
 };

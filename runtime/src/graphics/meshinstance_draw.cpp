@@ -182,7 +182,7 @@ Math::Vector4 ColorOf(const Graphics::MeshInstance& mi) {
     return Math::Vector4(mi._color[0], mi._color[1], mi._color[2], mi._color[3]);
 }
 
-void BindMaterialImage(Video::Context& context, void* obj) {
+void BindMaterialImage(Video::Context& context, const Video::ImageBuffer* obj) {
     if (obj != nullptr && obj != context._imageBuffers[3]) {
         context._dirty |= RtVideo::kDirtyImageBuffers;
         context._imageBufferDirty |= 8u;

@@ -590,7 +590,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     }
 
     // ---- redirect the context ---------------------------------------------
-    void* const savedRenderBuffer = ctx->_renderBuffer;
+    const Video::RenderBuffer* const savedRenderBuffer = ctx->_renderBuffer;
     if (savedRenderBuffer != renderBuffer) {
         ctx->_dirty |= 0x1u;
         ctx->_renderBuffer = renderBuffer;
@@ -690,8 +690,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // pointing at RIGHT NOW — which is ours — read through ctx, not through the
     // local, exactly as retail does (`MOV R9,[RBP+0x80]; MOV RAX,[R9+0x28]`).
     {
-        const RtVideo::RenderBufferPrefix* rb =
-            static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);   // LEFT: Context::_renderBuffer is void* (runtime/types/video/Context.h, X-RL FIELD left)
+        const Video::RenderBuffer* rb = ctx->_renderBuffer;
         sc._scissorX = 0;
         sc._scissorY = 0;
         sc._scissorW = rb->width;

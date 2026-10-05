@@ -2327,11 +2327,6 @@ void EdgeMeshInstance::SetMesh(Object::ExternalPtr<EdgeMesh> mesh, MeshInstance*
     this->::Graphics::Geometry::SetBounds(em->_aabb);
 }
 
-// B4 FORWARD: tool_base_render.cpp:607 holds its EdgeMesh as a void*.
-void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
-    SetMesh(Object::ExternalPtr<EdgeMesh>(static_cast<EdgeMesh*>(mesh.p)), followed);  // LEFT: B4 FORWARD for the void* caller (tool_base_render.cpp:607)
-}
-
 // ---------------------------------------------------------------------------
 // ?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
 //                                              [slot 3]  retail 0x1800a2fd0

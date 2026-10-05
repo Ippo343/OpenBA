@@ -53,21 +53,6 @@
 // DOORS (B4b-2). RULE B6-5: every export the members reach is cached in a
 // namespace-scope std::atomic slot, never in a function-local static.
 
-namespace {
-
-
-void ReleaseStringField(char** field) {
-    char* s = *field;
-    if (s == nullptr) return;
-    if (--RtSystem::StringRefCount(s) == 0) {
-        *field = s - 8;
-        System::MemoryAllocator::MemFree(*field);
-    } else {
-        *field = nullptr;
-    }
-}
-
-}  // namespace
 
 
 // ============================================================================
@@ -102,7 +87,7 @@ bool ScrollDescription::Serialize(IO::Stream& streamv) {
 
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 18011a998
     for (int i = 0; i < 9; ++i)                                // 18011a9a6 .. 18011aa2b
-        reinterpret_cast<System::String*>(&_spriteNames[i])->Serialize(ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        _spriteNames[i].Serialize(ser);
 
     rw->SerializeBool(_vertical, nullptr);
     rw->SerializeInt(_inset, nullptr);
@@ -150,7 +135,7 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
         SpriteSheet* sheet = _spriteSheet;                            // RE-READ each time
         if (sheet != nullptr) {
             const int32_t idx = sheet
-                ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(&_spriteNames[i]));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+                ->GetSpriteIndexFromName(_spriteNames[i]);
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // DWORD store
         } else {
             const int32_t minusOne = -1;
@@ -174,9 +159,10 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
 // (+0xb0 down to +0x70). The restamps, the base's _textName (+0x60) and the
 // tail JMP into ~External are the compiler's chain; the ExternalPtr at +0x68
 // is not released.
+//
+// B4 Y: the nine releases (18011a5f5 .. 18011a77a) are the member array's
+// ~String calls, run after this (empty) body, [8] first.
 ScrollDescription::~ScrollDescription() {
-    for (int i = 8; i >= 0; --i)                               // 18011a5f5 .. 18011a77a
-        ReleaseStringField(&_spriteNames[i]);
 }
 
 // ?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ 0x18003a210 --

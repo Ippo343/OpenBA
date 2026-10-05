@@ -92,9 +92,10 @@ void TextDescription::Destruct() { this->~TextDescription(); }
 // compiler's chain into ~ElementDescription, as is the tail JMP to ~External
 // (0x18011eb66). THE TWO ExternalPtrs AT +0x68 AND +0x70 ARE NOT RELEASED --
 // retail's, the same asymmetry ~ImageDescription has.
+//
+// B4 Y: the +0x78 release (18011eb04..18011eb22) is the member `_name`'s
+// ~String, run after this (empty) body and before ~ElementDescription.
 TextDescription::~TextDescription() {
-    System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_name));           // 18011eb04..18011eb22  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ============================================================================
@@ -134,7 +135,7 @@ bool TextDescription::Serialize(IO::Stream& streamv) {
 
     Object::SerializeExternal<UI::Font>(ser, _font);          // 18011ee8b ExternalPtr<Font>
     Object::SerializeExternal<UI::StringTable>(ser, _stringTable2);  // 18011ee99 ExternalPtr<StringTable>
-    reinterpret_cast<System::String*>(&_name)->Serialize(ser);   // 18011eea7 String 0x1800c9930  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    _name.Serialize(ser);                                     // 18011eea7 String 0x1800c9930
 
     rw->SerializeBool(_b84, nullptr);
     rw->SerializeBool(_b85, nullptr);

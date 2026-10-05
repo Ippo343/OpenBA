@@ -75,7 +75,7 @@ bool LabelDescription::Serialize(IO::Stream& streamv) {
     IO::ReaderWriter* rw = ser._readerWriter;
 
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet); // 1800d287b ExternalPtr<SpriteSheet>
-    StringSerialize(&_spriteName, &ser);  // 1800d288c System::String
+    _spriteName.Serialize(ser);           // 1800d288c System::String
 
     rw->SerializeUInt(_word90, nullptr);                     // 1800d28a3
     rw->SerializeUInt(_word94, nullptr);                     // 1800d28bb
@@ -120,8 +120,7 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
         SpriteSheet* sheet = _spriteSheet;                   // 1800d273f
         int32_t idx;
         if (sheet != nullptr) {                              // 1800d2749
-            idx = sheet->GetSpriteIndexFromName(               // 1800d2755
-                *reinterpret_cast<const System::String*>(&_spriteName));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+            idx = sheet->GetSpriteIndexFromName(_spriteName);  // 1800d2755
         } else {
             idx = -1;                                        // 1800d275c OR EAX,-1
         }
@@ -160,8 +159,9 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
 // the compiler's base call, which restamps and releases +0x78 and +0x60. The
 // +0xa8 ExternalPtr is not released.
 namespace UI {
+// B4 Y: the +0xb0 release (1800d2980) is the member `_spriteName`'s ~String,
+// run after this (empty) body and before ~TextDescription.
 LabelDescription::~LabelDescription() {
-    ReleaseStringField(_spriteName);                         // 1800d2980  +0xb0
 }
 }  // namespace UI
 
