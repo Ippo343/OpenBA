@@ -21,10 +21,8 @@
 #include "../../types/system/WideString.h"
 
 namespace RtSystem {
-// ?Set@WideString@System@@QEAAXPEB_W@Z            0x1800caf40
-void        RtSystem_WideString_Set(WideString* self, const wchar_t* src);
-// ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ   0x1800cacd0
-String*     RtSystem_WideString_AsUTF8(const WideString* self, String* ret);
+// (B.4 Z MIRROR2: the Set / AsUTF8 doors are gone; callers hold a real
+// System::WideString and call its members.)
 
 
 }  // namespace RtSystem

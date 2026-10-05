@@ -118,37 +118,9 @@ using RtSystem::SysFile;  //   "
 
 namespace {
 
-// ---- the two System::WideString entry points this file needs ---------------
-// Both are EXPORTED and both are PORTED (runtime/src/system/widestring.cpp);
-// B3R RT-IO: both are called by name on System::WideString.
-//
-// `??0WideString@System@@QEAA@AEBVString@1@@Z` RETURNS BY VALUE — RCX is the
-// hidden return slot and RDX is the String. Getting that typedef wrong is a
-// wild write that still returns the right answer
-// (`reference_hidden_retslot_wild_write.md`).
-//
-// A System::WideString is one pointer, exactly like a String, and the release
-// idiom on it is the same (refcount at -4, block at -8). Retail inlines that
-// idiom at all four sites below rather than calling ~WideString.
-struct WideStr { wchar_t* data; };
-WideStr* WideFromString(WideStr* ret, const System::String* s) {
-    ::new (static_cast<void*>(ret)) System::WideString(*s);   // B.3.x bridge
-    return ret;
-}
-
-// The inlined WideString release. Same asymmetry as the String one: the
-// freeing branch leaves the slot holding `data - 8`, the non-freeing branch
-// nulls it. Reproduced, not tidied.
-void WideRelease(WideStr* w) {
-    if (!w->data) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;  // CAST-OK: string_header
-    if (--*rc == 0) {
-        w->data = reinterpret_cast<wchar_t*>(reinterpret_cast<char*>(w->data) - 8);  // CAST-OK: string_header
-        RtSystem::RtMemFree(w->data);
-    } else {
-        w->data = nullptr;
-    }
-}
+// (B.4 Z MIRROR2: the WideStr slot, WideFromString and WideRelease are gone:
+// the four sites hold real System::WideString locals, whose ctor 0x1800cab50 /
+// 0x18000a6e0 and dtor 0x18000a730 are retail's, the release inlined there.)
 
 // ?SubString@String@System@@QEBA?AV12@HH@Z — ported (string.cpp), returns by
 // value, so RCX = this, RDX = the return slot, R8/R9 the two ints.
@@ -331,13 +303,10 @@ bool FileSystem::CreatePath(const System::Filename& pathRef) const {
         // expression — retail's 0x1800ae4c3, in the same place.
         System::Filename dir(src.SubString(0, i));          // 1800ae489..4bd
 
-        RtIO::WideStr w{};                                  // 1800ae53f
-        w.data = nullptr;
-        RtIO::WideFromString(&w, &dir.AsString());
-        ::CreateDirectoryW(w.data, nullptr);                // 1800ae54a — result DISCARDED
+        const System::WideString w(dir);                    // 1800ae53f: 0x1800cab50
+        ::CreateDirectoryW(w._data, nullptr);               // 1800ae54a — result DISCARDED
         ++created; ++RtIO::g_fcc.createPathDirs;
-        RtIO::WideRelease(&w);                              // 1800ae551..5bd
-        // ~dir is retail's release at 0x1800ae5bd.
+        // ~w (1800ae551..5bd), then ~dir (0x1800ae5bd): reverse declaration order.
     }
 
     return true;                                          // 1800ae637: MOV AL,1
@@ -373,20 +342,13 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
     info->handle = -2;                                       // 1800adef6 — LOOSE
 
     // temp path -> _name0, via WideString::Set / AsUTF8 / AdjustDelimiters.
-    // Both WideString entry points are ported; the two temporaries are released
-    // in retail's order (the UTF-8 String first, then the WideString).
+    // B.4 Z MIRROR2 (`behaviour:`, known_port_issues row 582, disassembly
+    // read): retail releases norm (0x1800adf5e), utf8 (0x1800adf93), then the
+    // WideString LAST (0x1800adfc0): the three locals' destructors, reverse
+    // declaration order.
     {
-        RtIO::WideStr w{};  w.data = nullptr;                // 1800adefc
-        reinterpret_cast<System::WideString*>(&w)->Set(      // B.3.x bridge  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
-            tempFile);                                       // 1800adf0f
-
-        // AsUTF8's hidden return slot is still POD-shaped (System::WideString
-        // is not a B.3.1 class), so the value lands in a POD and the move ctor
-        // steals it: `utf8Pod` is left null, so ~utf8 is the one release.
-        RtSystem::String utf8Pod{};  utf8Pod.data = nullptr; // 1800adf15
-        ::new (&RtIO::Sys(utf8Pod)) System::String(           // B.3.x bridge
-            reinterpret_cast<const System::WideString*>(&w)->AsUTF8());   // 1800adf21  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
-        System::String utf8(std::move(RtIO::Sys(utf8Pod)));
+        const System::WideString w(tempFile);                // 1800adefc null store, Set 1800adf0f
+        System::String utf8 = w.AsUTF8();                    // 1800adf21
 
         // adopt-then-AdjustDelimiters == Filename(const String&), 0x18000c780.
         System::Filename norm(utf8);                         // 1800adf27..47
@@ -394,8 +356,6 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
         // `RtSystem::String` member of the not-yet-converted FileInfo.
         RtIO::SysFile(info->_name0) = norm;                  // 1800adf58
 
-        // ~norm (0x1800adf5e) and ~utf8 (0x1800adf93) are the destructors now.
-        RtIO::WideRelease(&w);                               // 1800adfc0..ea
     }
 
     // the CALLER's path -> _name1
@@ -483,23 +443,19 @@ void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
 
     // 3. delete the destination
     {
-        RtIO::WideStr w{};  w.data = nullptr;
-        RtIO::WideFromString(&w, &RtIO::Sys(info->_name1));  // 1800ae07b
-        ::DeleteFileW(w.data);                               // 1800ae084 — discarded
-        RtIO::WideRelease(&w);                               // 1800ae08d..b9
+        const System::WideString w(RtIO::Sys(info->_name1)); // 1800ae07b: 0x1800cab50
+        ::DeleteFileW(w._data);                              // 1800ae084 — discarded
+        // ~w: 1800ae08d..b9
     }
 
     // 4. move the temp over it. Retail builds the DESTINATION wide string
     //    FIRST (0x1800ae0c1, over _name1) and the SOURCE second (0x1800ae0d1,
     //    over _name0), then calls MoveFileW(source, destination).
     {
-        RtIO::WideStr dst{};  dst.data = nullptr;
-        RtIO::WideFromString(&dst, &RtIO::Sys(info->_name1));// 1800ae0c1
-        RtIO::WideStr src{};  src.data = nullptr;
-        RtIO::WideFromString(&src, &RtIO::Sys(info->_name0));// 1800ae0d1
-        ::MoveFileW(src.data, dst.data);                     // 1800ae0dd — discarded
-        RtIO::WideRelease(&src);                             // 1800ae0e4..111  (src first)
-        RtIO::WideRelease(&dst);                             // 1800ae111..13e
+        const System::WideString dst(RtIO::Sys(info->_name1));// 1800ae0c1
+        const System::WideString src(RtIO::Sys(info->_name0));// 1800ae0d1
+        ::MoveFileW(src._data, dst._data);                   // 1800ae0dd — discarded
+        // ~src (1800ae0e4..111) then ~dst (1800ae111..13e): reverse declaration order.
     }
 
     // 5. clear both, through Filename::operator= from a null temporary
