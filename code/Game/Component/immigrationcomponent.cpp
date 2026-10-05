@@ -25,7 +25,6 @@
 
 #include "Component/ImmigrationComponent.h"
 #include "Entity/ComponentEntity.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -33,25 +32,6 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
-
-// FUN_1400032e0 -- dynamic array resize; this file DEFINES its body as
-// ImmigrationComp_DynArrayResize below (kept, still registered for other
-// callers) — Persist's own call site goes straight through the bridge.
-
-// ============================================================
-// Reimpl of FUN_1400032e0 (Component reg wave "people") — shared DynArray<ptr> resize.
-// ENDGAME B.3.2 step 2: this IS Collection::Array<void*>::SetSize(n) — the old
-// hand-written body's copy path did `*slot = 0;` immediately before assigning
-// the copied 8-byte value into the same slot; that default-construct-then-
-// assign is exactly what SetSizeCore's byte-copy `assign` does for a
-// zero-default element and is unobservable (the write is overwritten before
-// anything reads it), so the bridge call below is byte-for-byte identical.
-// Non-static: still registered by reg_component_people.cpp for other callers,
-// so this function is KEPT (not deleted/unregistered) — only its body changed.
-// ============================================================
-void ImmigrationComp_DynArrayResize(int64_t* param_1, int newCount) {
-    GameColl::AsArray<GameColl::Ptr8>(param_1).SetSize(newCount);
-}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-A — ImmigrationComponent as a REAL class (ImmigrationComponent.h).
