@@ -181,6 +181,17 @@ on `standalone/` and `devlost.sh` loses its `DLMAX` cap; if it shows a real leak
 rewrites anyway, that is a `behaviour:` commit against VideoDX11-x64.dll with the retail evidence, gated
 alone. Nothing else in the device-lost area is touched.
 
+RULED 2026-10-05 from `DEVLOST_FINDING.md`: the harness does NOT loop (one `INJECTING` per run, a
+`fired` latch); every later 0x887a0005 is a REAL removal of a genuinely recreated device
+(`D3D11CreateDevice` once per trip), recurring faster each trip. Leading hypothesis: the exe-side PORT
+GAP pair `GameUpdateLoop::OnVideoError / OnVideoRestart` (retail 0x140095970 / 0x140095930,
+gameupdateloop.cpp:2345-2352) leaves game-owned buffers on the dead device — DEFERRED area, its own
+`behaviour:` later; the old `ID3D11Device` is never Released on the lost path (retail's own
+`d3dDevice = nullptr` before Shutdown — KEEP). For B5: (a) CTX reproduces `Finish` exactly and adds ONE
+diagnostic — print `GetDeviceRemovedReason()` before the null at the lost path (no behaviour change);
+(b) `devlost.sh` keeps `DLMAX`; the gate's pass criterion is INJECT=1, COMPLETE>=1, crash log 0,
+`killed=YES` accepted; (c) known_port_issues row 890 is updated at the close with the finding.
+
 ## 7. Acceptance at the close
 
 `b4_session/acceptance.sh` lines 01-12 at target with line 01 in the PROD-total form, i.e. the PROD
@@ -191,4 +202,26 @@ standalone dx11 engine tests` = 0; unit 0 failures; `stepclose.sh` clean; `world
 
 ## 8. Corrections (dated, appended as blocks find them)
 
-(none yet)
+2026-10-05, from INVENTORY_B (before the pilot landed):
+- C1. **Destruction from the runtime side is spelled `p->DeletingDtor(1)` at 18 sites** (INVENTORY_B §3
+  DESTROYED: video_resources.cpp:283, videoprogram.cpp:160, vertexprogram.cpp:328, vertexlayout.cpp:226,
+  pixelprogram.cpp:226, renderstate.cpp:192, enumerate_video_modes.cpp:138, dynamic_resources.cpp:168,
+  device_startup.cpp:536/:627/:706, context_lifecycle.cpp:221/:338, buffers.cpp:355/:375/:392/:423,
+  engine/mainloop_video.cpp:543, save/saveload_update.cpp:1703). Every one passes 1 (no vector caller
+  exists). The block that flips class X converts X's callers to `delete p;` in the same commit (D10).
+- C2. **dx11 read its own DeviceData table by INDEX in one place** (contextdata.cpp:673-676, the
+  device-lost Shutdown / CreateDevice). W0 made it a by-name call through the base (a `B5 W0 bridge`
+  cast the CTX block removes) BEFORE any DeviceData flip, so an index never names the wrong slot.
+- C3. **The DX9 placeholder is `DeletingDtor(1)`'d by the runtime** (enumerate_video_modes.cpp:123-138
+  creates one through the slot's factory and destroys it) — D5 is therefore a PREREQUISITE of the
+  DeviceData flip, not a cleanup: DEV does D5 in the commit that flips DeviceData or before it.
+- C4. **The device-lost callbacks are `Video::Device::gap50[0..1]`** (+0x50 OnVideoError, +0x58
+  OnVideoRestart; written by engine.cpp:487-489, read by dx11 as `Dev::kOnDeviceLost / kOnDeviceRestored`).
+  CTX names them in Device.h (`onVideoError` / `onVideoRestart`, `void (*)()`), engine.cpp writes the
+  named members, dx11 reads them — the one Device.h edit that is CTX's, not DEV's.
+- C5. `standalone/main.cpp:775-800` ("THE DX11 PORT IS NOT RUNNING": the DeviceData vptr must live in
+  reimpl-x64.exe) keeps working with compiler tables; its wording ("seam installed") is the CLOSE's.
+  `runtime/types/video/ShaderProgram.h:504 kDeletingDtor` is a dead by-offset constant: CLOSE deletes it
+  after a reader grep. `tests/unit/sources.mk:144-158` wording: CLOSE.
+- C6. Two seam casts in main.cpp count as four rows (`reinterpret_cast` + `(uintptr_t)` each): the
+  "7 dx11 seam" group is 5 lines.
