@@ -119,7 +119,7 @@ using RtSystem::RtString_ReleaseInline;
 // read by nothing, exactly as retail's RCX is not.
 namespace IO {
 
-uint64_t FileSystem::GetFileTimeStamp(const System::Filename& path) const {
+System::DateTime FileSystem::GetFileTimeStamp(const System::Filename& path) const {
 
     // WideString ws(*path) -- ??0WideString@System@@QEAA@AEBVString@1@@Z; the
     // block ends at retail's 0x1800ae2c9 release, so ~WideString runs there.
@@ -136,12 +136,12 @@ uint64_t FileSystem::GetFileTimeStamp(const System::Filename& path) const {
         FILETIME lastWrite;                                      // [RSP+0x40]
         if (::GetFileTime(h, nullptr, nullptr, &lastWrite) != 0) {
             ::CloseHandle(h);                                    // 0x1800ae321
-            return *reinterpret_cast<const uint64_t*>(&lastWrite);  // CAST-OK: win32
+            return System::DateTime{lastWrite.dwLowDateTime, lastWrite.dwHighDateTime};
         }
         ::CloseHandle(h);                                        // 0x1800ae319
     }
 
-    return 0;                                                    // 0x1800ae331
+    return System::DateTime{};                                   // 0x1800ae331
 }
 
 }  // namespace IO

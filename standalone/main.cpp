@@ -651,7 +651,7 @@ static bool RunFactorySelfTest(const char* typeName,
     }
     printf("[SelfTest %s]   found entry @ %p (factoryFn=%p, parent=%s)\n",
            typeName, (const void*)match,
-           match->factoryFn,
+           (void*)match->factoryFn,
            match->parentName ? match->parentName : "(null)");
 
     if (!match->factoryFn) {
@@ -659,13 +659,12 @@ static bool RunFactorySelfTest(const char* typeName,
         return false;
     }
 
-    typedef void* (*Factory_t)(void);
-    void* obj = ((Factory_t)match->factoryFn)();   // LEFT: Object::BaseTypeInfo::factoryFn is void* (runtime/types/object/TypeInfo.h:520, RT; its FactoryFn alias exists)
+    ::Object::Base* const obj = match->factoryFn();
     if (!obj) {
         printf("[SelfTest %s] FAIL: factory returned NULL\n", typeName);
         return false;
     }
-    printf("[SelfTest %s]   factory returned %p\n", typeName, obj);
+    printf("[SelfTest %s]   factory returned %p\n", typeName, (void*)obj);
 
     // Validate vtable
     void* actualVt = *(void**)obj;   // the object's vtable word (an identity check)  // CAST-OK: crash_walk

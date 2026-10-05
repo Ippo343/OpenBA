@@ -905,21 +905,23 @@ namespace {
 // (`BTS EAX,0x1f` at 0x1800c9959), so it can only fire on data produced by a
 // build older than the one that added the flag. It is not expected to run at
 // all, and it says so on stderr the first time it does.
-int Utf16DecodeOne(const uint8_t* p, const uint8_t* end, int32_t* cp) {
-    if (p + 2 > end) {
+// Walks UTF-16LE code units (x64 is little-endian: a unit IS the LE pair);
+// returns the units consumed.
+int Utf16DecodeOne(const uint16_t* p, const uint16_t* end, int32_t* cp) {
+    if (p + 1 > end) {
         *cp = -1;
-        return 2;
+        return 1;
     }
-    const uint16_t w = static_cast<uint16_t>(p[0] | (p[1] << 8));
-    if (w >= 0xD800 && w < 0xDC00 && p + 4 <= end) {
-        const uint16_t w2 = static_cast<uint16_t>(p[2] | (p[3] << 8));
+    const uint16_t w = p[0];
+    if (w >= 0xD800 && w < 0xDC00 && p + 2 <= end) {
+        const uint16_t w2 = p[1];
         if (w2 >= 0xDC00 && w2 < 0xE000) {
             *cp = 0x10000 + (((w - 0xD800) << 10) | (w2 - 0xDC00));
-            return 4;
+            return 2;
         }
     }
     *cp = w;
-    return 2;
+    return 1;
 }
 
 int Utf8EncodeOne(int32_t cp, char* dst) {
@@ -971,15 +973,14 @@ void String::Serialize(::IO::Serializer& serializer) {
                 "converting with the spec decoder, not a transcription of the CRT helper\n");
         }
 
-        uint8_t* buf = static_cast<uint8_t*>(RtMemAlloc(static_cast<uint64_t>(n) * 2, 4));  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
-        rw->SerializeUShortArray(static_cast<int>(n),
-                                      reinterpret_cast<uint16_t*>(buf), nullptr);   // +0x50  // LEFT: the UTF-8 / UTF-16 transcoders walk the text as bytes; retyping them over char / wchar_t units is owed
+        uint16_t* buf = static_cast<uint16_t*>(RtMemAlloc(static_cast<uint64_t>(n) * 2, 4));
+        rw->SerializeUShortArray(static_cast<int>(n), buf, nullptr);   // +0x50
 
         // Retail stops two bytes short: the trailing UTF-16 NUL is not decoded.
-        uint8_t* const end = buf + (static_cast<int>(n) * 2 - 2);
+        uint16_t* const end = buf + (static_cast<int>(n) - 1);
 
         int total = 0;
-        for (uint8_t* p = buf; p < end;) {
+        for (uint16_t* p = buf; p < end;) {
             int32_t cp = -1;
             p += Utf16DecodeOne(p, end, &cp);
             if (cp >= 0) {
@@ -994,7 +995,7 @@ void String::Serialize(::IO::Serializer& serializer) {
         char* const base = _data;
         char* out = base;
         int written = 0;
-        for (uint8_t* p = buf; p < end;) {
+        for (uint16_t* p = buf; p < end;) {
             int32_t cp = -1;
             p += Utf16DecodeOne(p, end, &cp);
             if (cp < 0)

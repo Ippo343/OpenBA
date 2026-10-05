@@ -142,7 +142,7 @@ Object::InternalPtr<Element>* LabelDescription::CreateInstance(
     elem->_iconWidth    = _worda0;
     elem->_iconHeight   = _worda4;
 
-    elem->_iconColor = static_cast<uint32_t>(_id);           // 1800d27f1
+    elem->_iconColor = _id;                                  // 1800d27f1
 
     *ret = Object::InternalPtr<Element>(elem);                   // 1800d27fa
     return ret;

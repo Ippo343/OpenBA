@@ -516,7 +516,7 @@ protected:
 
 private:
     void InitFields() {
-        _active      = 1;          // +0x20 (BYTE)
+        _active      = true;       // +0x20 (BYTE 1)
         _recordCount = 1;          // +0x24
         _subCount    = 0xf;        // +0x28
         _material    = nullptr;    // +0x30
@@ -531,7 +531,7 @@ public:
     // ---- the 0x28 bytes Particle adds --------------------------------------
     // PUBLIC for the same reason `Object::External`'s are: unconverted bodies
     // reach them at these offsets through a cast.
-    uint8_t  _active;        // +0x20  ctor stores 1
+    bool     _active;        // +0x20  ctor stores 1; Serialize's bool slot (+0x78)
     uint8_t  _pad21[3];      // +0x21  MEASURED GAP — the ctor never writes it
     int32_t  _recordCount;   // +0x24  ctor 1. The POOL RECORD COUNT: Serialize
                              //        hands it to Array<void*>::SetSize over
