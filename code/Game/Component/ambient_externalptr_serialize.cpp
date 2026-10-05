@@ -80,10 +80,10 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, I
     }
 
     if (doLoad && loading) {
-        const ::Object::External* loaded = nullptr;
+        Audio::SoundEffect* loaded = nullptr;
         if (efactory)
-            loaded = efactory->FindOrLoad(pathBuf);
+            loaded = efactory->FindOrLoadAs<Audio::SoundEffect>(pathBuf);
         // RELAXED type check (see file header): keep the loaded External.
-        *field = static_cast<Audio::SoundEffect*>(const_cast<::Object::External*>(loaded));   // LEFT: CONST FindOrLoad returns const External* (decided at the close, ledger S3)
+        *field = loaded;
     }
 }

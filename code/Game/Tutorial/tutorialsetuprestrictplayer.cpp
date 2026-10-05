@@ -90,21 +90,20 @@ static void TutRestrict_ResolveRefOrLoad(NamedExternalRef* ref) {
         normalized[k] = (name[k] == '\\') ? '/' : name[k];
     normalized[k] = 0;
 
-    const ::Object::External* found = nullptr;
+    ::Object::External* found = nullptr;
     {
         System::String   normStr(normalized);
         System::Filename normFile(normStr);
-        found = efactory->FindOrLoad(normFile);
+        found = efactory->FindOrLoadAs<::Object::External>(normFile);
     }
 
-    const ::Object::External* result = nullptr;
+    ::Object::External* result = nullptr;
     if (found) {
         if (Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
             result = found;
         }
     }
-    // The factory hands out const Externals; the reference holds them mutable.
-    ref->resolved = const_cast<::Object::External*>(result);   // LEFT: FindOrLoad returns a const External*; the reference holds it mutable (PASS2_LEDGER S3, the close decides)
+    ref->resolved = result;
 }
 
 

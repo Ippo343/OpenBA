@@ -81,16 +81,15 @@ void MapUI::SetupImage(Video::ImageBuffer* imageBuffer, UI::SpriteSheet** sprite
                                                    : "Material/UI/UIMaterial.rsc");
 
     MAPTRC("material alloc+ctor done");
-    const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameObj);
-    const Graphics::Material* material = nullptr;
+    ::Object::External* ext =
+        ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameObj);
+    Graphics::Material* material = nullptr;
     if (ext) {
         if (::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId())) {
-            material = static_cast<const Graphics::Material*>(ext);
+            material = static_cast<Graphics::Material*>(ext);
         }
     }
-    // LEFT: ExternalPtr<Material> wraps a non-const Material (FindOrLoad returns const).
-    (*materialOut)->SetMaterial(
-        Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));   // LEFT: ExternalFactory::FindOrLoad returns const; ExternalPtr<Material> holds non-const
+    (*materialOut)->SetMaterial(Object::ExternalPtr<Graphics::Material>(material));
 
     // --- Add ImageBuffer as "diffuse" texture ---
     System::String diffuseStr("diffuse");

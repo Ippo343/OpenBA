@@ -182,7 +182,8 @@ void LoadInputNameTables() {
         // Retail builds a String and then runs Filename::AdjustDelimiters on it;
         // Filename(const char*) is exactly Set + AdjustDelimiters.
         System::Filename fnameBuf(path);
-        const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(fnameBuf);
+        ::Object::External* ext =
+            ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(fnameBuf);
         if (!ext) {
             printf("[InputBindings]   '%s' -> NOT FOUND\n", path);
             return nullptr;
@@ -192,8 +193,7 @@ void LoadInputNameTables() {
             return nullptr;
         }
         printf("[InputBindings]   '%s' -> %p\n", path, (const void*)ext);
-        // LEFT: FindOrLoad returns a const External*; the container holds StringTable*.
-        return const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext));   // LEFT: FindOrLoad returns a const External*; the container holds StringTable*.
+        return static_cast<UI::StringTable*>(ext);
     };
 
     GameContainer* container = g_gameContainer;

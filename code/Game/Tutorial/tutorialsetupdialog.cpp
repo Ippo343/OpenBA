@@ -124,10 +124,9 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
         ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
         if (toolbarRef.generation != efactory->_generation) {
             System::Filename filenameBuf(toolbarRef.name);
-            const ::Object::External* found = efactory->Find(filenameBuf);
+            ::Object::External* found = efactory->FindAs<::Object::External>(filenameBuf);
             bool valid = found && Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId());
-            // The factory hands out const Externals; the reference holds them mutable.
-            toolbarRef.resolved = valid ? const_cast<::Object::External*>(found) : nullptr;   // LEFT: FindOrLoad returns a const External*; the reference holds it mutable (PASS2_LEDGER S3, the close decides)
+            toolbarRef.resolved = valid ? found : nullptr;
             toolbarRef.generation = efactory->_generation;
         }
     }

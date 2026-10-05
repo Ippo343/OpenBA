@@ -69,16 +69,15 @@ void NoiseUI::SetupImage(Video::ImageBuffer* image, UI::SpriteSheet** sheetOut,
     // AdjustDelimiters call retail made on the raw buffer is redundant here.
     System::Filename filename("Material/UI/UIMaterialNoBlend.rsc");
 
-    const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
-    const Graphics::Material* material = nullptr;
+    ::Object::External* ext =
+        ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filename);
+    Graphics::Material* material = nullptr;
     if (ext) {
         if (::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId())) {
-            material = static_cast<const Graphics::Material*>(ext);
+            material = static_cast<Graphics::Material*>(ext);
         }
     }
-    // LEFT: ExternalPtr<Material> wraps a non-const Material (FindOrLoad returns const).
-    (*materialOut)->SetMaterial(
-        Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));   // LEFT: ExternalFactory::FindOrLoad returns const; ExternalPtr<Material> holds non-const
+    (*materialOut)->SetMaterial(Object::ExternalPtr<Graphics::Material>(material));
 
     // --- Add ImageBuffer as "diffuse" texture ---
     System::String diffuseStr("diffuse");

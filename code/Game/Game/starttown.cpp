@@ -582,8 +582,7 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     System::Filename fname(entry->strPtr);  // String -> Filename
     // A pool's template is a ComponentDescription (an Object::External).
-    tmpl = static_cast<ComponentDescription*>(
-        const_cast<::Object::External*>(efactory->FindOrLoad(fname)));    // LEFT: FindOrLoad returns const External* (retail ?FindOrLoad@...QEAAPEBV)
+    tmpl = efactory->FindOrLoadAs<ComponentDescription>(fname);
     entry->resolved = tmpl;                                  // cache
     return tmpl;
 }
@@ -3585,8 +3584,7 @@ static ComponentDescription* ResolveTemplateByPath(const char* path) {
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     System::Filename fname(path);
     // A "Template\*.rsc" is a ComponentDescription (an Object::External).
-    ComponentDescription* tmpl = static_cast<ComponentDescription*>(
-        const_cast<::Object::External*>(factory->FindOrLoad(fname)));   // LEFT: FindOrLoad returns const External* (retail ?FindOrLoad@...QEAAPEBV)
+    ComponentDescription* tmpl = factory->FindOrLoadAs<ComponentDescription>(fname);
     return tmpl;
 }
 
