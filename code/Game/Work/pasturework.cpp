@@ -696,7 +696,7 @@ PastureWork::PastureWork() : AutoPickupWork() {
 // -1s) and adds the entity-dependent fields on top; that is kept.
 // (The entity slot is void*, the caller's ABI: LEFT.)
 // ============================================================
-PastureWork::PastureWork(void* entityIBP) : AutoPickupWork() {
+PastureWork::PastureWork(ComponentEntity* const* entityIBP) : AutoPickupWork() {
     field_10 = *(ComponentEntity**)entityIBP;   // LEFT: the ctor's entity slot is void* (its callers' ABI)
     if (field_10 != nullptr &&
         GameUpdateLoop::_singleton != nullptr) {
@@ -716,7 +716,7 @@ PastureWork::PastureWork(void* entityIBP) : AutoPickupWork() {
 // Convenience for PastureComponent Slot14 (pasturecomponent_states.cpp, block MI-B):
 // MemAlloc(0x58,8) + the faithful ctor. `entityRefSlot` points at an 8-byte entity ref
 // (the pasture's owner entity).
-extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot) {
+extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSlot) {
     void* p = Object::detail::InternalMemAlloc(sizeof(PastureWork), 8);
     return p ? new (p) PastureWork(entityRefSlot) : nullptr;
 }

@@ -71,7 +71,7 @@ BuildStructure::BuildStructure()
 // zeroing every position byte. Without this array Execute's unbuilt-position scan finds
 // nothing (_slots._size == 0 -> unbuiltCount 0) and returns 1 (never assigns labor) — the
 // 2c-B blocker. Faithful offset-for-offset port of the Ghidra decompilation.
-BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
+BuildStructure::BuildStructure(ComponentEntity* const* entityIBP, uint8_t altAnim)
     : Work(entityIBP),   // local_res10 = *entityIBP; Work_Ctor25(this, &local_res10)
       field_48(altAnim), field_4c(0) {
     // The +0x50 array and the +0x60 set are members: their ctors zero data, count and

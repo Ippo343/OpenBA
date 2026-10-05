@@ -609,7 +609,7 @@ static void PastureCtrl_PopulateTable() {
 
 // PastureWork factory-with-entity (code/Game/Work/pasturework.cpp): MemAlloc(0x58,8)
 // + the retail ctor 0x1400f2d80. `entityRefSlot` points at an 8-byte entity ref.
-extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot);
+extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSlot);
 
 // ============================================================
 // PastureComponent slot 13 (0x140127dd0) — capability query for the three

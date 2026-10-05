@@ -33,7 +33,7 @@ class BuildRoad final : public Work {
 
 public:
     BuildRoad();                                                        // 0x1400e4ad0
-    BuildRoad(uint64_t* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
+    BuildRoad(ComponentEntity* const* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
               uint64_t roadDescExtra, uint32_t roadTypeExisting,
               uint32_t roadState, uint32_t terrainType);                // 0x1400e4b50
 

@@ -707,7 +707,7 @@ DEFINE_EXE_TYPE(GatherRawMaterials, "Work")
 // site ctor (seeds per-material slots from the site's BuildDescription + the amount
 // already in the site StorageComponent) rather than the generic factory. buildEntityIBP
 // is an InternalBasePtr* whose *value is the site entity pointer.
-extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(void* buildEntityIBP) {
+extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(ComponentEntity* const* buildEntityIBP) {
     void* mem = Object::detail::InternalMemAlloc(sizeof(GatherRawMaterials), 8);
     if (!mem) return nullptr;
     return new (mem) GatherRawMaterials(buildEntityIBP);

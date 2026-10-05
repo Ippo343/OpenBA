@@ -33,7 +33,7 @@ class BuildStructure final : public Work {
 
 public:
     BuildStructure();                                               // 0x1400e5a90
-    BuildStructure(void* entityIBP, uint8_t altAnim);               // 0x1400e59c0
+    BuildStructure(ComponentEntity* const* entityIBP, uint8_t altAnim);               // 0x1400e59c0
 
     // 0x1400e5920: the compiler's chain over the two members (set, then +0x50)
     ~BuildStructure() override;                                     // [0]  0x140029680

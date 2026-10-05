@@ -39,7 +39,7 @@ public:
     // AttendanceComponent's state-2 enter (retail builds it inline): the
     // entity-seeded Work base ctor 0x1400f72e0, then +0x48 = 0. ENDGAME B.3.9
     // OBJ: replaces the `??0Internal` door + hand stamp at that site.
-    explicit LocationWork(void* pEntityIBP);
+    explicit LocationWork(ComponentEntity* const* pEntityIBP);
 
     // nothing of its own to free
     ~LocationWork() override = default;                             // [0]  0x14002a850

@@ -53,7 +53,7 @@ extern "C" void OrchardDiag_NotePlantConstructed();
 
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
-PlantOrchard::PlantOrchard(void** entityIBP, ComponentDescription* treeType) : Work(entityIBP) {
+PlantOrchard::PlantOrchard(ComponentEntity* const* entityIBP, ComponentDescription* treeType) : Work(entityIBP) {
     // PlantOrchard's own fields. Retail writes +0x60 as one 8-byte store, which clears
     // BOTH the count (+0x60) and the capacity (+0x64) of the array triple at +0x58:
     // here the two named fields, in address order.
@@ -90,7 +90,7 @@ PlantOrchard::PlantOrchard(void** entityIBP, ComponentDescription* treeType) : W
 
 // The door OrchardComponent's states 9 and 12 call (orchardcomponent_states.cpp, block
 // MI-B): the real ctor on caller memory (B8-5).
-extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType) {
+extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, ComponentDescription* treeType) {
     if (!mem) return nullptr;
     OrchardDiag_NotePlantConstructed();
     return new (mem) PlantOrchard(entityIBP, treeType);

@@ -177,7 +177,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     }
 
     // Build the BuildRoad work item (0x70 bytes) and hand it to the work scheduler.
-    uint64_t ownerIbp = 0;   // retail seeds a null InternalBasePtr
+    ComponentEntity* ownerIbp = nullptr;   // retail seeds a null InternalBasePtr
     Work* work = nullptr;
     BuildRoad* mem = static_cast<BuildRoad*>(System::MemoryAllocator::MemAlloc(0x70, 8));
     if (mem) {

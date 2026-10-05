@@ -34,13 +34,13 @@
 // reads the pointer once, so passing the caller's IBP is the same read.
 // The +0x48 set's root / count zeroes are the `_citizens` member's ctor (retail 0x1400f5ac6 /
 // 0x1400f5ac9, recorded as the EH member state).
-TendArea::TendArea(void** entityIBP, int kind) : Work(entityIBP) {
+TendArea::TendArea(ComponentEntity* const* entityIBP, int kind) : Work(entityIBP) {
     tendMode = kind;
 }
 
 // The door OrchardComponent's state 10 calls (orchardcomponent_states.cpp, block MI-B):
 // the real ctor on caller memory (B8-5).
-extern "C" Work* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind) {
+extern "C" Work* TendArea_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, int kind) {
     if (!mem) return nullptr;
     return new (mem) TendArea(entityIBP, kind);
 }

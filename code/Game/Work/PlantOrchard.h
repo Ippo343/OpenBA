@@ -36,7 +36,7 @@ class PlantOrchard final : public Work {
 
 public:
     PlantOrchard();                                                 // 0x1400f50b0
-    PlantOrchard(void** entityIBP, ComponentDescription* treeType);   // 0x1400f5140
+    PlantOrchard(ComponentEntity* const* entityIBP, ComponentDescription* treeType);   // 0x1400f5140
 
     // 0x1400f5010: frees the slot array and the BST
     ~PlantOrchard() override;                                       // [0]  0x14002c540

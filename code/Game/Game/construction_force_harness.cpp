@@ -55,7 +55,7 @@
 extern "C" ComponentEntity* g_pConstructionDemoEntity;
 
 // PHASE GATHER — GatherRawMaterials Work wrappers (gatherrawmaterials.cpp).
-extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);
+extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(ComponentEntity* const* buildEntityIBP);
 extern "C" int   GatherRawMaterials_ForceDrive(Work* self, CitizenComponent** citizenIBP);
 extern "C" bool  GatherRawMaterials_DepsReady();
 
@@ -172,7 +172,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(CitizenComponent* citizen) {
         // @+0x48/+0x58 must survive across drives). Faithful site ctor seeds the slots.
         static GatherRawMaterials* s_gather = nullptr;
         if (!s_gather) {
-            int64_t siteIBP = 0;
+            ComponentEntity* siteIBP = nullptr;
             new (&siteIBP) ::Object::InternalBasePtr(site);   // ComponentEntity is-an Object::Internal
             s_gather = GatherRawMaterials_ConstructForSite(&siteIBP);
             if (!s_gather) return true;   // own it, retry construction next tick
