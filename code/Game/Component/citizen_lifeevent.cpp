@@ -64,12 +64,12 @@ void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* st
     // --- Build the title System::String from the source's UI::String name pair ---
     System::String titleStr;
     if (titleSrc) {
-        uint8_t uiStr[16];
-        ::new (uiStr) UI::String(
+        // UI::String is trivially destructible: retail 0x140113af0 builds it
+        // (CALL [0x140151300]) and never destroys it, as this typed local does.
+        UI::String uiStr(
             Object::ExternalPtr<UI::StringTable>(titleSrc->stringTable),
             titleSrc->stringName);   // +0x30
-        ::new (&titleStr) System::String(
-            reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge   // LEFT: H5 raw UI::String local (a typed local would run ~UI::String)
+        ::new (&titleStr) System::String(uiStr.operator System::String());  // B.3.6 bridge
     } else {
         titleStr.Set("");   // == String("") (ctor is default + Set)
     }
