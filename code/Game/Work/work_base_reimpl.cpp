@@ -287,8 +287,8 @@ uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destC
 
     map->FillZones();   // 0x14009c480 (was its Pf_ZoneRefresh_9c480 forwarder)
 
-    const MapCell& recSrc  = map->cells[static_cast<uint32_t>(srcCell)];
-    const MapCell& recDest = map->cells[destCell];
+    const MapCell& recSrc  = map->cells.GetData()[static_cast<uint32_t>(srcCell)];
+    const MapCell& recDest = map->cells.GetData()[destCell];
 
     uint32_t typeSrc  = 1u << (recSrc.terrainType & 0x1f);
     uint32_t typeDest = 1u << (recDest.terrainType & 0x1f);

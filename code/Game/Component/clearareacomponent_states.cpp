@@ -92,7 +92,7 @@ static T* FindOn(ComponentEntity* entity) {
 // By name: Map::cells (MapCell), Map::field_0xE8 (AvlNode28).
 // ============================================================
 static inline const MapCell* GridTiles(const Map* grid) {
-    return grid->cells;   // Map +0x80
+    return grid->cells.GetData();   // Map +0x80
 }
 
 // tile+0x08: the cell's occupant entity.
@@ -105,7 +105,7 @@ static inline ComponentEntity* GridOccupant(const MapCell* tiles, int cell) {
 static bool Grid_GroundClear(const Map* grid, int x1, int y1, int w, int h) {
     int width = grid->size;
     const MapCell* tiles = GridTiles(grid);
-    const AvlNode28* bstRoot = grid->field_0xE8;   // the reserved-cell BST root (Map +0xE8)
+    const AvlNode28* bstRoot = grid->field_0xE8.root;   // the reserved-cell BST root (Map +0xE8)
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             int cell = width * row + col;

@@ -141,7 +141,7 @@ void Map::StampDanger(int xMin, int yMin, int xMax, int yMax, short delta) {
             for (int x = xMin; x <= xMax; ++x) {
                 const int w = size;
                 if (x >= 0 && y >= 0 && x < w && y < w) {
-                    uint8_t* cell = &cells[static_cast<int64_t>(w * y + x)].field_0x1C[6];   // +0x22
+                    uint8_t* cell = &cells.GetData()[static_cast<int64_t>(w * y + x)].field_0x1C[6];   // +0x22
                     *cell = static_cast<uint8_t>(*cell + static_cast<char>(delta));
                 }
             }
@@ -426,7 +426,7 @@ void FireComponent::SpreadToNeighbors() {
 
         // Fine-cell array at grid+0x80, stride 0x30; +0x00 is MapCell::blocker.
         ComponentEntity* occupant =
-            grid->cells[static_cast<int64_t>(grid->size) * cy + cx].blocker;
+            grid->cells.GetData()[static_cast<int64_t>(grid->size) * cy + cx].blocker;
 
         // Retail inlines the exact-id scan here (no IsDerivedFrom): the generic find.
         FireComponent* neighbourFire = nullptr;

@@ -84,7 +84,7 @@ static int CountOccupiedBuildTiles_Impl(ClearAreaComponent* clearArea)
     // The Map at gameWorld+0xF8: size = mapWidth, cells = the 0x30-byte cell array
     Map* map = GameUpdateLoop::_singleton->m_game;
     int mapWidth = map->size;
-    const MapCell* tileArrayBase = map->cells;
+    const MapCell* tileArrayBase = map->cells.GetData();
 
     int count = 0;
     for (int row = 0; row < height; ++row) {

@@ -75,9 +75,9 @@ extern "C" void MapTileGrid_Build(Map* game, int dim) {
 
     // Publish the array header {data, count, capacity} at Map +0x80 before the
     // classify pass (classify uses flag=1 and never reads the cell array).
-    game->cells        = cells;
-    game->cellCount    = count;
-    game->cellCapacity = count;
+    game->cells._data     = cells;
+    game->cells._size     = count;
+    game->cells._capacity = count;
 
     // Classify pass — write the terrain type (+0x29) for every cell.
     for (int i = 0; i < count; ++i)

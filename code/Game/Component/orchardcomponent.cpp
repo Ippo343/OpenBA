@@ -136,7 +136,7 @@ static void SerializeSlots(IO::Serializer& ser, int count, OrchardSlot* slot) {
 void OrchardComponent::ValidateRefs() {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    const MapCell* cells = world->m_game->cells;
+    const MapCell* cells = world->m_game->cells.GetData();
     const int count = slotCount;
     for (int i = 0; i < count; ++i) {
         OrchardSlot& slot = slots[i];
@@ -202,7 +202,7 @@ float OrchardComponent::GetGrowth() const {
     if (!world) return 0.0f;
     const Map* map = world->m_game;
     if (!map) return 0.0f;
-    const MapCell* cells = map->cells;
+    const MapCell* cells = map->cells.GetData();
     if (!cells) return 0.0f;
 
     const uint32_t tidEntity = ComponentEntity::TypeId();   // cell 0x1401c5d70 (D5)
@@ -573,7 +573,7 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
     if (msgId == 0) {
         if (!slots) return;
         OrchardSlot& slot = slots[idx];
-        const MapCell* cells = world->m_game->cells;
+        const MapCell* cells = world->m_game->cells.GetData();
         // The cell's occupant (+0x08) is the entity standing on it — the tree the plant
         // action just created.
         ComponentEntity* entity = cells[slot.tile].occupant;
@@ -619,7 +619,7 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
         const Map* mapGrid = world->m_game;
         ValidateRefs();
         if (!slots) return;
-        ComponentEntity* entity = mapGrid->cells[slots[idx].tile].occupant;
+        ComponentEntity* entity = mapGrid->cells.GetData()[slots[idx].tile].occupant;
         if (entity == nullptr) return;
         FruitComponent* fruit = entity->FindComponent<FruitComponent>();   // 0x14000a0b0
         if (fruit == nullptr) return;

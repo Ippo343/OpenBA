@@ -149,7 +149,7 @@ int ComputeCost(Map* map, int fromCell, int toCell) {
         return d < 0 ? kUnreachable : d;
     };
 
-    MapCell* nav = map->cells;               // +0x80, stride 0x30
+    MapCell* nav = map->cells.GetData();               // +0x80, stride 0x30
     int regionA = nav[fromCell].regionId;    // +0x18
     int regionB = nav[toCell].regionId;
     if (regionA < 0 || regionB < 0) return euclid();

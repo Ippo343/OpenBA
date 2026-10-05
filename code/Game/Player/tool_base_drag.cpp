@@ -154,7 +154,7 @@ void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minC
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     Map* map = gw->m_game;
     int gridSize = map->size;
-    MapCell* cells = map->cells;
+    MapCell* cells = map->cells.GetData();
 
     for (int64_t row = minRow; row <= maxRow; row++) {
         for (int64_t col = minCol; col <= maxCol; col++) {

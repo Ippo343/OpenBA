@@ -163,7 +163,7 @@ int RoadTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
     }
 
     // Check terrain flags at both cells
-    const MapCell* cells = mapGrid->cells;
+    const MapCell* cells = mapGrid->cells.GetData();
     uint32_t flagA = 1u << (cells[sc].terrainType & 0x1f);
     uint32_t flagB = 1u << (cells[ec].terrainType & 0x1f);
     uint32_t combinedFlags = flagA | flagB;
@@ -281,7 +281,7 @@ void RoadTool::Draw(Video::Context* context, char param3) {
         if ((int)ec < 0) ec = sc;
 
         // Get terrain data
-        const MapCell* terrainBase = mapGrid->cells;
+        const MapCell* terrainBase = mapGrid->cells.GetData();
 
         // Check terrain flags at both cells
         uint32_t flagA = 1u << (terrainBase[sc].terrainType & 0x1f);

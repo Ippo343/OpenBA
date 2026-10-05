@@ -139,19 +139,19 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
                         if (inBounds) {
                             iVar7 = iVar7 * iVar18 + iVar20;
                             int64_t lVar10 = (int64_t)iVar7;
-                            if (cells[lVar10].occupant == nullptr) {
-                                ComponentEntity* local_d8 = cells[lVar10].blocker;
+                            if (cells.GetData()[lVar10].occupant == nullptr) {
+                                ComponentEntity* local_d8 = cells.GetData()[lVar10].blocker;
                                 bool occOk = (local_d8 == nullptr);
                                 if (!occOk && *allow != nullptr) {
                                     occOk = (*allow == local_d8);
                                 }
                                 if (occOk) {
-                                    const MapCell& cell = cells[lVar10];
+                                    const MapCell& cell = cells.GetData()[lVar10];
                                     uint32_t uVar8 = 1u << (cell.terrainType & 0x1f);
                                     if (((uVar8 & 2) == 0) &&
                                         (((uVar8 & 1) == 0) && (cell.field_0x2A == 0xff))) {
                                         // the skip tree at field_0xE8 (key = cell index)
-                                        const AvlNode28* piVar2 = field_0xE8;
+                                        const AvlNode28* piVar2 = field_0xE8.root;
                                         bool skip = false;
                                         while (piVar2 != nullptr) {
                                             if (iVar7 < piVar2->key) {
@@ -173,7 +173,7 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
                                                 iVar14 = size;
                                                 if ((iVar20 < iVar14) && (iVar18 < iVar14)) {
                                                     iVar12 = iVar14 * iVar18 + iVar20;
-                                                    const MapCell& at = cells[iVar12];
+                                                    const MapCell& at = cells.GetData()[iVar12];
                                                     if (((1u << (at.terrainType & 0x1f) & 0xfffffffbU) == 0) &&
                                                         ((at.blocker == nullptr) &&
                                                          (at.footprintCount == 0))) {

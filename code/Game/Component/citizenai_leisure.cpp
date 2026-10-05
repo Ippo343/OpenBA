@@ -360,7 +360,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
     }
 
     int64_t local_a8 = static_cast<int64_t>(static_cast<int>(uVar37));   // srcCell index (retail: its byte offset, *0x30)
-    ComponentEntity* local_res20 = piVar5->cells[local_a8].blocker;      // target entity
+    ComponentEntity* local_res20 = piVar5->cells.GetData()[local_a8].blocker;      // target entity
 
     {
         float fVar39 = pRVar6->RandFloat();
@@ -443,7 +443,7 @@ LAB_14010a846:
                 int cx = dxo + baseCol;
                 int w = piVar5->size;
                 if (cx >= 0 && cx < w && boxRow >= 0 && boxRow < w) {
-                    MapCell* plVar20 = &piVar5->cells[static_cast<int64_t>(w * boxRow + dxo + baseCol)];
+                    MapCell* plVar20 = &piVar5->cells.GetData()[static_cast<int64_t>(w * boxRow + dxo + baseCol)];
                     ComponentEntity* cand = nullptr;     // local_res18
                     if (plVar20->blocker == nullptr) {
                         if (plVar20->occupant == nullptr) { new (&cand) ::Object::InternalBasePtr(
@@ -601,9 +601,9 @@ LAB_14010ae8a:
                 if (iVar16 >= 0 && iVar16 < w && iVar13 >= 0 && iVar13 < w) {
                     int cellIdx = w * iVar13 + cc + (iVar30 - iVar27);
                     int64_t lv = static_cast<int64_t>(cellIdx);
-                    if (piVar5->cells[lv].terrainType < 3) {
+                    if (piVar5->cells.GetData()[lv].terrainType < 3) {
                         piVar5->FillZones();   // 0x14009c480 (RCX only)
-                        MapCell* arrBase = piVar5->cells;
+                        MapCell* arrBase = piVar5->cells.GetData();
                         uint32_t mNew = 1u << (arrBase[lv].terrainType & 0x1f);
                         uint32_t mSrc = 1u << (arrBase[local_a8].terrainType & 0x1f);
                         uint32_t both = mSrc | mNew;

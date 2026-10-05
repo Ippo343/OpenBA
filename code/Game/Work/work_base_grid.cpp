@@ -30,7 +30,7 @@ int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFl
     int gridW = map->size;
     int best = -1;
     int bestDist = 0;
-    MapCell* cellArr = map->cells;
+    MapCell* cellArr = map->cells.GetData();
 
     int col = srcCell % gridW - 1;                 // iVar9, advances with the outer loop
     for (int rowD = -1; rowD <= 1; rowD++, col++) {

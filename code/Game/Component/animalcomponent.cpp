@@ -136,7 +136,7 @@ inline Map* MapGrid() {
     return GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_game : nullptr;
 }
 inline MapCell* CellArray(Map* grid) {
-    return grid->cells;
+    return grid->cells.GetData();
 }
 inline uint8_t CellTerrain(const MapCell* cells, int64_t index) {
     return cells[index].terrainType;

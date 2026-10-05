@@ -450,9 +450,9 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
         if (dim <= ix) ix = dim - 1;
         if (iy < 0) iy = 0;
         if (dim <= iy) iy = dim - 1;
-        MapCell* cellBase = gameWorld->cells;   // +0x80
+        MapCell* cellBase = gameWorld->cells.GetData();   // +0x80
         // [PerfX] TERRAIN_SIDECAR: cells[dim*iy+ix].type via the mirror (perf_terrain.h).
-        if (PerfX::TerrainGet(cellBase, gameWorld->cellCount,
+        if (PerfX::TerrainGet(cellBase, gameWorld->cells.GetSize(),
                               static_cast<int>(static_cast<int64_t>(dim) * iy + ix)) == 0x0b) {
             pos[2] = 0.0f; pos[0] = fx; pos[1] = fy;
             blockedHandled = true;     // goto LAB_14010981e

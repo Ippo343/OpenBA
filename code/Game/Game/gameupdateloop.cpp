@@ -2035,8 +2035,7 @@ void GameUpdateLoop::Shutdown() {
     // Game
     if (m_game != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Game...\n");
-        // Map::~Map (keystone_a_gamedtor.cpp) through its B4 FORWARD.
-        Game_Dtor_9ed60(m_game);   // 0x14009ed60
+        m_game->~Map();   // 0x14009ed60 (keystone_a_gamedtor.cpp)
         System::MemoryAllocator::MemFree(m_game);
     }
 

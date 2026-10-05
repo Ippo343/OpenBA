@@ -846,8 +846,8 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                             do {               // fine col within block (local_e0)
                                 int fineCol = local_e0 + local_f4; // iVar20 (local_cc)
                                 uint64_t cellIdx = static_cast<uint64_t>(rowBase + fineCol);
-                                uint8_t batchId = map->cells[cellIdx].field_0x2A;
-                                uint8_t blendId = map->cells[cellIdx].field_0x2B;
+                                uint8_t batchId = map->cells.GetData()[cellIdx].field_0x2A;
+                                uint8_t blendId = map->cells.GetData()[cellIdx].field_0x2B;
 
                                 if (batchId != 0xff) {
                                     if (blendId == 0xff) {
@@ -870,7 +870,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                                                     if (iVar1 < 0 || iVar1 >= gridDim || row < 0 || row >= gridDim) {
                                                         local_f0[slot] = 0;
                                                     } else {
-                                                        local_f0[slot] = (map->cells[static_cast<int64_t>(iVar1) + rowOff].field_0x2A != 0xff) ? 1 : 0;
+                                                        local_f0[slot] = (map->cells.GetData()[static_cast<int64_t>(iVar1) + rowOff].field_0x2A != 0xff) ? 1 : 0;
                                                     }
                                                 }
                                                 slot++;

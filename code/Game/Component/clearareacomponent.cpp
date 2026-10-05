@@ -69,7 +69,7 @@ int ClearAreaComponent::FootprintSweep() {
     const Map* map = gw->m_game;
     if (!map) return 0;
     int gridWidth = map->size;
-    const MapCell* tileArray = map->cells;
+    const MapCell* tileArray = map->cells.GetData();
     EntityList* entityList = gw->m_entityList;
     if (!tileArray || !entityList) return 0;
 

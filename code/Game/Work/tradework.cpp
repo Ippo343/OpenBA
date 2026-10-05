@@ -48,8 +48,8 @@
 // ============================================================
 //   0x14002c8a0  TradeWork::SerializeAssignments (tradework_serialize.cpp)
 //   0x14002c710  TradeWork::InsertAssignment     (tradework_serialize.cpp)
-//   0x14002c690  PlayerTrade_BSTFindRemove_2c690
-//   0x140025740  PlayerTrade_BSTRemove_25740
+//   0x14002c690  Avl38SetFindRemove (Work/TradeWork.h; the core in Player/tool_base_trade.cpp)
+//   0x140025740  Avl38SetRemove (Work/TradeWork.h)
 //   0x1400c5400  WorkBase_TaskListCleanup_c5400
 //   0x1400f7100  Work::ValidateTask
 //   0x140014b00  TradeWork_helper_14b00
@@ -177,7 +177,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     ::Object::InternalPtr<Action> outBuf;                   // 0x1400bf790's hidden return slot (&local_res8)
 
     // ---- 0. capacity gate ----------------------------------------------------
-    int workers = workerCount;                           // param_1[10]
+    int workers = assignments.count;                           // param_1[10]
     WorkComponent* workComp = field_18.Get();                  // param_1[3]
     if (workComp->workState == 0)
         workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
@@ -234,7 +234,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // in-flight quantity from this set, by in-order traversal.
         int inFlight = 0;
-        Node* root = bstRoot;
+        Node* root = assignments.root;
         if (root) {
             Node* node = root;
             Node* prev;
@@ -430,7 +430,7 @@ cleanup:
 // ============================================================
 // Both slots call 0x14002c690 through its B4 FORWARD (see the LEFT on the call).
 int TradeWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&bstRoot), param2);   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 / PlayerTrade_BSTRemove_25740 (Player/exe_bodies.h, B4 FORWARD): the typed Avl38SetFindRemove / Avl38SetRemove take only the tool manager's TrackedEntityNode / PinnedToolNode sets, and Player's Avl38 templates read the node's `key`, which TradeWork::Node spells value.citizen (+0x00)
+    Avl38SetFindRemove(&assignments, param2);   // 0x14002c690
     return false;
 }
 
@@ -439,7 +439,7 @@ int TradeWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/,
 // TradeWork::OnCancel [7] -- BSTFindRemove thunk (0x1400f5d10)
 // ============================================================
 int TradeWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&bstRoot), param2);   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 / PlayerTrade_BSTRemove_25740 (Player/exe_bodies.h, B4 FORWARD): the typed Avl38SetFindRemove / Avl38SetRemove take only the tool manager's TrackedEntityNode / PinnedToolNode sets, and Player's Avl38 templates read the node's `key`, which TradeWork::Node spells value.citizen (+0x00)
+    Avl38SetFindRemove(&assignments, param2);   // 0x14002c690
     return 0;
 }
 
@@ -450,9 +450,9 @@ int TradeWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, i
 // (its CompleteTask cancel removes it from the set).
 // ============================================================
 int TradeWork::Cleanup() {
-    while (workerCount > 0) {
+    while (assignments.count > 0) {
         // Find the leftmost node
-        Node* node = bstRoot;
+        Node* node = assignments.root;
         Node* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -473,7 +473,7 @@ int TradeWork::Cleanup() {
 // removes the invalid ones. Returns true if all valid, false otherwise.
 // ============================================================
 int TradeWork::Validate() {
-    Node* root = bstRoot;
+    Node* root = assignments.root;
     CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
@@ -555,13 +555,13 @@ int TradeWork::Validate() {
     // Remove all invalid entries from the set
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
-            Node* searchNode = bstRoot;
+            Node* searchNode = assignments.root;
             while (searchNode != nullptr) {
                 if (removeArr[i] < searchNode->value.citizen.Get()) {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->value.citizen.Get()) {
-                        PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(&bstRoot), searchNode);   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 / PlayerTrade_BSTRemove_25740 (Player/exe_bodies.h, B4 FORWARD): the typed Avl38SetFindRemove / Avl38SetRemove take only the tool manager's TrackedEntityNode / PinnedToolNode sets, and Player's Avl38 templates read the node's `key`, which TradeWork::Node spells value.citizen (+0x00)
+                        Avl38SetRemove(&assignments, searchNode);   // 0x140025740
                         break;
                     }
                     searchNode = searchNode->right;
@@ -593,7 +593,7 @@ Profession** TradeWork::GetTarget(Profession** outPtr) {
 // ============================================================
 int TradeWork::GetPriority() {
     // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
-    return workerCount > 0 ? 1 : 0;
+    return assignments.count > 0 ? 1 : 0;
 }
 
 
@@ -616,17 +616,17 @@ void TradeWork::Persist(IO::Stream& stream) {
 // call are the compiler's chain. Frees the set's nodes.
 // ============================================================
 TradeWork::~TradeWork() {
-    Node* root = bstRoot;
+    Node* root = assignments.root;
     if (root != nullptr) {
         // 0x140014b00 (was its TradeWork_helper_14b00 forwarder)
-        Avl38FreeSubtree(&bstRoot, root->left);
-        Avl38FreeSubtree(&bstRoot, root->right);
+        Avl38FreeSubtree(&assignments.root, root->left);
+        Avl38FreeSubtree(&assignments.root, root->right);
         System::MemoryAllocator::MemFree(root);
     }
 
     // Zero out the root and the count
-    bstRoot = nullptr;
-    workerCount = 0;
+    assignments.root = nullptr;
+    assignments.count = 0;
 }
 
 
@@ -634,7 +634,7 @@ TradeWork::~TradeWork() {
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The stamps are the compiler's.
-TradeWork::TradeWork() : Work(), bstRoot(nullptr), workerCount(0), _pad54{} {
+TradeWork::TradeWork() : Work(), assignments{nullptr, 0, {}} {
 }
 
 // ============================================================

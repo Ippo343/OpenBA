@@ -30,8 +30,10 @@
 #include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
 #include "Dialog/EntityUI.h"
 #include "Player/exe_bodies.h"
+#include "Work/TradeWork.h"   // TradeWork::Node (the assignment set)
 
 namespace {
+
 
 // ============================================================
 // 0x140025740 — remove an AVL node and rebalance. 1:1 port of TradeWork_helper_5740.
@@ -142,10 +144,10 @@ void Avl38FindRemove(AvlTreeHead<Node>* tree, const Key* keyRef) {
     if (self == nullptr) return;
     Key key = *keyRef;
     do {
-        if (key < self->key) {
+        if (key < Avl38KeyOf(self)) {
             self = self->right;
         } else {
-            if (key <= self->key) {
+            if (key <= Avl38KeyOf(self)) {
                 Avl38Remove(tree, self);
                 return;
             }
@@ -167,10 +169,10 @@ void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* k
 
     // First pass: search; if an existing node matches the key, update in place.
     while (cur != nullptr) {
-        if (key < cur->key) {
+        if (key < cur->key.Get()) {
             cur = cur->right;
         } else {
-            if (key <= cur->key) {
+            if (key <= cur->key.Get()) {
                 // exact match -> update flag + payloads, no structural change.
                 cur->active = 1;
                 cur->x = x;
@@ -214,8 +216,8 @@ void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* k
             // Inner loop: descend right while node.key <= newKey (and check exact dup).
             for (;;) {
                 parent = walk;
-                if (parent->key > newKey) break;  // go left branch below
-                if (newKey <= parent->key) {
+                if (parent->key.Get() > newKey) break;  // go left branch below
+                if (newKey <= parent->key.Get()) {
                     return;  // duplicate appeared mid-walk; nothing to do
                 }
                 walk = parent->right;
@@ -287,21 +289,11 @@ void Avl38SetRemove(AvlTreeHead<PinnedToolNode>* set, PinnedToolNode* node) {
 void Avl38SetFindRemove(AvlTreeHead<TrackedEntityNode>* set, ComponentEntity* const* key) {
     Avl38FindRemove(set, key);   // 0x14002c690
 }
-
-// ---- the C entry points another block's file still binds (B4 FORWARD) -------
-// Work/tradework.cpp holds TradeWork's set as root + count on its own node
-// (Work/TradeWork.h, not this block's): the casts below are LEFT until that
-// set is typed. Their node is the generic Avl38Node (Player/exe_bodies.h):
-// retail runs the same bodies on every 0x18-element set.
-
-// B4 FORWARD: 1 outside caller (Work/tradework.cpp)
-extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
-    Avl38Remove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<Avl38Node*>(nodeArg));   // LEFT: B4 FORWARD Work/tradework.cpp passes TradeWork's root + count as int64_t* and its node as void* (Work/TradeWork.h)
+void Avl38SetRemove(AvlTreeHead<TradeWork::Node>* set, TradeWork::Node* node) {
+    Avl38Remove(set, node);   // 0x140025740
 }
-
-// B4 FORWARD: 1 outside caller (Work/tradework.cpp, two sites)
-extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP) {
-    Avl38FindRemove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<const void* const*>(keyIBP));   // LEFT: B4 FORWARD Work/tradework.cpp passes TradeWork's root + count as int64_t* (Work/TradeWork.h)
+void Avl38SetFindRemove(AvlTreeHead<TradeWork::Node>* set, CitizenComponent* const* key) {
+    Avl38FindRemove(set, key);   // 0x14002c690
 }
 
 // ============================================================

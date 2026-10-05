@@ -117,7 +117,7 @@ MapComponent** FloorComponent_FindResData(ComponentEntity* owner, MapComponent**
 // over the w*h footprint, then Picking::Scene::RemoveMesh. Map's embedded
 // Picking::Scene is raw storage (Map.h, DLG-1; H5): LEFT.
 void Map::RemoveFloor(uint32_t floorId, int x, int y, int w, int h) {
-    MapCell* grid = cells;   // +0x80
+    MapCell* grid = cells.GetData();   // +0x80
     for (int j = 0; j < h; ++j) {
         for (int i = 0; i < w; ++i) {
             int cell = (j + y) * size + i;
@@ -176,7 +176,7 @@ void FloorComponent::PlaceFloor() {
         return;
     }
 
-    MapCell* grid = map->cells;   // +0x80
+    MapCell* grid = map->cells.GetData();   // +0x80
     int mapW = map->size;
     for (int j = 0; j < (int)fh; ++j) {
         for (int i = 0; i < (int)fw; ++i) {

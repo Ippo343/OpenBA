@@ -157,7 +157,7 @@ void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint
                 do {
                     iVar5 = iVar5 + -1;     // descending inner (col)
                     int iVar15 = (param_5 + iVar18) * param_1->size + iVar13 + param_4;
-                    MapCell* cell = &param_1->cells[static_cast<int64_t>(iVar15)];   // +0x80, stride 0x30
+                    MapCell* cell = &param_1->cells.GetData()[static_cast<int64_t>(iVar15)];   // +0x80, stride 0x30
                     ComponentEntity** occupant = &cell->occupant;   // +0x08 InternalPtr<ComponentEntity>
 
                     // Evict any stale entity occupying this cell.
@@ -316,7 +316,7 @@ void CreateNaturalResource_impl_dee0(Map* param_1, ComponentEntity* const* owner
                         }
                     }
 
-                    MapCell* plVar11 = &param_1->cells[static_cast<int64_t>(iVar14)];   // +0x80, stride 0x30
+                    MapCell* plVar11 = &param_1->cells.GetData()[static_cast<int64_t>(iVar14)];   // +0x80, stride 0x30
                     if (bVar6) {
                         int cls = CreateNaturalResource_helper_e2c0(param_1, iVar14);
                         uint8_t bVar13 = (uint8_t)cls;

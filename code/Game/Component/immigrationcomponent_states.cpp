@@ -211,11 +211,11 @@ int ImmigrationComponent::FindSpawnCell(int x, int y, int hallCell) {
         if (cx < 0) cx = 0; else if (cx >= W) cx = W - 1;
         if (cy < 0) cy = 0; else if (cy >= W) cy = W - 1;
         int c = W * cy + cx;
-        const MapCell* tiles = grid->cells;   // Map +0x80
+        const MapCell* tiles = grid->cells.GetData();   // Map +0x80
         uint32_t fc = 1u << (tiles[static_cast<uintptr_t>(c)].terrainType & 0x1f);
         if ((fc & 0xe07u) == 0) continue;
         grid->FillZones();   // 0x14009c480 (RCX only)
-        tiles = grid->cells;
+        tiles = grid->cells.GetData();
         const MapCell* tc = &tiles[static_cast<uintptr_t>(c)];
         const MapCell* th = &tiles[static_cast<uintptr_t>(hallCell)];
         uint32_t mh = 1u << (th->terrainType & 0x1f);

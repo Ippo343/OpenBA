@@ -901,7 +901,7 @@ void Map::FillZone(uint32_t cell, uint16_t zone) {
         cellQueue.count = cellQueue.count + -1;
         cellQueue.pool.Push(puVar2);
         iVar12 = size;
-        const MapCell* lVar14c = &cells[uVar9];
+        const MapCell* lVar14c = &cells.GetData()[uVar9];
         iVar4 = static_cast<int>(uVar8) / iVar12;
         iVar13 = iVar12 * iVar4;
         iVar12 = (iVar4 + 1) * iVar12 + -1;
@@ -935,7 +935,7 @@ void Map::FillZone(uint32_t cell, uint16_t zone) {
                 int64_t i = lVar14;
                 lVar14 = (static_cast<int>(uVar8) - lVar14) + 1;
                 do {
-                    cells[i].zone = zone;
+                    cells.GetData()[i].zone = zone;
                     i = i + 1;
                     lVar14 = lVar14 + -1;
                 } while (lVar14 != 0);
@@ -950,7 +950,7 @@ void Map::FillZone(uint32_t cell, uint16_t zone) {
             if (0 < iVar4) {
                 for (; static_cast<int>(uVar3) <= static_cast<int>(uVar8); uVar3 = uVar3 + 1) {
                     local_res20.cell = uVar3 - size;
-                    const MapCell* c = &cells[local_res20.cell];
+                    const MapCell* c = &cells.GetData()[local_res20.cell];
                     if ((c->zone == 0) &&
                         ((1 << (c->terrainType & 0x1f) & 0xe1fU) != 0)) {
                         puVar5 = cellQueue.NewNode(&local_res20);   // 0x14001a9b0
@@ -968,7 +968,7 @@ void Map::FillZone(uint32_t cell, uint16_t zone) {
             if (iVar4 < size + -1) {
                 for (; static_cast<int>(uVar10) <= static_cast<int>(uVar8); uVar10 = uVar10 + 1) {
                     local_res20.cell = size + uVar10;
-                    const MapCell* c = &cells[local_res20.cell];
+                    const MapCell* c = &cells.GetData()[local_res20.cell];
                     if ((c->zone == 0) &&
                         ((1 << (c->terrainType & 0x1f) & 0xe1fU) != 0)) {
                         puVar5 = cellQueue.NewNode(&local_res20);   // 0x14001a9b0

@@ -261,7 +261,7 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
             for (uint32_t c = minCol; c <= maxCol; c++) {
                 // Get entity at this tile from map grid
                 int tileIndex = mapGrid->size * (int)r + (int)c;
-                const MapCell* cellBase = &mapGrid->cells[tileIndex];
+                const MapCell* cellBase = &mapGrid->cells.GetData()[tileIndex];
 
                 // Get entity occupying this tile: the blocker, else the occupant
                 ComponentEntity* entityPtr = cellBase->blocker;
@@ -290,7 +290,7 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
                     // Check road removal flag (+0x40 on removalDesc)
                     if (removalDesc && removalDesc->_b40) {
                         int tileIdx2 = mapGrid->size * (int)r + (int)c;
-                        const MapCell* cellBase2 = &mapGrid->cells[tileIdx2];
+                        const MapCell* cellBase2 = &mapGrid->cells.GetData()[tileIdx2];
                         uint32_t terrainFlag = 1u << (cellBase2->terrainType & 0x1f);
 
                         // Check if cell has road-type terrain (bits 0 or 1)
@@ -301,7 +301,7 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
 
                         if (!canRemove) {
                             // The map's road-cell BST (+0xE8): key at +0, children +0x10 / +0x18
-                            const AvlNode28* bstNode = mapGrid->field_0xE8;
+                            const AvlNode28* bstNode = mapGrid->field_0xE8.root;
                             while (bstNode != nullptr) {
                                 if (tileIdx2 < bstNode->key) {
                                     bstNode = bstNode->left;

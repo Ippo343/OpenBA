@@ -316,7 +316,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 if (iVar10map <= iVar12) iVar12 = iVar10map - 1;
 
                 // Read the occupant from the map grid cell
-                ComponentEntity* occupant = map->cells[(uintptr_t)iVar12 * (uintptr_t)iVar10map + (uintptr_t)iVar21pos].occupant;
+                ComponentEntity* occupant = map->cells.GetData()[(uintptr_t)iVar12 * (uintptr_t)iVar10map + (uintptr_t)iVar21pos].occupant;
 
                 if (occupant != nullptr) {
                     // Its RawMaterialComponent (0x1400223c0)

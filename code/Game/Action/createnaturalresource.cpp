@@ -83,7 +83,7 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     Map* map = gameWorld->m_game;
 
     const int32_t cellIndex = this->cellIndex;
-    MapCell* cells = map->cells;
+    MapCell* cells = map->cells.GetData();
 
     // The four early-outs below all return the same failure code, so a caller can only see
     // "no resource was created", never why. That matters here: the orchard plant chain sends

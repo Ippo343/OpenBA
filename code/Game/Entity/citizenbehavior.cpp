@@ -204,7 +204,7 @@ bool PathGraph::ProcessPaths() {
         }
 
         // Region IDs from the map's cell array (+0x80, MapCell stride 0x30, regionId +0x18)
-        MapCell* cells = map->cells;
+        MapCell* cells = map->cells.GetData();
         int regionA = cells[(int64_t)cellA].regionId;
         int regionB = cells[(int64_t)cellB].regionId;
 
@@ -397,7 +397,7 @@ void PathGraph::BuildPathGraph() {
 
     // ---- Step 4: Generate pairs from profession entities x buildings ----
     // The map's cell array, for region lookups
-    MapCell* cells = map->cells;
+    MapCell* cells = map->cells.GetData();
 
     // Building list at citizenBehavior+0xb0 (via game world +0xb0)
     int profGroupCount = buildingList->professions.GetSize();

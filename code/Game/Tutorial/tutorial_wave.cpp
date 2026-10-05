@@ -74,6 +74,7 @@
 #include "Tutorial/exe_bodies.h"
 #include "Entity/CitizenBehavior.h"
 #include "Component/ComponentDescription.h"
+#include "ui/Dialog.h"   // UI::Dialog (TutWave_SerializeDialogRef's ExternalPtr<UI::Dialog>)
 
 namespace {
 
@@ -130,8 +131,8 @@ void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) 
     ExternalPtrSerializeGeneric(field, serializer, nullptr, "Tutorial");
 }
 
-extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: the one caller's slot is TutorialSetupDialog::highlightDialog, a `const UI::Dialog*`, which the typed wrapper's T** -> External** cannot take without casting the const away
+void TutWave_SerializeDialogRef(UI::Dialog** field, IO::Serializer* serializer) {
+    ExternalPtrSerializeGeneric(field, serializer,
                                 nullptr, "UI::Dialog");
 }
 

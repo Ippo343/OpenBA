@@ -240,7 +240,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
     if (!mapGrid) return 0;
     const int width = mapGrid->size;
     if (width <= 0) return 0;
-    const MapCell* terrainBase = mapGrid->cells;
+    const MapCell* terrainBase = mapGrid->cells.GetData();
     if (!terrainBase) return 0;
 
     // ---- 1. Build the segment list ------------------------------------------------

@@ -60,7 +60,7 @@ static_assert(offsetof(PlayerCameraView, _pad19) == 0x19, "PlayerCameraView +0x1
 // keyed by the entity, built by 0x140102e30 (MemAlloc(0x38)), walked and
 // removed by 0x14002c690 / 0x140025740.
 struct TrackedEntityNode {
-    ComponentEntity*   key;       // +0x00 the entity (InternalPtr value)
+    Object::InternalPtr<ComponentEntity> key;   // +0x00 the entity (IBP-serialized by 0x14002e470)
     int32_t            x;         // +0x08 (Serialize int, 0x14002e470)
     int32_t            y;         // +0x0C (Serialize int)
     uint8_t            active;    // +0x10 (the insert stores the dword 1)
@@ -105,6 +105,12 @@ struct PinnedToolNode : PinnedToolEntry {
     int16_t            height;    // +0x32
     uint8_t            _pad34[4]; // +0x34
 };
+
+// The key the shared set cores compare (0x14002c690: the node's first qword,
+// unsigned): one accessor per node type, so the one template core reads each.
+inline ComponentEntity* Avl38KeyOf(const TrackedEntityNode* node) { return node->key.Get(); }
+inline ComponentDescription* Avl38KeyOf(const PinnedToolNode* node) { return node->key; }
+
 static_assert(sizeof(PinnedToolNode) == 0x38, "0x140014890 MemAlloc(0x38)");
 static_assert(offsetof(PinnedToolNode, key) == 0x00, "PinnedToolNode::key @ +0x00");
 static_assert(offsetof(PinnedToolNode, x) == 0x08, "PinnedToolNode::x @ +0x08");

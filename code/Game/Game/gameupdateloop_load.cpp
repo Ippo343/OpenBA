@@ -449,14 +449,24 @@ static_assert(std::is_trivially_default_constructible<EventLog>::value,
 static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
               "placement new of MusicPlayer runs no code");
 
-// 0x14009ee70 — the Map ctor (+0xF8, 0xf8). The embedded Picking::Scene @ +8
-// is a member: its default ctor (0x1801258e0) runs first, as retail's call of
-// the import does; then the zero stores.
-Map::Map() {
-    memset(&pathfinder, 0, sizeof(Map) - offsetof(Map, pathfinder));   // zero +0x68..+0xf8 (keeps the Scene at +8)
-    field_0xA2 = true;
-    cellQueue.pool.growCount = 8;             // +0xD0 / +0xD4: one qword store of 8 (H7: two stores)
-    cellQueue.pool.stride = 0;
+// 0x14009ee70 — the Map ctor (+0xF8, 0xf8). Retail's stores, in order: the
+// Picking::Scene import on +8 (0x14009ee8a); qword 0 at +0x68 / +0x70 / +0x78;
+// the cell Array header (+0x80, +0x88); byte 1 at +0xA2; the cell queue
+// (0x14009eec5..eee3); the +0xE8 tree root / count; +0x90 / +0x98 / +0xA0 (the
+// nine shorts). The members in declaration order give the first six; the body
+// writes the last two. Retail writes no padding (+0x04, +0xA3..+0xA7, +0xF4).
+Map::Map()
+    : pickingScene(),
+      pathfinder(nullptr),
+      regionGraph(nullptr),
+      regionPairCache(nullptr),
+      cells(),
+      field_0xA2(1),
+      cellQueue() {
+    field_0xE8.root = nullptr;                // +0xE8 qword 0
+    field_0xE8.count = 0;                     // +0xF0 dword 0
+    for (int i = 0; i < 9; ++i)               // +0x90 / +0x98 qwords, +0xA0 word
+        field_0x90[i] = 0;
 }
 
 // 0x1400f9180 — the WorkScheduler ctor's body (+0x118, 0x138).
@@ -1270,9 +1280,9 @@ void GameUpdateLoop::Load() {
                 }
                 if (game) {
                     int gdim = game->size;
-                    MapCell* cells = game->cells;
+                    MapCell* cells = game->cells.GetData();
                     fprintf(stderr, "[startTown::DIAG]   *game(dim)=%d  tileGrid(*(game+0x80))=%p  cnt=%d\n",
-                            gdim, cells, game->cellCount);
+                            gdim, cells, game->cells.GetSize());
                     // Tile-type histogram (2=buildable 6/10=mountain 7=shore 8=deep water).
                     if (cells && gdim > 0) {
                         int hist[16] = {0};
@@ -1368,7 +1378,7 @@ void GameUpdateLoop::Load() {
                 // wipe, these read 0 and every citizen silently loses its job a few
                 // hundred frames later. One line per load.
                 {
-                    const MapCell* tiles = game->cells;
+                    const MapCell* tiles = game->cells.GetData();
                     fprintf(stderr, "[GridProbe] tiles=%p regionIds:", (const void*)tiles);
                     if (tiles)
                         for (int c = 32000; c <= 35000; c += 500)

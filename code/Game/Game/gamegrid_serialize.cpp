@@ -114,9 +114,7 @@ void CopyMapCell(MapCell* d, const MapCell* s) {
     d->occupant = s->occupant;          // +0x08
     d->field_0x10 = s->field_0x10;      // +0x10
     d->regionId = s->regionId;          // +0x18
-    // +0x1C..+0x24, the 9-byte block: one qword and one byte, as retail moves it
-    *reinterpret_cast<uint64_t*>(&d->field_0x1C[0]) = *reinterpret_cast<const uint64_t*>(&s->field_0x1C[0]);   // LEFT: Map.h (DLG-1 / GAME-3): field_0x1C is uint8_t[9]; the copy is a qword + a byte
-    d->field_0x1C[8] = s->field_0x1C[8];
+    d->field_0x1C = s->field_0x1C;      // +0x1C..+0x24, the 9-byte block (retail: one qword and one byte)
 
     d->zone = s->zone;                  // +0x26
 
@@ -133,8 +131,7 @@ void ZeroMapCell(MapCell* d) {
     d->occupant = nullptr;              // +0x08
     d->field_0x10 = nullptr;            // +0x10
     d->regionId = -1;                   // +0x18 0xffffffff
-    *reinterpret_cast<uint64_t*>(&d->field_0x1C[0]) = 0;   // +0x1C..+0x23 one qword 0  // LEFT: Map.h (DLG-1 / GAME-3): field_0x1C is uint8_t[9]
-    d->field_0x1C[8] = 0;               // +0x24
+    d->field_0x1C = {};                 // +0x1C..+0x24 zero (retail: one qword 0 and one byte 0)
     d->zone = 0;                        // +0x26..+0x29 zero
     d->footprintCount = 0;
     d->terrainType = 0;
@@ -149,26 +146,18 @@ void AssignMapCell(uint8_t* dst, const uint8_t* src) {
 void InitMapCell(uint8_t* dst) {
     rtcoll::InitAs<MapCell, &ZeroMapCell>(dst);
 }
+}  // namespace
+
 // stays explicit: `init` is a patterned fill (0xffffffff at +0x18, 0xff at
 // +0x2a), `assign` is partial (byteCopy=false), and both arms carry unwritten
-// extents — a probe contract, not a trait.
-const rtcoll::ArraySpec kSpec_MapCell = {                  // exe 0x14001aa90
+// extents — a probe contract, not a trait. Map::cells (Game/Map.h) is the
+// Collection::Array over this row.
+extern const rtcoll::ArraySpec kSpec_MapCell = {           // exe 0x14001aa90
     "Array<MapCell>", 0x30, 8,
     &AssignMapCell, &InitMapCell, nullptr, false,
     /*assign unwritten*/ 0x2e, 0x30,   // plus the single byte +0x25
     /*init   unwritten*/ 0x2e, 0x30,   // plus the single byte +0x25
     /*seed zero       */ 0,    0 };
-using MapCellArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_MapCell>>;
-
-}  // namespace
-
-static void GameGrid_ResizeCellArray_aa90(MapCell** header, int32_t newCount) {
-    // B.3.2 bridge: Map+0x80 is the Array<MapCell> header {cells, cellCount,
-    // cellCapacity}, declared as three fields (the Array's explicit spec above).
-    reinterpret_cast<MapCellArray*>(header)->SetSize(newCount);   // LEFT: Map.h (DLG-1 / GAME-3): the cell array is three raw fields, not a Collection::Array (H5)
-
-}
 
 // ============================================================
 // GameGrid_SerializeCellArray_ac10 (0x14001ac10)
@@ -198,7 +187,7 @@ static void GameGrid_SerializeCellArray_ac10(IO::Serializer* serializer, int32_t
 
         Reimpl_ExternalPtr_Serialize_StringTable(&elem->field_0x10, serializer);
 
-        serializer->Serialize(9, elem->field_0x1C, nullptr);
+        serializer->Serialize(9, elem->field_0x1C.data(), nullptr);
 
         serializer->Serialize(elem->zone, nullptr);
 
@@ -230,16 +219,16 @@ void Map::Serialize(IO::Stream& stream) {
 
     serializer.Serialize(size, nullptr);
 
-    // Cell-array header at +0x80: cells, cellCount, cellCapacity.
-    int32_t count = cellCount;
+    // The cell Array at +0x80: its count, then (load) SetSize 0x14001aa90.
+    int32_t count = cells.GetSize();
     serializer.Serialize(count, nullptr);
 
     bool isSaving = static_cast<int>(stream.GetDirection()) != 0;   // IO::Stream::GetDirection, retail 0x180006200
     if (!isSaving) {
-        GameGrid_ResizeCellArray_aa90(&cells, count);
+        cells.SetSize(count);   // 0x14001aa90
     }
 
-    GameGrid_SerializeCellArray_ac10(&serializer, count, cells);
+    GameGrid_SerializeCellArray_ac10(&serializer, count, cells.GetData());
 
     // 9 shorts at +0x90.
     serializer.Serialize(9, field_0x90, nullptr);
@@ -253,7 +242,7 @@ void Map::Serialize(IO::Stream& stream) {
         if (version < 2) {
             int32_t width = size;
             for (int32_t i = 0; i < width * width; ++i) {
-                MapCell* e = &cells[i];
+                MapCell* e = &cells.GetData()[i];
                 if (e->blocker == nullptr &&
                     e->occupant == nullptr) {
                     bool occupied = CheckCellTerrain(this, i) != 0;   // 0x14009cb00
@@ -273,7 +262,7 @@ void Map::Serialize(IO::Stream& stream) {
         {
             int32_t width = size;
             for (int32_t i = 0; i < width * width; ++i) {
-                MapCell* e = &cells[i];
+                MapCell* e = &cells.GetData()[i];
 
                 if (e->footprintCount == 0xff) {
                     e->footprintCount = 0;
@@ -285,7 +274,7 @@ void Map::Serialize(IO::Stream& stream) {
                         // Walk the AVL tree rooted at +0xe8 for key == i (the
                         // 0x28 AvlNode28 of Action/PathAvl.h: key +0, left +0x10,
                         // right +0x18).
-                        const AvlNode28* node = field_0xE8;
+                        const AvlNode28* node = field_0xE8.root;
                         while (node != nullptr) {
                             int32_t key = node->key;
                             if (i < key) {

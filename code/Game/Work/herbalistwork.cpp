@@ -292,7 +292,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
                      testCellY < 0 || testCellY >= mapSize);
 
             uint32_t testCell = (uint32_t)(map->size) * testCellY + testCellX;
-            MapCell* gridData = map->cells;
+            MapCell* gridData = map->cells.GetData();
 
             // Check terrain type bitmask — skip "forest/resource" terrain (0x1e0 mask)
             uint8_t terrainByte = gridData[testCell].terrainType;

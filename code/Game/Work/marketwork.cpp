@@ -1047,8 +1047,8 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
         // --- 0x1400f10d3..0x1400f1156: the passability / region test ---------
         // Cell records live at map->cells, stride 0x30 (LEA r,[r+r*2]; SHL 4).
-        const MapCell& cellSrc = map->cells[cellIdx];
-        const MapCell& cellDst = map->cells[candCell];
+        const MapCell& cellSrc = map->cells.GetData()[cellIdx];
+        const MapCell& cellDst = map->cells.GetData()[candCell];
         const uint32_t bitDst = 1u << (cellDst.terrainType & 0x1f);
         const uint32_t bitSrc = 1u << (cellSrc.terrainType & 0x1f);
         const uint32_t mask   = (bitSrc | bitDst) | 0xe1fu;
