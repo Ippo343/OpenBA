@@ -560,8 +560,11 @@ public:
     // B.4 (X-RL): the two video callbacks the profile build's
     // `Video::Device::SetVideoErrorFuncs` (0x1800fd860, inlined by retail into
     // Engine::MainLoop) stores: [0] error +0x50, [1] restart +0x58. The ctor
-    // zeroes both (singleton_ctors.cpp's memset). Name kept for that reader.
-    void            (*gap50[2])();         // +0x50..+0x5F
+    // zeroes both (singleton_ctors.cpp's memset). B5 CTX (B5_RULES C4): named;
+    // written by Engine (engine.cpp), read by dx11's ContextData::Finish either
+    // side of a device reset (0x18000183c / 0x18000187d, both null-checked).
+    void            (*onVideoError)();     // +0x50
+    void            (*onVideoRestart)();   // +0x58
     uint8_t           lock[0x28];          // +0x60  CRITICAL_SECTION (InitializeCriticalSection + spin 5000)
                                            //        RULE B5-6: opaque, never a std::mutex.
     uint32_t          lockOwnerThreadId;   // +0x88  RenderBuffer::PlatformConstruct / ~RenderBuffer
@@ -906,8 +909,8 @@ static_assert(offsetof(Video::Device, multisampleCap) == 0x3C, "Device::multisam
 static_assert(offsetof(Video::Device, interfaceData) == 0x40, "Device::interfaceData");
 static_assert(offsetof(Video::Device, interfaceCount) == 0x48, "Device::interfaceCount");
 static_assert(offsetof(Video::Device, interfaceCapacity) == 0x4C, "Device::interfaceCapacity");
-static_assert(offsetof(Video::Device, gap50) == 0x50 && sizeof(Video::Device::gap50) == 0x10,
-              "Device::gap50, the two video callbacks @ +0x50 / +0x58");
+static_assert(offsetof(Video::Device, onVideoError) == 0x50, "Device::onVideoError @ +0x50");
+static_assert(offsetof(Video::Device, onVideoRestart) == 0x58, "Device::onVideoRestart @ +0x58");
 static_assert(offsetof(Video::Device, lock) == 0x60, "Device::lock");
 static_assert(sizeof(Video::Device::lock) == 0x28, "Device::lock is an opaque CRITICAL_SECTION — RULE B5-6");
 static_assert(offsetof(Video::Device, lockOwnerThreadId) == 0x88, "Device::lockOwnerThreadId");
