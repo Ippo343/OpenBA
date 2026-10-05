@@ -63,6 +63,7 @@ static_assert(sizeof(InteractDescription) == 0x58, "InteractDescription is 0x58 
 static_assert(alignof(InteractDescription) == 8, "InteractDescription alignment");
 static_assert(offsetof(InteractDescription, _points) == 0x20, "InteractDescription::_points @ +0x20");
 static_assert(sizeof(InteractDescription::Node) == 0x18, "InteractDescription node stride 0x18");
+static_assert(offsetof(InteractDescription::Node, offset) == 0x0, "Node::offset");
 static_assert(offsetof(InteractDescription::Node, direction) == 0x0C, "");
 static_assert(offsetof(InteractDescription, _useNodes) == 0x28, "InteractDescription::_useNodes @ +0x28");
 static_assert(offsetof(InteractDescription, _buildNodes) == 0x38, "InteractDescription::_buildNodes @ +0x38");

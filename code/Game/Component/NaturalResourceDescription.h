@@ -66,6 +66,9 @@ public:
 };
 
 static_assert(sizeof(NaturalResourceDescription) == 0x88, "NaturalResourceDescription is 0x88 (create 0x1400365d0 MemAlloc(0x88))");
+static_assert(offsetof(NaturalResourceDescription, _pad49) == 0x49, "NaturalResourceDescription::_pad49");
+static_assert(offsetof(NaturalResourceDescription, _pad65) == 0x65, "NaturalResourceDescription::_pad65");
+static_assert(offsetof(NaturalResourceDescription, _pad84) == 0x84, "NaturalResourceDescription::_pad84");
 static_assert(alignof(NaturalResourceDescription) == 8, "NaturalResourceDescription alignment");
 static_assert(offsetof(NaturalResourceDescription, _building) == 0x20, "NaturalResourceDescription::_building @ +0x20");
 static_assert(offsetof(NaturalResourceDescription, _f28) == 0x28, "NaturalResourceDescription::_f28 @ +0x28");

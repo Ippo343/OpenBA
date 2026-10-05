@@ -46,6 +46,7 @@ public:
 };
 
 static_assert(sizeof(AutoPickupComponent) == 0x40, "AutoPickupComponent is 0x40 (create 0x1400033c0)");
+static_assert(offsetof(AutoPickupComponent, _pad29) == 0x29, "AutoPickupComponent::_pad29");
 static_assert(alignof(AutoPickupComponent) == 8, "AutoPickupComponent alignment");
 static_assert(offsetof(AutoPickupComponent, isEnabled) == 0x28, "");
 static_assert(offsetof(AutoPickupComponent, field30) == 0x30, "");

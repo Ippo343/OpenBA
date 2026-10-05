@@ -53,6 +53,8 @@ struct CropSlot {
     uint8_t _pad19[7];                                       // +0x19
 };
 static_assert(sizeof(CropSlot) == 0x20, "CropSlot stride 0x20 (0x1400335b0 MemAlloc(cap*0x20))");
+static_assert(offsetof(CropSlot, cell) == 0x0, "CropSlot::cell");
+static_assert(offsetof(CropSlot, _pad19) == 0x19, "CropSlot::_pad19");
 static_assert(offsetof(CropSlot, state)     == 0x04, "CropSlot +0x04");
 static_assert(offsetof(CropSlot, entity)    == 0x08, "CropSlot +0x08");
 static_assert(offsetof(CropSlot, resource)  == 0x10, "CropSlot +0x10");
@@ -65,6 +67,8 @@ struct CropSlotArray {
     int32_t   capacity;   // +0x0C
 };
 static_assert(sizeof(CropSlotArray) == 0x10, "Array header");
+static_assert(offsetof(CropSlotArray, data) == 0x0, "CropSlotArray::data");
+static_assert(offsetof(CropSlotArray, capacity) == 0xC, "CropSlotArray::capacity");
 
 class CropFieldComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(CropFieldComponent)
@@ -114,6 +118,7 @@ public:
 };
 
 static_assert(sizeof(CropFieldComponent) == 0x68, "CropFieldComponent is 0x68 (create 0x140032ed0)");
+static_assert(offsetof(CropFieldComponent, _pad4A) == 0x4A, "CropFieldComponent::_pad4A");
 static_assert(alignof(CropFieldComponent) == 8, "CropFieldComponent alignment");
 static_assert(offsetof(CropFieldComponent, _controller) == 0x28,
               "CropFieldComponent's controller member at +0x28 (slot 17 0x140004080)");

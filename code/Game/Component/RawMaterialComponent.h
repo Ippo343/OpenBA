@@ -50,6 +50,7 @@ public:
 };
 
 static_assert(sizeof(RawMaterialComponent) == 0x40, "RawMaterialComponent is 0x40 (create 0x140037270)");
+static_assert(offsetof(RawMaterialComponent, _pad2c) == 0x2C, "RawMaterialComponent::_pad2c");
 static_assert(alignof(RawMaterialComponent) == 8, "RawMaterialComponent alignment");
 static_assert(offsetof(RawMaterialComponent, quantity) == 0x28, "RawMaterialComponent::quantity @ +0x28 (Persist 0x140129364)");
 static_assert(offsetof(RawMaterialComponent, profession) == 0x30, "RawMaterialComponent::profession @ +0x30 (Persist 0x140129395)");

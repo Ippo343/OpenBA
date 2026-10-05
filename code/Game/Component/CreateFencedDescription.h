@@ -49,6 +49,8 @@ public:
 };
 
 static_assert(sizeof(CreateFencedDescription) == 0x78, "CreateFencedDescription is 0x78 (create 0x1400048e0 MemAlloc(0x78))");
+static_assert(offsetof(CreateFencedDescription, _pad24) == 0x24, "CreateFencedDescription::_pad24");
+static_assert(offsetof(CreateFencedDescription, _pad69) == 0x69, "CreateFencedDescription::_pad69");
 static_assert(alignof(CreateFencedDescription) == 8, "CreateFencedDescription alignment");
 static_assert(offsetof(CreateFencedDescription, _u20) == 0x20, "CreateFencedDescription::_u20 @ +0x20");
 static_assert(offsetof(CreateFencedDescription, _refs) == 0x28, "CreateFencedDescription::_refs @ +0x28");

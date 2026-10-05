@@ -48,6 +48,7 @@ public:
 };
 
 static_assert(sizeof(CaptureBoxElement) == 0xe0, "CaptureBoxElement is 0xe0 (create 0x140013eb0)");
+static_assert(offsetof(CaptureBoxElement, _y0) == 0xD4, "CaptureBoxElement::_y0");
 static_assert(alignof(CaptureBoxElement) == 8, "CaptureBoxElement alignment");
 static_assert(offsetof(CaptureBoxElement, _lineSprite) == 0xc0, "+0xc0 Sprite");
 static_assert(offsetof(CaptureBoxElement, _x0) == 0xd0, "+0xd0");

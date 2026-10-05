@@ -37,6 +37,8 @@ struct UIDescriptionEntry {
     System::String name;         // +0x20
 };
 static_assert(sizeof(UIDescriptionEntry) == 0x28, "UIDescriptionEntry stride 0x28");
+static_assert(offsetof(UIDescriptionEntry, type) == 0x0, "UIDescriptionEntry::type");
+static_assert(offsetof(UIDescriptionEntry, _pad04) == 0x4, "UIDescriptionEntry::_pad04");
 static_assert(offsetof(UIDescriptionEntry, ref08) == 0x08, "UIDescriptionEntry +0x08");
 static_assert(offsetof(UIDescriptionEntry, ref10) == 0x10, "UIDescriptionEntry +0x10");
 static_assert(offsetof(UIDescriptionEntry, ref18) == 0x18, "UIDescriptionEntry +0x18");
@@ -73,6 +75,8 @@ public:
 };
 
 static_assert(sizeof(UIDescription) == 0x48, "UIDescription is 0x48 (create 0x1400395b0 MemAlloc(0x48))");
+static_assert(offsetof(UIDescription, _pad24) == 0x24, "UIDescription::_pad24");
+static_assert(offsetof(UIDescription, _pad44) == 0x44, "UIDescription::_pad44");
 static_assert(alignof(UIDescription) == 8, "UIDescription alignment");
 static_assert(offsetof(UIDescription, _valTail) == 0x20, "UIDescription::_valTail @ +0x20");
 static_assert(offsetof(UIDescription, _dialog) == 0x28, "UIDescription::_dialog @ +0x28");

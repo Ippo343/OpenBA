@@ -45,6 +45,8 @@ struct ParticleEmitterSlot {
     int32_t _pad14;                        // +0x14
 };
 static_assert(sizeof(ParticleEmitterSlot) == 0x18, "ParticleComponent emitter slot stride 0x18");
+static_assert(offsetof(ParticleEmitterSlot, instance) == 0x0, "ParticleEmitterSlot::instance");
+static_assert(offsetof(ParticleEmitterSlot, _pad14) == 0x14, "ParticleEmitterSlot::_pad14");
 static_assert(offsetof(ParticleEmitterSlot, sceneId) == 0x08, "");
 static_assert(offsetof(ParticleEmitterSlot, nodeIndex) == 0x0C, "");
 static_assert(offsetof(ParticleEmitterSlot, fadeRate) == 0x10, "");

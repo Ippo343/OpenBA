@@ -48,6 +48,7 @@ public:
 };
 
 static_assert(sizeof(FruitComponent) == 0x38, "FruitComponent is 0x38 (create 0x140005920)");
+static_assert(offsetof(FruitComponent, _pad35) == 0x35, "FruitComponent::_pad35");
 static_assert(alignof(FruitComponent) == 8, "FruitComponent alignment");
 static_assert(offsetof(FruitComponent, resource)  == 0x28, "");
 static_assert(offsetof(FruitComponent, ripeness)  == 0x30, "");

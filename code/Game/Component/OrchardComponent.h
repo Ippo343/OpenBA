@@ -50,6 +50,8 @@ struct OrchardSlot {
     uint8_t                   _pad21[7];  // +0x21
 };
 static_assert(sizeof(OrchardSlot) == 0x28, "OrchardSlot stride 0x28 (0x140009f80)");
+static_assert(offsetof(OrchardSlot, tile) == 0x0, "OrchardSlot::tile");
+static_assert(offsetof(OrchardSlot, _pad21) == 0x21, "OrchardSlot::_pad21");
 static_assert(offsetof(OrchardSlot, state) == 0x04, "OrchardSlot +0x04");
 static_assert(offsetof(OrchardSlot, tree) == 0x08, "OrchardSlot +0x08");
 static_assert(offsetof(OrchardSlot, resource) == 0x10, "OrchardSlot +0x10");
@@ -112,6 +114,7 @@ public:
 };
 
 static_assert(sizeof(OrchardComponent) == 0x68, "OrchardComponent is 0x68 (create 0x140009870)");
+static_assert(offsetof(OrchardComponent, _pad49) == 0x49, "OrchardComponent::_pad49");
 static_assert(alignof(OrchardComponent) == 8, "OrchardComponent alignment");
 static_assert(offsetof(OrchardComponent, _controller) == 0x28,
               "OrchardComponent's controller member at +0x28 (slot 17 0x140004080)");

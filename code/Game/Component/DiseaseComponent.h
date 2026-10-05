@@ -67,6 +67,7 @@ public:
 };
 
 static_assert(sizeof(DiseaseComponent) == 0x58, "DiseaseComponent is 0x58 (create 0x140004db0)");
+static_assert(offsetof(DiseaseComponent, _pad4C) == 0x4C, "DiseaseComponent::_pad4C");
 static_assert(alignof(DiseaseComponent) == 8, "DiseaseComponent alignment");
 static_assert(offsetof(DiseaseComponent, rollAccum)     == 0x28, "");
 static_assert(offsetof(DiseaseComponent, duration)      == 0x30, "");

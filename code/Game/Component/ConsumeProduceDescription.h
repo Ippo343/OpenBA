@@ -33,6 +33,9 @@ struct ConsumeProduceInput {
     int32_t               _pad0c;       // +0x0c
 };
 static_assert(sizeof(ConsumeProduceInput) == 0x10, "ConsumeProduceInput stride 0x10");
+static_assert(offsetof(ConsumeProduceInput, material) == 0x0, "ConsumeProduceInput::material");
+static_assert(offsetof(ConsumeProduceInput, count) == 0x8, "ConsumeProduceInput::count");
+static_assert(offsetof(ConsumeProduceInput, _pad0c) == 0xC, "ConsumeProduceInput::_pad0c");
 
 // One recipe (0x28 stride; Serialize 0x1400326f0: the input array, the product's
 // ExternalPtr<ComponentDescription>, the uint enum, the name String).
@@ -46,6 +49,13 @@ struct ConsumeProduceRecipe {
     System::String        name;         // +0x20 key into the description's string table
 };
 static_assert(sizeof(ConsumeProduceRecipe) == 0x28, "ConsumeProduceRecipe stride 0x28");
+static_assert(offsetof(ConsumeProduceRecipe, inputs) == 0x0, "ConsumeProduceRecipe::inputs");
+static_assert(offsetof(ConsumeProduceRecipe, inputCount) == 0x8, "ConsumeProduceRecipe::inputCount");
+static_assert(offsetof(ConsumeProduceRecipe, inputCap) == 0xC, "ConsumeProduceRecipe::inputCap");
+static_assert(offsetof(ConsumeProduceRecipe, product) == 0x10, "ConsumeProduceRecipe::product");
+static_assert(offsetof(ConsumeProduceRecipe, materialType) == 0x18, "ConsumeProduceRecipe::materialType");
+static_assert(offsetof(ConsumeProduceRecipe, _pad1c) == 0x1C, "ConsumeProduceRecipe::_pad1c");
+static_assert(offsetof(ConsumeProduceRecipe, name) == 0x20, "ConsumeProduceRecipe::name");
 
 class ConsumeProduceDescription final : public Description {
     DECLARE_EXE_TYPE(ConsumeProduceDescription)
@@ -77,6 +87,7 @@ public:
 };
 
 static_assert(sizeof(ConsumeProduceDescription) == 0x58, "ConsumeProduceDescription is 0x58 (create 0x140032360 MemAlloc(0x58))");
+static_assert(offsetof(ConsumeProduceDescription, _pad54) == 0x54, "ConsumeProduceDescription::_pad54");
 static_assert(alignof(ConsumeProduceDescription) == 8, "ConsumeProduceDescription alignment");
 static_assert(offsetof(ConsumeProduceDescription, _stringTable) == 0x20, "ConsumeProduceDescription::_stringTable @ +0x20");
 static_assert(offsetof(ConsumeProduceDescription, _recipes) == 0x28, "ConsumeProduceDescription::_recipes @ +0x28");

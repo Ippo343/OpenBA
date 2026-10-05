@@ -36,6 +36,8 @@ struct TradeGoodsCategory {
     System::String textName;           // +0x10 TradeUI: the string in _ref28
 };
 static_assert(sizeof(TradeGoodsCategory) == 0x18, "TradeGoodsCategory stride 0x18");
+static_assert(offsetof(TradeGoodsCategory, rawMaterialFlags) == 0x0, "TradeGoodsCategory::rawMaterialFlags");
+static_assert(offsetof(TradeGoodsCategory, _pad04) == 0x4, "TradeGoodsCategory::_pad04");
 static_assert(offsetof(TradeGoodsCategory, spriteName) == 0x08, "TradeGoodsCategory +0x08");
 static_assert(offsetof(TradeGoodsCategory, textName) == 0x10, "TradeGoodsCategory +0x10");
 
@@ -60,6 +62,11 @@ struct TradeMerchant {
     uint8_t                _pad44[4];        // +0x44
 };
 static_assert(sizeof(TradeMerchant) == 0x48, "TradeMerchant stride 0x48");
+static_assert(offsetof(TradeMerchant, stringTable) == 0x0, "TradeMerchant::stringTable");
+static_assert(offsetof(TradeMerchant, _pad1C) == 0x1C, "TradeMerchant::_pad1C");
+static_assert(offsetof(TradeMerchant, goodsCap) == 0x2C, "TradeMerchant::goodsCap");
+static_assert(offsetof(TradeMerchant, field_0x30Cap) == 0x3C, "TradeMerchant::field_0x30Cap");
+static_assert(offsetof(TradeMerchant, _pad44) == 0x44, "TradeMerchant::_pad44");
 static_assert(offsetof(TradeMerchant, name) == 0x08, "TradeMerchant +0x08");
 static_assert(offsetof(TradeMerchant, field_0x10) == 0x10, "TradeMerchant +0x10");
 static_assert(offsetof(TradeMerchant, fullPriceFlags) == 0x14, "TradeMerchant +0x14");
@@ -80,6 +87,7 @@ struct TradeTier {
     int32_t stockDivisor;      // +0x10 divides ValueDescription::_baseValue
 };
 static_assert(sizeof(TradeTier) == 0x14, "TradeTier stride 0x14");
+static_assert(offsetof(TradeTier, populationLimit) == 0x0, "TradeTier::populationLimit");
 static_assert(offsetof(TradeTier, delayBase) == 0x04, "TradeTier +0x04");
 static_assert(offsetof(TradeTier, delayTolerance) == 0x08, "TradeTier +0x08");
 static_assert(offsetof(TradeTier, rollDivisor) == 0x0c, "TradeTier +0x0c");

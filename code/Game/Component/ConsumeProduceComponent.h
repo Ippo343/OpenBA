@@ -46,6 +46,8 @@ public:
 };
 
 static_assert(sizeof(ConsumeProduceComponent) == 0x70, "ConsumeProduceComponent is 0x70 (create 0x140032300)");
+static_assert(offsetof(ConsumeProduceComponent, _pad54) == 0x54, "ConsumeProduceComponent::_pad54");
+static_assert(offsetof(ConsumeProduceComponent, _pad6C) == 0x6C, "ConsumeProduceComponent::_pad6C");
 static_assert(alignof(ConsumeProduceComponent) == 8, "ConsumeProduceComponent alignment");
 static_assert(offsetof(ConsumeProduceComponent, consumeResourceId) == 0x50, "ConsumeProduceComponent +0x50");
 static_assert(offsetof(ConsumeProduceComponent, consumeRates) == 0x58, "ConsumeProduceComponent +0x58");

@@ -51,6 +51,7 @@ public:
 };
 
 static_assert(sizeof(ComponentDescription) == 0x38, "ComponentDescription is 0x38 (create 0x140031f30 MemAlloc(0x38))");
+static_assert(offsetof(ComponentDescription, _pad24) == 0x24, "ComponentDescription::_pad24");
 static_assert(alignof(ComponentDescription) == 8, "ComponentDescription alignment");
 static_assert(offsetof(ComponentDescription, _category)     == 0x20, "ComponentDescription::_category @ +0x20");
 static_assert(offsetof(ComponentDescription, _subDescs)     == 0x28, "ComponentDescription::_subDescs @ +0x28");

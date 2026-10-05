@@ -57,6 +57,8 @@ public:
 };
 
 static_assert(sizeof(PopulationDescription) == 0x58, "PopulationDescription is 0x58 (create 0x14000afb0 MemAlloc(0x58))");
+static_assert(offsetof(PopulationDescription, _pad39) == 0x39, "PopulationDescription::_pad39");
+static_assert(offsetof(PopulationDescription, _pad49) == 0x49, "PopulationDescription::_pad49");
 static_assert(alignof(PopulationDescription) == 8, "PopulationDescription alignment");
 static_assert(offsetof(PopulationDescription, _name) == 0x20, "PopulationDescription::_name @ +0x20");
 static_assert(offsetof(PopulationDescription, _habitatBlock) == 0x28, "PopulationDescription::_habitatBlock @ +0x28");

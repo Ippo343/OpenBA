@@ -34,6 +34,7 @@ struct BuildCost {
     uint8_t               _pad0c[4];  // +0x0c
 };
 static_assert(sizeof(BuildCost) == 0x10, "BuildCost stride 0x10 (0x140109140)");
+static_assert(offsetof(BuildCost, _pad0c) == 0xC, "BuildCost::_pad0c");
 static_assert(offsetof(BuildCost, material) == 0x00, "BuildCost::material @ +0x00");
 static_assert(offsetof(BuildCost, quantity) == 0x08, "BuildCost::quantity @ +0x08");
 
@@ -61,6 +62,7 @@ public:
 };
 
 static_assert(sizeof(BuildDescription) == 0x38, "BuildDescription is 0x38 (create 0x14002f320 MemAlloc(0x38))");
+static_assert(offsetof(BuildDescription, _pad35) == 0x35, "BuildDescription::_pad35");
 static_assert(alignof(BuildDescription) == 8, "BuildDescription alignment");
 static_assert(offsetof(BuildDescription, _costs) == 0x20, "BuildDescription::_costs @ +0x20");
 static_assert(offsetof(BuildDescription, _costCount) == 0x28, "BuildDescription::_costCount @ +0x28");

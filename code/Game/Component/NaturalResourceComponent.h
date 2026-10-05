@@ -48,6 +48,7 @@ public:
 };
 
 static_assert(sizeof(NaturalResourceComponent) == 0x30, "NaturalResourceComponent is 0x30 (create 0x140036550)");
+static_assert(offsetof(NaturalResourceComponent, _pad2E) == 0x2E, "NaturalResourceComponent::_pad2E");
 static_assert(alignof(NaturalResourceComponent) == 8, "NaturalResourceComponent alignment");
 static_assert(offsetof(NaturalResourceComponent, resourceScale) == 0x28, "");
 static_assert(offsetof(NaturalResourceComponent, mature) == 0x2C, "");

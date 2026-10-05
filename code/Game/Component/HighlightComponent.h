@@ -63,6 +63,8 @@ public:
 };
 
 static_assert(sizeof(HighlightComponent) == 0x128, "HighlightComponent is 0x128 (create 0x140006e40)");
+static_assert(offsetof(HighlightComponent, _pad11D) == 0x11D, "HighlightComponent::_pad11D");
+static_assert(offsetof(HighlightComponent, _pad124) == 0x124, "HighlightComponent::_pad124");
 static_assert(alignof(HighlightComponent) == 8, "HighlightComponent alignment");
 static_assert(offsetof(HighlightComponent, edgeMeshInstance) == 0x28, "");
 static_assert(offsetof(HighlightComponent, fieldF8) == 0xF8, "");

@@ -134,6 +134,7 @@ struct alignas(A) Bytes {
 
 // The named strides, for the call sites where the element type IS known.
 struct Ptr8 { void*    v = nullptr; };   // stride 0x08, align 8 — Object ptr / InternalBasePtr slot
+static_assert(offsetof(Ptr8, v) == 0x0, "Ptr8::v");
 struct I32  { int32_t  v = 0; };         // stride 0x04, align 4
 struct U8   { uint8_t  v = 0; };         // stride 0x01, align 1
 struct U16  { uint16_t v = 0; };         // stride 0x02, align 2

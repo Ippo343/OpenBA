@@ -46,6 +46,7 @@ public:
 };
 
 static_assert(sizeof(AmbientEmitterDescription) == 0x38, "AmbientEmitterDescription is 0x38 (create 0x140001510 MemAlloc(0x38))");
+static_assert(offsetof(AmbientEmitterDescription, _pad21) == 0x21, "AmbientEmitterDescription::_pad21");
 static_assert(alignof(AmbientEmitterDescription) == 8, "AmbientEmitterDescription alignment");
 static_assert(offsetof(AmbientEmitterDescription, _enabled) == 0x20, "AmbientEmitterDescription::_enabled @ +0x20");
 static_assert(offsetof(AmbientEmitterDescription, _emitters) == 0x28, "AmbientEmitterDescription::_emitters @ +0x28");

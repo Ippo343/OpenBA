@@ -46,6 +46,7 @@ public:
 };
 
 static_assert(sizeof(DestroyDescription) == 0x38, "DestroyDescription is 0x38 (create 0x140033c30 MemAlloc(0x38))");
+static_assert(offsetof(DestroyDescription, _pad34) == 0x34, "DestroyDescription::_pad34");
 static_assert(alignof(DestroyDescription) == 8, "DestroyDescription alignment");
 static_assert(offsetof(DestroyDescription, _replaceEntity) == 0x20, "DestroyDescription::_replaceEntity @ +0x20");
 static_assert(offsetof(DestroyDescription, _damagedSkin) == 0x28, "DestroyDescription::_damagedSkin @ +0x28");

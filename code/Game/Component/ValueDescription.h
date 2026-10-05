@@ -49,6 +49,7 @@ public:
 };
 
 static_assert(sizeof(ValueDescription) == 0x50, "ValueDescription is 0x50 (create 0x14000faa0 MemAlloc(0x50))");
+static_assert(offsetof(ValueDescription, _pad4c) == 0x4C, "ValueDescription::_pad4c");
 static_assert(alignof(ValueDescription) == 8, "ValueDescription alignment");
 static_assert(offsetof(ValueDescription, _sprite) == 0x20, "ValueDescription::_sprite @ +0x20");
 static_assert(offsetof(ValueDescription, _name) == 0x28, "ValueDescription::_name @ +0x28");

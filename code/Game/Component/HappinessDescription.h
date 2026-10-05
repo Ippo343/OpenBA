@@ -45,6 +45,7 @@ public:
 };
 
 static_assert(sizeof(HappinessDescription) == 0x30, "HappinessDescription is 0x30 (create 0x140005c10 MemAlloc(0x30))");
+static_assert(offsetof(HappinessDescription, _pad26) == 0x26, "HappinessDescription::_pad26");
 static_assert(alignof(HappinessDescription) == 8, "HappinessDescription alignment");
 static_assert(offsetof(HappinessDescription, _happinessType) == 0x20, "HappinessDescription::_happinessType @ +0x20");
 static_assert(offsetof(HappinessDescription, _needsWorkers) == 0x24, "HappinessDescription::_needsWorkers @ +0x24");

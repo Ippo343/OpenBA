@@ -98,6 +98,8 @@ public:
 };
 
 static_assert(sizeof(DestroyComponent) == 0x68, "DestroyComponent is 0x68 (create 0x140033bc0)");
+static_assert(offsetof(DestroyComponent, _pad52) == 0x52, "DestroyComponent::_pad52");
+static_assert(offsetof(DestroyComponent, _pad5C) == 0x5C, "DestroyComponent::_pad5C");
 static_assert(alignof(DestroyComponent) == 8, "DestroyComponent alignment");
 static_assert(offsetof(DestroyComponent, _controller) == 0x28,
               "DestroyComponent's controller member at +0x28 (slot 17 0x140004080: LEA RAX,[RCX+0x28])");

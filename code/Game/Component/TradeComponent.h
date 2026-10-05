@@ -58,6 +58,8 @@ struct TradeMerchantOrder {
     int32_t                goodsCap;       // +0x1c
 };
 static_assert(sizeof(TradeMerchantOrder) == 0x20, "TradeMerchantOrder stride 0x20 (0x14000e760)");
+static_assert(offsetof(TradeMerchantOrder, merchantName) == 0x0, "TradeMerchantOrder::merchantName");
+static_assert(offsetof(TradeMerchantOrder, _pad0C) == 0xC, "TradeMerchantOrder::_pad0C");
 static_assert(offsetof(TradeMerchantOrder, orderKind) == 0x08, "TradeMerchantOrder +0x08");
 static_assert(offsetof(TradeMerchantOrder, goods) == 0x10, "TradeMerchantOrder +0x10");
 static_assert(offsetof(TradeMerchantOrder, goodsCount) == 0x18, "TradeMerchantOrder +0x18");
@@ -71,6 +73,7 @@ struct TradeBuyOrder {
     int32_t  amount;             // +0x08 units wanted (0x140059ad0)
 };
 static_assert(sizeof(TradeBuyOrder) == 0xc, "TradeBuyOrder stride 0xc (0x14000e8d0)");
+static_assert(offsetof(TradeBuyOrder, rawMaterialFlags) == 0x0, "TradeBuyOrder::rawMaterialFlags");
 static_assert(offsetof(TradeBuyOrder, categoryIndex) == 0x04, "TradeBuyOrder +0x04");
 static_assert(offsetof(TradeBuyOrder, amount) == 0x08, "TradeBuyOrder +0x08");
 
@@ -82,6 +85,7 @@ struct TradeManifestLine {
     int32_t               stock;  // +0x0c units the merchant has
 };
 static_assert(sizeof(TradeManifestLine) == 0x10, "TradeManifestLine stride 0x10 (0x14000f090)");
+static_assert(offsetof(TradeManifestLine, good) == 0x0, "TradeManifestLine::good");
 static_assert(offsetof(TradeManifestLine, price) == 0x08, "TradeManifestLine +0x08");
 static_assert(offsetof(TradeManifestLine, stock) == 0x0c, "TradeManifestLine +0x0c");
 
@@ -99,6 +103,9 @@ struct TradeResourceNode {
     uint8_t               _pad2C[4];  // +0x2c
 };
 static_assert(sizeof(TradeResourceNode) == 0x30, "TradeResourceNode is MemAlloc(0x30)");
+static_assert(offsetof(TradeResourceNode, resource) == 0x0, "TradeResourceNode::resource");
+static_assert(offsetof(TradeResourceNode, _pad0C) == 0xC, "TradeResourceNode::_pad0C");
+static_assert(offsetof(TradeResourceNode, _pad2C) == 0x2C, "TradeResourceNode::_pad2C");
 static_assert(offsetof(TradeResourceNode, quantity) == 0x08, "TradeResourceNode +0x08");
 static_assert(offsetof(TradeResourceNode, parent) == 0x10, "TradeResourceNode +0x10");
 static_assert(offsetof(TradeResourceNode, left) == 0x18, "TradeResourceNode +0x18");
@@ -181,6 +188,7 @@ public:
 };
 
 static_assert(sizeof(TradeComponent) == 0xa8, "TradeComponent is 0xa8 (create 0x14000db60)");
+static_assert(offsetof(TradeComponent, _pad72) == 0x72, "TradeComponent::_pad72");
 static_assert(alignof(TradeComponent) == 8, "TradeComponent alignment");
 static_assert(offsetof(TradeComponent, tradeState) == 0x28, "TradeComponent +0x28");
 static_assert(offsetof(TradeComponent, tradeId) == 0x2c, "TradeComponent +0x2c (ctor 0x14005c46a)");

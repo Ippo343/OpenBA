@@ -94,6 +94,7 @@ protected:
 };
 
 static_assert(sizeof(Component) == 0x28, "Component is 0x28 bytes (0x10 Internal + 0x18)");
+static_assert(offsetof(Component, _pad24) == 0x24, "Component::_pad24");
 static_assert(offsetof(Component, _entity)      == 0x10, "Component +0x10 entity (0x1401188de)");
 static_assert(offsetof(Component, _description) == 0x18, "Component +0x18 (0x1401188e2)");
 static_assert(offsetof(Component, _flags)       == 0x20, "Component +0x20 flags = 0x80 (0x1401188e6)");

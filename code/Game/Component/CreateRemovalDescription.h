@@ -50,6 +50,8 @@ public:
 };
 
 static_assert(sizeof(CreateRemovalDescription) == 0x48, "CreateRemovalDescription is 0x48 (create 0x140032b70 MemAlloc(0x48))");
+static_assert(offsetof(CreateRemovalDescription, _pad21) == 0x21, "CreateRemovalDescription::_pad21");
+static_assert(offsetof(CreateRemovalDescription, _pad44) == 0x44, "CreateRemovalDescription::_pad44");
 static_assert(alignof(CreateRemovalDescription) == 8, "CreateRemovalDescription alignment");
 static_assert(offsetof(CreateRemovalDescription, _b20) == 0x20, "CreateRemovalDescription::_b20 @ +0x20");
 static_assert(offsetof(CreateRemovalDescription, _refs) == 0x28, "CreateRemovalDescription::_refs @ +0x28");
