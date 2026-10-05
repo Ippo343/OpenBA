@@ -2928,13 +2928,16 @@ void RtColl_ArrayReserve_18005f980(void* a) {
 // records: retail's 0x180028d9e is a CALL to that address and the registry is
 // the door every other caller of it uses (runtime/src/io/modification.cpp and
 // runtime/src/collection/avl_trees.cpp both reach 0x1800067d0 the same way).
-void AssignModExternal18(uint8_t* d, const uint8_t* s) {
-    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
+// The element is RtIO::ReloadEntry (types/io/Modification.h).
+static void ReloadEntryAssign(RtIO::ReloadEntry* d, const RtIO::ReloadEntry* s) {
+    d->typeId = s->typeId;
     /* +0x04..+0x07 deliberately not copied — retail's first store is a DWORD */
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
+    d->external = s->external;
 
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(d + 0x10),   // 0x1800067d0  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
-                                         reinterpret_cast<const RtSystem::Filename*>(s + 0x10));  // LEFT: element {uint32, External*, Filename} has no type in any header (R-IO Modification)
+    RtSystem::RtSystem_Filename_CtorCopy(&d->file, &s->file);   // 0x1800067d0
+}
+void AssignModExternal18(uint8_t* d, const uint8_t* s) {
+    AssignAs<RtIO::ReloadEntry, &ReloadEntryAssign>(d, s);
 }
 
 // The two destroy ranges. Both are ported AND registered in array_destroy.cpp

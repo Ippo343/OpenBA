@@ -197,27 +197,10 @@ namespace {
 using rtpathid::PathIdNode;
 using rtpathid::PathIdSet;
 
-// The reload queue's element — `{uint32 typeId, External*, Filename}`, stride
-// 0x18, built at [RBP-0x71]. THE FOUR BYTES AT +0x04 ARE NEVER WRITTEN by
-// anybody (retail's first store is a DWORD and the next is at +0x08); the
-// matching `kSpec_ModExternal18` in array.cpp declares the same window.
-// `file` STAYS the POD (`RtSystem::Filename`), not `System::Filename`: the
-// array holding these is grown and appended to by `queueAppend`
-// (0x180028cd0), a raw byte-copy resolve door with no idea what a C++ object
-// is, so a member with a destructor would be double-released the moment that
-// copy and this struct's own local both thought they owned the buffer. Retail
-// itself treats it that way -- see the ENDGAME B.3.1 note on the queueing
-// code below, which promotes `entry.file` to the class only for the span
-// where IT constructs and releases it.
-struct ReloadEntry {
-    uint32_t             typeId;    // +0x00
-    uint32_t             _hole04;   // +0x04 — NEVER WRITTEN
-    ::Object::External*  external;  // +0x08
-    Filename             file;      // +0x10
-};
-static_assert(offsetof(ReloadEntry, external) == 0x08, "0x1800af058 MOV [RBP-0x69],R14");
-static_assert(offsetof(ReloadEntry, file)     == 0x10, "0x1800af064 MOV [RBP-0x61],R13");
-static_assert(sizeof(ReloadEntry) == 0x18, "0x180028d2d stride, cap*3*8");
+// The reload queue's element is `RtIO::ReloadEntry` (types/io/Modification.h,
+// beside `Mod`): `file` stays the POD -- see the ENDGAME B.3.1 note on the
+// queueing code below, which promotes `entry.file` to the class only for the
+// span where IT constructs and releases it.
 
 struct ReloadArray {
     ReloadEntry* data;      // [RSP+0x30]
