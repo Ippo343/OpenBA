@@ -363,11 +363,11 @@ extern "C" void PlayerTileRender_BuildRecords_1380(
                     isRoad = roadMap[flatIdx] == '.';
                 }
                 uint32_t code = param_7;
-                if (param_8->_placeCount > 0) {
+                if (param_8->_placeArray._size > 0) {
                     const char* codeMap = param_9->_data;
                     if (codeMap != nullptr && param_9->GetLength() != 0) {
                         // data - 0xc0 + c*4: the code array indexed by the char - '0'.
-                        code = param_8->_placeArray[(int64_t)codeMap[flatIdx] - 0x30];
+                        code = param_8->_placeArray._data[(int64_t)codeMap[flatIdx] - 0x30];
                     }
                 }
 
