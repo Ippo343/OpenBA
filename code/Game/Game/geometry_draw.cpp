@@ -115,12 +115,10 @@ WorldGeometry::~WorldGeometry() {
     FreeHeader(_contourIndices);                            // +0x1b0
     FreeHeader(_contourVertices);                           // +0x1a0
 
-    // ~IndexBuffer / ~VertexBuffer are `JMP PlatformDestruct` in retail
-    // (0x1800f3480 / 0x1800f55e0).
-    _waterIndexBuffer.PlatformDestruct();                   // +0x180
-    _waterVertexBuffer.PlatformDestruct();                  // +0x160
-    _indexBuffer.PlatformDestruct();                        // +0x120
-    _vertexBuffer.PlatformDestruct();                       // +0x100
+    // +0x180 / +0x160 / +0x120 / +0x100: the four buffers are destroyed by
+    // their own ~IndexBuffer / ~VertexBuffer (0x1800f3480 / 0x1800f55e0) after
+    // this body; retail runs them here, before the +0xe8 tree and +0xd8 array
+    // (known_port_issues row 715).
 
     // +0xe8: the dirty-chunk tree — free both subtrees, then the root node.
     if (AvlNode28* root = _dirtyTreeRoot) {
