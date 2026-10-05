@@ -1801,7 +1801,7 @@ const ArraySpec kSpec_GraphSeries = {             // 0x1800417d0
 //           this body computes exactly those two numbers itself).
 static void ShaderParamAssign(Video::ShaderProgram::Parameter* d,
                               const Video::ShaderProgram::Parameter* s) {
-    AdoptString(d->name, s->name);
+    AdoptString(d->name._data, s->name._data);
     d->dest     = s->dest;                  // Parameter::dest
     d->internal = s->internal;              // Parameter::internal (a BYTE)
 }
@@ -1809,7 +1809,7 @@ void AssignShaderParam(uint8_t* d, const uint8_t* s) {
     AssignAs<Video::ShaderProgram::Parameter, &ShaderParamAssign>(d, s);
 }
 static void ShaderParamInit(Video::ShaderProgram::Parameter* d) {
-    d->name     = nullptr;                  // +0x00..+0x0c zeroed
+    d->name._data = nullptr;                // +0x00..+0x0c zeroed
     d->dest     = 0;
     d->internal = false;
 }

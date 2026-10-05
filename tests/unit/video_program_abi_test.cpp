@@ -172,13 +172,12 @@ UNIT_TEST(video_shader_parameter_trivial) {
     CHECK_EQ(offsetof(Video::ShaderProgram::Parameter, dest),     (size_t)0x08);
     CHECK_EQ(offsetof(Video::ShaderProgram::Parameter, internal), (size_t)0x0c);
 
-    CHECK((std::is_trivially_destructible<Video::ShaderProgram::Parameter>::value));
-    CHECK((std::is_trivially_copyable<Video::ShaderProgram::Parameter>::value));
-
-    // The consequence, read off the array spec the real member consults.
-    const rtcoll::ArraySpec* spec =
-        Collection::Array<Video::ShaderProgram::Parameter>::Spec();
-    CHECK(spec->destroy == nullptr);
+    // B.4 wave Y: `name` is a System::String now; the members name retail's
+    // row, whose destroy is the one String release (0x18004fed0).
+    CHECK(!(std::is_trivially_destructible<Video::ShaderProgram::Parameter>::value));
+    const rtcoll::ArraySpec* spec = decltype(Video::ShaderProgram::_textures)::Spec();
+    CHECK(spec == &rtcoll::kSpec_ShaderParam);
+    CHECK(spec->destroy != nullptr);
     CHECK_EQ(spec->stride, (uint32_t)0x10);
 
     // `VertexLayout::Element` is the same arrangement one class over: its `name`
