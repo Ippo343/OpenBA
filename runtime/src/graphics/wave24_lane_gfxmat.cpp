@@ -360,7 +360,7 @@ namespace {
 // String is viewed at the field. (B.4 acceptance MOD: `MaterialConstant::name`
 // is the real String and serializes by name.)
 inline void SerString(void* field, IO::Serializer& ser) {
-    static_cast<System::String*>(field)->Serialize(ser);   // LEFT: audit WORK, not executed this pass (CLASS unit Graphics::MaterialInstance (doable-with:MaterialTexture::name,Ma); blocker; H5 the caller's field is raw storage of a System::String (MaterialTexture::name / MaterialConstant::_head: a String member changes the element array's lifecycle rows)
+    static_cast<System::String*>(field)->Serialize(ser);   // LEFT: its one caller passes &MaterialTexture::name, a char* (a System::String member makes the 0x10 texture element non-trivial and changes MaterialInstance::_textures' spec rows: retail's 0x180061480 grow / copy / free to be read first)
 }
 
 }  // namespace
