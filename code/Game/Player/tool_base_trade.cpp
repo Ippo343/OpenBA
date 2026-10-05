@@ -172,9 +172,11 @@ void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* k
     ComponentEntity* key = *keyRef;
 
     // First pass: search; if an existing node matches the key, update in place.
+    // Retail's walk is 0x14002c690's (0x140102e6d `CMP [key],[node]; JC` to +0x20,
+    // 0x140102e7e `CMP [node],[key]; JNC` to the update, else +0x28).
     while (cur != nullptr) {
         if (key < cur->key.Get()) {
-            cur = cur->right;
+            cur = cur->left;
         } else {
             if (key <= cur->key.Get()) {
                 // exact match -> update flag + payloads, no structural change.
@@ -183,7 +185,7 @@ void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* k
                 cur->y = y;
                 return;
             }
-            cur = cur->left;
+            cur = cur->right;
         }
     }
 
