@@ -147,64 +147,13 @@ inline bool IsSaving(const IO::Stream* stream) {
 // heap, plus the critical section retail's own Collection code takes.
 namespace {
 
-// Event entry {uint id @0, String text @8, int a,b,c,d,e @0x10..0x23},
-// stride 0x28, align 8. Copy-construct writes +0x00..+0x03 and +0x08..+0x23;
-// init writes the same bytes. +0x04..+0x07 (String alignment pad) and
-// +0x24..+0x27 are touched by NEITHER arm — the `unwritten` pair names the
-// trailing hole; +0x04..+0x07 is the second, non-contiguous one. The String
-// copy makes byteCopy=false and the String dtor is the destroy.
-// The element is EventLogEntry (Game/EventLog.h), reached through
-// Collection.h's element adapters.
-void CopyEventEntry(EventLogEntry* dst, const EventLogEntry* src) {
-    dst->color = src->color;
-    new (&dst->text) System::String(src->text);
-    dst->eventType = src->eventType;   // +0x10..+0x23: five ints (was one 20-byte copy)
-    dst->severity  = src->severity;
-    dst->tileIndex = src->tileIndex;
-    dst->iconIndex = src->iconIndex;
-    dst->popup     = src->popup;
-}
-// ⚠ Seed values are load-bearing: id=-1, c=d=e=-1, a=b=0.
-void ZeroEventEntry(EventLogEntry* dst) {
-    dst->color = 0xffffffff;
-    dst->text._data = nullptr;         // null String (retail: one qword 0)
-    dst->eventType = 0;                // a=b=0 (retail: one qword store, H7)
-    dst->severity  = 0;
-    dst->tileIndex = -1;               // c=d=-1 (retail: one qword store, H7)
-    dst->iconIndex = -1;
-    dst->popup     = -1;               // e=-1
-}
-void DestroyEventEntries(EventLogEntry* elems, int count) {
-    for (int i = 0; i < count; i++)
-        elems[i].text.~String();
-}
-void AssignEventEntry(uint8_t* dst, const uint8_t* src) {
-    rtcoll::AssignAs<EventLogEntry, &CopyEventEntry>(dst, src);
-}
-void InitEventEntry(uint8_t* dst) {
-    rtcoll::InitAs<EventLogEntry, &ZeroEventEntry>(dst);
-}
-void DestroyEventEntry(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<EventLogEntry, &DestroyEventEntries>(ignoredThis, base, count);
-}
-const rtcoll::ArraySpec kSpec_EventEntry = {             // exe 0x1400199a0
-    "Array<EventLogEntry>", 0x28, 8,
-    &AssignEventEntry, &InitEventEntry, &DestroyEventEntry, false,
-    /*assign unwritten*/ 0x24, 0x28,   // plus +0x04..+0x07
-    /*init   unwritten*/ 0x24, 0x28,   // plus +0x04..+0x07
-    /*seed zero       */ 0,    0 };
-using EventEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                          Collection::ExplicitSpec<&kSpec_EventEntry>>;
+// The event entry's row is EventLogRows::kSpec_EventEntry (eventlog.cpp):
+// one element for the grow 0x140019b70, this resize and ~Array 0x14000a8a0.
 
 // (The camera-view row, 0x14002e000, is PlayerToolManager::cameraViews' own:
 // PlayerToolManagerRows::kSpec_CamView, PlayerToolManager.h.)
 
 }  // namespace
-
-extern "C" void EventLog_Resize_199a0(void* hdrVoid, int newCount) {
-    // B.3.2 bridge: the event notifier's +0x18 header is still raw bytes.
-    reinterpret_cast<EventEntryArray*>(hdrVoid)->SetSize(newCount);   // LEFT: audit DEFERRED (two specs + memset; see eventlog.cpp's grow line): H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (eventlog.cpp's, grow 0x140019b70; this one, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
-}
 
 // ============================================================
 // 0x1400952c0 — event-log serialize (GUL+0x138 object)
@@ -215,15 +164,15 @@ void EventLog::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
     ser.Serialize(6, field_0x10, nullptr);
     if (ser.GetVersion() > 0) {
-        int total = entryCount;
+        int total = entries.GetSize();
         int capped = total > 200 ? 200 : total;
         int skip = total - capped;
         if (skip < 0) skip = 0;
         ser.Serialize(capped, nullptr);
         if (!IsSaving(&stream)) {
-            EventLog_Resize_199a0(&entries, capped);
+            entries.SetSize(capped);   // the resize, 0x1400199a0
         }
-        for (int i = skip; i < entryCount; i++) {
+        for (int i = skip; i < entries.GetSize(); i++) {
             EventLogEntry& e = entries[i];
             // LEFT: retail serializes the colour through the uint overload
             // (0x1400952c0); the tree's int overload is kept (an H8 question).

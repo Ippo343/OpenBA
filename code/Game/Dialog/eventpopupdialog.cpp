@@ -39,7 +39,7 @@ void EventPopupDialog::OnOpened() {
     // (Game/EventLog.h: +0x18 the entry array; the entry's +0x08 text and +0x20,
     // EventLogEntry::popup, the pop-up's icon.)
     EventLog* eventMgr = GameUpdateLoop::_singleton->m_eventNotifier;
-    EventLogEntry* eventArray = eventMgr->entries;
+    EventLogEntry* eventArray = eventMgr->entries.GetData();
     const EventLogEntry* eventEntry = eventArray + eventIndex;
 
     // Format sprite name "EventIcon<iconIdx>"

@@ -470,8 +470,8 @@ void DiseaseComponent::Infect() {
             {},            // _pad24
         };
 
-        int count = eventLog->entryCount;
-        EventLog_ArrayGrow_Reg(&eventLog->entries, count + 1, &entry);
+        int count = eventLog->entries.GetSize();
+        eventLog->entries.SetSize(count + 1, entry);   // the grow, 0x140019b70
     }
 
     // Drop to 1x speed if the settings' auto-slow byte (+0x17) is on. Retail

@@ -2069,7 +2069,7 @@ void GameUpdateLoop::Shutdown() {
     // EventNotifier
     if (m_eventNotifier != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EventNotifier...\n");
-        EventLog_EventArray_Destroy(&m_eventNotifier->entries);   // 0x14000a8a0
+        m_eventNotifier->~EventLog();   // ~Array 0x14000a8a0 on +0x18 (0x140097ab0)
         System::MemoryAllocator::MemFree(m_eventNotifier);
     }
 
