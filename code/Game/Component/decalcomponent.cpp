@@ -295,7 +295,7 @@ void DecalComponent::OnAdded() {
     if (!decalDesc->_materials) {
         return;
     }
-    void* material = decalDesc->_materials[decalState];
+    Graphics::MaterialInstance* material = decalDesc->_materials[decalState];
 
     uint8_t  tiledFlag = decalDesc->_tiled;
     uint8_t  p19       = decalDesc->_flagB;
@@ -307,7 +307,7 @@ void DecalComponent::OnAdded() {
         decalSys, minX, minY,
         width - 1 + minX, height - 1 + minY,
         static_cast<uint8_t>(alpha), rotation,
-        reinterpret_cast<Graphics::MaterialInstance*>(material),   // LEFT: Component/DecalDescription.h _materials is void** (its serializer takes void**)
+        material,
         tiledFlag, p10,
         FloatBits(uv.u0), FloatBits(uv.v0), FloatBits(uv.u1), FloatBits(uv.v1),
         '\0', 0, 0, p19);
