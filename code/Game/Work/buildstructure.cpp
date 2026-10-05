@@ -350,7 +350,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
         if (candidateCell != 0) {
             map->FillZones();   // 0x14009c480; retail sets RCX only (0x1400e532a / 54ea / 556c)
 
-            const MapCell* gridData = map->cells;
+            const MapCell* gridData = map->cells.GetData();
             if (CheckCellConnectivity(gridData, buildingCell, candidateCell)) {
                 // Found accessible point -- get exact position
                 float bestPos[3];
@@ -378,13 +378,13 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
                     // Check connectivity (first pass)
                     map->FillZones();   // 0x14009c480; retail sets RCX only (0x1400e532a / 54ea / 556c)
-                    gridData = map->cells;
+                    gridData = map->cells.GetData();
                     if (!CheckCellConnectivity(gridData, buildingCell, testCell))
                         continue;
 
                     // Check connectivity (second pass after re-invalidation)
                     map->FillZones();   // 0x14009c480; retail sets RCX only (0x1400e532a / 54ea / 556c)
-                    gridData = map->cells;
+                    gridData = map->cells.GetData();
                     if (!CheckCellConnectivity(gridData, buildingCell, testCell))
                         continue;
 

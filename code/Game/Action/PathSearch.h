@@ -129,6 +129,24 @@ struct PathCellQueue {
     uint8_t  _pad14[4];          // +0x14
     PathNodePool pool;           // +0x18
 
+    // The ctor Map's ctor 0x14009ee70 inlines (0x14009eec5..eee3): tail, head,
+    // count (a dword; +0x14 unwritten), the pool's chunks and free list, one qword
+    // of 8 over growCount / stride (H7: two stores), one qword 0 over total /
+    // inUse, a dword 0 over available (+0x24 unwritten). The dtor is 0x14001a5f0
+    // (Release), which Map's dtor runs on the member after its body (0x14009ee26).
+    // RegionGraph's queue (+0xC8) is never built or destroyed by C++: RegionGraph
+    // is MemAlloc + Init (0x1400a8670) and ReleaseStorage (0x1400a8570) + MemFree.
+    PathCellQueue() : tail(nullptr), head(nullptr), count(0) {
+        pool.chunks = nullptr;
+        pool.freeList = nullptr;
+        pool.growCount = 8;
+        pool.stride = 0;
+        pool.total = 0;
+        pool.inUse = 0;
+        pool.available = 0;
+    }
+    ~PathCellQueue() { Release(); }
+
     // Take a node from the pool (growing it first when the free list is empty) and
     // initialise it: value, next = prev = 0. One retail body per element
     // (specialised below): 0x14001a9b0 (Map's cell queue), 0x14001df40 (the region
@@ -170,7 +188,6 @@ static_assert(offsetof(MapCellQueue::Node, next) == 0x08, "queue node next @ +0x
 static_assert(offsetof(MapCellQueue::Node, prev) == 0x10, "queue node prev @ +0x10");
 static_assert(sizeof(RegionCellQueue) == 0x40, "the pooled queue is 0x40 (RegionGraph +0xC8)");
 static_assert(sizeof(RegionCellQueue::Node) == 0x18, "queue node stride 0x18 (0x14001df40)");
-static_assert(std::is_trivially_copyable<MapCellQueue>::value, "raw record");
 
 // ---------------------------------------------------------------------------
 // The A* open set: an AVL tree ordered by (fcost, seq), nodes from its own pool.

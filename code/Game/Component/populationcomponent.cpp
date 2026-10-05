@@ -178,7 +178,7 @@ void PopulationComponent::ScanHabitability(Map* map, int cellIndex) {
         int r = rowStart;
         do {
             if (colStart < blockDim + colStart) {
-                const MapCell* tile = &map->cells[(int64_t)(map->size * r + colStart)];
+                const MapCell* tile = &map->cells.GetData()[(int64_t)(map->size * r + colStart)];
                 uint64_t remaining = (uint64_t)(unsigned int)((blockDim + colStart) - colStart);
                 do {
                     unsigned int bit = 1u << (tile->terrainType & 0x1f);

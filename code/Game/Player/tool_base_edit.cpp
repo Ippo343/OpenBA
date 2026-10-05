@@ -30,7 +30,7 @@
 // into the out InternalBasePtr (written raw, the slot zeroed first) and returned. If
 // both are null, the empty IBP (the ctor's null store).
 ComponentEntity** PlayerEdit_EntityAtCell_a0280(const Map* map, ComponentEntity** retIBP, int cellIndex) {
-    const MapCell* cell = &map->cells[cellIndex];
+    const MapCell* cell = &map->cells.GetData()[cellIndex];
     if (cell->blocker != nullptr) {
         *retIBP = nullptr;
         *retIBP = cell->blocker;

@@ -79,7 +79,7 @@ void CropFieldComponent::ValidateEntityRefs() {
         if (entry->state != 1) continue;
 
         int id = entry->cell;
-        ComponentEntity* obj = map->cells[(int64_t)id].occupant;   // cell +0x08
+        ComponentEntity* obj = map->cells.GetData()[(int64_t)id].occupant;   // cell +0x08
         bool keep = false;
         if (obj != nullptr) {
             if (obj->IsA(ComponentEntity::TypeId())) {
@@ -375,7 +375,7 @@ void CropFieldComponent::OnMessage(int message, void* /*data*/, uint32_t arg0, u
 
     const Map* const map = GameUpdateLoop::_singleton->m_game;   // +0xf8
     if (!map) return;
-    const MapCell* const grid = map->cells;
+    const MapCell* const grid = map->cells.GetData();
     if (!grid || !slots.data) return;
 
     CropSlot* slot = &slots.data[arg0];

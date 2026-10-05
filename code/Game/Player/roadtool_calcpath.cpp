@@ -89,7 +89,7 @@ T* FindDescription(const ComponentDescription* entity) {
 
 // The pending-road BST at Map +0xE8 (AvlNode28: key +0x00, left +0x10, right +0x18).
 bool PendingRoad(const Map* map, int cellIdx) {
-    const AvlNode28* node = map->field_0xE8;
+    const AvlNode28* node = map->field_0xE8.root;
     while (node) {
         int key = node->key;
         if (cellIdx < key)      node = node->left;
@@ -153,8 +153,8 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
                                                 uint32_t mapDescVal, ComponentDescription* roadDescExtra) {
     if (!mapGrid) return;
 
-    if (!mapGrid->cells) return;
-    MapCell* cell = &mapGrid->cells[(int)cellIdx];
+    if (!mapGrid->cells.GetData()) return;
+    MapCell* cell = &mapGrid->cells.GetData()[(int)cellIdx];
 
     // Only upgrade: bail unless the new road type outranks what is already there.
     if (!(roadType < cell->field_0x2A)) return;
@@ -168,7 +168,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     // (terrain bits 0/1 clear), currently roadless (0x2a == 0xff), and not already
     // pending in the BST.
     {
-        const MapCell* tb = &mapGrid->cells[(int)cellIdx];
+        const MapCell* tb = &mapGrid->cells.GetData()[(int)cellIdx];
         uint32_t terrainFlag = 1u << (tb->terrainType & 0x1f);
         if ((terrainFlag & 2) == 0 && (terrainFlag & 1) == 0 &&
             static_cast<int8_t>(tb->field_0x2A) == -1) {
@@ -208,9 +208,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     {
         int32_t key = static_cast<int32_t>(cellIdx);
         AvlNode28* inserted = nullptr;
-        // LEFT: Map +0xE8 / +0xF0 (block GAME-b's header) are the Set header
-        // {root, count} declared as two fields.
-        AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(&mapGrid->field_0xE8), &inserted, &key);  // LEFT: Map.h declares the +0xE8 / +0xF0 pending-road Set header {root, count} as two fields (header outside this set)
+        AvlInsert28(&mapGrid->field_0xE8, &inserted, &key);   // Map +0xE8, the Set header
     }
 
     cell->field_0x2A = roadType;
@@ -233,7 +231,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     Map* mapGrid = gameWorld->m_game;
     if (!mapGrid) return false;
-    const MapCell* terrainBase = mapGrid->cells;
+    const MapCell* terrainBase = mapGrid->cells.GetData();
     if (!terrainBase) return false;
 
     // Both endpoints must be road-legal terrain and unoccupied.

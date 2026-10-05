@@ -103,8 +103,8 @@ GatherRawMaterials::GatherRawMaterials(ComponentEntity* const* buildEntityIBP) :
         // delivered = matching site-storage slot (total - reserved), else 0.
         int delivered = 0;
         if (storage) {
-            int slotCount = storage->slotCount;
-            const StorageComponent::Item* slots = storage->storageSlots;
+            int slotCount = storage->storageSlots._size;
+            const StorageComponent::Item* slots = storage->storageSlots._data;
             if (slots) {
                 for (int s = 0; s < slotCount; s++) {
                     if (slots[s]._resource == matType) {

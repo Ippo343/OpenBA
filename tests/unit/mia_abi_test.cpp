@@ -112,7 +112,7 @@ UNIT_TEST(mia_component_member_offsets) {
     CHECK_EQ(offsetof(NomadComponent, gender),            (size_t)0x50);
     CHECK_EQ(offsetof(ResidenceComponent, heatRemaining),  (size_t)0x48);
     CHECK_EQ(offsetof(ResidenceComponent, residentSlots),  (size_t)0x50);
-    CHECK_EQ(offsetof(ResidenceComponent, residentSlotCount), (size_t)0x58);
+    CHECK_EQ(offsetof(ResidenceComponent, residentSlots) + offsetof(ResidenceComponent::FamilyArray, _size), (size_t)0x58);
 }
 
 // ===========================================================================

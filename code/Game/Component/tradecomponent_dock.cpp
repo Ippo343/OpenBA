@@ -450,7 +450,7 @@ void TradeComponent::AutoTrade() {
         // ── 1. what the post can afford: everything unreserved in its storage ──────
         int sellValue = 0;
         {
-            const int n = storage->slotCount;
+            const int n = storage->storageSlots._size;
             for (int j = 0; j < n; ++j) {
                 const StorageComponent::Item& item = storage->storageSlots[j];
                 const int have = item._count - item._reserve;
@@ -509,7 +509,7 @@ void TradeComponent::AutoTrade() {
         // ── 4. sell to cover `spent` ──────────────────────────────────────────────
         {
             int paid = 0;
-            for (int idx = 0; idx < storage->slotCount; ++idx) {
+            for (int idx = 0; idx < storage->storageSlots._size; ++idx) {
                 const StorageComponent::Item& entry = storage->storageSlots[idx];
                 ComponentDescription* const resource = entry._resource;
                 const int unit = TradeUI_GetResourcePrice_a520(this, resource);
@@ -533,18 +533,18 @@ void TradeComponent::AutoTrade() {
 
                     // Take the unit out of storage, by identity. An entry that reaches
                     // zero is erased and the tail shifted down.
-                    const int n = storage->slotCount;
+                    const int n = storage->storageSlots._size;
                     for (int j = 0; j < n; ++j) {
                         StorageComponent::Item& slot = storage->storageSlots[j];
                         if (slot._resource != resource) continue;
                         slot._count -= 1;
                         if (storage->storageSlots[j]._count == 0) {
-                            for (int m = j; m + 1 < storage->slotCount; ++m) {
+                            for (int m = j; m + 1 < storage->storageSlots._size; ++m) {
                                 StorageComponent::Item* p = &storage->storageSlots[m];
                                 if (!p) continue;
                                 p[0] = p[1];
                             }
-                            storage->slotCount -= 1;
+                            storage->storageSlots._size -= 1;
                         }
                         break;
                     }

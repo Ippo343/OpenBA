@@ -49,7 +49,7 @@ extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y
     Minimap* grid = gridPtr;
     grid->overlayDirty = 1;
     int width = grid->size;
-    uint32_t* cells = grid->overlayPixels;
+    uint32_t* cells = grid->overlayPixels._data;
     for (int row = 0; row < h; ++row) {
         for (int col = 0; col < w; ++col) {
             int64_t idx = (int64_t)(((int64_t)width - y - row - 1) * width + x + col);
@@ -140,7 +140,7 @@ static void MapComponent_PaintMinimapRect(MapComponent* mc, bool clear) {
     if (!clear && !desc->_claimOnAdd) return;
     if (GameUpdateLoop::_singleton == nullptr) return;
     Minimap* minimap = GameUpdateLoop::_singleton->m_imageCapture;   // +0x148
-    if (!minimap || !minimap->overlayPixels) return;  // overlay array not built yet
+    if (!minimap || !minimap->overlayPixels._data) return;  // overlay array not built yet
     int width = minimap->size;
     int x = static_cast<int16_t>(mc->tileX0), y = static_cast<int16_t>(mc->tileY0);
     int w = static_cast<int16_t>(mc->tileX1), h = static_cast<int16_t>(mc->tileY1);

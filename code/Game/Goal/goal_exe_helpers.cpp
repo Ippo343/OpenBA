@@ -43,7 +43,7 @@ void NamedExternalRef::Resolve() {
     if (refGen == factoryGen) return;
 
     System::Filename filename(name);
-    const ::Object::External* found = efactory->Find(filename);
+    ::Object::External* found = efactory->FindAs<::Object::External>(filename);
     bool loaded = false;
     if (!found) {
         const char* text = name._data;
@@ -58,12 +58,12 @@ void NamedExternalRef::Resolve() {
 
             System::String   normStr(normalized);
             System::Filename normFile(normStr);
-            found = efactory->FindOrLoad(normFile);
+            found = efactory->FindOrLoadAs<::Object::External>(normFile);
             loaded = true;
         }
     }
 
-    const ::Object::External* result = nullptr;
+    ::Object::External* result = nullptr;
     if (found) {
         // Retail reads the type id through the import slot 0x140152870
         // (?_typeInfo@External@Object@@). ENDGAME B.3.9 TR: the class accessor; the
@@ -73,9 +73,7 @@ void NamedExternalRef::Resolve() {
         }
     }
 
-    // The factory hands out const Externals; the reference holds them mutable
-    // (retail's ExternalPtr<T> is a plain T*).
-    resolved = const_cast<::Object::External*>(result);   // LEFT: FindOrLoad returns a const External*; the reference holds it mutable (PASS2_LEDGER S3, the close decides)
+    resolved = result;
     // Re-read the generation: a FindOrLoad that actually loaded bumps it, and
     // stamping the pre-load value would make the next call redo the whole
     // lookup for nothing.

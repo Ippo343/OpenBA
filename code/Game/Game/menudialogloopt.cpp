@@ -529,14 +529,13 @@ bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
             : f(factory), saved(factory->_cleanBitIndex) { f->_cleanBitIndex = bit; }
         ~PublishLoadBit() { f->_cleanBitIndex = saved; }
     } publish(efactory, self->_loadBit);
-    const ::Object::External* obj = efactory->FindOrLoad(fnBuf);
+    ::Object::External* obj = efactory->FindOrLoadAs<::Object::External>(fnBuf);
 
     // Original validates via IsDerivedFrom against TypeInfo_MenuScene at exe 0x1401c59f0.
     // In standalone the Runtime factory tree doesn't have every base type registered,
     // so IsDerivedFrom NULL-derefs on the lookup. Trust FindOrLoad's return — if it
     // gave us a non-NULL External and the path resolved, it's the right type.
-    // LEFT: FindOrLoad returns a const External*; the loop holds a MenuScene*.
-    MenuScene* menuScene = const_cast<MenuScene*>(static_cast<const MenuScene*>(obj));   // LEFT: FindOrLoad returns a const External*; the loop holds a MenuScene*.
+    MenuScene* menuScene = static_cast<MenuScene*>(obj);
 
     self->_menuScene = menuScene;
 
@@ -872,11 +871,9 @@ bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self) {
     }
 
     System::Filename fnBuf("Audio/Music/Menu.rsc");  // System::Filename
-    const ::Object::External* found = ::Object::ExternalFactory::_singleton->FindOrLoad(fnBuf);
-    // FindOrLoad returns a const External* (CONST:FindOrLoad stays); the
-    // SoundEffect is that External (B10 downcast, no IsDerivedFrom: see above).
-    Audio::SoundEffect* music = static_cast<Audio::SoundEffect*>(
-        const_cast<::Object::External*>(found));   // LEFT: FindOrLoad returns a const External*; the slot holds the SoundEffect non-const (PASS2_LEDGER S3, the close decides)
+    // The SoundEffect is the loaded External (B10 downcast, no IsDerivedFrom: see above).
+    Audio::SoundEffect* music =
+        ::Object::ExternalFactory::_singleton->FindOrLoadAs<Audio::SoundEffect>(fnBuf);
 
     self->_music = music;
     printf("[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> %p (self+0xb88)\n", (void*)music);

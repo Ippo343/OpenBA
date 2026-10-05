@@ -207,7 +207,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         uint32_t uVar23 = iVar21 * iVar10 + iVar9;  // citizen cell index
 
         // Check if pasture is over its capacity (capacity < animal count)
-        int pastureCount = local_a8->animalCount;
+        int pastureCount = local_a8->animals._size;
         if (local_a8->capacity < pastureCount) {
             // Find an animal to remove via helper (0x140128350 takes the component as an
             // integer: LEFT)
@@ -316,7 +316,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 if (iVar10map <= iVar12) iVar12 = iVar10map - 1;
 
                 // Read the occupant from the map grid cell
-                ComponentEntity* occupant = map->cells[(uintptr_t)iVar12 * (uintptr_t)iVar10map + (uintptr_t)iVar21pos].occupant;
+                ComponentEntity* occupant = map->cells.GetData()[(uintptr_t)iVar12 * (uintptr_t)iVar10map + (uintptr_t)iVar21pos].occupant;
 
                 if (occupant != nullptr) {
                     // Its RawMaterialComponent (0x1400223c0)

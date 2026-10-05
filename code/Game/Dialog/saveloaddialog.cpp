@@ -232,8 +232,8 @@ void SaveLoadDialog::PopulateFileList() {
 
             // Load UIMaterialNoBlend material
             System::Filename matFilename("Material/UI/UIMaterialNoBlend.rsc");
-            const ::Object::External* matExternal =
-                ::Object::ExternalFactory::_singleton->FindOrLoad(matFilename);
+            ::Object::External* matExternal =
+                ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(matFilename);
 
             const ::Object::External* matResource = nullptr;
             if (matExternal) {
@@ -246,12 +246,9 @@ void SaveLoadDialog::PopulateFileList() {
             // for all checks, but here we need the Material type. Since the original code
             // works correctly, the ExternalFactory::FindOrLoad result is passed directly.
             // The IsDerivedFrom is checking MaterialExternal type.
-            // LEFT: FindOrLoad hands back a const External; SetMaterial takes a
-            // non-const handle.
             matInstFinal->SetMaterial(
                 Object::ExternalPtr<Graphics::Material>(
-                    const_cast<Graphics::Material*>(  // LEFT: const_cast FindOrLoad returns a const External; SetMaterial takes a non-const ExternalPtr (ledger S3: decide at the close)
-                        static_cast<const Graphics::Material*>(matExternal))));
+                    static_cast<Graphics::Material*>(matExternal)));
 
             // Add texture: "diffuse" -> saveInfo's ImageBuffer at +0x18
             System::String diffuseStr("diffuse");

@@ -138,11 +138,8 @@ extern "C" void PlayerTileRender_BuildRecords_1380(const void* /*never read*/, V
 extern "C" UI::DialogInstance** ToolUI_OpenToolDialog_ff9e0(PlayerToolManager* owner, UI::DialogInstance** ret, ComponentDescription* description);  // 0x1400ff9e0
 
 // ---- tool_base_trade.cpp
-// B4 FORWARD (Work/tradework.cpp still calls them: TradeWork's set is root +
-// count on its own node): the erased entry points of the two template cores.
-extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg);  // 0x140025740 B4 FORWARD -> Avl38Remove
-extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP);  // 0x14002c690 B4 FORWARD -> Avl38FindRemove
-// B.4 Y GAMEB: the typed wrappers over the same cores (one body each in retail).
+// B.4 Y GAMEB: the typed wrappers over the two set cores (one body each in
+// retail); TradeWork's assignment set has its pair in Work/TradeWork.h.
 struct TrackedEntityNode; struct PinnedToolNode; class ComponentEntity;   // Game/PlayerToolManager.h
 void Avl38SetRemove(AvlTreeHead<TrackedEntityNode>* set, TrackedEntityNode* node);   // 0x140025740
 void Avl38SetRemove(AvlTreeHead<PinnedToolNode>* set, PinnedToolNode* node);         // 0x140025740

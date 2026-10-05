@@ -109,7 +109,7 @@ int WorkLeaf_Pasture_8350(const PastureComponent* pasture) {
 
     int bestIndex = -1;
     float bestScore = 0.0f;
-    int n = pasture->animalCount;
+    int n = pasture->animals._size;
     if (n <= 0) return -1;
 
     for (int outer = 0; outer < n; ++outer) {

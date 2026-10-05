@@ -102,7 +102,7 @@
 // Faithful 1:1 port of the Ghidra decompile.
 // ============================================================
 void Map::StampInfluence(int state, int cx, int cy, int r, short delta) {
-    MapCell* grid = cells;   // +0x80
+    MapCell* grid = cells.GetData();   // +0x80
     int yy = cy - r;
     if (yy <= cy + r) {
         int dy = cy - yy;
@@ -238,8 +238,8 @@ bool HappinessComponent::IsActive() {
     if (!store) return false;
 
     // The 0x10-byte item's first qword is the good's ComponentDescription.
-    const StorageComponent::Item* items = store->storageSlots;   // +0x28
-    for (int i = 0; i < store->slotCount; ++i) {
+    const StorageComponent::Item* items = store->storageSlots._data;   // +0x28
+    for (int i = 0; i < store->storageSlots._size; ++i) {
         const ComponentDescription* good = items[i]._resource;   // Item +0x00
 
         const RawMaterialDescription* rawMat = nullptr;

@@ -29,7 +29,6 @@
 #include "Component/AmbientEmitterComponent.h"   // what Entity::FindAudioComponent (0x140002280) returns
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"   // CitizenBehavior::field_0x20 (the residence list)
-#include "Component/coll_bridge.h"
 #include "Component/firecomponent_funcs.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -96,22 +95,22 @@ void ResidenceComponent::EvictAndUnregister() {
 static void CopyFamily(ResidenceComponent::Family* dst, const ResidenceComponent::Family* src) {
     if (dst == src) return;
 
-    System::MemoryAllocator::MemFree(dst->members);
-    dst->count = 0;
-    dst->capacity = 0;
-    dst->members = nullptr;
-    dst->count = src->count;
-    int count = dst->count;
+    System::MemoryAllocator::MemFree(dst->_data);
+    dst->_size = 0;
+    dst->_capacity = 0;
+    dst->_data = nullptr;
+    dst->_size = src->_size;
+    int count = dst->_size;
     if (count > 0) {
-        dst->capacity = count;
-        dst->members = static_cast<Object::InternalPtr<CitizenComponent>*>(
+        dst->_capacity = count;
+        dst->_data = static_cast<Object::InternalPtr<CitizenComponent>*>(
             System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)count << 3), 8));
     }
-    int n = dst->count;
+    int n = dst->_size;
     for (int i = 0; i < n; i++) {
-        Object::InternalPtr<CitizenComponent>* slot = dst->members + i;
+        Object::InternalPtr<CitizenComponent>* slot = dst->_data + i;
         if (slot) {
-            *slot = src->members[i];
+            *slot = src->_data[i];
         }
     }
 }
@@ -125,46 +124,46 @@ static void CopyFamily(ResidenceComponent::Family* dst, const ResidenceComponent
 // member buffers are MemFree'd. When realloc happens, every old family is freed
 // and the old buffer released.
 void ResidenceComponent::SetFamilyCount(int newCount) {
-    int oldCount = residentSlotCount;
+    int oldCount = residentSlots._size;
     if (newCount == oldCount) return;
 
-    Family* oldBuf = residentSlots;
-    residentSlotCount = newCount;
-    if (residentSlotCapacity < newCount) {
-        residentSlotCapacity = newCount;
+    Family* oldBuf = residentSlots._data;
+    residentSlots._size = newCount;
+    if (residentSlots._capacity < newCount) {
+        residentSlots._capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            residentSlotCapacity = newCount * 3;
+            residentSlots._capacity = newCount * 3;
         }
-        residentSlots = static_cast<Family*>(
-            System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)residentSlotCapacity << 4), 8));
+        residentSlots._data = static_cast<Family*>(
+            System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)residentSlots._capacity << 4), 8));
     }
 
-    int start = (oldBuf == residentSlots) ? oldCount : 0;
+    int start = (oldBuf == residentSlots._data) ? oldCount : 0;
     if (start < newCount) {
         Family* srcSlot = oldBuf + start;
         for (int i = start; i < newCount; i++) {
-            Family* slot = residentSlots + i;
+            Family* slot = residentSlots._data + i;
             if (i < oldCount) {
                 if (slot) {
-                    slot->members = nullptr;
-                    slot->count = 0;
-                    slot->capacity = 0;
+                    slot->_data = nullptr;
+                    slot->_size = 0;
+                    slot->_capacity = 0;
                     CopyFamily(slot, srcSlot);   // 0x140007960
                 }
             } else {
-                if (slot) { slot->members = nullptr; slot->count = 0; slot->capacity = 0; }
+                if (slot) { slot->_data = nullptr; slot->_size = 0; slot->_capacity = 0; }
             }
             srcSlot += 1;
         }
     }
 
-    if (oldBuf == residentSlots) {
+    if (oldBuf == residentSlots._data) {
         // No realloc: free the member buffers of the shrunk-off tail
         if (newCount < oldCount) {
             Family* p = oldBuf + newCount;
             for (int i = 0; i < oldCount - newCount; i++) {
-                System::MemoryAllocator::MemFree(p->members);
-                p->members = nullptr; p->count = 0; p->capacity = 0;
+                System::MemoryAllocator::MemFree(p->_data);
+                p->_data = nullptr; p->_size = 0; p->_capacity = 0;
                 p += 1;
             }
         }
@@ -172,8 +171,8 @@ void ResidenceComponent::SetFamilyCount(int newCount) {
         // Reallocated: free every old family's member buffer, then the old buffer
         Family* p = oldBuf;
         for (int i = 0; i < oldCount; i++) {
-            System::MemoryAllocator::MemFree(p->members);
-            p->members = nullptr; p->count = 0; p->capacity = 0;
+            System::MemoryAllocator::MemFree(p->_data);
+            p->_data = nullptr; p->_size = 0; p->_capacity = 0;
             p += 1;
         }
         if (oldBuf) System::MemoryAllocator::MemFree(oldBuf);
@@ -191,14 +190,14 @@ void ResidenceComponent::SerializeFamilies(IO::Serializer& ser, int count, Famil
     if (count <= 0) return;
     Family* entry = families;
     for (int o = 0; o < count; o++) {
-        int innerCount = entry->count;
+        int innerCount = entry->_size;
         ser.Serialize(innerCount, nullptr);
         // On load (direction 0): resize the member array
         // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
         if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-            GameColl::AsArray<GameColl::Ptr8>(&entry->members).SetSize(innerCount);
+            entry->SetSize(innerCount);
         }
-        Object::InternalPtr<CitizenComponent>* inner = entry->members;
+        Object::InternalPtr<CitizenComponent>* inner = entry->_data;
         for (int i = 0; i < innerCount; i++) {
             // InternalPtr<CitizenComponent>::Serialize: InternalBasePtr::Serialize, then a
             // non-null VALUE not derived from CitizenComponent is cleared. (The value, not
@@ -224,13 +223,13 @@ void ResidenceComponent::EvictResidents() {
     // The registration below (push into townMgr+0x20) is the part standalone needs.
 
     // Evict each family's residents (+0x50, count +0x58, stride 0x10)
-    int slotCount = residentSlotCount;
+    int slotCount = residentSlots._size;
     for (int s = 0; s < slotCount; s++) {
-        int innerCount = residentSlots[s].count;
+        int innerCount = residentSlots[s]._size;
         while (innerCount > 0) {
-            CitizenComponent* citizen = residentSlots[s].members[0].Get();
+            CitizenComponent* citizen = residentSlots[s]._data[0].Get();
             citizen->SetHome(nullptr, -1);   // 0x1401163d0 with a null IBP
-            innerCount = residentSlots[s].count;
+            innerCount = residentSlots[s]._size;
         }
     }
 }
@@ -250,7 +249,7 @@ bool ResidenceComponent::IsFamilyFull(int family) const {
     // A guard of the tree's: retail 0x14012a538 reads [0+0x24] when the
     // description is not a ResidenceDescription.
     int eduLevel = res ? res->_maxResidentsPerFamily : 0;
-    int cap = residentSlots[family].count;
+    int cap = residentSlots[family]._size;
     return eduLevel <= cap;
 }
 
@@ -296,10 +295,10 @@ int RosterCompare_9e20(const void* pa, const void* pb) {
 // The exe hand-unrolls the sum 4-wide; this is the identical scalar equivalent.
 // ============================================================
 uint32_t ResidenceComponent::CountResidents() const {
-    int professions = residentSlotCount;
+    int professions = residentSlots._size;
     uint32_t total = 0;
     for (int i = 0; i < professions; ++i)
-        total += static_cast<uint32_t>(residentSlots[i].count);
+        total += static_cast<uint32_t>(residentSlots[i]._size);
     return total;
 }
 
@@ -317,8 +316,8 @@ void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenC
     Family* rec = &residentSlots[family];
     int idx = -1;
     {
-        int count = rec->count;
-        Object::InternalPtr<CitizenComponent>* arr = rec->members;
+        int count = rec->_size;
+        Object::InternalPtr<CitizenComponent>* arr = rec->_data;
         for (int i = 0; i < count; ++i) {
             if (arr[i] == *citizenIBP) {
                 idx = i;
@@ -330,21 +329,21 @@ void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenC
     // --- Compact the array down over the removed slot, then decrement count. ---
     // (Faithful to 0x14012a5b6..603, which reloads the table pointer here.)
     rec = &residentSlots[family];
-    int cnt = rec->count;
+    int cnt = rec->_size;
     // idx >= 0 is guaranteed by the caller invariant (the citizen being removed was
     // assigned to this home/slot, hence present in its roster). The original does
     // an out-of-bounds array[-1] shift on the assert-only "can't find item in priority
     // list" path; guarding the shift keeps that impossible path a crash-safe no-op
     // while remaining byte-identical for every real removal.
     if (idx >= 0) {
-        Object::InternalPtr<CitizenComponent>* base = rec->members;
+        Object::InternalPtr<CitizenComponent>* base = rec->_data;
         for (int i = idx; i + 1 < cnt; ++i) {
             Object::InternalPtr<CitizenComponent>* slot = base + i;
             if (slot)
                 *slot = base[i + 1];
         }
     }
-    rec->count = cnt - 1;   // DEC dword[rec+8] — unconditional, as in the original.
+    rec->_size = cnt - 1;   // DEC dword[rec+8] — unconditional, as in the original.
 
     // --- Inert: house became empty -> clear status icon + tear down audio emitter. ---
     if (CountResidents() == 0) {
@@ -444,15 +443,15 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
 
     // --- FAITHFUL CORE: model refresh on the family's first member, then append. ---
     Family* rec = &residentSlots[family];
-    if (rec->count == 0) {
+    if (rec->_size == 0) {
         _entity->SendEvent(2);   // variant 2 = occupied
     }
     // Grow the family array to count+1 and append the citizen pointer (*citizenIBP).
-    QwordArraySetSize(&GameColl::AsArray<CitizenComponent*>(rec), rec->count + 1, citizenIBP);   // Family is a raw triple: the coll_bridge view
+    QwordArraySetSize(rec, rec->_size + 1, citizenIBP);
     // Re-read count (3110 updated it) and sort the family when it holds >1 member.
-    int newCount = rec->count;
+    int newCount = rec->_size;
     if (newCount > 1)
-        qsort(rec->members, static_cast<size_t>(newCount), 8, &RosterCompare_9e20);
+        qsort(rec->_data, static_cast<size_t>(newCount), 8, &RosterCompare_9e20);
 }
 
 // ===== Standalone factory (Foundation D → Keystone D states) =====
@@ -572,28 +571,16 @@ static const bool s_residenceStateTableBuilt = (ResidenceComponent_PopulateState
 // `_controller(this)` is the member's back-pointer; +0x48 = +0x50 = +0x58 = 0; then
 // `_flags |= 0x82`.
 ResidenceComponent::ResidenceComponent()
-    : _controller(this), heatRemaining{0}, residentSlots(nullptr), residentSlotCount(0),
-      residentSlotCapacity(0) {
+    : _controller(this), heatRemaining{0} {
     OrFlagsInCtor(0x82);
 }
 
-// 0x14012a230 (inlined in [0] 0x140037610): 0x1400175d0 on the resident array at
-// +0x50 — every 0x10-byte slot's inner array is freed and the slot zeroed, then the
-// slot array itself is freed and +0x50/+0x58 zeroed. The member's and the bases'
-// dtors (restamps only) and ~Internal are the compiler's chain.
+// 0x14012a230 (inlined in [0] 0x140037610): the body is empty. CALL 0x1400175d0 on +0x50
+// (0x14012a254) is ~residentSlots: every family's ~Array (MemFree, data = 0, the size +
+// capacity qword = 0), then the slot buffer freed and +0x50 / +0x58 zeroed; then the
+// controller's restamp (0x14012a26a, ~_controller) -- reverse declaration order -- and
+// the bases' restamps and ~Internal (the compiler's chain).
 ResidenceComponent::~ResidenceComponent() {
-    const int count = residentSlotCount;
-    Family* slot = residentSlots;
-    for (int i = 0; i < count; ++i, ++slot) {
-        Object::detail::InternalMemFree(slot->members);
-        slot->members = nullptr;
-        slot->count = 0;
-        slot->capacity = 0;
-    }
-    Object::detail::InternalMemFree(residentSlots);
-    residentSlots = nullptr;
-    residentSlotCount = 0;
-    residentSlotCapacity = 0;        // +0x5c: 0x1400175d0 stores a qword at +0x58
 }
 
 // create 0x140037440: MemAlloc(0x60, 8), then the ctor.
@@ -642,7 +629,7 @@ void ResidenceComponent::Persist(IO::Stream& stream) {
     // Serialize the family count via a local copy
     // (same pattern as ConsumeProduceComponent — local copy needed so resize
     // sees old vs new count correctly)
-    int localCount = residentSlotCount;
+    int localCount = residentSlots._size;
     ser.Serialize(localCount, nullptr);
 
     // On load (direction == 0): resize the family array
@@ -651,7 +638,7 @@ void ResidenceComponent::Persist(IO::Stream& stream) {
     }
 
     // Serialize the families
-    SerializeFamilies(ser, localCount, residentSlots);
+    SerializeFamilies(ser, localCount, residentSlots._data);
 
     // Serialize Time at +0x48
     heatRemaining.Serialize(ser);

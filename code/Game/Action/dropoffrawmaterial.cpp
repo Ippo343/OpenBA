@@ -130,12 +130,12 @@ int  DropOffRawMaterial::AbstractImpl(ActionStack* actionStack) {
     uint32_t itemCount = 0;
     uint32_t itemCapacity = 0;
 
-    int numItems = parentStorage->slotCount;
+    int numItems = parentStorage->storageSlots._size;
 
     int srcIdx = 0;
     if (numItems > 0) {
         do {
-            StorageComponent::Item* inventoryArray = parentStorage->storageSlots;
+            StorageComponent::Item* inventoryArray = parentStorage->storageSlots._data;
 
             uint32_t newCount = itemCount + 1;
             if (newCount != itemCount) {
@@ -182,7 +182,7 @@ int  DropOffRawMaterial::AbstractImpl(ActionStack* actionStack) {
             }
 
             srcIdx++;
-        } while (srcIdx < parentStorage->slotCount);
+        } while (srcIdx < parentStorage->storageSlots._size);
     }
 
     // Transfer each resource type that has positive count

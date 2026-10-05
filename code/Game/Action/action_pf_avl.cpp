@@ -25,6 +25,7 @@
 #include "Component/TradeComponent.h"  // TradeResourceNode
 #include "Work/Work.h"                 // WorkEntitySetNode
 #include "Component/LeisureCandidateSet.h"   // LeisureHomeNode
+#include "Player/PathTool.h"           // PathSegmentNode (PathTool::SetSelected's dedup trees)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
 #include <cstdint>
 
@@ -225,6 +226,8 @@ template void AvlRebalance<AvlNode30>(AvlNode30**, AvlNode30**);
 template AvlNode28* AvlRotateLeft<AvlNode28>(AvlNode28**, AvlNode28*);
 template AvlNode28* AvlRotateRight<AvlNode28>(AvlNode28**, AvlNode28*);
 template void AvlRebalance<AvlNode28>(AvlNode28**, AvlNode28**);
+template PathSegmentNode* AvlRotateLeft<PathSegmentNode>(PathSegmentNode**, PathSegmentNode*);
+template PathSegmentNode* AvlRotateRight<PathSegmentNode>(PathSegmentNode**, PathSegmentNode*);
 // The 0x30 nodes of other modules' trees (retail: the same 0x14000e450 / 0x14000e580 /
 // 0x140013480 bodies, B13).
 template void AvlRebalance<WorkSchedulerIdNode>(WorkSchedulerIdNode**, WorkSchedulerIdNode**);

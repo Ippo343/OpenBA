@@ -189,7 +189,7 @@ void BuildComponent::FillModelLists() {
     if (_entity->FindComponent<MultiObjectComponent>() != nullptr) {
         MultiObjectComponent* multiObj = _entity->FindComponent<MultiObjectComponent>();
         // LEFT: the child count is the low dword of the untyped +0x50 (MultiObjectComponent.h, COMP-d)
-        int jobCount = multiObj->childCount;
+        int jobCount = multiObj->children._size;
         for (int j = 0; j < jobCount; j++) {
             ComponentEntity* host = multiObj->children[j].Get();
             Component* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);

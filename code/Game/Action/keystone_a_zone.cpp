@@ -140,7 +140,7 @@ static void StampZoneFootprint(Map* map, const Object::InternalPtr<ComponentEnti
             if (0 < iVar14) {
                 do {
                     iVar14 = iVar14 + -1;
-                    MapCell* cellsAtStart = map->cells;   // grid base, read before the store
+                    MapCell* cellsAtStart = map->cells.GetData();   // grid base, read before the store
                     int iVar15 = (iVar17 + y) * map->size + iVar13 + x;
                     const char* stamp = footprint->_data;
                     bool bVar18;
@@ -175,7 +175,7 @@ static void StampZoneFootprint(Map* map, const Object::InternalPtr<ComponentEnti
 LAB_clear:
                         stored = owner->Get();
                     }
-                    map->cells[iVar15].blocker = stored;
+                    map->cells.GetData()[iVar15].blocker = stored;
                     SetCellBlocked(map->pathfinder, static_cast<uint32_t>(iVar15),
                                    static_cast<uint32_t>(stored != nullptr));   // 0x1400a6f00
                     if (bVar18) {

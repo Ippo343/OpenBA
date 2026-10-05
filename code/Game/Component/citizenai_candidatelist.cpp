@@ -147,20 +147,20 @@ int CitizenComponent::HasSufficientResources() {
     // deref null+0x50/+0x58.
     int iVar2 = 0;
     if (storageObj) {
-        iVar2 = storageObj->residentSlots[homeSlot].count;
+        iVar2 = storageObj->residentSlots[homeSlot]._size;
     }
     float fVar1 = lVar3desc->_fc4;   // CVTTSS2SI = trunc
     int factor = (int)fVar1;
 
     // Row scan over local_res8.
     if (local_res8 == nullptr) return 0;   // no storage resolved -> "insufficient"
-    int rowCount = local_res8->residentSlotCount;
+    int rowCount = local_res8->residentSlots._size;
     int iVar7 = 0;
     if (0 < rowCount) {
-        const ResidenceComponent::Family* piVar5 = local_res8->residentSlots;
+        const ResidenceComponent::Family* piVar5 = local_res8->residentSlots._data;
         int64_t lVar6 = rowCount;
         do {
-            if (0 < piVar5->count) iVar7++;
+            if (0 < piVar5->_size) iVar7++;
             piVar5++;          // stride 0x10
             lVar6--;
         } while (lVar6 != 0);
@@ -186,13 +186,13 @@ int CitizenComponent::HasSufficientResources2() {
     CitizenDescription* lVar1desc = description;
 
     if (local_res8 == nullptr) return 0;   // [STANDALONE GUARD] no storage resolved
-    int rowCount = local_res8->residentSlotCount;
+    int rowCount = local_res8->residentSlots._size;
     int iVar6 = 0;
     if (0 < rowCount) {
-        const ResidenceComponent::Family* piVar4 = local_res8->residentSlots;
+        const ResidenceComponent::Family* piVar4 = local_res8->residentSlots._data;
         int64_t lVar5 = rowCount;
         do {
-            if (0 < piVar4->count) iVar6++;
+            if (0 < piVar4->_size) iVar6++;
             piVar4++;          // stride 0x10
             lVar5--;
         } while (lVar5 != 0);

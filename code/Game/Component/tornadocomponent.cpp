@@ -481,7 +481,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
     int hitAnimal = 0, hitCitizen = 0;
 
     const int N = map->size;
-    MapCell* cells = map->cells;
+    MapCell* cells = map->cells.GetData();
 
     auto clampCell = [N](float v) {
         int i = static_cast<int>(v + static_cast<float>(N >> 1));

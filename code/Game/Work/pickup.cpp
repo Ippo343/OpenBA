@@ -356,7 +356,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
             if (row < 0 || row >= dim) continue;
 
             const int nCell = row * dim + col;
-            const MapCell& cellPtr = map->cells[static_cast<int64_t>(nCell)];
+            const MapCell& cellPtr = map->cells.GetData()[static_cast<int64_t>(nCell)];
 
             // Occupant: prefer the blocker (+0x00), else the occupant (+0x08), else null.
             ComponentEntity* occIBP = nullptr;

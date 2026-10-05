@@ -62,7 +62,7 @@ inline uint32_t TerrainBit(const MapCell* cell) {
 }
 // Pending/queued-cell BST at Map +0xE8 (AvlNode28: key +0x00, left +0x10, right +0x18).
 bool PendingContains(const Map* mapGrid, int cellIdx) {
-    const AvlNode28* node = mapGrid->field_0xE8;
+    const AvlNode28* node = mapGrid->field_0xE8.root;
     while (node != nullptr) {
         if (cellIdx < node->key) {
             node = node->left;
@@ -119,7 +119,7 @@ void BridgeTool::Draw(Video::Context* context, char skip) {
     if (!mapGrid) return;
     const int width = mapGrid->size;
     if (width <= 0) return;
-    const MapCell* terrainBase = mapGrid->cells;
+    const MapCell* terrainBase = mapGrid->cells.GetData();
     if (!terrainBase) return;
 
     const CreateBridgeDescription* desc = bridgeDesc;

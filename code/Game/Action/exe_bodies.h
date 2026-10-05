@@ -15,6 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include "collection/Collection.h"   // Collection::Array (QwordArraySetSize's typed entry points)
 
 // ---- action_base_cnr.cpp
@@ -48,14 +49,19 @@ template <class T> struct RawArray;   // Action/PathSearch.h
 bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
 void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110
 // The typed entry points of the one erased core 0x140003110: every 8-byte-element
-// Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) is handed to it.
-template <class T, class A, class S>
-inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, T* const* fill) {
+// Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) or Array<InternalPtr<T>>
+// (PastureComponent::animals, MultiObjectComponent::children) is handed to it.
+namespace Object { template <class T> class InternalPtr; }
+template <class E, class A, class S, class T>
+inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, T* const* fill) {
+    static_assert(std::is_same<E, T*>::value || std::is_same<E, Object::InternalPtr<T>>::value,
+                  "an 8-byte T* / InternalPtr<T> slot array, filled with a T*");
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
-namespace Object { template <class T> class InternalPtr; }
-template <class T, class A, class S>
-inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, const Object::InternalPtr<T>* fill) {
+template <class E, class A, class S, class T>
+inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, const Object::InternalPtr<T>* fill) {
+    static_assert(std::is_same<E, T*>::value || std::is_same<E, Object::InternalPtr<T>>::value,
+                  "an 8-byte T* / InternalPtr<T> slot array, filled with an InternalPtr<T>");
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
 void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0

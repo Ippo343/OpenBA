@@ -77,7 +77,8 @@ public:
     System::String highlightPath; // +0x40: the element to highlight (B4 X7-GAME-A, H5: the member; destroyed after the body, before the two Arrays: retail 0x1400e2bf0)
     int32_t  arrowRotation;      // +0x48: degrees, lands at highlight +0xD8
     uint8_t  _pad4C[4];          // +0x4C: padding
-    const UI::Dialog* highlightDialog; // +0x50: ExternalPtr<UI::Dialog> — the highlight .rsc
+    UI::Dialog* highlightDialog;       // +0x50: ExternalPtr<UI::Dialog> — the highlight .rsc (read only; the slot
+                                       //        0x140028650 serializes is the External* itself)
     // +0x58..+0x6f: the toolbar template, by name: String, factory generation
     //   (-1 = unresolved), cached External* (resolved by 0x14001b1d0)
     NamedExternalRef toolbarRef;

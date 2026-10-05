@@ -287,13 +287,13 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
 
                 // --- Find storage on the found entity and match material slot ---
                 StorageComponent* storageComp = foundEntity->FindComponent<StorageComponent>();
-                int storageSlotCount = storageComp->slotCount;
+                int storageSlotCount = storageComp->storageSlots._size;
                 int availableAmount = 0;
 
                 // Search storage slots for matching material type
                 // R8D=slotIdx starts at 0, increments on miss, used on match
                 if (storageSlotCount > 0) {
-                    const StorageComponent::Item* slotArray = storageComp->storageSlots;
+                    const StorageComponent::Item* slotArray = storageComp->storageSlots._data;
                     for (int si = 0; si < storageSlotCount; si++) {
                         if (slotArray[si]._resource == cost->material) {
                             if (si >= 0) {  // R8D >= 0 (always true for unsigned, but matches original TEST R8D,R8D / JS)

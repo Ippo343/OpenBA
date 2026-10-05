@@ -218,16 +218,16 @@ CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
         // walk res's c7cf0 roster for an idle laborer. Entity_FindComponent_Storage
         // (0x140008090) is the ResidenceComponent type scan.
         ResidenceComponent* c7cf0 = res->FindComponent<ResidenceComponent>();   // local_98 (IBP)
-        int recCount = c7cf0->residentSlotCount;                  // +0x58
+        int recCount = c7cf0->residentSlots._size;                  // +0x58
         ResidenceComponent::Family* recBase = nullptr;
         for (int r = 0; r < recCount; ++r) {
-            recBase = c7cf0->residentSlots;                       // +0x50
-            int slotCount = recBase[r].count;
+            recBase = c7cf0->residentSlots._data;                       // +0x50
+            int slotCount = recBase[r]._size;
             bool matched = false;
-            Object::InternalPtr<CitizenComponent>* memberData = recBase[r].members;
+            Object::InternalPtr<CitizenComponent>* memberData = recBase[r]._data;
             for (int m = 0; m < slotCount; ++m) {
-                recBase = c7cf0->residentSlots;
-                memberData = recBase[r].members;
+                recBase = c7cf0->residentSlots._data;
+                memberData = recBase[r]._data;
                 CitizenComponent* member = memberData[m].Get();
                 if (AdultIdle(member)) {
                     if (member->profession == LaborerKey()) {
@@ -241,10 +241,10 @@ CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
                         break;
                     }
                 }
-                slotCount = c7cf0->residentSlots[r].count;
+                slotCount = c7cf0->residentSlots[r]._size;
             }
             (void)matched;
-            recCount = c7cf0->residentSlotCount;
+            recCount = c7cf0->residentSlots._size;
         }
     }
 
@@ -252,9 +252,9 @@ CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
     if (bestRes != nullptr) {
         ResidenceComponent* c7cf0 = FindResidenceComp(bestRes);
         ResidenceComponent::Family* recAddr = &c7cf0->residentSlots[bestRecordIdx];
-        int slotCount = recAddr->count;
+        int slotCount = recAddr->_size;
         for (int m = 0; m < slotCount; ++m) {
-            Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[bestRecordIdx].members;
+            Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[bestRecordIdx]._data;
             CitizenComponent* member = memberData[m].Get();
             if (member->profession == LaborerKey()) {
                 if (AdultIdle(member)) {
@@ -263,7 +263,7 @@ CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
                     return out;
                 }
             }
-            slotCount = c7cf0->residentSlots[bestRecordIdx].count;
+            slotCount = c7cf0->residentSlots[bestRecordIdx]._size;
         }
     }
 
@@ -302,28 +302,28 @@ CitizenComponent** Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
     for (int h = 0; h < houseCnt; ++h) {   // local_50[0] = h * 8
         ComponentEntity* house = townMgr->field_0x20._data[h];   // local_60
         ResidenceComponent* c7cf0 = FindResidenceComp(house);   // local_70
-        int recCount = c7cf0->residentSlotCount;
+        int recCount = c7cf0->residentSlots._size;
         for (int r = 0; r < recCount; ++r) {
             int laborerN = 0;   // iVar6
-            int slotCount = c7cf0->residentSlots[r].count;
+            int slotCount = c7cf0->residentSlots[r]._size;
             for (int m = 0; m < slotCount; ++m) {
-                Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[r].members;
+                Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[r]._data;
                 CitizenComponent* member = memberData[m].Get();
                 if (AdultIdle(member)) {
                     if (member->profession == LaborerKey()) laborerN++;
                 }
-                slotCount = c7cf0->residentSlots[r].count;
+                slotCount = c7cf0->residentSlots[r]._size;
             }
             if (bestCount < laborerN) { bestHouse = house; bestCount = laborerN; bestRecordIdx = r; }
-            recCount = c7cf0->residentSlotCount;
+            recCount = c7cf0->residentSlots._size;
         }
     }
 
     if (bestHouse != nullptr) {
         ResidenceComponent* c7cf0 = FindResidenceComp(bestHouse);
-        int slotCount = c7cf0->residentSlots[bestRecordIdx].count;
+        int slotCount = c7cf0->residentSlots[bestRecordIdx]._size;
         for (int m = 0; m < slotCount; ++m) {
-            Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[bestRecordIdx].members;
+            Object::InternalPtr<CitizenComponent>* memberData = c7cf0->residentSlots[bestRecordIdx]._data;
             CitizenComponent* member = memberData[m].Get();
             if (AdultIdle(member)) {
                 if (member->profession == LaborerKey()) {
@@ -332,7 +332,7 @@ CitizenComponent** Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
                     return out;
                 }
             }
-            slotCount = c7cf0->residentSlots[bestRecordIdx].count;
+            slotCount = c7cf0->residentSlots[bestRecordIdx]._size;
         }
     }
 

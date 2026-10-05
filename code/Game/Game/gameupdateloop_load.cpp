@@ -155,8 +155,8 @@ static void LoadProfessionList_Step2(GameUpdateLoop* self) {
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     System::Filename fname("Game/Profession/Profession.rsc");
-    ::Object::External* profList = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-        efactory->FindOrLoad(fname));                                       // B.3.3 bridge
+    ::Object::External* profList =
+        efactory->FindOrLoadAs<::Object::External>(fname);                  // B.3.3 bridge
     self->m_professionList = static_cast<ProfessionList*>(profList);   // unchecked, as before
 
     ProfessionList* profs = self->m_professionList;
@@ -199,9 +199,8 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
 
     System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* mat = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-        ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname));                                          // B.3.3 bridge
+    ::Object::External* mat = ::Object::ExternalFactory::_singleton
+            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
 
     // Retail's type gate: Graphics::Material's type id (ENDGAME B.3.9 TR: the class
     // accessor; was an RT_DATA_SLOT read of its ?_typeInfo@ record).
@@ -227,9 +226,8 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
 
     System::Filename fname("Game/Help/HelpTopics.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* list = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-        ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname));                                          // B.3.3 bridge
+    ::Object::External* list = ::Object::ExternalFactory::_singleton
+            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
 
     // Retail's type gate: Object::ExternalList's type id (retail reads it through the
     // exe import slot 0x140151ef0; ENDGAME B.3.9 TR: the class accessor).
@@ -280,9 +278,8 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
 
     System::Filename fname("Game/Disease/Diseases.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* list = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-        ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname));                                          // B.3.3 bridge
+    ::Object::External* list = ::Object::ExternalFactory::_singleton
+            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
 
     // Retail's type gate (same ExternalList type id as the HelpTopics list).
     bool isList = false;
@@ -451,17 +448,25 @@ static_assert(std::is_trivially_default_constructible<EventLog>::value,
               "placement new of EventLog runs no code");
 static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
               "placement new of MusicPlayer runs no code");
-static_assert(std::is_trivially_default_constructible<Minimap>::value,
-              "placement new of Minimap runs no code");
 
-// 0x14009ee70 — the Map ctor (+0xF8, 0xf8). The embedded Picking::Scene @ +8
-// is a member: its default ctor (0x1801258e0) runs first, as retail's call of
-// the import does; then the zero stores.
-Map::Map() {
-    memset(&pathfinder, 0, sizeof(Map) - offsetof(Map, pathfinder));   // zero +0x68..+0xf8 (keeps the Scene at +8)
-    field_0xA2 = true;
-    cellQueue.pool.growCount = 8;             // +0xD0 / +0xD4: one qword store of 8 (H7: two stores)
-    cellQueue.pool.stride = 0;
+// 0x14009ee70 — the Map ctor (+0xF8, 0xf8). Retail's stores, in order: the
+// Picking::Scene import on +8 (0x14009ee8a); qword 0 at +0x68 / +0x70 / +0x78;
+// the cell Array header (+0x80, +0x88); byte 1 at +0xA2; the cell queue
+// (0x14009eec5..eee3); the +0xE8 tree root / count; +0x90 / +0x98 / +0xA0 (the
+// nine shorts). The members in declaration order give the first six; the body
+// writes the last two. Retail writes no padding (+0x04, +0xA3..+0xA7, +0xF4).
+Map::Map()
+    : pickingScene(),
+      pathfinder(nullptr),
+      regionGraph(nullptr),
+      regionPairCache(nullptr),
+      cells(),
+      field_0xA2(1),
+      cellQueue() {
+    field_0xE8.root = nullptr;                // +0xE8 qword 0
+    field_0xE8.count = 0;                     // +0xF0 dword 0
+    for (int i = 0; i < 9; ++i)               // +0x90 / +0x98 qwords, +0xA0 word
+        field_0x90[i] = 0;
 }
 
 // 0x1400f9180 — the WorkScheduler ctor's body (+0x118, 0x138).
@@ -522,18 +527,14 @@ void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* clim
 // quadtree over characters, NOT a SkyMesh transform (that older name came from a
 // wrong plate comment on retail Load; corrected 2026-08-30 - see
 // engine/types/GameUpdateLoop.h +0x88).
-static_assert(std::is_trivially_default_constructible<CharacterGrid>::value,
-              "placement new of CharacterGrid runs no code");
-static void CharacterGrid_Construct(CharacterGrid* grid, float param2) {
-    memset(grid, 0, sizeof(CharacterGrid));
-    grid->worldSize = param2;
-    grid->levels = 8;
-    float scale = param2 * 0.5f;
-    grid->centerX = scale;
-    grid->centerY = scale;
+// Retail zeroes +0x04..+0x5F with qword stores (the five Arrays' ctors and the centre
+// pair), then stores worldSize, levels = 8 and the centre (param2 * 0.5).
+CharacterGrid::CharacterGrid(float param2)
+    : worldSize(param2), centerX(param2 * 0.5f), centerY(param2 * 0.5f), levels(8) {
+    CharacterGrid* grid = this;
     Reimpl_Array_Resize_Stride04(&grid->levelOffsets, 8);
     {
-        int32_t* lod = grid->levelOffsets;
+        int32_t* lod = grid->levelOffsets._data;
         if (lod) {
             lod[0] = 0x0; lod[1] = 0x1; lod[2] = 0x5; lod[3] = 0x15;
             lod[4] = 0x55; lod[5] = 0x155; lod[6] = 0x555; lod[7] = 0x1555;
@@ -542,8 +543,8 @@ static void CharacterGrid_Construct(CharacterGrid* grid, float param2) {
     Reimpl_Array_Resize_Stride04(&grid->cellHead, 0x5555);
     Reimpl_Array_Resize_Stride04(&grid->cellOccupancy, 0x5555);
     {
-        int32_t* aFF = grid->cellHead;
-        int32_t* aZ = grid->cellOccupancy;
+        int32_t* aFF = grid->cellHead._data;
+        int32_t* aZ = grid->cellOccupancy._data;
         if (aFF && aZ) {
             for (int idx = 0; idx < 0x5555; ++idx) { aFF[idx] = (int32_t)0xffffffff; aZ[idx] = 0; }
         }
@@ -661,12 +662,12 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     self->m_skyMesh = sky;
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
-    void* meshRes = nullptr;
+    Graphics::GraphicsMesh* meshRes = nullptr;
     if (::Object::ExternalFactory::_singleton) {
         // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
         ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
         System::Filename fname("Models/Sky/SkyMesh.rsc");
-        meshRes = const_cast<::Object::External*>(efactory->FindOrLoad(fname));  // B.3.3 bridge  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
+        meshRes = efactory->FindOrLoadAs<Graphics::GraphicsMesh>(fname);  // B.3.3 bridge
     }
 
     // B.3.5 bridge — ?SetMesh@MeshInstance@Graphics@@…. The `s_SetMesh` cache, its
@@ -674,7 +675,7 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     // all went in the closing pass: a diagnostic that prints the address of a door
     // nobody calls any more reports nothing. `meshRes` is an object test and stays.
     if (meshRes)
-        sky->SetMesh(Graphics::ExternalPtrHandle{meshRes});   // B.3.5 bridge
+        sky->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshRes));   // B.3.5 bridge
 
     // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
     // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
@@ -893,9 +894,8 @@ void GameUpdateLoop::Load() {
             System::Filename fname("Environment/Environment.rsc");
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             // The file's root resource is the EnvironmentDescription.
-            envRes = static_cast<EnvironmentDescription*>(const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(fname)));                                   // B.3.3 bridge
+            envRes = ::Object::ExternalFactory::_singleton
+                    ->FindOrLoadAs<EnvironmentDescription>(fname);           // B.3.3 bridge
             int wxCount = envRes ? static_cast<int>(envRes->_weatherCount) : 0;   // env+0x30
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
                     (void*)envRes, wxCount);
@@ -946,8 +946,7 @@ void GameUpdateLoop::Load() {
     // Step 21 - CharacterGrid: loose Morton quadtree over characters (+0x88, 0x60).
     {
         void* mem = AllocSub<void>(0x60, 8);
-        CharacterGrid* grid = mem ? new (mem) CharacterGrid : nullptr;
-        if (grid) CharacterGrid_Construct(grid, 2048.0f);
+        CharacterGrid* grid = mem ? new (mem) CharacterGrid(2048.0f) : nullptr;   // 0x1400182b0
         m_characterGrid = grid;
     }
 
@@ -1008,8 +1007,8 @@ void GameUpdateLoop::Load() {
     // Step 26 — KeyState/map-input struct (+0x148, 0x38) zero-init.
     {
         void* mem = AllocSub<void>(0x38, 4);
+        // Retail's inlined ctor (0x140097276..0x140097291): Minimap::Minimap.
         Minimap* minimap = mem ? new (mem) Minimap : nullptr;
-        if (minimap) memset(minimap, 0, sizeof(Minimap));
         m_imageCapture = minimap;
     }
 
@@ -1057,8 +1056,8 @@ void GameUpdateLoop::Load() {
                 // Retail: String(name) then Filename::AdjustDelimiters on it —
                 // Filename(const char*) is exactly Set + AdjustDelimiters.
                 System::Filename fname(name);
-                ::Object::External* ext = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                    efactory->FindOrLoad(fname));                            // B.3.3 bridge
+                ::Object::External* ext =
+                    efactory->FindOrLoadAs<::Object::External>(fname);       // B.3.3 bridge
                 if (!ext) return nullptr;
                 if (stTid != 0 && !::Object::IsDerivedFromNullSafe(ext, stTid)) return nullptr;
                 return static_cast<UI::StringTable*>(ext);   // checked above (B10)
@@ -1196,7 +1195,7 @@ void GameUpdateLoop::Load() {
                 int n = (int)(dim * dim);
                 Reimpl_Array_Resize_Stride04(&mapStruct->overlayPixels, n);
                 Reimpl_Array_Resize_Stride04(&mapStruct->terrainPixels, n);
-                uint32_t* arr = mapStruct->overlayPixels;
+                uint32_t* arr = mapStruct->overlayPixels._data;
                 if (arr) memset(arr, 0, (size_t)n * 4);
             }
 
@@ -1281,9 +1280,9 @@ void GameUpdateLoop::Load() {
                 }
                 if (game) {
                     int gdim = game->size;
-                    MapCell* cells = game->cells;
+                    MapCell* cells = game->cells.GetData();
                     fprintf(stderr, "[startTown::DIAG]   *game(dim)=%d  tileGrid(*(game+0x80))=%p  cnt=%d\n",
-                            gdim, cells, game->cellCount);
+                            gdim, cells, game->cells.GetSize());
                     // Tile-type histogram (2=buildable 6/10=mountain 7=shore 8=deep water).
                     if (cells && gdim > 0) {
                         int hist[16] = {0};
@@ -1379,7 +1378,7 @@ void GameUpdateLoop::Load() {
                 // wipe, these read 0 and every citizen silently loses its job a few
                 // hundred frames later. One line per load.
                 {
-                    const MapCell* tiles = game->cells;
+                    const MapCell* tiles = game->cells.GetData();
                     fprintf(stderr, "[GridProbe] tiles=%p regionIds:", (const void*)tiles);
                     if (tiles)
                         for (int c = 32000; c <= 35000; c += 500)

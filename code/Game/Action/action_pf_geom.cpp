@@ -239,7 +239,7 @@ int Map::NearestRegionId(int param_2) const {
     int64_t lVar16 = (int64_t)iVar5;
     // Ghidra's `param_1 + 0x20` on int* is byte 0x80: the cell array (the same array
     // Pf_IsDstReachable_f810 reads).
-    const MapCell* lVar6 = cells;
+    const MapCell* lVar6 = cells.GetData();
     uint32_t uVar8 = (uint32_t)(param_2 / iVar5);
     int iVar11 = param_2 % iVar5;
     uint64_t uVar18 = (uint64_t)(int)uVar8;

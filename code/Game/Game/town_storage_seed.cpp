@@ -162,8 +162,8 @@ static StorageComponent* FindStorageOnEntity(const ComponentEntity* entity) {
 // the item's count. (The item's material template at item+0x00.)
 static int Seed_QueryCount(const StorageComponent* storageComp) {
     int total = 0;
-    int slots = storageComp->slotCount;
-    const StorageComponent::Item* arr = storageComp->storageSlots;
+    int slots = storageComp->storageSlots._size;
+    const StorageComponent::Item* arr = storageComp->storageSlots._data;
     for (int i = 0; i < slots; i++) {
         const StorageComponent::Item* slot = &arr[i];
         RawMaterialDescription* desc = FindRawMatDescOnTemplate(slot->_resource);
@@ -235,9 +235,9 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
     // Credit existing (construction-delivery) slot contents to the town stock
     // table at townMgr+0x170 (the currentCount... +0xc field per 0x20-stride row,
     // index FUN_140088f90). No-op for a freshly spawned building (0 slots).
-    int slots = sc->slotCount;
+    int slots = sc->storageSlots._size;
     if (slots > 0 && townMgr && townMgr->professionResources._data) {
-        StorageComponent::Item* arr = sc->storageSlots;
+        StorageComponent::Item* arr = sc->storageSlots._data;
         for (int i = 0; i < slots; i++) {
             StorageComponent::Item* slot = &arr[i];
             int cnt = slot->_count;
@@ -284,7 +284,7 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
 
     int volumeLimit    = desc->_pickupValue;
     uint32_t storageFlags = desc->_rawMaterialFlags;
-    StorageComponent_DynArrayResize(&sc->storageSlots, 0);   // 0x14000f090
+    sc->storageSlots.SetSize(0);   // 0x14000f090
     sc->rawMaterialFlags = storageFlags;
     sc->capacity = volumeLimit * tileArea;
 

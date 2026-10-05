@@ -205,7 +205,7 @@ namespace {
 // ordered insert-if-absent loop (loading) or an in-order walk of the existing
 // tree (saving, no mutation).
 void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
-    int32_t count = trade.stockCount;
+    int32_t count = trade.stock.count;
     ser.Serialize(count, nullptr);
 
     if (Loading(ser)) {
@@ -215,10 +215,10 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
             int32_t value = 0;
             ser.Serialize(value, nullptr);
 
-            TradeResourceNode* root = trade.stockRoot;
+            TradeResourceNode* root = trade.stock.root;
             if (!root) {
-                trade.stockRoot = TradeResourceTree_NewNode(key, value, nullptr);
-                trade.stockCount += 1;
+                trade.stock.root = TradeResourceTree_NewNode(key, value, nullptr);
+                trade.stock.count += 1;
                 continue;
             }
 
@@ -229,8 +229,8 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
                     TradeResourceNode* left = cur->left;
                     if (!left) {
                         cur->left = TradeResourceTree_NewNode(key, value, cur);
-                        TradeResourceTree_Retrace(&trade.stockRoot, cur);
-                        trade.stockCount += 1;
+                        TradeResourceTree_Retrace(&trade.stock.root, cur);
+                        trade.stock.count += 1;
                         break;
                     }
                     cur = left;
@@ -240,8 +240,8 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
                 TradeResourceNode* right = cur->right;
                 if (!right) {
                     cur->right = TradeResourceTree_NewNode(key, value, cur);
-                    TradeResourceTree_Retrace(&trade.stockRoot, cur);
-                    trade.stockCount += 1;
+                    TradeResourceTree_Retrace(&trade.stock.root, cur);
+                    trade.stock.count += 1;
                     break;
                 }
                 cur = right;
@@ -251,7 +251,7 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
     }
 
     // SAVE: in-order walk, no mutation.
-    TradeResourceNode* n = trade.stockRoot;
+    TradeResourceNode* n = trade.stock.root;
     if (!n) return;
     while (TradeResourceNode* l = n->left) n = l;
     while (n) {
@@ -295,12 +295,12 @@ extern "C" void TradeStock_SeedForTest(TradeComponent* tradeComp, ComponentDescr
     TradeComponent& trade = *tradeComp;
     ComponentDescription* const key = resourceEntity;
 
-    TradeResourceNode* root = trade.stockRoot;
+    TradeResourceNode* root = trade.stock.root;
     if (!root) {
         TradeResourceNode* node = TradeResourceTree_NewNode(key, qty, nullptr);
         if (!node) return;
-        trade.stockRoot = node;
-        trade.stockCount += 1;
+        trade.stock.root = node;
+        trade.stock.count += 1;
         return;
     }
 
@@ -317,8 +317,8 @@ extern "C" void TradeStock_SeedForTest(TradeComponent* tradeComp, ComponentDescr
             TradeResourceNode* node = TradeResourceTree_NewNode(key, qty, cur);
             if (!node) return;
             *childSlot = node;
-            TradeResourceTree_Retrace(&trade.stockRoot, cur);
-            trade.stockCount += 1;
+            TradeResourceTree_Retrace(&trade.stock.root, cur);
+            trade.stock.count += 1;
             return;
         }
         cur = *childSlot;

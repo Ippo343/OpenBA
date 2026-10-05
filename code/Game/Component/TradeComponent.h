@@ -34,6 +34,7 @@
 #include "object/Internal.h"   // Object::InternalPtr<T>
 #include "system/String.h"
 #include "system/Value.h"      // System::Time
+#include "Action/PathAvl.h"      // AvlTreeHead<Node> (the +0x60 stock tree header)
 
 struct TradeCtrlTag { using Owner = class TradeComponent; };   // the handlers' receiver (controller_state_table.h)
 class ComponentDescription;   // Component/ComponentDescription.h
@@ -152,9 +153,8 @@ public:
     TradeManifestLine* manifest;           // +0x50 Array data
     int32_t  manifestCount;                // +0x58
     int32_t  manifestCap;                  // +0x5c
-    TradeResourceNode* stockRoot;          // +0x60 the stock tree's root (TradeUI's sell rows)
-    int32_t  stockCount;                   // +0x68 its node count
-    uint8_t  _pad6C[4];                    // +0x6c never written by retail's ctor
+    AvlTreeHead<TradeResourceNode> stock;  // +0x60 the stock tree (TradeUI's sell rows): root +0x60, node count
+                                           // +0x68; +0x6c (_pad0C) never written by retail's ctor
     bool     workEnabled;       // +0x70 Command's cached toggle (Persist bool&; not in the ctor)
     bool     tradeFlag;         // +0x71 the trade panel is open: the stay timer waits (Persist bool&)
     uint8_t  _pad72[6];         // +0x72
@@ -177,8 +177,8 @@ static_assert(offsetof(TradeComponent, buyOrderCap) == 0x4c, "TradeComponent +0x
 static_assert(offsetof(TradeComponent, manifest) == 0x50, "TradeComponent +0x50");
 static_assert(offsetof(TradeComponent, manifestCount) == 0x58, "TradeComponent +0x58");
 static_assert(offsetof(TradeComponent, manifestCap) == 0x5c, "TradeComponent +0x5c");
-static_assert(offsetof(TradeComponent, stockRoot) == 0x60, "TradeComponent +0x60 (ctor 0x14005c492)");
-static_assert(offsetof(TradeComponent, stockCount) == 0x68, "TradeComponent +0x68 (ctor 0x14005c495)");
+static_assert(offsetof(TradeComponent, stock) + offsetof(AvlTreeHead<TradeResourceNode>, root) == 0x60, "TradeComponent +0x60 (ctor 0x14005c492)");
+static_assert(offsetof(TradeComponent, stock) + offsetof(AvlTreeHead<TradeResourceNode>, count) == 0x68, "TradeComponent +0x68 (ctor 0x14005c495)");
 static_assert(offsetof(TradeComponent, workEnabled) == 0x70, "TradeComponent +0x70");
 static_assert(offsetof(TradeComponent, tradeFlag) == 0x71, "TradeComponent +0x71 (ctor 0x14005c498)");
 static_assert(offsetof(TradeComponent, merchantTimer) == 0x78, "TradeComponent +0x78");

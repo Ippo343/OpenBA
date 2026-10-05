@@ -171,15 +171,15 @@ void TownHallUI::InitGraph() {
     // Load string tables
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphYears");
-        const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+        ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
         graphYearsTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;   // LEFT: FindOrLoad returns const External*; the StringTable members / ExternalPtr<StringTable> are non-const
+            ? static_cast<UI::StringTable*>(ext) : nullptr;
     }
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphTypes");
-        const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+        ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
         graphTypesTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;   // LEFT: FindOrLoad returns const External*; the StringTable members / ExternalPtr<StringTable> are non-const
+            ? static_cast<UI::StringTable*>(ext) : nullptr;
     }
 
     // Populate time combo
@@ -443,9 +443,9 @@ void TownHallUI::InitProduction() {
     UI::StringTable* yearsTable = nullptr;
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:graphYears");
-        const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+        ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
         yearsTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;   // LEFT: FindOrLoad returns const External*; the StringTable members / ExternalPtr<StringTable> are non-const
+            ? static_cast<UI::StringTable*>(ext) : nullptr;
     }
 
     // Add 7 combo items from graphYears string table
@@ -523,9 +523,9 @@ void TownHallUI::InitInventory() {
     UI::StringTable* invTypeTable = nullptr;
     {
         System::Filename filenameBuf("Dialog/StringTable.rsc:inventoryType");
-        const ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+        ::Object::External* ext = ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
         invTypeTable = (ext && ::Object::IsDerivedFromNullSafe(ext, UI::StringTable::TypeId()))
-            ? const_cast<UI::StringTable*>(static_cast<const UI::StringTable*>(ext)) : nullptr;   // LEFT: FindOrLoad returns const External*; the StringTable members / ExternalPtr<StringTable> are non-const
+            ? static_cast<UI::StringTable*>(ext) : nullptr;
     }
 
     // Find "inventoryCombo" ComboElement
@@ -1578,10 +1578,10 @@ void TownHallUI::UpdateAll() {
 
         // Iterate StorageComponent resource entries
         if (storage == nullptr) continue;
-        int resourceCount = storage->slotCount;
+        int resourceCount = storage->storageSlots._size;
 
         for (int r = 0; r < resourceCount; r++) {
-            StorageComponent::Item* items = storage->storageSlots;
+            StorageComponent::Item* items = storage->storageSlots._data;
             ComponentDescription* resourceEntity = items[r]._resource;
             int resourceQty = items[r]._count;
 

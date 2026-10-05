@@ -281,7 +281,7 @@ static int Cemetery_CountBurials_6dd0(const CemeteryComponent* cemetery) {
     int slotCount = cemetery->plotCount;
     if (slotCount > 0) {
         for (int i = 0; i < slotCount; i++) {
-            ComponentEntity* occupant = map->cells[cemetery->plots[i]].occupant;
+            ComponentEntity* occupant = map->cells.GetData()[cemetery->plots[i]].occupant;
             if (occupant != nullptr) {
                 if (occupant->FindComponent<TombstoneComponent>() != nullptr) matched++;
             }
@@ -512,7 +512,7 @@ static uint32_t Helper_92d0(const Object::External* ext) {
     for (int i = 0; i < n; i++) {
         const PastureComponent* e = cb->pastures._data[i];
         if (e->livestockType == ext) {
-            total += e->animalCount;
+            total += e->animals._size;
         }
     }
     return (uint32_t)total;
@@ -853,7 +853,7 @@ uint32_t StatGoal::SumStorageAmounts(const Object::External* ext) const {
             if (owner != entity->_description) continue;
         }
         StorageComponent* storage = entity->FindComponent<StorageComponent>();
-        int childN = storage->slotCount;
+        int childN = storage->storageSlots._size;
         for (int ci = 0; ci < childN; ci++) {
             const StorageComponent::Item& slot = storage->storageSlots[ci];
             RawMaterialDescription* prof = FindSubDescription<RawMaterialDescription>(slot._resource);

@@ -207,7 +207,7 @@ void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
     Map* grid = TileGrid();
     if (!grid) return;
     int gridWidth = grid->size;
-    MapCell* cells = grid->cells;
+    MapCell* cells = grid->cells.GetData();
 
     // Biome config description at +0x18.
     Description* descRaw = _description;

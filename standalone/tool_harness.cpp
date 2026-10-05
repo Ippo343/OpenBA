@@ -436,7 +436,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
     // PlacementTool harness's ring scan).
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     Map* mapGrid = gw ? gw->m_game : nullptr;
-    MapCell* terrain = mapGrid ? mapGrid->cells : nullptr;
+    MapCell* terrain = mapGrid ? mapGrid->cells.GetData() : nullptr;
     if (!terrain) {
         fprintf(stderr, "[ToolHarness][road] ERROR: no terrain array (gw=%p mapGrid=%p)\n", gw, mapGrid);
         return;
@@ -612,7 +612,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
     // Scan outward from the valley centre for a clear 8x8 block (min size is 7).
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     Map* mapGrid = gw ? gw->m_game : nullptr;
-    MapCell* terrain = mapGrid ? mapGrid->cells : nullptr;
+    MapCell* terrain = mapGrid ? mapGrid->cells.GetData() : nullptr;
     if (!terrain) { fprintf(stderr, "[ToolHarness][pasture] ERROR: no terrain array\n"); return; }
     const int gridSize = mapGrid->size;
     auto cellClear = [&](int row, int col) -> bool {
@@ -845,8 +845,8 @@ void FireUtilityDialog() {
         bool testPattern = isMap && !(tp && (tp[0] == '0'));  // default ON for map
         if (mapObj && isMap) {
             int width = mapObj->size;
-            uint32_t* terr = mapObj->terrainPixels;
-            uint32_t* over = mapObj->overlayPixels;
+            uint32_t* terr = mapObj->terrainPixels._data;
+            uint32_t* over = mapObj->overlayPixels._data;
             if (testPattern && terr && width > 0) {
                 // Terrain: 16-cell checkerboard of two greens + blue diagonal.
                 for (int y = 0; y < width; y++)
@@ -907,8 +907,8 @@ void FireUtilityDialog() {
             fprintf(stderr, "[MapProbe]   ints +0x00=%d +0x04=%d +0x18=%d +0x1c=%d\n",
                    w[0], w[1], w[6], w[7]);
             // Sample the raw pixel arrays: +0x18 terrain, +0x28 overlay.
-            uint32_t* terr = mapObj->terrainPixels;
-            uint32_t* over = mapObj->overlayPixels;
+            uint32_t* terr = mapObj->terrainPixels._data;
+            uint32_t* over = mapObj->overlayPixels._data;
             int width = w[1];   // Minimap::size
             auto sampleArr = [width](const char* nm, uint32_t* a) {
                 if (!a) { fprintf(stderr, "[MapProbe]   %s=null\n", nm); return; }
@@ -1027,7 +1027,7 @@ void FireMarkRemoval() {
         return;
     }
     int width = map->size;
-    MapCell* tileArray = map->cells;
+    MapCell* tileArray = map->cells.GetData();
     fprintf(stderr, "[MarkRemoval] gw=%p map=%p width=%d tileArray=%p entityList=%p removalList.count(before)=%d\n",
            gw, map, width, tileArray, entityList,
            entityList->removalList._size);
@@ -1654,7 +1654,7 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
     fprintf(stderr, "[PasturePanel] select pasture ent=%p -> opened=%d dialog=%p "
            "(comp=%p type(+0x28)=%p count(+0x38)=%d max(+0x40)=%d)\n",
            entRef, opened, dialog, pastureComp,
-           pastureComp->livestockType, pastureComp->animalCount, pastureComp->capacity);
+           pastureComp->livestockType, pastureComp->animals._size, pastureComp->capacity);
 
     // BANISHED_PASTUREPANEL_SELECT=<item> — simulate the player picking a
     // livestock type from the combo: exactly the event DialogInstance routes on
@@ -1979,7 +1979,7 @@ void FireClearPlace() {
     Map* map = gw->m_game;
     if (!map) { fprintf(stderr, "[ClearPlace] ERROR: map null\n"); return; }
     int width = map->size;
-    MapCell* tileArray = map->cells;
+    MapCell* tileArray = map->cells.GetData();
 
     // 1. Find a resource cell (non-null tile occupant not yet flagged) near centre.
     int rcRow = -1, rcCol = -1; ComponentEntity* resEnt = nullptr;
@@ -2044,7 +2044,7 @@ void FireClearLive() {
     Map* map = gw->m_game;
     if (!map) { fprintf(stderr, "[ClearLive] ERROR: map null\n"); return; }
     int width = map->size;
-    MapCell* tileArray = map->cells;
+    MapCell* tileArray = map->cells.GetData();
 
     int rcRow = -1, rcCol = -1; ComponentEntity* resEnt = nullptr;
     for (int row = 100; row <= 156 && rcRow < 0; ++row)
@@ -2095,7 +2095,7 @@ void FireClearPlaceOver() {
     Map* map = gw->m_game;
     if (!map) { fprintf(stderr, "[ClearPlaceOver] ERROR: map null\n"); return; }
     int width = map->size;
-    MapCell* tileArray = map->cells;
+    MapCell* tileArray = map->cells.GetData();
 
     // Find a resource cell near centre.
     int rcRow = -1, rcCol = -1; ComponentEntity* resEnt = nullptr;
@@ -2140,7 +2140,7 @@ void FireClearHarvest() {
     Map* map = gw->m_game;
     if (!map) { fprintf(stderr, "[ClearHarvest] ERROR: map null\n"); return; }
     int width = map->size;
-    MapCell* tileArray = map->cells;
+    MapCell* tileArray = map->cells.GetData();
 
     int rcRow = -1, rcCol = -1; ComponentEntity* resEnt = nullptr;
     for (int row = 100; row <= 156 && rcRow < 0; ++row)
@@ -2581,7 +2581,7 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     Map* mapGrid = gw ? gw->m_game : nullptr;
-    MapCell* terrain = mapGrid ? mapGrid->cells : nullptr;
+    MapCell* terrain = mapGrid ? mapGrid->cells.GetData() : nullptr;
     if (!terrain) {
         fprintf(stderr, "[ToolHarness][bridge] ERROR: no terrain array (gw=%p mapGrid=%p)\n", gw, mapGrid);
         return;

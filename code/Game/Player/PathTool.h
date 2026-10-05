@@ -61,6 +61,25 @@ struct PathSegment {
 static_assert(sizeof(PathSegment) == 8 && alignof(PathSegment) == 4, "PathSegment is 8 bytes at align 4");
 static_assert(offsetof(PathSegment, maxCell) == 0x04, "PathSegment::maxCell @ +0x04");
 
+// The 0x28-byte node of SetSelected's two dedup trees (0x1400dd770: MemAlloc(0x28)):
+// the 8-byte element (the segment, or {cell, 0} in the point tree), the links,
+// and the balance / height pair the rotations 0x140014c70 / 0x140014da0 keep.
+struct PathSegmentNode {
+    PathSegment      seg;       // +0x00
+    PathSegmentNode* parent;    // +0x08
+    PathSegmentNode* left;      // +0x10
+    PathSegmentNode* right;     // +0x18
+    int16_t          balance;   // +0x20
+    int16_t          height;    // +0x22
+    uint8_t          _pad24[4]; // +0x24
+};
+static_assert(sizeof(PathSegmentNode) == 0x28, "PathSegmentNode is MemAlloc(0x28)");
+static_assert(offsetof(PathSegmentNode, parent) == 0x08, "PathSegmentNode::parent @ +0x08");
+static_assert(offsetof(PathSegmentNode, left) == 0x10, "PathSegmentNode::left @ +0x10");
+static_assert(offsetof(PathSegmentNode, right) == 0x18, "PathSegmentNode::right @ +0x18");
+static_assert(offsetof(PathSegmentNode, balance) == 0x20, "PathSegmentNode::balance @ +0x20");
+static_assert(offsetof(PathSegmentNode, height) == 0x22, "PathSegmentNode::height @ +0x22");
+
 class PathTool final : public Tool {
     DECLARE_EXE_TYPE(PathTool)
 

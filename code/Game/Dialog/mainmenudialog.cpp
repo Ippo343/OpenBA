@@ -88,8 +88,8 @@ enum MainMenuButtonId {
 static UI::Dialog* LoadDialogResource(const char* rscPath) {
     System::Filename filenameBuf(rscPath);
     // The dialog doors of the other blocks take the resource as a non-const void*.
-    ::Object::External* resource = const_cast<::Object::External*>(   // LEFT: ExternalFactory::FindOrLoad returns const External*; the dialog doors take it non-const
-        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf));
+    ::Object::External* resource =
+        ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
     printf("[LoadDialogResource] '%s' -> FindOrLoad=%p\n", rscPath, (const void*)resource);
     UI::Dialog* extRes = nullptr;
     if (resource) {

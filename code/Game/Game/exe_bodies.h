@@ -30,7 +30,7 @@
 #include "object/External.h"    // Object::ExternalPtr<UI::Cursor>
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameSettings.h"   // g_gameSettings's struct
-class Minimap;             // Game/Minimap.h (Game_ImageCaptureDtor)
+class Minimap;             // Game/Minimap.h (Minimap_PaintTerrain)
 class WeatherSimulation;   // Game/WeatherSimulation.h (Game_WeatherDtor)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 
@@ -84,8 +84,6 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
 
 // ---- game_leaf_helpers.cpp
 class CharacterGrid;   // Component/CharacterGrid.h
-void Game_MusicPlayerDtor(CharacterGrid* self);  // 0x140018220
-void Game_ImageCaptureDtor(Minimap* self);  // 0x1400a4fc0
 void Game_WeatherDtor(WeatherSimulation* self);  // 0x140093eb0
 
 // ---- game_settings_persist.cpp
@@ -128,10 +126,9 @@ extern "C" void Goals_Serialize_f9240(WorkScheduler* self, IO::Stream* stream, v
 
 // ---- keystone_a_gamedtor.cpp
 class Map;
-extern "C" void Game_Dtor_9ed60(Map* map);  // 0x14009ed60  // B4 FORWARD: 1 outside caller(s)
 
 // ---- mapquery.cpp
-extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inXY2, char flag, void* outTri);  // 0x14009f3e0
+extern "C" float* Reimpl_MapGetTerrainPos(Map* game, float* outPos3, const float* inXY2, char flag, float* outTri);  // 0x14009f3e0 (outTri: a Vector3, 0x1400aa810 writes three floats)
 
 // ---- minimap_paint.cpp
 class WorldGeometry;

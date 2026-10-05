@@ -129,7 +129,7 @@ void InteractComponent::OnAdded() {
     useLocationCount = 0;
     useLocationCapacity = 0;
 
-    int childCount = multi->childCount;
+    int childCount = multi->children._size;
     for (int ci = 0; ci < childCount; ci++) {
         ComponentEntity* host = multi->children[ci].Get();
 

@@ -150,9 +150,9 @@ int  ConsumeRawMaterial::AbstractImpl(ActionStack* actionStack) {
         if (!_field38) {
             // Check mode: verify sufficient availability
             int availableCount = 0;
-            int slotCount = storage->slotCount;
+            int slotCount = storage->storageSlots._size;
             if (slotCount > 0) {
-                StorageComponent::Item* itemArray = storage->storageSlots;
+                StorageComponent::Item* itemArray = storage->storageSlots._data;
                 for (int i = 0; i < slotCount; i++) {
                     if (itemArray[i]._resource == matEntry->material) {
                         if (i >= 0) {
@@ -168,9 +168,9 @@ int  ConsumeRawMaterial::AbstractImpl(ActionStack* actionStack) {
             }
         } else {
             // Consume mode: subtract from reserved field
-            int slotCount = storage->slotCount;
+            int slotCount = storage->storageSlots._size;
             if (slotCount > 0) {
-                StorageComponent::Item* itemArray = storage->storageSlots;
+                StorageComponent::Item* itemArray = storage->storageSlots._data;
                 for (int i = 0; i < slotCount; i++) {
                     if (itemArray[i]._resource == matEntry->material) {
                         if (i >= 0) {
@@ -223,9 +223,9 @@ void ConsumeRawMaterial::CheckEntity() {
     for (int i = 0; i < matCount; i++) {
         const Entry& entry = _field28.data[i];
 
-        int slotCount = storage->slotCount;
+        int slotCount = storage->storageSlots._size;
         if (slotCount > 0) {
-            StorageComponent::Item* itemArray = storage->storageSlots;
+            StorageComponent::Item* itemArray = storage->storageSlots._data;
             for (int j = 0; j < slotCount; j++) {
                 if (itemArray[j]._resource == entry.material) {
                     if (j >= 0) {
@@ -313,9 +313,9 @@ void ConsumeRawMaterial::AddMaterial(ComponentDescription* material, int count) 
     StorageComponent* storage = _field20->FindComponent<StorageComponent>();   // 0x140006270
 
     if (_field38) {
-        int invCount = storage->slotCount;
+        int invCount = storage->storageSlots._size;
         if (0 < invCount) {
-            StorageComponent::Item* p = storage->storageSlots;
+            StorageComponent::Item* p = storage->storageSlots._data;
             int idx = 0;
             while (true) {
                 if (p->_resource == material) {

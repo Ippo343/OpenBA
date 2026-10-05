@@ -325,7 +325,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     case 5: {
         Map* worldData2 = GameUpdateLoop::_singleton->m_game;
         if (worldData2) {
-            count = (worldData2->field_0xF0 > 0) ? 1 : 0;
+            count = (worldData2->field_0xE8.count > 0) ? 1 : 0;
         }
         break;
     }
@@ -393,7 +393,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
             if (!building) continue;
 
             // Search the trading post's stock tree at +0x60 for the type
-            const TradeResourceNode* storageNode = TradeOrderBSTFind(building->stockRoot, typePtr);
+            const TradeResourceNode* storageNode = TradeOrderBSTFind(building->stock.root, typePtr);
 
             int storageCount = 0;
             if (storageNode != nullptr) {
@@ -427,7 +427,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
             StorageComponent* storage = FindOnEntity<StorageComponent>(entity);
             if (!storage) continue;
 
-            int itemCount = storage->slotCount;
+            int itemCount = storage->storageSlots._size;
             for (int j = 0; j < itemCount; j++) {
                 total += storage->storageSlots[j]._count;
             }

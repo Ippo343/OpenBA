@@ -411,13 +411,13 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         {
             static int n = 0;
             if (n < 6) { ++n;
-                StorageComponent::Item* const items = storage ? storage->storageSlots : nullptr;
+                StorageComponent::Item* const items = storage ? storage->storageSlots._data : nullptr;
                 void* const sd = items;
                 void* const slot0 = items ? items->_resource : nullptr;
                 fprintf(stderr, "[CPWork] Execute storageComp=%p ibp=%p data=%p count=%d "
                         "slot0=%p tid_storage=%u activeProduct=%d cpSel(+0x50)=%d\n",
                         static_cast<void*>(storage), static_cast<void*>(storage), sd,
-                        storage ? storage->slotCount : -1,
+                        storage ? storage->storageSlots._size : -1,
                         slot0,
                         StorageComponent::TypeId(),
                         activeProductIdx, smComp->consumeResourceId);
@@ -425,7 +425,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             }
         }
         // The storage item array (+0x28, StorageComponent::Item, 0x10 stride)
-        int inputCount = storage->slotCount;
+        int inputCount = storage->storageSlots._size;
         if (inputCount > 0) {
             for (int inputIdx = 0; inputIdx < inputCount; inputIdx++) {
                 // Get material entity from storage component
@@ -556,9 +556,9 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
             // Check if this material is already in our storage
             int existingAmount = 0;
-            int storageSlotCount = storage->slotCount;
+            int storageSlotCount = storage->storageSlots._size;
             if (storageSlotCount > 0) {
-                StorageComponent::Item* storageSlots = storage->storageSlots;
+                StorageComponent::Item* storageSlots = storage->storageSlots._data;
                 for (int si = 0; si < storageSlotCount; si++) {
                     if (storageSlots[si]._resource == matEntity2) {
                         if (si >= 0) {
@@ -599,9 +599,9 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     StorageComponent* fStorage = foundStorage->FindComponent<StorageComponent>();
 
                     // Check if storage has the material
-                    int fSlotCount = fStorage->slotCount;
+                    int fSlotCount = fStorage->storageSlots._size;
                     if (fSlotCount > 0) {
-                        StorageComponent::Item* fSlots = fStorage->storageSlots;
+                        StorageComponent::Item* fSlots = fStorage->storageSlots._data;
                         for (int fi = 0; fi < fSlotCount; fi++) {
                             if (fSlots[fi]._resource == matEntity2) {
                                 if (fi >= 0 && fSlots[fi]._count != fSlots[fi]._reserve) {
@@ -678,7 +678,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
             // Check if position has status 2 but no structure (the cell's occupant, +0x08)
             int* statusArray = field_68;
-            MapCell* structBase = map->cells;
+            MapCell* structBase = map->cells.GetData();
             if (statusArray[posIdx] == 2 &&
                 structBase[posCell].occupant == nullptr) {
                 statusArray[posIdx] = 0;
@@ -720,7 +720,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             if (cy >= mapSize) cy = mapSize - 1;
             int checkCell = cy * mapSize + cx;
 
-            MapCell* structBase2 = map->cells;
+            MapCell* structBase2 = map->cells.GetData();
             ComponentEntity* structEntity = structBase2[checkCell].occupant;   // +0x08
 
             if (structEntity != nullptr) {
@@ -769,7 +769,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             map->FillZones();   // 0x14009c480
 
             // Get cell structs for passability check
-            MapCell* structBase3 = map->cells;
+            MapCell* structBase3 = map->cells.GetData();
             MapCell* srcCellStruct = &structBase3[citizenCell];
             MapCell* dstCellStruct = &structBase3[prodCellX * mapSize + prodCellY];
 

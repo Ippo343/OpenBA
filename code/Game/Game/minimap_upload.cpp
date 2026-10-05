@@ -112,8 +112,8 @@ void Minimap::CreateAndUpload() {
     }
 
     // Terrain: terrainPixels -> terrainImage. Overlay: overlayPixels -> overlayImage.
-    CreateAndUploadOne(&terrainImage, terrainPixels, width, "terrain", s_trace);
-    CreateAndUploadOne(&overlayImage, overlayPixels, width, "overlay", s_trace);
+    CreateAndUploadOne(&terrainImage, terrainPixels._data, width, "terrain", s_trace);
+    CreateAndUploadOne(&overlayImage, overlayPixels._data, width, "overlay", s_trace);
 }
 
 // B4 FORWARD: 2 callers (Minimap::Serialize; standalone/tool_harness.cpp). The

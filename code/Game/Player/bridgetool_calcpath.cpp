@@ -44,7 +44,6 @@
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
 #include "graphics/Geometry.h"
 #include "BridgeTool.h"
-#include "Component/coll_bridge.h"
 #include "Component/MapComponent.h"
 #include "Component/ModelComponent.h"
 #include "Component/MultiObjectComponent.h"
@@ -241,7 +240,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
     if (!mapGrid) return 0;
     const int width = mapGrid->size;
     if (width <= 0) return 0;
-    const MapCell* terrainBase = mapGrid->cells;
+    const MapCell* terrainBase = mapGrid->cells.GetData();
     if (!terrainBase) return 0;
 
     // ---- 1. Build the segment list ------------------------------------------------
@@ -368,15 +367,13 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
 
             // Append to the master's MultiObjectComponent (array +0x48, count +0x50).
             if (multi) {
-                const int newCount = multi->childCount + 1;
-                // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
-                // align 8, new tail zeroed. LEFT: MultiObjectComponent (block COMP)
-                // declares the array as three fields, so the grow goes through
-                // coll_bridge's ArrayAt view of +0x48.
-                GameColl::ArrayAt<GameColl::Ptr8>(multi, 0x48).SetSize(newCount);   // LEFT: H5 MultiObjectComponent declares its children Array as three raw fields (Component/MultiObjectComponent.h, not this set's)
-                if (multi->children) {
+                const int newCount = multi->children._size + 1;
+                // Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
+                // align 8, new tail zeroed (kSpec_PtrZero).
+                multi->children.SetSize(newCount);
+                if (multi->children._data) {
                     multi->children[newCount - 1] = Object::InternalPtr<ComponentEntity>(segIBP);
-                    multi->childCount = newCount;
+                    multi->children._size = newCount;
                 }
             }
 

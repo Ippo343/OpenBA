@@ -85,7 +85,7 @@ public:
     Graphics::SunLight* _sunLight;       // +0xbb0  (B4 STANDALONE: H4)
     PlayerController* _transform;        // +0xbb8  the camera controller (MemAlloc(0x10c, 4) + 0x140098800)
     Graphics::Geometry* _sceneGeometry;  // +0xbc0  MenuScene::geometry (not owned)
-    void*          _dlcShip;             // +0xbc8  TradeWork* (DLC)
+    Graphics::Geometry* _dlcShip;        // +0xbc8  the DLC ship: MemAlloc(0xf0) + the exe Geometry subclass ctor 0x1400d3f10 (0x14009ac9a), added as a scene global
     Collection::Array<Graphics::Geometry*> _particleArray;  // +0xbd0  the ParticleSystemInstances (Update reads it as Geometry**, 0x14009b6e0)
     Collection::Array<Graphics::Geometry*> _instanceArray;  // +0xbe0  every scene instance (MeshInstance / ParticleSystemInstance)
     Collection::Array<uint32_t>            _sceneIdArray;   // +0xbf0  scene ids

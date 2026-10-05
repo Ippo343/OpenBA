@@ -148,9 +148,9 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
 
     // ── Sex roll from the pasture's current mix ───────────────────────────────
     int flagged = 0;
-    const int total = animalCount;
+    const int total = animals._size;
     for (int i = 0; i < total; ++i) {
-        Object::InternalPtr<LivestockComponent>* arr = animals;
+        Object::InternalPtr<LivestockComponent>* arr = animals._data;
         if (!arr) break;
         LivestockComponent* peerLivestock = arr[i].Get();
         if (!peerLivestock) continue;
@@ -194,7 +194,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     std::fprintf(stderr, "[Pasture] SPAWN livestock ent=%p into pasture=%p at (%.1f,%.1f) "
                  "female=%d birth=%d (count now %d/%d)\n",
                  static_cast<void*>(ent), static_cast<void*>(this), posX, posY, (int)female,
-                 (int)(parentCharacter != nullptr), animalCount, capacity);
+                 (int)(parentCharacter != nullptr), animals._size, capacity);
     std::fflush(stderr);
 }
 
@@ -223,7 +223,7 @@ extern "C" int Pasture_FillAllPastures() {
         if (!pasture || pasture->livestockType == nullptr) continue;
         for (int k = 0; k < 5; ++k) {
             const int cap = pasture->ComputeCapacity();   // 0x140128570
-            if (pasture->animalCount >= cap) break;
+            if (pasture->animals._size >= cap) break;
             AnimalComponent* nullParent = nullptr;
             pasture->SpawnLivestock(&nullParent);   // 0x140128670
             ++spawned;

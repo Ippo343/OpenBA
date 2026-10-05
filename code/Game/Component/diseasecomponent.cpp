@@ -212,7 +212,7 @@ bool Map::HasIdentityInRect(int x, int y, int w, int h,
     const int32_t width = size;
 
     for (int64_t dx = 0; dx < w; ++dx) {
-        const MapCell* cell = &cells[((int64_t)width * y) + dx + x];
+        const MapCell* cell = &cells.GetData()[((int64_t)width * y) + dx + x];
         for (int64_t dy = 0; dy < h; ++dy) {
             if (cell->field_0x10 == wantIdentity) return true;
             cell += width;
@@ -330,7 +330,7 @@ bool DiseaseComponent::CheckCure() {
         // Faithful: retail derefs unguarded — isPasture==1 means the finder
         // already located a PastureComponent at Startup. The herd count is
         // PastureComponent::animalCount.
-        if (pasture->animalCount != 0) return false;
+        if (pasture->animals._size != 0) return false;
         return true;
     }
 
@@ -576,12 +576,12 @@ void DiseaseComponent::KillOneAnimal() {
 
     PastureComponent* pasture = _entity->FindComponent<PastureComponent>();   // 0x140004fe0
     // The herd (+0x30 animals, +0x38 animalCount).
-    if (pasture->animalCount == 0) return;
+    if (pasture->animals._size == 0) return;
 
     int attempts = 0;
     bool killed = false;
     do {
-        uint32_t herd = static_cast<uint32_t>(pasture->animalCount);
+        uint32_t herd = static_cast<uint32_t>(pasture->animals._size);
         uint32_t idx = rng->Rand(static_cast<uint32_t>(herd));
         Component* member = pasture->animals[idx].Get();
 
@@ -725,7 +725,7 @@ void DiseaseComponent::ActiveDisease(const System::Time* deltaTime) {
         if (tx >= width) tx = width - 1;
         if (ty >= width) ty = width - 1;
 
-        const MapCell* cell = &map->cells[(uintptr_t)(width * ty + tx)];
+        const MapCell* cell = &map->cells.GetData()[(uintptr_t)(width * ty + tx)];
 
         ComponentEntity* target = nullptr;
         if (cell->blocker != nullptr)       target = cell->blocker;    // +0x00 wins

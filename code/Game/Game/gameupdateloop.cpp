@@ -44,6 +44,7 @@
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Minimap.h"   // m_imageCapture's class (B.4 GAME-a)
+#include "Component/CharacterGrid.h"   // m_characterGrid's class (Shutdown runs ~CharacterGrid)
 #include "Game/EventLog.h"   // m_eventNotifier's class (B.4 GAME-a)
 #include "Game/WorkScheduler.h"   // m_tutorial's class (B.4 GAME-a)
 #include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
@@ -1227,7 +1228,7 @@ post_simulation:
             ::Video::Device::_singleton
                 ->Lock();   // B.3.5 bridge
             imageCapture->overlayImage
-                ->CopyToTexture(imageCapture->overlayPixels,
+                ->CopyToTexture(imageCapture->overlayPixels._data,
                                 imageCapture->size,
                                 imageCapture->size);
             ::Video::Device::_singleton
@@ -1715,9 +1716,8 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(filename));                                 // B.3.3 bridge
+            foundBase = ::Object::ExternalFactory::_singleton
+                    ->FindOrLoadAs<::Object::External>(filename);           // B.3.3 bridge
         }
 
         const UI::Dialog* dialogRes = nullptr;
@@ -1775,9 +1775,8 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(filename));                                 // B.3.3 bridge
+            foundBase = ::Object::ExternalFactory::_singleton
+                    ->FindOrLoadAs<::Object::External>(filename);           // B.3.3 bridge
         }
         const UI::Dialog* dialogRes = nullptr;
         if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
@@ -1826,9 +1825,8 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(filename));                                 // B.3.3 bridge
+            foundBase = ::Object::ExternalFactory::_singleton
+                    ->FindOrLoadAs<::Object::External>(filename);           // B.3.3 bridge
         }
         const UI::Dialog* dialogRes = nullptr;
         if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
@@ -2037,8 +2035,7 @@ void GameUpdateLoop::Shutdown() {
     // Game
     if (m_game != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Game...\n");
-        // Map::~Map (keystone_a_gamedtor.cpp) through its B4 FORWARD.
-        Game_Dtor_9ed60(m_game);   // 0x14009ed60
+        m_game->~Map();   // 0x14009ed60 (keystone_a_gamedtor.cpp)
         System::MemoryAllocator::MemFree(m_game);
     }
 
@@ -2122,7 +2119,7 @@ void GameUpdateLoop::Shutdown() {
     // CharacterGrid (Morton quadtree at +0x88)
     if (m_characterGrid != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying CharacterGrid...\n");
-        Game_MusicPlayerDtor(m_characterGrid);   // 0x140018220
+        m_characterGrid->~CharacterGrid();   // 0x140018220
         System::MemoryAllocator::MemFree(m_characterGrid);
     }
 
@@ -2136,7 +2133,7 @@ void GameUpdateLoop::Shutdown() {
     // ImageCapture
     if (m_imageCapture != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying ImageCapture...\n");
-        Game_ImageCaptureDtor(m_imageCapture);   // 0x1400a4fc0
+        m_imageCapture->~Minimap();   // 0x1400a4fc0
         System::MemoryAllocator::MemFree(m_imageCapture);
     }
 

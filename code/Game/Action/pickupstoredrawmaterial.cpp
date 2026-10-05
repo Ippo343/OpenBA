@@ -176,9 +176,9 @@ int  PickupStoredRawMaterial::AbstractImpl(ActionStack* actionStack) {
 
         // Look up available quantity of this material in the storage
         int availableCount = 0;
-        int slotCount = storage->slotCount;
+        int slotCount = storage->storageSlots._size;
         if (slotCount > 0) {
-            StorageComponent::Item* itemArray = storage->storageSlots;
+            StorageComponent::Item* itemArray = storage->storageSlots._data;
             for (int i = 0; i < slotCount; i++) {
                 if (itemArray[i]._resource == _field30.data[matIdx].material) {
                     if (i >= 0) {
@@ -205,9 +205,9 @@ int  PickupStoredRawMaterial::AbstractImpl(ActionStack* actionStack) {
         }
 
         // Release the reservation in the storage
-        slotCount = storage->slotCount;
+        slotCount = storage->storageSlots._size;
         if (slotCount > 0) {
-            StorageComponent::Item* itemArray = storage->storageSlots;
+            StorageComponent::Item* itemArray = storage->storageSlots._data;
             for (int i = 0; i < slotCount; i++) {
                 if (itemArray[i]._resource == _field30.data[matIdx].material) {
                     if (i >= 0) {
@@ -250,9 +250,9 @@ void PickupStoredRawMaterial::CheckEntity() {
     for (int i = 0; i < matCount; i++) {
         const Entry& entry = _field30.data[i];
 
-        int slotCount = storage->slotCount;
+        int slotCount = storage->storageSlots._size;
         if (slotCount > 0) {
-            StorageComponent::Item* itemArray = storage->storageSlots;
+            StorageComponent::Item* itemArray = storage->storageSlots._data;
             for (int j = 0; j < slotCount; j++) {
                 if (itemArray[j]._resource == entry.material) {
                     if (j >= 0) {
@@ -336,9 +336,9 @@ void PickupStoredRawMaterial::AddMaterial(ComponentDescription* material, int co
     StorageComponent* storage = _field28->FindComponent<StorageComponent>();   // 0x140006270
 
     // bump the storage item's reserve for the matching material
-    int invCount = storage->slotCount;
+    int invCount = storage->storageSlots._size;
     if (0 < invCount) {
-        StorageComponent::Item* p = storage->storageSlots;
+        StorageComponent::Item* p = storage->storageSlots._data;
         int idx = 0;
         while (true) {
             if (p->_resource == material) {
@@ -458,9 +458,9 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(CitizenComponent* const* citize
     // storage availability for the material = count - reserved; clamp requested down to it
     int avail = 0;
     {
-        int invCount = storage->slotCount;
+        int invCount = storage->storageSlots._size;
         if (0 < invCount) {
-            StorageComponent::Item* inv = storage->storageSlots;
+            StorageComponent::Item* inv = storage->storageSlots._data;
             int idx = 0; StorageComponent::Item* p = inv;
             while (true) {
                 if (p->_resource == material) {
@@ -476,9 +476,9 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(CitizenComponent* const* citize
     if (avail < requested) {
         // re-scan to set requested = avail (count - reserved)
         requested = 0;
-        int invCount = storage->slotCount;
+        int invCount = storage->storageSlots._size;
         if (0 < invCount) {
-            StorageComponent::Item* inv = storage->storageSlots;
+            StorageComponent::Item* inv = storage->storageSlots._data;
             int idx = 0; StorageComponent::Item* p = inv;
             while (true) {
                 if (p->_resource == material) {

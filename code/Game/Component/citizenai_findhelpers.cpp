@@ -188,11 +188,11 @@ uint64_t CitizenAIComponent::CanReachHome() {
 // ============================================================
 //   (B4 P2 CAI-2: the record array is ResidenceComponent::residentSlots, a Family each.)
 uint64_t CitizenAI_helper_70b0(const ResidenceComponent* param_1) {
-    uint32_t count = static_cast<uint32_t>(param_1->residentSlotCount);
-    const ResidenceComponent::Family* arr = param_1->residentSlots;
+    uint32_t count = static_cast<uint32_t>(param_1->residentSlots._size);
+    const ResidenceComponent::Family* arr = param_1->residentSlots._data;
     uint32_t sum = 0;
     for (uint32_t i = 0; i < count; ++i) {
-        sum += arr[i].count;
+        sum += arr[i]._size;
     }
     return static_cast<uint64_t>(sum);
 }
@@ -455,7 +455,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 }
                 if (cost < best) {
                     map->FillZones();   // 0x14009c480 (was its Pf_ZoneRefresh_9c480 forwarder)
-                    MapCell* cellArr = map->cells;   // +0x80
+                    MapCell* cellArr = map->cells.GetData();   // +0x80
                     MapCell* cGoal = &cellArr[static_cast<int>(param_3)];
                     MapCell* cCand = &cellArr[static_cast<int>(cell)];
                     uint32_t fGoal = 1u << (cGoal->terrainType & 0x1f);

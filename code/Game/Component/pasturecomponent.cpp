@@ -24,7 +24,6 @@
 #include "Component/LivestockComponent.h"
 #include "Component/MapComponent.h"
 #include "Component/ModelComponent.h"
-#include "Component/coll_bridge.h"
 #include "Entity/ComponentEntity.h"
 #include "Game/Map.h"              // Map (GameUpdateLoop::m_game)
 #include "math/Math.h"             // Math::Transform / Vector3
@@ -211,18 +210,14 @@ void LivestockComponent::PenInPasture() {
 // (+0x60); then `_flags |= 0x8b`. Retail leaves +0x40 unwritten; the tree's factory
 // zeroed it and that is kept.
 PastureComponent::PastureComponent()
-    : livestockType(nullptr), animals(nullptr), animalCount(0), animalCapacity(0),
-      capacity(0), production(0), _controller(this) {
+    : livestockType(nullptr), capacity(0), production(0), _controller(this) {
     OrFlagsInCtor(0x8b);
 }
 
-// 0x140128070: MemFree(+0x30), +0x30 = +0x38 = 0, then the restamps and ~Internal
-// (the compiler chain).
+// 0x140128070: the controller's restamp (~_controller), then MemFree(+0x30), +0x30 = +0x38
+// = 0 (~animals: kSpec_PtrZero has no element destroy), then the restamps and ~Internal
+// (the compiler chain, reverse declaration order). The body is empty.
 PastureComponent::~PastureComponent() {
-    Object::detail::InternalMemFree(animals);
-    animals = nullptr;
-    animalCount = 0;
-    animalCapacity = 0;
 }
 
 // create 0x140036730: MemAlloc(0x68, 8), then the ctor.
@@ -259,7 +254,7 @@ void PastureComponent::Persist(IO::Stream& stream) {
 
     Reimpl_ExternalPtr_Serialize_StringTable(&livestockType, &ser);   // 0x140002340
 
-    int countBuf = animalCount;
+    int countBuf = animals._size;
     ser.Serialize(countBuf, nullptr);
 
     // On load, resize the animal array. Retail reads the direction flag from the
@@ -269,11 +264,11 @@ void PastureComponent::Persist(IO::Stream& stream) {
     // a no-op).
     // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::Ptr8>(&animals).SetSize(countBuf);
+        animals.SetSize(countBuf);
     }
 
     // Serialize each InternalPtr and validate its type
-    Object::InternalPtr<LivestockComponent>* entry = animals;
+    Object::InternalPtr<LivestockComponent>* entry = animals._data;
     int64_t count = (int64_t)countBuf;
     if (count > 0 && entry) {
         for (int64_t i = 0; i < count; i++, entry++) {
@@ -329,7 +324,7 @@ void PastureComponent::OnEvent(int msgId) {
     Map* map = GameUpdateLoop::_singleton->m_game;
     if (!map) return;
     const int width = map->size;
-    MapCell* grid = map->cells;
+    MapCell* grid = map->cells.GetData();
     if (!grid || width <= 0) return;
 
     for (uint32_t i = 0; (int)i < InteractNodeCount(pos, 2); ++i) {   // 0x140123070 (Pf_RecursiveChildSum_123070's body)

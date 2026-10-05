@@ -222,7 +222,7 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
         // Check if natural resource flag needs to be set
         if (!naturalResFlag) {
             int32_t matIdx = materialCellIdx;
-            if (gameWorld->m_game->cells[matIdx].occupant != nullptr) {
+            if (gameWorld->m_game->cells.GetData()[matIdx].occupant != nullptr) {
                 naturalResFlag = true;
             }
         }

@@ -311,7 +311,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         return 1;
     }
 
-    ComponentEntity* structEntity = map->cells[(int64_t)targetCell].occupant;   // MapCell +0x08
+    ComponentEntity* structEntity = map->cells.GetData()[(int64_t)targetCell].occupant;   // MapCell +0x08
 
     if (structEntity != nullptr) {
         ++g_brExecStructOnCell;

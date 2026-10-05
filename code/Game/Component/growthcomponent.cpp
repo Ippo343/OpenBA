@@ -94,7 +94,7 @@ static void DoHarvestReset(GrowthComponent* comp, const Map* resourceMgr, float 
     // had an extra deref (*(uintptr_t*)gridBase), which read the zeroed first qword
     // of tile-record 0 and wrote to ~0x10 → access violation (misattributed to a
     // "missing resourceMgr grid"; the grid exists — see maptilegrid.cpp).
-    resourceMgr->cells[(int64_t)resIdx].field_0x10 = ownerPos;   // Map +0x80, MapCell +0x10
+    resourceMgr->cells._data[(int64_t)resIdx].field_0x10 = ownerPos;   // Map +0x80, MapCell +0x10
 
     NaturalResourceComponent* resource = comp->resource.Get();
 
@@ -172,7 +172,7 @@ void GrowthComponent::SetResourceAmount(float amount) {
     if (!world) return;
     const Map* map = world->m_game;   // +0xF8
     MapComponent* res = _entity->FindComponent<MapComponent>();   // 0x140004680
-    MapCell* grid = map->cells;   // Map +0x80
+    MapCell* grid = map->cells._data;   // Map +0x80
     int16_t x = static_cast<int16_t>(res->tileX0);
     int16_t y = static_cast<int16_t>(res->tileY0);
     int64_t cell = (int64_t)((int)x + (int)y * map->size);

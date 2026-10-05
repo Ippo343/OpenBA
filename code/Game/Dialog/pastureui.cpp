@@ -144,7 +144,7 @@ void PastureUI::OnUpdateLayout() {
     // Enable combo only if it has items AND pasture has no animals yet
     UI::ComboElement* comboElem = selectResource;
     int itemCount = comboElem->GetItemCount();
-    bool enableCombo = (itemCount > 0) && (comp->animalCount == 0);
+    bool enableCombo = (itemCount > 0) && (comp->animals._size == 0);
 
     // Set combo enabled/disabled via vtable[8]
     comboElem->Enable(enableCombo);   // Element slot 8 Enable
@@ -152,7 +152,7 @@ void PastureUI::OnUpdateLayout() {
     // Format current animal count → slider param 0
     UI::SliderElement* sliderElem = slider;
     {
-        System::String fmtStr = System::String::Format("%i", comp->animalCount);
+        System::String fmtStr = System::String::Format("%i", comp->animals._size);
         sliderElem->SetParameter(0, fmtStr);
     }
 

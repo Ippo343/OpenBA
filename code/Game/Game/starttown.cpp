@@ -248,7 +248,7 @@ static void StartTown_WriteCellType(Map* game, MapCell* cells, int idx, uint8_t 
 static void StartTown_MarkBuildingCells(Map* game, int tileX, int tileY, int fpW, int fpH,
                                         ComponentEntity* entity, int rot) {
     if (!game || !entity) return;
-    MapCell* cells = game->cells;
+    MapCell* cells = game->cells.GetData();
     int dim = game->size;
     if (!cells || dim <= 0) return;
 
@@ -465,7 +465,7 @@ static bool g_occupiedVisualsApplied = false;
 // buildable (in-bounds + type 2)?
 static bool StartTown_DiskBuildable(const Map* game, int tileX, int tileY, int size, int sizeSq) {
     const int dim = game->size;
-    const MapCell* cells = game->cells;
+    const MapCell* cells = game->cells.GetData();
     if (!cells || dim <= 0) return false;
     for (int iy = -size; iy <= size; ++iy) {
         for (int ix = -size; ix <= size; ++ix) {
@@ -582,8 +582,7 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     System::Filename fname(entry->strPtr);  // String -> Filename
     // A pool's template is a ComponentDescription (an Object::External).
-    tmpl = static_cast<ComponentDescription*>(
-        const_cast<::Object::External*>(efactory->FindOrLoad(fname)));    // LEFT: FindOrLoad returns const External* (retail ?FindOrLoad@...QEAAPEBV)
+    tmpl = efactory->FindOrLoadAs<ComponentDescription>(fname);
     entry->resolved = tmpl;                                  // cache
     return tmpl;
 }
@@ -1025,7 +1024,7 @@ static void StartTown_RecountGatherable() {
     GameUpdateLoop* gws = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     Map* mapObj = gws ? gws->m_game : nullptr;
     const int width = mapObj ? mapObj->size : 0;
-    const MapCell* grid = mapObj ? mapObj->cells : nullptr;
+    const MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;
     if (!grid || width <= 0 || !g_demoGatherer.acceptList || g_demoGatherer.acceptN <= 0) return;
 
     const int r = g_demoGatherer.radius;
@@ -1275,7 +1274,7 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
     // mask (0xe1f), NOT cellWorkable: that one asks nearestPassable(), which answers with
     // the nearest passable cell, so shoreline water counted as ground and houses were
     // sited with their door on the river bank (reachfix2-verify: 49 residual losses).
-    const MapCell* const kindTiles = game->cells;
+    const MapCell* const kindTiles = game->cells.GetData();
     auto cellWalkable = [&](int cell) -> bool {
         if (!kindTiles) return cellWorkable(cell);
         const unsigned k = kindTiles[(size_t)cell].terrainType;
@@ -1576,7 +1575,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
         // like a clean placement right up until something walks the cell.
         if (GameUpdateLoop::_singleton != nullptr) {
             Map* mapObj   = GameUpdateLoop::_singleton->m_game;
-            MapCell* grid = mapObj ? mapObj->cells : nullptr;
+            MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;
             const int mw  = mapObj ? mapObj->size : 0;
             const uint32_t tidNat = NaturalResourceComponent::TypeId();   // caller batch CB6: was a lazy cache
             if (grid && mw > 0 && tidNat) {
@@ -2374,7 +2373,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                         // 8-neighbour (0x1400a5ec0's admissibility test). The searcher keeps
                         // its own copy of these bytes and it is a verified byte-exact mirror.
                         Map* navMap = (gw && gw->m_game) ? gw->m_game : nullptr;
-                        const MapCell* cellBase = navMap ? navMap->cells : nullptr;
+                        const MapCell* cellBase = navMap ? navMap->cells.GetData() : nullptr;
                         std::vector<uint8_t> reach;          // empty = test unavailable
                         int entryCell = -1;
                         if (cellBase && mapSize > 0) {
@@ -2983,7 +2982,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                           ? GameUpdateLoop::_singleton : nullptr;
                 Map* mapObj = gws ? gws->m_game : nullptr;
                 const int width = mapObj ? mapObj->size : 0;
-                const MapCell* grid = mapObj ? mapObj->cells : nullptr;
+                const MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;
 
                 if (!gtmpl) {
                     fprintf(stderr, "[startTown::gathererhut] BANISHED_BUILD_DEMO_GATHERERHUT set "
@@ -3184,7 +3183,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                      ? GameUpdateLoop::_singleton : nullptr;
             Map* mapObj = gw ? gw->m_game : nullptr;
             const int width = mapObj ? mapObj->size : 0;
-            const MapCell* grid = mapObj ? mapObj->cells : nullptr;
+            const MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;
 
             if (!ftmpl) {
                 fprintf(stderr, "[startTown::fishingdock] BANISHED_BUILD_DEMO_FISHINGDOCK "
@@ -3345,8 +3344,8 @@ int DL_CollectAnimals(const CharacterGrid* grid, int wantType, std::vector<DL_An
                       int* outLive) {
     *outLive = 0;
     if (!grid) return 0;
-    const CharacterGridSlot* slots = grid->slots;
-    const int slotCount = grid->slotCount;
+    const CharacterGridSlot* slots = grid->slots._data;
+    const int slotCount = grid->slots._size;
     if (!slots || slotCount <= 0) return 0;
 
     for (int i = 0; i < slotCount && i < 4096; ++i) {
@@ -3585,8 +3584,7 @@ static ComponentDescription* ResolveTemplateByPath(const char* path) {
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     System::Filename fname(path);
     // A "Template\*.rsc" is a ComponentDescription (an Object::External).
-    ComponentDescription* tmpl = static_cast<ComponentDescription*>(
-        const_cast<::Object::External*>(factory->FindOrLoad(fname)));   // LEFT: FindOrLoad returns const External* (retail ?FindOrLoad@...QEAAPEBV)
+    ComponentDescription* tmpl = factory->FindOrLoadAs<ComponentDescription>(fname);
     return tmpl;
 }
 
@@ -3863,7 +3861,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
 static bool StartTown_EnsureResidenceRoster(ResidenceComponent* resComp) {
     if (!resComp) return false;
     ResidenceComponent* rc = resComp;
-    if (rc->residentSlots != nullptr && rc->residentSlotCount >= 1)
+    if (rc->residentSlots._data != nullptr && rc->residentSlots._size >= 1)
         return true;                                   // already sized
 
     const Description* linked = rc->_description;     // ResidenceDescription (trusted, no IsDerivedFrom)
@@ -3879,8 +3877,8 @@ static bool StartTown_EnsureResidenceRoster(ResidenceComponent* resComp) {
 
     rc->SetFamilyCount(capacity);   // 0x140037ad0
 
-    ResidenceComponent::Family* sa = rc->residentSlots;
-    int sc = rc->residentSlotCount;
+    ResidenceComponent::Family* sa = rc->residentSlots._data;
+    int sc = rc->residentSlots._size;
     fprintf(stderr, "[startTown::housing] residence roster sized: comp=%p desc=%p capacity=%d -> "
             "+0x50=%p +0x58=%d\n", resComp, desc, capacity, sa, sc);
     fflush(stderr);
@@ -3920,8 +3918,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
                     "(c7cf0) — skip\n", f, f); fflush(stderr);
             continue;
         }
-        ResidenceComponent::Family* slotArr = resComp->residentSlots;
-        int slotCnt = resComp->residentSlotCount;
+        ResidenceComponent::Family* slotArr = resComp->residentSlots._data;
+        int slotCnt = resComp->residentSlots._size;
         if (slotArr == nullptr || slotCnt < 1) {
             // Roster array not sized (SA ResidenceComponent::Serialize bailed on the
             // IsDerivedFrom gate) — size it faithfully now, else a710 would deref null.
@@ -3930,8 +3928,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
                         "bring-up failed — skip\n", f, f); fflush(stderr);
                 continue;
             }
-            slotArr = resComp->residentSlots;
-            slotCnt = resComp->residentSlotCount;
+            slotArr = resComp->residentSlots._data;
+            slotCnt = resComp->residentSlots._size;
         }
 
         int housed = 0, misfiled = 0;
@@ -3957,8 +3955,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
         // (retail reads *(*(c7cf0+0x50)+8) in FUN_1400d62a0's re-house loop).
         int residents = -1;
         {
-            ResidenceComponent::Family* sa = resComp->residentSlots;
-            if (sa) residents = sa[0].count;
+            ResidenceComponent::Family* sa = resComp->residentSlots._data;
+            if (sa) residents = sa[0]._size;
         }
         // ResidenceDescription carries TWO different numbers and they are easy to confuse:
         //   +0x20 = how many HOUSEHOLD SLOTS the house has (1 for a wood house; it is what
@@ -4098,10 +4096,10 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         ResidenceComponent* rescomp = FindComponentOnEntity<ResidenceComponent>(houseIBP, tidResidence);
         int residents = 0, reqInt = 0;
         if (rescomp) {
-            const ResidenceComponent::Family* slotArr = rescomp->residentSlots;
-            residents = slotArr ? slotArr[0].count : 0;   // slot[0].count
+            const ResidenceComponent::Family* slotArr = rescomp->residentSlots._data;
+            residents = slotArr ? slotArr[0]._size : 0;   // slot[0].count
             if (slotArr) {
-                const Object::InternalPtr<CitizenComponent>* slot0data = slotArr[0].members;   // slot[0].data
+                const Object::InternalPtr<CitizenComponent>* slot0data = slotArr[0]._data;   // slot[0].data
                 const CitizenComponent* resident = slot0data ? slot0data[0].Get() : nullptr;      // data[0]
                 const CitizenDescription* cd = resident ? resident->description : nullptr;   // CitizenDescription
                 if (cd) reqInt = (int)cd->_fc4;
@@ -4615,7 +4613,7 @@ static void StartTown_MarkResourceCellGrid(Map* game, ComponentEntity* ownerEnti
                                            int tileY, int w, int h, const char* shape, int rot) {
     if (!game || w <= 0 || h <= 0) return;
     const int dim = game->size;
-    MapCell* cells = game->cells;
+    MapCell* cells = game->cells.GetData();
     if (dim <= 0 || !cells) return;
     // shape length header sits at shape-8 (length-prefixed buffer); 0 => no shape.
     const int shapeLen = shape ? RtSystem::StringLength(shape) : 0;
@@ -4702,7 +4700,7 @@ extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* own
                                                  int tileY, int w, int h, const char* shape, int rot) {
     if (!game || w <= 0 || h <= 0) return;
     const int dim = game->size;
-    MapCell* cells = game->cells;
+    MapCell* cells = game->cells.GetData();
     if (dim <= 0 || !cells) return;
     const int shapeLen = shape ? RtSystem::StringLength(shape) : 0;
 
@@ -4921,7 +4919,7 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
     Map* game = world->m_game;
     if (!game) return 0;
     const int dim = game->size;
-    MapCell* cells = game->cells;
+    MapCell* cells = game->cells.GetData();
     System::Random* rng = world->m_random;
     if (dim <= 0 || !cells || !rng) return 0;
 

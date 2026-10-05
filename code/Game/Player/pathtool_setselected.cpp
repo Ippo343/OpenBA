@@ -13,8 +13,8 @@
 //   0x140026ba0  (the +0x30 route push)     Collection::Array<PathRoute>::SetSize
 //   0x140007080  FindComponent<HighlightComponent>
 //
-// AVL dedup nodes are 0x28 bytes (Action/PathAvl.h AvlNode28: identical layout for
-// both the point tree — int key — and the segment tree — packed {min,max} 8-byte key):
+// AVL dedup nodes are 0x28 bytes (PathSegmentNode, Player/PathTool.h: one layout for
+// both the point tree — element {cell, 0} — and the segment tree — packed {min,max}):
 //   +0x00 key (int or 8B), +0x08 parent, +0x10 left, +0x18 right,
 //   +0x20 short balance, +0x22 short height.
 // The rebalance/insert/flatten logic is byte-identical between the two trees, so it is
@@ -34,7 +34,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"
 #include "Game/PathfinderThread.h"
-#include "Action/PathAvl.h"        // AvlNode28, AvlRotateLeft / AvlRotateRight (0x140014c70 / 0x140014da0)
+#include "Action/PathAvl.h"        // AvlRotateLeft / AvlRotateRight (0x140014c70 / 0x140014da0)
 #include "Action/PathSearch.h"     // PathTicket, PathResult
 #include "collection/Collection.h"
 #include <cstdint>
@@ -53,7 +53,7 @@ namespace {
 //               "FindComponent_Storage"), 0x140004740 FindComponent<MultiObjectComponent>
 //               (the related-entity list), 0x140009790 FindComponent<CitizenComponent>
 //   0x140087fb0 EntityAnchorCell, 0x14009cfb0 Map::RequestPath,
-//   0x140014c70 / 0x140014da0 AvlRotateLeft / AvlRotateRight<AvlNode28>,
+//   0x140014c70 / 0x140014da0 AvlRotateLeft / AvlRotateRight<PathSegmentNode>,
 //   0x140122e20 InteractNodePosition (Action/exe_bodies.h)
 //   0x1400021d0 Collection::Array<int32_t>::SetSize -- resize to 0 frees nothing,
 //               it empties the result slot's cell list
@@ -61,13 +61,11 @@ namespace {
 
 // Allocate + init a fresh 0x28-byte AVL node with the given 8-byte element and
 // parent (the point tree's element is {cell, 0}: its key zero-extended).
-AvlNode28* AvlNodeAlloc(const PathSegment& key, AvlNode28* parent) {
-    AvlNode28* n = static_cast<AvlNode28*>(System::MemoryAllocator::MemAlloc(0x28, 8));
+PathSegmentNode* AvlNodeAlloc(const PathSegment& key, PathSegmentNode* parent) {
+    PathSegmentNode* n = static_cast<PathSegmentNode*>(System::MemoryAllocator::MemAlloc(0x28, 8));
     if (!n) return nullptr;
-    n->key = key.minCell;
-    // LEFT: ACT-a's AvlNode28 (Action/PathAvl.h) declares its 8-byte element as an
-    // int32 key and four bytes of padding; the element's high dword lives there.
-    reinterpret_cast<PathSegment*>(n)->maxCell = key.maxCell;   // LEFT: POD AvlNode28 (Action/PathAvl.h, not this set's) declares its 8-byte element as an int32 key + 4 pad bytes
+    n->seg.minCell = key.minCell;
+    n->seg.maxCell = key.maxCell;
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
@@ -79,11 +77,11 @@ AvlNode28* AvlNodeAlloc(const PathSegment& key, AvlNode28* parent) {
 // Retrace/rebalance walking up from `node` (the node a child was just linked to).
 // Faithful transcription of the exe's inlined rebalance: recompute height/balance,
 // then AVL single/double rotate (14c70 = rotate-left, 14da0 = rotate-right).
-void AvlRebalanceUp(AvlNode28** root, AvlNode28* node) {
+void AvlRebalanceUp(PathSegmentNode** root, PathSegmentNode* node) {
     while (node != nullptr) {
-        AvlNode28* parent = node->parent;
-        AvlNode28* left   = node->left;
-        AvlNode28* right  = node->right;
+        PathSegmentNode* parent = node->parent;
+        PathSegmentNode* left   = node->left;
+        PathSegmentNode* right  = node->right;
         short lh = left  ? (short)(left->height  + 1) : 0;
         short rh = right ? (short)(right->height + 1) : 0;
         short h  = (rh < lh) ? lh : rh;
@@ -110,20 +108,20 @@ void AvlRebalanceUp(AvlNode28** root, AvlNode28* node) {
 }
 
 // Insert `key` into the point AVL tree (int key, dedup on equal). count at *pCount.
-void PointTree_Insert(AvlNode28** root, int* pCount, int key) {
+void PointTree_Insert(PathSegmentNode** root, int* pCount, int key) {
     if (*root == nullptr) {
-        AvlNode28* n = AvlNodeAlloc(PathSegment{key, 0}, nullptr);
+        PathSegmentNode* n = AvlNodeAlloc(PathSegment{key, 0}, nullptr);
         if (!n) return;
         *pCount += 1;
         *root = n;
         return;
     }
-    AvlNode28* cur = *root;
+    PathSegmentNode* cur = *root;
     for (;;) {
-        int nk = cur->key;
+        int nk = cur->seg.minCell;
         if (key < nk) {
             if (cur->left == nullptr) {
-                AvlNode28* n = AvlNodeAlloc(PathSegment{key, 0}, cur);
+                PathSegmentNode* n = AvlNodeAlloc(PathSegment{key, 0}, cur);
                 cur->left = n;
                 AvlRebalanceUp(root, cur);
                 *pCount += 1;
@@ -132,7 +130,7 @@ void PointTree_Insert(AvlNode28** root, int* pCount, int key) {
             cur = cur->left;
         } else if (key > nk) {
             if (cur->right == nullptr) {
-                AvlNode28* n = AvlNodeAlloc(PathSegment{key, 0}, cur);
+                PathSegmentNode* n = AvlNodeAlloc(PathSegment{key, 0}, cur);
                 cur->right = n;
                 AvlRebalanceUp(root, cur);
                 *pCount += 1;
@@ -146,18 +144,17 @@ void PointTree_Insert(AvlNode28** root, int* pCount, int key) {
 }
 
 // Insert a {min,max} segment key into the segment AVL tree (dedup on equal pair).
-void SegTree_Insert(AvlNode28** root, int* pCount, const PathSegment& seg) {
+void SegTree_Insert(PathSegmentNode** root, int* pCount, const PathSegment& seg) {
     if (*root == nullptr) {
-        AvlNode28* n = AvlNodeAlloc(seg, nullptr);
+        PathSegmentNode* n = AvlNodeAlloc(seg, nullptr);
         if (!n) return;
         *pCount += 1;
         *root = n;
         return;
     }
-    AvlNode28* cur = *root;
+    PathSegmentNode* cur = *root;
     for (;;) {
-        // LEFT: AvlNode28's element as the 8-byte segment (see AvlNodeAlloc above).
-        const PathSegment& nodeSeg = *reinterpret_cast<const PathSegment*>(cur);   // LEFT: POD AvlNode28: the tree reads AvlNode28's element as the 8-byte segment (AvlNodeAlloc in this file)
+        const PathSegment& nodeSeg = cur->seg;
         int nmin = nodeSeg.minCell;
         int nmax = nodeSeg.maxCell;
         bool goLeft = false, skip = false;
@@ -170,7 +167,7 @@ void SegTree_Insert(AvlNode28** root, int* pCount, const PathSegment& seg) {
         if (skip) return;
         if (goLeft) {
             if (cur->left == nullptr) {
-                AvlNode28* n = AvlNodeAlloc(seg, cur);
+                PathSegmentNode* n = AvlNodeAlloc(seg, cur);
                 cur->left = n;
                 AvlRebalanceUp(root, cur);
                 *pCount += 1;
@@ -179,7 +176,7 @@ void SegTree_Insert(AvlNode28** root, int* pCount, const PathSegment& seg) {
             cur = cur->left;
         } else {
             if (cur->right == nullptr) {
-                AvlNode28* n = AvlNodeAlloc(seg, cur);
+                PathSegmentNode* n = AvlNodeAlloc(seg, cur);
                 cur->right = n;
                 AvlRebalanceUp(root, cur);
                 *pCount += 1;
@@ -191,10 +188,10 @@ void SegTree_Insert(AvlNode28** root, int* pCount, const PathSegment& seg) {
 }
 
 // In-order traversal helpers.
-AvlNode28* InorderFirst(AvlNode28* n) { if (!n) return nullptr; while (n->left) n = n->left; return n; }
-AvlNode28* InorderNext(AvlNode28* n) {
+PathSegmentNode* InorderFirst(PathSegmentNode* n) { if (!n) return nullptr; while (n->left) n = n->left; return n; }
+PathSegmentNode* InorderNext(PathSegmentNode* n) {
     if (n->right) { n = n->right; while (n->left) n = n->left; return n; }
-    AvlNode28* p = n->parent;
+    PathSegmentNode* p = n->parent;
     while (p && p->right == n) { n = p; p = p->parent; }
     return p;
 }
@@ -263,7 +260,7 @@ void PathTool::ClearHighlight() {
     if (selectedEntity == nullptr) return;
     MultiObjectComponent* list = selectedEntity->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (list != nullptr) {
-        int n = list->childCount;
+        int n = list->children._size;
         for (int i = 0; i < n; i++) {
             ComponentEntity* ent = list->children[i].Get();
             HighlightComponent* hi = ent->FindComponent<HighlightComponent>();   // 0x140007080
@@ -293,7 +290,7 @@ void PathTool::SetHighlight() {
     if (selectedEntity == nullptr) return;
     MultiObjectComponent* list = selectedEntity->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (list != nullptr) {
-        int n = list->childCount;
+        int n = list->children._size;
         for (int i = 0; i < n; i++) {
             ComponentEntity* ent = list->children[i].Get();
             HighlightComponent* hi = ent->FindComponent<HighlightComponent>();   // 0x140007080
@@ -354,11 +351,11 @@ void PathTool::BuildRoutes() {
 
     if (useResidence) {
         if (residence != nullptr) {
-            int outer = residence->residentSlotCount;
+            int outer = residence->residentSlots._size;
             for (int oi = 0; oi < outer; oi++) {
-                int inner = residence->residentSlots[oi].count;
+                int inner = residence->residentSlots[oi]._size;
                 for (int ii = 0; ii < inner; ii++) {
-                    CitizenComponent* member = residence->residentSlots[oi].members[ii].Get();
+                    CitizenComponent* member = residence->residentSlots[oi]._data[ii].Get();
                     if (member->home != nullptr) {
                         if (member->workplace != nullptr) {
                             PushRoute(routes, entry, member);
@@ -381,8 +378,8 @@ void PathTool::BuildRoutes() {
 
     // --- A*-route each pair, dedup cells/segments into the point/segment AVL trees. ---
     Map* map = GameUpdateLoop::_singleton->m_game;
-    AvlNode28* pointTree = nullptr;  int pointCount = 0;
-    AvlNode28* segTree   = nullptr;  int segCount   = 0;
+    PathSegmentNode* pointTree = nullptr;  int pointCount = 0;
+    PathSegmentNode* segTree   = nullptr;  int segCount   = 0;
 
     int routeCount = routes._size;
     for (int r = 0; r < routeCount; r++) {
@@ -445,12 +442,11 @@ void PathTool::BuildRoutes() {
     }
 
     // --- Flatten trees (in-order) into +0x40 (points) and +0x50 (segments). ---
-    for (AvlNode28* n = InorderFirst(pointTree); n; n = InorderNext(n)) {
-        points.SetSize(points._size + 1, n->key);
+    for (PathSegmentNode* n = InorderFirst(pointTree); n; n = InorderNext(n)) {
+        points.SetSize(points._size + 1, n->seg.minCell);
     }
-    for (AvlNode28* n = InorderFirst(segTree); n; n = InorderNext(n)) {
-        // LEFT: AvlNode28's element as the 8-byte segment (see AvlNodeAlloc above).
-        segments.SetSize(segments._size + 1, *reinterpret_cast<const PathSegment*>(n));   // LEFT: POD AvlNode28: the tree reads AvlNode28's element as the 8-byte segment (AvlNodeAlloc in this file)
+    for (PathSegmentNode* n = InorderFirst(segTree); n; n = InorderNext(n)) {
+        segments.SetSize(segments._size + 1, n->seg);   // LEFT: POD AvlNode28: the tree reads AvlNode28's element as the 8-byte segment (AvlNodeAlloc in this file)
     }
 
 

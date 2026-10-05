@@ -196,7 +196,7 @@ char CemeteryComponent::EnterBuilt() {
     int claimed = 0;
     for (int i = 0; i < plotCount; ++i) {
         const int cellIdx = plots[i];
-        MapCell* const cells = world->cells;
+        MapCell* const cells = world->cells.GetData();
         if (!cells) break;
         MapCell* const cell = &cells[static_cast<uintptr_t>(cellIdx)];
 
@@ -380,7 +380,7 @@ void CemeteryComponent::OnAdded() {
     // The gate child: multi->children[0], then that entity's MapComponent.
     MultiObjectComponent* multi = _entity->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (!multi) { CEM_TRACE("BAIL no MultiObjectComponent"); return; }
-    Object::InternalPtr<ComponentEntity>* childArr = multi->children;
+    Object::InternalPtr<ComponentEntity>* childArr = multi->children._data;
     if (!childArr) { CEM_TRACE("BAIL no child array"); return; }
     // Retail copies children[0] into a local and calls CheckPtr on THAT COPY
     // (0x1400472a7..0x1400472af) before using it -- the child slot holds a lazy/weak

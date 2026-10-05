@@ -312,8 +312,8 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
         // 0x10 bytes: resource, count, reserve).
         StorageComponent* storage = entity->FindComponent<StorageComponent>();
         if (storage) {
-            int nStacks = storage->slotCount;
-            const StorageComponent::Item* stacks = storage->storageSlots;
+            int nStacks = storage->storageSlots._size;
+            const StorageComponent::Item* stacks = storage->storageSlots._data;
             int divisor = (delivered > 0) ? 2 : 1;
             for (int i = 0; i < nStacks; i++) {
                 const StorageComponent::Item& s = stacks[i];
@@ -337,7 +337,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
     if (!grid) return;
     int gw_width = grid->size;
     if (gw_width <= 0) return;
-    MapCell* cellArr = grid->cells;
+    MapCell* cellArr = grid->cells.GetData();
     System::Random* random = gw->m_random;
     EntityList* entityList = gw->m_entityList;
 

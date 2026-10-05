@@ -141,14 +141,14 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
 void SpillAllStorage(DropOffRawMaterial* self) {
     CitizenComponent* citizen = self->_field30.Get();   // InternalPtr<CitizenComponent> (B.4 ACT-b)
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    int n = storage->slotCount;
+    int n = storage->storageSlots._size;
     while (0 < n) {
-        const StorageComponent::Item* items = storage->storageSlots;
+        const StorageComponent::Item* items = storage->storageSlots._data;
         n = items[0]._count;   // the first stack's count
         if (0 < n) {
             DropRawMaterialOnGround(citizen, items[0]._resource, n);
         }
-        n = storage->slotCount;
+        n = storage->storageSlots._size;
     }
 }
 

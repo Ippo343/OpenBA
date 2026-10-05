@@ -102,7 +102,7 @@ void StorageDisplayComponent::Refresh() {
 
     if (!storage) goto fill_remaining;
 
-    slotCount = storage->slotCount;
+    slotCount = storage->storageSlots._size;
 
     {
         float uvScale = kRdata_14017214c;   // g_fUVScale, .rdata 0x14017214c

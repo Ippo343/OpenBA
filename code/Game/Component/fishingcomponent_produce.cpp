@@ -126,7 +126,7 @@ char FishingComponent::ProduceTick(const System::Time* /*time*/) {
     const Map* map = TheMap();
     if (!map) return 0;
     const int width = map->size;
-    const MapCell* grid = map->cells;
+    const MapCell* grid = map->cells.GetData();
     if (!grid || width <= 0) return 0;
 
     // The accepted-terrain mask lives on the component's description, but only if it

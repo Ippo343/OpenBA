@@ -374,7 +374,7 @@ extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component) {
 // ============================================================
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
     InitTypeIds();
-    const AvlNode28* root = param_1->field_0xE8;
+    const AvlNode28* root = param_1->field_0xE8.root;
     uint32_t retLow = 2;
     int removeKind = 0xff;   // iVar9 / R12D
     uint8_t ebx = 0;         // the +0x64 byte (road branch) / the IBP's low byte
@@ -420,15 +420,14 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
             r7 = ebx;  // uVar7 = the +0x64 byte for the road branch
 
             // second BST pass: erase the matched node (0x14001a6e0)
-            AvlNode28* n2 = param_1->field_0xE8;
+            AvlNode28* n2 = param_1->field_0xE8.root;
             while (n2 != nullptr) {
                 if (param_2 < n2->key) {
                     n2 = n2->left;
                 } else if (n2->key < param_2) {
                     n2 = n2->right;
                 } else {
-                    // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&param_1->field_0xE8), n2);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (Work/exe_bodies.h:100, another region) takes the set as uintptr_t*; Map +0xE8 is an AvlTreeHead<AvlNode28> (Map.h, GAMEA), not the Set<T*> its typed overload takes
+                    WorkBST_BSTRemove_a6e0(&param_1->field_0xE8, n2);   // 0x14001a6e0
                     break;
                 }
             }
@@ -439,7 +438,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
     }
 
     // ---- LAB_14009c8a0: apply to map cell ----
-    MapCell* cell = &param_1->cells[param_2];
+    MapCell* cell = &param_1->cells.GetData()[param_2];
     uint64_t result;
     if (static_cast<int8_t>(cell->field_0x2A) == (int8_t)0xff) {
         uint8_t bVar1 = cell->terrainType;
@@ -689,7 +688,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                     int iRow = iVar24;
                     int iCol = iVar23;
                     int cellId = (int)(puVar18->size * iVar24 + iVar23);
-                    const MapCell* cellSlot = &puVar18->cells[cellId];
+                    const MapCell* cellSlot = &puVar18->cells.GetData()[cellId];
 
                     // resolve the entity occupying this cell (blocker, else occupant)
                     ComponentEntity* local_e8;
@@ -714,11 +713,11 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                     Map* piVar15 = GameUpdateLoop::_singleton->m_game;
                     if (removalDesc->_b40) {
                         int cid = piVar15->size * iRow + iCol;
-                        const MapCell* cl = &piVar15->cells[cid];
+                        const MapCell* cl = &piVar15->cells.GetData()[cid];
                         uint32_t mask = 1u << (cl->terrainType & 0x1f);
                         bool hit = false;
                         if (((mask & 2) == 0) && ((mask & 1) == 0) && (static_cast<int8_t>(cl->field_0x2A) == (int8_t)-1)) {
-                            const AvlNode28* bn = piVar15->field_0xE8;
+                            const AvlNode28* bn = piVar15->field_0xE8.root;
                             while (bn != nullptr) {
                                 if (cid < bn->key) {
                                     bn = bn->left;

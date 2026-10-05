@@ -183,12 +183,12 @@ void ActMv_ExternalPtrSerialize_22970(CharacterDescription** pSlot, IO::Serializ
     if (didFind) {
         int streamFlag = static_cast<int>(ser->GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
         if (streamFlag == 0) {
-            const ::Object::External* found = nullptr;
+            ::Object::External* found = nullptr;
             if (::Object::ExternalFactory::_singleton)
-                found = efactory->FindOrLoad(fnLocal);
+                found = efactory->FindOrLoadAs<::Object::External>(fnLocal);
             CharacterDescription* result = nullptr;
             if (found && ::Object::IsDerivedFromNullSafe(found, typeId))
-                result = static_cast<CharacterDescription*>(const_cast<::Object::External*>(found));   // LEFT: CONST FindOrLoad returns const (S3: floor decision at the close)
+                result = static_cast<CharacterDescription*>(found);
             *pSlot = result;
         }
     }
@@ -476,8 +476,8 @@ int PathfinderThread::TakePath(PathTicket* ticket, int32_t* path, int maxNodes) 
 PathTicket* Map::RequestPath(PathTicket* out, uint64_t flags, uint32_t destCell, uint32_t srcCell) {
     FillZones();   // 0x14009c480 (RCX only)
 
-    const MapCell* recSrc  = &cells[static_cast<int>(srcCell)];
-    const MapCell* recDest = &cells[static_cast<int>(destCell)];
+    const MapCell* recSrc  = &cells.GetData()[static_cast<int>(srcCell)];
+    const MapCell* recDest = &cells.GetData()[static_cast<int>(destCell)];
 
     uint32_t typeSrc  = 1u << (recSrc->terrainType & 0x1f);
     uint32_t typeDest = 1u << (recDest->terrainType & 0x1f);

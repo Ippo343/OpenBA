@@ -520,7 +520,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
             static int s_hiN = 0;
             if (s_hiN < 80) { ++s_hiN;
                 Map* mapInfo = gameWorld->m_game;
-                const MapCell* tiles = mapInfo ? mapInfo->cells : nullptr;
+                const MapCell* tiles = mapInfo ? mapInfo->cells.GetData() : nullptr;
                 int mapW = mapInfo ? mapInfo->size : 0, half = mapW >> 1;
                 CharacterComponent* ch = character;
                 ModelComponent* model = ch ? ch->modelComponent.Get() : nullptr;
@@ -689,7 +689,7 @@ FindWorkLabel:
         // always carries a ResidenceComponent (c7cf0). In standalone a force-assigned /
         // partially-built home can lack it (FindComponent -> null), so guard the null
         // before the read.
-        if (storageVal != nullptr && storageVal->residentSlotCount > 1) {
+        if (storageVal != nullptr && storageVal->residentSlots._size > 1) {
             int32_t slotIdx = -1;
             ComponentEntity* found = FindHome(&slotIdx, false);
             if (found != nullptr) {
@@ -1350,7 +1350,7 @@ char CitizenComponent::CanFindHousing() {
         // "not buildable" rather than deref res8+0x2e (p[0x17]). Surfaced by the
         // BANISHED_FORCE_WORK harness setting +0x238 to a real building entity.
         if (res8 == nullptr) return false;
-        MapCell* base = grid->cells;
+        MapCell* base = grid->cells.GetData();
         int dim = GameUpdateLoop::_singleton->m_game->size;
         int64_t idx = (((int64_t)res8->tileY1 >> 1) + (int64_t)res8->tileY0) * dim +
                       (((int64_t)res8->tileX1 >> 1) + (int64_t)res8->tileX0);
@@ -1380,7 +1380,7 @@ char CitizenComponent::CanFindHousing() {
     if (y < 0) y = 0;
     if (dim <= y) y = dim - 1;
     int64_t cell = (int64_t)dim * y + x;
-    return grid->cells[cell].field_0x1C[6] != '\0';   // +0x22
+    return grid->cells.GetData()[cell].field_0x1C[6] != '\0';   // +0x22
 }
 
 // The standalone type-name -> CRC registry lookup (also declared further down, next to
@@ -1634,7 +1634,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             char ok = CanReach(spouse->home);
             if (ok != '\0') {
                 ResidenceComponent* st = spouse->home->FindComponent<ResidenceComponent>();
-                if (st->residentSlotCount < 2) {
+                if (st->residentSlots._size < 2) {
                     *param_3 = spouse->homeSlot;
                     return spouse->home;
                 }
@@ -1683,8 +1683,8 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
                 }
                 ComponentEntity* otherWp = other->home;
                 ResidenceComponent* otherStore = otherWp->FindComponent<ResidenceComponent>();   // 0x140008090
-                if (ownStore->residentSlotCount == 1) {
-                    if (1 < otherStore->residentSlotCount) {
+                if (ownStore->residentSlots._size == 1) {
+                    if (1 < otherStore->residentSlots._size) {
                         return nullptr;   // LAB_140111497
                     }
                 }
@@ -1724,7 +1724,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             if (param_4 != '\0') {
                 consider = true;
             } else {
-                consider = (resIBP->residentSlotCount < 2);
+                consider = (resIBP->residentSlots._size < 2);
             }
             if (!consider) continue;
 
@@ -1732,9 +1732,9 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             InteractComponent* interactIBP = static_cast<InteractComponent*>(interactComp);
             if (!interactComp) continue;   // no work-positions -> can't seat a worker.
 
-            int rosterCount = resIBP->residentSlotCount;
+            int rosterCount = resIBP->residentSlots._size;
             for (int slot = 0; slot < rosterCount; slot++) {
-                if (resIBP->residentSlots[slot].count < 1) {  // free slot
+                if (resIBP->residentSlots[slot]._size < 1) {  // free slot
                     float pos[3] = {0.0f, 0.0f, 0.0f};
                     InteractNodePosition(interactIBP, pos, 0, 0, nullptr);
                     int mw = mapInfo->size;
@@ -1745,7 +1745,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
                     if (wpY < 0) wpY = 0;
                     if (mw <= wpY) wpY = mw - 1;
                     mapInfo->FillZones();   // 0x14009c480 (RCX only)
-                    MapCell* cellBase = mapInfo->cells;
+                    MapCell* cellBase = mapInfo->cells.GetData();
                     MapCell* homeCellPtr = cellBase + homeCellIdx;
                     MapCell* wpCellPtr = cellBase + static_cast<int64_t>(wpY * mw + wpX);
                     uint32_t wpBit   = 1u << (wpCellPtr->terrainType & 0x1f);
@@ -1756,11 +1756,11 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
                     short wr = wpCellPtr->zone;
                     if ((homeBit & mask) != 0 && (wpBit & mask) != 0 &&
                         ((both & 0x1e0) != 0 || (hr != 0 && wr != 0 && hr == wr))) {
-                        if (resIBP->residentSlotCount == 1) {
+                        if (resIBP->residentSlots._size == 1) {
                             *param_3 = slot;
                             return entry;
                         }
-                        if (bestPartial == nullptr && 1 < resIBP->residentSlotCount) {
+                        if (bestPartial == nullptr && 1 < resIBP->residentSlots._size) {
                             bestPartial = entry;
                             bestSlot = slot;
                         }
@@ -1839,7 +1839,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     if (store == nullptr) { *param_2 = nullptr; return param_2; }
 
     uint32_t chosen = 0xffffffff;
-    int64_t taskCount = store->slotCount;
+    int64_t taskCount = store->storageSlots._size;
     if (taskCount <= 0) { *param_2 = nullptr; return param_2; }
 
     // Find the RawMaterialDescription on a task entity, returning its derived ptr (or null).
@@ -1861,7 +1861,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     // Pass 1: count eligible slots; remember the last eligible index in `chosen`.
     uint32_t eligible = 0;
     for (int64_t row = 0; row < taskCount; row++) {
-        StorageComponent::Item* listBase = store->storageSlots;
+        StorageComponent::Item* listBase = store->storageSlots._data;
         ComponentDescription* entry = listBase[row]._resource;
         RawMaterialDescription* mat = findMat(entry);
         bool bitSet = mat && shift >= 0 &&
@@ -1882,7 +1882,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     // Pass 2: walk again, returning the chosen eligible slot's IBP.
     uint32_t cur = 0;
     for (int64_t row = 0; row < taskCount; row++) {
-        StorageComponent::Item* entryP = store->storageSlots + row;
+        StorageComponent::Item* entryP = store->storageSlots._data + row;
         RawMaterialDescription* mat = findMat(entryP->_resource);
         bool bitSet = mat && shift >= 0 &&
             ((mat->_flags >> shift) & 1);
@@ -1986,7 +1986,7 @@ void CitizenComponent::UpdateHappiness() {
     if (wpIBP != nullptr) {
         Map* mapInfo = gw->m_game;
         int region = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
-        const MapCell* tile = mapInfo->cells + (int64_t)region;
+        const MapCell* tile = mapInfo->cells.GetData() + (int64_t)region;
         int climate = ((tile->field_0x1C[4] != 0) +    // +0x20
                        (tile->field_0x1C[3] != 0) +    // +0x1f
                        (tile->field_0x1C[2] != 0) +    // +0x1e
@@ -1995,7 +1995,7 @@ void CitizenComponent::UpdateHappiness() {
                       (int)tile->field_0x1C[5];                // +0x21
         if (climate < 0) climate = 0;
         ResidenceComponent* st = home->FindComponent<ResidenceComponent>();
-        if (st->residentSlotCount > 1) climate >>= 2;
+        if (st->residentSlots._size > 1) climate >>= 2;
         fVar5 += (float)climate;
     }
     if (field_0x230 != nullptr) fVar5 += uv;

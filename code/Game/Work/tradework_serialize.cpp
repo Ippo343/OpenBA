@@ -49,7 +49,7 @@ TradeWork::Node* TradeWork::AllocNode(const Assignment& rec, Node* parent) {
 // ============================================================
 TradeWork::Node* TradeWork::InsertAssignment(const Assignment& rec) {
     Node* inserted;
-    if (bstRoot == nullptr) {
+    if (assignments.root == nullptr) {
         // Empty tree: allocate the root node inline (matches the decompile's MemAlloc
         // here rather than via the c830 sub-helper).
         Node* n = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x38, 8));
@@ -62,11 +62,11 @@ TradeWork::Node* TradeWork::InsertAssignment(const Assignment& rec) {
             n->balance = 0;
             n->height = 0;
         }
-        bstRoot = n;
+        assignments.root = n;
         inserted = n;
     } else {
         CitizenComponent* key = rec.citizen.Get();
-        Node* cur = bstRoot;
+        Node* cur = assignments.root;
         Node* cursor;     // local_res8 — descent node (parent of the new node)
         for (;;) {
             cursor = cur;
@@ -95,10 +95,10 @@ TradeWork::Node* TradeWork::InsertAssignment(const Assignment& rec) {
         // Rebalance from the descent node (parent of the new node) up to the root.
         // Matches the disasm: retrace cursor = &local_res8 (the parent), not the new node.
         Node* retraceCursor = cursor;
-        Avl38Retrace(&bstRoot, &retraceCursor);   // 0x140025920
+        Avl38Retrace(&assignments.root, &retraceCursor);   // 0x140025920
     }
 
-    workerCount = workerCount + 1;
+    assignments.count = assignments.count + 1;
     return inserted;
 }
 
@@ -108,7 +108,7 @@ TradeWork::Node* TradeWork::InsertAssignment(const Assignment& rec) {
 // ============================================================
 void TradeWork::SerializeAssignments(IO::Serializer& ser) {
     // Serialize the node count (read or write).
-    int32_t count = workerCount;
+    int32_t count = assignments.count;
     ser.Serialize(count, nullptr);
 
     bool readMode = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
@@ -136,7 +136,7 @@ void TradeWork::SerializeAssignments(IO::Serializer& ser) {
         }
     } else {
         // ---- write: walk the AVL in-order, serializing each node ----
-        Node* node = bstRoot;
+        Node* node = assignments.root;
         if (node == nullptr) return;
         // Descend to the leftmost (minimum) node.
         Node* n = node;

@@ -28,6 +28,7 @@
 #include <cstddef>
 #include "Work/Work.h"
 #include "Object/exe_type.h"
+#include "Action/PathAvl.h"   // AvlTreeHead (the assignment set, +0x48)
 
 class CitizenComponent;
 class ComponentDescription;
@@ -73,9 +74,10 @@ public:
     };
 
     // --- TradeWork fields (+0x48) ---
-    Node*    bstRoot;            // +0x48: the assignment set's root
-    int32_t  workerCount;        // +0x50: its count (0x140029860 `CMP [RCX+0x50]; SETG`: signed)
-    uint8_t  _pad54[4];          // +0x54: padding
+    // +0x48: the assignment set {root +0x48, count +0x50 (0x140029860 `CMP
+    // [RCX+0x50]; SETG`: signed), +0x54 padding}: the Set header 0x140025740 /
+    // 0x14002c690 take (a trivial POD).
+    AvlTreeHead<Node> assignments;   // +0x48
 
 private:
     // 0x14002c710: insert `rec` keyed on its citizen; returns the new node, or the
@@ -92,8 +94,16 @@ private:
 
 static_assert(sizeof(TradeWork) == 0x58, "TradeWork is 0x58 (retail create MemAlloc)");
 static_assert(alignof(TradeWork) == 8, "TradeWork is 8-aligned");
-static_assert(offsetof(TradeWork, bstRoot) == 0x48, "TradeWork +0x48");
-static_assert(offsetof(TradeWork, workerCount) == 0x50, "TradeWork +0x50");
+static_assert(offsetof(TradeWork, assignments) == 0x48, "TradeWork +0x48");
+static_assert(offsetof(TradeWork, assignments) + offsetof(AvlTreeHead<TradeWork::Node>, count) == 0x50, "TradeWork +0x50");
+
+// The key the shared set cores compare (Game/PlayerToolManager.h has the others).
+inline CitizenComponent* Avl38KeyOf(const TradeWork::Node* node) { return node->value.citizen.Get(); }
+
+// The typed entry points of the two shared set cores (Player/tool_base_trade.cpp)
+// for the assignment set: one retail body each, the Node's key is value.citizen.
+void Avl38SetRemove(AvlTreeHead<TradeWork::Node>* set, TradeWork::Node* node);                 // 0x140025740
+void Avl38SetFindRemove(AvlTreeHead<TradeWork::Node>* set, CitizenComponent* const* key);      // 0x14002c690
 static_assert(sizeof(TradeWork::Assignment) == 0x18, "the record 0x14002c710 copies is 0x18 bytes");
 static_assert(offsetof(TradeWork::Assignment, citizen) == 0x00, "");
 static_assert(offsetof(TradeWork::Assignment, resource) == 0x08, "");

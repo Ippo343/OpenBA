@@ -663,7 +663,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // --- 0x1400f0267..0x1400f0406: one tree node per town resource type ---
     // The town (CitizenBehavior): entity array +0x00 / count +0x08, and the
     // resource-type registry +0x110 / count +0x118.
-    const int marketEntryCount = marketStorage->slotCount;
+    const int marketEntryCount = marketStorage->storageSlots._size;
     CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;
 
     MW_SupplyTree tree = {nullptr, 0, 0};
@@ -840,7 +840,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
             if (consumeProduce != nullptr) continue;   // 0x1400f0812: has a consumer -> skip
 
-            const int n = storage->slotCount;
+            const int n = storage->storageSlots._size;
             for (int i = 0; i < n; ++i) {
                 const StorageComponent::Item& entry = storage->storageSlots[i];
                 ComponentDescription* resType = entry._resource;
@@ -1047,8 +1047,8 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
         // --- 0x1400f10d3..0x1400f1156: the passability / region test ---------
         // Cell records live at map->cells, stride 0x30 (LEA r,[r+r*2]; SHL 4).
-        const MapCell& cellSrc = map->cells[cellIdx];
-        const MapCell& cellDst = map->cells[candCell];
+        const MapCell& cellSrc = map->cells.GetData()[cellIdx];
+        const MapCell& cellDst = map->cells.GetData()[candCell];
         const uint32_t bitDst = 1u << (cellDst.terrainType & 0x1f);
         const uint32_t bitSrc = 1u << (cellSrc.terrainType & 0x1f);
         const uint32_t mask   = (bitSrc | bitDst) | 0xe1fu;
@@ -1074,7 +1074,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
         // --- 0x1400f1156..0x1400f127f: how much this candidate could supply ---
         // record+0x18 is scratch, zeroed per candidate then filled with the
         // candidate's own stock of each demand resource.
-        const int candEntries = candStorage->slotCount;
+        const int candEntries = candStorage->storageSlots._size;
         for (int r = 0; r < records.count; ++r) rec[r].stage4Scratch = 0;
 
         for (int i = 0; i < candEntries; ++i) {
@@ -1131,7 +1131,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
         // 0x18-byte records: resource type, rank (the ba70 sort key, SIGNED
         // int32), available, demand-record index.
         TakeList takeList = {nullptr, 0, 0};
-        const int winEntries = winStorage->slotCount;
+        const int winEntries = winStorage->storageSlots._size;
 
         for (int i = 0; i < winEntries; ++i) {
             const StorageComponent::Item& wentry = winStorage->storageSlots[i];

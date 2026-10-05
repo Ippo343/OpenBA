@@ -220,7 +220,7 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     context.SetDefaultRenderBuffer(savedDefaultBuffer);
 
     // Read the rendered color back into the terrain pixel array.
-    uint32_t* pixels = terrainPixels;
+    uint32_t* pixels = terrainPixels._data;
     if (colorBuf && pixels)
         // ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z.
         colorBuf->CopyFromTexture(pixels, width, width);
@@ -242,7 +242,7 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     RtGraphics_Renderer_Dtor(renderer);   // ~Renderer 0x1800180a0
 
     if (s_trace)
-        printf("[MinimapPaint] painted terrain: width=%d colorBuf=%p terrainPixels=%p "
+        printf("[MinimapPaint] painted terrain: width=%d colorBuf=%p terrainPixels._data=%p "
                "display(+0x08)=%p\n", width, (void*)colorBuf, (void*)pixels,
                (void*)terrainImage);
 }

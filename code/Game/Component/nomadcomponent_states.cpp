@@ -183,7 +183,7 @@ char NomadComponent::TickLoiter(const System::Time* time) {
     int centre = W * cy + cx;
     int x0 = centre % W - 8;
     int y0 = centre / W - 8;
-    const MapCell* tiles = grid->cells;   // Map +0x80
+    const MapCell* tiles = grid->cells.GetData();   // Map +0x80
     // Retail grows a DynArray<int> of candidates; a fixed 16x16 buffer holds them all.
     int cand[256];
     int nc = 0;

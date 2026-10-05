@@ -148,7 +148,7 @@ static void TerraformArrayPush(T*& data, int32_t& count, int32_t& cap, const T& 
 
 // The terrain-type byte of map cell `idx` (MapCell::terrainType, +0x29).
 static uint8_t* TerraformCellTypeAt(Map* map, int64_t idx) {
-    return &map->cells[idx].terrainType;
+    return &map->cells.GetData()[idx].terrainType;
 }
 
 // Terrain type byte of the map cell containing world point (wx, wy). Retail truncates
@@ -240,7 +240,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
 
         // Original terrain point under p: (x, y, currentHeight). This is the undo record.
         Math::Vector3 original(0.0f, 0.0f, 0.0f);
-        Reimpl_MapGetTerrainPos(map, &original.x, const_cast<float*>(p), '\0', nullptr);   // 0x14009f3e0  LEFT: SIG Reimpl_MapGetTerrainPos (takes float*)   // LEFT: SIG Reimpl_MapGetTerrainPos (takes float*)
+        Reimpl_MapGetTerrainPos(map, &original.x, p, '\0', nullptr);   // 0x14009f3e0 (reads inXY2 only)
 
         // Every cell sharing this heightmap vertex must be a terrain type the mask allows.
         // NOTE: retail samples (x,y), (x-1,y), (x-1,y-1) and then (x-1,y) AGAIN — the

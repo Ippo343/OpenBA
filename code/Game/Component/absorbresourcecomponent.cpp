@@ -86,7 +86,7 @@ char AbsorbResourceComponent::State0Tick() {
     for (int64_t y = y0; y < yEnd; ++y) {
         for (int64_t x = x0; x < xEnd; ++x) {
             const int64_t cellIndex = static_cast<int64_t>(grid->size) * y + x;
-            const MapCell* cell = grid->cells + cellIndex;
+            const MapCell* cell = grid->cells.GetData() + cellIndex;
             ComponentEntity* cellEntity = cell->occupant;
             if (cellEntity == nullptr) continue;
 
