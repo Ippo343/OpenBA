@@ -29,7 +29,6 @@
 #include "Object/factory_registration.h"
 #include "Component/AbsorbResourceComponent.h"
 
-#include "Component/coll_bridge.h"
 #include "Component/RawMaterialComponent.h"   // ENDGAME B.3.9 C1: 0x1401c7c80 cell class
 #include "Component/MapComponent.h"
 #include "Component/StorageComponent.h"

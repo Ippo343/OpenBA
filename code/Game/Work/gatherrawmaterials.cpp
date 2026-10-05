@@ -29,7 +29,6 @@
 #include "Component/exe_bodies.h"       // B3R: bodies called by name
 #include "Dialog/dialog_exe_helpers.h"  // B3R: Dialog_FindComponent_d6c0
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>

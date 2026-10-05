@@ -11,7 +11,6 @@
 
 #include "Component/livestockcomponent_funcs.h"
 #include "Component/LivestockDescription.h"
-#include "Component/coll_bridge.h"
 #include "Component/PastureComponent.h"
 #include "Entity/CitizenBehavior.h"   // CitizenBehavior::livestock (GameUpdateLoop::m_citizenList)
 #include <new>

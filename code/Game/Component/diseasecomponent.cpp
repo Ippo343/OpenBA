@@ -106,7 +106,6 @@
 #include <cstring>
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Component/MapComponent.h"
-#include "Component/coll_bridge.h"
 #include "Game/Map.h"
 #include "Work/GridTile.h"   // GridTile, RawArray (0x14009fc00)
 #include "Entity/CitizenBehavior.h"

@@ -24,7 +24,6 @@
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include "Dialog/dialog_exe_helpers.h"
-#include "Component/coll_bridge.h"
 #include "system/Value.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"

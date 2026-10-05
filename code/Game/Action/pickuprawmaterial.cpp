@@ -51,7 +51,7 @@
 // FUN_140003110 (DynArrayPush 8-byte elements, used to add the entity to the game
 // world list) is the exe-side Collection::Array<Ptr8>::SetSize(n,fill) mono-
 // morphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
+// member call on the typed array, so its resolved-pointer stand-in
 // is gone.
 // ============================================================
 

@@ -43,7 +43,6 @@
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include "system/Filename.h"
-#include "Component/coll_bridge.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>

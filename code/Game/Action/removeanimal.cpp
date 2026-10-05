@@ -44,7 +44,7 @@
 //
 // FUN_140003110 (array push) is the exe-side Collection::Array<Ptr8>::
 // SetSize(n,fill) monomorphisation -- ENDGAME B.3.2 step 2 converted its one
-// call site below to a GameColl::AsArray<GameColl::Ptr8> member call, so its
+// call site below to a member call on the typed array, so its
 // resolved-pointer stand-in is gone.
 //
 // DAT_1401c4218 is FireDescription's cell (the variable name below lies — Table 1).

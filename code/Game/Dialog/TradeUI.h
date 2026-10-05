@@ -57,7 +57,7 @@ class TradeUI final : public UI::DialogController {
 public:
     // ---- the rows of the ten arrays ----------------------------------------
     // Every element type zeroes in its default ctor, as the monomorphised exe
-    // array helpers do for a stride-8-aligned element (Component/coll_bridge.h).
+    // array helpers do for a stride-8-aligned element.
 
     // +0x30: one per raw material the post has in its storage tree
     // (RefreshSellTable 0x140083c70), stride 0x20.

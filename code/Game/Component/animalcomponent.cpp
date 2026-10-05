@@ -52,7 +52,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/animalcomponent_funcs.h"
-#include "Component/coll_bridge.h"
 #include "Component/AnimalDescription.h"      // ENDGAME B.3.9 C1: 0x1401c6fd0 cell class
 #include "Action/MoveTo.h"   // 0x1400c9170, by name
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
@@ -120,8 +119,8 @@ inline float MoveSpeed()  { return kRdata_140172280; }
 //   0x1400c9170 Pf_MoveToCtor_9170
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
 // the exe (ENDGAME B.3.2 step 2); ActHunt_DynArraySetCount_3110 confirmed the
-// 3-arg fill form matches SetSizeCore exactly, so the call site below now goes
-// through GameColl::AsArray<GameColl::Ptr8>(...).SetSizeFill(n, &entity).
+// 3-arg fill form matches SetSizeCore exactly, so the call site below is the
+// typed array's own SetSizeFill(n, &entity).
 
 } // namespace
 

@@ -19,7 +19,6 @@
 #include "Entity/ComponentEntity.h"
 #include "Entity/CitizenBehavior.h"
 #include "Work/Pickup.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Entity/EntityList.h"   // EntityList::removalList

@@ -38,7 +38,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"   // Pf_SetTileRoadFlag_9f2f0, ActHunt_*_c2ea0
 #include "Game/exe_bodies.h"     // Reimpl_MapGetTerrainPos
-#include "Component/coll_bridge.h"
 #include "Component/MapDescription.h"
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
