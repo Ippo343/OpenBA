@@ -101,14 +101,14 @@ extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
 // pair array (+0x00)
 // ============================================================
 extern "C" void ArrayPlusTree_Clear_171b0(PathGraph* self) {
-    PathCostNode* root = self->m_bstRoot;
+    PathCostNode* root = self->m_bst.root;
     if (root) {
-        WorkBase_TreeNodeFree_e320(&self->m_bstRoot, root->left);
-        WorkBase_TreeNodeFree_e320(&self->m_bstRoot, root->right);
+        WorkBase_TreeNodeFree_e320(&self->m_bst.root, root->left);
+        WorkBase_TreeNodeFree_e320(&self->m_bst.root, root->right);
         MemFree(root);
     }
-    self->m_bstRoot = nullptr;
-    self->m_bstCount = 0;
+    self->m_bst.root = nullptr;
+    self->m_bst.count = 0;
     Arr(self, 0x00).~Array();   // LEFT: PathGraph::m_pairs (Entity/CitizenBehavior.h, X6-CW) is three raw fields, not a Collection::Array (H5)
 }
 
