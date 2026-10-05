@@ -109,12 +109,10 @@ class SoundEffect;
 // HELD BY VALUE (B37_RULES 2.4 and its addendum): the exe's MenuDialogLoopT
 // embeds one at +0xb30 and GameUpdateLoop::Load allocates another
 // (`MemAlloc(0x38,8)` at 0x14009706a); both holders are unconverted exe PODs
-// that construct in place through the ctor DOOR (`??0Scene@Audio@@QEAA@XZ`,
-// runtime/src/audio/audio.cpp, reached from engine_funcs.h's
-// MenuDialogLoopT_Ctor). By the B4b-3 ruling a POD holding a POD does not
-// trigger B5-4's `= default` + `friend`: CONCRETE, PUBLIC members, NO C++
-// default constructor (the user-declared copy constructor below suppresses the
-// implicit one), so only the door builds a Scene. Retail's copy constructor
+// that construct in place through `RtAudio_Scene_Ctor`, which runs the C++
+// default constructor `Scene()` (`??0Scene@Audio@@QEAA@XZ`, audio.cpp) by
+// placement new. A holder that declares an `Audio::Scene` member gets the same
+// constructor. CONCRETE, PUBLIC members. Retail's copy constructor
 // (0x180050a50) is DEEP (two Array copies), so the class is not trivially
 // copyable (B7-8).
 //
@@ -244,8 +242,8 @@ private:
     int32_t FindFreeEffect() const;                                                // 0x1800debc0
 
 public:
-    // `??0Scene@Audio@@QEAA@XZ` 0x1800e0160 is the DOOR (audio.cpp); no C++
-    // default constructor exists (see the banner).
+    // `??0Scene@Audio@@QEAA@XZ` — the arrays sized 256 / 4096 (audio.cpp).
+    Scene();                                                                       // 0x1800e0160
 
     // ---- THE 0x38 BYTES ----------------------------------------------------
     int64_t  time;                    // +0x00  current System::Time ticks (set every Update)
@@ -294,8 +292,6 @@ static_assert(sizeof(Scene::SoundType) == 4, "`W4SoundType` is a 4-byte enum in 
 static_assert(sizeof(Scene) == 0x38, "Audio::Scene must be 0x38 bytes (exe MemAlloc(0x38,8) 0x14009706a)");
 static_assert(alignof(Scene) == 8, "Audio::Scene aligns to 8");
 static_assert(!std::is_polymorphic<Scene>::value, "Audio::Scene has no vtable");
-static_assert(!std::is_default_constructible<Scene>::value,
-              "only the ctor DOOR builds a Scene (B37_RULES 2.4 addendum)");
 static_assert(!std::is_trivially_copyable<Scene>::value, "B7-8: retail's copy ctor is deep");
 static_assert(offsetof(Scene, time)           == 0x00, "Scene::time @ +0x00");
 static_assert(offsetof(Scene, playGeneration) == 0x08, "Scene::playGeneration @ +0x08");

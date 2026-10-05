@@ -21,14 +21,11 @@
 // HELD BY VALUE (B37_RULES 2.4 and its addendum): the exe's Game object (built
 // by 0x14009ee70, `code/Game/Game/gameupdateloop_load.cpp`) embeds one at +0x8
 // and GameUpdateLoop allocates another (`MemAlloc(0x60,8)` at 0x140097093); both
-// holders are unconverted exe PODs that construct in place through the ctor
-// DOOR (`??0Scene@Picking@@QEAA@XZ`, runtime/src/picking/scene.cpp). By the
-// B4b-3 ruling a POD holding a POD does not trigger B5-4's `= default` +
-// `friend`, so the class is CONCRETE with PUBLIC members and NO C++ default
-// constructor at all: retail's constructor is `InitGrid(this, 16.0f)` and stays
-// the door (B4b-2: a C++ ctor would run a second time over what the door
-// seeded). The protected-ctor + `friend` shape arrives with a C++ holder in
-// step 8.
+// holders are unconverted exe PODs that construct in place through
+// `RtPicking_Scene_Ctor`, which runs the C++ default constructor `Scene()`
+// (`??0Scene@Picking@@QEAA@XZ`) by placement new; that delegates to the grid
+// constructor `Scene(16.0f)` (0x18007aef0). A holder that declares a
+// `Picking::Scene` member gets the same constructors. CONCRETE, PUBLIC members.
 //
 // THE DESTRUCTOR IS THE IMPLICIT ONE, and that is retail's: `??1Scene@Picking@@
 // QEAA@XZ` (0x180125890) is four `~Array` calls, +0x48, +0x30, +0x18, +0x08 —
@@ -243,7 +240,12 @@ public:
                      HitCallback callback);
 
     // ??1Scene@Picking@@QEAA@XZ  0x180125890 — the IMPLICIT destructor (banner).
-    // ??0Scene@Picking@@QEAA@XZ  0x1801258e0 — DOOR (`InitGrid(this, 16.0f)`).
+    // ??0Scene@Picking@@QEAA@XZ  0x1801258e0 — `Scene(16.0f)` (scene.cpp).
+    Scene();                                                            // 0x1801258e0
+    // The unexported grid constructor the default one delegates to (body in
+    // runtime/src/picking/closure_batch2b.cpp): the member stores, then the
+    // 10,000 bucket heads filled -1 (0x18007b960).
+    explicit Scene(float cellSize);                                     // 0x18007aef0
 
 private:
     // ---- retail `AEBA` (private), exported all the same -------------------
@@ -259,15 +261,6 @@ private:
                       Collection::Array<Vector3>& normals) const;       // 0x180122ef0
 
 public:
-    // ---- UNEXPORTED, PUBLIC here because its registered door delegates -----
-    // `Picking_Scene_InitGrid` 0x18007aef0 — the shared grid initialiser the
-    // ctor calls with 16.0f. Body in runtime/src/picking/closure_batch2b.cpp.
-    Scene* InitGrid(float cellSize);
-
-    // NO default constructor is declared (banner): the user-declared copy
-    // constructor above suppresses the implicit one, so nothing in C++ can
-    // build a Scene except through the ctor door.
-
     // ========================================================================
     // THE 0x60 BYTES. A uniform 2D spatial hash over components [0] and [1] of
     // a Vector3 — the XY plane, NOT XZ. Two independent witnesses: Intersect
@@ -278,7 +271,7 @@ public:
     // NO VTABLE: the ctor and dtor are both `QEAA` (non-virtual), the ctor's
     // first store is a float at +0x00, and no `??_7Scene@Picking@@6B@` exists.
     //
-    // Whole-object witness: InitGrid (0x18007aef0, disassembly
+    // Whole-object witness: the grid ctor Scene(float) (0x18007aef0, disassembly
     // 0x18007af06..0x18007af55) writes, in order, +0x00, +0x04, +0x08, +0x10,
     // +0x18, +0x20, +0x28 = -1, +0x30, +0x38, +0x40 = -1, +0x48, +0x50,
     // +0x58 = -1, +0x5c = 0 — and nothing else. It never writes +0x2c or +0x44,
@@ -286,7 +279,7 @@ public:
     //
     // | Off  | Field        | Pinned by                                        |
     // |------|--------------|--------------------------------------------------|
-    // | 0x00 | _cellSize    | InitGrid's float argument (the ctor passes 16.0f)|
+    // | 0x00 | _cellSize    | the grid ctor's float (Scene() passes 16.0f)   |
     // | 0x04 | _invCellSize | 1.0f/_cellSize. EVERY cell index in Intersect,   |
     // |      |              | 0x18007af70 and 0x1800724d0 is                   |
     // |      |              | `(int)(coord * *(float*)(scene+4))` — CVTTSS2SI, |
@@ -308,10 +301,10 @@ public:
     Collection::Array<int32_t> _cellHeads;     // +0x08
     Collection::Array<Cell>    _cells;         // +0x18
     int32_t                    _freeCell;      // +0x28
-    int32_t                    _pad2c;         // +0x2c  never written by InitGrid
+    int32_t                    _pad2c;         // +0x2c  never written by the ctor
     Collection::Array<Link>    _links;         // +0x30
     int32_t                    _freeLink;      // +0x40
-    int32_t                    _pad44;         // +0x44  never written by InitGrid
+    int32_t                    _pad44;         // +0x44  never written by the ctor
     Collection::Array<Entry>   _entries;       // +0x48
     int32_t                    _freeEntry;     // +0x58
     // `mutable`: the const Intersect (0x1801246c0) bumps it — retail's const

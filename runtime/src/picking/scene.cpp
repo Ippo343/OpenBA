@@ -90,8 +90,8 @@
 // `Picking::Scene` is a real class now (runtime/types/picking/Scene.h). The
 // bodies below are its MEMBERS, and each registered door at the bottom is a
 // one-line QUALIFIED delegation that keeps its name and address rows:
-//   * the ctor door calls `Scene::InitGrid(16.0f)` (closure_batch2b.cpp), as
-//     retail's 0x1801258e0 does — the inlined second copy of InitGrid's
+//   * the ctor door runs `Scene()`, which delegates to `Scene(16.0f)` (closure_batch2b.cpp), as
+//     retail's 0x1801258e0 does — the inlined second copy of that ctor's
 //     fourteen stores that used to live here is gone (B7-6);
 //   * the dtor door runs the IMPLICIT destructor, which is retail's four
 //     `~Array` calls in retail's order (Scene.h banner);
@@ -580,9 +580,16 @@ int32_t Scene::Intersect(const Vector3& startRef, const Vector3& dirRef,
 // ============================================================================
 
 // ??0Scene@Picking@@QEAA@XZ  0x1801258e0 — retail's whole body is
-// `InitGrid(this, 16.0f); return this;` (MOV RAX,RBX at 0x180125904). The
-// allocation it runs (10,000 bucket heads) happens on the LOADER thread when
-// GameUpdateLoop::Load builds the scene.
+// `Scene(this, 16.0f); return this;` (the 0x18007aef0 ctor, then MOV RAX,RBX
+// at 0x180125904). The allocation it runs (10,000 bucket heads) happens on
+// the LOADER thread when GameUpdateLoop::Load builds the scene.
+namespace Picking {
+Scene::Scene() : Scene(kCellSize) {}
+}  // namespace Picking
+
+// The in-place door the exe's two raw-storage holders still call (the Game
+// object's +0x08, GameUpdateLoop::Load's MemAlloc(0x60,8)): it runs the
+// default constructor above.
 extern "C" Picking::Scene* RtPicking_Scene_Ctor(void* selfv) {
-    return reinterpret_cast<Picking::Scene*>(selfv)->Picking::Scene::InitGrid(kCellSize);   // B.3.7 bridge  // LEFT: void* door, GAME-b's gameupdateloop_load.cpp passes raw MemAlloc storage
+    return ::new (selfv) Picking::Scene();
 }

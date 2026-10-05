@@ -153,16 +153,6 @@ void MemFree(void* p) { rtcoll::MemFree(p); }
 // therefore observably identical to retail's element-wise copy for every T
 // actually used here.
 // ----------------------------------------------------------------------------
-// The three zero stores every retail `Array<T>` header starts life with, and
-// the ones its owner writes back after freeing the buffer by hand. Spelled out
-// rather than `*arr = {}` — see the two call sites.
-template <class T>
-void ZeroHeader(Collection::Array<T>* arr) {
-    arr->_data     = nullptr;
-    arr->_size     = 0;
-    arr->_capacity = 0;
-}
-
 template <class T>
 void ArraySetSize(Collection::Array<T>* arr, int32_t n, const T& fillValue) {
     int32_t oldSize = arr->_size;
@@ -209,31 +199,38 @@ EffectSlot* FindEffectSlot(const Scene* self, uint32_t id) {
 }  // namespace
 
 // ============================================================================
-// Audio::Scene::Scene() — retail 0x1800e0160
-// Build oracle only (no diff target: constructing the live object twice would
-// leak the first allocation).
+// Audio::Scene::Scene() — retail 0x1800e0160 (`??0Scene@Audio@@QEAA@XZ`).
+// Retail: [+0x00] = 0 (qword), [+0x08] = 1 (dword), the two Array headers
+// zeroed in declaration order (+0x10/+0x18, +0x20/+0x28), then
+// FUN_180051390(this+0x20, 0x1000) (the AttenutedEffect table), then
+// FUN_180051020(this+0x10) (the 256 Channels), then [+0x30] dword 0 and
+// [+0x34] byte 0 (the five `paused` bytes). Its EH frame (-2 at [RSP+0x20])
+// is the two Array members' destructors. The member initialisers below are
+// those stores in that order; +0x0c is not written, as in retail.
 // ============================================================================
-Scene* RtAudio_Scene_Ctor(Scene* self) {
-    self->time = 0;
-    self->playGeneration = 1;
-    // ENDGAME B.3.2 closing pass: retail's three zero stores, written out.
-    // `= {}` used to mean exactly this because `Collection::Array<T>::operator=`
-    // was the shallow memberwise one; it is now retail's DEEP assign, which
-    // would CLEAR the destination first — and `self` is raw memory here.
-    ZeroHeader(&self->channels);
-    ZeroHeader(&self->effects);
+namespace Audio {
 
+Scene::Scene() : time(0), playGeneration(1), channels(), effects() {
     EffectSlot defaultSlot{};
     defaultSlot.baseVolume = 1.0f;
-    ArraySetSize(&self->effects, 0x1000, defaultSlot);   // matches FUN_180051390(this+0x20, 0x1000)
+    ArraySetSize(&effects, 0x1000, defaultSlot);   // matches FUN_180051390(this+0x20, 0x1000)
 
     Channel defaultChannel{};
     defaultChannel.volume = 1.0f;
     defaultChannel.sampleVolume = 1.0f;
-    ArraySetSize(&self->channels, 0x100, defaultChannel); // matches FUN_180051020(this+0x10)
+    ArraySetSize(&channels, 0x100, defaultChannel); // matches FUN_180051020(this+0x10)
 
-    for (int i = 0; i < 5; ++i) self->paused[i] = 0;
-    return self;
+    for (int i = 0; i < 5; ++i) paused[i] = 0;
+}
+
+}  // namespace Audio
+
+// The in-place door the exe's two raw-storage holders still call
+// (GameUpdateLoop::Load's MemAlloc(0x38,8), MenuDialogLoopT +0xb30): it runs
+// the constructor above. Global placement new: the class's own placement
+// `operator new` (0x180050920) is declared, not ported.
+Scene* RtAudio_Scene_Ctor(Scene* self) {
+    return ::new (static_cast<void*>(self)) Scene();
 }
 
 // ============================================================================

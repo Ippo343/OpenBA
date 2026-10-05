@@ -288,7 +288,7 @@ UNIT_TEST(audio_scene_and_configuration_layout) {
     CHECK_EQ((int)sizeof(Audio::Scene), 0x38);
     CHECK(!std::is_polymorphic<Audio::Scene>::value);
     CHECK(!std::is_abstract<Audio::Scene>::value);
-    CHECK(!std::is_default_constructible<Audio::Scene>::value);   // the ctor DOOR builds it
+    CHECK(std::is_default_constructible<Audio::Scene>::value);    // real ctor 0x1800e0160 (wave Y)
     CHECK(std::is_destructible<Audio::Scene>::value);             // implicit = retail's
     CHECK(!std::is_trivially_copyable<Audio::Scene>::value);      // B7-8
     CHECK_EQ((int)offsetof(Audio::Scene, channels), 0x10);

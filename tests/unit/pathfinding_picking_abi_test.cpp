@@ -559,9 +559,9 @@ UNIT_TEST(picking_scene_layout_and_value_shape) {
     CHECK_EQ((int)alignof(Picking::Scene), 8);
     CHECK(!std::is_polymorphic<Picking::Scene>::value);
     CHECK(!std::is_abstract<Picking::Scene>::value);
-    // No C++ default ctor: only the ctor DOOR builds one (B4b-2, B37_RULES
-    // 2.4 addendum); the dtor is the implicit, public one (retail's body).
-    CHECK(!std::is_default_constructible<Picking::Scene>::value);
+    // The default ctor is retail's 0x1801258e0 (wave Y); the dtor is the
+    // implicit, public one (retail's body).
+    CHECK(std::is_default_constructible<Picking::Scene>::value);
     CHECK(std::is_destructible<Picking::Scene>::value);
     // B7-8: retail's copy ctor is deep; the class is never trivially copyable.
     CHECK(!std::is_trivially_copyable<Picking::Scene>::value);

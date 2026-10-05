@@ -2,7 +2,7 @@
 // runtime/src/picking/closure_batch2b.cpp — cutover closure batch 2b
 // ============================================================================
 //
-//   0x18007aef0  Picking_Scene_InitGrid   (unexported, 14 stores + one call)
+//   0x18007aef0  Picking::Scene::Scene(float) (unexported, 14 stores + one call)
 //
 // The shared grid initialiser `??0Scene@Picking@@QEAA@XZ` (0x1801258e0) calls
 // with a cell size of 16.0f. Our port of that constructor
@@ -63,37 +63,19 @@ const float kOne = 1.0f;
 // behavioural difference from retail, and scene.cpp's oracle already excludes
 // exactly those two offsets from its byte comparison.
 // ============================================================================
-// ENDGAME B.3.7 block B6: the body is `Picking::Scene::InitGrid` now, and the
-// ctor door (scene.cpp) CALLS it with 16.0f exactly as retail's 0x1801258e0
-// does — the second, inlined copy of these fourteen stores that scene.cpp used
-// to carry is gone (B7-6). The registered door is a qualified delegation.
+// B.4 wave Y: 0x18007aef0 is a CONSTRUCTOR — its EH frame (-2 at
+// [RSP+0x20]) covers the four Array members, and its stores are the member
+// initialisers in declaration order — so it is `Scene(float cellSize)`, and
+// the exported default ctor 0x1801258e0 delegates to it with 16.0f
+// (scene.cpp). The fourteen stores are the initialiser list below.
 namespace Picking {
 
-Scene* Scene::InitGrid(float cellSize) {
-    _cellSize    = cellSize;
-    _invCellSize = kOne / cellSize;
-
-    _cellHeads._data     = nullptr;
-    _cellHeads._size     = 0;
-    _cellHeads._capacity = 0;
-
-    _cells._data     = nullptr;
-    _cells._size     = 0;
-    _cells._capacity = 0;
-    _freeCell        = -1;
-
-    _links._data     = nullptr;
-    _links._size     = 0;
-    _links._capacity = 0;
-    _freeLink        = -1;
-
-    _entries._data     = nullptr;
-    _entries._size     = 0;
-    _entries._capacity = 0;
-    _freeEntry         = -1;
-
-    _queryStamp = 0;
-
+Scene::Scene(float cellSize)
+    : _cellSize(cellSize), _invCellSize(kOne / cellSize),
+      _cellHeads(), _cells(), _freeCell(-1),
+      _links(), _freeLink(-1),
+      _entries(), _freeEntry(-1),
+      _queryStamp(0) {
     // ENDGAME B.3.2 step 2 (callers) — retail 0x18007b960, `Array<int32>::
     // SetSize(10000)` with every new slot filled -1 (both constants folded
     // into the body). NOT trait-equivalent (Collection.h's Array banner names
@@ -102,7 +84,6 @@ Scene* Scene::InitGrid(float cellSize) {
     // so `_cellHeads` is bridged through the hand-derived row rather than
     // trusted to its own (default) spec.
     rtcoll::AsArray<&rtcoll::kSpec_I32Neg1>(&_cellHeads)->SetSize(10000);
-    return this;   // MOV RAX,<this>
 }
 
 }  // namespace Picking
