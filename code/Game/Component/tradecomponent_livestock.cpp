@@ -105,10 +105,10 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
     // Corner 0 and corner 1 of the footprint. Three floats each: 0x140122e20 writes a
     // full Vector3 through its out-param, and a 2-float array here would let it scribble
     // over whatever local sits next on the stack (reference_out_param_buffer_too_small).
-    float a[3] = {0.0f, 0.0f, 0.0f};
-    float b[3] = {0.0f, 0.0f, 0.0f};
-    InteractNodePosition(footprint, a, 2, 0, nullptr);
-    InteractNodePosition(footprint, b, 2, 1, nullptr);
+    Math::Vector3 a;
+    Math::Vector3 b;
+    InteractNodePosition(footprint, &a, 2, 0, nullptr);
+    InteractNodePosition(footprint, &b, 2, 1, nullptr);
 
     GameUpdateLoop* const w = GameUpdateLoop::_singleton;
     if (!w) return;
@@ -118,15 +118,15 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
     // Retail derives each cell, packs it into a linear index, then immediately unpacks
     // it again. The round-trip is an identity; it is kept so this reads against the
     // disassembly one instruction at a time.
-    int minX = ToCell(a[0], half, mapSize);
-    int minY = ToCell(a[1], half, mapSize);
+    int minX = ToCell(a.x, half, mapSize);
+    int minY = ToCell(a.y, half, mapSize);
     {
         const int idx = mapSize * minY + minX;
         minX = idx % mapSize;
         minY = idx / mapSize;
     }
-    int maxX = ToCell(b[0], half, mapSize);
-    int maxY = ToCell(b[1], half, mapSize);
+    int maxX = ToCell(b.x, half, mapSize);
+    int maxY = ToCell(b.y, half, mapSize);
     {
         const int idx = mapSize * maxY + maxX;
         maxX = idx % mapSize;
@@ -179,9 +179,9 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
         const float r1 = rng->RandFloat();
         const float r2 = rng->RandFloat();
         const Math::Vector3 pos(
-            a[0] + (b[0] - a[0]) * r2,
-            a[1] + (b[1] - a[1]) * r1,
-            a[2] + (b[2] - a[2]) * 0.0f);    // XORPS XMM9,XMM9 — always corner-0's Z
+            a.x + (b.x - a.x) * r2,
+            a.y + (b.y - a.y) * r1,
+            a.z + (b.z - a.z) * 0.0f);    // XORPS XMM9,XMM9 — always corner-0's Z
 
         const float yaw = fn_Random_RandFloatTol(rng) * yawSpread;
         if (animal)

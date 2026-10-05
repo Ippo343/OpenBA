@@ -173,13 +173,13 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT:
     // called by their members; the find's InternalPtr slot was always non-null.
     ComponentEntity* ownerEntity = (*param_3)->_entity.Get();
     InteractComponent* posComp = ownerEntity->FindComponent<InteractComponent>();
-    float pos[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // pos[0]=x (local_48), pos[1]=y (local_44)
-    InteractNodePosition(posComp, pos, 0, 0, nullptr);
+    Vector3Slot pos;   // pos[0]=x (local_48), pos[1]=y (local_44)
+    InteractNodePosition(posComp, &pos.v, 0, 0, nullptr);
 
     int width = map->size;
     if (width <= 0) return 0;
-    int cellX = static_cast<int>(pos[0] + static_cast<float>(width >> 1));
-    int cellY = static_cast<int>(pos[1] + static_cast<float>(width >> 1));
+    int cellX = static_cast<int>(pos.v.x + static_cast<float>(width >> 1));
+    int cellY = static_cast<int>(pos.v.y + static_cast<float>(width >> 1));
     if (cellX < 0) cellX = 0;
     if (width <= cellX) cellX = width - 1;
     if (cellY < 0) cellY = 0;

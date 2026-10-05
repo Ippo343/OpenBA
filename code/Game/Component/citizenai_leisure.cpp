@@ -249,11 +249,11 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
             interactIBP[0] = interact;   // the InternalBasePtr ctor: `mov [rcx],rdx`
 
             // resolve world pos -> clamped grid cell
-            float posVec[4] = {0, 0, 0, 0};
-            Pf_EntityResolvePos_2e20(interactIBP[0], posVec, 0, 0, nullptr);
+            Vector3Slot posVec;
+            Pf_EntityResolvePos_2e20(interactIBP[0], &posVec.v, 0, 0, nullptr);
             int w = mapGrid->size;
-            int col = static_cast<int>(posVec[0] + static_cast<float>(w >> 1));
-            int row = static_cast<int>(posVec[1] + static_cast<float>(w >> 1));
+            int col = static_cast<int>(posVec.v.x + static_cast<float>(w >> 1));
+            int row = static_cast<int>(posVec.v.y + static_cast<float>(w >> 1));
             if (col < 0) col = 0; if (w <= col) col = w - 1;
             if (row < 0) row = 0; if (w <= row) row = w - 1;
             uint32_t destCell = static_cast<uint32_t>(w * row + col);
@@ -393,11 +393,11 @@ uint64_t CitizenAIComponent::State_Leisure() {
 
         InteractComponent* posIBP = local_res20->FindComponent<InteractComponent>();   // 0x140002ed0
         InteractComponent** pp = &posIBP;
-        float dpos[4] = {0, 0, 0, 0};
-        if (pp) InteractNodePosition(*pp, dpos, 0, 0, nullptr);
+        Vector3Slot dpos;
+        if (pp) InteractNodePosition(*pp, &dpos.v, 0, 0, nullptr);
         int w = piVar5->size;
-        int tcol = static_cast<int>(static_cast<float>(w >> 1) + dpos[0]);
-        int trow = static_cast<int>(static_cast<float>(w >> 1) + dpos[1]);
+        int tcol = static_cast<int>(static_cast<float>(w >> 1) + dpos.v.x);
+        int trow = static_cast<int>(static_cast<float>(w >> 1) + dpos.v.y);
         if (tcol < 0) tcol = 0; if (w <= tcol) tcol = w - 1;
         if (trow < 0) trow = 0; if (w <= trow) trow = w - 1;
         uint32_t uVar35 = static_cast<uint32_t>(w * trow + tcol);

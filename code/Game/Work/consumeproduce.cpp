@@ -491,7 +491,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     float terrainPos[4] = {};
                     if (storageLoc == nullptr) {
                         if (posComp != nullptr) {
-                            InteractNodePosition(posComp, reinterpret_cast<float*>(&foundEntity), 0, 0, nullptr);   // 0x140122e20  // LEFT: the 8-byte slot reused as a float[3] out (row 260)
+                            InteractNodePosition(posComp, reinterpret_cast<Math::Vector3*>(&foundEntity), 0, 0, nullptr);   // 0x140122e20  // LEFT: the 8-byte slot reused as a Math::Vector3 out (row 260)
                             terrainPos[0] = *(float*)&foundEntity;      // LEFT: row 260
                             terrainPos[1] = ((float*)&foundEntity)[1];  // LEFT: row 260
                             terrainPos[2] = ((float*)&foundEntity)[2];  // LEFT: row 260
@@ -596,8 +596,8 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                     if (hs2Count < 1) {
                                         // Storage empty -- set up path to fetch material
                                         ComponentEntity* fetchDest = foundStorage;
-                                        float fetchPos[4] = {};
-                                        InteractNodePosition(posComp, fetchPos, 0, slot, nullptr);   // 0x140122e20
+                                        Vector3Slot fetchPos;
+                                        InteractNodePosition(posComp, &fetchPos.v, 0, slot, nullptr);   // 0x140122e20
 
                                         ComponentEntity* pathSrc = field_10.Get();
 
@@ -617,7 +617,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                         WorkAct_GatherRawMatCtor_bf790(
                                             &pickup, &pathCitizen,
                                             field_20, &pathSrc,
-                                            fetchPos, &fetchDest, searchPos2,
+                                            &fetchPos.v.x, &fetchDest, searchPos2,
                                             matEntity2, -1, slot, 1, '\0', 0, 0);
 
                                         int priority2 = field_20;
@@ -646,13 +646,13 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         uint32_t freeCount = 0;
 
         for (int posIdx = 0; posIdx < totalPositions; posIdx++) {
-            float posVec[3];
-            InteractNodePosition(posComp, posVec, 2, posIdx, nullptr);   // 0x140122e20
+            Vector3Slot posVec;
+            InteractNodePosition(posComp, &posVec.v, 2, posIdx, nullptr);   // 0x140122e20
 
             mapSize = map->size;
             halfMap = mapSize >> 1;
-            int px = (int)(posVec[0] + (float)halfMap);
-            int py = (int)(posVec[1] + (float)halfMap);
+            int px = (int)(posVec.v.x + (float)halfMap);
+            int py = (int)(posVec.v.y + (float)halfMap);
             if (px < 0) px = 0;
             if (px >= mapSize) px = mapSize - 1;
             if (py < 0) py = 0;
@@ -690,13 +690,13 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
         // --- Check each position for workplace assignment ---
         for (int posIdx2 = 0; posIdx2 < totalPositions; posIdx2++) {
-            float checkPos[3];
-            InteractNodePosition(posComp, checkPos, 2, posIdx2, nullptr);   // 0x140122e20
+            Vector3Slot checkPos;
+            InteractNodePosition(posComp, &checkPos.v, 2, posIdx2, nullptr);   // 0x140122e20
 
             mapSize = map->size;
             halfMap = mapSize >> 1;
-            int cx = (int)(checkPos[0] + (float)halfMap);
-            int cy = (int)(checkPos[1] + (float)halfMap);
+            int cx = (int)(checkPos.v.x + (float)halfMap);
+            int cy = (int)(checkPos.v.y + (float)halfMap);
             if (cx < 0) cx = 0;
             if (cx >= mapSize) cx = mapSize - 1;
             if (cy < 0) cy = 0;
@@ -735,14 +735,14 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
         if (allInputsAvailable) {
             // Get position for the output slot
-            float producePos[3];
+            Vector3Slot producePos;
             float produceHeading[2] = {};
-            InteractNodePosition(posComp, producePos, 0, slot, produceHeading);   // 0x140122e20
+            InteractNodePosition(posComp, &producePos.v, 0, slot, produceHeading);   // 0x140122e20
 
             mapSize = map->size;
             halfMap = mapSize >> 1;
-            int prodCellX = (int)(producePos[1] + (float)halfMap);
-            int prodCellY = (int)(producePos[0] + (float)halfMap);
+            int prodCellX = (int)(producePos.v.y + (float)halfMap);
+            int prodCellY = (int)(producePos.v.x + (float)halfMap);
             if (prodCellY < 0) prodCellY = 0;
             if (prodCellY >= mapSize) prodCellY = mapSize - 1;
             if (prodCellX < 0) prodCellX = 0;
@@ -788,7 +788,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     &citizenRef4,
                     field_20,
                     &workEntityRef,
-                    producePos,
+                    &producePos.v.x,
                     produceHeading[0],
                     field_10->_description,
                     recipe->product,   // +0x10

@@ -445,10 +445,10 @@ static void Game_SpawnCitizens_Impl() {
                             if (spawnedHere >= capacityAccum) break;
 
                             // Get spawn point for this slot
-                            float spawnPos[4] = {0};
+                            Vector3Slot spawnPos;
                             // 0x140122e20 Pf_EntityResolvePos_2e20 (door misnamed
                             // fn_ResidenceComponent_GetSpawnPoint)
-                            InteractNodePosition(resComp, spawnPos, 0, spawnedHere, nullptr);
+                            InteractNodePosition(resComp, &spawnPos.v, 0, spawnedHere, nullptr);
 
                             // Check if we've reached the global limit of 4
                             if (spawnedTotal >= 4) {
@@ -511,7 +511,7 @@ static void Game_SpawnCitizens_Impl() {
                             float maxAge = citDesc->maxPregnancyAge;
                             float age = randAge * (maxAge - minAge) + minAge;
 
-                            CitizenComp_DeferredInit_117080(citizen, spawnPos,
+                            CitizenComp_DeferredInit_117080(citizen, &spawnPos.v,
                                                       genderFlag, '\0',
                                                       age, '\x01', &parentIBP,
                                                       profList);   // 0x140117080

@@ -93,12 +93,12 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
                 ComponentEntity* wellEntity = wells._data[-1 - id]->_entity.Get();
                 InteractComponent* interact = wellEntity->FindComponent<InteractComponent>();
 
-                float pos[3] = {0.0f, 0.0f, 0.0f};
-                InteractNodePosition(interact, pos, 0, 0, nullptr);
+                Math::Vector3 pos;
+                InteractNodePosition(interact, &pos, 0, 0, nullptr);
 
                 int iVar6 = map->size;                 // grid width W
-                int iVar2 = static_cast<int>(pos[0] + static_cast<float>(iVar6 >> 1));
-                int iVar3 = static_cast<int>(pos[1] + static_cast<float>(iVar6 >> 1));
+                int iVar2 = static_cast<int>(pos.x + static_cast<float>(iVar6 >> 1));
+                int iVar3 = static_cast<int>(pos.y + static_cast<float>(iVar6 >> 1));
                 if (iVar2 < 0)       iVar2 = 0;
                 if (iVar6 <= iVar2)  iVar2 = iVar6 - 1;
                 if (iVar3 < 0)       iVar3 = 0;
@@ -265,8 +265,8 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
         InteractNodeCount(chosen, 0));   // 0x140123070
     uint32_t randIdx = GameUpdateLoop::_singleton->m_random->Rand(count);
 
-    float resolved[3] = {0.0f, 0.0f, 0.0f};
-    InteractNodePosition(chosen, resolved, 0, static_cast<int>(randIdx), nullptr);
+    Math::Vector3 resolved;
+    InteractNodePosition(chosen, &resolved, 0, static_cast<int>(randIdx), nullptr);
 
     // Anchor cell of the well's entity, then its terrain position into outB.
     ComponentEntity* anchorEntity = wellEntity;
@@ -283,8 +283,8 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
     outB[2] = outP[2];
 
     // The random-resolved sub-entity position goes to outA.
-    outA[0] = resolved[0];
-    outA[1] = resolved[1];
-    outA[2] = resolved[2];
+    outA[0] = resolved.x;
+    outA[1] = resolved.y;
+    outA[2] = resolved.z;
     return 1;
 }

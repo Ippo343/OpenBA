@@ -173,12 +173,12 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
     if (spotCount > 0) {
         for (int i = 0; i < spotCount; i++) {
             // Get spot position (mode=2)
-            float spotPos[3];
-            InteractNodePosition(posComp, spotPos, 2, i, nullptr);   // 0x140122e20
+            Vector3Slot spotPos;
+            InteractNodePosition(posComp, &spotPos.v, 2, i, nullptr);   // 0x140122e20
 
             int half = mapSize >> 1;
-            int cx = ClampToMap((int)(spotPos[0] + (float)half), mapSize);
-            int cy = ClampToMap((int)(spotPos[1] + (float)half), mapSize);
+            int cx = ClampToMap((int)(spotPos.v.x + (float)half), mapSize);
+            int cy = ClampToMap((int)(spotPos.v.y + (float)half), mapSize);
             int cellIdx = mapSize * cy + cx;
 
             // If spot state is 2 (waiting for reset) and map cell is empty, reset to 0
@@ -202,9 +202,9 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
         if (freeSpot >= 0) {
             // Get citizen position (mode=0) for pathfinding
-            float citizenPos[3];
+            Vector3Slot citizenPos;
             float citizenHeading;
-            InteractNodePosition(posComp, citizenPos, 0, emptySlot, &citizenHeading);   // 0x140122e20
+            InteractNodePosition(posComp, &citizenPos.v, 0, emptySlot, &citizenHeading);   // 0x140122e20
 
             // The citizen's position (CharacterComponent -> ModelComponent -> the
             // transform translation, +0x158)
@@ -220,12 +220,12 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             int citizenCell = cMapSize * ccy + ccx;
 
             // Get spot cell
-            float spotPos[3];
-            InteractNodePosition(posComp, spotPos, 0, emptySlot, &citizenHeading);   // 0x140122e20
+            Vector3Slot spotPos;
+            InteractNodePosition(posComp, &spotPos.v, 0, emptySlot, &citizenHeading);   // 0x140122e20
 
             int spHalf = cMapSize >> 1;
-            int scx = ClampToMap((int)(spotPos[0] + (float)spHalf), cMapSize);
-            int scy = ClampToMap((int)(spotPos[1] + (float)spHalf), cMapSize);
+            int scx = ClampToMap((int)(spotPos.v.x + (float)spHalf), cMapSize);
+            int scy = ClampToMap((int)(spotPos.v.y + (float)spHalf), cMapSize);
             int spotCell = cMapSize * scy + scx;
 
             // Check passability. This is NOT an A*: 0x1400a00f0 is the region-equivalence
@@ -306,7 +306,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
                 WorkAct_FishWorkCtor_beae0(
                     &citizenRef, field_20, &entityRef,
-                    citizenPos, citizenHeading,
+                    &citizenPos.v.x, citizenHeading,
                     fishingDesc->_fish,
                     uvScale, freeSpotMapCell, spotInfo);
 
@@ -378,12 +378,12 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
     // Iterate spots and check if any has an entity that can be assigned
     if (spotCount > 0) {
         for (int i = 0; i < spotCount; i++) {
-            float spotPos[3];
-            InteractNodePosition(posComp, spotPos, 2, i, nullptr);   // 0x140122e20
+            Vector3Slot spotPos;
+            InteractNodePosition(posComp, &spotPos.v, 2, i, nullptr);   // 0x140122e20
 
             int half = map->size >> 1;
-            int cx = ClampToMap((int)(spotPos[0] + (float)half), map->size);
-            int cy = ClampToMap((int)(spotPos[1] + (float)half), map->size);
+            int cx = ClampToMap((int)(spotPos.v.x + (float)half), map->size);
+            int cy = ClampToMap((int)(spotPos.v.y + (float)half), map->size);
             int cellIdx = map->size * cy + cx;
 
             // Check if there's a structure at this cell (the cell's occupant, +0x08)

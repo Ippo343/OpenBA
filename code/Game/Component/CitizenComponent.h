@@ -85,6 +85,7 @@ class StatusIconComponent;
 class CitizenDescription;
 class WorkPlaceComponent;
 class ComponentDescription;
+namespace Math { class Vector3; }
 
 class CitizenComponent final : public Component {
     DECLARE_EXE_TYPE(CitizenComponent)
@@ -147,7 +148,7 @@ public:
     void  AdvanceSchooling();                                     // 0x1401117a0 (message 4)
     void  ShortenDisease();                                       // 0x140111540 (message 5)
     void  WarmAt(ComponentEntity* target);                        // 0x1401121e0 (message 0)
-    void  Initialize(const float* pos, uint32_t gender, char isElder, float age,
+    void  Initialize(const Math::Vector3* pos, uint32_t gender, char isElder, float age,
                      char forceEmploy, CitizenComponent* parent,
                      Profession* profession);                     // 0x140117080
     void  SetupYoung();                                           // 0x140115110

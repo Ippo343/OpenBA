@@ -224,11 +224,11 @@ int HomeDoorCell(CitizenComponent* const* citizen) {
     // cell for every building, N workers collapsed into N identical src/dst pairs
     // (the "duplicate routes" report).
     InteractComponent* door = (*citizen)->home->FindComponent<InteractComponent>();   // 0x140002ed0
-    float vec[3] = {0, 0, 0};
-    InteractNodePosition(door, vec, 0, 0, nullptr);
+    Math::Vector3 vec;
+    InteractNodePosition(door, &vec, 0, 0, nullptr);
     int w = map->size;
-    int col = (int)(vec[0] + (float)(w >> 1));   // local_18 = x
-    int row = (int)((float)(w >> 1) + vec[1]);   // local_14 = y
+    int col = (int)(vec.x + (float)(w >> 1));   // local_18 = x
+    int row = (int)((float)(w >> 1) + vec.y);   // local_14 = y
     if (col < 0) col = 0;
     if (w <= col) col = w - 1;
     if (row < 0) row = 0;

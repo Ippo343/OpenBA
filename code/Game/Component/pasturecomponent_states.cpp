@@ -458,11 +458,11 @@ void PastureProduce(PastureComponent* self) {
         const int nCells = InteractNodeCount(pos, 2);   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
         int placedCell = -1;
         for (int c = 0; c < nCells && placedCell < 0; ++c) {
-            float xy[3] = {0, 0, 0};
-            InteractNodePosition(pos, xy, 2, c, nullptr);
+            Math::Vector3 xy;
+            InteractNodePosition(pos, &xy, 2, c, nullptr);
             const int dim = grid->size;
-            int gx = static_cast<int>(xy[0] + static_cast<float>(dim >> 1));
-            int gy = static_cast<int>(xy[1] + static_cast<float>(dim >> 1));
+            int gx = static_cast<int>(xy.x + static_cast<float>(dim >> 1));
+            int gy = static_cast<int>(xy.y + static_cast<float>(dim >> 1));
             if (gx < 0) gx = 0;
             if (gx >= dim) gx = dim - 1;
             if (gy < 0) gy = 0;

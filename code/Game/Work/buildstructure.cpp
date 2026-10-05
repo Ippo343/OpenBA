@@ -341,11 +341,11 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
         }
 
         // Get world position for this build point
-        float candidatePos[3];
-        InteractNodePosition(posComp, candidatePos, 1, chosenIndex, nullptr);   // 0x140122e20
+        Vector3Slot candidatePos;
+        InteractNodePosition(posComp, &candidatePos.v, 1, chosenIndex, nullptr);   // 0x140122e20
 
         gridSize = map->size;
-        int candidateCell = WorldToCell(gridSize, candidatePos[0], candidatePos[1]);
+        int candidateCell = WorldToCell(gridSize, candidatePos.v.x, candidatePos.v.y);
 
         if (candidateCell != 0) {
             map->FillZones();   // 0x14009c480; retail sets RCX only (0x1400e532a / 54ea / 556c)
@@ -353,11 +353,11 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
             const MapCell* gridData = map->cells.GetData();
             if (CheckCellConnectivity(gridData, buildingCell, candidateCell)) {
                 // Found accessible point -- get exact position
-                float bestPos[3];
-                InteractNodePosition(posComp, bestPos, 1, chosenIndex, nullptr);   // 0x140122e20
+                Vector3Slot bestPos;
+                InteractNodePosition(posComp, &bestPos.v, 1, chosenIndex, nullptr);   // 0x140122e20
 
                 gridSize = map->size;
-                int exactCell = WorldToCell(gridSize, bestPos[0], bestPos[1]);
+                int exactCell = WorldToCell(gridSize, bestPos.v.x, bestPos.v.y);
 
                 // Calculate initial path cost
                 int bestPathCost = map->PathDistance((uint32_t)buildingCell, exactCell, 1);   // 0x14009f810
@@ -370,11 +370,11 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                 for (int posIdx = 0; posIdx < total; posIdx++) {
                     if (posIdx == chosenIndex) continue;
 
-                    float testPos[3];
-                    InteractNodePosition(posComp, testPos, 1, posIdx, nullptr);   // 0x140122e20
+                    Vector3Slot testPos;
+                    InteractNodePosition(posComp, &testPos.v, 1, posIdx, nullptr);   // 0x140122e20
 
                     gridSize = map->size;
-                    int testCell = WorldToCell(gridSize, testPos[0], testPos[1]);
+                    int testCell = WorldToCell(gridSize, testPos.v.x, testPos.v.y);
 
                     // Check connectivity (first pass)
                     map->FillZones();   // 0x14009c480; retail sets RCX only (0x1400e532a / 54ea / 556c)
@@ -455,9 +455,9 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
                     // If path is shorter than half current best, adopt this position
                     if (dist < (bestPathCost >> 1)) {
-                        bestPos[0] = testPos[0];
-                        bestPos[1] = testPos[1];
-                        bestPos[2] = testPos[2];
+                        bestPos.v.x = testPos.v.x;
+                        bestPos.v.y = testPos.v.y;
+                        bestPos.v.z = testPos.v.z;
                     }
                 }
 
@@ -475,7 +475,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                         &citizenEntityVal,
                         field_20,
                         &field_10,
-                        bestPos,
+                        &bestPos.v.x,
                         chosenIndex,
                         field_48
                     );

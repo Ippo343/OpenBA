@@ -327,10 +327,10 @@ void PastureComponent::OnEvent(int msgId) {
     if (!grid || width <= 0) return;
 
     for (uint32_t i = 0; (int)i < InteractNodeCount(pos, 2); ++i) {   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
-        float p[3] = {0, 0, 0};
-        InteractNodePosition(pos, p, 2, (int)i, nullptr);
-        int x = (int)(p[0] + (float)(width >> 1));
-        int y = (int)(p[1] + (float)(width >> 1));
+        Math::Vector3 p;
+        InteractNodePosition(pos, &p, 2, (int)i, nullptr);
+        int x = (int)(p.x + (float)(width >> 1));
+        int y = (int)(p.y + (float)(width >> 1));
         if (x < 0) x = 0; if (x >= width) x = width - 1;
         if (y < 0) y = 0; if (y >= width) y = width - 1;
         const int cell = width * y + x;

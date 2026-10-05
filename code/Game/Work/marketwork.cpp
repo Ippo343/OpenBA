@@ -956,8 +956,8 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
                 weight += InteractNodeCount(interact->useLocations[k].Get(), 0);   // 0x140123070
             }
             const uint32_t roll = GameUpdateLoop::_singleton->m_random->Rand(weight);
-            float marketPos[3] = {0.0f, 0.0f, 0.0f};
-            InteractNodePosition(interact, marketPos, 0, static_cast<int>(roll), nullptr);   // 0x140122e20
+            Math::Vector3 marketPos;
+            InteractNodePosition(interact, &marketPos, 0, static_cast<int>(roll), nullptr);   // 0x140122e20
 
             // 0x1400f0d57..0x1400f0ddc: build the citizen's action chain.
             // Arg 8 is the resource TYPE ENTITY POINTER, full 64 bits -- see the
@@ -968,7 +968,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             ::Object::InternalPtr<Action> pathOut;   // retail discards this handle on this arm
             const int pathType = field_20;
             WorkAct_GatherRawMatCtor_bf790(&pathOut, &pathWalker, pathType, &pathDest, destPos,
-                          &pathSrc, marketPos, resType, take,
+                          &pathSrc, &marketPos.x, resType, take,
                           0, 1, '\0', 0, 1);
 
             // 0x1400f0de1..0x1400f0e2a: stamp the citizen.
@@ -1205,8 +1205,8 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             weight += InteractNodeCount(mic->useLocations[k].Get(), 0);   // 0x140123070
         }
         const uint32_t roll2 = GameUpdateLoop::_singleton->m_random->Rand(weight);
-        float marketPos2[3] = {0.0f, 0.0f, 0.0f};
-        InteractNodePosition(mic, marketPos2, 0, static_cast<int>(roll2), nullptr);   // 0x140122e20
+        Math::Vector3 marketPos2;
+        InteractNodePosition(mic, &marketPos2, 0, static_cast<int>(roll2), nullptr);   // 0x140122e20
 
         float winnerPos[3] = {0.0f, 0.0f, 0.0f};
         StorageLocationComponent* winLoc = winner->FindComponent<StorageLocationComponent>();
@@ -1275,7 +1275,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             // 0 and -1 here, not a material template and a count.
             ::Object::InternalPtr<Action> pathOut2;
             const int pathType2 = field_20;
-            WorkAct_GatherRawMatCtor_bf790(&pathOut2, &pathCitizen, pathType2, &pathMarket, marketPos2,
+            WorkAct_GatherRawMatCtor_bf790(&pathOut2, &pathCitizen, pathType2, &pathMarket, &marketPos2.x,
                           &pathWinner, winnerPos, nullptr, -1, 0, 1, '\0', 0, 1);
 
             CitizenComponent* citizen5 = *citizenSlot;

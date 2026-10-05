@@ -71,6 +71,7 @@
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Component/exe_bodies.h"            // CitizenComp_DeferredInit_117080
+#include "Action/exe_bodies.h"               // Vector3Slot (the spawn position)
 #include "Game/exe_bodies.h"                 // fn_Random_RandFloatTol
 #include "Object/factory_registration.h"
 #include "object/TypeInfo.h"                 // caller batch CB6: Object::Base::Type()
@@ -309,7 +310,10 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     if (!(jitter == jitter) || jitter < 0.0f || jitter > 1.0e4f) jitter = 0.0f;  // deviation (d)
     float jy = (rng ? fn_Random_RandFloatTol(rng) : 0.0f) * jitter;
     float jx = (rng ? fn_Random_RandFloatTol(rng) : 0.0f) * jitter;
-    float pos[3] = { base[0] + jx, base[1] + jy, base[2] };
+    Vector3Slot pos;
+    pos.v.x = base[0] + jx;
+    pos.v.y = base[1] + jy;
+    pos.v.z = base[2];
 
     // 6. the Laborer profession key (ProfessionList at gw+0xb0, +0x30)
     Profession* laborer = nullptr;
@@ -325,7 +329,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     // 7. the whole per-citizen init
     CitizenComponent* nullIBP = nullptr;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);
-    CitizenComp_DeferredInit_117080(comp, pos,   // 0x140117080
+    CitizenComp_DeferredInit_117080(comp, &pos.v,   // 0x140117080
                                     static_cast<uint32_t>(genderSel == '\0'),
                                     isChild ? '\x01' : '\0', age, educated, &nullIBP,
                                     laborer);
@@ -346,7 +350,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
                 "(adultAge=%.2f) educated=%d pos=(%.1f,%.1f,%.1f) jitter=%.2f "
                 "laborerProf=0x%llx category=%d\n",
                 (void*)ent, (void*)comp, (int)(genderSel == '\0'), isChild ? "child" : "adult", age,
-                adultAge, (int)educated, pos[0], pos[1], pos[2], jitter,
+                adultAge, (int)educated, pos.v.x, pos.v.y, pos.v.z, jitter,
                 (unsigned long long)laborerProf, category);
         fflush(stderr);
     }

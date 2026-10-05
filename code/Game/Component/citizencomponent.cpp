@@ -1457,12 +1457,12 @@ void CitizenComponent::GiveBirth() {
     // the +0x148 transform's translation)
     CharacterComponent* mc = character.Get();
     ModelComponent* geom = mc->modelComponent.Get();
-    float pos[3];
-    pos[0] = geom->transform.translation.x;
-    pos[1] = geom->transform.translation.y;
-    pos[2] = geom->transform.translation.z;
+    Vector3Slot pos;
+    pos.v.x = geom->transform.translation.x;
+    pos.v.y = geom->transform.translation.y;
+    pos.v.z = geom->transform.translation.z;
 
-    newborn->Initialize(pos, gender, '\x01', 0, '\0', this, spawnArg);
+    newborn->Initialize(&pos.v, gender, '\x01', 0, '\0', this, spawnArg);
 
     Object::InternalPtr<ComponentEntity> addArg = child;
     {
@@ -1734,11 +1734,11 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             int rosterCount = resIBP->residentSlots._size;
             for (int slot = 0; slot < rosterCount; slot++) {
                 if (resIBP->residentSlots[slot]._size < 1) {  // free slot
-                    float pos[3] = {0.0f, 0.0f, 0.0f};
-                    InteractNodePosition(interactIBP, pos, 0, 0, nullptr);
+                    Math::Vector3 pos;
+                    InteractNodePosition(interactIBP, &pos, 0, 0, nullptr);
                     int mw = mapInfo->size;
-                    int wpX = static_cast<int>(pos[0] + static_cast<float>(mw >> 1));
-                    int wpY = static_cast<int>(pos[1] + static_cast<float>(mw >> 1));
+                    int wpX = static_cast<int>(pos.x + static_cast<float>(mw >> 1));
+                    int wpY = static_cast<int>(pos.y + static_cast<float>(mw >> 1));
                     if (wpX < 0) wpX = 0;
                     if (mw <= wpX) wpX = mw - 1;
                     if (wpY < 0) wpY = 0;
@@ -2068,8 +2068,8 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
 
     Map* mapInfo = GameUpdateLoop::_singleton->m_game;
     InteractComponent* posComp = att->_entity->FindComponent<InteractComponent>();
-    float pos[3] = {0,0,0};
-    InteractNodePosition(posComp, pos, 0, 0, nullptr);
+    Math::Vector3 pos;
+    InteractNodePosition(posComp, &pos, 0, 0, nullptr);
 
     ModelComponent* homeComp = citizen->character->modelComponent.Get();
 
@@ -2083,8 +2083,8 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
     };
     int homeX = clampTile(homeComp->transform.translation.x);
     int homeY = clampTile(homeComp->transform.translation.y);
-    int posX  = clampTile(pos[0]);
-    int posY  = clampTile(pos[1]);
+    int posX  = clampTile(pos.x);
+    int posY  = clampTile(pos.y);
     uint32_t fromCell = (uint32_t)(mapW * posY + posX);
     uint32_t toCell   = (uint32_t)(mapW * homeY + homeX);
     char ok = WorkBase_ValidateCell_a00f0(mapInfo, 0xe1f, fromCell, toCell);
