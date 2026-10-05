@@ -746,7 +746,7 @@ static int PathStrICmp(const char* a, const char* b) {
 // ---------------------------------------------------------------------------
 FilenamePairNode* FilenamePairCtor(FilenamePairNode* node, const FilenamePair* src,
                                    FilenamePairNode* parent) {
-    RtSystem::RtSystem_Filename_CtorCopy(&node->element.key, &src->key);   // 0x1800067d0
+    new (&node->element.key) System::Filename(src->key);   // 0x1800067d0 (the node is raw MemAlloc storage)
 
     node->element.value = src->value;
     node->parent  = parent;
@@ -780,9 +780,9 @@ struct FilenamePolicy : Collection::detail::NoCounters {
 
     static Node*&   Root(SetT* s)  { return s->root; }
     static int32_t& Count(SetT* s) { return s->count; }
-    static const char* NodeKey(const Node* n) { return n->element.key.data; }
+    static const char* NodeKey(const Node* n) { return n->element.key._data; }
     static const char* SearchKey(const Element* p) {
-        return p->key.data;                                // 0x180025ce1 re-read
+        return p->key._data;                               // 0x180025ce1 re-read
     }
     static bool IsNull(const char* k) { return k == nullptr; }
     static bool Less(const char* a, const char* b) { return PathStrICmp(a, b) < 0; }
@@ -824,18 +824,16 @@ Node** FilenameSetInsert(Set* set, Node** outSlot,
     // The probe ALLOCATES, so it cannot run from a *PortInit (WAVE9.md, lane
     // PKG2). It self-schedules here instead: this moment is provably safe
     // because the caller is itself about to allocate a node.
-    FilenamePair temp;
-
-    RtSystem::RtSystem_Filename_CtorCopy(                      // 0x1800067d0
-        &temp.key,
-        static_cast<const RtSystem::Filename*>(key));  // LEFT: audit DEFERRED:X-R3 mirror count (RtSystem::Filename 38 files, none deletable yet); POD RtSystem::Filename — FilenamePair's key is the mirror (RtSystem_Filename_CtorCopy); the caller holds a System::Filename
-
-    temp.value = *value;
+    // B.4 Z MIRROR2: the stack pair is a real FilenamePair: the Filename copy
+    // ctor 0x1800067d0 on +0x00, the raw value qword on +0x08, the insert,
+    // then ~FilenamePair (the key's release) at scope exit, retail's order.
+    FilenamePair temp{
+        *static_cast<const System::Filename*>(key),  // LEFT: SIG rtavl::FilenameSetInsert — `key` is a const void* until FilenamePairNode and RtIO::PackfileIndexNode are one node (see the insert below)
+        *value };
 
     FilenameInsertCore(reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(outSlot), &temp);  // LEFT: audit WORK, left: FilenamePairNode (RtSystem::Filename key mirror, DEFERRED) and RtIO::PackfileIndexNode are two declarations of one 0x30 node; the insert's +0x08 qword copy vs the readers' two dwords needs the node unified first
 
-    StringReleaseInline(&temp.key.data);
-    return outSlot;
+    return outSlot;   // ~temp: the key's release
 }
 
 // ============================================================================
@@ -882,8 +880,8 @@ void SubtreeFree(void* ignoredThis, Node* node) {
     SubtreeFree(ignoredThis, node->right);
 
     FilenamePairNode* n = reinterpret_cast<FilenamePairNode*>(node);  // LEFT: audit WORK, left: SubtreeFree's outside caller (filesystem_createfile_win.cpp) holds the erased rtsetavl::Node; same FilenamePairNode / PackfileIndexNode unification as the insert
-    if (n->element.key.data != nullptr) ++g_pc.freeStringsReleased;
-    StringReleaseInline(&n->element.key.data);
+    if (n->element.key._data != nullptr) ++g_pc.freeStringsReleased;
+    StringReleaseInline(&n->element.key._data);
 
     rtsetavl::SetNodeFree(ignoredThis, node);
 }

@@ -96,8 +96,12 @@ using StringPairNode = RtIo::SettingsMapNode;
 
 // Group D's element: the Filename key and the packed {packIndex, fileIndex}
 // qword (0x180008840: Filename copy ctor at +0x00, a raw qword move at +0x08).
+// B.4 Z MIRROR2: `key` is the real class. Nodes are raw MemAlloc storage
+// (0x180008520) built by placement copy (0x180008840) and released by the
+// subtree free; the one stack FilenamePair (FilenameSetInsert 0x180025a80) is
+// built by the copy ctor and released at its scope exit, as retail's is.
 struct FilenamePair {
-    RtSystem::Filename key;     // +0x00
+    System::Filename   key;     // +0x00
     uint64_t           value;   // +0x08
 };
 
