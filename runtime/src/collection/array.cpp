@@ -2939,7 +2939,7 @@ static void ReloadEntryAssign(RtIO::ReloadEntry* d, const RtIO::ReloadEntry* s) 
     /* +0x04..+0x07 deliberately not copied — retail's first store is a DWORD */
     d->external = s->external;
 
-    RtSystem::RtSystem_Filename_CtorCopy(&d->file, &s->file);   // 0x1800067d0
+    new (&d->file) System::Filename(s->file);   // 0x1800067d0 (the slot is raw storage)
 }
 void AssignModExternal18(uint8_t* d, const uint8_t* s) {
     AssignAs<RtIO::ReloadEntry, &ReloadEntryAssign>(d, s);
