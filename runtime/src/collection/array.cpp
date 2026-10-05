@@ -122,7 +122,7 @@
 // B3R RT-Core: the element ops below call their bodies by name.
 #include "../../types/system/Filename.h"      // PkgEntryAssign: the Filename copy ctor 0x1800067d0
 #include "../../types/io/Modification.h"      // RtColl_ArrayU8Assign_180011220
-#include "../../types/save/SaveLoad.h"        // RtSave_MetaData_CopyCtor 0x180032f70
+#include "../../types/save/SaveLoad.h"        // Save::SaveLoad::SaveInfo (kSpec_MetaData58)
 #include "../../types/graphics/Scene.h"       // RtGraphics_DrawGroup_CopyCtor 0x18001be60
 #include "../../types/graphics/Animation.h"   // RtGraphics_Animation_CopyCtor / _Dtor
 #include "../../types/graphics/Camera.h"      // Graphics::RendererDrawGroup (kSpec_DrawGroup1f0)
@@ -1984,9 +1984,10 @@ static void MetaData58Destroy(Save::SaveLoad::SaveInfo* base, int count) {
 void DestroyMetaData58Range(void* ignoredThis, uint8_t* base, int count) {
     DestroyAs<Save::SaveLoad::SaveInfo, &MetaData58Destroy>(ignoredThis, base, count);
 }
-void AssignMetaData58(uint8_t* d, const uint8_t* s) {
-    RtSave_MetaData_CopyCtor(d, s);
+static void MetaData58Assign(Save::SaveLoad::SaveInfo* d, const Save::SaveLoad::SaveInfo* s) {
+    ::new (static_cast<void*>(d)) Save::SaveLoad::SaveInfo(*s);   // the copy ctor 0x180032f70
 }
+void AssignMetaData58(uint8_t* d, const uint8_t* s) { AssignAs<Save::SaveLoad::SaveInfo, &MetaData58Assign>(d, s); }
 const ArraySpec kSpec_MetaData58 = {              // 0x1800332d0
     "Array<Save::MetaData>", 0x58, 8,
     &AssignMetaData58, nullptr, &DestroyMetaData58Range, false,

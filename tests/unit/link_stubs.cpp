@@ -51,7 +51,6 @@ namespace {
 namespace RtIO {
 void* RtColl_ArrayU8Assign_180011220(void*, const void*) { UnlinkedBody("RtColl_ArrayU8Assign_180011220"); }
 }  // namespace RtIO
-extern "C" void* RtSave_MetaData_CopyCtor(void*, const void*) { UnlinkedBody("RtSave_MetaData_CopyCtor"); }
 extern "C" void* RtGraphics_DrawGroup_CopyCtor(void*, const void*) { UnlinkedBody("RtGraphics_DrawGroup_CopyCtor"); }
 extern "C" void* RtGraphics_Animation_CopyCtor(void*, const void*) { UnlinkedBody("RtGraphics_Animation_CopyCtor"); }
 extern "C" void  RtGraphics_Animation_Dtor(void*) { UnlinkedBody("RtGraphics_Animation_Dtor"); }
