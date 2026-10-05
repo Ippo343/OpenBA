@@ -94,7 +94,7 @@ W* AllocWork(int size) {
     FishingWork* work = AllocWork<FishingWork>(0x70);
     if (!work) return WrapIBP(out, nullptr);
 
-    ComponentEntity* entity = self->_entity;
+    ComponentEntity* entity = self->_entity.Get();
 
     // +0x48..+0x68 zeroed by the ctor (citizenRefs / spotStates / retryCount).
     new (work) FishingWork();
@@ -130,7 +130,7 @@ W* AllocWork(int size) {
     HuntWork* work = AllocWork<HuntWork>(0x58);
     if (!work) return WrapIBP(out, nullptr);
 
-    ComponentEntity* entity = self->_entity;
+    ComponentEntity* entity = self->_entity.Get();
 
     // The ctor zeroes the leaf fields (+0x48 onward) as retail's tail does.
     new (work) HuntWork();
@@ -146,7 +146,7 @@ W* AllocWork(int size) {
     HerbalistWork* work = AllocWork<HerbalistWork>(0x60);
     if (!work) return WrapIBP(out, nullptr);
 
-    ComponentEntity* entity = self->_entity;
+    ComponentEntity* entity = self->_entity.Get();
 
     // The ctor zeroes the leaf fields (+0x48 onward) as retail's tail does.
     new (work) HerbalistWork();
@@ -178,7 +178,7 @@ W* AllocWork(int size) {
 // retail's "no pending transition" check.
 ::Object::InternalPtr<Work>* ForesterComponent::CreateWork(::Object::InternalPtr<Work>* out) {
     ForesterComponent* const self = this;
-    ComponentEntity* entity = self->_entity;
+    ComponentEntity* entity = self->_entity.Get();
 
     {
         StateMachineComponent* sm = entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
@@ -220,7 +220,7 @@ W* AllocWork(int size) {
     MarketWork* work = AllocWork<MarketWork>(0x58);
     if (!work) return WrapIBP(out, nullptr);
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // The ctor zeroes +0x48/+0x50 and runs MarketWork_ResolveFuncs.
     new (work) MarketWork();
@@ -310,7 +310,7 @@ extern "C" void ConsumeProduce_DumpRecipes(const ConsumeProduceDescription* cpDe
 ::Object::InternalPtr<Work>* ConsumeProduceComponent::CreateWork(::Object::InternalPtr<Work>* out) {
     ConsumeProduceComponent* const self = this;
 
-    ComponentEntity* entity = self->_entity;
+    ComponentEntity* entity = self->_entity.Get();
     if (!entity) return WrapIBP(out, nullptr);
 
     // The entity's description (not the component array — the search below is over

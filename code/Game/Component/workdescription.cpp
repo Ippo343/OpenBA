@@ -85,13 +85,13 @@ Object::External* WorkDescription::Construct() {
 }
 
 // create 0x140039ed0: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* WorkDescription::CreateNewObject() {
+::Object::Base* WorkDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(WorkDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) WorkDescription());
 }
 // createInPlace 0x140039f10.
-void* WorkDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* WorkDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) WorkDescription());
 }

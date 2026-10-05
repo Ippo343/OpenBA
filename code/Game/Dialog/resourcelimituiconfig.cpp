@@ -84,13 +84,13 @@ void ResourceLimitUIConfig::Destruct() { this->~ResourceLimitUIConfig(); }
 Object::External* ResourceLimitUIConfig::Construct() { return new (this) ResourceLimitUIConfig(); }
 
 // create 0x140013780: MemAlloc(0x28, 8), then the ctor.
-void* ResourceLimitUIConfig::CreateNewObject() {
+::Object::Base* ResourceLimitUIConfig::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ResourceLimitUIConfig), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ResourceLimitUIConfig());
 }
 // createInPlace 0x1400137e0.
-void* ResourceLimitUIConfig::CreateInPlaceObject(void* storage) {
+::Object::Base* ResourceLimitUIConfig::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ResourceLimitUIConfig());
 }

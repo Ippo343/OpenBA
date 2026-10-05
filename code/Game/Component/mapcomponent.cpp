@@ -198,7 +198,7 @@ static void MapComponent_ApplyOccupancy_41b0(MapComponent* mc) {
     Map* grid = GameUpdateLoop::_singleton->m_game;   // +0xF8
     if (!grid) return;
 
-    ComponentEntity* owner = mc->_entity;
+    ComponentEntity* owner = mc->_entity.Get();
     MapComponent_overlay_dc20(grid, &owner, (uint8_t)desc->_cellType,
                               (int)static_cast<int16_t>(mc->tileX0), (int)static_cast<int16_t>(mc->tileY0),
                               (int)static_cast<int16_t>(mc->tileX1), (int)static_cast<int16_t>(mc->tileY1),
@@ -247,7 +247,7 @@ void MapComponent::RemoveFromMap() {
 
     // Owner entity (comp+0x10) — dee0 compares it against cell+0x00 for
     // the buildable(2) override.
-    ComponentEntity* ownerEntity = self->_entity;
+    ComponentEntity* ownerEntity = self->_entity.Get();
 
     // MapDescription shape (desc+0x28 String buffer). The original IsDerivedFrom
     // guard rejects valid descriptions in standalone's partial factory tree (the
@@ -463,14 +463,14 @@ void MapComponent::OnEvent(int msgId) {
 }
 
 // create 0x140035700: MemAlloc(0x38, 8), then the ctor.
-void* MapComponent::CreateNewObject() {
+::Object::Base* MapComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MapComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MapComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* MapComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* MapComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MapComponent());
 }

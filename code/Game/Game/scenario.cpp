@@ -108,13 +108,13 @@ Object::External* Scenario::Construct() {
 // create 0x14001e9f0: MemAlloc(0x90, 8), then the (inlined) ctor. The menu
 // loader thread builds one when External::Load reads a Scenario out of the
 // Game/Global resource tree.
-void* Scenario::CreateNewObject() {
+::Object::Base* Scenario::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(Scenario), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) Scenario());
 }
 // createInPlace 0x14001ea70.
-void* Scenario::CreateInPlaceObject(void* storage) {
+::Object::Base* Scenario::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) Scenario());
 }

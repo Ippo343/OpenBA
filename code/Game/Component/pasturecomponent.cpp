@@ -147,7 +147,7 @@ void AnimalComponent::ReleaseToWander() {
 void LivestockComponent::PenInPasture() {
     if (pasture == nullptr) return;
 
-    ComponentEntity* link = pasture->_entity;
+    ComponentEntity* link = pasture->_entity.Get();
     MapComponent* mapComp = link->FindComponent<MapComponent>();   // 0x140004680
     int16_t r0 = mapComp->tileX0;
     int16_t r1 = mapComp->tileY0;
@@ -221,14 +221,14 @@ PastureComponent::~PastureComponent() {
 }
 
 // create 0x140036730: MemAlloc(0x68, 8), then the ctor.
-void* PastureComponent::CreateNewObject() {
+::Object::Base* PastureComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PastureComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PastureComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* PastureComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* PastureComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PastureComponent());
 }

@@ -71,13 +71,13 @@ Object::External* TerraformDescription::Construct() {
 }
 
 // create 0x14000ccf0: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* TerraformDescription::CreateNewObject() {
+::Object::Base* TerraformDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TerraformDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TerraformDescription());
 }
 // createInPlace 0x14000cd60.
-void* TerraformDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* TerraformDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TerraformDescription());
 }

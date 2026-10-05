@@ -280,7 +280,7 @@ void Impl_b930(HighlightComponent* hc) {
 
     // Entity footprint rect (MapComponent tileX0 / tileY0 / tileX1 / tileY1).
     MapComponent* rect = nullptr;
-    FloorComponent_FindResData(hc->_entity, &rect);   // 0x140004680 FindComponent<MapComponent>
+    FloorComponent_FindResData(hc->_entity.Get(), &rect);   // 0x140004680 FindComponent<MapComponent>
     int rx = (int)rect->tileX0;
     int ry = (int)rect->tileY0;
     int rw = (int)rect->tileX1;
@@ -470,7 +470,7 @@ void Impl_c4a0(HighlightComponent* hc) {
         uint32_t f1 = f0 & 0xfffffffb;
         hc->_flags = f1;
         if (((f1 ^ f0) & 0xffff) != 0 && hc->_entity != nullptr) {
-            NotifyEntityChanged(hc->_entity);   // 0x1400c3470
+            NotifyEntityChanged(hc->_entity.Get());   // 0x1400c3470
         }
     }
     // Release the built EdgeMesh (vtable slot 0).
@@ -611,7 +611,7 @@ add_prebuilt:
         uint32_t f1 = f0 | 4;
         hc->_flags = f1;
         if (((f1 ^ f0) & 0xffff) != 0 && hc->_entity != nullptr) {
-            NotifyEntityChanged(hc->_entity);   // 0x1400c3470
+            NotifyEntityChanged(hc->_entity.Get());   // 0x1400c3470
         }
     }
 }

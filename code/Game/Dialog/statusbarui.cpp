@@ -518,14 +518,14 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
             if ((statusBits & bitMask) != 0 || checked >= citizenCount) {
                 // Found a match (or exhausted all citizens): retail finds the
                 // component again and bails when the bit is not set
-                ComponentEntity* navEntity = citizens[self->statusCitizenIndex]->_entity;
+                ComponentEntity* navEntity = citizens[self->statusCitizenIndex]->_entity.Get();
                 const StatusIconComponent* navIcons = navEntity->FindComponent<StatusIconComponent>();
                 if (navIcons) {
                     if ((navIcons->_geometry.activeMask & bitMask) == 0) return;
                 }
 
                 // Navigate to the citizen entity (0x140103040)
-                ComponentEntity* entityRef = citizens[self->statusCitizenIndex]->_entity;
+                ComponentEntity* entityRef = citizens[self->statusCitizenIndex]->_entity.Get();
                 UI::DialogInstance* dialogRef = self->_dialog;
                 game->m_toolManager->CenterOnEntity(&dialogRef, &entityRef);
                 return;
@@ -637,14 +637,14 @@ void StatusBarUI::OnUpdate(const System::Time& /*time*/) {
 
 // create 0x1400140e0: MemAlloc(0x1d0, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* StatusBarUI::CreateNewObject() {
+::Object::Base* StatusBarUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StatusBarUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StatusBarUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* StatusBarUI::CreateInPlaceObject(void* storage) {
+::Object::Base* StatusBarUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StatusBarUI());
 }

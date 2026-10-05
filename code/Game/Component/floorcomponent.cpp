@@ -340,14 +340,14 @@ void FloorComponent::Slot11() {
 }
 
 // create 0x140034600: MemAlloc(0x30, 8), then the ctor.
-void* FloorComponent::CreateNewObject() {
+::Object::Base* FloorComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FloorComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FloorComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* FloorComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* FloorComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FloorComponent());
 }

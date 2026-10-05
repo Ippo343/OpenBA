@@ -72,13 +72,13 @@ Object::External* TimeGoal::Construct() {
 }
 
 // create 0x1400266f0: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* TimeGoal::CreateNewObject() {
+::Object::Base* TimeGoal::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TimeGoal), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TimeGoal());
 }
 // createInPlace 0x140026750.
-void* TimeGoal::CreateInPlaceObject(void* storage) {
+::Object::Base* TimeGoal::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TimeGoal());
 }

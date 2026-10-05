@@ -85,13 +85,13 @@ Object::External* MapDescription::Construct() {
 }
 
 // create 0x140035760: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* MapDescription::CreateNewObject() {
+::Object::Base* MapDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MapDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MapDescription());
 }
 // createInPlace 0x1400357a0.
-void* MapDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* MapDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MapDescription());
 }

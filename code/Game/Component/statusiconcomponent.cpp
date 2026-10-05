@@ -193,7 +193,7 @@ void StatusIconComponent::ShowAfterLoad() {
                 // If flags changed (low 16 bits) and owner non-null, notify entity
                 if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
                     if (_entity != nullptr) {
-                        NotifyEntityChanged(_entity);
+                        NotifyEntityChanged(_entity.Get());
                     }
                 }
 
@@ -288,7 +288,7 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             changed = after ^ before;
         }
         if ((changed & 0xffff) != 0 && _entity != nullptr) {
-            NotifyEntityChanged(_entity);
+            NotifyEntityChanged(_entity.Get());
         }
     }
 }
@@ -497,7 +497,7 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
 
     // Culled-entity guard: if the owner entity is culled (entity+0x40 bit 10) the original
     // skips the SET path (only clears are honoured while culled).
-    ComponentEntity* entity = selfC->_entity;
+    ComponentEntity* entity = selfC->_entity.Get();
     if (entity && ((entity->_entityFlags >> 10) & 1) != 0 && setFlag) return;
 
     uint32_t mask = 1u << (bit & 0x1f);
@@ -542,7 +542,7 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     }
     selfC->_flags = new20;
     if (((new20 ^ old20) & 0xffff) != 0 && selfC->_entity != nullptr) {
-        NotifyEntityChanged(selfC->_entity);
+        NotifyEntityChanged(selfC->_entity.Get());
     }
 }
 
@@ -683,7 +683,7 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
     pos[1] = 0.0f;
     pos[2] = desc ? desc->_scale2 : 0.0f;   // base height offset
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // Resolve Model + MultiObject by NAME (the exe finders key off unfilled .rdata globals
     // c7a50/c7ac0 → null for every entity in standalone; see StatusIcon_FindCompByName).
@@ -750,14 +750,14 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
 void StatusIconComponent::Slot11() {}
 
 // create 0x1400388c0: MemAlloc(0x108, 8), then the ctor.
-void* StatusIconComponent::CreateNewObject() {
+::Object::Base* StatusIconComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StatusIconComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StatusIconComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* StatusIconComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* StatusIconComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StatusIconComponent());
 }

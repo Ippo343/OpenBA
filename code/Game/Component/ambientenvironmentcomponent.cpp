@@ -83,7 +83,7 @@ inline float saturate(float x, float hi) { return x < 0.0f ? 0.0f : (x > hi ? hi
 // Find the entity's AmbientEmitterComponent by scanning its component list.
 // The tree's null and bad-id guards are its own; kept, not extended.
 AmbientEmitterComponent* FindSiblingEmitter(AmbientEnvironmentComponent* self) {
-    ComponentEntity* owner = self->_entity;
+    ComponentEntity* owner = self->_entity.Get();
     if (!owner) return nullptr;
     int count = owner->_componentCount;
     if (!owner->_components || !s_tidEmitterComp) return nullptr;
@@ -254,8 +254,8 @@ void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
                 uint8_t bits = cell->terrainType;
 
                 // Cell's entity reference (cell+0x00, else cell+0x08).
-                ComponentEntity* ent = cell->blocker;
-                if (!ent) ent = cell->occupant;
+                ComponentEntity* ent = cell->blocker.Get();
+                if (!ent) ent = cell->occupant.Get();
 
                 for (int k = 0; k < count; ++k) {
                     AmbientEnvironmentBiome* bt = &table[k];
@@ -315,14 +315,14 @@ void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
 }
 
 // create 0x140001ee0: MemAlloc(0x48, 8), then the ctor.
-void* AmbientEnvironmentComponent::CreateNewObject() {
+::Object::Base* AmbientEnvironmentComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AmbientEnvironmentComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AmbientEnvironmentComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AmbientEnvironmentComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AmbientEnvironmentComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AmbientEnvironmentComponent());
 }

@@ -851,7 +851,7 @@ void TownHallUI::UpdateGeneral() {
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
-        AttendanceComponent* school = citizen->school;
+        AttendanceComponent* school = citizen->school.Get();
 
         if (age < adultAge || school != nullptr) {
             if (school == nullptr) { children++; }
@@ -861,7 +861,7 @@ void TownHallUI::UpdateGeneral() {
             if (citizen->description->maxEducation <= citizen->education) {
                 clothedSum += 1.0f;
             }
-            CitizenComponent* spouse = citizen->spouse;
+            CitizenComponent* spouse = citizen->spouse.Get();
             if (spouse == nullptr) {
                 if (citizen->spouse == nullptr) {
                     familyCount++;
@@ -1429,7 +1429,7 @@ void TownHallUI::UpdateInventory() {
                 WorkPlaceComponent* workplaceComp2 = entity->FindComponent<WorkPlaceComponent>();
 
                 // Get parent entity (workplace+0x10)
-                ComponentEntity* parentEntity = workplaceComp2->_entity;
+                ComponentEntity* parentEntity = workplaceComp2->_entity.Get();
 
                 // Find the WorkComponent (DAT_1401c8070)
                 WorkComponent* workComp = parentEntity->FindComponent<WorkComponent>();
@@ -1463,7 +1463,7 @@ void TownHallUI::UpdateInventory() {
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
-        AttendanceComponent* school = citizen->school;
+        AttendanceComponent* school = citizen->school.Get();
 
         if (age >= adultAge && school == nullptr) {
             // Adult citizen — look up profession in profBST (+0x50)
@@ -1952,14 +1952,14 @@ TownHallUI::~TownHallUI() {
 
 // create 0x140014660: MemAlloc(0x1e8, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* TownHallUI::CreateNewObject() {
+::Object::Base* TownHallUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TownHallUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TownHallUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* TownHallUI::CreateInPlaceObject(void* storage) {
+::Object::Base* TownHallUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TownHallUI());
 }

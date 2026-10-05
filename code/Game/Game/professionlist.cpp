@@ -188,12 +188,12 @@ extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList) {
 // ============================================================
 // ProfessionList (Object::External, 0x50) is loaded from Profession.rsc during the
 // in-game world build (GameUpdateLoop::Load step 2).
-void* ProfessionList::CreateNewObject() {
+::Object::Base* ProfessionList::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ProfessionList), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) ProfessionList());
 }
-void* ProfessionList::CreateInPlaceObject(void* memory) {
+::Object::Base* ProfessionList::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) ProfessionList());
 }

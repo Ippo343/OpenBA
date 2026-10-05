@@ -94,11 +94,11 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
 // This is a CitizenComponent member in retail (0x140115a50); CitizenComponent.h is not
 // this block's, so the body stays free, on a typed receiver.
 void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll) {
-    AttendanceComponent*& slot = self->school;
+    Object::InternalPtr<AttendanceComponent>& slot = self->school;
     if (slot == nullptr) return;
 
     Object::InternalPtr<CitizenComponent> selfIbp(self);
-    AttendanceComponent* linked = slot;
+    AttendanceComponent* linked = slot.Get();
     CemeteryListErase_Reimpl(&linked->queue, &selfIbp);
 
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
@@ -124,11 +124,11 @@ void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll)
 // worker from the building's waiting queue (FUN_140002cc0), reset that building's
 // status icon flag 2 to off (FUN_14012c3f0), then null the slot.
 // LEFT: CitizenComponent members in retail; the class is COMP-b's.
-static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, AttendanceComponent*& slot) {
+static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Object::InternalPtr<AttendanceComponent>& slot) {
     if (slot == nullptr) return;
 
     Object::InternalPtr<CitizenComponent> selfIbp(self);
-    AttendanceComponent* linked = slot;
+    AttendanceComponent* linked = slot.Get();
     CemeteryListErase_Reimpl(&linked->queue, &selfIbp);
 
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
@@ -294,14 +294,14 @@ AttendanceComponent::~AttendanceComponent() {
 }
 
 // create 0x140002670: MemAlloc(0x58, 8), then the ctor.
-void* AttendanceComponent::CreateNewObject() {
+::Object::Base* AttendanceComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AttendanceComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AttendanceComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AttendanceComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AttendanceComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AttendanceComponent());
 }
@@ -356,7 +356,7 @@ void AttendanceComponent::Update(const System::Time* /*time*/) {
     if (count == 0)
         return;
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // Get the WorkPlaceComponent from the entity (0x140002e10)
     WorkPlaceComponent* building = entity->FindComponent<WorkPlaceComponent>();

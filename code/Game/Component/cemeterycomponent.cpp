@@ -201,7 +201,7 @@ char CemeteryComponent::EnterBuilt() {
         MapCell* const cell = &cells[static_cast<uintptr_t>(cellIdx)];
 
         // Already occupied by a grave? Leave the plot as it stands.
-        ComponentEntity* occupant = cell->occupant;
+        ComponentEntity* occupant = cell->occupant.Get();
         if (occupant) {
             ComponentEntity* probe = occupant;
             bool hasTombstone = false;
@@ -323,14 +323,14 @@ CemeteryComponent::~CemeteryComponent() {
 }
 
 // create 0x140004040: MemAlloc(0x58, 8), then the ctor.
-void* CemeteryComponent::CreateNewObject() {
+::Object::Base* CemeteryComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CemeteryComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CemeteryComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CemeteryComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CemeteryComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CemeteryComponent());
 }
@@ -357,7 +357,7 @@ void CemeteryComponent::Persist(IO::Stream& stream) {
 
 // [6] 0x140047200 — build the grave-plot grid from the footprint.
 void CemeteryComponent::OnAdded() {
-    CEM_TRACE("enter comp=%p owner=%p", (void*)this, _entity);
+    CEM_TRACE("enter comp=%p owner=%p", (void*)this, (void*)_entity.Get());
     if (GameUpdateLoop::_singleton == nullptr) {
         CEM_TRACE("BAIL deps: gs=%p",
                   (void*)(GameUpdateLoop::_singleton));

@@ -47,8 +47,8 @@ void Component::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    reinterpret_cast<Object::InternalBasePtr*>(&_entity)->Serialize(ser);   // B.3.8 bridge (_entity is the retail InternalPtr)   // LEFT: POD Component::_entity is the InternalPtr<ComponentEntity> retail holds, declared ComponentEntity* (readers tree-wide)
-    if (_entity && !::Object::IsDerivedFromNullSafe(_entity, ComponentEntity::TypeId())) {
+    _entity.Object::InternalBasePtr::Serialize(ser);
+    if (_entity && !::Object::IsDerivedFromNullSafe(_entity.Get(), ComponentEntity::TypeId())) {
         _entity = nullptr;
     }
 

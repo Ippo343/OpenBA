@@ -142,7 +142,7 @@ bool CompleteTask::GetTarget(ComponentEntity** param) {
     }
 
     // Check the work citizen's owning entity (Component +0x10)
-    return workEntity->_entity == paramVal;
+    return workEntity->_entity.Get() == paramVal;
 }
 
 // ============================================================
@@ -166,12 +166,12 @@ CompleteTask::CompleteTask()
 // [8] 0x1400c5ac0
 // [9] 0x1400c5a50
 
-void* CompleteTask::CreateNewObject() {
+::Object::Base* CompleteTask::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CompleteTask), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CompleteTask());
 }
-void* CompleteTask::CreateInPlaceObject(void* storage) {
+::Object::Base* CompleteTask::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CompleteTask());
 }

@@ -90,13 +90,13 @@ Object::External* PopulationDescription::Construct() {
 }
 
 // create 0x14000afb0: MemAlloc(0x58, 8), then the (inlined) ctor.
-void* PopulationDescription::CreateNewObject() {
+::Object::Base* PopulationDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PopulationDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PopulationDescription());
 }
 // createInPlace 0x14000aff0.
-void* PopulationDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* PopulationDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PopulationDescription());
 }

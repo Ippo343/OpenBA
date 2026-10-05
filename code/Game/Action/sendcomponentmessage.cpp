@@ -218,12 +218,12 @@ SendComponentMessage::SendComponentMessage()
 // [4] 0x1400caef0
 // [9] 0x1400cae80
 
-void* SendComponentMessage::CreateNewObject() {
+::Object::Base* SendComponentMessage::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(SendComponentMessage), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) SendComponentMessage());
 }
-void* SendComponentMessage::CreateInPlaceObject(void* storage) {
+::Object::Base* SendComponentMessage::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) SendComponentMessage());
 }

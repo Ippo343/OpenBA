@@ -812,13 +812,13 @@ extern "C" int EditTool_HarnessSelectNearby(EditTool* editTool) {
     return 0;
 }
 // create 0x14002daa0: MemAlloc(0x38, 8), then the ctor 0x1400fd340.
-void* EditTool::CreateNewObject() {
+::Object::Base* EditTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EditTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) EditTool());
 }
 // createInPlace 0x14002dae0: `if (storage) ctor(storage)`.
-void* EditTool::CreateInPlaceObject(void* storage) {
+::Object::Base* EditTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) EditTool());
 }

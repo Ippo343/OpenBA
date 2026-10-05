@@ -126,7 +126,7 @@ void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float 
     uint32_t nw = old | 4u;
     model->_flags = nw;
     if (((nw ^ old) & 0xffff) != 0 && model->_entity != nullptr) {
-        NotifyEntityChanged(model->_entity);   // 0x1400c3470
+        NotifyEntityChanged(model->_entity.Get());   // 0x1400c3470
     }
 }
 

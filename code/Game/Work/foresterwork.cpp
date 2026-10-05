@@ -381,7 +381,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                 if (dist > workplaceRadius * 2) goto next_attempt;
 
                 // Get resource entity at this cell
-                ComponentEntity* resourceEntity = gridData2[(int)testCell].occupant;
+                ComponentEntity* resourceEntity = gridData2[(int)testCell].occupant.Get();
 
                 // -------------------------------------------------------
                 // Branch: Check workplace flags for cut vs plant
@@ -531,7 +531,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                                     nrc->harvestable = true;   // +0x2d
                                     nrc->mature = true;        // +0x2c
                                     CitizenComponent* czEnt = *citizenIBP;
-                                    ComponentEntity* residence = czEnt ? czEnt->workplace : nullptr;
+                                    ComponentEntity* residence = czEnt ? czEnt->workplace.Get() : nullptr;
                                     ComponentEntity* workIBPbuf[2] = { residence, nullptr };
                                     fprintf(stderr, "[FORCE-HARVEST] #%d invoking produce on tree natResComp=%p "
                                             "(mirrors RemoveNaturalResource::Main; bypasses MoveTo arrival)\n",
@@ -856,14 +856,14 @@ ForesterWork::ForesterWork() : AutoPickupWork(), _field58(0) {
 // Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
 
 // create 0x14002a310: MemAlloc(sizeof, 8), then the ctor.
-void* ForesterWork::CreateNewObject() {
+::Object::Base* ForesterWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ForesterWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ForesterWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* ForesterWork::CreateInPlaceObject(void* storage) {
+::Object::Base* ForesterWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ForesterWork());
 }

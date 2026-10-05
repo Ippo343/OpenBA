@@ -274,7 +274,7 @@ void DumpAll(int frame) {
                                     if (dx * dx + dy * dy > radius * radius) continue;
                                     const int x = cx + dx, y = cy + dy;
                                     if (x < 0 || y < 0 || x >= mw || y >= mw) continue;
-                                    ComponentEntity* re = grid[y * mw + x].occupant;   // cell+0x08
+                                    ComponentEntity* re = grid[y * mw + x].occupant.Get();   // cell+0x08
                                     if (!re) continue;
                                     const Object::External* rd = re->_description;    // +0x28
                                     for (int t = 0; t < listN; ++t)

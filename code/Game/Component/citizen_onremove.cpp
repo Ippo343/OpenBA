@@ -144,13 +144,13 @@ void CitizenComponent::OnRemove() {
     }
 
     // ---- 4. family: spouse (+0x250) / children ring head (+0x260) -------------
-    CitizenComponent** spouseSlot = &spouse;
-    if (*spouseSlot == nullptr) {
+    Object::InternalPtr<CitizenComponent>* spouseSlot = &spouse;
+    if (spouseSlot->Get() == nullptr) {
         // No surviving parent: each child either dies with us (still a child)
         // or is emancipated into an unattached adult.
-        CitizenComponent** ringHead = &_firstChild;
+        Object::InternalPtr<CitizenComponent>* ringHead = &_firstChild;
         int iterations = 0;
-        CitizenComponent* member = *ringHead;
+        CitizenComponent* member = ringHead->Get();
         while (member != nullptr) {
             float memberAge = member->age;
             // DEVIATION (uninitialized-body guard): retail derefs the CitizenDescription
@@ -161,7 +161,7 @@ void CitizenComponent::OnRemove() {
             bool underAge = desc && memberAge <= desc->adultAge;
 
             if (underAge) {
-                (*ringHead)->HandleLifeEvent(4, nullptr);   // 0x140116dd0
+                ringHead->Get()->HandleLifeEvent(4, nullptr);   // 0x140116dd0
             } else {
                 CitizenComponent* memberIBP = member;
                 memberIBP->SetParent(nullptr);              // 0x140111fa0: detach from our ring
@@ -174,33 +174,33 @@ void CitizenComponent::OnRemove() {
                 AttendanceComponent_ReleasePartnerSlot(memberIBP, '\0');
             }
 
-            CitizenComponent* next = *ringHead;
+            CitizenComponent* next = ringHead->Get();
             if (!RingProgress(underAge ? "orphan" : "emancipate", member, next, iterations)) break;
             member = next;
         }
     } else {
         // A spouse survives: re-home the whole ring onto them.
-        CitizenComponent** ringHead = &_firstChild;
+        Object::InternalPtr<CitizenComponent>* ringHead = &_firstChild;
         int iterations = 0;
-        CitizenComponent* member = *ringHead;
+        CitizenComponent* member = ringHead->Get();
         while (member != nullptr) {
-            (*ringHead)->SetParent(*spouseSlot);            // 0x140111fa0
-            CitizenComponent* next = *ringHead;
+            ringHead->Get()->SetParent(spouseSlot->Get());            // 0x140111fa0
+            CitizenComponent* next = ringHead->Get();
             if (!RingProgress("re-home", member, next, iterations)) break;
             member = next;
         }
     }
 
     // Clear the spouse's back-ref to us and our own spouse link (no-op with no spouse).
-    if (*spouseSlot != nullptr) {
-        (*spouseSlot)->spouse = nullptr;
+    if (spouseSlot->Get() != nullptr) {
+        spouseSlot->Get()->spouse = nullptr;
         *spouseSlot = nullptr;
     }
 
     // ---- 5. workplace (+0x248) ------------------------------------------------
     // Read BEFORE SetWorkplace clears it: the vacated workplace is what step 6 passes
     // to the replacement-worker search as the "near here" hint.
-    ComponentEntity* formerHouse = workplace;
+    ComponentEntity* formerHouse = workplace.Get();
     if (formerHouse != nullptr) {
         SetWorkplace(nullptr);                              // 0x140111ee0
     }
@@ -232,7 +232,7 @@ void CitizenComponent::OnRemove() {
         }
 
         // ---- 7. trade-work list + any dialog bound to our entity ---------------
-        ComponentEntity* ownerIBP = _entity;
+        ComponentEntity* ownerIBP = _entity.Get();
         gw->m_toolManager->OnEntityRemoved(&ownerIBP);   // 0x140103480
 
         // ---- 8. the town citizen list (townMgr+0xa0) — the whole point ---------

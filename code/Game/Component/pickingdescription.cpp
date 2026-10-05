@@ -133,13 +133,13 @@ Object::External* PickingDescription::Construct() {
 }
 
 // create 0x140036e00: MemAlloc(0x40, 8), then the (inlined) ctor.
-void* PickingDescription::CreateNewObject() {
+::Object::Base* PickingDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PickingDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PickingDescription());
 }
 // createInPlace 0x140036e70.
-void* PickingDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* PickingDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PickingDescription());
 }

@@ -1374,14 +1374,14 @@ MarketWork::MarketWork() : Work(), _field48{nullptr, 0} {
 // statics for the dtor's stamps.
 
 // create 0x14002a8d0: MemAlloc(sizeof, 8), then the ctor.
-void* MarketWork::CreateNewObject() {
+::Object::Base* MarketWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MarketWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MarketWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* MarketWork::CreateInPlaceObject(void* storage) {
+::Object::Base* MarketWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MarketWork());
 }

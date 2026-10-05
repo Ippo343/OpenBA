@@ -170,8 +170,8 @@ void ParticleComponent::Place(int index) {
     ParticleEmitterSlot* ge = &emitters[index];
     if (!ge->instance) return;   // resource failed to load — leave emitter inert
 
-    ModelComponent* model = PC_FindModel(_entity);
-    MapComponent* mapc  = PC_FindMap(_entity);
+    ModelComponent* model = PC_FindModel(_entity.Get());
+    MapComponent* mapc  = PC_FindMap(_entity.Get());
 
     Math::Transform tf;   // identity
     if (model && !em.noModelTransform) {
@@ -693,7 +693,7 @@ void ParticleComponent::Tick(const System::Time* time) {
 
         // Node/attach-point follow: recompute transform every frame
         if (ge->nodeIndex >= 0 && ge->instance) {
-            ModelComponent* model = PC_FindModel(_entity);
+            ModelComponent* model = PC_FindModel(_entity.Get());
             ParticleDescription* desc = GetParticleDesc(this);
             if (desc && model) {
                 Math::Transform tf;
@@ -805,14 +805,14 @@ void ParticleComponent::OnEvent(int eventCode) {
 }
 
 // create 0x14000a360: MemAlloc(0x48, 8), then the ctor.
-void* ParticleComponent::CreateNewObject() {
+::Object::Base* ParticleComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ParticleComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ParticleComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ParticleComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ParticleComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ParticleComponent());
 }

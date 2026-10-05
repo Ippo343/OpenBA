@@ -199,14 +199,14 @@ int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
 // CalcPath in bridgetool_calcpath.cpp.
 
 // create 0x14002d7a0: MemAlloc(0x40, 8), then the ctor 0x1400fb890.
-void* BridgeTool::CreateNewObject() {
+::Object::Base* BridgeTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(BridgeTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) BridgeTool());
 }
 // createInPlace 0x14002d7e0: `TEST RCX,RCX; JNZ 0x1400fb890 (the ctor);
 // XOR EAX,EAX; RET` — the tools, unlike the components, DO build in place.
-void* BridgeTool::CreateInPlaceObject(void* storage) {
+::Object::Base* BridgeTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) BridgeTool());
 }

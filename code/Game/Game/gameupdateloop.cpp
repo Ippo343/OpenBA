@@ -825,7 +825,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", m_citizenList);
                 { PhaseTimer pt(kPhCitizenList);
-                m_citizenList->Update(const_cast<int64_t*>(&time->_ticks));   // 0x14008c2b0  // LEFT: audit WORK (SIG), owner Entity/ (z-CODEB): SIG CitizenBehavior::Update(int64_t* deltaTime) (Entity/CitizenBehavior.h, X6-CW's partition): retail passes the slot's const Time*
+                m_citizenList->Update(const_cast<int64_t*>(&time->_ticks));   // 0x14008c2b0  // LEFT: audit WORK (SIG; CitizenBehavior::Update's int64_t* time and its callers, not reached in B4 Z SWEEP): SIG CitizenBehavior::Update(int64_t* deltaTime) (Entity/CitizenBehavior.h, X6-CW's partition): retail passes the slot's const Time*
                 }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
@@ -1937,7 +1937,7 @@ void GameUpdateLoop::Shutdown() {
             // loses its workplace.
             float age = citizen->age;
             float maxAge = citizen->description->adultAge;
-            AttendanceComponent* school = citizen->school;
+            AttendanceComponent* school = citizen->school.Get();
 
             if (age >= maxAge && school == nullptr) {
                 // The profession list's +0x30 profession
@@ -1945,7 +1945,7 @@ void GameUpdateLoop::Shutdown() {
 
                 // Current profession (+0x1f0) and workplace (+0x248)
                 Profession* citProfession = citizen->profession;
-                ComponentEntity* citWorkplace = citizen->workplace;
+                ComponentEntity* citWorkplace = citizen->workplace.Get();
 
                 ComponentEntity* nullRef = nullptr;   // the null InternalPtr<ComponentEntity> retail passes
 
@@ -2069,7 +2069,7 @@ void GameUpdateLoop::Shutdown() {
     // EventNotifier
     if (m_eventNotifier != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying EventNotifier...\n");
-        EventLog_EventArray_Destroy(&m_eventNotifier->entries);   // 0x14000a8a0
+        m_eventNotifier->~EventLog();   // ~Array 0x14000a8a0 on +0x18 (0x140097ab0)
         System::MemoryAllocator::MemFree(m_eventNotifier);
     }
 

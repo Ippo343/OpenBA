@@ -435,7 +435,7 @@ void CitizenUI::OnUpdateLayout() {
     // --- Action text ---
     // The citizen's entity (Component::_entity), then its CitizenAIComponent
     // (FUN_140011050 at 0x140064fc2).
-    ComponentEntity* entityFromAI = ai->_entity;
+    ComponentEntity* entityFromAI = ai->_entity.Get();
     // Guard the entity backref (component-list walk dereferences its component array);
     // a partially-initialized standalone citizen can leave it as garbage.
     if (CitUI_OkPtr(entityFromAI)) {
@@ -502,14 +502,14 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         void* dialogRef;
         if (ai->school != nullptr) {
             // At school: navigate to the school component
-            AttendanceComponent* school = ai->school;
+            AttendanceComponent* school = ai->school.Get();
             targetRef = school;
             // and its entity (Component::_entity)
-            dialogRef = school->_entity;
+            dialogRef = school->_entity.Get();
         } else {
             if (ai->workplace == nullptr) return;
             // Has a workplace (+0x248): navigate there
-            targetRef = ai->workplace;
+            targetRef = ai->workplace.Get();
             dialogRef = _dialog;
         }
 
@@ -520,7 +520,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         // --- buttonHome: go to home building ---
         CitizenComponent* ai = CitizenUI_FindCitizen(_dataSource);
 
-        ComponentEntity* homeEntity = ai->home;
+        ComponentEntity* homeEntity = ai->home.Get();
         if (homeEntity == nullptr) return;
 
         ComponentEntity* targetRef = homeEntity;
@@ -595,14 +595,14 @@ void CitizenUI::OnUpdate(const System::Time& /*time*/) {
 
 // create 0x140010f80: MemAlloc(0xe8, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* CitizenUI::CreateNewObject() {
+::Object::Base* CitizenUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CitizenUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CitizenUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* CitizenUI::CreateInPlaceObject(void* storage) {
+::Object::Base* CitizenUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CitizenUI());
 }

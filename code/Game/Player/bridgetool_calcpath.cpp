@@ -309,7 +309,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
 
     // ---- 3. Master entity ----------------------------------------------------------
     ComponentEntity* master = CloneEntity(descriptionPtr);
-    ComponentEntity* masterIBP = master;   // the InternalBasePtr's eight bytes
+    Object::InternalPtr<ComponentEntity> masterIBP = master;   // the InternalBasePtr's eight bytes
     if (!master) return 0;
 
     {
@@ -320,13 +320,13 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         if (mh < crossH) mh = crossH;
         const int mCol = bodyCol - radius * stepRow;
         const int mRow = bodyRow - radius * stepCol;
-        StampCells(FindComponentOn<MapComponent>(masterIBP), mCol, mRow, mw, mh, stepRow * 0x5a);
+        StampCells(FindComponentOn<MapComponent>(masterIBP.Get()), mCol, mRow, mw, mh, stepRow * 0x5a);
         float centre[3];
         CellRectCentre(mapGrid, mCol, mRow, mCol + mw - 1, mRow + mh - 1, centre);
-        ApplyYaw(FindComponentOn<ModelComponent>(masterIBP),
+        ApplyYaw(FindComponentOn<ModelComponent>(masterIBP.Get()),
                  static_cast<float>(stepRow) * 90.0f, centre);
     }
-    MultiObjectComponent* multi = FindComponentOn<MultiObjectComponent>(masterIBP);
+    MultiObjectComponent* multi = FindComponentOn<MultiObjectComponent>(masterIBP.Get());
 
     // ---- 4. Per-segment entities ---------------------------------------------------
     EntityList* entityList = gameWorld->m_entityList;
@@ -357,13 +357,13 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
         ComponentDescription* tpl = desc->_refs[tplIdx];
         ComponentEntity* seg = CloneEntity(tpl);
         if (seg) {
-            ComponentEntity* segIBP = seg;   // the InternalBasePtr's eight bytes
+            Object::InternalPtr<ComponentEntity> segIBP = seg;   // the InternalBasePtr's eight bytes
 
-            StampCells(FindComponentOn<MapComponent>(segIBP), cursorCol, cursorRow, segW, segH, rot);
+            StampCells(FindComponentOn<MapComponent>(segIBP.Get()), cursorCol, cursorRow, segW, segH, rot);
             float segCentre[3];
             CellRectCentre(mapGrid, cursorCol, cursorRow,
                            cursorCol + segW - 1, cursorRow + segH - 1, segCentre);
-            ApplyYaw(FindComponentOn<ModelComponent>(segIBP), static_cast<float>(rot), segCentre);
+            ApplyYaw(FindComponentOn<ModelComponent>(segIBP.Get()), static_cast<float>(rot), segCentre);
 
             // Append to the master's MultiObjectComponent (array +0x48, count +0x50).
             if (multi) {
@@ -379,7 +379,7 @@ bool BridgeTool::CalcPath(int startCell, int endCell) {
 
             // Re-own the segment's pick mesh to the master (retail 0x1400faab3..fab7b),
             // BEFORE the register — that is the window PickingComponent::OnAdded reads.
-            SeatSegmentPickOwner(segIBP, master, gameWorld);
+            SeatSegmentPickOwner(segIBP.Get(), master, gameWorld);
 
             if (entityList && tpl) {
                 const int categoryId = static_cast<int>(tpl->_category);

@@ -164,7 +164,7 @@ CitizenComponent** Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
         if (AdultIdle(cz)) {
             if (cz->profession == LaborerKey()) {
                 if (cz->home != nullptr) {
-                    ComponentEntity* resAnchor = cz->home;   // +0x238
+                    ComponentEntity* resAnchor = cz->home.Get();   // +0x238
                     uint32_t czCell = (uint32_t)EntityAnchorCell(&resAnchor, nullptr);
                     int d = WorkBase_CalcDistance_8830(game, czCell, availCell);
                     if (d <= bestDist) { best = cz; bestDist = d; }
@@ -205,7 +205,7 @@ CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
         if (!AdultIdle(cz)) continue;
         if (cz->profession != profKey) continue;
 
-        ComponentEntity* res = cz->home;  // local_90 = their residence (+0x238)
+        ComponentEntity* res = cz->home.Get();  // local_90 = their residence (+0x238)
         if (res == nullptr) continue;
         ComponentEntity* resAnchor = res;                        // local_68
         uint32_t resCell = (uint32_t)EntityAnchorCell(&resAnchor, nullptr);

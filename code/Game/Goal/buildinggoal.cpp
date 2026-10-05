@@ -201,13 +201,13 @@ Object::External* BuildingGoal::Construct() {
 }
 
 // create 0x140025d80: MemAlloc(0x48, 8), then the (inlined) ctor.
-void* BuildingGoal::CreateNewObject() {
+::Object::Base* BuildingGoal::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(BuildingGoal), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) BuildingGoal());
 }
 // createInPlace 0x140025de0.
-void* BuildingGoal::CreateInPlaceObject(void* storage) {
+::Object::Base* BuildingGoal::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) BuildingGoal());
 }

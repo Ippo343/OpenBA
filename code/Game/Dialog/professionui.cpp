@@ -130,7 +130,7 @@ static int CalcWorkerSlots_Impl(WorkComponent* storageLocComp) {
     }
 
     // Find BuildComponent on the entity at +0x10
-    ComponentEntity* entity = storageLocComp->_entity;
+    ComponentEntity* entity = storageLocComp->_entity.Get();
 
     MapComponent* buildComp = nullptr;
     fn_FindComponent_Build(entity, &buildComp);
@@ -729,7 +729,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                 // Check if workplace is enabled (+0x50 != 0)
                 if (workplaceComp && workplaceComp->isAccepting != 0) {
                     // Find StorageLocationComponent on parent entity via +0x10
-                    ComponentEntity* parentEntity = workplaceComp->_entity;
+                    ComponentEntity* parentEntity = workplaceComp->_entity.Get();
                     if (!parentEntity) continue;
                     int pCompCount = parentEntity->_componentCount;
                     Object::InternalPtr<Component>* pCompArray = parentEntity->_components;
@@ -940,7 +940,7 @@ void ProfessionUI::HandleButton(int profIndex) {
 
                 // Get citizen's entity (at +0x10)
                 citizen = citizenArray[*rotIdx];
-                ComponentEntity* entityPtr = citizen->_entity;
+                ComponentEntity* entityPtr = citizen->_entity.Get();
 
                 // Center camera on this citizen
                 UI::DialogInstance* dialogInst = _dialog;
@@ -958,7 +958,7 @@ void ProfessionUI::HandleButton(int profIndex) {
             }
 
             citizen = citizenArray[*rotIdx];
-            ComponentEntity* entityPtr = citizen->_entity;
+            ComponentEntity* entityPtr = citizen->_entity.Get();
 
             UI::DialogInstance* dialogInst = _dialog;
             game->m_toolManager->CenterOnEntity(&dialogInst, &entityPtr);   // 0x140103040

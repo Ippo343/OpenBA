@@ -86,7 +86,7 @@ void EraseIdNode(WorkSchedulerTree* tree, WorkSchedulerIdNode* node) {          
     WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: audit DEFERRED (Work leaves ledger): SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF)
 }
 void EraseCountNode(WorkSchedulerCountNode** root, WorkSchedulerCountNode* node) {    // 0x14001a6e0
-    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(root), node);  // LEFT: audit WORK (SIG), owner Work/ (z-CODEB): SIG WorkBST_BSTRemove_a6e0 takes the root slot as uintptr_t* (Work/exe_bodies.h, WORK)
+    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(root), node);  // LEFT: audit WORK (SIG WorkBST_BSTRemove_a6e0's uintptr_t* root: the one body serves five node types (ICF), a typed root needs the erased-core template first; not reached in B4 Z SWEEP): SIG WorkBST_BSTRemove_a6e0 takes the root slot as uintptr_t* (Work/exe_bodies.h, WORK)
 }
 
 // ============================================================

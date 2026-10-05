@@ -494,7 +494,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
     {
         const int ix = clampCell(px);
         const int iy = clampCell(py);
-        ComponentEntity* cellEntity = cells[iy * N + ix].occupant;
+        ComponentEntity* cellEntity = cells[iy * N + ix].occupant.Get();
         if (cellEntity != nullptr) {
             NaturalResourceComponent* probe = cellEntity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
             if (probe != nullptr) {
@@ -534,7 +534,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
 
         for (int i = 0; i < found.size; i++) {
             CharacterComponent** slot = &found.data[i];
-            ComponentEntity* ownerEntity = (*slot)->_entity;
+            ComponentEntity* ownerEntity = (*slot)->_entity.Get();
             Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: WORK (audit dead-argument row) not executable: pointer here and at :502, integer (off * 6) at :561; no one declared type lets all three pass without a cast
                                  &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
                                  &hitAnimal, &hitCitizen);
@@ -555,7 +555,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
                 const int cy = row + dy;
                 if (cx < 0 || cy < 0 || cx >= N || cy >= N) continue;
                 const int64_t off = static_cast<int64_t>(N) * cy + cx;
-                ComponentEntity* cellEntity = cells[off].occupant;
+                ComponentEntity* cellEntity = cells[off].occupant.Get();
                 if (cellEntity == nullptr) continue;
                 // Retail passes `off * 6` here — junk into a dead parameter. Kept.
                 Tornado_StrikeEntityCounted(off * 6, &cellEntity, &hitTree, &hitTreeNoKnock,
@@ -827,7 +827,7 @@ void TornadoComponent::Tick(const System::Time* time) {
 
     if (!particleAlive) {
         // --- the funnel is gone: queue the tornado entity for destruction ---
-        ComponentEntity* entity = _entity;
+        ComponentEntity* entity = _entity.Get();
         EntityList* entityMgr = gw->m_entityList;
         if (entity != nullptr) {
             const uint32_t f = entity->_entityFlags;
@@ -931,14 +931,14 @@ void TornadoComponent::Tick(const System::Time* time) {
 }
 
 // create 0x14000d500: MemAlloc(0x68, 8), then the ctor.
-void* TornadoComponent::CreateNewObject() {
+::Object::Base* TornadoComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TornadoComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TornadoComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* TornadoComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* TornadoComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TornadoComponent());
 }

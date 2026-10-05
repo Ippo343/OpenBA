@@ -222,7 +222,7 @@ char TradeComponent::EnterIdle() {
         // ctor (Work/TradeWork.h) and Work::InitFromEntity (0x1400f72e0's body).
         void* mem = System::MemoryAllocator::MemAlloc(0x58, 8);
         if (mem) {
-            ComponentEntity* entityIBP[2] = {_entity, nullptr};
+            ComponentEntity* entityIBP[2] = {_entity.Get(), nullptr};
             work = new (mem) TradeWork();
             work->InitFromEntity(entityIBP);
         }
@@ -429,7 +429,7 @@ char TradeComponent::TickIdle(StateMachine* smV, const System::Time* deltaTime) 
 // BoatComponent's route head, which occupies the same offsets on a different object. The
 // two are easy to confuse when reading b160 and 56e0 side by side.
 char TradeComponent::Teardown() {
-    ComponentEntity* entityIBP = _entity;
+    ComponentEntity* entityIBP = _entity.Get();
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw) {
         // The town manager's trading-post list at +0x30.

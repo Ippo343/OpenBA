@@ -158,11 +158,11 @@ void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint
                     iVar5 = iVar5 + -1;     // descending inner (col)
                     int iVar15 = (param_5 + iVar18) * param_1->size + iVar13 + param_4;
                     MapCell* cell = &param_1->cells.GetData()[static_cast<int64_t>(iVar15)];   // +0x80, stride 0x30
-                    ComponentEntity** occupant = &cell->occupant;   // +0x08 InternalPtr<ComponentEntity>
+                    Object::InternalPtr<ComponentEntity>* occupant = &cell->occupant;   // +0x08 InternalPtr<ComponentEntity>
 
                     // Evict any stale entity occupying this cell.
-                    if ((*owner != nullptr) && (*occupant != nullptr)) {
-                        ComponentEntity* lVar2 = *occupant;
+                    if ((*owner != nullptr) && (occupant->Get() != nullptr)) {
+                        ComponentEntity* lVar2 = occupant->Get();
                         if (*owner != lVar2) {
                             EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;   // +0xE8
                             ComponentEntity* local_68 = lVar2;
@@ -364,7 +364,7 @@ void MapComponent::AddToMap() {
     }
 
     if (!pvVar5->_noOccupancy) {
-        ComponentEntity* local_res8 = _entity;
+        ComponentEntity* local_res8 = _entity.Get();
         MapComponent_overlay_dc20(
             piVar2, &local_res8,
             (uint8_t)pvVar5->_cellType,
@@ -400,7 +400,7 @@ void CreateNaturalResource_impl_4750(MapComponent* self) {
     Map* piVar2 = GameUpdateLoop::_singleton->m_game;   // +0xF8
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
-    ComponentEntity* local_res8 = self->_entity;
+    ComponentEntity* local_res8 = self->_entity.Get();
     MapDescription* pvVar5 = bVar3 ? static_cast<MapDescription*>(obj) : nullptr;
 
     CreateNaturalResource_impl_dee0(

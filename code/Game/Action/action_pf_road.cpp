@@ -548,7 +548,7 @@ float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p
     // retail unguarded `null+0x148` transform read.
     if (model == nullptr) {
         const uint32_t s_tidModel = ModelComponent::TypeId();   // B.3.8: no lazy cache (B6-5)
-        ComponentEntity* ownEnt = self->_entity;
+        ComponentEntity* ownEnt = self->_entity.Get();
         if (ownEnt && s_tidModel) {
             int n = ownEnt->_componentCount;
             ::Object::InternalPtr<Component>* arr = ownEnt->_components;

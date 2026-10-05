@@ -207,7 +207,7 @@ void SerializeIBPArray(T*** data, int32_t* countField, IO::Serializer* serialize
     for (int32_t i = 0; i < count; ++i) {
         T** elem = &arr[i];
         // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: audit WORK (CLASS CitizenBehavior), owner Entity/ (z-CODEB): an InternalBasePtr slot held as T* (the IBP's raw pointer; Internal.h)
+        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: audit WORK (CLASS CitizenBehavior; blocked by size, not ownership: the bucket trees' element type is one CLASS unit with its readers, not reached in B4 Z SWEEP): an InternalBasePtr slot held as T* (the IBP's raw pointer; Internal.h)
         T* val = *elem;
         if (val != nullptr) {
             if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
@@ -432,7 +432,7 @@ LegacyKeyIntNode* LegacyTreeSucc(LegacyKeyIntNode* n) {
 void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
     // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
     // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
-    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: audit WORK (CLASS CitizenBehavior +0x160), owner Entity/ (z-CODEB): +0x160 read as a second node type (legacy path)
+    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: audit WORK (CLASS CitizenBehavior +0x160; the legacy-path second node type needs the +0x160 tree typed first, not reached in B4 Z SWEEP): +0x160 read as a second node type (legacy path)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -706,7 +706,7 @@ void CitizenBehavior::PostLoad() {
         int slot = -1;
         for (; idx < entCount; ++idx, --slot) {
             WellComponent* entIBP = entArr[idx];
-            ComponentEntity* comp = entIBP->_entity;
+            ComponentEntity* comp = entIBP->_entity.Get();
 
             MapComponent* chosen = nullptr;
             int32_t compCount = comp->_componentCount;

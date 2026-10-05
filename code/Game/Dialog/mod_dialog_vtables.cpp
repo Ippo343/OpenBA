@@ -171,13 +171,13 @@ ModDialog::~ModDialog() {
 }
 
 // create 0x140012900: MemAlloc(0xd8, 8), then the ctor.
-void* ModDialog::CreateNewObject() {
+::Object::Base* ModDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ModDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) ModDialog());
 }
 // createInPlace 0x140012970 (the tree's in-place build is kept, B8-13).
-void* ModDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* ModDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) ModDialog());
 }
@@ -202,13 +202,13 @@ ModDetailsDialog::~ModDetailsDialog() {
 }
 
 // create 0x140012790: MemAlloc(0xc8, 8), then the ctor.
-void* ModDetailsDialog::CreateNewObject() {
+::Object::Base* ModDetailsDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ModDetailsDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) ModDetailsDialog());
 }
 // createInPlace 0x1400127e0 (the tree's in-place build is kept, B8-13).
-void* ModDetailsDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* ModDetailsDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) ModDetailsDialog());
 }

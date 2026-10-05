@@ -138,7 +138,7 @@ extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System:
     }
 
     // Found the name. Its position is relative to the owning entity's ModelComponent.
-    ComponentEntity* const entity = comp->_entity;
+    ComponentEntity* const entity = comp->_entity.Get();
     const uint32_t wantedTid = ModelComponent::TypeId();
     ModelComponent* model = nullptr;
     const int compCount = entity ? entity->_componentCount : 0;

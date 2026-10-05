@@ -143,7 +143,7 @@ bool PickupRawMaterial::GetTarget(ComponentEntity** param) {
         return true;
     }
 
-    return _field20->_entity == paramVal;
+    return _field20->_entity.Get() == paramVal;
 }
 
 // ============================================================
@@ -164,12 +164,12 @@ PickupRawMaterial::PickupRawMaterial()
 // [4] 0x1400c98d0
 // [9] 0x1400c9860
 
-void* PickupRawMaterial::CreateNewObject() {
+::Object::Base* PickupRawMaterial::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PickupRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PickupRawMaterial());
 }
-void* PickupRawMaterial::CreateInPlaceObject(void* storage) {
+::Object::Base* PickupRawMaterial::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PickupRawMaterial());
 }

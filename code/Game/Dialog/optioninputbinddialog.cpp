@@ -78,13 +78,13 @@ OptionInputBindDialog::OptionInputBindDialog(UI::UserInterface* ui, const UI::Di
     : MessageDialog(ui, dialog, parent), keyIndex(0), inputType(-1) {}
 
 // create 0x140012e60: MemAlloc(0xc8, 8), then the ctor.
-void* OptionInputBindDialog::CreateNewObject() {
+::Object::Base* OptionInputBindDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(OptionInputBindDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) OptionInputBindDialog());
 }
 // createInPlace 0x140012ed0 (tree's in-place build kept, B8-13).
-void* OptionInputBindDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* OptionInputBindDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) OptionInputBindDialog());
 }

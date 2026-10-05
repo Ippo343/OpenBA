@@ -493,14 +493,14 @@ void StorageDisplayComponent::Slot11() {
 }
 
 // create 0x14000c770: MemAlloc(0x38, 8), then the ctor.
-void* StorageDisplayComponent::CreateNewObject() {
+::Object::Base* StorageDisplayComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StorageDisplayComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StorageDisplayComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* StorageDisplayComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* StorageDisplayComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StorageDisplayComponent());
 }

@@ -181,13 +181,13 @@ Object::InternalPtr<UI::Element>* TutorialImageHotKey::CreateElement(Object::Int
 }
 
 // create 0x140027d00: MemAlloc(0x48, 8), then the ctor.
-void* TutorialImageHotKey::CreateNewObject() {
+::Object::Base* TutorialImageHotKey::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialImageHotKey), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialImageHotKey());
 }
 // createInPlace 0x140027d40.
-void* TutorialImageHotKey::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialImageHotKey::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialImageHotKey());
 }

@@ -140,7 +140,7 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
                             iVar7 = iVar7 * iVar18 + iVar20;
                             int64_t lVar10 = (int64_t)iVar7;
                             if (cells.GetData()[lVar10].occupant == nullptr) {
-                                ComponentEntity* local_d8 = cells.GetData()[lVar10].blocker;
+                                ComponentEntity* local_d8 = cells.GetData()[lVar10].blocker.Get();
                                 bool occOk = (local_d8 == nullptr);
                                 if (!occOk && *allow != nullptr) {
                                     occOk = (*allow == local_d8);
@@ -389,13 +389,13 @@ void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best,
 //    map size and the HerdDescription's _spread) and writes the 4 int16 wander fields
 //    into each member's AnimalComponent.
 void HerdStartMigration(HerdComponent* herd) {
-    int iVar4 = Pf_PastureTargetPick_53ca0(herd->population, herd->populationCell);   // 0x140053ca0
+    int iVar4 = Pf_PastureTargetPick_53ca0(herd->population.Get(), herd->populationCell);   // 0x140053ca0
     herd->tile = iVar4;
 
     if (iVar4 < 0) {
         if (0 < herd->memberCount) {
             do {
-                ComponentEntity* local_res8 = herd->members[0]->_entity;
+                ComponentEntity* local_res8 = herd->members[0]->_entity.Get();
                 EntityList* list = GameUpdateLoop::_singleton->m_entityList;
                 if (local_res8 != nullptr) {
                     if ((local_res8->_entityFlags >> 10 & 1) == 0) {
@@ -431,7 +431,7 @@ void HerdStartMigration(HerdComponent* herd) {
     if (0 < herd->memberCount) {
         uint32_t memberIdx = 0;
         do {
-            ComponentEntity* local_58 = herd->members[memberIdx]->_entity;
+            ComponentEntity* local_58 = herd->members[memberIdx]->_entity.Get();
             AnimalComponent* foundComp = local_58->FindComponent<AnimalComponent>();
             // DEVIATION (guard): retail writes unconditionally — it can, because a
             // dead member is erased from the herd list by WildAnimalComponent's

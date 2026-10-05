@@ -41,6 +41,6 @@ class ComponentEntity;
 // the field is merely SET to): retail returns ExternalPtr<ComponentDescription> by
 // value (RCX) from an InternalPtr<ComponentEntity> (RDX).
 extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription** out,
-                                                           ComponentEntity* const* entitySlot); // 0x140047f80
+                                                           const Object::InternalPtr<ComponentEntity>* entitySlot); // 0x140047f80
 // 0x1400050a0 (the DiseaseComponent finder) is ComponentEntity::FindComponent<DiseaseComponent>;
 // 0x1400537f0 is ParticleComponent::StopEmitterFade (ParticleComponent.h).

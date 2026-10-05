@@ -40,14 +40,14 @@ void QuarryComponent::OnRemove() {}
 // [12] 0x1400550f0 OnEvent / [15] 0x140054b80 OnMessage live in quarrycomponent_deform.cpp.
 
 // create 0x14000b3d0: MemAlloc(0x28, 8), then the ctor.
-void* QuarryComponent::CreateNewObject() {
+::Object::Base* QuarryComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(QuarryComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) QuarryComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* QuarryComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* QuarryComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) QuarryComponent());
 }

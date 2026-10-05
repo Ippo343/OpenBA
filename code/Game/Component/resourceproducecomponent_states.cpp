@@ -103,7 +103,7 @@ static char RP_State13Enter(ResourceProduceComponent* self, StateMachine* sm) {
         return 1;
     }
 
-    ComponentEntity* owner = rp->_entity;
+    ComponentEntity* owner = rp->_entity.Get();
 
     // CreateWork (slot 18) — allocates the class's Work object and hands back an
     // InternalBasePtr. Abstract in the base, so a null here means the subclass did
@@ -131,7 +131,7 @@ static char RP_State13Enter(ResourceProduceComponent* self, StateMachine* sm) {
 // ── state 14 enter — 0x14012ad20 ──────────────────────────────────────────────────
 // Release the held work slot if occupied, stop accepting, then OnExitProducing.
 static char RP_State14Enter(ResourceProduceComponent* self, StateMachine* /*sm*/) {
-    ComponentEntity* owner = self->_entity;
+    ComponentEntity* owner = self->_entity.Get();
 
     WorkComponent* workComp = owner->FindComponent<WorkComponent>();   // 0x140003050
     if (workComp != nullptr) {

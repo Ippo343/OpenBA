@@ -62,7 +62,7 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
 
     // Check if accumulated time exceeds threshold
     if (thresholdTime._ticks < self->age._ticks) {
-        ComponentEntity* entity = self->_entity;
+        ComponentEntity* entity = self->_entity.Get();
 
         if (GameUpdateLoop::_singleton == nullptr) return;
         EntityList* worldMgr = GameUpdateLoop::_singleton->m_entityList;
@@ -79,7 +79,7 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
                 {
                     int currentCount = worldMgr->removalList._size;
                     worldMgr->removalList
-                        .SetSize(currentCount + 1, self->_entity);
+                        .SetSize(currentCount + 1, self->_entity.Get());
                 }
             }
         }
@@ -250,7 +250,7 @@ void RawMaterialComponent::Startup() {
 //  10. CitizenAI_impl_ec60 (0x14012ec60) — POST the work to the scheduler
 
 void RawMaterialComponent::OnAdded() {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // The entity's WorkComponent (0x140003050)
     WorkComponent* workComp = entity->FindComponent<WorkComponent>();
@@ -299,14 +299,14 @@ void RawMaterialComponent::OnAdded() {
 void RawMaterialComponent::Update(const System::Time*) {}
 
 // create 0x140037270: MemAlloc(0x40, 8), then the ctor.
-void* RawMaterialComponent::CreateNewObject() {
+::Object::Base* RawMaterialComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RawMaterialComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RawMaterialComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* RawMaterialComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* RawMaterialComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RawMaterialComponent());
 }

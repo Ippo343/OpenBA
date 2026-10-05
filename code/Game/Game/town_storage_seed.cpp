@@ -207,7 +207,7 @@ extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLoc
     if (!townMgr || !storageLocationComp) {
         return;
     }
-    ComponentEntity* entityRef = storageLocationComp->_entity;   // the component's +0x10 entity
+    ComponentEntity* entityRef = storageLocationComp->_entity.Get();   // the component's +0x10 entity
     int newCount = townMgr->field_0x00._size + 1;
     QwordArraySetSize(&townMgr->field_0x00, newCount, &entityRef);   // 0x140003110
     // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the
@@ -225,7 +225,7 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
     if (!componentWithEntity) return;
     const Component* p = componentWithEntity;
 
-    ComponentEntity* entity = p->_entity;
+    ComponentEntity* entity = p->_entity.Get();
     StorageComponent* sc = FindStorageOnEntity(entity);
     if (!sc) {
         return;
@@ -261,7 +261,7 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
     // _areaBasedLimit (+0x20): multiply _volumeLimit by the MapComponent footprint.
     int tileArea = 1;
     if (desc->_flagA) {
-        ComponentEntity* ent2 = sc->_entity;
+        ComponentEntity* ent2 = sc->_entity.Get();
         // Find the MapComponent (typeid 0x1401c79e0) on the entity.
         MapComponent* mapComp = nullptr;
         const uint32_t tidMap = TidMapComponent();

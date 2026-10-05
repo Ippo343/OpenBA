@@ -58,13 +58,13 @@ Object::External* StorageLocationDescription::Construct() {
 }
 
 // create 0x140038e50: MemAlloc(0x28, 8), then the (inlined) ctor.
-void* StorageLocationDescription::CreateNewObject() {
+::Object::Base* StorageLocationDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StorageLocationDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StorageLocationDescription());
 }
 // createInPlace 0x140038eb0.
-void* StorageLocationDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* StorageLocationDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StorageLocationDescription());
 }

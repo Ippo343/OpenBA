@@ -33,6 +33,7 @@
 #include "collection/Collection.h"   // Collection::Array, Collection::Set
 
 class ComponentEntity;
+namespace Object { template <class T> class InternalPtr; }
 namespace IO { class Stream; }
 
 // The element arrays are `Collection::Array<ComponentEntity*>` over retail's
@@ -119,7 +120,7 @@ struct EntityList {
     void PostUpdate();                                // 0x1400c43d0
     void RemoveEntity(ComponentEntity** entityIBP);   // 0x1400c38e0 (an InternalPtr slot)
     void Serialize(IO::Stream& stream);               // 0x1400c44a0
-    void RegisterEntity(ComponentEntity** entityIBP, int category);  // 0x1400c48a0 (body in componententity.cpp)
+    void RegisterEntity(Object::InternalPtr<ComponentEntity>* entityIBP, int category);  // 0x1400c48a0 (body in componententity.cpp)
     void QueueDestroy(ComponentEntity* const* entity);           // 0x1400c49d0 (body in nomadcomponent_states.cpp)
 
 private:

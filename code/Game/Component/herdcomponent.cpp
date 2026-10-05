@@ -231,7 +231,7 @@ char HerdComponent::CheckMigrationDone() {
     (void)::Object::IsDerivedFromNullSafe(_description, HerdDescription::TypeId());
 
     for (int i = 0; i < memberCount; i++) {
-        ComponentEntity* entity = members[i]->_entity;
+        ComponentEntity* entity = members[i]->_entity.Get();
         AnimalComponent* animal = entity->FindComponent<AnimalComponent>();
         if (!animal->IsInWanderBox()) return 0;   // 0x140106b10
     }
@@ -267,7 +267,7 @@ void HerdComponent::AdjustSize(int targetSize) {
 
         // Build the animal entity from the template.
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-        ComponentEntity* entity = mem ? new (mem) ComponentEntity(descr) : nullptr;   // 0x1400c3720
+        Object::InternalPtr<ComponentEntity> entity = mem ? new (mem) ComponentEntity(descr) : nullptr;   // 0x1400c3720
 
         // Retail looks up three components in this order and uses two of them:
         // the WildAnimalComponent is what gets linked back to the herd, and the
@@ -446,7 +446,7 @@ void HerdComponent::Populate(int count) {
         int rndY = rng->Rand(static_cast<uint32_t>(bh));
 
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-        ComponentEntity* entity = mem ? new (mem) ComponentEntity(descr) : nullptr;   // 0x1400c3720
+        Object::InternalPtr<ComponentEntity> entity = mem ? new (mem) ComponentEntity(descr) : nullptr;   // 0x1400c3720
         if (!entity) continue;
 
         AnimalComponent* animal = entity->FindComponent<AnimalComponent>();
@@ -512,7 +512,7 @@ void HerdComponent::OnRemove() {
     // The two `break`s below are the tree's guards (retail has neither: a member with
     // no herd would spin, a null member would fault).
     while (memberCount > 0) {
-        WildAnimalComponent* member = members[memberCount - 1];
+        WildAnimalComponent* member = members[memberCount - 1].Get();
         if (!member) break;
 
         HerdComponent* current = member->herd.Get();
@@ -536,7 +536,7 @@ void HerdComponent::OnRemove() {
 // first int.
 // ============================================================
 static bool IsTileValid(HerdComponent* self) {
-    PopulationComponent* population = self->population;
+    PopulationComponent* population = self->population.Get();
     if (population == nullptr) return false;
 
     int mapWidth = GameUpdateLoop::_singleton->m_game->size;
@@ -737,14 +737,14 @@ void HerdComponent::Update(const System::Time* time) {
 }
 
 // create 0x140034cd0: MemAlloc(0x60, 8), then the ctor.
-void* HerdComponent::CreateNewObject() {
+::Object::Base* HerdComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HerdComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HerdComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* HerdComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* HerdComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HerdComponent());
 }

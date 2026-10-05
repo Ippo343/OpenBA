@@ -141,7 +141,7 @@ int WorkAreaCenterCell(ComponentEntity* area) {
 
 bool CitizenStackIdle(const CitizenComponent* citizen) {
     if (!citizen || !Readable(citizen, kCharCompOff + 8)) return false;
-    const CharacterComponent* charComp = citizen->character;   // +0x278
+    const CharacterComponent* charComp = citizen->character.Get();   // +0x278
     if (!charComp || !Readable(charComp, kActionTopOff + 8)) return false;
     return charComp->actionStack.current < 0;                 // +0x60
 }
@@ -158,7 +158,7 @@ int DriveWhenIdle(CitizenComponent* citizen, Work* work, int (*driveFn)(Work*, C
 
     if (driveCount && *driveCount < traceMax) {
         ++*driveCount;
-        const CharacterComponent* charComp = c->character;               // +0x278
+        const CharacterComponent* charComp = c->character.Get();               // +0x278
         int top = charComp ? charComp->actionStack.current : -999;             // +0x60
         std::fprintf(stderr, "[%s] DRIVE#%d citizen=%p ret=%d newTop+0x60=%d\n",
                      tag ? tag : "ForceWork", *driveCount, static_cast<void*>(citizen), rc, top);

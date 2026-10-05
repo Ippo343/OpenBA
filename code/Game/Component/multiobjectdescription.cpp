@@ -52,13 +52,13 @@ Object::External* MultiObjectDescription::Construct() {
 }
 
 // create 0x140035f50: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* MultiObjectDescription::CreateNewObject() {
+::Object::Base* MultiObjectDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MultiObjectDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MultiObjectDescription());
 }
 // createInPlace 0x140035fb0.
-void* MultiObjectDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* MultiObjectDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MultiObjectDescription());
 }

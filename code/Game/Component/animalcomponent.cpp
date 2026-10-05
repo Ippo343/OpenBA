@@ -142,7 +142,7 @@ inline uint8_t CellTerrain(const MapCell* cells, int64_t index) {
     return cells[index].terrainType;
 }
 inline ComponentEntity* CellOccupant(const MapCell* cells, int64_t index) {
-    return cells[index].blocker;
+    return cells[index].blocker.Get();
 }
 inline System::Random* Rng() {
     return GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_random : nullptr;
@@ -271,7 +271,7 @@ void AnimalComponent::UpdateBehavior() {
     float scale = (age / adultAge) * ScaleGain() + ScaleBase();
     if (scale > ScaleMax()) scale = ScaleMax();
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
@@ -302,7 +302,7 @@ void AnimalComponent::UpdateBehavior() {
 // Reproduced as-is (the second pass is a no-op on an already-unit 2D vector).
 // ============================================================
 void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
@@ -420,7 +420,7 @@ void AnimalComponent::OnAdded() {
     const uint32_t flags = _flags;
     if (((flags >> 0x16) & 1) == 0) return;
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
@@ -466,7 +466,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
     const float death = deathAge;
     if (newAge >= death && newAge != death) {
-        ComponentEntity* entity = _entity;
+        ComponentEntity* entity = _entity.Get();
         EntityList* const corpseOwner = GameUpdateLoop::_singleton
                                         ? GameUpdateLoop::_singleton->m_entityList : nullptr;
         if (entity == nullptr) return;
@@ -547,7 +547,7 @@ void AnimalComponent::Update(const System::Time* time) {
     UpdateBehavior();
 
     // ---- 4. busy / timer gates -------------------------------------------
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
@@ -757,14 +757,14 @@ void AnimalComponent::Update(const System::Time* time) {
 void AnimalComponent::Slot11() {}
 
 // create 0x14002f020: MemAlloc(0x58, 8), then the ctor.
-void* AnimalComponent::CreateNewObject() {
+::Object::Base* AnimalComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AnimalComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AnimalComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AnimalComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AnimalComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AnimalComponent());
 }

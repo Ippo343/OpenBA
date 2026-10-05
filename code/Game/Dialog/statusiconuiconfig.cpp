@@ -81,13 +81,13 @@ void StatusIconUIConfig::Destruct() { this->~StatusIconUIConfig(); }
 Object::External* StatusIconUIConfig::Construct() { return new (this) StatusIconUIConfig(); }
 
 // create 0x140014250: MemAlloc(0x28, 8), then the ctor.
-void* StatusIconUIConfig::CreateNewObject() {
+::Object::Base* StatusIconUIConfig::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StatusIconUIConfig), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StatusIconUIConfig());
 }
 // createInPlace 0x1400142a0.
-void* StatusIconUIConfig::CreateInPlaceObject(void* storage) {
+::Object::Base* StatusIconUIConfig::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StatusIconUIConfig());
 }

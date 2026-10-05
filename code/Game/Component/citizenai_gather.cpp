@@ -137,7 +137,7 @@ static void EnsureInit() {
 
 // the citizen's ModelComponent (CharacterComponent +0x68).
 static ModelComponent* CitizenModel(CitizenComponent* citizen) {
-    CharacterComponent* ch = citizen->character;
+    CharacterComponent* ch = citizen->character.Get();
     if (ch == nullptr) return nullptr;
     return ch->modelComponent.Get();
 }
@@ -178,7 +178,7 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(c
 
     StatusIconComponent* mi = citizen->home->FindComponent<StatusIconComponent>();
     if (mi == nullptr) return;
-    ComponentEntity* inner = mi->_entity;
+    ComponentEntity* inner = mi->_entity.Get();
     // gated: ((inner->_entityFlags >> 10) & 1) == 0
     if (inner == nullptr || (inner->_entityFlags >> 10 & 1) != 0) return;
 
@@ -215,7 +215,7 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(c
         changed = after ^ before;
     }
     if ((changed & 0xffff) != 0 && mi->_entity != nullptr) {
-        NotifyEntityChanged(mi->_entity);
+        NotifyEntityChanged(mi->_entity.Get());
     }
 }
 
@@ -378,7 +378,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
     bool haveWorkplace = (citizen->home != nullptr);
     char valid = 0;
     if (haveWorkplace) {
-        valid = citizen->CanReach(citizen->home);
+        valid = citizen->CanReach(citizen->home.Get());
     }
 
     if (haveWorkplace && valid != 0) {
@@ -395,7 +395,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         }
 
         // compute the citizen grid cell
-        ModelComponent* model = CitizenModel(citizen);
+        ModelComponent* model = CitizenModel(citizen.Get());
         Map* mg = GameUpdateLoop::_singleton->m_game;   // +0xF8
         int w = mg->size;
         uint32_t cell = ModelCell(model, mg);
@@ -405,7 +405,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         if (citizen->home == nullptr) {
             bGoal = 0xffffffff;
         } else {
-            ComponentEntity* wp = citizen->home;
+            ComponentEntity* wp = citizen->home.Get();
             bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
         }
 
@@ -419,10 +419,10 @@ uint64_t CitizenAIComponent::State_GatherResources() {
 
         if (found == nullptr) {
             // ---- cooldown + status-icon branch ----
-            int64_t stamp = CooldownStamp(citizen, kMultEmpty);
+            int64_t stamp = CooldownStamp(citizen.Get(), kMultEmpty);
             timers[6]._ticks = stamp;
             citizen->happinessFlags |= 4;
-            HideRenderWorkplaceMesh(citizen, &CitizenComp_Storage_GetResourceCount, 0x40);   // 0x14012a9d0
+            HideRenderWorkplaceMesh(citizen.Get(), &CitizenComp_Storage_GetResourceCount, 0x40);   // 0x14012a9d0
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
         }
 
@@ -438,8 +438,8 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         float destPos[4] = {0, 0, 0, 0};  // local_60
         InteractNodePosition(pp, destPos, 0, 0, nullptr);
 
-        CitizenComponent* citizenVal = citizen;                         // local_88
-        ComponentEntity* destEntityIBP = citizenVal->home;              // local_res18
+        CitizenComponent* citizenVal = citizen.Get();                         // local_88
+        ComponentEntity* destEntityIBP = citizenVal->home.Get();              // local_res18
         ::Object::InternalPtr<Action> pathResult;                        // local_res20
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
                        &destEntityIBP, destPos, &found,
@@ -447,11 +447,11 @@ uint64_t CitizenAIComponent::State_GatherResources() {
 
         // 3) capLeft = max( the profession list's field_0x30 carry amount, FUN_140116540(citizen) )
         int townCap = GameUpdateLoop::_singleton->m_professionList->field_0x30->priority;
-        int citCap = WorkLeaf_FreeStorageCapacity_116540(citizen);
+        int citCap = WorkLeaf_FreeStorageCapacity_116540(citizen.Get());
         int capLeft = (townCap < citCap) ? citCap : townCap;
 
         // 4) transfer loop (ef40 walks carrier slots of `found`, the carry target)
-        GatherTransferLoop(citizen, pathResult, found, capLeft);
+        GatherTransferLoop(citizen.Get(), pathResult, found, capLeft);
 
         // 5) set citizen action-state flags + return 1
         citizen->statusFlags |= 4;
@@ -462,7 +462,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
     }
 
     // ---- no reachable home: cooldown(_fd8 * 75.0) -> timers[6] ----
-    int64_t stamp = CooldownStamp(citizen, kMultInvalid);
+    int64_t stamp = CooldownStamp(citizen.Get(), kMultInvalid);
     timers[6]._ticks = stamp;
     return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
 }
@@ -476,7 +476,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
     bool haveWorkplace = (citizen->home != nullptr);
     char valid = 0;
     if (haveWorkplace) {
-        valid = citizen->CanReach(citizen->home);
+        valid = citizen->CanReach(citizen->home.Get());
     }
 
     if (haveWorkplace && valid != 0) {
@@ -493,7 +493,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         }
 
         // compute cell
-        ModelComponent* model = CitizenModel(citizen);
+        ModelComponent* model = CitizenModel(citizen.Get());
         Map* mg = GameUpdateLoop::_singleton->m_game;   // +0xF8
         int w = mg->size;
         uint32_t cell = ModelCell(model, mg);
@@ -503,7 +503,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         if (citizen->home == nullptr) {
             bGoal = 0xffffffff;
         } else {
-            ComponentEntity* wp = citizen->home;
+            ComponentEntity* wp = citizen->home.Get();
             bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
         }
 
@@ -518,9 +518,9 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         if (found == nullptr) {
             // ---- cooldown + status-icon branch ----
             citizen->happinessFlags |= 4;
-            int64_t stamp = CooldownStamp(citizen, kMultEmpty);
+            int64_t stamp = CooldownStamp(citizen.Get(), kMultEmpty);
             timers[7]._ticks = stamp;
-            HideRenderWorkplaceMesh(citizen, &Storage_GetResourceCount2, 0x80);   // 0x14012ab00
+            HideRenderWorkplaceMesh(citizen.Get(), &Storage_GetResourceCount2, 0x80);   // 0x14012ab00
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
         }
 
@@ -534,8 +534,8 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         float destPos[4] = {0, 0, 0, 0};  // local_98
         InteractNodePosition(pp, destPos, 0, 0, nullptr);
 
-        CitizenComponent* citizenVal = citizen;                         // local_res20
-        ComponentEntity* destEntityIBP = citizenVal->home;              // local_res18
+        CitizenComponent* citizenVal = citizen.Get();                         // local_res20
+        ComponentEntity* destEntityIBP = citizenVal->home.Get();              // local_res18
         ::Object::InternalPtr<Action> pathResult;                        // local_78
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
                        &destEntityIBP, destPos, &found,
@@ -543,7 +543,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
 
         // capLeft = max( the profession list's field_0x30 carry amount, FUN_140116540(citizen) )
         int townCap = GameUpdateLoop::_singleton->m_professionList->field_0x30->priority;
-        int citCap = WorkLeaf_FreeStorageCapacity_116540(citizen);
+        int citCap = WorkLeaf_FreeStorageCapacity_116540(citizen.Get());
         int capLeft = (townCap < citCap) ? citCap : townCap;
         // Distribution diagnostic (firewood-evenness): the per-trip take budget is
         // max(town default, citizen free carry) in WEIGHT units — degenerate values
@@ -572,7 +572,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
     }
 
     // ---- no reachable home: cooldown(_fd8 * 75.0) -> timers[7] ----
-    int64_t stamp = CooldownStamp(citizen, kMultInvalid);
+    int64_t stamp = CooldownStamp(citizen.Get(), kMultInvalid);
     timers[7]._ticks = stamp;
     return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
 }

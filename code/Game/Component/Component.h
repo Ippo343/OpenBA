@@ -73,7 +73,7 @@ public:
 
     // ---- the 0x18 bytes Component adds, retail order ------------------------
     // PUBLIC while unconverted bodies read them at raw offsets (decision 1).
-    ComponentEntity* _entity; // +0x10 owning ComponentEntity (InternalPtr<ComponentEntity> in
+    Object::InternalPtr<ComponentEntity> _entity; // +0x10 owning ComponentEntity (InternalPtr<ComponentEntity> in
                               //       retail: Persist nulls it unless IsDerivedFrom ComponentEntity)
     Description* _description; // +0x18 ExternalPtr<Description>: 0x140031d10 IsDerivedFrom 0x1401c72e0 (Description)
     uint32_t _flags;         // +0x20 capability flags; the ctor sets 0x80

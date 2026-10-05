@@ -49,13 +49,13 @@ Object::External* MarketLocationDescription::Construct() {
 }
 
 // create 0x140008720: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* MarketLocationDescription::CreateNewObject() {
+::Object::Base* MarketLocationDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MarketLocationDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MarketLocationDescription());
 }
 // createInPlace 0x140008780.
-void* MarketLocationDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* MarketLocationDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MarketLocationDescription());
 }

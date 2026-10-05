@@ -172,14 +172,14 @@ void UpgradeUI::OnUpdate(const System::Time& /*time*/) {
 
 // create 0x140016b30: MemAlloc(0x38, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* UpgradeUI::CreateNewObject() {
+::Object::Base* UpgradeUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(UpgradeUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) UpgradeUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* UpgradeUI::CreateInPlaceObject(void* storage) {
+::Object::Base* UpgradeUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) UpgradeUI());
 }

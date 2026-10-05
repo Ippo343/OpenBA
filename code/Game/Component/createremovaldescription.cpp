@@ -113,13 +113,13 @@ Object::External* CreateRemovalDescription::Construct() {
 }
 
 // create 0x140032b70: MemAlloc(0x48, 8), then the (inlined) ctor.
-void* CreateRemovalDescription::CreateNewObject() {
+::Object::Base* CreateRemovalDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CreateRemovalDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreateRemovalDescription());
 }
 // createInPlace 0x140032be0.
-void* CreateRemovalDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CreateRemovalDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreateRemovalDescription());
 }

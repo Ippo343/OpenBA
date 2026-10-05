@@ -253,12 +253,12 @@ Object::External* TerrainGenerator::Construct() {
 // FindOrLoad's per-element load hits a NullFactory and crashes in Runtime
 // IsDerivedFrom. GetFileVersion MUST return 4: Object::External::Load gates
 // the element Serialize on `fileVersion == obj->GetFileVersion()`.
-void* TerrainGenerator::CreateNewObject() {
+::Object::Base* TerrainGenerator::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TerrainGenerator), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TerrainGenerator());
 }
-void* TerrainGenerator::CreateInPlaceObject(void* memory) {
+::Object::Base* TerrainGenerator::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) TerrainGenerator());
 }

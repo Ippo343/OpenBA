@@ -518,7 +518,7 @@ static void Game_SpawnCitizens_Impl() {
 
                             // Register entity with entity manager
                             // Use the new entity (the InternalBasePtr value) as the entity ref
-                            ComponentEntity* entityRef = newEntity;
+                            Object::InternalPtr<ComponentEntity> entityRef = newEntity;
                             EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &entityRef,
                                                          entityDesc->_category);   // 0x1400c48a0
 
@@ -629,7 +629,7 @@ static void Game_SpawnTornado_Impl() {
     }
 
     // Register entity with entity manager
-    ComponentEntity* entityRef = newEntity;
+    Object::InternalPtr<ComponentEntity> entityRef = newEntity;
     EntityList_RegisterEntity_Impl(game->m_entityList, &entityRef,
                                   entityDesc->_category);   // 0x1400c48a0
 }
@@ -1258,14 +1258,14 @@ void DebugUI::OnCreated() {
 
 // create 0x140010ec0: MemAlloc(0x130, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* DebugUI::CreateNewObject() {
+::Object::Base* DebugUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DebugUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DebugUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* DebugUI::CreateInPlaceObject(void* storage) {
+::Object::Base* DebugUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DebugUI());
 }

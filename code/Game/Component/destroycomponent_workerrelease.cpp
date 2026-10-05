@@ -214,7 +214,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     // 4/5. Seat the Builder key and register the owner into the Builder bucket. Retail
     //      writes +0x48 BEFORE the bucket insert (the insert reads the key from its own
     //      argument, so the order only matters for anything re-entering meanwhile).
-    ComponentEntity* const ownerRef = _entity;
+    ComponentEntity* const ownerRef = _entity.Get();
     profession = builderKey;
     CitizenBehavior* const townMgr = gw->m_citizenList;
     if (townMgr) {

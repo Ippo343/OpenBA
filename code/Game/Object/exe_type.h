@@ -80,8 +80,8 @@ public:                                                                         
     uint32_t Type() const override { return _typeInfo.typeId; }                  \
     static uint32_t TypeId() { return _typeInfo.typeId; }                        \
     static const ::Object::BaseTypeInfo& GetTypeInfo() { return _typeInfo; }     \
-    static void* CreateNewObject();                                               \
-    static void* CreateInPlaceObject(void* storage);                              \
+    static ::Object::Base* CreateNewObject();                                     \
+    static ::Object::Base* CreateInPlaceObject(void* storage);                    \
     static const void* Vtable();                                                  \
 private:                                                                          \
     static ::Object::BaseTypeInfo _typeInfo;                                      \
@@ -94,10 +94,10 @@ private:                                                                        
 // `used`: the slot has no reader but the section walk, so it must be kept.
 #define OBJECT_EXE_TYPE_ENTRY __attribute__((used, section(".data$exetype_b")))
 
-// The record's two factory entries. One line each (no `\` continuation) so the
-// reason can sit on the line of the cast.
-#define OBJECT_EXE_TYPE_FACTORY(Class) reinterpret_cast< ::Object::BaseTypeInfo::FactoryFn>(&Class::CreateNewObject)  // LEFT: audit WORK (factoryFn is typed on main since b4z-RT; what remains is the macro family): SIG CreateNewObject returns void* where BaseTypeInfo::FactoryFn returns Object::Base* (DECLARE_EXE_TYPE above; about 630 definitions in every partition)
-#define OBJECT_EXE_TYPE_INPLACE(Class) reinterpret_cast< ::Object::BaseTypeInfo::InPlaceFn>(&Class::CreateInPlaceObject)  // LEFT: audit WORK (as the line above, the macro family): SIG CreateInPlaceObject returns void* where BaseTypeInfo::InPlaceFn returns Object::Base* (as the line above: the same declaration family)
+// The record's two factory entries: the class's own functions have exactly
+// BaseTypeInfo::FactoryFn / InPlaceFn's types.
+#define OBJECT_EXE_TYPE_FACTORY(Class) (&Class::CreateNewObject)
+#define OBJECT_EXE_TYPE_INPLACE(Class) (&Class::CreateInPlaceObject)
 
 // The record (a CRT-init head-insert into _firstTypeInfo) and its section slot.
 #define DEFINE_EXE_TYPE_EXT(Class, ParentLiteral, FileExt)                        \
@@ -117,8 +117,8 @@ private:                                                                        
 // -- exactly the pair the old REGISTER_ABSTRACT_FACTORY rows passed
 // (ENDGAME B.3.9 RF, B39_RULES D6).
 #define DEFINE_EXE_ABSTRACT_TYPE(Class, ParentLiteral)                            \
-    void* Class::CreateNewObject() { return ::Object::AbstractTypeFactory(#Class); } \
-    void* Class::CreateInPlaceObject(void*) { return nullptr; }                   \
+    ::Object::Base* Class::CreateNewObject() { return ::Object::AbstractTypeFactory(#Class); } \
+    ::Object::Base* Class::CreateInPlaceObject(void*) { return nullptr; }                   \
     DEFINE_EXE_TYPE(Class, ParentLiteral)
 
 // `TVSymbol` is the Itanium name of the class's vtable group, e.g.

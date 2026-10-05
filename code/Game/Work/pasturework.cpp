@@ -222,7 +222,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                     // Check if not flagged for removal (bit 20 of the component flags)
                     if (((natResIBP->_flags >> 0x14) & 1) == 0) {
                         // The animal entity's CharacterComponent (the guarded finder 0x1400012d0)
-                        CharacterComponent* familyComp = FindCharacterComponent(natResIBP->_entity);
+                        CharacterComponent* familyComp = FindCharacterComponent(natResIBP->_entity.Get());
                         const Math::Vector3& animalPos = familyComp->modelComponent->transform.translation;
 
                         // Get animal position as cell index
@@ -316,7 +316,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 if (iVar10map <= iVar12) iVar12 = iVar10map - 1;
 
                 // Read the occupant from the map grid cell
-                ComponentEntity* occupant = map->cells.GetData()[(uintptr_t)iVar12 * (uintptr_t)iVar10map + (uintptr_t)iVar21pos].occupant;
+                ComponentEntity* occupant = map->cells.GetData()[(uintptr_t)iVar12 * (uintptr_t)iVar10map + (uintptr_t)iVar21pos].occupant.Get();
 
                 if (occupant != nullptr) {
                     // Its RawMaterialComponent (0x1400223c0)
@@ -487,7 +487,7 @@ int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, i
         natResObj->_flags = newFlags;
 
         // If the component has an entity (+0x10), update it
-        ComponentEntity* parentEntity = natResObj->_entity;
+        ComponentEntity* parentEntity = natResObj->_entity.Get();
         if (parentEntity != nullptr) {
             NotifyEntityChanged(parentEntity);
         }
@@ -731,14 +731,14 @@ extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSl
 // Nothing outside this block reads 0x1401617a0 back, so that row goes with the table.
 
 // create 0x14002bf00: MemAlloc(sizeof, 8), then the ctor.
-void* PastureWork::CreateNewObject() {
+::Object::Base* PastureWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PastureWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PastureWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* PastureWork::CreateInPlaceObject(void* storage) {
+::Object::Base* PastureWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PastureWork());
 }

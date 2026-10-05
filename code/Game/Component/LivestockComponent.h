@@ -45,7 +45,7 @@ public:
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
     // 0x140123e10 (InternalPtr validated against PastureComponent; Time).
-    PastureComponent* pasture;          // +0x28 InternalPtr: the pasture it is kept in (null = free-roaming)
+    Object::InternalPtr<PastureComponent> pasture;   // +0x28 InternalPtr: the pasture it is kept in (null = free-roaming)
     System::Time      productionTimer;  // +0x30
 };
 

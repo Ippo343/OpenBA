@@ -86,14 +86,14 @@ MessageDialog::MessageDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0) {}
 
 // create 0x1400125d0: MemAlloc(0xc0, 8), then the default ctor.
-void* MessageDialog::CreateNewObject() {
+::Object::Base* MessageDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MessageDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) MessageDialog());
 }
 // createInPlace 0x140012620 (retail returns null for Internal-rooted classes;
 // the tree's in-place build is kept, B8-13).
-void* MessageDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* MessageDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) MessageDialog());
 }

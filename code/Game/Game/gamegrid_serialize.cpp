@@ -172,15 +172,14 @@ static void GameGrid_SerializeCellArray_ac10(IO::Serializer* serializer, int32_t
 
     MapCell* elem = cells;
     for (int32_t i = 0; i < count; ++i) {
-        // LEFT: the two refs are InternalBasePtr slots (an IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(&elem->blocker)->Serialize(*serializer);   // LEFT: audit WORK (CLASS MapCell): typing blocker / occupant InternalPtr<ComponentEntity> needs ~127 reader edits in ~50 files, most in Work/ Component/ Player/ (z-CODEB); Map.h (DLG-1 / GAME-3): the cell's refs are raw ComponentEntity* slots of an InternalBasePtr (H5)
-        ComponentEntity* refA = elem->blocker;
+        elem->blocker.Object::InternalBasePtr::Serialize(*serializer);
+        ComponentEntity* refA = elem->blocker.Get();
         if (refA != nullptr && !::Object::IsDerivedFromNullSafe(refA, ComponentEntity::TypeId())) {
             elem->blocker = nullptr;
         }
 
-        reinterpret_cast<Object::InternalBasePtr*>(&elem->occupant)->Serialize(*serializer);   // LEFT: audit WORK (CLASS MapCell, as the line above); Map.h (DLG-1 / GAME-3): the cell's refs are raw ComponentEntity* slots of an InternalBasePtr (H5)
-        ComponentEntity* refB = elem->occupant;
+        elem->occupant.Object::InternalBasePtr::Serialize(*serializer);
+        ComponentEntity* refB = elem->occupant.Get();
         if (refB != nullptr && !::Object::IsDerivedFromNullSafe(refB, ComponentEntity::TypeId())) {
             elem->occupant = nullptr;
         }

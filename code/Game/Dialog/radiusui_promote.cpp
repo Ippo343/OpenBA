@@ -64,14 +64,14 @@ RadiusUI::~RadiusUI() {
 
 // create 0x140013590: MemAlloc(0x38, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* RadiusUI::CreateNewObject() {
+::Object::Base* RadiusUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RadiusUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RadiusUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* RadiusUI::CreateInPlaceObject(void* storage) {
+::Object::Base* RadiusUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RadiusUI());
 }

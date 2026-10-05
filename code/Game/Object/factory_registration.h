@@ -22,10 +22,11 @@
 namespace Object {
 
 class BaseTypeInfo;
+class Base;
 
 // The factory of an ABSTRACT exe base (DEFINE_EXE_ABSTRACT_TYPE, exe_type.h):
 // retail's is a `_purecall` stub; ours logs the name to stderr and answers null.
-void* AbstractTypeFactory(const char* typeName);
+Base* AbstractTypeFactory(const char* typeName);
 
 // The exe records (one per DEFINE_EXE_TYPE expansion), as the linker collected
 // them in `.data$exetype_b`. Walks the section, not the chain, so it is valid

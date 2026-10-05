@@ -74,13 +74,13 @@ Object::External* StatusIconDescription::Construct() {
 }
 
 // create 0x140038920: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* StatusIconDescription::CreateNewObject() {
+::Object::Base* StatusIconDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StatusIconDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StatusIconDescription());
 }
 // createInPlace 0x140038990.
-void* StatusIconDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* StatusIconDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StatusIconDescription());
 }

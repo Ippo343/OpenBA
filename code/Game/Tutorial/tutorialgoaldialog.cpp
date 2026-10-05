@@ -114,13 +114,13 @@ bool TutorialGoalDialog::IsComplete(const System::Time* /*time*/, void* /*instan
 }
 
 // create 0x140027440: MemAlloc(0x40, 8), then the (inlined) ctor.
-void* TutorialGoalDialog::CreateNewObject() {
+::Object::Base* TutorialGoalDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialGoalDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialGoalDialog());
 }
 // createInPlace 0x1400274b0.
-void* TutorialGoalDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialGoalDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialGoalDialog());
 }

@@ -132,7 +132,7 @@ void TombstoneComponent::Update(const System::Time* timeV) {
 
 
     if (lifetime._ticks < 1) {
-        ComponentEntity* entityPtr = _entity;
+        ComponentEntity* entityPtr = _entity.Get();
         if (GameUpdateLoop::_singleton == nullptr) return;
         EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
 
@@ -148,7 +148,7 @@ void TombstoneComponent::Update(const System::Time* timeV) {
                 if (entityList) {
                     int count = entityList->removalList._size;
                     entityList->removalList
-                        .SetSize(count + 1, _entity);
+                        .SetSize(count + 1, _entity.Get());
                 }
             }
         }
@@ -156,14 +156,14 @@ void TombstoneComponent::Update(const System::Time* timeV) {
 }
 
 // create 0x14000d280: MemAlloc(0x30, 8), then the ctor.
-void* TombstoneComponent::CreateNewObject() {
+::Object::Base* TombstoneComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TombstoneComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TombstoneComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* TombstoneComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* TombstoneComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TombstoneComponent());
 }

@@ -682,14 +682,14 @@ GatherRawMaterials::GatherRawMaterials()
 // ctor now), so its registration goes with the table.
 
 // create 0x14002a3c0: MemAlloc(sizeof, 8), then the ctor.
-void* GatherRawMaterials::CreateNewObject() {
+::Object::Base* GatherRawMaterials::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(GatherRawMaterials), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) GatherRawMaterials());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* GatherRawMaterials::CreateInPlaceObject(void* storage) {
+::Object::Base* GatherRawMaterials::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) GatherRawMaterials());
 }

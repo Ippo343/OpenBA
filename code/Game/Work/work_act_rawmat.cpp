@@ -98,7 +98,7 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
                                   float rawMatP3, uint32_t rawMatP8, uint32_t param9) {
 
     // the action stack = character + 0x48 (disasm 0x1400bb7eb..0x1400bb802)
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
@@ -113,7 +113,7 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
     if (obj) {
         ComponentEntity* innerIbp = nullptr;            // [RBP-0x29]   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity; // [RBP-0x21]
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get(); // [RBP-0x21]
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;              // [RBP-0x19]
@@ -154,9 +154,9 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
         obj = WAR_Alloc(0x58, 8);
         Action* crm = nullptr;
         if (obj) {
-            ComponentEntity* entField248 = (*citizenRef)->workplace;  // [RBP+0x47] (p10 target)
+            ComponentEntity* entField248 = (*citizenRef)->workplace.Get();  // [RBP+0x47] (p10 target)
             CitizenComponent* entObj = *citizenRef;                   // RCX -> [RBP-0x21] (p4)
-            ComponentEntity* ent248Slot = entObj->workplace;          // [RBP-0x19] (p5)
+            ComponentEntity* ent248Slot = entObj->workplace.Get();          // [RBP-0x19] (p5)
             // p2=param_5 (RDX), p3=param_7 (XMM2 float), p4=&entObj, p5=&ent248Slot, p6=0 (leftover stack),
             // p7=*(*(storage)+0x38), p8=param_8, p9=1, p10=&entField248, p11=0xc (disasm 0x1400bba1a..0x1400bba55)
             crm = new (obj) CreateRawMaterial(rawMatDesc, rawMatP3, &entObj, &ent248Slot, 0,
@@ -185,7 +185,7 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
     obj = WAR_Alloc(0x480, 8);
     Action* mv = nullptr;
     if (obj) {
-        ComponentEntity* entInner = (*citizenRef)->_entity; // [RBP+0x47]
+        ComponentEntity* entInner = (*citizenRef)->_entity.Get(); // [RBP+0x47]
         CharacterComponent* family = FindCharacterComponent(entInner);   // 0x1400012d0            // [RBP-0x21]
         float speed = kRdata_140172280;          // [0x140172280] = -1.0f
         // disasm: R8D=1 (Slow), R9D=0, [RSP+0x20]=param_4, [RSP+0x28]=0xe1f, [RSP+0x30]=0, [RSP+0x38]=speed
@@ -214,7 +214,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
                                 float rawMatP3, uint32_t param8, uint32_t param9) {
 
     // the action stack = character + 0x48 (disasm 0x1400beb18..0x1400beb2f)
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
@@ -229,7 +229,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
     if (obj) {
         ComponentEntity* innerIbp = nullptr;          // [RBP+0x50]   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity; // [RBP-0x20]
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get(); // [RBP-0x20]
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;              // [RBP-0x18]
@@ -286,7 +286,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
         if (obj) {
             ComponentEntity* innerIbp = nullptr;      // [RBP+0x40] (IbpCtor(&,0))   // retail: InternalBasePtr(nullptr) in a stack slot
             CitizenComponent* entObj = *citizenRef;                   // RDX -> [RBP-0x18] (p4); RCX side
-            ComponentEntity* ent248Slot = entObj->workplace;          // [RBP+0x50] (p5)
+            ComponentEntity* ent248Slot = entObj->workplace.Get();          // [RBP+0x50] (p5)
             // p2=param_6 (RDX), p3=param_7 (XMM2), p4=&ent248Slot([RBP+0x50]) , p5=... — order per disasm:
             //   R9 = &[RBP-0x18] (= entObj, p4); [RSP+0x20] = &[RBP+0x50] (= ent248Slot, p5);
             //   [RSP+0x28]=0 (p6); [RSP+0x30]=R12D=p7; [RSP+0x38]=R15D=param_8 (p8);
@@ -321,7 +321,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
     obj = WAR_Alloc(0x480, 8);
     Action* mv = nullptr;
     if (obj) {
-        ComponentEntity* entInner = (*citizenRef)->_entity; // [RBP+0x40]
+        ComponentEntity* entInner = (*citizenRef)->_entity.Get(); // [RBP+0x40]
         CharacterComponent* family = FindCharacterComponent(entInner);   // 0x1400012d0            // [RBP-0x18]
         float speed = kRdata_140172280;          // [0x140172280] = -1.0f
         // disasm: R8D = 2 (Fast; LEA R8D,[R9+2]), R9D=0, [RSP+0x20]=R13(=param_4),

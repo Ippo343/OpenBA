@@ -394,14 +394,14 @@ void TutorialHighlightDialog::OnUpdateLayout() {
 }
 
 // create 0x1400278c0: MemAlloc(0xf0, 8), then the default ctor 0x1400e0290.
-void* TutorialHighlightDialog::CreateNewObject() {
+::Object::Base* TutorialHighlightDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialHighlightDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialHighlightDialog());
 }
 // Retail's createInPlace 0x140027900 does not build a dialog in place (B8-13);
 // the tree's in-place entry did, and that is kept.
-void* TutorialHighlightDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialHighlightDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialHighlightDialog());
 }

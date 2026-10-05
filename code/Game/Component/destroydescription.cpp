@@ -102,13 +102,13 @@ Object::External* DestroyDescription::Construct() {
 }
 
 // create 0x140033c30: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* DestroyDescription::CreateNewObject() {
+::Object::Base* DestroyDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DestroyDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DestroyDescription());
 }
 // createInPlace 0x140033ca0.
-void* DestroyDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* DestroyDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DestroyDescription());
 }

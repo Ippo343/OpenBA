@@ -204,7 +204,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
         changed = new4 ^ old4;
     }
     if ((changed & 0xffff) != 0 && mesh->_entity != nullptr) {
-        NotifyEntityChanged(mesh->_entity);   // 0x1400c3470
+        NotifyEntityChanged(mesh->_entity.Get());   // 0x1400c3470
     }
 }
 
@@ -498,7 +498,7 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     // Remove the owner entity from the Builder bucket in the profession BST.
     // The tree is CitizenBehavior +0x100 (ProfessionBucket nodes, the key compared by
     // address).
-    ComponentEntity* ownerRef = _entity;
+    ComponentEntity* ownerRef = _entity.Get();
     CitizenBehavior* townMgr = gw->m_citizenList;
     ProfessionBucket* node = townMgr ? townMgr->field_0x100._root : nullptr;
     while (node) {
@@ -593,7 +593,7 @@ char WorkPlaceComponent::EnterBuilt() {
     if (GameUpdateLoop::_singleton == nullptr) return 0;
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
-    ComponentEntity* ownerRef = _entity;
+    ComponentEntity* ownerRef = _entity.Get();
     ResidenceComponent_impl_95a0(townMgr, &ownerRef, key);   // 0x1400895a0
     return 0;
 }
@@ -734,14 +734,14 @@ WorkPlaceComponent::~WorkPlaceComponent() {
 }
 
 // create 0x14003a030: MemAlloc(0x68, 8), then the ctor.
-void* WorkPlaceComponent::CreateNewObject() {
+::Object::Base* WorkPlaceComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(WorkPlaceComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) WorkPlaceComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* WorkPlaceComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* WorkPlaceComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) WorkPlaceComponent());
 }
@@ -841,7 +841,7 @@ void WorkPlaceComponent::Persist(IO::Stream& stream) {
 void WorkPlaceComponent::OnRemove() {
     Profession* professionId = profession;
     if (professionId != nullptr && GameUpdateLoop::_singleton != nullptr) {
-        ComponentEntity* ownerRef = _entity;
+        ComponentEntity* ownerRef = _entity.Get();
 
         // The town's profession tree: CitizenBehavior +0x100 (ProfessionBucket nodes).
         CitizenBehavior* gameState = GameUpdateLoop::_singleton->m_citizenList;

@@ -88,13 +88,13 @@ Object::External* FireDescription::Construct() {
 }
 
 // create 0x140005640: MemAlloc(0x50, 8), then the (inlined) ctor.
-void* FireDescription::CreateNewObject() {
+::Object::Base* FireDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FireDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FireDescription());
 }
 // createInPlace 0x140005680.
-void* FireDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* FireDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FireDescription());
 }

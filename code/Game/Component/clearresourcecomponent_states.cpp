@@ -100,7 +100,7 @@
 // the owning component); comp+0x10 is the owner-entity IBP.
 // ============================================================
 char ClearResourceComponent::State2Enter() {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (entity == nullptr) return 1;
     if (GameUpdateLoop::_singleton == nullptr) return 1;
 

@@ -239,13 +239,13 @@ AutoSaveDialog::AutoSaveDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 }
 
 // create 0x1400106c0: MemAlloc(0xd0, 8), then the ctor.
-void* AutoSaveDialog::CreateNewObject() {
+::Object::Base* AutoSaveDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AutoSaveDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) AutoSaveDialog());
 }
 // createInPlace 0x140010730 (the tree's in-place build is kept, B8-13).
-void* AutoSaveDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* AutoSaveDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) AutoSaveDialog());
 }

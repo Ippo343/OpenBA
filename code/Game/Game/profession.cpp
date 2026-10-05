@@ -117,12 +117,12 @@ bool Profession::Serialize(IO::Stream& stream) {
 // ============================================================
 // Reflection: create / createInPlace, the registration
 // ============================================================
-void* Profession::CreateNewObject() {
+::Object::Base* Profession::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(Profession), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) Profession());
 }
-void* Profession::CreateInPlaceObject(void* memory) {
+::Object::Base* Profession::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) Profession());
 }

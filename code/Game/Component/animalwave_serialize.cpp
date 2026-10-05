@@ -65,9 +65,8 @@ inline bool Loading(IO::Serializer& ser) {
 
 // Serialize one InternalBasePtr slot and apply retail's post-load type validation
 // (null the ref when the pointee is not derived from tid). The slots are the
-// Herd/Livestock/Population headers' untyped words (COMP-d / COMP-e).
-inline void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) {
-    Object::InternalBasePtr* p = reinterpret_cast<Object::InternalBasePtr*>(ibp);   // LEFT: the IBP members are declared as plain T* (Herd/Livestock/Population headers; H5 / InternalPtr typing)
+// Herd/Livestock/Population headers' InternalPtr<T> members and array elements.
+inline void SerializeValidatedIBP(Object::InternalBasePtr* p, IO::Serializer& ser, uint32_t tid) {
     p->Serialize(ser);
     ::Object::Internal* obj = p->Get();
     if (obj && tid && !::Object::IsDerivedFromNullSafe(obj, tid))
@@ -140,7 +139,7 @@ extern "C" void PopulationComponent_Serialize_Real(PopulationComponent* self, IO
     ser.Serialize(herds, nullptr);
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
     if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&self->herds).SetSize(herds);
-    ComponentEntity** herd = self->herds;
+    Object::InternalPtr<ComponentEntity>* herd = self->herds;
     for (int i = 0; i < herds && herd; ++i, ++herd)
         SerializeValidatedIBP(herd, ser, ComponentEntity::TypeId());
 
@@ -184,7 +183,7 @@ void HerdComponent::Persist(IO::Stream& stream) {
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
     if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&members).SetSize(count);
 
-    WildAnimalComponent** member = members;
+    Object::InternalPtr<WildAnimalComponent>* member = members;
     for (int i = 0; i < count && member; ++i, ++member)
         SerializeValidatedIBP(member, ser, WildAnimalComponent::TypeId());
 

@@ -527,13 +527,13 @@ Object::External* TutorialGoalCount::Construct() {
 }
 
 // create 0x1400277b0: MemAlloc(0x50, 8), then the ctor.
-void* TutorialGoalCount::CreateNewObject() {
+::Object::Base* TutorialGoalCount::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialGoalCount), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialGoalCount());
 }
 // createInPlace 0x1400277f0.
-void* TutorialGoalCount::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialGoalCount::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialGoalCount());
 }

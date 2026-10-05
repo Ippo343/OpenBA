@@ -205,14 +205,14 @@ NomadComponent::NomadComponent()
 NomadComponent::~NomadComponent() = default;
 
 // create 0x140009020: MemAlloc(0x78, 8), then the ctor.
-void* NomadComponent::CreateNewObject() {
+::Object::Base* NomadComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(NomadComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) NomadComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* NomadComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* NomadComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) NomadComponent());
 }
@@ -270,7 +270,7 @@ void NomadComponent::Persist(IO::Stream& stream) {
 //     MOV RCX,[RCX+0x120]; MOV [RSP+0x30],RAX; CALL 0x140103480
 // Unguarded, as retail. The notify is NomadComp_FUN_140103480, called by name.
 void NomadComponent::OnRemove() {
-    ComponentEntity* entityIBP = _entity;
+    ComponentEntity* entityIBP = _entity.Get();
     GameUpdateLoop::_singleton->m_toolManager->OnEntityRemoved(&entityIBP);   // 0x140103480
 }
 

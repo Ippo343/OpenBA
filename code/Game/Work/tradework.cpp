@@ -270,7 +270,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // clamp qty to the citizen's carry-storage free space:
         CitizenComponent* citizen = *citizenRef;
-        StorageComponent* carryStor = TW_StorageOf(citizen->_entity);   // pvVar18
+        StorageComponent* carryStor = TW_StorageOf(citizen->_entity.Get());   // pvVar18
         // The matDesc / weight arm is the tree's guard; retail divides unguarded.
         if (matDesc && matDesc->_weight != 0) {
             int freeSpace = carryStor->capacity;
@@ -374,7 +374,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // clamp by the destination (citizen building) storage free space for resType:
         CitizenComponent* citizen = *citizenRef;
-        StorageComponent* b8 = TW_StorageOf(citizen->_entity);   // local_b8
+        StorageComponent* b8 = TW_StorageOf(citizen->_entity.Get());   // local_b8
         if (matDesc && matDesc->_weight != 0) {   // the tree's guard, as in pass 2
             int cap  = b8->capacity;
             int cur  = CitizenComp_StorageComponent_QueryCount(b8);
@@ -642,14 +642,14 @@ TradeWork::TradeWork() : Work(), assignments{nullptr, 0, {}} {
 // ============================================================
 
 // create 0x14002c620: MemAlloc(sizeof, 8), then the ctor.
-void* TradeWork::CreateNewObject() {
+::Object::Base* TradeWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TradeWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TradeWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* TradeWork::CreateInPlaceObject(void* storage) {
+::Object::Base* TradeWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TradeWork());
 }

@@ -158,7 +158,7 @@ void DragPlacementTool_ClearPathEntities_1018d0(const void* /*unused*/, int minC
 
     for (int64_t row = minRow; row <= maxRow; row++) {
         for (int64_t col = minCol; col <= maxCol; col++) {
-            ComponentEntity* cellEntity = cells[static_cast<int64_t>(gridSize) * row + col].blocker;
+            ComponentEntity* cellEntity = cells[static_cast<int64_t>(gridSize) * row + col].blocker.Get();
             if (cellEntity != nullptr) {
                 ComponentEntity* local = cellEntity;
                 if (local->_description == entityTemplate) {

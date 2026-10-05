@@ -111,7 +111,7 @@ int  PerformWork::AbstractImpl(ActionStack* actionStack) {
     uint32_t animId = static_cast<uint32_t>(animationId);
 
     // The citizen's CharacterComponent (+0x278): play the work animation
-    SetAnimation(workTarget->character, animId, kRdata_14017214c, 0.0f);   // 0x14010a1f0
+    SetAnimation(workTarget->character.Get(), animId, kRdata_14017214c, 0.0f);   // 0x14010a1f0
 
     // If yaw is in valid range [-180, 180], set facing direction
     float yaw = facingYaw;
@@ -120,7 +120,7 @@ int  PerformWork::AbstractImpl(ActionStack* actionStack) {
         float pitch = 0.0f;
 
         // The CharacterComponent found on the citizen's entity
-        CharacterComponent* familyPtr = FindCharacterComponent(workTarget->_entity);   // 0x1400012d0
+        CharacterComponent* familyPtr = FindCharacterComponent(workTarget->_entity.Get());   // 0x1400012d0
 
         // Convert yaw to direction vector and set it
         Math::Vector3 dirVec = Math::Vector3::FromYawPitch(Math::Scalar(yawVal), Math::Scalar(pitch));
@@ -172,7 +172,7 @@ int  PerformWork::Execute(ActionStack* actionStack, const System::Time* time) {
 // ============================================================
 void PerformWork::Exit(ActionStack* actionStack) {
     (void)actionStack;
-    SetAnimation(workTarget->character, 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    SetAnimation(workTarget->character.Get(), 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
@@ -180,7 +180,7 @@ void PerformWork::Exit(ActionStack* actionStack) {
 // Identical to Exit: resets character animation to idle.
 // ============================================================
 void PerformWork::CheckEntity() {
-    SetAnimation(workTarget->character, 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    SetAnimation(workTarget->character.Get(), 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
@@ -188,7 +188,7 @@ void PerformWork::CheckEntity() {
 // Returns true if param matches the citizen's owning entity (Component +0x10).
 // ============================================================
 bool PerformWork::GetTarget(ComponentEntity** param) {
-    return workTarget->_entity == *param;
+    return workTarget->_entity.Get() == *param;
 }
 
 // ============================================================
@@ -219,12 +219,12 @@ PerformWork::PerformWork()
 // [8] 0x1400c9320
 // [9] 0x1400c92d0
 
-void* PerformWork::CreateNewObject() {
+::Object::Base* PerformWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PerformWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PerformWork());
 }
-void* PerformWork::CreateInPlaceObject(void* storage) {
+::Object::Base* PerformWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PerformWork());
 }

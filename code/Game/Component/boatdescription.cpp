@@ -49,13 +49,13 @@ Object::External* BoatDescription::Construct() {
 }
 
 // create 0x140003760: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* BoatDescription::CreateNewObject() {
+::Object::Base* BoatDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(BoatDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) BoatDescription());
 }
 // createInPlace 0x1400037c0.
-void* BoatDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* BoatDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) BoatDescription());
 }

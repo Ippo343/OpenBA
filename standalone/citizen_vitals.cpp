@@ -84,7 +84,7 @@ void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
         //   busy > 0 but nothing changes -> actions are issued and never complete
         // CharacterComponent hangs off CitizenComponent +0x278; its +0x60 is the
         // action-stack top, seeded to -1 by the ctor (empty).
-        CharacterComponent* ch = c->character;           // +0x278
+        CharacterComponent* ch = c->character.Get();           // +0x278
         if (Readable(ch)) {
             ++hasChar;
             if (ch->actionStack.current >= 0) ++busy;          // +0x60
