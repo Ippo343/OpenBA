@@ -464,7 +464,7 @@ void InitIdentityTransform(uint8_t* d) { InitAs<Math::Transform, &IdentityTransf
 static void CaptureEntryAssign(UI::CaptureEntry* d, const UI::CaptureEntry* s) {
     d->sheetIndex = s->sheetIndex;          // +0x00
     // +0x04 pad -- neither instantiation writes it.
-    AdoptString(d->name, s->name);          // +0x08, INC [str-4]
+    AdoptString(d->name._data, s->name._data);  // +0x08, INC [str-4]
     d->x1       = s->x1;
     d->y1       = s->y1;
     d->x2       = s->x2;
@@ -480,7 +480,7 @@ void AssignCaptureEntry(uint8_t* d, const uint8_t* s) {
 // and +0x04 (pad) are NEVER written by this arm -- a real gap, not an omission
 // here: the disassembly's else-branch starts at `lVar5+8`, never `lVar5`.
 static void CaptureEntryInitTail(UI::CaptureEntry* d) {
-    d->name     = nullptr;                  // +0x08 qword
+    d->name._data = nullptr;                // +0x08 qword
     d->x1       = 0;                        // +0x10 qword (x1, y1)
     d->y1       = 0;
     d->x2       = 0;                        // +0x18 qword (x2, y2)

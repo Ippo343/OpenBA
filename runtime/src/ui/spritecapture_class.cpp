@@ -193,10 +193,9 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
                 sheet = _sheets._data[sheetIndex];                        // 1800d968f
                 if (sheet != nullptr) {                                  // 1800d9693
                     // ENDGAME B.3.6 block D: was an RT_EXPORT_ONCE door;
-                    // now the member. The entry's `name` IS a System::String
-                    // (B.4 LEFT: spelt `char*`, H5).
+                    // now the member.
                     const int32_t idx = sheet->GetSpriteIndexFromName(
-                        *reinterpret_cast<const System::String*>(&entries[i].name));   // 1800d96a3  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+                        entries[i].name);                                         // 1800d96a3
                     __builtin_memcpy(&idxSlot, &idx, sizeof idx);         // 1800d96a8
                 } else {
                     const int32_t minusOne = -1;
@@ -379,8 +378,7 @@ extern "C" void RtUi_SpriteCapture_SerializeEntries(IO::Serializer* ser, int cou
     for (int i = 0; i < count; ++i, ++e) {                    // stride 0x28
         ser->Serialize(e->sheetIndex, nullptr);               // +0x00
 
-        // B.4 LEFT: `name` is a System::String spelt `char*` (H5).
-        reinterpret_cast<System::String*>(&e->name)->Serialize(*ser);   // 18004c10b 0x1800c9930, +0x08  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        e->name.Serialize(*ser);                              // 18004c10b 0x1800c9930, +0x08
 
         ser->Serialize(e->x1, nullptr);                       // +0x10
         ser->Serialize(e->y1, nullptr);                       // +0x14
