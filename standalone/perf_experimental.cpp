@@ -275,7 +275,7 @@ bool AnimationHasRootMotion(const ::Graphics::Animation* anim) {
 // True when this model's root-motion offset would differ between one update of N ticks
 // and N updates of one tick (see above).
 bool NeedsPerTickRootUpdate(const ModelComponent* model) {
-    const RtGraphics::MeshAnimationState& state = model->meshInstance._animation;   // +0x28 + 0xd8
+    const ::Graphics::AnimationState& state = model->meshInstance._animation;   // +0x28 + 0xd8
     const int count = state._layers.GetSize();                     // +0x10
     if (count <= 0) return false;                                   // nothing playing
     const ::Graphics::AnimationState::Layer* layers = state._layers.GetData();   // +0x08

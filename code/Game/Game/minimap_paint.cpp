@@ -172,8 +172,8 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     alignas(16) uint8_t sceneStorage[256];
     Graphics::Renderer* renderer = reinterpret_cast<Graphics::Renderer*>(rendererStorage);   // LEFT: audit DEFERRED (ctor/dtor doors): stack storage the door constructs in place; ~Renderer runs mid-function (a local's dtor would move to scope exit)
     RtGraphics_Renderer_Ctor(renderer);   // Renderer() 0x180105180
-    RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(sceneStorage));   // LEFT: audit DEFERRED (ctor door, runtime/ z-RT): the Scene ctor door takes the POD mirror RtGraphics::Scene (its grid initialiser is typed on it); stack storage of its size
     Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(sceneStorage);   // LEFT: audit DEFERRED (ctor/dtor doors): stack storage the Scene ctor door builds in place; ~Scene runs mid-function (a local's dtor would move to scope exit)
+    RtGraphics_Scene_Ctor(scene);   // Scene() 0x180102730
 
     context.SetDefaultRenderBuffer(renderBuffer);
     context.SetRenderBuffer(renderBuffer);

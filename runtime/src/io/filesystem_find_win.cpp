@@ -380,11 +380,8 @@ namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
-using RtSystem::WideString;
 using RtSystem::RtString_ReleaseInline;
 using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
-using RtSystem::RtSystem_WideString_Set;
-using RtSystem::RtSystem_WideString_AsUTF8;
 
 // Retail's `Collection::Array<Filename>` — {_data, _size, _capacity}, the same
 // 16-byte header every Array in this engine has (runtime/types/collection/
@@ -631,24 +628,20 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
             // exactly this branch.
             if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
 
-            WideString nameW{nullptr};
-            RtSystem_WideString_Set(&nameW, fd.cFileName);
-            // AsUTF8's hidden return slot is still POD-shaped; the move ctor
-            // steals the pointer, leaving `utf8Pod` null, so there is exactly
-            // one release and it is ~utf8.
-            String utf8Pod{nullptr};
-            RtSystem_WideString_AsUTF8(&nameW, &utf8Pod);
-            System::String utf8(std::move(Sys(utf8Pod)));
+            // WideString(const wchar_t*) 0x18000a6e0 inlined: the null store
+            // 0x1800ad89d, Set 0x1800caf40; AsUTF8 0x1800cacd0 into utf8.
+            const System::WideString nameW(fd.cFileName);
+            System::String utf8 = nameW.AsUTF8();
 
             System::String full = *dir + utf8;          // 0x1800c9440
             System::Filename entry(full);               // 0x18000c780
 
             AppendFilename(out, &entry);
 
-            // Retail's order: entry (0x1800ad915), full (0x1800ad94e),
-            // utf8 (0x1800ad97f), nameW (0x1800ad9b0) — the first three are
-            // the destructors, in reverse declaration order, which is that.
-            RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+            // B.4 Z MIRROR2 (`behaviour:`, known_port_issues row 581, read in
+            // the disassembly): retail's order is entry (0x1800ad915), full
+            // (0x1800ad94e), utf8 (0x1800ad97f), nameW LAST (0x1800ad9b0):
+            // the four destructors, in reverse declaration order.
         } while (::FindNextFileW(h, &fd));
         ::FindClose(h);
     }
@@ -670,11 +663,8 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
                 if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
                 if (fd.cFileName[0] == L'.') continue;
 
-                WideString nameW{nullptr};
-                RtSystem_WideString_Set(&nameW, fd.cFileName);
-                String utf8Pod{nullptr};
-                RtSystem_WideString_AsUTF8(&nameW, &utf8Pod);
-                System::String utf8(std::move(Sys(utf8Pod)));
+                const System::WideString nameW(fd.cFileName);   // 0x1800adaba / 0x1800caf40
+                System::String utf8 = nameW.AsUTF8();          // 0x1800cacd0
 
                 System::String sub    = *dir + utf8;      // 0x1800c9440
                 System::String subDir = sub + "\\";       // 0x1800c92d0, 0x1801557e4
@@ -683,9 +673,9 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
                 // THROUGH unchanged; only the directory changes.
                 FindFilesImpl(fs, &subDir, pattern, recursive, out);
 
-                // subDir, sub and utf8 are released by their destructors, in
-                // retail's order (reverse of declaration).
-                RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+                // B.4 Z MIRROR2 (row 581, disassembly read): subDir
+                // (0x1800adb32), sub (0x1800adb63), utf8 (0x1800adb94), nameW
+                // LAST (0x1800adbc5): the destructors, reverse declaration order.
             } while (::FindNextFileW(h2, &fd));
             ::FindClose(h2);
         }

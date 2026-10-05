@@ -344,11 +344,13 @@ void DrawItemInit(uint8_t* dstv) {
 // QWORD at +0x00 and a zero DWORD at +0x08, leaving +0x0c..+0x0f alone — a
 // single window, so this spec can express it exactly.
 void DrawableAssign(uint8_t* dst, const uint8_t* src) { std::memcpy(dst, src, 0x10); }
-void DrawableInit(uint8_t* dst) {
-    const uint32_t zero = 0u;
-    std::memset(dst + 0x00, 0, 8);
-    std::memcpy(dst + 0x08, &zero, 4);  // LEFT: audit WORK, not executed this pass (write the element's +0x08 field by name (an offset memcpy inside the elemen); blocker; SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+// B.4 Z MIRROR2 GFX: by name -- the QWORD is the pointer, the DWORD `_value`;
+// `_pad0c` is not written.
+static void DrawableInitFields(Graphics::RendererDrawable* d) {
+    d->_object = nullptr;                              // +0x00  one qword
+    d->_value  = 0;                                    // +0x08  one dword
 }
+void DrawableInit(uint8_t* dst) { rtcoll::InitAs<Graphics::RendererDrawable, &DrawableInitFields>(dst); }
 
 // ============================================================================
 // The three ArraySpec rows.

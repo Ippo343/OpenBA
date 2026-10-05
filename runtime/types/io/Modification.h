@@ -139,15 +139,23 @@ static_assert(offsetof(Mod, files)   == 0x70, "CopyCtor 0x1800102e0 LEA RCX,[RBX
 // (modification_setupfilesystem.cpp) and copied by the array's assign arm
 // 0x180028cd0 (collection/array.cpp kSpec_ModExternal18). THE FOUR BYTES AT
 // +0x04 ARE NEVER WRITTEN by anybody (retail's first store is a DWORD and the
-// next is at +0x08). `file` STAYS the POD (`RtSystem::Filename`): the array
-// holding these is grown by the erased core, which copies and releases the
-// element through its spec row, so a member with a destructor would be
-// released twice.
+// next is at +0x08).
+// B.4 Z MIRROR2 (`behaviour:`): `file` is a real System::Filename and the
+// entry has retail's stack-pair ctor (0x1800af052..0x1800af0b2: typeId from
+// the Type() slot, external, then the Filename copy ctor 0x1800067d0 inlined
+// on +0x10, AdjustDelimiters twice; +0x04 left unwritten) and its implicit
+// dtor is retail's release of +0x10 right after the push (0x1800af0d5). The
+// queue's ELEMENTS are raw storage of the erased core (kSpec_ModExternal18
+// copies through the copy ctor and SetupFileSystem's teardown runs
+// `file.~Filename()` per element), never built or destroyed as ReloadEntry.
 struct ReloadEntry {
+    ReloadEntry(uint32_t t, ::Object::External* e, const System::Filename& f)
+        : typeId(t), external(e), file(f) {}
+
     uint32_t             typeId;    // +0x00
     uint32_t             _hole04;   // +0x04 — NEVER WRITTEN
     ::Object::External*  external;  // +0x08
-    RtSystem::Filename   file;      // +0x10
+    System::Filename     file;      // +0x10
 };
 static_assert(offsetof(ReloadEntry, external) == 0x08, "0x1800af058 MOV [RBP-0x69],R14");
 static_assert(offsetof(ReloadEntry, file)     == 0x10, "0x1800af064 MOV [RBP-0x61],R13");

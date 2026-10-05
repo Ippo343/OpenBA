@@ -501,7 +501,7 @@ void AnimationManager::Update(const System::Time& time, bool rootOnly) {
             // which every control fires proves only that the controls were
             // picked to fire (reference_probe_needs_an_effectiveness_control.md).
             for (int32_t i = 0; i < g->_states._size; ++i) {
-                AnimationState* const state = &g->_states._data[i];   // stride 0x48
+                InstancedAnimationState* const state = &g->_states._data[i];   // stride 0x48
 
                 // Rebuilt inside the loop, exactly as retail does (the callee
                 // takes it by const reference and could keep the address).
@@ -517,7 +517,7 @@ void AnimationManager::Update(const System::Time& time, bool rootOnly) {
                 // (MOV byte [RSP+0x40],0), NOT the bool this function was given.
                 // 5th arg `_nodes._data` (+0x38), 6th `_pose._data` (+0x28),
                 // 7th `_rootOffset` (+0x18).
-                state->Graphics::AnimationState::Update(
+                state->_state.Update(
                         time, g->_nodes, base,
                         state->_nodes._data, state->_pose._data,
                         state->_rootOffset,

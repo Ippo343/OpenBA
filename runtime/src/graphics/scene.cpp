@@ -146,9 +146,9 @@
 #include "../picking/scene_grid.h"      // rtpickgrid::BoxTransform
 #include "../../types/math/Math.h"
 
-using RtGraphics::Geometry;
-using RtGraphics::Scene;
-using RtGraphics::SceneNode;
+using Graphics::Geometry;
+using Graphics::Scene;
+using Graphics::SceneNode;
 using RtGraphics::SceneObjectId;
 
 namespace {
@@ -521,7 +521,7 @@ void DetachBody(::Graphics::Geometry* self, ::Graphics::Geometry* child) {
 // are retired; this member is the only body.
 // ============================================================================
 Graphics::Geometry::Geometry() {
-    RtGraphics::Geometry* const self = reinterpret_cast<RtGraphics::Geometry*>(this);   // B.3.8 bridge (the POD view)  // LEFT: audit WORK, not executed this pass (POD unit RtGraphics::Geometry (doable)); blocker; POD Geometry ctor writes through the RtGraphics view (closing wave)
+    Geometry* const self = this;   // B.4: the class's own fields (the POD view retired)
     self->_attachParent      = nullptr;
     self->_attachNode        = -1;
     self->_attached._data    = nullptr;
@@ -1325,8 +1325,7 @@ Scene::ObjectId Scene::AddObject(Geometry* geometry) {
     Geometry* local = geometry;
     // The grid insert reads `MOV RAX,[RSI]`, i.e. a POINTER TO the Geometry*,
     // which is why retail spills its argument to a local first.
-    return RtSceneGridAdd(reinterpret_cast<RtGraphics::Scene*>(this),          // B.3.5 bridge  // LEFT: audit DEFERRED:ctor/dtor doors; POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
-                          reinterpret_cast<RtGraphics::Geometry* const*>(&local));  // LEFT: audit DEFERRED:ctor/dtor doors; POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
+    return RtSceneGridAdd(this, &local);
 }
 
 // ---------------------------------------------------------------------------
@@ -1350,8 +1349,7 @@ void Scene::RemoveObject(ObjectId id) {
     SceneNode* node = &_nodes[static_cast<int32_t>(id)];
     const ObjectId local = id;
 
-    RtSceneGridUnthread(reinterpret_cast<RtGraphics::Scene*>(this),            // B.3.5 bridge  // LEFT: audit DEFERRED:ctor/dtor doors; POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
-                        static_cast<int32_t>(id));
+    RtSceneGridUnthread(this, static_cast<int32_t>(id));
 
     node->_object = nullptr;
     node->_next   = 0;
@@ -1430,7 +1428,7 @@ void Scene::Clean() {
         do {
             Geometry* geo = _nodes[i]._object;
             if (geo->_dirtyFlags != 0 && geo->Clean())          // VIRTUAL, slot 8
-                RtSceneGridReindex(reinterpret_cast<RtGraphics::Scene*>(this), i);  // B.3.5 bridge  // LEFT: audit DEFERRED:ctor/dtor doors; POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
+                RtSceneGridReindex(this, i);
 
             count = _nodes.GetSize();
             ++i;
