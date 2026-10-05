@@ -304,12 +304,12 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         if (posCount > 0) {
             int iPvVar20 = 0;
             do {
-                float local_80[3];
-                InteractNodePosition(posComp, local_80, 2, iPvVar20, nullptr);
+                Vector3Slot local_80;
+                InteractNodePosition(posComp, &local_80.v, 2, iPvVar20, nullptr);
 
                 int iVar10map = map->size;
-                int iVar21pos = (int)(local_80[0] + (float)(iVar10map >> 1));
-                int iVar12 = (int)(local_80[1] + (float)(iVar10map >> 1));
+                int iVar21pos = (int)(local_80.v.x + (float)(iVar10map >> 1));
+                int iVar12 = (int)(local_80.v.y + (float)(iVar10map >> 1));
                 if (iVar21pos < 0) iVar21pos = 0;
                 if (iVar10map <= iVar21pos) iVar21pos = iVar10map - 1;
                 if (iVar12 < 0) iVar12 = 0;

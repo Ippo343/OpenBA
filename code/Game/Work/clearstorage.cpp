@@ -189,7 +189,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         }
 
         // Determine destination position and cell
-        float destPos[3] = {0.0f, 0.0f, 0.0f};
+        Math::Vector3 destPos;
         uint32_t destCell = 0;
 
         int dbgBranch = -1, dbgSlot = 0;   // trace: 0=position, 1=findslot
@@ -199,14 +199,14 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
                 return 1;
             }
             dbgBranch = 0;
-            Pf_EntityResolvePos_2e20(positionComp, destPos, 0, 0, nullptr);   // (the forwarder takes the BuildComponent as void*)
-            destCell = WorldToCell(destPos[0], destPos[1], gridSize);
+            Pf_EntityResolvePos_2e20(positionComp, &destPos, 0, 0, nullptr);   // (the forwarder takes the BuildComponent as void*)
+            destCell = WorldToCell(destPos.x, destPos.y, gridSize);
         } else {
             // Use search position
             dbgBranch = 1;
             destCell = WorldToCell(searchPos[0], searchPos[1], gridSize);
 
-            int slotIdx = FindBestAdjacentCell(unknownComp, destCell, destPos);   // 0x14012d5d0 (the forwarder dropped workTypeId)
+            int slotIdx = FindBestAdjacentCell(unknownComp, destCell, &destPos.x);   // 0x14012d5d0 (the forwarder dropped workTypeId)
             dbgSlot = slotIdx;
             if (slotIdx < 0) {
                 return 1;
@@ -230,7 +230,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         // InternalPtr store overran (the value is never read).
         ::Object::InternalPtr<Action> pathResult;
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, pathType, &destEntityCopy,
-                                searchPos, &workEntity, destPos,
+                                searchPos, &workEntity, &destPos.x,
                                 itemEntity, availCount, pathFlags, 0, 1, 0, 0);
 
         // Get the Slot10 result (vtable +0x50)

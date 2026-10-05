@@ -125,7 +125,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
     float age = citizen->coldness;
     CitizenDescription* desc = citizen->description;
 
-    float dest[3] = {0, 0, 0};
+    Math::Vector3 dest;
     ComponentEntity* found = nullptr;        // local_res8
     ComponentEntity* holderEntity = nullptr; // entity passed to Ctor8
     bool doPush = false;
@@ -136,7 +136,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
         CitizenBehavior* listEnt = GameUpdateLoop::_singleton->m_citizenList;
         const ModelComponent* model = CitizenModel(citizen.Get());
         uint32_t cell = ModelCell(model, mg);
-        Entity_impl_ec70(listEnt, &found, cell, dest);   // find nearest valid residence
+        Entity_impl_ec70(listEnt, &found, cell, &dest.x);   // find nearest valid residence
         if (found != nullptr) { holderEntity = found; doPush = true; }
     }
 
@@ -147,7 +147,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
                 bool ok = (stor) ? ResidenceCheck_2ac30(stor) : false;
                 if (ok) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-                    InteractNodePosition(pp, dest, 0, 0, nullptr);
+                    InteractNodePosition(pp, &dest, 0, 0, nullptr);
                     holderEntity = citizen->home.Get();
                     doPush = true;
                 }
@@ -157,7 +157,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
 
     if (doPush) {
         CitizenComponent* holderCitizen = citizen.Get();
-        CitizenAI_PerformWorkCtor8_bd790(&holderCitizen, &holderEntity, dest);
+        CitizenAI_PerformWorkCtor8_bd790(&holderCitizen, &holderEntity, &dest.x);
         return Pushed(citizen.Get());
     }
 
@@ -179,7 +179,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
     CitizenDescription* desc = citizen->description;
     bool isAdult = (desc != nullptr) && (age > desc->_fcc);
 
-    float dest[3] = {0, 0, 0};
+    Math::Vector3 dest;
     ComponentEntity* found = nullptr;     // local_res8 (chosen target entity)
     char flag = 0;         // Ctor6 flag (cVar9)
     bool ctorDirect = false;  // reached the Ctor6 push with holders already set (LAB_14010d004)
@@ -195,9 +195,9 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             if (cnt > 0) {
                 found = citizen->home.Get();  // the home
                 const ModelComponent* model = CitizenModel(citizen.Get());
-                dest[0] = model->transform.translation.x;
-                dest[1] = model->transform.translation.y;
-                dest[2] = model->transform.translation.z;
+                dest.x = model->transform.translation.x;
+                dest.y = model->transform.translation.y;
+                dest.z = model->transform.translation.z;
             }
         }
         if (found == nullptr) {
@@ -208,7 +208,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             ComponentEntity* e370arg = citizen->home.Get();   // param_7 (home preferred candidate)
             ComponentDescription* outComp = nullptr;   // local_res20
             ComponentEntity* outBest = nullptr;        // local_res18
-            CitizenAI_helper_e370(listpair, &outBest, cell, &outComp, dest, 0, &e370arg);
+            CitizenAI_helper_e370(listpair, &outBest, cell, &outComp, &dest.x, 0, &e370arg);
             found = outBest;
             if (outBest == nullptr) retryWorkPath = true;  // goto LAB_14010d03c
         }
@@ -224,7 +224,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
                 int cnt = CitizenComp_Storage_GetResourceCount(stor);
                 if (cnt > 0) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-                    InteractNodePosition(pp, dest, 0, 0, nullptr);
+                    InteractNodePosition(pp, &dest, 0, 0, nullptr);
                     holderCitizen = citizen.Get();
                     flag = 1;
                     holderEntity = holderCitizen->home.Get();
@@ -235,7 +235,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
         }
         if (!handled) {
             // dd30 find-food target
-            dest[0] = dest[1] = dest[2] = 0.0f;
+            dest.x = dest.y = dest.z = 0.0f;
             CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
             Map* mg = MapGrid();
             uint32_t bGoal;
@@ -244,7 +244,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             const ModelComponent* model = CitizenModel(citizen.Get());
             uint32_t cell = ModelCell(model, mg);
             ComponentDescription* outComp = nullptr;  // local_res18
-            CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, dest, 0);
+            CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, &dest.x, 0);
             if (found == nullptr) {
                 // no target -> cooldown stamp (timers[0] & timers[14]) + return 0
                 System::Time stamp{};
@@ -271,7 +271,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
         holderCitizen = citizen.Get();
     }
 
-    CitizenAI_PerformWorkCtor6_bd420(&holderCitizen, &holderEntity, dest, flag);
+    CitizenAI_PerformWorkCtor6_bd420(&holderCitizen, &holderEntity, &dest.x, flag);
     return Pushed(citizen.Get());
 }
 
@@ -296,11 +296,11 @@ uint64_t CitizenAIComponent::State_Work() {
         if (static_cast<char>(valid) != '\0') {
             // NavigateTo the home
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-            float navDest[3];
-            InteractNodePosition(pp, navDest, 0, 0, nullptr);
+            Vector3Slot navDest;
+            InteractNodePosition(pp, &navDest.v, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home.Get();
-            CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
+            CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, &navDest.v.x, 0);
             return Pushed(citizen.Get());
         }
         return valid & 0xffffffffffffff00ULL;  // db20 false -> return 0
@@ -341,11 +341,11 @@ uint64_t CitizenAIComponent::State_Work() {
         AttendanceComponent_ReleaseLink59b0(citizen.Get());
         if (citizen->home != nullptr) {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-            float navDest[3];
-            InteractNodePosition(pp, navDest, 0, 0, nullptr);
+            Vector3Slot navDest;
+            InteractNodePosition(pp, &navDest.v, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home.Get();
-            CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
+            CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, &navDest.v.x, 0);
             return Pushed(citizen.Get());
         }
     }

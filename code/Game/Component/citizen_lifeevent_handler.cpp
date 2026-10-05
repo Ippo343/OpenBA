@@ -153,11 +153,11 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
         // The cemetery's map position = its InteractComponent's resolved position.
         Component* ic = FindComponentByTypeId(entity, tidInteract);
         InteractComponent* icIBP = static_cast<InteractComponent*>(ic);   // IsDerivedFrom-checked above
-        float pos[3] = {0.0f, 0.0f, 0.0f};
-        InteractNodePosition(icIBP, pos, 0, 0, nullptr);         // 0x140122e20
+        Math::Vector3 pos;
+        InteractNodePosition(icIBP, &pos, 0, 0, nullptr);         // 0x140122e20
         int size = map->size;
-        int cx = static_cast<int>(pos[0] + static_cast<float>(size >> 1));
-        int cy = static_cast<int>(pos[1] + static_cast<float>(size >> 1));
+        int cx = static_cast<int>(pos.x + static_cast<float>(size >> 1));
+        int cy = static_cast<int>(pos.y + static_cast<float>(size >> 1));
         if (cx < 0) cx = 0;
         if (size <= cx) cx = size - 1;
         if (cy < 0) cy = 0;
@@ -286,25 +286,25 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
 
     // --- Death position: the home's InteractComponent (+0x238) if housed, else the
     // citizen's own model (+0x278 -> +0x68, raw transform storage) ---
-    float pos[3] = {0.0f, 0.0f, 0.0f};
+    Math::Vector3 pos;
     if (home == nullptr) {
         CharacterComponent* ch = character.Get();
         if (ch) {   // [STANDALONE GUARD] retail derefs unguarded
             ModelComponent* homeEnt = ch->modelComponent.Get();
             if (homeEnt) {
-                pos[0] = homeEnt->transform.translation.x;   // +0x158
-                pos[1] = homeEnt->transform.translation.y;   // +0x15c
-                pos[2] = homeEnt->transform.translation.z;   // +0x160
+                pos.x = homeEnt->transform.translation.x;   // +0x158
+                pos.y = homeEnt->transform.translation.y;   // +0x15c
+                pos.z = homeEnt->transform.translation.z;   // +0x160
             }
         }
     } else {
-        InteractNodePosition(home->FindComponent<InteractComponent>(), pos, 0, 0, nullptr);   // 0x140122e20
+        InteractNodePosition(home->FindComponent<InteractComponent>(), &pos, 0, 0, nullptr);   // 0x140122e20
     }
 
     // --- Clamp to a map cell ---
     int size = world->m_game->size;
-    int cx = static_cast<int>(pos[0] + static_cast<float>(size >> 1));
-    int cy = static_cast<int>(pos[1] + static_cast<float>(size >> 1));
+    int cx = static_cast<int>(pos.x + static_cast<float>(size >> 1));
+    int cy = static_cast<int>(pos.y + static_cast<float>(size >> 1));
     if (cx < 0) cx = 0;
     if (size <= cx) cx = size - 1;
     if (cy < 0) cy = 0;

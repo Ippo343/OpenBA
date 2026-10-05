@@ -435,14 +435,14 @@ uint64_t CitizenAIComponent::State_GatherResources() {
 
         // 2) InteractComponent(home) -> 2e20 -> destPos; FindPath
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-        float destPos[3];  // local_60
-        InteractNodePosition(pp, destPos, 0, 0, nullptr);
+        Vector3Slot destPos;  // local_60
+        InteractNodePosition(pp, &destPos.v, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen.Get();                         // local_88
         ComponentEntity* destEntityIBP = citizenVal->home.Get();              // local_res18
         ::Object::InternalPtr<Action> pathResult;                        // local_res20
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
-                       &destEntityIBP, destPos, &found,
+                       &destEntityIBP, &destPos.v.x, &found,
                        dest, nullptr, -1, 0, 1, '\x01', 1, 0);
 
         // 3) capLeft = max( the profession list's field_0x30 carry amount, FUN_140116540(citizen) )
@@ -531,14 +531,14 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         }
 
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-        float destPos[3];  // local_98
-        InteractNodePosition(pp, destPos, 0, 0, nullptr);
+        Vector3Slot destPos;  // local_98
+        InteractNodePosition(pp, &destPos.v, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen.Get();                         // local_res20
         ComponentEntity* destEntityIBP = citizenVal->home.Get();              // local_res18
         ::Object::InternalPtr<Action> pathResult;                        // local_78
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
-                       &destEntityIBP, destPos, &found,
+                       &destEntityIBP, &destPos.v.x, &found,
                        srcPos, nullptr, -1, 0, 1, '\x01', 1, 0);
 
         // capLeft = max( the profession list's field_0x30 carry amount, FUN_140116540(citizen) )

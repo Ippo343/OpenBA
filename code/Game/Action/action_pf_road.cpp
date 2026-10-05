@@ -479,7 +479,7 @@ void RegionGraph::MarkCellDirty(int x, int y) {
 // counts (0x140123070) and recurse into the owning one with (index - running count).
 // Otherwise resolve the node through the entity's ModelComponent transform: optionally
 // rotate the node's direction to get a heading, then transform the node's offset.
-float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p3, int p4, float* p5) {
+Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* retVec3, int p3, int p4, float* p5) {
     Description* buildRaw = self->_description;
 
     uint32_t tid = InteractDescription::TypeId();
@@ -506,9 +506,9 @@ float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p
             std::fflush(stderr);
         }
         Math::Vector3 zero(Math::Scalar(0.0f));   // splat 0
-        retVec3[0] = zero.x;
-        retVec3[1] = zero.y;
-        retVec3[2] = zero.z;
+        retVec3->x = zero.x;
+        retVec3->y = zero.y;
+        retVec3->z = zero.z;
         return retVec3;
     }
 
@@ -530,9 +530,9 @@ float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p
             } while (i < self->useLocations._size);
         }
         Math::Vector3 zero(Math::Scalar(0.0f));   // Math::Vector3::Vector3(ret,&scalar0)
-        retVec3[0] = zero.x;
-        retVec3[1] = zero.y;
-        retVec3[2] = zero.z;
+        retVec3->x = zero.x;
+        retVec3->y = zero.y;
+        retVec3->z = zero.z;
         return retVec3;
     }
 
@@ -557,7 +557,7 @@ float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p
         }
         if (model == nullptr) {
             if (p5) *p5 = 0.0f;
-            retVec3[0] = retVec3[1] = retVec3[2] = 0.0f;
+            retVec3->x = retVec3->y = retVec3->z = 0.0f;
             return retVec3;
         }
     }
@@ -580,9 +580,9 @@ float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p
 
     Math::Transform xform2 = model->transform;
     Math::Vector3 pos = xform2 * (node ? node->offset : kZero3);
-    retVec3[0] = pos.x;
-    retVec3[1] = pos.y;
-    retVec3[2] = pos.z;
+    retVec3->x = pos.x;
+    retVec3->y = pos.y;
+    retVec3->z = pos.z;
     return retVec3;
 }
 
@@ -602,11 +602,11 @@ int PickReachableCell(const Component* target, uint32_t param_2, float* param_3)
     uint32_t cnt = static_cast<uint32_t>(InteractNodeCount(interact, 0));   // 0x140123070
     uint32_t rnd = world->m_random->Rand(static_cast<uint32_t>(cnt));
 
-    float pos[3] = {0, 0, 0};   // local_28/24/20
-    InteractNodePosition(interact, pos, 0, static_cast<int>(rnd), nullptr);   // 0x140122e20
-    param_3[0] = pos[0];
-    param_3[1] = pos[1];
-    param_3[2] = pos[2];
+    Math::Vector3 pos;   // local_28/24/20
+    InteractNodePosition(interact, &pos, 0, static_cast<int>(rnd), nullptr);   // 0x140122e20
+    param_3[0] = pos.x;
+    param_3[1] = pos.y;
+    param_3[2] = pos.z;
 
     int w = map->size;
     int gy = static_cast<int>(static_cast<float>(w >> 1) + param_3[1]);
@@ -670,11 +670,11 @@ int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
                 uint32_t n3 = static_cast<uint32_t>(InteractNodeCount(interact, 0));
                 world->m_random->Rand(static_cast<uint32_t>(n3)); // result discarded
             }
-            float pos[3] = {0, 0, 0};   // local_28/24/20
-            InteractNodePosition(interact, pos, 0, 0, nullptr);   // 0x140122e20
+            Math::Vector3 pos;   // local_28/24/20
+            InteractNodePosition(interact, &pos, 0, 0, nullptr);   // 0x140122e20
             int w = world->m_game->size;
-            int gx = static_cast<int>(pos[0] + static_cast<float>(w >> 1));
-            int gy = static_cast<int>(pos[1] + static_cast<float>(w >> 1));
+            int gx = static_cast<int>(pos.x + static_cast<float>(w >> 1));
+            int gy = static_cast<int>(pos.y + static_cast<float>(w >> 1));
             gx = ClampCell(gx, w);
             gy = ClampCell(gy, w);
             iVar4 = w * gy + gx;
@@ -951,7 +951,7 @@ float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* out
 // B4 FORWARD: the callers that hold the component as a Component* from a type-id scan
 // (citizenai_findhelpers.cpp:251 / :442, citizenai_leisure.cpp:253) or as a BuildComponent*
 // (clearstorage.cpp:202, known_port_issues row 643); the rest call InteractNodePosition.
-void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5) {
+void* Pf_EntityResolvePos_2e20(void* self, Math::Vector3* retVec3, int p3, int p4, float* p5) {
     return InteractNodePosition(reinterpret_cast<const InteractComponent*>(self), retVec3, p3, p4, p5);   // LEFT: SIG Pf_EntityResolvePos_2e20: three callers hand the InteractComponent as the Component* of a type-id scan (citizenai_findhelpers.cpp:251 / :442, citizenai_leisure.cpp:253) and clearstorage.cpp:202 hands a BuildComponent* (known_port_issues row 643)
 }
 

@@ -247,9 +247,9 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
 
         Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
 
-        float vec[3];
-        Pf_EntityResolvePos_2e20(interact, vec, 0, 0, nullptr);
-        uint32_t cell = WorldToCell(map, vec);
+        Vector3Slot vec;
+        Pf_EntityResolvePos_2e20(interact, &vec.v, 0, 0, nullptr);
+        uint32_t cell = WorldToCell(map, &vec.v.x);
         int cost = CellCost(map, cell, param_3);
 
         if (cost < best) {
@@ -261,9 +261,9 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
                 bool ok = storComp ? ResidenceCheck_2ac30(storComp) : false;
                 if (ok && (-1 < cost)) {
                     *found = cand;
-                    param_4[0] = vec[0];
-                    param_4[1] = vec[1];
-                    param_4[2] = vec[2];
+                    param_4[0] = vec.v.x;
+                    param_4[1] = vec.v.y;
+                    param_4[2] = vec.v.z;
                     best = cost;
                 }
             }
@@ -438,9 +438,9 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 // InteractComponent on the entity -> world position
                 Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
 
-                float vec[3];
-                Pf_EntityResolvePos_2e20(interact, vec, 0, 0, nullptr);
-                uint32_t cell = WorldToCell(map, vec);
+                Vector3Slot vec;
+                Pf_EntityResolvePos_2e20(interact, &vec.v, 0, 0, nullptr);
+                uint32_t cell = WorldToCell(map, &vec.v.x);
 
                 // path cost (Ghidra's uVar30/uVar22, cell/goal or %w/dist², were the extra
                 // ZoneRefresh "arguments"; 0x14009c480 takes RCX only and they are gone)
@@ -479,9 +479,9 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                             CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);   // LEFT: B6 register retail leaves unset: at this site (0x14008eb7a in 0x14008e370) retail loads RDX / R8 / R9D and never RCX (its low word still holds the zone compared at 0x14008eb5e); ef40 (exe_bodies.h:144) ignores param_1 and its nine other callers pass pointers through the const void*, so the tree's integer here has no declared type that fits all ten without a cast or a changed value
                             if ((outSlot != nullptr) && (-1 < cost)) {
                                 *found = cand;
-                                param_5[0] = vec[0];
-                                param_5[1] = vec[1];
-                                param_5[2] = vec[2];
+                                param_5[0] = vec.v.x;
+                                param_5[1] = vec.v.y;
+                                param_5[2] = vec.v.z;
                                 *param_4 = outSlot;
                                 best = cost;
                             }

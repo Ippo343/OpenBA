@@ -311,11 +311,11 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         if (srcStorPrimary == nullptr) { continue; }
 
         // destination position from the trade post's interact component:
-        float destPos[3];                             // local_a0
+        Vector3Slot destPos;                             // local_a0
         uint32_t range = InteractNodeCount(posComp, 0);   // 0x140123070
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
-        InteractNodePosition(posComp, destPos, 0, rnd, nullptr);
+        InteractNodePosition(posComp, &destPos.v, 0, rnd, nullptr);
 
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
         ComponentEntity* destStorage = srcStorPrimary;                  // local_d8 = local_b8
@@ -323,7 +323,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         ComponentEntity* bldgVal = field_10.Get();                            // local_res20 = *local_b0(old)
         uint32_t pathType = static_cast<uint32_t>(field_20);
         WorkAct_GatherRawMatCtor_bf790(&outBuf, &citizenVal, pathType, &destStorage,
-                          searchPos, &bldgVal, destPos, resType,
+                          searchPos, &bldgVal, &destPos.v.x, resType,
                           qty, 1, 0, 1, 0, 1);
 
         ret = CommitAssignment(citizenRef, resType, -qty);   // NEGATIVE qty (export)
@@ -403,8 +403,8 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         }
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
-        float srcPos2[3];                             // local_68
-        InteractNodePosition(posComp, srcPos2, 0, rnd, nullptr);
+        Vector3Slot srcPos2;                             // local_68
+        InteractNodePosition(posComp, &srcPos2.v, 0, rnd, nullptr);
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.
         CitizenComponent* citizenVal = *citizenRef;                        // local_b0 = *param2
@@ -412,7 +412,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         ComponentEntity* srcStorVal = srcEntity;                           // local_90 = local_e8
         uint32_t pathType = static_cast<uint32_t>(field_20);
         WorkAct_GatherRawMatCtor_bf790(&outBuf, &citizenVal, pathType, &bldgVal,
-                          srcPos2, &srcStorVal, srcPos, resType,
+                          &srcPos2.v.x, &srcStorVal, srcPos, resType,
                           qtyMove, 0, 0, 0, 0, 1);
 
         ret = CommitAssignment(citizenRef, resType, qtyMove);  // POSITIVE qty (import)

@@ -194,7 +194,7 @@ int FindBestAdjacentCell(const Component* target, uint32_t param_2, float* param
     Map* map = GameUpdateLoop::_singleton->m_game;
     // Two CONTIGUOUS Vector3 stack slots (the engine writers fill all 3 via one base
     // pointer): posVec = the node position / GridToWorld input, worldVec = its output.
-    float posVec[3] = {0, 0, 0};
+    Math::Vector3 posVec;
     float worldVec[3] = {0, 0, 0};
     InteractComponent* interact = entity->FindComponent<InteractComponent>();   // 0x140002ed0
     int iVar15;
@@ -249,11 +249,11 @@ LAB_14012d8ce:;
             } while (iVar5 <= iVar6);
             iVar6 = (int)uVar9;
             if (-1 < iVar6) {
-                posVec[1] = (float)(map->size >> 1) - kRdata_140172114;
-                posVec[0] = (float)(iVar6 % map->size) - posVec[1];
-                posVec[1] = (float)(iVar6 / map->size) - posVec[1];
-                posVec[2] = 0.0f;
-                Reimpl_MapGetTerrainPos(map, worldVec, posVec, '\0', nullptr);   // 0x14009f3e0
+                posVec.y = (float)(map->size >> 1) - kRdata_140172114;
+                posVec.x = (float)(iVar6 % map->size) - posVec.y;
+                posVec.y = (float)(iVar6 / map->size) - posVec.y;
+                posVec.z = 0.0f;
+                Reimpl_MapGetTerrainPos(map, worldVec, &posVec.x, '\0', nullptr);   // 0x14009f3e0
                 *param_3 = worldVec[0];
                 param_3[1] = worldVec[1];
                 param_3[2] = worldVec[2];
@@ -267,10 +267,10 @@ LAB_14012d8ce:;
         iVar15 = 0;
         if (0 < iVar4) {
             do {
-                InteractNodePosition(interact, posVec, 0, iVar15, nullptr);   // 0x140122e20
+                InteractNodePosition(interact, &posVec, 0, iVar15, nullptr);   // 0x140122e20
                 int iVar13 = map->size;
-                int iVar4b = (int)(posVec[0] + (float)(iVar13 >> 1));
-                int iVar5 = (int)(posVec[1] + (float)(iVar13 >> 1));
+                int iVar4b = (int)(posVec.x + (float)(iVar13 >> 1));
+                int iVar5 = (int)(posVec.y + (float)(iVar13 >> 1));
                 if (iVar4b < 0) iVar4b = 0;
                 if (iVar13 <= iVar4b) iVar4b = iVar13 + -1;
                 if (iVar5 < 0) iVar5 = 0;
@@ -289,9 +289,9 @@ LAB_14012d8ce:;
                         if (iVar4c < 0) goto LAB_14012d744;
                     }
                     if (iVar4c < iVar6) {
-                        *param_3 = posVec[0];
-                        param_3[1] = posVec[1];
-                        param_3[2] = posVec[2];
+                        *param_3 = posVec.x;
+                        param_3[1] = posVec.y;
+                        param_3[2] = posVec.z;
                         iVar6 = iVar4c;
                     }
                 }

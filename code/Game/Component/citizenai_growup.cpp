@@ -259,11 +259,11 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
         if (wpIBP != nullptr && wpIBP->workers._size != 0) {
             InteractComponent* posBuf[2] = {nullptr, nullptr};
             posBuf[0] = entity->FindComponent<InteractComponent>();   // 0x140002ed0
-            float wpos[3] = {0, 0, 0};
-            if (posBuf[0]) InteractNodePosition(posBuf[0], wpos, 0, 0, nullptr);
+            Math::Vector3 wpos;
+            if (posBuf[0]) InteractNodePosition(posBuf[0], &wpos, 0, 0, nullptr);
             int dim = map->size;
-            int ix = static_cast<int>(wpos[0] + static_cast<float>(dim >> 1));
-            int iy = static_cast<int>(wpos[1] + static_cast<float>(dim >> 1));
+            int ix = static_cast<int>(wpos.x + static_cast<float>(dim >> 1));
+            int iy = static_cast<int>(wpos.y + static_cast<float>(dim >> 1));
             if (ix < 0) ix = 0; if (dim <= ix) ix = dim - 1;
             if (iy < 0) iy = 0; if (dim <= iy) iy = dim - 1;
             uint32_t cell = static_cast<uint32_t>(dim * iy + ix);
@@ -271,7 +271,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             if (static_cast<char>(reachable) != '\0') {
                 int cost = WorkBase_CalcDistance_8830(mapGrid, param_3, cell);
                 if (cost < bestCost) {
-                    bestX = wpos[0]; bestY = wpos[1]; bestZ = wpos[2];
+                    bestX = wpos.x; bestY = wpos.y; bestZ = wpos.z;
                     bestEntity = arr[idx]->_entity.Get();
                     bestCost = cost;
                 }

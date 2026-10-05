@@ -291,10 +291,10 @@ void ImmigrationComponent::Spawn() {
             x = static_cast<int>(rng->Rand(static_cast<uint32_t>(W)));
             y = (r == 2) ? edge : (W - edge) - 1;
         }
-        float hp[3] = {0, 0, 0};
-        InteractNodePosition(pc, hp, 0, 0, nullptr);
-        int cx = static_cast<int>(hp[0] + static_cast<float>(W >> 1));
-        int cy = static_cast<int>(hp[1] + static_cast<float>(W >> 1));
+        Math::Vector3 hp;
+        InteractNodePosition(pc, &hp, 0, 0, nullptr);
+        int cx = static_cast<int>(hp.x + static_cast<float>(W >> 1));
+        int cy = static_cast<int>(hp.y + static_cast<float>(W >> 1));
         if (cx < 0) cx = 0;
         if (cx >= W) cx = W - 1;
         if (cy < 0) cy = 0;
@@ -351,7 +351,7 @@ void ImmigrationComponent::Spawn() {
         }
         uint32_t ptIdx = rng->Rand(static_cast<uint32_t>(nPts));
         Math::Vector3 meet(0.0f, 0.0f, 0.0f);
-        InteractNodePosition(pc, &meet.x, 2, static_cast<int>(ptIdx), nullptr);
+        InteractNodePosition(pc, &meet, 2, static_cast<int>(ptIdx), nullptr);
 
         // Clone the nomad template.
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);

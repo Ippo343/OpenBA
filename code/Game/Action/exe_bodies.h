@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <type_traits>
 #include "collection/Collection.h"   // Collection::Array (QwordArraySetSize's typed entry points)
+#include "math/Math.h"               // Math::Vector3 (Vector3Slot's member)
 
 // ---- action_base_cnr.cpp
 class Map;                    // Game/Map.h
@@ -181,10 +182,22 @@ class WorldGeometry;
 void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend);  // 0x1400acc10
 int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin, const float* maxT, float* outHit, float* outT, float* outNormal);  // 0x1400aaa20 (body: RayTestCell, action_pf_road.cpp)
 float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal);  // 0x1400b0f90 (body: TerrainHeightUnder, action_pf_road.cpp)
-float* InteractNodePosition(const InteractComponent* self, float* out, int kind, int index, float* heading);  // 0x140122e20
+// The caller's slot for a by-value Math::Vector3 result that retail leaves UNCONSTRUCTED.
+// 0x140122e20 returns a Vector3 through the hidden return slot (RDX) and writes x, y, z on
+// every path, so its retail callers hand it bare stack (e.g. 0x14010d9ab, 0x1400e52d3). A
+// Math::Vector3 local would run the zeroing default ctor (0x180015070: three stores);
+// this holds the Vector3 without constructing it (the anonymous union only suppresses
+// the member's ctor; nothing is read as another type). `&slot.v` is the Math::Vector3*.
+// The ctor is always_inline so -O0 emits no call for it.
+struct Vector3Slot {
+    union { Math::Vector3 v; };
+    [[gnu::always_inline]] Vector3Slot() {}
+};
+static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
+Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* out, int kind, int index, float* heading);  // 0x140122e20
 int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
-void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float* p5);  // 0x140122e20 B4 FORWARD -> InteractNodePosition
+void* Pf_EntityResolvePos_2e20(void* self, Math::Vector3* retVec3, int p3, int p4, float* p5);  // 0x140122e20 B4 FORWARD -> InteractNodePosition
 int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 
 // ---- action_pf_roots_drop.cpp
