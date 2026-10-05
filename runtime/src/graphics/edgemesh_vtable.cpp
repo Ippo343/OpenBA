@@ -168,9 +168,9 @@ inline void SerializeBuffer(Video::VertexBuffer& buf, IO::Serializer& ser) {
 // RtGraphics_EdgeMesh_SerializeTriangleListArray (0x180014850,
 // graphics/closure_batch2b.cpp, declared in types/graphics/Mesh.h).
 // B.4 P2 wave X: the two are `Object::SerializeExternal<T>` / the
-// ExternalPtr<T> member (External.h). The +0x20 slot is still `void*` in Mesh.h.
-inline void ExtBase(void*& slot, IO::Serializer& ser) {
-    Object::SerializeExternal<Graphics::GraphicsMesh>(ser, reinterpret_cast<Graphics::GraphicsMesh*&>(slot));  // LEFT: Mesh.h (X-RL) declares EdgeMesh::_reserved20 as void*
+// ExternalPtr<T> member (External.h). The +0x20 slot is a GraphicsMesh*.
+inline void ExtBase(Graphics::GraphicsMesh*& slot, IO::Serializer& ser) {
+    Object::SerializeExternal<Graphics::GraphicsMesh>(ser, slot);
 }
 // 0x1800136f0, the TriangleList `Array<>::SetSize`, is called by its body
 // name `rtcoll::RtColl_ArraySetSize_1800136f0` (Collection.h), on the typed
