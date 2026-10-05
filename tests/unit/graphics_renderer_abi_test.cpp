@@ -311,9 +311,12 @@ UNIT_TEST(graphics_camera_stays_trivially_copyable) {
     // carry no copy, assign or destroy step of its own. Its defaulted copy is
     // also what makes the three-byte deviation Camera.h records the ONLY
     // divergence from retail's partial copy bodies.
-    CHECK(std::is_trivially_copyable_v<Graphics::Camera>);
+    // B.4 S4 GFX2: the copy CONSTRUCTOR is retail's partial 0x180017a70 now
+    // (Camera.h), so the class is no longer trivially copyable; the assign and
+    // the destructor stay trivial.
+    CHECK(!std::is_trivially_copyable_v<Graphics::Camera>);
     CHECK(std::is_trivially_destructible_v<Graphics::Camera>);
-    CHECK(std::is_trivially_copy_constructible_v<Graphics::Camera>);
+    CHECK(!std::is_trivially_copy_constructible_v<Graphics::Camera>);
     CHECK(std::is_trivially_copy_assignable_v<Graphics::Camera>);
 
     // The two plain PODs among the element types: `SpecFor<T>` derives

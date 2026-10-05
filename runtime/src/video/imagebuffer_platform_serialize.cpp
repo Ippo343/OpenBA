@@ -226,13 +226,6 @@ inline void SerializeLevelBlobs(IO::Serializer& ser, int32_t count,
     RtVideo_SerializeBlobArray(ser, count, elems);
 }
 
-// The element-destroy spec for the outer array: free the inner buffer at +0x00
-// and clear its 16-byte header, per element, stride 0x10. Body A, with lane
-// D2's verification attached rather than a fourth copy of that loop.
-constexpr rtcoll::DestroySpec kV_LevelBlob =
-    { "Array<uint8> @+0x000, stride 0x010", 0x010, 1, { 0x000 } };
-static_assert(kV_LevelBlob.offs[0] + 16u <= kV_LevelBlob.stride, "kV_LevelBlob fits");
-
 // The eleven-argument Create call, spelled once so the two arms cannot drift.
 // `kind` is a PARAMETER rather than a field read, because the two arms source
 // it differently — see the banner.
@@ -311,9 +304,9 @@ void ImageBuffer::PlatformSerialize(IO::Serializer& ser) {
 
     // ---- the per-level pixel blobs ----------------------------------------
     // ENDGAME B.3.2: Array is a real class; the default ctor is these same
-    // three zero stores, and the explicit teardown below leaves the header
-    // zeroed, so the scope-exit ~Array is MemFree(nullptr).
-    rtcoll::ArrayHdr levels;
+    // three zero stores. B.4 S4 GFX2: the local is the `LevelArray` retail's
+    // is, and its teardown is its destructor (see the end of the body).
+    LevelArray levels;
 
     // 0x1800f3185 reads the count out of the array it has just zeroed, so on
     // the WRITE path the value serialised here is 0. Transcribed, not
@@ -328,31 +321,23 @@ void ImageBuffer::PlatformSerialize(IO::Serializer& ser) {
     if (ser._stream->GetDirection() == IO::kReading)
         rtcoll::AsArray<&rtcoll::kSpec_InnerArrayU8>(&levels)->SetSize(count);
 
-    SerializeLevelBlobs(ser, count,
-                        reinterpret_cast<rtcoll::ArrayHdr*>(levels.GetData()));   // the core takes rtcoll::ArrayHdr (Collection.h)  // CAST-OK: elem_stride
+    SerializeLevelBlobs(ser, count, levels.GetData());
 
     // 0x1800f31e2: the field reads for Create happen HERE, after the
     // serialization, and `kind` is RELOADED. Both are faithful.
-    RecreateFromFields(this, _kind,
-                       reinterpret_cast<LevelArray*>(&levels));   // B.3.5 bridge  // LEFT: typing `levels` as LevelArray makes its implicit ~Array<Array<uint8_t>> destroy the elements at scope exit, which FreeInnerArraysCore (kV_LevelBlob) already did: the teardown must move into ~LevelArray (retail 0x1800f3221..0x1800f331d, element loop then free) as one unit
+    RecreateFromFields(this, _kind, &levels);
 
     // ---- destroy the temporary --------------------------------------------
-    // DESTROYS EVERY ELEMENT and then frees the block, in that order: the
-    // element loop frees each level's byte buffer and clears its header, and
-    // only then is the outer buffer released. Writing this as "free the block"
-    // would leak one buffer per mip level, every load.
-    const int32_t levelCount = levels.GetSize();
-    rtcoll::FreeInnerArraysCore(reinterpret_cast<uint8_t*>(levels.GetData()),   // the core takes bytes (Collection.h)  // CAST-OK: elem_stride
-                                levelCount, &kV_LevelBlob);
-    // ENDGAME B.3.2 step 2 — the explicit `rtcoll::ArrayDtorImpl(&levels)` call
-    // is GONE, not replaced by an explicit `levels.~Array()`: the per-element
-    // inner buffers are already freed by `FreeInnerArraysCore` immediately
-    // above, so all that is left to release is the OUTER buffer — exactly what
-    // `levels`'s own IMPLICIT destructor does at the closing brace below, using
-    // `levels`'s DEFAULT (trivial, `SpecFor<uint8_t>()`) spec, whose
-    // `destroy` is null. Calling a spec-aware `~Array()` here (with
-    // `kSpec_InnerArrayU8`) would re-run the inner-buffer free a second time —
-    // a double free `FreeInnerArraysCore` already discharged.
+    // B.4 S4 GFX2 (behaviour): `levels`'s own destructor at the closing brace.
+    // Retail inlines ~Array<Array<uint8>> right after the Create call
+    // (0x1800f3226..0x1800f32ce, inside the local's EH scope: the NOP at
+    // 0x1800f3225): for each level, ASCENDING, `if (data) Free(data)` under the
+    // allocator lock and the 16-byte header zeroed; then the outer buffer
+    // freed the same way and its header zeroed. `LevelArray`'s trait-derived
+    // spec destroys each `Array<uint8_t>` element in ascending order (its
+    // ~Array: ArrayDtorImpl, MemFree with retail's null test inside, then the
+    // three header fields, H7) and then frees the outer buffer the same way.
+    // DESTROYS EVERY ELEMENT and then frees the block, in that order.
 }
 
 }  // namespace Video

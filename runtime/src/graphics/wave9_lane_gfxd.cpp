@@ -116,6 +116,7 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <new>
 
 #include "../../types/graphics/Camera.h"
 #include "../collection/array_destroy_internal.h"
@@ -175,15 +176,29 @@ using rtcoll::ArraySpec;
 // 0xd8, so +0xd5..+0xd7 is a hole retail does not touch — see the banner.
 // B.4: on the real class -- the 53 dwords are the frustum (incl. its pad), the
 // Transform3 and the projection, then the `_zUp` byte.
+//
+// B.4 S4 GFX2 (behaviour): the body is `Graphics::Camera`'s own copy
+// constructor (it was `= default`, a full 0xd8 blit, on the C++ copy path).
+// Every member is built by its mem-initialiser, so no default constructor
+// (Vector4 / Transform3 / Matrix zero) runs first; `_pad_d5` has none and is
+// left unwritten, as retail leaves +0xd5..+0xd7. `Frustum`'s implicit copy is
+// trivial and moves all 0x64 bytes, its +0x61..+0x63 pad included, as retail's
+// dword run does.
+}  // namespace rtgfxd
+
+Graphics::Camera::Camera(const Camera& src)
+    : _frustum(src._frustum),               // +0x00..+0x63 (25 dwords)
+      _cameraToWorld(src._cameraToWorld),   // +0x64..+0x93
+      _projection(src._projection),         // +0x94..+0xd3
+      _zUp(src._zUp) {}                     // +0xd4 (MOVZX / MOV byte)
+
+namespace rtgfxd {
+
+// The door's `(this, src)` shape, returning `this`: the copy ctor above,
+// placement-constructed into the caller's member.
 Graphics::Camera* RtGraphics_Camera_CopyCtor(Graphics::Camera* self,
                                              const Graphics::Camera* src) {
-    // 53 dwords, +0x00..+0xd3: the whole frustum (its +0x61..+0x63 pad
-    // included, as the dword run includes it), the Transform3, the projection.
-    std::memcpy(&self->_frustum, &src->_frustum, sizeof self->_frustum);
-    self->_cameraToWorld = src->_cameraToWorld;
-    self->_projection    = src->_projection;
-    self->_zUp = src->_zUp;                                     // +0xd4
-    return self;
+    return ::new (static_cast<void*>(self)) Graphics::Camera(*src);
 }
 
 // ??0Camera@Graphics@@QEAA@XZ — retail 0x1800fe7f0. Returns `this`.
@@ -556,16 +571,16 @@ void Renderer::Reset() {
 // materialTypeFlags) so the door is a straight pass-through and the swap stays
 // visible exactly once, here, where the assignments are.
 //
-// `raw` IS DELIBERATELY UNINITIALISED. Retail builds this record on the stack and
+// THE RECORD IS DELIBERATELY NOT ZEROED. Retail builds this record on the stack and
 // never writes +0xfc, nor the Camera's +0xd5..+0xd7 tail (which lands at
 // +0xe5..+0xe7); the assign then copies those uninitialised bytes into the array
 // element. A port that zeroed them would be "helpful" and WRONG in the one way
 // that shows up as a byte divergence against a DLL-built Renderer
 // (reference_oracle_must_not_compare_unwritten_bytes.md, and the same reasoning
-// renderer.cpp's Renderer ctor gives for leaving +0x3c and +0x4c alone). That is
-// why the record is raw storage with a typed cursor over it rather than a
-// `RendererSceneEntry` object: a constructed one would zero-initialise the
-// embedded Camera's Vector4 members.
+// renderer.cpp's Renderer ctor gives for leaving +0x3c and +0x4c alone). B.4 S4
+// GFX2: the record is a `RendererSceneEntry` built by retail's SceneGroup ctor
+// (0x1800628d0), whose Camera member is built by Camera's copy ctor (retail's
+// 0x180017a70), so no zeroing default ctor runs and the holes stay holes.
 //
 // The trailing `~Array<int32>` on the record's `_drawableIds` is retail's
 // (0x18010579c). It is not redundant: `SetSizeFill`'s assign copy-constructs a
@@ -576,29 +591,16 @@ void Renderer::Reset() {
 void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuffer,
                         const Camera& camera, int shaderDetail, int detailId,
                         int shader, uint32_t materialTypeFlags) {
-    alignas(RendererSceneEntry) uint8_t raw[sizeof(RendererSceneEntry)];  // ON PURPOSE
-    RendererSceneEntry* const rec = reinterpret_cast<RendererSceneEntry*>(raw);  // LEFT: S4 GFX measured: retail AddScene 0x180105700 builds the record field by field and calls Camera copy 0x180017a70 (leaves +0xd5..+0xd7 unwritten) then ~Array 0x18001c750; a RendererSceneEntry ctor would build _camera either by Camera()=default (Frustum / Transform3 / Matrix zeroing ctors: stores retail lacks) or by Camera's defaulted copy (a 0xd8 byte copy incl. the 3 pad bytes, not 0x180017a70) -- waits on Camera's copy ctor becoming retail's partial 0x180017a70 body (Camera.h keeps it = default for RULE B5-4)
+    // B.4 S4 GFX2: the stack record is a real local, built by retail's SceneGroup
+    // constructor (0x1800628d0, which AddScene inlines: the same stores in the
+    // same order, Camera.h) — +0xfc and the Camera's +0xd5..+0xd7 tail stay
+    // unwritten, because neither has an initialiser.
+    RendererSceneEntry rec(scene, renderBuffer, camera, shaderDetail, detailId,
+                           shader, materialTypeFlags);
 
-    rec->_scene        = scene;
-    rec->_renderBuffer = renderBuffer;
-    rtgfxd::RtGraphics_Camera_CopyCtor(&rec->_camera, &camera);
-
-    rec->_shaderDetail      = shaderDetail;   // +0xe8
-    rec->_shader            = shader;         // +0xec
-    rec->_materialTypeFlags = materialTypeFlags;  // +0xf0
-    rec->_drawGroupIndex    = -1;             // +0xf4
-    rec->_detailId          = detailId;       // +0xf8
-    // +0xfc: NOT WRITTEN. See the banner.
-
-    // The two zero qwords retail stores over the inner Array header, spelled as
-    // the three fields they are.
-    rec->_drawableIds._data     = nullptr;
-    rec->_drawableIds._size     = 0;
-    rec->_drawableIds._capacity = 0;
-
-    rtgfxd::RtGfxd_SceneArraySetSizeFill(&_sceneGroups, _sceneGroups.GetSize() + 1, raw);
-    // retail 0x18001c750 — the stack record's own Array<int32> header, freed.
-    rec->_drawableIds.~Array();
+    rtgfxd::RtGfxd_SceneArraySetSizeFill(&_sceneGroups, _sceneGroups.GetSize() + 1, &rec);
+    // retail 0x18001c750 — the record's own Array<int32> header, freed by its
+    // implicit destructor (`_drawableIds` is the only member with one).
 }
 
 }  // namespace Graphics

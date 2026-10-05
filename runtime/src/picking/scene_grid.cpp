@@ -361,7 +361,7 @@ Entry* EntryAssign(Entry* d, const Entry* s) {
 // `Math::Transform::AsTransform3`, the member, called by name (B3R).
 // `?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ` (0x18001fcd0).
 
-float* BoxTransform(float* out, const Math::Transform* transform, const float* b) {
+float* BoxTransform(float* out, const Math::Transform* transform, const ::Box* b) {
     // Math::Transform3 AsTransform3(const Math::Transform&) — hidden return
     // slot in RDX, `this` in RCX. m[0..11] are the three basis vectors and the
     // translation, in that order.
@@ -371,12 +371,12 @@ float* BoxTransform(float* out, const Math::Transform* transform, const float* b
                           t3.axisZ.x, t3.axisZ.y, t3.axisZ.z,
                           t3.translation.x, t3.translation.y, t3.translation.z };
 
-    const float ez = (b[5] - b[2]) * kHalf;
-    const float ey = (b[4] - b[1]) * kHalf;
-    const float ex = (b[3] - b[0]) * kHalf;
-    const float cy = (b[4] + b[1]) * kHalf;
-    const float cx = (b[3] + b[0]) * kHalf;
-    const float cz = (b[5] + b[2]) * kHalf;
+    const float ez = (b->max.z - b->min.z) * kHalf;
+    const float ey = (b->max.y - b->min.y) * kHalf;
+    const float ex = (b->max.x - b->min.x) * kHalf;
+    const float cy = (b->max.y + b->min.y) * kHalf;
+    const float cx = (b->max.x + b->min.x) * kHalf;
+    const float cz = (b->max.z + b->min.z) * kHalf;
 
     // Centre, transformed. Retail's association, left to right as written.
     const float tcx = ((m[3] * cy + m[0] * cx) + m[6] * cz) + m[9];
@@ -434,12 +434,13 @@ float* MeshBoundsXY(const Desc* desc, float* outRect) {
         const PickingMesh::SubMesh* nodes = mesh->_nodes._data;
         const Math::Transform* xforms = desc->_transforms._data;
 
-        const ::Box& aabb = nodes[i]._aabb;
-        const float box[6] = { aabb.min.x, aabb.min.y, aabb.min.z,
-                               aabb.max.x, aabb.max.y, aabb.max.z };
+        // Retail copies the node's box (six dwords) to a stack Box at
+        // [RSP+0x20] and hands BoxTransform that copy (0x180125c38..c69):
+        // `Box`'s implicit copy, no default ctor.
+        const ::Box box = nodes[i]._aabb;
 
         float t[6];
-        BoxTransform(t, xforms + i, box);
+        BoxTransform(t, xforms + i, &box);
 
         if (!(maxZ > t[5])) maxZ = t[5];
         if (!(maxY > t[4])) maxY = t[4];

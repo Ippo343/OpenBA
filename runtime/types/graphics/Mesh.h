@@ -909,7 +909,7 @@ void RtGraphics_EdgeMesh_SerializeTriangleListArray(IO::Serializer& ser, int cou
 // C++ linkage, global namespace; given external linkage for their exe-side reader.
 // ??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z
 RtGraphics::TriangleVertex* RtGraphics_EdgeMesh_TriangleVertex_Ctor(RtGraphics::TriangleVertex* self,
-                                                                    const void* vec3);  // 0x1800a2f50
+                                                                    const Math::Vector3* vec3);  // 0x1800a2f50
 // ??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z
 RtGraphics::EdgeVertex* RtGraphics_EdgeMesh_EdgeVertex_Ctor(RtGraphics::EdgeVertex* self,
                                                             const RtGraphics::TriangleVertex* a,
