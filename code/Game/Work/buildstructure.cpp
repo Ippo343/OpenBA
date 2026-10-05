@@ -262,7 +262,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
     // --- Phase 3: Check builder count vs max, verify citizen authorization ---
     WorkPlaceComponent* bc = field_10->FindComponent<WorkPlaceComponent>();
-    int currentBuilders = bc->workerCount;
+    int currentBuilders = bc->workers._size;
 
     WorkComponent* matDesc = bc->_entity->FindComponent<WorkComponent>();
 
@@ -274,7 +274,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
     // If at max builders, verify this citizen is on the builder list
     if (currentBuilders == matDesc->workState) {
         bool found = false;
-        if (bc->workerCount < 1) {
+        if (bc->workers._size < 1) {
             return 1;
         }
 
@@ -287,7 +287,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
             }
             i++;
 
-        } while (i < bc->workerCount);
+        } while (i < bc->workers._size);
 
         if (!found) {
             return 1;

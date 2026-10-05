@@ -64,7 +64,7 @@ void HuntComponent::Update(const System::Time* time) {
 
     // The owner's workplace: its worker count is the speed numerator
     WorkPlaceComponent* workplace = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
-    int workerCount = workplace->workerCount;
+    int workerCount = workplace->workers._size;
 
     // The work component of the workplace's owner: its cached worker capacity
     WorkComponent* work = workplace->_entity->FindComponent<WorkComponent>();   // 0x140003050

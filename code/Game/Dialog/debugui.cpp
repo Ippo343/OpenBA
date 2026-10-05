@@ -426,9 +426,9 @@ static void Game_SpawnCitizens_Impl() {
                             int capacityAccum = resDesc->_useNodes.count;
 
                             // Sum occupant counts from the use locations (+0x28 / +0x30)
-                            int childCount = resComp->useLocationCount;
+                            int childCount = resComp->useLocations._size;
                             if (childCount > 0) {
-                                Object::InternalPtr<InteractComponent>* childArrayBase = resComp->useLocations;
+                                Object::InternalPtr<InteractComponent>* childArrayBase = resComp->useLocations._data;
                                 int si = 0;
                                 do {
                                     const Object::InternalPtr<InteractComponent>* pChild = childArrayBase + si;

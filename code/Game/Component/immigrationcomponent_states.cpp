@@ -81,7 +81,6 @@
 #include "Game/exe_bodies.h"              // Reimpl_MapGetTerrainPos, EventLog_AddEvent
 #include "Player/exe_bodies.h"            // ToolTile_SetTransformFromYaw_3870
 #include "Entity/componententity_funcs.h" // EntityList_RegisterEntity_Impl
-#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
 #include <cstdint>
@@ -345,7 +344,7 @@ void ImmigrationComponent::Spawn() {
         InteractDescription* id = (idesc && ::Object::IsDerivedFromNullSafe(idesc, TidInteractDesc()))
                                       ? static_cast<InteractDescription*>(idesc) : nullptr;
         uint32_t nPts = id ? static_cast<uint32_t>(id->_createNodes.count) : 0;
-        int nChildren = pc->useLocationCount;
+        int nChildren = pc->useLocations._size;
         for (int ci = 0; ci < nChildren; ++ci) {
             nPts += static_cast<uint32_t>(InteractNodeCount(
                 pc->useLocations[ci].Get(), 2));   // 0x140123070
@@ -374,10 +373,10 @@ void ImmigrationComponent::Spawn() {
         }
         // Append to the group array (+0x58/+0x60/+0x64) — retail inlines this
         // DynArray8 push; the registered resize does the same growth policy.
-        int count = groupCount;
+        int count = group._size;
         ComponentEntity* pushIBP = ent;
-        // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-        GameColl::AsArray<GameColl::Ptr8>(&group).SetSizeFill(count + 1, &pushIBP);
+        // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
+        group.SetSizeFill(count + 1, &pushIBP);
     }
     arrivedCount = 0;
 }
@@ -386,15 +385,15 @@ void ImmigrationComponent::Spawn() {
 // Dismiss — port of 0x14004d300: event 1 (LEAVE) to every nomad, drop the group.
 // ============================================================
 void ImmigrationComponent::Dismiss() {
-    int n = groupCount;
-    Object::InternalPtr<ComponentEntity>* arr = group;
+    int n = group._size;
+    Object::InternalPtr<ComponentEntity>* arr = group._data;
     for (int i = 0; i < n; ++i) {
         PostEventToEntity(arr[i].Get(), 1);
     }
     if (arr) System::MemoryAllocator::MemFree(arr);
-    group = nullptr;
-    groupCount = 0;
-    groupCapacity = 0;
+    group._data = nullptr;
+    group._size = 0;
+    group._capacity = 0;
     arrivedCount = 0;
 }
 
@@ -469,10 +468,10 @@ void ImmigrationComponent::Accept() {
     RtSystem_Time_Ctor(&dur, static_cast<float>(desc->_diseaseMonths) * kSecondsPerMonth);
     if (tm->field_0x1A0._ticks < dur._ticks) tm->field_0x1A0._ticks = dur._ticks;
 
-    const int n = groupCount;
+    const int n = group._size;
     TownMgr(gw)->field_0x1B0 += n;
 
-    Object::InternalPtr<ComponentEntity>* arr = group;
+    Object::InternalPtr<ComponentEntity>* arr = group._data;
     auto nomadAt = [&](int i) -> ComponentEntity* {
         return arr[i].Get();
     };
@@ -505,9 +504,9 @@ void ImmigrationComponent::Accept() {
         i += 4;
     }
     if (arr) System::MemoryAllocator::MemFree(arr);
-    group = nullptr;
-    groupCount = 0;
-    groupCapacity = 0;
+    group._data = nullptr;
+    group._size = 0;
+    group._capacity = 0;
     arrivedCount = 0;
 }
 
@@ -557,23 +556,23 @@ char ImmigrationComponent::TickWaiting(StateMachine* sm, const System::Time* tim
 // state 0x10 ARRIVING — enter 0x14004d090: reset the group and spawn it
 char ImmigrationComponent::EnterArriving() {
     arrivedCount = 0;
-    Object::InternalPtr<ComponentEntity>* old = group;
+    Object::InternalPtr<ComponentEntity>* old = group._data;
     if (old) System::MemoryAllocator::MemFree(old);
-    group = nullptr;
-    groupCount = 0;
-    groupCapacity = 0;
+    group._data = nullptr;
+    group._size = 0;
+    group._capacity = 0;
     Spawn();   // 0x14004dbe0
     return 1;
 }
 // tick 0x14004d070: spawn again if the group is empty
 char ImmigrationComponent::TickArriving() {
-    if (groupCount == 0) Spawn();   // 0x14004dbe0
+    if (group._size == 0) Spawn();   // 0x14004dbe0
     return 1;
 }
 // event 6 0x14004cff0: a nomad reached the hall
 char ImmigrationComponent::OnArrived(StateMachine* sm) {
     int32_t arrived = ++arrivedCount;
-    if (arrived == groupCount) ::ControllerLive::RequestStateTransition(sm, 0x11);
+    if (arrived == group._size) ::ControllerLive::RequestStateTransition(sm, 0x11);
     return 1;
 }
 // transition 0x10/0x11 -> 3 handler 0x14004cd00: dismiss on the way out

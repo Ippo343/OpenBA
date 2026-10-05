@@ -340,7 +340,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
         if (!prof) continue;
         ++workplaces;
         if (wpc->isAccepting == 0) { ++notAccepting; continue; }            // +0x50
-        const int have = wpc->workerCount;   // live roster (+0x60)
+        const int have = wpc->workers._size;   // live roster (+0x60)
         int want = 1;
         WorkComponent* wc = ent->FindComponent<WorkComponent>();             // 0x140003050
         if (wc) {

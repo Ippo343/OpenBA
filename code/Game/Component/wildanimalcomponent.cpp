@@ -109,7 +109,7 @@ void WildAnimalComponent::OnRemove() {
     ++g_war_calls;
     const bool trace = (g_war_calls % 10) == 1;
     // HerdComponent +0x40: the member array's count.
-    const int before = herdComp ? herdComp->memberCount : -1;
+    const int before = herdComp ? herdComp->members._size : -1;
 
     if (herdComp) {
         // Erase self from the herd's member array (+0x38) by value (0x140002cc0).
@@ -118,7 +118,7 @@ void WildAnimalComponent::OnRemove() {
     }
 
     if (trace) {
-        const int after = herdComp ? herdComp->memberCount : -1;
+        const int after = herdComp ? herdComp->members._size : -1;
         fprintf(stderr, "[WildAnimalRm] calls=%lld noHerd=%lld herd=%p members %d -> %d%s\n",
                 g_war_calls, g_war_noHerd, static_cast<void*>(herdComp),
                 before, after, (before == after) ? "  ERASE-NO-OP" : "");

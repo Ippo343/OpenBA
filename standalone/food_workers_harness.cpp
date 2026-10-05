@@ -225,9 +225,9 @@ void Fire(int frameNum) {
             continue;
         }
 
-        const int32_t before = wpcIBP->workerCount;              // +0x60
+        const int32_t before = wpcIBP->workers._size;              // +0x60
         const int seated = CitizenEmploy_SeatWorkers(townMgr, profKey, s_count);
-        const int32_t after = wpcIBP->workerCount;
+        const int32_t after = wpcIBP->workers._size;
 
         if (s_seatedCount < kMaxTracked) s_seated[s_seatedCount++] = foodComp;
 

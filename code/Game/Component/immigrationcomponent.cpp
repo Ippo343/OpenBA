@@ -75,17 +75,13 @@ static const bool s_immigrationStateTableBuilt = (ImmigrationCtrl_PopulateTable(
 // 0x14004e640. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // `_controller(this)` is the member's back-pointer; +0x48..+0x60 = 0. No flag OR.
 ImmigrationComponent::ImmigrationComponent()
-    : _controller(this), waitTimer{0}, arrivedCount(0), _pad54{}, group(nullptr), groupCount(0),
-      groupCapacity(0) {}
+    : _controller(this), waitTimer{0}, arrivedCount(0), _pad54{} {}
 
 // 0x14004e5d0: the group array (+0x58 data, +0x60 count/capacity) is freed and
-// zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
-// compiler's chain.
+// zeroed by ~group (kSpec_PtrZero: no element destroy); the controller's and the
+// bases' dtors (restamps only) and ~Internal are the compiler's chain, reverse
+// declaration order. The body is empty.
 ImmigrationComponent::~ImmigrationComponent() {
-    Object::detail::InternalMemFree(group);
-    group = nullptr;
-    groupCount = 0;
-    groupCapacity = 0;
 }
 
 // create 0x140007a20: MemAlloc(0x68, 8), then the ctor.
@@ -111,16 +107,16 @@ void ImmigrationComponent::Persist(IO::Stream& stream) {
     { IO::Serializer scope(*st, 0); }
     IO::Serializer ser(*st, 0);
     ser.Serialize(arrivedCount, nullptr);
-    int arrayCount = groupCount;
+    int arrayCount = group._size;
     ser.Serialize(arrayCount, nullptr);
     // "Am I loading?" is the STREAM's direction (Serializer -> stream +8), not the
     // Serializer's own +8 (m_encoding): see
     // reference_serializer_plus8_is_encoding_not_loading_flag.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-        GameColl::AsArray<GameColl::Ptr8>(&group).SetSize(arrayCount);
+        // exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n) (kSpec_PtrZero).
+        group.SetSize(arrayCount);
     }
-    Object::InternalPtr<ComponentEntity>* element = group;
+    Object::InternalPtr<ComponentEntity>* element = group._data;
     for (int64_t remaining = arrayCount; remaining > 0; --remaining, ++element) {
         element->InternalBasePtr::Serialize(ser);
         ComponentEntity* obj = element->Get();

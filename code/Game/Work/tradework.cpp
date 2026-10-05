@@ -394,9 +394,9 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             interactDesc = static_cast<InteractDescription*>(desc);
         // The null arm is the tree's guard; retail reads +0x30 of the result unguarded.
         uint32_t range = interactDesc ? static_cast<uint32_t>(interactDesc->_useNodes.count) : 0;
-        if (posComp->useLocationCount > 0) {
-            Object::InternalPtr<InteractComponent>* parts = posComp->useLocations;
-            int cn = posComp->useLocationCount;
+        if (posComp->useLocations._size > 0) {
+            Object::InternalPtr<InteractComponent>* parts = posComp->useLocations._data;
+            int cn = posComp->useLocations._size;
             for (int k = 0; k < cn; k++) {
                 range += InteractNodeCount(parts[k].Get(), 0);   // 0x140123070
             }

@@ -517,7 +517,7 @@ float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p
     int local_68 = nodes.count;
 
     if (local_68 <= p4) {
-        int childN = self->useLocationCount;
+        int childN = self->useLocations._size;
         int i = 0;
         if (0 < childN) {
             do {
@@ -528,7 +528,7 @@ float* InteractNodePosition(const InteractComponent* self, float* retVec3, int p
                 }
                 i++;
                 local_68 += n;
-            } while (i < self->useLocationCount);
+            } while (i < self->useLocations._size);
         }
         Math::Vector3 zero(Math::Scalar(0.0f));   // Math::Vector3::Vector3(ret,&scalar0)
         retVec3[0] = zero.x;

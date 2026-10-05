@@ -366,7 +366,7 @@ void AttendanceComponent::Update(const System::Time* /*time*/) {
     }
 
     // Check if building is idle (the roster count, +0x60, == 0)
-    int32_t busyState = building->workerCount;
+    int32_t busyState = building->workers._size;
     if (busyState == 0) {
         // Building is idle -- process the attendance queue
         ProcessQueue();   // 0x140043f60

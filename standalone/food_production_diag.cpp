@@ -173,7 +173,7 @@ void DumpAll(int frame) {
             int staffed = -1, accepting = -1;
             if (Component* wpcBase = FindComp(ent, tidWPC)) {
                 WorkPlaceComponent* w = static_cast<WorkPlaceComponent*>(wpcBase);   // exact type id
-                staffed   = w->workerCount;                  // +0x60
+                staffed   = w->workers._size;                  // +0x60
                 accepting = w->isAccepting;                  // +0x50
             }
 

@@ -45,7 +45,6 @@
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"
 #include "Component/tornadocomponent_funcs.h"
-#include "Component/coll_bridge.h"
 #include "Entity/EntityList.h"   // EntityList::removalList
 #include "Game/Map.h"   // Map, MapCell
 #include "options.h"
@@ -286,7 +285,7 @@ int TornadoComponent::Path::FindNext(const float* pos, float radius) const {
     int i = index;
     for (;;) {
         ++i;
-        if (i >= count) return -1;
+        if (i >= points._size) return -1;
         const Math::Vector3& wp = points[i];
         const float dx = pos[0] - wp.x;
         const float dy = pos[1] - wp.y;
@@ -644,7 +643,7 @@ void AmbientEmitterComponent::MoveTo(const Math::Vector3& newPos) {
 // +0x40 = +0x48 = 0, +0x50 = -1}, +0x58 = 0, +0x60 (dword) = 0; flags |= 0x84.
 TornadoComponent::TornadoComponent()
     : damageCountdown{0},
-      path{Math::Vector3(0.0f, 0.0f, 0.0f), {}, nullptr, 0, 0, -1, {}},
+      path{Math::Vector3(0.0f, 0.0f, 0.0f), {}, {}, -1, {}},
       position(0.0f, 0.0f, 0.0f), _pad64{} {
     OrFlagsInCtor(0x84);
 }
@@ -665,16 +664,15 @@ void TornadoComponent::Persist(IO::Stream& stream) {
     path.target.Serialize(ser);
     ser.Serialize(path.index, nullptr);
 
-    int pathCount = path.count;
+    int pathCount = path.points._size;
     ser.Serialize(pathCount, nullptr);
 
     // stream+8 == 0 means "loading": grow the array before reading the waypoints.
-    // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
-    // LEFT: the point array is the raw triple (H5).
+    // FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
     if (static_cast<int>(st->GetDirection()) == 0)   // IO::Stream::GetDirection, retail 0x180006200
-        GameColl::AsArray<GameColl::Vec3>(&path.points).SetSize(pathCount);
+        path.points.SetSize(pathCount);
 
-    Math::Vector3* pVec = path.points;
+    Math::Vector3* pVec = path.points._data;
     if (pathCount > 0 && pVec) {
         for (int i = 0; i < pathCount; i++) {
             pVec->Serialize(ser);
@@ -749,15 +747,14 @@ void TornadoComponent::Startup() {
     // --- push the waypoints; the first one seeds the current target ---
     for (int i = 0; i < kPathNodes; i++) {
         float* p = &pathBuf[i * 3];
-        if (path.count == 0) {
+        if (path.points._size == 0) {
             path.target.x = p[0];
             path.target.y = p[1];
             path.target.z = p[2];
             path.index = 0;
         }
-        // B.3.2 bridge: FUN_14000cf40 is Collection::Array<Vector3>::SetSize(n, fill)
-        // LEFT: the point array is the raw triple (H5).
-        GameColl::AsArray<GameColl::Vec3>(&path.points).SetSizeFill(path.count + 1, p);
+        // FUN_14000cf40 is Collection::Array<Vector3>::SetSize(n, fill)
+        path.points.SetSizeFill(path.points._size + 1, p);
     }
 
     // --- post the warning to the event log, and pause if the setting says so ---
@@ -793,7 +790,7 @@ void TornadoComponent::Startup() {
                   "endpointTries=%d path=%s (maxLateralDeviation=%.2f) "
                   "speed=%.2f damageRadius=%d scatterRadius=%d particleComponent=%s\n",
                   pathBuf[0], pathBuf[1], pathBuf[kPathLast * 3], pathBuf[kPathLast * 3 + 1],
-                  path.count, tries,
+                  path.points._size, tries,
                   (maxDev > 0.01f) ? "FRACTAL" : "STRAIGHT", maxDev,
                   desc->_speed,
                   desc->_damageRadius,
@@ -836,7 +833,7 @@ void TornadoComponent::Tick(const System::Time* time) {
                     .SetSize(entityMgr->removalList._size + 1, entity);
                 TORNADO_TRACE("expired: particle finished, entity queued for destruction "
                               "(pathIndex=%d of %d)\n",
-                              path.index, path.count);
+                              path.index, path.points._size);
             }
         }
         return;
@@ -857,12 +854,12 @@ void TornadoComponent::Tick(const System::Time* time) {
         // Path exhausted: reverse the particle's playback so the funnel winds down.
         pc->FadeOutEmitter(0);   // 0x140053720
         TORNADO_TRACE("path exhausted at waypoint %d of %d — funnel winding down\n",
-                      idxAfter, path.count);
+                      idxAfter, path.points._size);
     } else {
         DamageTick(dt);
         if (idxAfter != idxBefore && (idxAfter % 16) == 0)
             TORNADO_TRACE("waypoint %d of %d at (%.1f,%.1f)\n",
-                          idxAfter, path.count, position.x, position.y);
+                          idxAfter, path.points._size, position.x, position.y);
     }
 
     // --- integrate the position ---

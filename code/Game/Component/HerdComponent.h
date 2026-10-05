@@ -13,7 +13,7 @@
 //                       +0x40 = 0, +0x48 (byte) = 0, +0x4c = -1, +0x50 = +0x58
 //                       = 0, flags |= 0x0b. +0x30 is NOT written.
 //   dtor   0x140034ea0 (scalar): restamp, MemFree(+0x38), +0x38 = +0x40 = 0
-//                       (the member array), stamp 0x140162920, ~Internal,
+//                       (~members, the inlined ~Array), stamp 0x140162920, ~Internal,
 //                       MemFree on &1
 //   table  0x140163680, 16 slots:
 //     [0] 0x140034ea0 scalar deleting dtor   [1]/[2] TypeName/Type
@@ -27,6 +27,13 @@
 #include "Component/Component.h"
 #include "system/Value.h"   // System::Time
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (members)
+#include "object/Internal.h"         // Object::InternalPtr<T>
+
+// The member list grows through retail's stride-8 rows (0x1400032e0 / 0x140003110:
+// stride 8, align 8, the new tail ZEROED, no element destroy) and is freed by the
+// inlined ~Array (dtor 0x140034ec7..0x140034ed7): kSpec_PtrZero (Entity/EntityList.h).
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 class PopulationComponent;
 class WildAnimalComponent;
@@ -43,8 +50,8 @@ class HerdComponent final : public Component {
 public:
     HerdComponent();                                              // 0x140122150
 
-    // PORT GAP (retail 0x140034ea0) — B38 D2: retail frees the member array at
-    // +0x38; the tree never did (Inert_ScalarDtor).
+    // 0x140034ea0: the body is empty; ~members frees and zeroes +0x38 / +0x40 (the
+    // InternalPtr at +0x28 releases nothing).
     ~HerdComponent() override = default;                          // [0] 0x140034ea0
     void Persist(IO::Stream& stream) override;                          // [3] 0x140121f90
     // [4] inherited: Component's `RET` 0x140118a50 (the ctor writes +0x4c = -1).
@@ -62,9 +69,9 @@ public:
     Object::InternalPtr<PopulationComponent> population;   // +0x28 InternalPtr<PopulationComponent>
     int32_t               populationCell; // +0x30 grid cell of the population map; the ctor leaves it
     uint8_t               _pad34[4];      // +0x34
-    Object::InternalPtr<WildAnimalComponent>* members;   // +0x38 Array<InternalPtr<WildAnimalComponent>> data (freed by the retail dtor)
-    int32_t               memberCount;    // +0x40
-    int32_t               memberCapacity; // +0x44
+    using MemberList = Collection::Array<Object::InternalPtr<WildAnimalComponent>, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    MemberList            members;        // +0x38 the herd's animals (count +0x40, capacity +0x44)
     bool                  migrating;      // +0x48 phase (false grazing, true migrating)
     uint8_t               _pad49[3];      // +0x49
     int32_t               tile;           // +0x4C herd centre tile (ctor -1)
@@ -79,8 +86,8 @@ static_assert(offsetof(HerdComponent, population) == 0x28, "");
 static_assert(offsetof(HerdComponent, populationCell) == 0x30, "");
 static_assert(offsetof(HerdComponent, _pad34) == 0x34, "");
 static_assert(offsetof(HerdComponent, members) == 0x38, "");
-static_assert(offsetof(HerdComponent, memberCount) == 0x40, "");
-static_assert(offsetof(HerdComponent, memberCapacity) == 0x44, "");
+static_assert(offsetof(HerdComponent, members) + offsetof(HerdComponent::MemberList, _size) == 0x40, "");
+static_assert(offsetof(HerdComponent, members) + offsetof(HerdComponent::MemberList, _capacity) == 0x44, "");
 static_assert(offsetof(HerdComponent, migrating) == 0x48, "");
 static_assert(offsetof(HerdComponent, tile) == 0x4C, "");
 static_assert(offsetof(HerdComponent, grazeTimer) == 0x50, "");

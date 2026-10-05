@@ -122,8 +122,8 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int pa
     uint8_t result = WorkImpl_WalkablePos_122be0(
         interact, nodes, param_3, param_4, param_5) ? 1 : 0;
 
-    int childCount = interact->useLocationCount;
-    Object::InternalPtr<InteractComponent>* childArr = interact->useLocations;
+    int childCount = interact->useLocations._size;
+    Object::InternalPtr<InteractComponent>* childArr = interact->useLocations._data;
     for (int i = 0; i < childCount; i++) {
         uint8_t sub = WorkImpl_WalkablePosRecursive_122b00(childArr[i].Get(),
                                                            param_2, param_3, param_4, param_5);
