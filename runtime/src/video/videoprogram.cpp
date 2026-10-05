@@ -155,9 +155,11 @@ void VideoProgram::PlatformCreate() {
     _data->Slot1();
 }
 // ?PlatformDestruct@VideoProgram@Video@@AEAAXXZ (0x1800f47f0): slot 0, flags 1.
+// B5 PILOT (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+// virtual destructor, then the base's class-scope operator delete (MemFree).
 void VideoProgram::PlatformDestruct() {
     if (_data == nullptr) return;
-    _data->DeletingDtor(1);
+    delete _data;
 }
 
 // slot 5 — ?Serialize@VideoProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f46b0).

@@ -419,8 +419,11 @@ void Video::RenderBuffer::PlatformConstruct() {
 }
 
 void Video::RenderBuffer::PlatformDestruct() {
+    // B5 PILOT (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+    // virtual destructor, then the base's class-scope operator delete (MemFree).
+    // +0x28 is still NOT nulled afterwards (the ImageBuffer asymmetry above).
     if (RenderBufferData* companion = platformData)
-        (void)companion->DeletingDtor(1);
+        delete companion;
     RtVideoDeviceLock(&Device::_singleton);
     ListUnlink(this, _firstRenderBuffer, &RenderBuffer::next, &RenderBuffer::prev);
     RtVideoDeviceUnlock(&Device::_singleton);

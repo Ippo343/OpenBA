@@ -19,6 +19,10 @@
 #include <cstdint>
 #include <cstddef>
 
+// B5 (the dx11 seam): the abstract `Video::XData` bases the converted classes
+// below derive from.
+#include "video/CompanionData.h"
+
 namespace VideoDX11 {
 
 // ============================================================
@@ -533,14 +537,23 @@ enum RenderStateDataSlot : int {
 //                        DeviceData[7]
 //   slot 2  0x180001190  `ret`           — shared with DeviceData[4]
 //
-// Owner type confirmed by ??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@1@@Z.
-struct VideoProgramData {
-    void* vptr;         // +0x00
-    void* videoProgram; // +0x08  Video::VideoProgram*
+// B5 PILOT: a real C++ subclass of `Video::VideoProgramData`; the compiler builds
+// its vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
+// `_owner` (+0x08, `Video::VideoProgram*`) is the base's and replaces the old
+// `videoProgram` field. Owner type confirmed by
+// ??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@1@@Z.
+class VideoProgramData final : public ::Video::VideoProgramData {
+public:
+    // Factory 0x180005a40: MemAlloc(0x10, 4) + ??0VideoProgramData(owner) + the
+    // vptr store. Nothing else is stored.
+    explicit VideoProgramData(::Video::VideoProgram* owner)
+        : ::Video::VideoProgramData(owner) {}
+    ~VideoProgramData() override;                        // [0] 0x180001140, chains ??1VideoProgramData@Video@@UEAA@XZ
+    bool Slot1() override;                               // [1] 0x180001060  `mov al,1; ret` — shared with RenderBufferData[1], DeviceData[7]
+    void Bind(void* context, int detail) override;       // [2] 0x180001190  `ret` — shared with DeviceData[4]
 };
-static_assert(sizeof(VideoProgramData) == 0x10, "VideoProgramData size");
-static_assert(offsetof(VideoProgramData, vptr) == 0x0, "VideoProgramData::vptr");
-static_assert(offsetof(VideoProgramData, videoProgram) == 0x08, "VideoProgramData::videoProgram");
+static_assert(sizeof(VideoProgramData) == 0x10, "MemAlloc 0x10 @ 0x180005a40");
+static_assert(offsetof(VideoProgramData, _owner) == 0x08, "VideoProgramData::_owner (the base's)");
 
 // 0x10, vtable 0x180018588 (4 slots), factory 0x180005aa0 — no private fields.
 //
@@ -556,20 +569,30 @@ static_assert(offsetof(VideoProgramData, videoProgram) == 0x08, "VideoProgramDat
 //                        ResolveSubresource(this.colour, 0, other.colour, 0,
 //                                           B8G8R8A8_UNORM)
 //
-// "0 private bytes" is true of the struct but NOT of the code: slots 2 and 3
+// "0 private bytes" is true of the class but NOT of the code: slots 2 and 3
 // reach real D3D11 views through the owner. Video::RenderBuffer is a
 // (colour, depth) Video::ImageBuffer pair at +0x00/+0x08 and each ImageBuffer
 // carries its VideoDX11::ImageBufferData at +0x60 — all pinned with
 // static_asserts in dx11/src/dx11_backend_access.h. Owner type confirmed by
 // ??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@1@@Z, and the pair shape by
 // ?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z.
-struct RenderBufferData {
-    void* vptr;         // +0x00
-    void* renderBuffer; // +0x08  Video::RenderBuffer*
+//
+// B5 PILOT: a real C++ subclass of `Video::RenderBufferData`; the compiler builds
+// its vtable. `_owner` (+0x08, `Video::RenderBuffer*`) is the base's and replaces
+// the old `renderBuffer` field.
+class RenderBufferData final : public ::Video::RenderBufferData {
+public:
+    // Factory 0x180005aa0: MemAlloc(0x10, 4) + ??0RenderBufferData(owner) + the
+    // vptr store. Nothing else is stored.
+    explicit RenderBufferData(::Video::RenderBuffer* owner)
+        : ::Video::RenderBufferData(owner) {}
+    ~RenderBufferData() override;                                      // [0] 0x180001010, chains ??1RenderBufferData@Video@@UEAA@XZ
+    bool Slot1() override;                                             // [1] 0x180001060  `mov al,1; ret`
+    void Bind(void* context) override;                                 // [2] 0x180001070  OMSetRenderTargets
+    void Resolve(void* context, void* other, bool flag) override;      // [3] 0x1800010e0  ResolveSubresource
 };
-static_assert(sizeof(RenderBufferData) == 0x10, "RenderBufferData size");
-static_assert(offsetof(RenderBufferData, vptr) == 0x0, "RenderBufferData::vptr");
-static_assert(offsetof(RenderBufferData, renderBuffer) == 0x08, "RenderBufferData::renderBuffer");
+static_assert(sizeof(RenderBufferData) == 0x10, "MemAlloc 0x10 @ 0x180005aa0");
+static_assert(offsetof(RenderBufferData, _owner) == 0x08, "RenderBufferData::_owner (the base's)");
 
 // ============================================================
 // Vtable slot counts, walked from .rdata 0x180018580-0x180018c60 on

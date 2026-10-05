@@ -10,6 +10,10 @@
 // arms of the inline VECTOR `DeletingDtor` (element 0x10). Slots 1..N are
 // retail's `_purecall` and are never called here.
 //
+// B5 (the dx11 seam): a class whose dx11 subclass is converted moves to
+// CheckDataB5 -- `virtual ~T()`, `delete` instead of `DeletingDtor` (so far:
+// RenderBufferData, VideoProgramData).
+//
 // The out-of-line destructors live in runtime/src/video/companion_data.cpp
 // (which cannot link into the host test), so they are defined HERE as markers.
 // ============================================================================
@@ -79,6 +83,43 @@ void CheckData() {
     CHECK(g_dtorOrder[2] == e[0]);
 }
 
+// B5 (the dx11 seam, B5_RULES D1): a base whose dx11 subclass is a real C++
+// subclass declares `virtual ~T()` -- the compiler's D1/D0 pair is retail slot 0
+// and its class-scope operator delete (companion_operators.cpp, host arm
+// std::free) is slot 0's MemFree. Still concrete (the `_purecall` bodies).
+template <class T>
+void CheckDataB5() {
+    typename T::Owner* const kOwner = reinterpret_cast<typename T::Owner*>(kOwnerBits);
+    CHECK(!std::is_abstract<T>::value);
+    CHECK(std::has_virtual_destructor<T>::value);
+    CHECK(std::is_destructible<T>::value);
+    CHECK(!std::is_default_constructible<T>::value); // the owner is required
+    CHECK_EQ(sizeof(T), (size_t)0x10);
+    CHECK_DTOR_SLOT(T);
+
+    // The ctor's one data store: owner at +0x08.
+    alignas(8) uint8_t buf[0x10];
+    std::memset(buf, 0xCD, sizeof buf);
+    T* d = ::new (buf) T(kOwner);
+    CHECK(static_cast<void*>(d) == static_cast<void*>(buf));
+    CHECK(d->_owner == kOwner);
+    void* ownerAt8 = nullptr;
+    std::memcpy(&ownerAt8, buf + 0x08, sizeof ownerAt8);
+    CHECK(ownerAt8 == static_cast<void*>(kOwner));
+    g_dtorCount = 0;
+    d->~T();
+    CHECK_EQ(g_dtorCount, 1);
+
+    // retail's slot 0 with flags 1: `delete` runs the destructor once and frees
+    // through the class's own operator delete.
+    T* p = new T(kOwner);
+    CHECK(p->_owner == kOwner);
+    g_dtorCount = 0;
+    delete p;
+    CHECK_EQ(g_dtorCount, 1);
+    CHECK(g_dtorOrder[0] == static_cast<const void*>(p));
+}
+
 }  // namespace
 
 namespace Video {
@@ -102,12 +143,24 @@ UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckData<Video::ImageBufferDat
 UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckData<Video::IndexBufferData>(); }
 UNIT_TEST(b39_vid_vertexbufferdata_concrete)   { CheckData<Video::VertexBufferData>(); }
 UNIT_TEST(b39_vid_constantbufferdata_concrete) { CheckData<Video::ConstantBufferData>(); }
-UNIT_TEST(b39_vid_renderbufferdata_concrete)   { CheckData<Video::RenderBufferData>(); }
+UNIT_TEST(b39_vid_renderbufferdata_concrete)   { CheckDataB5<Video::RenderBufferData>(); }
 UNIT_TEST(b39_vid_vertexlayoutdata_concrete)   { CheckData<Video::VertexLayoutData>(); }
 UNIT_TEST(b39_vid_vertexprogramdata_concrete)  { CheckData<Video::VertexProgramData>(); }
 UNIT_TEST(b39_vid_pixelprogramdata_concrete)   { CheckData<Video::PixelProgramData>(); }
 UNIT_TEST(b39_vid_renderstatedata_concrete)    { CheckData<Video::RenderStateData>(); }
-UNIT_TEST(b39_vid_videoprogramdata_concrete)   { CheckData<Video::VideoProgramData>(); }
+UNIT_TEST(b39_vid_videoprogramdata_concrete)   { CheckDataB5<Video::VideoProgramData>(); }
+
+// B5 PILOT: the two flipped classes' slots in RETAIL numbers (slot_check.h
+// shifts them past the destructor pair).
+UNIT_TEST(b5_vid_flipped_companion_slots_by_pmf) {
+    using R = Video::RenderBufferData;
+    CHECK_SLOT(R, Slot1,   1);
+    CHECK_SLOT(R, Bind,    2);
+    CHECK_SLOT(R, Resolve, 3);
+    using V = Video::VideoProgramData;
+    CHECK_SLOT(V, Slot1, 1);
+    CHECK_SLOT(V, Bind,  2);
+}
 
 // The slot ORDER of the two 20-slot tables, by PMF: the Device-side callers
 // reach the factories by BYTE OFFSET (VertexLayout +0x70, ConstantBuffer +0x58,
