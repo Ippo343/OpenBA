@@ -659,7 +659,8 @@ static bool RunFactorySelfTest(const char* typeName,
         return false;
     }
 
-    void* obj = match->factoryFn();
+    typedef void* (*Factory_t)(void);
+    void* obj = ((Factory_t)match->factoryFn)();   // LEFT: Object::BaseTypeInfo::factoryFn is void* (runtime/types/object/TypeInfo.h:520, RT; its FactoryFn alias exists)
     if (!obj) {
         printf("[SelfTest %s] FAIL: factory returned NULL\n", typeName);
         return false;
