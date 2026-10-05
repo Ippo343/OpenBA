@@ -234,7 +234,6 @@ using RtUI::Dialog;
 using RtUI::DialogController;
 using RtUI::DialogInstance;
 using RtUI::DialogTimer;
-using RtUI::ElementDescription;
 using RtUI::kDialogInstanceCtorExtent;
 using RtUI::DialogNamedTemplate;   // WAVE 9 LANE UIC (?CreateElement@Dialog@)
 

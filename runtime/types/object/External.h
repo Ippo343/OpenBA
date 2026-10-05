@@ -102,10 +102,10 @@ using RtSystem::Filename;
 // uint32_t. SetSize's one-qword copy of them is written as the two named
 // stores, in address order (H7).
 struct ExternalArrayElement {
-    Filename owned;       // +0x00 — a System::Filename (the RtSystem POD: the
-                          //         array's lifecycle is hand-written): released
-                          //         with the String idiom by FUN_180006ac0, copied
-                          //         (and delimiter-normalised) by 0x1800067d0
+    System::Filename owned;  // +0x00 — released with the String idiom by
+                          //         FUN_180006ac0, copied (and delimiter-
+                          //         normalised) by 0x1800067d0; the array's row
+                          //         kSpec_ExtArrayElem owns the lifecycle
     uint32_t field_0x08;  // +0x08 — SerializeUInt at 0x1800bc7fc; copied by SetSize
     uint32_t field_0x0c;  // +0x0c — SerializeUInt at 0x1800bc811; copied by SetSize
 };
@@ -119,15 +119,19 @@ static_assert(offsetof(ExternalArrayElement, field_0x08) == 0x08,
 static_assert(offsetof(ExternalArrayElement, field_0x0c) == 0x0c,
               "ExternalArrayElement +0x0c (0x1800bc811)");
 
-struct External {
-    void*                              _vftable;   // +0x00
-    Filename                           _path;      // +0x08
-    Collection::Array<ExternalArrayElement> _refs; // +0x10 data, +0x18 size, +0x1c capacity
-};
-static_assert(sizeof(External) == 0x20, "Object::External is 0x20 bytes");
-static_assert(offsetof(External, _vftable) == 0x00, "External vtable @ +0x00");
-static_assert(offsetof(External, _path)    == 0x08, "External::_path @ +0x08 (GetPath 0x180006250)");
-static_assert(offsetof(External, _refs)    == 0x10, "External::_refs @ +0x10 (~External 0x1800bc950)");
+}  // namespace RtObject
+namespace rtcoll {
+// Array<ExternalArrayElement>'s row (runtime/src/collection/array.cpp, SetSize
+// 0x18002c6a0: assign = the Filename copy ctor + one qword, init = zero,
+// destroy = 0x180006ac0, the per-element ~Filename).
+extern const ArraySpec kSpec_ExtArrayElem;
+}
+namespace RtObject {
+using ExternalRefArray = Collection::Array<ExternalArrayElement, Collection::DefaultAllocator,
+                                           Collection::ExplicitSpec<&rtcoll::kSpec_ExtArrayElem>>;
+
+// (B.4 Z MIRROR: the `RtObject::External` POD mirror that stood here had no
+// user left: the one External is `Object::External` below.)
 
 // ============================================================
 // Object::ExternalFactory — the global resource table.
@@ -181,11 +185,26 @@ static_assert(offsetof(External, _refs)    == 0x10, "External::_refs @ +0x10 (~E
 // tail lands at +0x18 parent / +0x20 left / +0x28 right — exactly the offsets
 // FindNext (0x1800be9d0), Clean (0x1800be310) and SerializeReferenceTable
 // (0x1800bcb60) all walk.
+//
+// B.4 Z MIRROR: `path` is the real System::Filename and the element has the
+// constructor retail's `Set<ResourceEntry>::Insert` (0x18002ca00) builds its
+// stack pair with: the Filename copy ctor (0x1800067d0) on `path`, then the
+// value's fields in order; the pair's implicit destructor is the inlined
+// ~Filename (0x180006980) at 0x18002ca70, under the same EH state (-2) retail
+// opens. Nodes are raw allocations: PairCtor (0x18002e6e0) placement-constructs
+// `path` in the node, and the node frees (0x18002ee40, 0x18002eea0, the remove
+// at 0x18002cfdc) run ~Filename on it by hand. Nothing copies, memsets or
+// default-constructs an entry; ~Set's Clear runs after ~ExternalFactory has
+// zeroed the root, so it destroys nothing.
 struct ResourceEntry {
-    Filename  path;         // +0x00 — the Set key; compared with _stricmp
-    ::Object::External* external;   // +0x08 — Find/FindNext return this
-    uint32_t  usageMask;    // +0x10 — Add ORs in 1 << factory->_cleanBitIndex
-    uint32_t  referenceId;  // +0x14 — GetReferenceId returns this; Add seeds -1
+    ResourceEntry(const System::Filename& key, ::Object::External* ext,
+                  uint32_t mask, uint32_t refId)
+        : path(key), external(ext), usageMask(mask), referenceId(refId) {}
+
+    System::Filename    path;         // +0x00 — the Set key; compared with _stricmp
+    ::Object::External* external;     // +0x08 — Find/FindNext return this
+    uint32_t            usageMask;    // +0x10 — Add ORs in 1 << factory->_cleanBitIndex
+    uint32_t            referenceId;  // +0x14 — GetReferenceId returns this; Add seeds -1
 };
 static_assert(sizeof(ResourceEntry) == 0x18, "ResourceEntry is 0x18 bytes");
 static_assert(offsetof(ResourceEntry, external)    == 0x08, "ResourceEntry::external @ +0x08");
@@ -196,10 +215,18 @@ static_assert(offsetof(ResourceEntry, referenceId) == 0x14, "ResourceEntry::refe
 // SerializeReferenceTable. sizeof == 0x10, so the node tail lands at +0x10
 // parent / +0x18 left / +0x20 right — the offsets GetPathForReferenceId
 // (0x1800bf1d0) descends through (`piVar5[6]` and `piVar5[8]` on an int*).
+//
+// B.4 Z MIRROR: `path` is the real System::Filename; the constructor is the
+// stack pair of retail's `Set<ReferenceEntry>::Insert` (0x18002cb90): a DWORD
+// id store (`_pad` never written) then the Filename copy ctor (0x1800067d0);
+// the implicit destructor is the inlined release at 0x18002cbda. Nodes are raw
+// allocations with hand-written lifecycles, as ResourceEntry's above.
 struct ReferenceEntry {
-    uint32_t id;    // +0x00 — the Set key, compared with plain integer <
-    uint32_t _pad;  // +0x04
-    Filename path;  // +0x08 — GetPathForReferenceId copies this out
+    ReferenceEntry(uint32_t key, const System::Filename& value) : id(key), path(value) {}
+
+    uint32_t         id;    // +0x00 — the Set key, compared with plain integer <
+    uint32_t         _pad;  // +0x04 — never written (see above)
+    System::Filename path;  // +0x08 — GetPathForReferenceId copies this out
 };
 static_assert(sizeof(ReferenceEntry) == 0x10, "ReferenceEntry is 0x10 bytes");
 static_assert(offsetof(ReferenceEntry, path) == 0x08, "ReferenceEntry::path @ +0x08");
@@ -214,7 +241,7 @@ static_assert(offsetof(ReferenceEntry, path) == 0x08, "ReferenceEntry::path @ +0
 // one a caller varies. Retail's mangled name spells it <T, Allocator, Key,
 // Compare>; the four parameters and their meanings are unchanged.)
 using ResourceSet  = Collection::Set<ResourceEntry,  Collection::AVLCompare,
-                                     Collection::DefaultAllocator, Filename>;
+                                     Collection::DefaultAllocator, System::Filename>;
 using ReferenceSet = Collection::Set<ReferenceEntry, Collection::AVLCompare,
                                      Collection::DefaultAllocator, uint32_t>;
 static_assert(sizeof(ResourceSet::Node)  == 0x38, "ResourceEntry node is 0x38");
@@ -259,14 +286,37 @@ static_assert(offsetof(ReferenceSet::Node, right)  == 0x20, "reference node righ
 // So the entry is two Filenames, directory first. The two halves are read by
 // separate accessors, so it is spelled as a struct rather than Filename[2].
 // ============================================================
+//
+// B.4 Z MIRROR: the two halves are the real System::Filename. The constructor
+// is PushPath's stack pair (0x1800bd177: the Filename copy ctor 0x1800067d0 on
+// the directory, then on the filename) and RemoveLast's copy-out (0x18002ccb0,
+// the same two copy ctors in the same order); the implicit destructor releases
+// +0x08 before +0x00, retail's order in PushPath, PopPath (0x1800bd066) and the
+// destroy-range 0x18002e8d0. The array's lifecycle is retail's row
+// `rtcoll::kSpec_PathStack` (SetSize 0x18002e220), named by its type below;
+// ~ExternalFactory's ~Array (0x18002e9e0) zeroes the header, so the member's
+// implicit ~Array that may follow releases nothing.
 struct PathStackEntry {
-    Filename directory;  // +0x00 — GetPathStackDirectory copies this out
-    Filename filename;   // +0x08 — GetPathStackFilename copies this out
+    PathStackEntry(const System::Filename& dir, const System::Filename& file)
+        : directory(dir), filename(file) {}
+
+    System::Filename directory;  // +0x00 — GetPathStackDirectory copies this out
+    System::Filename filename;   // +0x08 — GetPathStackFilename copies this out
 };
 static_assert(sizeof(PathStackEntry) == 0x10,
               "the path-stack stride is 0x10 (SHL RDX,0x4 in both accessors)");
 static_assert(offsetof(PathStackEntry, filename) == 0x08,
               "GetPathStackFilename's extra `ADD RDX,0x8`");
+
+}  // namespace RtObject
+namespace rtcoll {
+// Array<PathStackEntry>'s row (runtime/src/object/external_path_stack.cpp,
+// SetSize 0x18002e220: assign = the two copy ctors, destroy = 0x18002e8d0).
+extern const ArraySpec kSpec_PathStack;
+}
+namespace RtObject {
+using PathStackArray = Collection::Array<PathStackEntry, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_PathStack>>;
 
 // B.4 P2 wave X (X-R1): the POD that stood here is RETIRED. It was the same
 // 0x43 bytes as `Object::ExternalFactory` below, field for field and asserted
@@ -473,16 +523,16 @@ public:
                //         directly and retail's own layout is one bare pointer.
 };
 
-static_assert(sizeof(ExternalPtr<RtObject::External>) == 8,
+static_assert(sizeof(ExternalPtr<External>) == 8,
               "Object::ExternalPtr<T> is one pointer (ExternalList::Find 0x1800bf700)");
 // ...and for every other T, including one that is only forward-declared, which
 // is what most of the 26 instantiations are in this tree today.
 struct ExternalPtrLayoutProbe;
 static_assert(sizeof(ExternalPtr<ExternalPtrLayoutProbe>) == 8, "...for every T");
-static_assert(std::is_trivially_copyable<ExternalPtr<RtObject::External> >::value,
+static_assert(std::is_trivially_copyable<ExternalPtr<External> >::value,
               "Array<T>::operator= memcpys these; a real copy ctor would be skipped "
               "(runtime/src/collection/array.cpp:983)");
-static_assert(std::is_trivially_destructible<ExternalPtr<RtObject::External> >::value,
+static_assert(std::is_trivially_destructible<ExternalPtr<External> >::value,
               "the array range-destroy never calls one; a real dtor would be skipped");
 
 // ############################################################################
@@ -614,23 +664,16 @@ public:
     //    before `_path`, after ~External's element loop: exactly that order,
     //    with one release (the compiler's; the body no longer releases it).
     //
-    //  * `_refs` keeps `Collection::Array<ExternalArrayElement>`, which DOES
-    //    have a real `~Array`, and that is deliberate: retail's ~External is a
-    //    CALL to FUN_180006b80 -> FUN_180006ac0, i.e. "release each element's
-    //    leading String, then free the buffer and zero the header". The second
-    //    half IS `~Array` for a trivially-destructible element (its
-    //    `spec->destroy` is null, so it runs `ArrayDtorImpl` and nothing
-    //    else). So ~External's body does the FIRST half only and the
-    //    compiler-emitted member destructor does the second — retail's own
-    //    decomposition, with each half run exactly once.
+    //  * `_refs` names its row, kSpec_ExtArrayElem (B.4 Z MIRROR): retail's
+    //    ~External is a CALL to FUN_180006b80, i.e. ~Array<ExternalArrayElement>
+    //    -> FUN_180006ac0 ("release each element's leading Filename") then free
+    //    the buffer and zero the header. That is exactly the member's implicit
+    //    ~Array over the row (spec->destroy, then ArrayDtorImpl), run once,
+    //    after ~External's (empty) body and before `_path`'s.
     System::Filename                                _path;   // +0x08  ctor 0x1800bc9f0, dtor 0x1800bc97a
-    Collection::Array<RtObject::ExternalArrayElement> _refs;  // +0x10
+    RtObject::ExternalRefArray                      _refs;   // +0x10
 };
 static_assert(sizeof(External) == 0x20, "Object::External is 0x20 bytes");
-static_assert(sizeof(External) == sizeof(RtObject::External),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(External, _path) == offsetof(RtObject::External, _path), "alias _path");
-static_assert(offsetof(External, _refs) == offsetof(RtObject::External, _refs), "alias _refs");
 static_assert(offsetof(External, _path) == 0x08, "External::_path @ +0x08 (GetPath 0x180006250)");
 static_assert(offsetof(External, _refs) == 0x10, "External::_refs @ +0x10 (~External 0x1800bc950)");
 
@@ -744,6 +787,7 @@ static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count 
 using ResourceEntry  = RtObject::ResourceEntry;
 using ReferenceEntry = RtObject::ReferenceEntry;
 using PathStackEntry = RtObject::PathStackEntry;
+using PathStackArray = RtObject::PathStackArray;
 using ResourceSet    = RtObject::ResourceSet;
 using ReferenceSet   = RtObject::ReferenceSet;
 
@@ -797,8 +841,8 @@ inline bool FilenameLess(const char* a, const char* b) {
 inline ResourceSet::Node* ResourceFind(ResourceSet::Node* root, const char* key) {
     ResourceSet::Node* n = root;
     while (n != nullptr) {
-        if (FilenameLess(key, n->element.path.data))      n = n->left;
-        else if (FilenameLess(n->element.path.data, key)) n = n->right;
+        if (FilenameLess(key, n->element.path._data))      n = n->left;
+        else if (FilenameLess(n->element.path._data, key)) n = n->right;
         else                                              return n;
     }
     return nullptr;
@@ -949,7 +993,7 @@ public:
     int32_t      _pad0c;                 // +0x0c
     ResourceSet  _resources;             // +0x10
     ReferenceSet _references;            // +0x20
-    Collection::Array<PathStackEntry> _pathStack;   // +0x30 data, +0x38 size
+    PathStackArray _pathStack;           // +0x30 data, +0x38 size
     bool         _referenceModeEnabled;  // +0x40
     bool         _loadEnabled;           // +0x41
     bool         _simpleLoadEnabled;     // +0x42
@@ -958,7 +1002,7 @@ static_assert(offsetof(ExternalFactory, _resources)  == 0x10, "_resources @ +0x1
 static_assert(offsetof(ExternalFactory, _references) == 0x20, "_references @ +0x20");
 static_assert(offsetof(ExternalFactory, _pathStack)  == 0x30, "_pathStack @ +0x30");
 static_assert(offsetof(ExternalFactory, _pathStack)
-              + offsetof(Collection::Array<PathStackEntry>, _size) == 0x38,
+              + offsetof(PathStackArray, _size) == 0x38,
               "path-stack SIZE @ +0x38 (GetPathStack*'s `CMP dword [RCX+0x38],0`)");
 static_assert(offsetof(ExternalFactory, _referenceModeEnabled) == 0x40, "_referenceMode @ +0x40");
 static_assert(offsetof(ExternalFactory, _loadEnabled)          == 0x41, "_loadEnabled @ +0x41");

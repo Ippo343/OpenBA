@@ -101,7 +101,6 @@
 #include "../../types/object/Internal.h"
 #include "../../types/object/External.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../collection/avl_trees.h"   // B3R: rtavl::PtrArrayDtor (0x1800093e0)
 #include "../../types/system/MemoryAllocator.h"   // B3R: rtalloc::FreeLockedIgnoringSelf (0x180009c30)
 
@@ -110,7 +109,6 @@ namespace RtObjFactoryDtor {
 using RtObject::TypeNode;
 using RtObject::ExternalFactory;
 using RtObject::PathStackEntry;
-using RtSystem::Sys;
 
 // ---------------------------------------------------------------------------
 // Local views. These are deliberately NOT added to the shared type headers:
@@ -330,12 +328,9 @@ void PathStackDestroyRange(void* /*ignoredThis*/, PathStackEntry* p, int n) {
         return;
     for (int i = 0; i < n; ++i, ++p) {
         // ENDGAME B.3.1 step 2: retail's inlined release IS `~Filename`
-        // (0x180006980), asymmetry included. `PathStackEntry` is a
-        // not-yet-converted struct, so its two halves keep the POD type and
-        // come through the one transitional bridge. +0x08 (filename) goes
-        // BEFORE +0x00 (directory), which is retail's order.
-        RtSystem::Sys(p->filename).~Filename();
-        RtSystem::Sys(p->directory).~Filename();
+        // (0x180006980), asymmetry included: ~PathStackEntry runs it on
+        // +0x08 (filename) BEFORE +0x00 (directory), which is retail's order.
+        p->~PathStackEntry();
     }
 }
 
@@ -353,7 +348,7 @@ void PathStackDestroyRange(void* /*ignoredThis*/, PathStackEntry* p, int n) {
 //
 // *** THIS IS THE "DESTROYS ITS ELEMENTS" MEMBER of ~ExternalFactory. ***
 // ============================================================================
-void PathStackArrayDtor(Collection::Array<PathStackEntry>* a) {
+void PathStackArrayDtor(RtObject::PathStackArray* a) {
     PathStackDestroyRange(a, a->_data, a->_size);
     RtSystem::RtMemFree(a->_data);   // retail's `if (p)` lives inside 0x1800c7ad0
     a->_data     = nullptr;
@@ -387,7 +382,7 @@ void ReferenceSubtreeFree(void* set, RtObject::ReferenceSet::Node* node) {
     ReferenceSubtreeFree(set, node->left);    // +0x18
     ReferenceSubtreeFree(set, node->right);   // +0x20
     // ~Filename (0x180006980) over `ReferenceEntry::path` (+0x08).
-    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (ReferenceEntry: element of an erased container); H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)
+    node->element.path.~Filename();
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
@@ -416,7 +411,7 @@ void ResourceSubtreeFree(void* set, RtObject::ResourceSet::Node* node) {
     ResourceSubtreeFree(set, node->left);     // +0x20
     ResourceSubtreeFree(set, node->right);    // +0x28
     // ~Filename over `ResourceEntry::path`, the key at +0x00.
-    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (ReferenceEntry: element of an erased container); H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)
+    node->element.path.~Filename();
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 

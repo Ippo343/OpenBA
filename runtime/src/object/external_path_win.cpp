@@ -56,7 +56,6 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../system/setupdir_helpers.h"
 #include "../system/widestring.h"
 #include "../../../standalone/res_load_lock.h"
@@ -93,7 +92,6 @@
 
 namespace RtObject {
 
-using RtSystem::Sys;
 
 PathCounters g_pc = {};
 
@@ -269,7 +267,7 @@ System::Filename* RtObject_ExternalFactory_GetPathStackFilename(const ExternalFa
     // Retail's copy ctor (0x1800067d0) into the hidden return slot. `filename`
     // is a POD member of the not-yet-converted `PathStackEntry`, so it comes
     // through the bridge.
-    new (ret) System::Filename(Sys(top.filename));
+    new (ret) System::Filename(top.filename);
     return ret;
 }
 
@@ -282,7 +280,7 @@ System::Filename* RtObject_ExternalFactory_GetPathStackDirectory(const ExternalF
     }
     ++g_pc.stackNonEmpty;
     const PathStackEntry& top = self->_pathStack._data[self->_pathStack._size - 1];
-    new (ret) System::Filename(Sys(top.directory));
+    new (ret) System::Filename(top.directory);
     return ret;
 }
 

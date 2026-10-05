@@ -110,10 +110,10 @@ static const RtIO::ModSetNode* BSTNext(const RtIO::ModSetNode* node) {
 // Helper: search BST for filename match using Filename::operator<
 // ============================================================
 static bool BSTContains(const RtIO::ModSetNode* root, const RtIO::ModSetNode* filename) {
-    const System::Filename& fnameRef = *reinterpret_cast<const System::Filename*>(&filename->key);   // LEFT: POD RtIO::ModSetNode::key is the RtSystem::Filename mirror (runtime/types/io/Modification.h, RT); System::Filename::operator< needs the real class
+    const System::Filename& fnameRef = filename->key;
     const RtIO::ModSetNode* node = root;
     while (node) {
-        const System::Filename& nodeRef = *reinterpret_cast<const System::Filename*>(&node->key);   // LEFT: POD RtIO::ModSetNode::key is the RtSystem::Filename mirror (runtime/types/io/Modification.h, RT); System::Filename::operator< needs the real class
+        const System::Filename& nodeRef = node->key;
         if (fnameRef < nodeRef) {
             node = node->left;
         } else if (nodeRef < fnameRef) {
@@ -281,7 +281,7 @@ void ModDetailsDialog::OnOpened() {
                 prefix = "^li^c1";
 
             // Build entry: prefix + filename + "^n"
-            const char* filename = node->key.data;
+            const char* filename = node->key._data;
             System::String entryStr = System::String::Format("%s%s^n", prefix, filename);
             ModDetails_StringArrayPush_Impl(resArray, std::move(entryStr));
             // Note: ModDetails_StringArrayPush_Impl reads entryStr in place; it

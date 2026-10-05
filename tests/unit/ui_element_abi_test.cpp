@@ -267,7 +267,6 @@ UNIT_TEST(ui_element_field_offsets_and_pod_agreement) {
     CHECK_EQ(offsetof(UI::ElementDescription, _elementType), (size_t)0x40);
     CHECK_EQ(offsetof(UI::ElementDescription, _childDesc),   (size_t)0x48);
     CHECK_EQ(offsetof(UI::ElementDescription, _textName),    (size_t)0x60);
-    CHECK_EQ(sizeof(UI::ElementDescription), sizeof(RtUI::ElementDescription));
 }
 
 UNIT_TEST(ui_element_updatestate_is_retails) {

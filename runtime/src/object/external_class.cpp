@@ -67,33 +67,20 @@ External::External() {
 //      hand-written store would name the MINTED table and a converted object
 //      carries the compiler's.
 //   2. CALL 0x180006b80 -> 0x180006ac0: release each element's leading String,
-//      then free the buffer and zero the header. THE FIRST HALF IS THE LOOP
-//      BELOW; the second half is the compiler-emitted `~_refs`, which for a
-//      trivially-destructible element is exactly `ArrayDtorImpl` (free, then
-//      zero `_data`/`_size`/`_capacity`) and nothing else. Each half runs once.
-//      See External.h's member banner.
+//      then free the buffer and zero the header. B.4 Z MIRROR: that is the
+//      compiler-emitted `~_refs` over its row kSpec_ExtArrayElem (destroy =
+//      0x180006ac0, then ArrayDtorImpl), run once after this (empty) body; the
+//      hand-written element loop that stood here is gone. See External.h's
+//      member banner.
 //   3. release `_path` — retail's inlined release IS `~Filename` (0x180006980).
 //      `_path` is a `System::Filename` member (B4 X-R3): the compiler destroys
 //      it after `~_refs`, i.e. after this body, which is retail's 0x1800bc97a.
 //   4. stamp Base's vtable — `~Base()` running after this body emits it.
 //
-// The element release is retail's String idiom verbatim, including the
-// `e->owned = p - 8` store on the free branch, which is the release asymmetry
-// runtime/types/system/String.h documents and which callers depend on.
+// The element release (0x180006ac0, kD_Str_10) is retail's String idiom
+// verbatim, including the store of `p - 8` on the free branch, the release
+// asymmetry runtime/types/system/String.h documents.
 External::~External() {
-    RtObject::ExternalArrayElement* e = _refs._data;
-    for (int i = 0; i < _refs._size; ++i, ++e) {
-        char* p = e->owned.data;
-        if (p != nullptr) {
-            if (--RtSystem::StringRefCount(p) == 0) {
-                e->owned.data = p - 8;
-                if (e->owned.data != nullptr)
-                    RtSystem::RtMemFree(e->owned.data);
-            } else {
-                e->owned.data = nullptr;
-            }
-        }
-    }
 }
 
 // ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A — 0x1801f9b38. ENDGAME

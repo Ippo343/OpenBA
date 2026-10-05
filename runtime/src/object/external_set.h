@@ -44,7 +44,7 @@
 // -----------------------------------------------------------
 // Lane INPUT could leave the element as `uint8_t[0x18]` because none of its
 // five bodies reads it. Five bodies here DO:
-//   * `Find` / `InsertCore` compare `element.path.data` with `_stricmp`;
+//   * `Find` / `InsertCore` compare `element.path._data` with `_stricmp`;
 //   * `PairCtor` copy-constructs the `Filename` at +0x00 and copies +0x08 and
 //     +0x10 as raw qwords;
 //   * `Erase` and `FreeEntryNode` RELEASE the `Filename` at +0x00 before the

@@ -68,12 +68,10 @@
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/setupdir_helpers.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../collection/array_internal.h"
 
 namespace RtObject {
 
-using RtSystem::Sys;
 
 namespace {
 
@@ -135,25 +133,21 @@ void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const System::File
     // not-yet-converted struct, so its two members keep the POD type
     // (B31_RULES) and both halves are constructed and destroyed BY HAND, in
     // retail's own order — that is what retail's own code does here too.
-    PathStackEntry entry;
-    // 0x1800bd177 — the copy ctor into a raw stack slot.
-    new (&entry.directory) System::Filename(dir);
-    // 0x1800bd185-0x1800bd1d4 — null the slot, release-then-adopt, then
+    // 0x1800bd177 — the copy ctor into the directory slot; 0x1800bd185-
+    // 0x1800bd1d4 — null the filename slot, release-then-adopt, then
     // AdjustDelimiters TWICE (see the banner: it really is twice). Null-init
     // plus that sequence IS the copy ctor 0x1800067d0, whose ported body
-    // normalises twice for exactly this reason.
-    new (&entry.filename) System::Filename(file);
+    // normalises twice for exactly this reason. Both are PathStackEntry's
+    // constructor (B.4 Z MIRROR: the halves are the real Filename).
+    PathStackEntry entry(dir, file);
 
     RtObject_PathStackSetSize_18002e220(&self->_pathStack,
                                         self->_pathStack._size + 1, &entry);
     g_psc.depthAfterPush = self->_pathStack._size;
 
-    // Retail's release order is reversed construction order. The two hand-built
-    // halves of `entry` go first, explicitly, because nothing owns them; the
-    // six locals after them — dir, file, t2, t1, fname, ext — are destructors
-    // running in reverse declaration order, which is the same sequence.
-    Sys(entry.filename).~Filename();
-    Sys(entry.directory).~Filename();
+    // Retail's release order is reversed construction order: ~PathStackEntry
+    // (filename, then directory) first, then the six locals before it — dir,
+    // file, t2, t1, fname, ext — in reverse declaration order.
 
     // NO LIVE SHADOW. PushPath is a destructive mutator on one shared stack:
     // running theirs after ours would push the same entry TWICE and leave the
@@ -187,13 +181,12 @@ void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const System::File
 void RtObject_ExternalFactory_PopPath(ExternalFactory* self) {
     ++g_psc.popCalls;
 
-    // `out` is the raw 0x10-byte slot RemoveLast copy-CONSTRUCTS into, and the
-    // two halves are POD members of a not-yet-converted struct, so the pair of
-    // releases is spelled as the two destructors it is (~Filename, 0x180006980).
-    PathStackEntry out;                                          // [RSP+0x28]
-    RtObject_PathStackRemoveLast_18002ccb0(&self->_pathStack, &out);
-    Sys(out.filename).~Filename();                               // 0x1800bd066
-    Sys(out.directory).~Filename();
+    // `out` is the raw 0x10-byte slot RemoveLast copy-CONSTRUCTS into (retail's
+    // by-value return), and the pair of releases is ~PathStackEntry
+    // (~Filename 0x180006980 on +0x08, then +0x00).
+    alignas(PathStackEntry) unsigned char slot[sizeof(PathStackEntry)];   // [RSP+0x28]
+    PathStackEntry* out = RtObject_PathStackRemoveLast_18002ccb0(&self->_pathStack, slot);
+    out->~PathStackEntry();                                      // 0x1800bd066
     g_psc.depthAfterPop = self->_pathStack._size;
 
     // No live shadow, same reason as PushPath.
@@ -234,10 +227,10 @@ extern "C" void RtObject_PathStackDestroyRange_18002e8d0(void* ignoredThis,
                                                           uint8_t* base, int count) {
     (void)ignoredThis;
     // The erased core's element bytes, handed to the element type.
-    RtObject::PathStackElement* const elems =
-        reinterpret_cast<RtObject::PathStackElement*>(base);  // CAST-OK: elem_stride
+    RtObject::PathStackEntry* const elems =
+        reinterpret_cast<RtObject::PathStackEntry*>(base);  // CAST-OK: elem_stride
     for (int i = 0; i < count; ++i) {
-        RtObject::PathStackElement& e = elems[i];
+        RtObject::PathStackEntry& e = elems[i];
         ++RtObject::g_psc.elemsDestroyed;
         // ENDGAME B.3.1 step 2: retail's inlined release IS ~Filename
         // (0x180006980), +0x08 before +0x00.
@@ -253,10 +246,10 @@ namespace rtcoll {
 // release-then-adopt: the destination is raw MemAlloc memory on the realloc arm
 // and freshly-vacated-by-destroy memory nowhere. It must NOT release `dst`.
 static void AssignPathStackEntry(uint8_t* dst, const uint8_t* src) {
-    RtObject::PathStackElement* const d =
-        reinterpret_cast<RtObject::PathStackElement*>(dst);         // CAST-OK: elem_stride
-    const RtObject::PathStackElement* const s =
-        reinterpret_cast<const RtObject::PathStackElement*>(src);   // CAST-OK: elem_stride
+    RtObject::PathStackEntry* const d =
+        reinterpret_cast<RtObject::PathStackEntry*>(dst);         // CAST-OK: elem_stride
+    const RtObject::PathStackEntry* const s =
+        reinterpret_cast<const RtObject::PathStackEntry*>(src);   // CAST-OK: elem_stride
     new (&d->directory) System::Filename(s->directory);
     new (&d->filename)  System::Filename(s->filename);
 }
@@ -327,7 +320,7 @@ extern "C" void RtObject_PathStackSetSize_18002e220(void* a, int n, const void* 
 // above just vacated, not an assignment; using `ReleaseThenAdopt` here would
 // double-release.
 extern "C" void RtObject_PathStackRemoveAt_18002de30(
-        Collection::Array<RtObject::PathStackEntry>* a, int index) {
+        RtObject::PathStackArray* a, int index) {
     ++RtObject::g_psc.removeAtCalls;
 
     // CONTROL 3, and note WHERE it perturbs. It removes a DIFFERENT, valid
@@ -347,20 +340,17 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(
         do {
             // `_data` is re-read at each of the three uses, as retail and the
             // tree before B.4 did (the destructors in between are calls).
-            RtObject::PathStackElement* e =
-                reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
+            RtObject::PathStackEntry* e = a->_data + i;
             e->filename.~Filename();
             e->directory.~Filename();
 
             const int32_t next = i + 1;
             if (next < a->_size) {
-                RtObject::PathStackElement* dst =
-                    reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
+                RtObject::PathStackEntry* dst = a->_data + i;
                 // Retail tests the COMPUTED address, which can only be null
                 // when _data is null and i == 0.
                 if (dst != nullptr) {
-                    const RtObject::PathStackElement* src =
-                        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
+                    const RtObject::PathStackEntry* src = a->_data + next;
                     ++RtObject::g_psc.elemsShifted;
                     new (&dst->directory) System::Filename(src->directory);
                     new (&dst->filename)  System::Filename(src->filename);
@@ -382,17 +372,15 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(
 // RemoveAt(size - 1). Returns the slot in RAX, as every by-value-out helper in
 // this DLL does.
 extern "C" RtObject::PathStackEntry* RtObject_PathStackRemoveLast_18002ccb0(
-        Collection::Array<RtObject::PathStackEntry>* a, RtObject::PathStackEntry* out) {
+        RtObject::PathStackArray* a, void* out) {
     ++RtObject::g_psc.removeLastCalls;
 
     const int32_t idx = a->_size - 1;
-    const RtObject::PathStackElement* e =
-        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
-    RtObject::PathStackElement* o =
-        reinterpret_cast<RtObject::PathStackElement*>(out);  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 the out slot is a PathStackEntry whose halves are the RtSystem::Filename POD (External.h)
-    new (&o->directory) System::Filename(e->directory);
-    new (&o->filename)  System::Filename(e->filename);
+    const RtObject::PathStackEntry* e = a->_data + idx;
+    // The two copy ctors (0x1800067d0), directory then filename, into the
+    // caller's raw slot: PathStackEntry's constructor.
+    RtObject::PathStackEntry* const o = new (out) RtObject::PathStackEntry(e->directory, e->filename);
     RtObject_PathStackRemoveAt_18002de30(a, idx);
-    return out;
+    return o;
 }
 

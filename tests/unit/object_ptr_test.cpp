@@ -36,10 +36,11 @@ namespace {
 
 // Stand-ins for the pointees. Nothing is dereferenced through a live object
 // here; only the pointer value is ever observed.
-RtObject::External  g_extA;
-RtObject::External  g_extB;
+struct TestExternal { void* vftable; char* path; void* refs; int32_t size, capacity; };  // the 0x20 bytes of an External (the RtObject::External POD mirror is gone)
+TestExternal g_extA;
+TestExternal g_extB;
 
-using ExtPtr  = Object::ExternalPtr<RtObject::External>;
+using ExtPtr  = Object::ExternalPtr<TestExternal>;
 using BasePtr = Object::InternalBasePtr;
 using IntPtr  = Object::InternalPtr<Object::Internal>;
 

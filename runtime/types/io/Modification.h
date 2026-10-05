@@ -69,7 +69,11 @@ static_assert(sizeof(ModArrayOf<int32_t>) == sizeof(ModArray), "one header for e
 // One node of the Filename-keyed set at Mod+0x60. Allocated at 0x180010570
 // (`MOV EDX,0x28` size, `LEA R8D,[RDX-0x20]` align 8) and cloned at 0x1800104f0.
 struct ModSetNode {
-    RtSystem::Filename key;      // +0x00 — copy-constructed by 0x1800067d0
+    // B.4 Z MIRROR: the real class. The node is raw MemAlloc storage
+    // (0x180010570) that is never constructed, copied or destroyed as a
+    // ModSetNode: `key` is placement-constructed by the copy ctor and released
+    // by the Set<Filename> node frees, so typing it changes no code.
+    System::Filename   key;      // +0x00 — copy-constructed by 0x1800067d0
     ModSetNode*        parent;   // +0x08
     ModSetNode*        left;     // +0x10
     ModSetNode*        right;    // +0x18

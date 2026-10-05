@@ -17,10 +17,21 @@
 //   * ??1Filename@System@@QEAA@XZ (0x180006980) is byte-for-byte the same
 //     release sequence as ??1String@System@@QEAA@XZ (0x180006c80).
 //
-// Whether the original source expressed this as `class Filename : public
-// String` or as a String member is unobservable and irrelevant: retail
-// converts between them by pointer cast throughout (Filename::operator=(const
-// String&) at 0x180026d40 is byte-identical to the Filename& overload).
+// RULING (B.4 Z MIRROR): in retail, Filename IS-A String (public derivation).
+// The export table shows exactly what a derived class must redeclare and
+// nothing else: ctors (default 0x180006220, const char* 0x180026cf0, const
+// String& 0x18000c780 = the inlined String copy ctor on `this` then
+// AdjustDelimiters, copy 0x1800067d0 = String() then String::operator= inlined
+// then AdjustDelimiters twice), ~Filename 0x180006980 (the inlined ~String,
+// under an EH frame), both operator= overloads, and the comparisons it HIDES
+// (==, !=, < case-insensitive). It exports NO accessor for its characters:
+// every reader goes through String's own exports with the Filename's address,
+// e.g. PlatformExists 0x1800adc70 passes its `const Filename&` straight to
+// WideString(const String&) 0x1800cab50 — a derived-to-base conversion.
+// The tree keeps two separate classes with AsString(): turning that into a
+// base class is a behaviour change at every ctor (String's ctor/dtor would
+// run as base subobjects) and an overload-resolution change at every
+// String/Filename overload pair, so it is its own commit, not a typing pass.
 //
 // The one behavioural difference is that every mutating Filename entry point
 // ends in a call to the private `?AdjustDelimiters@Filename@System@@AEAAXXZ`

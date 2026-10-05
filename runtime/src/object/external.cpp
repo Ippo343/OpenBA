@@ -68,12 +68,10 @@
 #include "../../types/object/External.h"
 #include "../../types/object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtObject {
 
 using RtSystem::StringRefCount;
-using RtSystem::Sys;
 
 // ============================================================
 // Local helpers
@@ -113,8 +111,8 @@ static inline bool FilenameLess(const char* a, const char* b) {
 static ResourceSet::Node* ResourceSetFind(const ResourceSet* set, const char* key) {
     ResourceSet::Node* n = set->_root;
     while (n != nullptr) {
-        if (FilenameLess(key, n->element.path.data))      n = n->left;
-        else if (FilenameLess(n->element.path.data, key)) n = n->right;
+        if (FilenameLess(key, n->element.path._data))      n = n->left;
+        else if (FilenameLess(n->element.path._data, key)) n = n->right;
         else                                              return n;
     }
     return nullptr;
@@ -299,7 +297,7 @@ System::Filename* RtObject_ExternalFactory_GetPathForReferenceId(const ExternalF
     if (n != nullptr) {
         // Adopt-then-adjust-twice is the copy ctor; `path` is a POD member of
         // the not-yet-converted node element, hence the bridge.
-        System::Filename tmp(Sys(n->element.path));
+        System::Filename tmp(n->element.path);
         new (ret) System::Filename(tmp);
     } else {
         // Retail really does copy-construct from a null temporary rather than

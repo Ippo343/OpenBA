@@ -96,7 +96,6 @@
 #include <cstdlib>
 
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // RtSystem::Sys: ExternalArrayElement::owned (the Filename POD)
 #include "../../types/object/TypeInfo.h"   // BEFORE External.h -- see external_savetext_win.cpp
 #include "../../types/object/External.h"
 #include "../../types/io/Stream.h"
@@ -355,7 +354,7 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 ::RtObject::ExternalArrayElement* elem = obj->_refs._data;
                 for (int32_t i = 0; i < depCount; ++i, ++elem) {
                     ++g_lc.deps;
-                    ::RtSystem::Sys(elem->owned).AsString().Serialize(ser);   // 1800bc7e9
+                    elem->owned.AsString().Serialize(ser);                    // 1800bc7e9
                     SerUInt(rw, &elem->field_0x08);                          // 1800bc7fc
                     SerUInt(rw, &elem->field_0x0c);                          // 1800bc811
                 }

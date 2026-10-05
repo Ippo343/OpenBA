@@ -113,74 +113,9 @@
 #include "../object/External.h"
 #include "../object/Internal.h"   // Object::InternalPtr<T> (CreateInstance's retslot)
 
-namespace RtUI {
-
-struct ElementDescription {
-    RtObject::External _base;          // +0x00 .. +0x1f
-    int32_t  _x;                       // +0x20
-    int32_t  _y;                       // +0x24
-    int32_t  _width;                   // +0x28
-    int32_t  _height;                  // +0x2c
-    int32_t  _minWidth;                // +0x30
-    int32_t  _minHeight;               // +0x34
-    int32_t  _tabOrder;                // +0x38
-    uint32_t _id;                      // +0x3c  ctor: 0xffffffff; serialized by the uint slot, copied to Element::_color
-    uint32_t _elementType;             // +0x40  ctor: 3
-    uint32_t _flags;                   // +0x44
-    // +0x48 / +0x50 / +0x58 ARE ALL `Object::ExternalPtr<T>`, NOT the scalars
-    // the names suggest. Wave 9 lane UIW2 deduced that `_userData` could not be
-    // a plain integer (Serialize hands it to a 215-instruction
-    // ExternalPtr<T>::Serialize, not to a scalar slot) and asked whoever took
-    // the row to correct the types. WAVE 10 MEASURED WHICH T EACH ONE IS.
-    //
-    // ?Serialize@ElementDescription@ (0x180116b00) dispatches these three
-    // fields to three different addresses, and all three turned out to be ONE
-    // 748-byte body parameterised by a single BaseTypeInfo* it reads twice:
-    //
-    //   +0x48  CALL 0x180038f90  reads ?_typeInfo@ElementDescription@UI@@
-    //   +0x50  CALL 0x180076610  reads ?_typeInfo@Dialog@UI@@
-    //   +0x58  CALL 0x1800042a0  reads ?_typeInfo@StringTable@UI@@
-    //
-    // (215 instructions each, 193 identical bytes, 20 differing only by
-    // position, 2 genuinely different -- both the same type-id load. Method and
-    // numbers in docs/runtime_port/WAVE10_EXTPTR_SERIALIZE.md.)
-    //
-    // So +0x50 is an ExternalPtr<UI::Dialog> -- the name `_userData` is wrong
-    // and is kept only because call sites already use it. The OFFSETS were
-    // always right; the TYPES were under-specified, and a port that treats
-    // +0x50 as a plain integer emits the wrong thing into every saved layout.
-    void*    _childDesc;               // +0x48  ExternalPtr<UI::ElementDescription>
-    uint64_t _userData;                // +0x50  ExternalPtr<UI::Dialog>  (misnamed)
-    void*    _stringTable;             // +0x58  ExternalPtr<UI::StringTable>
-    char*    _textName;                // +0x60  System::String (refcounted char*)
-};
-
-static_assert(offsetof(ElementDescription, _x)           == 0x20, "ElementDescription::_x @ +0x20");
-static_assert(offsetof(ElementDescription, _y)           == 0x24, "ElementDescription::_y @ +0x24");
-static_assert(offsetof(ElementDescription, _width)       == 0x28, "ElementDescription::_width @ +0x28");
-static_assert(offsetof(ElementDescription, _height)      == 0x2c, "ElementDescription::_height @ +0x2c");
-static_assert(offsetof(ElementDescription, _minWidth)    == 0x30, "ElementDescription::_minWidth @ +0x30");
-static_assert(offsetof(ElementDescription, _minHeight)   == 0x34, "ElementDescription::_minHeight @ +0x34");
-static_assert(offsetof(ElementDescription, _tabOrder)    == 0x38, "ElementDescription::_tabOrder @ +0x38");
-static_assert(offsetof(ElementDescription, _id)          == 0x3c, "ElementDescription::_id @ +0x3c");
-static_assert(offsetof(ElementDescription, _elementType) == 0x40, "ElementDescription::_elementType @ +0x40");
-static_assert(offsetof(ElementDescription, _flags)       == 0x44, "ElementDescription::_flags @ +0x44");
-static_assert(offsetof(ElementDescription, _childDesc)   == 0x48, "ElementDescription::_childDesc @ +0x48");
-static_assert(offsetof(ElementDescription, _userData)    == 0x50, "ElementDescription::_userData @ +0x50");
-static_assert(offsetof(ElementDescription, _stringTable) == 0x58, "ElementDescription::_stringTable @ +0x58");
-static_assert(offsetof(ElementDescription, _textName)    == 0x60, "ElementDescription::_textName @ +0x60");
-static_assert(sizeof(ElementDescription) == 0x68,
-              "sizeof(UI::ElementDescription) == 0x68 (ctor 0x180115a40 last store +0x60; "
-              "~ElementDescription 0x180116100 touches nothing above)");
-
-// The size the ctor's replay oracle compares. Every byte of it is written by
-// the ctor, so a full-buffer comparison is legitimate here.
-constexpr size_t kElementDescriptionSize = sizeof(ElementDescription);
-
-// (The three vtable-name constants the ctor door stamped -- Base, External,
-// ElementDescription -- were retired with that door, ENDGAME B.3.9 UI-D.)
-
-}  // namespace RtUI
+// (B.4 Z MIRROR: the `RtUI::ElementDescription` POD mirror and its
+// `kElementDescriptionSize` had no user left; the class is UI::ElementDescription
+// below.)
 
 // ############################################################################
 // ENDGAME B.3 step 6 (block A) — `UI::ElementDescription`, the REAL C++ class
@@ -352,11 +287,5 @@ static_assert(offsetof(ElementDescription, _childDesc)   == 0x48, "");
 static_assert(offsetof(ElementDescription, _toolTipDialog) == 0x50, "");
 static_assert(offsetof(ElementDescription, _stringTable) == 0x58, "");
 static_assert(offsetof(ElementDescription, _textName)    == 0x60, "");
-// The class and the POD describe the same bytes.
-static_assert(sizeof(ElementDescription) == sizeof(RtUI::ElementDescription), "");
-static_assert(offsetof(ElementDescription, _x)        == offsetof(RtUI::ElementDescription, _x), "");
-static_assert(offsetof(ElementDescription, _id)       == offsetof(RtUI::ElementDescription, _id), "");
-static_assert(offsetof(ElementDescription, _flags)    == offsetof(RtUI::ElementDescription, _flags), "");
-static_assert(offsetof(ElementDescription, _textName) == offsetof(RtUI::ElementDescription, _textName), "");
 
 }  // namespace UI

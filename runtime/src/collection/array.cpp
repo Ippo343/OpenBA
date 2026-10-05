@@ -851,7 +851,7 @@ void DestroyStringPair10Range(void* ignoredThis, uint8_t* base, int count) {
 
 static void ExtArrayElemAssign(RtObject::ExternalArrayElement* d,
                                const RtObject::ExternalArrayElement* s) {
-    RtSystem::RtSystem_Filename_CtorCopy(&d->owned, &s->owned);   // 18002c773
+    new (&d->owned) System::Filename(s->owned);                  // 18002c773  0x1800067d0
     d->field_0x08 = s->field_0x08;           // 18002c779: one qword in retail (H7)
     d->field_0x0c = s->field_0x0c;
 }
