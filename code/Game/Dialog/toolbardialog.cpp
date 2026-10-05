@@ -428,7 +428,7 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
     }
 
     // Step 8: Configure and start the tool
-    ToolSetting* toolSettingRef = foundNode->toolSetting;
+    ToolSetting* toolSettingRef = foundNode->toolSetting.Get();
     Tool* tool = currentTool.Get();
     tool->dialogPtr = this;                 // back-pointer to the manager
     tool->descriptionPtr = field_0x20;      // the group

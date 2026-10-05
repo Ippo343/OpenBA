@@ -163,7 +163,7 @@ extern "C" void TreeNodeFree_2df90(void* hdrV, ToolRegistryNode* node) {
     TreeNodeFree_2df90(hdrV, node->left);
     TreeNodeFree_2df90(hdrV, node->right);
     if (node->toolSetting != nullptr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(&node->toolSetting)->DeletePtr();   // LEFT: ToolRegistryNode::toolSetting is an InternalPtr<ToolSetting> held as T* (H5, as Tool::toolSetting)
+        node->toolSetting.DeletePtr();
     MemFree(node);
 }
 
@@ -176,7 +176,7 @@ extern "C" void IbpTree_Clear_2de90(ToolRegistryNode** hdrV) {
         TreeNodeFree_2df90(hdrV, root->left);
         TreeNodeFree_2df90(hdrV, root->right);
         if (root->toolSetting != nullptr)
-            reinterpret_cast< ::Object::InternalBasePtr*>(&root->toolSetting)->DeletePtr();   // LEFT: ToolRegistryNode::toolSetting is an InternalPtr<ToolSetting> held as T* (H5, as Tool::toolSetting)
+            root->toolSetting.DeletePtr();
         MemFree(root);
     }
     *hdrV = nullptr;
