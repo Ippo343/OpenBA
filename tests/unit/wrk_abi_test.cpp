@@ -177,8 +177,8 @@ UNIT_TEST(wrk_leaf_consumeproduce) {
     CHECK_EQ(offsetof(ConsumeProduce, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(ConsumeProduce, field_58) + offsetof(ConsumeProduce::CitizenRefList, _size), (size_t)0x60);
     CHECK_EQ(offsetof(ConsumeProduce, field_68), (size_t)0x68);
-    CHECK_EQ(offsetof(ConsumeProduce, field_70), (size_t)0x70);
-    CHECK_EQ(offsetof(ConsumeProduce, field_74), (size_t)0x74);
+    CHECK_EQ(offsetof(ConsumeProduce, field_68) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x70);
+    CHECK_EQ(offsetof(ConsumeProduce, field_68) + offsetof(Collection::Array<int32_t>, _capacity), (size_t)0x74);
 }
 
 UNIT_TEST(wrk_leaf_firework) {
