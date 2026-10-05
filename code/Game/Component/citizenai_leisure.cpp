@@ -249,7 +249,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
             interactIBP[0] = interact;   // the InternalBasePtr ctor: `mov [rcx],rdx`
 
             // resolve world pos -> clamped grid cell
-            float posVec[4] = {0, 0, 0, 0};
+            float posVec[3];
             Pf_EntityResolvePos_2e20(interactIBP[0], posVec, 0, 0, nullptr);
             int w = mapGrid->size;
             int col = static_cast<int>(posVec[0] + static_cast<float>(w >> 1));
@@ -393,7 +393,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
 
         InteractComponent* posIBP = local_res20->FindComponent<InteractComponent>();   // 0x140002ed0
         InteractComponent** pp = &posIBP;
-        float dpos[4] = {0, 0, 0, 0};
+        float dpos[3];
         if (pp) InteractNodePosition(*pp, dpos, 0, 0, nullptr);
         int w = piVar5->size;
         int tcol = static_cast<int>(static_cast<float>(w >> 1) + dpos[0]);

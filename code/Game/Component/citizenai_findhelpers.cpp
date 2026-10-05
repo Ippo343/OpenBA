@@ -247,7 +247,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
 
         Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
 
-        float vec[4] = {0, 0, 0, 0};
+        float vec[3];
         Pf_EntityResolvePos_2e20(interact, vec, 0, 0, nullptr);
         uint32_t cell = WorldToCell(map, vec);
         int cost = CellCost(map, cell, param_3);
@@ -438,7 +438,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 // InteractComponent on the entity -> world position
                 Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
 
-                float vec[4] = {0, 0, 0, 0};
+                float vec[3];
                 Pf_EntityResolvePos_2e20(interact, vec, 0, 0, nullptr);
                 uint32_t cell = WorldToCell(map, vec);
 

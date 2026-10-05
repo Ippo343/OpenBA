@@ -445,7 +445,7 @@ static void Game_SpawnCitizens_Impl() {
                             if (spawnedHere >= capacityAccum) break;
 
                             // Get spawn point for this slot
-                            float spawnPos[4] = {0};
+                            float spawnPos[3];
                             // 0x140122e20 Pf_EntityResolvePos_2e20 (door misnamed
                             // fn_ResidenceComponent_GetSpawnPoint)
                             InteractNodePosition(resComp, spawnPos, 0, spawnedHere, nullptr);

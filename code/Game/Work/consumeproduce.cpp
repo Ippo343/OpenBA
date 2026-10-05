@@ -596,7 +596,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                     if (hs2Count < 1) {
                                         // Storage empty -- set up path to fetch material
                                         ComponentEntity* fetchDest = foundStorage;
-                                        float fetchPos[4] = {};
+                                        float fetchPos[3];
                                         InteractNodePosition(posComp, fetchPos, 0, slot, nullptr);   // 0x140122e20
 
                                         ComponentEntity* pathSrc = field_10.Get();

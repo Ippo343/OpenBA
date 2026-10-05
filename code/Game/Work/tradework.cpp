@@ -311,7 +311,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         if (srcStorPrimary == nullptr) { continue; }
 
         // destination position from the trade post's interact component:
-        float destPos[4] = {};                             // local_a0
+        float destPos[3];                             // local_a0
         uint32_t range = InteractNodeCount(posComp, 0);   // 0x140123070
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
@@ -403,7 +403,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         }
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
-        float srcPos2[4] = {};                             // local_68
+        float srcPos2[3];                             // local_68
         InteractNodePosition(posComp, srcPos2, 0, rnd, nullptr);
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.

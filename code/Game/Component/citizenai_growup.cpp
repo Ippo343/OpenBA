@@ -259,7 +259,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
         if (wpIBP != nullptr && wpIBP->workers._size != 0) {
             InteractComponent* posBuf[2] = {nullptr, nullptr};
             posBuf[0] = entity->FindComponent<InteractComponent>();   // 0x140002ed0
-            float wpos[4] = {0, 0, 0, 0};
+            float wpos[3] = {0, 0, 0};
             if (posBuf[0]) InteractNodePosition(posBuf[0], wpos, 0, 0, nullptr);
             int dim = map->size;
             int ix = static_cast<int>(wpos[0] + static_cast<float>(dim >> 1));

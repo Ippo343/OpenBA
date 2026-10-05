@@ -435,7 +435,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
 
         // 2) InteractComponent(home) -> 2e20 -> destPos; FindPath
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-        float destPos[4] = {0, 0, 0, 0};  // local_60
+        float destPos[3];  // local_60
         InteractNodePosition(pp, destPos, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen.Get();                         // local_88
@@ -531,7 +531,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         }
 
         InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-        float destPos[4] = {0, 0, 0, 0};  // local_98
+        float destPos[3];  // local_98
         InteractNodePosition(pp, destPos, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen.Get();                         // local_res20

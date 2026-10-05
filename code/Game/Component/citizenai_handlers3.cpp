@@ -125,7 +125,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
     float age = citizen->coldness;
     CitizenDescription* desc = citizen->description;
 
-    float dest[4] = {0, 0, 0, 0};
+    float dest[3] = {0, 0, 0};
     ComponentEntity* found = nullptr;        // local_res8
     ComponentEntity* holderEntity = nullptr; // entity passed to Ctor8
     bool doPush = false;
@@ -179,7 +179,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
     CitizenDescription* desc = citizen->description;
     bool isAdult = (desc != nullptr) && (age > desc->_fcc);
 
-    float dest[4] = {0, 0, 0, 0};
+    float dest[3] = {0, 0, 0};
     ComponentEntity* found = nullptr;     // local_res8 (chosen target entity)
     char flag = 0;         // Ctor6 flag (cVar9)
     bool ctorDirect = false;  // reached the Ctor6 push with holders already set (LAB_14010d004)
@@ -296,7 +296,7 @@ uint64_t CitizenAIComponent::State_Work() {
         if (static_cast<char>(valid) != '\0') {
             // NavigateTo the home
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-            float navDest[4] = {0, 0, 0, 0};
+            float navDest[3];
             InteractNodePosition(pp, navDest, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home.Get();
@@ -341,7 +341,7 @@ uint64_t CitizenAIComponent::State_Work() {
         AttendanceComponent_ReleaseLink59b0(citizen.Get());
         if (citizen->home != nullptr) {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
-            float navDest[4] = {0, 0, 0, 0};
+            float navDest[3];
             InteractNodePosition(pp, navDest, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home.Get();
