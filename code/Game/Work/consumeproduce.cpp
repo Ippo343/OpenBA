@@ -721,7 +721,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             int checkCell = cy * mapSize + cx;
 
             MapCell* structBase2 = map->cells.GetData();
-            ComponentEntity* structEntity = structBase2[checkCell].occupant;   // +0x08
+            ComponentEntity* structEntity = structBase2[checkCell].occupant.Get();   // +0x08
 
             if (structEntity != nullptr) {
                 if (structEntity != field_10.Get()) {

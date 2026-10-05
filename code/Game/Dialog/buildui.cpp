@@ -91,7 +91,7 @@ static int CountOccupiedBuildTiles_Impl(ClearAreaComponent* clearArea)
         for (int col = 0; col < width; ++col) {
             // Each tile entry is a 0x30-byte MapCell; occupant ptr is at offset +8
             int tileIndex = (originY + row) * mapWidth + originX + col;
-            const ComponentEntity* occupant = tileArrayBase[tileIndex].occupant;
+            const ComponentEntity* occupant = tileArrayBase[tileIndex].occupant.Get();
             // Count tiles occupied by other entities (not self, not null)
             if (occupant != clearArea->_entity.Get() && occupant != nullptr) {
                 count++;

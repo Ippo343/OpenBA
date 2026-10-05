@@ -121,7 +121,7 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(CemeteryComponent* self) {
     uint32_t tid = TombstoneComponent::TypeId();
     for (int tries = 0; tries < count; tries++) {
         int cell = self->plots[idx];                             // +0x48
-        ComponentEntity* occupant = map->cells.GetData()[cell].occupant;   // +0x80 -> +0x08, stride 0x30
+        ComponentEntity* occupant = map->cells.GetData()[cell].occupant.Get();   // +0x80 -> +0x08, stride 0x30
         if (!occupant) return static_cast<uint32_t>(idx);      // empty cell — free slot
         Component* ts = FindComponentByTypeId(occupant, tid);
         Component* tsIBP = ts;

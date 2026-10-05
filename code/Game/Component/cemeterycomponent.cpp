@@ -201,7 +201,7 @@ char CemeteryComponent::EnterBuilt() {
         MapCell* const cell = &cells[static_cast<uintptr_t>(cellIdx)];
 
         // Already occupied by a grave? Leave the plot as it stands.
-        ComponentEntity* occupant = cell->occupant;
+        ComponentEntity* occupant = cell->occupant.Get();
         if (occupant) {
             ComponentEntity* probe = occupant;
             bool hasTombstone = false;

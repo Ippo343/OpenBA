@@ -282,7 +282,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
         bool distOk = dist <= areaRadius * 2;
 
         // Check 3: no entity at the cell (the cell's occupant, +8)
-        ComponentEntity* cellEntity = gridData[testCell].occupant;
+        ComponentEntity* cellEntity = gridData[testCell].occupant.Get();
         bool emptyCell = (cellEntity == nullptr);
 
         // Attribute the failure to the FIRST failing check only, so the columns sum to

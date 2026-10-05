@@ -264,8 +264,8 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
                 const MapCell* cellBase = &mapGrid->cells.GetData()[tileIndex];
 
                 // Get entity occupying this tile: the blocker, else the occupant
-                ComponentEntity* entityPtr = cellBase->blocker;
-                ComponentEntity* entityPtr2 = cellBase->occupant;
+                ComponentEntity* entityPtr = cellBase->blocker.Get();
+                ComponentEntity* entityPtr2 = cellBase->occupant.Get();
                 ComponentEntity* entity;
                 if (entityPtr == nullptr) {
                     if (entityPtr2 == nullptr) {

@@ -470,7 +470,7 @@ void PastureProduce(PastureComponent* self) {
             const int cell = dim * gy + gx;
             const MapCell* tiles = grid->cells.GetData();
             if (!tiles) break;
-            ComponentEntity* occ = tiles[cell].occupant;   // the entity on the cell
+            ComponentEntity* occ = tiles[cell].occupant.Get();   // the entity on the cell
             if (occ == nullptr) { placedCell = cell; break; }
         }
         if (placedCell < 0) {

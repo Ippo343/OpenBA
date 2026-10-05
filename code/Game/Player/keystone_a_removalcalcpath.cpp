@@ -697,10 +697,10 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                         if (cellSlot->occupant == nullptr) {
                             local_e8 = nullptr;   // the null InternalBasePtr
                         } else {
-                            local_e8 = cellSlot->occupant;
+                            local_e8 = cellSlot->occupant.Get();
                         }
                     } else {
-                        local_e8 = cellSlot->blocker;
+                        local_e8 = cellSlot->blocker.Get();
                     }
                     ComponentEntity* local_e0 = local_e8;
 

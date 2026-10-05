@@ -1034,7 +1034,7 @@ static void StartTown_RecountGatherable() {
             if (dx * dx + dy * dy > r * r) continue;
             const int x = g_demoGatherer.cx + dx, y = g_demoGatherer.cy + dy;
             if (x < 0 || y < 0 || x >= width || y >= width) continue;
-            const ComponentEntity* re = grid[static_cast<size_t>(y * width + x)].occupant;
+            const ComponentEntity* re = grid[static_cast<size_t>(y * width + x)].occupant.Get();
             if (!re) continue;
             ++anyResource;
             const ComponentDescription* rd = re->_description;
@@ -1583,7 +1583,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                 for (int yy = tileY; yy < tileY + fpH; ++yy) {
                     for (int xx = tileX; xx < tileX + fpW; ++xx) {
                         if (xx < 0 || yy < 0 || xx >= mw || yy >= mw) continue;
-                        ComponentEntity* occ = grid[mw * yy + xx].occupant;
+                        ComponentEntity* occ = grid[mw * yy + xx].occupant.Get();
                         if (!occ) continue;
                         if (FindComponentOnEntity(occ, tidNat)) {
                             if (!residue) { fx = xx; fy = yy; }
@@ -3018,7 +3018,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                                     if (dx * dx + dy * dy > gRadius * gRadius) continue;
                                     const int x = cx + dx, y = cy + dy;
                                     if (x < 0 || y < 0 || x >= width || y >= width) continue;
-                                    const ComponentEntity* re = grid[static_cast<size_t>(y * width + x)].occupant;
+                                    const ComponentEntity* re = grid[static_cast<size_t>(y * width + x)].occupant.Get();
                                     if (!re) continue;
                                     const ComponentDescription* rd = re->_description;
                                     for (int t = 0; t < acceptN; ++t)
@@ -3052,7 +3052,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                         for (int y = townCy - kWindow; y <= townCy + kWindow && seenN < 12; ++y)
                             for (int x = townCx - kWindow; x <= townCx + kWindow && seenN < 12; ++x) {
                                 if (x < 0 || y < 0 || x >= width || y >= width) continue;
-                                const ComponentEntity* re = grid[static_cast<size_t>(y * width + x)].occupant;
+                                const ComponentEntity* re = grid[static_cast<size_t>(y * width + x)].occupant.Get();
                                 if (!re) continue;
                                 ++sampled;
                                 const ComponentDescription* rd = re->_description;
@@ -4652,7 +4652,7 @@ static void StartTown_MarkResourceCellGrid(Map* game, ComponentEntity* ownerEnti
                 uint8_t t = (uint8_t)StartTown_ClassifyCell(game, dim, cellIdx);
                 // override to buildable(2) only if the natural type is water/mountain
                 // AND the cell already holds a *different* owner (cell+0x00).
-                ComponentEntity* cellOwner = cell->blocker;   // cell+0x00
+                ComponentEntity* cellOwner = cell->blocker.Get();   // cell+0x00
                 if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
                     t = 2;
                 StartTown_WriteCellType(game, cells, cellIdx, t);
@@ -4733,7 +4733,7 @@ extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* own
             MapCell* cell = &cells[cellIdx];
             if (occupied) {
                 uint8_t t = (uint8_t)StartTown_ClassifyCell(game, dim, cellIdx);
-                ComponentEntity* cellOwner = cell->blocker;   // cell+0x00
+                ComponentEntity* cellOwner = cell->blocker.Get();   // cell+0x00
                 if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
                     t = 2;
                 StartTown_WriteCellType(game, cells, cellIdx, t);

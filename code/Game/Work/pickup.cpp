@@ -361,9 +361,9 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
             // Occupant: prefer the blocker (+0x00), else the occupant (+0x08), else null.
             ComponentEntity* occIBP = nullptr;
             if (cellPtr.blocker != nullptr) {
-                occIBP = cellPtr.blocker;
+                occIBP = cellPtr.blocker.Get();
             } else if (cellPtr.occupant != nullptr) {
-                occIBP = cellPtr.occupant;
+                occIBP = cellPtr.occupant.Get();
             } else {
                 occIBP = nullptr;   // ??0InternalBasePtr(nullptr)
             }

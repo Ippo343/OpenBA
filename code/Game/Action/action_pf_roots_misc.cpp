@@ -140,7 +140,7 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
                             iVar7 = iVar7 * iVar18 + iVar20;
                             int64_t lVar10 = (int64_t)iVar7;
                             if (cells.GetData()[lVar10].occupant == nullptr) {
-                                ComponentEntity* local_d8 = cells.GetData()[lVar10].blocker;
+                                ComponentEntity* local_d8 = cells.GetData()[lVar10].blocker.Get();
                                 bool occOk = (local_d8 == nullptr);
                                 if (!occOk && *allow != nullptr) {
                                     occOk = (*allow == local_d8);

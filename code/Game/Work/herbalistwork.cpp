@@ -308,7 +308,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
             }
 
             // Get resource entity at this cell (the cell's occupant, +8)
-            ComponentEntity* resourceEntity = gridData[testCell].occupant;
+            ComponentEntity* resourceEntity = gridData[testCell].occupant.Get();
             if (resourceEntity == nullptr) {
                 continue;
             }

@@ -186,7 +186,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             int* spotState = &spotStates[i];
             if (*spotState == 2) {
                 MapCell* mapEntryBase = map->cells.GetData();
-                const ComponentEntity* occupant = mapEntryBase[cellIdx].occupant;   // +0x08
+                const ComponentEntity* occupant = mapEntryBase[cellIdx].occupant.Get();   // +0x08
                 if (occupant == nullptr) {
                     *spotState = 0;
                 }
@@ -389,7 +389,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
             // Check if there's a structure at this cell (the cell's occupant, +0x08)
             MapCell* mapData = map->cells.GetData();
-            ComponentEntity* cellEntity = mapData[cellIdx].occupant;
+            ComponentEntity* cellEntity = mapData[cellIdx].occupant.Get();
             if (cellEntity == nullptr) continue;
 
             // ⚠ KNOWN DIVERGENCE FROM RETAIL — self-assignment guard.

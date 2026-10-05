@@ -142,7 +142,7 @@ inline uint8_t CellTerrain(const MapCell* cells, int64_t index) {
     return cells[index].terrainType;
 }
 inline ComponentEntity* CellOccupant(const MapCell* cells, int64_t index) {
-    return cells[index].blocker;
+    return cells[index].blocker.Get();
 }
 inline System::Random* Rng() {
     return GameUpdateLoop::_singleton ? GameUpdateLoop::_singleton->m_random : nullptr;

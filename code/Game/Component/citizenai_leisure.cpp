@@ -360,7 +360,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
     }
 
     int64_t local_a8 = static_cast<int64_t>(static_cast<int>(uVar37));   // srcCell index (retail: its byte offset, *0x30)
-    ComponentEntity* local_res20 = piVar5->cells.GetData()[local_a8].blocker;      // target entity
+    ComponentEntity* local_res20 = piVar5->cells.GetData()[local_a8].blocker.Get();      // target entity
 
     {
         float fVar39 = pRVar6->RandFloat();
@@ -448,8 +448,8 @@ LAB_14010a846:
                     if (plVar20->blocker == nullptr) {
                         if (plVar20->occupant == nullptr) { new (&cand) ::Object::InternalBasePtr(
                             nullptr); }   // B.3.3 bridge
-                        else cand = plVar20->occupant;
-                    } else cand = plVar20->blocker;
+                        else cand = plVar20->occupant.Get();
+                    } else cand = plVar20->blocker.Get();
                     if (cand != nullptr) {
                         MapComponent* mapBuf = nullptr;     // local_b0
                         FloorComponent_FindResData(cand, &mapBuf);

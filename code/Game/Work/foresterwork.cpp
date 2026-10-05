@@ -381,7 +381,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                 if (dist > workplaceRadius * 2) goto next_attempt;
 
                 // Get resource entity at this cell
-                ComponentEntity* resourceEntity = gridData2[(int)testCell].occupant;
+                ComponentEntity* resourceEntity = gridData2[(int)testCell].occupant.Get();
 
                 // -------------------------------------------------------
                 // Branch: Check workplace flags for cut vs plant

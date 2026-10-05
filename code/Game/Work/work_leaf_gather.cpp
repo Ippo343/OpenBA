@@ -149,7 +149,7 @@ long long WorkLeaf_FootprintOwnerCheck_120c30(const GrowthDescription* growth, i
             if ((colDelta != 0) || (rowIdx != row)) {
                 long long c = static_cast<long long>(col) + colDelta;
                 if (c >= 0 && c < mapW && rowIdx >= 0 && rowIdx < mapW) {
-                    ComponentEntity* cell = grid->cells.GetData()[static_cast<long long>(mapW) * rowIdx + c].occupant;
+                    ComponentEntity* cell = grid->cells.GetData()[static_cast<long long>(mapW) * rowIdx + c].occupant.Get();
                     if (cell != nullptr) {
                         touched++;
                         // 0x14000c460 = FindComponent<GrowthComponent>

@@ -97,7 +97,7 @@ static inline const MapCell* GridTiles(const Map* grid) {
 
 // tile+0x08: the cell's occupant entity.
 static inline ComponentEntity* GridOccupant(const MapCell* tiles, int cell) {
-    return tiles[static_cast<uintptr_t>(cell)].occupant;
+    return tiles[static_cast<uintptr_t>(cell)].occupant.Get();
 }
 
 // FUN_14009d860 — ground cells are clear & unreserved. Returns true if every cell in

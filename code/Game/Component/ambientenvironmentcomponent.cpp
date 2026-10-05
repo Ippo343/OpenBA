@@ -254,8 +254,8 @@ void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
                 uint8_t bits = cell->terrainType;
 
                 // Cell's entity reference (cell+0x00, else cell+0x08).
-                ComponentEntity* ent = cell->blocker;
-                if (!ent) ent = cell->occupant;
+                ComponentEntity* ent = cell->blocker.Get();
+                if (!ent) ent = cell->occupant.Get();
 
                 for (int k = 0; k < count; ++k) {
                     AmbientEnvironmentBiome* bt = &table[k];

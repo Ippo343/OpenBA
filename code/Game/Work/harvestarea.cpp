@@ -232,7 +232,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 
                 MapCell* gridData = map->cells.GetData();
                 int cellGridIdx = cropField->slots.data[i].cell;
-                entityAtCell1 = gridData[cellGridIdx].occupant;
+                entityAtCell1 = gridData[cellGridIdx].occupant.Get();
 
                 if (entityAtCell1 == nullptr) {
                     // No entity at cell -- mark as unavailable
@@ -241,7 +241,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 } else {
                     if (pairedAvailable) {
                         int cellGridIdx2 = cropField->slots.data[cellIdx2].cell;
-                        entityAtCell2 = gridData[cellGridIdx2].occupant;
+                        entityAtCell2 = gridData[cellGridIdx2].occupant.Get();
                         if (entityAtCell2 == nullptr) {
                             pairedAvailable = false;
                         }

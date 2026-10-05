@@ -143,7 +143,7 @@ void OrchardComponent::ValidateRefs() {
         if (slot.state != 1) continue;
 
         const int32_t tile = slot.tile;
-        ComponentEntity* live = cells[tile].occupant;   // the entity standing on the cell
+        ComponentEntity* live = cells[tile].occupant.Get();   // the entity standing on the cell
         bool ok = false;
         if (live) {
             if (live->IsA(ComponentEntity::TypeId())) {   // slot 0x140151410
@@ -214,7 +214,7 @@ float OrchardComponent::GetGrowth() const {
     for (int i = 0; i < count; ++i) {
         const OrchardSlot& slot = slots[i];
 
-        ComponentEntity* entity = cells[slot.tile].occupant;   // the entity standing on the cell
+        ComponentEntity* entity = cells[slot.tile].occupant.Get();   // the entity standing on the cell
         if (!entity) continue;
         if (!entity->IsA(tidEntity)) continue;
 
@@ -576,7 +576,7 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
         const MapCell* cells = world->m_game->cells.GetData();
         // The cell's occupant (+0x08) is the entity standing on it — the tree the plant
         // action just created.
-        ComponentEntity* entity = cells[slot.tile].occupant;
+        ComponentEntity* entity = cells[slot.tile].occupant.Get();
         NaturalResourceComponent* natRes = entity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
         FruitComponent* fruit = entity->FindComponent<FruitComponent>();   // 0x14000a0b0
 
@@ -619,7 +619,7 @@ void OrchardComponent::OnMessage(int msgId, void* /*srcEntityRef*/, uint32_t slo
         const Map* mapGrid = world->m_game;
         ValidateRefs();
         if (!slots) return;
-        ComponentEntity* entity = mapGrid->cells.GetData()[slots[idx].tile].occupant;
+        ComponentEntity* entity = mapGrid->cells.GetData()[slots[idx].tile].occupant.Get();
         if (entity == nullptr) return;
         FruitComponent* fruit = entity->FindComponent<FruitComponent>();   // 0x14000a0b0
         if (fruit == nullptr) return;

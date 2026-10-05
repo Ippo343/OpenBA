@@ -310,7 +310,7 @@ int FencedTool::CalcCost(int startCell, int endCell,
             }
 
             // Check entity occupancy
-            const ComponentEntity* cellEntity = cellPtr->blocker;
+            const ComponentEntity* cellEntity = cellPtr->blocker.Get();
             if (allowedEntityType != nullptr) {
                 if (cellEntity != nullptr) {
                     if (cellPtr->blocker->_description != allowedEntityType) { allValid = false; break; }
@@ -499,7 +499,7 @@ void FencedTool::Draw(Video::Context* context, char param3) {
                     valid = false;
                 } else {
                     // Entity occupancy check
-                    const ComponentEntity* cellEntity = cellPtr->blocker;
+                    const ComponentEntity* cellEntity = cellPtr->blocker.Get();
                     if (allowedEntityType != nullptr) {
                         if (cellEntity != nullptr) {
                             if (cellPtr->blocker->_description != allowedEntityType) {

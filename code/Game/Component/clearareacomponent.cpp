@@ -78,7 +78,7 @@ int ClearAreaComponent::FootprintSweep() {
         for (int col = 0; col < width; ++col) {
             int cell = (startRow + row) * gridWidth + (startCol + col);
             // entity ptr slot at cell*0x30 + 0x08 (matches 7d60's "+ 8 + (...)*0x30")
-            ComponentEntity* occ = tileArray[static_cast<uintptr_t>(cell)].occupant;
+            ComponentEntity* occ = tileArray[static_cast<uintptr_t>(cell)].occupant.Get();
 
             // Skip empty cells and the building's own entity.
             if (occ == nullptr || occ == _entity.Get()) continue;

@@ -494,7 +494,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
     {
         const int ix = clampCell(px);
         const int iy = clampCell(py);
-        ComponentEntity* cellEntity = cells[iy * N + ix].occupant;
+        ComponentEntity* cellEntity = cells[iy * N + ix].occupant.Get();
         if (cellEntity != nullptr) {
             NaturalResourceComponent* probe = cellEntity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
             if (probe != nullptr) {
@@ -555,7 +555,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
                 const int cy = row + dy;
                 if (cx < 0 || cy < 0 || cx >= N || cy >= N) continue;
                 const int64_t off = static_cast<int64_t>(N) * cy + cx;
-                ComponentEntity* cellEntity = cells[off].occupant;
+                ComponentEntity* cellEntity = cells[off].occupant.Get();
                 if (cellEntity == nullptr) continue;
                 // Retail passes `off * 6` here — junk into a dead parameter. Kept.
                 Tornado_StrikeEntityCounted(off * 6, &cellEntity, &hitTree, &hitTreeNoKnock,
