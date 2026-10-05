@@ -206,24 +206,15 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
         // makes that field an "allow negative" switch.
         const char* set = _b80 != 0 ? "0123456789-" : "0123456789";  // 1800d4e1c
 
-        char* tmp = nullptr;                                   // 1800d4e27
-        reinterpret_cast<System::String*>(&tmp)->Set(set);    // 1800d4e31  0x1800c95d0  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        System::String tmp;                                    // 1800d4e27
+        tmp.Set(set);                                          // 1800d4e31  0x1800c95d0
 
-        char* value = tmp;                                     // 1800d4e3e  RBX
-        StringAssignInline(&elem->_filter._data, value);             // 1800d4e37
+        StringAssignInline(&elem->_filter._data, tmp._data);         // 1800d4e37
 
-        // The release works off the CAPTURED value, not a re-read of `tmp`:
-        // retail keeps it in RBX across the assignment (0x1800d4e82).
-        if (value != nullptr) {
-            if (--RefCount(value) == 0) {
-                value = value - 8;
-                tmp = value;
-                MemFree(value);
-            } else {
-                tmp = nullptr;                                 // 1800d4e9f
-            }
-        }
-        (void)tmp;
+        // `tmp`'s ~String at the closing brace is the release (0x1800d4e82..
+        // 0x1800d4e9f): retail works off the value it kept in RBX across the
+        // assignment, which is the value `tmp` still holds -- the assignment
+        // never writes `tmp`.
     }
 
     elem->_min = _i78;                                         // 1800d4ea7

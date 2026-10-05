@@ -159,7 +159,7 @@ int32_t ActiveInterface() {
 
 // One `Array<Parameter>` of the two, in the order retail does them. Both are
 // resized by 0x180055db0, `Array<Parameter>::SetSize`.
-void SerializeParameters(IO::Serializer& ser, Array<ShaderParameter>* arr) {
+void SerializeParameters(IO::Serializer& ser, decltype(Video::ShaderProgram::_textures)* arr) {
     IO::ReaderWriter* rw = ser._readerWriter;
     int32_t n = arr->_size;
     rw->SerializeInt(n, nullptr);
@@ -168,12 +168,7 @@ void SerializeParameters(IO::Serializer& ser, Array<ShaderParameter>* arr) {
 
     ShaderParameter* e = arr->_data;
     for (int32_t i = 0; i < n; ++i, ++e) {
-        // LEFT (B.3.1 bridge): ShaderProgram::Parameter::name is `void*` because a
-        // real `System::String` member would give Parameter a non-trivial
-        // destructor and make the compiler release every name a SECOND time (the
-        // reason is spelled out on the Parameter declaration); the eight bytes are
-        // a System::String.
-        reinterpret_cast<System::String&>(e->name).Serialize(ser);   // LEFT: H5 Parameter::name is raw storage of a String (a String member would release every name twice)
+        e->name.Serialize(ser);
         rw->SerializeInt(e->dest, nullptr);
         if (rw->GetVersion() >= 1) rw->SerializeBool(e->internal, nullptr);
     }

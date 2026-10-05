@@ -213,9 +213,7 @@ PathfinderThread::~PathfinderThread() {
     queueTail = nullptr;                  // [thread + 0x60] = 0
     queueCount = 0;                       // [thread + 0x70] = 0
 
-    // LEFT: the CriticalSection dtor is a door on the POD mirror (System::
-    // CriticalSection is trivially destructible by design, Thread.h).
-    RtSystem_CriticalSection_Dtor(reinterpret_cast<RtSystem::CriticalSection*>(&lock));   // LEFT: the CriticalSection dtor is a door on the POD mirror (System:: CriticalSection is trivially destructible by design, Thread.h).
+    RtSystem_CriticalSection_Dtor(&lock);   // 0x18000c5b0 (System::CriticalSection is trivially destructible by design, Thread.h)
     // tail-call: System::Thread::~Thread() -- the compiler's base chain.
 }
 

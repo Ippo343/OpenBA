@@ -124,23 +124,6 @@ struct Event {
 };
 static_assert(sizeof(Event) == 0x30, "UI event record stride");
 
-// `System::String::~String` inlined: release one reference, and when it reaches
-// zero rewrite the FIELD to `data - 8` and free that. The asymmetry (nulling
-// the field on the non-zero arm, leaving a freed pointer on the zero arm) is
-// retail's and is the same one runtime/src/ui/groupdescription.cpp documents.
-void ReleaseString(char** slot) {
-    char* s = *slot;
-    if (s == nullptr) return;
-    int32_t* rc = &RtSystem::StringRefCount(s);
-    --*rc;
-    if (*rc == 0) {
-        *slot = s - 8;
-        System::MemoryAllocator::MemFree(*slot);
-    } else {
-        *slot = nullptr;
-    }
-}
-
 // `UI::UserInterface::Play`, INLINED by this body (ButtonElement calls the
 // out-of-line 0x1801223d0 instead). Walk the audio scene's 256 voice slots for
 // one whose +0x68 is zero, take it, and stamp a generation counter into it.
@@ -238,15 +221,14 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
         const int T = _layoutTop;
 
         if (kind == 0) {
-            // LEFT (H5): _sourceText and the temporary are System::Strings held
-            // as raw char* storage.
-            char* tmp = nullptr;
-            new (static_cast<void*>(&tmp)) System::String(                 // 0x1800c9230, retslot
-                _sourceText.SubString(item->first, item->last));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+            // The temporary is a System::String local of this arm: the
+            // retslot of SubString (0x1800c9230) is its storage, and its
+            // ~String at the end of the arm is the release that closed it.
+            System::String tmp = _sourceText.SubString(item->first, item->last);
 
             Font* font = _fonts._data[item->index];
             context.AddFont(Object::ExternalPtr<UI::Font>(font),          // 0x18011ccb0
-                            *reinterpret_cast<const System::String*>(&tmp), false, 0, 0, -1,   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+                            tmp, false, 0, 0, -1,
                             item->x + L, item->y + T, static_cast<uint32_t>(item->color));
 
             const uint8_t underline = item->byte21;
@@ -261,7 +243,7 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
                 context.AddSprite(_underlineSprite, x, y + 1, width + x, y + 2,   // 0x18011d3c0
                                   static_cast<uint32_t>(item->color));
             }
-            ReleaseString(&tmp);
+            // `tmp`'s ~String: the release that stood here.
         } else if (kind == 1) {
             UI::Sprite sprite;
             sprite.spriteSheet = _sheets._data[item->index];

@@ -179,41 +179,15 @@ inline const double* TimerSecondsPerTick() {
 // ---------------------------------------------------------------------------
 // UI::Element::UpdateState — 0x30 bytes, recovered from THIS function's frame
 // ---------------------------------------------------------------------------
-// Not a guess: every field below is a store or a load in 0x180121635..0x18012185e,
-// and the size is pinned by the span from the base (RBP-0x51) to the last field
-// (RBP-0x29, 8 bytes). Only the fields Update touches are named; the rest is
-// left as explicit padding rather than invented, per PLAN §4.3 risk 1.
-//
-// B.4 LEFT: `UI::Element::UpdateState` (Element.h, R-UI-a) is the real type,
-// but its constructor (0x180115600) makes stores this frame does not, and
-// `DialogInstance::Update` still takes the state as `uint8_t*`; this frame
-// record stays until R-UI-a's typed overload lands.
-//
-// `DialogInstance::Update` takes this by reference and WRITES BACK into it —
-// at least `+0x07` (the mouse-down byte reloaded at 0x180121781) and `+0x20`
-// (stored into `_mouseCaptured` at 0x18012184e).
-struct UpdateState {
-    uint8_t  dragActive;      // +0x00  = (_dragDropDialog != 0)
-    uint8_t  buttonPressed;   // +0x01  Input _mouse[4].pressed
-    uint8_t  b02;             // +0x02  Input _mouse[6].pressed
-    uint8_t  b03;             // +0x03  Input _mouse[5].pressed
-    uint8_t  b04;             // +0x04  Input _mouse[4].released
-    uint8_t  b05;             // +0x05  Input _mouse[6].released
-    uint8_t  b06;             // +0x06  Input _mouse[5].released
-    uint8_t  leftDown;        // +0x07  (Input _mouse[4].value > 0); WRITTEN BACK
-    uint8_t  b08;             // +0x08  (Input _mouse[5].value > 0)
-    uint8_t  b09;             // +0x09  (Input _mouse[6].value > 0)
-    uint8_t  pad0a[2];        // +0x0a  never written
-    int32_t  dragDx;          // +0x0c
-    int32_t  dragDy;          // +0x10
-    int32_t  wheel;           // +0x14  Input _mouse[12].value
-    int32_t  mouseX;          // +0x18  init -1
-    int32_t  mouseY;          // +0x1c  init -1
-    uint8_t  mouseCaptured;   // +0x20  WRITTEN BACK; -> _mouseCaptured
-    uint8_t  pad21[7];        // +0x21
-    void*    config;          // +0x28  = Input::Configuration::_singleton->_keyMap
-};
-static_assert(sizeof(UpdateState) == 0x30, "UpdateState frame span is 0x30");
+// B4 Y RT-UI: the frame record IS `UI::Element::UpdateState` (Element.h). The
+// frame's first stores (0x180121635..0x18012164d: qword 0 at base+0x01, byte
+// +0x09, qword +0x0c, qword -1 at +0x18, byte +0x20, base = RBP-0x51) are the
+// inlined ??0UpdateState (0x180115600) with the +0x00 byte left to the SETNZ
+// at 0x18012165d; +0x0a/+0x0b and +0x21..+0x27 are written by neither. The
+// tree's value-initialised file-local copy of the struct (it zeroed all 0x30
+// bytes) is deleted; `DialogInstance::Update` takes the state by reference
+// and WRITES BACK into it -- at least `+0x07` (the mouse-down byte reloaded
+// at 0x180121781) and `+0x20` (stored into `_mouseCaptured` at 0x18012184e).
 
 // A list node of `_dialogs`: element, prev, next. Proven by the drain's own
 // stores (tail->[+0x10] = node, node->[+0x08] = tail).
@@ -344,9 +318,9 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
         return 0;
 
     // ---- gather input into UpdateState ------------------------------------
-    UpdateState st = {};
-    st.mouseX = -1;
-    st.mouseY = -1;
+    // ??0UpdateState (0x180115600) inlined, 0x180121635..0x18012164d: the
+    // zeroes and mouseX / mouseY = -1 (B4 Y RT-UI; see the note above).
+    Element::UpdateState st;
 
     const ::Input::Device* const in = ::Input::Device::_singleton;
     st.dragActive = (_dragDropDialog != nullptr) ? 1 : 0;
@@ -396,8 +370,7 @@ int32_t UI::UserInterface::Update(const System::Time& timeRef) {
                 // Element::UpdateState&)` (0x180113980) — non-virtual member of
                 // the real class (block B), which spells the state as its
                 // address; it WRITES BACK into `st`.
-                // B.4 LEFT: the `uint8_t*` parameter is R-UI-a's signature.
-                dlg->Update(timeRef, this, reinterpret_cast<uint8_t*>(&st));   // LEFT: NOCLASS the frame's value-initialised 0x30-byte record (see dialog.cpp:1172)
+                dlg->Update(timeRef, this, st);                     // 0x18012176a
             }
             if ((dlg->_flags >> 1) & 1u) break;
             n = n->prev;

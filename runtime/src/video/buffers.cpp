@@ -448,6 +448,17 @@ void Video_VertexBuffer_Ctor(VertexBuffer* self) {
     self->Video::VertexBuffer::PlatformConstruct();
 }
 
+// B.4 wave Y (RT-GFX): the two exported destructors are real members.
+//   ??1IndexBuffer@Video@@QEAA@XZ   0x1800f3480  `JMP 0x1800f3760` (PlatformDestruct)
+//   ??1VertexBuffer@Video@@QEAA@XZ  0x1800f55e0  `JMP 0x1800f58c0` (PlatformDestruct)
+// Each is the one tail jump: the destructor IS PlatformDestruct. A holder's
+// implicit member destruction now runs it, so no holder calls PlatformDestruct
+// on a typed member by hand any more (EdgeMesh, WorldGeometry). The erased
+// `Array<DetailLevel>` rows and Context's heap buffers keep their explicit
+// PlatformDestruct, as retail's bodies call it there.
+Video::IndexBuffer::~IndexBuffer()   { PlatformDestruct(); }
+Video::VertexBuffer::~VertexBuffer() { PlatformDestruct(); }
+
 // Create/Set are pure trampolines into the companion at +0x08, slots 1 and 2 of
 // `Video::{Index,Vertex}BufferData` (`Create` and `SetData`, +0x08 and +0x10).
 bool Video::IndexBuffer::Create(int count, bool isDynamic, void* data) {

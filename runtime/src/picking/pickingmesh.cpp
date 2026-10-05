@@ -129,12 +129,12 @@ void UvArraySetSize(Collection::Array<UV16>* a, int32_t n) {
 // 0x18007aa40  Array<SubMesh>::SetSize. NON-TRIVIAL: element copy ctor
 // 0x1800734a0, per-element destroy 0x180073ee0 on the shrink tail and on the
 // abandoned buffer.
-void SubMeshArraySetSize(Collection::Array<SubMesh>* a, int32_t n) {
+void SubMeshArraySetSize(decltype(Picking::PickingMesh::_nodes)* a, int32_t n) {
     rtcoll::RtColl_ArraySetSize_18007aa40(a, n);
 }
 // 0x180073720  ~Array<SubMesh>: the element destroy 0x180073ee0, then the
 // plain `~Array`. Retail's ~PickingMesh CALLs exactly this at 0x1801228c4.
-void SubMeshArrayDtor(Collection::Array<SubMesh>* a) {
+void SubMeshArrayDtor(decltype(Picking::PickingMesh::_nodes)* a) {
     rtcoll::RtColl_ArrayDtorElem_180073720(a);
 }
 
@@ -167,8 +167,7 @@ void SerializeSubMeshesBody(IO::Serializer* ser, int32_t count, SubMesh* base) {
 
     for (int32_t i = 0; i < count; ++i) {
         SubMesh* s = &base[i];
-        // B.3.1 bridge: SubMesh::_name is a raw slot (PickingMesh.h says why).
-        reinterpret_cast<System::String&>(s->_name).Serialize(*ser);  // LEFT: H5 PickingMesh.h SubMesh::_name is raw char* storage of a String (its ctor / dtor would run: a behaviour commit)
+        s->_name.Serialize(*ser);
         rw->SerializeInt(s->_parent, nullptr);
         rw->SerializeFloatArray(4, &s->_local.rotation.x, nullptr);
         rw->SerializeFloatArray(3, &s->_local.translation.x, nullptr);

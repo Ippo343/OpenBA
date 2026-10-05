@@ -310,13 +310,17 @@ public:
     void SetTime(float time);                                      // 0x18001a330
     void SetFog(float nearZ, float farZ, const Math::Vector4& color);  // 0x18001a360
     void SetViewport(const Viewport& vp);                          // 0x18001a060
-    // LEFT (B.4 R-VIDEO): the mangled names spell `PEBVVertexBuffer@2@`,
-    // `PEAVRenderBuffer@2@`, but dx11/src/contextdata.cpp and code/Game callers
-    // hand these `void*`, so the parameters stay untyped until those callers
-    // type their pointers.
+    // B.4: SetVertexBuffer / SetRenderBuffer take retail's types
+    // (`PEBVVertexBuffer@2@`, `PEBVRenderBuffer@2@`); dx11's `void*` callers
+    // reach them through the inline B4 FORWARD overloads below.
     void SetImageBuffer(const ImageBuffer* image, int32_t slot);   // 0x180019ed0
-    void SetVertexBuffer(const void* vb, int32_t slot,
-                         int32_t offset, int32_t stride);          // 0x180019f20 (const VertexBuffer*)
+    void SetVertexBuffer(const VertexBuffer* vb, int32_t slot,
+                         int32_t offset, int32_t stride);          // 0x180019f20
+    // B4 FORWARD: dx11/src/contextdata.cpp hands its dynamic vertex buffer as a
+    // `void*` (dx11 is outside wave Y); inline, as SetRenderBuffer's below.
+    void SetVertexBuffer(const void* vb, int32_t slot, int32_t offset, int32_t stride) {
+        SetVertexBuffer(static_cast<const VertexBuffer*>(vb), slot, offset, stride);    // CAST-OK: dx11_seam
+    }
     void SetRenderBuffer(const RenderBuffer* rb);                  // 0x1800f2100
     // B4 FORWARD: dx11/src/contextdata.cpp:499 hands its default render
     // buffer as a `void*` (dx11 is outside wave Y); inline, so the dx11 call

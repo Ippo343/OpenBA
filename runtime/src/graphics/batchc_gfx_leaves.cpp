@@ -405,14 +405,10 @@ Graphics::EdgeMesh::~EdgeMesh() {
     rtcoll::RtColl_ArrayDtor_180013e70(&_edgeLists);
     rtcoll::RtColl_ArrayDtor_180013e70(&_triangleLists);
 
-    _edgeSkinIndexBuffer.PlatformDestruct();    // +0x128
-    _edgeSkinVertexBuffer.PlatformDestruct();   // +0x108
-    _edgeIndexBuffer.PlatformDestruct();        // +0x0e8
-    _edgeVertexBuffer.PlatformDestruct();       // +0x0c8
-    _skinIndexBuffer.PlatformDestruct();        // +0x0a8
-    _skinVertexBuffer.PlatformDestruct();       // +0x088
-    _indexBuffer.PlatformDestruct();            // +0x068
-    _vertexBuffer.PlatformDestruct();           // +0x048
+    // B.4 wave Y: the eight buffers are destroyed by their own ~IndexBuffer /
+    // ~VertexBuffer (0x1800f3480 / 0x1800f55e0, `JMP PlatformDestruct`) after
+    // this body, in reverse declaration order: +0x128, +0x108, ... +0x048,
+    // retail's order above.
 }
 
 // ############################################################################

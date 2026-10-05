@@ -24,7 +24,8 @@
 // `companion_data.cpp`, `context_lifecycle.cpp` and `dynamic_resources.cpp`
 // spell these types unqualified today and keep compiling unchanged.
 //
-// NO REAL CONSTRUCTOR OR DESTRUCTOR, and the reason is the intrusive list:
+// NO REAL CONSTRUCTOR (the destructor IS real since B.4 wave Y: retail's `??1`
+// is one `JMP PlatformDestruct`, declared below), and the reason is the intrusive list:
 // `PlatformConstruct`/`PlatformDestruct` (0x1800f3680/0x1800f3760 for
 // IndexBuffer, 0x1800f57e0/0x1800f58c0 for VertexBuffer) link and unlink `this`
 // in a process-global circular doubly linked list of every live buffer of that
@@ -69,11 +70,13 @@ class VertexBufferData;    // runtime/types/video/CompanionData.h (b35-A)
 //
 // LIFECYCLE EXPORTS — DOORS, NOT MEMBERS (see the header banner):
 //   ??0IndexBuffer@Video@@QEAA@XZ                0x1800f3490  Video_IndexBuffer_Ctor
-//   ??1IndexBuffer@Video@@QEAA@XZ                0x1800f3480  UNPORTED
+//   ??1IndexBuffer@Video@@QEAA@XZ                0x1800f3480  ~IndexBuffer (member)
 //   ??4IndexBuffer@Video@@QEAAAEAV01@AEBV01@@Z   0x180011e10  UNPORTED (operator=)
 // ----------------------------------------------------------------------------
 class IndexBuffer {
 public:
+    // ??1IndexBuffer@Video@@QEAA@XZ  0x1800f3480  `JMP PlatformDestruct` (buffers.cpp)
+    ~IndexBuffer();
     // ?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z  0x1800f3880  buffers.cpp
     //   A trampoline into IndexBufferData slot 1 (+0x08).
     bool Create(int count, bool dynamic, void* data);
@@ -154,11 +157,13 @@ public:
 //
 // LIFECYCLE EXPORTS — DOORS, NOT MEMBERS:
 //   ??0VertexBuffer@Video@@QEAA@XZ               0x1800f55f0  Video_VertexBuffer_Ctor
-//   ??1VertexBuffer@Video@@QEAA@XZ               0x1800f55e0  UNPORTED
+//   ??1VertexBuffer@Video@@QEAA@XZ               0x1800f55e0  ~VertexBuffer (member)
 //   ??4VertexBuffer@Video@@QEAAAEAV01@AEBV01@@Z  0x180011dd0  UNPORTED (operator=)
 // ----------------------------------------------------------------------------
 class VertexBuffer {
 public:
+    // ??1VertexBuffer@Video@@QEAA@XZ  0x1800f55e0  `JMP PlatformDestruct` (buffers.cpp)
+    ~VertexBuffer();
     // ?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z  0x1800f59e0  buffers.cpp
     bool Create(int count, bool dynamic, void* data);
     // ?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z      0x1800f5a00  buffers.cpp
@@ -210,8 +215,8 @@ public:
 static_assert(sizeof(Video::IndexBuffer) == 0x20, "IndexBuffer must be 0x20 bytes");
 static_assert(alignof(Video::IndexBuffer) == 8, "IndexBuffer aligns to 8");
 static_assert(std::is_standard_layout<Video::IndexBuffer>::value, "IndexBuffer stays standard-layout");
-static_assert(std::is_trivially_copyable<Video::IndexBuffer>::value,
-              "IndexBuffer stays trivially copyable — its ctor keeps the intrusive list and stays a door");
+static_assert(!std::is_trivially_destructible<Video::IndexBuffer>::value,
+              "IndexBuffer's destructor is retail's ??1 (PlatformDestruct); its ctor stays a door");
 static_assert(offsetof(Video::IndexBuffer, size) == 0x00, "size at +0x00");
 static_assert(offsetof(Video::IndexBuffer, dynamic) == 0x04, "dynamic at +0x04");
 static_assert(offsetof(Video::IndexBuffer, platformData) == 0x08, "platformData at +0x08");
@@ -221,8 +226,8 @@ static_assert(offsetof(Video::IndexBuffer, listNext) == 0x18, "listNext at +0x18
 static_assert(sizeof(Video::VertexBuffer) == 0x20, "VertexBuffer must be 0x20 bytes");
 static_assert(alignof(Video::VertexBuffer) == 8, "VertexBuffer aligns to 8");
 static_assert(std::is_standard_layout<Video::VertexBuffer>::value, "VertexBuffer stays standard-layout");
-static_assert(std::is_trivially_copyable<Video::VertexBuffer>::value,
-              "VertexBuffer stays trivially copyable — its ctor keeps the intrusive list and stays a door");
+static_assert(!std::is_trivially_destructible<Video::VertexBuffer>::value,
+              "VertexBuffer's destructor is retail's ??1 (PlatformDestruct); its ctor stays a door");
 static_assert(offsetof(Video::VertexBuffer, size) == 0x00, "size at +0x00");
 static_assert(offsetof(Video::VertexBuffer, dynamic) == 0x04, "dynamic at +0x04");
 static_assert(offsetof(Video::VertexBuffer, platformData) == 0x08, "platformData at +0x08");

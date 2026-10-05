@@ -280,8 +280,9 @@ static_assert(offsetof(Event, userData) == 0x28, "Event::userData @ +0x28");
 
 #include <type_traits>
 
+#include "../object/Internal.h"   // B4 Y RT-UI: Object::InternalPtr<T> (IsDialogOpen reads it by name)
+
 namespace Object {
-template <class T> class InternalPtr;
 template <class T> class ExternalPtr;
 }
 namespace System { class Time; }
@@ -352,13 +353,10 @@ public:
     // / JZ false — the argument is NOT read on an empty list — then
     // MOV RCX,[RDX] (the dialog, through the caller's InternalPtr) and a walk
     // through `next` (+0x10). Not registered (nothing in the tree calls it).
-    // B.4 LEFT: the header only forward-declares `Object::InternalPtr`, and
-    // tests/unit/ui_userinterface_abi_test.cpp links this inline body without
-    // userinterface.cpp, so the InternalPtr's one pointer is read through it.
     bool IsDialogOpen(Object::InternalPtr<DialogInstance>* dialog) const {
         auto* node = _dialogs._head;
         if (node == nullptr) return false;
-        void* const want = *reinterpret_cast<void* const*>(dialog);   // LEFT: the header only forward-declares InternalPtr (unit test links this inline body alone)
+        DialogInstance* const want = dialog->Get();
         do {
             if (node->element == want) return true;
             node = node->next;

@@ -261,10 +261,10 @@ struct StringTableProbe final : UI::StringTable {
 UNIT_TEST(ui_stringtable_layout) {
     CHECK_EQ((int)sizeof(UI::StringTable), 0x30);
     CHECK_EQ((int)alignof(UI::StringTable), 8);
-    CHECK_EQ((int)offsetof(UI::StringTable, _data),     0x20);
-    CHECK_EQ((int)offsetof(UI::StringTable, _size),     0x28);
-    CHECK_EQ((int)offsetof(UI::StringTable, _capacity), 0x2c);
-    CHECK_EQ((int)offsetof(UI::StringTable, _data), (int)sizeof(Object::External));
+    CHECK_EQ((int)offsetof(UI::StringTable, _entries),           0x20);
+    CHECK_EQ((int)(offsetof(UI::StringTable, _entries) + 0x08),  0x28);   // _size
+    CHECK_EQ((int)(offsetof(UI::StringTable, _entries) + 0x0c),  0x2c);   // _capacity
+    CHECK_EQ((int)offsetof(UI::StringTable, _entries), (int)sizeof(Object::External));
     CHECK_EQ((int)sizeof(UI::StringTable::TextEntry), 0x10);
     CHECK_EQ((int)offsetof(UI::StringTable::TextEntry, text), 0x08);
     CHECK((std::is_base_of<Object::External, UI::StringTable>::value));

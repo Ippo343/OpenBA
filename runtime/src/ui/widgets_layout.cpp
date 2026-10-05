@@ -473,20 +473,21 @@ void GraphElement::AddGraphPoint(int32_t graph, int32_t value) {
 void GraphElement::AddGraph(uint32_t colour) {
     const int64_t old = _seriesCount;                      // MOVSXD
 
-    uint8_t tmp[0x18];
-    // tmp[0x00..0x07] intentionally left uninitialised — see (1) above.
-    *reinterpret_cast<uint64_t*>(tmp + 0x08) = 0;   // LEFT: the AddGraph fill is raw stack bytes (a GraphSeries local would construct / destroy its Array twice)
-    *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;   // LEFT: the AddGraph fill is raw stack bytes (a GraphSeries local would construct / destroy its Array twice)
+    // B4 Y RT-UI: the fill is a GraphSeries local in its own block.
+    // GraphSeries has no constructor of its own, so `colour` / `hole04`
+    // (tmp+0x00..0x07) stay uninitialised — see (1) above — and `points`'
+    // Array() is the two zero stores at tmp+0x08 / tmp+0x10. Its implicit
+    // destructor at the closing brace is `points`' ~Array (0x18001c750, a J1,
+    // trait-equivalent for `int32_t`), before the colour store, as in retail.
+    {
+        GraphSeries tmp;
 
-    // ENDGAME B.3.2 step 2 — `_seriesData` is GraphElement.h's raw
-    // `Array<GraphSeries>` header (NON-TRIVIAL `kSpec_GraphSeries`), so it
-    // bridges through the hand-derived row; the local `tmp+8` nested
-    // `Array<int32_t>` is a real stack object, so its teardown is a plain
-    // `.~Array()` (0x18001c750 is a J1, trait-equivalent for `int32_t`).
-    rtcoll::AsArray<&rtcoll::kSpec_GraphSeries>(&_seriesData)
-        ->SetSizeFill(_seriesCount + 1, tmp);
-
-    reinterpret_cast<Collection::Array<int32_t>*>(tmp + 8)->~Array();   // LEFT: the AddGraph fill is raw stack bytes (a GraphSeries local would construct / destroy its Array twice)
+        // ENDGAME B.3.2 step 2 — `_seriesData` is GraphElement.h's raw
+        // `Array<GraphSeries>` header (NON-TRIVIAL `kSpec_GraphSeries`), so it
+        // bridges through the hand-derived row.
+        rtcoll::AsArray<&rtcoll::kSpec_GraphSeries>(&_seriesData)
+            ->SetSizeFill(_seriesCount + 1, &tmp);
+    }
 
     _seriesData[old].colour = colour;
 }

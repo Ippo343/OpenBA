@@ -82,10 +82,6 @@ double SecondsPerTick() {
 
 void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
-// A System::String held in a raw char* slot, as the member calls below need
-// it. LEFT (H5): the Strings of this class are raw char* storage.
-System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-
 struct Event {
     void*    dialog;
     void*    element;
@@ -104,23 +100,6 @@ static_assert(sizeof(Event) == 0x30, "UI event record stride");
 int StrLen(const char* s) {
     if (s == nullptr) return 0;
     return RtSystem::StringLength(s);
-}
-
-const System::String& AsString(char* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-}
-
-void ReleaseString(char** slot) {
-    char* s = *slot;
-    if (s == nullptr) return;
-    int32_t* rc = &RtSystem::StringRefCount(s);
-    --*rc;
-    if (*rc == 0) {
-        *slot = s - 8;
-        MemFree(*slot);
-    } else {
-        *slot = nullptr;
-    }
 }
 
 // The inlined `System::String::operator=` the three edit paths share:
@@ -145,13 +124,14 @@ void AssignStringInline(char** dst, char* const* src) {
 // Retail's password mask: append '*' to a fresh String once per character of
 // the real text. `System::String::operator+=` (0x1800c89e0) takes a HIDDEN
 // TEMPORARY SLOT as its second argument and leaves a String in it that the
-// caller must release — which is why the loop has a release in its body.
-char* BuildMask(int length) {
-    char* masked = nullptr;
+// caller must release — which is why the loop has a release in its body: the
+// temporary's ~String at the end of each iteration (B4 Y RT-UI: the mask and
+// the temporary are System::String locals; the mask is handed to the caller
+// by value, its one reference moving with it).
+System::String BuildMask(int length) {
+    System::String masked;
     for (int i = 0; i < length; ++i) {
-        char* tmp = nullptr;
-        new (static_cast<void*>(&tmp)) System::String(Str(&masked) += '*');   // 0x1800c89e0, retslot = &tmp
-        ReleaseString(&tmp);
+        System::String tmp = (masked += '*');                  // 0x1800c89e0, retslot = &tmp
     }
     return masked;
 }
@@ -195,12 +175,12 @@ void EditElement::ComputeSize() {
         _layoutWidth  = font->ComputeLineLayout(text, StrLen(text), 0, 0, -1, 0, nullptr);
         _layoutHeight = font->_lineHeight;
     } else {
-        char* masked = BuildMask(StrLen(_text._data));
+        System::String masked = BuildMask(StrLen(_text._data));
         _layoutWidth = 0; _layoutHeight = 0;                 // one qword store
-        _layoutWidth  = font->ComputeLineLayout(masked,
-                                                StrLen(masked), 0, 0, -1, 0, nullptr);
+        _layoutWidth  = font->ComputeLineLayout(masked._data,
+                                                StrLen(masked._data), 0, 0, -1, 0, nullptr);
         _layoutHeight = font->_lineHeight;
-        ReleaseString(&masked);
+        // `masked`'s ~String: the release that ended this arm.
     }
 
     if (_layoutWidth < _minWidth) _layoutWidth = _minWidth;
@@ -240,37 +220,36 @@ void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
     // The string actually drawn: the mask in password mode, otherwise a
     // REFERENCE to the real text (retail bumps its refcount and releases it at
     // the end, so the field itself is untouched).
-    char* shown = nullptr;
+    // B4 Y RT-UI: `shown` and `caret` are System::String locals; each one's
+    // ~String is the release that ended its scope.
+    System::String shown;
     if (_password != 0) {
-        shown = BuildMask(StrLen(_text._data));
+        shown = BuildMask(StrLen(_text._data));              // a pointer steal onto null
     } else if (_text._data != nullptr) {
-        shown = _text._data;
-        ++RtSystem::StringRefCount(shown);
+        shown._data = _text._data;
+        ++RtSystem::StringRefCount(shown._data);
     }
 
     Font* font = _font;
     const int baseline = _layoutTop - font->_baseLine + font->_lineHeight;
-    ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(shown), false, 0, 0, -1,
+    ctx.AddFont(Object::ExternalPtr<Font>(font), shown, false, 0, 0, -1,
                 _layoutLeft, baseline, colour);
 
     if (_blinkOn != 0 && _active != 0) {
-        const int cx = _font->ComputeCharacterPosition(AsString(shown), _caret) - 1;
+        const int cx = _font->ComputeCharacterPosition(shown, _caret) - 1;
 
         // THE CARET'S STRING IS BUILT FROM A C LITERAL. Retail passes the DLL's
         // own `"|"` at 0x180156804; our own literal is the same bytes and
         // `System::String::Set` copies them either way.
-        char* caret = nullptr;
+        System::String caret;
         static const char kCaretText[] = "|";
-        Str(&caret).Set(kCaretText);                                    // 0x1800c95d0
+        caret.Set(kCaretText);                                          // 0x1800c95d0
 
         Font* f = _font;
         const int y = _layoutTop - f->_baseLine + f->_lineHeight;
-        ctx.AddFont(Object::ExternalPtr<Font>(_font), AsString(caret), false, 0, 0, -1,
+        ctx.AddFont(Object::ExternalPtr<Font>(_font), caret, false, 0, 0, -1,
                     _layoutLeft + cx, y, colour);
-        ReleaseString(&caret);
     }
-
-    ReleaseString(&shown);
 }
 
 // ============================================================================
@@ -370,20 +349,20 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
     // ---- backspace / delete ----------------------------------------------
     // System::String::RemoveAt (0x1800c86b0, retslot) and operator= (0x1800c9810).
     if (Down(kKeyBack) && _caret > 0) {
-        char* tmp = nullptr;
-        new (static_cast<void*>(&tmp)) System::String(_text.RemoveAt(_caret - 1));
-        _text = Str(&tmp);
-        ReleaseString(&tmp);
+        {
+            System::String tmp = _text.RemoveAt(_caret - 1);
+            _text = tmp;
+        }                                                    // tmp's release
         _caret -= 1;
         SetNeedsSizeCalc();
     }
 
     if (Down(kKeyDelete)) {
         if (_caret < StrLen(_text._data)) {
-            char* tmp = nullptr;
-            new (static_cast<void*>(&tmp)) System::String(_text.RemoveAt(_caret));
-            _text = Str(&tmp);
-            ReleaseString(&tmp);
+            {
+                System::String tmp = _text.RemoveAt(_caret);
+                _text = tmp;
+            }                                                // tmp's release
             SetNeedsSizeCalc();
         }
     }
@@ -425,27 +404,28 @@ void EditElement::Update(const System::Time& time, UserInterface* ui,
         int64_t idx = 0;
         do { ++n; ++idx; } while (buf[idx] != 0);
 
-        char* one = nullptr;
-        System::StringPrivateAccess::SetLength(Str(&one), n);         // 0x1800c8220
-
-        const int cap = n + 1;
-        int srcLen = 0;
+        // B4 Y RT-UI: `one` and `ins` are System::String locals of this block;
+        // their destructors at its closing brace (ins, then one: reverse
+        // declaration order) are the two releases that stood there.
         {
-            const char* p = buf;
-            do { ++srcLen; ++p; } while (*p != 0);
-        }
-        ++srcLen;
-        const int copy = (cap < srcLen) ? cap : srcLen;
-        std::memmove(one, buf, static_cast<size_t>(copy));           // 0x18008a290 is memmove
-        if (srcLen > cap) one[idx] = 0;
+            System::String one;
+            System::StringPrivateAccess::SetLength(one, n);           // 0x1800c8220
 
-        char* ins = nullptr;
-        new (static_cast<void*>(&ins)) System::String(                // 0x1800c8510, retslot = &ins
-            _text.InsertAt(_caret, Str(&one)));
-        char** ret = &ins;
-        AssignStringInline(&_text._data, ret);
-        ReleaseString(&ins);
-        ReleaseString(&one);
+            const int cap = n + 1;
+            int srcLen = 0;
+            {
+                const char* p = buf;
+                do { ++srcLen; ++p; } while (*p != 0);
+            }
+            ++srcLen;
+            const int copy = (cap < srcLen) ? cap : srcLen;
+            std::memmove(one._data, buf, static_cast<size_t>(copy));  // 0x18008a290 is memmove
+            if (srcLen > cap) one._data[idx] = 0;
+
+            System::String ins = _text.InsertAt(_caret, one);         // 0x1800c8510, retslot = &ins
+            char** ret = &ins._data;
+            AssignStringInline(&_text._data, ret);
+        }
 
         _caret += 1;
         SetNeedsSizeCalc();
