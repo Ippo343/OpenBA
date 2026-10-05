@@ -104,7 +104,7 @@ void NamedExternalRef::ResolveToolbar() {
     int32_t factoryGen = efactory->_generation;
     if (refGen == factoryGen) return;
 
-    System::Filename filename(Name());
+    System::Filename filename(name);
     const ::Object::External* found = efactory->Find(filename);
 
     // STANDALONE DEVIATION, deliberate — retail uses Find() alone and would crash
@@ -131,7 +131,7 @@ void NamedExternalRef::ResolveToolbar() {
     // does; until then this loads on demand, which is what retail's environment
     // has already done by this point.
     if (!found) {
-        const char* text = Name()._data;
+        const char* text = name._data;
         if (text) {
             char normalized[260];
             size_t k = 0;

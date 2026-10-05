@@ -30,7 +30,7 @@
 // 0x140027520): External(), the TutorialGoal and TutorialGoalDialog stamps
 // (the compiler's), then +0x20 = +0x28 = 0, +0x30 = -1, +0x38 = 0.
 TutorialGoalDialog::TutorialGoalDialog()
-    : dialogName(), target{{}, -1, {}, nullptr} {}
+    : dialogName(), target() {}
 
 // B4 X7-GAME-A (H5): the +0x20 String is a member: String() is the qword 0 the
 // ctor stored; its ~String runs after the dtor body, i.e. after target's name,
@@ -42,8 +42,8 @@ System::String& TutorialGoalDialog::DialogName() {
 // The dtor inside [0] 0x140027590: ~String on +0x28, then +0x20; the compiler
 // re-stamps TutorialGoal and runs ~External (the tree ran a guarded ~Internal).
 TutorialGoalDialog::~TutorialGoalDialog() {
-    target.Name().~String();
-    // +0x20: the member's ~String, after this body
+    // B4 Y GAMEA: +0x28 target's ~String (0x1400275c0), then +0x20 (0x1400275cb):
+    // the members', after this empty body.
 }
 
 // ============================================================
@@ -64,7 +64,7 @@ bool TutorialGoalDialog::Serialize(IO::Stream& stream) {
     System::Filename tempFilename;
     (void)tempFilename;
 
-    target.Name().Serialize(ser);
+    target.name.Serialize(ser);
 
     // On load (direction 0): resolve the ExternalRef at +0x28 by name.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210

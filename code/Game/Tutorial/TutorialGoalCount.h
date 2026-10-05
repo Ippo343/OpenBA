@@ -25,7 +25,7 @@
 #include "Object/exe_type.h"
 #include "Goal/goal_exe_helpers.h"   // NamedExternalRef
 
-namespace System { class String; }
+#include "system/String.h"
 
 class TutorialGoalCount final : public TutorialGoal {
     DECLARE_EXE_TYPE(TutorialGoalCount)
@@ -41,17 +41,13 @@ public:
     bool              IsComplete(const System::Time* time, void* instance) override;  // [8] 0x1400df290
     virtual Object::External* Construct();                         // [9] 0x1400277f0
 
-    // The +0x48 String (H5 raw storage: the ctor stores 0 inline, the dtor
-    // destroys it by hand). LEFT: the one reinterpretation.
-    System::String& ElementName();   // tutorialgoalcount.cpp
-
 public:
     uint32_t countMode;          // +0x20: count mode (0-10, selects what to count); Serialize(unsigned int&)
     int32_t  targetCount;        // +0x24: required count to complete goal
     bool     greaterOrEqual;     // +0x28: count >= target, else count == target; Serialize(bool&)
     uint8_t  _pad29[7];          // +0x29: padding
     NamedExternalRef typeRef;    // +0x30: the counted building / profession, by name
-    uint64_t elementName;        // +0x48: System::String — UI element path (mode 9)
+    System::String elementName;  // +0x48: UI element path (mode 9); B4 Y GAMEA (H5): String() is the ctor's qword 0 (0x1400dfab1), ~String the dtor's first release (0x14002784b)
 };
 
 static_assert(offsetof(TutorialGoalCount, countMode) == 0x20, "countMode offset");

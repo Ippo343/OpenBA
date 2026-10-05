@@ -52,11 +52,9 @@
 // 0x28 event-log entry, is EventLog_EventArray_Destroy in eventlog.cpp.)
 // ------------------------------------------------------------------
 
-// FUN_14001b030 — the same body for BuildingGoal's entry array (~BuildingGoal,
-// 0x140025e80): `~Array` over MapGenerator's 0x18 row.
-void Game_DestroyStringArray18(NamedExternalRefArray* arrayHeader) {
-    reinterpret_cast<MapGenerator::ExternalRefArray*>(arrayHeader)->~Array();  // LEFT: BuildingGoal::_field38 is a NamedExternalRefArray (Goal/goal_exe_helpers.h): its element's name is raw storage (H5, TutorialGoalCount::elementName with NamedExternalRef::name), so it is not the typed ExternalRef pool
-}
+// FUN_14001b030 for BuildingGoal's entry array (~BuildingGoal, 0x140025e80): B4 Y
+// GAMEA typed BuildingGoal::_field38 as NamedExternalRefArray (Goal/goal_exe_helpers.h),
+// so the body is that member's own `~Array`; Game_DestroyStringArray18 is deleted.
 
 // FUN_14000a8a0 (gameupdateloop.cpp, EventNotifier_Cleanup) — String at element+8,
 // stride 0x28: EventLog_EventArray_Destroy (eventlog.cpp), called by name; the

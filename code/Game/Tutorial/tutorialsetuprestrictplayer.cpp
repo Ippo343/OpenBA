@@ -79,7 +79,7 @@ static void TutRestrict_ResolveRefOrLoad(NamedExternalRef* ref) {
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     if (!efactory) return;
 
-    const char* name = ref->Name()._data;
+    const char* name = ref->name._data;
     if (!name || !name[0]) return;
 
     // Only the LOADER rejects backslashes; the factory's key comparison
@@ -118,14 +118,14 @@ TutorialSetupRestrictPlayer::TutorialSetupRestrictPlayer()
     : restrictMinX(-1), restrictMinChunkRow(-1),      // one qword store of -1
       restrictMaxX(-1), restrictMaxChunkCol(-1),      // one qword store of -1
       restrictToolFlags(0), _pad34{},
-      toolRef{{}, -1, {}, nullptr},
-      cameraRef{{}, -1, {}, nullptr} {}
+      toolRef(),
+      cameraRef() {}
 
 // The dtor inside [0] 0x140028bb0: ~String +0x50, ~String +0x38; the compiler
 // re-stamps TutorialSetup and runs ~External.
 TutorialSetupRestrictPlayer::~TutorialSetupRestrictPlayer() {
-    cameraRef.Name().~String();
-    toolRef.Name().~String();
+    // B4 Y GAMEA: cameraRef's ~String (0x140028be0), then toolRef's (0x140028bf0):
+    // the members', after this empty body.
 }
 
 // ============================================================
@@ -150,7 +150,7 @@ bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
         System::Filename tempFilename;
         (void)tempFilename;
 
-        toolRef.Name().Serialize(serializer);
+        toolRef.name.Serialize(serializer);
 
         // On load: resolve external by name
         if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
@@ -163,7 +163,7 @@ bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
         System::Filename tempFilename;
         (void)tempFilename;
 
-        cameraRef.Name().Serialize(serializer);
+        cameraRef.name.Serialize(serializer);
 
         // On load: resolve external by name
         if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
@@ -185,14 +185,9 @@ void TutorialSetupRestrictPlayer::Destruct() { this->~TutorialSetupRestrictPlaye
 // A copy of a by-name reference, resolved; the External it names (retail
 // copies the 0x18 reference to the stack and resolves the copy).
 static Object::External* ResolveCopy(const NamedExternalRef& ref) {
-    NamedExternalRef local{};
-    new (local.name) System::String(ref.Name());
-    local.generation = ref.generation;
-    local.resolved   = ref.resolved;
+    NamedExternalRef local(ref);
     TutRestrict_ResolveRefOrLoad(&local);
-    Object::External* ptr = local.resolved;
-    local.Name().~String();
-    return ptr;
+    return local.resolved;   // then the copy's ~String
 }
 
 // The resolved reference as the ComponentDescription it was validated as

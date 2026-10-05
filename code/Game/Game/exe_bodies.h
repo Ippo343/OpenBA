@@ -83,8 +83,6 @@ class CitizenBehavior;
 void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFlag, int count);
 
 // ---- game_leaf_helpers.cpp
-struct NamedExternalRefArray;   // Goal/goal_exe_helpers.h
-void Game_DestroyStringArray18(NamedExternalRefArray* arrayHeader);  // 0x14001b030
 class CharacterGrid;   // Component/CharacterGrid.h
 void Game_MusicPlayerDtor(CharacterGrid* self);  // 0x140018220
 void Game_ImageCaptureDtor(Minimap* self);  // 0x1400a4fc0

@@ -7,7 +7,7 @@
 // RETAIL (Application-x64.exe, B38_SLOTS.md section 6):
 //   reflected "BuildingGoal", parent "Achievement::Goal", ti 0x1401c61d0
 //   create 0x140025d80 (MemAlloc(0x48, 8)), createInPlace 0x140025de0
-//   ctor 0x1400d77a0, copy ctor 0x1400d77e0
+//   ctor inlined in create 0x140025d80 (0x1400d77a0 is the dtor body), copy ctor 0x1400d77e0
 //   table 0x140160300, 11 slots:
 //     [0] 0x140025e80 scalar deleting dtor: stamp, destroy the entry array at
 //         +0x38 (0x14001b030), ~Goal, MemFree on &1
@@ -47,12 +47,13 @@ public:
     bool     _field30;           // +0x30: requireAll (1 = every listed type, 0 = any); Serialize(bool&)
     uint8_t  _pad31[7];          // +0x31: padding
     // +0x38: Array<by-name ComponentDescription reference> (stride 0x18;
-    //   resolved by 0x14001b1d0; H5 raw triple, freed by 0x14001b030)
+    //   resolved by 0x14001b1d0). B4 Y GAMEA (H5): the member's ~Array is the
+    //   0x14001b030 retail's dtor 0x140025eab runs, after the (empty) body.
     NamedExternalRefArray _field38;
 };
 
 static_assert(offsetof(BuildingGoal, _field30) == 0x30, "BuildingGoal +0x30 requireAll");
 static_assert(offsetof(BuildingGoal, _field38) == 0x38, "BuildingGoal +0x38 entry array");
-static_assert(offsetof(BuildingGoal, _field38) + offsetof(NamedExternalRefArray, count) == 0x40, "BuildingGoal +0x40 entry count");
+static_assert(offsetof(BuildingGoal, _field38) + offsetof(NamedExternalRefArray, _size) == 0x40, "BuildingGoal +0x40 entry count");
 static_assert(sizeof(BuildingGoal) == 0x48, "BuildingGoal is 0x48 (create 0x140025d80 MemAlloc(0x48))");
 static_assert(alignof(BuildingGoal) == 8, "BuildingGoal is qword-aligned");
