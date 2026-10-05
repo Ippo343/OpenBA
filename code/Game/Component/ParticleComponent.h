@@ -29,6 +29,7 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (active, emitters)
 
 namespace Graphics { class ParticleInstance; }
 
@@ -51,15 +52,20 @@ static_assert(offsetof(ParticleEmitterSlot, sceneId) == 0x08, "");
 static_assert(offsetof(ParticleEmitterSlot, nodeIndex) == 0x0C, "");
 static_assert(offsetof(ParticleEmitterSlot, fadeRate) == 0x10, "");
 
+// The emitter array's row, exe 0x14000a640 (particlecomponent.cpp): stride 0x18, align 8;
+// copy = three qword moves; the new tail is {instance 0, sceneId -1, fadeRate 0} (a qword,
+// then two dwords: +0x0C and +0x14 are NOT written); no element destroy.
+namespace ParticleComponentRows { extern const rtcoll::ArraySpec kSpec_EmitterSlot; }
+
 class ParticleComponent final : public Component {
     DECLARE_EXE_TYPE(ParticleComponent)
 
 public:
     ParticleComponent();                                          // 0x1400533d0
 
-    // PORT GAP (retail 0x140053310) — B38 D2: retail destroys the geometry
-    // objects and frees both arrays; the tree never did (Inert_ScalarDtor).
-    ~ParticleComponent() override = default;                      // [0]  0x14000a560
+    // [0] 0x14000a560 = 0x140053310 + MemFree on &1. The body deletes the emitter
+    // instances; ~emitters then ~active free the two arrays (reverse declaration order).
+    ~ParticleComponent() override;                                // [0]  0x14000a560
     void Persist(IO::Stream& stream) override;                          // [3]  0x140053270
     void Startup() override;                                      // [4]  0x140053230
     void OnAdded() override;                                      // [6]  0x140052f70
@@ -81,19 +87,25 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from
     // Persist 0x140053270 (int count, then that many bools: Array<bool>) and the
     // dtor 0x140053310 (Array<ParticleEmitterSlot>, both freed by the retail dtor).
-    bool*                active;        // +0x28 per-emitter "running" flags (Array<bool> data)
-    int32_t              activeCount;   // +0x30
-    int32_t              activeCapacity;// +0x34
-    ParticleEmitterSlot* emitters;      // +0x38 Array<ParticleEmitterSlot> data
-    int32_t              emitterCount;  // +0x40
-    int32_t              emitterCapacity;// +0x44
+    // The ctor 0x1400533d0 zeroes +0x28 / +0x30 / +0x38 / +0x40 as four qwords: the two
+    // Array ctors. The dtor frees +0x38 (0x140053372..0x140053380) BEFORE +0x28
+    // (0x140053384..0x140053392): reverse declaration order after the body.
+    //
+    // +0x28 grows through 0x14000a590 (stride 1, align 1, NO tail write: the trait row of a
+    // trivial bool, as HarvestArea::_field58).
+    using ActiveFlags = Collection::Array<bool>;
+    ActiveFlags          active;        // +0x28 per-emitter "running" flags (count +0x30, capacity +0x34)
+    // +0x38 grows through 0x14000a640 (ParticleComponentRows::kSpec_EmitterSlot).
+    using EmitterList = Collection::Array<ParticleEmitterSlot, Collection::DefaultAllocator,
+                                          Collection::ExplicitSpec<&ParticleComponentRows::kSpec_EmitterSlot>>;
+    EmitterList          emitters;      // +0x38 the emitters (count +0x40, capacity +0x44)
 };
 
 static_assert(sizeof(ParticleComponent) == 0x48, "ParticleComponent is 0x48 (create 0x14000a360)");
 static_assert(alignof(ParticleComponent) == 8, "ParticleComponent alignment");
 static_assert(offsetof(ParticleComponent, active) == 0x28, "");
-static_assert(offsetof(ParticleComponent, activeCount) == 0x30, "");
-static_assert(offsetof(ParticleComponent, activeCapacity) == 0x34, "");
+static_assert(offsetof(ParticleComponent, active) + offsetof(ParticleComponent::ActiveFlags, _size) == 0x30, "");
+static_assert(offsetof(ParticleComponent, active) + offsetof(ParticleComponent::ActiveFlags, _capacity) == 0x34, "");
 static_assert(offsetof(ParticleComponent, emitters) == 0x38, "");
-static_assert(offsetof(ParticleComponent, emitterCount) == 0x40, "");
-static_assert(offsetof(ParticleComponent, emitterCapacity) == 0x44, "");
+static_assert(offsetof(ParticleComponent, emitters) + offsetof(ParticleComponent::EmitterList, _size) == 0x40, "");
+static_assert(offsetof(ParticleComponent, emitters) + offsetof(ParticleComponent::EmitterList, _capacity) == 0x44, "");

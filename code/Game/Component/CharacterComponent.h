@@ -41,8 +41,9 @@ class CharacterComponent final : public Component {
 public:
     CharacterComponent();                                         // 0x140109d20
 
-    // PORT GAP (retail 0x14002faa0) — B38 D2: retail releases the action stack
-    // at +0x48 (0x1400c5150); the tree never did (Inert_ScalarDtor).
+    // [0] 0x14002faa0: restamp, 0x1400c5150(+0x48) (0x14002facb), Component's stamp,
+    // ~Internal. The body is empty: ~actionStack (0x1400c5150) is the member's dtor, and
+    // +0x68..+0x7F (trivial) release nothing, so the compiler's chain is retail's order.
     ~CharacterComponent() override = default;                     // [0] 0x14002faa0
     void Persist(IO::Stream& stream) override;                          // [3] 0x140109ab0
     void Startup() override;                                      // [4] 0x140109a30
@@ -99,8 +100,8 @@ static_assert(offsetof(CharacterComponent, field_0x3C)           == 0x3C, "");
 static_assert(offsetof(CharacterComponent, characterIndex)       == 0x40, "");
 static_assert(offsetof(CharacterComponent, _pad44)               == 0x44, "");
 static_assert(offsetof(CharacterComponent, actionStack)          == 0x48, "");
-static_assert(offsetof(CharacterComponent, actionStack.count)    == 0x50, "");
-static_assert(offsetof(CharacterComponent, actionStack.capacity) == 0x54, "");
+static_assert(offsetof(CharacterComponent, actionStack.actions._size)     == 0x50, "");
+static_assert(offsetof(CharacterComponent, actionStack.actions._capacity) == 0x54, "");
 static_assert(offsetof(CharacterComponent, actionStack.field_0x10) == 0x58, "");
 static_assert(offsetof(CharacterComponent, actionStack.current)  == 0x60, "");
 static_assert(offsetof(CharacterComponent, modelComponent)       == 0x68, "");

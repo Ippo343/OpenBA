@@ -153,7 +153,7 @@ void WorkBase_TaskListCleanup_c5400(ActionStack* stack) {
     // grow left the cached pointer dangling and the walk read freed memory
     // (crash: organic herder's first PastureWork claim, GrazingWorkCtor →
     // cleanup → MoveTo cancel → push → walk of the stale array).
-    for (int i = 0; i < stack->count; i++) {
+    for (int i = 0; i < stack->actions._size; i++) {
         Action* node = stack->actions[i].Get();
         if (!node) continue;
         Action* cur = node;

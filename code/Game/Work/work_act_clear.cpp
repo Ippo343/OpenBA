@@ -36,7 +36,6 @@
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "object/Internal.h"
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
-#include "Component/coll_bridge.h"
 #include "Component/NaturalResourceDescription.h"   // ENDGAME B.3.9 D5
 #include "Component/Component.h"
 #include "Component/CitizenComponent.h"
@@ -83,34 +82,34 @@ static inline void* WAC_Alloc(uint64_t size, uint32_t align) {
 // capacity, +0x60 top). Faithful to disasm @0x1400c17ad..0x1400c18ec (RemoveNaturalResource
 // append) and the identical blocks for PerformWork / inline ShowTool.
 static void WAC_AppendInline(CharacterComponent* character, Action* actionIbpVal) {
-    int iVar16 = character->actionStack.count;
+    ActionStack::ActionList& actions = character->actionStack.actions;
+    int iVar16 = actions._size;
     if (iVar16 == 0) {
         // First append: initialize to capacity 0x10, copy any prior contents.
-        ::Object::InternalPtr<Action>* pvVar11 = character->actionStack.actions;
-        character->actionStack.count = 0x10;
-        if (character->actionStack.capacity < 0x10) {
-            character->actionStack.capacity = 0x10;
-            character->actionStack.actions = static_cast<::Object::InternalPtr<Action>*>(
-                System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(character->actionStack.capacity) << 3, 8));
+        ::Object::InternalPtr<Action>* pvVar11 = actions._data;
+        actions._size = 0x10;
+        if (actions._capacity < 0x10) {
+            actions._capacity = 0x10;
+            actions._data = static_cast<::Object::InternalPtr<Action>*>(
+                System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(actions._capacity) << 3, 8));
         }
         // The original copies index 0 (iVar16==0 ⇒ start = 0), zeroing the rest.
         // Disasm: start = (RDI==data) ? old-count(EBX) : 0; here EBX(old count)=0.
         int64_t start = 0;
-        if (pvVar11 == character->actionStack.actions) start = iVar16; // ==0 here
+        if (pvVar11 == actions._data) start = iVar16; // ==0 here
         for (int64_t i = start; i < 0x10; ++i) {
-            ::Object::InternalPtr<Action>* slot = &character->actionStack.actions[i];
+            ::Object::InternalPtr<Action>* slot = &actions._data[i];
             if (i < static_cast<int64_t>(iVar16)) {
                 if (slot) { *slot = nullptr; *slot = pvVar11[i]; }
             } else if (slot) {
                 *slot = nullptr;
             }
         }
-        if (pvVar11 != character->actionStack.actions) System::MemoryAllocator::MemFree(pvVar11);
+        if (pvVar11 != actions._data) System::MemoryAllocator::MemFree(pvVar11);
     } else if (character->actionStack.current + 1 == iVar16) {
-        // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize on the
+        // FUN_1400032e0 == Collection::Array<InternalPtr>::SetSize (kSpec_PtrZero) on the
         // array header at +0x48 (data, count +0x50, capacity +0x54).
-        // LEFT (B4 H5): ActionStack's retail dtor 0x1400c5150 DeletePtr's every element and +0x10 before MemFree(+0x00); the tree's ActionStack has no dtor (CharacterComponent's implicit dtor releases nothing), so typing `actions` needs 0x1400c5150 ported as ~ActionStack in CharacterComponent (Component/) first.
-        GameColl::AsArray<GameColl::Ptr8>(&character->actionStack.actions).SetSize(iVar16 * 2);
+        actions.SetSize(iVar16 * 2);
     }
 
     // Drain any pending nodes from the current index slot (cancel/detach chain).

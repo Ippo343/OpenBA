@@ -142,13 +142,13 @@ static T* FindOn(ComponentEntity* entity) {
 // The stack is the ActionStack (Action.h); its only caller is in this file.
 extern "C" void ActionStack_AbortForEntity_c52c0(ActionStack* stack, ComponentEntity** pEntityIbp) {
     if (!stack || !pEntityIbp) return;
-    int count = stack->count;
+    int count = stack->actions._size;
     if (count <= 0) return;
 
     // Action slots 9 (GetTarget, +0x48) and 8 (CheckEntity, +0x40) by name: every
     // Action has a compiler table (Action.h bodies 0x1400c4a40 / 0x1400c4a30), so the
     // old null-slot skip of the partially-filled standalone arrays is gone.
-    ::Object::InternalPtr<Action>* items = stack->actions;
+    ::Object::InternalPtr<Action>* items = stack->actions._data;
     if (!items) return;
 
     bool hit = false;

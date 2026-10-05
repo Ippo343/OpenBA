@@ -18,7 +18,6 @@
 #include "graphics/GraphicsMesh.h"
 #include <new>
 #include "Component/particlecomponent_funcs.h"
-#include "Component/coll_bridge.h"
 #include "Component/ModelComponent.h"
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
@@ -130,34 +129,32 @@ static Graphics::Scene* PC_Scene() {
     return GameUpdateLoop::_singleton->m_graphicsScene;
 }
 
-// Emitter-array (re)size — port of FUN_14000a640 (stride 0x18).
-// New entries init to {instance=0, sceneId=-1, nodeIndex=0, fadeRate=0}.
-static void PC_EmitterArrayResize(ParticleComponent* self, int newCount) {
-    int oldCount = self->emitterCount;
-    if (newCount == oldCount) return;
-
-    ParticleEmitterSlot* oldData = self->emitters;
-    self->emitterCount = newCount;
-    if (self->emitterCapacity < newCount) {
-        int cap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
-        self->emitterCapacity = cap;
-        self->emitters = static_cast<ParticleEmitterSlot*>(System::MemoryAllocator::MemAlloc((uint64_t)cap * 0x18, 8));
-    }
-    ParticleEmitterSlot* data = self->emitters;
-    if (!data) { self->emitterCount = 0; self->emitterCapacity = 0; return; }
-    int keep = (oldData == data) ? oldCount : 0;  // in-place: old entries stay valid
-    for (int i = 0; i < newCount; i++) {
-        ParticleEmitterSlot* e = &data[i];
-        if (i < keep) continue;
-        if (i < oldCount && oldData) {
-            *e = oldData[i];
-        } else {
-            e->instance = nullptr; e->sceneId = -1; e->nodeIndex = 0;
-            e->fadeRate = 0.0f; e->_pad14 = 0;
-        }
-    }
-    if (oldData && oldData != data) System::MemoryAllocator::MemFree(oldData);
+// The emitter array's row: exe 0x14000a640, Array<ParticleEmitterSlot>::SetSize (the
+// shared grow policy: exact-equal no-op, capacity n or 3n on a +1 append, MemAlloc(cap *
+// 0x18, 8), copy from the old buffer below the old count, init above it, MemFree the old
+// buffer when it moved). Copy: three qword moves (0x14000a83a..0x14000a84f). Init: a qword
+// 0 at +0x00, dword -1 at +0x08, dword 0 at +0x10 (0x14000a85a..0x14000a865); +0x0C and
+// +0x14 are not written. No element destroy.
+namespace {
+void ZeroEmitterSlot(ParticleEmitterSlot* e) {
+    e->instance = nullptr;   // +0x00 qword
+    e->sceneId  = -1;        // +0x08
+    e->fadeRate = 0.0f;      // +0x10 (retail stores the dword 0)
 }
+void AssignEmitterSlot(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<uint64_t, &rtcoll::CopyWords<uint64_t, 3>>(d, s);
+}
+void InitEmitterSlot(uint8_t* d) {
+    rtcoll::InitAs<ParticleEmitterSlot, &ZeroEmitterSlot>(d);
+}
+}  // namespace
+
+const rtcoll::ArraySpec ParticleComponentRows::kSpec_EmitterSlot = {   // exe 0x14000a640
+    "Array<ParticleEmitterSlot>", 0x18, 8,
+    &AssignEmitterSlot, &InitEmitterSlot, nullptr, true,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0x0c, 0x18,   // +0x0C..+0x10 and +0x14..+0x18 (one window: +0x10 is written)
+    /*seed zero       */ 0, 0 };
 
 // ============================================================
 // ParticleComponent_helper_2560 — place emitter i (0x140052560)
@@ -166,7 +163,7 @@ void ParticleComponent::Place(int index) {
     ParticleDescription* desc = GetParticleDesc(this);
     if (!desc) return;
     const ParticleEmitterDescription& em = desc->_emitters[index];
-    if (!emitters) return;
+    if (!emitters._data) return;
     ParticleEmitterSlot* ge = &emitters[index];
     if (!ge->instance) return;   // resource failed to load — leave emitter inert
 
@@ -263,7 +260,7 @@ void ParticleComponent::Place(int index) {
 // ParticleComponent_helper_2990 — stop emitter i (0x140052990)
 // ============================================================
 void ParticleComponent::StopEmitter(int index) {
-    if (!emitters) return;
+    if (!emitters._data) return;
     ParticleEmitterSlot* ge = &emitters[index];
     if (ge->sceneId >= 0) {
         if (GameUpdateLoop::_singleton != nullptr) {
@@ -273,10 +270,10 @@ void ParticleComponent::StopEmitter(int index) {
         }
         ge->sceneId = -1;
     }
-    if (active) active[index] = false;
+    if (active._data) active[index] = false;
 
     // Any emitter still live? Keep the per-frame flag.
-    int total = emitterCount;
+    int total = emitters._size;
     for (int j = 0; j < total; j++)
         if (emitters[j].sceneId >= 0) return;
 
@@ -293,7 +290,7 @@ void ParticleComponent::StopEmitter(int index) {
 // ParticleComponent_helper_2a50 — start emitter i (0x140052a50)
 // ============================================================
 void ParticleComponent::StartEmitter(int index) {
-    if (!emitters) return;
+    if (!emitters._data) return;
     ParticleEmitterSlot* ge = &emitters[index];
 
     Graphics::Scene* scene = (GameUpdateLoop::_singleton != nullptr) ? PC_Scene() : nullptr;
@@ -320,7 +317,7 @@ void ParticleComponent::StartEmitter(int index) {
             _entity->RefreshEntityFlags();   // 0x1400c3470
         }
     }
-    if (active) active[index] = true;
+    if (active._data) active[index] = true;
 }
 
 // ============================================================
@@ -329,7 +326,7 @@ void ParticleComponent::StartEmitter(int index) {
 void ParticleComponent::StartEmitterFade(int index) {
     ParticleDescription* desc = GetParticleDesc(this);
     if (!desc) return;
-    if (!emitters) return;
+    if (!emitters._data) return;
     ParticleEmitterSlot* ge = &emitters[index];
 
     float t1 = desc->_emitters[index].fadeTime.AsSeconds();
@@ -360,14 +357,12 @@ void ParticleComponent::Setup() {
         return;
     }
     int n = desc->_emitterCount;
-    PC_EmitterArrayResize(this, n);
-    // FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n).
-    // B.3.2 bridge, LEFT (B4 H5): retail dtor 0x140053310 deletes every non-null emitters[i].instance (0x140053350..0x140053370, `CALL [vptr+0]` with EDX=1) and frees +0x38 BEFORE it frees this +0x28 array; typing `active` alone needs that emitter teardown, which the tree has never run, in the dtor body first
-    GameColl::AsArray<GameColl::U8>(&active).SetSize(n);
+    emitters.SetSize(n);   // 0x14000a640
+    active.SetSize(n);     // 0x14000a590 Collection::Array<bool>::SetSize(n)
 
     ParticleEmitterDescription* emArr = desc->_emitters;
-    ParticleEmitterSlot* geoArr = emitters;
-    int total = emitterCount;
+    ParticleEmitterSlot* geoArr = emitters._data;
+    int total = emitters._size;
     if (!emArr || !geoArr) return;
     int nullRes = 0, nullInst = 0;
     for (int i = 0; i < total; i++) {
@@ -501,8 +496,8 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
         return false;   // table full (cannot happen below kSeenCap distinct emits)
     };
 
-    ParticleEmitterSlot* arr = self->emitters;
-    int total = self->emitterCount;
+    ParticleEmitterSlot* arr = self->emitters._data;
+    int total = self->emitters._size;
     for (int i = 0; arr && i < total; ++i) {
         if (!arr[i].instance || arr[i].sceneId < 0) continue;
         Graphics::ParticleInstance* g = arr[i].instance;
@@ -520,8 +515,8 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
 // continues. Position = the first live emitter geometry's transform translation (+0x94).
 static bool PC_Culled(ParticleComponent* self) {
     if (!PerfX::ParticleCull()) return false;
-    int total = self->emitterCount;
-    ParticleEmitterSlot* geoArr = self->emitters;
+    int total = self->emitters._size;
+    ParticleEmitterSlot* geoArr = self->emitters._data;
     if (total <= 0 || !geoArr) return false;
     for (int i = 0; i < total; i++) {
         if (geoArr[i].instance && geoArr[i].sceneId >= 0)
@@ -531,11 +526,25 @@ static bool PC_Culled(ParticleComponent* self) {
 }
 
 // 0x1400533d0. Component() is the CALL 0x1401188b0; the 0x14015a290 stamp is
-// the compiler's; +0x28..+0x40 = 0; flags |= 0xc3.
-ParticleComponent::ParticleComponent()
-    : active(nullptr), activeCount(0), activeCapacity(0),
-      emitters(nullptr), emitterCount(0), emitterCapacity(0) {
+// the compiler's; +0x28..+0x40 = 0 (the two Array ctors, 0x1400533fd..0x140053409);
+// flags |= 0xc3.
+ParticleComponent::ParticleComponent() {
     OrFlagsInCtor(0xc3);
+}
+
+// 0x140053310 (the scalar 0x14000a560 adds the MemFree on &1). Restamp (the compiler's),
+// then every non-null emitters[i].instance is destroyed through its slot 0 with flag 1
+// (0x140053350..0x140053370: `delete`, the virtual deleting dtor; the count and the data
+// pointer re-read each pass; the slot is NOT nulled). Nothing unregisters the instance
+// from Graphics::Scene here: OnRemove 0x140052e80 (the MarkForRemoval broadcast) does.
+// Then ~emitters frees +0x38 (0x140053372..0x140053380) and ~active frees +0x28
+// (0x140053384..0x140053392): reverse declaration order, then Component's chain.
+ParticleComponent::~ParticleComponent() {
+    for (int i = 0; i < emitters._size; ++i) {
+        Graphics::ParticleInstance* instance = emitters[i].instance;
+        if (instance != nullptr)
+            delete instance;
+    }
 }
 
 // [3] 0x140053270. Slot 3 is the FIRST call into this class on a load-from-save
@@ -550,18 +559,17 @@ void ParticleComponent::Persist(IO::Stream& stream) {
     IO::Stream* st = &stream;
     IO::Serializer ser(*st, 0);
 
-    int localCount = activeCount;
+    int localCount = active._size;
     ser.Serialize(localCount, nullptr);
 
     // If loading, resize bool array
-    // FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n).
-    // B.3.2 bridge, LEFT (B4 H5): retail dtor 0x140053310 deletes every non-null emitters[i].instance (0x140053350..0x140053370, `CALL [vptr+0]` with EDX=1) and frees +0x38 BEFORE it frees this +0x28 array; typing `active` alone needs that emitter teardown, which the tree has never run, in the dtor body first
+    // FUN_14000a590 is Collection::Array<bool>::SetSize(n).
     if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        GameColl::AsArray<GameColl::U8>(&active).SetSize(localCount);
+        active.SetSize(localCount);
     }
 
     // Serialize bool array
-    ser.Serialize(localCount, active, nullptr);
+    ser.Serialize(localCount, active._data, nullptr);
 }
 
 // [4] 0x140053230 — setup: create the ParticleSystemInstances.
@@ -572,7 +580,7 @@ void ParticleComponent::Startup() {
     Setup();   // 0x140052480
 
     // Zero all emitter flags
-    int count = activeCount;
+    int count = active._size;
     if (count > 0) {
         for (int i = 0; i < count; i++) {
             active[i] = false;
@@ -594,7 +602,7 @@ void ParticleComponent::OnAdded() {
     if (emitterTotal <= 0) return;
 
     ParticleEmitterDescription* descArray = desc->_emitters;
-    ParticleEmitterSlot* geoArray = emitters;
+    ParticleEmitterSlot* geoArray = emitters._data;
 
     for (int i = 0; i < emitterTotal; i++) {
         // Is the emitter started on add? (autoStart, +0x11)
@@ -629,11 +637,11 @@ void ParticleComponent::OnAdded() {
 // ParticleComponent::OnRemove (0x140052e80)
 // ============================================================
 void ParticleComponent::OnRemove() {
-    int totalCount = emitterCount;
+    int totalCount = emitters._size;
     if (totalCount <= 0) return;
 
-    ParticleEmitterSlot* geoArray = emitters;
-    bool* flagArray = active;
+    ParticleEmitterSlot* geoArray = emitters._data;
+    bool* flagArray = active._data;
 
     for (int i = 0; i < totalCount; i++) {
         ParticleEmitterSlot* geoEntry = &geoArray[i];
@@ -683,9 +691,9 @@ void ParticleComponent::OnRemove() {
 void ParticleComponent::Tick(const System::Time* time) {
     if (PC_Culled(this)) return;   // frozen off-screen: neither the unstamp nor the tick
     PC_UnstampOwnEmitters(this);   // SA per-frame frame-index advance (see helper) before the tick
-    int total = emitterCount;
+    int total = emitters._size;
     if (total <= 0) return;
-    ParticleEmitterSlot* geoArr = emitters;
+    ParticleEmitterSlot* geoArr = emitters._data;
     if (!geoArr) return;
     float uvScale = PC_UVScale();
     const System::Time& elapsed = *time;
@@ -772,7 +780,7 @@ void ParticleComponent::Slot11() {
     int emitterTotal = desc->_emitterCount;
     if (emitterTotal <= 0) return;
 
-    bool* flagArray = active;
+    bool* flagArray = active._data;
 
     for (int i = 0; i < emitterTotal; i++) {
         if (flagArray[i]) {
@@ -790,8 +798,8 @@ void ParticleComponent::OnEvent(int eventCode) {
     ParticleDescription* desc = GetParticleDesc(this);
     if (!desc) return;
     ParticleEmitterDescription* emArr = desc->_emitters;
-    ParticleEmitterSlot* geoArr = emitters;
-    int total = emitterCount;
+    ParticleEmitterSlot* geoArr = emitters._data;
+    int total = emitters._size;
     if (!emArr || !geoArr) return;
 
     for (int i = 0; i < total; i++) {

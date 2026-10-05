@@ -38,6 +38,7 @@
 #include "Player/EditTool.h"
 #include "Game/PlayerToolManager.h"   // m_toolManager->currentTool
 #include "Component/ModelComponent.h"
+#include "Component/ParticleComponent.h"   // AuditDyingEntity's particle arm
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
 #include <cstdint>
 #include <cstdio>
@@ -856,6 +857,26 @@ static void AuditDyingEntity(ComponentEntity* entity) {
         }
     }
 
+    // The same net for a ParticleComponent (B4 H5 P1): its OnAdded (slot 6, 0x140052f70)
+    // starts the autoStart emitters (StartEmitter 0x140052a50 -> Scene::AddObject) with
+    // the same blindness to the 0x400 mark, and its dtor 0x140053310 now DELETES every
+    // emitter instance (retail does; the tree leaked them before) without unregistering
+    // it -- retail relies on the mark-time OnRemove 0x140052e80. Without this, an emitter
+    // registered after the mark would leave Graphics::Scene a node pointing at the freed
+    // instance. Re-fire the component's own OnRemove only when an emitter is still in
+    // the scene (sceneId >= 0), as the model arm does on modelId.
+    const uint32_t tidParticle = ParticleComponent::TypeId();
+    for (int i = 0; i < n && arr; ++i) {
+        Component* c = arr[i].Get();
+        if (!::Object::IsDerivedFromNullSafe(c, tidParticle)) continue;
+        ParticleComponent* particle = static_cast<ParticleComponent*>(c);
+        for (int j = 0; j < particle->emitters._size; ++j) {
+            if (particle->emitters[j].sceneId >= 0) {
+                particle->OnRemove();   // slot 7
+                break;
+            }
+        }
+    }
 }
 
 void EntityList::DrainRemovals() {
