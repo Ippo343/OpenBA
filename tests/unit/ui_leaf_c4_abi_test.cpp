@@ -713,7 +713,7 @@ UNIT_TEST(b39_uib_c4_scroll) {
     std::memset(d, 0xCD, sizeof d);
     auto* sd = ::new (static_cast<void*>(d)) UI::ScrollDescription();
     CHECK(sd->_spriteSheet == nullptr);
-    for (int i = 0; i < 9; ++i) CHECK(sd->_spriteNames[i] == nullptr);
+    for (int i = 0; i < 9; ++i) CHECK(sd->_spriteNames[i]._data == nullptr);
     CHECK_EQ((int)sd->_vertical, 1);
     CHECK_EQ((int)d[0xb9], 0xCD);
     CHECK_EQ(sd->_inset, 1);
