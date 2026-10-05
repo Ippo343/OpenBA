@@ -32,8 +32,7 @@
 // must not re-declare it: two definitions of RtGraphics::Geometry in one
 // namespace across two translation units is an ODR violation, and the drift
 // between them would be invisible until a field moved.
-#include "AnimationState.h"                 // RtGraphics::InterpolatedTransform — the ONE
-                                           // definition (ENDGAME B.3.5 block GC)
+#include "AnimationState.h"                 // Graphics::AnimationState, MeshInstance::_animation
 #include "Geometry.h"                       // RtGraphics::Geometry (lane D)
 // ENDGAME B.3.5 block G: the real `Graphics::EdgeMesh` at the bottom of this
 // file derives from `Object::External` and holds four `Object::ExternalPtr<T>`.
@@ -81,16 +80,6 @@ namespace RtGraphics {
 // (PREVIOUS), which is the ordinary render-interpolation arrangement and agrees
 // with GetNodeToWorld reading the first one.
 // ============================================================================
-// THE DUPLICATE DEFINITION THAT USED TO SIT HERE IS GONE — ENDGAME B.3.5 block
-// GC. `RtGraphics::InterpolatedTransform` is defined ONCE, in `AnimationState.h`,
-// which this header now includes; the reading above (+0x00 CURRENT, +0x1c
-// PREVIOUS) travelled with it and is what that one definition records. The two
-// spellings were a LATENT ODR DEFECT — same 0x38, same offsets, DIFFERENT member
-// names, neither guarding against the other — and only an accident of include
-// graphs kept them apart. `GraphicsMesh.h`'s banner records block G routing
-// around it; block GC hit it for real and collapsed it.
-static_assert(sizeof(InterpolatedTransform) == 0x38,
-              "InterpolatedState<Transform> must be 0x38 bytes");
 
 // ============================================================================
 // Graphics::Geometry — the base of MeshInstance and EdgeMeshInstance — is
@@ -111,98 +100,6 @@ static_assert(sizeof(InterpolatedTransform) == 0x38,
 // (_sortBias, _fadeA, _fadeB) — lane D's come from the exported getters
 // ?GetDetailId@ / ?GetOpacity@, which is the stronger evidence.
 // ============================================================================
-
-// ============================================================================
-// Graphics::AnimationState — 0x18 bytes as MeshInstance embeds it.
-//
-// Spelled `MeshAnimationState` here, not `AnimationState`. The class belongs to
-// Wave 6 lane G (runtime/types/graphics/Animation.h); if that lane declares the
-// real thing under its own name, two definitions of one name in RtGraphics
-// would be an ODR violation the moment a header pulled both in. This is the
-// three-field read-only VIEW lane E needs, named so it cannot collide.
-//
-// NOT PORTED BY THIS LANE (it is lane G's class). Declared for the three fields
-// lane E's bodies read:
-//   +0x00 a bool. ??0MeshInstance stores a single BYTE here (`MOV byte ptr
-//         [RAX],CL` at 0x180100009, RAX = this+0xd8). GetNodeToWorld and
-//         RootAnimationOffset branch on it: zero means "read the instance's own
-//         node array / root offset", non-zero means "read the AnimationManager
-//         instance pool".
-//   +0x08 the layer array buffer, +0x10 its count. IsAnimating
-//         (0x1800ff7d0) reads count at MeshInstance+0xe8 and buffer at +0xe0;
-//         GetNodeToWorld reads `layers[count-1]` at stride 0x38, field +0x0c.
-// The 0x38 layer stride and the field roles are documented in
-// standalone/perf_experimental.cpp and are consistent with every read here.
-// ============================================================================
-//
-// B.4: retail's own `Graphics::AnimationState` IS these 0x18 bytes -- its ctor
-// 0x1800fdaf0 writes +0x00 (byte) and the two qwords at +0x08 / +0x10 and
-// stops, its copy ctor 0x1800168d0 copies the byte and assigns the Array, and
-// `?IsInstanced@AnimationState@` 0x1800168a0 is `MOVZX EAX,byte [RCX]`. The
-// tree's 0x48 `Graphics::AnimationState` is the AnimationManager's per-frame
-// record that EMBEDS one (a class-shape correction owed; the unit test pins
-// the 0x48 shape). The fields are typed: `_instanced` is the bool IsInstanced
-// returns and `_layers` is `Array<AnimationState::Layer>` (a trivially
-// destructible element: the implicit member dtor is the same Clear-then-J1).
-struct MeshAnimationState {
-    bool    _instanced;                     // +0x00
-    uint8_t _pad01[7];                      // +0x01
-    Collection::Array<Graphics::AnimationState::Layer> _layers;  // +0x08 data, +0x10 size
-};
-static_assert(sizeof(MeshAnimationState) == 0x18, "Graphics::AnimationState (as embedded) must be 0x18 bytes");
-static_assert(offsetof(MeshAnimationState, _layers) == 0x08, "AnimationState::_layers @ +0x08");
-static_assert(sizeof(MeshAnimationState) == sizeof(Graphics::AnimationState),
-              "the POD view and the class describe the same 0x18 bytes");
-
-// One entry of AnimationState's layer array. Only the pool id is read by lane E
-// (GetNodeToWorld / RootAnimationOffset / AddDrawItems all read
-// `layers[count-1] + 0x0c`, spelled in the decompile as
-// `*(int*)(count*0x38 - 0x2c + buffer)`); the rest is named from
-// standalone/perf_experimental.cpp's documented walk and is NOT pinned here.
-struct MeshAnimationLayer {
-    ExternalPtr _group;        // +0x00
-    int32_t     _animIndex;    // +0x08
-    int32_t     _poolId;       // +0x0c  <- the only field lane E reads
-    uint8_t     _rest[0x28];   // +0x10 .. +0x37 (time at +0x18, blend at +0x20/+0x28)
-};
-static_assert(sizeof(MeshAnimationLayer) == 0x38, "AnimationState layer stride must be 0x38");
-static_assert(offsetof(MeshAnimationLayer, _poolId) == 0x0c, "AnimationLayer::_poolId @ +0x0c");
-
-// ============================================================================
-// Graphics::MeshInstance — 0x120 bytes.
-//
-// Pinned field-by-field by ??0MeshInstance@Graphics@@QEAA@XZ (retail
-// 0x1800fffc0, ordinal 275), disassembled: after the Geometry base ctor it
-// writes qwords at +0xc0/+0xc8/+0xd0, a BYTE at +0xd8, qwords at +0xe0/+0xe8
-// (through `LEA RAX,[RBX+0xd8]`), qwords at +0xf0/+0xf8/+0x100, a dword at
-// +0x108, four 0x3f800000 dwords at +0x10c..+0x118 and a WORD at +0x11c. The
-// last write being a word is what fixes the size at 0x120 rather than 0x11c.
-//
-// CROSS-CHECK: standalone/address_registry.cpp:1343 calls the array element
-// StorageDisplayComponent reallocates "0x128-byte" and says it hand-copies
-// "sceneId at +0x120". That is the EXE's array element (a MeshInstance plus a
-// trailing int), not sizeof(MeshInstance); the two numbers agree.
-// ============================================================================
-struct MeshInstance {
-    Geometry _base;                                   // +0x00 .. +0xbf
-    ExternalPtr _mesh;                                // +0xc0  ExternalPtr<GraphicsMesh>
-    Collection::Array<ExternalPtr> _materials;        // +0xc8 data, +0xd0 size, +0xd4 capacity
-    MeshAnimationState _animation;                        // +0xd8 .. +0xef
-    Collection::Array<InterpolatedTransform> _nodes;  // +0xf0 data, +0xf8 size, +0xfc capacity
-    Vector3 _rootAnimationOffset;                     // +0x100 .. +0x10b
-    float   _color[4];                                // +0x10c ctor: 1,1,1,1
-    int16_t _sortBias;                                // +0x11c ctor: 0. AddDrawItems
-                                                      //        adds it to Geometry::_sortBias.
-    int16_t _pad11e;                                  // +0x11e
-};
-static_assert(sizeof(MeshInstance) == 0x120, "Graphics::MeshInstance must be 0x120 bytes");
-static_assert(offsetof(MeshInstance, _mesh)                == 0xc0,  "MeshInstance::_mesh @ +0xc0");
-static_assert(offsetof(MeshInstance, _materials)           == 0xc8,  "MeshInstance::_materials @ +0xc8");
-static_assert(offsetof(MeshInstance, _animation)           == 0xd8,  "MeshInstance::_animation @ +0xd8");
-static_assert(offsetof(MeshInstance, _nodes)               == 0xf0,  "MeshInstance::_nodes @ +0xf0");
-static_assert(offsetof(MeshInstance, _rootAnimationOffset) == 0x100, "MeshInstance::_rootAnimationOffset @ +0x100");
-static_assert(offsetof(MeshInstance, _color)               == 0x10c, "MeshInstance::_color @ +0x10c");
-static_assert(offsetof(MeshInstance, _sortBias)            == 0x11c, "MeshInstance::_sortBias @ +0x11c");
 
 // ============================================================================
 // Graphics::GraphicsMesh::Node — 0x48 bytes.
@@ -420,14 +317,8 @@ static_assert(offsetof(EdgeMesh, _bounds)        == 0x168, "EdgeMesh bounds @ +0
 // retail's on a field a copy ctor propagates, and PLAN §4.1 decision 5 requires
 // both implementations to be able to operate on one shared object.
 // ============================================================================
-struct EdgeMeshInstance {
-    Geometry    _base;          // +0x00 .. +0xbf
-    ExternalPtr _mesh;          // +0xc0  ExternalPtr<EdgeMesh>; default ctor: 0
-    MeshInstance* _followed;    // +0xc8  default ctor: LEFT UNINITIALISED (see above)
-};
-static_assert(sizeof(EdgeMeshInstance) == 0xd0, "Graphics::EdgeMeshInstance must be 0xd0 bytes");
-static_assert(offsetof(EdgeMeshInstance, _mesh)     == 0xc0, "EdgeMeshInstance::_mesh @ +0xc0");
-static_assert(offsetof(EdgeMeshInstance, _followed) == 0xc8, "EdgeMeshInstance::_followed @ +0xc8");
+// (B.4 Z MIRROR2 GFX: the `RtGraphics::EdgeMeshInstance` POD this banner
+// described had no reader left and is deleted; the class is below.)
 
 }  // namespace RtGraphics
 
@@ -442,11 +333,12 @@ static_assert(offsetof(EdgeMeshInstance, _followed) == 0xc8, "EdgeMeshInstance::
 // real here — the PODs' `_base` was always "single inheritance written as
 // embedding" (B35_RULES §3 says so in as many words).
 //
-// The PODs keep their names and their out-of-block users (`batchc_gfx_leaves.cpp`
+// (B.4 Z MIRROR2 GFX: the `RtGraphics::MeshInstance` POD, `MeshAnimationState`,
+// `MeshAnimationLayer` and `InterpolatedTransform` had no reader left and are
+// deleted.) The PODs keep their names and their out-of-block users (`batchc_gfx_leaves.cpp`
 // is not this block's file), so both descriptions coexist and every offset is
 // cross-asserted. `GraphicsMeshView`, `EdgeMesh`, `MeshNode`, `TriangleVertex`,
-// `EdgeVertex`, `VideoBufferHeader`, `MeshAnimationState`, `MeshAnimationLayer`
-// and `InterpolatedTransform` above are NOT this block's classes —
+// `EdgeVertex` and `VideoBufferHeader` above are NOT this block's classes —
 // `Graphics::GraphicsMesh` and `Graphics::EdgeMesh` are block G's and
 // `Graphics::AnimationState` is block H1's — and are left exactly as they are.
 //
@@ -644,16 +536,6 @@ static_assert(sizeof(MeshInstance) == 0x120,
               "Graphics::MeshInstance is 0x120 bytes (MOV EDX,0x120 in its own "
               "slot-0 vector deleting destructor 0x180017330)");
 static_assert(alignof(MeshInstance) == 8, "qword aligned (the vptr)");
-static_assert(sizeof(MeshInstance) == sizeof(RtGraphics::MeshInstance),
-              "the real class and the POD describe the same bytes");
-
-static_assert(offsetof(MeshInstance, _mesh)      == offsetof(RtGraphics::MeshInstance, _mesh),      "alias _mesh");
-static_assert(offsetof(MeshInstance, _materials) == offsetof(RtGraphics::MeshInstance, _materials), "alias _materials");
-static_assert(offsetof(MeshInstance, _animation) == offsetof(RtGraphics::MeshInstance, _animation), "alias _animation");
-static_assert(offsetof(MeshInstance, _nodes)     == offsetof(RtGraphics::MeshInstance, _nodes),     "alias _nodes");
-static_assert(offsetof(MeshInstance, _rootAnimationOffset) == offsetof(RtGraphics::MeshInstance, _rootAnimationOffset), "alias _rootAnimationOffset");
-static_assert(offsetof(MeshInstance, _color)     == offsetof(RtGraphics::MeshInstance, _color),     "alias _color");
-static_assert(offsetof(MeshInstance, _sortBias)  == offsetof(RtGraphics::MeshInstance, _sortBias),  "alias _sortBias");
 
 static_assert(offsetof(MeshInstance, _mesh)                == 0xc0,  "MeshInstance::_mesh @ +0xc0 (??0 0x1800fffc0)");
 static_assert(offsetof(MeshInstance, _materials)           == 0xc8,  "MeshInstance::_materials @ +0xc8");
@@ -748,10 +630,6 @@ static_assert(sizeof(EdgeMeshInstance) == 0xd0,
               "Graphics::EdgeMeshInstance is 0xd0 bytes (MOV EDX,0xd0 in its own "
               "slot-0 vector deleting destructor 0x1800175d0)");
 static_assert(alignof(EdgeMeshInstance) == 8, "qword aligned (the vptr)");
-static_assert(sizeof(EdgeMeshInstance) == sizeof(RtGraphics::EdgeMeshInstance),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(EdgeMeshInstance, _mesh)     == offsetof(RtGraphics::EdgeMeshInstance, _mesh),     "alias _mesh");
-static_assert(offsetof(EdgeMeshInstance, _followed) == offsetof(RtGraphics::EdgeMeshInstance, _followed), "alias _followed");
 static_assert(offsetof(EdgeMeshInstance, _mesh)     == 0xc0, "EdgeMeshInstance::_mesh @ +0xc0");
 static_assert(offsetof(EdgeMeshInstance, _followed) == 0xc8, "EdgeMeshInstance::_followed @ +0xc8");
 static_assert(offsetof(EdgeMeshInstance, _mesh) == sizeof(Geometry),
