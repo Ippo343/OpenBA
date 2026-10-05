@@ -80,25 +80,21 @@ void Game_MusicPlayerDtor(CharacterGrid* self) {
 }
 
 // ------------------------------------------------------------------
-// FUN_1400a4fc0 (gameupdateloop.cpp, ImageCapture_Dtor) — virtual scalar-dtor
+// FUN_1400a4fc0 (Minimap::~Minimap, run by GameUpdateLoop::Shutdown) — virtual scalar-dtor
 // of the two sub-objects at +8/+0x10, then frees the two buffers at +0x28/+0x18.
 // ------------------------------------------------------------------
-void Game_ImageCaptureDtor(Minimap* self) {
+Minimap::~Minimap() {
     // Retail is (**(code **)*puVar1)(puVar1, 1): deref the object to get its
     // vtable, deref THAT to get slot 0, then call. This port had only one deref
     // and so called the vtable's own address as if it were code — EXEC of
     // g_NoiseUI_ImageBufferVtable_Standalone when GameUpdateLoop::Shutdown
     // finally reached the minimap ImageBuffers.
-    for (Video::ImageBuffer* obj : {self->terrainImage, self->overlayImage}) {   // +0x08, +0x10
+    for (Video::ImageBuffer* obj : {terrainImage, overlayImage}) {   // +0x08, +0x10
         if (!obj) continue;
         delete obj;   // slot 0, free
     }
-    // ENDGAME B.3.2 step 2: two trivial-element `~Array`s (headers at +0x28 and
-    // +0x18, in that order — re-decompiled 2026-09-13: MemFree, data = 0, one
-    // qword over size+capacity).
-    // LEFT: the pixel arrays are declared as the Array's three fields (H5).
-    reinterpret_cast<rtcoll::ArrayHdr*>(&self->overlayPixels)->~Array();   // LEFT: Minimap.h H5 (gameupdateloop_load.cpp asserts Minimap trivially constructible)
-    reinterpret_cast<rtcoll::ArrayHdr*>(&self->terrainPixels)->~Array();   // LEFT: Minimap.h H5 (gameupdateloop_load.cpp asserts Minimap trivially constructible)
+    // Then the members' two trivial-element `~Array`s, +0x28 and +0x18 in that order
+    // (reverse declaration order: MemFree, data = 0, one qword over size+capacity).
 }
 
 // ------------------------------------------------------------------

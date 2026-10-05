@@ -1227,7 +1227,7 @@ post_simulation:
             ::Video::Device::_singleton
                 ->Lock();   // B.3.5 bridge
             imageCapture->overlayImage
-                ->CopyToTexture(imageCapture->overlayPixels,
+                ->CopyToTexture(imageCapture->overlayPixels._data,
                                 imageCapture->size,
                                 imageCapture->size);
             ::Video::Device::_singleton
@@ -2136,7 +2136,7 @@ void GameUpdateLoop::Shutdown() {
     // ImageCapture
     if (m_imageCapture != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying ImageCapture...\n");
-        Game_ImageCaptureDtor(m_imageCapture);   // 0x1400a4fc0
+        m_imageCapture->~Minimap();   // 0x1400a4fc0
         System::MemoryAllocator::MemFree(m_imageCapture);
     }
 

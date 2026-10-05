@@ -451,8 +451,6 @@ static_assert(std::is_trivially_default_constructible<EventLog>::value,
               "placement new of EventLog runs no code");
 static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
               "placement new of MusicPlayer runs no code");
-static_assert(std::is_trivially_default_constructible<Minimap>::value,
-              "placement new of Minimap runs no code");
 
 // 0x14009ee70 — the Map ctor (+0xF8, 0xf8). The embedded Picking::Scene @ +8
 // is a member: its default ctor (0x1801258e0) runs first, as retail's call of
@@ -1008,8 +1006,8 @@ void GameUpdateLoop::Load() {
     // Step 26 — KeyState/map-input struct (+0x148, 0x38) zero-init.
     {
         void* mem = AllocSub<void>(0x38, 4);
+        // Retail's inlined ctor (0x140097276..0x140097291): Minimap::Minimap.
         Minimap* minimap = mem ? new (mem) Minimap : nullptr;
-        if (minimap) memset(minimap, 0, sizeof(Minimap));
         m_imageCapture = minimap;
     }
 
@@ -1196,7 +1194,7 @@ void GameUpdateLoop::Load() {
                 int n = (int)(dim * dim);
                 Reimpl_Array_Resize_Stride04(&mapStruct->overlayPixels, n);
                 Reimpl_Array_Resize_Stride04(&mapStruct->terrainPixels, n);
-                uint32_t* arr = mapStruct->overlayPixels;
+                uint32_t* arr = mapStruct->overlayPixels._data;
                 if (arr) memset(arr, 0, (size_t)n * 4);
             }
 

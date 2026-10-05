@@ -25,6 +25,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "collection/Collection.h"   // Collection::Array (the pixel arrays)
 
 namespace Video { class ImageBuffer; class Context; }
 namespace Graphics { class Geometry; }
@@ -37,12 +38,17 @@ public:
     int32_t             size;                  // +0x04 image edge = the map size (Serialize int)
     Video::ImageBuffer* terrainImage;          // +0x08 terrainPixels' texture (null until painted)
     Video::ImageBuffer* overlayImage;          // +0x10 overlayPixels' texture
-    uint32_t*           terrainPixels;         // +0x18 Array<uint> data (size^2)
-    int32_t             terrainPixelCount;     // +0x20
-    int32_t             terrainPixelCapacity;  // +0x24
-    uint32_t*           overlayPixels;         // +0x28 Array<uint> data (size^2, zeroed on a new game)
-    int32_t             overlayPixelCount;     // +0x30
-    int32_t             overlayPixelCapacity;  // +0x34
+    Collection::Array<uint32_t> terrainPixels; // +0x18 Array<uint> (size^2; count +0x20, capacity +0x24)
+    Collection::Array<uint32_t> overlayPixels; // +0x28 Array<uint> (size^2, zeroed on a new game; count +0x30, capacity +0x34)
+
+    // Load 0x140097276..0x140097291 (inlined): byte +0x00 = 0, dword +0x04 = 0, the two
+    // image pointers, then the two Arrays' {data, size + capacity} qwords; +0x01..+0x03
+    // are not written.
+    Minimap() : overlayDirty(0), size(0), terrainImage(nullptr), overlayImage(nullptr) {}
+    // 0x1400a4fc0: the two images through their virtual scalar-deleting dtor (slot 0, flag
+    // 1); then ~overlayPixels (+0x28) and ~terrainPixels (+0x18): MemFree, data = 0, the
+    // size + capacity qword = 0 (reverse declaration order).
+    ~Minimap();
 
     // ---- members (B4 GAME-a; bodies in gameupdateloop_serialize.cpp) ----
     void Serialize(IO::Stream& stream);   // 0x1400a57f0
@@ -59,8 +65,8 @@ static_assert(offsetof(Minimap, size) == 0x04, "Minimap::size @ +0x04");
 static_assert(offsetof(Minimap, terrainImage) == 0x08, "Minimap::terrainImage @ +0x08");
 static_assert(offsetof(Minimap, overlayImage) == 0x10, "Minimap::overlayImage @ +0x10");
 static_assert(offsetof(Minimap, terrainPixels) == 0x18, "Minimap::terrainPixels @ +0x18");
-static_assert(offsetof(Minimap, terrainPixelCount) == 0x20, "Minimap::terrainPixelCount @ +0x20");
-static_assert(offsetof(Minimap, terrainPixelCapacity) == 0x24, "Minimap::terrainPixelCapacity @ +0x24");
+static_assert(offsetof(Minimap, terrainPixels) + offsetof(Collection::Array<uint32_t>, _size) == 0x20, "Minimap terrain count @ +0x20");
+static_assert(offsetof(Minimap, terrainPixels) + offsetof(Collection::Array<uint32_t>, _capacity) == 0x24, "Minimap terrain capacity @ +0x24");
 static_assert(offsetof(Minimap, overlayPixels) == 0x28, "Minimap::overlayPixels @ +0x28");
-static_assert(offsetof(Minimap, overlayPixelCount) == 0x30, "Minimap::overlayPixelCount @ +0x30");
-static_assert(offsetof(Minimap, overlayPixelCapacity) == 0x34, "Minimap::overlayPixelCapacity @ +0x34");
+static_assert(offsetof(Minimap, overlayPixels) + offsetof(Collection::Array<uint32_t>, _size) == 0x30, "Minimap overlay count @ +0x30");
+static_assert(offsetof(Minimap, overlayPixels) + offsetof(Collection::Array<uint32_t>, _capacity) == 0x34, "Minimap overlay capacity @ +0x34");

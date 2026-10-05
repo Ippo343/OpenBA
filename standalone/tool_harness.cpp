@@ -845,8 +845,8 @@ void FireUtilityDialog() {
         bool testPattern = isMap && !(tp && (tp[0] == '0'));  // default ON for map
         if (mapObj && isMap) {
             int width = mapObj->size;
-            uint32_t* terr = mapObj->terrainPixels;
-            uint32_t* over = mapObj->overlayPixels;
+            uint32_t* terr = mapObj->terrainPixels._data;
+            uint32_t* over = mapObj->overlayPixels._data;
             if (testPattern && terr && width > 0) {
                 // Terrain: 16-cell checkerboard of two greens + blue diagonal.
                 for (int y = 0; y < width; y++)
@@ -907,8 +907,8 @@ void FireUtilityDialog() {
             fprintf(stderr, "[MapProbe]   ints +0x00=%d +0x04=%d +0x18=%d +0x1c=%d\n",
                    w[0], w[1], w[6], w[7]);
             // Sample the raw pixel arrays: +0x18 terrain, +0x28 overlay.
-            uint32_t* terr = mapObj->terrainPixels;
-            uint32_t* over = mapObj->overlayPixels;
+            uint32_t* terr = mapObj->terrainPixels._data;
+            uint32_t* over = mapObj->overlayPixels._data;
             int width = w[1];   // Minimap::size
             auto sampleArr = [width](const char* nm, uint32_t* a) {
                 if (!a) { fprintf(stderr, "[MapProbe]   %s=null\n", nm); return; }
