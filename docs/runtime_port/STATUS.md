@@ -20,6 +20,23 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.4 THIRD SESSION — 2026-10-05: 1,051 -> 389 (811 -> 149 outside `dx11/`), NOT closed; stopped by the
+  harness for low system memory during the last merge's gate.** 37 gated merges (`b4_session/GATE_TABLE.md`
+  rows 122-158), 0 real problems; invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable
+  `b983f144`, resave 5/5 on every merge, 0 new warnings; unit 918 -> 914, tests of deleted PODs). Ran as:
+  wave Y rounds 2-5 by partition (the re-inventory's doable units) -> an independent read-only AUDIT
+  (`b4_session/AUDIT.md`: one ruling per class, all accepted; the tier-I allocation shape grown, four floor
+  categories added, `FLOOR.md` re-cut with measured ceilings) -> the closing wave (typed `FindOrLoadAs`
+  wrappers, the H8 puns, the String / Filename / WideString mirrors) -> the acceptance passes. About 120
+  more classes are real against retail's ctor AND dtor (TownHallUI, Map, WorldGeometry, TradeComponent,
+  FileInfo, Mod, GeometryBatch, ActionStack, ParticleComponent, about forty component / work arrays ...);
+  about fifteen arrays the port leaked are freed as retail; `Filename` derives from `String` as retail;
+  EVERY `Rt<Ns>::` POD mirror and `pod_bridge.h` are deleted (acceptance line 11: 49 -> 0); 1,144
+  compiler-derived `offsetof` asserts added (line 10: 1,231 -> 21); stale bridge comments 331 -> 69 (52 are
+  `dx11/`). B.4's acceptance: 6 of 12 lines off target, 3 of them entirely `dx11/`. Close checks done:
+  generated-world comparison against `b2a5434c` (identical), `devlost.sh`, the Mods route. NOT done:
+  `stepclose.sh`, quiet `sa-stress`, the removal tool's CalcPath by hand. NOT merged: `b4fin-VOID`.
+  What is left and the step after it (the dx11 seam): `endgame_b/NEXT_SESSION.md`.
 - **B.4 SECOND PASS — 2026-10-05: 8,950 -> 1,051 (811 outside `dx11/`), NOT closed; wave Y (the
   re-inventory by class) started and was interrupted by machine instability; the user closed the
   session there.** 77 gated merges this session (`b4_session/GATE_TABLE.md` rows 45-121), one problem
