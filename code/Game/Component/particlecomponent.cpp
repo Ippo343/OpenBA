@@ -361,7 +361,8 @@ void ParticleComponent::Setup() {
     }
     int n = desc->_emitterCount;
     PC_EmitterArrayResize(this, n);
-    // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
+    // FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n).
+    // B.3.2 bridge, LEFT (B4 H5): retail dtor 0x140053310 deletes every non-null emitters[i].instance (0x140053350..0x140053370, `CALL [vptr+0]` with EDX=1) and frees +0x38 BEFORE it frees this +0x28 array; typing `active` alone needs that emitter teardown, which the tree has never run, in the dtor body first
     GameColl::AsArray<GameColl::U8>(&active).SetSize(n);
 
     ParticleEmitterDescription* emArr = desc->_emitters;
@@ -553,7 +554,8 @@ void ParticleComponent::Persist(IO::Stream& stream) {
     ser.Serialize(localCount, nullptr);
 
     // If loading, resize bool array
-    // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
+    // FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n).
+    // B.3.2 bridge, LEFT (B4 H5): retail dtor 0x140053310 deletes every non-null emitters[i].instance (0x140053350..0x140053370, `CALL [vptr+0]` with EDX=1) and frees +0x38 BEFORE it frees this +0x28 array; typing `active` alone needs that emitter teardown, which the tree has never run, in the dtor body first
     if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
         GameColl::AsArray<GameColl::U8>(&active).SetSize(localCount);
     }
