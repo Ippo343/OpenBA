@@ -78,14 +78,17 @@ static_assert(sizeof(MaterialParameterSet) == 0x20, "MaterialInstance parameter 
 // `?GetConstantName@MaterialInstance@` hands it out, `FindConstant` (wave28)
 // strcmp's it, Serialize (wave24) runs `String::Serialize` (0x1800c9930) on it,
 // and the array's own copy (0x1800616c0, array.cpp `AssignStringPlus16`) adopts
-// it with a refcount bump. The POD spelling (trivially destructible, the
-// `Object::External::_path` reason). Declaring the pointer raises the element's
-// alignment from 4 to 8; nothing sizes this array through the trait-derived
-// `SpecFor` (its SetSize is the registered 0x1800616c0, `MOV EDX,8`), and the
-// only by-value holder is `Array<MaterialConstant>`, whose layout is the 16-byte
-// header either way.
+// it with a refcount bump.
+// B.4 acceptance MOD: `name` is the real `System::String`. The element is raw
+// storage of the erased core and is never built or destroyed as a C++ object:
+// `MaterialInstance::_constants` names its row, `rtcoll::kSpec_MaterialParam`
+// (SetSize 0x1800616c0: assign = zero + adopt + the 16 value bytes, init = the
+// three zero qwords, destroy = 0x180005880, i.e. ~String on +0x00 per element),
+// and ~MaterialInstance's ~Array 0x180004c80 (that destroy, then the free and
+// the header zeroed) releases each name ONCE; the member's implicit ~Array that
+// follows sees size 0 and destroys nothing.
 struct MaterialConstant {
-    RtSystem::String name; // +0x00
+    System::String name;   // +0x00
     float   value[4];      // +0x08..+0x17
 };
 static_assert(sizeof(MaterialConstant) == 0x18, "MaterialInstance constant entry is 0x18");
@@ -215,6 +218,10 @@ namespace System { class Filename; }
 namespace Video  { class Context; class ImageBuffer; class RenderState;
                    class VideoProgram; }
 
+// MaterialInstance::_constants' row (runtime/src/collection/array.cpp, retail
+// SetSize 0x1800616c0; the name is historical -- it serves Array<MaterialConstant>).
+namespace rtcoll { extern const ArraySpec kSpec_MaterialParam; }
+
 namespace Graphics {
 
 class Camera;     // block F  (runtime/types/graphics/Camera.h)
@@ -281,15 +288,14 @@ public:
 
     // ---- the non-slot exported surface -------------------------------------
     // PORTED, bodies in `runtime/src/graphics/wave28_lane_gfxbody.cpp`. Both
-    // are hidden-retslot exports whose retail body passes the CALLER's slot
-    // straight through to `Video::ShaderProgram`'s own retslot export, so the
-    // member keeps the out-parameter spelled rather than materialising a
-    // `System::String` temporary and copying a refcounted pointer out of it.
-    // The door is the same function with the retail argument order.
-    RtSystem::String* GetConstantName(RtSystem::String* ret,
-                                      int32_t pass, int32_t index) const;  // 0x180102830
-    RtSystem::String* GetTextureName(RtSystem::String* ret,
-                                     int32_t pass, int32_t index) const;   // 0x180102900
+    // are hidden-retslot exports (`QEBA?AVString@System@@HH@Z`, by value) whose
+    // retail body passes the CALLER's slot straight through to
+    // `Video::ShaderProgram`'s own retslot export: the by-value return below,
+    // whose prvalue is constructed in the caller's slot (no temporary, no
+    // refcounted copy). Non-virtual and reached by name only, so GCC's
+    // retslot-before-`this` order is never seen by a retail caller.
+    System::String GetConstantName(int32_t pass, int32_t index) const;  // 0x180102830
+    System::String GetTextureName(int32_t pass, int32_t index) const;   // 0x180102900
 
     // Exported, NOT PORTED anywhere in the tree, and no caller: declared so no
     // later block or caller batch has to edit this header, deliberately left
@@ -394,8 +400,8 @@ public:
     void    RenderTextures(Renderer& renderer, const Scene& scene,
                            const Camera& camera, int32_t pass) const;  // 0x180102df0  wave9
     void    GenerateTextures(Video::Context& context, int32_t pass) const;  // 0x180102eb0  batchc
-    int32_t FindConstant(const RtSystem::String& name) const;     // 0x180102f40  wave28
-    int32_t FindTexture(const RtSystem::String& name) const;      // 0x180103020  wave28
+    int32_t FindConstant(const System::String& name) const;     // 0x180102f40  wave28
+    int32_t FindTexture(const System::String& name) const;      // 0x180103020  wave28
     void    BuildParameters();                                    // 0x1801033e0  wave27
     // Bodies in `runtime/src/graphics/renderer.cpp`, moved onto the members by
     // block GC. Both take `Object::ExternalPtr<T>` BY VALUE, as retail does: the
@@ -461,7 +467,8 @@ public:
     uint8_t  _pad_26[2];           // +0x26
     Object::ExternalPtr<Material> _material;                          // +0x28 BY VALUE
     Collection::Array<RtGraphics::MaterialParameterSet> _parameters;  // +0x30
-    Collection::Array<RtGraphics::MaterialConstant>     _constants;   // +0x40
+    Collection::Array<RtGraphics::MaterialConstant, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_MaterialParam>> _constants;   // +0x40
     Collection::Array<RtGraphics::MaterialTexture>      _textures;    // +0x50
 };
 static_assert(sizeof(MaterialInstance) == 0x60,

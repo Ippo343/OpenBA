@@ -94,7 +94,6 @@
 #include <windows.h>
 
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 // ORDER IS LOAD-BEARING, and it is a trap in the tree rather than a style
 // choice. `External.h` does `#include "TypeInfo.h"` at its line 322 -- INSIDE
 // its own `namespace RtObject { ... }`. A translation unit that includes

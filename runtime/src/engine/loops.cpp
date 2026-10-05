@@ -96,7 +96,6 @@
 #include <cstdlib>
 #include <new>          // ENDGAME B.3.1 step 2: placement new into a POD member
 
-#include "../system/pod_bridge.h"          // the one transitional POD<->class cast
 #include "../../types/engine/UpdateLoop.h"
 #include "../../types/engine/MainLoop.h"   // lane B; for MainLoop::_currentLoop
 #include "../../types/engine/Engine.h"     // ENDGAME B.3.7: Engine::Engine (Loader::Run)
@@ -152,7 +151,7 @@ namespace {
 //                (array_destroy.cpp), rtcoll::RtColl_ArrayDtorElem_180010ab0.
 //                `UpdateLoop::_internalListA` is typed only as `void*`, so it
 //                is not a `.~Array()` (ENDGAME B.3.2 step 2 note).
-//   0x180010110  Array<IO::Mod>::operator=, RtColl_ArrayModAssign_180010110
+//   0x180010110  Array<IO::Mod>::operator=, RtIO::ModList's Assign (B.4 acceptance MOD)
 //                (io/modification.cpp), the deep copy Loader::Load runs when
 //                mod changes are switched OFF.
 // 0x18007a0d0 — Collection::Array<InternalPtr<UI::DialogInstance>>::SetSize
@@ -412,7 +411,7 @@ void Engine::Loader::Load(UpdateLoop* loop) {
         } else {
             mod->_savingSettings = 0;
             // Array<Mod>::operator=(&_savedMods, &_mods) — dst +0x18, src +0x08.
-            RtIO::RtColl_ArrayModAssign_180010110(&mod->_savedMods, &mod->_mods);
+            mod->_savedMods = mod->_mods;   // Array<Mod>::operator= 0x180010110
         }
     }
 

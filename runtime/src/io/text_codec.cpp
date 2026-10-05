@@ -84,7 +84,6 @@
 #include "../../types/system/String.h"
 #include "../../types/system/MemoryAllocator.h"
 
-namespace RtSystem { void RtString_SetLength(String* self, int len); }
 
 namespace {
 

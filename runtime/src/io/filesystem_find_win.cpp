@@ -361,7 +361,6 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
 #include "../system/widestring.h"
 #include "../collection/array_internal.h"
 

@@ -287,7 +287,6 @@ static_assert(!std::is_trivially_destructible<Configuration>::value,
 // address in its trailing comment and read through the registry today. It is
 // declared here, copied from its definition (linkage, namespace, types), so the
 // reader can call it by name. Nothing calls it through this declaration yet.
-namespace RtSystem { struct String; }   // system/String.h
 namespace System { class String; }       // system/String.h
 
 // ---- system/configuration.cpp

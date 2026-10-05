@@ -131,7 +131,6 @@
 #include <cstring>
 
 #include "saveload_internal.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../../types/io/Stream.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/io/Modification.h"
@@ -393,8 +392,8 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
         // ENDGAME B.3.1 step 2: the `?Set@String@System@@QEAAXPEBD@Z` door is gone
         // with its one call site — it is `work.Set(...)` below.
 
-        for (int32_t i = 0; i < mods->_mods.size; ++i) {
-            RtIO::Mod* entry = &mods->_mods.data[i];
+        for (int32_t i = 0; i < mods->_mods._size; ++i) {
+            RtIO::Mod* entry = &mods->_mods._data[i];
             if (entry->enabled == 0) continue;
 
             // ModInfo's real default ctor IS retail's two stores here (name and
@@ -404,9 +403,9 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
             ModInfo tmp;
 
             // The display name, adopted straight off the Mod entry with an AddRef
-            // (String's adopt, 0x180006cb0's second half; the Mod entry's name is
-            // still the RtIO::Mod POD's raw buffer pointer).
-            System::StringPrivateAccess::Adopt(tmp.name, entry->name);
+            // (String's adopt, 0x180006cb0's second half, on the Mod entry's
+            // name buffer).
+            System::StringPrivateAccess::Adopt(tmp.name, entry->name._data);
 
             // The path, with the data-directory prefix stripped. See the banner.
             //
@@ -424,7 +423,7 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
                 // `?Set@String@System@@QEAAXPEBD@Z` (0x1800c95d0) as itself; the
                 // default ctor is retail's `work.data = nullptr`.
                 System::String work;
-                work.Set(entry->file.data + static_cast<int64_t>(dirLen));
+                work.Set(entry->file._data + static_cast<int64_t>(dirLen));
 
                 // Adopt with an AddRef into the zeroed path: String::operator=
                 // on a null destination.

@@ -75,7 +75,6 @@ namespace rtgfxbody28 {
 
 using RtGraphics::MaterialConstant;
 using RtGraphics::MaterialTexture;
-using RtSystem::String;
 
 // ---------------------------------------------------------------------------
 // Attendance. Counts the DOOR and, separately, the BRANCH that does the work:
@@ -258,16 +257,16 @@ bool StringEqualsInline(const char* a, const char* b) {
 
 // Each element's leading `System::String` data pointer (+0x00).
 inline const char* ElementName(const MaterialTexture& t) { return t.name; }
-inline const char* ElementName(const MaterialConstant& c) { return c.name.data; }
+inline const char* ElementName(const MaterialConstant& c) { return c.name._data; }
 
 // The shared loop. The stride is the element's size (`ADD R11,<n>` at the
 // bottom: 0x18 for a constant, 0x10 for a texture).
 template <class Element>
-int32_t FindByName(const Element* data, int32_t size, const String* query) {
+int32_t FindByName(const Element* data, int32_t size, const System::String* query) {
     const int64_t n = size;                       // MOVSXD RSI,<size>
     if (n <= 0) return -1;                        // TEST RSI,RSI / JLE  -> OR EAX,-1
 
-    const char* const b = query->data;            // MOV R9,[RDX]
+    const char* const b = query->_data;           // MOV R9,[RDX]
     const Element* p = data;                      // MOV R11,[RCX+0x40 / 0x50]
     for (int64_t i = 0; i < n; ++i) {
         if (StringEqualsInline(ElementName(*p), b))
@@ -670,22 +669,17 @@ namespace Graphics {
 // `ret` that the door pointer used to be handed, from the member's prvalue. That
 // is line for line what `RtVideo_ShaderProgram_GetConstantName` does, minus the
 // indirection, so the refcount arithmetic is unchanged. `ShaderGetNameFn` is gone.
-// LEFT: `ret` is the `RtSystem::String` slot the member's declaration names
-// (Material.h), constructed in place as the `System::String` it holds.
-RtSystem::String* Material::GetConstantName(RtSystem::String* ret,
-                                            int32_t pass, int32_t index) const {
-    new (ret) System::String(
-        rtgfxbody28::PassShaderProgram(this, pass)
-            ->::Video::ShaderProgram::GetConstantName(index));
-    return ret;                                   // MOV RAX,RBX
+// B.4 acceptance MOD: the member returns by value (retail's signature); the
+// callee's prvalue is constructed straight into the caller's slot, as the
+// placement new into `ret` did.
+System::String Material::GetConstantName(int32_t pass, int32_t index) const {
+    return rtgfxbody28::PassShaderProgram(this, pass)
+        ->::Video::ShaderProgram::GetConstantName(index);
 }
 
-RtSystem::String* Material::GetTextureName(RtSystem::String* ret,
-                                           int32_t pass, int32_t index) const {
-    new (ret) System::String(
-        rtgfxbody28::PassShaderProgram(this, pass)
-            ->::Video::ShaderProgram::GetTextureName(index));
-    return ret;
+System::String Material::GetTextureName(int32_t pass, int32_t index) const {
+    return rtgfxbody28::PassShaderProgram(this, pass)
+        ->::Video::ShaderProgram::GetTextureName(index);
 }
 
 // ---------------------------------------------------------------------------
@@ -704,11 +698,11 @@ RtSystem::String* Material::GetTextureName(RtSystem::String* ret,
 // functions and cannot be friends of the class without a declaration this header
 // does not need.
 // ---------------------------------------------------------------------------
-int32_t MaterialInstance::FindConstant(const RtSystem::String& name) const {
+int32_t MaterialInstance::FindConstant(const System::String& name) const {
     return rtgfxbody28::FindByName(_constants._data, _constants._size, &name);
 }
 
-int32_t MaterialInstance::FindTexture(const RtSystem::String& name) const {
+int32_t MaterialInstance::FindTexture(const System::String& name) const {
     return rtgfxbody28::FindByName(_textures._data, _textures._size, &name);
 }
 

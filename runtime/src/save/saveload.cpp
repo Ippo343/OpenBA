@@ -104,7 +104,6 @@
 #include "../../types/system/Value.h"   // System::Time — Update / SetMinOperationTime
 #include <new>                  // placement new into the retail hidden return slot
 #include "../system/string.h"   // RtSystem::String (Wave 2, lane String)
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "saveload_internal.h"
 
 using RtSave::SaveLoad;
@@ -735,10 +734,10 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     // (0x18000c780), so this one line spends both.
     System::Filename work(joined);
 
-    count = mods->_mods.size;
-    base  = mods->_mods.data;
+    count = mods->_mods._size;
+    base  = mods->_mods._data;
     for (int i = 0; i < count; ++i) {
-        const char* entry = base[i].file.data;
+        const char* entry = base[i].file._data;
         const int lenEntry = entry ? RtSystem::StringLength(entry) : 0;
         // GetLength (0x1800063c0) IS the null-guarded header read this line
         // used to spell by hand.

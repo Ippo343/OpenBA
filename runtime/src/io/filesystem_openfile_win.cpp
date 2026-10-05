@@ -144,7 +144,6 @@
 #include "../../types/system/Filename.h"
 #include "../../types/system/WideString.h"
 #include "../../src/system/string.h"
-#include "../../src/system/pod_bridge.h"
 
 #include <new>        // placement new into a raw FileInfo Filename slot
 

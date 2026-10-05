@@ -38,6 +38,8 @@
 #include <type_traits>   // B.3.4 PACKAGE+FS: the "IO::Modification has no vptr" pins
 
 #include "../system/Filename.h"
+#include "../system/String.h"
+#include "../collection/Collection.h"   // B.4 acceptance MOD: Mod's Array / Set members
 
 namespace Object { class External; }   // ReloadEntry::external
 
@@ -92,18 +94,86 @@ static_assert(offsetof(ModSetNode, right)  == 0x18, "0x18001054e MOV [RBX+0x18],
 static_assert(offsetof(ModSetNode, balance) == 0x20, "0x180027529 MOV [RDX+0x20],CX");
 static_assert(offsetof(ModSetNode, height)  == 0x22, "0x180027525 MOV [RDX+0x22],AX");
 
-struct ModSet {
-    ModSetNode* root;    // +0x00
-    int32_t     count;   // +0x08
-    int32_t     _pad0c;
-};
-static_assert(sizeof(ModSet) == 0x10, "CopyCtor zeroes [RSI] and [RSI+8] then strides 0x10");
+// (B.4 acceptance MOD: the `ModSet` header POD is gone; Mod+0x60 is the real
+// `Collection::Set<System::Filename, FilenameICompare>` below. `ModSetNode`
+// stays: it is the erased node the width-8 AVL core (the retrace 0x1800274c0
+// and its two rotations, modification_refresh.cpp) is typed on, the same 0x28
+// bytes as `ModFilenameSet::Node`, asserted below.)
 
-// One entry of Modification's mod array.
+// 0x18007eefc -- `__ascii_stricmp`, the comparator of the mod path set
+// (modification_refresh.cpp).
+int ModStrICmp(const char* a, const char* b);
+
+// The `Compare` policy of the mod path set: retail's `_stricmp`, not
+// `AVLCompare`'s signed `strcmp`.
+struct FilenameICompare {
+    static bool Less(const System::Filename& a, const System::Filename& b) {
+        return ModStrICmp(a._data, b._data) < 0;
+    }
+};
+
+}  // namespace RtIO
+
+namespace Collection {
+namespace detail {
+// `System::Filename`'s null state. Only a POINTER-shaped key has one, and the
+// descent treats it asymmetrically -- a null NODE key skips the left test, a
+// null SEARCH key descends left and then reports EQUAL. That is retail's, read
+// off 0x1800afd50 / 0x1800afd81 (RefreshList's inlined insert), and it is
+// exactly the shape `InsertCorePattern` already carries for `char*`. Declared
+// here, beside the one Set that keys on a Filename, so every translation unit
+// that names the set sees it before anything instantiates it.
+template <> struct KeyTraits<System::Filename> {
+    static bool IsNull(const System::Filename& k) { return k._data == nullptr; }
+};
+}  // namespace detail
+}  // namespace Collection
+
+namespace RtIO {
+
+// The set itself. `Key == T` is retail's rule (Collection.h's Set banner), the
+// element IS the key, and `align8(sizeof(System::Filename)) == 8` selects
+// `AvlOps<Node, 0x8>` -- modification_refresh.cpp's three bodies.
+using ModFilenameSet = Collection::Set<System::Filename, FilenameICompare>;
+static_assert(sizeof(ModFilenameSet) == 0x10, "CopyCtor zeroes [RSI] and [RSI+8] then strides 0x10");
+static_assert(sizeof(ModFilenameSet::Node) == sizeof(ModSetNode),
+              "Set<Filename>::Node is ModSetNode's 0x28 bytes (node alloc 0x180010570)");
+static_assert(offsetof(ModFilenameSet::Node, parent)  == offsetof(ModSetNode, parent),  "parent");
+static_assert(offsetof(ModFilenameSet::Node, left)    == offsetof(ModSetNode, left),    "left");
+static_assert(offsetof(ModFilenameSet::Node, right)   == offsetof(ModSetNode, right),   "right");
+static_assert(offsetof(ModFilenameSet::Node, balance) == offsetof(ModSetNode, balance), "balance @ +0x20");
+static_assert(offsetof(ModFilenameSet::Node, height)  == offsetof(ModSetNode, height),  "height @ +0x22");
+
+// One entry of Modification's mod array: `IO::Modification::Mod`
+// (`?GetModification@` spells it `UMod@12@`).
+//
+// B.4 acceptance MOD (`behaviour:`): the real class. Its members are what
+// retail constructs and destroys, and its special members are retail's:
+//   * Mod(const Mod&)        0x1800101e0 (modification.cpp), statement for
+//                            statement in retail's order;
+//   * operator=(const Mod&)  0x180026ef0 (modification.cpp);
+//   * ~Mod()                 0x180011460 (modification.cpp, out of line as
+//                            retail's is): no body; retail releases files
+//                            (0x1800098d0), set (0x180010470 and the two zero
+//                            stores), file, bytes (0x1800112a0), ints
+//                            (0x1800111a0), description, author, name --
+//                            reverse declaration order, which is exactly the
+//                            member destruction;
+//   * Mod()                  RefreshList's stack record (0x1800af790..
+//                            0x1800af7d7): every member zeroed in declaration
+//                            order EXCEPT +0x24 / +0x28 / +0x2c and the pad at
+//                            +0x51..+0x57, which retail leaves unwritten.
+// Its arrays are rows of the erased core: `ModList` below
+// (`rtcoll::kSpec_Mod`: assign = the copy ctor, destroy = ~Mod).
 struct Mod {
-    char*    name;          // +0x00 — refcounted String
-    char*    author;        // +0x08 — refcounted String
-    char*    description;   // +0x10 — refcounted String
+    Mod();
+    Mod(const Mod& src);
+    Mod& operator=(const Mod& src);
+    ~Mod();
+
+    System::String name;          // +0x00
+    System::String author;        // +0x08
+    System::String description;   // +0x10
 
     int32_t  i18;           // +0x18
     int32_t  i1c;           // +0x1c
@@ -112,27 +182,56 @@ struct Mod {
     int32_t  i28;           // +0x28
     int32_t  i2c;           // +0x2c
 
-    ModArrayOf<uint32_t> ints;   // +0x30 — Array<uint> (op= 0x180011110, stride 4; filled from ?GetIconData@ `?$Array@I`)
-    ModArrayOf<uint8_t> bytes;   // +0x40 — Array<uint8> (op= 0x180011220, stride 1)
+    Collection::Array<uint32_t> ints;    // +0x30 — op= 0x180011110, ~Array 0x1800111a0 (filled from ?GetIconData@ `?$Array@I`)
+    Collection::Array<uint8_t>  bytes;   // +0x40 — op= 0x180011220, ~Array 0x1800112a0
 
     uint8_t  enabled;       // +0x50 — Enable() writes this byte
-    uint8_t  _pad51[7];
+    uint8_t  _pad51[7];     // +0x51 — never written
 
-    RtSystem::Filename file;   // +0x58 — the mod's .pkm path; Find()'s key
+    System::Filename file;  // +0x58 — the mod's .pkm path; Find()'s key
 
-    ModSet   set;           // +0x60 — Filename-keyed set
-    ModArrayOf<System::Filename> files;     // +0x70 — Array<Filename> (op= 0x1800091f0, stride 8); B.4 Z LAST IO: real Filename elements in the trivial header
+    ModFilenameSet set;     // +0x60 — the package's paths (clone 0x1800104f0, destroy 0x180010470)
+    Collection::Array<System::Filename> files;   // +0x70 — op= 0x1800091f0, ~Array 0x1800098d0
 };
 static_assert(sizeof(Mod) == 0x80,
               "Find() 0x1800aea10: `lVar3 = lVar3 + 0x80` strides the array by this");
+static_assert(offsetof(Mod, name)        == 0x00, "CopyCtor 0x180010208 MOV [RCX],RBP");
+static_assert(offsetof(Mod, author)      == 0x08, "CopyCtor 0x180010219 MOV [RCX+0x8],RBP");
+static_assert(offsetof(Mod, description) == 0x10, "CopyCtor 0x18001022d MOV [RCX+0x10],RBP");
+static_assert(offsetof(Mod, i18)     == 0x18, "CopyCtor 0x180010244");
+static_assert(offsetof(Mod, i1c)     == 0x1c, "CopyCtor 0x18001024a");
 static_assert(offsetof(Mod, order)   == 0x20, "SaveList 0x1800b0654");
+static_assert(offsetof(Mod, i24)     == 0x24, "CopyCtor 0x180010256");
+static_assert(offsetof(Mod, i28)     == 0x28, "CopyCtor 0x18001025c");
+static_assert(offsetof(Mod, i2c)     == 0x2c, "CopyCtor 0x180010262");
 static_assert(offsetof(Mod, ints)    == 0x30, "CopyCtor 0x180010265 ADD RCX,0x30");
 static_assert(offsetof(Mod, bytes)   == 0x40, "CopyCtor 0x180010283 LEA RCX,[RBX+0x40]");
 static_assert(offsetof(Mod, enabled) == 0x50, "Enable 0x1800aeabe MOV [RDX+RAX+0x50],R8B");
+static_assert(offsetof(Mod, _pad51)  == 0x51, "never written");
 static_assert(offsetof(Mod, file)    == 0x58,
               "Find() 0x1800aea10: `*(char**)(*(this+8) + 0x58 + lVar3)`");
 static_assert(offsetof(Mod, set)     == 0x60, "CopyCtor 0x1800102ae LEA R14,[RDI+0x60]");
 static_assert(offsetof(Mod, files)   == 0x70, "CopyCtor 0x1800102e0 LEA RCX,[RBX+0x70]");
+
+}  // namespace RtIO
+
+namespace rtcoll {
+// Array<Mod>'s row (modification.cpp): stride 0x80, align 8 (0x180028676's
+// MemAlloc), assign = Mod's copy ctor (0x1800101e0: the CALL in SetSize
+// 0x1800286a5 and in operator= 0x180010110), no init arm (SetSize 0x180028610
+// is only ever called with a fill), destroy = ~Mod (0x180011460: the
+// per-element CALL in ~Array 0x180010b80 and SetSize 0x1800286c7 / 0x180028733).
+extern const ArraySpec kSpec_Mod;
+}  // namespace rtcoll
+
+namespace RtIO {
+
+// `Collection::Array<IO::Modification::Mod>`: retail's ~Array 0x180010b80,
+// operator= 0x180010110 and SetSize 0x180028610 are this class's members over
+// the one erased core, driven by `kSpec_Mod`.
+using ModList = Collection::Array<Mod, Collection::DefaultAllocator,
+                                  Collection::ExplicitSpec<&rtcoll::kSpec_Mod>>;
+static_assert(sizeof(ModList) == 0x10, "Collection::Array is 16 bytes");
 
 // The reload queue's element in ?SetupFileSystem@Modification@IO@@ —
 // `{uint32 typeId, External*, Filename}`, stride 0x18, built at [RBP-0x71]
@@ -194,23 +293,16 @@ static_assert(sizeof(ReloadEntry) == 0x18, "0x180028d2d stride, cap*3*8");
 // `UNPROMOTABLE(HARMFUL)` in `reg_mint_promoted.cpp` — then destroys
 // `_savedMods`, then `_mods`. Nothing here changes any of that.
 //
-// *** `Mod`, `ModSet`, `ModSetNode` AND `ModArray` STAY PODs. ***
-// ---------------------------------------------------------------
+// *** `Mod` IS A REAL CLASS (B.4 acceptance MOD). ***
+// ---------------------------------------------------
 // `IO::Modification::Mod` is retail's nested struct — `?GetModification@` spells
 // it `UMod@12@`, `U` for struct, `12` for `Modification::IO`. It is NOT nested
-// here and it is NOT converted, for the plain reason that `RtIO::Mod` is
-// read outside this block's file set entirely:
-// `runtime/src/engine/{loops,engine_platform,singleton_ctors}.cpp` and
-// `runtime/src/save/{saveload_meta,saveload_update}.cpp` all include this
-// header. B33 §7's rule applies verbatim — the POD stays, trivially
-// destructible, until its last user converts, and that is not this step.
-//
-// That is also the answer to the `RtSystem::Filename` member question for this
-// class. The two Filename PODs in this header (`Mod::file` at +0x58 and
-// `ModSetNode::key`) belong to those two PODs, not to `Modification` itself,
-// which holds no String or Filename member at all: its 0x28 bytes are two
-// flags and two `Collection::Array<Mod>` headers. So there is nothing to
-// retype here and no double-free to risk.
+// here (it stays `RtIO::Mod`, the spelling its readers in runtime/engine,
+// runtime/save and code/Game/Dialog use), but it is the real class: String /
+// Filename / Array / Set members with retail's copy ctor, operator= and
+// destructor (see its banner above). `ModSetNode` stays the erased node of
+// the width-8 AVL core; `ModArrayOf<T>` stays the header of the PackageFile
+// return slots and FileSystem::_userPackFilenames.
 //
 // *** WHAT IS AND IS NOT DECLARED. ***
 // ------------------------------------
@@ -237,8 +329,7 @@ public:
     int GetCount() const;
 
     // ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z     0x18000da80
-    // Returns `const Mod&`. `Mod` is still the `RtIO::Mod` POD (see the banner)
-    // — a B.3.4 spelling, not a permanent one. The index is SIGN-extended
+    // Returns `const Mod&` (`RtIO::Mod`, see the banner). The index is SIGN-extended
     // before the `<< 7`: a negative index strides BACKWARDS, and that is
     // load-bearing, not a decompiler artefact.
     const RtIO::Mod& GetModification(int index) const;
@@ -259,10 +350,6 @@ public:
     void SetupFileSystem();
 
     // ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z      0x1800aea10
-    // Declared with the `RtSystem::Filename` POD for its parameter because that
-    // is what the door's signature carries today; `System::Filename` is a real
-    // class already, so this is a spelling the caller batches collapse, not a
-    // layout question (the two are layout-identical).
     int Find(const System::Filename& file) const;
 
     // ---- the 0x28 bytes, at retail's offsets -------------------------------
@@ -272,11 +359,15 @@ public:
     uint8_t  _dirty;           // +0x00 — IsDirty 0x18000daa0
     uint8_t  _savingSettings;  // +0x01 — EnableSavingSettings 0x1800aead0
     uint8_t  _pad02[6];
-    // B.4 Z RT2: the two Array<Mod>s as the typed 16-byte header (POD, trivially
-    // constructible / destructible: the ctor 0x1800b04b0 still zeroes the six
-    // fields by name, ??1 0x1800b0470 still releases them through 0x180010b80).
-    RtIO::ModArrayOf<RtIO::Mod> _mods;        // +0x08 {data, size +0x10, capacity +0x14}
-    RtIO::ModArrayOf<RtIO::Mod> _savedMods;   // +0x18 {data, size +0x20, capacity +0x24}
+    // B.4 acceptance MOD: the two Array<Mod>s are `RtIO::ModList`, retail's
+    // Array<Mod> (row kSpec_Mod). IO::Modification is never constructed or
+    // destroyed as a C++ object: Engine::Startup MemAllocs it and runs the
+    // ctor 0x1800b04b0 (Ctor_Modification, which zeroes the six fields by
+    // name), and Engine::Shutdown runs ??1 0x1800b0470 (RtIo_Modification_Dtor:
+    // ~Array 0x180010b80 on each, i.e. DestroyAndFree) and then MemFree, so no
+    // implicit constructor or destructor of these members ever runs.
+    RtIO::ModList _mods;        // +0x08 {data, size +0x10, capacity +0x14}
+    RtIO::ModList _savedMods;   // +0x18 {data, size +0x20, capacity +0x24}
 
     // ?_singleton@Modification@IO@@2PEAV12@EA (0x1801fc6b0) -- the class
     // static (ENDGAME B.3.9 IO, B39_RULES D7; retail's `2` = public). Defined
@@ -317,11 +408,7 @@ namespace RtIO {
 extern "C" void RtIo_Modification_SortMods(Mod* data, int32_t count, void*);  // 0x180028760
 // ---- io/modification.cpp
 void* RtColl_ArrayFilenameDtor_1800098d0(ModArrayOf<System::Filename>* a);  // 0x1800098d0
-ModArrayOf<Mod>* RtColl_ArrayModAssign_180010110(ModArrayOf<Mod>* dst, const ModArrayOf<Mod>* src);  // 0x180010110
-void* RtColl_ArrayModDtor_180010b80(ModArrayOf<Mod>* a);  // 0x180010b80
+void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv);  // 0x180011110
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv);  // 0x180011220
-void* RtIo_Mod_Assign_180026ef0(Mod* dst, const Mod* src);  // 0x180026ef0
-void* RtIo_Mod_CopyCtor_1800101e0(Mod* dst, const Mod* src);  // 0x1800101e0
-void RtIo_Mod_Dtor_180011460(Mod* self);  // 0x180011460
 }  // namespace RtIO
 // ==== end B3R W0-P0c ====
