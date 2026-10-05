@@ -154,7 +154,7 @@ bool UIDescription::Serialize(IO::Stream& stream) {
     // 5. per-element serialize
     if (UIDescriptionEntry* e = _entries) {
         for (int i = 0; i < count; ++i, ++e) {
-            RtObject::RtObject_Type_Serialize(&e->type, &ser);   // import slot 0x1401516b0
+            RtObject::RtObject_Type_Serialize(&e->type._type, &ser);   // import slot 0x1401516b0
             Reimpl_ExternalPtr_Serialize_StringTable(&e->ref08, &ser);
             Reimpl_ExternalPtr_Serialize_StringTable(&e->ref10, &ser);
             Reimpl_ExternalPtr_Serialize_StringTable(&e->ref18, &ser);

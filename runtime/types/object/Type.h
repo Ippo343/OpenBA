@@ -66,9 +66,8 @@ namespace IO { class Serializer; }
 
 namespace RtObject {
 // ---- object/type_system.cpp
-// `self` stays `void*`: the callers' fields are uint32_t, int32_t and
-// Object::Type (code/Game headers), and one typed parameter needs them all
-// declared Object::Type. Every caller hands a local IO::Serializer.
-void RtObject_Type_Serialize(void* self, ::IO::Serializer* serializer);  // 0x1800c0c40
+// `self` is the 4-byte type id: every caller's field is a uint32_t (or an
+// Object::Type, which passes its `_type`). Every caller hands a local IO::Serializer.
+void RtObject_Type_Serialize(uint32_t* self, ::IO::Serializer* serializer);  // 0x1800c0c40
 }  // namespace RtObject
 // ==== end B3R W0-P0c ====
