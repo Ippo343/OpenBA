@@ -1959,13 +1959,15 @@ void* Factory_RenderStateData(DeviceData* /*self*/, ::Video::RenderState* owner)
 }
 
 void* Factory_VideoProgramData(DeviceData* /*self*/, ::Video::VideoProgram* owner) {
-    return AllocData<VideoProgramData, ::Video::VideoProgramData>(0x10, owner,
-                                       Vt::VideoProgramData);
+    // B5 PILOT: the base's operator new is retail's MemAlloc(0x10, 4); the ctor chain
+    // is retail's `??0VideoProgramData` + the vptr store (now the compiler's table).
+    return new VideoProgramData(owner);
 }
 
 void* Factory_RenderBufferData(DeviceData* /*self*/, ::Video::RenderBuffer* owner) {
-    return AllocData<RenderBufferData, ::Video::RenderBufferData>(0x10, owner,
-                                       Vt::RenderBufferData);
+    // B5 PILOT: the base's operator new is retail's MemAlloc(0x10, 4); the ctor chain
+    // is retail's `??0RenderBufferData` + the vptr store (now the compiler's table).
+    return new RenderBufferData(owner);
 }
 
 

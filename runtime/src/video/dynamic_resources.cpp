@@ -459,7 +459,13 @@ void Video::RenderBuffer::ReleaseDynamic() {
     RenderBuffer* p = _firstRenderBuffer;
     if (p != nullptr) {
         do {
-            ReleaseCompanion(p->platformData);
+            // B5 PILOT (B5_RULES D10): RenderBufferData wears the compiler's
+            // table, so its slot-0 call with flags 1 is `delete` (virtual dtor,
+            // then the base's operator delete = MemFree); guarded on the
+            // companion and the field nulled, as ReleaseCompanion does.
+            if (RenderBufferData* companion = p->platformData)
+                delete companion;
+            p->platformData = nullptr;
             p = p->prev;
         } while (p != _firstRenderBuffer);
     }
