@@ -738,8 +738,6 @@ static_assert(offsetof(ParticleSystem, _gravScale) - offsetof(ParticleSystem, _a
 extern "C" void* RtGraphics_Emitter_OperatorNew(void);  // 0x1800205a0
 extern "C" void RtGraphics_Emitter_OperatorDelete(void* p);  // 0x180020600
 extern "C" void* RtGraphics_Emitter_DeleteDtor(void* p);  // 0x180020d60
-// B.4: typed -- the block it builds and the Particle it reads `_subCount` from.
-extern "C" RtGraphics::ParticleBoundsRecord* RtGraphics_ParticlePoolRecord_Ctor(
-    void* recv, const Graphics::Particle* particle);  // 0x180103bf0
+// 0x180103bf0 is RtGraphics::ParticleBoundsRecord's C++ ctor (ParticleInstance.h).
 extern "C" void* RtGraphics_ParticlePool_OperatorNew();  // 0x180061a80
 // ==== end B3R W0-P0c ====
