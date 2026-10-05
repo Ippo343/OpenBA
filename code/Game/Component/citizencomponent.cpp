@@ -1527,7 +1527,8 @@ void CitizenComponent::EatFrom(ComponentEntity* target) {
         return;
     }
 
-    // consumedTypes (+0x98) is the data of an H5 raw Array triple (data, count, capacity).
+    // consumedTypes (+0x98) is the Array {data, count, capacity}; the append below is
+    // the tree's hand-written grow, read by its three fields.
     float uv = kRdata_14017214c;
     float hours = hunger;
     do {
@@ -1538,26 +1539,26 @@ void CitizenComponent::EatFrom(ComponentEntity* target) {
         if (work == nullptr) return;
 
         // add `work` to the citizen's consumed-type list (+0x98 array, +0xa0 count, +0xa4 cap)
-        int count = consumedTypeCount;
+        int count = consumedTypes._size;
         happinessFlags |= 0x10000;
         bool present = false;
         if (0 < count) {
-            ComponentDescription** arr = consumedTypes;
+            ComponentDescription** arr = consumedTypes._data;
             for (int i = 0; i < count; i++) {
                 if (arr[i] == work) { present = true; break; }
             }
         }
         if (!present) {
             int newCount = count + 1;
-            ComponentDescription** old = consumedTypes;
-            consumedTypeCount = newCount;
-            if (consumedTypeCapacity < newCount) {
-                consumedTypeCapacity = (count != 0) ? newCount * 3 : newCount;
+            ComponentDescription** old = consumedTypes._data;
+            consumedTypes._size = newCount;
+            if (consumedTypes._capacity < newCount) {
+                consumedTypes._capacity = (count != 0) ? newCount * 3 : newCount;
                 ComponentDescription** nb = static_cast<ComponentDescription**>(
-                    System::MemoryAllocator::MemAlloc((uint64_t)consumedTypeCapacity * 8, 8));
-                consumedTypes = nb;
+                    System::MemoryAllocator::MemAlloc((uint64_t)consumedTypes._capacity * 8, 8));
+                consumedTypes._data = nb;
             }
-            ComponentDescription** dst = consumedTypes;
+            ComponentDescription** dst = consumedTypes._data;
             int start = (old == dst) ? count : 0;
             for (int i = start; i < newCount; i++) {
                 dst[i] = (i < count) ? old[i] : work;
@@ -1974,8 +1975,8 @@ void CitizenComponent::UpdateHappiness() {
         else fVar5 += uv;
     }
     if ((f >> 0x10 & 1) != 0) {
-        if (desc->_ia8 < consumedTypeCount) {
-            if (desc->_iac <= consumedTypeCount) fVar5 += uv;
+        if (desc->_ia8 < consumedTypes._size) {
+            if (desc->_iac <= consumedTypes._size) fVar5 += uv;
         } else {
             fVar5 -= uv;
         }
@@ -2365,16 +2366,17 @@ static Component* CitizenComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, 
 // parent walk never terminates (the post-load freeze).
 //   +0x30 = -1, +0xa8 = -1, +0x1d8 = -1 (qword: toolId AND sceneObjectId),
 //   +0x1e0 = 4, everything else 0.
-// PORT GAP (retail 0x140114808): retail runs Graphics::MeshInstance::MeshInstance()
-// on +0xb8; the tree keeps those 0x120 bytes zero-filled (CitizenComponent.h).
+// +0x98: Array() zeroes it (retail's qword stores 0x1401147e2 / 0x1401147e9);
+// +0xB8: Graphics::MeshInstance::MeshInstance() (retail CALL [0x140151490] at
+// 0x140114808), in declaration order between +0xAC and +0x1D8 as retail.
 CitizenComponent::CitizenComponent()
     : name(), field_0x30(-1), field_0x34(0), gender(0), age(0), maxAge(0), hunger(0),
       coldness(0), pregnancyTimer(0), health(0), statusFlags(0), foodTimer{0},
       field_0x60{0}, disease(nullptr), field_0x70{0}, field_0x78{0}, happiness(0),
       field_0x84(0), happinessFlags(0), _pad8C{}, happinessTimer{0},
-      consumedTypes(nullptr), consumedTypeCount(0), consumedTypeCapacity(0),
+      consumedTypes(),
       field_0xA8(-1), field_0xAC(0), field_0xB0(0), _padB4{},
-      meshInstance{}, toolId(-1), toolSceneId(-1), field_0x1E0(4), clothingLevel(0),
+      meshInstance(), toolId(-1), toolSceneId(-1), field_0x1E0(4), clothingLevel(0),
       clothingTimer{0}, profession(nullptr), pendingProfession(nullptr),
       field_0x200{0}, school(nullptr), education(0), _pad214{}, schoolTime{0},
       field_0x220(false), _pad221{}, careBuilding(nullptr), field_0x230(nullptr),

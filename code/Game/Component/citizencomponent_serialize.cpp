@@ -156,8 +156,8 @@ void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) {
 } // namespace
 
 // [3] 0x140114160.
-// The System::String / Collection::Array members are H5 raw storage
-// (CitizenComponent.h): each is handed to its serializer as the class it holds.
+// The System::String / Collection::Array members are handed to their serializers
+// by name (CitizenComponent.h).
 void CitizenComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);   // retail's direct CALL 0x1401189b0
 
@@ -190,11 +190,11 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     s->Serialize(happinessFlags, nullptr);
     happinessTimer.Serialize(*s);
 
-    int arrCount = consumedTypeCount;
+    int arrCount = consumedTypes._size;
     s->Serialize(arrCount, nullptr);
     if (stream.GetDirection() == IO::kReading)   // Stream +0x08 == 0
-        ResizeCitizenExternalArray(consumedTypes, consumedTypeCount, consumedTypeCapacity, arrCount);
-    Reimpl_ExternalPtrArray_Serialize(s, arrCount, consumedTypes, nullptr);   // 0x1400049c0
+        ResizeCitizenExternalArray(consumedTypes._data, consumedTypes._size, consumedTypes._capacity, arrCount);
+    Reimpl_ExternalPtrArray_Serialize(s, arrCount, consumedTypes._data, nullptr);   // 0x1400049c0
 
     {
         // ENDGAME B.3.9 C1 (D5): 0x1401c5a98 is Profession's registered type-id cell
