@@ -368,6 +368,12 @@ public:
     // first, then the buffer: that is the order both retail families use.
     ~Array();
 
+    // The whole of ~Array's body (ClearCallback over this header) WITHOUT
+    // ending the member's lifetime: for an owner's hand-written dtor that
+    // frees the buffer before the implicit ~Array runs again on the zeroed
+    // header (Geometry::~Geometry, Element's dtor).
+    void DestroyAndFree();
+
     void SetSize(int newSize);                      // ?SetSize@..@QEAAXH@Z     (2-arg form)
     void SetSize(int newSize, const T& fill);       // ?SetSize@..@QEAAXHAEBT@Z (3-arg form)
     // The 3-argument form with an untyped fill, for the instantiations whose
@@ -447,8 +453,13 @@ inline void Array<T, Allocator, SpecPolicy>::ClearCallback(Array<uint8_t>* hdr) 
 }
 
 template <class T, class Allocator, class SpecPolicy>
-inline Array<T, Allocator, SpecPolicy>::~Array() {
+inline void Array<T, Allocator, SpecPolicy>::DestroyAndFree() {
     ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(this));  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+}
+
+template <class T, class Allocator, class SpecPolicy>
+inline Array<T, Allocator, SpecPolicy>::~Array() {
+    DestroyAndFree();
 }
 
 // retail 0x18001cdf0 — the deep assign. Every arm of it is

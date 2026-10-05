@@ -591,7 +591,7 @@ Graphics::Geometry::Geometry() {
 Graphics::Geometry::~Geometry() {
     while (_attached.GetSize() > 0)
         DetachBody(this, _attached[0]);
-    decltype(_attached)::ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(&_attached));  // LEFT: ERASED the core takes rtcoll::ArrayHdr (Collection.h, R-COLL)
+    _attached.DestroyAndFree();
 }
 
 // ============================================================================
