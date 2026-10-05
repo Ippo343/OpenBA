@@ -149,7 +149,7 @@ static void MarkovGenerate(const NameDatabase* db, System::Random* rng, int minL
 // db's reject list (a sorted C-string table at +0x40 / +0x50 / +0x58). Writes the
 // accepted C-string into `out` (>=0x100 bytes).
 static void GenerateName(const NameDatabase* db, System::Random* rng, int minLen, int maxLen, char* out) {
-    const uint8_t* pool = db->_array3._data;   // +0x40
+    const char* pool = db->_array3._data;      // +0x40
     const int32_t* offs = db->_array4._data;   // +0x50
     int       rejN  = db->_array4._size;      // +0x58
 
@@ -167,7 +167,7 @@ static void GenerateName(const NameDatabase* db, System::Random* rng, int minLen
             while (true) {
                 int mid = (lo + hi) >> 1;
                 if (mid < 0 || mid >= rejN) break;     // not found -> accept
-                const char* cand = (const char*)(pool + offs[mid]);   // LEFT: NameDatabase.h: the reject pool is a byte Array (_array3 is Array<uint8_t>)
+                const char* cand = pool + offs[mid];
                 int cmp = std::strcmp(out, cand);
                 if (cmp == 0) { rejected = true; break; }
                 if (cmp < 1) hi = mid - 1; else lo = mid + 1;

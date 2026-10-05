@@ -50,7 +50,7 @@ public:
 public:
     UI::StringTable* _field20;   // +0x20: ExternalPtr<StringTable> (serialized via FUN_14000bf40, as Map / Climate)
     System::String _field28;     // +0x28: String (ctor 0x1400b1810 stores 0; dtor 0x140020630 ~String)
-    uint8_t  _field30;           // +0x30: 1 (bool, enabled?)
+    bool     _field30;           // +0x30: 1 (bool, enabled?; retail serializes it through Serialize(bool&))
     uint8_t  _pad31[7];          // +0x31: padding
     // The three material refs, each {String filename, int32 generation (-1 =
     // unresolved), External* resolved} (B4 X7-GAME-A: MapGenerator's ExternalRef;

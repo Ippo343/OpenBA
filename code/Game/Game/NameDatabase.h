@@ -56,7 +56,7 @@ public:
     // ~Arrays back to front, the compiler's member order).
     Collection::Array<NameDatabaseEntry> _array1;   // +0x20: stride 0xc
     Collection::Array<uint16_t>          _array2;   // +0x30: stride 0x2
-    Collection::Array<uint8_t>           _array3;   // +0x40: stride 0x1 (byte buffer)
+    Collection::Array<char>              _array3;   // +0x40: stride 0x1, the reject-name C-string pool (Serialize 0x1400a45e0 hands it to Serialize(int, char*))
     Collection::Array<int32_t>           _array4;   // +0x50: stride 0x4
 };
 

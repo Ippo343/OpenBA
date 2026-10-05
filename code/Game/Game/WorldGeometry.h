@@ -24,14 +24,54 @@
 #include "video/Buffers.h"
 
 // B.4 GAME-b: forward declarations for the appended members.
-#include "Action/PathSearch.h"   // RawArray<T> (the nine arrays at +0x1A0)
-struct TerrainVertex; struct GeometryBatch; struct GeometryDrawRange; struct AvlNode28;
+#include "Action/PathSearch.h"   // RawArray<T>, RawArrayFree (the arrays at +0xD8 and +0x1A0)
+#include "Action/PathAvl.h"      // AvlTreeHead, AvlNode28 (the +0xE8 set)
+#include "Game/WorldGeometryElements.h"   // TerrainVertex, GeometryBatch(_DestroyRange), GeometryDrawRange
 class TerrainGenerator;       // Game/TerrainGenerator.h
 struct TerrainHeightfield;    // Game/TerrainHeightfield.h
 namespace Video { class ImageBuffer; }
 namespace Graphics { class MaterialInstance; }
 namespace IO { class Stream; }
 namespace Object { class External; }
+
+// ---------------------------------------------------------------------------
+// The members +0xD8 .. +0x220 that ~WorldGeometry (body 0x1400aed50) releases.
+// Retail's dtor body deletes +0x148 and frees +0x140, then releases the rest in
+// REVERSE address order: +0x220 down to +0x1A0, the four buffers +0x180 /
+// +0x160 / +0x120 / +0x100 (the imported ~IndexBuffer / ~VertexBuffer), the
+// +0xE8 set, +0xD8. That is C++'s reverse-declaration member destruction, so
+// each of them is a member with its own destructor (B.4 Z CODEA).
+// ---------------------------------------------------------------------------
+
+// A Collection::Array<T> header (RawArray's three fields) whose destructor is
+// retail's release for it: `Release` (default: the inlined ~Array of a
+// trivially destructible T, MemFree then the fields zeroed). The ctor stays
+// trivial: 0x1400b00e0 writes the fields in WorldGeometry's ctor body.
+template <class T, void (*Release)(RawArray<T>&) = &RawArrayFree<T>>
+struct WorldGeometryArray : RawArray<T> {
+    WorldGeometryArray() = default;
+    WorldGeometryArray(const WorldGeometryArray&) = delete;
+    WorldGeometryArray& operator=(const WorldGeometryArray&) = delete;
+    ~WorldGeometryArray() { Release(*this); }
+};
+
+// +0x1F0 / +0x200: 0x14001fb80 over the elements (count = the header's low
+// dword), then MemFree and the fields zeroed (0x1400aedd3..0x1400aee28).
+void GeometryBatchArray_Release(RawArray<GeometryBatch>& batches);          // geometry_draw.cpp
+// +0x1E0: 0x1400175d0, each inner {data, size|cap} freed and zeroed in
+// ascending order, then the outer block (gameupdateloop_teardown.cpp).
+void ArrayOfArrays_Clear_175d0(RawArray<RawArray<Math::Vector2>>& outlines);  // 0x1400175d0
+
+// +0xE8: the dirty-chunk set, a Collection::Set header {root, count}. Retail's
+// release (0x1400aeee0..0x1400aef18): both subtrees through 0x140014c30, the
+// root node, then root = 0 and the dword count = 0.
+struct DirtyChunkSet : AvlTreeHead<AvlNode28> {
+    DirtyChunkSet() = default;
+    DirtyChunkSet(const DirtyChunkSet&) = delete;
+    DirtyChunkSet& operator=(const DirtyChunkSet&) = delete;
+    ~DirtyChunkSet();                                                  // geometry_draw.cpp
+};
+static_assert(sizeof(DirtyChunkSet) == 0x10, "DirtyChunkSet is the Set header {root, count}");
 
 class WorldGeometry final : public Graphics::Geometry {
 public:
@@ -77,11 +117,8 @@ public:
     int32_t  _fieldCC;            // +0xCC
     int32_t  _fieldD0;            // +0xD0
     int32_t  _chunkIndexStride;   // +0xD4  index count per chunk (the ctor leaves it)
-    int16_t* _arrayD8;            // +0xD8  {data, (height words: 0x14009e0e0 stores one; B.4 ACT-a H4)
-    uint64_t _arrayD8Size;        // +0xE0   count|cap}
-    AvlNode28* _dirtyTreeRoot;    // +0xE8  tree of dirty chunks (nodes: children +0x10/+0x18)
-    int32_t  _dirtyTreeCount;     // +0xF0
-    uint8_t  _padF4[4];           // +0xF4
+    WorldGeometryArray<int16_t> _heights;   // +0xD8  the int16 heightmap (0x14009e0e0 stores one word; B.4 ACT-a H4)
+    DirtyChunkSet _dirtyChunks;   // +0xE8  set of dirty chunks (nodes: children +0x10/+0x18; count +0xF0)
     Graphics::MaterialInstance* _terrainMaterial; // +0xF8  MaterialInstance* for the chunks
     Video::VertexBuffer _vertexBuffer;       // +0x100 terrain chunk vertices
     Video::IndexBuffer  _indexBuffer;        // +0x120
@@ -91,19 +128,22 @@ public:
     Graphics::MaterialInstance* _waterMaterialB;  // +0x158
     Video::VertexBuffer _waterVertexBuffer;  // +0x160 water contour mesh
     Video::IndexBuffer  _waterIndexBuffer;   // +0x180
-    // Nine {data, size, capacity} arrays, +0x1A0..+0x22F (RawArray: trivial, no
-    // ctor / dtor; the ctor 0x1400b00e0 zeroes each with two qword stores, the
-    // tree writes the three named fields, H7; the dtor body 0x1400aed50 frees them
-    // by hand in reverse order). Element types: WorldGeometryElements.h.
-    RawArray<TerrainVertex>           _contourVertices;   // +0x1A0 contour vertex accumulator
-    RawArray<uint16_t>                _contourIndices;    // +0x1B0 contour index accumulator
-    RawArray<GeometryDrawRange>       _contourRangesA;    // +0x1C0 draw ranges, mode 0x6000
-    RawArray<GeometryDrawRange>       _contourRangesB;    // +0x1D0 draw ranges, mode 0x8000
-    RawArray<RawArray<Math::Vector2>> _contourOutlines;   // +0x1E0 array of point arrays
-    RawArray<GeometryBatch>           _decals;            // +0x1F0 0x60-byte batches, mode 0x2000
-    RawArray<GeometryBatch>           _roadBatches;       // +0x200 0x60-byte batches, mode 0x4000
-    RawArray<Object::External*>       _batchMaterials;    // +0x210 per-batch material refs
-    RawArray<int32_t>                 _batchCounters;     // +0x220 per-batch fill counters
+    // Nine {data, size, capacity} arrays, +0x1A0..+0x22F (no ctor: 0x1400b00e0
+    // zeroes each with two qword stores, the tree writes the three named fields,
+    // H7; each member's destructor is retail's release of it, run in reverse
+    // declaration order as 0x1400aed50 does). Element types: WorldGeometryElements.h.
+    WorldGeometryArray<TerrainVertex>     _contourVertices;   // +0x1A0 contour vertex accumulator
+    WorldGeometryArray<uint16_t>          _contourIndices;    // +0x1B0 contour index accumulator
+    WorldGeometryArray<GeometryDrawRange> _contourRangesA;    // +0x1C0 draw ranges, mode 0x6000
+    WorldGeometryArray<GeometryDrawRange> _contourRangesB;    // +0x1D0 draw ranges, mode 0x8000
+    WorldGeometryArray<RawArray<Math::Vector2>, &ArrayOfArrays_Clear_175d0>
+                                          _contourOutlines;   // +0x1E0 array of point arrays
+    WorldGeometryArray<GeometryBatch, &GeometryBatchArray_Release>
+                                          _decals;            // +0x1F0 0x60-byte batches, mode 0x2000
+    WorldGeometryArray<GeometryBatch, &GeometryBatchArray_Release>
+                                          _roadBatches;       // +0x200 0x60-byte batches, mode 0x4000
+    WorldGeometryArray<Object::External*> _batchMaterials;    // +0x210 per-batch material refs
+    WorldGeometryArray<int32_t>           _batchCounters;     // +0x220 per-batch fill counters
 };
 
 static_assert(sizeof(WorldGeometry) == 0x230, "WorldGeometry is MemAlloc(0x230)");
@@ -111,9 +151,9 @@ static_assert(alignof(WorldGeometry) == 8, "qword-aligned");
 static_assert(offsetof(WorldGeometry, _gridSize) == 0xC0, "+0xC0");
 static_assert(offsetof(WorldGeometry, _chunkSize) == 0xC8, "+0xC8");
 static_assert(offsetof(WorldGeometry, _chunkIndexStride) == 0xD4, "+0xD4");
-static_assert(offsetof(WorldGeometry, _arrayD8) == 0xD8, "+0xD8");
-static_assert(offsetof(WorldGeometry, _dirtyTreeRoot) == 0xE8, "+0xE8");
-static_assert(offsetof(WorldGeometry, _dirtyTreeCount) == 0xF0, "+0xF0");
+static_assert(offsetof(WorldGeometry, _heights) == 0xD8, "+0xD8");
+static_assert(offsetof(WorldGeometry, _dirtyChunks) == 0xE8, "+0xE8");
+static_assert(offsetof(WorldGeometry, _dirtyChunks.count) == 0xF0, "+0xF0");
 static_assert(offsetof(WorldGeometry, _terrainMaterial) == 0xF8, "+0xF8");
 static_assert(offsetof(WorldGeometry, _vertexBuffer) == 0x100, "+0x100");
 static_assert(offsetof(WorldGeometry, _indexBuffer) == 0x120, "+0x120");

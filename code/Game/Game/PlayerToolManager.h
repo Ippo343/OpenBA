@@ -144,9 +144,10 @@ public:
     UI::DialogInstance* field_0x00;   // +0x00 InternalPtr<UI::DialogInstance>: the open tool dialog (0x1400ff9e0 stores it; ctor null)
     float    field_0x08;         // +0x08 not written by the ctor; the CreateBar dialog's smoothed screen x (0x1400ffc60: MOVSS [RCX+0x8] at 0x14010004d, [RCX+0xc] at 0x140100097; it blends them; the open path stores -1.0f)
     float    field_0x0C;         // +0x0C not written by the ctor; the smoothed screen y (the same; two dword stores of 0xbf800000)
-    struct ToolRegistryNode* field_0x10; // +0x10 ctor 0; the tool registry root SelectTool 0x140102b60 walks (B4 H4: typed, DLG-d; node in Dialog/toolbardialog.cpp)
-    int32_t  field_0x18;         // +0x18 ctor 0
-    uint8_t  _pad1C[4];          // +0x1C
+    // +0x10: the tool registry, a Collection::Set header {root, int count}
+    // (root +0x10, count +0x18; ctor 0, two stores) that SelectTool 0x140102b60
+    // walks and 0x14002de90 clears by its header (node: Dialog/ToolRegistryNode.h).
+    AvlTreeHead<struct ToolRegistryNode> toolRegistry;
     ComponentDescription* field_0x20; // +0x20 ctor 0; the active tool group SelectTool 0x140102b60 stores (B4 H4: typed, DLG-d)
     // +0x28: retail's ctor 0x1401025c0 builds it with ??0InternalBasePtr(null)
     // (0x1401025fe); the teardown 0x1401024d0 DeletePtr()s it. Trivially
@@ -215,9 +216,8 @@ static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Loa
 static_assert(offsetof(PlayerToolManager, field_0x00) == 0x00, "+0x00");
 static_assert(offsetof(PlayerToolManager, field_0x08) == 0x08, "+0x08");
 static_assert(offsetof(PlayerToolManager, field_0x0C) == 0x0C, "+0x0C");
-static_assert(offsetof(PlayerToolManager, field_0x10) == 0x10, "+0x10");
-static_assert(offsetof(PlayerToolManager, field_0x18) == 0x18, "+0x18");
-static_assert(offsetof(PlayerToolManager, _pad1C) == 0x1C, "+0x1C");
+static_assert(offsetof(PlayerToolManager, toolRegistry) == 0x10, "+0x10");
+static_assert(offsetof(PlayerToolManager, toolRegistry.count) == 0x18, "+0x18");
 static_assert(offsetof(PlayerToolManager, field_0x20) == 0x20, "+0x20");
 static_assert(offsetof(PlayerToolManager, currentTool) == 0x28, "PlayerToolManager::currentTool @ +0x28 (0x1401026a0)");
 static_assert(offsetof(PlayerToolManager, paused) == 0x30, "PlayerToolManager::paused @ +0x30 (0x1400b8d40)");

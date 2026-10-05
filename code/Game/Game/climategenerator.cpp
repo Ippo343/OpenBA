@@ -38,7 +38,7 @@
 // in address order as retail stores them.
 ClimateGenerator::ClimateGenerator() : _field20(nullptr), _field28() {
     // Climate parameters
-    _field30 = 1;              // enabled
+    _field30 = true;           // enabled
     temperatureBase = 50.0f;   // base temperature
     tempVariation = 30.0f;     // temperature variation
     precipitation = 5.0f;      // precipitation amount
@@ -89,8 +89,8 @@ bool ClimateGenerator::Serialize(IO::Stream& stream) {
     // Serialize String at +0x28
     _field28.Serialize(s);
 
-    // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
-    s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);   // LEFT: H8: retail serializes the raw byte as bool (a bool field would let the compiler normalise it)
+    // Serialize bool at +0x30
+    s.Serialize(_field30, nullptr);
 
     // Serialize float fields: temperatureBase(+0x34), tempVariation(+0x38),
     // precipitation(+0x3C), windSpeed(+0x40)

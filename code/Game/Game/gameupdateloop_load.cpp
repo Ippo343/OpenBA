@@ -573,10 +573,10 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
     // Raw storage: a ::Frustum local would run its zeroing
     // default ctor (the Vector4 planes) before the ctor door.
     uint8_t frustum[0xC0];
-    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: a ::Frustum local runs its implicit default ctor (Vector4 zeroes each of the six planes) before the perspective ctor 0x1800fa1e0; this body hands it an untouched stack block
+    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: audit DEFERRED (zeroing ctor): a ::Frustum local runs its implicit default ctor (Vector4 zeroes each of the six planes) before the perspective ctor 0x1800fa1e0; this body hands it an untouched stack block
         &nearS, &farS, &fovXS, &fovYS);
     camera.SetFrustum(
-        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // LEFT: the Frustum lives in a raw 0xC0 stack block (a ::Frustum local would run its Vector4-zeroing default ctor first); the ctor door's result is held as void*
+        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // LEFT: audit DEFERRED (zeroing ctor): the Frustum lives in a raw 0xC0 stack block (a ::Frustum local would run its Vector4-zeroing default ctor first); the ctor door's result is held as void*
 }
 
 // 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs
@@ -584,8 +584,8 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
 // null store.
 PlayerToolManager::PlayerToolManager() {
     field_0x00 = nullptr;
-    field_0x10 = 0;
-    field_0x18 = 0;
+    toolRegistry.root = nullptr;
+    toolRegistry.count = 0;
     field_0x20 = 0;
     // +0x28 currentTool: the member's InternalPtr ctor stores the null (0x1401025fe).
     paused = false;
@@ -803,7 +803,7 @@ void GameUpdateLoop::Load() {
         if (mem) {
             const Math::Scalar nearZ(2.0f), farZ(70.0f), fovX(60.0f), fovY(aspect * 60.0f);
             uint8_t frustum[0xC0] = {};
-            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);   // LEFT: the 0xC0 stack block is zeroed as bytes (a ::Frustum local would run its Vector4-zeroing default ctor per plane instead)
+            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);   // LEFT: audit DEFERRED (zeroing ctor): the 0xC0 stack block is zeroed as bytes (a ::Frustum local would run its Vector4-zeroing default ctor per plane instead)
             RtVolume_Frustum_Ctor_Perspective(fr, &nearZ, &farZ, &fovX, &fovY);
             pc = ::new (mem) PlayerController(*fr, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
         }
@@ -925,7 +925,7 @@ void GameUpdateLoop::Load() {
     // Step 18 — Graphics::Scene (+0x60, 0x78).
     {
         Graphics::Scene* mem = AllocSub<Graphics::Scene>(0x78, 8);
-        if (mem) RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(mem));   // LEFT: the ctor door takes the POD mirror RtGraphics::Scene (runtime/types/graphics)
+        if (mem) RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(mem));   // LEFT: audit DEFERRED (ctor door; RtGraphics_Scene_Ctor is runtime/, z-RT): the ctor door takes the POD mirror RtGraphics::Scene (runtime/types/graphics)
         m_graphicsScene = mem;
     }
 
