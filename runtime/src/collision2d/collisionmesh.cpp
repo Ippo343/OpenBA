@@ -78,7 +78,6 @@
 
 namespace {
 
-using RtSystem::String;
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;

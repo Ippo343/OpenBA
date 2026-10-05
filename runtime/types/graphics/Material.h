@@ -418,8 +418,8 @@ public:
     // by-value returns here. THE DOOR DECIDES THE OVERLOAD (B5-14): the two
     // `GetTexture`s differ only in their argument, and retail exports both.
     Object::ExternalPtr<Video::ImageBuffer> GetTexture(int32_t index) const;      // 0x180103100
-    Object::ExternalPtr<Video::ImageBuffer> GetTexture(const RtSystem::String& name) const; // 0x180103120
-    void SetTexture(const RtSystem::String& name,
+    Object::ExternalPtr<Video::ImageBuffer> GetTexture(const System::String& name) const; // 0x180103120
+    void SetTexture(const System::String& name,
                     Object::ExternalPtr<Video::ImageBuffer> image);   // 0x180103180
     // `AddTexture` (0x180103350) and `SetMaterial` (0x180103340) were listed here
     // as unported; they are NOT — both have registered, ported doors in
