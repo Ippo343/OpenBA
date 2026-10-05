@@ -271,18 +271,20 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
     self->cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)
 
     // Two trees with kids at +0x20/+0x28 (+0x60 then +0x50).
-    struct EntitySet { TrackedEntityNode** root; int32_t* count; };
-    for (EntitySet set : {EntitySet{&self->field_0x60, &self->field_0x68},
-                          EntitySet{&self->field_0x50, &self->field_0x58}}) {
-        TrackedEntityNode* root = *set.root;
+    // (B.4 Y GAMEB: the two sets have their own node types now; the same
+    // body runs on each, +0x60 first.)
+    auto freeSet = [](auto& set) {
+        auto* root = set.root;
         if (root) {
-            Avl38FreeSubtree(set.root, root->left);    // 0x140014b00 (was its TradeWork_helper_14b00 forwarder)
-            Avl38FreeSubtree(set.root, root->right);
+            Avl38FreeSubtree(&set.root, root->left);    // 0x140014b00 (was its TradeWork_helper_14b00 forwarder)
+            Avl38FreeSubtree(&set.root, root->right);
             MemFree(root);
         }
-        *set.root = nullptr;
-        *set.count = 0;
-    }
+        set.root = nullptr;
+        set.count = 0;
+    };
+    freeSet(self->field_0x60);
+    freeSet(self->field_0x50);
 
     // Tool registry tree (+0x10): nodes carry an IBP payload at +0x10.
     IbpTree_Clear_2de90(&self->field_0x10);

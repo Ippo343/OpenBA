@@ -150,13 +150,13 @@ void Tree_Insert(PlayerToolManager* mgr, uint32_t key, uint32_t toolTypeId) {
 // node whose `wanted` byte is set, and THAT constructs the DialogInstance and hands it
 // to UserInterface::AddDialog.
 //
-// Node layout (from 0x1401001f0 + 0x140101a80): TrackedEntityNode
+// Node layout (from 0x1401001f0 + 0x140101a80): PinnedToolNode
 // (Game/PlayerToolManager.h): +0x00 key, +0x08 int x, +0x0C int y, +0x10 byte wanted,
 // +0x18 parent, +0x20 left, +0x28 right. Retail walks it in order (leftmost, then
 // successor). An empty tree — every non-scenario game — makes this a no-op.
 extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr) {
     if (!mgr) return;
-    TrackedEntityNode* node = mgr->field_0x50;
+    PinnedToolNode* node = mgr->field_0x50.root;
     if (!node) return;
 
     while (node->left) node = node->left;   // leftmost
@@ -165,9 +165,8 @@ extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr) {
     while (node) {
         if (node->active != 0) {
             // The toggle 0x140101a80 (was its Toolbar_Utility_Reg forwarder; the returned
-            // InternalPtr was discarded). LEFT: the node's key is declared ComponentEntity*
-            // (GAME-a's TrackedEntityNode); 0x1401001f0 stores the dialog's description there.
-            mgr->ToggleUtilityDialog(reinterpret_cast<ComponentDescription*>(node->key));   // LEFT: Game/PlayerToolManager.h TrackedEntityNode::key
+            // InternalPtr is discarded). The node's key is the dialog's description.
+            mgr->ToggleUtilityDialog(node->key);
             ++opened;
         }
         // successor: leftmost of the right subtree, else up until we come from a left child
@@ -175,7 +174,7 @@ extern "C" void EntityUI_OpenRegisteredDialogs_SA(PlayerToolManager* mgr) {
             node = node->right;
             while (node->left) node = node->left;
         } else {
-            TrackedEntityNode* parent = node->parent;
+            PinnedToolNode* parent = node->parent;
             while (parent && parent->right == node) {
                 node = parent;
                 parent = node->parent;

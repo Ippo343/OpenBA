@@ -161,7 +161,7 @@ void Avl38FindRemove(AvlTreeHead<Node>* tree, const Key* keyRef) {
 // ============================================================
 void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* keyRef,
                            int32_t x, int32_t y) {
-    TrackedEntityNode** rootSlot = &manager->field_0x60;
+    TrackedEntityNode** rootSlot = &manager->field_0x60.root;
     TrackedEntityNode* cur = *rootSlot;
     ComponentEntity* key = *keyRef;
 
@@ -270,7 +270,7 @@ void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* k
     }
 
     // count++
-    manager->field_0x68 = manager->field_0x68 + 1;
+    manager->field_0x60.count = manager->field_0x60.count + 1;
 }
 
 } // namespace
@@ -330,8 +330,7 @@ void EntityUI::SyncPin() {
         TrackManagerPinEntity(manager, &key, x, y);
     } else {
         ComponentEntity* key = entity;
-        // LEFT: PlayerToolManager (GAME-b) declares retail's +0x60 Set as root + count.
-        Avl38FindRemove(reinterpret_cast<AvlTreeHead<TrackedEntityNode>*>(&manager->field_0x60), &key);   // LEFT: H5 PlayerToolManager (Game/PlayerToolManager.h, not this set's) declares retail's +0x60 Set as root + count
+        Avl38FindRemove(&manager->field_0x60, &key);   // 0x14002c690 on +0x60 (0x1400667de)
     }
 }
 

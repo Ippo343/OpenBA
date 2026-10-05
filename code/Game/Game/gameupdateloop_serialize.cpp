@@ -302,7 +302,7 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
 // ported 0x140014890.
 // The set is PlayerToolManager's {root +0x50, count +0x58}: `root` is its
 // header (the count is the int at root + 8, read as the header's).
-static void GoalRefTree_Serialize_e2e0(TrackedEntityNode** root, int32_t* countField,
+static void GoalRefTree_Serialize_e2e0(PinnedToolNode** root, int32_t* countField,
                                        IO::Serializer* serializer) {
     int count = *countField;
     serializer->Serialize(count, nullptr);
@@ -324,9 +324,9 @@ static void GoalRefTree_Serialize_e2e0(TrackedEntityNode** root, int32_t* countF
         }
     } else {
         // SAVE: leftmost-first in-order walk
-        TrackedEntityNode* node = *root;
+        PinnedToolNode* node = *root;
         if (!node) { return; }
-        TrackedEntityNode* cur = node;
+        PinnedToolNode* cur = node;
         while (cur->left) cur = cur->left;
         while (cur) {
             Reimpl_ExternalPtr_Serialize_StringTable(&cur->key, serializer);   // 0x140002340
@@ -334,12 +334,12 @@ static void GoalRefTree_Serialize_e2e0(TrackedEntityNode** root, int32_t* countF
             serializer->Serialize(cur->y, nullptr);
             serializer->Serialize(cur->active, nullptr);
             // in-order successor
-            TrackedEntityNode* next = cur->right;
+            PinnedToolNode* next = cur->right;
             if (next) {
                 while (next->left) next = next->left;
                 cur = next;
             } else {
-                TrackedEntityNode* parent = cur->parent;
+                PinnedToolNode* parent = cur->parent;
                 while (parent && parent->right == cur) {
                     cur = parent;
                     parent = parent->parent;
@@ -468,9 +468,9 @@ void PlayerToolManager::Serialize(IO::Stream& stream) {
     ser.Serialize(field_0x3C, nullptr);
     ser.Serialize(field_0x40, nullptr);
     ser.Serialize(field_0x44, nullptr);
-    GoalRefTree_Serialize_e2e0(&field_0x50, &field_0x58, &ser);
+    GoalRefTree_Serialize_e2e0(&field_0x50.root, &field_0x50.count, &ser);
     if (ser.GetVersion() > 0) {
-        IbpTree_Serialize_e470(&field_0x60, &field_0x68, &ser);
+        IbpTree_Serialize_e470(&field_0x60.root, &field_0x60.count, &ser);
     }
     if (ser.GetVersion() > 1) {
         int count = cameraViews.GetSize();

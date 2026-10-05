@@ -150,9 +150,9 @@ void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, const ComponentDes
     if (!treeOwner) return;
     const void* key = tutorialId;
 
-    // Walk. The node is TrackedEntityNode (Game/PlayerToolManager.h), keyed by
+    // Walk. The node is PinnedToolNode (Game/PlayerToolManager.h), keyed by
     // address.
-    TrackedEntityNode* node = treeOwner->field_0x50;
+    PinnedToolNode* node = treeOwner->field_0x50.root;
     while (node) {
         const void* nodeKey = node->key;
         if (key < nodeKey) { node = node->left; continue; }

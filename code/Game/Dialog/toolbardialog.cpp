@@ -449,7 +449,7 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
 // template (`description`, the toolbar item's +0x58).
 //
 // The template has a UIDescription among its sub-descriptions, whose +0x28 is
-// the dialog resource. The +0x50 set (TrackedEntityNode, keyed by the
+// the dialog resource. The +0x50 set (PinnedToolNode, keyed by the
 // template's address) keeps each utility dialog's position and open flag.
 //
 // Flow:
@@ -475,7 +475,7 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
         userInterface->CloseDialog(&closeRef);
 
         // Clear the set node's open flag
-        TrackedEntityNode* node = field_0x50;
+        PinnedToolNode* node = field_0x50.root;
         while (node != nullptr) {
             const void* nodeKey = node->key;
             if (key < nodeKey) {
@@ -537,8 +537,8 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
     }
 
     // Step 4: Look up the position node in the +0x50 set
-    TrackedEntityNode* bstNode = nullptr;
-    TrackedEntityNode* current = field_0x50;
+    PinnedToolNode* bstNode = nullptr;
+    PinnedToolNode* current = field_0x50.root;
     while (current != nullptr) {
         const void* nodeKey = current->key;
         if (key < nodeKey) {
@@ -562,7 +562,7 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
 
         void* retNode = nullptr;
         ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&field_0x50), &retNode, insertBuf);   // 0x140014890   // LEFT: SIG ToolbarUtility_BstInsert_4890 (int64_t* root holder, void** out)
-        bstNode = reinterpret_cast<TrackedEntityNode*>(retNode);   // LEFT: SIG ToolbarUtility_BstInsert_4890 (void** out)
+        bstNode = reinterpret_cast<PinnedToolNode*>(retNode);   // LEFT: SIG ToolbarUtility_BstInsert_4890 (void** out)
     }
 
     // Set the open flag

@@ -52,14 +52,20 @@
 // ============================================================
 // BST remove: walks the tree to the node whose key == *key, then deletes it
 // (0x140025740).
-static void EntityTrackingSet_Remove_Impl(TrackedEntityNode** root, ComponentEntity* const* key)
+// (A template over the set's node since B.4 Y GAMEB: OnElementEvent below hands
+// it the +0x50 pinned-dialog set, whose keys are descriptions; the compare is by
+// address, as 0x14002c690's.)
+template <class Node>
+static void EntityTrackingSet_Remove_Impl(Node** root, ComponentEntity* const* key)
 {
-    TrackedEntityNode* node = *root;
+    Node* node = *root;
+    const void* const keyAddr = *key;
 
     while (node != nullptr) {
-        if (*key < node->key) {
+        const void* const nodeKey = node->key;
+        if (keyAddr < nodeKey) {
             node = node->left;
-        } else if (*key <= node->key) {
+        } else if (keyAddr <= nodeKey) {
             // Found the node — delete it
             // LEFT: the shared AVL helper takes the root as int64_t* (PLAYER's declaration).
             PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740   // LEFT: SIG PlayerTrade_BSTRemove_25740 (B4 FORWARD; Work/tradework.cpp still calls it)
@@ -213,7 +219,7 @@ void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEn
 {
     PlayerToolManager* manager = playerController;
     ComponentEntity* entityKey = *entityPtr;
-    TrackedEntityNode** rootPtr = &manager->field_0x60;
+    TrackedEntityNode** rootPtr = &manager->field_0x60.root;
 
     // Search the tree for an existing node with this key
     TrackedEntityNode* node = *rootPtr;
@@ -271,7 +277,7 @@ void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEn
     }
 
     // One more tracked entity (+0x68)
-    manager->field_0x68 = manager->field_0x68 + 1;
+    manager->field_0x60.count = manager->field_0x60.count + 1;
 }
 
 // ============================================================
@@ -358,7 +364,7 @@ void EntityUI::OnClosed() {
     // The tracking set: the tool manager (g_pGameWorldSingleton +0x120) +0x60
     PlayerToolManager* tools = GameUpdateLoop::_singleton->m_toolManager;
 
-    EntityTrackingSet_Remove_Impl(&tools->field_0x60, &entityKey);
+    EntityTrackingSet_Remove_Impl(&tools->field_0x60.root, &entityKey);
 }
 
 // ============================================================
@@ -664,7 +670,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         if (checkPin->_checked == 0) {
             ComponentEntity* entityKey = entity;
             PlayerToolManager* worldObj = GameUpdateLoop::_singleton->m_toolManager;
-            EntityTrackingSet_Remove_Impl(&worldObj->field_0x50, &entityKey);
+            EntityTrackingSet_Remove_Impl(&worldObj->field_0x50.root, &entityKey);
             return;
         }
 

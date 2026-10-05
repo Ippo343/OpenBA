@@ -594,10 +594,10 @@ PlayerToolManager::PlayerToolManager() {
     field_0x40 = 0.0f;
     field_0x44 = 0.75f;
     field_0x48 = 0;
-    field_0x50 = nullptr;
-    field_0x58 = 0;
-    field_0x60 = nullptr;
-    field_0x68 = 0;
+    field_0x50.root = nullptr;
+    field_0x50.count = 0;
+    field_0x60.root = nullptr;
+    field_0x60.count = 0;
     // +0x70: the Array member's own ctor zeroes data / count / capacity.
     field_0x80 = false;
     field_0x88 = nullptr;
