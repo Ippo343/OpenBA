@@ -213,7 +213,7 @@ static Description* ScanForType(const ComponentDescription* node, uint32_t typeI
 extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, ComponentEntity** param_2, uint32_t param_3, float* param_4) {
     EnsureInit();
     if (param_1->healers._size == 0) {
-        new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (param_2) ::Object::InternalBasePtr(nullptr);
         return param_2;
     }
     Map* map = MapGrid();
@@ -403,7 +403,7 @@ void CitizenComponent::LongTermPlan() {
     // push a PerformWork(Ctor4) per candidate and run the executor.
     if (arrACount != 0) {
         ComponentEntity* firstIBP = nullptr;   // local_90
-        new (&firstIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&firstIBP) ::Object::InternalBasePtr(nullptr);
         CitizenComponent* selfIBP = this;   // local_98 (the InternalBasePtr ctor: one store)
 
         // Vector3((Scalar&)0) — the first push uses a zero-vector built from local_res10 (=0).

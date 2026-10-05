@@ -285,7 +285,7 @@ void TornadoInstance::Update(const System::Time& time) {
 
     // Base ParticleInstance::Update is the frame gate: it returns false when this
     // instance has already been stepped this frame.
-    // B.3.5 bridge — ?Update@ParticleInstance@Graphics@@QEAA_NXZ, the NON-VIRTUAL
+    // ?Update@ParticleInstance@Graphics@@QEAA_NXZ, the NON-VIRTUAL
     // `bool Update()` (ParticleInstance.h's name-hiding note: the arg-less
     // overload, not slot 1's `Update(const Time&)`).
     if (!Graphics::ParticleInstance::Update()) return;
@@ -474,7 +474,7 @@ void TornadoInstance::Update(const System::Time& time) {
         p->_alpha = p->_alphaPrev = env * la.v;
     }
 
-    // B.3.5 bridge — ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z. The
+    // ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z. The
     // door took `(void* geometry, const void* box)` and retail hands it the pool
     // pointer: the accumulated `Volume::Box` is the pool's first 0x18 bytes.
     SetBounds(pool->_bounds);   // the pool's Box

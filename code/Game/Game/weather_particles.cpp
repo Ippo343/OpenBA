@@ -147,8 +147,7 @@ WeatherParticleGeometry::~WeatherParticleGeometry() {
     // `~Array` (MemFree the block, zero data and the count/capacity qword —
     // the same three stores this body made by hand; trivial element, no
     // destroy). The +0xd0 index buffer is not an Array (its +0xd8 is a bare
-    // count) and keeps its hand-written free. B.3.2 bridge: +0xe0 is still a
-    // raw header.
+    // count) and keeps its hand-written free.
     // (~Array of a trivial element: MemFree, then zero data and the count / capacity.)
     System::MemoryAllocator::MemFree(_particles.data);
     _particles.data = nullptr;

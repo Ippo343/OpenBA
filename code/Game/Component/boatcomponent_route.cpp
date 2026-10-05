@@ -146,7 +146,7 @@ extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System:
         Object::InternalPtr<Component>* const slot = &entity->_components[i];
         Component* const obj = slot->Get();
         if (!obj) continue;
-        if (obj->Type() == wantedTid) {   // B.3.8 bridge (slot 2)
+        if (obj->Type() == wantedTid) {
             Component* cand = slot->Get();
             model = (::Object::IsDerivedFromNullSafe(cand, wantedTid)) ? static_cast<ModelComponent*>(cand) : nullptr;
             break;

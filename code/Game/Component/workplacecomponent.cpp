@@ -176,7 +176,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
         if (mesh->iconId >= 0) {
             if (GameUpdateLoop::_singleton)
                 GameUpdateLoop::_singleton->m_graphicsScene
-                    ->RemoveObject(mesh->iconId);   // B.3.5 bridge
+                    ->RemoveObject(mesh->iconId);
             mesh->iconId = -1;
         }
         uint32_t old4 = mesh->_flags;
@@ -188,7 +188,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
             g_gameSettings->statusIconEnable != '\0' && mesh->iconId < 0) {
             if (GameUpdateLoop::_singleton) {
                 uint32_t id = GameUpdateLoop::_singleton->m_graphicsScene
-                    ->AddObject(&mesh->_geometry);   // B.3.5 bridge
+                    ->AddObject(&mesh->_geometry);
                 mesh->iconId = static_cast<int32_t>(id);
                 SceneWatch_Note(id, &mesh->_geometry, "WorkPlaceComponent carry-mesh");
             }

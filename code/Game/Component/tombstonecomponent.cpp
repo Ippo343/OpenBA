@@ -144,7 +144,6 @@ void TombstoneComponent::Update(const System::Time* timeV) {
                 MarkEntityForRemoval(entityPtr);   // 0x1400c2ea0
 
                 // Add to removal queue
-                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 if (entityList) {
                     int count = entityList->removalList._size;
                     entityList->removalList

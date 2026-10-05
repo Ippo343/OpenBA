@@ -407,7 +407,7 @@ void PathTool::BuildRoutes() {
             if (qIdx < cap &&
                 table[qIdx].token == qId &&
                 table[qIdx].ready != '\0') { ready = true; break; }
-            ::Application::Application::_singleton->YieldToThreads();   // B.3.7 bridge
+            ::Application::Application::_singleton->YieldToThreads();
         }
         if (!ready) {
             continue;

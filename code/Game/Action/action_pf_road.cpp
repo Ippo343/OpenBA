@@ -79,11 +79,6 @@ static_assert(offsetof(RoadVertexScratch, normalW) == 0x0F, "RoadVertexScratch::
 // reads +0x00..+0x0E as two short[4] (signed: blend +0x06, the mask-atlas corner
 // +0x0C / +0x0E) and +0x10 as uchar[4]; cc10 (0x1400acc10) and f370 only copy the
 // fields (MOVZX / MOV word, byte), so no read's value depends on the signedness.
-// B.3.2 bridge: FUN_14001ee40 / FUN_14001f8d0 are Collection::Array<T>::SetSize /
-// SetSize(n,fill) monomorphised over this 0x14-byte, align-2 element. Neither body's
-// new-tail arm touches the tail, so the element must be TRIVIALLY default
-// constructible -- rtcoll::SpecFor<T> then emits init=nullptr, matching retail's
-// uninitialised new slot exactly.
 static_assert(alignof(GeometryBatchVertex) == 2, "GeometryBatchVertex align (MemAlloc(.., 2))");
 static_assert(std::is_trivially_copyable<GeometryBatchVertex>::value, "GeometryBatchVertex byteCopy");
 static_assert(std::is_trivially_destructible<GeometryBatchVertex>::value, "GeometryBatchVertex destroy-free");

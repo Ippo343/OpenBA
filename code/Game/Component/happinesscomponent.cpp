@@ -282,7 +282,6 @@ void HappinessComponent::Register() {
         CitizenBehavior* town = TownManager();
         if (town) {
             const int count = town->happinessComponents._size;
-            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             town->happinessComponents
                 .SetSizeFill(count + 1, &self);
 

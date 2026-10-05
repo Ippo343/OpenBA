@@ -378,7 +378,6 @@ extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP) 
 
     if (!fail) {
         before = townMgr->field_0x20._size;
-        // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         townMgr->field_0x20
             .SetSizeFill(before + 1, &houseEntityIBP);
         after = townMgr->field_0x20._size;
@@ -569,7 +568,6 @@ void CitizenComponent::OnAdded() {
     if (townMgr == nullptr) return;
     CitizenComponent* ref[2] = { nullptr, nullptr };
     ref[0] = this;   // the InternalBasePtr ctor's one store
-    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     townMgr->citizens
         .SetSizeFill(townMgr->citizens._size + 1, ref);
 }

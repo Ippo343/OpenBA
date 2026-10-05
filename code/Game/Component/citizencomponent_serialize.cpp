@@ -265,5 +265,5 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     s->Serialize(field_0x34, nullptr);
 
 
-    s->~Serializer();   // B.3.4 bridge
+    s->~Serializer();
 }
