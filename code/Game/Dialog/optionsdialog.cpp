@@ -489,7 +489,7 @@ void OptionsDialog::PopulateAdapterCombo() {
         // (LEFT: Adapter::name is declared as the String's data pointer, H5).
         UI::Sprite sprite;
         void* itemData = (void*)(intptr_t)i;  // CAST-OK: ptr_int
-        comboAdapter->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.adapterData[i].name), itemData);   // LEFT: H5 the adapter record's name is void* String storage (runtime/types/video/Device.h)
+        comboAdapter->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.adapterData[i].name), itemData);   // LEFT: dx11 seam: Device::Adapter::name as System::String gives the record an implicit String ctor / dtor, and dx11/src/devicedata.cpp builds these records by hand through the RtVideo_Adapter / RtVideo_GraphicsInterface Ctor / Dtor doors (its `GraphicsInterface gi;` local, :1548-1560, would release the name twice) -- the doors become the structs' C++ ctor / dtor with that dx11 edit
     }
 
     comboAdapter->SetCurrentItem(savedAdapter);
@@ -517,7 +517,7 @@ void OptionsDialog::PopulateVideoComboBoxes() {
         const Video::Device::GraphicsInterface& gfxIface = vidDev->GetInterface(i);
         UI::Sprite sprite;
         void* itemData = (void*)(intptr_t)i;  // CAST-OK: ptr_int
-        comboRenderer->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.name), itemData);   // LEFT: H5 the renderer record's name is void* String storage (runtime/types/video/Device.h)
+        comboRenderer->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.name), itemData);   // LEFT: dx11 seam: as the adapter line above (Device::GraphicsInterface::name; dx11/src/devicedata.cpp :1548-1560 builds the record through RtVideo_GraphicsInterface_Ctor / _Dtor)
     }
 
     comboRenderer->SetCurrentItem(savedRenderer);
