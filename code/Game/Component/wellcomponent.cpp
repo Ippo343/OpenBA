@@ -19,7 +19,6 @@
 
 #include "Component/wellcomponent_funcs.h"
 #include "Component/MapComponent.h"
-#include "Component/coll_bridge.h"
 #include "Entity/CitizenBehavior.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "object/TypeInfo.h"

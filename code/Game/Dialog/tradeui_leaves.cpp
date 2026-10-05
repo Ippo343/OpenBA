@@ -150,9 +150,9 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState,
     if (orderIdx < 0 || !orderBase) return;
 
     TradeMerchantOrder* rec = orderBase + orderIdx;
-    ComponentDescription*** items = &rec->goods;
-    int32_t*  count = &rec->goodsCount;
-    int32_t*  cap   = &rec->goodsCap;
+    ComponentDescription*** items = &rec->goods._data;
+    int32_t*  count = &rec->goods._size;
+    int32_t*  cap   = &rec->goods._capacity;
 
     bool present = false;
     if (*items) {

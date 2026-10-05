@@ -54,8 +54,8 @@
 //
 // Dependencies (all verified against the live tree; nothing here is stubbed):
 //   Collection::Array<T>::SetSize   — the exe's own monomorphisations
-//                                     (0x1400032e0/0x1400021d0/0x140001bb0) reached
-//                                     by name through Component/coll_bridge.h.
+//                                     (0x1400032e0/0x1400021d0/0x140001bb0): each
+//                                     member array's own SetSize.
 //   fn_InternalBasePtr_Serialize    — engine_funcs.h (0x140152aa0 dispatch slot)
 //   fn_InternalBasePtr_CheckPtr     — engine_funcs.h
 //   fn_IsDerivedFrom                — engine_funcs.h
@@ -103,7 +103,6 @@
 #include "Entity/CitizenBehavior.h"         // B4 GAME-a: CitizenBehavior::Serialize / PostLoad
 #include <cstdio>
 #include "collection/Collection.h"
-#include "Component/coll_bridge.h"
 #include "Component/LivestockComponent.h"
 #include "Component/HerdComponent.h"
 #include "Component/DiseaseComponent.h"
@@ -183,11 +182,10 @@ void RegistryCensus(const CitizenBehavior* cb, const char* leg, const char* when
 }
 
 // ------------------------------------------------------------
-// IBP array serialize — the recurring 15-times pattern:
-//   count = hdr.count; Serialize(count); if(loading) resize(hdr,count);
+// IBP array serialize — the recurring 15-times pattern (0x140008150 and its siblings):
+//   count = list.count; Serialize(count); if(loading) list.SetSize(count);
 //   for each slot: InternalBasePtr::Serialize(slot); if (!IsDerivedFrom(typeId)) slot=null;
-// `data` is the first field of a 0x10-byte {T** data, int32 count, int32 cap}
-// header (a Collection::Array<InternalPtr<T>>, declared as three fields).
+// `list` is a Collection::Array<InternalPtr<T>> (CitizenPtrList, kSpec_PtrZero).
 // ------------------------------------------------------------
 // ENDGAME B.3.9 CB: takes the type id by VALUE (the class static of the cell retail
 // reads) and validates unconditionally, as retail does (0x14008f760: every array's
@@ -195,19 +193,19 @@ void RegistryCensus(const CitizenBehavior* cb, const char* leg, const char* when
 // whenever the cell read 0 -- which it always did for Healer (0x1401c4330), Well
 // (0x1401c4c28) and Happiness (0x1401c42c0), so those three arrays were never validated.
 template <class T>
-void SerializeIBPArray(T*** data, int32_t* countField, IO::Serializer* serializer, uint32_t typeId) {
-    int32_t count = *countField;
+void SerializeIBPArray(CitizenPtrList<T>& list, IO::Serializer* serializer, uint32_t typeId) {
+    int32_t count = list._size;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
-    // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
-    // new tail zeroed. Element is the 8-byte InternalBasePtr slot walked below.
-    if (loading) GameColl::AsArray<GameColl::Ptr8>(data).SetSize(count);
+    // retail 0x1400032e0 IS Collection::Array<T>::SetSize(n): stride 8 align 8,
+    // new tail zeroed (kSpec_PtrZero). Element is the 8-byte InternalBasePtr slot walked below.
+    if (loading) list.SetSize(count);
 
-    T** arr = *data;
+    T** arr = list._data;
     for (int32_t i = 0; i < count; ++i) {
         T** elem = &arr[i];
         // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: B4 H5-P2 (not reached): this one template serves every CitizenBehavior IBP array (+0x00 / +0x10 / +0x20 / +0x30, healers, citizens, pastures, cemeteries, happiness, attendance, livestock, herds, diseases, populations, buildComponents, wells) and the two bucket-node entity arrays, each held as Collection::Array<T*> where retail's element is InternalPtr<T>: the cast goes when the LAST of them is retyped (one element retype + reader sweep per array, as EntityList's UpdateBucket was)
+        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: B4 fin-F2 (measured, not done): the cast goes when the 16 IBP members and the bucket entity list are CitizenIbpList<T> (Array<InternalPtr<T>>, kSpec_PtrZero); that retype breaks about 170 reader lines in 49 files (code/Game Component, Dialog, Entity, Game, Goal, Tutorial, Work, Action and standalone harnesses: T* / T** reads of the elements) and was not reached
         T* val = *elem;
         if (val != nullptr) {
             if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
@@ -259,10 +257,10 @@ void SerializeIntAssocArray(CitizenIntAssocArray& outer, IO::Serializer* seriali
     for (int32_t i = 0; i < count; ++i) {
         int32_t innerCount = slot->_size;
         serializer->Serialize(innerCount, nullptr);
-        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400021d0, stride 4 align 4,
-        // grown tail left as the allocation found it (no init arm). The bulk int
-        // serializer below overwrites all `innerCount` elements either way.
-        if (loading) GameColl::AsArray<GameColl::I32NoInit>(slot).SetSize(innerCount);
+        // retail 0x1400021d0 IS Collection::Array<int32_t>::SetSize(n): stride 4 align 4,
+        // grown tail left as the allocation found it (no init arm: int32_t's trait row).
+        // The bulk int serializer below overwrites all `innerCount` elements either way.
+        if (loading) slot->SetSize(innerCount);
         int32_t* innerPtr = slot->_data;
         // Retail (0x1400900e7 for +0x150, 0x1400903b8 for +0x140) dispatches
         // through slot 0x140151278 = IO::Serializer::Serialize(int count,
@@ -281,27 +279,23 @@ void SerializeIntAssocArray(CitizenIntAssocArray& outer, IO::Serializer* seriali
 // Node (0x38 bytes): {uint64 key@0, valHdr[16]@8 (ptr,count,cap), parent@0x18,
 // left@0x20, right@0x28, int16 balance@0x30, int16 height@0x32}. Rebalance via Avl38Retrace (0x140014b40).
 // ------------------------------------------------------------
-struct IbpArrayHeader {             // a Collection::Array<InternalPtr<ComponentEntity>>
-    ComponentEntity** data;         // +0x00
-    int32_t           count;        // +0x08
-    int32_t           capacity;     // +0x0C
-};
 // The nodes are CitizenBehavior's bucket-tree nodes (CitizenBucketNode<Key>,
 // Entity/CitizenBehavior.h: 0x38 bytes, {key, entity Array} element, parent
 // +0x18, left +0x20, right +0x28, int16 balance / height +0x30 / +0x32).
-// The loaded entity Array header is MOVED into the node as its three fields
-// (not copied-then-freed): the element's Array has a deep operator=.
+// The node's entity Array is zeroed (+0x08 = +0x10 = 0) and then DEEP-COPIED from the
+// loaded local by 0x140015ec0 (Array::Assign: free the destination, allocate exactly
+// the source count, copy the qwords), as retail's three node arms do
+// (0x140017b03 / 0x140017b9a / 0x140017beb in 0x140017a40; the same in 0x140017cd0).
 template <class Key>
 CitizenBucketNode<Key>* AllocCompRefTreeNode(Key* key, CitizenBucketNode<Key>* parent,
-                                             const IbpArrayHeader& val) {
+                                             const CitizenPtrList<ComponentEntity>& val) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
     CitizenBucketNode<Key>* n =
         static_cast<CitizenBucketNode<Key>*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
     n->element.key = key;
-    n->element.entities._data     = val.data;       // +0x08..+0x18: value header (moved)
-    n->element.entities._size     = val.count;
-    n->element.entities._capacity = val.capacity;
+    ::new (&n->element.entities) CitizenPtrList<ComponentEntity>();   // +0x08 = +0x10 = 0
+    n->element.entities.Assign(val);                                 // 0x140015ec0
     n->parent = parent;              // +0x18
     n->left = nullptr;               // +0x20
     n->right = nullptr;              // +0x28
@@ -341,10 +335,14 @@ void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serialize
 
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
+            // Retail's per-iteration local {key, Array} (zeroed at 0x140017d30..0x140017d38,
+            // before the key is read); the Array is freed at the bottom of EVERY iteration,
+            // the duplicate-key one included (0x140017c19 in 0x140017a40, 0x140017ea5 in
+            // 0x140017cd0): ~val.
             Key* key = nullptr;
+            CitizenPtrList<ComponentEntity> val;
             if (keyFn) keyFn(&key, serializer);
-            IbpArrayHeader val = {nullptr, 0, 0};
-            SerializeIBPArray(&val.data, &val.count, serializer, ComponentEntity::TypeId());
+            SerializeIBPArray(val, serializer, ComponentEntity::TypeId());
 
             if (*rootPtr == nullptr) {
                 *rootPtr = AllocCompRefTreeNode(key, static_cast<Node*>(nullptr), val);
@@ -386,8 +384,7 @@ void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serialize
         Node* node = CompRefTreeMin(root);
         while (node) {
             if (keyFn) keyFn(&node->element.key, serializer);
-            SerializeIBPArray(&node->element.entities._data, &node->element.entities._size,
-                              serializer, ComponentEntity::TypeId());
+            SerializeIBPArray(node->element.entities, serializer, ComponentEntity::TypeId());
             node = CompRefTreeSucc(node);
         }
     }
@@ -491,29 +488,29 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
     const char* leg = SerializerLoading(ser) ? "LOAD" : "SAVE";
     RegistryCensus(this, leg, "enter");
 
-    SerializeIBPArray(&field_0x00._data, &field_0x00._size, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(&field_0x10._data, &field_0x10._size, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(&field_0x30._data, &field_0x30._size, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(&field_0x20._data, &field_0x20._size, ser, ComponentEntity::TypeId());
-    SerializeIBPArray(&healers._data, &healers._size, ser, HealerComponent::TypeId());
-    SerializeIBPArray(&citizens._data, &citizens._size, ser, CitizenComponent::TypeId());
+    SerializeIBPArray(field_0x00, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(field_0x10, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(field_0x30, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(field_0x20, ser, ComponentEntity::TypeId());
+    SerializeIBPArray(healers, ser, HealerComponent::TypeId());
+    SerializeIBPArray(citizens, ser, CitizenComponent::TypeId());
 
     // Unconditional TREE #1 (residence/path-graph style, string-table key).
     SerializeCompRefTree(field_0x100, ser, &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140018020
 
-    SerializeIBPArray(&pastures._data, &pastures._size, ser, PastureComponent::TypeId());
-    SerializeIBPArray(&cemeteries._data, &cemeteries._size, ser, CemeteryComponent::TypeId());
-    SerializeIBPArray(&happinessComponents._data, &happinessComponents._size, ser, HappinessComponent::TypeId());
-    SerializeIBPArray(&attendanceComponents._data, &attendanceComponents._size, ser, AttendanceComponent::TypeId());
-    SerializeIBPArray(&livestock._data, &livestock._size, ser, LivestockComponent::TypeId());
-    SerializeIBPArray(&herds._data, &herds._size, ser, HerdComponent::TypeId());
+    SerializeIBPArray(pastures, ser, PastureComponent::TypeId());
+    SerializeIBPArray(cemeteries, ser, CemeteryComponent::TypeId());
+    SerializeIBPArray(happinessComponents, ser, HappinessComponent::TypeId());
+    SerializeIBPArray(attendanceComponents, ser, AttendanceComponent::TypeId());
+    SerializeIBPArray(livestock, ser, LivestockComponent::TypeId());
+    SerializeIBPArray(herds, ser, HerdComponent::TypeId());
 
     if (ser->GetVersion() > 0) {
-        SerializeIBPArray(&diseases._data, &diseases._size, ser, DiseaseComponent::TypeId());
+        SerializeIBPArray(diseases, ser, DiseaseComponent::TypeId());
     }
 
-    SerializeIBPArray(&populations._data, &populations._size, ser, PopulationComponent::TypeId());
-    SerializeIBPArray(&buildComponents._data, &buildComponents._size, ser, BuildComponent::TypeId());
+    SerializeIBPArray(populations, ser, PopulationComponent::TypeId());
+    SerializeIBPArray(buildComponents, ser, BuildComponent::TypeId());
 
     // ExternalPtr<ComponentDescription>[] arrays, resized via Array<Ptr8>::SetSize
     // (FUN_140001bb0) then bulk-serialized via Reimpl_ExternalPtrArray_Serialize
@@ -560,7 +557,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
         ResizeStride0x10(&field_0x160._root /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
     }
 
-    SerializeIBPArray(&wells._data, &wells._size, ser, WellComponent::TypeId());
+    SerializeIBPArray(wells, ser, WellComponent::TypeId());
 
     // Stride-8 int-pair array at +0x130.
     {

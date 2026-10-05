@@ -15,7 +15,6 @@
 #include "Component/TradeDescription.h"
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
-#include "Component/coll_bridge.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Entity/CitizenBehavior.h"
 #include "Work/tradework_funcs.h"
@@ -36,7 +35,7 @@
 // Helpers
 // ============================================================
 // FUN_140002cc0 CemeteryListErase_Reimpl — the world entity-list erase (by value).
-// FUN_140003110 — add entity to world pending list (GameColl SetSizeFill).
+// FUN_140003110 — add entity to world pending list (Array SetSizeFill).
 // FUN_14005c220 TradeComponent::Setup (below) — called after adding to pending list.
 
 // ============================================================
@@ -73,22 +72,22 @@
 // destination's buffer, allocate count*8 (8-aligned), copy the source pointers in.
 // Faithful 1:1 port of TradeComponent_helper_e6b0; closure = MemAlloc/MemFree only.
 static void TradeGoods_Copy(TradeMerchantOrder& dst, const TradeMerchantOrder& src) {
-    System::MemoryAllocator::MemFree(dst.goods);
-    dst.goodsCount = 0;   // retail: one qword 0 over +0x18..+0x1f
-    dst.goodsCap = 0;
-    dst.goods = nullptr;
-    int count = src.goodsCount;
-    dst.goodsCount = count;
+    System::MemoryAllocator::MemFree(dst.goods._data);
+    dst.goods._size = 0;   // retail: one qword 0 over +0x18..+0x1f
+    dst.goods._capacity = 0;
+    dst.goods._data = nullptr;
+    int count = src.goods._size;
+    dst.goods._size = count;
     if (count > 0) {
-        dst.goodsCap = count;
-        dst.goods = static_cast<ComponentDescription**>(
+        dst.goods._capacity = count;
+        dst.goods._data = static_cast<ComponentDescription**>(
             System::MemoryAllocator::MemAlloc((uint64_t)count * 8, 8));
     }
-    int n = dst.goodsCount;
+    int n = dst.goods._size;
     for (int64_t i = 0; i < n; i++) {
-        ComponentDescription** slot = dst.goods + i;
+        ComponentDescription** slot = dst.goods._data + i;
         if (slot != nullptr)
-            *slot = src.goods[i];
+            *slot = src.goods._data[i];
     }
 }
 
@@ -99,10 +98,10 @@ void TradeMerchantOrders_Destroy(TradeMerchantOrder* base, int count) {
     if (count <= 0) return;
     TradeMerchantOrder* p = base;
     for (int64_t k = count; k != 0; k--, ++p) {
-        System::MemoryAllocator::MemFree(p->goods);
-        p->goods = nullptr;
-        p->goodsCount = 0;   // retail: one qword 0 over +0x18..+0x1f
-        p->goodsCap = 0;
+        System::MemoryAllocator::MemFree(p->goods._data);
+        p->goods._data = nullptr;
+        p->goods._size = 0;   // retail: one qword 0 over +0x18..+0x1f
+        p->goods._capacity = 0;
         p->merchantName.~String();
     }
 }
@@ -113,9 +112,7 @@ void TradeMerchantOrders_Destroy(TradeMerchantOrder* base, int count) {
 static void TradeMerchantOrder_CopyConstruct(TradeMerchantOrder* dstElem, const TradeMerchantOrder* srcElem) {
     ::new (&dstElem->merchantName) System::String(srcElem->merchantName);   // String at +0x00
     dstElem->orderKind = srcElem->orderKind;                                // int at +0x08
-    dstElem->goods = nullptr;
-    dstElem->goodsCount = 0;
-    dstElem->goodsCap = 0;
+    ::new (&dstElem->goods) TradeMerchantOrder::GoodsList();                // +0x10 = +0x18 = 0
     if (&dstElem->goods != &srcElem->goods)
         TradeGoods_Copy(*dstElem, *srcElem);
 }
@@ -123,9 +120,7 @@ static void TradeMerchantOrder_ConstructZero(TradeMerchantOrder* dstElem) {
     ::new (&dstElem->merchantName) System::String();   // _data = null (0x180006760)
     dstElem->orderKind = 0;
     dstElem->_pad0C[0] = dstElem->_pad0C[1] = dstElem->_pad0C[2] = dstElem->_pad0C[3] = 0;
-    dstElem->goods = nullptr;
-    dstElem->goodsCount = 0;
-    dstElem->goodsCap = 0;
+    ::new (&dstElem->goods) TradeMerchantOrder::GoodsList();   // +0x10 = +0x18 = 0
 }
 
 // The +0x30 array's row: 0x14000e760's element arms and 0x14000ef10's destroy. Its

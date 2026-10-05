@@ -269,26 +269,26 @@ void TradeComponent::BuildMerchantManifest() {
     // Where the goods list comes from, and whether it is marked up.
     TradeMerchantOrder& rec = merchantOrders._data[merchantIdx];
     bool fromOrder = false;
-    if (rec.orderKind == 0 || rec.goodsCount < 1) {
+    if (rec.orderKind == 0 || rec.goods._size < 1) {
         TradeUI_GetBuyEntries_59670(this, &goods);
     } else {
         fromOrder = true;
-        const int32_t n = rec.goodsCount;
+        const int32_t n = rec.goods._size;
         goods.count = n;
         goods.cap   = n;
         goods.base  = static_cast<ComponentDescription**>(
             System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(n) * 8, 8));
-        ComponentDescription** src = rec.goods;
+        ComponentDescription** src = rec.goods._data;
         for (int32_t i = 0; i < n && goods.base; ++i)
             goods.base[i] = src[i];
     }
 
     // Consume the order unless it is the persistent kind.
     if (rec.orderKind != 2) {
-        System::MemoryAllocator::MemFree(rec.goods);
-        rec.goods = nullptr;
-        rec.goodsCount = 0;    // count and capacity together
-        rec.goodsCap = 0;
+        System::MemoryAllocator::MemFree(rec.goods._data);
+        rec.goods._data = nullptr;
+        rec.goods._size = 0;    // count and capacity together
+        rec.goods._capacity = 0;
         rec.orderKind = 0;
     }
 

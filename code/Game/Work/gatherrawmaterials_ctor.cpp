@@ -31,7 +31,6 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "Dialog/dialog_exe_helpers.h"   // B3R: Dialog_FindComponent_d6c0
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include "Component/BuildDescription.h"   // ENDGAME B.3.8 CB3: BuildDescription::TypeId()
 #include "Component/BuildComponent.h"

@@ -25,7 +25,6 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "math/Math.h"
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cmath>
 #include <cstdio>

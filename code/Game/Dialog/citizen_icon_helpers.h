@@ -6,7 +6,6 @@
 //   CitizenUI_UpdateIconDisplay — FUN_14006aed0
 //   CitizenUI_BuildIconArray   — FUN_14006abf0
 
-#include "Component/coll_bridge.h"
 #include "collection/Collection.h"   // Collection::Array
 #include "ui/UserInterface.h"
 #include "system/String.h"

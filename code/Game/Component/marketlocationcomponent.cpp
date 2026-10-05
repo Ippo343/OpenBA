@@ -38,7 +38,6 @@
 // real ctor/dtor chain, and retail's member at +0x28 over retail's state table.
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/coll_bridge.h"
 #include "Entity/CitizenBehavior.h"   // the market-location list (GameUpdateLoop::m_citizenList)
 #include "io/Serializer.h"
 

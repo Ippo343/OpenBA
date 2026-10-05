@@ -53,8 +53,7 @@ namespace {
 // 0x1401189b0 is Component::Persist; the import slot 0x140152a98 is
 // Object::Base::IsDerivedFrom. Both are called directly.
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
-// exe (ENDGAME B.3.2 step 2, ImmigrationComp_DynArrayResize body: stride 8,
-// align 8, zero tail) — the resolved pointer is gone, see the call sites below.
+// exe (stride 8, align 8, zero tail: kSpec_PtrZero) — the resolved pointer is gone, see the call sites below.
 
 // True when the serializer is READING (retail: *(int*)(stream + 8) == 0,
 // reached through the serializer's first field).

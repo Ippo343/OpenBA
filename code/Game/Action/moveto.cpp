@@ -60,7 +60,7 @@ namespace {
 inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
 // 0x1400032e0 (Array<Ptr8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::Ptr8> member call, so its resolved-pointer stand-in
+// member call on the typed array, so its resolved-pointer stand-in
 // is gone.
 } // namespace
 
