@@ -154,7 +154,7 @@ namespace {
 //     0x180014c70  operator=   rtcoll::RtColl_ArrayAssign_180014c70
 //     0x180014d00  ~Array      rtcoll::RtColl_ArrayDtor_180014d00
 //   Array<AnimationState layer>, element 0x38, alignment 8:
-//     0x18001b700 / 0x18001c480  rtcoll::Rt_ArrayAssign_18001b700 / Rt_ArrayDtor_18001c480
+//     0x18001b700 / 0x18001c480  rtcoll::Rt_ArrayAssign_18001b700 / AnimationState::LayerArray::~Array
 //   Array<InterpolatedState<Transform>>, element 0x38, alignment 4 (a DIFFERENT
 //   instantiation from the layer array even though the stride matches — its
 //   SetSize default-constructs new elements to an identity Transform pair):

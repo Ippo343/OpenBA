@@ -339,6 +339,12 @@ static_assert(offsetof(InterpolatedTransform, second) == 0x1c,
 // `AnimationLayer` now binds the CLASS. Spell the PODs `RtGraphics::` there.
 // ############################################################################
 
+// The row of `Array<AnimationState::Layer>` (array_graphics_anim.cpp): SetSize
+// 0x18005c8a0's init, operator= 0x18001b700, ~Array 0x18001c480.
+namespace rtcoll { namespace gfxanim {
+extern const ArraySpec kSpec_AnimLayer;
+} }
+
 namespace Graphics {
 
 // ============================================================================
@@ -520,7 +526,13 @@ public:
     //        `CopyInstancedToUnique` and clears it.
     bool     _instanced;
     uint8_t  _pad01[7];                  // +0x01  never written by the ctor
-    Collection::Array<Layer> _layers;    // +0x08  stride 0x38
+    // B.4 Z MIRROR2 GFX: on retail's row, kSpec_AnimLayer -- its SetSize is
+    // 0x18005c8a0, operator= 0x18001b700, ~Array 0x18001c480 (J1: the row has
+    // no destroy step, as the trait row of the trivially destructible Layer
+    // did not).
+    using LayerArray = Collection::Array<Layer, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimLayer>>;
+    LayerArray _layers;                  // +0x08  stride 0x38
 };
 static_assert(sizeof(AnimationState) == 0x18,
               "Graphics::AnimationState is 0x18 bytes -- its ctor 0x1800fdaf0 "
@@ -629,13 +641,12 @@ using AnimationStateArray = Collection::Array<InstancedAnimationState, Collectio
                                               Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimState>>;
 }  // namespace Graphics
 namespace rtcoll {
-void* Rt_ArrayDtor_18001c480(void* a);  // 0x18001c480 ~Array<AnimationState::Layer>
 void* Rt_ArrayDtor_18001c550(void* a);  // 0x18001c550 ~Array<InterpolatedState<Transform>>
 void* Rt_ArrayDtor_180014090(Graphics::GraphicsMesh::NodeArray* a);  // 0x180014090 ~Array<GraphicsMesh::Node>
 void* Rt_ArrayDtor_18005bbb0(Graphics::AnimationStateArray* a);  // 0x18005bbb0 ~Array<AnimationState>
 void Rt_SetSize_18005aa30(Graphics::GraphicsMesh::NodeArray* a, int n);  // 0x18005aa30 Array<GraphicsMesh::Node>
 void Rt_SetSize_18005b1e0(Graphics::AnimationStateArray* a, int n);  // 0x18005b1e0 Array<AnimationState>
-void Rt_SetSize_18005c8a0(void* a, int n);  // 0x18005c8a0 Array<AnimationState::Layer>
+void Rt_SetSize_18005c8a0(Graphics::AnimationState::LayerArray* a, int n);  // 0x18005c8a0 Array<AnimationState::Layer>
 void Rt_SetSize_18005ac50(void* a, int n);  // 0x18005ac50 Array<InterpolatedState<Transform>>
 void Rt_SetSize_18005c3d0(void* a, int n);  // 0x18005c3d0 Array<Instance>
 void Rt_SetSize_18005be30(void* a, int n, const void* fill);  // 0x18005be30 Array<Instance>, fill
@@ -643,7 +654,9 @@ Graphics::GraphicsMesh::NodeArray* Rt_ArrayAssign_180013960(Graphics::GraphicsMe
                                                             const Graphics::GraphicsMesh::NodeArray* s);  // 0x180013960 Array<GraphicsMesh::Node>
 Graphics::AnimationStateArray* Rt_ArrayAssign_18005b130(Graphics::AnimationStateArray* d,
                                                         const Graphics::AnimationStateArray* s);  // 0x18005b130 Array<AnimationState>
-void* Rt_ArrayAssign_18001b700(void* d, const void* s);  // 0x18001b700 Array<AnimationState::Layer>
+Graphics::AnimationState::LayerArray* Rt_ArrayAssign_18001b700(
+        Graphics::AnimationState::LayerArray* d,
+        const Graphics::AnimationState::LayerArray* s);  // 0x18001b700 Array<AnimationState::Layer>
 void* Rt_ArrayAssign_18001b810(void* d, const void* s);  // 0x18001b810 Array<InterpolatedState<Transform>>
 }  // namespace rtcoll
 // ---- graphics/wave27_lane_gfxbig.cpp: the Update door (it counts its calls
