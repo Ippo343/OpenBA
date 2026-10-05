@@ -317,10 +317,7 @@ void SaveLoadDialog::PopulateFileList() {
             if (saveInfo.field44 == 2) {
                 // Valid save: show formatted date string
                 // ?AsString@DateTime@System@@ returns by value.
-                // LEFT: SaveInfo::sortKey (+0x30) is declared uint64_t; it is the
-                // save's System::DateTime (runtime/types/save/SaveLoad.h).
-                System::String dateStr =
-                    reinterpret_cast<const System::DateTime*>(&saveInfo.sortKey)->AsString();   // B.3.x bridge  // LEFT: SaveInfo::sortKey (+0x30) is declared uint64_t; it is the save's System::DateTime (runtime/types/save/SaveLoad.h, outside this set)
+                System::String dateStr = saveInfo.sortKey.AsString();
                 entry.labelSaveDate->SetParameter(0, dateStr);
             } else {
                 // Corrupt save: show "Corrupt" text from the globalNames table (+0xD8)

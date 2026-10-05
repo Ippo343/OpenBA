@@ -125,6 +125,7 @@
 #include "../../types/save/SaveLoad.h"        // RtSave_MetaData_CopyCtor 0x180032f70
 #include "../../types/graphics/Scene.h"       // RtGraphics_DrawGroup_CopyCtor 0x18001be60
 #include "../../types/graphics/Animation.h"   // RtGraphics_Animation_CopyCtor / _Dtor
+#include "../../types/graphics/Camera.h"      // Graphics::RendererDrawGroup (kSpec_DrawGroup1f0)
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 // B.4 (R-CORE): the element types the hand-derived rows below read by name.
 #include "../../types/system/String.h"            // RtSystem::StringRefCount
@@ -2002,14 +2003,18 @@ const ArraySpec kSpec_MetaData58 = {              // 0x1800332d0
 // DESCENDING slot order. Written out here with ArrayDtorImpl rather than
 // reaching array_destroy.cpp, because ArrayDtorImpl IS the body the iterator
 // eventually calls (0x18001c650, the twelfth copy of J1).
-void DestroyDrawGroup1f0Range(void* ignoredThis, uint8_t* base, int count) {
-    (void)ignoredThis;
+// B.4: the element is the typed Graphics::RendererDrawGroup (Camera.h); its
+// three item arrays are destroyed by name. RendererDrawItem is trivially
+// destructible, so each `~Array` is the J1 body alone (ArrayDtorImpl).
+static void DrawGroup1f0Destroy(::Graphics::RendererDrawGroup* base, int count) {
     for (int i = 0; i < count; ++i) {
-        uint8_t* e = base + static_cast<int64_t>(i) * 0x1f0;
-        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1e0));   // reverse order,  // LEFT: type-erased J1 body takes ArrayHdr*; RendererDrawGroup::items are Array<RendererDrawItem> (Collection core)
-        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1d0));   // as the CRT  // LEFT: type-erased J1 body takes ArrayHdr*; RendererDrawGroup::items are Array<RendererDrawItem> (Collection core)
-        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1c0));   // iterator does  // LEFT: type-erased J1 body takes ArrayHdr*; RendererDrawGroup::items are Array<RendererDrawItem> (Collection core)
+        base[i]._items[2].~Array();   // reverse order,
+        base[i]._items[1].~Array();   // as the CRT
+        base[i]._items[0].~Array();   // iterator does
     }
+}
+void DestroyDrawGroup1f0Range(void* ignoredThis, uint8_t* base, int count) {
+    DestroyAs<::Graphics::RendererDrawGroup, &DrawGroup1f0Destroy>(ignoredThis, base, count);
 }
 void AssignDrawGroup1f0(uint8_t* d, const uint8_t* s) {
     RtGraphics_DrawGroup_CopyCtor(d, s);

@@ -154,8 +154,8 @@ void RecInt(::IO::ReaderWriter* rw, int32_t* v) {
     rw->SerializeInt(*v, nullptr);                               // +0xa0
 }
 
-void RecBool(::IO::ReaderWriter* rw, uint8_t* v) {
-    rw->SerializeBool(reinterpret_cast<bool&>(*v), nullptr);     // +0x78  // retail hands PackageFile::_overridable's raw byte to the bool slot (H8)  // CAST-OK: byte_io
+void RecBool(::IO::ReaderWriter* rw, bool* v) {
+    rw->SerializeBool(*v, nullptr);                              // +0x78
 }
 
 // `SerializeUIntArray` is (count, uint*, name) — EDX, R8, R9 at 0x1800b624c-0x1800b6259.

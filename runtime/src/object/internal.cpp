@@ -223,10 +223,10 @@ void InternalBasePtrSerializeBody(Internal** self,
                                   ::IO::Serializer& ser) {
     ::IO::ReaderWriter* const enc = ser._readerWriter;
 
-    // A one-byte `char` through the bool slot (+0x78), as retail passes it.
-    char present = (*self != nullptr) ? 1 : 0;
-    enc->SerializeBool(*reinterpret_cast<bool*>(&present), nullptr);  // retail hands the one-byte char to the bool slot (H8)  // CAST-OK: byte_io
-    if (present == 0) {
+    // A one-byte bool through the bool slot (+0x78), as retail passes it.
+    bool present = (*self != nullptr);
+    enc->SerializeBool(present, nullptr);
+    if (!present) {
         *self = nullptr;
         return;
     }

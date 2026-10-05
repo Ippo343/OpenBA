@@ -155,7 +155,7 @@ bool ElementDescription::Serialize(IO::Stream& streamArg) {
 
     rw->SerializeUInt(_elementType, nullptr); // +0x40
     rw->SerializeUInt(_flags, nullptr); // +0x44
-    rw->SerializeUInt(reinterpret_cast<uint32_t&>(_id), nullptr); // +0x3c — unsigned slot, see the banner  // LEFT: the int32 _id through retail's uint overload (H8)
+    rw->SerializeUInt(_id, nullptr); // +0x3c — the uint slot
 
     rw->SerializeInt(_tabOrder, nullptr); // +0x38
 

@@ -54,6 +54,7 @@
 
 #include "../system/String.h"
 #include "../system/Filename.h"   // B.3.4: GetSaveFilename returns System::Filename
+#include "../system/Value.h"      // System::DateTime (SaveGameInfo::sortKey)
 
 namespace RtIo {
 
@@ -304,7 +305,7 @@ static_assert(sizeof(SaveBlock) == 0x10, "sizeof(IO::Persistence::SaveBlock) == 
 // hand-derived kSpec_SaveGameInfo row manages by offset (array.cpp), never
 // through this type's destructor.
 struct SaveGameInfo {
-    uint64_t         sortKey;  // +0x00 — a FILETIME; see the note above
+    System::DateTime sortKey;  // +0x00 — a FILETIME; see the note above
     System::String   name;     // +0x08
 };
 static_assert(offsetof(SaveGameInfo, name) == 0x08, "SaveGameInfo.name @ 0x08");
