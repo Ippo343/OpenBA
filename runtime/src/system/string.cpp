@@ -1139,7 +1139,7 @@ String String::RemoveAt(int index) const {
 // as before.
 //
 // A caller that reaches a shim hands it RAW BYTES, not a constructed object:
-// the `ret` slot is an uninitialised `RtSystem::String` local. So a shim that
+// the `ret` slot is uninitialised String-sized storage. So a shim that
 // produces a value CONSTRUCTS INTO the slot with placement new rather than
 // assigning to it — an assignment would Release() whatever garbage pointer the
 // caller's stack happened to hold.

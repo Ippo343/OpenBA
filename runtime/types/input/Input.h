@@ -239,10 +239,10 @@ static_assert(offsetof(Configuration, _pad0b) == 0xB, "Configuration::_pad0b");
 // The erased Set<E24> core's two views of a KeyMap's tree (input.cpp): the
 // {_root, _count, _pad14} header as its Set, a BindingNode as its Node.
 inline rtsetavl24::Set* AsSet24(void* p) {
-    return reinterpret_cast<rtsetavl24::Set*>(p);   // B.3.x bridge  // CAST-OK: elem_stride
+    return reinterpret_cast<rtsetavl24::Set*>(p);   // CAST-OK: elem_stride
 }
 inline rtsetavl24::Node* AsNode24(BindingNode* n) {
-    return reinterpret_cast<rtsetavl24::Node*>(n);  // B.3.x bridge  // CAST-OK: elem_stride
+    return reinterpret_cast<rtsetavl24::Node*>(n);  // CAST-OK: elem_stride
 }
 
 }  // namespace Input

@@ -315,9 +315,7 @@ class Particle;           // block H2 (runtime/types/graphics/Particle.h, the PO
 // Retail's parameter and return type is `Object::ExternalPtr<T>` — a real class
 // template that `runtime/types/object/External.h` already carries. This family
 // keeps `RtGraphics::ExternalPtr` (one `void* p`, `static_assert(sizeof == 8)`)
-// instead, for the same reason `Object::External::_path` keeps the POD
-// `RtSystem::Filename` rather than the real `System::Filename`
-// (External.h's field banner):
+// instead:
 //
 //  * the two are ABI-identical — 8 bytes, trivially copyable, so the Microsoft
 //    x64 ABI passes both in a register and returns both in RAX — and every

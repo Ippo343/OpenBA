@@ -65,7 +65,7 @@
 #include "../collection/Collection.h"
 #include "../object/External.h"     // Object::External, ExternalPtr<T>
 #include "../object/Internal.h"     // Object::detail::InternalMemFree
-#include "../system/String.h"       // RtSystem::String — trivially destructible
+#include "../system/String.h"       // System::String (the four name fields)
 
 namespace RtUI {
 

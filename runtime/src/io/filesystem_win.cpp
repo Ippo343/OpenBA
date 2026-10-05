@@ -46,8 +46,7 @@
 // "RETAIL'S RELEASE IDIOM" section) — WideString shares String's allocation
 // header, just over wchar_t characters instead of char. Confirmed by reading
 // the release sequences byte-for-byte identical to RtString_ReleaseInline's
-// shape; reused here via a reinterpret_cast to RtSystem::String rather than
-// re-deriving a WideString-specific idiom for a type this lane does not own.
+// shape.
 //
 // DIFF: value oracle, not a byte oracle. GetSaveDirectory reads no shared
 // FileSystem state and allocates a FRESH buffer on every call (unlike

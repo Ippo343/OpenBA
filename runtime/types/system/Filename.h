@@ -83,8 +83,7 @@ namespace System {
 // String / Filename overload pairs are Filename's own ctor, operator= and
 // operator< (each hides or pairs with String's, binding as retail's exports
 // do: a Filename argument takes the Filename overload by exact match, a String
-// argument the String one), the test helper RefCount and the transitional
-// Sys() / AsSys() bridges; no by-value Filename parameter or return changes its
+// argument the String one) and the test helper RefCount; no by-value Filename parameter or return changes its
 // ABI (Filename was already non-trivial: hidden pointer / hidden return slot).
 class Filename : public String {
 public:

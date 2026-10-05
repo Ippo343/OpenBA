@@ -129,7 +129,7 @@
 #include <cstddef>
 #include <type_traits>
 
-#include "FileSystem.h"                // RtIO::PackageFileView, RtIO::FileInfo
+#include "FileSystem.h"                // RtIO::FileInfo
 #include "Modification.h"              // RtIO::ModArray: GetIconData / GetPreviewData's slot
 #include "../object/External.h"          // Object::External — the base
 #include "../object/Internal.h"          // Object::detail::InternalMemFree
@@ -292,9 +292,8 @@ public:
     // ---- the 0xd0 bytes PackageFile adds, from +0x20 ----------------------
     // PUBLIC, like `Object::External`'s and `IO::Serializer`'s, because the
     // unconverted bodies in filesystem_packages.cpp, filesystem_find_win.cpp
-    // and package_file_serialize.cpp reach these offsets through
-    // `RtIO::PackageFileView` or by raw byte offset, and `offsetof` on them has
-    // to be well formed for the pins below.
+    // and package_file_serialize.cpp reach these fields directly, and `offsetof`
+    // on them has to be well formed for the pins below.
 
     // +0x20 and +0x30 — TWO `Collection::Array<System::String>` headers. Their
     // MEANING is unknown and is NOT invented here: `package_file_serialize.cpp`

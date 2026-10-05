@@ -161,8 +161,6 @@ System::Filename* RtObject_External_GetPath(const ::Object::External* self, Syst
     // ENDGAME B.3.1 step 2: retail's copy ctor (0x1800067d0), spelled as itself.
     // `ret` is the hidden return slot — raw, uninitialised bytes — so the object
     // is placement-constructed into it, which is what retail's CALL does.
-    // `_path` is a `RtSystem::Filename` member of the not-yet-converted
-    // `Object::External`, so it comes through the one transitional bridge.
     new (ret) System::Filename(self->_path);
 
     return ret;

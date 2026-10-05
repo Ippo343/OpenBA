@@ -10,10 +10,6 @@
 // spelling and the free-function doors, whose names, signatures and
 // registration rows are unchanged. The doors now DELEGATE to the class members;
 // see the bodies in widestring.cpp.
-//
-// ⚠ `WideString` here is `RtSystem::WideString`, the POD. Inside a
-// `namespace System { ... }` block the same bare name binds the real CLASS —
-// B34_RULES §7.2's grep hazard, armed for this name.
 // ============================================================================
 
 #include <cstddef>

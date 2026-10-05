@@ -23,7 +23,7 @@
 #include <new>        // placement new into the retail hidden return slot
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "../../types/io/Persistence.h"
-#include "../system/string.h"   // RtSystem::String, RtString_ReleaseInline (Wave 2, lane String)
+#include "../system/string.h"   // RtString_ReleaseInline (Wave 2, lane String)
 #include "../collection/avl_trees.h"          // rtavl::StringMapInsert
 #include "../../types/system/Configuration.h"  // RtSystem_ConfigMap_Find
 

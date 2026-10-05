@@ -122,14 +122,6 @@
 #include "../../types/collection/Collection.h"  // B3R: rtsetclear::Clear, rtcoll::RtColl_ArrayDtorElem_180010ab0
 
 
-// ⚠ B34_RULES §7.2 / rule B4b-5, AND IT BITES IN THIS FILE SPECIFICALLY. This
-// using-declaration makes a bare `String` at GLOBAL scope mean the POD
-// `RtSystem::String`. Inside a `System::Configuration` member body, unqualified
-// lookup reaches `namespace System` BEFORE the global scope, so the same bare
-// `String` there binds `System::String` — the CLASS — silently, because the two
-// are the same eight bytes. Every member body below therefore spells
-// `RtSystem::String` in full wherever it means the POD.
-
 // ?_singleton@Configuration@System@@0PEAV12@EA  0x1801fc6f8 — the class static
 // (ENDGAME B.3.9 SYS, B39_RULES D7); RtSystemPortInit redirects the minted row
 // onto it, so the name door, the address door and this member are one cell.

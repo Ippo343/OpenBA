@@ -112,13 +112,6 @@ constexpr int kStringAllocAlign = 4;
 // ENDGAME B.3.1 step 1 — the real class, `System::String`
 // ============================================================================
 //
-// Everything above this line is the ORIGINAL POD (`RtSystem::String`) and the
-// header accessors written for it. They stay, unchanged and trivially
-// destructible, until their last user is converted (B31_RULES.md, "Why a NEW
-// name and not the old POD made real": ported bodies still hold
-// `RtSystem::String tmp; RtSystem_String_Ctor(&tmp); ... RtSystem_String_Dtor(&tmp);`
-// and a real destructor on that type would double-free every one of them).
-//
 // The class below is the SAME EIGHT BYTES under retail's own name. The bodies
 // are the ones the C functions in runtime/src/system/string.cpp already had —
 // moved, not rewritten, retail's release asymmetry included.
@@ -206,10 +199,8 @@ private:
     friend class Filename;
 
 public:
-    // Retail's one and only field. PUBLIC during the migration: the whole
-    // unconverted tree reads `.data` on the POD that overlays these same bytes,
-    // and the step-1 shims hand the pointer back and forth. It becomes private
-    // when the last of them is gone (B31_RULES step 2).
+    // Retail's one and only field. PUBLIC: ported bodies and the step-1 shims
+    // still read and hand the pointer back and forth by name.
     char* _data;
 };
 static_assert(sizeof(String) == 8, "System::String must be 8 bytes");

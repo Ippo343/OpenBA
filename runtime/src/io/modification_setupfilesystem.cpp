@@ -206,8 +206,7 @@ struct ReloadArray {
 
 // ---- the callees ------------------------------------------------------
 // B3R RT-IO: every callee below was a resolve door (RtResolveCached by name,
-// ResolveAddr by address, RT_EXPORT_ONCE); each is called by name now. The two
-// casts are the B.3.x bridge from this body's PODs to the real classes.
+// ResolveAddr by address, RT_EXPORT_ONCE); each is called by name now.
 
 void MemFree(void* p) {   // the null test is INSIDE 0x1800c7ad0
     ::System::MemoryAllocator::MemFree(p);
