@@ -47,6 +47,17 @@
 // BANISHED_REDZONE is unset).
 #include "redzone_alloc.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include <type_traits>
+
+// MenuScene::particles grows through 0x14001bf10 (stride 0x14, align 4, byte copy,
+// the new tail zero-filled, no destroy): the trait row of MenuSceneParticle. Its
+// default constructor is non-trivial (Vector3's) and implicit, so the row's init is
+// value-initialisation, which zero-fills all 0x14 bytes first.
+static_assert(alignof(MenuSceneParticle) == 4, "0x14001bf10 MemAlloc(.., 4)");
+static_assert(std::is_trivially_copyable<MenuSceneParticle>::value, "0x14001bf10 byte copy");
+static_assert(std::is_trivially_destructible<MenuSceneParticle>::value, "0x14001bf10 no destroy");
+static_assert(!std::is_trivially_default_constructible<MenuSceneParticle>::value,
+              "the trait row's init arm runs (value-initialisation zero-fills the new tail)");
 #define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
 
 // M3.5 Path B session 8 — top-level Geometry serializers used by Serialize.
@@ -327,7 +338,9 @@ bool MenuScene::Serialize(IO::Stream& stream) {
     int count58 = particles.GetSize();
     outer.Serialize(count58, nullptr);
     if (count58 > 0) {
-        Reimpl_Array_Resize_Stride14(&particles, count58);
+        // 0x14001bf10 (0x1400a387d) is Array<MenuSceneParticle>::SetSize: its trait row
+        // (stride 0x14, align 4, byte copy, zero-filled new tail, no destroy).
+        particles.SetSize(count58);
     }
     // Per-element serialize (inlined in original; not a separate helper).
     if (count58 > 0 && particles.GetData()) {

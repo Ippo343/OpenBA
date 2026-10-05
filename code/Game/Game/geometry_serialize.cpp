@@ -19,7 +19,7 @@
 // Both walk the spec in `notes/M35_geom_serialize_findings.md`. Each step
 // delegates to a previously-implemented session helper:
 //
-//   session 2 — Reimpl_Struct60B_Resize / _CopyCtor / _DtorRange
+//   session 2 — the GeometryBatch resize / copy / destroy (now GeometryBatchArray, B.4 H5-P2)
 //   session 3 — Reimpl_ExternalPtr_Serialize_Typed_7140 (MaterialInstance)
 //   session 4 — Reimpl_Struct60B_Serialize, Reimpl_Array_Serialize_External_MaterialInstance
 //   session 5 — Reimpl_Array_Resize_Stride02/16A/16B/04/_ArrayOfArrays
@@ -99,31 +99,31 @@ void SerializeDrawRanges(IO::Serializer& serializer, RawArray<GeometryDrawRange>
 
 // One batch array (+0x1F0 / +0x200): count, on load resize (0x14001f250), then
 // the batches in place (0x14001ffa0).
-void SerializeBatches(IO::Serializer& serializer, RawArray<GeometryBatch>& batches) {
-    int32_t c = batches.size;
+void SerializeBatches(IO::Serializer& serializer, GeometryBatchArray& batches) {
+    int32_t c = batches._size;
     serializer.Serialize(c, nullptr);
     if (IsLoading(serializer)) {
         GeometryBatch_Resize(batches, static_cast<unsigned>(c));
     }
-    GeometryBatch_Serialize(serializer, c, batches.data);
+    GeometryBatch_Serialize(serializer, c, batches._data);
 }
 
 // The pre-v5 (Serialize) / pre-v3 (SerializeLegacyBatches) backfill, on load: the
 // material table +0x210 sized to the road batches, each entry the batch's
 // material, and each batch's box reset to {0, 0, grid, grid}.
 void BackfillBatchMaterials(WorldGeometry& geometry) {
-    RawArray<GeometryBatch>& roads = geometry._roadBatches;
+    GeometryBatchArray& roads = geometry._roadBatches;
     RawArray<Object::External*>& materials = geometry._batchMaterials;
-    Reimpl_Array_Resize_Stride08(&materials, roads.size);   // FUN_140001bb0
+    Reimpl_Array_Resize_Stride08(&materials, roads._size);   // FUN_140001bb0
     int32_t dstCount = materials.size;
     int32_t grid = geometry._gridSize;
-    if (dstCount > 0 && roads.data && materials.data) {
+    if (dstCount > 0 && roads._data && materials.data) {
         for (int i = 0; i < dstCount; ++i) {
-            materials.data[i] = roads.data[i].material;
-            roads.data[i].minX = 0;
-            roads.data[i].minY = 0;
-            roads.data[i].maxX = grid;
-            roads.data[i].maxY = grid;
+            materials.data[i] = roads._data[i].material;
+            roads._data[i].minX = 0;
+            roads._data[i].minY = 0;
+            roads._data[i].maxX = grid;
+            roads._data[i].maxY = grid;
         }
     }
 }

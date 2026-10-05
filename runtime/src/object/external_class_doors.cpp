@@ -32,14 +32,6 @@
 // NOTHING HERE IS REGISTERED. No `RegisterRuntimeExport`, no
 // `RegisterRuntimeAddr`, no row added or removed. Every existing entry point
 // keeps working and keeps its address.
-//
-// THE CASTS. Each forward hands `this` to an entry point whose signature is the
-// retail ABI shape over the POD (`RtObject::ExternalFactory*`). External.h
-// asserts the class and the POD field for field, so the cast is exact by
-// construction; it is the B31_RULES transitional cast and it is spelled with
-// the mandatory `// B.3.3 bridge` marker so the B.4 metric can tell it from a
-// leftover. It goes when the registered entry points themselves go, which is
-// after step 6's caller batches.
 // ============================================================================
 
 #include <cstddef>

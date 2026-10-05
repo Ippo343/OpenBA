@@ -607,10 +607,10 @@ void EntityList::Update(const System::Time* time) {
         if ((int32_t)toProcess > 0) {
             do {
                 // Re-read bucket data pointer each iteration (may be reallocated)
-                ComponentEntity** arrBase = bkt->_data;
+                Object::InternalPtr<ComponentEntity>* arrBase = bkt->_data;
 
                 // Read entity IBP and CheckPtr
-                ComponentEntity* entIBP = arrBase[idx];
+                ComponentEntity* entIBP = arrBase[idx].Get();
                 if (prof) ++g_elProfBucketVisits;
 
                 // Check not deleted (bit 10)
@@ -1105,11 +1105,11 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
 
         if (lastIdx != entityBucketIdx) {
             // Swap last element into removed element's slot
-            ComponentEntity** bucketData = bucket->_data;
+            Object::InternalPtr<ComponentEntity>* bucketData = bucket->_data;
             bucketData[entityBucketIdx] = bucketData[lastIdx];
 
             // Update swapped entity's bucket index field
-            ComponentEntity* swappedEntity = bucket->_data[entityBucketIdx];
+            ComponentEntity* swappedEntity = bucket->_data[entityBucketIdx].Get();
 
             // Update low 24 bits of +0x1C with new index
             swappedEntity->_handle = swappedEntity->_handle ^ ((swappedEntity->_handle ^ entityBucketIdx) & 0xFFFFFF);
@@ -1243,7 +1243,7 @@ void EntityList::Serialize(IO::Stream& stream) {
     if (ibpCount > 0) {
         for (int64_t j = 0; j < ibpCount; j++) {
             ComponentEntity** currentIBP = &ibpIter[j];
-            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge   // LEFT: the IBPArray element is the InternalPtr<ComponentEntity> slot held as ComponentEntity* (EntityList.h): InternalBasePtr::Serialize reads the slot
+            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge   // LEFT: B4 H5-P2 (not reached): masterArray is IBPArray (Array<ComponentEntity*>) where retail's element is InternalPtr<ComponentEntity> (the buckets are retyped, UpdateBucket); its readers are ~25 files, 20 of them standalone harnesses walking `ComponentEntity** arr = masterArray._data`: the master-array retype is that sweep
 
             // After loading, verify it's a ComponentEntity
             if (*currentIBP != nullptr) {
