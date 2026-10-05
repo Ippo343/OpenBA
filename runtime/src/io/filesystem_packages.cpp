@@ -366,29 +366,29 @@ namespace {
 // 0x1800c7ad0 and carries retail's `if (p)` inside itself, which is why the
 // callers below hand it a possibly-null pointer exactly as retail does.
 void AppendPackfile(::IO::FileSystem* self, ::IO::PackageFile* obj) {
-    ::IO::PackageFile** const old  = self->_packfiles;
-    const int32_t             oldN = self->_packfileCount;
+    ::IO::PackageFile** const old  = self->_packfiles._data;
+    const int32_t             oldN = self->_packfiles._size;
     const int32_t             newN = oldN + 1;
     if (newN == oldN)
         return;
-    self->_packfileCount = newN;
-    if (newN > self->_packfileCapacity) {
-        self->_packfileCapacity = newN;
+    self->_packfiles._size = newN;
+    if (newN > self->_packfiles._capacity) {
+        self->_packfiles._capacity = newN;
         if (newN == oldN + 1 && oldN != 0)
-            self->_packfileCapacity = newN * 3;
+            self->_packfiles._capacity = newN * 3;
         // MOVSXD RBX,dword[RSI+0x2c] ; SHL RBX,3 — a SIGN extension of the
         // capacity, then times 8. Ghidra's C prints this as a zero extension.
         const uint64_t bytes =
-            static_cast<uint64_t>(static_cast<int64_t>(self->_packfileCapacity)) * 8u;
-        self->_packfiles = static_cast<::IO::PackageFile**>(RtMemAlloc(bytes, 8));  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
+            static_cast<uint64_t>(static_cast<int64_t>(self->_packfiles._capacity)) * 8u;
+        self->_packfiles._data = static_cast<::IO::PackageFile**>(RtMemAlloc(bytes, 8));  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
     }
-    int64_t k = (old == self->_packfiles) ? static_cast<int64_t>(oldN) : 0;
+    int64_t k = (old == self->_packfiles._data) ? static_cast<int64_t>(oldN) : 0;
     for (; k < static_cast<int64_t>(newN); ++k) {
-        ::IO::PackageFile** const dst = self->_packfiles + k;
+        ::IO::PackageFile** const dst = self->_packfiles._data + k;
         if (dst != nullptr)
             *dst = (k < static_cast<int64_t>(oldN)) ? old[k] : obj;
     }
-    if (old != self->_packfiles && old != nullptr)
+    if (old != self->_packfiles._data && old != nullptr)
         RtMemFree(old);
 }
 
@@ -599,10 +599,10 @@ System::Filename FileSystem::GetPackDirectory() const {
 }
 
 void FileSystem::ClosePackages() {
-    const int32_t hadPackfiles = _packfileCount;
+    const int32_t hadPackfiles = _packfiles._size;
     const bool    hadIndex     = _packfileIndexRoot != nullptr;
 
-    for (int32_t i = 0; i < _packfileCount; ++i) {
+    for (int32_t i = 0; i < _packfiles._size; ++i) {
         // Retail RELOADS the array base on every iteration and indexes it twice
         // (0x1800abae0 and 0x1800abafb) rather than caching the element. Kept:
         // the deleting destructor below could in principle write the array.
@@ -625,13 +625,13 @@ void FileSystem::ClosePackages() {
     }
 
     // `if (p) { lock; Free; unlock }` with the null test inside 0x1800c7ad0.
-    RtIO::RtMemFree(_packfiles);
-    _packfiles = nullptr;
+    RtIO::RtMemFree(_packfiles._data);
+    _packfiles._data = nullptr;
     // Retail zeroes +0x28 as ONE QWORD (`MOV qword ptr [RDI+0x28],RBP`), which
     // clears the count AND the capacity. Unlike Array::SetSize, this DOES
     // shrink capacity — the next LoadPackages therefore reallocates from 1.
-    _packfileCount    = 0;
-    _packfileCapacity = 0;
+    _packfiles._size    = 0;
+    _packfiles._capacity = 0;
 
     RtIO::PackfileIndexNode* const root = _packfileIndexRoot;
     if (root != nullptr) {
@@ -753,8 +753,8 @@ void FileSystem::LoadPackages() {
     //
     // B3R RT-IO: the call is rtsort::SortByKey70 by name (it was the address
     // door, which resolved to the same body).
-    if (_packfileCount > 1) {
-        rtsort::SortByKey70(reinterpret_cast<void**>(_packfiles), _packfileCount);  // LEFT: SIG rtsort::SortByKey70(void**, int) (Collection.h, R-COLL); the element is IO::PackageFile, _priority +0x70
+    if (_packfiles._size > 1) {
+        rtsort::SortByKey70(reinterpret_cast<void**>(_packfiles._data), _packfiles._size);  // LEFT: SIG rtsort::SortByKey70(void**, int) (Collection.h, R-COLL); the element is IO::PackageFile, _priority +0x70
     }
 
     // ---- LOOP 2: the user/mod pack filenames already on the FileSystem -----
@@ -772,7 +772,7 @@ void FileSystem::LoadPackages() {
 
     // ---- LOOP 3: the path -> {packIndex, fileIndex} index ------------------
     int64_t inserted = 0, overridden = 0, kept = 0;
-    for (int32_t pi = 0; pi < _packfileCount; ++pi) {
+    for (int32_t pi = 0; pi < _packfiles._size; ++pi) {
         PackageFile* pkg = _packfiles[pi];
         const int32_t entries = pkg->_entryCount;         // MOV EAX,[RCX+0xb8]
         for (int32_t fi = 0; fi < entries; ++fi) {

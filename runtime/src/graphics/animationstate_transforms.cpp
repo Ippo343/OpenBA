@@ -162,7 +162,7 @@ namespace Graphics {
 // ---------------------------------------------------------------------------
 void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHandle,
                                    int animIndex,
-                                   const Collection::Array<GraphicsMesh::Node>& nodes,
+                                   const GraphicsMesh::NodeArray& nodes,
                                    const System::Time& startTime,
                                    const System::Time& /*fadeTime, unread*/,
                                    float /*speed, unread*/, bool instanced) {
@@ -286,7 +286,7 @@ void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHand
 // Quaternion::operator*); nodes 1..n-1 inline the rotate with the schedule
 // below and call only operator*.
 // ---------------------------------------------------------------------------
-void AnimationState::CopyInstancedToUnique(const Collection::Array<GraphicsMesh::Node>& nodes,
+void AnimationState::CopyInstancedToUnique(const GraphicsMesh::NodeArray& nodes,
                                            const Math::Transform& root,
                                            InterpolatedState<Math::Transform>* interp,
                                            int handle) const {
@@ -418,7 +418,7 @@ void AnimationState::CopyInstancedToUnique(const Collection::Array<GraphicsMesh:
 // RE-READ at every use exactly as retail reloads them.
 // ---------------------------------------------------------------------------
 void AnimationState::UpdateNodes(float speed,
-                                 const Collection::Array<GraphicsMesh::Node>& nodes,
+                                 const GraphicsMesh::NodeArray& nodes,
                                  const Math::Transform& root,
                                  InterpolatedState<Math::Transform>* interp,
                                  Math::Transform* pose,
@@ -701,7 +701,7 @@ void AnimationState::UpdateNodes(float speed,
 int MeshInstance::GetBones(float t, const Math::Transform& rootRef,
                            Math::Matrix* out) const {
     const GraphicsMesh* mesh = _mesh.Get();
-    const Collection::Array<GraphicsMesh::Node>& meshNodes = mesh->GetNodes();
+    const GraphicsMesh::NodeArray& meshNodes = mesh->GetNodes();
     const int32_t boneCount = meshNodes._size;
 
     // The body writes only the caller's matrix buffer and returns the bone count;
@@ -923,7 +923,7 @@ int MeshInstance::GetBones(float t, const Math::Transform& rootRef,
 // ---------------------------------------------------------------------------
 int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> groupHandle,
                                         int animIndex,
-                                        const Collection::Array<GraphicsMesh::Node>& nodes) {
+                                        const GraphicsMesh::NodeArray& nodes) {
     AnimationGroup* const group = groupHandle.Get();
 
     int32_t freeSlot = -1;
@@ -952,24 +952,16 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
         // headers null. It is the FILL for the grow arm and the SOURCE of the
         // two empty arrays for the reuse arm.
         //
-        //
-        // LEFT: raw stack storage viewed as an Instance and NEVER constructed or
-        // destroyed by C++ -- its two Arrays are freed below by retail's own two
-        // explicit `~Array` calls (0x18005bbb0 / 0x180014090), as retail does. A
-        // C++-constructed Instance would instantiate `Array<Node>` /
-        // `Array<AnimationState>`'s trait-derived element ops, which the tree
-        // ports as the registered spec rows (array_graphics_anim.cpp) instead.
-        alignas(Instance) uint8_t tmpStorage[sizeof(Instance)];
-        Instance* const tmp = reinterpret_cast<Instance*>(tmpStorage);  // LEFT: H5 AnimationState::tmpStorage, raw stack storage never constructed
+        // B.4 Y RT: a real local. Its implicit ctor is the two Array ctors'
+        // zero triples (retail's header zero stores); its two Arrays are freed
+        // below by retail's own two explicit `~Array` calls (0x18005bbb0 /
+        // 0x180014090), which zero each header, so the implicit member
+        // ~Arrays at scope exit are no-ops (no element destroy, MemFree(null)).
+        Instance tmpInstance;
+        Instance* const tmp = &tmpInstance;
         tmp->_group     = group;
         tmp->_animIndex = animIndex;
         tmp->_refCount  = 0;
-        tmp->_nodes._data      = nullptr;
-        tmp->_nodes._size      = 0;
-        tmp->_nodes._capacity  = 0;
-        tmp->_states._data     = nullptr;
-        tmp->_states._size     = 0;
-        tmp->_states._capacity = 0;
 
         if (count > 0 && freeSlot >= 0) {
             idx = freeSlot;

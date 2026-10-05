@@ -907,14 +907,14 @@ static void DestroyNestedPair(AnimInstance* base, int count) {
     for (int64_t i = 0; i < n; ++i) {
         AnimInstance* e = base + i;
 
-        Collection::Array<Graphics::AnimationState>& states = e->_states;   // +0x20
+        auto& states = e->_states;   // +0x20
         FreeInnerArraysCore(reinterpret_cast<uint8_t*>(states._data), states._size, &kD_InnerArr3_48);  // CAST-OK: elem_stride
         if (states._data) MemFree(states._data);
         states._data = nullptr;
         states._size = 0;                         // one qword (H7)
         states._capacity = 0;
 
-        Collection::Array<Graphics::GraphicsMesh::Node>& nodes = e->_nodes; // +0x10
+        Graphics::GraphicsMesh::NodeArray& nodes = e->_nodes; // +0x10
         ReleaseStringsCore(reinterpret_cast<uint8_t*>(nodes._data), nodes._size, &kD_Str_48);  // CAST-OK: elem_stride
         if (nodes._data) MemFree(nodes._data);
         nodes._data = nullptr;

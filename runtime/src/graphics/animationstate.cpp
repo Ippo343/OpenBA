@@ -274,8 +274,7 @@ void RtGraphics_SerializeMeshNodes(IO::Serializer& ser, int count, GraphicsMesh:
     if (count <= 0) return;
     IO::ReaderWriter* rw = ser._readerWriter;
     for (int i = 0; i < count; ++i, ++p) {
-        // LEFT (H5): `_name` is the RtSystem::String POD (GraphicsMesh.h's note).
-        reinterpret_cast<System::String*>(&p->_name)->Serialize(ser);   // LEFT: H5 GraphicsMesh::Node::_name is the RtSystem::String POD (GraphicsMesh.h), viewed as the real System::String
+        p->_name.Serialize(ser);
         rw->SerializeInt(p->_parent, nullptr);
         rw->SerializeFloatArray(4, &p->_local.rotation.x, nullptr);
         rw->SerializeFloatArray(3, &p->_local.translation.x, nullptr);
@@ -580,12 +579,9 @@ void Animation::GetPoseAtTime(const System::Time& timeRef, const System::Time& d
 // +0x08..+0x43, which is `for (off = 0x08; off <= 0x40; off += 4)`. `_pad44` is
 // NOT assigned, which is retail's own behaviour and not an omission.
 // ---------------------------------------------------------------------------
-GraphicsMesh::Node::Node(const Node& src) {
-    _name.data = nullptr;
-    if (src._name.data != nullptr) {
-        _name.data = src._name.data;
-        ++RtSystem::StringRefCount(_name.data);   // System::String refcount at str-4
-    }
+// B.4 Y RT: `_name` is the real String; its copy ctor 0x180006cb0 is the same
+// zero-then-AddRef pair.
+GraphicsMesh::Node::Node(const Node& src) : _name(src._name) {
     _parent = src._parent;
     _local  = src._local;
     _bind   = src._bind;

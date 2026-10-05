@@ -186,14 +186,6 @@ using RtIo::TextFileStream;
 namespace {
 
 
-// The String-release idiom on a `char*` slot. TextFileStream's two object
-// strings are declared `char*` in FileStream.h (a System::String is exactly
-// that one pointer). FileStream::_filename is a String member (B4 X-RH).
-void ReleaseStrSlot(char** slot) {
-    // ~String (0x180006c80), including retail's release asymmetry (String.h).
-    reinterpret_cast<System::String*>(slot)->~String();  // LEFT: H5 TextFileStream::_objectName / _objectType are char* raw storage of a System::String (not in X-RH's assignment)
-}
-
 // ??0FileStream@IO@@QEAA@XZ (0x1800aaa10): ENDGAME B.3.9 IO (W2) -- the door
 // is gone; Audio::Stream::Run and the persistence loader build the class.
 
@@ -414,9 +406,9 @@ extern "C" void RtIo_TextFileStream_SetObject(::IO::TextFileStream* self,
                                               const System::String* name,
                                               int version) {
 
-    TfsReleaseAssign(&self->_objectName, &name->_data);   // 1800ba294..ba2dd   arg2
+    TfsReleaseAssign(&self->_objectName._data, &name->_data);   // 1800ba294..ba2dd   arg2
     self->_objectVersion = version;                      // 1800ba2de          arg3
-    TfsReleaseAssign(&self->_objectType, &type->_data);   // 1800ba2e1..ba31e   arg1
+    TfsReleaseAssign(&self->_objectType._data, &type->_data);   // 1800ba2e1..ba31e   arg1
 
 }
 
@@ -779,8 +771,8 @@ FileStream::~FileStream() {
 // External@` sets both to 2 and branches on +0x6c alone for the BOM.
 TextFileStream::TextFileStream(const System::String& type,
                                const System::String& name, int version)
-    : _objectName(nullptr),          // 1800ba3d0  +0x58
-      _objectType(nullptr),          // 1800ba3d4  +0x60
+    : _objectName(),                 // 1800ba3d0  +0x58
+      _objectType(),                 // 1800ba3d4  +0x60
       _requestedFormat(6),           // 1800ba3d8  +0x68
       _activeEncoding(6),            // 1800ba3df  +0x6c
       _buffer(nullptr),              // 1800ba3e6  +0x70
@@ -805,10 +797,11 @@ TextFileStream::TextFileStream(const System::String& type,
 //   2. if (buffer) MemFree(buffer)  -- BARE, and NOT nulled afterwards
 //   3. release objectType (+0x60)   4. release objectName (+0x58)
 //   5. JMP ~FileStream(this)        -- the compiler's base destructor
+// B.4 Y RT: steps 3 and 4 are the two String members' own destructors
+// (String::Release, the same null test and asymmetric arms), which run after
+// this body in reverse declaration order: +0x60, then +0x58.
 TextFileStream::~TextFileStream() {
     if (_buffer) RtSystem::RtMemFree(_buffer);                    // 1800ba4b9
-    if (_objectType) RtIO::ReleaseStrSlot(&_objectType);          // 1800ba4bf
-    if (_objectName) RtIO::ReleaseStrSlot(&_objectName);          // 1800ba4e9
 }
 
 // ============================================================================
