@@ -116,8 +116,8 @@ const State* DeviceArrayBase(const Input::Device* d, int32_t device, int32_t joy
 // 0x180009c30). B3R: called by name; the atomic by-address caches are gone.
 // ---------------------------------------------------------------------------
 // (AsSet24 / AsNode24, the two views of a KeyMap's tree the erased core
-// takes, are defined in namespace Input below and declared in Input.h, so
-// keymap_save.cpp's inlined teardown reaches the core through them too.)
+// takes, are inline in Input.h, so keymap_save.cpp's inlined teardown reaches
+// the core through them too.)
 
 // The three device-state readers of KeyMap (GetValue / Pressed / Released)
 // share ONE shape and differ only in which State byte they read and what they
@@ -161,12 +161,6 @@ T ReadBoundState(const Input::KeyMap* km, int32_t joystick, int32_t id, Read rea
 // ############################################################################
 namespace Input {
 
-rtsetavl24::Set* AsSet24(void* p) {
-    return reinterpret_cast<rtsetavl24::Set*>(p);   // B.3.x bridge  // CAST-OK: elem_stride
-}
-rtsetavl24::Node* AsNode24(BindingNode* n) {
-    return reinterpret_cast<rtsetavl24::Node*>(n);  // B.3.x bridge  // CAST-OK: elem_stride
-}
 
 // ?ClearAll@KeyMap@Input@@QEAAXXZ  retail 0x1800a7d20  ord 1706
 //

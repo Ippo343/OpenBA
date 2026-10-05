@@ -184,12 +184,16 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
 //     stamp ??_7AnimatedImageDescription@UI@@6B@             ; 1800cb6cd (compiler's)
 //     Array<String>::~Array(this + 0x80)                     ; 1800cb6d4
 //     JMP ~ImageDescription                                  ; 1800cb6e2 (compiler's)
-// 0x180010ab0 is the Array destructor that ALSO destroys its elements: the
-// implicit destructor of the `Collection::Array<System::String>` member (B.4 Z
-// RT2), which runs after this empty body and before ~ImageDescription, where
-// retail's CALL sits. The plain Array::~Array other classes use is 0x180039440.
+// 0x180010ab0 is the Array destructor that ALSO destroys its elements
+// (array_destroy.cpp's J2 entry point); the plain Array::~Array the other
+// classes use is 0x180039440. Using the wrong one here would leak a
+// System::String per frame name. It ZEROES the array header, so the
+// compiler-emitted member `~Array` of the `Collection::Array<System::String>`
+// member that runs after this body sees an empty array (no element destroy,
+// MemFree(null)), exactly as it did over the old Array<char*> spelling.
 namespace UI {
 AnimatedImageDescription::~AnimatedImageDescription() {
+    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_frameNames);          // 1800cb6d4
 }
 }  // namespace UI
 
