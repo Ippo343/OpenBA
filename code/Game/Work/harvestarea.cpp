@@ -38,7 +38,6 @@
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Game/exe_constants.h"     // B3R: kRdata_140172114
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -80,7 +79,7 @@
 //   0x14000e320 BST recursive free                  WorkBase_TreeNodeFree_e320
 //   MemAlloc                                        System::MemoryAllocator::MemAlloc
 //   DAT_140172114 = 0.5f                            kRdata_140172114
-// 0x14000a590 (Array<uint8>::SetSize) is a GameColl::AsArray<GameColl::U8> member call.
+// 0x14000a590 (Array<bool>::SetSize) is `_field58.SetSize`.
 
 
 // ============================================================
@@ -195,13 +194,13 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     if (citizenCellY >= mapSz) citizenCellY = mapSz - 1;
     uint32_t citizenGridCell = mapSz * citizenCellY + citizenCellX;
 
-    int fieldCellCount = _field60;
+    int fieldCellCount = _field58._size;
 
     if (fieldCellCount > 0) {
         int cellIdx2 = 1; // paired cell index starts at 1
         for (int i = 0; i < fieldCellCount; i++) {
             // Check if this cell's validity flag is set
-            bool* validityArray = _field58;
+            bool* validityArray = _field58._data;
             if (validityArray[i] == 0) {
                 ++g_ha_nomark;
                 goto next_cell;
@@ -408,7 +407,7 @@ int HarvestArea::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*p
     int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
 
     HarvestArea_RemoveCellNode(this, primaryIdx);
-    if (pairedIdx < _field60) {
+    if (pairedIdx < _field58._size) {
         HarvestArea_RemoveCellNode(this, pairedIdx);
     }
     return 0;
@@ -444,10 +443,10 @@ int HarvestArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*par
     HarvestArea_RemoveCellNode(this, primaryIdx);
 
     // Cancelled: the cell goes back in the pool.
-    bool* validityArray = _field58;
+    bool* validityArray = _field58._data;
     validityArray[primaryIdx] = 1;
 
-    if (pairedIdx < _field60) {
+    if (pairedIdx < _field58._size) {
         validityArray[pairedIdx] = 1;
         HarvestArea_RemoveCellNode(this, pairedIdx);
     }
@@ -562,7 +561,7 @@ int HarvestArea::Validate() {
             }
 
             // Mark validity flag
-            bool* validityArray = _field58;
+            bool* validityArray = _field58._data;
             validityArray[node->element.slot] = 1;
         }
 
@@ -649,14 +648,14 @@ void HarvestArea::Persist(IO::Stream& stream) {
     WorkCellBST_Serialize_9de0(&_cells, &serializer2);
 
     // Serialize field cell count at +0x60
-    int cellCount = _field60;
+    int cellCount = _field58._size;
     int cellCountBuf[2] = { cellCount, 0 };
     serializer2.Serialize(cellCountBuf[0], nullptr);
 
     // If reading (serializer mode == 0), resize validity array.
-    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
+    // 0x14000a590 == Collection::Array<bool>::SetSize.
     if (static_cast<int>(serializer2.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::U8>(&_field58).SetSize(cellCountBuf[0]);
+        _field58.SetSize(cellCountBuf[0]);
     }
 
     // Serialize validity array through the BOOL-ARRAY door.
@@ -675,19 +674,16 @@ void HarvestArea::Persist(IO::Stream& stream) {
     // B.3.4a closing sweep) pointed at — that is the THREE-parameter
     // `Serialize(int&)` scalar door, so the old call put the COUNT in the register
     // the scalar body dereferences as `int*`.
-    serializer2.Serialize(cellCountBuf[0], _field58, nullptr);   // slot 0x140151458 = bool-array door
+    serializer2.Serialize(cellCountBuf[0], _field58._data, nullptr);   // slot 0x140151458 = bool-array door
 }
 
 
 // The HarvestArea / AutoPickupWork / Work stamps and the `~Internal` call are the
 // compiler's chain.
 HarvestArea::~HarvestArea() {
-    // Free validity array at +0x58
-    System::MemoryAllocator::MemFree(_field58);
-    _field58 = nullptr;
-    _field60 = 0;   // with +0x64: one qword store in retail
-    _field64 = 0;
-    // The +0x48 set's Clear is the `_cells` member's ~Set, after this body (0x1400ed410).
+    // The +0x58 flags are the `_field58` member's ~Array (MemFree, then +0x58 = +0x60 = 0),
+    // then the +0x48 set's Clear is the `_cells` member's ~Set: reverse declaration order
+    // after this empty body (0x1400ed410).
 }
 
 
@@ -701,7 +697,7 @@ int HarvestArea::GetPriority() {
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The three stamps are the compiler's.
 HarvestArea::HarvestArea()
-    : AutoPickupWork(), _field58(nullptr), _field60(0), _field64(0) {
+    : AutoPickupWork() {
 }
 
 // ============================================================

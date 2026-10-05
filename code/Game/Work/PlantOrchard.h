@@ -59,13 +59,14 @@ public:
     // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
     using CellSet = Collection::Set<WorkCellAssignment>;
     CellSet _cells;
-    // +0x58/+0x60/+0x64 are ONE dynamic-array triple {base, count, capacity} — the same
-    // shape as OrchardComponent's +0x50/+0x58/+0x5c. 0x14000a590 (the resizer the ctor
-    // calls) reads capacity at +0x0c of the triple, so +0x64 is NOT padding. Persist
-    // streams it through the bool-array overload (0x140151458): 1 = planted.
-    bool*    field_58;           // +0x58: validity array base (one bool per orchard slot)
-    int32_t  field_60;           // +0x60: element count (= OrchardComponent+0x58 slot count)
-    int32_t  field_64;           // +0x64: capacity (was mislabelled padding)
+    // +0x58: Collection::Array<bool> {data, count +0x60, capacity +0x64}, one flag per
+    // orchard slot (1 = planted; Persist streams it through the bool-array overload
+    // 0x140151458). It grows through 0x14000a590 (stride 1, align 1, NO tail write: the
+    // trait row of a trivial bool). A real member: the ctor 0x1400f50b0 zeroes +0x58 /
+    // +0x60 as two qwords after the set; the dtor 0x1400f5010 restamps, MemFree(+0x58),
+    // +0x58 = +0x60 = 0, THEN clears the set: reverse declaration order (~Array before ~Set).
+    using SlotFlags = Collection::Array<bool>;
+    SlotFlags field_58;
     ComponentDescription* field_68;   // +0x68: ExternalPtr<ComponentDescription> (0x140002340): the
                                       //        TREE TYPE template chosen in OrchardUI's combo (copied
                                       //        from OrchardComponent+0x60). NOT the OrchardDescription.
@@ -76,6 +77,6 @@ static_assert(alignof(PlantOrchard) == 8, "PlantOrchard is 8-aligned");
 static_assert(offsetof(PlantOrchard, _cells) == 0x48, "PlantOrchard +0x48");
 static_assert(offsetof(PlantOrchard, _cells) + offsetof(PlantOrchard::CellSet, _count) == 0x50, "PlantOrchard +0x50");
 static_assert(offsetof(PlantOrchard, field_58) == 0x58, "PlantOrchard +0x58");
-static_assert(offsetof(PlantOrchard, field_60) == 0x60, "PlantOrchard +0x60");
-static_assert(offsetof(PlantOrchard, field_64) == 0x64, "PlantOrchard +0x64");
+static_assert(offsetof(PlantOrchard, field_58) + offsetof(PlantOrchard::SlotFlags, _size) == 0x60, "PlantOrchard +0x60");
+static_assert(offsetof(PlantOrchard, field_58) + offsetof(PlantOrchard::SlotFlags, _capacity) == 0x64, "PlantOrchard +0x64");
 static_assert(offsetof(PlantOrchard, field_68) == 0x68, "PlantOrchard +0x68");

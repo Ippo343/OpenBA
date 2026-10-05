@@ -27,6 +27,10 @@
 #include <cstddef>
 #include "Work/Work.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (field_58, field_68)
+#include "object/Internal.h"         // Object::InternalPtr<T>
+
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 class CitizenComponent;
 
@@ -37,7 +41,7 @@ class ConsumeProduce final : public Work {
 public:
     ConsumeProduce();                                               // 0x1400e9340
 
-    // 0x1400e9190: frees both arrays
+    // 0x1400e9190: frees both arrays (the members' ~Array, after the empty body)
     ~ConsumeProduce() override;                                     // [0]  0x14002a190
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400e9020
     int   Execute(CitizenComponent** entityIBP, System::Time* context) override;  // [4]  0x1400e7840
@@ -55,13 +59,19 @@ public:
     int32_t  field_4c;           // +0x4C: int (serialized)
     int32_t  field_50;           // +0x50: Type (zeroed, serialized)
     int32_t  field_54;           // +0x54: int (serialized)
-    Object::InternalPtr<CitizenComponent>* field_58; // +0x58: Array<InternalPtr<CitizenComponent>> data (zeroed; Persist
-                                 //        0x1400e9020 validates each element against CitizenComponent)
-    int32_t  field_60;           // +0x60: DynArray count (zeroed)
-    int32_t  field_64;           // +0x64: DynArray capacity (zeroed)
-    int32_t* field_68;           // +0x68: Array<int> data (zeroed; Persist's int-array overload)
-    int32_t  field_70;           // +0x70: DynArray count (zeroed)
-    int32_t  field_74;           // +0x74: DynArray capacity (zeroed)
+    // Both arrays are real members: the ctor 0x1400e9340 zeroes +0x58 / +0x60 / +0x68 /
+    // +0x70 as four qwords (0x1400e939d..0x1400e93a9); the dtor 0x1400e9190 restamps,
+    // MemFrees +0x68 and zeroes +0x68 / +0x70, then MemFrees +0x58 and zeroes +0x58 /
+    // +0x60 (0x1400e91b5..0x1400e91d7): ~Array in reverse declaration order.
+    // +0x58: the citizens on the work slots (Persist 0x1400e9020 validates each element
+    // against CitizenComponent); grows through 0x1400032e0 (stride 8, the new tail ZEROED,
+    // no element destroy): kSpec_PtrZero, the row the AsArray<Ptr8> view reached.
+    using CitizenRefList = Collection::Array<Object::InternalPtr<CitizenComponent>, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    CitizenRefList field_58;     // +0x58 (count +0x60, capacity +0x64)
+    // +0x68: per output position state (Persist's int-array overload); grows through
+    // 0x1400021d0 (stride 4, the new tail left as found): Array<int32_t>'s trait row.
+    Collection::Array<int32_t> field_68;   // +0x68 (count +0x70, capacity +0x74)
 };
 
 static_assert(sizeof(ConsumeProduce) == 0x78, "ConsumeProduce is 0x78 (retail create MemAlloc)");
@@ -72,8 +82,8 @@ static_assert(offsetof(ConsumeProduce, field_4c) == 0x4c, "ConsumeProduce +0x4c"
 static_assert(offsetof(ConsumeProduce, field_50) == 0x50, "ConsumeProduce +0x50");
 static_assert(offsetof(ConsumeProduce, field_54) == 0x54, "ConsumeProduce +0x54");
 static_assert(offsetof(ConsumeProduce, field_58) == 0x58, "ConsumeProduce +0x58");
-static_assert(offsetof(ConsumeProduce, field_60) == 0x60, "ConsumeProduce +0x60");
-static_assert(offsetof(ConsumeProduce, field_64) == 0x64, "ConsumeProduce +0x64");
+static_assert(offsetof(ConsumeProduce, field_58) + offsetof(ConsumeProduce::CitizenRefList, _size) == 0x60, "ConsumeProduce +0x60");
+static_assert(offsetof(ConsumeProduce, field_58) + offsetof(ConsumeProduce::CitizenRefList, _capacity) == 0x64, "ConsumeProduce +0x64");
 static_assert(offsetof(ConsumeProduce, field_68) == 0x68, "ConsumeProduce +0x68");
-static_assert(offsetof(ConsumeProduce, field_70) == 0x70, "ConsumeProduce +0x70");
-static_assert(offsetof(ConsumeProduce, field_74) == 0x74, "ConsumeProduce +0x74");
+static_assert(offsetof(ConsumeProduce, field_68) + offsetof(Collection::Array<int32_t>, _size) == 0x70, "ConsumeProduce +0x70");
+static_assert(offsetof(ConsumeProduce, field_68) + offsetof(Collection::Array<int32_t>, _capacity) == 0x74, "ConsumeProduce +0x74");

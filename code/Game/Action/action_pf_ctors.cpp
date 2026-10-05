@@ -87,6 +87,7 @@ void ActionStackPush(ActionStack* stack, const ::Object::InternalPtr<Action>* ac
     // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize (stride 8,
     // zero tail; ImmigrationComp_DynArrayResize in immigrationcomponent.cpp). It only
     // touches the array header at the front of the stack (+0x00..+0x10).
+    // LEFT (B4 H5): ActionStack's retail dtor 0x1400c5150 DeletePtr's every element and +0x10 before MemFree(+0x00); the tree's ActionStack has no dtor (CharacterComponent's implicit dtor releases nothing), so typing `actions` needs 0x1400c5150 ported as ~ActionStack in CharacterComponent (Component/) first.
     GameColl::AsArray<GameColl::Ptr8>(stack).SetSize(newCount);
 LAB_550e:
     if (-1 < stack->current) {

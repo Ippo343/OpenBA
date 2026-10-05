@@ -27,7 +27,6 @@
 #include "Action/exe_bodies.h"      // B3R: Pf_EntityResolvePos_2e20
 #include "Component/exe_bodies.h"   // B3R: CitizenComp_FUN_14012c3f0, AttendanceComponent_GetJobHostComponent
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include "Object/factory_registration.h"   // GetTypeIdByName (drop-spot occupancy dump)
@@ -68,8 +67,8 @@
 //   0x1400a00f0 Map_CheckPassable                   WorkBase_ValidateCell_a00f0
 //   0x1400f7100 Work::CanStartWork                  WorkBase_ValidateTask_f7100
 //   0x140115e60 CitizenAI_State_LongTermPlan        CitizenAI_State_LongTermPlan
-// 0x1400032e0 (Array<Ptr8>::SetSize) and 0x1400021d0 (Array<int32>::SetSize) are
-// GameColl::AsArray<T> member calls (ENDGAME B.3.2 step 2).
+// 0x1400032e0 (Array<InternalPtr>::SetSize) and 0x1400021d0 (Array<int32>::SetSize) are
+// the citizenRefs / spotStates members' SetSize.
 
 // ============================================================
 // Helper: Find a description on a ComponentDescription's sub-description list
@@ -142,7 +141,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
     // Find InteractComponent (the spot positions) on building entity
     InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
-    int citizenCount = this->citizenCount;  // +0x50
+    int citizenCount = citizenRefs._size;  // +0x50
 
     if (citizenCount < 1) {
         return 1;
@@ -163,8 +162,8 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
     // Find first available fishing spot (state == 0)
     // Also reset spots that were marked as state 2 if the map cell is now empty
-    int spotCount = this->spotCount;    // +0x60
-    int32_t* spotStates = this->spotStates;  // +0x58
+    int spotCount = spotStates._size;    // +0x60
+    int32_t* spotStates = this->spotStates._data;  // +0x58
     // The world map
     Map* map = gameWorld->m_game;
     int mapSize = map->size;
@@ -518,7 +517,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 // Returns: 1 = all valid (or no citizens), 0 = some invalid
 // ============================================================
 int FishingWork::Validate() {
-    int citizenCount = this->citizenCount;  // +0x50
+    int citizenCount = citizenRefs._size;  // +0x50
     if (citizenCount <= 0) {
         return 1;
     }
@@ -592,7 +591,7 @@ int FishingWork::Validate() {
 
     // If any citizen was invalid, mark orphaned spots as needing reset
     if (!allValid) {
-        int spotCount = this->spotCount;  // +0x60
+        int spotCount = spotStates._size;  // +0x60
 
         for (int s = 0; s < spotCount; s++) {
             // Check if any valid citizen maps to this spot
@@ -637,19 +636,18 @@ void FishingWork::Persist(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // 3. Serialize citizenCount at +0x50
-    int citizenCount = this->citizenCount;
+    int citizenCount = citizenRefs._size;
     serializer.Serialize(citizenCount, nullptr);
 
     // If loading (serializer mode == 0 at *(int*)(serializer[0] + 8)):
     // resize the IBP array at +0x48 to the deserialized count
-    // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
-    // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp).
+    // 0x1400032e0 == Collection::Array<InternalPtr>::SetSize (kSpec_PtrZero).
     if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::Ptr8>(&citizenRefs).SetSize(citizenCount);
+        citizenRefs.SetSize(citizenCount);
     }
 
     // 4. Loop over each citizen IBP, serialize and validate
-    Object::InternalPtr<CitizenComponent>* ibpPtr = citizenRefs;
+    Object::InternalPtr<CitizenComponent>* ibpPtr = citizenRefs._data;
     int64_t remaining = (int64_t)citizenCount;
     if (remaining > 0) {
         do {
@@ -670,20 +668,19 @@ void FishingWork::Persist(IO::Stream& stream) {
     }
 
     // 5. Serialize spotCount at +0x60
-    int spotCount = this->spotCount;
+    int spotCount = spotStates._size;
     serializer.Serialize(spotCount, nullptr);
 
     // If loading, resize the int array at +0x58
-    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
-    // FishingWork_Shutdown calls it at 1400ea9ef). I32NoInit — a grown tail is left as
-    // the allocation found it, like retail. Safe: the resize runs only when loading and
+    // 0x1400021d0 == Collection::Array<int32>::SetSize (retail FishingWork_Shutdown
+    // calls it at 1400ea9ef): a grown tail is left as the allocation found it, like retail. Safe: the resize runs only when loading and
     // the bulk int read below writes all spotCount spot states from the stream.
     if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::I32NoInit>(&spotStates).SetSize(spotCount);
+        spotStates.SetSize(spotCount);
     }
 
     // 6. Serialize the spotStates int array
-    serializer.Serialize(spotCount, spotStates, nullptr);
+    serializer.Serialize(spotCount, spotStates._data, nullptr);
 
     // 7. Serialize retryCount at +0x68
     serializer.Serialize(retryCount, nullptr);
@@ -716,13 +713,13 @@ int FishingWork::OnComplete(CitizenComponent** param2, ComponentEntity** param3,
         uint32_t spotIdx = (param4 >> 4) & 0xf;
         // TEARDOWN_WILD_WRITE.md: same unbounded retail store (0x1400e9eb0) as
         // ConsumeProduce::OnComplete; report an index past the spot count first.
-        if ((int)spotIdx >= spotCount || (int)citizenSlot >= citizenCount) {
+        if ((int)spotIdx >= spotStates._size || (int)citizenSlot >= citizenRefs._size) {
             std::fprintf(stderr,
                 "[WILDWRITE] FishingWork::Slot6 OUT OF RANGE: work=%p entity=%p workId=%d "
                 "param4=0x%x -> spotIdx=%u (count %d, cap %d, array %p) citizenSlot=%u (count %d)\n",
                 (void*)this, static_cast<void*>(field_10.Get()), field_20, param4,
-                spotIdx, spotCount, spotCapacity, static_cast<void*>(spotStates),
-                citizenSlot, citizenCount);
+                spotIdx, spotStates._size, spotStates._capacity, static_cast<void*>(spotStates._data),
+                citizenSlot, citizenRefs._size);
             RedzoneAlloc_PrintBacktrace("FishingWork::Slot6");
         }
         spotStates[spotIdx] = 2;
@@ -769,7 +766,7 @@ int FishingWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, i
 //   - Then clears the citizen IBP slot
 // ============================================================
 int FishingWork::Cleanup() {
-    if (citizenCount <= 0) return 0;
+    if (citizenRefs._size <= 0) return 0;
 
     int i = 0;
     do {
@@ -782,7 +779,7 @@ int FishingWork::Cleanup() {
         }
 
         i++;
-    } while (i < citizenCount);
+    } while (i < citizenRefs._size);
     return 0;
 }
 
@@ -811,14 +808,13 @@ Profession** FishingWork::GetTarget(Profession** param2) {
 // — "is anyone assigned" (+0x50 is the citizen count). The old table pointed at
 // Work_Slot11_HasActiveTasks, the same body.
 int FishingWork::GetPriority() {
-    return citizenCount > 0 ? 1 : 0;
+    return citizenRefs._size > 0 ? 1 : 0;
 }
 
 // Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
 // the leaf fields zeroed. The stamps are the compiler's.
 FishingWork::FishingWork()
-    : Work(), citizenRefs(nullptr), citizenCount(0), citizenCapacity(0),
-      spotStates(nullptr), spotCount(0), spotCapacity(0), retryCount(0) {
+    : Work(), retryCount(0) {
 }
 
 // ============================================================

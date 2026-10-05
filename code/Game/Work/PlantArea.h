@@ -56,22 +56,23 @@ public:
     // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
     using CellSet = Collection::Set<WorkCellAssignment>;
     CellSet _cells;
-    // +0x58 / +0x60 / +0x64 are one byte Collection::Array {data, count, capacity}
-    // (SetSize 0x14000a590; Persist streams it through the bool-array overload
-    // 0x140151458): one byte per CropFieldComponent slot, 1 = still to plant.
-    bool*    field_58;           // +0x58: the array's data (bool: the overload Persist streams it with)
-    int32_t  field_60;           // +0x60: its count (= the field's slot count)
-    uint8_t  _pad64[4];          // +0x64: its capacity (written by SetSize; kept raw bytes for
-                                 //        the crop-field state that zeroes it bytewise)
+    // +0x58: Collection::Array<bool> {data, count +0x60, capacity +0x64} (SetSize 0x14000a590:
+    // stride 1, align 1, NO tail write, the trait row of a trivial bool; Persist streams it
+    // through the bool-array overload 0x140151458): one byte per CropFieldComponent slot,
+    // 1 = still to plant. A real member: the ctor 0x1400f4770 zeroes +0x58 / +0x60 as two
+    // qwords after the set; the dtor 0x1400f4600 restamps, MemFree(+0x58), +0x58 = +0x60 = 0,
+    // THEN clears the set: reverse declaration order (~Array before ~Set).
+    using SlotFlags = Collection::Array<bool>;
+    SlotFlags field_58;
     ComponentDescription* field_68;   // +0x68: ExternalPtr<ComponentDescription> (0x140002340):
                                       //        the crop the field plants
 };
 
 static_assert(sizeof(PlantArea) == 0x70, "PlantArea is 0x70 (retail create MemAlloc)");
-static_assert(offsetof(PlantArea, _pad64) == 0x64, "PlantArea::_pad64");
 static_assert(alignof(PlantArea) == 8, "PlantArea is 8-aligned");
 static_assert(offsetof(PlantArea, _cells) == 0x48, "PlantArea +0x48");
 static_assert(offsetof(PlantArea, _cells) + offsetof(PlantArea::CellSet, _count) == 0x50, "PlantArea +0x50");
 static_assert(offsetof(PlantArea, field_58) == 0x58, "PlantArea +0x58");
-static_assert(offsetof(PlantArea, field_60) == 0x60, "PlantArea +0x60");
+static_assert(offsetof(PlantArea, field_58) + offsetof(PlantArea::SlotFlags, _size) == 0x60, "PlantArea +0x60");
+static_assert(offsetof(PlantArea, field_58) + offsetof(PlantArea::SlotFlags, _capacity) == 0x64, "PlantArea +0x64");
 static_assert(offsetof(PlantArea, field_68) == 0x68, "PlantArea +0x68");

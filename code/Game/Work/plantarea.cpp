@@ -27,7 +27,6 @@
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -130,12 +129,12 @@ int PlantArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     uint32_t citizenGridCell = (uint32_t)(mapSz * citizenCellY + citizenCellX);
 
     // Step 4: Iterate field cells
-    int fieldCellCount = field_60;
+    int fieldCellCount = field_58._size;
     bool anyUnplanted = true;  // tracks if we found any cell with validity flag set
 
     if (fieldCellCount > 0) {
         for (int i = 0; i < fieldCellCount; i++) {
-            bool* validityArray = field_58;
+            bool* validityArray = field_58._data;
             if (validityArray[i] == 0) {
                 continue;
             }
@@ -345,7 +344,7 @@ int PlantArea::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*par
     // TryCompleteTask reporting false is faithful and was never the defect.
 
     // Handle paired cell (if within bounds)
-    if ((int)pairedIdx < field_60) {
+    if ((int)pairedIdx < field_58._size) {
         // Remove paired cell from the set
         WorkCellSetNode* node2 = _cells._root;
         while (node2 != nullptr) {
@@ -389,11 +388,11 @@ int PlantArea::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*param
     }
 
     // Mark primary cell as valid
-    bool* validityArray = field_58;
+    bool* validityArray = field_58._data;
     validityArray[primaryIdx] = 1;
 
     // Handle paired cell
-    if ((int)pairedIdx < field_60) {
+    if ((int)pairedIdx < field_58._size) {
         validityArray[pairedIdx] = 1;
 
         // Remove paired cell from the set
@@ -509,7 +508,7 @@ int PlantArea::Validate() {
             }
 
             // Mark cell as valid (available for re-planting)
-            bool* validityArray = field_58;
+            bool* validityArray = field_58._data;
             validityArray[node->element.cell] = 1;
         }
 
@@ -597,13 +596,13 @@ void PlantArea::Persist(IO::Stream& stream) {
     WorkCellBST_Serialize_9de0(&_cells, &ser);
 
     // Serialize field cell count at +0x60
-    int cellCountBuf[2] = { field_60, 0 };
+    int cellCountBuf[2] = { field_58._size, 0 };
     ser.Serialize(cellCountBuf[0], nullptr);
 
     // If reading (serializer mode == 0), resize validity array.
-    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
+    // 0x14000a590 == Collection::Array<bool>::SetSize.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::U8>(&field_58).SetSize(cellCountBuf[0]);
+        field_58.SetSize(cellCountBuf[0]);
     }
 
     // Serialize validity array through the BOOL-ARRAY door.
@@ -626,7 +625,7 @@ void PlantArea::Persist(IO::Stream& stream) {
     // the element COUNT landed in RDX — the register the scalar body
     // dereferences as `int*` — so this was a wild read off a small integer, not
     // a differently-shaped write. It could never have been retail behaviour.
-    ser.Serialize(cellCountBuf[0], field_58, nullptr);
+    ser.Serialize(cellCountBuf[0], field_58._data, nullptr);
 
     // Serialize ExternalRef at +0x68
     Reimpl_ExternalPtr_Serialize_StringTable(&field_68, &ser);
@@ -638,13 +637,9 @@ void PlantArea::Persist(IO::Stream& stream) {
 // Work dtor chain. The stamps and the `~Internal` call are the compiler's chain.
 // ============================================================
 PlantArea::~PlantArea() {
-    // Free the validity array at +0x58 (the qword store at +0x60 zeroes count and
-    // capacity together in retail; here the two named fields, in address order)
-    System::MemoryAllocator::MemFree(field_58);
-    field_58 = nullptr;
-    field_60 = 0;
-    _pad64[0] = _pad64[1] = _pad64[2] = _pad64[3] = 0;
-    // The +0x48 set's Clear is the `_cells` member's ~Set, after this body (0x1400f4600).
+    // The +0x58 flags are the `field_58` member's ~Array (MemFree, then +0x58 = +0x60 = 0),
+    // then the +0x48 set's Clear is the `_cells` member's ~Set: reverse declaration order
+    // after this empty body (0x1400f4600).
 
 }
 
@@ -654,7 +649,7 @@ PlantArea::~PlantArea() {
 // Ctor 0x1400f4770 (factory variant): `??0Internal`, the Work base fields, the leaf
 // fields zeroed (the two stamps are the compiler's).
 PlantArea::PlantArea()
-    : Work(), field_58(nullptr), field_60(0), _pad64{},
+    : Work(),
       field_68(nullptr) {
 }
 

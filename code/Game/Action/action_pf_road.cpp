@@ -770,23 +770,23 @@ static void AppendIndex(RawArray<uint16_t>* a, short valueForNew) {
 void WorldGeometry::RebuildRoadMesh(Map* map) {
     RawArray<GeometryBatch>* meshBatches = &_roadBatches;    // +0x200 (local_a8)
     const RawArray<Object::External*>* sources = &_batchMaterials; // +0x210
-    RawArray<int32_t>* counters = &_batchCounters;           // +0x220
+    Collection::Array<int32_t>* counters = &_batchCounters;  // +0x220
     Reimpl_Struct60B_Resize(meshBatches, 0);                                // f250(local_a8, 0)
 
     int vtxOff = (_gridSize - _fieldC4) >> 1; // iVar12
 
     // Phase 1: counter array length sync (vs the batch count) then zero every counter.
-    if (counters->size != sources->size) {
-        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize. I32NoInit —
-        // the grown tail is left as the allocation found it, exactly as retail's helper
-        // does at 1400af3df. Safe: the counter-zeroing loop right below (retail
-        // 1400af400) writes all the elements before anything reads one.
-        GameColl::AsArray<GameColl::I32NoInit>(counters).SetSize(sources->size);
+    if (counters->_size != sources->size) {
+        // FUN_1400021d0 == Collection::Array<int32>::SetSize: the grown tail is left as
+        // the allocation found it, exactly as retail's helper does at 1400af3df. Safe:
+        // the counter-zeroing loop right below (retail 1400af400) writes all the
+        // elements before anything reads one.
+        counters->SetSize(sources->size);
     }
     {
-        int cnt = counters->size;
+        int cnt = counters->_size;
         for (int i = 0; i < cnt; i++)
-            counters->data[i] = 0;
+            counters->_data[i] = 0;
     }
 
     // Phase 2: local working batch array, sized to the batch count.
@@ -817,6 +817,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                         // B.3.2 bridge: FUN_14001c890 == Array<uint16>::SetSize (+0x08);
                         // FUN_14001ee40 == Array<RoadVertex>::SetSize (+0x18). Both shrink
                         // to 0 here, so neither body's new-tail arm is ever exercised.
+                        // LEFT (B4 H5): GeometryBatch is the element of RawArray<GeometryBatch> whose resize / copy / destroy are hand-ported element bodies (0x14001f250 / 0x14001f5e0 / 0x14001fb80) and which AddDecal builds from a memset template: its two inner arrays become members only in a GeometryBatch CLASS unit with those three bodies.
                         GameColl::AsArray<GameColl::U16>(&rec.vertices).SetSize(0);
                         GameColl::AsArray<GeometryBatchVertex>(&rec.indices).SetSize(0);
                         // Culling AABB in tile coords, read by the TerrainGenerator cull pass
@@ -845,7 +846,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
                                 if (batchId != 0xff) {
                                     if (blendId == 0xff) {
-                                        counters->data[batchId] += 1;
+                                        counters->_data[batchId] += 1;
                                     }
 
                                     // ---- 3x3 corner-occupancy mask local_f0[0..8] ----
@@ -912,7 +913,8 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                                         int curCount = rec.vertices.size;  // (int)plVar15[1]
                                         // B.3.2 bridge: FUN_14001f8d0 == Array<RoadVertex>::
                                         // SetSize(n, fill) (3-arg form) -- appends the vertex as
-                                        // the new tail element.
+                                        // the new tail element. LEFT (B4 H5): the GeometryBatch CLASS
+                                        // unit above (0x14001f250 / 0x14001f5e0 / 0x14001fb80) first.
                                         GameColl::AsArray<GeometryBatchVertex>(&rec.vertices)
                                             .SetSize(curCount + 1, quad[vi]);
                                     }

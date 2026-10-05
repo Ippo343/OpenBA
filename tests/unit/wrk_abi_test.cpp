@@ -175,10 +175,10 @@ UNIT_TEST(wrk_leaf_consumeproduce) {
     CHECK_EQ(offsetof(ConsumeProduce, field_4c), (size_t)0x4c);
     CHECK_EQ(offsetof(ConsumeProduce, field_50), (size_t)0x50);
     CHECK_EQ(offsetof(ConsumeProduce, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(ConsumeProduce, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(ConsumeProduce, field_58) + offsetof(ConsumeProduce::CitizenRefList, _size), (size_t)0x60);
     CHECK_EQ(offsetof(ConsumeProduce, field_68), (size_t)0x68);
-    CHECK_EQ(offsetof(ConsumeProduce, field_70), (size_t)0x70);
-    CHECK_EQ(offsetof(ConsumeProduce, field_74), (size_t)0x74);
+    CHECK_EQ(offsetof(ConsumeProduce, field_68) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x70);
+    CHECK_EQ(offsetof(ConsumeProduce, field_68) + offsetof(Collection::Array<int32_t>, _capacity), (size_t)0x74);
 }
 
 UNIT_TEST(wrk_leaf_firework) {
@@ -191,11 +191,11 @@ UNIT_TEST(wrk_leaf_firework) {
 UNIT_TEST(wrk_leaf_fishingwork) {
     WRK_LEAF_SHAPE(FishingWork, Work, 0x70);
     CHECK_EQ(offsetof(FishingWork, citizenRefs), (size_t)0x48);
-    CHECK_EQ(offsetof(FishingWork, citizenCount), (size_t)0x50);
-    CHECK_EQ(offsetof(FishingWork, citizenCapacity), (size_t)0x54);
+    CHECK_EQ(offsetof(FishingWork, citizenRefs) + offsetof(FishingWork::CitizenRefList, _size), (size_t)0x50);
+    CHECK_EQ(offsetof(FishingWork, citizenRefs) + offsetof(FishingWork::CitizenRefList, _capacity), (size_t)0x54);
     CHECK_EQ(offsetof(FishingWork, spotStates), (size_t)0x58);
-    CHECK_EQ(offsetof(FishingWork, spotCount), (size_t)0x60);
-    CHECK_EQ(offsetof(FishingWork, spotCapacity), (size_t)0x64);
+    CHECK_EQ(offsetof(FishingWork, spotStates) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x60);
+    CHECK_EQ(offsetof(FishingWork, spotStates) + offsetof(Collection::Array<int32_t>, _capacity), (size_t)0x64);
     CHECK_EQ(offsetof(FishingWork, retryCount), (size_t)0x68);
 }
 
@@ -221,7 +221,7 @@ UNIT_TEST(wrk_leaf_harvestarea) {
     CHECK_EQ(offsetof(HarvestArea, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(HarvestArea, _cells) + offsetof(HarvestArea::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestArea, _field58), (size_t)0x58);
-    CHECK_EQ(offsetof(HarvestArea, _field60), (size_t)0x60);
+    CHECK_EQ(offsetof(HarvestArea, _field58) + offsetof(HarvestArea::SlotFlags, _size), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_harvestorchard) {
@@ -229,7 +229,7 @@ UNIT_TEST(wrk_leaf_harvestorchard) {
     CHECK_EQ(offsetof(HarvestOrchard, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(HarvestOrchard, _cells) + offsetof(HarvestOrchard::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestOrchard, _field58), (size_t)0x58);
-    CHECK_EQ(offsetof(HarvestOrchard, _field60), (size_t)0x60);
+    CHECK_EQ(offsetof(HarvestOrchard, _field58) + offsetof(HarvestOrchard::SlotFlags, _size), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_herbalistwork) {
@@ -274,7 +274,7 @@ UNIT_TEST(wrk_leaf_plantarea) {
     CHECK_EQ(offsetof(PlantArea, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(PlantArea, _cells) + offsetof(PlantArea::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(PlantArea, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(PlantArea, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(PlantArea, field_58) + offsetof(PlantArea::SlotFlags, _size), (size_t)0x60);
     CHECK_EQ(offsetof(PlantArea, field_68), (size_t)0x68);
 }
 
@@ -283,8 +283,8 @@ UNIT_TEST(wrk_leaf_plantorchard) {
     CHECK_EQ(offsetof(PlantOrchard, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(PlantOrchard, _cells) + offsetof(PlantOrchard::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(PlantOrchard, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(PlantOrchard, field_60), (size_t)0x60);
-    CHECK_EQ(offsetof(PlantOrchard, field_64), (size_t)0x64);
+    CHECK_EQ(offsetof(PlantOrchard, field_58) + offsetof(PlantOrchard::SlotFlags, _size), (size_t)0x60);
+    CHECK_EQ(offsetof(PlantOrchard, field_58) + offsetof(PlantOrchard::SlotFlags, _capacity), (size_t)0x64);
     CHECK_EQ(offsetof(PlantOrchard, field_68), (size_t)0x68);
 }
 
