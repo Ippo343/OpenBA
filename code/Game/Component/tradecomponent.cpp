@@ -278,8 +278,7 @@ TradeComponent::TradeComponent()
       merchantOrders(nullptr), merchantOrderCount(0), merchantOrderCap(0),
       buyOrders(nullptr), buyOrderCount(0), buyOrderCap(0),
       manifest(nullptr), manifestCount(0), manifestCap(0),
-      stockRoot(nullptr), stockCount(0),
-      _pad6C{}, workEnabled(0),   // the tree's: retail's ctor leaves +0x6c..+0x70 as allocated
+      stock{nullptr, 0, {}}, workEnabled(0),   // the tree's: retail's ctor leaves +0x6c..+0x70 as allocated
       tradeFlag(0), _pad72{}, merchantTimer{0}, merchant(nullptr),
       _controller(this) {
     OrFlagsInCtor(0x3);
@@ -293,13 +292,13 @@ TradeComponent::TradeComponent()
 //   +0x40: MemFree, +0x40 = +0x48 = 0
 //   +0x30: the elements through 0x14000ef10 (count +0x38), MemFree, +0x30 = +0x38 = 0
 TradeComponent::~TradeComponent() {
-    if (TradeResourceNode* root = stockRoot) {
-        WorkBase_TreeNodeFree_e320(&stockRoot, root->left);
-        WorkBase_TreeNodeFree_e320(&stockRoot, root->right);
+    if (TradeResourceNode* root = stock.root) {
+        WorkBase_TreeNodeFree_e320(&stock.root, root->left);
+        WorkBase_TreeNodeFree_e320(&stock.root, root->right);
         Object::detail::InternalMemFree(root);
     }
-    stockRoot = nullptr;
-    stockCount = 0;
+    stock.root = nullptr;
+    stock.count = 0;
     Object::detail::InternalMemFree(manifest);
     manifest = nullptr;
     manifestCount = 0;   // retail: one qword 0 over +0x58..+0x5f

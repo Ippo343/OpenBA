@@ -314,7 +314,7 @@ void TradeUI::RefreshSellTable()
             const ComponentDescription* resKey = resEntity;
 
             // Search the post's storage BST for this resource
-            TradeResourceNode* bstNode = trade->stockRoot;
+            TradeResourceNode* bstNode = trade->stock.root;
             bool found = false;
             while (bstNode != nullptr) {
                 if (resKey < bstNode->resource) {
@@ -1692,7 +1692,7 @@ void TradeUI::OnStorageSpinner(int idx) {
     // If not found: insert new leaf
     TradeStockEntry newEntry[1] = { { resourceEntity, newVal, { 0, 0, 0, 0 } } };
     TradeResourceNode* retval = nullptr;
-    TradeUI_StorageTree_Insert_e1c0(&trade->stockRoot, &retval, newEntry);   // 0x14000e1c0
+    TradeUI_StorageTree_Insert_e1c0(&trade->stock, &retval, newEntry);   // 0x14000e1c0
 
     // If we got a result back (found existing), update its qty
     if (retval) {
@@ -2054,7 +2054,7 @@ void TradeUI::RefreshDisplay() {
         // Node: {key(+0), value(+8), color(+10), left(+18), right(+20)}
         int orderAmt = 0;
         const ComponentDescription* key = entry.resource;
-        TradeResourceNode* bstNode = trade->stockRoot;
+        TradeResourceNode* bstNode = trade->stock.root;
         while (bstNode != nullptr) {
             if (key < bstNode->resource) {
                 bstNode = bstNode->left;   // left child at +0x18

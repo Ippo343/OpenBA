@@ -211,7 +211,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         // resource (retail compares the keys as unsigned 64-bit values)
         int requested = 0;
         if (tradeComp) {
-            TradeResourceNode* node = tradeComp->stockRoot;
+            TradeResourceNode* node = tradeComp->stock.root;
             while (node) {
                 if (resType < node->resource)       node = node->left;
                 else if (resType <= node->resource) { requested = node->quantity; break; }

@@ -122,7 +122,7 @@ int32_t TreeCountFor(SortCtx ctx, const ComponentDescription* key) {
     if (!ctx) return 0;
     const TradeComponent* obj = *ctx;
     if (!obj) return 0;
-    const TradeResourceNode* node = obj->stockRoot;
+    const TradeResourceNode* node = obj->stock.root;
     while (node) {
         if (key < node->resource)      node = node->left;
         else if (node->resource < key) node = node->right;

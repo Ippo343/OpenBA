@@ -253,11 +253,12 @@ extern "C" TradeResourceNode* TradeUI_StorageTreeNodeNew_e2c0(const ComponentDes
     return n;
 }
 
-extern "C" TradeResourceNode** TradeUI_StorageTree_Insert_e1c0(TradeResourceNode** tree,
+extern "C" TradeResourceNode** TradeUI_StorageTree_Insert_e1c0(AvlTreeHead<TradeResourceNode>* head,
                                                                TradeResourceNode** out,
                                                                const TradeStockEntry* entry) {
-    if (!tree || !out || !entry) return out;   // standalone-only
-    int32_t* count = reinterpret_cast<int32_t*>(tree + 1);   // LEFT: TradeComponent.h (the +0x60 tree header is two members stockRoot / stockCount, COMP-8)
+    if (!head || !out || !entry) return out;   // standalone-only
+    TradeResourceNode** tree = &head->root;
+    int32_t* count = &head->count;
 
     if (*tree == nullptr) {
         // Empty tree: the root node is built inline rather than through e2c0 (retail

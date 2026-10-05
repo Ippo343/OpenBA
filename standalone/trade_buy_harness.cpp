@@ -245,8 +245,8 @@ extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum)
             std::fprintf(stderr, "[TradeSell] f=%d seeded %d/%d resource(s) x%d into the "
                                  "TRADE stock (tradeComp=%p tree root=%p count=%d)\n",
                          frameNum, seeded, tmplN, seedQty, static_cast<void*>(tradeComp),
-                         tradeComp ? static_cast<void*>(tradeComp->stockRoot) : nullptr,   // +0x60
-                         tradeComp ? tradeComp->stockCount : -1);                          // +0x68
+                         tradeComp ? static_cast<void*>(tradeComp->stock.root) : nullptr,   // +0x60
+                         tradeComp ? tradeComp->stock.count : -1);                          // +0x68
         }
         if (seeded > 0) {
             TradeUI_RefreshSellTable(tui);

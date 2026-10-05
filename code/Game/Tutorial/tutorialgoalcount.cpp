@@ -393,7 +393,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
             if (!building) continue;
 
             // Search the trading post's stock tree at +0x60 for the type
-            const TradeResourceNode* storageNode = TradeOrderBSTFind(building->stockRoot, typePtr);
+            const TradeResourceNode* storageNode = TradeOrderBSTFind(building->stock.root, typePtr);
 
             int storageCount = 0;
             if (storageNode != nullptr) {

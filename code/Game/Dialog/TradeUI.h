@@ -247,8 +247,9 @@ static_assert(offsetof(TradeStockEntry, quantity) == 0x08, "TradeStockEntry +0x0
 static_assert(offsetof(TradeStockEntry, _pad0C) == 0x0c, "TradeStockEntry +0x0c");
 
 struct TradeResourceNode;   // Component/TradeComponent.h
-// tree = &TradeComponent::stockRoot (the root; the node count follows at +0x08).
+template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
+// head = &TradeComponent::stock (the root, then the node count at +0x08).
 // Returns `out`; *out is the inserted node, or the existing node of that key.
-extern "C" TradeResourceNode** TradeUI_StorageTree_Insert_e1c0(TradeResourceNode** tree,
+extern "C" TradeResourceNode** TradeUI_StorageTree_Insert_e1c0(AvlTreeHead<TradeResourceNode>* head,
                                                                TradeResourceNode** out,
                                                                const TradeStockEntry* entry);  // 0x14000e1c0
