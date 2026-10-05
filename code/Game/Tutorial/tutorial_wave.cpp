@@ -143,9 +143,9 @@ extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
 // Upsert keyed by the tutorial's setup description. Existing node: active
 // byte at +0x10 = 1, dword +0x08 = value, dword +0x0C = 0x20. Absent: build
 // that same 0x18-byte record on the stack and hand it to the shared BST
-// inserter at 0x140014890 (ToolbarUtility_BstInsert_4890).
+// inserter at 0x140014890 (Avl38SetInsert, Dialog/exe_bodies.h).
 // ===========================================================================
-void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, const ComponentDescription* tutorialId,
+void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, ComponentDescription* tutorialId,
                                 void* /*param3*/, uint32_t value) {
     if (!treeOwner) return;
     const void* key = tutorialId;
@@ -163,18 +163,14 @@ void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, const ComponentDes
         return;
     }
 
-    struct { const ComponentDescription* key; uint32_t value; uint32_t flags; uint8_t on; uint8_t _pad[7]; } rec;
-    rec.key   = tutorialId;
-    rec.value = value;
-    rec.flags = 0x20;
-    rec.on    = 1;
-    for (int i = 0; i < 7; ++i) rec._pad[i] = 0;
+    PinnedToolEntry rec;
+    rec.key    = tutorialId;
+    rec.x      = static_cast<int32_t>(value);
+    rec.y      = 0x20;
+    rec.active = 1;
+    for (int i = 0; i < 7; ++i) rec._pad11[i] = 0;
 
-    void* out[4] = {};
-    // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record
-    // as uint64_t* (DLG-d's B4 FORWARD signature).
-    ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&treeOwner->field_0x50), out,   // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record as uint64_t* (DLG-d's B4 FORWARD signature).
-                                  reinterpret_cast<uint64_t*>(&rec));   // 0x140014890   // LEFT: 0x140014890's forwarder takes the root as int64_t* and the record as uint64_t* (DLG-d's B4 FORWARD signature).
+    Avl38SetInsert(&treeOwner->field_0x50, rec);   // 0x140014890
 }
 
 // ===========================================================================

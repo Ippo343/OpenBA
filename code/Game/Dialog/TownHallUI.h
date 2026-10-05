@@ -35,6 +35,7 @@
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
+#include "Action/PathAvl.h"   // AvlTreeHead (the inventory tree, +0x138)
 
 class ComponentDescription;
 class ComponentEntity;
@@ -117,14 +118,19 @@ public:
         int32_t         _pad2c;    // +0x2C
     };
     // +0x138: the inventory tree node (0x38; key = the raw material's description).
-    struct InventoryNode {
+    // The 0x18-byte element is the node's base: the shared insert 0x140014890
+    // copies it whole (B.4 Y GAMEB).
+    struct InventoryEntry {
         ComponentDescription* key; // +0x00 compared by address (unsigned)
         int32_t        counts[3];  // +0x08 used / produced / storage (UpdateAll 0x14007d590)
         int32_t        _pad14;     // +0x14
+    };
+    struct InventoryNode : InventoryEntry {
         InventoryNode* parent;     // +0x18
         InventoryNode* left;       // +0x20
         InventoryNode* right;      // +0x28
-        int32_t        balance;    // +0x30
+        int16_t        balance;    // +0x30 (the shared retrace 0x140014b40: int16)
+        int16_t        height;     // +0x32 (int16)
         int32_t        _pad34;     // +0x34
     };
     // +0x1D8: the agriculture tree node (0x28; key = the building's description).
@@ -206,9 +212,7 @@ public:
     int32_t invTableCap = 0;                      // +0x124
     UI::ComboElement* inventoryCombo = nullptr;   // +0x128 "inventoryCombo"
     UI::ComboElement* sortCombo = nullptr;        // +0x130 "sortCombo" (sort order)
-    InventoryNode* invBST = nullptr;              // +0x138 inventory tree root
-    uint32_t invBSTCount = 0;                     // +0x140
-    uint8_t _pad144[4] = {};                      // +0x144 gap
+    AvlTreeHead<InventoryNode> invBST = {};       // +0x138 inventory tree {root, count +0x140, +0x144 gap}
     int32_t cachedGameTick = 0;                   // +0x148 cached game time tick for graph refresh
     uint8_t _pad14C[4] = {};                      // +0x14C gap
     // --- Graph tab elements ---
@@ -249,6 +253,10 @@ static_assert(offsetof(TownHallUI::ProfessionNode, balance) == 0x28, "Profession
 static_assert(offsetof(TownHallUI::ProfessionNode, height) == 0x2A, "ProfessionNode::height @ +0x2A (int16, 0x140013480)");
 static_assert(sizeof(TownHallUI::InventoryNode) == 0x38, "inventory node 0x38");
 static_assert(offsetof(TownHallUI::InventoryNode, left) == 0x20, "InventoryNode::left @ +0x20 (0x140081163)");
+static_assert(sizeof(TownHallUI::InventoryEntry) == 0x18, "the 0x18-byte element 0x140014890 copies");
+static_assert(offsetof(TownHallUI::InventoryNode, parent) == 0x18, "InventoryNode::parent @ +0x18");
+static_assert(offsetof(TownHallUI::InventoryNode, balance) == 0x30, "InventoryNode::balance @ +0x30 (int16, 0x140014b40)");
+static_assert(offsetof(TownHallUI::InventoryNode, height) == 0x32, "InventoryNode::height @ +0x32 (int16, 0x140014b40)");
 static_assert(sizeof(TownHallUI::AgricultureNode) == 0x28, "agriculture node 0x28 (MemAlloc(0x28))");
 static_assert(offsetof(TownHallUI::AgricultureNode, left) == 0x10, "AgricultureNode::left @ +0x10 (0x14008110b)");
 static_assert(offsetof(TownHallUI::AgricultureNode, balance) == 0x20, "AgricultureNode::balance @ +0x20 (int16, 0x1400149a0)");
@@ -284,7 +292,7 @@ static_assert(offsetof(TownHallUI, invTableCount) == 0x120, "invTableCount @ 0x1
 static_assert(offsetof(TownHallUI, inventoryCombo) == 0x128, "inventoryCombo @ 0x128");
 static_assert(offsetof(TownHallUI, sortCombo) == 0x130, "sortCombo @ 0x130");
 static_assert(offsetof(TownHallUI, invBST) == 0x138, "invBST @ 0x138 (dtor 0x14008114f)");
-static_assert(offsetof(TownHallUI, invBSTCount) == 0x140, "invBSTCount @ 0x140 (dtor 0x140081187)");
+static_assert(offsetof(TownHallUI, invBST.count) == 0x140, "invBST.count @ 0x140 (dtor 0x140081187)");
 static_assert(offsetof(TownHallUI, cachedGameTick) == 0x148, "cachedGameTick @ 0x148");
 static_assert(offsetof(TownHallUI, graphYearsTable) == 0x150, "graphYearsTable @ 0x150");
 static_assert(offsetof(TownHallUI, graphTypesTable) == 0x158, "graphTypesTable @ 0x158");
@@ -306,3 +314,9 @@ static_assert(offsetof(TownHallUI, _pad1E4) == 0x1E4, "_pad1E4 @ 0x1E4");
 // capacity} triple at +0x40 / +0xF0 (H5, above); entry is the row every new slot copies.
 extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, const TownHallUI::ProfessionRow* entry);  // 0x140015800
 extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, const TownHallUI::ProductionRow* entry);  // 0x1400159b0
+
+// 0x140014890 (Dialog/toolbar_utility_helpers.cpp): the shared 0x38-node
+// find-or-insert, the inventory tree's typed wrapper (the PinnedToolNode one is in
+// Dialog/exe_bodies.h).
+TownHallUI::InventoryNode* Avl38SetInsert(AvlTreeHead<TownHallUI::InventoryNode>* set,
+                                          const TownHallUI::InventoryEntry& rec);   // 0x140014890

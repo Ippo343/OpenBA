@@ -77,7 +77,12 @@ extern "C" SaveLoadDialog* SaveLoadDialog_Ctor_8270(void* self, UI::UserInterfac
 
 // ---- toolbar_utility_helpers.cpp
 // B.4 DLG-d: 0x140100270 is PlayerToolManager::FindUtilityDialog (Game/PlayerToolManager.h).
-extern "C" void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData);  // 0x140014890 B4 FORWARD: townhallui.cpp (DLG-e) and ToggleUtilityDialog
+// 0x140014890: the find-or-insert shared by the 0x38-node sets (one template
+// core, typed wrappers per node). The InventoryNode wrapper is declared in
+// Dialog/TownHallUI.h.
+template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
+struct PinnedToolNode; struct PinnedToolEntry;   // Game/PlayerToolManager.h
+PinnedToolNode* Avl38SetInsert(AvlTreeHead<PinnedToolNode>* set, const PinnedToolEntry& rec);   // 0x140014890
 
 // ---- toolbardialog.cpp
 // B.4 DLG-d: 0x140102b60 / 0x140101a80 / 0x140101ce0 / 0x140103040 are

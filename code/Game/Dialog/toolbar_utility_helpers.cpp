@@ -20,7 +20,8 @@
 #include "Player/exe_bodies.h"   // Avl38Retrace (0x140014b40)
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Game/PlayerToolManager.h"
+#include "Game/PlayerToolManager.h"   // PinnedToolNode / PinnedToolEntry
+#include "Dialog/TownHallUI.h"         // TownHallUI::InventoryNode / InventoryEntry
 #include "Object/factory_registration.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
@@ -37,44 +38,96 @@ namespace {
 // Retrace/rebalance (0x140014b40, TradeWork_impl_4b40) — shared AVL retrace,
 // called by name (B3R).
 
-// The 0x38-byte node 0x140014890 inserts: a key and two data qwords (for the
-// utility-dialog set, PlayerToolManager.h's TrackedEntityNode: the key, the
-// packed x / y and the flags), then the tree links.
-struct SetNode {
-    uint64_t key;       // +0x00
-    uint64_t data[2];   // +0x08 / +0x10
-    SetNode* parent;    // +0x18
-    SetNode* left;      // +0x20
-    SetNode* right;     // +0x28
-    int16_t  balance;   // +0x30
-    int16_t  height;    // +0x32
-    uint32_t _pad34;    // +0x34
-};
-static_assert(sizeof(SetNode) == 0x38, "set node 0x38");
-static_assert(offsetof(SetNode, parent) == 0x18, "");
-static_assert(offsetof(SetNode, left) == 0x20, "");
-static_assert(offsetof(SetNode, right) == 0x28, "");
+// B.4 Y GAMEB: 0x140014890 is ONE body that serves every set of 0x38-byte nodes
+// whose 0x18-byte element is copied whole (B13): the core is a template over
+// the node, whose element is its base class (PinnedToolNode : PinnedToolEntry,
+// TownHallUI::InventoryNode : InventoryEntry); the typed wrappers below are the
+// only entry points.
 
-// The set header the callers hand over: the root and the count.
-struct SetHeader {
-    SetNode* root;    // +0x00
-    int32_t  count;   // +0x08
-};
-
-// sub_4a90 — allocate + init a new 0x38-byte AVL node (copies the 3 data qwords,
-// sets parent, zeroes children + balance).
-SetNode* BstNodeAlloc(const uint64_t* insertData, SetNode* parent) {
-    SetNode* n = static_cast<SetNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+// sub_4a90 — allocate + init a new 0x38-byte AVL node (copies the 0x18-byte
+// element, sets parent, zeroes children + balance).
+template <class Node, class Element>
+Node* BstNodeAlloc(const Element& rec, Node* parent) {
+    Node* n = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x38, 8));
     if (!n) return nullptr;
-    n->key = insertData[0];               // key (Description ptr)
-    n->data[0] = insertData[1];           // packed (x,y)
-    n->data[1] = insertData[2];           // flags
+    Element& element = *n;
+    element = rec;                        // +0x00..+0x17 (three qword copies in retail)
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;
     n->balance = 0;     // +0x30 / +0x32: one dword 0 in retail (H7)
     n->height = 0;
     return n;
+}
+
+// ---- FUN_140014890: BST_Insert_0x14 ----------------------------------------
+// (RCX=set, RDX=retNode, R8=the element)
+//   set:      the set header, root node and int32 count
+//   returns:  the found-or-inserted node (retail: *retNode)
+// Faithful AVL find-or-insert keyed by the element's +0x00 (compared as an
+// unsigned 64-bit value); rebalances from the insertion point via 0x140014b40.
+template <class Node, class Element>
+Node* BstInsertCore(AvlTreeHead<Node>* set, const Element& rec) {
+    Node* result = nullptr;
+    if (set->root == nullptr) {
+        // Empty tree — the new node becomes the root.
+        Node* n = static_cast<Node*>(System::MemoryAllocator::MemAlloc(0x38, 8));
+        if (!n) {
+            set->root = nullptr;
+            result = nullptr;
+        } else {
+            Element& element = *n;
+            element = rec;
+            n->parent = nullptr; n->left = nullptr; n->right = nullptr;
+            n->balance = 0;
+            n->height = 0;
+            result = n;
+            set->root = n;
+        }
+    } else {
+        const void* const key = rec.key;
+        Node* next = set->root;
+        Node* node = nullptr;      // current node examined (== insertion parent)
+        Node* newNode = nullptr;
+        bool inserted = false;
+
+        while (!inserted) {
+            node = next;
+            // Walk right while node->key < key.
+            for (;;) {
+                const void* const nodeKey = node->key;
+                if (!(nodeKey <= key)) break;
+                if (key <= nodeKey) {      // equal → existing node found (no count++)
+                    return node;
+                }
+                if (node->right == nullptr) {   // right child null → insert right
+                    newNode = BstNodeAlloc(rec, node);
+                    node->right = newNode;
+                    inserted = true;
+                    break;
+                }
+                next = node->right;
+                node = next;
+            }
+            if (inserted) break;
+            // node->key > key → go left.
+            if (node->left == nullptr) {     // left child null → insert left
+                newNode = BstNodeAlloc(rec, node);
+                node->left = newNode;
+                inserted = true;
+                break;
+            }
+            next = node->left;
+        }
+
+        Avl38Retrace(&set->root, &node);   // 0x140014b40
+        result = newNode;
+    }
+
+    // count — incremented on every non-early-return path, matching the exe
+    // (even the alloc-failure sub-case).
+    set->count += 1;
+    return result;
 }
 
 }  // namespace
@@ -114,76 +167,11 @@ UI::DialogInstance* PlayerToolManager::FindUtilityDialog(const ComponentDescript
     return nullptr;
 }
 
-extern "C" {
-
-// ---- FUN_140014890: BST_Insert_0x14 ----------------------------------------
-// (RCX=rootHolder, RDX=retNode, R8=insertData)
-//   rootHolder: the set header, root node and int32 count
-//   retNode:    *retNode = the found-or-inserted node
-//   insertData: [0]=key, [1] / [2] the node's two data qwords
-// Faithful AVL find-or-insert; rebalances from the insertion point via 0x140014b40.
-// B4 FORWARD: the int64_t* / void** / uint64_t* signature is kept for
-// townhallui.cpp (DLG-e, running) and PlayerToolManager::ToggleUtilityDialog.
-void ToolbarUtility_BstInsert_4890(int64_t* rootHolder, void** retNode, uint64_t* insertData) {
-    SetHeader* set = reinterpret_cast<SetHeader*>(rootHolder);   // LEFT: SIG ToolbarUtility_BstInsert_4890 (int64_t* root holder; townhallui.cpp, toolbardialog.cpp, toolbar_utility.cpp)
-    if (set->root == nullptr) {
-        // Empty tree — the new node becomes the root.
-        SetNode* n = static_cast<SetNode*>(System::MemoryAllocator::MemAlloc(0x38, 8));
-        if (!n) {
-            set->root = nullptr;
-            *retNode = nullptr;
-        } else {
-            n->key = insertData[0];
-            n->data[0] = insertData[1];
-            n->data[1] = insertData[2];
-            n->parent = nullptr; n->left = nullptr; n->right = nullptr;
-            n->balance = 0;
-            n->height = 0;
-            *retNode = n;
-            set->root = n;
-        }
-    } else {
-        const uint64_t key = insertData[0];
-        SetNode* next = set->root;
-        SetNode* node = nullptr;      // current node examined (== insertion parent)
-        SetNode* newNode = nullptr;
-        bool inserted = false;
-
-        while (!inserted) {
-            node = next;
-            // Walk right while node->key < key.
-            while (node->key <= key) {
-                if (key <= node->key) {      // equal → existing node found (no count++)
-                    *retNode = node;
-                    return;
-                }
-                if (node->right == nullptr) {   // right child null → insert right
-                    newNode = BstNodeAlloc(insertData, node);
-                    node->right = newNode;
-                    inserted = true;
-                    break;
-                }
-                next = node->right;
-                node = next;
-            }
-            if (inserted) break;
-            // node->key > key → go left.
-            if (node->left == nullptr) {     // left child null → insert left
-                newNode = BstNodeAlloc(insertData, node);
-                node->left = newNode;
-                inserted = true;
-                break;
-            }
-            next = node->left;
-        }
-
-        Avl38Retrace(&set->root, &node);   // 0x140014b40
-        *retNode = newNode;
-    }
-
-    // count — incremented on every non-early-return path, matching the exe
-    // (even the alloc-failure sub-case).
-    set->count += 1;
+// The typed wrappers (Dialog/exe_bodies.h) over the one core 0x140014890.
+PinnedToolNode* Avl38SetInsert(AvlTreeHead<PinnedToolNode>* set, const PinnedToolEntry& rec) {
+    return BstInsertCore(set, rec);
 }
-
-}  // extern "C"
+TownHallUI::InventoryNode* Avl38SetInsert(AvlTreeHead<TownHallUI::InventoryNode>* set,
+                                          const TownHallUI::InventoryEntry& rec) {
+    return BstInsertCore(set, rec);
+}

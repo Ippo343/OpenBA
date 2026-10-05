@@ -47,7 +47,7 @@ extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer);  // 0
 class PlayerToolManager;
 class ComponentDescription;
 // A PlayerToolManager member in retail (GAME-b's class): kept free.
-void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, const ComponentDescription* tutorialId,
+void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, ComponentDescription* tutorialId,
                                 void* , uint32_t value);  // 0x1401001f0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h; no .cpp)
