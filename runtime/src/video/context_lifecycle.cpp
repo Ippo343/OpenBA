@@ -217,8 +217,10 @@ void RtVideo_ConstEntryArrayDtor(ConstantInfo*& data, int32_t& size, int32_t& ca
 // `static_assert`s in both headers forbid exactly that.
 // ============================================================================
 void Video_ConstantBuffer_Dtor(Video::ConstantBuffer* self) {
+    // B5 BUF (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+    // virtual destructor, then the base's class-scope operator delete (MemFree).
     if (Video::ConstantBufferData* companion = self->_platformData)
-        (void)companion->DeletingDtor(1);
+        delete companion;
 
     RtVideo_ConstEntryArrayDtor(self->_constantData, self->_constantCount,
                                 self->_constantCapacity);
