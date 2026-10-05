@@ -512,7 +512,7 @@ void HerdComponent::OnRemove() {
     // The two `break`s below are the tree's guards (retail has neither: a member with
     // no herd would spin, a null member would fault).
     while (memberCount > 0) {
-        WildAnimalComponent* member = members[memberCount - 1];
+        WildAnimalComponent* member = members[memberCount - 1].Get();
         if (!member) break;
 
         HerdComponent* current = member->herd.Get();
@@ -536,7 +536,7 @@ void HerdComponent::OnRemove() {
 // first int.
 // ============================================================
 static bool IsTileValid(HerdComponent* self) {
-    PopulationComponent* population = self->population;
+    PopulationComponent* population = self->population.Get();
     if (population == nullptr) return false;
 
     int mapWidth = GameUpdateLoop::_singleton->m_game->size;

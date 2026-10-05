@@ -137,7 +137,7 @@ LivestockDescription* FindLivestockDescription(ComponentDescription* tmpl) {
 // ============================================================
 void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     PastureComponent* target = *pastureRef;
-    PastureComponent* cur = pasture;
+    PastureComponent* cur = pasture.Get();
     if (cur == target) return;
 
     CitizenBehavior* town = Town();
@@ -320,7 +320,7 @@ void PastureComponent::ReleaseAllAnimals() {
         if (!arr) break;
         LivestockComponent* animal = arr[animals._size - 1].Get();
         if (!animal) break;
-        PastureComponent* cur = animal->pasture;
+        PastureComponent* cur = animal->pasture.Get();
         if (cur == nullptr) break;                  // already free: retail would spin here
 
         LivestockComponent* ref = animal;
