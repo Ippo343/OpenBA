@@ -346,13 +346,13 @@ void* RtColl_ArrayFilenameAssign_1800091f0(ModArrayOf<Filename>* dst, const ModA
 // spilled at 0x180010570 and NEVER READ AGAIN — the same shape lane FIND
 // documented for DestroyFilenameArray, and the reason this signature carries an
 // ignored first argument at all.
-static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const Filename* key,
+static ModSetNode* SetNodeNew(void* /*ignoredSet*/, const System::Filename* key,
                               ModSetNode* parent) {
     ModSetNode* n = static_cast<ModSetNode*>(::System::MemoryAllocator::MemAlloc(0x28, 8));
     if (n == nullptr) return nullptr;
     // CALL 0x1800067d0 — Filename copy ctor, into the freshly allocated node's
     // raw `key` bytes.
-    new (&Sys(n->key)) System::Filename(Sys(*key));
+    new (&n->key) System::Filename(*key);
     n->parent = parent;
     n->left = nullptr;
     n->right = nullptr;

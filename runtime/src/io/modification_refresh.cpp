@@ -879,15 +879,15 @@ void Modification::RefreshList() {
                     // 0x1800b0234 — go LEFT while probe->key is non-null and
                     // node->key sorts before it (a null node->key sorts first).
                     bool goLeft;
-                    if (probe->key.data == nullptr)     goLeft = false;
-                    else if (node->key.data == nullptr) goLeft = true;
-                    else goLeft = (ModStrICmp(node->key.data, probe->key.data) < 0);
+                    if (probe->key._data == nullptr)     goLeft = false;
+                    else if (node->key._data == nullptr) goLeft = true;
+                    else goLeft = (ModStrICmp(node->key._data, probe->key._data) < 0);
                     if (goLeft) { probe = probe->left; continue; }
                     // 0x1800b0258 — a null node->key here is a MATCH, and so is
                     // any probe->key that does not sort before it.
-                    if (node->key.data == nullptr) { hit = true; break; }
-                    if (probe->key.data == nullptr) { probe = probe->right; continue; }
-                    if (ModStrICmp(probe->key.data, node->key.data) < 0) { probe = probe->right; continue; }
+                    if (node->key._data == nullptr) { hit = true; break; }
+                    if (probe->key._data == nullptr) { probe = probe->right; continue; }
+                    if (ModStrICmp(probe->key._data, node->key._data) < 0) { probe = probe->right; continue; }
                     hit = true;
                     break;
                 }
