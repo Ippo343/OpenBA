@@ -122,18 +122,9 @@ using RtIo::SaveGameInfo;
 
 namespace {
 
-// `Collection::Array<System::Filename>` as FindFiles fills it — the same three
-// fields every Array in this engine has. `data` is `System::Filename` now
-// (same eight bytes as the old `Filename*`): every element this file owns
-// individually, so each one becomes a real destructor call instead of the
-// manual release.
-struct FilenameArray {
-    System::Filename* data;      // +0x00
-    int32_t            size;      // +0x08
-    int32_t            capacity;  // +0x0c
-};
-static_assert(offsetof(FilenameArray, size)     == 0x08, "Array::_size @ +0x08");
-static_assert(offsetof(FilenameArray, capacity) == 0x0c, "Array::_capacity @ +0x0c");
+// B.4 Z LAST IO: the local `FilenameArray` that stood here is gone: FindFiles'
+// out-parameter `RtIO::FilenameArray` holds `System::Filename` elements now,
+// and this job owns each one individually (a real destructor call each).
 
 // B3R RT-IO: the eight callees this body reached through RtResolveCached are
 // called by name: String::Set (0x1800c95d0), FileSystem::GetSaveDirectory
@@ -169,7 +160,7 @@ void IO::PersistenceWorker::GetSaveListJob() {
     // `IO::FileSystem::_singleton`, the class static (`0x1801fc6a8`).
     const ::IO::FileSystem* const fs = ::IO::FileSystem::_singleton;   // 0x1800b62b8
 
-    FilenameArray found = { nullptr, 0, 0 };                    // [RBP-0x30]
+    RtIO::FilenameArray found = { nullptr, 0, 0 };              // [RBP-0x30]
 
     // ---- 2. FindFiles(saveDir + "\Save\", "*.sav", recursive=false) -------
     // Scoped to a block, declared in this order, so the block's automatic
@@ -188,7 +179,7 @@ void IO::PersistenceWorker::GetSaveListJob() {
         System::String dir(saveDir.AsString() + kSaveSubDir);       // [RBP+0x50]
 
         fs->FindFiles(dir, pattern,                                 // 0x1800b6315
-            false, reinterpret_cast<RtIO::FilenameArray*>(&found));  // LEFT: audit WORK, not executed this pass (POD unit RtIO::FilenameArray (doable-with:RtSystem::Filename elements -> Sy); blocker; this job reads the elements as System::Filename, RtIO::FilenameArray holds the RtSystem::Filename POD (system/Filename, R-SYS)
+            false, &found);
 
         // ~dir, ~saveDir, ~pattern are retail's release sequence at
         // 0x1800b631b/0x1800b6343/0x1800b636c, now the three destructors

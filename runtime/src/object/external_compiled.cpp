@@ -70,7 +70,6 @@
 
 namespace RtObject {
 
-using RtSystem::Sys;
 
 CompiledCounters g_cc = {};
 

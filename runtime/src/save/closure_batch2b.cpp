@@ -108,8 +108,8 @@ Save::SaveLoad::SaveInfo::SaveInfo(const SaveInfo& other)
 // The registered address door (0x180032f70): `(dst, src)`, `dst` in RAX.
 // B4 FORWARD: 1 outside caller(s) — runtime/src/collection/array.cpp's
 // kSpec_MetaData58 row hands it raw element bytes.
-extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src) {
-    return new (self) Save::SaveLoad::SaveInfo(
+extern "C" void* RtSave_MetaData_CopyCtor(void* dst, const void* src) {
+    return new (dst) Save::SaveLoad::SaveInfo(
         *static_cast<const Save::SaveLoad::SaveInfo*>(src));   // LEFT: audit WORK, left: array.cpp's kSpec_MetaData58 spec row hands raw element bytes (a spec-row element op of the erased core: elem_stride candidate)
 }
 

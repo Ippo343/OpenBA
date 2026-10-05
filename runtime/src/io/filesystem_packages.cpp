@@ -314,12 +314,8 @@
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::RtMemAlloc;
 using RtSystem::RtMemFree;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
-using RtSystem::SysFile;  //   "
 
 namespace {
 
@@ -709,7 +705,7 @@ void FileSystem::LoadPackages() {
         // Unguarded on `pkg` — retail calls ReadPackfile with whatever the
         // constructor branch left in R12, including zero on the out-of-memory
         // path (`XOR R12D,R12D` at 0x1800ab5a5). Faithful; not a null check.
-        pkg->IO::PackageFile::ReadPackfile(RtIO::Sys(found.data[i]));
+        pkg->IO::PackageFile::ReadPackfile(found.data[i]);
         RtIO::AppendPackfile(this, pkg);
     }
 
@@ -774,7 +770,7 @@ void FileSystem::LoadPackages() {
     int64_t inserted = 0, overridden = 0, kept = 0;
     for (int32_t pi = 0; pi < _packfiles._size; ++pi) {
         PackageFile* pkg = _packfiles[pi];
-        const int32_t entries = pkg->_entryCount;         // MOV EAX,[RCX+0xb8]
+        const int32_t entries = pkg->_entries._size;      // MOV EAX,[RCX+0xb8]
         for (int32_t fi = 0; fi < entries; ++fi) {
             // Retail RE-INDEXES the array here too rather than reusing `pkg`.
             PackageFile* owner = _packfiles[pi];
@@ -848,7 +844,7 @@ void FileSystem::LoadPackages() {
     // null test inside.
     const int32_t foundCount = found.size;   // the shadow below runs after the zeroing
     for (int64_t i = 0; i < static_cast<int64_t>(found.size); ++i)
-        RtIO::Sys(found.data[i]).~Filename();
+        found.data[i].~Filename();
     RtIO::RtMemFree(found.data);
     found.data  = nullptr;
     found.size = 0;
@@ -881,9 +877,9 @@ System::Filename PackageFile::GetFileName(int index) const {
     // prints it as a zero extension and that cost Wave 6 three defects. It only
     // matters for a negative index, which retail never passes; it is written as
     // int64 anyway because that is what the instruction says.
-    // The entry's `name` (+0x00) is a Filename on the RtSystem::String POD;
-    // `Filename(const Filename&)` is the copy ctor 0x1800067d0.
-    return System::Filename(RtSystem::SysFile(_entries[static_cast<int64_t>(index)].name));
+    // The entry's `name` (+0x00) is a Filename; `Filename(const Filename&)`
+    // is the copy ctor 0x1800067d0, into the hidden return slot.
+    return _entries._data[static_cast<int64_t>(index)].name;
 }
 
 }  // namespace IO

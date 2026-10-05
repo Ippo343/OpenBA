@@ -213,15 +213,12 @@
 // retail's, unchanged.
 IO::PackageFile::~PackageFile() {
 
-    RtIO::RtIo_FileInfo_Dtor(&_file);                  // 0x1800b456c  ~FileInfo 0x18000c180, +0xC0
-
-    // retail 0x1800269a0 — `~Array<IO::PackageFile::Entry>` at +0xB0.
-    // array_destroy.cpp's kD_Str_10 / array.cpp's kSpec_PkgEntry: stride 0x10,
-    // an assign that calls Filename::AdjustDelimiters and a destroy that
-    // releases the embedded String — neither is trait-expressible (Collection.h's
-    // Array banner), so this stays the hand-derived spec, reached with `AsArray`.
-    // Each Array door is handed its {data, size, capacity} header.
-    rtcoll::AsArray<&rtcoll::kSpec_PkgEntry>(&_entries)->~Array();   // +0xB0
+    // B.4 Z LAST IO (`behaviour:`): 0x1800b456c (~FileInfo 0x18000c180 on
+    // +0xC0) and retail 0x1800269a0 (`~Array<IO::PackageFile::Entry>` on +0xB0,
+    // on its own row kSpec_PkgEntry: stride 0x10, a destroy that releases the
+    // embedded String) are the two members' own destructors now, which the
+    // compiler runs after this body in reverse declaration order: FileInfo
+    // first, then the entry array, as retail.
 
     // 0x1800b4586 (~Array<uint8> 0x1800112a0, +0x98) and 0x1800b4593
     // (~Array<uint32> 0x1800111a0, +0x80) are the members' own destructors

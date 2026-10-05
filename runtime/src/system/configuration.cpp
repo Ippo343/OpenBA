@@ -130,7 +130,6 @@
 // `String` there binds `System::String` — the CLASS — silently, because the two
 // are the same eight bytes. Every member body below therefore spells
 // `RtSystem::String` in full wherever it means the POD.
-using RtSystem::String;
 
 // ?_singleton@Configuration@System@@0PEAV12@EA  0x1801fc6f8 — the class static
 // (ENDGAME B.3.9 SYS, B39_RULES D7); RtSystemPortInit redirects the minted row
@@ -142,10 +141,7 @@ namespace {
 // ENDGAME B.3.1 step 2: the `??1String@System@@QEAA@XZ` door typedef is gone
 // with its two call sites — the locals in SetCommandLine are RAII objects now,
 // so their destructors ARE that call.
-// Wave 22 lane ERRCFG. THREE parameters: the hidden String return slot is the
-// SECOND, between `this` and the key. See GetCommandLineString's banner for why
-// omitting it is a wild write that still returns the right answer.
-typedef String* (*GetCmdLineStrFn)(void* self, String* ret, const String* key);
+// (B.4 Z LAST IO: the unused `GetCmdLineStrFn` typedef that stood here is gone.)
 
 // ---------------------------------------------------------------------------
 // The node the two tree walkers agree on. B.4 R-SYS: it is RtIo::SettingsMapNode
@@ -392,21 +388,7 @@ namespace {
 // Retail's blank test, inlined at four sites across the two functions.
 inline bool IsBlank(char c) { return c == ' ' || c == '\t'; }
 
-// The oracle's verdict for a returned String. Compares the two `data` pointers
-// as STRINGS, never as pointers — they are separate allocations by
-// construction — and compares only bytes both sides actually wrote: the length
-// and `length` characters. The NUL and the refcount are excluded, which is
-// what reference_oracle_must_not_compare_unwritten_bytes.md is about.
-bool SameString(const String* a, const String* b) {
-    if ((a->data == nullptr) != (b->data == nullptr)) return false;
-    if (a->data == nullptr) return true;
-    const int la = RtSystem::RtString_GetLength(a);
-    const int lb = RtSystem::RtString_GetLength(b);
-    if (la != lb) return false;
-    for (int i = 0; i < la; ++i)
-        if (a->data[i] != b->data[i]) return false;
-    return true;
-}
+// (B.4 Z LAST IO: the unused oracle helper `SameString` is gone.)
 
 }  // namespace
 

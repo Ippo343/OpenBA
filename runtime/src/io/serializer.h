@@ -44,33 +44,7 @@
 
 #include "../../types/io/Serializer.h"
 
-extern "C" {
-
-// ---- accessors -------------------------------------------------------------
-int                     RtSerializer_GetVersion (rt::io::Serializer* self);
-
-// ---- scalar forwarders (this, T&, name) ------------------------------------
-void RtSerializer_Serialize_Bool  (rt::io::Serializer* self, bool*     v, const char* name);
-void RtSerializer_Serialize_SChar (rt::io::Serializer* self, int8_t*   v, const char* name);
-void RtSerializer_Serialize_UChar (rt::io::Serializer* self, uint8_t*  v, const char* name);
-void RtSerializer_Serialize_Short (rt::io::Serializer* self, int16_t*  v, const char* name);
-void RtSerializer_Serialize_UShort(rt::io::Serializer* self, uint16_t* v, const char* name);
-void RtSerializer_Serialize_Int   (rt::io::Serializer* self, int32_t*  v, const char* name);
-void RtSerializer_Serialize_UInt  (rt::io::Serializer* self, uint32_t* v, const char* name);
-void RtSerializer_Serialize_Float (rt::io::Serializer* self, float*    v, const char* name);
-
-// ---- array forwarders (this, count, T*, name) ------------------------------
-// The char / signed char forms are here because two exe dispatch slots
-// (0x140152490 and 0x140152478) are real PE imports of them, even though no
-// ResolveExport site in the tree names them. See serializer.cpp.
-void RtSerializer_Serialize_CharArr  (rt::io::Serializer* self, int n, char*     d, const char* name);
-void RtSerializer_Serialize_SCharArr (rt::io::Serializer* self, int n, int8_t*   d, const char* name);
-void RtSerializer_Serialize_BoolArr  (rt::io::Serializer* self, int n, bool*     d, const char* name);
-void RtSerializer_Serialize_UCharArr (rt::io::Serializer* self, int n, uint8_t*  d, const char* name);
-void RtSerializer_Serialize_ShortArr (rt::io::Serializer* self, int n, int16_t*  d, const char* name);
-void RtSerializer_Serialize_UShortArr(rt::io::Serializer* self, int n, uint16_t* d, const char* name);
-void RtSerializer_Serialize_IntArr   (rt::io::Serializer* self, int n, int32_t*  d, const char* name);
-void RtSerializer_Serialize_UIntArr  (rt::io::Serializer* self, int n, uint32_t* d, const char* name);
-void RtSerializer_Serialize_FloatArr (rt::io::Serializer* self, int n, float*    d, const char* name);
-
-} // extern "C"
+// B.4 Z LAST IO: the 19 `extern "C"` RtSerializer_* forwarders that were
+// declared here (the exe import-slot family over the `rt::io::Serializer`
+// POD) had no caller left anywhere in the tree and are deleted with their
+// bodies; every caller calls `IO::Serializer`'s members.

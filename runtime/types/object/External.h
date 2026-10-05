@@ -46,7 +46,6 @@ namespace Object { class External; }   // ResourceEntry::external
 
 namespace RtObject {
 
-using RtSystem::Filename;
 
 // (B.4 P2 wave X: the `RtObject::ExternalPtr<T>` POD that stood here had no
 // user left; the one ExternalPtr is `Object::ExternalPtr<T>` below, pinned by

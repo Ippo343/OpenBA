@@ -121,7 +121,7 @@ struct Mod {
     RtSystem::Filename file;   // +0x58 — the mod's .pkm path; Find()'s key
 
     ModSet   set;           // +0x60 — Filename-keyed set
-    ModArrayOf<RtSystem::Filename> files;   // +0x70 — Array<Filename> (op= 0x1800091f0, stride 8)
+    ModArrayOf<System::Filename> files;     // +0x70 — Array<Filename> (op= 0x1800091f0, stride 8); B.4 Z LAST IO: real Filename elements in the trivial header
 };
 static_assert(sizeof(Mod) == 0x80,
               "Find() 0x1800aea10: `lVar3 = lVar3 + 0x80` strides the array by this");
@@ -263,7 +263,7 @@ public:
     // is what the door's signature carries today; `System::Filename` is a real
     // class already, so this is a spelling the caller batches collapse, not a
     // layout question (the two are layout-identical).
-    int Find(const RtSystem::Filename& file) const;
+    int Find(const System::Filename& file) const;
 
     // ---- the 0x28 bytes, at retail's offsets -------------------------------
     // PUBLIC for the same reason `IO::Serializer`'s are: unconverted bodies

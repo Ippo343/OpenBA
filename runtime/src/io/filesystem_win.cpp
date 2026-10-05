@@ -86,21 +86,14 @@ void    RtString_ReleaseInline(String* self);
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 
 // WideString is not modelled as its own type (out of this lane's 7-symbol
 // scope): every use here goes through System::WideString by cast, and the only fact
 // this file relies on is the single-pointer, String-shaped release idiom
 // documented above — RtSystem::String already models exactly that.
-using WideStringHandle = String;
+using WideStringHandle = RtSystem::String;
 
-bool SameFilenameText(const Filename* a, const Filename* b) {
-    if ((a->data == nullptr) != (b->data == nullptr)) return false;
-    if (a->data == nullptr) return true;
-    return std::strcmp(a->data, b->data) == 0;
-}
+// (B.4 Z LAST IO: the unused `SameFilenameText` that stood here is gone.)
 
 // The body, independent of the `this` FileSystem pointer (see header note).
 //
@@ -152,14 +145,10 @@ System::Filename FileSystem::GetSaveDirectory() const {
     RtIO::WideStringHandle ws{nullptr};
     reinterpret_cast<System::WideString*>(&ws)->Set(buf);          // B.3.x bridge  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
 
-    // AsUTF8's hidden return slot is still POD-shaped (System::WideString is
-    // not a B.3.1 class), so the value lands in a POD and is then STOLEN into
-    // the class: the move ctor is a pure pointer steal, so `utf8Pod` is left
-    // null and exactly one release happens, `utf8`'s destructor.
-    RtSystem::String utf8Pod{nullptr};
-    new (&RtSystem::Sys(utf8Pod)) System::String(                 // B.3.x bridge
-        reinterpret_cast<const System::WideString*>(&ws)->AsUTF8());  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
-    System::String utf8(std::move(RtSystem::Sys(utf8Pod)));
+    // AsUTF8 returns the String by value: `utf8` IS its hidden return slot,
+    // and exactly one release happens, `utf8`'s destructor.
+    System::String utf8 =
+        reinterpret_cast<const System::WideString*>(&ws)->AsUTF8();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
 
     System::String formatted = System::String::Format(
         "%s\\%s\\", utf8._data ? utf8._data : "", "Banished");

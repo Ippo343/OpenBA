@@ -92,9 +92,9 @@
 // Filename equality check — compares two System::Filename/String objects
 // by their underlying string data. Both are 8-byte COW pointers.
 // ============================================================
-static bool Filename_Equals(const RtSystem::Filename& filenameA, const RtSystem::Filename& filenameB) {
+static bool Filename_Equals(const RtSystem::Filename& filenameA, const System::Filename& filenameB) {
     const char* a = filenameA.data;
-    const char* b = filenameB.data;
+    const char* b = filenameB._data;
     if (a == b) return true;
     if (!a || !b) return false;
     // Compare using C string comparison (null-terminated)
@@ -138,7 +138,7 @@ void ModDialog::RefreshDisplay() {
                 int depCount = mod.files.size;
                 if (depCount <= 0) continue;
 
-                const RtSystem::Filename* depArray = mod.files.data;   // Mod +0x70 Array<Filename>
+                const System::Filename* depArray = mod.files.data;   // Mod +0x70 Array<Filename>
                 for (int k = 0; k < depCount; k++) {
                     // Compare other mod's filename with this mod's dependency[k]
                     if (Filename_Equals(otherMod.file, depArray[k])) {

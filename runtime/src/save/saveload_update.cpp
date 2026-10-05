@@ -67,7 +67,6 @@ using RtSave::SaveLoad;
 using RtSave::SavedState;
 using RtSave::SaveInfo;
 using RtSave::Operation;
-using RtSystem::String;
 
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;

@@ -159,49 +159,20 @@ using rt::io::Stream;
 // wrong slot consumes or emits the wrong number of bytes and the damage shows
 // up later, on an innocent-looking record. That is what the resave gate is.
 
-// `self` arrives as the POD view every unconverted caller spells. The two
-// views are cross-asserted field for field in runtime/types/io/Serializer.h,
-// which is what makes this cast honest rather than hopeful.
-static inline IO::Serializer* Ser(Serializer* self) {          // B.3.4 bridge
-    return reinterpret_cast<IO::Serializer*>(self);  // LEFT: audit WORK, not executed this pass (SIG unit RtSerializer_* forwarders (doable)); blocker; SIG the RtSerializer_* forwarders take the rt::io::Serializer POD (the exe import-slot family)
-}
-
-#define RT_SER_SCALAR(FN, T)                                                   \
-    void FN(Serializer* self, T* v, const char* name) {                        \
-        Ser(self)->Serialize(*v, name);                                        \
-    }
-
-#define RT_SER_ARRAY(FN, T)                                                    \
-    void FN(Serializer* self, int n, T* d, const char* name) {                 \
-        Ser(self)->Serialize(n, d, name);                                      \
-    }
+// B.4 Z LAST IO: the `Ser()` POD bridge, the RT_SER_* forwarder macros and
+// the 19 `extern "C"` RtSerializer_* forwarders they stamped (the exe
+// import-slot family over the `rt::io::Serializer` POD) are deleted: no
+// caller was left anywhere in the tree; every caller calls `IO::Serializer`'s
+// members. (serializer.h's declarations went with them.)
 
 extern "C" {
 
 // ---- scalars ---------------------------------------------------------------
-RT_SER_SCALAR(RtSerializer_Serialize_Bool, bool)   // IO::Serializer::Serialize(bool&)
-RT_SER_SCALAR(RtSerializer_Serialize_SChar, int8_t)   // IO::Serializer::Serialize(schar&)
-RT_SER_SCALAR(RtSerializer_Serialize_UChar, uint8_t)   // IO::Serializer::Serialize(uchar&)
-RT_SER_SCALAR(RtSerializer_Serialize_Short, int16_t)   // IO::Serializer::Serialize(short&)
-RT_SER_SCALAR(RtSerializer_Serialize_UShort, uint16_t)   // IO::Serializer::Serialize(ushort&)
-RT_SER_SCALAR(RtSerializer_Serialize_Int, int32_t)   // IO::Serializer::Serialize(int&)
 // ENDGAME B.3.4b SYSTEM (5) — the 24th door. `_J` is MSVC's `__int64`, which is
 // `int64_t` on this toolchain; `long` is FOUR bytes on Win64 and would bind
 // neither overload, so there is no ambiguity to create here.
-RT_SER_SCALAR(RtSerializer_Serialize_Int64, int64_t)   // IO::Serializer::Serialize(int64&)
-RT_SER_SCALAR(RtSerializer_Serialize_UInt, uint32_t)   // IO::Serializer::Serialize(uint&)
-RT_SER_SCALAR(RtSerializer_Serialize_Float, float)   // IO::Serializer::Serialize(float&)
 
 // ---- arrays ----------------------------------------------------------------
-RT_SER_ARRAY(RtSerializer_Serialize_CharArr, char)   // IO::Serializer::Serialize(n,char*)
-RT_SER_ARRAY(RtSerializer_Serialize_SCharArr, int8_t)   // IO::Serializer::Serialize(n,schar*)
-RT_SER_ARRAY(RtSerializer_Serialize_BoolArr, bool)   // IO::Serializer::Serialize(n,bool*)
-RT_SER_ARRAY(RtSerializer_Serialize_UCharArr, uint8_t)   // IO::Serializer::Serialize(n,uchar*)
-RT_SER_ARRAY(RtSerializer_Serialize_ShortArr, int16_t)   // IO::Serializer::Serialize(n,short*)
-RT_SER_ARRAY(RtSerializer_Serialize_UShortArr, uint16_t)   // IO::Serializer::Serialize(n,ushort*)
-RT_SER_ARRAY(RtSerializer_Serialize_IntArr, int32_t)   // IO::Serializer::Serialize(n,int*)
-RT_SER_ARRAY(RtSerializer_Serialize_UIntArr, uint32_t)   // IO::Serializer::Serialize(n,uint*)
-RT_SER_ARRAY(RtSerializer_Serialize_FloatArr, float)   // IO::Serializer::Serialize(n,float*)
 
 // ============================================================================
 // GetVersion — FULL ORACLE
@@ -213,9 +184,8 @@ RT_SER_ARRAY(RtSerializer_Serialize_FloatArr, float)   // IO::Serializer::Serial
 //   ?GetVersion@BinaryWriter@IO@@UEBAHXZ  0x180023ab0  MOV EAX,[RCX+0x28]; RET
 // If a third ReaderWriter subclass ever gives that slot a side effect this
 // site becomes unsound.
-int RtSerializer_GetVersion(Serializer* self) {
-    return Ser(self)->GetVersion();
-}
+// (B.4 Z LAST IO: the `RtSerializer_GetVersion` forwarder that stood here is
+// gone with the family above.)
 
 // ============================================================================
 // GetEncoding — FULL ORACLE

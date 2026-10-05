@@ -85,8 +85,6 @@
 #include "../../types/system/Filename.h"
 #include <new>
 
-using RtSystem::String;
-using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
 namespace {
 
@@ -121,21 +119,15 @@ bool Persistence::Startup() {
 
     ReadSettings();
 
-    // GetSaveDirectory's by-value Filename is constructed into the POD slot
-    // (as the door that stood here did) and then stolen into the class -- a
-    // pure pointer steal, no AddRef, `tmpPod` left null.
-    RtSystem::String tmpPod{nullptr};
-
+    // GetSaveDirectory's by-value Filename is constructed straight into `tmp`
+    // (its hidden return slot); with no slot `tmp` is the null Filename.
     // Retail dereferences FileSystem::_singleton without a check (0x1800b7f01
     // is a bare `MOV RCX,[0x1801fc6a8]`). The DEREFERENCE stays unguarded. What
     // is guarded is whether the SLOT EXISTS at all: with no DLL that variable
     // exists only if the mint provides it. Our difference from retail, not a
     // guard over retail's logic.
-    if (::IO::FileSystem** fsSlot = ::FileSystemSingletonSlot()) {
-        ::new (static_cast<void*>(&tmpPod)) System::Filename(          // B.3.x bridge
-            static_cast<const ::IO::FileSystem*>(*fsSlot)->GetSaveDirectory());
-    }
-    System::String tmp(std::move(::Sys(tmpPod)));
+    ::IO::FileSystem** const fsSlot = ::FileSystemSingletonSlot();
+    System::Filename tmp = fsSlot ? (*fsSlot)->GetSaveDirectory() : System::Filename();
 
     // String::operator=, retail 0x1800c9810, inlined at 0x1800b7f10 -- the
     // exact self-assignment guard on the BUFFER (the banner above).

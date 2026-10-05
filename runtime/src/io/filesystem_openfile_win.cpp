@@ -156,11 +156,7 @@
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
-using RtSystem::SysFile;  //   "
 
 namespace {
 
@@ -175,8 +171,7 @@ int PathStrICmp(const char* a, const char* b) {
     return rtcrt::StrICmp(a, b);
 }
 
-// FileInfo::operator= is now PORTED (rung 4, below) -- it used to be reached
-// here by ResolveAddr(0x18000c200), which was rung 3's one new cutover blocker.
+// FileInfo::operator= is FileInfo's own (runtime/types/io/FileSystem.h).
 
 inline int32_t StrLenOf(const char* data) {
     // retail: `if (p) len = [p-8] else len = 0` — the String block's length word.
@@ -186,88 +181,13 @@ inline int32_t StrLenOf(const char* data) {
 }  // namespace
 
 // ============================================================================
-// FileInfo's copy constructor                                retail 0x18000c110
+// FileInfo's copy constructor (0x18000c110) and operator= (0x18000c200)
 // ============================================================================
-// Five DWORD moves, one QWORD move, two Filename copy ctors — and NOT +0x14,
-// which is why the struct carries an explicit `_pad14`. Ported rather than
-// called by address because `?GetFileInfo@PackageFile@IO@@` is a three-line
-// wrapper around it and porting one without the other would leave the wrapper
-// standing on a null at cutover.
-extern "C" FileInfo* RtIo_FileInfo_CopyCtor(FileInfo* dst, const FileInfo* src) {
-
-    dst->handle     = src->handle;       // 18000c12e
-    dst->_unk04     = src->_unk04;       // 18000c132
-    dst->size       = src->size;         // 18000c138
-    dst->cursor     = src->cursor;       // 18000c13e
-    dst->baseOffset = src->baseOffset;   // 18000c144
-    dst->winHandle  = src->winHandle;    // 18000c14a  (+0x14 is NOT copied)
-    // `dst` is a raw FileInfo: these two slots are uninitialised bytes, so the
-    // copy ctor (??0Filename@System@@QEAA@AEBV01@@Z, 0x1800067d0) is placement-
-    // constructed into them, which is what retail's two CALLs do. The members
-    // are `RtSystem::String` on the not-yet-converted FileInfo, hence SysFile.
-    new (&dst->_name0) System::Filename(SysFile(src->_name0));   // 18000c15a
-    new (&dst->_name1) System::Filename(SysFile(src->_name1));   // 18000c168
-
-    // No replay oracle: the Filename copy ctors AddRef, so running the shipped
-    // body a second time would leave two extra references on every call. The
-    // lockstep probe compares whole FileInfos produced through this path.
-    return dst;                          // 18000c16e
-}
-
-// ============================================================================
-// FileInfo::operator=(const FileInfo&)                       retail 0x18000c200
-// ============================================================================
-// Rung 3 named this as its ONE new cutover blocker: unexported, unported, and
-// called from inside our own PlatformOpenFile, so at cutover ResolveAddr would
-// hand back null and our port would die on a null call. 61 instructions.
-//
-// It also supplies a FOURTH independent proof of the FileInfo layout rung 3
-// corrected: the field moves are +0x00, +0x04, +0x08, +0x0C, +0x10 and the
-// QWORD at +0x18 -- and +0x14 is skipped, exactly as in the copy ctor. A
-// `uint64_t size` at +0x08 cannot produce two separate DWORD moves at +0x08 and
-// +0x0C.
-//
-// The two Filename members are refcounted Strings assigned with the release/
-// adopt idiom, and there are three details a paraphrase gets wrong:
-//
-//   1. SELF-ASSIGNMENT OF THE BUFFER SHORT-CIRCUITS. `CMP RAX,[RDX+0x20]; JZ`
-//      jumps past BOTH the release and the retain -- not just the release. Doing
-//      release-then-retain on a shared buffer would drop the count to zero and
-//      free a string both sides still point at.
-//   2. THE ADOPT IS UNCONDITIONAL, THE INCREMENT IS NOT. Retail stores theirs
-//      into our slot whatever it is, and only then tests it for the `INC`. This
-//      is why RtString_AdoptInline is NOT used here: it skips the store when the
-//      source is null, which would leave our slot holding the DANGLING `data - 8`
-//      that the freeing branch of the release deliberately leaves behind.
-//   3. AdjustDelimiters RUNS ON BOTH PATHS. `LEA RCX,[RSI+0x20]; CALL` sits at
-//      the merge point that the self-assignment JZ targets, so it runs even when
-//      nothing was copied.
-extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo* dst, const FileInfo* src) {
-
-    dst->handle     = src->handle;       // 18000c217
-    dst->_unk04     = src->_unk04;       // 18000c21c
-    dst->size       = src->size;         // 18000c222
-    dst->cursor     = src->cursor;       // 18000c228
-    dst->baseOffset = src->baseOffset;   // 18000c22e
-    dst->winHandle  = src->winHandle;    // 18000c235  (+0x14 is NOT copied)
-
-    // ENDGAME B.3.1 step 2: all three details above ARE
-    // `??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z` (0x180026d40), which is
-    // why the two blocks collapse to one operator= each. Read the class body
-    // (runtime/src/system/filename.cpp) against the three numbered notes: the
-    // guard is on the BUFFER and skips both halves; the store is unconditional
-    // and only the increment is guarded; AdjustDelimiters is outside the `if`.
-
-    SysFile(dst->_name0) = Sys(src->_name0);             // 18000c239..c27d
-    SysFile(dst->_name1) = Sys(src->_name1);             // 18000c282..c2c6
-
-    // No replay oracle, for the same reason as the copy ctor: the adopt half
-    // AddRefs, so running the shipped body a second time on the same pair would
-    // leave two extra references on every call. The lockstep probe compares
-    // whole FileInfos produced through this path, and rung 4's probe below adds
-    // a dedicated comparison with the buffer-identity and null cases forced.
-    return dst;                          // 18000c2d0
-}
+// B.4 Z LAST IO: the two hand-written bodies that stood here
+// (`RtIo_FileInfo_CopyCtor` / `RtIo_FileInfo_Assign`) are FileInfo's own
+// implicit members now (runtime/types/io/FileSystem.h): five dword moves, the
+// qword at +0x18, then the Filename copy ctor (0x1800067d0) / Filename::
+// operator= on +0x20 and +0x28; +0x14 is padding and not copied.
 
 // ============================================================================
 // ?GetFileInfo@PackageFile@IO@@QEBA?AUFileInfo@FileSystem@2@XZ  retail 0x180025400
@@ -326,25 +246,12 @@ bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
     // An empty FileInfo, assigned over the caller's — retail builds it on the
     // stack and calls FileInfo::operator= rather than clearing in place, which
     // is what releases whatever the caller's Strings were holding.
-    RtIO::FileInfo blank;                // 1800add08..1800add30
-    blank.handle     = -1;
-    blank.size       = 0;
-    blank.cursor     = 0;
-    blank.baseOffset = 0;
-    // Two empty Filenames constructed into the raw stack slots, retail's
-    // ??0Filename@System@@QEAA@XZ (0x180006220) — a zero store, and no dtor has
-    // run over them yet.
-    new (&blank._name0) System::Filename();
-    new (&blank._name1) System::Filename();
-    blank.winHandle  = INVALID_HANDLE_VALUE;
-    blank._unk04     = 0;                // retail leaves this whatever the stack
-    blank._pad14     = 0;                // held; see §4 — zeroed here only so the
-                                         // value we copy out is defined.
-    RtIO::RtIo_FileInfo_Assign(fi, &blank);    // 1800add3f
-    // ~blank, reverse order. FileInfo is not a converted class, so its two
-    // Filename members are destroyed by hand — one release each, as retail.
-    RtIO::SysFile(blank._name1).~Filename();   // 1800add45
-    RtIO::SysFile(blank._name0).~Filename();   // 1800add75
+    // `*fi = FileInfo();` — FileInfo's default ctor (1800add08..1800add30: the
+    // four fields, the two Filename() null stores, winHandle), operator=
+    // (1800add3f), then ~FileInfo on the temporary (1800add45 +0x28, 1800add75
+    // +0x20). B.4 Z LAST IO: the temporary's +0x04 is no longer zeroed (retail
+    // leaves it whatever the stack held, §4; the oracle excludes it).
+    *fi = RtIO::FileInfo();
 
     // WideString ws(*name); CreateFileW(ws, ...). ??0WideString(const String&);
     // the block ends at retail's 1800adde1 release, so ~WideString runs there.
@@ -417,10 +324,10 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
         if (ok) fi->cursor += n;                             // 1800ace87
     }
 
-    // ~pack — the two Filenames released in REVERSE order, +0x28 then +0x20.
-    RtIO::SysFile(pack._name1).~Filename();                  // 1800acea1
-    RtIO::SysFile(pack._name0).~Filename();                  // 1800aceda
-
+    // ~pack (FileInfo's dtor: 1800acea1 +0x28, then 1800aceda +0x20) runs at
+    // the return. B.4 Z LAST IO: GetFileInfo's copy now AddRefs the two names
+    // (retail's copy ctor 0x18000c110, called at 180025428); the POD copy did
+    // not, while this release was already there.
     return ok;                                               // 1800acf07
 }
 
@@ -430,21 +337,13 @@ bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
 // A FileInfo-RETURNING member, so the hidden return slot is the SECOND argument
 // (RCX = this, RDX = ret) and RAX is the slot on the way out — `MOV RAX,RDI` at
 // 0x1800acc2b. Getting that wrong is reference_hidden_retslot_wild_write.md.
-RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
-                                     const System::Filename& name) {
+RtIO::FileInfo FileSystem::OpenFile(const System::Filename& name) {
 
-    RtIO::FileInfo lf;                                       // 1800ac8b3..
-    lf.handle     = -1;
-    lf.size       = 0;
-    lf.cursor     = 0;
-    lf.baseOffset = 0;
-    // Two empty Filenames constructed into raw stack slots (0x180006220), so
-    // that the FileInfo::operator= PlatformOpenFile runs over them below has a
-    // live object to release. Their destructors are at the bottom.
-    new (&lf._name0) System::Filename();
-    new (&lf._name1) System::Filename();
-    lf.winHandle  = INVALID_HANDLE_VALUE;
-    lf._pad14     = 0;
+    // FileInfo's default ctor (1800ac8b3..: the four fields, the two
+    // Filename() null stores 0x180006220, winHandle), so that the
+    // FileInfo::operator= PlatformOpenFile runs over it below has a live
+    // object to release. ~lf runs at every return (1800acbc9 / 1800acbfa).
+    RtIO::FileInfo lf;
     // +0x04 is DELIBERATELY left as-is: retail never writes it and copies it out
     // anyway (§4). Reading it below reproduces that; the oracle excludes it.
 
@@ -485,7 +384,7 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
             lf.handle = static_cast<int32_t>(
                 (node->packIndex << 24) | node->fileIndex);  // 1800ac9c5..d1
             const PackageFile* const pkg = _packfiles[node->packIndex];
-            const RtIO::PackageFileEntry* const e = &pkg->_entries[node->fileIndex];
+            const RtIO::PackageFileEntry* const e = &pkg->_entries._data[node->fileIndex];
             lf.size       = static_cast<int32_t>(e->size);   // 1800ac9ee  +0xc
             lf.baseOffset = static_cast<int32_t>(e->offset); // 1800aca0c  +0x8
             lf.cursor     = 0;                               // 1800aca13
@@ -495,48 +394,23 @@ RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
 
     if (!emitted) {
         if (_platformExistsGate == 0) {                      // 1800aca1e
-            ret->handle     = -1;                            // 1800aca28
-            ret->size       = 0;
-            ret->cursor     = 0;
-            ret->baseOffset = 0;
-            // `ret` is the hidden return slot: raw bytes, so these are two
-            // default ctors (0x180006220), not stores through live objects.
-            new (&ret->_name0) System::Filename();
-            new (&ret->_name1) System::Filename();
-            ret->winHandle  = INVALID_HANDLE_VALUE;                            // 1800aca4c
+            // FileInfo's default ctor in the hidden return slot (1800aca28..4c).
+            return RtIO::FileInfo();
         } else if (!PlatformOpenFile(lf, name)) {            // 1800acace
-            ret->handle     = -1;                            // 1800acadb
-            ret->size       = 0;
-            ret->cursor     = 0;
-            ret->baseOffset = 0;
-            new (&ret->_name0) System::Filename();           // as above
-            new (&ret->_name1) System::Filename();
-            ret->winHandle  = INVALID_HANDLE_VALUE;                            // 1800acaff
+            return RtIO::FileInfo();                         // 1800acadb..acaff
         } else {
             lf.handle = -2;                                  // 1800acb77
             emitted   = true;
         }
     }
 
-    if (emitted) {                                           // 1800acb8b
-        ret->handle     = lf.handle;
-        ret->_unk04     = lf._unk04;   // retail's uninitialised dword — §4
-        ret->size       = lf.size;
-        ret->cursor     = lf.cursor;
-        ret->baseOffset = lf.baseOffset;
-        ret->winHandle  = lf.winHandle;                      // 1800acba2
-        // The copy ctor (0x1800067d0) into the raw return slot, as retail's two
-        // CALLs. It AddRefs, which is why ~lf below is still exactly one
-        // release per name and not a drop to zero.
-        new (&ret->_name0) System::Filename(RtIO::SysFile(lf._name0));  // 1800acbae
-        new (&ret->_name1) System::Filename(RtIO::SysFile(lf._name1));  // 1800acbbc
-    }
-
-    // ~lf, reverse order.
-    RtIO::SysFile(lf._name1).~Filename();                    // 1800acbc9
-    RtIO::SysFile(lf._name0).~Filename();                    // 1800acbfa
-
-    return ret;                                              // 1800acc2b
+    // 1800acb8b: FileInfo's copy ctor (0x18000c110, inlined: the fields
+    // including retail's uninitialised +0x04 (section 4), then the Filename
+    // copy ctor 0x1800067d0 on both names, 1800acbae / 1800acbbc) into the
+    // hidden return slot; then ~lf (1800acbc9 +0x28, 1800acbfa +0x20). Returned
+    // through a const reference so the copy, not a move, builds the slot.
+    const RtIO::FileInfo& emittedInfo = lf;
+    return emittedInfo;                                      // 1800acc2b
 }
 
 }  // namespace IO

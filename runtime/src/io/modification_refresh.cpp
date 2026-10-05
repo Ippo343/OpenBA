@@ -192,8 +192,6 @@
 
 namespace RtIO {
 
-using RtSystem::Filename;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 // ENDGAME B.3.1 step 2: the two Filename entry points this file used to
 // forward-declare here (CtorCopy 0x1800067d0, AdjustDelimiters 0x1800c6970)
 // are gone from this translation unit -- every use was one of Filename.h's
@@ -648,7 +646,7 @@ void Modification::RefreshList() {
     // -----------------------------------------------------------------------
     // LOOP 1 — one iteration per .pkm found (0x1800af790 .. 0x1800b019f)
     // -----------------------------------------------------------------------
-    Filename* const foundData = found.data;
+    System::Filename* const foundData = found.data;
     for (int32_t i = 0; i < found.size; ++i) {
         // The stack Mod, zeroed member by member at 0x1800af790..0x1800af7d7.
         // NOTE what is NOT zeroed: +0x24/+0x28/+0x2c (icon width, icon height,
@@ -676,7 +674,7 @@ void Modification::RefreshList() {
         // filesystem_setupdirs_win.cpp's `sourceDirectory`/`dataDirectory`).
         // Both sides are `RtSystem::Filename` (Mod member / found[] element,
         // neither yet converted), reached through the bridge.
-        Sys(m->file) = Sys(foundData[i]);
+        RtSystem::Sys(m->file) = foundData[i];
 
         // 0x1800af830..0x1800af8e6 — the inlined PackageFile constructor:
         // ENDGAME B.3.9 IO, the class's real constructor on the same stack
@@ -684,7 +682,7 @@ void Modification::RefreshList() {
         alignas(16) uint8_t pkgStorage[0xF0];
         IO::PackageFile* const pkgObj = ::new (static_cast<void*>(pkgStorage)) IO::PackageFile();
 
-        const bool read = pkgObj->IO::PackageFile::ReadPackfile(Sys(foundData[i]));   // 0x1800b46b0
+        const bool read = pkgObj->IO::PackageFile::ReadPackfile(foundData[i]);   // 0x1800b46b0
         // 0x1800af923 — `platform` (+0x74) non-zero means the package is not for
         // this build, and retail CLOSES THE FILE before discarding it. The
         // ReadPackfile-failed path does NOT close: there the file never opened.
@@ -758,7 +756,7 @@ void Modification::RefreshList() {
         // and sends the walk right, while a null SEARCH key descends LEFT in the
         // first arm and ends the walk with NO INSERT in the second.
         // -------------------------------------------------------------------
-        const int32_t entryCount = pkgObj->_entryCount;          // +0xb8
+        const int32_t entryCount = pkgObj->_entries._size;       // +0xb8
         for (int32_t e = 0; e < entryCount; ++e) {
             // GetFileName's by-value return is constructed straight into `key`
             // (the hidden return slot).
@@ -927,7 +925,7 @@ void Modification::RefreshList() {
     }
 
     // 0x1800b0350 — release every found Filename, then the array itself.
-    for (int32_t i = 0; i < found.size; ++i) ReleaseInto(&foundData[i].data);
+    for (int32_t i = 0; i < found.size; ++i) ReleaseInto(&foundData[i]._data);
     ::System::MemoryAllocator::MemFree(found.data);
     found.data = nullptr; found.size = 0; found.capacity = 0;
 

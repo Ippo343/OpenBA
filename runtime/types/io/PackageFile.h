@@ -134,6 +134,11 @@
 #include "../object/External.h"          // Object::External — the base
 #include "../object/Internal.h"          // Object::detail::InternalMemFree
 #include "../system/String.h"
+#include "../collection/Collection.h"   // B.4 Z LAST IO: the entry array member
+
+namespace rtcoll {
+extern const ArraySpec kSpec_PkgEntry;   // 0x1800298f0  Array<IO::PackageFile::Entry> (array.cpp)
+}  // namespace rtcoll
 
 namespace IO {
 
@@ -162,17 +167,13 @@ public:
           _version(0), _userVersion(0),                         // 1800b44ad (one qword)
           _priority(0x2710), _platform(0),                      // 1800b44b1 (one qword 0x2710)
           _iconData(),                                          // 1800b44b9 / 1800b44c0
-          _previewData() {                                      // 1800b44c7 / 1800b44ce
-        _crc = 0;                                               // 1800b44d5
-        _overridable = true;                                    // 1800b44dc
-        _entries = nullptr;                                     // 1800b44e3
-        _entryCount = 0; _entryCapacity = 0;                    // 1800b44ea
-        _file.handle = -1;                                      // 1800b44fd
-        _file.size = 0; _file.cursor = 0;                       // 1800b4503 (one qword)
-        _file.baseOffset = 0;                                   // 1800b4507
-        _file._name0.data = nullptr;                            // 1800b4514
-        _file._name1.data = nullptr;                            // 1800b4520
-        _file.winHandle = reinterpret_cast<void*>(intptr_t{-1});   // 1800b4523 INVALID_HANDLE_VALUE (no <windows.h> in a type header)  // CAST-OK: win32
+          _previewData(),                                       // 1800b44c7 / 1800b44ce
+          // B.4 Z LAST IO: the last four are members constructed in
+          // declaration order, which is retail's store order.
+          _crc(0),                                              // 1800b44d5
+          _overridable(true),                                   // 1800b44dc
+          _entries(),                                           // 1800b44e3 / 1800b44ea
+          _file() {                                             // 1800b44fd..1800b4523 (FileInfo's ctor)
     }
 
     // ---- the nine slots of ??_7PackageFile@IO@@6B@ (0x180155700) ----------
@@ -366,16 +367,22 @@ public:
     bool     _overridable;   // +0xac  Serialize's bool slot (+0x78)
     uint8_t  _padAd[3];      // +0xad
 
-    RtIO::PackageFileEntry* _entries;   // +0xb0  Collection::Array<PackageFileEntry>, stride 16
-    int32_t  _entryCount;    // +0xb8
-    int32_t  _entryCapacity; // +0xbc
+    // +0xb0 — Collection::Array<Entry>, stride 16. B.4 Z LAST IO
+    // (`behaviour:`): a real member on retail's own row, `kSpec_PkgEntry`
+    // (0x1800298f0). Its ~Array is retail's 0x1800269a0 (the row's destroy
+    // over the live range, the J1 free, the header zeroed), which ~PackageFile
+    // 0x1800b4540 runs right after ~FileInfo (+0xc0) and before the two
+    // Arrays below it: reverse declaration order.
+    using EntryArray = Collection::Array<RtIO::PackageFileEntry, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_PkgEntry>>;
+    EntryArray _entries;     // +0xb0  data, +0xb8 size, +0xbc capacity
 
     // +0xc0 — the EMBEDDED `IO::FileSystem::FileInfo`, 0x30 bytes, which is
     // what makes the object exactly 0xf0. The constructor does `ADD RCX,0xc0`
     // at 0x1800b44f1 and then writes the FileInfo's own fields in retail's
     // out-of-order sequence (+0x00, +0x08, +0x10, +0x20, +0x28, and only then
     // +0x18 = -1, the Win32 HANDLE).
-    RtIO::FileInfo _file;    // +0xc0 .. +0xef
+    RtIO::FileInfo _file;    // +0xc0 .. +0xef  ctor 1800b44fd..23, dtor 0x1800b456c (0x18000c180)
 };
 
 // ---- the layout pins ------------------------------------------------------
@@ -417,32 +424,14 @@ static_assert(offsetof(PackageFile, _previewData) + offsetof(Collection::Array<u
 static_assert(offsetof(PackageFile, _crc)         == 0xa8, "GetCRC 0x180025500 / GetPackfileId 0x1800ab050");
 static_assert(offsetof(PackageFile, _overridable) == 0xac, "ctor 1800b44dc MOV byte [RCX+0xac],1");
 static_assert(offsetof(PackageFile, _entries)     == 0xb0, "GetFileName 0x180025475 ADD RDX,[RCX+0xb0]");
-static_assert(offsetof(PackageFile, _entryCount)  == 0xb8, "LoadPackages 0x1800ab889 MOV EAX,[RCX+0xb8]");
+static_assert(offsetof(PackageFile, _entries) + offsetof(PackageFile::EntryArray, _size) == 0xb8,
+              "LoadPackages 0x1800ab889 MOV EAX,[RCX+0xb8]");
+static_assert(sizeof(PackageFile::EntryArray) == 0x10, "the 16-byte Array header");
 static_assert(offsetof(PackageFile, _file)        == 0xc0, "ctor 1800b44f1 ADD RCX,0xc0");
 static_assert(sizeof(RtIO::FileInfo) == 0x30, "the embedded FileInfo is what makes 0xc0 + 0x30 == 0xf0");
 
-// ---- the cross-asserts against the partial POD view ------------------------
-// `RtIO::PackageFileView` is NOT replaced by this class and must not be: it is
-// read by `filesystem_packages.cpp`, `filesystem_find_win.cpp` and
-// `filesystem.cpp`, and B33 §7's rule is that the POD stays, trivially
-// destructible, until its last user converts. These asserts are what keep the
-// two spellings from drifting — exactly as `RtObject::BaseTypeInfo` was kept
-// against `Object::BaseTypeInfo`.
-static_assert(offsetof(PackageFile, _name)        == offsetof(RtIO::PackageFileView, name),        "alias name");
-static_assert(offsetof(PackageFile, _author)      == offsetof(RtIO::PackageFileView, author),      "alias author");
-static_assert(offsetof(PackageFile, _description) == offsetof(RtIO::PackageFileView, description), "alias description");
-static_assert(offsetof(PackageFile, _string58)    == offsetof(RtIO::PackageFileView, _string58),   "alias _string58");
-static_assert(offsetof(PackageFile, _string60)    == offsetof(RtIO::PackageFileView, _string60),   "alias _string60");
-static_assert(offsetof(PackageFile, _version)     == offsetof(RtIO::PackageFileView, version),     "alias version");
-static_assert(offsetof(PackageFile, _userVersion) == offsetof(RtIO::PackageFileView, userVersion), "alias userVersion");
-static_assert(offsetof(PackageFile, _priority)    == offsetof(RtIO::PackageFileView, priority),    "alias priority");
-static_assert(offsetof(PackageFile, _platform)    == offsetof(RtIO::PackageFileView, platform),    "alias platform");
-static_assert(offsetof(PackageFile, _iconWidth)   == offsetof(RtIO::PackageFileView, iconWidth),   "alias iconWidth");
-static_assert(offsetof(PackageFile, _iconHeight)  == offsetof(RtIO::PackageFileView, iconHeight),  "alias iconHeight");
-static_assert(offsetof(PackageFile, _crc)         == offsetof(RtIO::PackageFileView, packfileId),  "alias packfileId/CRC");
-static_assert(offsetof(PackageFile, _overridable) == offsetof(RtIO::PackageFileView, overridable), "alias overridable");
-static_assert(offsetof(PackageFile, _entries)     == offsetof(RtIO::PackageFileView, entries),     "alias entries");
-static_assert(offsetof(PackageFile, _entryCount)  == offsetof(RtIO::PackageFileView, entryCount),  "alias entryCount");
+// (B.4 Z LAST IO: the cross-asserts against the `RtIO::PackageFileView` POD
+// are gone with the POD; the pins above are the class's own.)
 
 // The class IS polymorphic and that is the point — unlike `IO::Serializer`,
 // `IO::Registry` and `IO::Modification`, this one has a live nine-row minted

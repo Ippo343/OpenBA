@@ -291,7 +291,6 @@
 
 namespace RtIO {
 
-using RtSystem::String;
 
 namespace {
 
@@ -512,7 +511,7 @@ int32_t  PackageFile::GetPlatform() const    { return _platform; }     // 0x1800
 int32_t  PackageFile::GetIconWidth() const   { return _iconWidth; }    // 0x180025510 +0x78
 int32_t  PackageFile::GetIconHeight() const  { return _iconHeight; }   // 0x180025520 +0x7c
 uint32_t PackageFile::GetCRC() const         { return _crc; }          // 0x180025500 +0xa8
-int32_t  PackageFile::GetFileCount() const   { return _entryCount; }   // 0x1800254d0 +0xb8
+int32_t  PackageFile::GetFileCount() const   { return _entries._size; }   // 0x1800254d0 +0xb8
 
 // 0x1800254f0 is `MOVZX EAX,byte ptr [RCX+0xac]` -- a ZERO extension of the
 // byte, not a sign extension and not a dword read. The field is the same one
@@ -535,11 +534,11 @@ bool PackageFile::CanOverride() const {
 // bounds check in either body and none is added -- the caller bounds it with
 // GetFileCount, and a guard here would skip work rather than restore it.
 uint32_t PackageFile::GetFileSize(int index) const {
-    return _entries[static_cast<int64_t>(index)].size;          // +0x0C
+    return _entries._data[static_cast<int64_t>(index)].size;          // +0x0C
 }
 
 uint32_t PackageFile::GetFileOffset(int index) const {
-    return _entries[static_cast<int64_t>(index)].offset;        // +0x08
+    return _entries._data[static_cast<int64_t>(index)].offset;        // +0x08
 }
 
 }  // namespace IO

@@ -67,18 +67,18 @@ bool SameText(const char* a, const char* b) {
 // disassembly, not inferred from the decompile. That is not a curiosity: it is
 // what makes this call safe for SetupDirectories to make while
 // `?_singleton@Configuration@System@@0PEAV12@EA` is still an unminted slot.
-String* RtSystem_Configuration_GetPlatformName(void* self, String* ret, int platform) {
+System::String RtSystem_Configuration_GetPlatformName(void* self, int platform) {
     (void)self;   // retail never reads it
 
-    // ENDGAME B.3.1 step 2: retail's `*ret = 0` IS the default ctor
-    // (??0String@System@@QEAA@XZ, 0x180006760, one qword store), and `ret` is
-    // the hidden return slot, so it is placement-constructed rather than
-    // assigned. The conditional Set is retail's own 0x1800c95d0 call.
-    System::String* out = new (Sys(ret)) System::String();
+    // Retail's `*ret = 0` IS the default ctor (??0String@System@@QEAA@XZ,
+    // 0x180006760, one qword store) in the hidden return slot (the named
+    // return value below is built there). The conditional Set is retail's own
+    // 0x1800c95d0 call.
+    System::String out;
     if (platform == 0)
-        out->Set("Win");
+        out.Set("Win");
 
-    return ret;
+    return out;
 }
 
 // ============================================================================
@@ -93,15 +93,15 @@ String* RtSystem_Configuration_GetPlatformName(void* self, String* ret, int plat
 // the boot's data directory: `Format("%s%s%s%s\\", root, "", "Win", "Data")`
 // = "<install>\WinData\", which is exactly the directory the shipped game
 // ships (verified on disk).
-String* RtSystem_Configuration_GetBuildName(void* self, String* ret, int build) {
+System::String RtSystem_Configuration_GetBuildName(void* self, int build) {
     (void)self;   // retail never reads it
 
-    // ENDGAME B.3.1 step 2, exactly as GetPlatformName above.
-    System::String* out = new (Sys(ret)) System::String();
-    if (build == 0)      out->Set("Data");
-    else if (build == 1) out->Set("Eval");
+    // As GetPlatformName above.
+    System::String out;
+    if (build == 0)      out.Set("Data");
+    else if (build == 1) out.Set("Eval");
 
-    return ret;
+    return out;
 }
 
 }  // namespace RtSystem
