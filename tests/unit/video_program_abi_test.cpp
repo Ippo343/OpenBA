@@ -180,12 +180,11 @@ UNIT_TEST(video_shader_parameter_trivial) {
     CHECK(spec->destroy != nullptr);
     CHECK_EQ(spec->stride, (uint32_t)0x10);
 
-    // `VertexLayout::Element` is the same arrangement one class over: its `name`
-    // is a `void*` so that the ported `~Array<Element>` (0x18004fa30) stays the
-    // only thing that releases the names.
-    CHECK((std::is_trivially_destructible<Video::VertexLayout::Element>::value));
-    CHECK(Collection::Array<Video::VertexLayout::Element>::Spec()->destroy == nullptr);
-    CHECK_EQ(Collection::Array<Video::VertexLayout::Element>::Spec()->stride, (uint32_t)0x20);
+    // `VertexLayout::Element` is the same arrangement one class over (B.4 wave Y):
+    // its `name` is a System::String too, and the member names the row.
+    CHECK(!(std::is_trivially_destructible<Video::VertexLayout::Element>::value));
+    CHECK(decltype(Video::VertexLayout::_elements)::Spec() == &rtcoll::kSpec_VertexElement);
+    CHECK_EQ(decltype(Video::VertexLayout::_elements)::Spec()->stride, (uint32_t)0x20);
 }
 
 // ===========================================================================

@@ -1421,7 +1421,7 @@ const ArraySpec kSpec_EffectSlot = {              // 0x180051390
 //                (array_destroy.cpp kD_Str_20)
 static void VertexElementAssign(Video::VertexLayout::Element* d,
                                 const Video::VertexLayout::Element* s) {
-    AdoptString(d->name, s->name);          // +0x00
+    AdoptString(d->name._data, s->name._data);  // +0x00
     d->stream     = s->stream;              // +0x08..+0x1b, five dwords
     d->offset     = s->offset;
     d->usage      = s->usage;
@@ -1432,7 +1432,7 @@ void AssignVertexElement(uint8_t* d, const uint8_t* s) {
     AssignAs<Video::VertexLayout::Element, &VertexElementAssign>(d, s);
 }
 static void VertexElementInit(Video::VertexLayout::Element* d) {
-    d->name       = nullptr;                // +0x00..+0x1b zeroed
+    d->name._data = nullptr;                // +0x00..+0x1b zeroed
     d->stream     = 0;
     d->offset     = 0;
     d->usage      = Video::VertexLayout::Usage();
