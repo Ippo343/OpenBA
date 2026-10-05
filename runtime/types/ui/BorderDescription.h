@@ -57,7 +57,8 @@ public:
     // (0x18010facd..0x18010fb03: the ExternalPtr and the nine String bodies).
     BorderDescription() : ElementDescription() {
         _spriteSheet = nullptr;
-        for (int i = 0; i < 9; ++i) _spriteName[i] = nullptr;
+        // +0x70..+0xb0 `_spriteName[9]`: each String() (the zero store) runs
+        // as a member, [0] first.
     }
 
     // ---- the ten slots, in measured order ---------------------------------
@@ -97,7 +98,7 @@ public:
     // and NINE System::String sprite names, the pieces of a nine-slice border,
     // in BorderElement's row-major order.
     SpriteSheet* _spriteSheet;     // +0x68 (B4 H4: typed)  LEA RCX,[RDI+0x68] @ 0x18010fe6f
-    char* _spriteName[9];          // +0x70 .. +0xb0  @ 0x18010fe7d .. 0x18010feff
+    System::String _spriteName[9]; // +0x70 .. +0xb0  @ 0x18010fe7d .. 0x18010feff; dtor releases [8]..[0]
 };
 
 static_assert(sizeof(BorderDescription) == 0xb8,
