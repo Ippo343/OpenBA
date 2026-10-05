@@ -427,7 +427,6 @@ static void Destroy_MarkAndPushRemoval(ComponentEntity* entity) {
     if (!entityList) return;
     if (((entity->_entityFlags >> 10) & 1) != 0) return;
     MarkEntityForRemoval(entity);
-    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     entityList->removalList
         .SetSize(entityList->removalList._size + 1, entity);
 }

@@ -279,7 +279,7 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
     // ??0Random@System@@QEAA@XZ 0x1800c7f20, called by name (B3R Leftovers).
     System::Random* random = reinterpret_cast<System::Random*>(rng);   // LEFT: audit DEFERRED (ctor door; System::Random has no C++ ctor and the 2520-byte local is larger than sizeof(Random) 2500, so a typed local would resize it): H5 the Random lives in raw stack storage (retail runs its ctor and no dtor)
     RtSystem_Random_Ctor(random);
-    // B.3.4b bridge: the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
+    // the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
     // 0x1401512e8, Runtime 0x1800c8040) — `12u` picks it over Rand() and
     // Rand(int,int).
     uint32_t variant = random->Rand(12u);

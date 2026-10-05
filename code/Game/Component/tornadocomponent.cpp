@@ -424,7 +424,6 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, ComponentEntity*
             const uint32_t f = ibp->_entityFlags;
             if (((f >> 10) & 1) == 0) {
                 MarkEntityForRemoval(ibp);
-                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 entityMgr->removalList
                     .SetSize(entityMgr->removalList._size + 1, ibp);
                 if (hitAnimal) ++*hitAnimal;
@@ -833,7 +832,6 @@ void TornadoComponent::Tick(const System::Time* time) {
             const uint32_t f = entity->_entityFlags;
             if (((f >> 10) & 1) == 0) {
                 MarkEntityForRemoval(entity);
-                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 entityMgr->removalList
                     .SetSize(entityMgr->removalList._size + 1, entity);
                 TORNADO_TRACE("expired: particle finished, entity queued for destruction "

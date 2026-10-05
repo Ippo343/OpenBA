@@ -156,7 +156,7 @@ static void LoadProfessionList_Step2(GameUpdateLoop* self) {
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     System::Filename fname("Game/Profession/Profession.rsc");
     ::Object::External* profList =
-        efactory->FindOrLoadAs<::Object::External>(fname);                  // B.3.3 bridge
+        efactory->FindOrLoadAs<::Object::External>(fname);
     self->m_professionList = static_cast<ProfessionList*>(profList);   // unchecked, as before
 
     ProfessionList* profs = self->m_professionList;
@@ -200,7 +200,7 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
     System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::External* mat = ::Object::ExternalFactory::_singleton
-            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
+            ->FindOrLoadAs<::Object::External>(fname);
 
     // Retail's type gate: Graphics::Material's type id (ENDGAME B.3.9 TR: the class
     // accessor; was an RT_DATA_SLOT read of its ?_typeInfo@ record).
@@ -227,7 +227,7 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
     System::Filename fname("Game/Help/HelpTopics.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::External* list = ::Object::ExternalFactory::_singleton
-            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
+            ->FindOrLoadAs<::Object::External>(fname);
 
     // Retail's type gate: Object::ExternalList's type id (retail reads it through the
     // exe import slot 0x140151ef0; ENDGAME B.3.9 TR: the class accessor).
@@ -279,7 +279,7 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
     System::Filename fname("Game/Disease/Diseases.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::External* list = ::Object::ExternalFactory::_singleton
-            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
+            ->FindOrLoadAs<::Object::External>(fname);
 
     // Retail's type gate (same ExternalList type id as the HelpTopics list).
     bool isList = false;
@@ -665,15 +665,11 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
         // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
         ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
         System::Filename fname("Models/Sky/SkyMesh.rsc");
-        meshRes = efactory->FindOrLoadAs<Graphics::GraphicsMesh>(fname);  // B.3.3 bridge
+        meshRes = efactory->FindOrLoadAs<Graphics::GraphicsMesh>(fname);
     }
 
-    // B.3.5 bridge — ?SetMesh@MeshInstance@Graphics@@…. The `s_SetMesh` cache, its
-    // typedef, its resolve and the `SetMesh=%p` it fed the [GUL::SkyMesh] fprintf
-    // all went in the closing pass: a diagnostic that prints the address of a door
-    // nobody calls any more reports nothing. `meshRes` is an object test and stays.
     if (meshRes)
-        sky->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshRes));   // B.3.5 bridge
+        sky->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshRes));
 
     // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
     // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
@@ -893,7 +889,7 @@ void GameUpdateLoop::Load() {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             // The file's root resource is the EnvironmentDescription.
             envRes = ::Object::ExternalFactory::_singleton
-                    ->FindOrLoadAs<EnvironmentDescription>(fname);           // B.3.3 bridge
+                    ->FindOrLoadAs<EnvironmentDescription>(fname);
             int wxCount = envRes ? static_cast<int>(envRes->_weatherArray._size) : 0;   // env+0x30
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
                     (void*)envRes, wxCount);
@@ -1044,7 +1040,7 @@ void GameUpdateLoop::Load() {
                 // Filename(const char*) is exactly Set + AdjustDelimiters.
                 System::Filename fname(name);
                 ::Object::External* ext =
-                    efactory->FindOrLoadAs<::Object::External>(fname);       // B.3.3 bridge
+                    efactory->FindOrLoadAs<::Object::External>(fname);
                 if (!ext) return nullptr;
                 if (stTid != 0 && !::Object::IsDerivedFromNullSafe(ext, stTid)) return nullptr;
                 return static_cast<UI::StringTable*>(ext);   // checked above (B10)
@@ -1080,7 +1076,7 @@ void GameUpdateLoop::Load() {
     {
         Achievement::AchievementManager* achMgr = ::Achievement::AchievementManager::_singleton;
         if (achMgr) {
-            achMgr->SetEventHandler(&EventLog_OnAchievementAwarded);   // B.3.7 bridge
+            achMgr->SetEventHandler(&EventLog_OnAchievementAwarded);
             fprintf(stderr, "[GUL::Load] step30 AchievementManager::SetEventHandler "
                             "(mgr=%p handler=EventLog_OnAchievementAwarded)\n", (void*)achMgr);
         } else {
@@ -1121,7 +1117,7 @@ void GameUpdateLoop::Load() {
     if (m_savedState == nullptr /*new game*/) {
         Achievement::AchievementManager* mgr = ::Achievement::AchievementManager::_singleton;
         if (mgr) {
-            mgr->Reset();   // B.3.7 bridge
+            mgr->Reset();
             fprintf(stderr, "[GUL::Load] step30b AchievementManager::Reset(mgr=%p) -> "
                             "instances=%d\n", (void*)mgr, mgr->_instances._size);   // mgr+0x20
         } else {
@@ -1449,7 +1445,7 @@ void GameUpdateLoop::Load() {
             fflush(stderr);
             // ExternalPtr<Achievement> arrives as a bare register value (B7-5).
             // `checked` passed the IsDerivedFrom(Achievement) gate above.
-            if (inst) inst->SetAchievement(   // B.3.7 bridge
+            if (inst) inst->SetAchievement(
                 Object::ExternalPtr<Achievement::Achievement>(static_cast<Achievement::Achievement*>(checked)));
             m_scenarioIndex = achievementId;
         }
@@ -1465,7 +1461,7 @@ void GameUpdateLoop::Load() {
         if (gScene) {
             Graphics::Scene* gs = gScene;
             if (m_worldGeometry)
-                gs->AddGlobalObject(m_worldGeometry); // WorldGeom  B.3.5 bridge
+                gs->AddGlobalObject(m_worldGeometry); // WorldGeom
             // M5 5b lighting: add the SunLight so the directional light + ambient
             // light the terrain in the main render pass (Renderer::Draw dispatches the
             // light's vtable+0x50 SunLight::Draw → Context::SetLight + DrawItemList).
@@ -1478,12 +1474,12 @@ void GameUpdateLoop::Load() {
             // DrawShadowMap 0x180106bc0, AddScene 0x180105700).
             static const bool kAddSunLight = true;
             if (kAddSunLight && m_sunLight)
-                gs->AddGlobalObject(m_sunLight); // SunLight  B.3.5 bridge
+                gs->AddGlobalObject(m_sunLight); // SunLight
             // SkyMesh: add as a Scene global object so the reflection + main passes
             // both draw the `_clear_` sky dome (the dark-water fix; see BuildSkyMesh_Step28).
             static const bool kAddSkyMesh = true;
             if (kAddSkyMesh && m_skyMesh)
-                gs->AddGlobalObject(m_skyMesh); // SkyMesh  B.3.5 bridge
+                gs->AddGlobalObject(m_skyMesh); // SkyMesh
         }
         Audio::Scene* aScene = m_audioScene;   // g_pGameWorld+0x78
         if (aScene) {

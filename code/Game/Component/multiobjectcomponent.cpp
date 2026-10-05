@@ -42,7 +42,6 @@ void MultiObjectComponent::OnRemove() {
 
             if (entityList) {
                 int removalCount = entityList->removalList._size;
-                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 entityList->removalList
                     .SetSize(removalCount + 1, entityPtr);
             }
@@ -160,7 +159,6 @@ void MultiObjectComponent::Persist(IO::Stream& stream) {
     ser.Serialize(localCount, nullptr);
 
     // If loading (stream+8 == 0), resize array
-    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
     if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
         children.SetSize(localCount);
     }
