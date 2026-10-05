@@ -28,10 +28,10 @@
 // every reader goes through String's own exports with the Filename's address,
 // e.g. PlatformExists 0x1800adc70 passes its `const Filename&` straight to
 // WideString(const String&) 0x1800cab50 — a derived-to-base conversion.
-// The tree keeps two separate classes with AsString(): turning that into a
-// base class is a behaviour change at every ctor (String's ctor/dtor would
-// run as base subobjects) and an overload-resolution change at every
-// String/Filename overload pair, so it is its own commit, not a typing pass.
+// IMPLEMENTED by B.4 Z MIRROR2 (see the class below). Filename's own ==, !=
+// (retail exports them) are not ported: nothing in the tree compares two
+// Filenames for equality (it did not compile before the derivation), and a
+// new `f == g` would now bind String's case-sensitive ==, not retail's.
 //
 // The one behavioural difference is that every mutating Filename entry point
 // ends in a call to the private `?AdjustDelimiters@Filename@System@@AEAAXXZ`
@@ -70,17 +70,31 @@ static_assert(sizeof(Filename) == sizeof(String),
 // retail's name, carrying the bodies runtime/src/system/filename.cpp already
 // had (plus GetPathDirectory, moved out of runtime/src/system/setupdir_helpers.cpp).
 //
-// THE CAST TO String IS EXPLICIT AND IT IS THE ONLY ONE. Retail passes a
-// `Filename*` straight into String's members (Filename.h's three pins above),
-// so the class exposes exactly that as `AsString()`. It is not a downcast and
-// not a type pun of convenience: it is the conversion the retail bodies
-// perform, spelled once, in one place, so the bodies can keep calling String's
-// members the way retail's do.
+// Retail passes a `Filename*` straight into String's members (the three pins
+// above): the derived-to-base conversion. `AsString()` names it (no cast since
+// B.4 Z MIRROR2) so the bodies can keep calling String's members the way
+// retail's do.
 // ============================================================================
 
 namespace System {
 
-class Filename {
+// B.4 Z MIRROR2 (`behaviour:`): the ruling above, IMPLEMENTED. Filename is a
+// String by public derivation, as in retail. Every ctor constructs the String
+// base first (each retail ctor opens with the inlined String ctor under an EH
+// frame of its own: 0x180006220 / 0x180026cf0 / 0x1800067d0 store the null,
+// 0x18000c780 is String's copy ctor inlined on `this`), and ~Filename has no
+// body of its own: the release at 0x180006980 (the inlined ~String under an EH
+// frame) is ~String run on the base subobject. `AsString()` is now the
+// derived-to-base conversion, no cast; GetLength is String's, as retail's
+// export table (no Filename::GetLength) says.
+// OVERLOAD SURVEY (code runtime standalone dx11 engine tests): the only
+// String / Filename overload pairs are Filename's own ctor, operator= and
+// operator< (each hides or pairs with String's, binding as retail's exports
+// do: a Filename argument takes the Filename overload by exact match, a String
+// argument the String one), the test helper RefCount and the transitional
+// Sys() / AsSys() bridges; no by-value Filename parameter or return changes its
+// ABI (Filename was already non-trivial: hidden pointer / hidden return slot).
+class Filename : public String {
 public:
     // ---- lifecycle ---------------------------------------------------------
     Filename();                                      // ??0Filename@System@@QEAA@XZ            0x180006220
@@ -108,11 +122,10 @@ public:
     Filename GetPathDirectory() const;               // ?GetPathDirectory@..@QEBA?AV12@XZ      0x1800c6880
     Filename GetPathExtension() const;               // ?GetPathExtension@..@QEBA?AV12@XZ      0x1800c64f0
 
-    int GetLength() const { return AsString().GetLength(); }
-
-    // The conversion retail performs by pointer cast. See the header note.
-    String&       AsString()       { return reinterpret_cast<String&>(*this); }  // LEFT: audit DEFERRED:a base-class relation would run String ctor/dtor (H5, behaviour); retail Filename; retail's Filename IS a String (one field); a base-class relation would run String's ctor/dtor (H5, behaviour)
-    const String& AsString() const { return reinterpret_cast<const String&>(*this); }  // LEFT: audit DEFERRED:a base-class relation would run String ctor/dtor (H5, behaviour); retail Filename; retail's Filename IS a String (one field); a base-class relation would run String's ctor/dtor (H5, behaviour)
+    // The base subobject: retail hands the Filename's own address to String's
+    // members (PlatformExists 0x1800adc70 -> WideString(const String&)).
+    String&       AsString()       { return *this; }
+    const String& AsString() const { return *this; }
 
 private:
     // PRIVATE in retail too (AEAA, not QEAA — the QEAA spelling in circulation
@@ -120,9 +133,7 @@ private:
     void AdjustDelimiters();                         // ?AdjustDelimiters@..@AEAAXXZ           0x1800c6970
 
     friend struct FilenamePrivateAccess;
-
-public:
-    char* _data;   // +0x00 — identical to String::_data; public for the reason String.h gives
+    // +0x00: String::_data, the base's one field.
 };
 static_assert(sizeof(Filename) == 8, "System::Filename must be 8 bytes");
 static_assert(sizeof(Filename) == sizeof(String),

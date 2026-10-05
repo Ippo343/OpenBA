@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <cstring>
 #include <new>
+#include <utility>
 
 #include "../../types/system/Filename.h"
 #include "string.h"
@@ -68,12 +69,17 @@ using RtSystem::StringLength;
 // Constructors / destructor
 // ============================================================
 
-// ??0Filename@System@@QEAA@XZ  retail 0x180006220
-Filename::Filename() : _data(nullptr) {}
+// B.4 Z MIRROR2: each ctor builds the String BASE first, as retail's do (the
+// inlined String ctor under its own EH state, then the body); the dtor's
+// release is ~String on the base (0x180006980 = the inlined 0x180006c80).
 
-// ??0Filename@System@@QEAA@PEBD@Z  retail 0x180026cf0
-Filename::Filename(const char* src) : _data(nullptr) {
-    AsString().Set(src);
+// ??0Filename@System@@QEAA@XZ  retail 0x180006220: String() (one null store).
+Filename::Filename() : String() {}
+
+// ??0Filename@System@@QEAA@PEBD@Z  retail 0x180026cf0: String() (the null
+// store at 0x180026d06), String::Set 0x1800c95d0, AdjustDelimiters.
+Filename::Filename(const char* src) : String() {
+    Set(src);
     AdjustDelimiters();
 }
 
@@ -84,8 +90,8 @@ Filename::Filename(const char* src) : _data(nullptr) {
 // characters too when the path contained forward slashes. That is retail's
 // behaviour and several call sites depend on the resulting Filename and its
 // source String staying identical.
-Filename::Filename(const String& src) : _data(nullptr) {
-    StringPrivateAccess::Adopt(AsString(), src._data);
+// 0x18000c780..7a8 is String's copy ctor (null store, AddRef) on `this`.
+Filename::Filename(const String& src) : String(src) {
     AdjustDelimiters();
 }
 
@@ -96,7 +102,7 @@ Filename::Filename(const String& src) : _data(nullptr) {
 // Retail zeroes, then inlines operator=(const Filename&) — which already ends
 // in AdjustDelimiters — and then calls AdjustDelimiters a SECOND time. The
 // second call is idempotent, but it is transcribed rather than folded away.
-Filename::Filename(const Filename& other) : _data(nullptr) {
+Filename::Filename(const Filename& other) : String() {   // 0x1800067ee/f0: the null store
     if (_data != other._data) {
         StringPrivateAccess::Release(AsString());
         _data = other._data;
@@ -110,14 +116,11 @@ Filename::Filename(const Filename& other) : _data(nullptr) {
 // Not retail's: a pure pointer steal (B31_RULES class rule 4). The source was
 // normalised when it was built, so the AdjustDelimiters the copy ctor runs
 // would find nothing to do.
-Filename::Filename(Filename&& other) noexcept : _data(other._data) {
-    other._data = nullptr;
-}
+Filename::Filename(Filename&& other) noexcept : String(std::move(other)) {}
 
-// ??1Filename@System@@QEAA@XZ  retail 0x180006980
-Filename::~Filename() {
-    StringPrivateAccess::Release(AsString());
-}
+// ??1Filename@System@@QEAA@XZ  retail 0x180006980: no body of its own; the
+// release is the base's ~String (0x180006c80, inlined there).
+Filename::~Filename() {}
 
 // ============================================================
 // Assignment
