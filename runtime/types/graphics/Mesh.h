@@ -915,14 +915,13 @@ public:
     // "four identical groups of six" reading is wrong by construction and only
     // happens to work because every slot is an int or a pointer.
     //
-    // `TriangleList` has no C++ type here on purpose: the arrays it fills are
-    // `Collection::Array<uint8_t>` walked at a 0x18 stride (see `_triangleLists`
-    // below), so the parameter stays `const void*` exactly as the door had it.
+    // B.4 wave Y: the two list parameters are retail's
+    // `PEBUTriangleList@GraphicsMesh@2@` (the arrays they fill are typed).
     // `engine/funcs/engine_funcs.h` carried a SECOND transcription of these same
     // 25 slots in a symmetric "four groups of five" shape; it is ABI-identical
     // and it retires with its last caller.
-    bool Set(int triCount, const void* triLists,
-             int edgeCount, const void* edgeLists,
+    bool Set(int triCount, const GraphicsMesh::TriangleList* triLists,
+             int edgeCount, const GraphicsMesh::TriangleList* edgeLists,
              int i0, uint16_t* ib0, int v0s, void* vb0, int v0n, int v0x,
              uint16_t* ib1, int v1s, void* vb1, int v1n, int v1x,
              uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
@@ -1074,9 +1073,13 @@ void RtGraphics_EdgeMesh_SerializeTriangleListArray(IO::Serializer& ser, int cou
 // ==== B3R RT-VG: the two EdgeMesh vertex constructors (graphics/mesh.cpp) ====
 // C++ linkage, global namespace; given external linkage for their exe-side reader.
 // ??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z
-void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3);  // 0x1800a2f50
+RtGraphics::TriangleVertex* RtGraphics_EdgeMesh_TriangleVertex_Ctor(RtGraphics::TriangleVertex* self,
+                                                                    const void* vec3);  // 0x1800a2f50
 // ??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z
-void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags);  // 0x1800a2df0
+RtGraphics::EdgeVertex* RtGraphics_EdgeMesh_EdgeVertex_Ctor(RtGraphics::EdgeVertex* self,
+                                                            const RtGraphics::TriangleVertex* a,
+                                                            const RtGraphics::TriangleVertex* b,
+                                                            int flags);  // 0x1800a2df0
 // ==== end B3R RT-VG ====
 
 // ==== B3R W2-RES: the body the 0x180100f20 address row held (graphics/mesh.cpp) ====

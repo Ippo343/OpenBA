@@ -281,16 +281,9 @@ inline void MarkNeedsSizeCalcUpToRoot(UI::Element* self) {
 // `UI::TextElement::CacheText` (textelement_cachetext.cpp) and is called as
 // that member.
 
-// ??4String@System@@QEAAAEAV01@AEBV01@@Z (0x1800c9810) is now
-// `System::String::operator=` (ENDGAME B.3.1).
-//
-// B.3.1 bridge: both sides are slots in untyped array storage (the TextElement
-// parameter array's `char*` cells, ComboElement's `Array<void*>` `_strings`),
-// so the call sites cast the eight bytes at the use site.
-inline void StringAssign(void* dst, const void* src) {
-    *reinterpret_cast<System::String*>(dst) =   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-        *reinterpret_cast<const System::String*>(src);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-}
+// ??4String@System@@QEAAAEAV01@AEBV01@@Z (0x1800c9810) is
+// `System::String::operator=` (ENDGAME B.3.1), called on the typed elements
+// (TextElement::_params and ComboElement::_strings are Array<System::String>).
 
 // ?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z
 // (0x180115760) is `UI::Element::FindElementType` (element.cpp) — EXACT type-id
@@ -329,7 +322,7 @@ inline void StringAssign(void* dst, const void* src) {
 // ============================================================================
 void WrappedTextSetParam(UI::TextElement* child, int32_t index, const System::String& str) {
     MarkNeedsSizeCalcUpToRoot(child);
-    StringAssign(&child->_params._data[index], &str);
+    child->_params._data[index] = str;
     child->CacheText();
 }
 
@@ -573,7 +566,7 @@ void ComboElement::UpdateText() {
     // ---- the STRING half (0x180112258-0x1801122a5) -------------------------
     if (label->_params._size > 0) {
         MarkNeedsSizeCalcUpToRoot(label);
-        StringAssign(&label->_params._data[0], &_strings._data[_currentItem]);
+        label->_params._data[0] = _strings._data[_currentItem];
         label->CacheText();
     }
 

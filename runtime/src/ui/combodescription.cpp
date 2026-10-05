@@ -52,7 +52,7 @@
 #include "../../types/ui/ComboDescription.h"
 #include "../../types/ui/ComboElement.h"
 #include "../../types/ui/String.h"
-#include "../../types/ui/StringTable.h"   // B4: StringTable::_size
+#include "../../types/ui/StringTable.h"   // B4: StringTable::_entries._size
 #include "../../types/ui/UserInterface.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ComboDialog.h"     // ComboElement::_openDialog
@@ -152,7 +152,7 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
     StringTable* table = _stringTable;
     if (table != nullptr) {                                 // 180112b37
         int32_t i = 0;
-        if (table->_size > 0) {                             // 180112b40
+        if (table->_entries._size > 0) {                    // 180112b40
             void* userDataFill = nullptr;                   // 180112b4a  [RSP+0x98]
             do {
                 // UI::String{ StringTable*, index } built in place, then
@@ -180,7 +180,7 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
 
                 ++i;                                        // 180112c06
                 table = _stringTable;                       // 180112c08
-            } while (i < table->_size);
+            } while (i < table->_entries._size);
         }
 
         // 180112c18: close any dialog the element is still showing.

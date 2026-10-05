@@ -104,7 +104,7 @@ namespace {
 int SpriteIndexFromName(const SpriteInfo* data, int32_t count, const char* key) {
     const int32_t keyLen = key ? RtSystem::StringLength(key) : 0;
     for (int32_t i = 0; i < count; ++i) {
-        const char* name = data[i].name;
+        const char* name = data[i].name._data;
         const int32_t nameLen = name ? RtSystem::StringLength(name) : 0;
         if (nameLen != keyLen) continue;
         if (name == nullptr || nameLen == 0) return i;   // covers keyLen==0 too (lengths already match)
@@ -201,7 +201,7 @@ int32_t SpriteSheet::GetSpriteIndexFromName(const System::String& name) const {
 // placement-news this member's prvalue into the slot.
 System::String SpriteSheet::GetSpriteNameFromIndex(int32_t index) const {
     System::String out;                        // 0x1800032f4, null before the load
-    char* name = m_sprites._data[index].name;
+    char* name = m_sprites._data[index].name._data;
     if (name) {
         RtSystem::StringRefCount(name) += 1;   // 0x180003302
         out._data = name;
@@ -232,18 +232,23 @@ void SpriteSheet::SetSpriteInfo(int32_t index, int32_t width, int32_t height,
 }
 
 // SpriteSheet::AddSpriteInfo(String const&,String const&,int,int,int,int) —
-// retail 0x180003390. This does not need retail's own pre-bump/post-release
-// dance around the new element's refcounts (the growth helper's own
-// copy-construct step supplies the ONE bump the caller-visible contract needs;
-// the dance nets to the same +1 either way — verified by hand against the
-// decompile of both 0x180003390 and its internal helper 0x180004e30).
+// retail 0x180003390. B4 Y RT-UI: retail's local is a real SpriteInfo
+// (disassembly): the 0x34 bytes zeroed (0x1800033a8..0x1800033c0), x / y /
+// width / height stored, then each name copied in with its refcount bump
+// (`if (src) { slot = src; INC [src-4] }`, 0x1800033d9 name, 0x1800033e8
+// group), the append through 0x180004e30 (which bumps again for the stored
+// element), and the local's two releases at the end, group (+0x08) first,
+// then name (0x18000340a, 0x18000342b). That is this local's construction,
+// two String assignments onto null names, and its implicit destructor at the
+// closing brace. (The tree used to skip the local's bump / release pair; the
+// net count was the same, the sequence was not retail's.)
 void SpriteSheet::AddSpriteInfo(const System::String& name, const System::String& group,
                                 int32_t x, int32_t y, int32_t width, int32_t height) {
     const int32_t oldCount = m_sprites._size;
 
     SpriteInfo newEntry{};
-    newEntry.name        = name._data;
-    newEntry.group       = group._data;
+    newEntry.name        = name;          // 0x1800033d9  null slot: adopt + bump
+    newEntry.group       = group;         // 0x1800033e8
     newEntry.x           = x;
     newEntry.y           = y;
     newEntry._reserved18 = 0;
@@ -272,7 +277,7 @@ void SpriteSheet::AddSpriteInfo(const System::String& name, const System::String
 namespace UI {
 
 // StringTable::GetCount() const — retail 0x180002610: `return *(int*)(this+0x28)`.
-int32_t StringTable::GetCount() const { return _size; }
+int32_t StringTable::GetCount() const { return _entries._size; }
 
 // StringTable::GetText(int) const — retail 0x180002550. Bounds-checked both
 // ways (unlike Sprite/SpriteSheet's UV accessors); returns an empty String on
@@ -305,8 +310,8 @@ int32_t StringTable::GetCount() const { return _size; }
 System::String StringTable::GetText(int32_t index) const {
     System::String out;                                          // data == null
     if (index >= 0) {                                            // 0x18000256c
-        if (index < _size) {                                     // 0x180002573
-            char* text = _data[index].text._data;                      // 0x180002585
+        if (index < _entries._size) {                            // 0x180002573
+            char* text = _entries._data[index].text._data;             // 0x180002585
             if (text) {
                 RtSystem::StringRefCount(text) += 1;
                 out._data = text;
@@ -338,8 +343,8 @@ int32_t StringTable::GetIndexFromName(const System::String& keyString) const {
     const int keyLen = (key != nullptr) ? RtSystem::StringLength(key) : 0;
 
     int result = -1;
-    for (int i = 0; i < _size; ++i) {
-        const char* name = _data[i].name._data;
+    for (int i = 0; i < _entries._size; ++i) {
+        const char* name = _entries._data[i].name._data;
         const int nameLen = (name != nullptr) ? RtSystem::StringLength(name) : 0;
         if (nameLen != keyLen) continue;
         if (name == nullptr || nameLen == 0) { result = i; break; }

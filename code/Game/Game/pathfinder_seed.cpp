@@ -129,9 +129,7 @@ extern "C" void Pathfinder_Seed(Map* game, int dim) {
     // ENDGAME B.3.9 ENG W2: the REAL class ctor on System::Thread(0x10000) --
     // creates + parks the worker thread; the 0x14015ef18 stamp is the compiler's.
     PathfinderThread* pf = ::new (pfV) PathfinderThread(0x10000);
-    // LEFT: the CriticalSection ctor is a door on the POD mirror (System::
-    // CriticalSection is trivially constructible by design, Thread.h).
-    RtSystem_CriticalSection_Ctor(reinterpret_cast<RtSystem::CriticalSection*>(&pf->lock));   // LEFT: the CriticalSection ctor is a door on the POD mirror (System:: CriticalSection is trivially constructible by design, Thread.h).
+    RtSystem_CriticalSection_Ctor(&pf->lock);   // 0x18000c5c0 (System::CriticalSection is trivially constructible by design, Thread.h)
     pf->nextToken  = 1;          // next result-slot generation id
     pf->runInline  = 1;          // priming runs SYNC (commands apply inline); flipped to 0 (async) after priming
     pf->queueTail  = nullptr;    // queue tail

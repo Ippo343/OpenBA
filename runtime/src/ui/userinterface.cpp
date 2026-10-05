@@ -631,11 +631,6 @@ void UI::UserInterface::AddDialog(Object::InternalPtr<DialogInstance>* dialog) {
     // no early-out: every call does the whole body
 }
 
-extern "C" void RtUi_UserInterface_AddDialog(UserInterface* self, void** dlgPtr) {
-    self->UI::UserInterface::AddDialog(
-        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));   // LEFT: SIG the extern "C" door takes void** (pinned by tests/unit/ui_userinterface_abi_test.cpp:122)
-}
-
 // ---- ?Play@UserInterface@UI@@QEAAXH@Z  0x1801223d0  ord 3418 ---------------
 
 void UI::UserInterface::Play(int32_t id) {

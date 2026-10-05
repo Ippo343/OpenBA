@@ -974,8 +974,8 @@ void* RtColl_ArrayDtorElem_18005bf60(void* self) {
 // harmless and silently stops comparing bytes that should be compared. The
 // finding is filed in docs/runtime_port/WAVE9_LANE_D2.md as lane Q's to make.
 static void SpriteInfoCopy(UI::SpriteInfo* d, const UI::SpriteInfo* s) {
-    AdoptStringSlot(d->name,  s->name);           // +0x00
-    AdoptStringSlot(d->group, s->group);          // +0x08
+    AdoptStringSlot(d->name._data,  s->name._data);   // +0x00
+    AdoptStringSlot(d->group._data, s->group._data);  // +0x08
     d->x           = s->x;                        // nine dwords, +0x10 .. +0x30
     d->y           = s->y;
     d->_reserved18 = s->_reserved18;
@@ -1009,9 +1009,9 @@ void* RtColl_SpriteEntryAssign_180004220(uint8_t* dst, const uint8_t* src) {
 using LayoutEntry = UI::LayoutDescription::Entry;
 static void LayoutEntryCopy(LayoutEntry* d, const LayoutEntry* s) {
     d->desc = s->desc;                            // +0x00, no refcount touch
-    AdoptStringSlot(d->name,        s->name);     // +0x08
-    AdoptStringSlot(d->relativeToX, s->relativeToX);  // +0x10
-    AdoptStringSlot(d->relativeToY, s->relativeToY);  // +0x18
+    AdoptStringSlot(d->name._data,        s->name._data);         // +0x08
+    AdoptStringSlot(d->relativeToX._data, s->relativeToX._data);  // +0x10
+    AdoptStringSlot(d->relativeToY._data, s->relativeToY._data);  // +0x18
     d->horizontal = s->horizontal;                // four dwords
     d->vertical   = s->vertical;
     d->offsetX    = s->offsetX;
@@ -1555,7 +1555,7 @@ static void DestroySubMesh80(SubMesh* base, int count) {
         FreeArrayField(e->_triangles);            // +0x60
         FreeArrayField(e->_normals);              // +0x50
         FreeArrayField(e->_vertices);             // +0x40
-        ReleaseStringSlot(e->_name);              // +0x00, LAST
+        ReleaseStringSlot(e->_name._data);        // +0x00, LAST
     }
 }
 void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count) {

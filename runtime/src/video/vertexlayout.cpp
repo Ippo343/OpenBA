@@ -127,11 +127,7 @@ void RtVideo_VertexLayout_SerializeElements(IO::Serializer& ser, int count,
                                             VertexLayout::Element* e) {
     IO::ReaderWriter* rw = ser._readerWriter;
     for (int i = 0; i < count; ++i, ++e) {
-        // LEFT (B.3.1 bridge): `Element::name` is `void*` because a real
-        // `System::String` member would give Element a non-trivial destructor that
-        // runs IN ADDITION to the by-hand release the ported `Array<Element>::~Array`
-        // already performs (0x18004fa30); the eight bytes are a System::String.
-        reinterpret_cast<System::String&>(e->name).Serialize(ser);   // LEFT: H5 Element::name is raw storage of a String (a String member would release it twice)
+        e->name.Serialize(ser);
         rw->SerializeInt(e->stream, nullptr);
         rw->SerializeInt(e->offset, nullptr);
         uint32_t usage = static_cast<uint32_t>(e->usage);

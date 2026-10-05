@@ -404,17 +404,14 @@ void Video::Context::BindResources() {
 // ---- ?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z  0x180019f20
 // B.4 (R-VIDEO): MOVED here from context.cpp (unchanged), beside BindResources,
 // the one reader of the slots it fills.
-void Context::SetVertexBuffer(const void* vb, int32_t slot,
+void Context::SetVertexBuffer(const VertexBuffer* vb, int32_t slot,
                               int32_t offset, int32_t stride) {
 
     if (vb != _vertexBuffers[slot] || offset != _vertexOffsets[slot] ||
         stride != _vertexStrides[slot]) {
         _dirty |= RtVideo::kDirtyVertexBuffers;
         _vertexBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
-        // LEFT (B.4 R-VIDEO): the parameter stays `const void*` because
-        // dx11/src/contextdata.cpp and code/Game/Game/geometry_draw.cpp hand it
-        // one; the field is typed.
-        _vertexBuffers[slot] = static_cast<const Video::VertexBuffer*>(vb);  // LEFT: SIG Context::SetVertexBuffer keeps its const void* parameter (dx11/src/contextdata.cpp and code/Game/Game/geometry_draw.cpp hand it one)
+        _vertexBuffers[slot] = vb;
         _vertexOffsets[slot] = offset;
         _vertexStrides[slot] = stride;
     }

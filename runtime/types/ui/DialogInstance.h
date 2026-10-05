@@ -440,9 +440,6 @@ public:
     // `Element::UpdateState&` in retail.
     void Update(const System::Time& time, UserInterface* ui,
                 Element::UpdateState& state);                                  // 0x180113980
-    // B4 FORWARD: 1 outside caller(s) (userinterface_frame.cpp) pass the address.
-    void Update(const System::Time& time, UserInterface* ui,
-                uint8_t* updateState);
     void SetUpperLeft(int32_t x, int32_t y, bool scaled);                      // 0x180114a60
     void AddController(uint32_t typeId, Object::Base* dataSource,
                        Object::ExternalPtr<DialogControllerConfig> config,
