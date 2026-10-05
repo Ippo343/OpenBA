@@ -371,8 +371,10 @@ void Video::IndexBuffer::PlatformConstruct() {
 }
 
 void Video::IndexBuffer::PlatformDestruct() {
+    // B5 BUF (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+    // virtual destructor, then the base's class-scope operator delete (MemFree).
     if (IndexBufferData* companion = platformData)
-        (void)companion->DeletingDtor(1);
+        delete companion;
     platformData = nullptr;
     RtVideoDeviceLock(&Device::_singleton);
     ListUnlink(this, _firstBuffer, &IndexBuffer::listPrev, &IndexBuffer::listNext);
@@ -388,8 +390,10 @@ void Video::VertexBuffer::PlatformConstruct() {
 }
 
 void Video::VertexBuffer::PlatformDestruct() {
+    // B5 BUF (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+    // virtual destructor, then the base's class-scope operator delete (MemFree).
     if (VertexBufferData* companion = platformData)
-        (void)companion->DeletingDtor(1);
+        delete companion;
     platformData = nullptr;
     RtVideoDeviceLock(&Device::_singleton);
     ListUnlink(this, _firstBuffer, &VertexBuffer::listPrev, &VertexBuffer::listNext);
