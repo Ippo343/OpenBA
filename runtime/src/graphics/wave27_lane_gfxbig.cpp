@@ -652,30 +652,28 @@ void MaterialInstance::BuildParameters() {
             const Video::PixelProgram* const desc = rtgfxbig::PassPixelProgram(this, pass);
             if (desc->_textures._data[i].internal != 0) continue;   // skip flag
 
-            RtSystem::String name;
-            name.data = nullptr;
-            // B.3.5 block GC item 6: two `RT_EXPORT_ONCE` edges onto classes that
-            // are now real become direct QUALIFIED member calls. `GetTextureName`
-            // keeps the out-parameter spelled, which is the member's own signature
-            // and retail's argument order (block G's banner in
-            // wave28_lane_gfxbody.cpp says why the member does not return by value).
-            material->Graphics::Material::GetTextureName(&name, pass, i);
-
             RtGraphics::MaterialBinding v;
-            v.sourceIndex = this->Graphics::MaterialInstance::FindTexture(name);
+            {
+                // B.3.5 block GC item 6: two `RT_EXPORT_ONCE` edges onto classes
+                // that are now real become direct QUALIFIED member calls. Retail
+                // hands GetTextureName its uninitialised stack slot [RSP+0x30]
+                // (0x1801034c3, no store before the call): the by-value return
+                // constructs `name` there.
+                System::String name =
+                    material->Graphics::Material::GetTextureName(pass, i);
 
-            // The release is retail's inlined RtSystem::String::Release, byte for byte:
-            // decrement the refcount at data-4, and on zero rewind to data-8 and
-            // free. RtString_ReleaseInline (runtime/src/system/string.cpp:132) IS
-            // that sequence, including the asymmetry where the freeing branch
-            // leaves `data - 8` in the slot and the sharing branch nulls it.
-            //
-            // ONE INSTRUCTION DIFFERS AND IT CANNOT FIRE: retail tests
-            // `data - 8 == 0` before freeing (the ZF of `SUB RDI,0x8` at
-            // 0x1801034f5), which is true only if `data == 8`. The shared body
-            // instead relies on the null test inside 0x1800c7ad0. Recorded rather
-            // than quietly treated as identical.
-            RtSystem::RtString_ReleaseInline(&name);
+                v.sourceIndex = this->Graphics::MaterialInstance::FindTexture(name);
+
+                // ~name here is retail's inlined String::Release, byte for byte:
+                // decrement the refcount at data-4, and on zero rewind to data-8
+                // and free, the sharing branch nulling the slot.
+                //
+                // ONE INSTRUCTION DIFFERS AND IT CANNOT FIRE: retail tests
+                // `data - 8 == 0` before freeing (the ZF of `SUB RDI,0x8` at
+                // 0x1801034f5), which is true only if `data == 8`. ~String
+                // instead relies on the null test inside 0x1800c7ad0. Recorded
+                // rather than quietly treated as identical.
+            }
 
             // The shader slot is read AFTER the call, through a FRESHLY RELOADED
             // chain (0x180103546..0x18010355f). Retail reloads because
@@ -699,14 +697,14 @@ void MaterialInstance::BuildParameters() {
         const int32_t conCount = desc1 ? desc1->_constants._size : 0;
         for (int32_t i = 0; i < conCount; ++i) {
             // NO SKIP FLAG on this arm — see the PassPixelProgram note above.
-            RtSystem::String name;
-            name.data = nullptr;
-            // block GC item 6, as in the textures arm above.
-            material->Graphics::Material::GetConstantName(&name, pass, i);
-
             RtGraphics::MaterialBinding v;
-            v.sourceIndex = this->Graphics::MaterialInstance::FindConstant(name);
-            RtSystem::RtString_ReleaseInline(&name);
+            {
+                // block GC item 6, as in the textures arm above; ~name is the
+                // release before the shader-slot reload.
+                System::String name =
+                    material->Graphics::Material::GetConstantName(pass, i);
+                v.sourceIndex = this->Graphics::MaterialInstance::FindConstant(name);
+            }
 
             v.shaderSlot = rtgfxbig::PassPixelProgram(this, pass)->_constants._data[i].dest;
 

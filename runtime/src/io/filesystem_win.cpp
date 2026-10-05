@@ -79,9 +79,6 @@
 // (0x180006980) pair were the tail of a mutating Filename entry point and of
 // ~Filename, which the class spells as itself. Only the WideString release is
 // still by hand, because System::WideString is not a B.3.1 class.
-namespace RtSystem {
-void    RtString_ReleaseInline(String* self);
-}  // namespace RtSystem
 
 namespace RtIO {
 

@@ -77,11 +77,10 @@
 
 namespace RtSystem {
 
-// ---- System::String --------------------------------------------------------
-struct String {
-    char* data;   // +0x00 — points at block+8; null == the empty string
-};
-static_assert(sizeof(String) == 8, "System::String must be 8 bytes");
+// (B.4 acceptance MOD: the `RtSystem::String` POD mirror is gone with its last
+// user, `Graphics::MaterialConstant::name`; System::String below is the one
+// layout. The block header and its accessors stay: they describe the bytes in
+// front of `System::String::_data`.)
 
 // ---- the allocation header in front of `data` ------------------------------
 // Laid out so that `reinterpret_cast<StringBlock*>(data - 8)` is exact.
