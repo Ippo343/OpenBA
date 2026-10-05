@@ -230,15 +230,18 @@ UNIT_TEST(object_external_destroy_reaches_slot0_with_flags1) {
 // ---------------------------------------------------------------------------
 UNIT_TEST(object_external_resource_find_at_two_depths) {
     using Node = Object::ResourceSet::Node;
-    Node n[7];
-    std::memset(static_cast<void*>(n), 0, sizeof n);
+    // Raw node storage, as the factory's own nodes are (the element has a
+    // constructor and a ~Filename, so a `Node n[7]` would build and release them).
+    alignas(Node) unsigned char storage[7 * sizeof(Node)];
+    std::memset(storage, 0, sizeof storage);
+    Node* n = reinterpret_cast<Node*>(storage);
 
     static char kMmm[] = "mmm"; static char kDdd[] = "ddd";
     static char kTtt[] = "ttt"; static char kBbb[] = "bbb";
     static char kGgg[] = "ggg"; static char kPpp[] = "ppp";
     static char kZzz[] = "zzz";
     char* keys[7] = { kMmm, kDdd, kTtt, kBbb, kGgg, kPpp, kZzz };
-    for (int i = 0; i < 7; ++i) n[i].element.path.data = keys[i];
+    for (int i = 0; i < 7; ++i) n[i].element.path._data = keys[i];
 
     n[0].left = &n[1]; n[0].right = &n[2];
     n[1].parent = &n[0]; n[2].parent = &n[0];
@@ -288,8 +291,11 @@ UNIT_TEST(object_external_resource_find_at_two_depths) {
 // ---------------------------------------------------------------------------
 UNIT_TEST(object_external_reference_find_at_two_depths) {
     using Node = Object::ReferenceSet::Node;
-    Node n[7];
-    std::memset(static_cast<void*>(n), 0, sizeof n);
+    // Raw node storage, as the factory's own nodes are (the element has a
+    // constructor and a ~Filename, so a `Node n[7]` would build and release them).
+    alignas(Node) unsigned char storage[7 * sizeof(Node)];
+    std::memset(storage, 0, sizeof storage);
+    Node* n = reinterpret_cast<Node*>(storage);
 
     const uint32_t ids[7] = { 50, 30, 70, 20, 40, 60, 80 };
     for (int i = 0; i < 7; ++i) n[i].element.id = ids[i];

@@ -181,11 +181,26 @@ static_assert(offsetof(External, _refs)    == 0x10, "External::_refs @ +0x10 (~E
 // tail lands at +0x18 parent / +0x20 left / +0x28 right — exactly the offsets
 // FindNext (0x1800be9d0), Clean (0x1800be310) and SerializeReferenceTable
 // (0x1800bcb60) all walk.
+//
+// B.4 Z MIRROR: `path` is the real System::Filename and the element has the
+// constructor retail's `Set<ResourceEntry>::Insert` (0x18002ca00) builds its
+// stack pair with: the Filename copy ctor (0x1800067d0) on `path`, then the
+// value's fields in order; the pair's implicit destructor is the inlined
+// ~Filename (0x180006980) at 0x18002ca70, under the same EH state (-2) retail
+// opens. Nodes are raw allocations: PairCtor (0x18002e6e0) placement-constructs
+// `path` in the node, and the node frees (0x18002ee40, 0x18002eea0, the remove
+// at 0x18002cfdc) run ~Filename on it by hand. Nothing copies, memsets or
+// default-constructs an entry; ~Set's Clear runs after ~ExternalFactory has
+// zeroed the root, so it destroys nothing.
 struct ResourceEntry {
-    Filename  path;         // +0x00 — the Set key; compared with _stricmp
-    ::Object::External* external;   // +0x08 — Find/FindNext return this
-    uint32_t  usageMask;    // +0x10 — Add ORs in 1 << factory->_cleanBitIndex
-    uint32_t  referenceId;  // +0x14 — GetReferenceId returns this; Add seeds -1
+    ResourceEntry(const System::Filename& key, ::Object::External* ext,
+                  uint32_t mask, uint32_t refId)
+        : path(key), external(ext), usageMask(mask), referenceId(refId) {}
+
+    System::Filename    path;         // +0x00 — the Set key; compared with _stricmp
+    ::Object::External* external;     // +0x08 — Find/FindNext return this
+    uint32_t            usageMask;    // +0x10 — Add ORs in 1 << factory->_cleanBitIndex
+    uint32_t            referenceId;  // +0x14 — GetReferenceId returns this; Add seeds -1
 };
 static_assert(sizeof(ResourceEntry) == 0x18, "ResourceEntry is 0x18 bytes");
 static_assert(offsetof(ResourceEntry, external)    == 0x08, "ResourceEntry::external @ +0x08");
@@ -196,10 +211,18 @@ static_assert(offsetof(ResourceEntry, referenceId) == 0x14, "ResourceEntry::refe
 // SerializeReferenceTable. sizeof == 0x10, so the node tail lands at +0x10
 // parent / +0x18 left / +0x20 right — the offsets GetPathForReferenceId
 // (0x1800bf1d0) descends through (`piVar5[6]` and `piVar5[8]` on an int*).
+//
+// B.4 Z MIRROR: `path` is the real System::Filename; the constructor is the
+// stack pair of retail's `Set<ReferenceEntry>::Insert` (0x18002cb90): a DWORD
+// id store (`_pad` never written) then the Filename copy ctor (0x1800067d0);
+// the implicit destructor is the inlined release at 0x18002cbda. Nodes are raw
+// allocations with hand-written lifecycles, as ResourceEntry's above.
 struct ReferenceEntry {
-    uint32_t id;    // +0x00 — the Set key, compared with plain integer <
-    uint32_t _pad;  // +0x04
-    Filename path;  // +0x08 — GetPathForReferenceId copies this out
+    ReferenceEntry(uint32_t key, const System::Filename& value) : id(key), path(value) {}
+
+    uint32_t         id;    // +0x00 — the Set key, compared with plain integer <
+    uint32_t         _pad;  // +0x04 — never written (see above)
+    System::Filename path;  // +0x08 — GetPathForReferenceId copies this out
 };
 static_assert(sizeof(ReferenceEntry) == 0x10, "ReferenceEntry is 0x10 bytes");
 static_assert(offsetof(ReferenceEntry, path) == 0x08, "ReferenceEntry::path @ +0x08");
@@ -214,7 +237,7 @@ static_assert(offsetof(ReferenceEntry, path) == 0x08, "ReferenceEntry::path @ +0
 // one a caller varies. Retail's mangled name spells it <T, Allocator, Key,
 // Compare>; the four parameters and their meanings are unchanged.)
 using ResourceSet  = Collection::Set<ResourceEntry,  Collection::AVLCompare,
-                                     Collection::DefaultAllocator, Filename>;
+                                     Collection::DefaultAllocator, System::Filename>;
 using ReferenceSet = Collection::Set<ReferenceEntry, Collection::AVLCompare,
                                      Collection::DefaultAllocator, uint32_t>;
 static_assert(sizeof(ResourceSet::Node)  == 0x38, "ResourceEntry node is 0x38");
@@ -797,8 +820,8 @@ inline bool FilenameLess(const char* a, const char* b) {
 inline ResourceSet::Node* ResourceFind(ResourceSet::Node* root, const char* key) {
     ResourceSet::Node* n = root;
     while (n != nullptr) {
-        if (FilenameLess(key, n->element.path.data))      n = n->left;
-        else if (FilenameLess(n->element.path.data, key)) n = n->right;
+        if (FilenameLess(key, n->element.path._data))      n = n->left;
+        else if (FilenameLess(n->element.path._data, key)) n = n->right;
         else                                              return n;
     }
     return nullptr;

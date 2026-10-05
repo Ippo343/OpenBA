@@ -261,7 +261,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
             found = self->_resources._root;      // this + 0x10
             while (found) {
                 char* searchKey = lookup._data;
-                char* nodeKey   = found->element.path.data;
+                char* nodeKey   = found->element.path._data;
                 if (nodeKey) {
                     if (!searchKey) {
                         ++g_c.nullSearchKey;
@@ -279,7 +279,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 }
                 // second test — 1800bcd37
                 if (!searchKey) break;           // FOUND (both keys null)
-                nodeKey = found->element.path.data;
+                nodeKey = found->element.path._data;
                 if (nodeKey && rtcrt::StrICmp(nodeKey, searchKey) >= 0) break;  // FOUND
                 found = found->right;            // 1800bcd54, +0x28
             }

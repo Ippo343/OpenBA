@@ -212,7 +212,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, ::Object::Ex
     if (node == nullptr) ++g_ac.emptyTree;
 
     while (node != nullptr) {
-        const char* const nodeKey = rtresset::Elem(node)->path.data;
+        const char* const nodeKey = rtresset::Elem(node)->path._data;
         if (FilenameLess(path._data, nodeKey)) {
             ++g_ac.descLeft;
             node = node->left;                                  // 1800be6bb

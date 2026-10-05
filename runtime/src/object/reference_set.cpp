@@ -95,9 +95,8 @@ ProbeCounters g_fc = {};
 // The refcount release idiom retail inlines at 0x18002cbda. ENDGAME B.3.1
 // step 2: that idiom IS `~Filename` (0x180006980), retail's release asymmetry
 // included, so the helper forwards to the destructor instead of re-spelling it.
-static void ReleaseInline(RtSystem::Filename* f) {
-    RtSystem::Sys(*f).~Filename();
-}
+// B.4 Z MIRROR: ReferenceEntry::path is the real System::Filename, so the
+// release is its destructor, spelled at each site.
 
 // ---------------------------------------------------------------------------
 // The height/balance recompute retail inlines into the retrace and both
@@ -308,7 +307,7 @@ void Retrace(Set* set, Node** slot) {
 Node* PairCtor(Node* node, const ReferenceEntry* src, Node* parent) {
     ReferenceEntry* e = Elem(node);
     e->id = src->id;                                   // DWORD only; _pad untouched
-    new (&e->path) System::Filename(RtSystem::Sys(src->path));
+    new (&e->path) System::Filename(src->path);
     node->parent  = parent;
     node->left    = nullptr;
     node->right   = nullptr;
@@ -460,14 +459,12 @@ Node** InsertCore(Set* set, Node** out, const ReferenceEntry* pair) {
 // field uninitialised for the same reason.
 // ---------------------------------------------------------------------------
 Node** Insert(Set* set, Node** out, const uint32_t* key, const System::Filename* value) {
-    ReferenceEntry tmp;
-    tmp.id = *key;                     // DWORD; tmp._pad deliberately untouched
-    new (&tmp.path) System::Filename(*value);
+    // DWORD id; tmp._pad deliberately untouched; then the Filename copy ctor.
+    ReferenceEntry tmp(*key, *value);
 
     InsertCore(set, out, &tmp);
 
-    ReleaseInline(&tmp.path);
-    return out;                        // 0x18002cc0b MOV RAX,RDI — the out slot
+    return out;                        // ~ReferenceEntry: the release at 0x18002cbda                        // 0x18002cc0b MOV RAX,RDI — the out slot
 }
 
 }  // namespace rtrefset

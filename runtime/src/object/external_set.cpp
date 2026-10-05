@@ -118,8 +118,10 @@ ProbeCounters g_rc = {};
 // System::String's destructor carries retail's asymmetry verbatim (String.h).
 // The four call sites now spell it as the destructor it is; the local copy of
 // the idiom is gone, and with it the fourth place it could drift.
-static void ReleaseInline(RtSystem::Filename* slot) {
-    RtSystem::Sys(*slot).~Filename();
+// B.4 Z MIRROR: ResourceEntry::path is the real System::Filename; the helper
+// keeps the four sites' spelling.
+static void ReleaseInline(System::Filename* slot) {
+    slot->~Filename();
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +353,7 @@ void Retrace(Set* set, Node** slot) {
 // ---------------------------------------------------------------------------
 Node* PairCtor(Node* node, const ResourceEntry* src, Node* parent) {
     ResourceEntry* e = Elem(node);
-    new (&e->path) System::Filename(RtSystem::Sys(src->path));
+    new (&e->path) System::Filename(src->path);
     e->external    = src->external;
     e->usageMask   = src->usageMask;
     e->referenceId = src->referenceId;
@@ -414,7 +416,7 @@ Node** InsertCore(Set* set, Node** out, const ResourceEntry* pair) {
 
     Node* slot = n;                    // [RSP+0x30]
     for (;;) {
-        if (FilenameLess(pair->path.data, Elem(n)->path.data)) {
+        if (FilenameLess(pair->path._data, Elem(n)->path._data)) {
             Node* l = n->left;
             if (l == nullptr) {
                 ++g_rc.descLeft;
@@ -428,7 +430,7 @@ Node** InsertCore(Set* set, Node** out, const ResourceEntry* pair) {
             n = l; slot = l;
             continue;
         }
-        if (FilenameLess(Elem(n)->path.data, pair->path.data)) {
+        if (FilenameLess(Elem(n)->path._data, pair->path._data)) {
             Node* r = n->right;
             if (r == nullptr) {
                 ++g_rc.descRight;
@@ -465,18 +467,13 @@ Node** InsertCore(Set* set, Node** out, const ResourceEntry* pair) {
 // this ~22.6k times in one menu-to-gameplay run.
 // ---------------------------------------------------------------------------
 Node** Insert(Set* set, Node** out, const System::Filename* key, const EntryValue* value) {
-    ResourceEntry tmp;
-    // The copy ctor member-initialises `_data` to null before it adopts, so
-    // retail's explicit pre-null is inside it now.
-    new (&tmp.path) System::Filename(*key);
-    tmp.external    = value->external;
-    tmp.usageMask   = value->usageMask;
-    tmp.referenceId = value->referenceId;
+    // The Filename copy ctor (it member-initialises `_data` to null before it
+    // adopts: retail's explicit pre-null is inside it), then the value's fields.
+    ResourceEntry tmp(*key, value->external, value->usageMask, value->referenceId);
 
     InsertCore(set, out, &tmp);
 
-    ReleaseInline(&tmp.path);
-    return out;                        // 0x18002caa1 MOV RAX,RSI — the out slot
+    return out;                        // ~ResourceEntry: the release at 0x18002ca70                        // 0x18002caa1 MOV RAX,RSI — the out slot
 }
 
 // ---------------------------------------------------------------------------
@@ -617,8 +614,8 @@ void Erase(Set* set, Node* z) {
 Node* Find(const Set* set, const System::Filename* key) {
     Node* n = set->root;
     while (n != nullptr) {
-        if (FilenameLess(key->_data, Elem(n)->path.data))      n = n->left;
-        else if (FilenameLess(Elem(n)->path.data, key->_data)) n = n->right;
+        if (FilenameLess(key->_data, Elem(n)->path._data))      n = n->left;
+        else if (FilenameLess(Elem(n)->path._data, key->_data)) n = n->right;
         else                                                  return n;
     }
     return nullptr;
@@ -770,7 +767,7 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
             if (Elem(n)->usageMask == 0 || self->_cleanBitIndex < 0) {
                 ++g_rc.cleanEvicted;
                 rtresset::ArrayResize(&evicted, collected + 1,
-                                      RtSystem::Sys(&Elem(n)->path));   // ResourceEntry::path, the key at +0x00 (a POD member: H5)
+                                      &Elem(n)->path);   // ResourceEntry::path, the key at +0x00
                 collected = evicted.size;    // 0x1800be396, RE-READ from the array
             }
             // in-order successor, transcribed from 0x1800be39a..0x1800be3e6
