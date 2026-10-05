@@ -70,6 +70,7 @@ public:
 };
 
 static_assert(sizeof(Weather) == 0x80, "Weather is 0x80");
+static_assert(offsetof(Weather, _pad41) == 0x41, "Weather::_pad41");
 static_assert(offsetof(Weather, material) == 0x20, "+0x20");
 static_assert(offsetof(Weather, particleCount) == 0x28, "+0x28");
 static_assert(offsetof(Weather, velocityDir) == 0x2C, "+0x2C");

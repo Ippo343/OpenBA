@@ -73,7 +73,17 @@ public:
 };
 
 static_assert(sizeof(EnvironmentDescription::WeatherEntry) == 0x20, "EnvironmentDescription::WeatherEntry is 0x20");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, skyColor) == 0x0, "WeatherEntry::skyColor");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, groundColor) == 0x4, "WeatherEntry::groundColor");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogColor) == 0x8, "WeatherEntry::fogColor");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogStart) == 0xC, "WeatherEntry::fogStart");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, fogEnd) == 0x10, "WeatherEntry::fogEnd");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, sunIntensity) == 0x14, "WeatherEntry::sunIntensity");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, sunAngle) == 0x18, "WeatherEntry::sunAngle");
+static_assert(offsetof(EnvironmentDescription::WeatherEntry, sunSpread) == 0x1C, "WeatherEntry::sunSpread");
 static_assert(sizeof(EnvironmentDescription::WeatherChoice) == 0x10, "EnvironmentDescription::WeatherChoice is 0x10");
+static_assert(offsetof(EnvironmentDescription::WeatherChoice, weather) == 0x0, "WeatherChoice::weather");
+static_assert(offsetof(EnvironmentDescription::WeatherChoice, description) == 0x8, "WeatherChoice::description");
 static_assert(sizeof(EnvironmentDescription) == 0x1b8, "EnvironmentDescription is 0x1b8 (create 0x140019120 MemAlloc(0x1b8))");
 static_assert(alignof(EnvironmentDescription) == 8, "EnvironmentDescription alignment");
 static_assert(offsetof(EnvironmentDescription, _environmentRef) == 0x20, "EnvironmentDescription::_environmentRef @ +0x20");

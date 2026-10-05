@@ -52,6 +52,7 @@ public:
 };
 
 static_assert(sizeof(MapComponent) == 0x38, "MapComponent is 0x38 (create 0x140035700)");
+static_assert(offsetof(MapComponent, _pad34) == 0x34, "MapComponent::_pad34");
 static_assert(alignof(MapComponent) == 8, "MapComponent alignment");
 static_assert(offsetof(MapComponent, tileX0) == 0x28, "");
 static_assert(offsetof(MapComponent, tileY0) == 0x2A, "");

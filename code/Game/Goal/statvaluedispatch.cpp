@@ -278,7 +278,7 @@ static int DestroyComponent_InState345_e710(const DestroyComponent* destroy) {
 static int Cemetery_CountBurials_6dd0(const CemeteryComponent* cemetery) {
     int matched = 0;
     Map* map = GameUpdateLoop::_singleton->m_game;
-    int slotCount = cemetery->plotCount;
+    int slotCount = cemetery->plots._size;
     if (slotCount > 0) {
         for (int i = 0; i < slotCount; i++) {
             ComponentEntity* occupant = map->cells.GetData()[cemetery->plots[i]].occupant.Get();

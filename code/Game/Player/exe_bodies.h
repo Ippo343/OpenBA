@@ -84,6 +84,8 @@ struct DecalVertexNode {
     uint8_t          _pad34[4]; // +0x34
 };
 static_assert(sizeof(DecalVertexNode) == 0x38, "0x14001f850 MemAlloc(0x38)");
+static_assert(offsetof(DecalVertexNode, key) == 0x0, "DecalVertexNode::key");
+static_assert(offsetof(DecalVertexNode, _pad34) == 0x34, "DecalVertexNode::_pad34");
 static_assert(offsetof(DecalVertexNode, parent) == 0x18 && offsetof(DecalVertexNode, left) == 0x20, "DecalVertexNode links");
 static_assert(offsetof(DecalVertexNode, right) == 0x28 && offsetof(DecalVertexNode, balance) == 0x30, "DecalVertexNode links");
 static_assert(offsetof(DecalVertexNode, height) == 0x32, "DecalVertexNode::height @ +0x32");
@@ -288,6 +290,9 @@ struct Avl38Node {
     uint8_t     _pad34[4];      // +0x34
 };
 static_assert(sizeof(Avl38Node) == 0x38, "Avl38Node is 0x38");
+static_assert(offsetof(Avl38Node, key) == 0x0, "Avl38Node::key");
+static_assert(offsetof(Avl38Node, _element08) == 0x8, "Avl38Node::_element08");
+static_assert(offsetof(Avl38Node, _pad34) == 0x34, "Avl38Node::_pad34");
 static_assert(offsetof(Avl38Node, parent) == 0x18 && offsetof(Avl38Node, left) == 0x20, "Avl38Node links");
 static_assert(offsetof(Avl38Node, right) == 0x28 && offsetof(Avl38Node, balance) == 0x30, "Avl38Node links");
 static_assert(offsetof(Avl38Node, height) == 0x32, "Avl38Node::height @ +0x32");

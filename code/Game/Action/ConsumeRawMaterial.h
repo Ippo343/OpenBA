@@ -61,13 +61,18 @@ public:
 };
 
 static_assert(sizeof(ConsumeRawMaterial::Entry) == 0x10, "ConsumeRawMaterial consume-list stride 0x10");
+static_assert(offsetof(ConsumeRawMaterial::Entry, material) == 0x0, "Entry::material");
 static_assert(offsetof(ConsumeRawMaterial::Entry, count) == 0x08, "Entry +0x08");
 static_assert(offsetof(ConsumeRawMaterial::Entry, reserved) == 0x0C, "Entry +0x0C");
 static_assert(sizeof(ConsumeRawMaterial) == 0x40, "ConsumeRawMaterial is 0x40 (create 0x1400220c0 MemAlloc)");
+static_assert(offsetof(ConsumeRawMaterial, _pad39) == 0x39, "ConsumeRawMaterial::_pad39");
 static_assert(alignof(ConsumeRawMaterial) == 8, "ConsumeRawMaterial is 8-aligned");
 static_assert(offsetof(ConsumeRawMaterial, _field20) == 0x20, "ConsumeRawMaterial +0x20");
 static_assert(offsetof(ConsumeRawMaterial, _field28) == 0x28, "ConsumeRawMaterial +0x28");
 static_assert(offsetof(ConsumeRawMaterial, _field28.count) == 0x30, "ConsumeRawMaterial +0x30");
 static_assert(offsetof(ConsumeRawMaterial, _field28.capacity) == 0x34, "ConsumeRawMaterial +0x34");
 static_assert(sizeof(ConsumeRawMaterial::EntryList) == 0x10, "Array<Entry> header");
+static_assert(offsetof(ConsumeRawMaterial::EntryList, data) == 0x0, "EntryList::data");
+static_assert(offsetof(ConsumeRawMaterial::EntryList, count) == 0x8, "EntryList::count");
+static_assert(offsetof(ConsumeRawMaterial::EntryList, capacity) == 0xC, "EntryList::capacity");
 static_assert(offsetof(ConsumeRawMaterial, _field38) == 0x38, "ConsumeRawMaterial +0x38");

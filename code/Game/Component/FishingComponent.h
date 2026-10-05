@@ -42,6 +42,7 @@ public:
 };
 
 static_assert(sizeof(FishingComponent) == 0x58, "FishingComponent is 0x58 (create 0x140034350)");
+static_assert(offsetof(FishingComponent, _pad51) == 0x51, "FishingComponent::_pad51");
 static_assert(alignof(FishingComponent) == 8, "FishingComponent alignment");
 static_assert(offsetof(FishingComponent, fishingFlag) == 0x50, "FishingComponent +0x50");
 static_assert(offsetof(FishingComponent, fishingRate) == 0x54, "FishingComponent +0x54");

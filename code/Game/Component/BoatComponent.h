@@ -14,8 +14,9 @@
 //   ctor 0x140046800: Component ctor; +0x28..+0x40 = 0, +0x48 = 0, +0x50 = 0,
 //     +0x58 = 0, +0x60 = +0x68 = 0 (route array), +0x70 = -1; member at +0x78.
 //     No flag OR (0x80).
-//   dtor 0x140046770: MemFree(+0x60) and +0x60 = +0x68 = 0 (the route
-//     waypoint array), member restamp, ~Internal. [0] 0x140003970 = dtor + MemFree.
+//   dtor 0x140046770: member restamp (+0x78, 0x1400467a5), THEN MemFree(+0x60) and
+//     +0x60 = +0x68 = 0 (~Array of the route waypoint array, 0x1400467b1..0x1400467c1),
+//     ~Internal: reverse declaration order. [0] 0x140003970 = dtor + MemFree.
 //   table 0x140158f40, 18 slots:
 //     [0] 0x140003970 dtor  [1]/[2] TypeName/Type  [3] 0x1400465d0 Persist
 //     [16] 0x140003730 `XOR EAX,EAX`  [17] 0x140003720 `LEA RAX,[RCX+0x78]`
@@ -27,7 +28,9 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 #include "Component/ControllerComponent.h"
+#include "collection/Collection.h"   // Collection::Array (route)
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 #include "math/Math.h"
@@ -83,15 +86,18 @@ public:
     // used by TornadoComponent): the current waypoint, the route array, the index.
     Math::Vector3       waypoint;        // +0x50 the current waypoint
     uint8_t             _pad5C[4];       // +0x5c
-    Math::Vector3*      route;           // +0x60 route Array<Vector3> data (freed by the dtor)
-    int32_t             routeCount;      // +0x68 Array count
-    int32_t             routeCapacity;   // +0x6c Array capacity
+    // +0x60 the route (count +0x68, capacity +0x6c). Math::Vector3's trait-derived row is
+    // exe 0x14000d030's: stride 0xc, align 4, the new tail zeroed (Vector3() 0x180015070),
+    // no element destroy.
+    Collection::Array<Math::Vector3> route;
     int32_t             routeIndex;      // +0x70 the waypoint's index (retail ctor: -1)
     uint8_t             _pad74[4];       // +0x74
     StateController _controller;   // +0x78 the embedded controller (D6)
 };
 
 static_assert(sizeof(BoatComponent) == 0x98, "BoatComponent is 0x98 (create 0x1400036e0)");
+static_assert(offsetof(BoatComponent, _pad5C) == 0x5C, "BoatComponent::_pad5C");
+static_assert(offsetof(BoatComponent, _pad74) == 0x74, "BoatComponent::_pad74");
 static_assert(alignof(BoatComponent) == 8, "BoatComponent alignment");
 static_assert(offsetof(BoatComponent, _controller) == 0x78,
               "BoatComponent's controller member at +0x78 (slot 17 0x140003720: LEA RAX,[RCX+0x78])");
@@ -104,6 +110,9 @@ static_assert(offsetof(BoatComponent, dockPosition) == 0x40, "BoatComponent::doc
 static_assert(offsetof(BoatComponent, dockHeading) == 0x4c, "BoatComponent::dockHeading @ +0x4c");
 static_assert(offsetof(BoatComponent, waypoint) == 0x50, "BoatComponent::waypoint @ +0x50");
 static_assert(offsetof(BoatComponent, route) == 0x60, "BoatComponent::route @ +0x60");
-static_assert(offsetof(BoatComponent, routeCount) == 0x68, "BoatComponent::routeCount @ +0x68");
-static_assert(offsetof(BoatComponent, routeCapacity) == 0x6c, "BoatComponent::routeCapacity @ +0x6c");
+static_assert(offsetof(BoatComponent, route) + offsetof(Collection::Array<Math::Vector3>, _size) == 0x68, "BoatComponent::route count @ +0x68");
+static_assert(offsetof(BoatComponent, route) + offsetof(Collection::Array<Math::Vector3>, _capacity) == 0x6c, "BoatComponent::route capacity @ +0x6c");
 static_assert(offsetof(BoatComponent, routeIndex) == 0x70, "BoatComponent::routeIndex @ +0x70");
+static_assert(std::is_trivially_copyable<Math::Vector3>::value && std::is_trivially_destructible<Math::Vector3>::value &&
+              !std::is_trivially_default_constructible<Math::Vector3>::value,
+              "route's trait row: byte copy, no destroy, a zeroing init (exe 0x14000d030)");

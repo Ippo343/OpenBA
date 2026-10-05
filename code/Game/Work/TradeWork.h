@@ -105,10 +105,13 @@ inline CitizenComponent* Avl38KeyOf(const TradeWork::Node* node) { return node->
 void Avl38SetRemove(AvlTreeHead<TradeWork::Node>* set, TradeWork::Node* node);                 // 0x140025740
 void Avl38SetFindRemove(AvlTreeHead<TradeWork::Node>* set, CitizenComponent* const* key);      // 0x14002c690
 static_assert(sizeof(TradeWork::Assignment) == 0x18, "the record 0x14002c710 copies is 0x18 bytes");
+static_assert(offsetof(TradeWork::Assignment, _pad14) == 0x14, "Assignment::_pad14");
 static_assert(offsetof(TradeWork::Assignment, citizen) == 0x00, "");
 static_assert(offsetof(TradeWork::Assignment, resource) == 0x08, "");
 static_assert(offsetof(TradeWork::Assignment, quantity) == 0x10, "");
 static_assert(sizeof(TradeWork::Node) == 0x38, "MemAlloc(0x38) in 0x14002c830");
+static_assert(offsetof(TradeWork::Node, value) == 0x0, "Node::value");
+static_assert(offsetof(TradeWork::Node, _pad34) == 0x34, "Node::_pad34");
 static_assert(offsetof(TradeWork::Node, parent) == 0x18, "");
 static_assert(offsetof(TradeWork::Node, left) == 0x20, "");
 static_assert(offsetof(TradeWork::Node, right) == 0x28, "");

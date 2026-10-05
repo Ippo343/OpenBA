@@ -77,6 +77,9 @@ public:
 };
 
 static_assert(sizeof(HarvestOrchard::Claim) == 0x10, "HarvestOrchard claim element 0x10");
+static_assert(offsetof(HarvestOrchard::Claim, slot) == 0x0, "Claim::slot");
+static_assert(offsetof(HarvestOrchard::Claim, _pad04) == 0x4, "Claim::_pad04");
+static_assert(offsetof(HarvestOrchard::Claim, citizen) == 0x8, "Claim::citizen");
 static_assert(sizeof(HarvestOrchard::ClaimNode) == 0x30, "HarvestOrchard claim node 0x30");
 static_assert(offsetof(HarvestOrchard::ClaimNode, parent) == 0x10, "claim node parent @ +0x10");
 static_assert(offsetof(HarvestOrchard::ClaimNode, left) == 0x18, "claim node left @ +0x18");

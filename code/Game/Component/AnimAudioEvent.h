@@ -60,6 +60,7 @@ public:
 };
 
 static_assert(sizeof(AnimAudioEvent) == 0x30, "AnimAudioEvent is 0x30 (create 0x140016f00)");
+static_assert(offsetof(AnimAudioEvent, _pad2c) == 0x2C, "AnimAudioEvent::_pad2c");
 static_assert(alignof(AnimAudioEvent) == 8, "AnimAudioEvent alignment");
 static_assert(offsetof(AnimAudioEvent, _sound) == 0x20, "AnimAudioEvent +0x20");
 static_assert(offsetof(AnimAudioEvent, _chance) == 0x28, "AnimAudioEvent +0x28");

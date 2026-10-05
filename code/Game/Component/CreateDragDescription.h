@@ -47,6 +47,7 @@ public:
 };
 
 static_assert(sizeof(CreateDragDescription) == 0x40, "CreateDragDescription is 0x40 (create 0x140032970 MemAlloc(0x40))");
+static_assert(offsetof(CreateDragDescription, _pad25) == 0x25, "CreateDragDescription::_pad25");
 static_assert(alignof(CreateDragDescription) == 8, "CreateDragDescription alignment");
 static_assert(offsetof(CreateDragDescription, _shape) == 0x20, "CreateDragDescription::_shape @ +0x20");
 static_assert(offsetof(CreateDragDescription, _b24) == 0x24, "CreateDragDescription::_b24 @ +0x24");

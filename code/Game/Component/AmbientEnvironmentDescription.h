@@ -39,6 +39,9 @@ struct AmbientEnvironmentBiome {
     uint8_t               _pad24[4];     // +0x24
 };
 static_assert(sizeof(AmbientEnvironmentBiome) == 0x28, "AmbientEnvironmentBiome stride 0x28 (0x140002540)");
+static_assert(offsetof(AmbientEnvironmentBiome, terrainMask) == 0x0, "AmbientEnvironmentBiome::terrainMask");
+static_assert(offsetof(AmbientEnvironmentBiome, _pad04) == 0x4, "AmbientEnvironmentBiome::_pad04");
+static_assert(offsetof(AmbientEnvironmentBiome, _pad24) == 0x24, "AmbientEnvironmentBiome::_pad24");
 static_assert(offsetof(AmbientEnvironmentBiome, entityFilter) == 0x08, "AmbientEnvironmentBiome::entityFilter @ +0x08");
 static_assert(offsetof(AmbientEnvironmentBiome, daySound) == 0x10, "AmbientEnvironmentBiome::daySound @ +0x10");
 static_assert(offsetof(AmbientEnvironmentBiome, nightSound) == 0x18, "AmbientEnvironmentBiome::nightSound @ +0x18");

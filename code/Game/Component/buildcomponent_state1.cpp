@@ -299,7 +299,6 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
         StorageComponent* storage = _entity->FindComponent<StorageComponent>();
 
         if (storage != nullptr) {
-            // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
             storage->storageSlots.SetSize(0);
 
             uint32_t acceptMask = 0;

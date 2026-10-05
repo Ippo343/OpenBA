@@ -34,6 +34,7 @@ struct MusicListTrack {
     int32_t           field_0x14; // +0x14 (new track: 11)
 };
 static_assert(sizeof(MusicListTrack) == 0x18, "stride 0x18 (0x14001c3c0)");
+static_assert(offsetof(MusicListTrack, sound) == 0x0, "MusicListTrack::sound");
 static_assert(offsetof(MusicListTrack, field_0x08) == 0x08, "+0x08");
 static_assert(offsetof(MusicListTrack, field_0x0C) == 0x0C, "+0x0C");
 static_assert(offsetof(MusicListTrack, field_0x10) == 0x10, "+0x10");

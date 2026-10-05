@@ -12,7 +12,6 @@
 
 #include "Component/AutoPickupComponent.h"
 #include "Component/AutoPickupDescription.h"   // ENDGAME B.3.9 CB: 0x1401c3fe8 cell class
-#include "Component/coll_bridge.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -37,11 +36,11 @@
 #include "Component/AutoPickupComponent.h"
 
 // 0x140044ae0: Component() is the CALL 0x1401188b0; the 0x140158df0 stamp is
-// the compiler's; +0x30 = +0x38 = 0; flags |= 0x80. PORT GAP (retail
+// the compiler's; +0x30 = +0x38 = 0 (field30's Array ctor); flags |= 0x80. PORT GAP (retail
 // 0x140044ae0) — B38 D1: retail writes isEnabled (+0x28) = 1; the tree's
 // zero-fill is kept here and the retail value is its own titled commit.
 AutoPickupComponent::AutoPickupComponent()
-    : isEnabled(false), _pad29{}, field30(nullptr), field30Count(0), field30Capacity(0) {
+    : isEnabled(false), _pad29{} {
     OrFlagsInCtor(0x80);
 }
 
@@ -52,17 +51,16 @@ void AutoPickupComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
     IO::Serializer ser(stream, 0);
     ser.Serialize(isEnabled, nullptr);
-    int count = field30Count;
+    int count = field30._size;
     ser.Serialize(count, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        // B.3.2 bridge: +0x30 is the { int32* data; int32 size; int32 capacity }
-        // header. I32NoInit — exe 0x1400021d0 (called at 140044a40) copies only the
+        // +0x30 field30: exe 0x1400021d0 (called at 140044a40) copies only the
         // old prefix and leaves a grown tail as-found. Safe: this arm runs only when
         // loading, and the bulk read below (140044a55) writes all `count` elements
         // from the stream before any of them is read.
-        GameColl::AsArray<GameColl::I32NoInit>(&field30).SetSize(count);
+        field30.SetSize(count);
     }
-    ser.Serialize(count, field30, nullptr);
+    ser.Serialize(count, field30._data, nullptr);
 }
 
 // [4] 0x140044990: isEnabled = the description's _enabled (+0x20), the description

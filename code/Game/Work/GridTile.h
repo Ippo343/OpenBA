@@ -21,5 +21,6 @@ struct GridTile {
     ComponentEntity* entity;     // +0x08 the cell's occupant (InternalPtr), or null
 };
 static_assert(sizeof(GridTile) == 0x10, "GridTile stride 0x10 (0x14009fc00 MemAlloc(cap << 4))");
+static_assert(offsetof(GridTile, cell) == 0x0, "GridTile::cell");
 static_assert(offsetof(GridTile, distance) == 0x04, "GridTile::distance @ +0x04 (0x14009d7b0)");
 static_assert(offsetof(GridTile, entity) == 0x08, "GridTile::entity @ +0x08");

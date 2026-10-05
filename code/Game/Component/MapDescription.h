@@ -50,6 +50,8 @@ public:
 };
 
 static_assert(sizeof(MapDescription) == 0x38, "MapDescription is 0x38 (create 0x140035760 MemAlloc(0x38))");
+static_assert(offsetof(MapDescription, _pad24) == 0x24, "MapDescription::_pad24");
+static_assert(offsetof(MapDescription, _pad33) == 0x33, "MapDescription::_pad33");
 static_assert(alignof(MapDescription) == 8, "MapDescription alignment");
 static_assert(offsetof(MapDescription, _cellType) == 0x20, "MapDescription::_cellType @ +0x20");
 static_assert(offsetof(MapDescription, _footprint) == 0x28, "MapDescription::_footprint @ +0x28");

@@ -49,4 +49,5 @@ public:
 static_assert(offsetof(TutorialSetupGameSpeed, speed) == 0x20, "speed offset");
 static_assert(offsetof(TutorialSetupGameSpeed, _field24) == 0x24, "_field24 offset");
 static_assert(sizeof(TutorialSetupGameSpeed) == 0x28, "TutorialSetupGameSpeed is 0x28 (create 0x1400289c0)");
+static_assert(offsetof(TutorialSetupGameSpeed, _pad25) == 0x25, "TutorialSetupGameSpeed::_pad25");
 static_assert(alignof(TutorialSetupGameSpeed) == 8, "qword-aligned");

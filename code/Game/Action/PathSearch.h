@@ -75,6 +75,7 @@ struct PathPoolLink {
     PathPoolLink* next;          // +0x00 chunk list / free list link
 };
 static_assert(sizeof(PathPoolLink) == 8, "PathPoolLink is one qword");
+static_assert(offsetof(PathPoolLink, next) == 0x0, "PathPoolLink::next");
 
 struct PathNodePool {
     PathPoolLink* chunks;        // +0x00 chunk list (0x14001a9b0: `*chunk = pool->chunks`)
@@ -99,6 +100,7 @@ struct PathNodePool {
     }
 };
 static_assert(sizeof(PathNodePool) == 0x28, "PathNodePool is 0x28");
+static_assert(offsetof(PathNodePool, _pad24) == 0x24, "PathNodePool::_pad24");
 static_assert(offsetof(PathNodePool, chunks) == 0x00, "PathNodePool::chunks @ +0x00");
 static_assert(offsetof(PathNodePool, freeList) == 0x08, "PathNodePool::freeList @ +0x08");
 static_assert(offsetof(PathNodePool, growCount) == 0x10, "PathNodePool::growCount @ +0x10");
@@ -164,6 +166,8 @@ struct PathCellXY {
     int32_t y;                   // +0x04
 };
 static_assert(sizeof(PathCellXY) == 8, "PathCellXY is one qword");
+static_assert(offsetof(PathCellXY, x) == 0x0, "PathCellXY::x");
+static_assert(offsetof(PathCellXY, y) == 0x4, "PathCellXY::y");
 
 // Map's queue holds one cell index; the node's high dword of the first qword is
 // never written (0x14001a9b0 stores a dword).
@@ -172,6 +176,8 @@ struct PathCellIndex {
     uint8_t  _pad04[4];          // +0x04 not written by 0x14001a9b0
 };
 static_assert(sizeof(PathCellIndex) == 8, "PathCellIndex is one qword");
+static_assert(offsetof(PathCellIndex, cell) == 0x0, "PathCellIndex::cell");
+static_assert(offsetof(PathCellIndex, _pad04) == 0x4, "PathCellIndex::_pad04");
 
 using MapCellQueue    = PathCellQueue<PathCellIndex>;
 using RegionCellQueue = PathCellQueue<PathCellXY>;
@@ -199,6 +205,9 @@ struct PathOpenKey {             // the 3-int key 0x14001d450 / 0x14001d730 read
     int32_t fcost;               // +0x08 sort key
 };
 static_assert(sizeof(PathOpenKey) == 0x0C, "PathOpenKey is three ints");
+static_assert(offsetof(PathOpenKey, cell) == 0x0, "PathOpenKey::cell");
+static_assert(offsetof(PathOpenKey, seq) == 0x4, "PathOpenKey::seq");
+static_assert(offsetof(PathOpenKey, fcost) == 0x8, "PathOpenKey::fcost");
 
 struct PathOpenNode {
     int32_t       cell;          // +0x00
@@ -213,6 +222,8 @@ struct PathOpenNode {
     uint8_t       _pad2C[4];     // +0x2C
 };
 static_assert(sizeof(PathOpenNode) == 0x30, "open-set node stride 0x30 (0x14001d730)");
+static_assert(offsetof(PathOpenNode, _pad0C) == 0xC, "PathOpenNode::_pad0C");
+static_assert(offsetof(PathOpenNode, _pad2C) == 0x2C, "PathOpenNode::_pad2C");
 static_assert(offsetof(PathOpenNode, cell) == 0x00, "PathOpenNode::cell @ +0x00");
 static_assert(offsetof(PathOpenNode, seq) == 0x04, "PathOpenNode::seq @ +0x04");
 static_assert(offsetof(PathOpenNode, fcost) == 0x08, "PathOpenNode::fcost @ +0x08");
@@ -236,6 +247,7 @@ struct PathOpenSet {
     void           Clear();   // 0x14001ced0 (GAME-b, keystone_a_gamedtor.cpp): the tree back onto the free list, the chunks freed
 };
 static_assert(sizeof(PathOpenSet) == 0x38, "PathOpenSet is 0x38");
+static_assert(offsetof(PathOpenSet, _pad0C) == 0xC, "PathOpenSet::_pad0C");
 static_assert(offsetof(PathOpenSet, root) == 0x00, "PathOpenSet::root @ +0x00");
 static_assert(offsetof(PathOpenSet, count) == 0x08, "PathOpenSet::count @ +0x08");
 static_assert(offsetof(PathOpenSet, pool) == 0x10, "PathOpenSet::pool @ +0x10");
@@ -309,6 +321,8 @@ struct GridPathSearch {
     int      Run(int start, int goal, int32_t* path);          // 0x14001ce00, path cap 0x4000
 };
 static_assert(sizeof(GridPathSearch) == 0xE8, "GridPathSearch is 0xE8 (PathfinderThread +0x78..+0x160)");
+static_assert(offsetof(GridPathSearch, _padD7) == 0xD7, "GridPathSearch::_padD7");
+static_assert(offsetof(GridPathSearch, _padDC) == 0xDC, "GridPathSearch::_padDC");
 static_assert(offsetof(GridPathSearch, search) == 0x00, "GridPathSearch::search @ +0x00");
 static_assert(offsetof(GridPathSearch, stepCost) == 0x50, "GridPathSearch::stepCost @ +0x50");
 static_assert(offsetof(GridPathSearch, passableTypes) == 0xD0, "GridPathSearch::passableTypes @ +0xD0");
@@ -360,6 +374,7 @@ struct PathResult {
     Collection::Array<int32_t> path;   // +0x08 cell indices, start first
 };
 static_assert(sizeof(PathResult) == 0x18, "result slot stride 0x18 (0x14001d940)");
+static_assert(offsetof(PathResult, _pad01) == 0x1, "PathResult::_pad01");
 static_assert(offsetof(PathResult, ready) == 0x00, "PathResult::ready @ +0x00");
 static_assert(offsetof(PathResult, token) == 0x04, "PathResult::token @ +0x04");
 static_assert(offsetof(PathResult, path) == 0x08, "PathResult::path @ +0x08");
@@ -370,6 +385,8 @@ struct PathTicket {
     int32_t token;               // +0x04
 };
 static_assert(sizeof(PathTicket) == 8, "PathTicket is two ints");
+static_assert(offsetof(PathTicket, slot) == 0x0, "PathTicket::slot");
+static_assert(offsetof(PathTicket, token) == 0x4, "PathTicket::token");
 
 // ---------------------------------------------------------------------------
 // The coarse region graph (Map +0x70; MemAlloc(0x108) + ctor 0x1400a8670). The
@@ -387,6 +404,7 @@ struct RegionNode {                          // stride 0x30 (0x14001e210)
     Collection::Array<int32_t> borderCells;  // +0x20 cells just outside the block
 };
 static_assert(sizeof(RegionNode) == 0x30, "RegionNode stride 0x30 (0x14001e210)");
+static_assert(offsetof(RegionNode, _pad0C) == 0xC, "RegionNode::_pad0C");
 static_assert(offsetof(RegionNode, x) == 0x00, "RegionNode::x @ +0x00");
 static_assert(offsetof(RegionNode, y) == 0x04, "RegionNode::y @ +0x04");
 static_assert(offsetof(RegionNode, block) == 0x08, "RegionNode::block @ +0x08");
@@ -402,6 +420,7 @@ struct RegionBlock {                         // stride 0x20 (0x14001e060)
     Collection::Array<int32_t> regions;      // +0x10 region ids in this block
 };
 static_assert(sizeof(RegionBlock) == 0x20, "RegionBlock stride 0x20 (0x14001e060)");
+static_assert(offsetof(RegionBlock, _pad0A) == 0xA, "RegionBlock::_pad0A");
 static_assert(offsetof(RegionBlock, x) == 0x00, "RegionBlock::x @ +0x00");
 static_assert(offsetof(RegionBlock, y) == 0x04, "RegionBlock::y @ +0x04");
 static_assert(offsetof(RegionBlock, needsRebuild) == 0x08, "RegionBlock::needsRebuild @ +0x08");
@@ -537,6 +556,7 @@ struct CharacterGridWalkerNode {             // stride 0x24
     uint32_t flag;                           // +0x20 always written 0
 };
 static_assert(sizeof(CharacterGridWalkerNode) == 0x24, "walker node stride 0x24");
+static_assert(offsetof(CharacterGridWalkerNode, center) == 0x0, "CharacterGridWalkerNode::center");
 static_assert(offsetof(CharacterGridWalkerNode, extent) == 0x0C, "walker node extent @ +0x0C");
 static_assert(offsetof(CharacterGridWalkerNode, cell) == 0x18, "walker node cell @ +0x18");
 static_assert(offsetof(CharacterGridWalkerNode, depth) == 0x1C, "walker node depth @ +0x1C");
@@ -557,6 +577,8 @@ struct CharacterGridWalker {
     void Subdivide();                                           // 0x140018880
 };
 static_assert(sizeof(CharacterGridWalker) == 0x2430, "walker: the highest touched byte is +0x2430");
+static_assert(offsetof(CharacterGridWalker, _pad00) == 0x0, "CharacterGridWalker::_pad00");
+static_assert(offsetof(CharacterGridWalker, _pad2424) == 0x2424, "CharacterGridWalker::_pad2424");
 static_assert(offsetof(CharacterGridWalker, top) == 0x08, "walker top @ +0x08");
 static_assert(offsetof(CharacterGridWalker, padLo) == 0x0C, "walker padLo @ +0x0C");
 static_assert(offsetof(CharacterGridWalker, padHi) == 0x18, "walker padHi @ +0x18");

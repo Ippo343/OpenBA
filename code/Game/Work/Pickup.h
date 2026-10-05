@@ -62,6 +62,7 @@ public:
 };
 
 static_assert(sizeof(Pickup) == 0x60, "Pickup is 0x60 (retail create MemAlloc)");
+static_assert(offsetof(Pickup, _pad4C) == 0x4C, "Pickup::_pad4C");
 static_assert(alignof(Pickup) == 8, "Pickup is 8-aligned");
 static_assert(offsetof(Pickup, status) == 0x48, "Pickup +0x48");
 static_assert(offsetof(Pickup, citizenIBP) == 0x50, "Pickup +0x50");

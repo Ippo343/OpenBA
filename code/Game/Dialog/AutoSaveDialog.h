@@ -58,6 +58,7 @@ static_assert(offsetof(AutoSaveDialog, savingImage) == 0xB8, "AutoSaveDialog +0x
 static_assert(offsetof(AutoSaveDialog, animatedImage) == 0xC0, "AutoSaveDialog +0xc0");
 static_assert(offsetof(AutoSaveDialog, angle) == 0xC8, "AutoSaveDialog +0xc8");
 static_assert(sizeof(AutoSaveDialog) == 0xD0, "AutoSaveDialog is 0xd0 (create 0x1400106c0)");
+static_assert(offsetof(AutoSaveDialog, _padCC) == 0xCC, "AutoSaveDialog::_padCC");
 static_assert(alignof(AutoSaveDialog) == 8, "AutoSaveDialog is qword-aligned");
 
 // The slot-4 door (autosavedialog.cpp): registered at 0x14005e120 / 0x14005e110.

@@ -90,6 +90,7 @@ struct WorkSchedulerBucketNode {
     uint8_t                  _pad34[4]; // +0x34
 };
 static_assert(sizeof(WorkSchedulerBucketNode) == 0x38, "MemAlloc(0x38, 8) in 0x14002ccf0");
+static_assert(offsetof(WorkSchedulerBucketNode, _pad34) == 0x34, "WorkSchedulerBucketNode::_pad34");
 static_assert(offsetof(WorkSchedulerBucketNode, bucket) == 0x00, "WorkSchedulerBucketNode::bucket @ +0x00");
 static_assert(offsetof(WorkSchedulerBucketNode, parent) == 0x18, "WorkSchedulerBucketNode::parent @ +0x18");
 static_assert(offsetof(WorkSchedulerBucketNode, left) == 0x20, "WorkSchedulerBucketNode::left @ +0x20");

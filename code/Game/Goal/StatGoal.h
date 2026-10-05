@@ -85,4 +85,5 @@ static_assert(offsetof(StatGoal, statB) + offsetof(NamedExternalRef, resolved) =
 static_assert(offsetof(StatGoal, statFlags) == 0x78, "StatGoal::statFlags offset");
 static_assert(offsetof(StatGoal, statSubType) == 0x7c, "StatGoal::statSubType offset");
 static_assert(sizeof(StatGoal) == 0x80, "StatGoal is 0x80 (create 0x1400264d0 MemAlloc(0x80))");
+static_assert(offsetof(StatGoal, _pad41) == 0x41, "StatGoal::_pad41");
 static_assert(alignof(StatGoal) == 8, "StatGoal is qword-aligned");

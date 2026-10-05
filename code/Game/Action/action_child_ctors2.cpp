@@ -30,10 +30,10 @@ uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self) {
     uint64_t result = sel;
     if ((int)sel < 0) {
         if (sel == 0xffffffff) {
-            int n = self->consumeCount;
+            int n = self->consumeRates._size;
             float total = 0.0f;
             if (0 < n) {
-                const float* w = self->consumeRates;
+                const float* w = self->consumeRates._data;
                 for (int k = 0; k < n; ++k) total += w[k];
             }
             System::Random* random = GameUpdateLoop::_singleton
@@ -42,7 +42,7 @@ uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self) {
             float r = random ? random->RandFloat() : 0.0f;
             result = 0;
             if (0 < n) {
-                const float* w = self->consumeRates;
+                const float* w = self->consumeRates._data;
                 float running = 0.0f;
                 for (int k = 0; k < n; ++k) {
                     running += w[k];

@@ -72,4 +72,5 @@ static_assert(offsetof(TutorialStep, setups._size) == 0x58, "+0x58");
 static_assert(offsetof(TutorialStep, goals) == 0x60, "+0x60");
 static_assert(offsetof(TutorialStep, goals._size) == 0x68, "+0x68");
 static_assert(sizeof(TutorialStep) == 0x70, "TutorialStep is 0x70 (create 0x140028c50 MemAlloc(0x70))");
+static_assert(offsetof(TutorialStep, _pad21) == 0x21, "TutorialStep::_pad21");
 static_assert(alignof(TutorialStep) == 8, "qword-aligned");

@@ -51,6 +51,7 @@ public:
 };
 
 static_assert(sizeof(CharacterDescription) == 0x48, "CharacterDescription is 0x48 (create 0x14002f9c0 MemAlloc(0x48))");
+static_assert(offsetof(CharacterDescription, _pad3d) == 0x3D, "CharacterDescription::_pad3d");
 static_assert(alignof(CharacterDescription) == 8, "CharacterDescription alignment");
 static_assert(offsetof(CharacterDescription, _speedScale) == 0x20, "CharacterDescription::_speedScale @ +0x20");
 static_assert(offsetof(CharacterDescription, _f24) == 0x24, "CharacterDescription::_f24 @ +0x24");

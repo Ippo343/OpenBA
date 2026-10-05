@@ -57,6 +57,8 @@ public:
 };
 
 static_assert(sizeof(AnimalDescription) == 0x58, "AnimalDescription is 0x58 (create 0x14002f080 MemAlloc(0x58))");
+static_assert(offsetof(AnimalDescription, _pad3d) == 0x3D, "AnimalDescription::_pad3d");
+static_assert(offsetof(AnimalDescription, _pad44) == 0x44, "AnimalDescription::_pad44");
 static_assert(alignof(AnimalDescription) == 8, "AnimalDescription alignment");
 static_assert(offsetof(AnimalDescription, _i20) == 0x20, "AnimalDescription::_i20 @ +0x20");
 static_assert(offsetof(AnimalDescription, _i24) == 0x24, "AnimalDescription::_i24 @ +0x24");

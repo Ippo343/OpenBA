@@ -13,8 +13,8 @@
 //     the tree's in-place entry builds the object and is kept (B38 B8-13).
 //   ctor 0x1400476f0: Component ctor; member at +0x28; +0x48 = +0x50 = 0;
 //     `_flags |= 0x83`.
-//   dtor 0x140047680: MemFree(+0x48), +0x48 = +0x50 = 0 (the plot list),
-//     member restamp, ~Internal. [0] 0x140004220 = dtor + MemFree.
+//   dtor 0x140047680: MemFree(+0x48), +0x48 = +0x50 = 0 (~Array of the plot list),
+//     member restamp, ~Internal: reverse declaration order. [0] 0x140004220 = dtor + MemFree.
 //   table 0x1401590a0, 18 slots:
 //     [0] 0x140004220 dtor  [1]/[2] TypeName/Type  [3] 0x1400475c0 Persist
 //     [4] 0x1400475b0 `RET 0`  [6] 0x140047200 OnAdded (build the plot grid)
@@ -31,6 +31,7 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (plots)
 
 struct CemeteryCtrlTag { using Owner = class CemeteryComponent; };   // the handlers' receiver (controller_state_table.h)
 
@@ -58,11 +59,10 @@ public:
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    // Grave-plot cell list, a plain DynArray<int>: the plot-grid builder (slot 6)
-    // fills it; the state-2 enter and Cemetery_PickFreeSlot_6c60 walk it.
-    int32_t*        plots;         // +0x48 cell indices
-    int32_t         plotCount;     // +0x50
-    int32_t         plotCapacity;  // +0x54
+    // Grave-plot cell list, an Array<int32>: the plot-grid builder (slot 6)
+    // fills it; the state-2 enter and Cemetery_PickFreeSlot_6c60 walk it. int32_t's
+    // trait-derived row is exe 0x1400021d0's (stride 4, tail as-found, no destroy).
+    Collection::Array<int32_t> plots;   // +0x48 cell indices (size +0x50, capacity +0x54)
 };
 
 static_assert(sizeof(CemeteryComponent) == 0x58, "CemeteryComponent is 0x58 (create 0x140004040)");
@@ -72,5 +72,5 @@ static_assert(offsetof(CemeteryComponent, _controller) == 0x28,
 static_assert(offsetof(CemeteryComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x1400476f0)");
 static_assert(offsetof(CemeteryComponent, plots) == 0x48, "CemeteryComponent +0x48 plots");
-static_assert(offsetof(CemeteryComponent, plotCount) == 0x50, "CemeteryComponent +0x50");
-static_assert(offsetof(CemeteryComponent, plotCapacity) == 0x54, "CemeteryComponent +0x54");
+static_assert(offsetof(CemeteryComponent, plots) + offsetof(Collection::Array<int32_t>, _size) == 0x50, "CemeteryComponent +0x50");
+static_assert(offsetof(CemeteryComponent, plots) + offsetof(Collection::Array<int32_t>, _capacity) == 0x54, "CemeteryComponent +0x54");

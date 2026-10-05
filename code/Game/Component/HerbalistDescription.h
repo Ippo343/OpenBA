@@ -44,6 +44,7 @@ public:
 };
 
 static_assert(sizeof(HerbalistDescription) == 0x38, "HerbalistDescription is 0x38 (create 0x140006bb0 MemAlloc(0x38))");
+static_assert(offsetof(HerbalistDescription, _pad34) == 0x34, "HerbalistDescription::_pad34");
 static_assert(alignof(HerbalistDescription) == 8, "HerbalistDescription alignment");
 static_assert(offsetof(HerbalistDescription, _herbs) == 0x20, "HerbalistDescription::_herbs @ +0x20");
 static_assert(offsetof(HerbalistDescription, _herbCount) == 0x28, "HerbalistDescription::_herbCount @ +0x28");

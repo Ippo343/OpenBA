@@ -118,6 +118,9 @@ struct MaterialCount16 {               // the core's own 16-byte element view
     int32_t               pad0C;       // +0x0C (the SetSize tail leaves it unwritten)
 };
 static_assert(sizeof(MaterialCount16) == 0x10, "16-byte stride (0x14000da70)");
+static_assert(offsetof(MaterialCount16, material) == 0x0, "MaterialCount16::material");
+static_assert(offsetof(MaterialCount16, count) == 0x8, "MaterialCount16::count");
+static_assert(offsetof(MaterialCount16, pad0C) == 0xC, "MaterialCount16::pad0C");
 void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70
 void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0
 template <class Holder>

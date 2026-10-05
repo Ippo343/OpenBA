@@ -47,6 +47,8 @@ public:
 };
 
 static_assert(sizeof(WorkDescription) == 0x38, "WorkDescription is 0x38 (create 0x140039ed0 MemAlloc(0x38))");
+static_assert(offsetof(WorkDescription, _pad21) == 0x21, "WorkDescription::_pad21");
+static_assert(offsetof(WorkDescription, _pad35) == 0x35, "WorkDescription::_pad35");
 static_assert(alignof(WorkDescription) == 8, "WorkDescription alignment");
 static_assert(offsetof(WorkDescription, _b20) == 0x20, "WorkDescription::_b20 @ +0x20");
 static_assert(offsetof(WorkDescription, _i24) == 0x24, "WorkDescription::_i24 @ +0x24");

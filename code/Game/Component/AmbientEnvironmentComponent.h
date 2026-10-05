@@ -51,6 +51,7 @@ public:
 };
 
 static_assert(sizeof(AmbientEnvironmentComponent) == 0x48, "AmbientEnvironmentComponent is 0x48 (create 0x140001ee0)");
+static_assert(offsetof(AmbientEnvironmentComponent, _pad44) == 0x44, "AmbientEnvironmentComponent::_pad44");
 static_assert(alignof(AmbientEnvironmentComponent) == 8, "AmbientEnvironmentComponent alignment");
 static_assert(offsetof(AmbientEnvironmentComponent, regionX) == 0x28, "AmbientEnvironmentComponent::regionX @ +0x28 (Serialize int&)");
 static_assert(offsetof(AmbientEnvironmentComponent, regionY) == 0x2C, "AmbientEnvironmentComponent::regionY @ +0x2C (Serialize int&)");

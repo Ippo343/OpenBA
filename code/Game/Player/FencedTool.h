@@ -77,6 +77,7 @@ public:
 
 
 static_assert(sizeof(FencedTool) == 0x70, "FencedTool is 0x70 (create 0x1400268d0 MemAlloc(0x70))");
+static_assert(offsetof(FencedTool, _pad64) == 0x64, "FencedTool::_pad64");
 static_assert(alignof(FencedTool) == 8, "FencedTool is 8-aligned");
 static_assert(offsetof(FencedTool, fencedDesc)      == 0x38, "FencedTool +0x38 (ctor 0x1400dd0c8)");
 static_assert(offsetof(FencedTool, areaDesc)        == 0x40, "FencedTool +0x40");

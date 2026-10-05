@@ -36,6 +36,7 @@ struct ModelMeshGroup {
     int32_t                  meshCapacity; // +0x14
 };
 static_assert(sizeof(ModelMeshGroup) == 0x18, "ModelDescription mesh group stride 0x18");
+static_assert(offsetof(ModelMeshGroup, field_0x00) == 0x0, "ModelMeshGroup::field_0x00");
 static_assert(offsetof(ModelMeshGroup, meshes) == 0x08, "");
 static_assert(offsetof(ModelMeshGroup, meshCount) == 0x10, "");
 static_assert(offsetof(ModelMeshGroup, meshCapacity) == 0x14, "");
@@ -65,6 +66,7 @@ public:
 };
 
 static_assert(sizeof(ModelDescription) == 0x40, "ModelDescription is 0x40 (create 0x140035930 MemAlloc(0x40))");
+static_assert(offsetof(ModelDescription, _pad39) == 0x39, "ModelDescription::_pad39");
 static_assert(alignof(ModelDescription) == 8, "ModelDescription alignment");
 static_assert(offsetof(ModelDescription, _meshGroups) == 0x20, "ModelDescription::_meshGroups @ +0x20");
 static_assert(offsetof(ModelDescription, _meshGroupCount) == 0x28, "ModelDescription::_meshGroupCount @ +0x28");

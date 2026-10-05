@@ -96,5 +96,7 @@ static_assert(sizeof(ControllerComponent) == 0x28,
               "ControllerComponent adds no bytes; the controller member lives in each leaf");
 static_assert(sizeof(ControllerComponent::Controller) == 0x20,
               "the embedded controller is 0x20 bytes (vptr, +8, +0x10, owner +0x18)");
+static_assert(offsetof(ControllerComponent::Controller, _data08) == 0x8, "Controller::_data08");
+static_assert(offsetof(ControllerComponent::Controller, _data10) == 0x10, "Controller::_data10");
 static_assert(offsetof(ControllerComponent::Controller, _owner) == 0x18,
               "controller +0x18 = owning component (every slot body: MOV RCX,[RCX+0x18])");

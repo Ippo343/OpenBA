@@ -63,6 +63,7 @@ public:
 };
 
 static_assert(sizeof(BuildRoad) == 0x70, "BuildRoad is 0x70 (create 0x140029560 MemAlloc(0x70))");
+static_assert(offsetof(BuildRoad, _pad6c) == 0x6C, "BuildRoad::_pad6c");
 static_assert(alignof(BuildRoad) == 8, "BuildRoad is 8-aligned");
 static_assert(offsetof(BuildRoad, field_48) == 0x48, "BuildRoad +0x48");
 static_assert(offsetof(BuildRoad, field_50) == 0x50, "BuildRoad +0x50");

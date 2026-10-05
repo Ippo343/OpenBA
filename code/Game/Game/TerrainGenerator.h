@@ -67,6 +67,8 @@ public:
 };
 
 static_assert(sizeof(TerrainGenerator) == 0x90, "TerrainGenerator is 0x90");
+static_assert(offsetof(TerrainGenerator, _field28) == 0x28, "TerrainGenerator::_field28");
+static_assert(offsetof(TerrainGenerator, _pad31) == 0x31, "TerrainGenerator::_pad31");
 static_assert(alignof(TerrainGenerator) == 8, "qword-aligned");
 static_assert(offsetof(TerrainGenerator, _field20) == 0x20, "+0x20");
 static_assert(offsetof(TerrainGenerator, _field30) == 0x30, "+0x30");

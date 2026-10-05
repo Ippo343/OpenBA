@@ -90,6 +90,7 @@ protected:
 };
 
 static_assert(sizeof(Action) == 0x20, "Action is 0x20 bytes (0x10 Internal + 0x10)");
+static_assert(offsetof(Action, _pad19) == 0x19, "Action::_pad19");
 static_assert(alignof(Action) == 8, "Action is 8-aligned");
 static_assert(offsetof(Action, _next) == 0x10, "Action +0x10 next IBP (0x1400013ee)");
 static_assert(offsetof(Action, _status) == 0x18, "Action +0x18 status byte (0x1400013f6)");
@@ -110,6 +111,7 @@ struct ActionStack {
 };
 
 static_assert(sizeof(ActionStack) == 0x20, "ActionStack: CharacterComponent +0x48..+0x67");
+static_assert(offsetof(ActionStack, _pad1C) == 0x1C, "ActionStack::_pad1C");
 static_assert(offsetof(ActionStack, actions)    == 0x00, "ActionStack::actions @ +0x00");
 static_assert(offsetof(ActionStack, count)      == 0x08, "ActionStack::count @ +0x08");
 static_assert(offsetof(ActionStack, capacity)   == 0x0C, "ActionStack::capacity @ +0x0C");

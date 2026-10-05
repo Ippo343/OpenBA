@@ -365,7 +365,6 @@ void TradeComponent::OnAdded() {
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // Add to the trading-post list at +0x30
-    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     int currentCount = worldMgr->field_0x30._size;
     worldMgr->field_0x30
         .SetSizeFill(currentCount + 1, &entityPtr);

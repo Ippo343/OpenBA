@@ -58,4 +58,6 @@ static_assert(offsetof(TutorialInstance, stepDialog) == 0x18, "+0x18");
 static_assert(offsetof(TutorialInstance, stepUI) == 0x20, "+0x20");
 static_assert(offsetof(TutorialInstance, tutorialDef) == 0x30, "+0x30");
 static_assert(sizeof(TutorialInstance) == 0x38, "TutorialInstance is 0x38 (create 0x140028120 MemAlloc(0x38))");
+static_assert(offsetof(TutorialInstance, _pad14) == 0x14, "TutorialInstance::_pad14");
+static_assert(offsetof(TutorialInstance, _pad28) == 0x28, "TutorialInstance::_pad28");
 static_assert(alignof(TutorialInstance) == 8, "qword-aligned");

@@ -73,6 +73,7 @@ public:
 };
 
 static_assert(sizeof(HerdComponent) == 0x60, "HerdComponent is 0x60 (create 0x140034cd0)");
+static_assert(offsetof(HerdComponent, _pad49) == 0x49, "HerdComponent::_pad49");
 static_assert(alignof(HerdComponent) == 8, "HerdComponent alignment");
 static_assert(offsetof(HerdComponent, population) == 0x28, "");
 static_assert(offsetof(HerdComponent, populationCell) == 0x30, "");

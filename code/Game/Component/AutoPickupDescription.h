@@ -41,5 +41,6 @@ public:
 };
 
 static_assert(sizeof(AutoPickupDescription) == 0x28, "AutoPickupDescription is 0x28 (create 0x140003420 MemAlloc(0x28))");
+static_assert(offsetof(AutoPickupDescription, _pad21) == 0x21, "AutoPickupDescription::_pad21");
 static_assert(alignof(AutoPickupDescription) == 8, "AutoPickupDescription alignment");
 static_assert(offsetof(AutoPickupDescription, _enabled) == 0x20, "AutoPickupDescription::_enabled @ +0x20");

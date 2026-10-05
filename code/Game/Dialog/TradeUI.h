@@ -181,14 +181,36 @@ public:
 };
 
 static_assert(sizeof(TradeUI::SellItem) == 0x20, "sell item stride 0x20 (0x140016050)");
+static_assert(offsetof(TradeUI::SellItem, resource) == 0x0, "SellItem::resource");
+static_assert(offsetof(TradeUI::SellItem, value) == 0x8, "SellItem::value");
+static_assert(offsetof(TradeUI::SellItem, rawMaterial) == 0x10, "SellItem::rawMaterial");
+static_assert(offsetof(TradeUI::SellItem, _pad1c) == 0x1C, "SellItem::_pad1c");
 static_assert(sizeof(TradeUI::BuyItem) == 0x18, "buy item stride 0x18 (0x140016130)");
+static_assert(offsetof(TradeUI::BuyItem, resource) == 0x0, "BuyItem::resource");
+static_assert(offsetof(TradeUI::BuyItem, value) == 0x8, "BuyItem::value");
+static_assert(offsetof(TradeUI::BuyItem, _pad14) == 0x14, "BuyItem::_pad14");
 static_assert(sizeof(TradeUI::StorageItem) == 0x18, "storage item stride 0x18 (0x140016200)");
+static_assert(offsetof(TradeUI::StorageItem, resource) == 0x0, "StorageItem::resource");
+static_assert(offsetof(TradeUI::StorageItem, rawMaterial) == 0x8, "StorageItem::rawMaterial");
 static_assert(sizeof(TradeUI::SellRow) == 0x20, "sell row stride 0x20");
+static_assert(offsetof(TradeUI::SellRow, label) == 0x0, "SellRow::label");
+static_assert(offsetof(TradeUI::SellRow, stored) == 0x8, "SellRow::stored");
+static_assert(offsetof(TradeUI::SellRow, price) == 0x10, "SellRow::price");
 static_assert(sizeof(TradeUI::BuyRow) == 0x20, "buy row stride 0x20");
+static_assert(offsetof(TradeUI::BuyRow, label) == 0x0, "BuyRow::label");
+static_assert(offsetof(TradeUI::BuyRow, price) == 0x8, "BuyRow::price");
+static_assert(offsetof(TradeUI::BuyRow, spinner) == 0x10, "BuyRow::spinner");
 static_assert(sizeof(TradeUI::StorageRow) == 0x18, "storage row stride 0x18");
+static_assert(offsetof(TradeUI::StorageRow, label) == 0x0, "StorageRow::label");
+static_assert(offsetof(TradeUI::StorageRow, spinner) == 0x8, "StorageRow::spinner");
 static_assert(sizeof(TradeUI::OrderRow) == 0x20, "order row stride 0x20");
+static_assert(offsetof(TradeUI::OrderRow, upButton) == 0x0, "OrderRow::upButton");
+static_assert(offsetof(TradeUI::OrderRow, downButton) == 0x8, "OrderRow::downButton");
+static_assert(offsetof(TradeUI::OrderRow, label) == 0x10, "OrderRow::label");
 static_assert(sizeof(TradeUI::PurchaseRow) == 0x08, "purchase row stride 8");
+static_assert(offsetof(TradeUI::PurchaseRow, check) == 0x0, "PurchaseRow::check");
 static_assert(sizeof(TradeUI::PurchaseItem) == 0x08, "purchase item stride 8");
+static_assert(offsetof(TradeUI::PurchaseItem, resource) == 0x0, "PurchaseItem::resource");
 static_assert(offsetof(TradeUI::SellItem, quantity) == 0x18, "SellItem::quantity @ +0x18");
 static_assert(offsetof(TradeUI::BuyItem, quantity) == 0x10, "BuyItem::quantity @ +0x10");
 static_assert(offsetof(TradeUI::StorageItem, value) == 0x10, "StorageItem::value @ +0x10");
@@ -243,6 +265,7 @@ struct TradeStockEntry {
     uint8_t               _pad0C[4];  // +0x0c copied with the value's qword
 };
 static_assert(sizeof(TradeStockEntry) == 0x10, "TradeStockEntry is two qwords (0x14000e1c0)");
+static_assert(offsetof(TradeStockEntry, resource) == 0x0, "TradeStockEntry::resource");
 static_assert(offsetof(TradeStockEntry, quantity) == 0x08, "TradeStockEntry +0x08");
 static_assert(offsetof(TradeStockEntry, _pad0C) == 0x0c, "TradeStockEntry +0x0c");
 

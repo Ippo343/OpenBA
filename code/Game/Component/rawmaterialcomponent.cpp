@@ -75,7 +75,6 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
                 MarkEntityForRemoval(entity);
 
                 // Add to world pending list
-                // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                 {
                     int currentCount = worldMgr->removalList._size;
                     worldMgr->removalList

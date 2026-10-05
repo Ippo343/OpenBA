@@ -323,7 +323,7 @@ void ModDialog::OnOpened() {
             // own table, i.e. `new Video::ImageBuffer()` compiled in the exe.
             imgBuf = ::new (imgBufMem) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
             imgBuf->Create(
-                0, 2, 5, 0u, 0x30, 0x30, 1, 1, 1, 1, nullptr);   // B.3.5 bridge
+                0, 2, 5, 0u, 0x30, 0x30, 1, 1, 1, 1, nullptr);
             entry.imageBuffer = imgBuf;
         }
 

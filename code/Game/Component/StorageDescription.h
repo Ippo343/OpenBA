@@ -59,6 +59,8 @@ public:
 };
 
 static_assert(sizeof(StorageDescription) == 0x40, "StorageDescription is 0x40 (create 0x140038bb0 MemAlloc(0x40))");
+static_assert(offsetof(StorageDescription, _pad22) == 0x22, "StorageDescription::_pad22");
+static_assert(offsetof(StorageDescription, _pad2c) == 0x2C, "StorageDescription::_pad2c");
 static_assert(alignof(StorageDescription) == 8, "StorageDescription alignment");
 static_assert(offsetof(StorageDescription, _flagA) == 0x20, "StorageDescription::_flagA @ +0x20");
 static_assert(offsetof(StorageDescription, _flagB) == 0x21, "StorageDescription::_flagB @ +0x21");
@@ -66,6 +68,8 @@ static_assert(offsetof(StorageDescription, _pickupValue) == 0x24, "StorageDescri
 static_assert(offsetof(StorageDescription, _rawMaterialFlags) == 0x28, "StorageDescription::_rawMaterialFlags @ +0x28");
 static_assert(offsetof(StorageDescription, _volumes) == 0x30, "StorageDescription::_volumes @ +0x30");
 static_assert(sizeof(StorageDescription::Volume) == 0x10, "volume stride 0x10 (Serialize 0x14012c9a0)");
+static_assert(offsetof(StorageDescription::Volume, _resource) == 0x0, "Volume::_resource");
+static_assert(offsetof(StorageDescription::Volume, _pad0C) == 0xC, "Volume::_pad0C");
 static_assert(offsetof(StorageDescription::Volume, _count) == 0x08, "volume count +0x08 (Serialize 0x14012ca5d)");
 static_assert(offsetof(StorageDescription, _volumeCount) == 0x38, "StorageDescription::_volumeCount @ +0x38");
 static_assert(offsetof(StorageDescription, _volumeCap) == 0x3c, "StorageDescription::_volumeCap @ +0x3c");

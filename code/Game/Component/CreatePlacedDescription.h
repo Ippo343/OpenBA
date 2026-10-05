@@ -21,6 +21,7 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 #include "system/String.h"
+#include "collection/Collection.h"   // Collection::Array (_placeArray)
 
 class CreatePlacedDescription final : public Description {
     DECLARE_EXE_TYPE(CreatePlacedDescription)
@@ -40,9 +41,9 @@ public:
     uint32_t _category;                         // +0x20 enum: placement category
     uint8_t _pad24[4];                          // +0x24 never written by the ctor
     System::String _name;                       // +0x28 String (empty)
-    uint32_t* _placeArray;                      // +0x30 enum[] (stride 4, the uint door): `_placeBitArray`
-    int32_t _placeCount;                        // +0x38
-    int32_t _placeCap;                          // +0x3c
+    // +0x30 enum[] `_placeBitArray` (size +0x38, capacity +0x3c). uint32_t's trait-derived
+    // row is exe 0x1400021d0's (stride 4, align 4, tail as-found, no destroy).
+    Collection::Array<uint32_t> _placeArray;
     int32_t _i40;                               // +0x40
     int32_t _i44;                               // +0x44
     int32_t _i48;                               // +0x48
@@ -51,12 +52,14 @@ public:
 };
 
 static_assert(sizeof(CreatePlacedDescription) == 0x58, "CreatePlacedDescription is 0x58 (create 0x140032a60 MemAlloc(0x58))");
+static_assert(offsetof(CreatePlacedDescription, _pad24) == 0x24, "CreatePlacedDescription::_pad24");
+static_assert(offsetof(CreatePlacedDescription, _pad4c) == 0x4C, "CreatePlacedDescription::_pad4c");
 static_assert(alignof(CreatePlacedDescription) == 8, "CreatePlacedDescription alignment");
 static_assert(offsetof(CreatePlacedDescription, _category) == 0x20, "CreatePlacedDescription::_category @ +0x20");
 static_assert(offsetof(CreatePlacedDescription, _name) == 0x28, "CreatePlacedDescription::_name @ +0x28");
 static_assert(offsetof(CreatePlacedDescription, _placeArray) == 0x30, "CreatePlacedDescription::_placeArray @ +0x30");
-static_assert(offsetof(CreatePlacedDescription, _placeCount) == 0x38, "CreatePlacedDescription::_placeCount @ +0x38");
-static_assert(offsetof(CreatePlacedDescription, _placeCap) == 0x3c, "CreatePlacedDescription::_placeCap @ +0x3c");
+static_assert(offsetof(CreatePlacedDescription, _placeArray) + offsetof(Collection::Array<uint32_t>, _size) == 0x38, "CreatePlacedDescription::_placeArray size @ +0x38");
+static_assert(offsetof(CreatePlacedDescription, _placeArray) + offsetof(Collection::Array<uint32_t>, _capacity) == 0x3c, "CreatePlacedDescription::_placeArray capacity @ +0x3c");
 static_assert(offsetof(CreatePlacedDescription, _i40) == 0x40, "CreatePlacedDescription::_i40 @ +0x40");
 static_assert(offsetof(CreatePlacedDescription, _i44) == 0x44, "CreatePlacedDescription::_i44 @ +0x44");
 static_assert(offsetof(CreatePlacedDescription, _i48) == 0x48, "CreatePlacedDescription::_i48 @ +0x48");

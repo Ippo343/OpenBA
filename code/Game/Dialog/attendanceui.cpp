@@ -98,7 +98,7 @@ void AttendanceUI::OnUpdateLayout() {
     AttendanceComponent* attendance = AttendanceUI_FindComponent(_dataSource);
 
     // The queue count (+0x30)
-    int currentCount = attendance->queueCount;
+    int currentCount = attendance->queue._size;
 
     progress->_currentValue = (float)currentCount;
 

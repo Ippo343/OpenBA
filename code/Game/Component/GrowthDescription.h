@@ -61,6 +61,10 @@ public:
 };
 
 static_assert(sizeof(GrowthDescription) == 0x68, "GrowthDescription is 0x68 (create 0x140034b70 MemAlloc(0x68))");
+static_assert(offsetof(GrowthDescription, _pad2d) == 0x2D, "GrowthDescription::_pad2d");
+static_assert(offsetof(GrowthDescription, _pad39) == 0x39, "GrowthDescription::_pad39");
+static_assert(offsetof(GrowthDescription, _pad45) == 0x45, "GrowthDescription::_pad45");
+static_assert(offsetof(GrowthDescription, _pad65) == 0x65, "GrowthDescription::_pad65");
 static_assert(alignof(GrowthDescription) == 8, "GrowthDescription alignment");
 static_assert(offsetof(GrowthDescription, _f20) == 0x20, "GrowthDescription::_f20 @ +0x20");
 static_assert(offsetof(GrowthDescription, _f24) == 0x24, "GrowthDescription::_f24 @ +0x24");

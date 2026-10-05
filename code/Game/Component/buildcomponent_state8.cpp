@@ -203,7 +203,7 @@ static int BC8_Target(BuildComponent* bc, BuildDescription* matComp) {
 // call is idempotent with the wired slot: whichever runs first leaves count>0 and the
 // other no-ops.
 static void BC8_EnsureMeshList(BuildComponent* bc) {
-    if (bc->modelComponentCount > 0) return;
+    if (bc->modelComponents._size > 0) return;
     bc->FillModelLists();
 }
 
@@ -247,7 +247,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
     if (instant == 0) {
         // STAGED: reset every construction mesh to frame 0.
         BC8_EnsureMeshList(this);
-        int meshCount = modelComponentCount;
+        int meshCount = modelComponents._size;
         for (int i = 0; i < meshCount; ++i) {
             ModelComponent* me = modelComponents[i].Get();
             if (!me) continue;
@@ -314,7 +314,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
         BuildDescription* matComp = BC8_MatComp(this);
         FillModelLists();           // sub_8720 (mesh-list fill + model reset)
         laborProgress = BC8_Target(this, matComp);
-        int meshCount = modelComponentCount;
+        int meshCount = modelComponents._size;
         for (int i = 0; i < meshCount; ++i) {
             ModelComponent* me = modelComponents[i].Get();
             if (!me) continue;
@@ -379,7 +379,7 @@ char BuildComponent::State8Update(StateMachine* sm) {
 
     BC8_EnsureMeshList(this);
     int progress = laborProgress;
-    int meshCount = modelComponentCount;
+    int meshCount = modelComponents._size;
 
 
     if (progress < target) {
@@ -540,7 +540,6 @@ void BuildComponent::State8Finalize() {
     }
     int perItem   = desc->_pickupValue;
     int acceptTyp = static_cast<int>(desc->_rawMaterialFlags);
-    // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
     storage->storageSlots.SetSize(0);
     storage->rawMaterialFlags = static_cast<uint32_t>(acceptTyp);
     storage->capacity = perItem * mult;

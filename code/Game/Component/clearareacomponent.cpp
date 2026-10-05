@@ -88,7 +88,6 @@ int ClearAreaComponent::FootprintSweep() {
             MarkEntityForRemoval(occ);
             IBPArray* rl = &entityList->removalList;
             int cnt = rl->_size;
-            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             rl->SetSize(cnt + 1, occ);
             ++marked;
         }

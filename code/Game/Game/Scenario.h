@@ -70,4 +70,5 @@ static_assert(offsetof(Scenario, terrainGenerator) == 0x78, "Scenario +0x78");
 static_assert(offsetof(Scenario, climateGenerator) == 0x80, "Scenario +0x80");
 static_assert(offsetof(Scenario, _field88) == 0x88, "Scenario +0x88");
 static_assert(sizeof(Scenario) == 0x90, "Scenario is 0x90 (create 0x14001e9f0 MemAlloc(0x90))");
+static_assert(offsetof(Scenario, _pad6A) == 0x6A, "Scenario::_pad6A");
 static_assert(alignof(Scenario) == 8, "Scenario is qword-aligned");

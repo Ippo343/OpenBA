@@ -30,6 +30,7 @@ struct WeatherParticle {
     float velocity[3];           // +0x18
 };
 static_assert(sizeof(WeatherParticle) == 0x24, "WeatherParticle stride 0x24");
+static_assert(offsetof(WeatherParticle, position) == 0x0, "WeatherParticle::position");
 static_assert(offsetof(WeatherParticle, previousPosition) == 0x0C, "WeatherParticle +0x0C");
 static_assert(offsetof(WeatherParticle, velocity) == 0x18, "WeatherParticle +0x18");
 

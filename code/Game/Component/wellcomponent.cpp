@@ -209,7 +209,6 @@ void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
     }
     if (index < 0) {
         index = wells._size;      // append at the current end
-        // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
         wells.SetSizeFill(index + 1, well);
     }
 

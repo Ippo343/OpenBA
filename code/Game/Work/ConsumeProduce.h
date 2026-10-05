@@ -65,6 +65,7 @@ public:
 };
 
 static_assert(sizeof(ConsumeProduce) == 0x78, "ConsumeProduce is 0x78 (retail create MemAlloc)");
+static_assert(offsetof(ConsumeProduce, _pad49) == 0x49, "ConsumeProduce::_pad49");
 static_assert(alignof(ConsumeProduce) == 8, "ConsumeProduce is 8-aligned");
 static_assert(offsetof(ConsumeProduce, field_48) == 0x48, "ConsumeProduce +0x48");
 static_assert(offsetof(ConsumeProduce, field_4c) == 0x4c, "ConsumeProduce +0x4c");

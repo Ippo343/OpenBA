@@ -146,7 +146,7 @@ extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System:
         Object::InternalPtr<Component>* const slot = &entity->_components[i];
         Component* const obj = slot->Get();
         if (!obj) continue;
-        if (obj->Type() == wantedTid) {   // B.3.8 bridge (slot 2)
+        if (obj->Type() == wantedTid) {
             Component* cand = slot->Get();
             model = (::Object::IsDerivedFromNullSafe(cand, wantedTid)) ? static_cast<ModelComponent*>(cand) : nullptr;
             break;
@@ -193,16 +193,16 @@ extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System:
 // loop; kept, because it makes the empty-array case return 0 rather than -1 and the
 // caller indexes with the result unguarded.
 extern "C" int BoatRoute_NearestPointIndex(const BoatComponent* boat, const float* pt) {
-    const Math::Vector3* base = boat->route;
+    const Math::Vector3* base = boat->route._data;
     if (!base) return 0;
 
     float dx = pt[0] - base[0].x, dy = pt[1] - base[0].y, dz = pt[2] - base[0].z;
     float best = dx * dx + dy * dy + dz * dz;
     int bestIdx = 0;
 
-    const int n = boat->routeCount;
+    const int n = boat->route._size;
     for (int i = 0; i < n; ++i) {
-        const Math::Vector3* e = boat->route + i;
+        const Math::Vector3* e = boat->route._data + i;
         dx = pt[0] - e->x; dy = pt[1] - e->y; dz = pt[2] - e->z;
         const float d = dx * dx + dy * dy + dz * dz;
         if (d < best) { best = d; bestIdx = i; }
@@ -256,26 +256,26 @@ namespace {
 //   copy the surviving elements, write pt into the new tail
 // The `if (dst)` inside retail's copy loop is a NULL-BASE test (JZ on base+offset), kept.
 void AppendRoutePoint(BoatComponent* comp, const float pt[3]) {
-    if (comp->routeCount == 0) {
+    if (comp->route._size == 0) {
         comp->waypoint.x = pt[0];
         comp->waypoint.y = pt[1];
         comp->waypoint.z = pt[2];
         comp->routeIndex = 0;
     }
 
-    const int oldCount = comp->routeCount;
+    const int oldCount = comp->route._size;
     const int newCount = oldCount + 1;
-    Math::Vector3* oldBase = comp->route;
-    comp->routeCount = newCount;
+    Math::Vector3* oldBase = comp->route._data;
+    comp->route._size = newCount;
 
-    if (newCount > comp->routeCapacity) {
-        comp->routeCapacity = newCount;
-        if (oldCount != 0) comp->routeCapacity = newCount * 3;
-        comp->route = static_cast<Math::Vector3*>(::System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(comp->routeCapacity) * 0xc, 4));
+    if (newCount > comp->route._capacity) {
+        comp->route._capacity = newCount;
+        if (oldCount != 0) comp->route._capacity = newCount * 3;
+        comp->route._data = static_cast<Math::Vector3*>(::System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(comp->route._capacity) * 0xc, 4));
     }
 
-    Math::Vector3* newBase = comp->route;
+    Math::Vector3* newBase = comp->route._data;
     int i = (oldBase == newBase) ? oldCount : 0;
     for (; i < newCount; ++i) {
         if (!newBase) continue;          // retail's JZ on base+offset: skip, do not break
@@ -455,7 +455,7 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     // degenerate (an empty polyline, or both A* legs failed), and the fix belongs upstream
     // at whichever of those produced it, not in a guard that silently yields a wrong yaw.
     const int nearest = BoatRoute_NearestPointIndex(this, destPos);
-    const Math::Vector3* pts = route;
+    const Math::Vector3* pts = route._data;
     if (pts) {
         const Math::Vector3& a = pts[nearest];
         const Math::Vector3& b = pts[nearest - 2];

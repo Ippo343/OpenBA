@@ -80,6 +80,9 @@ static_assert(offsetof(ProfessionUI, professionIndexRoot) == 0x60, "professionIn
 static_assert(offsetof(ProfessionUI, professionIndexCount) == 0x68, "professionIndexCount @ 0x68");
 static_assert(offsetof(ProfessionUI, gotoIndex) == 0x70, "gotoIndex @ 0x70");
 static_assert(sizeof(ProfessionUI::ProfessionIndexNode) == 0x30, "the Set node is 0x30 (MemAlloc(0x30, 8))");
+static_assert(offsetof(ProfessionUI::ProfessionIndexNode, key) == 0x0, "ProfessionIndexNode::key");
+static_assert(offsetof(ProfessionUI::ProfessionIndexNode, _pad0C) == 0xC, "ProfessionIndexNode::_pad0C");
+static_assert(offsetof(ProfessionUI::ProfessionIndexNode, _pad2C) == 0x2C, "ProfessionIndexNode::_pad2C");
 static_assert(offsetof(ProfessionUI::ProfessionIndexNode, index) == 0x08, "node +0x08");
 static_assert(offsetof(ProfessionUI::ProfessionIndexNode, parent) == 0x10, "node +0x10");
 static_assert(offsetof(ProfessionUI::ProfessionIndexNode, left) == 0x18, "node +0x18");

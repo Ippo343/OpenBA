@@ -40,6 +40,9 @@ struct EventNotifySlot {
     Object::InternalPtr<UI::Element> button;   // +0x10 "notifyButton", element id 1500 + i
 };
 static_assert(sizeof(EventNotifySlot) == 0x18, "EventNotifySlot is 0x18 (the +0xc8 array stride)");
+static_assert(offsetof(EventNotifySlot, group) == 0x0, "EventNotifySlot::group");
+static_assert(offsetof(EventNotifySlot, image) == 0x8, "EventNotifySlot::image");
+static_assert(offsetof(EventNotifySlot, button) == 0x10, "EventNotifySlot::button");
 
 // One shown notification (0x30): OnUpdate 0x140067c30 builds it on the stack
 // and appends it with Array<T>::SetSize 0x140011750; 0x140011670 removes one.

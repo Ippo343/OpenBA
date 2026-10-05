@@ -52,4 +52,5 @@ public:
 static_assert(offsetof(ModDetailsDialog, spriteSheet) == 0xB8, "ModDetailsDialog +0xb8");
 static_assert(offsetof(ModDetailsDialog, modIndex) == 0xC0, "ModDetailsDialog +0xc0");
 static_assert(sizeof(ModDetailsDialog) == 0xC8, "ModDetailsDialog is 0xc8 (create 0x140012790)");
+static_assert(offsetof(ModDetailsDialog, _padC4) == 0xC4, "ModDetailsDialog::_padC4");
 static_assert(alignof(ModDetailsDialog) == 8, "ModDetailsDialog is qword-aligned");

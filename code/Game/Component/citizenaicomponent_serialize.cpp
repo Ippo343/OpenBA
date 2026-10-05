@@ -96,5 +96,5 @@ void CitizenAIComponent::Persist(IO::Stream& stream) {
     version = s->GetVersion();
     if (version > 3) dataC8.Serialize(*s);
 
-    s->~Serializer();   // B.3.4 bridge
+    s->~Serializer();
 }

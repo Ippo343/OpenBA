@@ -73,6 +73,8 @@ struct TrackedEntityNode {
     uint8_t            _pad34[4]; // +0x34
 };
 static_assert(sizeof(TrackedEntityNode) == 0x38, "0x140102e30 MemAlloc(0x38)");
+static_assert(offsetof(TrackedEntityNode, _pad11) == 0x11, "TrackedEntityNode::_pad11");
+static_assert(offsetof(TrackedEntityNode, _pad34) == 0x34, "TrackedEntityNode::_pad34");
 static_assert(offsetof(TrackedEntityNode, key) == 0x00, "TrackedEntityNode::key @ +0x00");
 static_assert(offsetof(TrackedEntityNode, x) == 0x08, "TrackedEntityNode::x @ +0x08");
 static_assert(offsetof(TrackedEntityNode, y) == 0x0C, "TrackedEntityNode::y @ +0x0C");
@@ -97,6 +99,11 @@ struct PinnedToolEntry {
     uint8_t            _pad11[7]; // +0x11 copied with the record
 };
 static_assert(sizeof(PinnedToolEntry) == 0x18, "the 0x18-byte element 0x140014890 copies");
+static_assert(offsetof(PinnedToolEntry, key) == 0x0, "PinnedToolEntry::key");
+static_assert(offsetof(PinnedToolEntry, x) == 0x8, "PinnedToolEntry::x");
+static_assert(offsetof(PinnedToolEntry, y) == 0xC, "PinnedToolEntry::y");
+static_assert(offsetof(PinnedToolEntry, active) == 0x10, "PinnedToolEntry::active");
+static_assert(offsetof(PinnedToolEntry, _pad11) == 0x11, "PinnedToolEntry::_pad11");
 struct PinnedToolNode : PinnedToolEntry {
     PinnedToolNode*    parent;    // +0x18
     PinnedToolNode*    left;      // +0x20
@@ -112,6 +119,7 @@ inline ComponentEntity* Avl38KeyOf(const TrackedEntityNode* node) { return node-
 inline ComponentDescription* Avl38KeyOf(const PinnedToolNode* node) { return node->key; }
 
 static_assert(sizeof(PinnedToolNode) == 0x38, "0x140014890 MemAlloc(0x38)");
+static_assert(offsetof(PinnedToolNode, _pad34) == 0x34, "PinnedToolNode::_pad34");
 static_assert(offsetof(PinnedToolNode, key) == 0x00, "PinnedToolNode::key @ +0x00");
 static_assert(offsetof(PinnedToolNode, x) == 0x08, "PinnedToolNode::x @ +0x08");
 static_assert(offsetof(PinnedToolNode, y) == 0x0C, "PinnedToolNode::y @ +0x0C");

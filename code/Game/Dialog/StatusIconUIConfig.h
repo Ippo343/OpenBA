@@ -37,5 +37,6 @@ public:
 };
 
 static_assert(sizeof(StatusIconUIConfig) == 0x28, "StatusIconUIConfig is 0x28 (create 0x140014250)");
+static_assert(offsetof(StatusIconUIConfig, _pad21) == 0x21, "StatusIconUIConfig::_pad21");
 static_assert(alignof(StatusIconUIConfig) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(StatusIconUIConfig, _showOnMainPage) == 0x20, "flag @ +0x20 (Serialize 0x14007b400)");

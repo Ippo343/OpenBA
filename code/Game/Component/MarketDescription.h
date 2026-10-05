@@ -27,6 +27,8 @@ struct MarketRatio {
     float    ratio;          // +0x04
 };
 static_assert(sizeof(MarketRatio) == 8, "MarketRatio stride 8");
+static_assert(offsetof(MarketRatio, resourceMask) == 0x0, "MarketRatio::resourceMask");
+static_assert(offsetof(MarketRatio, ratio) == 0x4, "MarketRatio::ratio");
 
 class MarketDescription final : public Description {
     DECLARE_EXE_TYPE(MarketDescription)

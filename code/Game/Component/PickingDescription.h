@@ -56,8 +56,12 @@ public:
 };
 
 static_assert(sizeof(PickingDescription) == 0x40, "PickingDescription is 0x40 (create 0x140036e00 MemAlloc(0x40))");
+static_assert(offsetof(PickingDescription, _pad39) == 0x39, "PickingDescription::_pad39");
 static_assert(alignof(PickingDescription) == 8, "PickingDescription alignment");
 static_assert(sizeof(PickingDescription::Group) == 0x10, "PickingDescription::Group stride 0x10");
+static_assert(offsetof(PickingDescription::Group, meshes) == 0x0, "Group::meshes");
+static_assert(offsetof(PickingDescription::Group, meshCount) == 0x8, "Group::meshCount");
+static_assert(offsetof(PickingDescription::Group, meshCapacity) == 0xC, "Group::meshCapacity");
 static_assert(offsetof(PickingDescription, _groups) == 0x20, "PickingDescription::_groups @ +0x20");
 static_assert(offsetof(PickingDescription, _groupCount) == 0x28, "PickingDescription::_groupCount @ +0x28");
 static_assert(offsetof(PickingDescription, _groupCap) == 0x2c, "PickingDescription::_groupCap @ +0x2c");

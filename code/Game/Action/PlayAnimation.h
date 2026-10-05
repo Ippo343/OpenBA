@@ -42,6 +42,7 @@ public:
 };
 
 static_assert(sizeof(PlayAnimation) == 0x40, "PlayAnimation is 0x40 (create 0x1400011f0 MemAlloc)");
+static_assert(offsetof(PlayAnimation, _pad2C) == 0x2C, "PlayAnimation::_pad2C");
 static_assert(alignof(PlayAnimation) == 8, "PlayAnimation is 8-aligned");
 static_assert(offsetof(PlayAnimation, _field20) == 0x20, "PlayAnimation +0x20");
 static_assert(offsetof(PlayAnimation, animation) == 0x28, "PlayAnimation +0x28");

@@ -171,7 +171,7 @@ void WorkBase_TaskListCleanup_c5400(ActionStack* stack) {
     if (stack->field_0x10 != nullptr) {
         stack->field_0x10.DeletePtr();
         Action* nul = nullptr;
-        new (&nul) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&nul) ::Object::InternalBasePtr(nullptr);
         stack->field_0x10 = nul;
     }
 }

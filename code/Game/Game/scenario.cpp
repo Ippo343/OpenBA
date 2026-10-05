@@ -70,8 +70,8 @@ bool Scenario::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
 
     // Serialize Scenario-specific fields
-    serializer.Serialize(_field60, nullptr);   // B.3.4 bridge
-    serializer.Serialize(_field64, nullptr);   // B.3.4 bridge
+    serializer.Serialize(_field60, nullptr);
+    serializer.Serialize(_field64, nullptr);
 
     scenarioName.Serialize(serializer);
 
@@ -81,8 +81,8 @@ bool Scenario::Serialize(IO::Stream& stream) {
 
     _field88.Serialize(serializer);
 
-    serializer.Serialize(_field68, nullptr);   // B.3.4 bridge
-    serializer.Serialize(_field69, nullptr);   // B.3.4 bridge
+    serializer.Serialize(_field68, nullptr);
+    serializer.Serialize(_field69, nullptr);
 
     return true;
 }

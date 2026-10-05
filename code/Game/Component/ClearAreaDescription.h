@@ -53,6 +53,8 @@ public:
 };
 
 static_assert(sizeof(ClearAreaDescription) == 0x38, "ClearAreaDescription is 0x38 (create 0x140030f00 MemAlloc(0x38))");
+static_assert(offsetof(ClearAreaDescription, _pad2e) == 0x2E, "ClearAreaDescription::_pad2e");
+static_assert(offsetof(ClearAreaDescription, _pad34) == 0x34, "ClearAreaDescription::_pad34");
 static_assert(alignof(ClearAreaDescription) == 8, "ClearAreaDescription alignment");
 static_assert(offsetof(ClearAreaDescription, _target) == 0x20, "ClearAreaDescription::_target @ +0x20");
 static_assert(offsetof(ClearAreaDescription, _clearTrees) == 0x28, "ClearAreaDescription::_clearTrees @ +0x28");

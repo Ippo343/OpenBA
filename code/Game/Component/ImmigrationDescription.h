@@ -58,6 +58,7 @@ public:
 };
 
 static_assert(sizeof(ImmigrationDescription) == 0x68, "ImmigrationDescription is 0x68 (create 0x140007a80 MemAlloc(0x68))");
+static_assert(offsetof(ImmigrationDescription, _pad2c) == 0x2C, "ImmigrationDescription::_pad2c");
 static_assert(alignof(ImmigrationDescription) == 8, "ImmigrationDescription alignment");
 static_assert(offsetof(ImmigrationDescription, _nomad) == 0x20, "ImmigrationDescription::_nomad @ +0x20");
 static_assert(offsetof(ImmigrationDescription, _minPopulation) == 0x28, "ImmigrationDescription::_minPopulation @ +0x28");

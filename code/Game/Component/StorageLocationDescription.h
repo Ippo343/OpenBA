@@ -41,5 +41,6 @@ public:
 };
 
 static_assert(sizeof(StorageLocationDescription) == 0x28, "StorageLocationDescription is 0x28 (create 0x140038e50 MemAlloc(0x28))");
+static_assert(offsetof(StorageLocationDescription, _pad24) == 0x24, "StorageLocationDescription::_pad24");
 static_assert(alignof(StorageLocationDescription) == 8, "StorageLocationDescription alignment");
 static_assert(offsetof(StorageLocationDescription, _locationType) == 0x20, "StorageLocationDescription::_locationType @ +0x20");

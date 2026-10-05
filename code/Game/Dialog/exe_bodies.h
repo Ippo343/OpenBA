@@ -201,8 +201,8 @@ inline uint32_t fn_GetCurrentProductIndex(const ConsumeProduceComponent* compone
     uint32_t idx = static_cast<uint32_t>(component->consumeResourceId);
     if ((int)idx < 0) {
         if (idx != 0xffffffff) return 0;
-        int count = component->consumeCount;
-        float* weights = component->consumeRates;
+        int count = component->consumeRates._size;
+        float* weights = component->consumeRates._data;
         float totalWeight = 0.0f;
         for (int i = 0; i < count; i++) totalWeight += weights[i];
         System::Random* randomPtr = GameUpdateLoop::_singleton->m_random;

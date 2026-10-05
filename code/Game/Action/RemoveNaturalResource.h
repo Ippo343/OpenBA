@@ -41,6 +41,7 @@ public:
 };
 
 static_assert(sizeof(RemoveNaturalResource) == 0x38, "RemoveNaturalResource is 0x38 (create 0x140022f70 MemAlloc)");
+static_assert(offsetof(RemoveNaturalResource, _pad31) == 0x31, "RemoveNaturalResource::_pad31");
 static_assert(alignof(RemoveNaturalResource) == 8, "RemoveNaturalResource is 8-aligned");
 static_assert(offsetof(RemoveNaturalResource, _field20) == 0x20, "RemoveNaturalResource +0x20");
 static_assert(offsetof(RemoveNaturalResource, _field28) == 0x28, "RemoveNaturalResource +0x28");

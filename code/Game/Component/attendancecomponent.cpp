@@ -16,7 +16,6 @@
 #include "Component/attendancecomponent_funcs.h"
 #include "Component/AttendanceComponent.h"
 #include "Component/StatusIconComponent.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"   // ::Object::GetTypeNameById (pre-fault report)
@@ -99,7 +98,7 @@ void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll)
 
     Object::InternalPtr<CitizenComponent> selfIbp(self);
     AttendanceComponent* linked = slot.Get();
-    CemeteryListErase_Reimpl(&linked->queue, &selfIbp);
+    CemeteryListErase_Reimpl(&linked->queue._data, &selfIbp);
 
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
     // StatusIconComponent, null included (the tree's `if (mesh)` tested the slot address).
@@ -129,7 +128,7 @@ static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Object::
 
     Object::InternalPtr<CitizenComponent> selfIbp(self);
     AttendanceComponent* linked = slot.Get();
-    CemeteryListErase_Reimpl(&linked->queue, &selfIbp);
+    CemeteryListErase_Reimpl(&linked->queue._data, &selfIbp);
 
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
     // StatusIconComponent, null included (the tree's `if (mesh)` tested the slot address).
@@ -163,7 +162,7 @@ void AttendanceComponent_ReleaseLink59b0(CitizenComponent* self) {
 // count each pass. The dispatch compares this component against three worker
 // fields (+0x208/+0x228/+0x230).
 void AttendanceComponent::ProcessQueue() {
-    while (queueCount > 0) {
+    while (queue._size > 0) {
         CitizenComponent* worker = queue[0].Get();
         if (worker->school == this) {
             AttendanceComponent_ReleasePartnerSlot(worker, '\x01');
@@ -276,21 +275,18 @@ extern "C" void AttendanceCtrl_PopulateTable();
 static const bool s_attendanceStateTableBuilt = (AttendanceCtrl_PopulateTable(), true);
 
 // 0x140044580. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
-// +0x28 = +0x30 = 0; `_controller(this)` is the member's back-pointer at +0x50; then
+// +0x28 = +0x30 = 0 (queue's Array ctor); `_controller(this)` is the member's back-pointer at +0x50; then
 // `_flags |= 0xa` (0x8a).
 AttendanceComponent::AttendanceComponent()
-    : queue(nullptr), queueCount(0), queueCapacity(0), _controller(this) {
+    : _controller(this) {
     OrFlagsInCtor(0xa);
 }
 
-// 0x140044510: the waiting queue (+0x28 data, +0x30 count/capacity) is freed and
-// zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
-// compiler's chain.
+// 0x140044510: the body is empty. ~_controller restamps +0x38 (0x140044540), THEN
+// ~queue frees and zeroes the waiting queue (+0x28 data, +0x30 count/capacity,
+// 0x140044543..0x140044553; kSpec_PtrZero has no element destroy), then the bases'
+// restamps and ~Internal: reverse declaration order, the compiler's chain.
 AttendanceComponent::~AttendanceComponent() {
-    Object::detail::InternalMemFree(queue);
-    queue = nullptr;
-    queueCount = 0;      // retail: one qword 0 over +0x30..+0x37
-    queueCapacity = 0;
 }
 
 // create 0x140002670: MemAlloc(0x58, 8), then the ctor.
@@ -317,17 +313,17 @@ void AttendanceComponent::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(io, 0);
 
-    int32_t count = queueCount;
+    int32_t count = queue._size;
     ser.Serialize(count, nullptr);
 
     // The queue array has to be grown to the deserialized count before the
     // per-entry loop writes into it. The loading flag is on the STREAM (+0x08).
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-        GameColl::AsArray<GameColl::Ptr8>(&queue).SetSize(count);
+        // exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n) (kSpec_PtrZero).
+        queue.SetSize(count);
     }
 
-    Object::InternalPtr<CitizenComponent>* q = queue;
+    Object::InternalPtr<CitizenComponent>* q = queue._data;
     for (int32_t i = 0; i < count && q; ++i, ++q) {
         q->InternalBasePtr::Serialize(ser);
         if (q->Get() == nullptr) continue;
@@ -352,7 +348,7 @@ void AttendanceComponent::OnRemove() {
 // ============================================================
 void AttendanceComponent::Update(const System::Time* /*time*/) {
     // Check if queue count at +0x30 (as int32) is nonzero
-    int32_t count = queueCount;
+    int32_t count = queue._size;
     if (count == 0)
         return;
 

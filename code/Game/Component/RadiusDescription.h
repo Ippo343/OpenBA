@@ -44,6 +44,7 @@ public:
 };
 
 static_assert(sizeof(RadiusDescription) == 0x30, "RadiusDescription is 0x30 (create 0x14000b9e0 MemAlloc(0x30))");
+static_assert(offsetof(RadiusDescription, _pad2c) == 0x2C, "RadiusDescription::_pad2c");
 static_assert(alignof(RadiusDescription) == 8, "RadiusDescription alignment");
 static_assert(offsetof(RadiusDescription, _material) == 0x20, "RadiusDescription::_material @ +0x20");
 static_assert(offsetof(RadiusDescription, _radius) == 0x28, "RadiusDescription::_radius @ +0x28");

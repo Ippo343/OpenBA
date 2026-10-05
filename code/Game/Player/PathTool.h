@@ -48,6 +48,7 @@ struct alignas(4) PathRoute {
     int32_t cells[0x800];     // +0x0C
 };
 static_assert(sizeof(PathRoute) == 0x200c, "PathRoute stride 0x200c (0x140026ba0)");
+static_assert(offsetof(PathRoute, srcCell) == 0x0, "PathRoute::srcCell");
 static_assert(offsetof(PathRoute, dstCell) == 0x04, "PathRoute::dstCell @ +0x04");
 static_assert(offsetof(PathRoute, cellCount) == 0x08, "PathRoute::cellCount @ +0x08");
 static_assert(offsetof(PathRoute, cells) == 0x0C, "PathRoute::cells @ +0x0C");
@@ -59,6 +60,7 @@ struct PathSegment {
     int32_t maxCell;          // +0x04
 };
 static_assert(sizeof(PathSegment) == 8 && alignof(PathSegment) == 4, "PathSegment is 8 bytes at align 4");
+static_assert(offsetof(PathSegment, minCell) == 0x0, "PathSegment::minCell");
 static_assert(offsetof(PathSegment, maxCell) == 0x04, "PathSegment::maxCell @ +0x04");
 
 // The 0x28-byte node of SetSelected's two dedup trees (0x1400dd770: MemAlloc(0x28)):
@@ -74,6 +76,8 @@ struct PathSegmentNode {
     uint8_t          _pad24[4]; // +0x24
 };
 static_assert(sizeof(PathSegmentNode) == 0x28, "PathSegmentNode is MemAlloc(0x28)");
+static_assert(offsetof(PathSegmentNode, seg) == 0x0, "PathSegmentNode::seg");
+static_assert(offsetof(PathSegmentNode, _pad24) == 0x24, "PathSegmentNode::_pad24");
 static_assert(offsetof(PathSegmentNode, parent) == 0x08, "PathSegmentNode::parent @ +0x08");
 static_assert(offsetof(PathSegmentNode, left) == 0x10, "PathSegmentNode::left @ +0x10");
 static_assert(offsetof(PathSegmentNode, right) == 0x18, "PathSegmentNode::right @ +0x18");

@@ -53,6 +53,7 @@ public:
 };
 
 static_assert(sizeof(WorkComponent) == 0x38, "WorkComponent is 0x38 (create 0x140039e70)");
+static_assert(offsetof(WorkComponent, _pad34) == 0x34, "WorkComponent::_pad34");
 static_assert(alignof(WorkComponent) == 8, "WorkComponent alignment");
 static_assert(offsetof(WorkComponent, workId) == 0x28, "");
 static_assert(offsetof(WorkComponent, workFlags) == 0x2c, "");

@@ -47,7 +47,6 @@
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <new>
 #include "system/MemoryAllocator.h"
@@ -59,21 +58,16 @@
 CreatePlacedDescription::CreatePlacedDescription()
     : Description(),
       _category(0),
-      _placeArray(nullptr),
-      _placeCount(0),
-      _placeCap(0),
       _i40(0),
       _i44(1),
       _i48(1),
       _created(nullptr) {}
 
-// dtor (slot 0 0x140032ad0 minus the stamps): frees the int[] array; the String member's dtor follows.
-// The compiler then chains ~Description -> ~External.
+// dtor (slot 0 0x140032ad0 minus the stamps): the body is empty. ~_placeArray frees the
+// int[] array unconditionally and zeroes +0x30 / +0x38 (0x140032af7..0x140032b07), then
+// ~_name (0x140032b0f): reverse declaration order. The compiler then chains
+// ~Description -> ~External.
 CreatePlacedDescription::~CreatePlacedDescription() {
-    if (_placeArray) ::System::MemoryAllocator::MemFree(_placeArray);   // int[] array
-    _placeArray = nullptr;
-    _placeCount = 0;
-    _placeCap = 0;
 }
 
 // [5] 0x1401198d0: stream order as retail.
@@ -105,7 +99,7 @@ bool CreatePlacedDescription::Serialize(IO::Stream& stream) {
     // per-cell terrain-mask override in ToolTile_FootprintValidity_d580 (0x14009D580):
     // with them zero, `code` is 0 for every footprint cell, no terrain type is ever
     // allowed, and the building can never be placed anywhere.
-    int count = _placeCount;
+    int count = _placeArray._size;
     ser.Serialize(count, nullptr);
     
     // Retail gates the resize on its load flag: `if (*(int*)(local_20 + 8) == 0)`, where
@@ -121,7 +115,7 @@ bool CreatePlacedDescription::Serialize(IO::Stream& stream) {
     // the element loop was skipped, the stream desynced, and the process crashed.
     // Resizing only when the array cannot already hold `count` keeps an already-parsed
     // array — values intact — which is the whole point of the fix above.
-    uint32_t* arr = _placeArray;
+    uint32_t* arr = _placeArray._data;
     if (count > 0 && !arr) {
         // No buffer yet: allocate directly instead of going through the shared resize.
         // Reimpl_Array_Resize_Stride04 (our 0x1400021D0) reads the RECORDED count as
@@ -129,20 +123,20 @@ bool CreatePlacedDescription::Serialize(IO::Stream& stream) {
         // null data pointer with a non-zero count makes it read from address 0. Retail
         // never sees that state; ours could, so keep the shared helper off this path.
         arr = static_cast<uint32_t*>(::System::MemoryAllocator::MemAlloc((uint64_t)count * 4, 4));
-        _placeArray = arr;
-        _placeCount = count;
-        _placeCap   = count;
+        _placeArray._data     = arr;
+        _placeArray._size     = count;
+        _placeArray._capacity = count;
         // Zeroing a FRESH buffer is right — its elements are about to be read from the
         // stream. Zeroing an ALREADY-PARSED one is the bug this fix removes.
         if (arr) for (int i = 0; i < count; ++i) arr[i] = 0;
-    } else if (count > 0 && _placeCap < count) {
-        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
-        // here at 14011993d. I32NoInit — the grown tail is left as the allocation found
+    } else if (count > 0 && _placeArray._capacity < count) {
+        // exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called here at
+        // 14011993d: uint32_t's trait-derived row — the grown tail is left as the allocation found
         // it, like retail. Safe: this branch is only taken when the buffer cannot
         // already hold `count`, i.e. the array has not been parsed yet, and the element
         // loop right below reads all `count` slots from the stream into it.
-        GameColl::AsArray<GameColl::I32NoInit>(&_placeArray).SetSize(count);
-        arr = _placeArray;
+        _placeArray.SetSize(count);
+        arr = _placeArray._data;
     }
     for (int i = 0; i < count && arr; ++i) {
         ser.Serialize(arr[i], nullptr);   // enum element

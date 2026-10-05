@@ -33,6 +33,9 @@ struct ResidenceUIRow {
     UI::Element*     buttonGoto;      // +0x28 element id 300 + row
 };
 static_assert(sizeof(ResidenceUIRow) == 0x30, "ResidenceUIRow is 0x30");
+static_assert(offsetof(ResidenceUIRow, imageMale) == 0x0, "ResidenceUIRow::imageMale");
+static_assert(offsetof(ResidenceUIRow, imageFemale) == 0x8, "ResidenceUIRow::imageFemale");
+static_assert(offsetof(ResidenceUIRow, textAge) == 0x18, "ResidenceUIRow::textAge");
 static_assert(offsetof(ResidenceUIRow, textName) == 0x10, "ResidenceUIRow +0x10");
 static_assert(offsetof(ResidenceUIRow, textProfession) == 0x20, "ResidenceUIRow +0x20");
 static_assert(offsetof(ResidenceUIRow, buttonGoto) == 0x28, "ResidenceUIRow +0x28");

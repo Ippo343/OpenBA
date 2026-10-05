@@ -57,6 +57,7 @@ public:
 };
 
 static_assert(sizeof(RawMaterialDescription) == 0x60, "RawMaterialDescription is 0x60 (create 0x1400372d0 MemAlloc(0x60))");
+static_assert(offsetof(RawMaterialDescription, _pad59) == 0x59, "RawMaterialDescription::_pad59");
 static_assert(alignof(RawMaterialDescription) == 8, "RawMaterialDescription alignment");
 static_assert(offsetof(RawMaterialDescription, _spriteSheet) == 0x20, "RawMaterialDescription::_spriteSheet @ +0x20");
 static_assert(offsetof(RawMaterialDescription, _stringTable) == 0x28, "RawMaterialDescription::_stringTable @ +0x28");

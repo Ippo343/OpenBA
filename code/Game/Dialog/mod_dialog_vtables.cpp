@@ -265,7 +265,7 @@ void ModDialog_OpenFromMainMenu(MainMenuDialog* mainMenu) {
     // local is read only in the debug build. The CALL stays either way — that is
     // the whole point of hoisting it out of the argument list.
     [[maybe_unused]] const int modCount =
-        ::IO::Modification::_singleton->GetCount();   // B.3.4 bridge
+        ::IO::Modification::_singleton->GetCount();
     printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", (void*)dlg, modCount);
 }
 

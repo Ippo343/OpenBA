@@ -47,6 +47,8 @@ public:
 };
 
 static_assert(sizeof(StatusIconDescription) == 0x38, "StatusIconDescription is 0x38 (create 0x140038920 MemAlloc(0x38))");
+static_assert(offsetof(StatusIconDescription, _pad31) == 0x31, "StatusIconDescription::_pad31");
+static_assert(offsetof(StatusIconDescription, _pad34) == 0x34, "StatusIconDescription::_pad34");
 static_assert(alignof(StatusIconDescription) == 8, "StatusIconDescription alignment");
 static_assert(offsetof(StatusIconDescription, _spriteSheet) == 0x20, "StatusIconDescription::_spriteSheet @ +0x20");
 static_assert(offsetof(StatusIconDescription, _scale) == 0x28, "StatusIconDescription::_scale @ +0x28");

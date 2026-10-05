@@ -126,11 +126,11 @@ int Work::TryAutoPickup(CitizenComponent** citizenRef) {
     WorkScheduler* mgr = GameUpdateLoop::_singleton->m_tutorial;
 
     int i = 0;
-    if (apComp->field30Count <= 0) return 0;
+    if (apComp->field30._size <= 0) return 0;
 
     do {
         WorkSchedulerIdNode* node = mgr->trees[0].root;
-        int cellId = apComp->field30[i];
+        int cellId = apComp->field30._data[i];
         bool keepElement = false;
         while (node != nullptr) {
             if (cellId < node->key) {
@@ -149,22 +149,22 @@ int Work::TryAutoPickup(CitizenComponent** citizenRef) {
         }
         if (!keepElement) {
             // not found in the map -> compact arr[i] out of the list
-            int count = apComp->field30Count;
+            int count = apComp->field30._size;
             int shiftIdx = i;
             int j = i;
             while (j < count) {
                 j++;
                 if (j < count) {
-                    int32_t* p = apComp->field30 + shiftIdx;
+                    int32_t* p = apComp->field30._data + shiftIdx;
                     p[0] = p[1];
                 }
                 shiftIdx += 1;
             }
-            apComp->field30Count = count - 1;
+            apComp->field30._size = count - 1;
             i -= 1;
         }
         i += 1;
-    } while (i < apComp->field30Count);
+    } while (i < apComp->field30._size);
 
     return 0;
 }

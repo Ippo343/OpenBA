@@ -72,7 +72,6 @@ void LivestockComponent::OnAdded() {
     CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;   // +0xF0
     if (!town) return;
     LivestockComponent* ibp = this;
-    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     town->livestock
         .SetSizeFill(town->livestock._size + 1, &ibp);
     std::fprintf(stderr, "[Pasture] livestock %p joined the free-roaming pool (now %d)\n",

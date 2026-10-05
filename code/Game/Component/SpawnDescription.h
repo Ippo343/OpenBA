@@ -62,6 +62,9 @@ public:
 static_assert(sizeof(SpawnDescription) == 0x30, "SpawnDescription is 0x30 (create 0x14000c1d0 MemAlloc(0x30))");
 static_assert(alignof(SpawnDescription) == 8, "SpawnDescription alignment");
 static_assert(sizeof(SpawnDescription::Entry) == 0x10, "SpawnDescription::Entry stride 0x10 (0x14000c520)");
+static_assert(offsetof(SpawnDescription::Entry, _template) == 0x0, "Entry::_template");
+static_assert(offsetof(SpawnDescription::Entry, _minSpawnAge) == 0x8, "Entry::_minSpawnAge");
+static_assert(offsetof(SpawnDescription::Entry, _maxSpawnAge) == 0xC, "Entry::_maxSpawnAge");
 static_assert(offsetof(SpawnDescription, _entries) == 0x20, "SpawnDescription::_entries @ +0x20");
 static_assert(sizeof(SpawnDescription::EntryArray) == 0x10, "SpawnDescription::_entries is the 16-byte Array header");
 

@@ -34,6 +34,7 @@ public:
 };
 
 static_assert(sizeof(CompleteRoad) == 0x30, "CompleteRoad is 0x30 (create 0x140021ec0 MemAlloc)");
+static_assert(offsetof(CompleteRoad, _pad29) == 0x29, "CompleteRoad::_pad29");
 static_assert(alignof(CompleteRoad) == 8, "CompleteRoad is 8-aligned");
 static_assert(offsetof(CompleteRoad, roadTileIndex) == 0x20, "CompleteRoad +0x20");
 static_assert(offsetof(CompleteRoad, roadType) == 0x24, "CompleteRoad +0x24");

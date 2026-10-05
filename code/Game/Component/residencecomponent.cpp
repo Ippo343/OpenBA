@@ -193,7 +193,6 @@ void ResidenceComponent::SerializeFamilies(IO::Serializer& ser, int count, Famil
         int innerCount = entry->_size;
         ser.Serialize(innerCount, nullptr);
         // On load (direction 0): resize the member array
-        // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
         if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
             entry->SetSize(innerCount);
         }

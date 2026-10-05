@@ -40,6 +40,7 @@ public:
 };
 
 static_assert(sizeof(CreateNaturalResource) == 0x38, "CreateNaturalResource is 0x38 (create 0x1400221d0 MemAlloc)");
+static_assert(offsetof(CreateNaturalResource, _pad34) == 0x34, "CreateNaturalResource::_pad34");
 static_assert(alignof(CreateNaturalResource) == 8, "CreateNaturalResource is 8-aligned");
 static_assert(offsetof(CreateNaturalResource, descEntity) == 0x20, "CreateNaturalResource +0x20");
 static_assert(offsetof(CreateNaturalResource, parentEntity) == 0x28, "CreateNaturalResource +0x28");
