@@ -461,8 +461,8 @@ void TutorialInstance::RefreshStepUI() {
 
     // 1. setup objects — vtable slot 8 (+0x40)
     {
-        int n = step->setupCount;
-        TutorialSetup** data = step->setups;
+        int n = step->setups.GetSize();
+        TutorialSetup** data = step->setups.GetData();
         for (int i = 0; i < n && data; ++i) {
             TutorialSetup* obj = data[i];
             if (!obj) continue;
@@ -478,8 +478,8 @@ void TutorialInstance::RefreshStepUI() {
         UI::StringTable* stringTable = step->stringTable;
 
         const struct { System::String* srcString; UI::Element* elem; } texts[2] = {
-            { &step->TitleText(), ui->preText },
-            { &step->DescText(),  ui->postText },
+            { &step->titleStr, ui->preText },
+            { &step->descStr,  ui->postText },
         };
         for (const auto& t : texts) {
             UI::String tmp(Object::ExternalPtr<UI::StringTable>(stringTable), *t.srcString);
@@ -512,8 +512,8 @@ void TutorialInstance::RefreshStepUI() {
 
     // 5. images — vtable slot 9 (+0x48) builds each element
     {
-        int n = step->imageCount;
-        TutorialImage** data = step->images;
+        int n = step->images.GetSize();
+        TutorialImage** data = step->images.GetData();
         if (n > 0 && data && table) {
             UI::DialogInstance* dlgIBP = ui->_dialog;
             const UI::Dialog* dialog = dlgIBP ? dlgIBP->_dialog : nullptr;
@@ -613,8 +613,8 @@ void TutorialInstance::StepExecute(const System::Time* param2, const Achievement
 
     // setups: slot 9
     {
-        int n = step->setupCount;
-        TutorialSetup** data = step->setups;
+        int n = step->setups.GetSize();
+        TutorialSetup** data = step->setups.GetData();
         for (int i = 0; i < n && data; ++i) {
             TutorialSetup* obj = data[i];
             if (!obj) continue;
@@ -624,9 +624,9 @@ void TutorialInstance::StepExecute(const System::Time* param2, const Achievement
 
     // goals: slot 8, counts the ones that report complete
     int passed = 0;
-    int goalCount = step->goalCount;
+    int goalCount = step->goals.GetSize();
     {
-        TutorialGoal** data = step->goals;
+        TutorialGoal** data = step->goals.GetData();
         for (int i = 0; i < goalCount && data; ++i) {
             TutorialGoal* obj = data[i];
             if (!obj) continue;
@@ -663,8 +663,8 @@ void TutorialInstance::StepExecute(const System::Time* param2, const Achievement
     //   Undoing the restriction first means that drain sees no restriction at all, which
     //   is the same state retail's drain sees.
     {
-        int n = step->setupCount;
-        TutorialSetup** data = step->setups;
+        int n = step->setups.GetSize();
+        TutorialSetup** data = step->setups.GetData();
         // ENDGAME B.3.8: the class's own record (was a lazy GetTypeIdByName cache).
         const uint32_t s_restrictTid = TutorialSetupRestrictPlayer::TypeId();
 

@@ -18,8 +18,8 @@
 // behaviour gives one, else a typed guess):
 //   +0x00 int32  size        Serialize(int&) first (0x14009f100); squared
 //                            as the cell count (size * size) by the loader
-//   +0x08 Picking::Scene     embedded, Picking::Scene::Scene(+0x08) — raw
-//                            storage (B.4 H5: the member's ctor would run)
+//   +0x08 Picking::Scene     embedded, Picking::Scene::Scene(+0x08): a real
+//                            member (behaviour: B4 wave Y)
 //   +0x80 cell array         Collection::Array of 0x30-byte cells: data +0x80,
 //                            count +0x88 (Serialize(int&) + resize
 //                            0x14009aa90), capacity +0x8C
@@ -60,6 +60,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "Action/PathSearch.h"   // MapCellQueue, RegionGraph (B.4 ACT-a)
+#include "picking/Scene.h"       // -Iruntime/types: Picking::Scene (by value at +0x08)
 
 class ComponentEntity;
 class PathfinderThread;
@@ -107,7 +108,11 @@ public:
 
     int32_t  size;               // +0x00 map edge in cells (Serialize int&)
     uint8_t  _pad04[4];          // +0x04 not written by the ctor
-    uint8_t  pickingScene[0x60]; // +0x08 Picking::Scene (embedded; raw, H5)
+    // +0x08: retail's ctor 0x14009ee70 runs ??0Scene@Picking@@ (import
+    // 0x140151ff8) on it first; its dtor 0x14009ed60 tail-JMPs to ~Scene after
+    // freeing everything else (cells and the cell queue in the body): the
+    // compiler's member destruction after ~Map's body.
+    Picking::Scene pickingScene; // +0x08
     PathfinderThread* pathfinder;  // +0x68 ctor 0; the worker (e8c0 MemAlloc(0x1f8) + 0x1400a67f0;
                                  //       0x140046b2c hands it to 0x1400a6fe0)
     RegionGraph* regionGraph;    // +0x70 ctor 0; the coarse region graph (e8c0 MemAlloc(0x108) +

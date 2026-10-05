@@ -7,14 +7,11 @@
 // Fields (from Ghidra decompilation):
 //   +0x20: bool     completed      -- step completion flag
 //   +0x28: void*    stringTable    -- ExternalPtr<StringTable>
-//   +0x30: void*    titleStr       -- System::String
-//   +0x38: void*    descStr        -- System::String
-//   +0x40: void*    images         -- DynArray<ExternalPtr<TutorialImage>> data
-//   +0x48: int32_t  imageCount     -- array count
-//   +0x50: void*    setups         -- DynArray<ExternalPtr<TutorialSetup>> data
-//   +0x58: int32_t  setupCount     -- array count
-//   +0x60: void*    goals          -- DynArray<ExternalPtr<TutorialGoal>> data
-//   +0x68: int32_t  goalCount      -- array count
+//   +0x30: String   titleStr
+//   +0x38: String   descStr
+//   +0x40: Array<ExternalPtr<TutorialImage>> images
+//   +0x50: Array<ExternalPtr<TutorialSetup>> setups
+//   +0x60: Array<ExternalPtr<TutorialGoal>>  goals
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
@@ -43,25 +40,19 @@
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
 // ctor 0x1400e3480: External() (the base's real ctor), the stamp (the
-// compiler's), then every field zeroed (+0x20 .. +0x68).
+// compiler's), then +0x20 .. +0x68 zeroed: the byte at +0x20, the qwords +0x28
+// .. +0x68. The two Strings' default ctor and the three Arrays' default ctor
+// are those zero stores (String() stores the null data pointer out of line).
 TutorialStep::TutorialStep()
-    : completed(false), _pad21{}, stringTable(nullptr), titleStr(nullptr), descStr(nullptr),
-      images(nullptr), imageCount(0), imageCapacity(0),
-      setups(nullptr), setupCount(0), setupCapacity(0),
-      goals(nullptr), goalCount(0), goalCapacity(0) {}
+    : completed(false), _pad21{}, stringTable(nullptr) {}
 
-// The dtor body 0x1400e33f0: free the goals (+0x60), setups (+0x50) and images
-// (+0x40) arrays in retail's order — each an inlined Collection::Array<T>::~Array
-// (MemFree the buffer, zero _data, zero the _size/_capacity qword; no element
-// destroy for the 8-byte ExternalPtr<T> entries) — then ~String on the
-// description (+0x38) and the title (+0x30). The compiler runs ~External.
-TutorialStep::~TutorialStep() {
-    reinterpret_cast<Collection::Array<void*>*>(&goals)->~Array();    // B.3.2 bridge   // LEFT: H5 TutorialStep's goals / setups / images are raw triples of Array<ExternalPtr<T>> (TutorialStep.h, not this agent's)
-    reinterpret_cast<Collection::Array<void*>*>(&setups)->~Array();   // B.3.2 bridge   // LEFT: H5 TutorialStep's goals / setups / images are raw triples of Array<ExternalPtr<T>> (TutorialStep.h, not this agent's)
-    reinterpret_cast<Collection::Array<void*>*>(&images)->~Array();   // B.3.2 bridge   // LEFT: H5 TutorialStep's goals / setups / images are raw triples of Array<ExternalPtr<T>> (TutorialStep.h, not this agent's)
-    DescText().~String();
-    TitleText().~String();
-}
+// The dtor body 0x1400e33f0 is empty after the stamp: retail then frees the
+// goals (+0x60), setups (+0x50) and images (+0x40) arrays (MemFree the buffer,
+// zero _data, zero the _size/_capacity qword; no element destroy for the 8-byte
+// ExternalPtr<T> entries) and runs ~String on the description (+0x38) and the
+// title (+0x30), then JMPs to ~External: the compiler's member destruction in
+// reverse declaration order.
+TutorialStep::~TutorialStep() {}
 
 // ============================================================
 // TutorialStep::Reconstruct [6] 0x140028ca0 / Destruct [7] / Construct [8]
@@ -88,15 +79,6 @@ Object::External* TutorialStep::Construct() {                     // 0x140028c90
 //   5. int count at +0x48, then DynArray resize +0x40, then array serialize (images)
 //   6. int count at +0x58, then DynArray resize +0x50, then array serialize (setups)
 //   7. int count at +0x68, then DynArray resize +0x60, then array serialize (goals)
-// LEFT H5: the two Strings are raw storage (the ctor stores 0 inline, the dtor
-// destroys them by hand).
-System::String& TutorialStep::TitleText() {
-    return *reinterpret_cast<System::String*>(&titleStr);   // LEFT: H5: the two Strings are raw storage (the ctor stores 0 inline, the dtor destroys them by hand).
-}
-System::String& TutorialStep::DescText() {
-    return *reinterpret_cast<System::String*>(&descStr);   // LEFT: H5: the two Strings are raw storage (the ctor stores 0 inline, the dtor destroys them by hand).
-}
-
 bool TutorialStep::Serialize(IO::Stream& stream) {
     // The serializer.
     IO::Serializer serializer(stream, 0);
@@ -108,23 +90,23 @@ bool TutorialStep::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&stringTable, &serializer);   // 0x14000bf40
 
     // 3. / 4. Serialize the title (+0x30) and description (+0x38) Strings
-    TitleText().Serialize(serializer);
-    DescText().Serialize(serializer);
+    titleStr.Serialize(serializer);
+    descStr.Serialize(serializer);
 
     // 5. / 6. / 7. The three ExternalPtr arrays: count, resize on load, elements.
-    auto leg = [&serializer](auto& data, int32_t count,
+    auto leg = [&serializer](auto& array, int32_t count,
                              void (*serializeArray)(void* serializer, int count, void* arrayData, void* p4)) {
         int32_t localCount = count;
         serializer.Serialize(localCount, nullptr);
         // On load (encoding mode 0): resize the array
         if (static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-            Reimpl_Array_Resize_Stride08(&data, localCount);   // 0x140001bb0
+            Reimpl_Array_Resize_Stride08(&array, localCount);   // 0x140001bb0
         }
-        serializeArray(&serializer, localCount, data, nullptr);
+        serializeArray(&serializer, localCount, array.GetData(), nullptr);
     };
-    leg(images, imageCount, &TutBase_SerializeImageArray);   // images  0x140028cf0
-    leg(setups, setupCount, &TutBase_SerializeSetupArray);   // setups  0x140028f40
-    leg(goals,  goalCount,  &TutBase_SerializeGoalArray);    // goals   0x140029190
+    leg(images, images.GetSize(), &TutBase_SerializeImageArray);   // images  0x140028cf0
+    leg(setups, setups.GetSize(), &TutBase_SerializeSetupArray);   // setups  0x140028f40
+    leg(goals,  goals.GetSize(),  &TutBase_SerializeGoalArray);    // goals   0x140029190
     return true;
 }
 

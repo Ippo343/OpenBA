@@ -61,8 +61,8 @@ static void MarkovGenerate(const NameDatabase* db, System::Random* rng, int minL
     uint32_t s = rng->Rand(static_cast<uint32_t>(startCnt));
     uint16_t startIdx = startArr[(int)s];
     if ((int)startIdx >= recCount) { out[0] = 0; return; }
-    uint32_t seedKey = *(const uint32_t*)table[startIdx].field_0x00;   // LEFT: NameDatabase.h: the 4-gram is declared uint8_t[4]; retail reads it as one dword
-    *(uint32_t*)out = seedKey;   // LEFT: the 4-gram stored into the caller's char buffer as one dword (retail)
+    uint32_t seedKey = table[startIdx].field_0x00;
+    *(uint32_t*)out = seedKey;   // CAST-OK: byte_io (the 4-gram stored into the caller's char buffer as one dword, as retail does)
     out[0] = (char)(out[0] - 0x20);   // uppercase the first letter ('a'-0x20 = 'A')
 
     // Context window = the 4 seed bytes, in memory (little-endian) order.
@@ -89,16 +89,18 @@ static void MarkovGenerate(const NameDatabase* db, System::Random* rng, int minL
         for (;;) {
             int mid = (hi + lo) >> 1;
             if (mid < 0 || mid >= recCount) return;   // context not found -> stop
-            const unsigned char* rp = table[mid].field_0x00;
-            uint32_t rkey = ((uint32_t)rp[0] << 24) | ((uint32_t)rp[1] << 16)
-                          | ((uint32_t)rp[2] << 8) | (uint32_t)rp[3];
+            // The 4-gram's bytes in memory order (little-endian: byte 0 is the
+            // dword's low byte), most significant first.
+            const uint32_t rk = table[mid].field_0x00;
+            uint32_t rkey = ((rk & 0xFFu) << 24) | (((rk >> 8) & 0xFFu) << 16)
+                          | (((rk >> 16) & 0xFFu) << 8) | (rk >> 24);
             if (rkey == ctxKey) { foundIdx = mid; break; }
             if (rkey < ctxKey) lo = mid + 1; else hi = mid - 1;
             if (hi < lo) return;                       // not found -> stop
         }
 
         const NameDatabaseEntry* rec = &table[foundIdx];
-        uint32_t recKey  = *(const uint32_t*)rec->field_0x00;   // LEFT: NameDatabase.h: the 4-gram is declared uint8_t[4]; retail reads it as one dword
+        uint32_t recKey  = rec->field_0x00;
         uint32_t mask    = rec->field_0x08;
         // Slide the context window: drop the oldest byte (recKey byte0), keep 1..3.
         c0 = (unsigned char)(recKey >> 8);
