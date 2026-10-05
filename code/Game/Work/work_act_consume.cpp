@@ -27,7 +27,6 @@
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
 #include "Component/CitizenAIComponent.h"   // ENDGAME B.3.9 CB: kCitizenAIMessageTargetTypeId
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/ConsumeProduceDescription.h"   // ENDGAME B.3.9 D5
@@ -67,8 +66,8 @@
 //   0x1400012d0 Entity_FindComponent_Family           ActMv_FindComponentFamily_12d0
 //   0x14000b6f0 FindComponent<ConsumeProduceComponent>
 //   0x140119470 WeightedRandomIndex                   WeightedRandomIndex_119470
-// 0x1400032e0 (task-list array grow) is Collection::Array<Ptr8>::SetSize, converted to
-// GameColl::AsArray<GameColl::Ptr8> member calls in ENDGAME B.3.2 step 2.
+// 0x1400032e0 (task-list array grow) is Collection::Array<InternalPtr>::SetSize: the
+// member call on ActionStack::actions (kSpec_PtrZero).
 // Dispatch slots: 0x140152b60 MemAlloc -> System::MemoryAllocator::MemAlloc;
 // 0x140152b00 System::Time(float) -> RtSystem_Time_Ctor; 0x140152a98 IsDerivedFrom ->
 // the member Object::Base::IsDerivedFrom.
@@ -113,17 +112,17 @@ static ConsumeProduceDescription* WCP_FindComponentDerived(ComponentDescription*
 // (0x1400bf5be.. and 0x1400bf69c..). Functionally identical to TaskListAppend: the
 // Array's count (+0x50) is the stack's size and currentAction (+0x60) its top.
 static void WCP_AppendInline(CharacterComponent* character, Action* ibpVal) {
-    // FUN_1400032e0 == Collection::Array<Ptr8>::SetSize; it only touches the array
-    // header at +0x48..+0x58. B.3.2 bridge, LEFT (B4 H5): ActionStack's retail dtor 0x1400c5150 DeletePtr's every element and +0x10 before MemFree(+0x00); the tree's ActionStack has no dtor (CharacterComponent's implicit dtor releases nothing), so typing `actions` needs 0x1400c5150 ported as ~ActionStack in CharacterComponent (Component/) first.
-    int cap = character->actionStack.count;                          // [RSI+0x8]
+    // FUN_1400032e0 == Collection::Array<InternalPtr>::SetSize (kSpec_PtrZero); it only
+    // touches the array header at +0x48..+0x58.
+    int cap = character->actionStack.actions._size;                  // [RSI+0x8]
     if (cap == 0) {
         cap = 0x10;
-        GameColl::AsArray<GameColl::Ptr8>(&character->actionStack.actions).SetSize(cap);
+        character->actionStack.actions.SetSize(cap);
     } else {
         int n = character->actionStack.current + 1;                  // [RSI+0x18]+1
         if (n == cap) {
             cap *= 2;
-            GameColl::AsArray<GameColl::Ptr8>(&character->actionStack.actions).SetSize(cap);
+            character->actionStack.actions.SetSize(cap);
         }
     }
 

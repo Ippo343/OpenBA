@@ -180,7 +180,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
 CharacterComponent::CharacterComponent()
     : field_0x28(false), _pad29{}, field_0x2C(), field_0x38(0), field_0x3C(0),
       characterIndex(-1), _pad44{},
-      actionStack{nullptr, 0, 0, nullptr, -1, {}},
+      actionStack(),
       modelComponent(nullptr), pickingComponent(nullptr), characterDescription(nullptr) {
     OrFlagsInCtor(0x8f);
 }

@@ -560,7 +560,7 @@ static bool CheckCitizenHasTask(BuildStructure* self, CitizenComponent** citizen
     int actionCount = character->actionStack.current + 1;  // original: 0x60 field + 1
     if (actionCount <= 0) return false;
 
-    ::Object::InternalPtr<Action>* actionArray = character->actionStack.actions;
+    ::Object::InternalPtr<Action>* actionArray = character->actionStack.actions._data;
     for (int i = 0; i < actionCount; i++) {
         Action* action = actionArray[i].Get();
 

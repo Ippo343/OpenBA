@@ -38,6 +38,7 @@
 #include <cstddef>
 #include "object/Internal.h"
 #include "Object/exe_type.h"   // DECLARE_EXE_TYPE (ENDGAME B.3.9 RF)
+#include "collection/Collection.h"   // Collection::Array (ActionStack::actions)
 
 class ComponentEntity;   // B4 P2 S2: slot 9's parameter
 struct ActionStack;      // below: slots 4 and 5's parameter
@@ -100,10 +101,27 @@ static_assert(offsetof(Action, _status) == 0x18, "Action +0x18 status byte (0x14
 // 0x1400c5150). Read from the push 0x1400c54e0 (grows `actions` through
 // Array<qword>::SetSize 0x1400032e0 when `current + 1 == count`, walks the old top
 // with 0x1400c4f10, then stores at ++current) and CharacterComponent's own fields.
+//
+// `actions` grows through retail's stride-8 row 0x1400032e0 (stride 8, align 8, the new
+// tail ZEROED, no element destroy): kSpec_PtrZero (Entity/EntityList.h). Its buffer is
+// freed by the member's ~Array AFTER the dtor body (0x1400c51b3..0x1400c51c3: MemFree,
+// then +0x00 = +0x08 = 0), which is retail's order: 0x1400c5150 DeletePtr's the elements
+// and +0x10 first.
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
+
 struct ActionStack {
-    ::Object::InternalPtr<Action>* actions;   // +0x00 Array<InternalPtr<Action>> data
-    int32_t  count;                           // +0x08 Array count
-    int32_t  capacity;                        // +0x0C Array capacity
+    using ActionList = Collection::Array<::Object::InternalPtr<Action>, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+
+    // CharacterComponent's ctor 0x140109d20 builds the sub-object inline: +0x00 = +0x08 =
+    // +0x10 = 0 (0x140109d69..0x140109d70: `actions`' Array ctor and the null +0x10),
+    // +0x18 = -1 (0x140109d74). +0x1C is not written.
+    ActionStack() : actions(), field_0x10(), current(-1) {}
+    ~ActionStack();                                   // 0x1400c5150
+    ActionStack(const ActionStack&) = delete;
+    ActionStack& operator=(const ActionStack&) = delete;
+
+    ActionList actions;                       // +0x00 the entries (count +0x08, capacity +0x0C)
     ::Object::InternalPtr<Action> field_0x10; // +0x10 (the executor 0x1400c4c50 and the stack clear
                                               //       0x1400c5400 DeletePtr it; a trivial type: layout-neutral)
     int32_t  current;                         // +0x18 index of the running entry (-1 = none)
@@ -113,8 +131,8 @@ struct ActionStack {
 static_assert(sizeof(ActionStack) == 0x20, "ActionStack: CharacterComponent +0x48..+0x67");
 static_assert(offsetof(ActionStack, _pad1C) == 0x1C, "ActionStack::_pad1C");
 static_assert(offsetof(ActionStack, actions)    == 0x00, "ActionStack::actions @ +0x00");
-static_assert(offsetof(ActionStack, count)      == 0x08, "ActionStack::count @ +0x08");
-static_assert(offsetof(ActionStack, capacity)   == 0x0C, "ActionStack::capacity @ +0x0C");
+static_assert(offsetof(ActionStack, actions) + offsetof(ActionStack::ActionList, _size)     == 0x08, "ActionStack count @ +0x08");
+static_assert(offsetof(ActionStack, actions) + offsetof(ActionStack::ActionList, _capacity) == 0x0C, "ActionStack capacity @ +0x0C");
 static_assert(offsetof(ActionStack, field_0x10) == 0x10, "ActionStack +0x10");
 static_assert(offsetof(ActionStack, current)    == 0x18, "ActionStack::current @ +0x18");
 

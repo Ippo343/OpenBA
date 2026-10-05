@@ -31,7 +31,6 @@
 #include "Action/Action.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Work/exe_bodies.h"          // WorkBase_TaskListCleanup_c5400, WorkBase_FindComponent_6270
 #include "Game/exe_constants.h"       // kRdata_*
@@ -72,23 +71,37 @@ void ActionStackWalkClear(ActionStack* stack, ::Object::InternalPtr<Action>* cur
 }
 
 // ============================================================
+// FUN_1400c5150 — ~ActionStack (CharacterComponent's dtor 0x14002faa0 runs it on +0x48,
+// 0x14002facb). DeletePtr (IAT 0x140151ab8) every non-null entry over the whole COUNT
+// (+0x08, re-read each pass: 0x1400c5180..0x1400c51a0), then the non-null +0x10
+// (0x1400c51a2..0x1400c51ac). The buffer free that follows (0x1400c51b3 MemFree(+0x00),
+// +0x00 = +0x08 = 0) is `actions`' ~Array, run after this body.
+// ============================================================
+ActionStack::~ActionStack() {
+    for (int i = 0; i < actions._size; ++i) {
+        if (actions[i] != nullptr)
+            actions[i].DeletePtr();
+    }
+    if (field_0x10 != nullptr)
+        field_0x10.DeletePtr();
+}
+
+// ============================================================
 // FUN_1400c54e0 — action-stack push: grow the entry array when the running index is its
 // last slot (0x10 on an empty array, else double), walk-clear the old top (0x1400c4f10),
 // then store the new entry at ++current.
 // ============================================================
 void ActionStackPush(ActionStack* stack, const ::Object::InternalPtr<Action>* action) {
-    int newCount = stack->count;
+    int newCount = stack->actions._size;
     if (newCount == 0) {
         newCount = 0x10;
     } else {
         if (stack->current + 1 != newCount) goto LAB_550e;
         newCount = newCount * 2;
     }
-    // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize (stride 8,
-    // zero tail; ImmigrationComp_DynArrayResize in immigrationcomponent.cpp). It only
-    // touches the array header at the front of the stack (+0x00..+0x10).
-    // LEFT (B4 H5): ActionStack's retail dtor 0x1400c5150 DeletePtr's every element and +0x10 before MemFree(+0x00); the tree's ActionStack has no dtor (CharacterComponent's implicit dtor releases nothing), so typing `actions` needs 0x1400c5150 ported as ~ActionStack in CharacterComponent (Component/) first.
-    GameColl::AsArray<GameColl::Ptr8>(stack).SetSize(newCount);
+    // FUN_1400032e0 == Collection::Array<InternalPtr>::SetSize (kSpec_PtrZero: stride 8,
+    // zero tail) on the array header at the front of the stack (+0x00..+0x10).
+    stack->actions.SetSize(newCount);
 LAB_550e:
     if (-1 < stack->current) {
         ::Object::InternalPtr<Action> top = stack->actions[stack->current];
