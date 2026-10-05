@@ -739,9 +739,14 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
 // B4 FORWARD: 38 outside caller(s) (code/Game/Action, Component, Game, Work,
 // standalone; componententity_funcs.h). The null guards are the tree's (retail's
 // 0x1400c48a0 has none); kept here, not extended into the member.
-void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int category) {
-    if (!entityListV || !entityIBP) return;
-    reinterpret_cast<EntityList*>(entityListV)->RegisterEntity(reinterpret_cast<ComponentEntity**>(entityIBP), category);   // LEFT: SIG EntityList_RegisterEntity_Impl (B4 FORWARD): its callers in 24 files across Action, Component, Game, Work, Player and standalone pass the list and the IBP slot as void*
+void EntityList_RegisterEntity_Impl(EntityList* entityList, ComponentEntity** entityIBP, int category) {
+    if (!entityList || !entityIBP) return;
+    entityList->RegisterEntity(entityIBP, category);
+}
+
+// The callers that hold the retail InternalPtr<ComponentEntity> slot (same one qword).
+void EntityList_RegisterEntity_Impl(EntityList* entityList, Object::InternalPtr<ComponentEntity>* entityIBP, int category) {
+    EntityList_RegisterEntity_Impl(entityList, reinterpret_cast<ComponentEntity**>(entityIBP), category);   // LEFT: POD bare-T*-for-InternalPtr<T>: EntityList::RegisterEntity (0x1400c48a0) reads and clears the slot as ComponentEntity** (the tree-wide InternalPtr convention)
 }
 
 // ============================================================

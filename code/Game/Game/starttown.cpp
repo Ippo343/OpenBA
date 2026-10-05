@@ -3810,7 +3810,7 @@ static void CitizenCarryStorageInit(ComponentEntity* ent) {
 extern "C" float StartTown_FoundingAdultAge(const ComponentDescription* citizenTemplate);
 extern "C" float StartTown_FoundingChildAge(const ComponentDescription* citizenTemplate);
 extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startConfig, ComponentDescription* citizenTemplate,
-                                                          void* entityList, const float base[3],
+                                                          EntityList* entityList, const float base[3],
                                                           float age, char genderSel, char educated,
                                                           CitizenComponent** outCitizenComp);
 

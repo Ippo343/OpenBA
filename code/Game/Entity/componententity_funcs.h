@@ -19,4 +19,6 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
 // Assigns id/owner/category-handle, registers update/draw buckets + main array
 // + per-category bucket, runs the OnAdded lifecycle pass. Registered for
 // standalone so fn_EntityList_RegisterEntity resolves to it.
-void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
+void EntityList_RegisterEntity_Impl(EntityList* entityList, ComponentEntity** entityIBP, int category);
+namespace Object { template <class T> class InternalPtr; }
+void EntityList_RegisterEntity_Impl(EntityList* entityList, Object::InternalPtr<ComponentEntity>* entityIBP, int category);   // the InternalPtr slot holders
