@@ -333,7 +333,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                      testCellY < 0 || testCellY >= mapSize);
 
             uint32_t testCell = (uint32_t)(map->size) * testCellY + testCellX;
-            const MapCell& cellData = map->cells[testCell];
+            const MapCell& cellData = map->cells.GetData()[testCell];
 
             // Check terrain type bitmask — skip "forest-incompatible" terrain types
             // bit 5..8 (0x1e0 mask) indicates forest/grass terrain
@@ -351,7 +351,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                 map->FillZones();   // 0x14009c480
 
                 // Read fresh grid data after invalidation
-                MapCell* gridData2 = map->cells;
+                MapCell* gridData2 = map->cells.GetData();
                 const MapCell& entityCellData = gridData2[entityCellSigned];
                 const MapCell& testCellData2 = gridData2[(int)testCell];
 

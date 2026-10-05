@@ -119,7 +119,7 @@ void BridgeTool::Draw(Video::Context* context, char skip) {
     if (!mapGrid) return;
     const int width = mapGrid->size;
     if (width <= 0) return;
-    const MapCell* terrainBase = mapGrid->cells;
+    const MapCell* terrainBase = mapGrid->cells.GetData();
     if (!terrainBase) return;
 
     const CreateBridgeDescription* desc = bridgeDesc;

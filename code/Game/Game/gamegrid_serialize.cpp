@@ -149,26 +149,18 @@ void AssignMapCell(uint8_t* dst, const uint8_t* src) {
 void InitMapCell(uint8_t* dst) {
     rtcoll::InitAs<MapCell, &ZeroMapCell>(dst);
 }
+}  // namespace
+
 // stays explicit: `init` is a patterned fill (0xffffffff at +0x18, 0xff at
 // +0x2a), `assign` is partial (byteCopy=false), and both arms carry unwritten
-// extents — a probe contract, not a trait.
-const rtcoll::ArraySpec kSpec_MapCell = {                  // exe 0x14001aa90
+// extents — a probe contract, not a trait. Map::cells (Game/Map.h) is the
+// Collection::Array over this row.
+extern const rtcoll::ArraySpec kSpec_MapCell = {           // exe 0x14001aa90
     "Array<MapCell>", 0x30, 8,
     &AssignMapCell, &InitMapCell, nullptr, false,
     /*assign unwritten*/ 0x2e, 0x30,   // plus the single byte +0x25
     /*init   unwritten*/ 0x2e, 0x30,   // plus the single byte +0x25
     /*seed zero       */ 0,    0 };
-using MapCellArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_MapCell>>;
-
-}  // namespace
-
-static void GameGrid_ResizeCellArray_aa90(MapCell** header, int32_t newCount) {
-    // B.3.2 bridge: Map+0x80 is the Array<MapCell> header {cells, cellCount,
-    // cellCapacity}, declared as three fields (the Array's explicit spec above).
-    reinterpret_cast<MapCellArray*>(header)->SetSize(newCount);   // LEFT: Map.h (DLG-1 / GAME-3): the cell array is three raw fields, not a Collection::Array (H5)
-
-}
 
 // ============================================================
 // GameGrid_SerializeCellArray_ac10 (0x14001ac10)
@@ -230,16 +222,16 @@ void Map::Serialize(IO::Stream& stream) {
 
     serializer.Serialize(size, nullptr);
 
-    // Cell-array header at +0x80: cells, cellCount, cellCapacity.
-    int32_t count = cellCount;
+    // The cell Array at +0x80: its count, then (load) SetSize 0x14001aa90.
+    int32_t count = cells.GetSize();
     serializer.Serialize(count, nullptr);
 
     bool isSaving = static_cast<int>(stream.GetDirection()) != 0;   // IO::Stream::GetDirection, retail 0x180006200
     if (!isSaving) {
-        GameGrid_ResizeCellArray_aa90(&cells, count);
+        cells.SetSize(count);   // 0x14001aa90
     }
 
-    GameGrid_SerializeCellArray_ac10(&serializer, count, cells);
+    GameGrid_SerializeCellArray_ac10(&serializer, count, cells.GetData());
 
     // 9 shorts at +0x90.
     serializer.Serialize(9, field_0x90, nullptr);
@@ -253,7 +245,7 @@ void Map::Serialize(IO::Stream& stream) {
         if (version < 2) {
             int32_t width = size;
             for (int32_t i = 0; i < width * width; ++i) {
-                MapCell* e = &cells[i];
+                MapCell* e = &cells.GetData()[i];
                 if (e->blocker == nullptr &&
                     e->occupant == nullptr) {
                     bool occupied = CheckCellTerrain(this, i) != 0;   // 0x14009cb00
@@ -273,7 +265,7 @@ void Map::Serialize(IO::Stream& stream) {
         {
             int32_t width = size;
             for (int32_t i = 0; i < width * width; ++i) {
-                MapCell* e = &cells[i];
+                MapCell* e = &cells.GetData()[i];
 
                 if (e->footprintCount == 0xff) {
                     e->footprintCount = 0;

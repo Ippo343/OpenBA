@@ -253,7 +253,7 @@ void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, Compo
     }
 
     // work mask bit from the cell flags byte
-    uint8_t bit = GameUpdateLoop::_singleton->m_game->cells[param_4].terrainType;
+    uint8_t bit = GameUpdateLoop::_singleton->m_game->cells.GetData()[param_4].terrainType;
 
     ComponentEntity* target = *targetRef;
     if (target == nullptr) return;

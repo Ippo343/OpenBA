@@ -265,7 +265,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
     const int rectW = map->tileX1;
     const int rectH = map->tileY1;
 
-    MapCell* tileData = tileGrid->cells;
+    MapCell* tileData = tileGrid->cells.GetData();
     if (!tileData) { QuarryBail("Slot15", "tileGrid+0x80 cell array null"); return; }
     const float   halfTerrain = static_cast<float>(terrainGrid->_gridSize >> 1);
 

@@ -266,7 +266,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     // Step 8: Validate cell — terrain, distance, entity, passability
     // Original checks all 4 conditions; if ANY fail, uses fallback action.
     // -------------------------------------------------------
-    MapCell* gridData = map->cells;
+    MapCell* gridData = map->cells.GetData();
     bool allChecksPass = false;
 
     // Only check if cell index is in bounds (negative X can produce bad index)

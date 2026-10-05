@@ -439,7 +439,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
     }
 
     // ---- LAB_14009c8a0: apply to map cell ----
-    MapCell* cell = &param_1->cells[param_2];
+    MapCell* cell = &param_1->cells.GetData()[param_2];
     uint64_t result;
     if (static_cast<int8_t>(cell->field_0x2A) == (int8_t)0xff) {
         uint8_t bVar1 = cell->terrainType;
@@ -689,7 +689,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                     int iRow = iVar24;
                     int iCol = iVar23;
                     int cellId = (int)(puVar18->size * iVar24 + iVar23);
-                    const MapCell* cellSlot = &puVar18->cells[cellId];
+                    const MapCell* cellSlot = &puVar18->cells.GetData()[cellId];
 
                     // resolve the entity occupying this cell (blocker, else occupant)
                     ComponentEntity* local_e8;
@@ -714,7 +714,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                     Map* piVar15 = GameUpdateLoop::_singleton->m_game;
                     if (removalDesc->_b40) {
                         int cid = piVar15->size * iRow + iCol;
-                        const MapCell* cl = &piVar15->cells[cid];
+                        const MapCell* cl = &piVar15->cells.GetData()[cid];
                         uint32_t mask = 1u << (cl->terrainType & 0x1f);
                         bool hit = false;
                         if (((mask & 2) == 0) && ((mask & 1) == 0) && (static_cast<int8_t>(cl->field_0x2A) == (int8_t)-1)) {

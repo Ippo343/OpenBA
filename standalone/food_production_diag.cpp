@@ -200,7 +200,7 @@ void DumpAll(int frame) {
                 GameUpdateLoop* gwp = (GameUpdateLoop::_singleton != nullptr)
                           ? GameUpdateLoop::_singleton : nullptr;
                 Map* mapObj = gwp ? gwp->m_game : nullptr;           // +0xf8
-                MapCell* grid = mapObj ? mapObj->cells : nullptr;   // +0x80 (stride 0x30)
+                MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;   // +0x80 (stride 0x30)
                 const int mw = mapObj ? mapObj->size : 0;           // +0x00
                 // Radius lives on the RadiusDescription in the entity's description
                 // list (entity+0x28), at +0x28 — the same read the work does.

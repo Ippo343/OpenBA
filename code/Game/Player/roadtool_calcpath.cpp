@@ -153,8 +153,8 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
                                                 uint32_t mapDescVal, ComponentDescription* roadDescExtra) {
     if (!mapGrid) return;
 
-    if (!mapGrid->cells) return;
-    MapCell* cell = &mapGrid->cells[(int)cellIdx];
+    if (!mapGrid->cells.GetData()) return;
+    MapCell* cell = &mapGrid->cells.GetData()[(int)cellIdx];
 
     // Only upgrade: bail unless the new road type outranks what is already there.
     if (!(roadType < cell->field_0x2A)) return;
@@ -168,7 +168,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     // (terrain bits 0/1 clear), currently roadless (0x2a == 0xff), and not already
     // pending in the BST.
     {
-        const MapCell* tb = &mapGrid->cells[(int)cellIdx];
+        const MapCell* tb = &mapGrid->cells.GetData()[(int)cellIdx];
         uint32_t terrainFlag = 1u << (tb->terrainType & 0x1f);
         if ((terrainFlag & 2) == 0 && (terrainFlag & 1) == 0 &&
             static_cast<int8_t>(tb->field_0x2A) == -1) {
@@ -233,7 +233,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     Map* mapGrid = gameWorld->m_game;
     if (!mapGrid) return false;
-    const MapCell* terrainBase = mapGrid->cells;
+    const MapCell* terrainBase = mapGrid->cells.GetData();
     if (!terrainBase) return false;
 
     // Both endpoints must be road-legal terrain and unoccupied.

@@ -127,8 +127,8 @@ int Map::PathDistance(uint32_t param_2, uint32_t param_3, char param_4) {
     // Map as int*.
     uint64_t uVar4 = WorkBase_ValidateCell_a00f0(this, 0xe1f, param_2, (int)param_3);   // 0x1400a00f0
     if ((char)uVar4 != '\0') {
-        uint32_t uVar1 = static_cast<uint32_t>(cells[(int)param_2].regionId);
-        uint32_t uVar2 = static_cast<uint32_t>(cells[(int)param_3].regionId);
+        uint32_t uVar1 = static_cast<uint32_t>(cells.GetData()[(int)param_2].regionId);
+        uint32_t uVar2 = static_cast<uint32_t>(cells.GetData()[(int)param_3].regionId);
         if ((int)uVar1 < 0) {
             uVar1 = (uint32_t)NearestRegionId((int)param_2);   // 0x14009d0a0
         }
@@ -214,11 +214,11 @@ int FindBestAdjacentCell(const Component* target, uint32_t param_2, float* param
                         if ((-1 < iVar13) && (iVar13 < map->size)) {
                             uint32_t uVar14 = map->size * iVar5 + iVar13;
                             int64_t lVar10b = (int64_t)(int)uVar14;
-                            if ((1 << (map->cells[lVar10b].terrainType & 0x1f) & 0xe07U) != 0) {
+                            if ((1 << (map->cells.GetData()[lVar10b].terrainType & 0x1f) & 0xe07U) != 0) {
                                 // 0x14009c480, RCX only (Ghidra's uVar18 carried its phantom
                                 // 3rd argument and is gone with it)
                                 map->FillZones();
-                                const MapCell* cells = map->cells;
+                                const MapCell* cells = map->cells.GetData();
                                 const MapCell& goal = cells[(int64_t)(int)param_2];
                                 const MapCell& cell = cells[lVar10b];
                                 uint32_t uVar17 = 1 << (goal.terrainType & 0x1f);

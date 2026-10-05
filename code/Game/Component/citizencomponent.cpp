@@ -520,7 +520,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
             static int s_hiN = 0;
             if (s_hiN < 80) { ++s_hiN;
                 Map* mapInfo = gameWorld->m_game;
-                const MapCell* tiles = mapInfo ? mapInfo->cells : nullptr;
+                const MapCell* tiles = mapInfo ? mapInfo->cells.GetData() : nullptr;
                 int mapW = mapInfo ? mapInfo->size : 0, half = mapW >> 1;
                 CharacterComponent* ch = character;
                 ModelComponent* model = ch ? ch->modelComponent.Get() : nullptr;
@@ -1350,7 +1350,7 @@ char CitizenComponent::CanFindHousing() {
         // "not buildable" rather than deref res8+0x2e (p[0x17]). Surfaced by the
         // BANISHED_FORCE_WORK harness setting +0x238 to a real building entity.
         if (res8 == nullptr) return false;
-        MapCell* base = grid->cells;
+        MapCell* base = grid->cells.GetData();
         int dim = GameUpdateLoop::_singleton->m_game->size;
         int64_t idx = (((int64_t)res8->tileY1 >> 1) + (int64_t)res8->tileY0) * dim +
                       (((int64_t)res8->tileX1 >> 1) + (int64_t)res8->tileX0);
@@ -1380,7 +1380,7 @@ char CitizenComponent::CanFindHousing() {
     if (y < 0) y = 0;
     if (dim <= y) y = dim - 1;
     int64_t cell = (int64_t)dim * y + x;
-    return grid->cells[cell].field_0x1C[6] != '\0';   // +0x22
+    return grid->cells.GetData()[cell].field_0x1C[6] != '\0';   // +0x22
 }
 
 // The standalone type-name -> CRC registry lookup (also declared further down, next to
@@ -1745,7 +1745,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
                     if (wpY < 0) wpY = 0;
                     if (mw <= wpY) wpY = mw - 1;
                     mapInfo->FillZones();   // 0x14009c480 (RCX only)
-                    MapCell* cellBase = mapInfo->cells;
+                    MapCell* cellBase = mapInfo->cells.GetData();
                     MapCell* homeCellPtr = cellBase + homeCellIdx;
                     MapCell* wpCellPtr = cellBase + static_cast<int64_t>(wpY * mw + wpX);
                     uint32_t wpBit   = 1u << (wpCellPtr->terrainType & 0x1f);
@@ -1986,7 +1986,7 @@ void CitizenComponent::UpdateHappiness() {
     if (wpIBP != nullptr) {
         Map* mapInfo = gw->m_game;
         int region = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
-        const MapCell* tile = mapInfo->cells + (int64_t)region;
+        const MapCell* tile = mapInfo->cells.GetData() + (int64_t)region;
         int climate = ((tile->field_0x1C[4] != 0) +    // +0x20
                        (tile->field_0x1C[3] != 0) +    // +0x1f
                        (tile->field_0x1C[2] != 0) +    // +0x1e

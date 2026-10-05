@@ -109,7 +109,7 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
                 // Cell-type gate: bit (cellType & 0x1f) of mask 0xe07 must be set.
                 // cellType = byte +0x29 of the 0x30-byte map cell (disasm:
                 // MOV RAX,[R14 + 0x80]).
-                uint8_t cellType = map->cells[static_cast<int>(uVar7)].terrainType;
+                uint8_t cellType = map->cells.GetData()[static_cast<int>(uVar7)].terrainType;
                 if (((1u << (cellType & 0x1f)) & 0xe07u) == 0)
                     goto next;
             }

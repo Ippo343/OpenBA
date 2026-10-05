@@ -93,7 +93,7 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 // (terrain bit 0/1, field_0x2A set, or pending in the field_0xE8 tree), else 0.
 // ============================================================
 uint64_t CheckCellTerrain(const Map* map, int cellIndex) {
-    const MapCell& rec = map->cells[cellIndex];
+    const MapCell& rec = map->cells.GetData()[cellIndex];
     uint32_t passBits = 1u << (rec.terrainType & 0x1f);
     uint64_t high = passBits;   // retail's RAX before the tree walk
     if (((passBits & 2) == 0) && ((passBits & 1) == 0) && (rec.field_0x2A == 0xff)) {
@@ -408,7 +408,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     if (newEntity != nullptr) {
         MapComponent* mc = newEntity->FindComponent<MapComponent>();   // 0x140004680
         Map* map = gameWorld->m_game;
-        MapCell* cells = map ? map->cells : nullptr;
+        MapCell* cells = map ? map->cells.GetData() : nullptr;
         const int dim = map ? map->size : 0;
         // 41b0's own gate: skip when occupancy is already written for this component.
         if (mc && cells && dim > 0 && cell >= 0 && cell < dim * dim &&

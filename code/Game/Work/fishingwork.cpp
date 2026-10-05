@@ -185,7 +185,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             // If spot state is 2 (waiting for reset) and map cell is empty, reset to 0
             int* spotState = &spotStates[i];
             if (*spotState == 2) {
-                MapCell* mapEntryBase = map->cells;
+                MapCell* mapEntryBase = map->cells.GetData();
                 const ComponentEntity* occupant = mapEntryBase[cellIdx].occupant;   // +0x08
                 if (occupant == nullptr) {
                     *spotState = 0;
@@ -282,7 +282,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
                 // Check map cell for valid water terrain
                 int64_t mapCellIdx = (int64_t)(cMapSize * targetY + targetX);
-                MapCell* mapData = map->cells;
+                MapCell* mapData = map->cells.GetData();
                 uint8_t terrainType = mapData[mapCellIdx].field_0x1C[8];   // +0x24 (field_0x1C[8])
                 uint8_t terrainBit = mapData[mapCellIdx].terrainType;      // +0x29
 
@@ -388,7 +388,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             int cellIdx = map->size * cy + cx;
 
             // Check if there's a structure at this cell (the cell's occupant, +0x08)
-            MapCell* mapData = map->cells;
+            MapCell* mapData = map->cells.GetData();
             ComponentEntity* cellEntity = mapData[cellIdx].occupant;
             if (cellEntity == nullptr) continue;
 

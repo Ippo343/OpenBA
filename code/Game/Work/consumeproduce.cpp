@@ -678,7 +678,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
             // Check if position has status 2 but no structure (the cell's occupant, +0x08)
             int* statusArray = field_68;
-            MapCell* structBase = map->cells;
+            MapCell* structBase = map->cells.GetData();
             if (statusArray[posIdx] == 2 &&
                 structBase[posCell].occupant == nullptr) {
                 statusArray[posIdx] = 0;
@@ -720,7 +720,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             if (cy >= mapSize) cy = mapSize - 1;
             int checkCell = cy * mapSize + cx;
 
-            MapCell* structBase2 = map->cells;
+            MapCell* structBase2 = map->cells.GetData();
             ComponentEntity* structEntity = structBase2[checkCell].occupant;   // +0x08
 
             if (structEntity != nullptr) {
@@ -769,7 +769,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             map->FillZones();   // 0x14009c480
 
             // Get cell structs for passability check
-            MapCell* structBase3 = map->cells;
+            MapCell* structBase3 = map->cells.GetData();
             MapCell* srcCellStruct = &structBase3[citizenCell];
             MapCell* dstCellStruct = &structBase3[prodCellX * mapSize + prodCellY];
 

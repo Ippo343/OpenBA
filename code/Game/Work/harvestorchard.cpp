@@ -197,7 +197,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
             // Look up the occupant of this slot's cell
             {
-                MapCell* gridData = map->cells;
+                MapCell* gridData = map->cells.GetData();
                 // Orchard slot stride is 0x28 (different from HarvestArea's 0x20)
                 int cellGridIdx = orchard->slots[i].tile;
                 ComponentEntity* entityAtCell = gridData[cellGridIdx].occupant;

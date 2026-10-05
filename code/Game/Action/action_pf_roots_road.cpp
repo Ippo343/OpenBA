@@ -63,21 +63,21 @@ void Map::FillZones() {
         field_0xA2 = 0;
         uVar2 = 0;
         int64_t i = 0;
-        if (0 < cellCount) {
+        if (0 < cells.GetSize()) {
             do {
                 uVar1 = static_cast<int>(uVar2) + 1;
-                cells[i].zone = 0;
+                cells.GetData()[i].zone = 0;
                 uVar2 = static_cast<uint64_t>(uVar1);
                 i = i + 1;
-            } while (static_cast<int>(uVar1) < cellCount);
+            } while (static_cast<int>(uVar1) < cells.GetSize());
         }
-        lVar4 = static_cast<int64_t>(cellCount);
+        lVar4 = static_cast<int64_t>(cells.GetSize());
         sVar6 = 1;
         uVar2 = 0;
         if (0 < lVar4) {
             do {
-                if (((1 << (cells[uVar5].terrainType & 0x1f) & 0xe1fU) != 0) &&
-                    (static_cast<short>(cells[uVar5].zone) == 0)) {
+                if (((1 << (cells.GetData()[uVar5].terrainType & 0x1f) & 0xe1fU) != 0) &&
+                    (static_cast<short>(cells.GetData()[uVar5].zone) == 0)) {
                     FillZone(static_cast<uint32_t>(static_cast<int>(uVar2)), static_cast<uint16_t>(sVar6));   // 0x14009c170
                     sVar6 = sVar6 + 1;
                 }
@@ -106,7 +106,7 @@ void Map::SetTerrainType(int param_2, uint param_3) {
     uint8_t bVar4;
     uint uVar5;
 
-    lVar3 = &cells[param_2];
+    lVar3 = &cells.GetData()[param_2];
     bVar1 = lVar3->terrainType;
     uVar5 = 1u << (bVar1 & 0x1f);
     bVar4 = static_cast<uint8_t>(param_3);
@@ -194,7 +194,7 @@ void Map::FinishRoadCell(int param_2, uint8_t param_3, uint param_4) {
     int iVar3;
     MapCell* lVar4;
 
-    lVar4 = &cells[param_2];
+    lVar4 = &cells.GetData()[param_2];
     if (param_4 == 2) {
         lVar4->footprintCount = lVar4->footprintCount + -1;
         lVar4->field_0x2A = 0xff;          // disasm: MOV word ptr,0xff over +0x2a / +0x2b (H7)

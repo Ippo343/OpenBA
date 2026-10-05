@@ -115,7 +115,7 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int sta
     if (!mapGrid) return 0;
     const int width = mapGrid->size;
     if (width <= 0) return 0;
-    const MapCell* terrainBase = mapGrid->cells;
+    const MapCell* terrainBase = mapGrid->cells.GetData();
     if (!terrainBase) return 0;
 
     const CreateBridgeDescription* desc = self->bridgeDesc;

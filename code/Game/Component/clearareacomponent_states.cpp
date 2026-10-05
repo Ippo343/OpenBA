@@ -92,7 +92,7 @@ static T* FindOn(ComponentEntity* entity) {
 // By name: Map::cells (MapCell), Map::field_0xE8 (AvlNode28).
 // ============================================================
 static inline const MapCell* GridTiles(const Map* grid) {
-    return grid->cells;   // Map +0x80
+    return grid->cells.GetData();   // Map +0x80
 }
 
 // tile+0x08: the cell's occupant entity.

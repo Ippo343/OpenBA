@@ -337,7 +337,7 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
     if (!grid) return;
     int gw_width = grid->size;
     if (gw_width <= 0) return;
-    MapCell* cellArr = grid->cells;
+    MapCell* cellArr = grid->cells.GetData();
     System::Random* random = gw->m_random;
     EntityList* entityList = gw->m_entityList;
 

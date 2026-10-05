@@ -183,7 +183,7 @@ void RegionGraph::RebuildAdjacency(int block) {
             if (0 < lVar11->borderCells._size) {
                 int64_t lVar10 = 0;
                 do {
-                    int iVar1 = map->cells[lVar11->borderCells._data[lVar10]].regionId;
+                    int iVar1 = map->cells.GetData()[lVar11->borderCells._data[lVar10]].regionId;
                     if (-1 < iVar1) {
                         int iVar9 = lVar11->neighbours._size;
                         int iVar8 = 0;
@@ -275,7 +275,7 @@ void RegionGraph::StampRegionIds(int block) {
                     }
                     iVar9 = iVar9 + 1;
                     lVar10 = lVar10 + 1;
-                    map->cells[static_cast<int64_t>(iVar3 + iVar5)].regionId = static_cast<int32_t>(uVar8);
+                    map->cells.GetData()[static_cast<int64_t>(iVar3 + iVar5)].regionId = static_cast<int32_t>(uVar8);
                     iVar4 = blockWidth;
                 } while (iVar9 < iVar4);
             }
@@ -478,7 +478,7 @@ void RegionGraph::FloodLabel(int param_2, int param_3, uint32_t param_4, uint32_
             int64_t lVar13 = static_cast<int64_t>(param_3);
             int64_t lVar15 = static_cast<int64_t>(param_2);
             int64_t lVar11 = static_cast<int64_t>(map->size);
-            const MapCell* lVar5 = map->cells;
+            const MapCell* lVar5 = map->cells.GetData();
             if (Walkable(lVar5[(iVar12 + lVar13) * lVar11 + lVar15 + lVar10].terrainType)) {
                 uint64_t uVar4 = static_cast<uint64_t>(static_cast<uint32_t>(local_res8.x));
                 uint32_t uVar6 = uVar14;
@@ -524,7 +524,7 @@ void RegionGraph::FloodLabel(int param_2, int param_3, uint32_t param_4, uint32_
                     uVar14 = uVar6;
                     for (lVar10 = static_cast<int64_t>(static_cast<int>(uVar6)); lVar10 <= iVar8; lVar10 = lVar10 + 1) {
                         if ((labels._data[static_cast<int64_t>(blockWidth) * static_cast<int64_t>(iVar12) + lVar10] == 0)
-                            && Walkable(map->cells[(iVar12 + lVar13) * static_cast<int64_t>(map->size) +
+                            && Walkable(map->cells.GetData()[(iVar12 + lVar13) * static_cast<int64_t>(map->size) +
                                                    static_cast<int64_t>(local_res10) + lVar10].terrainType)) {
                             PathCellXY pack;
                             pack.x = static_cast<int32_t>(uVar14);
@@ -550,7 +550,7 @@ void RegionGraph::FloodLabel(int param_2, int param_3, uint32_t param_4, uint32_
                     for (lVar10 = static_cast<int64_t>(static_cast<int>(uVar6)); ((local_res10 = param_2), (local_res18 = param_3),
                          lVar10 <= iVar8); lVar10 = lVar10 + 1) {
                         if ((labels._data[static_cast<int64_t>(blockWidth) * static_cast<int64_t>(iVar12) + lVar10] == 0)
-                            && Walkable(map->cells[(iVar12 + lVar13) * static_cast<int64_t>(map->size) +
+                            && Walkable(map->cells.GetData()[(iVar12 + lVar13) * static_cast<int64_t>(map->size) +
                                                    static_cast<int64_t>(param_2) + lVar10].terrainType)) {
                             PathCellXY pack;
                             pack.x = static_cast<int32_t>(uVar6);
@@ -605,7 +605,7 @@ int RegionGraph::LabelBlock(int block) {
             int64_t lVar3 = 0;
             if (0 < iVar5) {
                 do {
-                    if (Walkable(map->cells[(iVar7 + lVar8) * static_cast<int64_t>(map->size) +
+                    if (Walkable(map->cells.GetData()[(iVar7 + lVar8) * static_cast<int64_t>(map->size) +
                                             static_cast<int64_t>(iVar6) + lVar3].terrainType) &&
                         (labels._data[blockWidth * lVar8 + lVar3] == 0)) {
                         FloodLabel(iVar6, iVar7, iVar4, iVar9, uVar2);   // 0x1400a7ad0

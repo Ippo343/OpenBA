@@ -196,7 +196,7 @@ char CemeteryComponent::EnterBuilt() {
     int claimed = 0;
     for (int i = 0; i < plotCount; ++i) {
         const int cellIdx = plots[i];
-        MapCell* const cells = world->cells;
+        MapCell* const cells = world->cells.GetData();
         if (!cells) break;
         MapCell* const cell = &cells[static_cast<uintptr_t>(cellIdx)];
 

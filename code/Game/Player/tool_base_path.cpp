@@ -107,7 +107,7 @@ bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t p
         return false;
 
     int iVar2 = param_1->size * param_3 + param_2;
-    const MapCell* cell = &param_1->cells[iVar2];
+    const MapCell* cell = &param_1->cells.GetData()[iVar2];
 
     uint8_t passByte = cell->terrainType;
     if ((~param_4 & (1u << (passByte & 0x1f))) != 0)

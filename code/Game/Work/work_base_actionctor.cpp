@@ -402,7 +402,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     uint8_t cellFlag = 0;
     if (GameUpdateLoop::_singleton != nullptr) {
         Map* grid = GameUpdateLoop::_singleton->m_game;
-        cellFlag = grid->cells[static_cast<int64_t>(cellIdx)].terrainType;
+        cellFlag = grid->cells.GetData()[static_cast<int64_t>(cellIdx)].terrainType;
     }
 
     // --- inline PerformWork action, kind 7 ---

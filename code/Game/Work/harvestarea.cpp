@@ -230,7 +230,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                 ComponentEntity* entityAtCell1 = nullptr;
                 ComponentEntity* entityAtCell2 = nullptr;
 
-                MapCell* gridData = map->cells;
+                MapCell* gridData = map->cells.GetData();
                 int cellGridIdx = cropField->slots.data[i].cell;
                 entityAtCell1 = gridData[cellGridIdx].occupant;
 

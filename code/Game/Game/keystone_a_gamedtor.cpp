@@ -257,9 +257,9 @@ void PathfinderThread::DrainQueue() {
 //   if (regionGraph) { ReleaseStorage; MemFree }
 //   if (regionPairCache) { 0x14001a450; MemFree }
 //   the +0xE8 tree: children freed through 0x140014c30, the root MemFreed; root / count zeroed
-//   cellQueue.Release()                               1a5f0(+0xa8)
-//   cells freed                                        [+0x80]; [+0x80]=[+0x88]=0
-//   Picking::Scene::~Scene(+0x08)                      (tail-call)
+//   members: cellQueue.~PathCellQueue()               1a5f0(+0xa8)
+//            cells.~Array()                            [+0x80]; [+0x80]=[+0x88]=0
+//            pickingScene.~Scene()                     (tail-call)
 // 1:1 port of FUN_14009ed60.
 // ============================================================================
 Map::~Map() {
@@ -303,14 +303,10 @@ Map::~Map() {
     field_0xE8 = nullptr;                                       // [+0xe8] = 0
     field_0xF0 = 0;                                             // [+0xf0] = 0
 
-    cellQueue.Release();                                        // 0x14001a5f0(+0xa8)
-
-    MemFree(cells);                                             // free [+0x80]
-    cells = nullptr;
-    cellCount = 0;                                              // [+0x88] = 0 (one qword, H7)
-    cellCapacity = 0;
-
-    // Then the compiler runs ~Picking::Scene on +0x08 (retail's tail-JMP).
+    // Then the compiler destroys the members in reverse declaration order, as
+    // retail does after the body: ~PathCellQueue on cellQueue (0x14001a5f0(+0xa8),
+    // 0x14009ee26), ~Array on cells (MemFree [+0x80]; [+0x80] = [+0x88] = 0,
+    // 0x14009ee2c..ee40), ~Picking::Scene on +0x08 (the tail-JMP 0x14009ee5a).
 }
 
 // B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a). The caller MemFrees

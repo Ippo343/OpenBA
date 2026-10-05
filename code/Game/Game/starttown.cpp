@@ -248,7 +248,7 @@ static void StartTown_WriteCellType(Map* game, MapCell* cells, int idx, uint8_t 
 static void StartTown_MarkBuildingCells(Map* game, int tileX, int tileY, int fpW, int fpH,
                                         ComponentEntity* entity, int rot) {
     if (!game || !entity) return;
-    MapCell* cells = game->cells;
+    MapCell* cells = game->cells.GetData();
     int dim = game->size;
     if (!cells || dim <= 0) return;
 
@@ -465,7 +465,7 @@ static bool g_occupiedVisualsApplied = false;
 // buildable (in-bounds + type 2)?
 static bool StartTown_DiskBuildable(const Map* game, int tileX, int tileY, int size, int sizeSq) {
     const int dim = game->size;
-    const MapCell* cells = game->cells;
+    const MapCell* cells = game->cells.GetData();
     if (!cells || dim <= 0) return false;
     for (int iy = -size; iy <= size; ++iy) {
         for (int ix = -size; ix <= size; ++ix) {
@@ -1025,7 +1025,7 @@ static void StartTown_RecountGatherable() {
     GameUpdateLoop* gws = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     Map* mapObj = gws ? gws->m_game : nullptr;
     const int width = mapObj ? mapObj->size : 0;
-    const MapCell* grid = mapObj ? mapObj->cells : nullptr;
+    const MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;
     if (!grid || width <= 0 || !g_demoGatherer.acceptList || g_demoGatherer.acceptN <= 0) return;
 
     const int r = g_demoGatherer.radius;
@@ -1275,7 +1275,7 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
     // mask (0xe1f), NOT cellWorkable: that one asks nearestPassable(), which answers with
     // the nearest passable cell, so shoreline water counted as ground and houses were
     // sited with their door on the river bank (reachfix2-verify: 49 residual losses).
-    const MapCell* const kindTiles = game->cells;
+    const MapCell* const kindTiles = game->cells.GetData();
     auto cellWalkable = [&](int cell) -> bool {
         if (!kindTiles) return cellWorkable(cell);
         const unsigned k = kindTiles[(size_t)cell].terrainType;
@@ -1576,7 +1576,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
         // like a clean placement right up until something walks the cell.
         if (GameUpdateLoop::_singleton != nullptr) {
             Map* mapObj   = GameUpdateLoop::_singleton->m_game;
-            MapCell* grid = mapObj ? mapObj->cells : nullptr;
+            MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;
             const int mw  = mapObj ? mapObj->size : 0;
             const uint32_t tidNat = NaturalResourceComponent::TypeId();   // caller batch CB6: was a lazy cache
             if (grid && mw > 0 && tidNat) {
@@ -2374,7 +2374,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                         // 8-neighbour (0x1400a5ec0's admissibility test). The searcher keeps
                         // its own copy of these bytes and it is a verified byte-exact mirror.
                         Map* navMap = (gw && gw->m_game) ? gw->m_game : nullptr;
-                        const MapCell* cellBase = navMap ? navMap->cells : nullptr;
+                        const MapCell* cellBase = navMap ? navMap->cells.GetData() : nullptr;
                         std::vector<uint8_t> reach;          // empty = test unavailable
                         int entryCell = -1;
                         if (cellBase && mapSize > 0) {
@@ -2983,7 +2983,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                           ? GameUpdateLoop::_singleton : nullptr;
                 Map* mapObj = gws ? gws->m_game : nullptr;
                 const int width = mapObj ? mapObj->size : 0;
-                const MapCell* grid = mapObj ? mapObj->cells : nullptr;
+                const MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;
 
                 if (!gtmpl) {
                     fprintf(stderr, "[startTown::gathererhut] BANISHED_BUILD_DEMO_GATHERERHUT set "
@@ -3184,7 +3184,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                      ? GameUpdateLoop::_singleton : nullptr;
             Map* mapObj = gw ? gw->m_game : nullptr;
             const int width = mapObj ? mapObj->size : 0;
-            const MapCell* grid = mapObj ? mapObj->cells : nullptr;
+            const MapCell* grid = mapObj ? mapObj->cells.GetData() : nullptr;
 
             if (!ftmpl) {
                 fprintf(stderr, "[startTown::fishingdock] BANISHED_BUILD_DEMO_FISHINGDOCK "
@@ -4615,7 +4615,7 @@ static void StartTown_MarkResourceCellGrid(Map* game, ComponentEntity* ownerEnti
                                            int tileY, int w, int h, const char* shape, int rot) {
     if (!game || w <= 0 || h <= 0) return;
     const int dim = game->size;
-    MapCell* cells = game->cells;
+    MapCell* cells = game->cells.GetData();
     if (dim <= 0 || !cells) return;
     // shape length header sits at shape-8 (length-prefixed buffer); 0 => no shape.
     const int shapeLen = shape ? RtSystem::StringLength(shape) : 0;
@@ -4702,7 +4702,7 @@ extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* own
                                                  int tileY, int w, int h, const char* shape, int rot) {
     if (!game || w <= 0 || h <= 0) return;
     const int dim = game->size;
-    MapCell* cells = game->cells;
+    MapCell* cells = game->cells.GetData();
     if (dim <= 0 || !cells) return;
     const int shapeLen = shape ? RtSystem::StringLength(shape) : 0;
 
@@ -4921,7 +4921,7 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
     Map* game = world->m_game;
     if (!game) return 0;
     const int dim = game->size;
-    MapCell* cells = game->cells;
+    MapCell* cells = game->cells.GetData();
     System::Random* rng = world->m_random;
     if (dim <= 0 || !cells || !rng) return 0;
 

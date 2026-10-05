@@ -11,8 +11,8 @@
 // build lists `Game\Map.cpp` and the tree's own comments call its functions
 // Map::CreateNaturalResource / Map_CalcDistance. `Map` is used until the
 // profile exe (Application-x64-profile.exe, not open in Ghidra) confirms it.
-// No vtable: a plain struct, built in raw memory (Load placement-news it,
-// which constructs nothing, then runs the ctor body).
+// No vtable. Load placement-news it on MemAlloc(0xf8, 8): the ctor 0x14009ee70
+// (members pickingScene, cells, cellQueue constructed where retail builds them).
 //
 // FIELDS (retail ctor 0x14009ee70 unless noted; names only where retail's
 // behaviour gives one, else a typed guess):
@@ -20,9 +20,9 @@
 //                            as the cell count (size * size) by the loader
 //   +0x08 Picking::Scene     embedded, Picking::Scene::Scene(+0x08): a real
 //                            member (behaviour: B4 wave Y)
-//   +0x80 cell array         Collection::Array of 0x30-byte cells: data +0x80,
-//                            count +0x88 (Serialize(int&) + resize
-//                            0x14009aa90), capacity +0x8C
+//   +0x80 cell array         Collection::Array<MapCell> (a real member, behaviour:
+//                            B4 wave Y): data +0x80, count +0x88 (Serialize(int&)
+//                            + resize 0x14001aa90), capacity +0x8C
 //   +0x90 int16[9]           Serialize(9, short*) (0x14009f100); ctor zero
 //   +0xA2 uint8_t            ctor 1; the loader sets it to 1
 //   +0x68 / +0x70            the pathfinder worker and the coarse region graph
@@ -61,6 +61,7 @@
 #include <cstddef>
 #include "Action/PathSearch.h"   // MapCellQueue, RegionGraph (B.4 ACT-a)
 #include "picking/Scene.h"       // -Iruntime/types: Picking::Scene (by value at +0x08)
+#include "collection/Collection.h" // Collection::Array<MapCell> (by value at +0x80)
 
 class ComponentEntity;
 class PathfinderThread;
@@ -100,6 +101,14 @@ static_assert(offsetof(MapCell, field_0x2C) == 0x2C, "MapCell +0x2C");
 static_assert(offsetof(MapCell, floorCount) == 0x2D, "MapCell::floorCount @ +0x2D");
 static_assert(offsetof(MapCell, _pad2E) == 0x2E, "MapCell +0x2E");
 
+// The cell Array's element row (0x14001aa90's two arms: the partial assign and
+// the patterned init; defined in gamegrid_serialize.cpp). Map::cells is a
+// Collection::Array over it: retail's ctor zeroes the header, its dtor inlines
+// the trivial-element ~Array (MemFree, then data / size+capacity zeroed).
+extern const rtcoll::ArraySpec kSpec_MapCell;
+using MapCellArray = Collection::Array<MapCell, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&kSpec_MapCell>>;
+
 class Map {
 public:
     Map();                       // 0x14009ee70 (defined in gameupdateloop_load.cpp)
@@ -120,17 +129,21 @@ public:
     RegionPairCache* regionPairCache;   // +0x78 ctor 0; the region pair cache (Action/PathSearch.h:
                                  //       MemAlloc(0x38) in the e8c0 tail; Update hands it to
                                  //       0x1400a5d10, the dtor 0x14009ed60 frees it)
-    MapCell* cells;              // +0x80 cell Array data (MapCell, stride 0x30)
-    int32_t  cellCount;          // +0x88 cell Array count (Serialize int&)
-    int32_t  cellCapacity;       // +0x8C cell Array capacity
+    // +0x80: Collection::Array<MapCell> (count Serialize int&, resize 0x14001aa90).
+    // Retail's ctor zeroes it second-to-last of the four leading pointers (qword
+    // +0x80, qword +0x88); its dtor frees it after cellQueue (0x14009ee2c..ee40):
+    // the compiler's member destruction after ~Map's body.
+    MapCellArray cells;          // +0x80
     int16_t  field_0x90[9];      // +0x90 Serialize(9, short*)
     uint8_t  field_0xA2;         // +0xA2 ctor 1; the zones-stale flag, a raw byte (B.4 H8): retail ORs
                                  //       a byte into it (known_port_issues row 311); every
                                  //       writer in the tree stores 0 / 1
     uint8_t  _padA3[5];          // +0xA3
     MapCellQueue cellQueue;      // +0xA8 the zone flood fill's pooled work queue (0x14009c170:
-                                 //       tail +0xA8, head +0xB0, count +0xB8, node pool +0xC0;
-                                 //       ctor: all 0, pool growCount 8). Name unconfirmed.
+                                 //       tail +0xA8, head +0xB0, count +0xB8, node pool +0xC0).
+                                 //       A real member: retail's ctor builds it inline after
+                                 //       +0xA2 (0x14009eeb4..eee3), its dtor runs 0x14001a5f0 on
+                                 //       it after the body (0x14009ee26). Name unconfirmed.
     AvlNode28* field_0xE8;       // +0xE8 BST root (ctor 0): 0x28 nodes keyed by cell (0x14009c640)
     int32_t  field_0xF0;         // +0xF0 BST count (ctor 0)
     uint8_t  _padF4[4];          // +0xF4
@@ -160,8 +173,7 @@ static_assert(offsetof(Map, pathfinder) == 0x68, "Map::pathfinder @ +0x68");
 static_assert(offsetof(Map, regionGraph) == 0x70, "Map::regionGraph @ +0x70");
 static_assert(offsetof(Map, regionPairCache) == 0x78, "Map::regionPairCache @ +0x78");
 static_assert(offsetof(Map, cells) == 0x80, "Map::cells @ +0x80");
-static_assert(offsetof(Map, cellCount) == 0x88, "Map::cellCount @ +0x88");
-static_assert(offsetof(Map, cellCapacity) == 0x8C, "Map::cellCapacity @ +0x8C");
+static_assert(sizeof(MapCellArray) == 0x10, "Map::cells is the 0x10 Array header (+0x80..+0x90)");
 static_assert(offsetof(Map, field_0x90) == 0x90, "Map +0x90");
 static_assert(offsetof(Map, field_0xA2) == 0xA2, "Map +0xA2");
 static_assert(offsetof(Map, _padA3) == 0xA3, "Map +0xA3");

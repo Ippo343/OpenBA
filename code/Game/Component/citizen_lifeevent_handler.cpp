@@ -121,7 +121,7 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(CemeteryComponent* self) {
     uint32_t tid = TombstoneComponent::TypeId();
     for (int tries = 0; tries < count; tries++) {
         int cell = self->plots[idx];                             // +0x48
-        ComponentEntity* occupant = map->cells[cell].occupant;   // +0x80 -> +0x08, stride 0x30
+        ComponentEntity* occupant = map->cells.GetData()[cell].occupant;   // +0x80 -> +0x08, stride 0x30
         if (!occupant) return static_cast<uint32_t>(idx);      // empty cell — free slot
         Component* ts = FindComponentByTypeId(occupant, tid);
         Component* tsIBP = ts;
@@ -238,7 +238,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     if (!world || !cem) return;
     ComponentEntity* nullIBP = nullptr;                          // the InternalBasePtr(nullptr) ctor
     Map* map = world->m_game;                                    // +0xf8
-    MapCell* cellRec = map->cells;                               // +0x80, stride 0x30
+    MapCell* cellRec = map->cells.GetData();                               // +0x80, stride 0x30
     uint8_t oldState = cellRec[cell].terrainType;                // +0x29
     bool stateWasWalk = ((1u << (oldState & 0x1f)) & 0x1e0u) != 0;   // old state 5..8
     map->field_0xA2 |= static_cast<uint8_t>(stateWasWalk);   // the tree ORs the byte (Map::field_0xA2 is uint8_t)

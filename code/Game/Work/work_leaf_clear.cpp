@@ -385,7 +385,7 @@ void WorkLeaf_TileArrPush(GridTileArray* arr, const GridTile* rec) {
 void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h,
                                    GridTileArray* arr, char collectEmpty) {
     int gridW = map->size;
-    MapCell* cells = map->cells;
+    MapCell* cells = map->cells._data;
     int rowEnd = h + y;
     if (y >= rowEnd) return;
 

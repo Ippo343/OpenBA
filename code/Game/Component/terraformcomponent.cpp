@@ -148,7 +148,7 @@ static void TerraformArrayPush(T*& data, int32_t& count, int32_t& cap, const T& 
 
 // The terrain-type byte of map cell `idx` (MapCell::terrainType, +0x29).
 static uint8_t* TerraformCellTypeAt(Map* map, int64_t idx) {
-    return &map->cells[idx].terrainType;
+    return &map->cells.GetData()[idx].terrainType;
 }
 
 // Terrain type byte of the map cell containing world point (wx, wy). Retail truncates

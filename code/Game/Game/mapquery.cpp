@@ -186,7 +186,7 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
 
     if (flag == 0) {
         Map* mapGrid = CanonicalMapGrid(game);
-        const MapCell* cells = mapGrid ? mapGrid->cells : nullptr;
+        const MapCell* cells = mapGrid ? mapGrid->cells.GetData() : nullptr;
         const int dim = mapGrid ? mapGrid->size : 0;
         if (cells && dim > 0) {
             int ix = (int)(inX + (float)(dim >> 1));

@@ -285,7 +285,7 @@ int FencedTool::CalcCost(int startCell, int endCell,
     const ComponentDescription* allowedEntityType = desc->_ref70;
 
     // Cell data base pointer
-    const MapCell* cellDataBase = mapGrid->cells;
+    const MapCell* cellDataBase = mapGrid->cells.GetData();
 
     float baseHeight = 0.0f;
     bool heightInitialized = false;
@@ -469,7 +469,7 @@ void FencedTool::Draw(Video::Context* context, char param3) {
     }
 
     // Read terrain info for per-cell validation
-    const MapCell* cellDataBase = mapGrid->cells;
+    const MapCell* cellDataBase = mapGrid->cells.GetData();
     uint32_t terrainMask = desc->_u20;
     const ComponentDescription* allowedEntityType = desc->_ref70;
 

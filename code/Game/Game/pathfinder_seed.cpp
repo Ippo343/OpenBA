@@ -164,8 +164,8 @@ extern "C" void Pathfinder_Seed(Map* game, int dim) {
     // per-cell terrain flags: low 7 bits = the cell's terrainType (+0x29),
     // bit 7 = blocked (the cell's blocker, +0x00, set). The map's cells, stride 0x30.
     uint8_t* flags    = pf->grid.cellFlags;
-    MapCell* cellGrid = game->cells;
-    int      cellN    = game->cellCount;
+    MapCell* cellGrid = game->cells.GetData();
+    int      cellN    = game->cells.GetSize();
     if (flags && cellGrid) {
         for (int i = 0; i < cellN; ++i) {
             uint8_t  type    = cellGrid[i].terrainType;

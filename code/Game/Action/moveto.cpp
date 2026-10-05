@@ -426,8 +426,8 @@ int  MoveTo::Execute(ActionStack* actionStack, const System::Time* time) {
     // destCell here samples the wrong tile's movement cost.
     // [PerfX] TERRAIN_SIDECAR: same byte, read through the 1-byte-per-cell mirror
     // (perf_terrain.h) instead of the 0x30-stride cell record -- raw read when off.
-    uint8_t terrainType = PerfX::TerrainGet(map->cells,
-                                            map->cellCount, curCell);
+    uint8_t terrainType = PerfX::TerrainGet(map->cells.GetData(),
+                                            map->cells.GetSize(), curCell);
 
     float speed;
     bool onRoad = field_0x474;

@@ -102,7 +102,7 @@
 // Faithful 1:1 port of the Ghidra decompile.
 // ============================================================
 void Map::StampInfluence(int state, int cx, int cy, int r, short delta) {
-    MapCell* grid = cells;   // +0x80
+    MapCell* grid = cells.GetData();   // +0x80
     int yy = cy - r;
     if (yy <= cy + r) {
         int dy = cy - yy;

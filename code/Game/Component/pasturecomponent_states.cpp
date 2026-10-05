@@ -469,7 +469,7 @@ void PastureProduce(PastureComponent* self) {
             if (gy < 0) gy = 0;
             if (gy >= dim) gy = dim - 1;
             const int cell = dim * gy + gx;
-            const MapCell* tiles = grid->cells;
+            const MapCell* tiles = grid->cells.GetData();
             if (!tiles) break;
             ComponentEntity* occ = tiles[cell].occupant;   // the entity on the cell
             if (occ == nullptr) { placedCell = cell; break; }
@@ -762,7 +762,7 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, 
     const Map* map = grid;
     const int dim = map->size;
     // +0x10 of a cell is its owner ref.
-    MapCell* cells = map->cells;
+    MapCell* cells = map->cells._data;
     if (!cells) return 0;
     for (int64_t dx = 0; dx < w; ++dx) {
         for (int64_t dy = 0; dy < h; ++dy) {
