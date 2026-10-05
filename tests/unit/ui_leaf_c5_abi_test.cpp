@@ -683,15 +683,15 @@ UNIT_TEST(b39_uib_c5_documenttext_ctor_stores) {
     std::memset(d, 0xCD, sizeof d);
     auto* dd = ::new (static_cast<void*>(d)) UI::DocumentTextDescription();
     CHECK(dd->_documentStringTable == nullptr);
-    CHECK(dd->_frameNamesData == nullptr);
-    CHECK_EQ(dd->_frameNamesCount, 0);
+    CHECK(dd->_frameNames._data == nullptr);
+    CHECK_EQ(dd->_frameNames._size, 0);
     CHECK_EQ(dd->_linkColor, 0xffeeee00u);
     CHECK_EQ(dd->_linkHoverColor, 0xffffff00u);
     CHECK_EQ(dd->_linkPressedColor, 0xffcccc00u);
     CHECK_EQ(dd->_tabWidth, 4);
     CHECK_EQ(dd->_wrapWidth, 0x12c);
     CHECK_EQ((int)d[0xac], 0xCD);
-    CHECK(dd->_colorsData == nullptr);
+    CHECK(dd->_colors._data == nullptr);
     CHECK(dd->_resourceList == nullptr);
     dd->~DocumentTextDescription();
 
