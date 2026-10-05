@@ -131,7 +131,7 @@ void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) 
 }
 
 extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: TutWave_SerializeDialogRef's callers hand the slot as void*
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: the one caller's slot is TutorialSetupDialog::highlightDialog, a `const UI::Dialog*`, which the typed wrapper's T** -> External** cannot take without casting the const away
                                 nullptr, "UI::Dialog");
 }
 
