@@ -793,11 +793,14 @@ Graphics::MeshInstance::~MeshInstance() {
 // ============================================================================
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h) for the
 // exe-side reader in code/Game/Player/tool_base_render.cpp.
-// B.4 LEFT: the `void*` signature is its one outside caller's
-// (code/Game/Player/tool_base_render.cpp); each parameter is viewed once.
-void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
-    TriangleVertex* tv = static_cast<TriangleVertex*>(self);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
-    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
+// B.4 wave Y: `self` is typed; `vec3` stays `const void*` (retail's is
+// `const Math::Vector3&`) because its one outside caller
+// (code/Game/Player/tool_base_render.cpp) holds the ribbon endpoints as float[3]
+// locals filled by RelVec: a Math::Vector3 local would run its zeroing
+// constructor (0x180015070) first, stores retail's caller does not make.
+TriangleVertex* RtGraphics_EdgeMesh_TriangleVertex_Ctor(TriangleVertex* self, const void* vec3) {
+    TriangleVertex* tv = self;
+    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: SIG its caller (tool_base_render.cpp EdgeSegment) holds the endpoints as float[3] (a Math::Vector3 local would add its zeroing ctor's stores)
     tv->x = static_cast<int16_t>(static_cast<int>(v->x * kEdgeMeshVertexScale));
     tv->y = static_cast<int16_t>(static_cast<int>(v->y * kEdgeMeshVertexScale));
     tv->z = static_cast<int16_t>(static_cast<int>(v->z * kEdgeMeshVertexScale));
@@ -821,11 +824,11 @@ void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
 // ORACLE: FULL, through a scratch buffer. No side effects.
 // ============================================================================
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h), as above.
-void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags) {
-    // B.4: the three casts below keep the outside caller\'s `void*` signature.
-    EdgeVertex* ev = static_cast<EdgeVertex*>(self);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
-    const TriangleVertex* ta = static_cast<const TriangleVertex*>(a);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
-    const TriangleVertex* tb = static_cast<const TriangleVertex*>(b);   // LEFT: SIG its one caller (tool_base_render.cpp) builds the vertices in byte buffers from float triples
+EdgeVertex* RtGraphics_EdgeMesh_EdgeVertex_Ctor(EdgeVertex* self, const TriangleVertex* a,
+                                                const TriangleVertex* b, int flags) {
+    EdgeVertex* ev = self;
+    const TriangleVertex* ta = a;
+    const TriangleVertex* tb = b;
 
     ev->a.x = ta->x;  ev->b.x = tb->x;
     ev->a.y = ta->y;  ev->b.y = tb->y;
@@ -2468,8 +2471,8 @@ int32_t GraphicsMesh::GetNodeIndexFromName(const char* name) const {
 // +0x88), (+0xe8, +0xc8), (+0x128, +0x108) -- the INDEX buffer of each pair is
 // uploaded FIRST.
 // ----------------------------------------------------------------------------
-bool EdgeMesh::Set(int triCount, const void* triLists,
-                   int edgeCount, const void* edgeLists,
+bool EdgeMesh::Set(int triCount, const GraphicsMesh::TriangleList* triLists,
+                   int edgeCount, const GraphicsMesh::TriangleList* edgeLists,
                    int i0, uint16_t* ib0, int v0s, void* vb0, int v0n, int v0x,
                    uint16_t* ib1, int v1s, void* vb1, int v1n, int v1x,
                    uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
@@ -2477,13 +2480,8 @@ bool EdgeMesh::Set(int triCount, const void* triLists,
                    const ::Box& box) {
     _aabb = box;
 
-    // LEFT: the two list parameters are `const void*` in the declaration its
-    // code/Game caller (tool_base_render.cpp) holds; retail's are
-    // `const GraphicsMesh::TriangleList*`.
-    const GraphicsMesh::TriangleList* const tris =
-        static_cast<const GraphicsMesh::TriangleList*>(triLists);   // LEFT: SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)
-    const GraphicsMesh::TriangleList* const edges =
-        static_cast<const GraphicsMesh::TriangleList*>(edgeLists);   // LEFT: SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)
+    const GraphicsMesh::TriangleList* const tris  = triLists;
+    const GraphicsMesh::TriangleList* const edges = edgeLists;
 
     rtcoll::RtColl_ArraySetSize_1800136f0(&_triangleLists, triCount);
     for (int i = 0; i < _triangleLists._size; ++i)

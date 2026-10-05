@@ -262,12 +262,11 @@ public:
     // The node index type `AddObject` returns and `RemoveObject` takes.
     using ObjectId = RtGraphics::SceneObjectId;
 
-    // ---- lifetime: BOTH STAY DOORS (B4b-2, B35_RULES §11) ------------------
-    // `fn_Graphics_Scene_Ctor` has three call sites and `engine_funcs.cpp:3095`
-    // resolves the destructor by name. Declared so no caller batch has to edit
-    // this header; deliberately UNDEFINED.
+    // ---- lifetime ------------------------------------------------------------
+    // The constructor stays the door RtGraphics_Scene_Ctor (scene.cpp says why);
+    // declared, deliberately UNDEFINED. The destructor is real (B.4 wave Y).
     Scene();                                     // 0x180102730  door: scene.cpp
-    ~Scene();                                    // 0x1801026c0  door: scene.cpp
+    ~Scene();                                    // 0x1801026c0  scene.cpp: Clear +0x60, then the five Arrays
 
     // Exported, NOT PORTED, no caller anywhere: declared, deliberately undefined.
     Scene(const Scene& src);                     // 0x18005e290  not ported
@@ -370,5 +369,5 @@ extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill); 
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
 // ---- graphics/scene.cpp
 extern "C" RtGraphics::Scene* RtGraphics_Scene_Ctor(RtGraphics::Scene* self);  // 0x180102730
-extern "C" void RtGraphics_Scene_Dtor(RtGraphics::Scene* self);  // 0x1801026c0
+extern "C" void RtGraphics_Scene_Dtor(Graphics::Scene* self);  // 0x1801026c0: ~Scene()
 // ==== end B3R G-Game ====

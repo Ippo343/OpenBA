@@ -93,6 +93,12 @@
 #include "../object/Internal.h"                // Object::detail::InternalMemFree
 #include "../system/String.h"
 
+namespace rtcoll {
+// B.4 wave Y (RT-GFX): the row of `Array<ShaderProgram::Parameter>`
+// (runtime/src/collection/array.cpp, SetSize 0x180055db0).
+extern const ArraySpec kSpec_ShaderParam;
+}
+
 namespace IO { class Serializer; }   // io/Serializer.h
 
 namespace Video {
@@ -115,29 +121,23 @@ public:
     // GetVersion() >= 1, Bool at elem+0x0c. The last three bytes are padding
     // and are never written.
     //
-    // *** IT STAYS A TRIVIAL VALUE TYPE, AND THAT IS A DECISION, NOT AN
-    // OVERSIGHT. *** Retail exports five special members for it —
+    // Retail exports five special members for it --
     //     ??0Parameter…@XZ          0x1800f4fa0   default ctor
     //     ??0Parameter…@VString@System@@H_N@Z  0x1800f4f30
     //     ??0Parameter…@AEBU012@@Z  0x18004e150   copy ctor
     //     ??4Parameter…@AEBU012@@Z  0x18004e190   assignment
     //     ??1Parameter…@XZ          0x18004e110   destructor
-    // — and DECLARING any of them here would make `Parameter` non-trivially
-    // copyable / destructible, which changes `rtcoll::SpecFor<Parameter>`
-    // (Collection.h) from `destroy == nullptr` to `&TDestroy<Parameter>`. The
-    // compiler-emitted `~Array<Parameter>` would then release each element's
-    // `name` String — and the REGISTERED array destructor this class's own
-    // destructor calls (0x18004fb00, `J2_ENTRY(…, ReleaseStringsCounted,
-    // kD_Str_10)` in `runtime/src/collection/array_destroy.cpp`) already does
-    // exactly that. That is a DOUBLE RELEASE of every parameter name, in the
-    // shape B31_RULES records. `name` stays a `void*` for the same reason
-    // `Video::VertexLayout::Element::name` does.
-    //
-    // So: only the non-special exported member is declared, and the five above
-    // are named here rather than in code. Nothing in the tree calls them.
+    // B.4 wave Y (RT-GFX): `name` is a System::String, so the element is no
+    // longer trivial. Every Parameter lives in `_textures` / `_constants`, whose
+    // type names retail's row `kSpec_ShaderParam` (SetSize 0x180055db0: the
+    // String adopt, the zeroing init; destroy 0x18004fed0, the String release),
+    // and ~ShaderProgram calls the registered ~Array 0x18004fb00 on both, which
+    // zeroes each header, so the members' implicit ~Array that follows releases
+    // nothing. No Parameter is built, copied or destroyed through C++ outside
+    // those rows, so each name is released once.
     // ========================================================
     struct Parameter {
-        char*   name;      // +0x00  System::String data (refcounted, str[-4] is the count); B.4 R-VIDEO: char*, H4
+        System::String name;  // +0x00  (B.4 wave Y: the String; the rows above own its lifecycle)
         int32_t dest;      // +0x08  the register/sampler index this binds to
         bool    internal;  // +0x0c  only serialized when GetVersion() >= 1 (B.4 R-VIDEO: bool, H4)
         uint8_t _pad0d[3]; // +0x0d  never written by any arm
@@ -234,8 +234,10 @@ public:
     // PUBLIC because `dx11/` reads `_byteCode` directly — the same posture
     // `Object::External` takes with `_path` / `_refs`, and what lets
     // `dx11/src/shaderprograms.cpp` drop its `ShaderProgramOwner` view.
-    Collection::Array<Parameter>                  _textures;   // +0x20
-    Collection::Array<Parameter>                  _constants;  // +0x30
+    Collection::Array<Parameter, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_ShaderParam>> _textures;   // +0x20
+    Collection::Array<Parameter, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_ShaderParam>> _constants;  // +0x30
     Collection::Array<Collection::Array<uint8_t>> _byteCode;   // +0x40
 };
 
@@ -253,13 +255,10 @@ static_assert(offsetof(ShaderProgram::Parameter, dest) == 0x08,
               "Parameter::dest @ +0x08 (MOV EAX,[RAX+R8*8+0x8] at 0x18004e47a)");
 static_assert(offsetof(ShaderProgram::Parameter, internal) == 0x0c,
               "Parameter::internal @ +0x0c (MOVZX EAX,[RAX+R8*8+0xc] at 0x18004e48a)");
-// The triviality the array spec depends on — see the Parameter banner. If this
-// ever fails, `~Array<Parameter>` has started releasing the names a second time.
-static_assert(std::is_trivially_destructible<ShaderProgram::Parameter>::value,
-              "ShaderProgram::Parameter must stay trivially destructible "
-              "(rtcoll::SpecFor<Parameter>::destroy must stay null)");
-static_assert(std::is_trivially_copyable<ShaderProgram::Parameter>::value,
-              "ShaderProgram::Parameter must stay trivially copyable");
+// B.4 wave Y: the element carries a String (see the Parameter banner); the
+// arrays' row, not the trait-derived spec, owns its lifecycle.
+static_assert(!std::is_trivially_destructible<ShaderProgram::Parameter>::value,
+              "ShaderProgram::Parameter::name is a System::String");
 
 // ============================================================
 // Video::VertexProgram — the compiled vertex shader. 0x58, 9 slots.

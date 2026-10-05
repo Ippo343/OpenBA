@@ -511,8 +511,9 @@ static_assert(std::is_standard_layout<Animation>::value,
 }  // namespace Graphics
 
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
-extern "C" RtGraphics::AnimationManager* RtGraphics_AnimationManager_Ctor(RtGraphics::AnimationManager* self);  // 0x1800fc430
-extern "C" void RtGraphics_AnimationManager_Dtor(RtGraphics::AnimationManager* self);  // 0x1800fc400
+namespace Graphics { class AnimationManager; }
+extern "C" Graphics::AnimationManager* RtGraphics_AnimationManager_Ctor(Graphics::AnimationManager* self);  // 0x1800fc430: placement-new AnimationManager()
+extern "C" void RtGraphics_AnimationManager_Dtor(Graphics::AnimationManager* self);  // 0x1800fc400: ~AnimationManager()
 // ==== end B3R G-Game ====
 
 // ==== B3R RT-Core: the Array<Animation> element ops collection/array.cpp calls ====

@@ -1421,7 +1421,7 @@ const ArraySpec kSpec_EffectSlot = {              // 0x180051390
 //                (array_destroy.cpp kD_Str_20)
 static void VertexElementAssign(Video::VertexLayout::Element* d,
                                 const Video::VertexLayout::Element* s) {
-    AdoptString(d->name, s->name);          // +0x00
+    AdoptString(d->name._data, s->name._data);  // +0x00
     d->stream     = s->stream;              // +0x08..+0x1b, five dwords
     d->offset     = s->offset;
     d->usage      = s->usage;
@@ -1432,7 +1432,7 @@ void AssignVertexElement(uint8_t* d, const uint8_t* s) {
     AssignAs<Video::VertexLayout::Element, &VertexElementAssign>(d, s);
 }
 static void VertexElementInit(Video::VertexLayout::Element* d) {
-    d->name       = nullptr;                // +0x00..+0x1b zeroed
+    d->name._data = nullptr;                // +0x00..+0x1b zeroed
     d->stream     = 0;
     d->offset     = 0;
     d->usage      = Video::VertexLayout::Usage();
@@ -1801,7 +1801,7 @@ const ArraySpec kSpec_GraphSeries = {             // 0x1800417d0
 //           this body computes exactly those two numbers itself).
 static void ShaderParamAssign(Video::ShaderProgram::Parameter* d,
                               const Video::ShaderProgram::Parameter* s) {
-    AdoptString(d->name, s->name);
+    AdoptString(d->name._data, s->name._data);
     d->dest     = s->dest;                  // Parameter::dest
     d->internal = s->internal;              // Parameter::internal (a BYTE)
 }
@@ -1809,7 +1809,7 @@ void AssignShaderParam(uint8_t* d, const uint8_t* s) {
     AssignAs<Video::ShaderProgram::Parameter, &ShaderParamAssign>(d, s);
 }
 static void ShaderParamInit(Video::ShaderProgram::Parameter* d) {
-    d->name     = nullptr;                  // +0x00..+0x0c zeroed
+    d->name._data = nullptr;                // +0x00..+0x0c zeroed
     d->dest     = 0;
     d->internal = false;
 }
@@ -3551,7 +3551,7 @@ void DestroyFace28Range(void* ignoredThis, uint8_t* base, int count) {
 using PickingSubMesh = Picking::PickingMesh::SubMesh;
 static void SubMeshAssign(PickingSubMesh* d, const PickingSubMesh* s) {
     // the String at +0x00: null the slot, adopt, bump the shared refcount
-    AdoptString(d->_name, s->_name);
+    AdoptString(d->_name._data, s->_name._data);
     // +0x08..+0x3f: fourteen plain DWORD moves in retail
     d->_parent = s->_parent;
     d->_local  = s->_local;
@@ -3575,7 +3575,7 @@ void AssignSubMesh80(uint8_t* d, const uint8_t* s) { AssignSubMesh80Impl(d, s); 
 // -1e8 max -- 0x4cbebc20 / 0xccbebc20) and four empty inner Arrays. All 0x80
 // bytes are written; there is no init window.
 static void SubMeshInit(PickingSubMesh* d) {
-    d->_name                   = nullptr;   // +0x00
+    d->_name._data             = nullptr;   // +0x00
     d->_parent                 = -1;        // +0x08 0xffffffff
     d->_local.rotation.x       = 0.0f;      // +0x0c qword
     d->_local.rotation.y       = 0.0f;

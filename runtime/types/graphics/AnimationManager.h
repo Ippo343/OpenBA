@@ -65,6 +65,10 @@
 // and undefined (retail's are these rows), so `Instance::_states` names it.
 namespace rtcoll { namespace gfxanim {
 extern const ArraySpec kSpec_AnimState;
+// B.4 wave Y (RT-GFX): the row of `Array<AnimationManager::Instance>` (SetSize
+// 0x18005c3d0 / 0x18005be30, copy ctor 0x18005b700, element destroy 0x18005c550
+// that ~Array 0x18005bf60 runs), so `AnimationManager::_instances` names it.
+extern const ArraySpec kSpec_AnimInstance;
 } }
 
 // Forward declarations only. Tags match the real declarations (RULE B4b-5).
@@ -227,7 +231,11 @@ namespace Graphics {
 // `??1…@QEAA@XZ` (0x1800fc400) are `QEAA` — non-virtual — and the constructor
 // never stores a vtable pointer.
 //
-// NO REAL CONSTRUCTOR OR DESTRUCTOR, and the reason is NOT B4b-2's vtable test
+// B.4 wave Y (RT-GFX): BOTH ARE REAL NOW (animation.cpp). The constructor names
+// `_instances` (Array(): the +0x00 / +0x08 qwords) and `_f10` and nothing else
+// by initialiser, so +0x9d4 stays unwritten; the doors placement-new / call
+// ~AnimationManager. The paragraph below is the HISTORY of why they were not.
+// [was:] NO REAL CONSTRUCTOR OR DESTRUCTOR, and the reason is NOT B4b-2's vtable test
 // (there is no vtable). It is retail's own store list. The constructor at
 // 0x1800fc430 writes +0x00..+0x13 and then the 624 words at +0x14..+0x9d3, and
 // STOPS: the four bytes at +0x9d4 are never written. A C++ constructor with a
@@ -372,7 +380,10 @@ public:
     //        see the CORRECTION banner in Animation.h: 0x1800fc268 reads +0x08
     //        as a LOOP BOUND and 0x1800fc2a0 reads +0x00 as an ARRAY BASE, and a
     //        LockCount is not a loop bound.
-    Collection::Array<Instance> _instances;   // B.4: typed; see Instance's note
+    // B.4 wave Y: retail's row (0x18005bf60 is this member's ~Array).
+    Collection::Array<Instance, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimInstance>>
+        _instances;
 
     // +0x10  UNVERIFIED — no reader in the ctor, the dtor, `Update` or
     //        `Serialize`. The DO-NOT-DELETE note in Animation.h owns this field's
