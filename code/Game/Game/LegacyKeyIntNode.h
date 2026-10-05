@@ -24,6 +24,8 @@ struct LegacyKeyIntNode {
     uint8_t           _pad2C[4];   // +0x2C
 };
 static_assert(sizeof(LegacyKeyIntNode) == 0x30, "LegacyKeyIntNode is MemAlloc(0x30)");
+static_assert(offsetof(LegacyKeyIntNode, key) == 0x0, "LegacyKeyIntNode::key");
+static_assert(offsetof(LegacyKeyIntNode, _pad2C) == 0x2C, "LegacyKeyIntNode::_pad2C");
 static_assert(offsetof(LegacyKeyIntNode, value) == 0x08, "LegacyKeyIntNode::value @ +0x08");
 static_assert(offsetof(LegacyKeyIntNode, valueHigh) == 0x0C, "LegacyKeyIntNode::valueHigh @ +0x0C");
 static_assert(offsetof(LegacyKeyIntNode, parent) == 0x10, "LegacyKeyIntNode::parent @ +0x10");

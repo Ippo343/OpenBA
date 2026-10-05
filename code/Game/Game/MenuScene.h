@@ -52,6 +52,7 @@ struct MenuSceneMesh {
     int16_t       skinIndex;    // +0x1E GraphicsMesh::GetMaterialList's argument
 };
 static_assert(sizeof(MenuSceneMesh) == 0x20, "MenuSceneMesh stride 0x20 (0x14001baf0)");
+static_assert(offsetof(MenuSceneMesh, position) == 0x0, "MenuSceneMesh::position");
 static_assert(offsetof(MenuSceneMesh, color) == 0x0C, "MenuSceneMesh::color @ +0x0C");
 static_assert(offsetof(MenuSceneMesh, yaw) == 0x18, "MenuSceneMesh::yaw @ +0x18");
 static_assert(offsetof(MenuSceneMesh, meshIndex) == 0x1C, "MenuSceneMesh::meshIndex @ +0x1C");
@@ -64,6 +65,7 @@ struct MenuSceneParticle {
     int32_t       particleIndex;  // +0x10 into MenuScene::particleResources
 };
 static_assert(sizeof(MenuSceneParticle) == 0x14, "MenuSceneParticle stride 0x14 (0x14001bf10)");
+static_assert(offsetof(MenuSceneParticle, position) == 0x0, "MenuSceneParticle::position");
 static_assert(offsetof(MenuSceneParticle, yaw) == 0x0C, "MenuSceneParticle::yaw @ +0x0C");
 static_assert(offsetof(MenuSceneParticle, particleIndex) == 0x10, "MenuSceneParticle::particleIndex @ +0x10");
 
@@ -74,6 +76,7 @@ struct MenuSceneTreeNode {
     MenuSceneTreeNode* left;         // +0x18
     MenuSceneTreeNode* right;        // +0x20
 };
+static_assert(offsetof(MenuSceneTreeNode, _key) == 0x0, "MenuSceneTreeNode::_key");
 static_assert(offsetof(MenuSceneTreeNode, left)  == 0x18, "MenuSceneTreeNode::left @ +0x18 (0x14001b860)");
 static_assert(offsetof(MenuSceneTreeNode, right) == 0x20, "MenuSceneTreeNode::right @ +0x20 (0x14001b860)");
 
@@ -95,6 +98,8 @@ struct MenuSceneTreeMap {
     uint8_t            _pad1C[4];        // +0x1C not written by the ctor
 };
 static_assert(sizeof(MenuSceneTreeMap) == 0x20, "MenuScene +0x1C8 / +0x1E8 records are 0x20 apart");
+static_assert(offsetof(MenuSceneTreeMap, array) == 0x0, "MenuSceneTreeMap::array");
+static_assert(offsetof(MenuSceneTreeMap, _pad1C) == 0x1C, "MenuSceneTreeMap::_pad1C");
 static_assert(offsetof(MenuSceneTreeMap, root)  == 0x10, "MenuSceneTreeMap::root @ +0x10 (0x14001b860)");
 static_assert(offsetof(MenuSceneTreeMap, count) == 0x18, "MenuSceneTreeMap::count @ +0x18 (0x14001b860)");
 
@@ -149,6 +154,7 @@ public:
 };
 
 static_assert(sizeof(MenuScene) == 0x208, "MenuScene is 0x208");
+static_assert(offsetof(MenuScene, _pad7C) == 0x7C, "MenuScene::_pad7C");
 static_assert(alignof(MenuScene) == 8, "qword-aligned");
 static_assert(offsetof(MenuScene, name) == 0x20, "+0x20");
 static_assert(offsetof(MenuScene, geometry) == 0x28, "+0x28");

@@ -102,6 +102,9 @@ public:
 };
 
 static_assert(sizeof(PathfinderThread) == 0x1f8, "PathfinderThread is MemAlloc(0x1f8)");
+static_assert(offsetof(PathfinderThread, _pad5D) == 0x5D, "PathfinderThread::_pad5D");
+static_assert(offsetof(PathfinderThread, _pad74) == 0x74, "PathfinderThread::_pad74");
+static_assert(offsetof(PathfinderThread, _pad1F7) == 0x1F7, "PathfinderThread::_pad1F7");
 static_assert(offsetof(PathfinderThread, lock) == 0x30, "PathfinderThread::lock @ +0x30");
 static_assert(offsetof(PathfinderThread, nextToken) == 0x58, "PathfinderThread::nextToken @ +0x58");
 static_assert(offsetof(PathfinderThread, runInline) == 0x5C, "PathfinderThread::runInline @ +0x5C");

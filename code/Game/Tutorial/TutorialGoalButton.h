@@ -52,4 +52,5 @@ public:
 static_assert(offsetof(TutorialGoalButton, elementPath) == 0x20, "elementPath offset");
 static_assert(offsetof(TutorialGoalButton, invertCheck) == 0x28, "invertCheck offset");
 static_assert(sizeof(TutorialGoalButton) == 0x30, "TutorialGoalButton is 0x30 (create 0x140027290)");
+static_assert(offsetof(TutorialGoalButton, _pad29) == 0x29, "TutorialGoalButton::_pad29");
 static_assert(alignof(TutorialGoalButton) == 8, "qword-aligned");

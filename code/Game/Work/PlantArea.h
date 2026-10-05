@@ -68,6 +68,7 @@ public:
 };
 
 static_assert(sizeof(PlantArea) == 0x70, "PlantArea is 0x70 (retail create MemAlloc)");
+static_assert(offsetof(PlantArea, _pad64) == 0x64, "PlantArea::_pad64");
 static_assert(alignof(PlantArea) == 8, "PlantArea is 8-aligned");
 static_assert(offsetof(PlantArea, _cells) == 0x48, "PlantArea +0x48");
 static_assert(offsetof(PlantArea, _cells) + offsetof(PlantArea::CellSet, _count) == 0x50, "PlantArea +0x50");

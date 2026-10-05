@@ -65,6 +65,7 @@ struct WorkSchedulerNode20 {
     WorkSchedulerNode20* right;              // +0x20
 };
 static_assert(sizeof(WorkSchedulerNode20) == 0x28, "the links 0x14000e320 walks end at +0x28");
+static_assert(offsetof(WorkSchedulerNode20, _unknown00) == 0x0, "WorkSchedulerNode20::_unknown00");
 static_assert(offsetof(WorkSchedulerNode20, left) == 0x18, "WorkSchedulerNode20::left @ +0x18 (0x14000e320)");
 static_assert(offsetof(WorkSchedulerNode20, right) == 0x20, "WorkSchedulerNode20::right @ +0x20 (0x14000e320)");
 

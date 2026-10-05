@@ -54,6 +54,10 @@ public:
 };
 
 static_assert(sizeof(Disease) == 0x48, "Disease is 0x48 (create 0x14008fd0 MemAlloc(0x48))");
+static_assert(offsetof(Disease, _field34) == 0x34, "Disease::_field34");
+static_assert(offsetof(Disease, _field38) == 0x38, "Disease::_field38");
+static_assert(offsetof(Disease, _field3C) == 0x3C, "Disease::_field3C");
+static_assert(offsetof(Disease, _pad44) == 0x44, "Disease::_pad44");
 static_assert(alignof(Disease) == 8, "qword-aligned");
 static_assert(offsetof(Disease, _stringTable) == 0x20, "+0x20");
 static_assert(offsetof(Disease, _name)        == 0x28, "+0x28");

@@ -32,6 +32,8 @@ struct NameDatabaseEntry {
     uint32_t field_0x08;     // +0x08 uint
 };
 static_assert(sizeof(NameDatabaseEntry) == 0xC, "stride 0xc (0x14001c7c0)");
+static_assert(offsetof(NameDatabaseEntry, field_0x00) == 0x0, "NameDatabaseEntry::field_0x00");
+static_assert(offsetof(NameDatabaseEntry, _pad05) == 0x5, "NameDatabaseEntry::_pad05");
 static_assert(offsetof(NameDatabaseEntry, field_0x04) == 0x04, "+0x04");
 static_assert(offsetof(NameDatabaseEntry, field_0x08) == 0x08, "+0x08");
 

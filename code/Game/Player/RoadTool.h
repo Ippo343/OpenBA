@@ -55,6 +55,7 @@ public:
 
 
 static_assert(sizeof(RoadTool) == 0x48, "RoadTool is 0x48 (create 0x14002e870 MemAlloc(0x48))");
+static_assert(offsetof(RoadTool, _pad41) == 0x41, "RoadTool::_pad41");
 static_assert(alignof(RoadTool) == 8, "RoadTool is 8-aligned");
 static_assert(offsetof(RoadTool, roadDesc)     == 0x38, "RoadTool +0x38 (ctor 0x140105828)");
 static_assert(offsetof(RoadTool, modifierFlag) == 0x40, "RoadTool +0x40 (ctor 0x14010582c)");

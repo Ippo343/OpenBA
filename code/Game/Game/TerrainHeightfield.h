@@ -47,6 +47,17 @@ struct TerrainSizeRow {
     int32_t basinRadiusMin;      // +0x40
 };
 static_assert(sizeof(TerrainSizeRow) == 0x44, "TerrainSizeRow stride 0x44");
+static_assert(offsetof(TerrainSizeRow, mapSize) == 0x0, "TerrainSizeRow::mapSize");
+static_assert(offsetof(TerrainSizeRow, riverCount2) == 0x4, "TerrainSizeRow::riverCount2");
+static_assert(offsetof(TerrainSizeRow, riverMinEdge2) == 0x8, "TerrainSizeRow::riverMinEdge2");
+static_assert(offsetof(TerrainSizeRow, riverMaxEdge2) == 0xC, "TerrainSizeRow::riverMaxEdge2");
+static_assert(offsetof(TerrainSizeRow, riverMinEdge1) == 0x14, "TerrainSizeRow::riverMinEdge1");
+static_assert(offsetof(TerrainSizeRow, riverMaxEdge1) == 0x18, "TerrainSizeRow::riverMaxEdge1");
+static_assert(offsetof(TerrainSizeRow, field_0x1C) == 0x1C, "TerrainSizeRow::field_0x1C");
+static_assert(offsetof(TerrainSizeRow, maxRangeCount) == 0x2C, "TerrainSizeRow::maxRangeCount");
+static_assert(offsetof(TerrainSizeRow, minRangeBand) == 0x30, "TerrainSizeRow::minRangeBand");
+static_assert(offsetof(TerrainSizeRow, maxRangeBand) == 0x34, "TerrainSizeRow::maxRangeBand");
+static_assert(offsetof(TerrainSizeRow, basinRadiusMax) == 0x3C, "TerrainSizeRow::basinRadiusMax");
 static_assert(offsetof(TerrainSizeRow, riverCount1) == 0x10, "TerrainSizeRow +0x10");
 static_assert(offsetof(TerrainSizeRow, secondaryPathCount) == 0x20, "TerrainSizeRow +0x20");
 static_assert(offsetof(TerrainSizeRow, erosionIterations) == 0x24, "TerrainSizeRow +0x24");
@@ -67,6 +78,9 @@ struct TerrainPathPoint {
     float outerFalloff;          // +0x18
 };
 static_assert(sizeof(TerrainPathPoint) == 0x1C, "TerrainPathPoint stride 0x1C");
+static_assert(offsetof(TerrainPathPoint, x) == 0x0, "TerrainPathPoint::x");
+static_assert(offsetof(TerrainPathPoint, y) == 0x4, "TerrainPathPoint::y");
+static_assert(offsetof(TerrainPathPoint, innerFalloff) == 0x10, "TerrainPathPoint::innerFalloff");
 static_assert(offsetof(TerrainPathPoint, strength) == 0x08, "TerrainPathPoint +0x08");
 static_assert(offsetof(TerrainPathPoint, innerRadius) == 0x0C, "TerrainPathPoint +0x0C");
 static_assert(offsetof(TerrainPathPoint, outerRadius) == 0x14, "TerrainPathPoint +0x14");
@@ -79,6 +93,9 @@ struct TerrainStamp {
     float radius;                // +0x08
 };
 static_assert(sizeof(TerrainStamp) == 0x0C && alignof(TerrainStamp) == 4, "TerrainStamp stride 0xC");
+static_assert(offsetof(TerrainStamp, x) == 0x0, "TerrainStamp::x");
+static_assert(offsetof(TerrainStamp, y) == 0x4, "TerrainStamp::y");
+static_assert(offsetof(TerrainStamp, radius) == 0x8, "TerrainStamp::radius");
 
 // The polyline list's row (worldgen_f390_coastline.cpp): append 0x140024460 deep-
 // copies each path (0x140024ac0), the destructor 0x1400175d0 frees every path.
@@ -109,6 +126,8 @@ static_assert(offsetof(TerrainHeightfield, random) == 0x58, "TerrainHeightfield 
 static_assert(offsetof(TerrainHeightfield, generator) == 0xA20, "TerrainHeightfield +0xA20");
 static_assert(offsetof(TerrainHeightfield, sizeRow) == 0xA28, "TerrainHeightfield +0xA28");
 static_assert(sizeof(TerrainHeightfield) == 0xA30, "b0230's stack record is 0xA30");
+static_assert(offsetof(TerrainHeightfield, gridSize) == 0x0, "TerrainHeightfield::gridSize");
+static_assert(offsetof(TerrainHeightfield, _pad04) == 0x4, "TerrainHeightfield::_pad04");
 
 // The f390 height-pipeline stages (worldgen_f390_*.cpp), each on the heightfield.
 void wg_f390_coastline(TerrainHeightfield* hf);   // 0x1400cd090 coastline ring -> paths

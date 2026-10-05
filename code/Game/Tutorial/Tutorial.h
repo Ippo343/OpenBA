@@ -59,4 +59,5 @@ static_assert(offsetof(Tutorial, steps) + offsetof(Collection::Array<TutorialSte
 static_assert(offsetof(Tutorial, steps) + offsetof(Collection::Array<TutorialStep*>, _capacity) == 0x34, "+0x34");
 static_assert(offsetof(Tutorial, currentStep) == 0x38, "+0x38");
 static_assert(sizeof(Tutorial) == 0x40, "Tutorial is 0x40 (create 0x140026e50 MemAlloc(0x40))");
+static_assert(offsetof(Tutorial, _pad3C) == 0x3C, "Tutorial::_pad3C");
 static_assert(alignof(Tutorial) == 8, "qword-aligned");

@@ -59,6 +59,9 @@ public:
 };
 
 static_assert(sizeof(ClimateGenerator) == 0x110, "ClimateGenerator is 0x110");
+static_assert(offsetof(ClimateGenerator, _pad31) == 0x31, "ClimateGenerator::_pad31");
+static_assert(offsetof(ClimateGenerator, tempVariation) == 0x38, "ClimateGenerator::tempVariation");
+static_assert(offsetof(ClimateGenerator, precipitation) == 0x3C, "ClimateGenerator::precipitation");
 static_assert(alignof(ClimateGenerator) == 8, "qword-aligned");
 static_assert(offsetof(ClimateGenerator, _field20) == 0x20, "+0x20");
 static_assert(offsetof(ClimateGenerator, _field28) == 0x28, "+0x28");

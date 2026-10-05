@@ -102,6 +102,9 @@ struct ToolTileRecord {
     int32_t  angle;     // +0x10 degrees
 };
 static_assert(sizeof(ToolTileRecord) == 0x14, "ToolTileRecord is the 0x14-byte 0x1401008c0 record");
+static_assert(offsetof(ToolTileRecord, col) == 0x0, "ToolTileRecord::col");
+static_assert(offsetof(ToolTileRecord, row) == 0x4, "ToolTileRecord::row");
+static_assert(offsetof(ToolTileRecord, variant) == 0x8, "ToolTileRecord::variant");
 static_assert(offsetof(ToolTileRecord, color) == 0x0C, "ToolTileRecord::color @ +0x0C");
 static_assert(offsetof(ToolTileRecord, angle) == 0x10, "ToolTileRecord::angle @ +0x10");
 
@@ -118,6 +121,12 @@ struct ToolSegmentRecord {
     float    width;     // +0x1C
 };
 static_assert(sizeof(ToolSegmentRecord) == 0x20, "ToolSegmentRecord is the 0x20-byte 0x1401008c0 record");
+static_assert(offsetof(ToolSegmentRecord, col1) == 0x0, "ToolSegmentRecord::col1");
+static_assert(offsetof(ToolSegmentRecord, row1) == 0x4, "ToolSegmentRecord::row1");
+static_assert(offsetof(ToolSegmentRecord, variant) == 0x8, "ToolSegmentRecord::variant");
+static_assert(offsetof(ToolSegmentRecord, color) == 0xC, "ToolSegmentRecord::color");
+static_assert(offsetof(ToolSegmentRecord, angle) == 0x10, "ToolSegmentRecord::angle");
+static_assert(offsetof(ToolSegmentRecord, row2) == 0x18, "ToolSegmentRecord::row2");
 static_assert(offsetof(ToolSegmentRecord, col2) == 0x14, "ToolSegmentRecord::col2 @ +0x14");
 static_assert(offsetof(ToolSegmentRecord, width) == 0x1C, "ToolSegmentRecord::width @ +0x1C");
 

@@ -67,6 +67,7 @@ public:
 };
 
 static_assert(sizeof(BuildStructure) == 0x70, "BuildStructure is 0x70 (retail create MemAlloc)");
+static_assert(offsetof(BuildStructure, _pad49) == 0x49, "BuildStructure::_pad49");
 static_assert(alignof(BuildStructure) == 8, "BuildStructure is 8-aligned");
 static_assert(offsetof(BuildStructure, field_48) == 0x48, "BuildStructure +0x48");
 static_assert(offsetof(BuildStructure, field_4c) == 0x4c, "BuildStructure +0x4c");

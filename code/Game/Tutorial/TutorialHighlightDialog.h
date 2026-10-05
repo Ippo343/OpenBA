@@ -77,4 +77,5 @@ static_assert(offsetof(TutorialHighlightDialog, rotation) == 0xD8, "+0xD8");
 static_assert(offsetof(TutorialHighlightDialog, targetElement) == 0xE0, "+0xE0");
 static_assert(offsetof(TutorialHighlightDialog, targetEntity) == 0xE8, "+0xE8");
 static_assert(sizeof(TutorialHighlightDialog) == 0xF0, "TutorialHighlightDialog is 0xf0 (create 0x1400278c0)");
+static_assert(offsetof(TutorialHighlightDialog, _padDC) == 0xDC, "TutorialHighlightDialog::_padDC");
 static_assert(alignof(TutorialHighlightDialog) == 8, "qword-aligned");

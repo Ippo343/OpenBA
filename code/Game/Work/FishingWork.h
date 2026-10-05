@@ -63,6 +63,7 @@ public:
 };
 
 static_assert(sizeof(FishingWork) == 0x70, "FishingWork is 0x70 (retail create MemAlloc)");
+static_assert(offsetof(FishingWork, _pad6C) == 0x6C, "FishingWork::_pad6C");
 static_assert(alignof(FishingWork) == 8, "FishingWork is 8-aligned");
 static_assert(offsetof(FishingWork, citizenRefs) == 0x48, "FishingWork +0x48");
 static_assert(offsetof(FishingWork, citizenCount) == 0x50, "FishingWork +0x50");

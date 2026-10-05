@@ -71,6 +71,7 @@ public:
 };
 
 static_assert(sizeof(ClearArea) == 0x78, "ClearArea is 0x78 (retail create MemAlloc)");
+static_assert(offsetof(ClearArea, _pad73) == 0x73, "ClearArea::_pad73");
 static_assert(alignof(ClearArea) == 8, "ClearArea is 8-aligned");
 static_assert(offsetof(ClearArea, _entities) == 0x48, "ClearArea +0x48");
 static_assert(offsetof(ClearArea, _entities) + offsetof(ClearArea::EntitySet, _count) == 0x50, "ClearArea +0x50");

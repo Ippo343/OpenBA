@@ -62,6 +62,9 @@ public:
 };
 
 static_assert(sizeof(Toolbar) == 0x68, "Toolbar is 0x68");
+static_assert(offsetof(Toolbar, _field28) == 0x28, "Toolbar::_field28");
+static_assert(offsetof(Toolbar, _pad46) == 0x46, "Toolbar::_pad46");
+static_assert(offsetof(Toolbar, _pad54) == 0x54, "Toolbar::_pad54");
 static_assert(offsetof(Toolbar, _field20) == 0x20, "+0x20");
 static_assert(offsetof(Toolbar, _field30) == 0x30, "+0x30");
 static_assert(offsetof(Toolbar, _field38) == 0x38, "+0x38");
