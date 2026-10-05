@@ -672,14 +672,14 @@ HerbalistWork::HerbalistWork() : AutoPickupWork(), _field58(0) {
 // Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
 
 // create 0x14002a5e0: MemAlloc(sizeof, 8), then the ctor.
-void* HerbalistWork::CreateNewObject() {
+::Object::Base* HerbalistWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HerbalistWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HerbalistWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* HerbalistWork::CreateInPlaceObject(void* storage) {
+::Object::Base* HerbalistWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HerbalistWork());
 }

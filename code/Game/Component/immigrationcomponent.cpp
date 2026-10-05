@@ -89,14 +89,14 @@ ImmigrationComponent::~ImmigrationComponent() {
 }
 
 // create 0x140007a20: MemAlloc(0x68, 8), then the ctor.
-void* ImmigrationComponent::CreateNewObject() {
+::Object::Base* ImmigrationComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ImmigrationComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ImmigrationComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ImmigrationComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ImmigrationComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ImmigrationComponent());
 }

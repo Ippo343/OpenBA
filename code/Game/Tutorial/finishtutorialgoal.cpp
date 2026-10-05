@@ -71,13 +71,13 @@ Object::External* FinishTutorialGoal::Construct() {
 }
 
 // create 0x1400260f0: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* FinishTutorialGoal::CreateNewObject() {
+::Object::Base* FinishTutorialGoal::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FinishTutorialGoal), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) FinishTutorialGoal());
 }
 // createInPlace 0x140026150.
-void* FinishTutorialGoal::CreateInPlaceObject(void* storage) {
+::Object::Base* FinishTutorialGoal::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) FinishTutorialGoal());
 }

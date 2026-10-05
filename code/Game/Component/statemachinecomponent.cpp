@@ -646,14 +646,14 @@ char StateMachineComponent::RootController::TickAlt(StateMachine*, const System:
 char StateMachineComponent::RootController::HasStates() { return 0; }
 
 // create 0x1400382d0: MemAlloc(0x58, 8), then the ctor.
-void* StateMachineComponent::CreateNewObject() {
+::Object::Base* StateMachineComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StateMachineComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StateMachineComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* StateMachineComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* StateMachineComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StateMachineComponent());
 }

@@ -87,13 +87,13 @@ Object::External* PopulationGoal::Construct() {
 }
 
 // create 0x140025f00: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* PopulationGoal::CreateNewObject() {
+::Object::Base* PopulationGoal::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PopulationGoal), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) PopulationGoal());
 }
 // createInPlace 0x140025f60.
-void* PopulationGoal::CreateInPlaceObject(void* storage) {
+::Object::Base* PopulationGoal::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) PopulationGoal());
 }

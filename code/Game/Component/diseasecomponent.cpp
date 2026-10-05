@@ -869,14 +869,14 @@ void DiseaseComponent::Update(const System::Time* time) {
 }
 
 // create 0x140004db0: MemAlloc(0x58, 8), then the ctor.
-void* DiseaseComponent::CreateNewObject() {
+::Object::Base* DiseaseComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DiseaseComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DiseaseComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* DiseaseComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* DiseaseComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DiseaseComponent());
 }

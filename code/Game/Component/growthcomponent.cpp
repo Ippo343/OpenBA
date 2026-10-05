@@ -632,14 +632,14 @@ void GrowthComponent::PostUpdate() {
 void GrowthComponent::Slot11() {}
 
 // create 0x140034b10: MemAlloc(0x50, 8), then the ctor.
-void* GrowthComponent::CreateNewObject() {
+::Object::Base* GrowthComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(GrowthComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) GrowthComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* GrowthComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* GrowthComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) GrowthComponent());
 }

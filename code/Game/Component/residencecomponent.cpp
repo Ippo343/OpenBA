@@ -584,14 +584,14 @@ ResidenceComponent::~ResidenceComponent() {
 }
 
 // create 0x140037440: MemAlloc(0x60, 8), then the ctor.
-void* ResidenceComponent::CreateNewObject() {
+::Object::Base* ResidenceComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ResidenceComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ResidenceComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ResidenceComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ResidenceComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ResidenceComponent());
 }

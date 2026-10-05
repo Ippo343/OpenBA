@@ -124,12 +124,12 @@ Object::External* ClimateGenerator::Construct() {
 // ============================================================
 // Reflection: create / createInPlace, the registration
 // ============================================================
-void* ClimateGenerator::CreateNewObject() {
+::Object::Base* ClimateGenerator::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ClimateGenerator), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) ClimateGenerator());
 }
-void* ClimateGenerator::CreateInPlaceObject(void* memory) {
+::Object::Base* ClimateGenerator::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) ClimateGenerator());
 }

@@ -744,13 +744,13 @@ Object::Type* FencedTool::GetSettingType(Object::Type* ret) const {
 // sets sceneObjectId = -1 ("preview not in the scene"): the tree's zero-fill
 // once turned that into a live id 0 (the start-town barn's mesh) and
 // Scene::RemoveObject(0) spun forever.
-void* FencedTool::CreateNewObject() {
+::Object::Base* FencedTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FencedTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FencedTool());
 }
 // createInPlace 0x140026910: `if (storage) ctor(storage)`.
-void* FencedTool::CreateInPlaceObject(void* storage) {
+::Object::Base* FencedTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FencedTool());
 }

@@ -751,14 +751,14 @@ void EntityList_RegisterEntity_Impl(EntityList* entityList, Object::InternalPtr<
 // ComponentEntity_Ctor (0x1400c3620) == the default ctor above. Registered as
 // the real factory so Object::Factory::CreateObject("ComponentEntity") /
 // External::Load no longer hits the NullFactory -> IsDerivedFrom(NULL) crash.
-void* ComponentEntity::CreateNewObject() {
+::Object::Base* ComponentEntity::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ComponentEntity), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ComponentEntity());
 }
 // Retail's in-place create is the Runtime's `Internal::CreateInPlaceObject`;
 // the tree has always run the full ctor here (kept, no behaviour change).
-void* ComponentEntity::CreateInPlaceObject(void* storage) {
+::Object::Base* ComponentEntity::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ComponentEntity());
 }

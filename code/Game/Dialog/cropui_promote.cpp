@@ -182,14 +182,14 @@ void CropUI::OnUpdate(const System::Time& time) {
 
 // create 0x140020b10: MemAlloc(0x60, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* CropUI::CreateNewObject() {
+::Object::Base* CropUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CropUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CropUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* CropUI::CreateInPlaceObject(void* storage) {
+::Object::Base* CropUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CropUI());
 }

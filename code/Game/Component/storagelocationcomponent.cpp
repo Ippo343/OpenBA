@@ -116,14 +116,14 @@ StorageLocationComponent::StorageLocationComponent() : _controller(this) {
 }
 
 // create 0x140038df0: MemAlloc(0x48, 8), then the ctor.
-void* StorageLocationComponent::CreateNewObject() {
+::Object::Base* StorageLocationComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StorageLocationComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StorageLocationComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* StorageLocationComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* StorageLocationComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StorageLocationComponent());
 }

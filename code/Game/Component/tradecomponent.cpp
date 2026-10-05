@@ -322,14 +322,14 @@ TradeStockTree::~TradeStockTree() {
 }
 
 // create 0x14000db60: MemAlloc(0xa8, 8), then the ctor.
-void* TradeComponent::CreateNewObject() {
+::Object::Base* TradeComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TradeComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TradeComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* TradeComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* TradeComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TradeComponent());
 }

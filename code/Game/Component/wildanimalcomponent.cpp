@@ -127,14 +127,14 @@ void WildAnimalComponent::OnRemove() {
 }
 
 // create 0x140039c20: MemAlloc(0x30, 8), then the ctor.
-void* WildAnimalComponent::CreateNewObject() {
+::Object::Base* WildAnimalComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(WildAnimalComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) WildAnimalComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* WildAnimalComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* WildAnimalComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) WildAnimalComponent());
 }

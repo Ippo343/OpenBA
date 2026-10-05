@@ -168,13 +168,13 @@ Object::External* ConsumeProduceDescription::Construct() {
 }
 
 // create 0x140032360: MemAlloc(0x58, 8), then the (inlined) ctor.
-void* ConsumeProduceDescription::CreateNewObject() {
+::Object::Base* ConsumeProduceDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeProduceDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ConsumeProduceDescription());
 }
 // createInPlace 0x1400323a0.
-void* ConsumeProduceDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ConsumeProduceDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ConsumeProduceDescription());
 }

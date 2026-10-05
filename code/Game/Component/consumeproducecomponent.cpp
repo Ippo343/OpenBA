@@ -106,14 +106,14 @@ ConsumeProduceComponent::~ConsumeProduceComponent() {
 }
 
 // create 0x140032300: MemAlloc(0x70, 8), then the ctor.
-void* ConsumeProduceComponent::CreateNewObject() {
+::Object::Base* ConsumeProduceComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeProduceComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ConsumeProduceComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ConsumeProduceComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ConsumeProduceComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ConsumeProduceComponent());
 }

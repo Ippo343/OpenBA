@@ -517,13 +517,13 @@ void TornadoInstance::Update(const System::Time& time) {
 // ---------------------------------------------------------------------------
 // Reflection
 // ---------------------------------------------------------------------------
-void* Tornado::CreateNewObject() {
+::Object::Base* Tornado::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(Tornado), 8);
-    void* built = p ? static_cast<Object::Base*>(::new (p) Tornado()) : nullptr;
+    Object::Base* built = p ? static_cast<Object::Base*>(::new (p) Tornado()) : nullptr;
     TornadoFactoryTrace("Factory", built);
     return built;
 }
-void* Tornado::CreateInPlaceObject(void* memory) {
+::Object::Base* Tornado::CreateInPlaceObject(void* memory) {
     TornadoFactoryTrace("CreateInPlace", memory);
     if (!memory) return nullptr;
     return static_cast<Object::Base*>(::new (memory) Tornado());

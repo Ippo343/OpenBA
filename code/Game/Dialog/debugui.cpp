@@ -1258,14 +1258,14 @@ void DebugUI::OnCreated() {
 
 // create 0x140010ec0: MemAlloc(0x130, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* DebugUI::CreateNewObject() {
+::Object::Base* DebugUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DebugUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DebugUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* DebugUI::CreateInPlaceObject(void* storage) {
+::Object::Base* DebugUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DebugUI());
 }

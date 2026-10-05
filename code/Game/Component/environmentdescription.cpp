@@ -133,13 +133,13 @@ Object::External* EnvironmentDescription::Construct() {
 }
 
 // create 0x140019120: MemAlloc(0x1b8, 8), then the ctor.
-void* EnvironmentDescription::CreateNewObject() {
+::Object::Base* EnvironmentDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EnvironmentDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) EnvironmentDescription());
 }
 // createInPlace 0x140019160.
-void* EnvironmentDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* EnvironmentDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) EnvironmentDescription());
 }

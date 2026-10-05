@@ -649,7 +649,7 @@ HarvestOrchard::HarvestOrchard()
 // now), so its registration goes with the table.
 
 // create 0x14002a520: MemAlloc(sizeof, 8), then the ctor.
-void* HarvestOrchard::CreateNewObject() {
+::Object::Base* HarvestOrchard::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HarvestOrchard), 8);
     if (!p) return nullptr;
     Object::Base* r = new (p) HarvestOrchard();
@@ -658,7 +658,7 @@ void* HarvestOrchard::CreateNewObject() {
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* HarvestOrchard::CreateInPlaceObject(void* storage) {
+::Object::Base* HarvestOrchard::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     Object::Base* r = new (storage) HarvestOrchard();
     OrchardDiag_NoteHarvestConstructed();

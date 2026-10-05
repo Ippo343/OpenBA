@@ -931,14 +931,14 @@ void TornadoComponent::Tick(const System::Time* time) {
 }
 
 // create 0x14000d500: MemAlloc(0x68, 8), then the ctor.
-void* TornadoComponent::CreateNewObject() {
+::Object::Base* TornadoComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TornadoComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TornadoComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* TornadoComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* TornadoComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TornadoComponent());
 }

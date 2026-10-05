@@ -171,12 +171,12 @@ RemoveAnimal::RemoveAnimal(ComponentEntity* animal)
 // [8] 0x1400ca760
 // [9] 0x1400ca720
 
-void* RemoveAnimal::CreateNewObject() {
+::Object::Base* RemoveAnimal::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RemoveAnimal), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RemoveAnimal());
 }
-void* RemoveAnimal::CreateInPlaceObject(void* storage) {
+::Object::Base* RemoveAnimal::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RemoveAnimal());
 }

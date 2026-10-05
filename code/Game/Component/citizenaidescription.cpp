@@ -57,13 +57,13 @@ Object::External* CitizenAIDescription::Construct() {
 }
 
 // create 0x14002fb80: MemAlloc(0x20, 8), then the (inlined) ctor.
-void* CitizenAIDescription::CreateNewObject() {
+::Object::Base* CitizenAIDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CitizenAIDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CitizenAIDescription());
 }
 // createInPlace 0x14002fbe0.
-void* CitizenAIDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* CitizenAIDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CitizenAIDescription());
 }

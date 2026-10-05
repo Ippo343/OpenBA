@@ -1952,14 +1952,14 @@ TownHallUI::~TownHallUI() {
 
 // create 0x140014660: MemAlloc(0x1e8, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* TownHallUI::CreateNewObject() {
+::Object::Base* TownHallUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TownHallUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TownHallUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* TownHallUI::CreateInPlaceObject(void* storage) {
+::Object::Base* TownHallUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TownHallUI());
 }

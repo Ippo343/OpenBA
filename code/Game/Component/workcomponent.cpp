@@ -241,14 +241,14 @@ uint32_t WorkComponent::CommandMask(int) { return 0; }
 void WorkComponent::Command(int) {}
 
 // create 0x140039e70: MemAlloc(0x38, 8), then the ctor.
-void* WorkComponent::CreateNewObject() {
+::Object::Base* WorkComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(WorkComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) WorkComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* WorkComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* WorkComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) WorkComponent());
 }

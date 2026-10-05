@@ -281,12 +281,12 @@ ConsumeRawMaterial::~ConsumeRawMaterial() {
 // [8] 0x1400c5e30
 // [9] 0x1400c5f10
 
-void* ConsumeRawMaterial::CreateNewObject() {
+::Object::Base* ConsumeRawMaterial::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ConsumeRawMaterial());
 }
-void* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
+::Object::Base* ConsumeRawMaterial::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ConsumeRawMaterial());
 }

@@ -829,14 +829,14 @@ FishingWork::FishingWork()
 // _CreateInPlace, both Work_GenericCtor.
 
 // create 0x14002a280: MemAlloc(sizeof, 8), then the ctor.
-void* FishingWork::CreateNewObject() {
+::Object::Base* FishingWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FishingWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FishingWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* FishingWork::CreateInPlaceObject(void* storage) {
+::Object::Base* FishingWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FishingWork());
 }

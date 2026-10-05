@@ -316,12 +316,12 @@ PickupStoredRawMaterial::~PickupStoredRawMaterial() {
 // [8] 0x1400c9c70
 // [9] 0x1400c9bf0
 
-void* PickupStoredRawMaterial::CreateNewObject() {
+::Object::Base* PickupStoredRawMaterial::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PickupStoredRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PickupStoredRawMaterial());
 }
-void* PickupStoredRawMaterial::CreateInPlaceObject(void* storage) {
+::Object::Base* PickupStoredRawMaterial::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PickupStoredRawMaterial());
 }

@@ -315,14 +315,14 @@ void AmbientEmitterComponent::OnAdded() {
 void AmbientEmitterComponent::OnRemove() {}
 
 // create 0x1400014b0: MemAlloc(0x48, 8), then the ctor.
-void* AmbientEmitterComponent::CreateNewObject() {
+::Object::Base* AmbientEmitterComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AmbientEmitterComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AmbientEmitterComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AmbientEmitterComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AmbientEmitterComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AmbientEmitterComponent());
 }

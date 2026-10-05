@@ -226,12 +226,12 @@ CreateNaturalResource::CreateNaturalResource()
 // [4] 0x1400c6650
 // [9] 0x1400c6610
 
-void* CreateNaturalResource::CreateNewObject() {
+::Object::Base* CreateNaturalResource::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CreateNaturalResource), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreateNaturalResource());
 }
-void* CreateNaturalResource::CreateInPlaceObject(void* storage) {
+::Object::Base* CreateNaturalResource::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreateNaturalResource());
 }

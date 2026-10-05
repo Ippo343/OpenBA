@@ -159,13 +159,13 @@ Object::External* InteractDescription::Construct() {
 }
 
 // create 0x140035200: MemAlloc(0x58, 8), then the (inlined) ctor.
-void* InteractDescription::CreateNewObject() {
+::Object::Base* InteractDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(InteractDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) InteractDescription());
 }
 // createInPlace 0x140035240.
-void* InteractDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* InteractDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) InteractDescription());
 }

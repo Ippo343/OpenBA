@@ -645,14 +645,14 @@ Pickup::Pickup() : Work(), status(0), citizenIBP(nullptr), candidateList(nullptr
 // _CreateInPlace, plus two vtable-pointer statics for the dtor's stamps.
 
 // create 0x14002bfc0: MemAlloc(sizeof, 8), then the ctor.
-void* Pickup::CreateNewObject() {
+::Object::Base* Pickup::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(Pickup), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) Pickup());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* Pickup::CreateInPlaceObject(void* storage) {
+::Object::Base* Pickup::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) Pickup());
 }

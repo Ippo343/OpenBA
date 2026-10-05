@@ -314,14 +314,14 @@ void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, i
 
 // create 0x1400113e0: MemAlloc(0x80, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* EventLogUI::CreateNewObject() {
+::Object::Base* EventLogUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EventLogUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) EventLogUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* EventLogUI::CreateInPlaceObject(void* storage) {
+::Object::Base* EventLogUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) EventLogUI());
 }

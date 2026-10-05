@@ -67,13 +67,13 @@ Object::External* OrchardDescription::Construct() {
 }
 
 // create 0x1400098d0: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* OrchardDescription::CreateNewObject() {
+::Object::Base* OrchardDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(OrchardDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) OrchardDescription());
 }
 // createInPlace 0x140009940.
-void* OrchardDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* OrchardDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) OrchardDescription());
 }

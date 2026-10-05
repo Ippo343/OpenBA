@@ -92,13 +92,13 @@ EventPopupDialog::EventPopupDialog(UI::UserInterface* ui, const UI::Dialog* dial
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), eventIndex(index) {}
 
 // create 0x140011920: MemAlloc(0xc0, 8), then the ctor.
-void* EventPopupDialog::CreateNewObject() {
+::Object::Base* EventPopupDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EventPopupDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) EventPopupDialog());
 }
 // createInPlace 0x140011970 (the tree's in-place build is kept, B8-13).
-void* EventPopupDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* EventPopupDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) EventPopupDialog());
 }

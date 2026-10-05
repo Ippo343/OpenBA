@@ -219,12 +219,12 @@ PerformWork::PerformWork()
 // [8] 0x1400c9320
 // [9] 0x1400c92d0
 
-void* PerformWork::CreateNewObject() {
+::Object::Base* PerformWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PerformWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PerformWork());
 }
-void* PerformWork::CreateInPlaceObject(void* storage) {
+::Object::Base* PerformWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PerformWork());
 }

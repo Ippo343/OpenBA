@@ -157,14 +157,14 @@ void AbsorbResourceComponent::Persist(IO::Stream& stream) {
 }
 
 // create 0x14002ea20: MemAlloc(0x48, 8), then the ctor.
-void* AbsorbResourceComponent::CreateNewObject() {
+::Object::Base* AbsorbResourceComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AbsorbResourceComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AbsorbResourceComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AbsorbResourceComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AbsorbResourceComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AbsorbResourceComponent());
 }

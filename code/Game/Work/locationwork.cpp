@@ -303,14 +303,14 @@ LocationWork::LocationWork(ComponentEntity* const* pEntityIBP) : Work(pEntityIBP
 // dtor's stamps.
 
 // create 0x14002a810: MemAlloc(sizeof, 8), then the ctor.
-void* LocationWork::CreateNewObject() {
+::Object::Base* LocationWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(LocationWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) LocationWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* LocationWork::CreateInPlaceObject(void* storage) {
+::Object::Base* LocationWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) LocationWork());
 }

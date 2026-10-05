@@ -805,14 +805,14 @@ void ParticleComponent::OnEvent(int eventCode) {
 }
 
 // create 0x14000a360: MemAlloc(0x48, 8), then the ctor.
-void* ParticleComponent::CreateNewObject() {
+::Object::Base* ParticleComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ParticleComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ParticleComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ParticleComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ParticleComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ParticleComponent());
 }

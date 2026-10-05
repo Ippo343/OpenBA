@@ -241,14 +241,14 @@ void PickingComponent::OnRemove() {
 void PickingComponent::Slot11() {}
 
 // create 0x140036da0: MemAlloc(0x38, 8), then the ctor.
-void* PickingComponent::CreateNewObject() {
+::Object::Base* PickingComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PickingComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PickingComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* PickingComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* PickingComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PickingComponent());
 }

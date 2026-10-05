@@ -463,14 +463,14 @@ void MapComponent::OnEvent(int msgId) {
 }
 
 // create 0x140035700: MemAlloc(0x38, 8), then the ctor.
-void* MapComponent::CreateNewObject() {
+::Object::Base* MapComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MapComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MapComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* MapComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* MapComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MapComponent());
 }

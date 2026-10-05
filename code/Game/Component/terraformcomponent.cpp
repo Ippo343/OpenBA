@@ -451,14 +451,14 @@ void TerraformComponent::OnEvent(int msgId) {
 }
 
 // create 0x14000cc90: MemAlloc(0x48, 8), then the ctor.
-void* TerraformComponent::CreateNewObject() {
+::Object::Base* TerraformComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TerraformComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TerraformComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* TerraformComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* TerraformComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TerraformComponent());
 }

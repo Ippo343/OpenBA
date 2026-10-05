@@ -750,14 +750,14 @@ void StatusIconComponent::Tick(const System::Time* /*time*/) {
 void StatusIconComponent::Slot11() {}
 
 // create 0x1400388c0: MemAlloc(0x108, 8), then the ctor.
-void* StatusIconComponent::CreateNewObject() {
+::Object::Base* StatusIconComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StatusIconComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StatusIconComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* StatusIconComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* StatusIconComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StatusIconComponent());
 }

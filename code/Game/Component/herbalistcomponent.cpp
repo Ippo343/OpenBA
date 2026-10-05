@@ -45,14 +45,14 @@
 HerbalistComponent::HerbalistComponent() : ResourceProduceComponent() {}
 
 // create 0x140006b40: MemAlloc(0x50, 8), then the ctor.
-void* HerbalistComponent::CreateNewObject() {
+::Object::Base* HerbalistComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HerbalistComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HerbalistComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* HerbalistComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* HerbalistComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HerbalistComponent());
 }

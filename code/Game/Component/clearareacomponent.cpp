@@ -127,14 +127,14 @@ ClearAreaComponent::ClearAreaComponent() : _controller(this), clearState(0), _pa
 ClearAreaComponent::~ClearAreaComponent() = default;
 
 // create 0x140030ea0: MemAlloc(0x50, 8), then the ctor.
-void* ClearAreaComponent::CreateNewObject() {
+::Object::Base* ClearAreaComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ClearAreaComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ClearAreaComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* ClearAreaComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* ClearAreaComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ClearAreaComponent());
 }

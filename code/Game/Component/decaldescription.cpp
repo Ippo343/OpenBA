@@ -140,13 +140,13 @@ Object::External* DecalDescription::Construct() {
 }
 
 // create 0x140033820: MemAlloc(0x50, 8), then the (inlined) ctor.
-void* DecalDescription::CreateNewObject() {
+::Object::Base* DecalDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DecalDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DecalDescription());
 }
 // createInPlace 0x140033860.
-void* DecalDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* DecalDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DecalDescription());
 }

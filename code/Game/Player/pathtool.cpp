@@ -263,13 +263,13 @@ ComponentEntity** PathTool::GetSelected(ComponentEntity** ret) const {
 // pathtool_setselected.cpp next to the helper it jumps to.
 
 // create 0x140026b10: MemAlloc(0x60, 8), then the ctor 0x1400de9e0.
-void* PathTool::CreateNewObject() {
+::Object::Base* PathTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PathTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PathTool());
 }
 // createInPlace 0x140026b50: `if (storage) ctor(storage)`.
-void* PathTool::CreateInPlaceObject(void* storage) {
+::Object::Base* PathTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PathTool());
 }

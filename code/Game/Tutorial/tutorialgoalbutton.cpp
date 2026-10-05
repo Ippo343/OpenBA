@@ -118,13 +118,13 @@ Object::External* TutorialGoalButton::Construct() {
 }
 
 // create 0x140027290: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* TutorialGoalButton::CreateNewObject() {
+::Object::Base* TutorialGoalButton::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialGoalButton), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialGoalButton());
 }
 // createInPlace 0x140027300.
-void* TutorialGoalButton::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialGoalButton::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialGoalButton());
 }

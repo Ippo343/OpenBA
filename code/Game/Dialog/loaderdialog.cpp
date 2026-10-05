@@ -65,13 +65,13 @@ LoaderDialog::LoaderDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
       loadingImage(nullptr), rotation(0.0f) {}
 
 // create 0x140020bb0: MemAlloc(0xc8, 8), then the ctor.
-void* LoaderDialog::CreateNewObject() {
+::Object::Base* LoaderDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(LoaderDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) LoaderDialog());
 }
 // createInPlace 0x140020c20 (the tree's in-place build is kept, B8-13).
-void* LoaderDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* LoaderDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) LoaderDialog());
 }

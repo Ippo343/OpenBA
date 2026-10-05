@@ -276,12 +276,12 @@ void ShowTool::Exit(ActionStack*) {}
 // [8] 0x1400426d0
 // [9] 0x140042680
 
-void* ShowTool::CreateNewObject() {
+::Object::Base* ShowTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ShowTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ShowTool());
 }
-void* ShowTool::CreateInPlaceObject(void* storage) {
+::Object::Base* ShowTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ShowTool());
 }

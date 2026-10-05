@@ -199,12 +199,12 @@ RemoveNaturalResource::RemoveNaturalResource()
 // [8] 0x1400caaa0
 // [9] 0x1400caa20
 
-void* RemoveNaturalResource::CreateNewObject() {
+::Object::Base* RemoveNaturalResource::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RemoveNaturalResource), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RemoveNaturalResource());
 }
-void* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
+::Object::Base* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RemoveNaturalResource());
 }

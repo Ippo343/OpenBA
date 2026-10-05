@@ -757,14 +757,14 @@ void AnimalComponent::Update(const System::Time* time) {
 void AnimalComponent::Slot11() {}
 
 // create 0x14002f020: MemAlloc(0x58, 8), then the ctor.
-void* AnimalComponent::CreateNewObject() {
+::Object::Base* AnimalComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AnimalComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AnimalComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AnimalComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AnimalComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AnimalComponent());
 }

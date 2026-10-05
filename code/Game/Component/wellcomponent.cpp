@@ -368,14 +368,14 @@ void WellComponent::OnRemove() {
 }
 
 // create 0x14000fc80: MemAlloc(0x48, 8), then the ctor.
-void* WellComponent::CreateNewObject() {
+::Object::Base* WellComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(WellComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) WellComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (WellComponent.h).
-void* WellComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* WellComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) WellComponent());
 }

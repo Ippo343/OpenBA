@@ -335,12 +335,12 @@ HuntAnimal::HuntAnimal()
 // [6] 0x1400c7de0
 // [9] 0x1400c7d60
 
-void* HuntAnimal::CreateNewObject() {
+::Object::Base* HuntAnimal::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HuntAnimal), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HuntAnimal());
 }
-void* HuntAnimal::CreateInPlaceObject(void* storage) {
+::Object::Base* HuntAnimal::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HuntAnimal());
 }

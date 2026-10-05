@@ -99,13 +99,13 @@ Object::External* SpawnDescription::Construct() {
 }
 
 // create 0x14000c1d0: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* SpawnDescription::CreateNewObject() {
+::Object::Base* SpawnDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(SpawnDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) SpawnDescription());
 }
 // createInPlace 0x14000c230.
-void* SpawnDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* SpawnDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) SpawnDescription());
 }

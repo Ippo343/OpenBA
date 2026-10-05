@@ -408,7 +408,7 @@ OrchardComponent::~OrchardComponent() {
 }
 
 // create 0x140009870: MemAlloc(0x68, 8), then the ctor.
-void* OrchardComponent::CreateNewObject() {
+::Object::Base* OrchardComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(OrchardComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) OrchardComponent());
@@ -416,7 +416,7 @@ void* OrchardComponent::CreateNewObject() {
 
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* OrchardComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* OrchardComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) OrchardComponent());
 }

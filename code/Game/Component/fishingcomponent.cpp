@@ -48,14 +48,14 @@ FishingComponent::FishingComponent()
     : ResourceProduceComponent(), fishingFlag(false), _pad51{}, fishingRate(0.0f) {}
 
 // create 0x140034350: MemAlloc(0x58, 8), then the ctor.
-void* FishingComponent::CreateNewObject() {
+::Object::Base* FishingComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FishingComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FishingComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* FishingComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* FishingComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FishingComponent());
 }

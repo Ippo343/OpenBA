@@ -299,14 +299,14 @@ void RawMaterialComponent::OnAdded() {
 void RawMaterialComponent::Update(const System::Time*) {}
 
 // create 0x140037270: MemAlloc(0x40, 8), then the ctor.
-void* RawMaterialComponent::CreateNewObject() {
+::Object::Base* RawMaterialComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RawMaterialComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RawMaterialComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* RawMaterialComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* RawMaterialComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RawMaterialComponent());
 }

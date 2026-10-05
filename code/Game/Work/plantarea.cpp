@@ -663,14 +663,14 @@ PlantArea::PlantArea()
 // ============================================================
 
 // create 0x14002c470: MemAlloc(sizeof, 8), then the ctor.
-void* PlantArea::CreateNewObject() {
+::Object::Base* PlantArea::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PlantArea), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PlantArea());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* PlantArea::CreateInPlaceObject(void* storage) {
+::Object::Base* PlantArea::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PlantArea());
 }

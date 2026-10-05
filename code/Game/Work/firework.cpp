@@ -529,14 +529,14 @@ FireWork::FireWork(ComponentEntity* const* pEntityIBP, uint32_t capacity)
 // _CreateInPlace, both Work_GenericCtor.
 
 // create 0x14002a1e0: MemAlloc(sizeof, 8), then the ctor.
-void* FireWork::CreateNewObject() {
+::Object::Base* FireWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FireWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FireWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* FireWork::CreateInPlaceObject(void* storage) {
+::Object::Base* FireWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FireWork());
 }

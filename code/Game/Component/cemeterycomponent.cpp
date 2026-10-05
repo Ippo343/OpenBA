@@ -323,14 +323,14 @@ CemeteryComponent::~CemeteryComponent() {
 }
 
 // create 0x140004040: MemAlloc(0x58, 8), then the ctor.
-void* CemeteryComponent::CreateNewObject() {
+::Object::Base* CemeteryComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CemeteryComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CemeteryComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CemeteryComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CemeteryComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CemeteryComponent());
 }

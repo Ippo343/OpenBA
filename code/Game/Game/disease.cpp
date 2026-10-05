@@ -80,12 +80,12 @@ Object::External* Disease::Construct() {
 }
 
 // create 0x14008fd0: MemAlloc(0x48, 8), then the ctor.
-void* Disease::CreateNewObject() {
+::Object::Base* Disease::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(Disease), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) Disease());
 }
-void* Disease::CreateInPlaceObject(void* storage) {
+::Object::Base* Disease::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) Disease());
 }

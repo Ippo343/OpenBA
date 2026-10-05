@@ -70,12 +70,12 @@ CompleteRoad::CompleteRoad(uint32_t roadTypeArg, uint32_t tileIndex, uint8_t dir
       roadType(static_cast<int32_t>(roadTypeArg)),
       roadDirection(direction) {}
 
-void* CompleteRoad::CreateNewObject() {
+::Object::Base* CompleteRoad::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CompleteRoad), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CompleteRoad());
 }
-void* CompleteRoad::CreateInPlaceObject(void* storage) {
+::Object::Base* CompleteRoad::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CompleteRoad());
 }

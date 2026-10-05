@@ -294,14 +294,14 @@ AttendanceComponent::~AttendanceComponent() {
 }
 
 // create 0x140002670: MemAlloc(0x58, 8), then the ctor.
-void* AttendanceComponent::CreateNewObject() {
+::Object::Base* AttendanceComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AttendanceComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AttendanceComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AttendanceComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AttendanceComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AttendanceComponent());
 }

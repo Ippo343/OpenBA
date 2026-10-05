@@ -194,13 +194,13 @@ void FrustumOutlineElement::Draw(UI::SpriteContext& context, uint8_t alpha) cons
 }
 
 // create 0x140012400: MemAlloc(0xd8, 8), then the (inlined) ctor.
-void* FrustumOutlineElement::CreateNewObject() {
+::Object::Base* FrustumOutlineElement::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FrustumOutlineElement), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) FrustumOutlineElement());
 }
 // createInPlace 0x140012470: the same construction on `storage`.
-void* FrustumOutlineElement::CreateInPlaceObject(void* storage) {
+::Object::Base* FrustumOutlineElement::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) FrustumOutlineElement());
 }

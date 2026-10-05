@@ -358,12 +358,12 @@ CreateRawMaterial::CreateRawMaterial()
 // [4] 0x1400c6b40
 // [9] 0x1400c6aa0
 
-void* CreateRawMaterial::CreateNewObject() {
+::Object::Base* CreateRawMaterial::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CreateRawMaterial), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CreateRawMaterial());
 }
-void* CreateRawMaterial::CreateInPlaceObject(void* storage) {
+::Object::Base* CreateRawMaterial::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CreateRawMaterial());
 }

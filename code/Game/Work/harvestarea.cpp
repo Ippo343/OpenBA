@@ -711,14 +711,14 @@ HarvestArea::HarvestArea()
 // cached id) and REGISTER_TYPE over HarvestArea_Factory / _CreateInPlace (both
 // Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
 // create 0x14002a460: MemAlloc(sizeof, 8), then the ctor.
-void* HarvestArea::CreateNewObject() {
+::Object::Base* HarvestArea::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HarvestArea), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HarvestArea());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* HarvestArea::CreateInPlaceObject(void* storage) {
+::Object::Base* HarvestArea::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HarvestArea());
 }

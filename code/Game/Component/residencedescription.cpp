@@ -81,13 +81,13 @@ Object::External* ResidenceDescription::Construct() {
 }
 
 // create 0x1400374a0: MemAlloc(0x30, 8), then the (inlined) ctor.
-void* ResidenceDescription::CreateNewObject() {
+::Object::Base* ResidenceDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ResidenceDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ResidenceDescription());
 }
 // createInPlace 0x140037500.
-void* ResidenceDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* ResidenceDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ResidenceDescription());
 }

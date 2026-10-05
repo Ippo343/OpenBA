@@ -543,14 +543,14 @@ void ResidenceUI::OnUpdate(const System::Time& /*time*/) {
 
 // create 0x140020f60: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ResidenceUI::CreateNewObject() {
+::Object::Base* ResidenceUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ResidenceUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ResidenceUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ResidenceUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ResidenceUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ResidenceUI());
 }

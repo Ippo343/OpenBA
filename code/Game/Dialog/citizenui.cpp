@@ -595,14 +595,14 @@ void CitizenUI::OnUpdate(const System::Time& /*time*/) {
 
 // create 0x140010f80: MemAlloc(0xe8, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* CitizenUI::CreateNewObject() {
+::Object::Base* CitizenUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CitizenUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CitizenUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* CitizenUI::CreateInPlaceObject(void* storage) {
+::Object::Base* CitizenUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CitizenUI());
 }

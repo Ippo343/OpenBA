@@ -100,14 +100,14 @@ MarketLocationComponent::MarketLocationComponent() : _controller(this) {
 }
 
 // create 0x1400086c0: MemAlloc(0x48, 8), then the ctor.
-void* MarketLocationComponent::CreateNewObject() {
+::Object::Base* MarketLocationComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MarketLocationComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MarketLocationComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* MarketLocationComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* MarketLocationComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MarketLocationComponent());
 }

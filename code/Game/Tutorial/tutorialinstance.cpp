@@ -85,14 +85,14 @@ void TutorialInstance::Persist(IO::Stream& stream) {
 // Reflection (ENDGAME B.3.8)
 // ============================================================
 // create 0x140028120: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* TutorialInstance::CreateNewObject() {
+::Object::Base* TutorialInstance::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TutorialInstance), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) TutorialInstance());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (null);
 // the tree's in-place build is kept (B38_RULES B8-13).
-void* TutorialInstance::CreateInPlaceObject(void* storage) {
+::Object::Base* TutorialInstance::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) TutorialInstance());
 }

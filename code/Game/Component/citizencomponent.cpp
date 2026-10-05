@@ -2440,14 +2440,14 @@ void CitizenComponent::Startup() {
 
 
 // create 0x140030110: MemAlloc(0x290, 8), then the ctor.
-void* CitizenComponent::CreateNewObject() {
+::Object::Base* CitizenComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CitizenComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CitizenComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CitizenComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CitizenComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CitizenComponent());
 }

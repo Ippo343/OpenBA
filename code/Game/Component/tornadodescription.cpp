@@ -75,13 +75,13 @@ Object::External* TornadoDescription::Construct() {
 }
 
 // create 0x14000d560: MemAlloc(0x38, 8), then the (inlined) ctor.
-void* TornadoDescription::CreateNewObject() {
+::Object::Base* TornadoDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TornadoDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TornadoDescription());
 }
 // createInPlace 0x14000d5a0.
-void* TornadoDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* TornadoDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TornadoDescription());
 }

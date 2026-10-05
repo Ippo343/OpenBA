@@ -79,14 +79,14 @@
 
 // create 0x1400107f0: MemAlloc(0x60, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* BuildRequirementUI::CreateNewObject() {
+::Object::Base* BuildRequirementUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(BuildRequirementUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) BuildRequirementUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* BuildRequirementUI::CreateInPlaceObject(void* storage) {
+::Object::Base* BuildRequirementUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) BuildRequirementUI());
 }
@@ -98,14 +98,14 @@ DEFINE_EXE_TYPE(BuildRequirementUI, "UI::DialogController")
 
 // create 0x140011e20: MemAlloc(0x30, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* HotKeyToolTipUI::CreateNewObject() {
+::Object::Base* HotKeyToolTipUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HotKeyToolTipUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HotKeyToolTipUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* HotKeyToolTipUI::CreateInPlaceObject(void* storage) {
+::Object::Base* HotKeyToolTipUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HotKeyToolTipUI());
 }
@@ -117,14 +117,14 @@ DEFINE_EXE_TYPE(HotKeyToolTipUI, "UI::DialogController")
 
 // create 0x1400104b0: MemAlloc(0x38, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* AttendanceUI::CreateNewObject() {
+::Object::Base* AttendanceUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AttendanceUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AttendanceUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* AttendanceUI::CreateInPlaceObject(void* storage) {
+::Object::Base* AttendanceUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AttendanceUI());
 }
@@ -137,14 +137,14 @@ DEFINE_EXE_TYPE(AttendanceUI, "UI::DialogController")
 
 // create 0x140010900: MemAlloc(0x38, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* CemeteryUI::CreateNewObject() {
+::Object::Base* CemeteryUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CemeteryUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CemeteryUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* CemeteryUI::CreateInPlaceObject(void* storage) {
+::Object::Base* CemeteryUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CemeteryUI());
 }
@@ -155,14 +155,14 @@ DEFINE_EXE_TYPE(CemeteryUI, "UI::DialogController")
 
 // create 0x140010ae0: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ConsumeProduceUI::CreateNewObject() {
+::Object::Base* ConsumeProduceUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeProduceUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ConsumeProduceUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ConsumeProduceUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ConsumeProduceUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ConsumeProduceUI());
 }
@@ -194,14 +194,14 @@ DEFINE_EXE_TYPE(ConsumeProduceUI, "UI::DialogController")
 
 // create 0x140011ca0: MemAlloc(0x78, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* HelpUI::CreateNewObject() {
+::Object::Base* HelpUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HelpUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HelpUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* HelpUI::CreateInPlaceObject(void* storage) {
+::Object::Base* HelpUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HelpUI());
 }
@@ -215,14 +215,14 @@ DEFINE_EXE_TYPE(HelpUI, "UI::DialogController")
 
 // create 0x140011ee0: MemAlloc(0x50, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ImmigrationUI::CreateNewObject() {
+::Object::Base* ImmigrationUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ImmigrationUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ImmigrationUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ImmigrationUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ImmigrationUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ImmigrationUI());
 }
@@ -234,14 +234,14 @@ DEFINE_EXE_TYPE(ImmigrationUI, "UI::DialogController")
 
 // create 0x140012240: MemAlloc(0x50, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* MapUI::CreateNewObject() {
+::Object::Base* MapUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MapUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MapUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* MapUI::CreateInPlaceObject(void* storage) {
+::Object::Base* MapUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MapUI());
 }
@@ -261,14 +261,14 @@ DEFINE_EXE_TYPE(MapUI, "UI::DialogController")
 
 // create 0x1400126d0: MemAlloc(0x30, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ModBrowseUI::CreateNewObject() {
+::Object::Base* ModBrowseUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ModBrowseUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ModBrowseUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ModBrowseUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ModBrowseUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ModBrowseUI());
 }
@@ -277,14 +277,14 @@ DEFINE_EXE_TYPE(ModBrowseUI, "UI::DialogController")
 
 // create 0x140012d30: MemAlloc(0x70, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* NoiseUI::CreateNewObject() {
+::Object::Base* NoiseUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(NoiseUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) NoiseUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* NoiseUI::CreateInPlaceObject(void* storage) {
+::Object::Base* NoiseUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) NoiseUI());
 }
@@ -297,14 +297,14 @@ DEFINE_EXE_TYPE(NoiseUI, "UI::DialogController")
 
 // create 0x140013160: MemAlloc(0x48, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* PageToggleUI::CreateNewObject() {
+::Object::Base* PageToggleUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PageToggleUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PageToggleUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* PageToggleUI::CreateInPlaceObject(void* storage) {
+::Object::Base* PageToggleUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PageToggleUI());
 }
@@ -317,14 +317,14 @@ DEFINE_EXE_TYPE(PageToggleUI, "UI::DialogController")
 
 // create 0x140013230: MemAlloc(0x50, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ProductionUI::CreateNewObject() {
+::Object::Base* ProductionUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ProductionUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ProductionUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ProductionUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ProductionUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ProductionUI());
 }
@@ -337,14 +337,14 @@ DEFINE_EXE_TYPE(ProductionUI, "UI::DialogController")
 
 // create 0x140013400: MemAlloc(0x78, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ProfessionUI::CreateNewObject() {
+::Object::Base* ProfessionUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ProfessionUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ProfessionUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ProfessionUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ProfessionUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ProfessionUI());
 }
@@ -364,14 +364,14 @@ DEFINE_EXE_TYPE(ProfessionUI, "UI::DialogController")
 
 // create 0x1400136b0: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ResourceLimitUI::CreateNewObject() {
+::Object::Base* ResourceLimitUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ResourceLimitUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ResourceLimitUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ResourceLimitUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ResourceLimitUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ResourceLimitUI());
 }
@@ -392,14 +392,14 @@ void SpriteCaptureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element
 
 // create 0x140013d10: MemAlloc(0x70, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* SpriteCaptureUI::CreateNewObject() {
+::Object::Base* SpriteCaptureUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(SpriteCaptureUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) SpriteCaptureUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* SpriteCaptureUI::CreateInPlaceObject(void* storage) {
+::Object::Base* SpriteCaptureUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) SpriteCaptureUI());
 }
@@ -436,14 +436,14 @@ DEFINE_EXE_TYPE(SpriteCaptureUI, "UI::DialogController")
 
 // create 0x1400144c0: MemAlloc(0x30, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* TitleDescToolTipUI::CreateNewObject() {
+::Object::Base* TitleDescToolTipUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TitleDescToolTipUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TitleDescToolTipUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* TitleDescToolTipUI::CreateInPlaceObject(void* storage) {
+::Object::Base* TitleDescToolTipUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TitleDescToolTipUI());
 }
@@ -456,14 +456,14 @@ DEFINE_EXE_TYPE(TitleDescToolTipUI, "UI::DialogController")
 
 // create 0x140014580: MemAlloc(0x58, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* ToolUI::CreateNewObject() {
+::Object::Base* ToolUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ToolUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ToolUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* ToolUI::CreateInPlaceObject(void* storage) {
+::Object::Base* ToolUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ToolUI());
 }
@@ -483,14 +483,14 @@ DEFINE_EXE_TYPE(ToolUI, "UI::DialogController")
 
 // create 0x140015f80: MemAlloc(0x148, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* TradeUI::CreateNewObject() {
+::Object::Base* TradeUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(TradeUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) TradeUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* TradeUI::CreateInPlaceObject(void* storage) {
+::Object::Base* TradeUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) TradeUI());
 }
@@ -512,14 +512,14 @@ DEFINE_EXE_TYPE(TradeUI, "UI::DialogController")
 
 // create 0x1400209e0: MemAlloc(0x50, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* BuildUI::CreateNewObject() {
+::Object::Base* BuildUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(BuildUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) BuildUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* BuildUI::CreateInPlaceObject(void* storage) {
+::Object::Base* BuildUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) BuildUI());
 }

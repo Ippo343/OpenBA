@@ -79,13 +79,13 @@ Object::External* DiseaseDescription::Construct() {
 }
 
 // create 0x140004e10: MemAlloc(0x48, 8), then the (inlined) ctor.
-void* DiseaseDescription::CreateNewObject() {
+::Object::Base* DiseaseDescription::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(DiseaseDescription), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) DiseaseDescription());
 }
 // createInPlace 0x140004e70.
-void* DiseaseDescription::CreateInPlaceObject(void* storage) {
+::Object::Base* DiseaseDescription::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) DiseaseDescription());
 }

@@ -223,14 +223,14 @@ CropFieldComponent::~CropFieldComponent() {
 }
 
 // create 0x140032ed0: MemAlloc(0x68, 8), then the ctor.
-void* CropFieldComponent::CreateNewObject() {
+::Object::Base* CropFieldComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CropFieldComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CropFieldComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CropFieldComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CropFieldComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CropFieldComponent());
 }

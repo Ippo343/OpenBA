@@ -841,14 +841,14 @@ int ClearArea::Validate() {
 // lazily cached id), REGISTER_TYPE over ClearArea_Factory / ClearArea_CreateInPlace.
 
 // create 0x140029820: MemAlloc(sizeof, 8), then the ctor.
-void* ClearArea::CreateNewObject() {
+::Object::Base* ClearArea::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ClearArea), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ClearArea());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* ClearArea::CreateInPlaceObject(void* storage) {
+::Object::Base* ClearArea::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ClearArea());
 }

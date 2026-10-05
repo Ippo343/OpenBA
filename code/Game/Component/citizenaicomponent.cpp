@@ -653,14 +653,14 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
 void CitizenAIComponent::OnMessage(int, void*, uint32_t, uint32_t) {}
 
 // create 0x14002fb20: MemAlloc(0xd0, 8), then the ctor.
-void* CitizenAIComponent::CreateNewObject() {
+::Object::Base* CitizenAIComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(CitizenAIComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) CitizenAIComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* CitizenAIComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* CitizenAIComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) CitizenAIComponent());
 }

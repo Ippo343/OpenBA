@@ -1077,14 +1077,14 @@ void ConsumeProduce::Slot12(int /*version*/) {}
 // cached id) and REGISTER_TYPE over ConsumeProduce_Factory / _CreateInPlace.
 
 // create 0x14002a150: MemAlloc(sizeof, 8), then the ctor.
-void* ConsumeProduce::CreateNewObject() {
+::Object::Base* ConsumeProduce::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeProduce), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) ConsumeProduce());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* ConsumeProduce::CreateInPlaceObject(void* storage) {
+::Object::Base* ConsumeProduce::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) ConsumeProduce());
 }

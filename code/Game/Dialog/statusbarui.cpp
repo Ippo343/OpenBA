@@ -637,14 +637,14 @@ void StatusBarUI::OnUpdate(const System::Time& /*time*/) {
 
 // create 0x1400140e0: MemAlloc(0x1d0, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).
-void* StatusBarUI::CreateNewObject() {
+::Object::Base* StatusBarUI::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(StatusBarUI), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) StatusBarUI());
 }
 // Retail's createInPlace does not build a controller in place (B8-13); the
 // tree's in-place entry did, and that is kept.
-void* StatusBarUI::CreateInPlaceObject(void* storage) {
+::Object::Base* StatusBarUI::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) StatusBarUI());
 }

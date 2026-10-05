@@ -247,7 +247,7 @@ FinishTutorialInstance::~FinishTutorialInstance() {
     _field20.DeletePtr();
 }
 
-void* FinishTutorialInstance::CreateNewObject() {
+::Object::Base* FinishTutorialInstance::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(FinishTutorialInstance), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) FinishTutorialInstance());
@@ -255,7 +255,7 @@ void* FinishTutorialInstance::CreateNewObject() {
 
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (null);
 // the tree's in-place build is kept (B38_RULES B8-13).
-void* FinishTutorialInstance::CreateInPlaceObject(void* memory) {
+::Object::Base* FinishTutorialInstance::CreateInPlaceObject(void* memory) {
     { if (s_logCreate.fetch_add(1) < 3) {
         std::fprintf(stderr, "[FinTutInst] CREATED (in place) mem=%p\n", memory); std::fflush(stderr); } }
     if (!memory) return nullptr;

@@ -315,14 +315,14 @@ void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
 }
 
 // create 0x140001ee0: MemAlloc(0x48, 8), then the ctor.
-void* AmbientEnvironmentComponent::CreateNewObject() {
+::Object::Base* AmbientEnvironmentComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(AmbientEnvironmentComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) AmbientEnvironmentComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* AmbientEnvironmentComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* AmbientEnvironmentComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) AmbientEnvironmentComponent());
 }

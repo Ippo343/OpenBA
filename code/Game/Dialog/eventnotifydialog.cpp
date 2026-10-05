@@ -609,13 +609,13 @@ EventNotifyDialog::EventNotifyDialog(UI::UserInterface* ui, const UI::Dialog* di
 }
 
 // create 0x140011500: MemAlloc(0xf0, 8), then the ctor.
-void* EventNotifyDialog::CreateNewObject() {
+::Object::Base* EventNotifyDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(EventNotifyDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) EventNotifyDialog());
 }
 // createInPlace 0x140011540 (the tree's in-place build is kept, B8-13).
-void* EventNotifyDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* EventNotifyDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) EventNotifyDialog());
 }

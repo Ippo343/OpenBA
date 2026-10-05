@@ -731,14 +731,14 @@ extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSl
 // Nothing outside this block reads 0x1401617a0 back, so that row goes with the table.
 
 // create 0x14002bf00: MemAlloc(sizeof, 8), then the ctor.
-void* PastureWork::CreateNewObject() {
+::Object::Base* PastureWork::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PastureWork), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PastureWork());
 }
 // Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
 // the tree's in-place entry built the object, and that is kept (B8-13).
-void* PastureWork::CreateInPlaceObject(void* storage) {
+::Object::Base* PastureWork::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PastureWork());
 }

@@ -357,13 +357,13 @@ void RoadTool::Draw(Video::Context* context, char param3) {
 // CalcPath in roadtool_calcpath.cpp.
 
 // create 0x14002e870: MemAlloc(0x48, 8), then the ctor 0x1401057d0.
-void* RoadTool::CreateNewObject() {
+::Object::Base* RoadTool::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(RoadTool), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) RoadTool());
 }
 // createInPlace 0x14002e8b0: `if (storage) ctor(storage)`.
-void* RoadTool::CreateInPlaceObject(void* storage) {
+::Object::Base* RoadTool::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) RoadTool());
 }

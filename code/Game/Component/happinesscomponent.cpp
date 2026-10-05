@@ -410,14 +410,14 @@ HappinessComponent::HappinessComponent() : registered(false), _pad29{}, _control
 HappinessComponent::~HappinessComponent() = default;
 
 // create 0x140005ba0: MemAlloc(0x50, 8), then the ctor.
-void* HappinessComponent::CreateNewObject() {
+::Object::Base* HappinessComponent::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(HappinessComponent), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) HappinessComponent());
 }
 // Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
 // tree's in-place entry built the object, and that is kept (B38 B8-13).
-void* HappinessComponent::CreateInPlaceObject(void* storage) {
+::Object::Base* HappinessComponent::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) HappinessComponent());
 }

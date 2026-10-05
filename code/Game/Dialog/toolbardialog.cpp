@@ -1487,13 +1487,13 @@ ToolbarDialog::~ToolbarDialog() {
 }
 
 // create 0x140021710: MemAlloc(0x108, 8), then the default ctor.
-void* ToolbarDialog::CreateNewObject() {
+::Object::Base* ToolbarDialog::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(ToolbarDialog), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(::new (p) ToolbarDialog());
 }
 // createInPlace (the tree's in-place build is kept, B8-13).
-void* ToolbarDialog::CreateInPlaceObject(void* storage) {
+::Object::Base* ToolbarDialog::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(::new (storage) ToolbarDialog());
 }

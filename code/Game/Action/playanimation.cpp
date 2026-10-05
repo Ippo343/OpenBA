@@ -168,12 +168,12 @@ PlayAnimation::PlayAnimation()
 void PlayAnimation::CheckEntity() {}
 // [9] 0x1400423b0
 
-void* PlayAnimation::CreateNewObject() {
+::Object::Base* PlayAnimation::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(PlayAnimation), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) PlayAnimation());
 }
-void* PlayAnimation::CreateInPlaceObject(void* storage) {
+::Object::Base* PlayAnimation::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) PlayAnimation());
 }

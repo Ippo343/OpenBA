@@ -594,12 +594,12 @@ MoveTo::MoveTo()
 // [8] 0x1400c84d0
 // [9] 0x1400c8480
 
-void* MoveTo::CreateNewObject() {
+::Object::Base* MoveTo::CreateNewObject() {
     void* p = Object::detail::InternalMemAlloc(sizeof(MoveTo), 8);
     if (!p) return nullptr;
     return static_cast<Object::Base*>(new (p) MoveTo());
 }
-void* MoveTo::CreateInPlaceObject(void* storage) {
+::Object::Base* MoveTo::CreateInPlaceObject(void* storage) {
     if (!storage) return nullptr;
     return static_cast<Object::Base*>(new (storage) MoveTo());
 }
