@@ -46,7 +46,7 @@ public:
     UI::StringTable* _field20;   // +0x20: ExternalPtr<StringTable> (serialized via FUN_14000bf40)
     System::String _field28;     // +0x28: name (ctor 0x1400930c0 stores qword 0; dtor 0x140018f60 runs ~String first)
 
-    uint8_t  _field30;           // +0x30: 1 (bool, enabled?)
+    bool     _field30;           // +0x30: 1 (bool, enabled?; retail serializes it through Serialize(bool&))
     uint8_t  _pad31[3];          // +0x31: padding
     float    temperatureBase;    // +0x34: 50.0f (base temp in F?)
     float    tempVariation;      // +0x38: 30.0f

@@ -331,7 +331,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     EngineStorage engine;
     std::memset(&engine, 0, sizeof(engine));
     // LEFT: the Engine lives in raw stack storage (its ctor is a door, RULE B5-4).
-    ::Engine::Engine* const eng = reinterpret_cast<::Engine::Engine*>(&engine);   // LEFT: H5 the Engine lives in raw stack storage (its ctor is a door)
+    ::Engine::Engine* const eng = reinterpret_cast<::Engine::Engine*>(&engine);   // LEFT: audit DEFERRED (ctor door + memset): H5 the Engine lives in raw stack storage (its ctor is a door)
 
     printf("[GameMain] Constructing Engine (storage=%p)...\n", (void*)&engine);
     RtEngine_Engine_Ctor(eng, hInstance);

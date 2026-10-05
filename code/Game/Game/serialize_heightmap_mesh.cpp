@@ -112,7 +112,7 @@ constexpr float kNormalDefaultZ  = 2.0f;        // 0x140172174
 // 0x1400ae270 — WorldGeometry::TerrainNormal (vertex normal from the heightmap)
 // ============================================================
 //
-// Reads the int16 heightmap (_arrayD8, row stride _fieldD0 = gridLevels) around
+// Reads the int16 heightmap (_heights.data, row stride _fieldD0 = gridLevels) around
 // (col, row), computes a normal from the discrete x/y deltas and normalizes it.
 //
 // Decompile:
@@ -126,7 +126,7 @@ Math::Vector3 WorldGeometry::TerrainNormal(int col, int row) const {
     int gridLevels = _fieldD0;
     // Degenerate — 0,0,2 unnormalized to avoid div-by-zero in Normalize.
     if (gridLevels <= 0) return Math::Vector3(0.0f, 0.0f, kNormalDefaultZ);
-    const int16_t* heightmap = _arrayD8;
+    const int16_t* heightmap = _heights.data;
     if (!heightmap) return Math::Vector3(0.0f, 0.0f, kNormalDefaultZ);
 
     auto clamp = [&](int v) -> int {
@@ -184,7 +184,7 @@ void WorldGeometry::FillTerrainVertices(int colStart, int rowStart, int width, i
 
     int gridSize   = _gridSize;
     int gridLevels = _fieldD0;
-    const int16_t* heightmap = _arrayD8;
+    const int16_t* heightmap = _heights.data;
 
     if (!heightmap) {
         // Without a heightmap, the loop would deref garbage. Zero the block
@@ -411,7 +411,7 @@ void WorldGeometry::BuildTerrainMesh() {
 // ============================================================
 //
 // Vtable +0x08 of WorldGeometry (slot 1 0x1400aed40 is a JMP to it). Walks the
-// AVL tree of dirty chunk indices at _dirtyTreeRoot (+0xE8; nodes AvlNode28:
+// AVL tree of dirty chunk indices at _dirtyChunks (+0xE8; nodes AvlNode28:
 // key = the linear chunk index row*chunksPerSide + col, parent +0x08, left
 // +0x10, right +0x18), regenerates each chunk's vertices (0x1400ac880) and
 // uploads them into the master VertexBuffer.
@@ -422,7 +422,7 @@ namespace { std::atomic<bool> s_chunkUpdateWarned{false}; }
 
 void WorldGeometry::RebuildDirtyChunks() {
     // +0xF0 is the "dirty tree non-empty" count. The original tests this first.
-    if (_dirtyTreeCount == 0) return;
+    if (_dirtyChunks.count == 0) return;
 
     if (!System::MemoryAllocator::_singleton) {
         if (!s_chunkUpdateWarned.exchange(true)) {
@@ -446,7 +446,7 @@ void WorldGeometry::RebuildDirtyChunks() {
     TerrainVertex* vertScratch = scratch.data;
     if (!vertScratch) return;
 
-    AvlNode28* treeRoot = _dirtyTreeRoot;     // +0xE8
+    AvlNode28* treeRoot = _dirtyChunks.root;    // +0xE8
 
     auto upload = [&](const AvlNode28* node) {
         int chunkIdx = node->key;
@@ -498,8 +498,8 @@ void WorldGeometry::RebuildDirtyChunks() {
     };
     freeNode(freeNode, treeRoot);
 
-    _dirtyTreeRoot = nullptr;    // +0xE8
-    _dirtyTreeCount = 0;         // +0xF0
+    _dirtyChunks.root = nullptr; // +0xE8
+    _dirtyChunks.count = 0;      // +0xF0
 
     if (scratch.data) {
         System::MemoryAllocator::MemFree(scratch.data);

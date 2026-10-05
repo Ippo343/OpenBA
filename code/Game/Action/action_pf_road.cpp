@@ -168,7 +168,7 @@ static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* 
     int cy = (y < 0) ? 0 : y;
     if (hmW <= cy) cy = hmW - 1;
 
-    const int16_t* hm = geo->_arrayD8;
+    const int16_t* hm = geo->_heights.data;
     short hVal = hm[static_cast<int64_t>(hmW) * cy + cx];
 
     // normal encode: byte = (normal + 1.0) * 127.5  (all three components)
@@ -281,7 +281,7 @@ static int RayTestCell(WorldGeometry* geo, int x, int y, const float* dir, const
     int half = geo->_gridSize >> 1;
     int hmW = geo->_fieldD0;
     int64_t lW = hmW;
-    const int16_t* hm = geo->_arrayD8;
+    const int16_t* hm = geo->_heights.data;
     float hscale = f1720bc();
     // Cell-corner world spacing. The original (disasm 0x1400aaaf7) adds *0x14017214c = 1.0
     // to step to the next corner — NOT *0x1401720b8=0.001, which collapses the quad
@@ -389,9 +389,8 @@ void WorldGeometry::MarkChunksDirty(int x, int y) {
     int qy = y / cs;
     int cw = _gridSize / cs;            // chunks per row
 
-    // The dirty-chunk tree is two members (_dirtyTreeRoot / _dirtyTreeCount) of WorldGeometry;
-    // 0x14001a4f0 takes it as one Set header.
-    AvlTreeHead<AvlNode28>* tree = reinterpret_cast<AvlTreeHead<AvlNode28>*>(&_dirtyTreeRoot);   // LEFT: Game/WorldGeometry.h +0xE8 / +0xF0 are two members, not one AvlTreeHead<AvlNode28>
+    // The dirty-chunk set (WorldGeometry +0xE8); 0x14001a4f0 takes it as one Set header.
+    AvlTreeHead<AvlNode28>* tree = &_dirtyChunks;
     AvlNode28* outNode = nullptr;   // local_res8
     int32_t key[2] = {0, 0};        // local_res10
 

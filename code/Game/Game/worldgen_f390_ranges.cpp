@@ -20,7 +20,7 @@
 //     FUN_1400cc510  SubdivideSeg (recursive fractal midpoint displacement)
 //     FUN_140023b70  ResizeVec1c  (0x1C-stride array resize)
 //     FUN_140024460  DeepAppendAoA(array-of-arrays deep append)
-//     FUN_140024ac0  CopyVec1c    (deep-copy of one 0x1C-stride vector)
+//     FUN_140024ac0  (the deep copy: kSpec_WgPathVec's assign, worldgen_f390_coastline.cpp)
 //
 // ----------------------------------------------------------------------------
 // HEIGHT EFFECT (these two stages do NOT touch the float heightmap directly):
@@ -146,89 +146,16 @@ static void AppendVec3(Collection::Array<TerrainStamp>* list, int newCount, cons
 }
 
 // ============================================================
-// FUN_140024ac0  @0x140024ac0  —  CopyVec1c: deep-copy one 0x1C-stride vector.
-// dst{data,count,cap}@dst <- src{data,count,cap}@src (frees dst's old data,
-// allocates count*0x1c, copies each 0x1C-byte element).
-// ============================================================
-static void CopyVec1c(RawArray<TerrainPathPoint>* d, const RawArray<TerrainPathPoint>* s) {
-    if (d == s) return;
-    if (d->data) System::MemoryAllocator::MemFree(d->data);
-    d->data = nullptr;
-    d->size = 0;
-    int cnt = s->size;
-    d->size = cnt;
-    TerrainPathPoint* nd = nullptr;
-    if (cnt > 0) {
-        d->capacity = cnt;
-        nd = static_cast<TerrainPathPoint*>(System::MemoryAllocator::MemAlloc((uint64_t)cnt * sizeof(TerrainPathPoint), 4));
-        d->data = nd;
-    }
-    if (!nd) return;
-    const TerrainPathPoint* sd = s->data;
-    for (int i = 0; i < cnt; ++i)
-        nd[i] = sd[i];
-}
-
-// ============================================================
 // FUN_140024460  @0x140024460  —  DeepAppendAoA: append `srcVec` (a 0x1C-stride
-// {data,count,cap} header) to the array-of-arrays header `hdr` (16-byte elems,
-// each a {data,count,cap}+pad inner vector), resizing to newCount = count+1 and
-// deep-copying srcVec into the new tail slot via CopyVec1c.
-// (Only the push_back-one fast path is exercised by cc850.)
-//
-// ENDGAME B.3.2 step 2: now `Collection::Array<>::SetSizeFill` over the
-// `kSpec_RgPathVec` row (this file's twin of worldgen_f390_coastline.cpp's
-// kSpec_WgPathVec, kept separate so its `assign` keeps driving this file's
-// CopyVec1c). Compared arm for arm against rtcoll::SetSizeCore and the retail
-// body 0x140024460 (re-decompiled 2026-09-13): exact-equal early return, `_size`
-// first, treble rule, cap*16 at align 8, per element zero-the-header then deep
-// copy (prefix only when the block moved, otherwise the fill), old inner buffers
-// freed then the old block when it moved. ONE arm this transcription LACKED and
-// retail HAS: destroy of the truncated tail on an in-place shrink (free the
-// inner buffer, zero the header). Unreachable from this file: the only caller
-// (TryPlacePath, below) passes newCount = count + 1, so the array never shrinks
-// here. The row carries retail's arm.
+// {data,count,cap} header) to the heightfield's path list, resizing to
+// newCount = count + 1 and deep-copying srcVec (0x140024ac0) into the new tail.
+// The list is the heightfield's TerrainPathList (TerrainHeightfield.h), over
+// the ONE row retail has for it, kSpec_WgPathVec (worldgen_f390_coastline.cpp:
+// SetSizeCore + the 0x140024ac0 deep copy). B.4 Z CODEA: this file's twin row
+// kSpec_RgPathVec and its CopyVec1c copy of 0x140024ac0 are gone.
 // ============================================================
-// The row's callbacks receive the element as the bytes rtcoll::ArraySpec hands
-// them; each takes ONE typed view of its element (LEFT: the callback signature
-// is Collection.h's). The element is RawArray<TerrainPathPoint>, the zero
-// stores of the header are its three fields (H7: retail's two qword stores).
-// (reached through rtcoll::AssignAs / DestroyAs, Collection.h: the row's byte view)
-static void AssignRgPathVec(RawArray<TerrainPathPoint>* dst, const RawArray<TerrainPathPoint>* src) {
-    dst->data = nullptr;
-    dst->size = 0;
-    dst->capacity = 0;
-    CopyVec1c(dst, src);
-}
-static void DestroyRgPathVec(RawArray<TerrainPathPoint>* slots, int count) {
-    for (int i = 0; i < count; ++i) {
-        RawArray<TerrainPathPoint>* slot = &slots[i];
-        rtcoll::MemFree(slot->data);                  // null-guarded inside
-        slot->data = nullptr;
-        slot->size = 0;
-        slot->capacity = 0;
-    }
-}
-// stays explicit: `assign` deep-copies the inner vector (CopyVec1c) and
-// `destroy` frees its buffer — byteCopy=false plus a destroy, which no C++
-// element type can express. `init` (Collection::Array's ctor, the header's
-// zero stores; no site here reaches it) is the value-initialising TInit.
-static const rtcoll::ArraySpec kSpec_RgPathVec = {  // exe 0x140024460
-    "Array<Array<PathPoint>>", 0x10, 8,
-    &rtcoll::AssignAs<RawArray<TerrainPathPoint>, &AssignRgPathVec>, &rtcoll::TInit<RawArray<TerrainPathPoint>>,
-    &rtcoll::DestroyAs<RawArray<TerrainPathPoint>, &DestroyRgPathVec>, /*byteCopy*/false,
-    /*assign unwritten*/ 0, 0,
-    /*init   unwritten*/ 0, 0,
-    /*seed zero       */ 0, 0 };
-using RgPathVecArray = Collection::Array<RawArray<TerrainPathPoint>, Collection::DefaultAllocator,
-                                         Collection::ExplicitSpec<&kSpec_RgPathVec>>;
-
-// The heightfield's `paths` is a TerrainPathList (coastline's kSpec_WgPathVec
-// row); this file drives the same list through its own twin row so that the
-// deep copy stays this file's CopyVec1c (it keeps an out-of-memory return the
-// coastline twin lacks). One view of the list under the twin row.
 static void DeepAppendAoA(TerrainPathList* paths, int newCount, const void* srcVec) {
-    reinterpret_cast<RgPathVecArray*>(paths)->SetSizeFill(newCount, srcVec);   // LEFT: twin spec row of TerrainPathList (kSpec_RgPathVec vs kSpec_WgPathVec)
+    paths->SetSizeFill(newCount, srcVec);
 }
 
 // ============================================================

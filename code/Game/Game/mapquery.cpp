@@ -44,7 +44,7 @@
 
 // WorldGeometry fields (worldgen.cpp writes them): _gridSize (+0xc0, dim*2 == the
 // heightfield grid size, e.g. 512), _fieldD0 (+0xd0, N = dim*2+1, the int16
-// heightmap's row stride, 513), _arrayD8 (+0xd8, the int16 heightmap, N x N).
+// heightmap's row stride, 513), _heights.data (+0xd8, the int16 heightmap, N x N).
 
 static constexpr float kHeightScale = 1.0f / 256.0f;   // DAT_1401720bc (reverses worldgen ×256)
 
@@ -54,7 +54,7 @@ static constexpr float kHeightScale = 1.0f / 256.0f;   // DAT_1401720bc (reverse
 static float MapQuery_SampleHeight(const WorldGeometry* wg, float worldX, float worldZ) {
     if (!wg) return 0.0f;
     const int N = wg->_fieldD0;
-    const short* hm = wg->_arrayD8;
+    const short* hm = wg->_heights.data;
     if (!hm || N <= 0) return 0.0f;
 
     const float center = (float)(wg->_gridSize >> 1);
@@ -97,7 +97,7 @@ static void MapQuery_SampleNormal(const WorldGeometry* wg, float worldX, float w
     out3[0] = 0.0f; out3[1] = 0.0f; out3[2] = 1.0f;   // default = flat / up
     if (!wg) return;
     const int N = wg->_fieldD0;
-    const short* hm = wg->_arrayD8;
+    const short* hm = wg->_heights.data;
     if (!hm || N <= 0) return;
 
     const float center = (float)(wg->_gridSize >> 1);

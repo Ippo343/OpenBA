@@ -225,7 +225,7 @@ void GeometryBatch_Resize(RawArray<GeometryBatch>& hdr, unsigned int newCount) {
 // LEFT: Resize keeps its void* header: action_pf_road.cpp (X-G1-3, running) passes it.
 extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount) {
     if (!arrayHeader) return;
-    GeometryBatch_Resize(*reinterpret_cast<RawArray<GeometryBatch>*>(arrayHeader), newCount);   // LEFT: Resize keeps its void* header: action_pf_road.cpp (not this agent's) passes it
+    GeometryBatch_Resize(*reinterpret_cast<RawArray<GeometryBatch>*>(arrayHeader), newCount);   // LEFT: audit WORK (SIG; caller Action/action_pf_road.cpp, z-CODEB): Resize keeps its void* header: action_pf_road.cpp (not this agent's) passes it
 }
 
 extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const GeometryBatch* src) {

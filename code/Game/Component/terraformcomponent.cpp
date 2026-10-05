@@ -73,7 +73,7 @@ void TerraformComponent_RegionRecalc(WorldGeometry* terrain, int x, int y) {
     int gy = y / cell;
     int dim = terrain->_gridSize / cell;
 
-    AvlTreeHead<AvlNode28>* regionMgr = reinterpret_cast<AvlTreeHead<AvlNode28>*>(&terrain->_dirtyTreeRoot);   // LEFT: Game/WorldGeometry.h +0xE8 / +0xF0 are two members, not one AvlTreeHead<AvlNode28>
+    AvlTreeHead<AvlNode28>* regionMgr = &terrain->_dirtyChunks;
     AvlNode28* scratch = nullptr;
     int32_t cellIdx;
 
@@ -168,7 +168,7 @@ static uint8_t TerraformCellType(Map* map, float wx, float wy) {
 // The terrain heightmap sample at (mapX, mapY): WorldGeometry's +0xD8 int16 array,
 // row stride +0xD0.
 static int16_t& TerraformHeightAt(WorldGeometry* terrain, int mapX, int mapY) {
-    int16_t* heights = terrain->_arrayD8;
+    int16_t* heights = terrain->_heights.data;
     return heights[static_cast<int64_t>(terrain->_fieldD0) * mapY + mapX];
 }
 

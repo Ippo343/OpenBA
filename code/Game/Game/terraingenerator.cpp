@@ -157,7 +157,7 @@ TerrainGenerator::TerrainGenerator() {
     // The four Strings (+0x28 / +0x38 / +0x50 / +0x68) are members: String()
     // stores the null data pointer retail's inlined ctor stores.
     _field20 = nullptr;          // ExternalPtr
-    _field30 = 1;                // enabled
+    _field30 = true;             // enabled
 
     // Noise layer 1: String, sentinel, ptr
     _field38.factoryGen = -1;
@@ -215,8 +215,8 @@ bool TerrainGenerator::Serialize(IO::Stream& stream) {
     // Serialize String at +0x28
     _field28.Serialize(*serializer);
 
-    // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
-    s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);   // LEFT: H8 (a bool field would normalise the byte)
+    // Serialize bool at +0x30
+    s.Serialize(_field30, nullptr);
 
     // 3 filename strings with the version-0 resolution: +0x38, +0x50, +0x68
     SerializeFilenameString(&_field38, serializer);

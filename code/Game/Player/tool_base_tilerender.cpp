@@ -122,7 +122,7 @@ extern "C" void PlayerTileRender_TerrainCorners_b10e0(const WorldGeometry* param
     int r1 = r0 + 1;              // iVar8
     float center = (float)(param_1->_gridSize >> 1);
     int hdim = param_1->_fieldD0;
-    const int16_t* hmap = param_1->_arrayD8;
+    const int16_t* hmap = param_1->_heights.data;
 
     float pC0 = (float)c0 - center;   // fVar15 (world X at c0)
     float pR0 = (float)r0 - center;   // fVar13 (world Y at r0)

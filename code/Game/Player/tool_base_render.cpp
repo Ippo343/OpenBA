@@ -194,7 +194,7 @@ void SampleTile(const WorldGeometry* hf, int col, int row, float* out) {
     float fy  = (float)cy  - half;
     float fx1 = (float)cx1 - half;
     float fy1 = (float)cy1 - half;
-    int16_t* tbl = hf->_arrayD8;
+    int16_t* tbl = hf->_heights.data;
 
     auto sample = [&](int a, int b) -> float {
         int ca = a < 0 ? 0 : a; if (dim <= ca) ca = dim - 1;

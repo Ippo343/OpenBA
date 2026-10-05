@@ -663,7 +663,7 @@ void WorldGeometry::BuildWaterShores(const TerrainHeightfield* hf) {
     RangeResize(rangeB, featureCount);
 
     int   N        = _fieldD0;           // heightmap edge
-    const int16_t* hmap = _arrayD8;      // int16 heightmap
+    const int16_t* hmap = _heights.data;      // int16 heightmap
     int   halfGrid = _gridSize >> 1;
     const TerrainStamp* featBase = hf->waterFeatures._data;
 

@@ -169,7 +169,7 @@ void Map::ResetTerrainHeights(int param_2, int param_3, int param_4, int param_5
                 gw[2] = 0.0f;  // original: local_90 = 0 (a 4-byte zero into the z slot; the same bits)
                 fVar7 = static_cast<float>(lVar2->_gridSize >> 1);
                 co = Math::Vector3(gw[0] + fVar7, gw[1] + fVar7, 0.0f);
-                lVar2->_arrayD8[static_cast<int64_t>(lVar2->_fieldD0) * static_cast<int64_t>(static_cast<int>(co.y)) +
+                lVar2->_heights.data[static_cast<int64_t>(lVar2->_fieldD0) * static_cast<int64_t>(static_cast<int>(co.y)) +
                                 static_cast<int64_t>(static_cast<int>(co.x))] = static_cast<short>(static_cast<int>(fVar4 * 0.0f));
                 lVar2->MarkChunksDirty(static_cast<int>(co.x), static_cast<int>(co.y));   // 0x1400ab150
                 iVar6 = iVar6 + 1;

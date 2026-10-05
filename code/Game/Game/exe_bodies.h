@@ -174,7 +174,7 @@ template <void (*Core)(::Object::External*&, IO::Serializer&), class T>
 inline void ExternalPtrSerializeSlot(T* refField, IO::Serializer* serializer) {
     static_assert(sizeof(T) == 8, "an ExternalPtr slot is the eight bytes of an External*");
     if (!refField || !serializer) return;
-    Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // LEFT: FLOOR? an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)
+    Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // LEFT: audit floor elem_stride (coordinator marker): an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)
 }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_GraphicsMesh(T* f, IO::Serializer* s)     { ExternalPtrSerializeSlot<&ExternalPtrSerialize_GraphicsMesh>(f, s); }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_Weather(T* f, IO::Serializer* s)          { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Weather>(f, s); }
@@ -276,7 +276,7 @@ void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* load
 inline System::String* GetLoadingSoundString(System::String* retStr) {
     uint8_t rng[2520];  // System::Random is large (~2512 bytes)
     // ??0Random@System@@QEAA@XZ 0x1800c7f20, called by name (B3R Leftovers).
-    System::Random* random = reinterpret_cast<System::Random*>(rng);   // LEFT: H5 the Random lives in raw stack storage (retail runs its ctor and no dtor)
+    System::Random* random = reinterpret_cast<System::Random*>(rng);   // LEFT: audit DEFERRED (ctor door; System::Random has no C++ ctor and the 2520-byte local is larger than sizeof(Random) 2500, so a typed local would resize it): H5 the Random lives in raw stack storage (retail runs its ctor and no dtor)
     RtSystem_Random_Ctor(random);
     // B.3.4b bridge: the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
     // 0x1401512e8, Runtime 0x1800c8040) — `12u` picks it over Rand() and

@@ -36,6 +36,7 @@
 #include "system/Value.h"
 #include "object/External.h"
 #include "Game/exe_bodies.h"
+#include "Work/exe_bodies.h"      // WorkBase_TreeNodeFree_14c30 (0x140014c30)
 #include "math/Math.h"
 #include "volume/Volume.h"        // RtVolume_Frustum_MulTransform3 / _Contains
 #include "Game/exe_constants.h"   // kRdata_*
@@ -73,26 +74,32 @@ std::atomic<bool> s_itemDrawLogged{false};
 // Slot +0x00 — destructor (B38 D9 #12)
 // ============================================================
 //
-// Callees, each the body registered at its retail address.
-extern "C" void ArrayOfArrays_Clear_175d0(void* hdr);                               // 0x1400175d0
-void WorkBase_TreeNodeFree_14c30(void* root, void* node);                           // 0x140014c30
-
-namespace {
-// `MemFree(h.data); h = {}` — one of retail's free-and-zero pairs.
-// Retail zeroes size|capacity with one qword store (0x1400aedaa..): two named
-// stores here (H7).
-template <class T>
-void FreeHeader(RawArray<T>& h) {
-    Object::detail::InternalMemFree(h.data);   // MemFree is null-tolerant, as retail relies on
-    h.data = nullptr;
-    h.size = 0;
-    h.capacity = 0;
+// +0x1F0 / +0x200 (0x1400aedd3..0x1400aee28): 0x14001fb80 over the elements
+// (retail passes the header's low dword as the count), then the inlined ~Array.
+void GeometryBatchArray_Release(RawArray<GeometryBatch>& batches) {
+    GeometryBatch_DestroyRange(batches.data, batches.size);
+    RawArrayFree(batches);
 }
-}  // namespace
 
-// Body 0x1400aed50, transcribed in retail's order (read in Ghidra). The vptr
-// restamp on entry and the tail JMP to Graphics::Geometry::~Geometry are the
-// compiler's.
+// +0xE8 (0x1400aeee0..0x1400aef18): free both subtrees, then the root node;
+// root = 0, the dword count = 0.
+DirtyChunkSet::~DirtyChunkSet() {
+    if (AvlNode28* top = root) {
+        WorkBase_TreeNodeFree_14c30(&root, top->left);    // +0x10
+        WorkBase_TreeNodeFree_14c30(&root, top->right);   // +0x18
+        Object::detail::InternalMemFree(top);
+    }
+    root = nullptr;
+    count = 0;
+}
+
+// Body 0x1400aed50 (read in Ghidra). The vptr restamp on entry and the tail JMP
+// to Graphics::Geometry::~Geometry are the compiler's. The body releases +0x148
+// and +0x140; everything else retail releases after them (+0x220 down to +0x1a0,
+// the buffers +0x180 / +0x160 / +0x120 / +0x100 through the imported
+// ~IndexBuffer / ~VertexBuffer, the +0xe8 set, +0xd8) is a member whose
+// destructor runs after this body in reverse declaration order, which is
+// retail's order (WorldGeometry.h).
 WorldGeometry::~WorldGeometry() {
     // +0x148: the height ImageBuffer, deleted through its own slot 0 with
     // flags 1 (retail: MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]).
@@ -100,38 +107,6 @@ WorldGeometry::~WorldGeometry() {
         delete _heightImage;   // slot 0, free
     }
     Object::detail::InternalMemFree(_heightBytes);          // +0x140 (not zeroed)
-
-    FreeHeader(_batchCounters);                             // +0x220 ints
-    FreeHeader(_batchMaterials);                            // +0x210 External* refs
-    // +0x200 / +0x1f0 batches: 0x14001fb80 over the elements (retail passes the
-    // header's low dword as the count), then the block.
-    GeometryBatch_DestroyRange(_roadBatches.data, _roadBatches.size);
-    FreeHeader(_roadBatches);
-    GeometryBatch_DestroyRange(_decals.data, _decals.size);
-    FreeHeader(_decals);
-    ArrayOfArrays_Clear_175d0(&_contourOutlines);           // +0x1e0 array of arrays
-    FreeHeader(_contourRangesB);                            // +0x1d0
-    FreeHeader(_contourRangesA);                            // +0x1c0
-    FreeHeader(_contourIndices);                            // +0x1b0
-    FreeHeader(_contourVertices);                           // +0x1a0
-
-    // +0x180 / +0x160 / +0x120 / +0x100: the four buffers are destroyed by
-    // their own ~IndexBuffer / ~VertexBuffer (0x1800f3480 / 0x1800f55e0) after
-    // this body; retail runs them here, before the +0xe8 tree and +0xd8 array
-    // (known_port_issues row 715).
-
-    // +0xe8: the dirty-chunk tree — free both subtrees, then the root node.
-    if (AvlNode28* root = _dirtyTreeRoot) {
-        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, root->left);    // +0x10
-        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, root->right);   // +0x18
-        Object::detail::InternalMemFree(root);
-    }
-    _dirtyTreeRoot = nullptr;
-    _dirtyTreeCount = 0;
-
-    Object::detail::InternalMemFree(_arrayD8);              // +0xd8
-    _arrayD8 = nullptr;
-    _arrayD8Size = 0;
 }
 
 // ============================================================
@@ -297,9 +272,6 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*camera*/,
                          Graphics::ExternalPtrHandle /*material*/,
                          float param5, int a, int /*b*/, int /*c*/) const {
-    // LEFT: the context binds
-    // this object's buffers through its non-const `void*` _indexBuffer.
-    WorldGeometry& self = const_cast<WorldGeometry&>(*this);   // LEFT: the context binds this object's index buffers through a non-const Video::IndexBuffer* (BindIndexBuffer), in a const virtual slot.
     const uint32_t param6 = static_cast<uint32_t>(a);
 
     if (!s_itemDrawLogged.exchange(true)) {
@@ -312,7 +284,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     //    with the alpha. LEFT: Graphics::Geometry (R-GFX) holds the pair as two
     //    Transforms, not as the InterpolatedState Lerp is a member of.
     const Math::Transform lerpedTransform =
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: Graphics::Geometry (R-GFX) holds the pair as two Transforms, not as the InterpolatedState Lerp is a member of.
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: audit WORK (CLASS Graphics::Geometry), runtime/ (z-RT): Graphics::Geometry (R-GFX) holds the pair as two Transforms, not as the InterpolatedState Lerp is a member of.
             ->Lerp(Math::Scalar(param5));
 
     // 2. Convert to Matrix and SetTransform(0, matrix).
@@ -351,13 +323,13 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     };
 
     if (mode == 0x2000) {
-        GeometryBatch* base = self._decals.data;
+        GeometryBatch* base = _decals.data;
         if (!base) return;
         IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
     }
     if (mode == 0x4000) {
-        GeometryBatch* base = self._roadBatches.data;
+        GeometryBatch* base = _roadBatches.data;
         if (!base) return;
         IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
@@ -365,7 +337,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
 
     // Binds an index buffer the way the inlined SetIndexBuffer does: dirty bit
     // 0x10 when the bound buffer or its offset differs.
-    auto BindIndexBuffer = [&](Video::IndexBuffer* ib) {
+    auto BindIndexBuffer = [&](const Video::IndexBuffer* ib) {
         if (context._indexBuffer != ib || context._indexOffset != 0) {
             context._dirty |= 0x10;
             context._indexBuffer = ib;
@@ -376,7 +348,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     // The contour vertex/index buffers, then DrawIndexed from one range record.
     auto DrawContourRange = [&](const GeometryDrawRange* ranges) {
         context.SetVertexBuffer(&_waterVertexBuffer, 0, 0, 0x10);
-        BindIndexBuffer(&self._waterIndexBuffer);
+        BindIndexBuffer(&_waterIndexBuffer);
         const GeometryDrawRange& range = ranges[static_cast<int>(key)];
         // DrawIndexed(context, primType=0, [1], [2], [0], [3], 1)
         // Original order at LAB_1400aed0e: (param_2, 0, iVar7, iVar8, iVar9, iVar10, 1)
@@ -385,13 +357,13 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     };
 
     if (mode == 0x8000) {
-        const GeometryDrawRange* ranges = self._contourRangesB.data;   // +0x1D0
+        const GeometryDrawRange* ranges = _contourRangesB.data;   // +0x1D0
         if (!ranges) return;
         DrawContourRange(ranges);
         return;
     }
     if (mode == 0x6000) {
-        const GeometryDrawRange* ranges = self._contourRangesA.data;   // +0x1C0
+        const GeometryDrawRange* ranges = _contourRangesA.data;   // +0x1C0
         if (!ranges) return;
         DrawContourRange(ranges);
         return;
@@ -410,7 +382,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
         // Water overlay chunk — same chunk draw as terrain but from the water
         // VB/IB (+0x160/+0x180) and WITHOUT the height-image bind.
         context.SetVertexBuffer(&_waterVertexBuffer, 0, 0, 0x10);
-        BindIndexBuffer(&self._waterIndexBuffer);
+        BindIndexBuffer(&_waterIndexBuffer);
         context.DrawIndexed(0, start, scale, 0, primCount, 1);
         return;
     }
@@ -420,6 +392,6 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     //   bind the IB at +0x120, DrawIndexed(0, start, scale, 0, primCount, 1).
     context.SetImageBuffer(_heightImage, 6);
     context.SetVertexBuffer(&_vertexBuffer, 0, 0, 0x10);
-    BindIndexBuffer(&self._indexBuffer);
+    BindIndexBuffer(&_indexBuffer);
     context.DrawIndexed(0, start, scale, 0, primCount, 1);
 }
