@@ -121,6 +121,11 @@ Video::Device** DeviceSingletonSlot() {
 //  3. Ordering is DESCENDING by sortKey (newest first), because the compare is
 //     `b vs a` and not `a vs b`.
 // ---------------------------------------------------------------------------
+// The FILETIME's 64-bit tick count: retail reads the DateTime as one qword.
+static inline uint64_t FileTimeTicks(const System::DateTime& t) {
+    return (static_cast<uint64_t>(t._highDateTime) << 32) | t._lowDateTime;
+}
+
 int SaveInfoCompareImpl(const void* a, const void* b) {
     // qsort hands the comparator its elements as `const void*`.
     const SaveInfo* pa = static_cast<const SaveInfo*>(a);  // CAST-OK: crt
@@ -129,8 +134,8 @@ int SaveInfoCompareImpl(const void* a, const void* b) {
     if (pa->saveIndex < 0) return 1;
     if (pb->saveIndex < 0) return 1;
 
-    const uint64_t ka = pa->sortKey;
-    const uint64_t kb = pb->sortKey;
+    const uint64_t ka = FileTimeTicks(pa->sortKey);   // MOV RAX,[RCX+0x30]
+    const uint64_t kb = FileTimeTicks(pb->sortKey);   // MOV RCX,[RDX+0x30]
     if (kb > ka) return 1;     // JA  — UNSIGNED
     if (kb < ka) return -1;    // SBB EAX,EAX with CF set
     return 0;                  // SBB EAX,EAX with CF clear
