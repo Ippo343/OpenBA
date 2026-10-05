@@ -411,7 +411,7 @@ void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h,
                     cell.field_0x2A == 0xFF) {
                     // Pass/flag condition HOLDS: walk the Map's +0xE8 set (int keys).
                     // Exe: found (cellIdx <= *node) -> EMIT; exhausted -> SKIP.
-                    const AvlNode28* bnode = map->field_0xE8;   // key +0x00, left +0x10, right +0x18
+                    const AvlNode28* bnode = map->field_0xE8.root;   // key +0x00, left +0x10, right +0x18
                     emit = false;
                     while (bnode != nullptr) {
                         if (cellIdx < bnode->key) {

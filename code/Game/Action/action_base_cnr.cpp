@@ -97,7 +97,7 @@ uint64_t CheckCellTerrain(const Map* map, int cellIndex) {
     uint32_t passBits = 1u << (rec.terrainType & 0x1f);
     uint64_t high = passBits;   // retail's RAX before the tree walk
     if (((passBits & 2) == 0) && ((passBits & 1) == 0) && (rec.field_0x2A == 0xff)) {
-        const AvlNode28* node = map->field_0xE8;
+        const AvlNode28* node = map->field_0xE8.root;
         while (true) {
             while (true) {
                 if (node == nullptr) return 0;

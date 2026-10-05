@@ -105,7 +105,7 @@ static inline ComponentEntity* GridOccupant(const MapCell* tiles, int cell) {
 static bool Grid_GroundClear(const Map* grid, int x1, int y1, int w, int h) {
     int width = grid->size;
     const MapCell* tiles = GridTiles(grid);
-    const AvlNode28* bstRoot = grid->field_0xE8;   // the reserved-cell BST root (Map +0xE8)
+    const AvlNode28* bstRoot = grid->field_0xE8.root;   // the reserved-cell BST root (Map +0xE8)
     for (int row = y1; row < y1 + h; ++row) {
         for (int col = x1; col < x1 + w; ++col) {
             int cell = width * row + col;

@@ -31,8 +31,8 @@
 //                            flood fill 0x14009c170's work list (B.4 ACT-a);
 //                            the ctor's qword store of 8 at +0xD0 is the queue
 //                            pool's growCount (8) and stride (0)
-//   +0xE8 / +0xF0            a BST root (children at node+0x10 / +0x18,
-//                            int key at +0) and its count (0x14009f100)
+//   +0xE8                    a Set header AvlTreeHead<AvlNode28>: root (children
+//                            at node+0x10 / +0x18, int key at +0) and count +0xF0
 //   every other qword / dword: zeroed by the ctor, meaning not settled.
 //
 // MapCell (B.4 GAME-a): the element of the cell array at +0x80, stride 0x30,
@@ -59,6 +59,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 #include "Action/PathSearch.h"   // MapCellQueue, RegionGraph (B.4 ACT-a)
 #include "picking/Scene.h"       // -Iruntime/types: Picking::Scene (by value at +0x08)
 #include "collection/Collection.h" // Collection::Array<MapCell> (by value at +0x80)
@@ -144,9 +145,11 @@ public:
                                  //       A real member: retail's ctor builds it inline after
                                  //       +0xA2 (0x14009eeb4..eee3), its dtor runs 0x14001a5f0 on
                                  //       it after the body (0x14009ee26). Name unconfirmed.
-    AvlNode28* field_0xE8;       // +0xE8 BST root (ctor 0): 0x28 nodes keyed by cell (0x14009c640)
-    int32_t  field_0xF0;         // +0xF0 BST count (ctor 0)
-    uint8_t  _padF4[4];          // +0xF4
+    // +0xE8: a Set header {root, count} (ctor: qword 0 at +0xE8, dword 0 at +0xF0;
+    // +0xF4 unwritten): 0x28 nodes keyed by cell (0x14009c640). The dtor's body
+    // frees it (0x140014c30 on both children, MemFree the root, root / count
+    // zeroed): a trivial POD here, released by hand where retail does.
+    AvlTreeHead<AvlNode28> field_0xE8;   // +0xE8
 
     void RemoveFloor(uint32_t floorId, int x, int y, int w, int h);   // 0x14009cba0 (defined in Component/floorcomponent.cpp)
     void StampInfluence(int state, int cx, int cy, int r, short delta);  // 0x14009f990 (defined in Component/happinesscomponent.cpp)
@@ -181,5 +184,5 @@ static_assert(offsetof(Map, cellQueue) == 0xA8, "Map::cellQueue @ +0xA8");
 static_assert(offsetof(Map, cellQueue) + offsetof(MapCellQueue, pool) +
               offsetof(PathNodePool, growCount) == 0xD0, "Map +0xD0 (ctor 8) is the queue pool's growCount");
 static_assert(offsetof(Map, field_0xE8) == 0xE8, "Map +0xE8");
-static_assert(offsetof(Map, field_0xF0) == 0xF0, "Map +0xF0");
-static_assert(offsetof(Map, _padF4) == 0xF4, "Map +0xF4");
+static_assert(offsetof(Map, field_0xE8) + offsetof(AvlTreeHead<AvlNode28>, count) == 0xF0, "Map +0xF0 (the tree's count)");
+static_assert(std::is_trivially_destructible<AvlTreeHead<AvlNode28>>::value, "the +0xE8 header is a POD");

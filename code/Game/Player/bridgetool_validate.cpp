@@ -53,7 +53,7 @@ inline uint32_t TerrainBit(const MapCell* cell) {
 // The pending/queued-cell BST at Map +0xE8 (AvlNode28: key +0x00, left +0x10,
 // right +0x18). Returns true if cellIdx is present, which makes the cell unavailable.
 bool PendingContains(const Map* mapGrid, int cellIdx) {
-    const AvlNode28* node = mapGrid->field_0xE8;
+    const AvlNode28* node = mapGrid->field_0xE8.root;
     while (node != nullptr) {
         if (cellIdx < node->key) {
             node = node->left;

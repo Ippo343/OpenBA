@@ -151,7 +151,7 @@ int Map::FindPlacementCell(int param_2, char param_3, ComponentEntity* const* al
                                     if (((uVar8 & 2) == 0) &&
                                         (((uVar8 & 1) == 0) && (cell.field_0x2A == 0xff))) {
                                         // the skip tree at field_0xE8 (key = cell index)
-                                        const AvlNode28* piVar2 = field_0xE8;
+                                        const AvlNode28* piVar2 = field_0xE8.root;
                                         bool skip = false;
                                         while (piVar2 != nullptr) {
                                             if (iVar7 < piVar2->key) {

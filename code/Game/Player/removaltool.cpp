@@ -301,7 +301,7 @@ void RemovalTool::Draw(Video::Context* ctx, char param3) {
 
                         if (!canRemove) {
                             // The map's road-cell BST (+0xE8): key at +0, children +0x10 / +0x18
-                            const AvlNode28* bstNode = mapGrid->field_0xE8;
+                            const AvlNode28* bstNode = mapGrid->field_0xE8.root;
                             while (bstNode != nullptr) {
                                 if (tileIdx2 < bstNode->key) {
                                     bstNode = bstNode->left;

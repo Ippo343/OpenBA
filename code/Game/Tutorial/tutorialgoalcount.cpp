@@ -325,7 +325,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     case 5: {
         Map* worldData2 = GameUpdateLoop::_singleton->m_game;
         if (worldData2) {
-            count = (worldData2->field_0xF0 > 0) ? 1 : 0;
+            count = (worldData2->field_0xE8.count > 0) ? 1 : 0;
         }
         break;
     }

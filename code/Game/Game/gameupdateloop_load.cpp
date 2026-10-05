@@ -468,8 +468,8 @@ Map::Map()
       cells(),
       field_0xA2(1),
       cellQueue() {
-    field_0xE8 = nullptr;                     // +0xE8 qword 0
-    field_0xF0 = 0;                           // +0xF0 dword 0
+    field_0xE8.root = nullptr;                // +0xE8 qword 0
+    field_0xE8.count = 0;                     // +0xF0 dword 0
     for (int i = 0; i < 9; ++i)               // +0x90 / +0x98 qwords, +0xA0 word
         field_0x90[i] = 0;
 }

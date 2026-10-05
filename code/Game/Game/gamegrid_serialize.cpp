@@ -277,7 +277,7 @@ void Map::Serialize(IO::Stream& stream) {
                         // Walk the AVL tree rooted at +0xe8 for key == i (the
                         // 0x28 AvlNode28 of Action/PathAvl.h: key +0, left +0x10,
                         // right +0x18).
-                        const AvlNode28* node = field_0xE8;
+                        const AvlNode28* node = field_0xE8.root;
                         while (node != nullptr) {
                             int32_t key = node->key;
                             if (i < key) {

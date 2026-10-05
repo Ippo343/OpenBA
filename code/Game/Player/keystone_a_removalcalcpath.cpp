@@ -374,7 +374,7 @@ extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component) {
 // ============================================================
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
     InitTypeIds();
-    const AvlNode28* root = param_1->field_0xE8;
+    const AvlNode28* root = param_1->field_0xE8.root;
     uint32_t retLow = 2;
     int removeKind = 0xff;   // iVar9 / R12D
     uint8_t ebx = 0;         // the +0x64 byte (road branch) / the IBP's low byte
@@ -420,15 +420,14 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
             r7 = ebx;  // uVar7 = the +0x64 byte for the road branch
 
             // second BST pass: erase the matched node (0x14001a6e0)
-            AvlNode28* n2 = param_1->field_0xE8;
+            AvlNode28* n2 = param_1->field_0xE8.root;
             while (n2 != nullptr) {
                 if (param_2 < n2->key) {
                     n2 = n2->left;
                 } else if (n2->key < param_2) {
                     n2 = n2->right;
                 } else {
-                    // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&param_1->field_0xE8), n2);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (Work/exe_bodies.h:100, another region) takes the set as uintptr_t*; Map +0xE8 is an AvlTreeHead<AvlNode28> (Map.h, GAMEA), not the Set<T*> its typed overload takes
+                    WorkBST_BSTRemove_a6e0(&param_1->field_0xE8, n2);   // 0x14001a6e0
                     break;
                 }
             }
@@ -718,7 +717,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                         uint32_t mask = 1u << (cl->terrainType & 0x1f);
                         bool hit = false;
                         if (((mask & 2) == 0) && ((mask & 1) == 0) && (static_cast<int8_t>(cl->field_0x2A) == (int8_t)-1)) {
-                            const AvlNode28* bn = piVar15->field_0xE8;
+                            const AvlNode28* bn = piVar15->field_0xE8.root;
                             while (bn != nullptr) {
                                 if (cid < bn->key) {
                                     bn = bn->left;

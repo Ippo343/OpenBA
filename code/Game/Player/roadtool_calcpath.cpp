@@ -89,7 +89,7 @@ T* FindDescription(const ComponentDescription* entity) {
 
 // The pending-road BST at Map +0xE8 (AvlNode28: key +0x00, left +0x10, right +0x18).
 bool PendingRoad(const Map* map, int cellIdx) {
-    const AvlNode28* node = map->field_0xE8;
+    const AvlNode28* node = map->field_0xE8.root;
     while (node) {
         int key = node->key;
         if (cellIdx < key)      node = node->left;
@@ -208,9 +208,7 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     {
         int32_t key = static_cast<int32_t>(cellIdx);
         AvlNode28* inserted = nullptr;
-        // LEFT: Map +0xE8 / +0xF0 (block GAME-b's header) are the Set header
-        // {root, count} declared as two fields.
-        AvlInsert28(reinterpret_cast<AvlTreeHead<AvlNode28>*>(&mapGrid->field_0xE8), &inserted, &key);  // LEFT: Map.h declares the +0xE8 / +0xF0 pending-road Set header {root, count} as two fields (header outside this set)
+        AvlInsert28(&mapGrid->field_0xE8, &inserted, &key);   // Map +0xE8, the Set header
     }
 
     cell->field_0x2A = roadType;
