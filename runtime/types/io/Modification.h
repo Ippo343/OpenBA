@@ -260,12 +260,11 @@ public:
     uint8_t  _dirty;           // +0x00 — IsDirty 0x18000daa0
     uint8_t  _savingSettings;  // +0x01 — EnableSavingSettings 0x1800aead0
     uint8_t  _pad02[6];
-    RtIO::Mod* _mods;          // +0x08
-    int32_t  _count;           // +0x10
-    int32_t  _capacity;        // +0x14
-    RtIO::Mod* _savedMods;     // +0x18
-    int32_t  _savedCount;      // +0x20
-    int32_t  _savedCapacity;   // +0x24
+    // B.4 Z RT2: the two Array<Mod>s as the typed 16-byte header (POD, trivially
+    // constructible / destructible: the ctor 0x1800b04b0 still zeroes the six
+    // fields by name, ??1 0x1800b0470 still releases them through 0x180010b80).
+    RtIO::ModArrayOf<RtIO::Mod> _mods;        // +0x08 {data, size +0x10, capacity +0x14}
+    RtIO::ModArrayOf<RtIO::Mod> _savedMods;   // +0x18 {data, size +0x20, capacity +0x24}
 
     // ?_singleton@Modification@IO@@2PEAV12@EA (0x1801fc6b0) -- the class
     // static (ENDGAME B.3.9 IO, B39_RULES D7; retail's `2` = public). Defined
@@ -277,13 +276,9 @@ public:
 };
 
 static_assert(sizeof(Modification) == 0x28, "ctor 0x1800b04b0 zeroes +0x08..+0x27");
-static_assert(offsetof(Modification, _mods)      == 0x08, "see the POD's field comment");
-static_assert(offsetof(Modification, _count)     == 0x10, "see the POD's field comment");
-static_assert(offsetof(Modification, _capacity)  == 0x14, "the Array capacity");
+static_assert(offsetof(Modification, _mods)      == 0x08, "Find()'s `*(longlong*)(this + 8)`, count at +0x10");
 static_assert(offsetof(Modification, _savedMods) == 0x18,
               "SaveList 0x1800b0619: ModArrayCopy(this+0x18, this+0x08)");
-static_assert(offsetof(Modification, _savedCount) == 0x20, "the saved Array size");
-static_assert(offsetof(Modification, _savedCapacity) == 0x24, "the saved Array capacity");
 // The guard, as an assertion so a future `virtual` fails the build rather than
 // the boot: a vptr would push every field eight bytes down under doors that are
 // registered BY ADDRESS and under a live singleton five other files read.
@@ -310,8 +305,8 @@ namespace RtIO {
 extern "C" void RtIo_Modification_SortMods(Mod* data, int32_t count, void*);  // 0x180028760
 // ---- io/modification.cpp
 void* RtColl_ArrayFilenameDtor_1800098d0(void* av);  // 0x1800098d0
-void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv);  // 0x180010110
-void* RtColl_ArrayModDtor_180010b80(void* av);  // 0x180010b80
+ModArrayOf<Mod>* RtColl_ArrayModAssign_180010110(ModArrayOf<Mod>* dst, const ModArrayOf<Mod>* src);  // 0x180010110
+void* RtColl_ArrayModDtor_180010b80(ModArrayOf<Mod>* a);  // 0x180010b80
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv);  // 0x180011220
 void* RtIo_Mod_Assign_180026ef0(Mod* dst, const Mod* src);  // 0x180026ef0
 void* RtIo_Mod_CopyCtor_1800101e0(Mod* dst, const Mod* src);  // 0x1800101e0

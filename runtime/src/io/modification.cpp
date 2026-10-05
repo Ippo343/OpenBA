@@ -562,8 +562,7 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
 }
 
 // 0x180010b80 — Collection::Array<Mod>::~Array
-void* RtColl_ArrayModDtor_180010b80(void* av) {
-    ModArrayOf<Mod>* a = static_cast<ModArrayOf<Mod>*>(av);   // LEFT: SIG RtColl_ArrayModDtor_180010b80 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+void* RtColl_ArrayModDtor_180010b80(ModArrayOf<Mod>* a) {
     Mod* p = a->data;
     for (int32_t i = a->size; i > 0; --i, ++p)
         RtIo_Mod_Dtor_180011460(p);
@@ -573,9 +572,7 @@ void* RtColl_ArrayModDtor_180010b80(void* av) {
 // 0x180010110 — Collection::Array<Mod>::operator=, resolved in our tree as
 // fn_ModArrayCopy (engine_funcs.cpp:1747) and again as ModArrayCopy()
 // (runtime/src/engine/loops.cpp:230). Both doors now land here.
-void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
-    ModArrayOf<Mod>* dst = static_cast<ModArrayOf<Mod>*>(dstv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
-    const ModArrayOf<Mod>* src = static_cast<const ModArrayOf<Mod>*>(srcv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+ModArrayOf<Mod>* RtColl_ArrayModAssign_180010110(ModArrayOf<Mod>* dst, const ModArrayOf<Mod>* src) {
     if (dst == src) return dst;
     RtColl_ArrayModDtor_180010b80(dst);          // CALL 0x180010b80
     ArrayAssignGrow(dst, src, 0x80, 8);
@@ -661,7 +658,7 @@ namespace IO {
 Modification* Modification::_singleton = nullptr;
 
 int Modification::GetCount() const {
-    return _count;
+    return _mods.size;
 }
 
 // ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z      retail 0x18000da80
@@ -673,7 +670,7 @@ int Modification::GetCount() const {
 // index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
 // extension, and it is load-bearing. Unbounded, exactly as retail is.
 const RtIO::Mod& Modification::GetModification(int index) const {
-    return _mods[index];   // a signed int index: MOVSXD, then the 0x80 stride
+    return _mods.data[index];   // a signed int index: MOVSXD, then the 0x80 stride
 }
 
 // ?Enable@Modification@IO@@QEAAXH_N@Z                       retail 0x1800aeab0
@@ -687,7 +684,7 @@ const RtIO::Mod& Modification::GetModification(int index) const {
 // early" tidy-up would be a real behaviour change to IsDirty.
 void Modification::Enable(int index, bool value) {
     _dirty = 1;
-    _mods[index].enabled = static_cast<uint8_t>(value);
+    _mods.data[index].enabled = static_cast<uint8_t>(value);
 }
 
 // ?Swap@Modification@IO@@QEAAXHH@Z                          retail 0x1800aeb20
@@ -709,9 +706,9 @@ void Modification::Swap(int a, int b) {
     _dirty = 1;
 
     RtIO::Mod tmp;   // a POD: uninitialised stack, as retail's
-    RtIO::RtIo_Mod_CopyCtor_1800101e0(&tmp, _mods + a);
-    RtIO::RtIo_Mod_Assign_180026ef0(_mods + a, _mods + b);
-    RtIO::RtIo_Mod_Assign_180026ef0(_mods + b, &tmp);
+    RtIO::RtIo_Mod_CopyCtor_1800101e0(&tmp, _mods.data + a);
+    RtIO::RtIo_Mod_Assign_180026ef0(_mods.data + a, _mods.data + b);
+    RtIO::RtIo_Mod_Assign_180026ef0(_mods.data + b, &tmp);
     RtIO::RtIo_Mod_Dtor_180011460(&tmp);
 }
 
@@ -746,8 +743,8 @@ void Modification::SaveList() {
 
     ::IO::Persistence* p = ::IO::Persistence::_singleton;   // ENDGAME B.3.9 IO (D7): the class static
 
-    for (int i = 0; i < _count; ++i) {
-        RtIO::Mod* m = _mods + i;
+    for (int i = 0; i < _mods.size; ++i) {
+        RtIO::Mod* m = _mods.data + i;
         m->order = i;
 
         // GetPathFilename's by-value return constructs `tmp` in place (the

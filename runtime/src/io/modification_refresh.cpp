@@ -210,8 +210,6 @@ using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 // drifts — the near-miss modification.cpp §4 records about RtString_AdoptInline.
 // ---------------------------------------------------------------------------
 void  AssignShared(char** dst, char* src);
-void* RtColl_ArrayModDtor_180010b80(void* av);                          // 0x180010b80
-void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv);    // 0x180010110
 void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv);    // 0x180011110
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv);     // 0x180011220
 // (The Mod copy ctor 0x1800101e0 and dtor 0x180011460 are declared, typed, by
@@ -604,7 +602,7 @@ void Modification::RefreshList() {
 
     // `this + 8` is the Array<Mod> header {mods, count, capacity}. Retail holds
     // it in RDI for the whole body and spills it at [RBP+0x208].
-    ModArrayOf<Mod>* const arr = reinterpret_cast<ModArrayOf<Mod>*>(&_mods);   // LEFT: IO::Modification holds the Array<Mod> as three fields (_mods/_count/_capacity) that engine/ and save/ read by name (R-IO, wave X)
+    ModArrayOf<Mod>* const arr = &_mods;
 
     // 0x1800af62c — UNCONDITIONAL. This is what makes the function idempotent
     // and therefore diffable; see the banner.
@@ -867,8 +865,8 @@ void Modification::RefreshList() {
     // leftmost node, then take the successor repeatedly (leftmost of the right
     // subtree, else climb while we are a right child).
     // -----------------------------------------------------------------------
-    for (int32_t i = 0; i < _count; ++i) {
-        for (int32_t j = 0; j < _count; ++j) {
+    for (int32_t i = 0; i < _mods.size; ++i) {
+        for (int32_t j = 0; j < _mods.size; ++j) {
             if (i == j) continue;                                // CMP R13,R15 ; JZ
             Mod* const mods = arr->data;                         // re-read, as retail does
             AvlNode* node = mods[i].set.root;
