@@ -145,7 +145,7 @@ class PlayerController;
 extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);  // 0x14001bf10
-extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount);  // 0x14000c520
+// 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
 namespace IO { class Serializer; }
 extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0

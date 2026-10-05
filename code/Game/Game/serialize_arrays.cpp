@@ -49,6 +49,7 @@
 #include "Game/exe_bodies.h"
 #include "Game/serialize_externals.h"
 #include "Game/MenuScene.h"
+#include "Component/SpawnDescription.h"   // SpawnDescription::EntryArray (0x14000c520's holder)
 
 // ============================================================
 // Helper #1 — Geometry init (FUN_1400b00e0)
@@ -244,16 +245,18 @@ void InitSpawnEntry(uint8_t* e) {
 }
 // stays explicit: `init` is a patterned fill (maxSpawnAge = 10.0f at +0x0c), not
 // the zero/as-found tail any element type's `T()` would write.
-const rtcoll::ArraySpec kSpec_SpawnEntry = {             // exe 0x14000c520
+
+} // namespace
+
+// External linkage: SpawnDescription::EntryArray (Component/SpawnDescription.h)
+// names it as its spec policy.
+extern const rtcoll::ArraySpec kSpec_SpawnEntry = {      // exe 0x14000c520
     "Array<SpawnEntry>", 0x10, 8,
     &ByteAssign<0x10>, &InitSpawnEntry, nullptr, true,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };
-using SpawnEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                          Collection::ExplicitSpec<&kSpec_SpawnEntry>>;
-
-} // namespace
+static_assert(sizeof(SpawnDescription::Entry) == sizeof(SpawnEntry), "the row's stride is the entry's");
 
 // ============================================================
 // Helpers #3-#5 — Array resize variants
@@ -312,10 +315,9 @@ extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
 // every tree carried an EMPTY spawn table, so no wild food could ever spawn and
 // the Gatherer's Hut had nothing it accepts anywhere on the map. Registered in
 // address_registry.cpp alongside the other resize variants.
-extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount) {
+extern "C" void Reimpl_Array_Resize_Stride10_Spawn(SpawnDescription::EntryArray* arrayHeader, int newCount) {
     if (!arrayHeader) return;
-    // B.3.2 bridge: SpawnDescription+0x20 is still a raw header.
-    reinterpret_cast<SpawnEntryArray*>(arrayHeader)->SetSize(newCount);   // LEFT: audit WORK (SIG; blocked by the SpawnDescription +0x20 raw triple: type that holder first, not reached in B4 Z SWEEP): H5 SpawnDescription+0x20 is a raw triple (other owner's header)
+    arrayHeader->SetSize(newCount);   // SpawnDescription+0x20, typed (its spec is kSpec_SpawnEntry)
 }
 
 // ============================================================

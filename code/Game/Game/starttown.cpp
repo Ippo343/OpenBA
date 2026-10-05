@@ -4901,12 +4901,12 @@ static void SeedInitialSpawn(ComponentEntity* ent, uint32_t tidSpawnComp,
     const Description* linked = sc->_description;
     const SpawnDescription* sd = static_cast<const SpawnDescription*>(linked);
 
-    if (sd && sd->_entryCount > 0) ++withSpawnEntries;
+    if (sd && sd->_entries._size > 0) ++withSpawnEntries;
     if (withSpawnComp <= 3)
         fprintf(stderr, "[startTown::res]   spawnComp[%d] sc=%p desc=%p "
                 "entries=%d array=%p\n", withSpawnComp, sc, sd,
-                sd ? sd->_entryCount : -1,
-                sd ? sd->_entries : nullptr);
+                sd ? sd->_entries._size : -1,
+                sd ? sd->_entries._data : nullptr);
     SpawnComponent_InitialSpawn(sc);
 }
 
