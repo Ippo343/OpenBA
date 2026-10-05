@@ -1066,12 +1066,10 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
         context._shaderDetail = e->_shaderDetail;   // MOV [RSI+0xc],EAX
 
         // Slot 9 on every drawable the entry names. 5th argument is a literal 1.
-        // LEFT: `RendererDrawable::_object` is `const void*` (Camera.h: it names
-        // a Geometry or a Light); the Draw arms are the Light's.
         for (int32_t j = 0; j < e->_drawableIds._size; ++j) {
             const int32_t id = e->_drawableIds._data[j];
             RendererDrawable& d = _drawables._data[id];
-            static_cast<const Light*>(d._object)->DrawShadowMap(   // LEFT: RendererDrawable::_object is a Geometry or a Light (void*; the drawable's kind decides): this arm is the Light's
+            d._object->DrawShadowMap(
                 context, *this, d._value, 1);
         }
 
@@ -1118,7 +1116,7 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
             for (int32_t j = 0; j < e->_drawableIds._size; ++j) {
                 const int32_t id = e->_drawableIds._data[j];
                 RendererDrawable& d = _drawables._data[id];
-                static_cast<const Light*>(d._object)->DrawLight(   // LEFT: RendererDrawable::_object is a Geometry or a Light (void*; the drawable's kind decides): this arm is the Light's
+                d._object->DrawLight(
                     context, *this, e->_drawGroupIndex, d._value, k, e->_shader);
             }
         }

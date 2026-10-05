@@ -302,7 +302,7 @@ void AmbientLight::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     rtcoll::RtColl_ArraySetSizeFill_180023830(&lights, lights._size + 1, &fill);
 
     // Retail keeps `this` in RBX and stores it into the {Light*, int} pair
-    // (`MOV [RSP+0x20],RBX`); `RendererDrawable::_object` is a `const void*`.
+    // (`MOV [RSP+0x20],RBX`) as `RendererDrawable::_object` (`const Light*`).
     // `_pad0c` is written ZERO here, as the local's `_pad` always was.
     RendererDrawable pair;
     pair._object = this;
