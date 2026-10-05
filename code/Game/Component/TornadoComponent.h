@@ -15,7 +15,8 @@
 //                       +0x48 = 0, +0x50 = -1}, +0x58 = 0, +0x60 (dword) = 0,
 //                       flags |= 0x84 (bit 2: the full-rate tree walk -> slot 8)
 //   dtor   0x14000d640 (scalar): restamp, MemFree(+0x40), +0x40 = +0x48 = 0
-//                       (the waypoint array), stamp 0x140162920, ~Internal,
+//                       (~path: its ~points, the inlined ~Array over this+0x30
+//                       +0x10), stamp 0x140162920, ~Internal,
 //                       MemFree on &1
 //   table  0x14015aa80, 16 slots:
 //     [0] 0x14000d640 scalar deleting dtor   [1]/[2] TypeName/Type
@@ -29,6 +30,7 @@
 #include "Object/exe_type.h"
 #include "math/Math.h"       // Math::Vector3
 #include "system/Value.h"    // System::Time
+#include "collection/Collection.h"   // Collection::Array (path.points)
 
 class TornadoComponent final : public Component {
     DECLARE_EXE_TYPE(TornadoComponent)
@@ -36,8 +38,8 @@ class TornadoComponent final : public Component {
 public:
     TornadoComponent();                                           // 0x140058cf0
 
-    // PORT GAP (retail 0x14000d640) — B38 D2: retail frees the waypoint array
-    // at +0x40; the tree never did (Inert_ScalarDtor).
+    // 0x14000d640: the body is empty; ~path (its ~points) frees and zeroes the
+    // waypoint array at +0x40 / +0x48.
     ~TornadoComponent() override = default;                       // [0] 0x14000d640
     void Persist(IO::Stream& stream) override;                          // [3] 0x140058b80
     void Startup() override;                                      // [4] 0x1400585a0
@@ -45,13 +47,12 @@ public:
 
     // The waypoint path at +0x30 (H6): 0x1400a70c0 and 0x1400a71e0 take `this+0x30`
     // as their receiver. The point array is an Array<Vector3> (SetSize 0x14000d030,
-    // append 0x14000cf40; freed by the retail dtor): H5, kept as its raw triple.
+    // append 0x14000cf40, both with Vector3's zeroing ctor as the init arm; freed by
+    // the retail dtor 0x14000d675..0x14000d685).
     struct Path {
         Math::Vector3  target;     // +0x00 the waypoint being walked to (Advance latches it, z = 0)
         uint8_t        _pad0C[4];  // +0x0C
-        Math::Vector3* points;     // +0x10 Array<Vector3> data
-        int32_t        count;      // +0x18
-        int32_t        capacity;   // +0x1C
+        Collection::Array<Math::Vector3> points;   // +0x10 the waypoints (count +0x18, capacity +0x1C)
         int32_t        index;      // +0x20 the current waypoint (ctor -1)
         uint8_t        _pad24[4];  // +0x24
 
@@ -85,7 +86,7 @@ static_assert(offsetof(TornadoComponent::Path, target) == 0x0, "Path::target");
 static_assert(offsetof(TornadoComponent::Path, _pad0C) == 0xC, "Path::_pad0C");
 static_assert(offsetof(TornadoComponent::Path, _pad24) == 0x24, "Path::_pad24");
 static_assert(offsetof(TornadoComponent::Path, points)    == 0x10, "path +0x40 (the retail dtor frees it)");
-static_assert(offsetof(TornadoComponent::Path, count)     == 0x18, "path count +0x48");
-static_assert(offsetof(TornadoComponent::Path, capacity)  == 0x1C, "path capacity +0x4C");
+static_assert(offsetof(TornadoComponent::Path, points) + offsetof(Collection::Array<Math::Vector3>, _size) == 0x18, "path count +0x48");
+static_assert(offsetof(TornadoComponent::Path, points) + offsetof(Collection::Array<Math::Vector3>, _capacity) == 0x1C, "path capacity +0x4C");
 static_assert(offsetof(TornadoComponent::Path, index)     == 0x20, "path index +0x50 (ctor -1)");
 static_assert(offsetof(TornadoComponent, position)        == 0x58, "");

@@ -31,7 +31,6 @@
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -138,11 +137,11 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
     uint32_t citizenGridCell = (uint32_t)(mapSz * citizenCellY + citizenCellX);
 
     // Step 5: Iterate orchard cells
-    int fieldCellCount = field_60;
+    int fieldCellCount = field_58._size;
 
     if (fieldCellCount > 0) {
         for (int i = 0; i < fieldCellCount; i++) {
-            bool* validityArray = field_58;
+            bool* validityArray = field_58._data;
 
             // Orchard uses inverted validity: 0 = available, 1 = planted
             if (validityArray[i] != 0) {
@@ -266,7 +265,7 @@ int PlantOrchard::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** /*
     }
 
     // Mark cell as available (validity = 0 for orchard)
-    bool* validityArray = field_58;
+    bool* validityArray = field_58._data;
     validityArray[param4] = 0;
     return 0;
 }
@@ -291,7 +290,7 @@ int PlantOrchard::OnCancel(CitizenComponent** /*param2*/, ComponentEntity** /*pa
     }
 
     // Mark cell as available
-    bool* validityArray = field_58;
+    bool* validityArray = field_58._data;
     validityArray[param4] = 0;
     return 0;
 }
@@ -386,7 +385,7 @@ int PlantOrchard::Validate() {
             }
 
             // Mark cell available (orchard uses 0 for available)
-            bool* validityArray = field_58;
+            bool* validityArray = field_58._data;
             validityArray[node->element.cell] = 0;
         }
 
@@ -467,12 +466,12 @@ void PlantOrchard::Persist(IO::Stream& stream) {
 
     WorkCellBST_Serialize_9de0(&_cells, &ser);
 
-    int cellCountBuf[2] = { field_60, 0 };
+    int cellCountBuf[2] = { field_58._size, 0 };
     ser.Serialize(cellCountBuf[0], nullptr);
 
-    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
+    // 0x14000a590 == Collection::Array<bool>::SetSize.
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::U8>(&field_58).SetSize(cellCountBuf[0]);
+        field_58.SetSize(cellCountBuf[0]);
     }
 
     // Serialize validity array through the BOOL-ARRAY door.
@@ -488,7 +487,7 @@ void PlantOrchard::Persist(IO::Stream& stream) {
     //     1400f4fd1  CALL qword ptr [0x140151458]   ; the bool-array door
     // The local pointer was aliased onto 0x140152ac8, the three-parameter
     // `Serialize(int&)` scalar door, and called with four arguments.
-    ser.Serialize(cellCountBuf[0], field_58, nullptr);   // 0x140151458 = the bool-array overload
+    ser.Serialize(cellCountBuf[0], field_58._data, nullptr);   // 0x140151458 = the bool-array overload
 
     Reimpl_ExternalPtr_Serialize_StringTable(&field_68, &ser);
 }   // ~Serializer
@@ -499,12 +498,9 @@ void PlantOrchard::Persist(IO::Stream& stream) {
 // The stamps and the `~Internal` call are the compiler's chain.
 // ============================================================
 PlantOrchard::~PlantOrchard() {
-    System::MemoryAllocator::MemFree(field_58);
-    field_58 = nullptr;
-    field_60 = 0;   // retail: one qword store over the count and the capacity
-    field_64 = 0;
-
-    // The +0x48 set's Clear is the `_cells` member's ~Set, after this body (0x1400f5010).
+    // The +0x58 flags are the `field_58` member's ~Array (MemFree, then +0x58 = +0x60 = 0),
+    // then the +0x48 set's Clear is the `_cells` member's ~Set: reverse declaration order
+    // after this empty body (0x1400f5010).
 
 }
 
@@ -516,7 +512,7 @@ PlantOrchard::~PlantOrchard() {
 // stamps are the compiler's). The orchard diagnostic counts the construction (the old
 // factory ctor did the same).
 PlantOrchard::PlantOrchard()
-    : Work(), field_58(nullptr), field_60(0), field_64(0),
+    : Work(),
       field_68(nullptr) {
     OrchardDiag_NotePlantConstructed();
 }

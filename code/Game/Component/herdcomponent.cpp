@@ -28,7 +28,6 @@
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"
 #include "Component/herdcomponent_funcs.h"
-#include "Component/coll_bridge.h"
 #include <new>
 #include "object/External.h"
 #include "object/TypeInfo.h"
@@ -139,7 +138,7 @@ float PopulationComponent::HerdCellFood(int cell) const {
 
     int positive = 0;
     for (int64_t row = 0; row < gridDim; row++) {
-        const Cell* pTile = cells +
+        const Cell* pTile = cells._data +
             (((cell / cellDim) * gridDim + row) * (int64_t)mapStride +
              (int64_t)((cell % cellDim) * gridDim));
         for (int64_t col = gridDim; col != 0; col--) {
@@ -230,7 +229,7 @@ void AnimalComponent::Place(const Math::Vector3* position, float yaw, bool pose)
 char HerdComponent::CheckMigrationDone() {
     (void)::Object::IsDerivedFromNullSafe(_description, HerdDescription::TypeId());
 
-    for (int i = 0; i < memberCount; i++) {
+    for (int i = 0; i < members._size; i++) {
         ComponentEntity* entity = members[i]->_entity.Get();
         AnimalComponent* animal = entity->FindComponent<AnimalComponent>();
         if (!animal->IsInWanderBox()) return 0;   // 0x140106b10
@@ -258,12 +257,12 @@ void HerdComponent::AdjustSize(int targetSize) {
     const float spread = kRdata_140172220;   // 0x140172220
     const float half = kRdata_140172114;     // 0x140172114
 
-    while (memberCount < targetSize) {
+    while (members._size < targetSize) {
         // The loop's only exit is the member count at +0x40 growing, which
         // happens inside SetHerd -> AddMember. If that link is missing the
         // retail shape spins forever while allocating an entity per pass, so
         // bail on a pass that made no progress rather than hanging the world.
-        const int countBefore = memberCount;
+        const int countBefore = members._size;
 
         // Build the animal entity from the template.
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
@@ -310,7 +309,7 @@ void HerdComponent::AdjustSize(int targetSize) {
         // LEFT: GameUpdateLoop::m_entityList is void* (W0 header); the forwarder takes it.
         EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &entity,
                                        descr->_category);   // 0x1400c48a0
-        if (memberCount <= countBefore) {
+        if (members._size <= countBefore) {
             fprintf(stderr, "[Herd] AdjustSize aborted: member count stuck at %d "
                     "(target %d) — the herd back-link never ran\n",
                     countBefore, targetSize);
@@ -325,8 +324,8 @@ void HerdComponent::AdjustSize(int targetSize) {
 // herd centre tile +0x4c and the description's spread +0x38) and write it into the
 // animal's AnimalComponent (+0x38..+0x3e, found through 0x140005500).
 void HerdComponent::AddMember(WildAnimalComponent* const* member) {
-    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-    GameColl::AsArray<GameColl::Ptr8>(&members).SetSizeFill(memberCount + 1, member);
+    // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
+    members.SetSizeFill(members._size + 1, member);
 
     Description* cfgRaw = _description;
     HerdDescription* cfg = ::Object::IsDerivedFromNullSafe(cfgRaw, HerdDescription::TypeId())
@@ -511,8 +510,8 @@ void HerdComponent::Populate(int count) {
 void HerdComponent::OnRemove() {
     // The two `break`s below are the tree's guards (retail has neither: a member with
     // no herd would spin, a null member would fault).
-    while (memberCount > 0) {
-        WildAnimalComponent* member = members[memberCount - 1].Get();
+    while (members._size > 0) {
+        WildAnimalComponent* member = members[members._size - 1].Get();
         if (!member) break;
 
         HerdComponent* current = member->herd.Get();
@@ -587,8 +586,7 @@ static bool IsTileValid(HerdComponent* self) {
 // the Startup slot (HerdComponent_Startup) because the inert factory could not
 // express it; retail's slot 4 is Component's `RET`, which the class now inherits.
 HerdComponent::HerdComponent()
-    : population(nullptr), populationCell(0), _pad34{}, members(nullptr), memberCount(0),
-      memberCapacity(0), migrating(false), _pad49{}, tile(-1), grazeTimer{0}, spawnTimer{0} {
+    : population(nullptr), populationCell(0), _pad34{}, migrating(false), _pad49{}, tile(-1), grazeTimer{0}, spawnTimer{0} {
     OrFlagsInCtor(0x0b);
 }
 
@@ -652,7 +650,7 @@ void HerdComponent::Update(const System::Time* time) {
         fprintf(stderr, "[HerdUpd] calls=%lld noPop=%lld noCfg=%lld fired=%lld | "
                 "herd=%p members=%d timer=%lld interval=%lld cfgMin=%.3f\n",
                 g_hu_calls, g_hu_noPop, g_hu_noCfg, g_hu_fired, static_cast<void*>(this),
-                memberCount,
+                members._size,
                 (long long)spawnTimer._ticks, (long long)intervalTicks, intervalMinutes);
         fflush(stderr);
     }
@@ -661,7 +659,7 @@ void HerdComponent::Update(const System::Time* time) {
         ++g_hu_fired;
         fprintf(stderr, "[HerdUpd] FIRED #%lld herd=%p members=%d (calls=%lld)\n",
                 g_hu_fired, static_cast<void*>(this),
-                memberCount, g_hu_calls);
+                members._size, g_hu_calls);
         fflush(stderr);
         // Timer fired -- subtract interval
         spawnTimer._ticks -= intervalTicks;
@@ -676,7 +674,7 @@ void HerdComponent::Update(const System::Time* time) {
         }
 
         // Target size: current * 2 (minimum 2)
-        int currentTarget = memberCount * 2;
+        int currentTarget = members._size * 2;
         if (currentTarget == 0) {
             currentTarget = 2;
         }

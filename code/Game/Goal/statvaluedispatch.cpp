@@ -683,7 +683,7 @@ static uint32_t Helper_86e0(const Object::External* ext) {
         }
         ComponentEntity* entityRef = node ? node->element.entities._data[bi] : nullptr;
         WorkPlaceComponent* comp = entityRef->FindComponent<WorkPlaceComponent>();
-        total += comp->workerCount;
+        total += comp->workers._size;
     }
     return (uint32_t)total;
 }
@@ -693,9 +693,9 @@ static uint32_t Helper_86e0(const Object::External* ext) {
 uint32_t StatGoal::ReadSubTypeEntry() const {
     int idx = statSubType;
     WorldGeometry* pc = GameUpdateLoop::_singleton->m_worldGeometry;
-    const RawArray<int32_t>& ints = pc->_batchCounters;   // +0x220
-    if (idx >= 0 && idx < ints.size) {
-        return static_cast<uint32_t>(ints.data[idx]);
+    const Collection::Array<int32_t>& ints = pc->_batchCounters;   // +0x220
+    if (idx >= 0 && idx < ints._size) {
+        return static_cast<uint32_t>(ints._data[idx]);
     }
     return 0;
 }

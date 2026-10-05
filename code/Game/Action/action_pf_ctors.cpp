@@ -87,6 +87,7 @@ void ActionStackPush(ActionStack* stack, const ::Object::InternalPtr<Action>* ac
     // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize (stride 8,
     // zero tail; ImmigrationComp_DynArrayResize in immigrationcomponent.cpp). It only
     // touches the array header at the front of the stack (+0x00..+0x10).
+    // LEFT (B4 H5): ActionStack's retail dtor 0x1400c5150 DeletePtr's every element and +0x10 before MemFree(+0x00); the tree's ActionStack has no dtor (CharacterComponent's implicit dtor releases nothing), so typing `actions` needs 0x1400c5150 ported as ~ActionStack in CharacterComponent (Component/) first.
     GameColl::AsArray<GameColl::Ptr8>(stack).SetSize(newCount);
 LAB_550e:
     if (-1 < stack->current) {
@@ -137,7 +138,7 @@ int InteractNodeCount(const InteractComponent* self, int kind) {
     // null+0x30 (the counter simply contributes 0). Surfaced via the BANISHED_FORCE_WORK
     // harness (Leisure/Work anchor a citizen on an inert workplace building's position comp).
     int total = interact ? (&interact->_useNodes)[kind].count : 0;
-    for (int i = 0; i < self->useLocationCount; ++i) {
+    for (int i = 0; i < self->useLocations._size; ++i) {
         total = total + InteractNodeCount(self->useLocations[i].Get(), kind);
     }
     return total;

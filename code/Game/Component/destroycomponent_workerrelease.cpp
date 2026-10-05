@@ -124,23 +124,23 @@ void WorkPlaceComponent::SetMaxWorkers(int newMax) {
     WorkComponent* workComp = _entity->FindComponent<WorkComponent>();   // 0x140003050
     if (workComp) workComp->workState = newMax;   // +0x30 the work capacity
 
-    if (newMax >= workerCount) return;
+    if (newMax >= workers._size) return;
 
     std::fprintf(stderr, "[WorkPlaceComponent] SetMaxWorkers: evicting wpc=%p from roster %d down to %d\n",
-                 (void*)this, workerCount, newMax);
+                 (void*)this, workers._size, newMax);
     std::fflush(stderr);
 
     const bool savedRosterOnly = g_wpcRosterOnly;
     g_wpcRosterOnly = true;
 
     int guard = 0;
-    while (newMax < workerCount) {
-        const int before = workerCount;
+    while (newMax < workers._size) {
+        const int before = workers._size;
 
         // [STANDALONE GUARD] Retail walks +0x58 unchecked because its roster is always
         // consistent; ours can be caught mid-teardown (live crash 2026-07-25 read base == 8
         // with count > 0). Bail instead of faulting.
-        Object::InternalPtr<CitizenComponent>* roster = workers;
+        Object::InternalPtr<CitizenComponent>* roster = workers._data;
         if (!Plausible(roster)) break;
         CitizenComponent* citizen = roster[0].Get();
         if (!Plausible(citizen)) break;
@@ -159,7 +159,7 @@ void WorkPlaceComponent::SetMaxWorkers(int newMax) {
 
         // Re-read the roster base — the finders above can reallocate it (faithful: retail
         // re-reads *(wpc+0x58) too, right before the AssignHousing call).
-        Object::InternalPtr<CitizenComponent>* rosterNow = workers;
+        Object::InternalPtr<CitizenComponent>* rosterNow = workers._data;
         if (!Plausible(rosterNow)) break;
         if (!Plausible(rosterNow[0].Get())) break;
 
@@ -168,10 +168,10 @@ void WorkPlaceComponent::SetMaxWorkers(int newMax) {
         // [STANDALONE GUARD] Retail's `while` assumes the finder never hands back THIS
         // workplace. If it did, an unterminated loop here is an in-world FREEZE rather than
         // a crash, which is far harder to diagnose. Break out loudly.
-        if (workerCount >= before || ++guard > 4096) {
+        if (workers._size >= before || ++guard > 4096) {
             std::fprintf(stderr, "[WorkPlaceComponent] SetMaxWorkers: no progress on wpc=%p (roster %d -> %d, "
                          "citizen=%p) — breaking to avoid a spin\n", (void*)this,
-                         before, workerCount, (void*)citizen);
+                         before, workers._size, (void*)citizen);
             std::fflush(stderr);
             break;
         }
@@ -246,7 +246,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     std::fprintf(stderr, "[DestroyWorkers] f520 re-seat wpc=%p: builderKey=%p capacity=%d "
                  "roster=%d (buildComp=%p) workComp=%p workId(+0x28)=%d%s\n",
                  (void*)this, (void*)builderKey, capacity,
-                 workerCount, (void*)buildComp, (void*)workComp,
+                 workers._size, (void*)buildComp, (void*)workComp,
                  workComp ? workComp->workId : -1,
                  (workComp && workComp->workId >= 0)
                      ? " -> re-keyed" : " -> nothing in flight to re-key");

@@ -342,7 +342,7 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
             // The profession pointer is the tree's key and is printed as one.
             const uint64_t key   = reinterpret_cast<uint64_t>(wpc->profession);  // +0x48  // CAST-OK: ptr_int
             const int      accept= wpc->isAccepting;                            // +0x50
-            const int      roster= wpc->workerCount;                            // +0x60
+            const int      roster= wpc->workers._size;                            // +0x60
             const int      cap   = wc ? wc->workState : -1;                     // WC+0x30
 
             // Is the owner registered in the town profession BST under that key? An
@@ -411,7 +411,7 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
                     // msg 0x12 = button command, id 0x1450 = workerCountUp. WorkPlaceUI is a
                     // real class (ENDGAME B.3.8): slot 9 is its OnElementEvent override.
                     wpUi->OnElementEvent(nullptr, 0x12, 0x1450, 0, 0, 0, nullptr);
-                    const int rosterNow = wpc->workerCount;           // +0x60
+                    const int rosterNow = wpc->workers._size;           // +0x60
                     const int capNow = wc ? wc->workState : -1;       // WC+0x30
                     std::fprintf(stderr, "[FoodPanel]   seat CLICK workerCountUp(0x1450): "
                                  "roster %d -> %d, capacity %d -> %d   %s\n",
@@ -549,7 +549,7 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
 void FollowUp(int frameNum) {
     if (!s_seatComp) return;
     WorkPlaceComponent* w = s_seatComp;
-    const int roster = w->workerCount;                 // +0x60
+    const int roster = w->workers._size;                 // +0x60
 
     // AttendanceComponent, when present: queue count at +0x30, capacity at desc+0x20.
     int queued = -1, capacity = -1;

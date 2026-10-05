@@ -27,7 +27,6 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"   // B3R: OrchardComponent_ValidateRefs
-#include "Component/coll_bridge.h"
 #include "Component/OrchardComponent.h"
 #include "Entity/ComponentEntity.h"
 #include <cstdint>
@@ -36,10 +35,8 @@
 namespace {
 // 0x140005440 WorkAcc_FindComponent_5440 (Work/exe_bodies.h) and 0x140051830
 // OrchardComponent_ValidateRefs (Component/exe_bodies.h) are called by name (B3R).
-// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
-// is gone.
+// 0x14000a590 (Array<bool>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation: `field_58.SetSize` below.
 // ENDGAME B.3.8: the file-level lazy Resolve() is gone (B38 D7) — Work_Ctor25 is the
 // base ctor Work(void*), the stamp is the compiler's, and the two helpers are resolved
 // where they are used.
@@ -57,10 +54,8 @@ PlantOrchard::PlantOrchard(ComponentEntity* const* entityIBP, ComponentDescripti
     // PlantOrchard's own fields. Retail writes +0x60 as one 8-byte store, which clears
     // BOTH the count (+0x60) and the capacity (+0x64) of the array triple at +0x58:
     // here the two named fields, in address order.
-    // +0x48 / +0x50: the `_cells` member's ctor zeroes the set (retail 0x1400f50b0, under its EH state).
-    field_58 = nullptr;
-    field_60 = 0;
-    field_64 = 0;
+    // +0x48 / +0x50: the `_cells` member's ctor zeroes the set, then `field_58`'s ctor
+    // zeroes +0x58 / +0x60 (retail 0x1400f50b0, under its EH state).
     field_68 = treeType;   // tree type, stored verbatim: no null test, no validation,
                            // no refcount — as retail does.
 
@@ -74,15 +69,16 @@ PlantOrchard::PlantOrchard(ComponentEntity* const* entityIBP, ComponentDescripti
     orchard->ValidateRefs();   // 0x140051830
 
     // Size the per-slot validity array from the orchard's CURRENT slot count.
-    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
+    // 0x14000a590 == Collection::Array<bool>::SetSize (no tail write: the loop below
+    // writes every slot).
     const int slotCount = orchard->slotCount;
-    GameColl::AsArray<GameColl::U8>(&field_58).SetSize(slotCount);
+    field_58.SetSize(slotCount);
 
     // Zero each byte. Retail re-reads orchardComp->+0x58 and re-runs CheckPtr on every
     // iteration; the re-read is preserved because ValidateRefs/CheckPtr can in principle
     // shrink the component's slot array underneath the loop.
     for (int i = 0; i < orchard->slotCount; ++i) {
-        bool* base = field_58;
+        bool* base = field_58._data;
         if (!base) break;   // the tree's guard
         base[i] = false;
     }

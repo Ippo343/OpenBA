@@ -215,7 +215,7 @@ void ProbeClass(const FoodClass& fc) {
     if (Component* wpcc = FindComp(ent, WorkPlaceComponent::TypeId())) {
         WorkPlaceComponent* w = static_cast<WorkPlaceComponent*>(wpcc);   // exact type id
         haveWpc   = true;
-        staffed   = w->workerCount;     // +0x60
+        staffed   = w->workers._size;     // +0x60
         accepting = w->isAccepting;     // +0x50
         // +0x48 = profession key. WorkplaceUI_Startup hides the ENTIRE workPlace
         // ribbon (worker up/down spinner + stop-sign icon) when this is 0 -

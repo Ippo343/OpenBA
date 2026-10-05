@@ -38,7 +38,6 @@
 #include "Component/ComponentDescription.h"
 #include "Component/UIComponent.h"
 #include "Component/UIDescription.h"
-#include "Component/coll_bridge.h"
 #include "Dialog/EntityUI.h"
 #include "Dialog/ToolUI.h"
 #include "ui/UserInterface.h"
@@ -132,7 +131,7 @@ void EditTool::SelectEntity(const Object::InternalPtr<ComponentEntity>* selected
             int32_t ctrlCount = 0;
             if (uiComp != nullptr) {
                 // UIComponent +0x28: the byte array {data, count, capacity}.
-                auto& bytes = GameColl::AsArray<GameColl::U8>(&uiComp->data);
+                auto& bytes = uiComp->data;
                 ctrlCount = bytes.GetSize();
                 ctrlData = bytes.GetData();
             }

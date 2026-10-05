@@ -314,7 +314,7 @@ void DumpOrchards(int frameNum) {
         }
 
         if (wpc) {
-            int32_t roster = wpc->workerCount;                       // +0x60
+            int32_t roster = wpc->workers._size;                       // +0x60
             fprintf(stderr, "[OrchardDiag]   WorkPlaceComponent=%p roster(+0x60)=%d  "
                             "(max-worker cap not read here — see file header comment; it's a "
                             "Work-side lazy cache on matDesc+0x30, not a WPC field)\n",

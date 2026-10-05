@@ -365,7 +365,7 @@ void PathTool::BuildRoutes() {
             }
         }
     } else {
-        int workerCount = workPlace->workerCount;
+        int workerCount = workPlace->workers._size;
         for (int wi = 0; wi < workerCount; wi++) {
             CitizenComponent* worker = workPlace->workers[wi].Get();
             if (worker->home != nullptr) {

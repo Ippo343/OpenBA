@@ -67,13 +67,14 @@ public:
     // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
     using CellSet = Collection::Set<Claim>;
     CellSet _cells;
-    // +0x58 / +0x60 / +0x64: Collection::Array<bool> {data, count, capacity}, one flag per
-    // orchard slot (Persist 0x1400edea0 serializes it through the bool-array door
-    // 0x140151458 with the int count at +0x60; the ctor 0x1400ee060 and the dtor clear
-    // +0x60/+0x64 with one qword store). The container stays raw (H5).
-    bool*    _field58;           // +0x58: zeroed
-    int32_t  _field60;           // +0x60: count
-    int32_t  _field64;           // +0x64: capacity
+    // +0x58: Collection::Array<bool> {data, count +0x60, capacity +0x64}, one flag per
+    // orchard slot (Persist 0x1400edea0 serializes it through the bool-array door 0x140151458 with
+    // the int count at +0x60). A real member: the ctor 0x1400ee060 zeroes +0x58 / +0x60 as two
+    // qwords after the set; the dtor 0x1400edf60 restamps, MemFree(+0x58), +0x58 = +0x60 = 0,
+    // THEN clears the set: reverse declaration order (~Array before ~Set). It grows through
+    // 0x14000a590 (stride 1, align 1, NO tail write: the trait row of a trivial bool).
+    using SlotFlags = Collection::Array<bool>;
+    SlotFlags _field58;
 };
 
 static_assert(sizeof(HarvestOrchard::Claim) == 0x10, "HarvestOrchard claim element 0x10");
@@ -90,5 +91,5 @@ static_assert(alignof(HarvestOrchard) == 8, "HarvestOrchard is 8-aligned");
 static_assert(offsetof(HarvestOrchard, _cells) == 0x48, "HarvestOrchard +0x48");
 static_assert(offsetof(HarvestOrchard, _cells) + offsetof(HarvestOrchard::CellSet, _count) == 0x50, "HarvestOrchard +0x50");
 static_assert(offsetof(HarvestOrchard, _field58) == 0x58, "HarvestOrchard +0x58");
-static_assert(offsetof(HarvestOrchard, _field60) == 0x60, "HarvestOrchard +0x60");
-static_assert(offsetof(HarvestOrchard, _field64) == 0x64, "HarvestOrchard +0x64");
+static_assert(offsetof(HarvestOrchard, _field58) + offsetof(HarvestOrchard::SlotFlags, _size) == 0x60, "HarvestOrchard +0x60");
+static_assert(offsetof(HarvestOrchard, _field58) + offsetof(HarvestOrchard::SlotFlags, _capacity) == 0x64, "HarvestOrchard +0x64");

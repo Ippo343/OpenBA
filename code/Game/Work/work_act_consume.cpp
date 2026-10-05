@@ -114,7 +114,7 @@ static ConsumeProduceDescription* WCP_FindComponentDerived(ComponentDescription*
 // Array's count (+0x50) is the stack's size and currentAction (+0x60) its top.
 static void WCP_AppendInline(CharacterComponent* character, Action* ibpVal) {
     // FUN_1400032e0 == Collection::Array<Ptr8>::SetSize; it only touches the array
-    // header at +0x48..+0x58.
+    // header at +0x48..+0x58. B.3.2 bridge, LEFT (B4 H5): ActionStack's retail dtor 0x1400c5150 DeletePtr's every element and +0x10 before MemFree(+0x00); the tree's ActionStack has no dtor (CharacterComponent's implicit dtor releases nothing), so typing `actions` needs 0x1400c5150 ported as ~ActionStack in CharacterComponent (Component/) first.
     int cap = character->actionStack.count;                          // [RSI+0x8]
     if (cap == 0) {
         cap = 0x10;

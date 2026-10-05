@@ -26,7 +26,6 @@
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "object/Type.h"            // B3R: RtObject_Type_Serialize
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include <cstdio>
@@ -75,7 +74,7 @@
 //   0x1400bef70 SetupConsumeProduceWorkChain       WorkAct_ConsumeProduceCtor_bef70
 // Object::Internal ctor/dtor (IAT 0x140152768 / 0x140152770) and Work::Serialize
 // (0x1400f7400) are the real base classes. 0x1400032e0 / 0x1400021d0 are
-// GameColl::AsArray<T> member calls (ENDGAME B.3.2 step 2).
+// the field_58 / field_68 members' SetSize.
 
 // ============================================================
 // Constructor (0x1400e9340)
@@ -85,29 +84,14 @@
 // field_4c/field_54 (ints) are NOT initialized by retail's ctor.
 ConsumeProduce::ConsumeProduce()
     : Work(),
-      field_50(0),         // Type
-      field_58(nullptr),   // IBP DynArray data ptr
-      field_60(0),         // IBP DynArray count
-      field_64(0),         // IBP DynArray capacity
-      field_68(nullptr),   // int DynArray data ptr
-      field_70(0),         // int DynArray count
-      field_74(0) {        // int DynArray capacity
+      field_50(0) {        // Type; +0x58 / +0x68 are the two arrays' ctors
 }
 
 // BaseDtor 0x1400e9190. The stamps (ConsumeProduce, then Work) and the `~Internal`
 // tail call are the compiler's.
 ConsumeProduce::~ConsumeProduce() {
-    // Free the int DynArray at +0x68 (original uses 8-byte writes to zero count+capacity)
-    System::MemoryAllocator::MemFree(field_68);
-    field_68 = nullptr;
-    field_70 = 0;
-    field_74 = 0;
-
-    // Free the IBP DynArray at +0x58 (original uses 8-byte writes to zero count+capacity)
-    System::MemoryAllocator::MemFree(field_58);
-    field_58 = nullptr;
-    field_60 = 0;
-    field_64 = 0;
+    // The +0x68 int array, then the +0x58 IBP array: the members' ~Array (MemFree, then
+    // data / count / capacity zeroed) in reverse declaration order after this empty body.
 }
 
 // ============================================================
@@ -127,23 +111,22 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
     // --- Serialize IBP array count (+0x60) ---
     // Use a local copy like the original does (original serializes into a stack local,
     // not directly into self->field_60). This avoids issues if ResizeIBPArray
-    // modifies field_60 as a side-effect.
-    int ibpCount = field_60;
+    // modifies field_58._size as a side-effect.
+    int ibpCount = field_58._size;
     serializer.Serialize(ibpCount, nullptr);
 
     // If loading, resize the IBP array to match deserialized count.
-    // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
-    // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp).
+    // 0x1400032e0 == Collection::Array<InternalPtr>::SetSize (kSpec_PtrZero).
     if (isLoading) {
-        GameColl::AsArray<GameColl::Ptr8>((void*)&field_58).SetSize(ibpCount);
+        field_58.SetSize(ibpCount);
     }
 
     // Serialize each InternalBasePtr in the array
-    Object::InternalPtr<CitizenComponent>* ibpArray = field_58;
+    Object::InternalPtr<CitizenComponent>* ibpArray = field_58._data;
 #ifdef _DEBUG
     if (ibpCount > 0 && ibpArray == nullptr) {
-        printf("[ConsumeProduce::Serialize] BUG: ibpCount=%d but ibpArray=NULL! this=%p isLoading=%d field_58=%p field_60=%d\n",
-               ibpCount, (void*)this, (int)isLoading, (void*)field_58, field_60);
+        printf("[ConsumeProduce::Serialize] BUG: ibpCount=%d but ibpArray=NULL! this=%p isLoading=%d field_58=%p field_58._size=%d\n",
+               ibpCount, (void*)this, (int)isLoading, (void*)field_58._data, field_58._size);
     }
 #endif
     for (int i = 0; i < ibpCount; i++) {
@@ -175,21 +158,21 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
     }
 
     // --- Serialize int array count (+0x70) ---
-    int intCount = field_70;
+    int intCount = field_68._size;
     serializer.Serialize(intCount, nullptr);
 
     // If loading, resize the int array.
-    // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
-    // ConsumeProduceAction_Shutdown calls it at 1400e90ff). I32NoInit — a grown tail is
+    // 0x1400021d0 == Collection::Array<int32>::SetSize (retail
+    // ConsumeProduceAction_Shutdown calls it at 1400e90ff): a grown tail is
     // left as the allocation found it, like retail. Safe: the resize runs only when
     // loading and the bulk int read below writes all intCount elements from the stream.
     if (isLoading) {
-        GameColl::AsArray<GameColl::I32NoInit>((void*)&field_68).SetSize(intCount);
+        field_68.SetSize(intCount);
     }
 
     // Bulk-serialize the int array
     // Original: IO::Serializer::Serialize(serializer, count, intArrayPtr, name)
-    serializer.Serialize(intCount, field_68, nullptr);
+    serializer.Serialize(intCount, field_68._data, nullptr);
 
     // --- Serialize ConsumeProduce fields ---
     serializer.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: WORK:H8 kept (B11 -O2): typed bool, Execute's `field_48 == 0` (cmpb $0x0 / jne) becomes cmpb $0x1 / je, which reads a loaded byte > 1 differently; the field stays uint8_t
@@ -353,8 +336,8 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         }
 
         // --- Pick random empty output slot ---
-        uint32_t startSlot = gameWorld->m_random->Rand((uint32_t)field_60);
-        int totalSlots = field_60;
+        uint32_t startSlot = gameWorld->m_random->Rand((uint32_t)field_58._size);
+        int totalSlots = field_58._size;
         uint32_t slot = startSlot;
 
         if (totalSlots < 1) {
@@ -362,7 +345,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         }
 
         // Find an empty slot (field_58[slot] == 0)
-        Object::InternalPtr<CitizenComponent>* slotCitizens = field_58;
+        Object::InternalPtr<CitizenComponent>* slotCitizens = field_58._data;
         int attempts = 0;
         while (slotCitizens[slot] != nullptr) {
             slot++;
@@ -652,12 +635,12 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
         // --- Third pass: check assigned positions for validity ---
         // Retail 0x1400e7840 bounds BOTH position loops below by *(int*)(self+0x70) — the
         // status INT ARRAY's own count (param_1[0xe]) — not by the citizen-slot count at
-        // +0x60 (param_1[0xc]). The port used field_60: a workplace with more worker slots
+        // +0x60 (param_1[0xc]). The port used field_58._size: a workplace with more worker slots
         // than produce positions (e.g. 20 vs 18) then read and WROTE statusArray[18..19],
         // which is the next heap block's boundary tag (+1 then +2 in its high dword, the
         // "free-list link with wrong high bits" teardown crash in the 800x10 stress run,
         // caught 2026-09-04 by a hardware watchpoint: Execute wrote 1, OnComplete wrote 2).
-        int totalPositions = (int)field_70;  // number of output positions (= int array count)
+        int totalPositions = (int)field_68._size;  // number of output positions (= int array count)
         uint32_t firstFreePos = 0xffffffff;
         int firstFreeIndex = -1;
         uint32_t freeCount = 0;
@@ -677,7 +660,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
             int posCell = py * mapSize + px;
 
             // Check if position has status 2 but no structure (the cell's occupant, +0x08)
-            int* statusArray = field_68;
+            int* statusArray = field_68._data;
             MapCell* structBase = map->cells.GetData();
             if (statusArray[posIdx] == 2 &&
                 structBase[posCell].occupant == nullptr) {
@@ -882,19 +865,19 @@ int ConsumeProduce::OnComplete(CitizenComponent** /*param2*/, ComponentEntity** 
 
     // If bit 15 set, mark the int array slot as state 2 (completed)
     if ((param4 >> 15) & 1) {
-        int* intArray = field_68;
+        int* intArray = field_68._data;
         uint32_t intIdx = (param4 >> 8) & 0x7F;
         // TEARDOWN_WILD_WRITE.md: retail (0x1400e77c0) stores this 2 unbounded, and a
         // 4-mod-8 store of a 2 past a small int array is exactly the teardown damage.
         // Report an index past the array's own count BEFORE the faithful store below,
         // with everything needed to say how the index and the array came apart.
-        if ((int)intIdx >= field_70 || slotIdx >= (uint32_t)field_60) {
+        if ((int)intIdx >= field_68._size || slotIdx >= (uint32_t)field_58._size) {
             std::fprintf(stderr,
                 "[WILDWRITE] ConsumeProduce::OnComplete OUT OF RANGE: work=%p entity=%p "
                 "workId=%d param4=0x%x -> posIdx=%u (count %d, cap %d, array %p) "
                 "slotIdx=%u (count %d)\n",
                 (void*)this, field_10.Get(), field_20, param4, intIdx,
-                field_70, field_74, (void*)intArray, slotIdx, field_60);
+                field_68._size, field_68._capacity, (void*)intArray, slotIdx, field_58._size);
             RedzoneAlloc_PrintBacktrace("ConsumeProduce::OnComplete");
         }
         intArray[intIdx] = 2;
@@ -928,10 +911,10 @@ int ConsumeProduce::OnCancel(CitizenComponent** param2, ComponentEntity** param3
 // Iterates assigned citizens in the IBP array, clears their task state.
 // ============================================================
 int ConsumeProduce::Cleanup() {
-    int count = field_60;
+    int count = field_58._size;
     if (count <= 0) return 0;
 
-    Object::InternalPtr<CitizenComponent>* ibpArray = field_58;
+    Object::InternalPtr<CitizenComponent>* ibpArray = field_58._data;
 
     for (int i = 0; i < count; i++) {
         if (ibpArray[i] == nullptr) continue;
@@ -951,13 +934,13 @@ int ConsumeProduce::Cleanup() {
 // Returns: 1 = all valid, 0 = some invalid (with cleanup).
 // ============================================================
 int ConsumeProduce::Validate() {
-    int count = field_60;
+    int count = field_58._size;
     if (count <= 0) {
         // No assigned citizens -- return valid
         return 1;
     }
 
-    Object::InternalPtr<CitizenComponent>* ibpArray = field_58;
+    Object::InternalPtr<CitizenComponent>* ibpArray = field_58._data;
     bool allValid = true;
     int validCount = 0;
     int* tempTypes = nullptr;  // dynamic array of type IDs per valid citizen
@@ -1016,8 +999,8 @@ int ConsumeProduce::Validate() {
 
     // If some citizens were invalidated, update the int array state
     if (!allValid) {
-        int* intArray = field_68;
-        int intCount = field_70;
+        int* intArray = field_68._data;
+        int intCount = field_68._size;
         for (int k = 0; k < intCount; k++) {
             // Check if this slot's type is still present in valid citizens
             bool found = false;
@@ -1063,7 +1046,7 @@ Profession** ConsumeProduce::GetTarget(Profession** retbuf) {
 // body ClearStorage also uses: tree count at +0x60, not the +0x50 the generic
 // Work_Slot11_HasActiveTasks reads). Was pinned to 0 by Work_SlotRet0 (2026-09-05).
 int ConsumeProduce::GetPriority() {
-    return field_60 > 0 ? 1 : 0;
+    return field_58._size > 0 ? 1 : 0;
 }
 
 // Slot12 (+0x60) — retail 0x1400e9010, this class's own `RET 0` (every other Work

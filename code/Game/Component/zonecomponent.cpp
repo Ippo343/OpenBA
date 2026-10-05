@@ -14,7 +14,6 @@
 //
 
 #include "Component/ZoneComponent.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include <cstdint>
@@ -99,10 +98,10 @@ void CitizenBehavior::AddZoneEntity(Object::InternalPtr<ComponentEntity>* entity
         System::MemoryAllocator::MemFree(nullptr);
     }
 
-    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
+    // FUN_140003110 is Collection::Array<void*>::SetSize(n, fill): the bucket's own
+    // typed Array (+0x08, CitizenPtrList over kSpec_PtrZero).
     if (found)
-        GameColl::AsArray<GameColl::Ptr8>(&found->element.entities._data)   // the bucket's Array (+0x08)
-            .SetSizeFill(found->element.entities._size + 1, entityPtr);
+        found->element.entities.SetSizeFill(found->element.entities._size + 1, entityPtr);
 }
 
 // ============================================================================

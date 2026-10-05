@@ -336,7 +336,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
             // +0x60 = LIVE WORKER COUNT (capacity is WorkComponent+0x30, never read
             // here). The `== 0` skip is what makes this allocator a rebalancer only:
             // an unstaffed workplace is invisible to it. Faithful to retail.
-            int rosterCount = wpComp->workerCount;   // +0x60
+            int rosterCount = wpComp->workers._size;   // +0x60
             if (rosterCount == 0) continue;
             NeedEntry e;
             e.workplaceComp = wpComp;

@@ -21,7 +21,6 @@
 // HerbalistComponent's slot 18. The real HerbalistWork ctor is elsewhere. Same
 // class of misnomer as "HerbalistComponent_Slot13" (which is really the shared base's).
 
-#include "Component/coll_bridge.h"
 #include "Component/ConsumeProduceDescription.h"
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"
@@ -105,15 +104,15 @@ W* AllocWork(int size) {
         if (pos) {
             const int n0 = InteractNodeCount(pos, 0);
             const int n2 = InteractNodeCount(pos, 2);
-            // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
-            // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). I32NoInit:
-            // 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop right below
-            // (retail 1400eaba0) writes all the spot slots before any is read.
-            GameColl::AsArray<GameColl::Ptr8>(&work->citizenRefs).SetSize(n0);
-            GameColl::AsArray<GameColl::I32NoInit>(&work->spotStates).SetSize(n2);
+            // 0x1400032e0 is citizenRefs.SetSize, 0x1400021d0 is spotStates.SetSize
+            // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). 0x1400021d0
+            // leaves a grown tail as-found. Safe — the zero loop right below (retail
+            // 1400eaba0) writes all the spot slots before any is read.
+            work->citizenRefs.SetSize(n0);
+            work->spotStates.SetSize(n2);
             // Zero the kind-2 slot array the ctor allocates (retail's trailing loop).
-            const int cnt = work->spotCount;
-            int32_t* slots = work->spotStates;
+            const int cnt = work->spotStates._size;
+            int32_t* slots = work->spotStates._data;
             if (slots) for (int i = 0; i < cnt; ++i) slots[i] = 0;
         }
     }
@@ -278,26 +277,21 @@ static ConsumeProduce* ConsumeProduceAction_Ctor(ConsumeProduce* work, Component
     work->field_4c = 0;
     work->field_50 = productIdx ? *productIdx : 0;
     work->field_54 = second;
-    work->field_58 = nullptr;
-    work->field_60 = 0;
-    work->field_64 = 0;
-    work->field_68 = nullptr;
-    work->field_70 = 0;
-    work->field_74 = 0;
+    // +0x58..+0x74: the two arrays' ctors (the four qword stores of 0x1400e9200).
 
     {
         InteractComponent* pos = (*entity)->FindComponent<InteractComponent>();   // 0x140002ed0
         if (pos) {
             const int n0 = InteractNodeCount(pos, 0);
             const int n2 = InteractNodeCount(pos, 2);
-            // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
-            // (retail ConsumeProduceAction_Ctor calls them at 1400e92d8 / 1400e92e3).
-            // I32NoInit: 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop
-            // right below (retail 1400e9300) writes all the slots before any is read.
-            GameColl::AsArray<GameColl::Ptr8>(&work->field_58).SetSize(n0);
-            GameColl::AsArray<GameColl::I32NoInit>(&work->field_68).SetSize(n2);
-            const int cnt = work->field_70;
-            int32_t* slots = work->field_68;
+            // 0x1400032e0 is field_58.SetSize, 0x1400021d0 is field_68.SetSize (retail
+            // ConsumeProduceAction_Ctor calls them at 1400e92d8 / 1400e92e3). 0x1400021d0
+            // leaves a grown tail as-found. Safe — the zero loop right below (retail
+            // 1400e9300) writes all the slots before any is read.
+            work->field_58.SetSize(n0);
+            work->field_68.SetSize(n2);
+            const int cnt = work->field_68._size;
+            int32_t* slots = work->field_68._data;
             if (slots) for (int i = 0; i < cnt; ++i) slots[i] = 0;
         }
     }

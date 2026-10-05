@@ -13,7 +13,6 @@
 
 #include "Component/interactcomponent_funcs.h"
 #include "Component/MultiObjectComponent.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -75,9 +74,8 @@
 // pasture masters).
 
 // 0x140123480: Component() is the CALL 0x1401188b0; the 0x1401638b0 stamp is
-// the compiler's; +0x28 = +0x30 = 0; flags |= 1 (0x81).
-InteractComponent::InteractComponent()
-    : useLocations(nullptr), useLocationCount(0), useLocationCapacity(0) {
+// the compiler's; +0x28 = +0x30 = 0 (the inlined Array ctor); flags |= 1 (0x81).
+InteractComponent::InteractComponent() {
     OrFlagsInCtor(0x1);
 }
 
@@ -89,7 +87,7 @@ void InteractComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // Serialize count
-    int32_t count = useLocationCount;
+    int32_t count = useLocations._size;
     ser.Serialize(count, nullptr);
 
     // "Am I loading?" is the STREAM's direction (IO::Serializer::GetDirection, retail
@@ -99,12 +97,12 @@ void InteractComponent::Persist(IO::Stream& stream) {
     // load, so the array at +0x28 stayed NULL while `count` came back non-zero from
     // the stream, and the element loop dereferenced null.
     if (static_cast<int>(ser.GetDirection()) == 0) {
-        // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-        GameColl::AsArray<GameColl::Ptr8>(&useLocations).SetSize(count);
+        // exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n) (kSpec_PtrZero).
+        useLocations.SetSize(count);
     }
 
     // Serialize each InternalBasePtr element and validate
-    Object::InternalPtr<InteractComponent>* arrayBase = useLocations;
+    Object::InternalPtr<InteractComponent>* arrayBase = useLocations._data;
     for (int i = 0; i < count; i++) {
         arrayBase[i].InternalBasePtr::Serialize(ser);
 
@@ -124,10 +122,10 @@ void InteractComponent::OnAdded() {
     if (multi == nullptr) return;
 
     // Clear the existing use-location array
-    System::MemoryAllocator::MemFree(useLocations);
-    useLocations = nullptr;
-    useLocationCount = 0;
-    useLocationCapacity = 0;
+    System::MemoryAllocator::MemFree(useLocations._data);
+    useLocations._data = nullptr;
+    useLocations._size = 0;
+    useLocations._capacity = 0;
 
     int childCount = multi->children._size;
     for (int ci = 0; ci < childCount; ci++) {
@@ -138,19 +136,19 @@ void InteractComponent::OnAdded() {
 
         if (interact != nullptr) {
             // Append interact to the use-location array at +0x28 (count +0x30, cap +0x34)
-            uint32_t oldCount = (uint32_t)useLocationCount;
+            uint32_t oldCount = (uint32_t)useLocations._size;
             uint32_t newCount = oldCount + 1;
             if (newCount != oldCount) {
-                Object::InternalPtr<InteractComponent>* oldBuf = useLocations;
-                useLocationCount = (int32_t)newCount;
-                if (useLocationCapacity < (int)newCount) {
-                    useLocationCapacity = (int32_t)newCount;
-                    if (oldCount != 0) useLocationCapacity = (int32_t)(newCount * 3);
-                    useLocations = static_cast<Object::InternalPtr<InteractComponent>*>(
-                        System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)useLocationCapacity << 3), 8));
+                Object::InternalPtr<InteractComponent>* oldBuf = useLocations._data;
+                useLocations._size = (int32_t)newCount;
+                if (useLocations._capacity < (int)newCount) {
+                    useLocations._capacity = (int32_t)newCount;
+                    if (oldCount != 0) useLocations._capacity = (int32_t)(newCount * 3);
+                    useLocations._data = static_cast<Object::InternalPtr<InteractComponent>*>(
+                        System::MemoryAllocator::MemAlloc((uint64_t)((int64_t)useLocations._capacity << 3), 8));
                 }
-                int start = (oldBuf == useLocations) ? (int)oldCount : 0;
-                Object::InternalPtr<InteractComponent>* nbArr = useLocations;
+                int start = (oldBuf == useLocations._data) ? (int)oldCount : 0;
+                Object::InternalPtr<InteractComponent>* nbArr = useLocations._data;
                 Object::InternalPtr<InteractComponent>* oldArr = oldBuf;
                 for (int i = start; i < (int)newCount; i++) {
                     Object::InternalPtr<InteractComponent>* dst = nbArr + i;
@@ -159,7 +157,7 @@ void InteractComponent::OnAdded() {
                         *dst = (i < (int)oldCount) ? oldArr[i] : interact;
                     }
                 }
-                if (oldBuf != useLocations) System::MemoryAllocator::MemFree(oldBuf);
+                if (oldBuf != useLocations._data) System::MemoryAllocator::MemFree(oldBuf);
             }
         }
     }

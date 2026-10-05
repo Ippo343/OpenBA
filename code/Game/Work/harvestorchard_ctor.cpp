@@ -27,7 +27,6 @@
 #include "harvestorchard_funcs.h"
 #include <new>
 #include "object/TypeInfo.h"
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include "Component/OrchardComponent.h"
@@ -35,10 +34,8 @@
 
 namespace {
 // 0x140005440 is WorkAcc_FindComponent_5440 (Work/exe_bodies.h), called by name (B3R).
-// 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
-// monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
-// GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
-// is gone.
+// 0x14000a590 (Array<bool>::SetSize) is the exe-side Collection::Array<T>
+// monomorphisation: `_field58.SetSize` below.
 // ENDGAME B.3.8: the file-level lazy Resolve() is gone (B38 D7) — Work_Ctor25 is the
 // base ctor Work(void*), the two stamps are the compiler's (the old AutoPickupWork
 // stamp read 0x140161380, an RTTI descriptor, and was always skipped), and the finder
@@ -50,10 +47,8 @@ extern "C" void OrchardDiag_NoteHarvestConstructed();
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
 HarvestOrchard::HarvestOrchard(ComponentEntity* const* entityIBP) : AutoPickupWork(entityIBP) {
-    // +0x48 / +0x50: the `_cells` member's ctor zeroes the set (retail 0x1400ee060, under its EH state).
-    _field58 = nullptr;   // byte-array base
-    _field60 = 0;         // count (+0x60) + capacity (+0x64): one qword store in retail
-    _field64 = 0;
+    // +0x48 / +0x50: the `_cells` member's ctor zeroes the set, then `_field58`'s ctor
+    // zeroes +0x58 / +0x60 (retail 0x1400ee0ae..0x1400ee0b8, under its EH state).
 
     // The entity's OrchardComponent (0x140005440)
     OrchardComponent* orchard = field_10->FindComponent<OrchardComponent>();
@@ -62,15 +57,16 @@ HarvestOrchard::HarvestOrchard(ComponentEntity* const* entityIBP) : AutoPickupWo
                                       // orchard, so this can only fire if our caller is
                                       // wrong. Same guard plantorchard_ctor.cpp carries.
 
-    // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
-    GameColl::AsArray<GameColl::U8>(&_field58).SetSize(orchard->slotCount);
+    // 0x14000a590 == Collection::Array<bool>::SetSize (no tail write: every slot is
+    // written by the loop below).
+    _field58.SetSize(orchard->slotCount);
 
     // One byte per orchard slot: 1 = there is a tree here to pick, 0 = hole. Retail
     // re-runs CheckPtr on the orchard IBP every iteration and loops on the WORK item's
     // own count (+0x60) — the value the resize just produced — not the component's.
-    const int n = _field60;
+    const int n = _field58._size;
     for (int i = 0; i < n; ++i) {
-        bool* base = _field58;
+        bool* base = _field58._data;
         if (!base) break;
         OrchardSlot* slots = orchard->slots;
         base[i] = (slots && slots[i].tree != nullptr) ? 1 : 0;

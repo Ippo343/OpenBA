@@ -67,7 +67,11 @@ void WorldGeometry::RemoveDecal(int decalId) {
     if (slot->slot == decalId) {   // +0x28 id
         slot->slot = -1;           // +0x28 = 0xffffffff
         slot->material = nullptr;  // +0x00 qword
-        // B.3.2 bridge: exe 0x14001ee40 / 0x14001c890 ARE
+        // B.3.2 bridge, LEFT (B4 H5): the owner is GeometryBatch (Game/WorldGeometryElements.h,
+        // not this set's), an element of WorldGeometry::_decals / roads whose hand rows
+        // (resize 0x14001f250, copy 0x14001f5e0, destroy 0x14001fb80) build and free
+        // vertices / indices per element: the batch row must be typed with them first.
+        // exe 0x14001ee40 / 0x14001c890 ARE
         // Collection::Array<T>::SetSize(0) — see the note above the (removed)
         // typedefs for why the init-policy mismatch never fires at count 0.
         GameColl::AsArray<GameColl::Bytes<0x14, 2>>(&slot->vertices).SetSize(0);   // +0x08

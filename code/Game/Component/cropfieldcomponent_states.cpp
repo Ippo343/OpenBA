@@ -62,7 +62,6 @@
 
 #include "Component/controller_state_table.h"
 #include "Component/CropFieldComponent.h"
-#include "Component/coll_bridge.h"
 #include "Work/PlantArea.h"        // ENDGAME B.3.8 MI-B: the real Work classes
 #include "Work/HarvestArea.h"
 #include "Work/TendArea.h"
@@ -181,15 +180,16 @@ Description* FindInDescList(ComponentDescription* list, uint32_t tid) {
 
 // The per-slot byte array Plant/Harvest carry at +0x58: sized to the crop field's slot
 // count and filled with 1s.
-void CF_FillPerSlotArray(void* arrayHeader, ComponentEntity* entity) {
+// The array is PlantArea::field_58 / HarvestArea::_field58 (both Collection::Array<bool>;
+// exe 0x14000a590 IS its SetSize(n), which leaves the new tail as found: the loop writes
+// every byte, 0x1400f4734..0x1400f4751).
+void CF_FillPerSlotArray(Collection::Array<bool>* arr, ComponentEntity* entity) {
     CropFieldComponent* crop = entity->FindComponent<CropFieldComponent>();   // 0x140005380
     if (!crop) return;
-    // B.3.2 bridge: exe 0x14000a590 IS Collection::Array<uint8>::SetSize(n).
-    Collection::Array<GameColl::U8>& arr = GameColl::AsArray<GameColl::U8>(arrayHeader);
-    arr.SetSize(crop->slots.count);
-    const int n = arr.GetSize();
-    GameColl::U8* bytes = arr.GetData();
-    if (bytes) for (int i = 0; i < n; ++i) bytes[i].v = 1;
+    arr->SetSize(crop->slots.count);
+    const int n = arr->GetSize();
+    bool* bytes = arr->GetData();
+    if (bytes) for (int i = 0; i < n; ++i) bytes[i] = 1;
 }
 
 Work* CF_MakePlantArea(CropFieldComponent* comp) {
@@ -201,9 +201,7 @@ Work* CF_MakePlantArea(CropFieldComponent* comp) {
     work->InitFromEntity(&entity);
     work->_cells._root = nullptr;
     work->_cells._count = 0;
-    work->field_58 = nullptr;
-    work->field_60 = 0;
-    work->_pad64[0] = work->_pad64[1] = work->_pad64[2] = work->_pad64[3] = 0;
+    // +0x58 / +0x60: the `field_58` member's ctor (0x1400f46a0's two qword stores).
     work->field_68 = comp->cropDescription;
     CF_FillPerSlotArray(&work->field_58, work->field_10.Get());
     return work;
@@ -218,9 +216,7 @@ Work* CF_MakeHarvestArea(CropFieldComponent* comp) {
     work->InitFromEntity(&entity);
     work->_cells._root = nullptr;
     work->_cells._count = 0;
-    work->_field58 = nullptr;
-    work->_field60 = 0;
-    work->_field64 = 0;
+    // +0x58 / +0x60: the `_field58` member's ctor (0x1400ed4c0's two qword stores).
     CF_FillPerSlotArray(&work->_field58, work->field_10.Get());
     return work;
 }

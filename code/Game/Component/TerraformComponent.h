@@ -11,7 +11,8 @@
 //   ctor   0x140057620: Component ctor, stamp 0x14015a880, +0x28/+0x30/+0x38/
 //                       +0x40 = 0, flags |= 3 (0x83)
 //   dtor   0x1400575b0: MemFree(+0x38), +0x38 = +0x40 = 0, MemFree(+0x28),
-//                       +0x28 = +0x30 = 0, restamp, ~Internal
+//                       +0x28 = +0x30 = 0, restamp, ~Internal: ~tileRecord then
+//                       ~heightRecord (reverse declaration order), both inlined ~Array
 //   table  0x14015a880, 16 slots:
 //     [0]  0x14000ce90 scalar deleting dtor  [1]/[2] TypeName/Type
 //     [3]  0x140057500 Persist (the undo record)
@@ -27,6 +28,7 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 #include "math/Math.h"   // Math::Vector3
+#include "collection/Collection.h"   // Collection::Array (the two undo records)
 
 class TerraformComponent final : public Component {
     DECLARE_EXE_TYPE(TerraformComponent)
@@ -34,8 +36,8 @@ class TerraformComponent final : public Component {
 public:
     TerraformComponent();                                         // 0x140057620
 
-    // PORT GAP (retail 0x1400575b0) — B38 D2: retail frees both undo arrays; the
-    // tree never did (Inert_ScalarDtor). Kept as the tree's.
+    // 0x1400575b0: the body is empty; ~tileRecord (+0x38) then ~heightRecord (+0x28)
+    // free and zero the two undo arrays in retail's order (reverse declaration order).
     ~TerraformComponent() override = default;                     // [0]  0x14000ce90
     void Persist(IO::Stream& stream) override;                          // [3]  0x140057500
     void OnAdded() override;                                      // [6]  0x1400574f0 own RET
@@ -46,19 +48,17 @@ public:
     void ApplyFootprint();                                        // 0x140057120 footprint cells type 10 -> 6
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    Math::Vector3* heightRecord; // +0x28 Array<Vector3> of original terrain points (freed by the retail dtor)
-    int32_t  heightCount;  // +0x30
-    int32_t  heightCap;    // +0x34
-    int32_t* tileRecord;   // +0x38 Array<int> of retyped map cell indices (freed by the retail dtor)
-    int32_t  tileCount;    // +0x40
-    int32_t  tileCap;      // +0x44
+    // Math::Vector3's ctor zeroes (0x180015070): the load resize 0x14000d030 zeroes its
+    // new tail, as the stride-12 row the bridge bound did.
+    Collection::Array<Math::Vector3> heightRecord; // +0x28 original terrain points (count +0x30, capacity +0x34)
+    Collection::Array<int32_t>       tileRecord;   // +0x38 retyped map cell indices (count +0x40, capacity +0x44)
 };
 
 static_assert(sizeof(TerraformComponent) == 0x48, "TerraformComponent is 0x48 (create 0x14000cc90)");
 static_assert(alignof(TerraformComponent) == 8, "TerraformComponent alignment");
 static_assert(offsetof(TerraformComponent, heightRecord) == 0x28, "");
-static_assert(offsetof(TerraformComponent, heightCount) == 0x30, "");
-static_assert(offsetof(TerraformComponent, heightCap) == 0x34, "");
+static_assert(offsetof(TerraformComponent, heightRecord) + offsetof(Collection::Array<Math::Vector3>, _size) == 0x30, "");
+static_assert(offsetof(TerraformComponent, heightRecord) + offsetof(Collection::Array<Math::Vector3>, _capacity) == 0x34, "");
 static_assert(offsetof(TerraformComponent, tileRecord) == 0x38, "");
-static_assert(offsetof(TerraformComponent, tileCount) == 0x40, "");
-static_assert(offsetof(TerraformComponent, tileCap) == 0x44, "");
+static_assert(offsetof(TerraformComponent, tileRecord) + offsetof(Collection::Array<int32_t>, _size) == 0x40, "");
+static_assert(offsetof(TerraformComponent, tileRecord) + offsetof(Collection::Array<int32_t>, _capacity) == 0x44, "");

@@ -12,7 +12,8 @@
 //   ctor 0x14012f2e0: Component ctor; member at +0x28 (0x14015f070, 0x140164ce0),
 //     back-pointer +0x40; +0x48 = 0; `MOV byte [RBX+0x50],1`; +0x58 = +0x60 = 0;
 //     `_flags |= 2`.
-//   dtor 0x14012f270: MemFree(+0x58), +0x58 = +0x60 = 0 (the roster), restamps,
+//   dtor 0x14012f270: MemFree(+0x58), +0x58 = +0x60 = 0 (the roster: ~workers, before
+//     ~_controller in reverse declaration order), restamps,
 //     ~Internal. [0] 0x14003a220 = dtor + MemFree on &1.
 //   table 0x140164d30, 18 slots: [3] 0x14012f120 Persist, [7] 0x14012f090 OnRemove,
 //     [16] 0x140003730 `XOR EAX,EAX` (default state 0), [17] 0x140004080
@@ -31,8 +32,8 @@
 //   +0x58 Collection::Array<InternalPtr<CitizenComponent>> the worker roster:
 //         data +0x58, count +0x60, capacity +0x64 (Persist: count via
 //         Serialize(int&), SetSize 0x1400032e0, each element
-//         InternalBasePtr::Serialize + IsDerivedFrom CitizenComponent). Raw
-//         members (B.4 H5: the tree's dtor frees the data by hand, as retail's).
+//         InternalBasePtr::Serialize + IsDerivedFrom CitizenComponent). A real
+//         Array member over kSpec_PtrZero (B.4 H5): ~workers is the dtor's free.
 // ============================================================================
 
 #include <cstdint>
@@ -40,6 +41,13 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (workers)
+#include "object/Internal.h"         // Object::InternalPtr<T>
+
+// The roster grows through retail's stride-8 rows (0x1400032e0 / 0x140003110: stride
+// 8, align 8, the new tail ZEROED, no element destroy) and is freed by the inlined
+// ~Array (dtor 0x14012f290..0x14012f2a0): kSpec_PtrZero (Entity/EntityList.h).
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 struct WPCCtrlTag { using Owner = class WorkPlaceComponent; };   // the handlers' receiver (controller_state_table.h)
 class Profession;         // Game/Profession.h
@@ -88,9 +96,9 @@ public:
     Profession* profession;        // +0x48 ExternalPtr<Profession>
     bool     isAccepting;          // +0x50 1 from the ctor (Serialize bool&)
     uint8_t  _pad51[7];            // +0x51
-    Object::InternalPtr<CitizenComponent>* workers;   // +0x58 roster Array data
-    int32_t  workerCount;          // +0x60 roster Array count
-    int32_t  workerCapacity;       // +0x64 roster Array capacity
+    using WorkerList = Collection::Array<Object::InternalPtr<CitizenComponent>, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    WorkerList workers;            // +0x58 the roster (count +0x60, capacity +0x64)
 };
 
 static_assert(sizeof(WorkPlaceComponent) == 0x68, "WorkPlaceComponent is 0x68 (create 0x14003a030)");
@@ -103,5 +111,5 @@ static_assert(offsetof(WorkPlaceComponent, profession) == 0x48, "WorkPlaceCompon
 static_assert(offsetof(WorkPlaceComponent, isAccepting) == 0x50, "WorkPlaceComponent +0x50 (ctor 0x14012f344)");
 static_assert(offsetof(WorkPlaceComponent, _pad51) == 0x51, "WorkPlaceComponent +0x51 padding");
 static_assert(offsetof(WorkPlaceComponent, workers) == 0x58, "WorkPlaceComponent roster data @ +0x58");
-static_assert(offsetof(WorkPlaceComponent, workerCount) == 0x60, "WorkPlaceComponent roster count @ +0x60");
-static_assert(offsetof(WorkPlaceComponent, workerCapacity) == 0x64, "WorkPlaceComponent roster capacity @ +0x64");
+static_assert(offsetof(WorkPlaceComponent, workers) + offsetof(WorkPlaceComponent::WorkerList, _size) == 0x60, "WorkPlaceComponent roster count @ +0x60");
+static_assert(offsetof(WorkPlaceComponent, workers) + offsetof(WorkPlaceComponent::WorkerList, _capacity) == 0x64, "WorkPlaceComponent roster capacity @ +0x64");

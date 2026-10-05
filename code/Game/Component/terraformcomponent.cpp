@@ -11,7 +11,6 @@
 
 #include "Component/terraformcomponent_funcs.h"
 #include "Component/TerraformDescription.h"
-#include "Component/coll_bridge.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
@@ -270,7 +269,7 @@ void TerraformComponent::ApplyMesh(bool ceiling) {
         ++applied;
 
         if (ceiling) {
-            TerraformArrayPush(heightRecord, heightCount, heightCap, original);
+            TerraformArrayPush(heightRecord._data, heightRecord._size, heightRecord._capacity, original);
         }
     }
 
@@ -307,7 +306,7 @@ void TerraformComponent::ApplyFootprint() {
                 idx % map->size, idx / map->size);   // 0x1400a8c90 (Pf_FineCellDirty_a8c90's body)
             // 0x1400a6fe0 reads the cell and the type (EDX, R8D) only.
             map->pathfinder->SetCellTerrain(idx, 6);   // 0x1400a6fe0 (Pf_EnqueueCmd2_a6fe0's body)
-            TerraformArrayPush(tileRecord, tileCount, tileCap, static_cast<int32_t>(idx));
+            TerraformArrayPush(tileRecord._data, tileRecord._size, tileRecord._capacity, static_cast<int32_t>(idx));
             ++converted;
         }
     }
@@ -328,10 +327,9 @@ void TerraformComponent::ApplyFootprint() {
 #include "Object/factory_registration.h"
 
 // 0x140057620: Component() is the CALL 0x1401188b0; the 0x14015a880 stamp is
-// the compiler's; +0x28/+0x30/+0x38/+0x40 = 0; flags |= 3 (0x83).
-TerraformComponent::TerraformComponent()
-    : heightRecord(nullptr), heightCount(0), heightCap(0),
-      tileRecord(nullptr), tileCount(0), tileCap(0) {
+// the compiler's; +0x28/+0x30/+0x38/+0x40 = 0 (the two inlined Array ctors);
+// flags |= 3 (0x83).
+TerraformComponent::TerraformComponent() {
     OrFlagsInCtor(0x3);
 }
 
@@ -344,17 +342,17 @@ void TerraformComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // The undo record's count
-    int localCount = heightCount;
+    int localCount = heightRecord._size;
     ser.Serialize(localCount, nullptr);
 
     // If loading, resize the Vector3 array
-    // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
+    // FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
     if (static_cast<int>(stream.GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        GameColl::AsArray<GameColl::Vec3>(&heightRecord).SetSize(localCount);
+        heightRecord.SetSize(localCount);
     }
 
     // Serialize each Vector3
-    Math::Vector3* vec = heightRecord;
+    Math::Vector3* vec = heightRecord._data;
     if (localCount > 0) {
         for (uint32_t i = 0; i < static_cast<uint32_t>(localCount); i++) {
             vec->Serialize(ser);
@@ -383,7 +381,7 @@ void TerraformComponent::OnRemove() {
 
     // Phase 1: Apply Vector3 terrain heights
     WorldGeometry* terrain = gameWorld->m_worldGeometry;
-    int vecCount = heightCount;
+    int vecCount = heightRecord._size;
 
     if (vecCount > 0 && terrain) {
         float halfSize = (float)(terrain->_gridSize >> 1);
@@ -408,7 +406,7 @@ void TerraformComponent::OnRemove() {
 
     // Phase 2: Update tile types from the recorded cell indices
     Map* map = gameWorld->m_game;
-    int count = tileCount;
+    int count = tileRecord._size;
 
     if (count > 0 && map) {
         int gridWidth = map->size;

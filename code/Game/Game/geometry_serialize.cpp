@@ -291,13 +291,13 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     // ---- Step 11: version 4+: the batch counters at +0x220 (stride 4). ----
     // Original at 0x1400b0a55 calls slot 0x140151278: Serialize(int count, int* data, name).
     if (version >= 4) {
-        RawArray<int32_t>& counters = _batchCounters;
-        int32_t c = counters.size;
+        Collection::Array<int32_t>& counters = _batchCounters;
+        int32_t c = counters._size;
         serializer.Serialize(c, nullptr);
         if (IsLoading(serializer)) {
             Reimpl_Array_Resize_Stride04(&counters, c);
         }
-        if (counters.data) serializer.Serialize(c, counters.data, nullptr);
+        if (counters._data) serializer.Serialize(c, counters._data, nullptr);
     }
 
     // ---- Step 12: version < 5, on load: backfill +0x210 from the road batches. ----
@@ -321,7 +321,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         UploadHeightImage();   // 0x1400ac780
 
         int32_t materialCount = _batchMaterials.size;
-        int32_t counterCount  = _batchCounters.size;
+        int32_t counterCount  = _batchCounters._size;
         if (materialCount != counterCount) {
             Reimpl_Array_Resize_Stride08(&_batchMaterials, counterCount);
         }

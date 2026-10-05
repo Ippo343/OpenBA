@@ -174,19 +174,19 @@ int SeatViaPanel(PlayerToolManager* entityUI, ComponentEntity* ent, WorkPlaceCom
             // touches it, so removing those guards can only be called measured if this
             // runs. The seat loop below immediately refills the seat.
             static const int unseat = EnvOnValue(Opt().autoStaffUnseat) ? 1 : 0;
-            if (unseat && wpc->workerCount > 0) {                    // +0x60
-                const int b = wpc->workerCount;
+            if (unseat && wpc->workers._size > 0) {                    // +0x60
+                const int b = wpc->workers._size;
                 wpUi->OnElementEvent(nullptr, 0x12, 0x1451, 0, 0, 0, nullptr);
                 std::fprintf(stderr, "[AutoStaff] UNSEAT click: roster %d -> %d\n",
-                             b, wpc->workerCount);
+                             b, wpc->workers._size);
                 std::fflush(stderr);
                 ++want;   // refill the seat we just freed
             }
             for (int i = 0; i < want; ++i) {
-                const int before = wpc->workerCount;                  // +0x60
+                const int before = wpc->workers._size;                  // +0x60
                 // msg 0x12 = button command, id 0x1450 = workerCountUp.
                 wpUi->OnElementEvent(nullptr, 0x12, 0x1450, 0, 0, 0, nullptr);
-                const int after = wpc->workerCount;
+                const int after = wpc->workers._size;
                 if (after <= before) break;      // nobody left to seat — stop asking
                 gained += after - before;
             }
@@ -225,7 +225,7 @@ extern "C" void PanelStaffingDriver_Tick(PlayerToolManager* entityUI, int frameN
         // The profession pointer is the key and is printed as one.
         const uint64_t key    = reinterpret_cast<uint64_t>(wpc->profession);  // +0x48  // CAST-OK: ptr_int
         const int      accept = wpc->isAccepting;                // +0x50
-        const int      roster = wpc->workerCount;                // +0x60
+        const int      roster = wpc->workers._size;                // +0x60
         // Found by exact type id.
         WorkComponent* wcP = static_cast<WorkComponent*>(FindComp(ent, tidWc));
         // Capacity is filled lazily by FindAvailableBuilding / the citizen finder, so a
@@ -247,7 +247,7 @@ extern "C" void PanelStaffingDriver_Tick(PlayerToolManager* entityUI, int frameN
         const int iconBefore = IconMask(ent);
         const int gained = SeatViaPanel(entityUI, ent, wpc, cap - roster);
         const int iconAfter  = IconMask(ent);
-        const int rosterNow  = wpc->workerCount;                 // +0x60
+        const int rosterNow  = wpc->workers._size;                 // +0x60
         if (gained > 0 || s_trace)
             std::fprintf(stderr, "[AutoStaff] frame %d: ent=%p key=0x%llx roster %d -> %d "
                          "(cap %d) icon 0x%x -> 0x%x%s%s\n", frameNum, static_cast<void*>(ent),
