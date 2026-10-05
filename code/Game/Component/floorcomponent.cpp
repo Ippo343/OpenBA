@@ -108,9 +108,9 @@
     // save/load-wave mid-function address sweep, 2026-08-28).
 
 // Reimpl of FUN_140004680 (FindComponentByType on owner+0x30 array; returns IBP wrapping found component)
-void* FloorComponent_FindResData(void* owner, void* outIBP) {
-    return new (outIBP) ::Object::InternalPtr<MapComponent>(
-        reinterpret_cast<ComponentEntity*>(owner)->FindComponent<MapComponent>());   // LEFT: SIG FloorComponent_FindResData (B4 FORWARD, callers in other blocks' files)
+MapComponent** FloorComponent_FindResData(ComponentEntity* owner, MapComponent** outIBP) {
+    *outIBP = owner->FindComponent<MapComponent>();   // the InternalPtr<MapComponent> slot: one store
+    return outIBP;
 }
 
 // Map::RemoveFloor — FUN_14009cba0: decrement the per-cell floor counter (cell +0x2d)

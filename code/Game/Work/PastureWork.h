@@ -38,7 +38,7 @@ class PastureWork final : public AutoPickupWork {
 
 public:
     PastureWork();                                                  // (Work_GenericCtor shape)
-    explicit PastureWork(void* entityIBP);                          // 0x1400f2d80
+    explicit PastureWork(ComponentEntity* const* entityIBP);                          // 0x1400f2d80
 
     // 0x1400f2ce0: the +0x48 citizen Set's ~Set (its Clear), then the base stamps
     ~PastureWork() override;                                        // [0]  0x14002bf70

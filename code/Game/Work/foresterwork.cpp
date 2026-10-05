@@ -115,8 +115,8 @@ bool ForesterWork_ExecuteReady() {
 
 // extern "C" wrapper so the force harness can drive ForesterWork::Execute directly (the Work
 // driver ABI: self + the worker citizen's IBP) without needing the ForesterWork type/mangling.
-extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<ForesterWork*>(self)->ForesterWork::Execute(static_cast<CitizenComponent**>(citizenIBP), nullptr);   // B.3.8 bridge; LEFT: SIG ForceWork::DriveWhenIdle (Game/force_work.h, X3-GAME) takes every driver as int (*)(void* work, void* citizenIBP)
+extern "C" int ForesterWork_ForceDrive(Work* self, CitizenComponent** citizenIBP) {
+    return static_cast<ForesterWork*>(self)->ForesterWork::Execute(citizenIBP, nullptr);
 }
 
 

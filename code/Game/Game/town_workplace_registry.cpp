@@ -127,7 +127,7 @@ extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEnt
     }
 
     // Append: 003110(&node.array (node+0x08), count+1, workplaceRef).
-    ActHunt_DynArraySetCount_3110(&found->element.entities, count + 1, param_2);   // 0x140003110
+    QwordArraySetSize(&found->element.entities, count + 1, param_2);   // 0x140003110
 }
 
 // ------------------------------------------------------------

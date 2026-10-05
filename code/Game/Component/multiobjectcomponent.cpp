@@ -39,7 +39,7 @@ void MultiObjectComponent::OnRemove() {
         EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;   // +0xE8
 
         if (entityPtr != nullptr && ((entityPtr->_entityFlags >> 10) & 1) == 0) {
-            ActHunt_MarkEntityRemoval_c2ea0(entityPtr);   // 0x1400c2ea0
+            MarkEntityForRemoval(entityPtr);   // 0x1400c2ea0
 
             if (entityList) {
                 int removalCount = entityList->removalList._size;

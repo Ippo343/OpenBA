@@ -246,7 +246,7 @@ static ComponentDescription* FoundingSpawn_RefreshTemplate(MapGenerator* startCo
 // CitizenComponent the family links are written through.
 // ---------------------------------------------------------------------------
 extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startConfig, ComponentDescription* citizenTemplate,
-                                                          void* entityList, const float base[3],
+                                                          EntityList* entityList, const float base[3],
                                                           float age, char genderSel, char educated,
                                                           CitizenComponent** outCitizenComp) {
     if (outCitizenComp) *outCitizenComp = nullptr;

@@ -34,7 +34,7 @@ class HarvestOrchard final : public AutoPickupWork {
 
 public:
     HarvestOrchard();                                               // (Work_GenericCtor shape)
-    explicit HarvestOrchard(void** entityIBP);                      // 0x1400ee060
+    explicit HarvestOrchard(ComponentEntity* const* entityIBP);                      // 0x1400ee060
 
     // frees the slot array and the BST
     ~HarvestOrchard() override;                                     // [0]

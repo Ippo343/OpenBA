@@ -114,7 +114,7 @@ char ClearResourceComponent::State2Enter() {
         return 1;
     }
 
-    ActHunt_MarkEntityRemoval_c2ea0(entity);
+    MarkEntityForRemoval(entity);
     // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     entityList->removalList
         .SetSize(entityList->removalList._size + 1, entity);

@@ -61,10 +61,8 @@
 // import slot 0x140152768, a stamp of Work's table, then this body) went with its last
 // callers, the attendance / destroy / fire CreateWork builders, which now construct the
 // real leaf (LocationWork / ClearStorage / FireWork) through `Work(void*)`.
-void Work::InitFromEntity(void* pEntityIBP) {
-    // LEFT: Work(void*) and InitFromEntity(void*) keep their callers' untyped
-    // entity reference (the leaves' ctors in other blocks).
-    ComponentEntity* const* entityRef = reinterpret_cast<ComponentEntity* const*>(pEntityIBP);   // LEFT: SIG Work::InitFromEntity(void*) / Work(void*): the leaves' builders (resourceproduce_creatework.cpp, tradecomponent_states.cpp, cropfieldcomponent_states.cpp ...) hand the entity reference untyped
+void Work::InitFromEntity(ComponentEntity* const* pEntityIBP) {
+    ComponentEntity* const* entityRef = pEntityIBP;   // LEFT: SIG Work::InitFromEntity(void*) / Work(void*): the leaves' builders (resourceproduce_creatework.cpp, tradecomponent_states.cpp, cropfieldcomponent_states.cpp ...) hand the entity reference untyped
     field_10 = nullptr;
     field_10 = entityRef ? *entityRef : nullptr;   // the tree's guard (retail reads *param_2)
     field_18 = nullptr;
@@ -101,11 +99,6 @@ void Work::InitFromEntity(void* pEntityIBP) {
 // the byte offsets of the two child pointers within a node. The first arg (tree
 // root / allocator owner) is unused by the original beyond being forwarded.
 // Caller signature: void fn(void* root, void* node)
-// LEFT: SIG WorkBase_TreeNodeFree_14c30 / _e320: one retail body per child-offset pair
-// serves every node type of the trees that use it (42 / 37 call sites in other blocks,
-// handing the node as void*); each body views the node once through the two links it
-// reads (retail 0x140014c30 reads [node+0x10] / [node+0x18], 0x14000e320 [node+0x18] /
-// [node+0x20]) until wave X types the trees.
 namespace {
 struct FreeNodeLinks10 {          // 0x140014c30's view of a node
     uint8_t _payload[0x10];       // +0x00 the element (never read here)
@@ -124,7 +117,7 @@ static_assert(offsetof(FreeNodeLinks18, left) == 0x18 && offsetof(FreeNodeLinks1
 // Reimpl of FUN_140014c30 (TreeNodeCleanup) — children at +0x10 and +0x18.
 void WorkBase_TreeNodeFree_14c30(void* root, void* node) {
     if (node) {
-        const FreeNodeLinks10* links = reinterpret_cast<const FreeNodeLinks10*>(node);   // LEFT: SIG WorkBase_TreeNodeFree_14c30
+        const FreeNodeLinks10* links = reinterpret_cast<const FreeNodeLinks10*>(node);   // LEFT: FLOOR? the one recursive free body 0x140014c30 (ICF) over every node type whose links sit at +0x10 / +0x18 (21 call sites, a dozen node types): the erased core's view of the node it frees
         WorkBase_TreeNodeFree_14c30(root, links->left);
         WorkBase_TreeNodeFree_14c30(root, links->right);
         System::MemoryAllocator::MemFree(node);
@@ -134,7 +127,7 @@ void WorkBase_TreeNodeFree_14c30(void* root, void* node) {
 // Reimpl of FUN_14000e320 (TreeNodeFree) — children at +0x18 and +0x20.
 void WorkBase_TreeNodeFree_e320(void* root, void* node) {
     if (node) {
-        const FreeNodeLinks18* links = reinterpret_cast<const FreeNodeLinks18*>(node);   // LEFT: SIG WorkBase_TreeNodeFree_e320
+        const FreeNodeLinks18* links = reinterpret_cast<const FreeNodeLinks18*>(node);   // LEFT: FLOOR? the one recursive free body 0x14000e320 (ICF) over every node type whose links sit at +0x18 / +0x20 (PathCostNode, the scheduler / trade / goals trees): the erased core's view of the node it frees
         WorkBase_TreeNodeFree_e320(root, links->left);
         WorkBase_TreeNodeFree_e320(root, links->right);
         System::MemoryAllocator::MemFree(node);

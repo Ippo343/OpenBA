@@ -38,7 +38,7 @@ public:
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
     bool _b20;                                  // +0x20
     uint8_t _pad21[7];                          // +0x21 never written by the ctor
-    void* _created;                             // +0x28 ExternalPtr (created-resource description)
+    class ComponentDescription* _created;       // +0x28 ExternalPtr (created-resource description: the BuildRoad work's +0x50)
 };
 
 static_assert(sizeof(CreateRoadDescription) == 0x30, "CreateRoadDescription is 0x30 (create 0x140032d30 MemAlloc(0x30))");

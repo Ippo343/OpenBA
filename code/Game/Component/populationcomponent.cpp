@@ -339,7 +339,7 @@ void PopulationComponent::Startup() {
 
     uint32_t tidHerdDesc = HerdDescription::TypeId();  // cell 0x1401c7858 (D5)
     System::Random* rng = gw->m_random;
-    void* entityList = gw->m_entityList;
+    EntityList* entityList = gw->m_entityList;
 
     int created = 0;
     for (int i = 0; i < herdCells; i++) {

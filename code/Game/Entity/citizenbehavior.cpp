@@ -218,9 +218,9 @@ bool PathGraph::ProcessPaths() {
 
         // Search BST for existing entry
         PathCostNode* foundNode = nullptr;
-        PathCostNode* bstNode = pg->m_bstRoot;
+        PathCostNode* bstNode = pg->m_bst.root;
         while (bstNode != nullptr) {
-            int nodeHigh = bstNode->regionHigh;
+            int nodeHigh = bstNode->key0;
             if (keyHigh < nodeHigh) {
                 // Go left (+0x18)
                 bstNode = bstNode->left;
@@ -228,7 +228,7 @@ bool PathGraph::ProcessPaths() {
                 // Check low key
                 if (keyHigh == nodeHigh) {
                     // Same high, check low
-                    if (keyLow < bstNode->regionLow) {
+                    if (keyLow < bstNode->key1) {
                         bstNode = bstNode->left;
                     } else {
                         foundNode = bstNode;
@@ -240,9 +240,9 @@ bool PathGraph::ProcessPaths() {
                 }
             } else {
                 // keyHigh == nodeHigh
-                if (keyLow < bstNode->regionLow) {
+                if (keyLow < bstNode->key1) {
                     bstNode = bstNode->left;
-                } else if (keyLow > bstNode->regionLow) {
+                } else if (keyLow > bstNode->key1) {
                     bstNode = bstNode->right;
                 } else {
                     foundNode = bstNode;
@@ -260,15 +260,15 @@ bool PathGraph::ProcessPaths() {
 
             PathCostNode* outNode = nullptr;
             PathCostTreeInsert(   // 0x140025a10
-                reinterpret_cast<AvlTreeHead<AvlNode30>*>(&pg->m_bstRoot),   // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
-                reinterpret_cast<AvlNode30**>(&outNode),                     // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
+                &pg->m_bst,
+                &outNode,
                 &key.high);
             foundNode = outNode;
         }
 
         // Store the computed distance
         if (foundNode) {
-            foundNode->cost = cost;
+            foundNode->key2 = cost;
         }
 
         // Decrement pending index
@@ -382,15 +382,15 @@ void PathGraph::BuildPathGraph() {
     }
 
     // ---- Step 2: Clear old BST ----
-    PathCostNode* oldBst = pg->m_bstRoot;
+    PathCostNode* oldBst = pg->m_bst.root;
     if (oldBst != nullptr) {
         // Recursively free left and right subtrees
-        WorkBase_TreeNodeFree_e320(&pg->m_bstRoot, oldBst->left);    // 0x14000e320
-        WorkBase_TreeNodeFree_e320(&pg->m_bstRoot, oldBst->right);
+        WorkBase_TreeNodeFree_e320(&pg->m_bst.root, oldBst->left);    // 0x14000e320
+        WorkBase_TreeNodeFree_e320(&pg->m_bst.root, oldBst->right);
         System::MemoryAllocator::MemFree(oldBst);
     }
-    pg->m_bstRoot = nullptr;
-    pg->m_bstCount = 0;
+    pg->m_bst.root = nullptr;
+    pg->m_bst.count = 0;
 
     // ---- Step 3: Clear pairs array ----
     PathPairs_Clear_25b30(pg);   // 0x140025b30
@@ -467,19 +467,19 @@ void PathGraph::BuildPathGraph() {
                     }
 
                     // Check if this pair already exists in BST
-                    PathCostNode* bstNode = pg->m_bstRoot;
+                    PathCostNode* bstNode = pg->m_bst.root;
                     bool found = false;
                     while (bstNode != nullptr) {
-                        int nodeHigh = bstNode->regionHigh;
+                        int nodeHigh = bstNode->key0;
                         if (keyHigh < nodeHigh) {
                             bstNode = bstNode->left;
                         } else if (keyHigh > nodeHigh) {
                             bstNode = bstNode->right;
                         } else {
                             // keyHigh == nodeHigh
-                            if (keyLow < bstNode->regionLow) {
+                            if (keyLow < bstNode->key1) {
                                 bstNode = bstNode->left;
-                            } else if (keyLow > bstNode->regionLow) {
+                            } else if (keyLow > bstNode->key1) {
                                 bstNode = bstNode->right;
                             } else {
                                 found = true;
@@ -540,10 +540,10 @@ void PathGraph::BuildPathGraph() {
                     bstKey.value = 0;
 
                     {
-                        void* dummy = nullptr;
+                        PathCostNode* dummy = nullptr;
                         PathCostTreeInsert(   // 0x140025a10
-                            reinterpret_cast<AvlTreeHead<AvlNode30>*>(&pg->m_bstRoot),   // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
-                            reinterpret_cast<AvlNode30**>(&dummy),                       // LEFT: PathGraph's tree is two PathCostNode fields; the insert (Action/PathAvl.h) runs on AvlNode30
+                            &pg->m_bst,
+                            &dummy,
                             &bstKey.high);
                     }
                 }
@@ -1318,8 +1318,8 @@ CitizenBehavior::CitizenBehavior() {
         sub->m_pairCount = 0;                 // +0x08 / +0x0C: one qword store (H7: two stores)
         sub->m_pairCapacity = 0;
         sub->m_pendingIdx = -1;
-        sub->m_bstRoot = nullptr;
-        sub->m_bstCount = 0;
+        sub->m_bst.root = nullptr;
+        sub->m_bst.count = 0;
     }
     pathGraph = sub;
 }

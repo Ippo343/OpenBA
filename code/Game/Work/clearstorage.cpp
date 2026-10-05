@@ -522,7 +522,7 @@ ClearStorage::ClearStorage()
     : Work() {
 }
 
-ClearStorage::ClearStorage(void* pEntityIBP)
+ClearStorage::ClearStorage(ComponentEntity* const* pEntityIBP)
     : Work(pEntityIBP) {
 }
 

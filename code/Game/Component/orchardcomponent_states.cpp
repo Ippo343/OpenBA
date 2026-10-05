@@ -272,7 +272,7 @@ char OrchardComponent::EnterPlanting() {
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
-            void* entityLocal = _entity;
+            ComponentEntity* entityLocal = _entity;
             work = PlantOrchard_CtorFromEntity(mem, &entityLocal, treeType);
         }
     }
@@ -386,7 +386,7 @@ void OrchardPostTendArea(ComponentEntity* entity) {
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x60, 8);
         if (mem) {
-            void* entityLocal = entity;
+            ComponentEntity* entityLocal = entity;
             work = TendArea_CtorFromEntity(mem, &entityLocal, 1);
         }
     }
@@ -588,7 +588,7 @@ char OrchardComponent::EnterReplanting() {
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
-            void* entityLocal = _entity;
+            ComponentEntity* entityLocal = _entity;
             work = PlantOrchard_CtorFromEntity(mem, &entityLocal, treeType);
         }
     }
@@ -642,7 +642,7 @@ char OrchardComponent::EnterHarvesting() {
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x68, 8);
         if (mem) {
-            void* entityLocal = _entity;
+            ComponentEntity* entityLocal = _entity;
             work = HarvestOrchard_CtorFromEntity(mem, &entityLocal);
         }
     }

@@ -146,14 +146,14 @@ bool CitizenStackIdle(const CitizenComponent* citizen) {
     return charComp->actionStack.current < 0;                 // +0x60
 }
 
-int DriveWhenIdle(CitizenComponent* citizen, void* work, int (*driveFn)(void*, void*),
+int DriveWhenIdle(CitizenComponent* citizen, Work* work, int (*driveFn)(Work*, CitizenComponent**),
                   const char* tag, int* driveCount, int traceMax) {
     if (!work || !driveFn) return INT_MIN;
     if (!CitizenStackIdle(citizen)) return INT_MIN;
 
     // CitizenStackIdle proved it readable as a CitizenComponent.
     CitizenComponent* c = citizen;
-    ::Object::InternalPtr<CitizenComponent> citizenIBP(c);
+    CitizenComponent* citizenIBP = c;   // the InternalPtr<CitizenComponent> slot: one pointer store
     int rc = driveFn(work, &citizenIBP);
 
     if (driveCount && *driveCount < traceMax) {

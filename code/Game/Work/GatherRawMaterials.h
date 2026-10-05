@@ -37,7 +37,7 @@ class GatherRawMaterials final : public Work {
 
 public:
     GatherRawMaterials();                                           // (Work_GenericCtor shape)
-    explicit GatherRawMaterials(void* buildEntityIBP);              // 0x1400ec710 (site ctor)
+    explicit GatherRawMaterials(ComponentEntity* const* buildEntityIBP);              // 0x1400ec710 (site ctor)
 
     // 0x1400ec650: the compiler's chain over the three members (set, +0x58, +0x48)
     ~GatherRawMaterials() override;                                 // [0]  0x14002a410

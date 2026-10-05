@@ -43,6 +43,7 @@
 #include "Entity/ComponentEntity.h"
 #include "force_work.h"
 #include "Work/BuildStructure.h"   // BuildStructure::field_58 (the build-position count)
+#include "Work/GatherRawMaterials.h"   // s_gather is driven as a Work
 #include "Work/exe_bodies.h"       // BuildStructure_ConstructForSite
 #include <cstdint>
 #include <cstdio>
@@ -54,12 +55,12 @@
 extern "C" ComponentEntity* g_pConstructionDemoEntity;
 
 // PHASE GATHER — GatherRawMaterials Work wrappers (gatherrawmaterials.cpp).
-extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);
-extern "C" int   GatherRawMaterials_ForceDrive(void* self, void* citizenIBP);
+extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(ComponentEntity* const* buildEntityIBP);
+extern "C" int   GatherRawMaterials_ForceDrive(Work* self, CitizenComponent** citizenIBP);
 extern "C" bool  GatherRawMaterials_DepsReady();
 
 // PHASE BUILD — BuildStructure Work wrappers (buildstructure.cpp).
-extern "C" int   BuildStructure_ForceDrive(void* self, void* citizenIBP);
+extern "C" int   BuildStructure_ForceDrive(Work* self, CitizenComponent** citizenIBP);
 extern "C" bool  BuildStructure_DepsReady();
 
 static bool ForceConstructEnvOn() {
@@ -169,9 +170,9 @@ extern "C" bool StartTown_ForcePushConstructionWork(CitizenComponent* citizen) {
 
         // Construct the site GatherRawMaterials ONCE and keep it (its per-material slot arrays
         // @+0x48/+0x58 must survive across drives). Faithful site ctor seeds the slots.
-        static void* s_gather = nullptr;
+        static GatherRawMaterials* s_gather = nullptr;
         if (!s_gather) {
-            int64_t siteIBP = 0;
+            ComponentEntity* siteIBP = nullptr;
             new (&siteIBP) ::Object::InternalBasePtr(site);   // ComponentEntity is-an Object::Internal
             s_gather = GatherRawMaterials_ConstructForSite(&siteIBP);
             if (!s_gather) return true;   // own it, retry construction next tick
