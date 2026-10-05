@@ -324,10 +324,10 @@ void ImmigrationComponent::Spawn() {
             ResidenceComponent* rc = (h && TidResidence())
                                          ? h->FindComponent<ResidenceComponent>() : nullptr;
             if (!rc) continue;
-            int slots = rc->residentSlotCount;
-            const ResidenceComponent::Family* arr = rc->residentSlots;   // +0x50, stride 0x10
+            int slots = rc->residentSlots._size;
+            const ResidenceComponent::Family* arr = rc->residentSlots._data;   // +0x50, stride 0x10
             for (int s = 0; s < slots; ++s)
-                if (arr[static_cast<uintptr_t>(s)].count == 0) ++emptySlots;   // Family +0x08
+                if (arr[static_cast<uintptr_t>(s)]._size == 0) ++emptySlots;   // Family +0x08
         }
     }
     // Retail calls Rand(emptySlots*2) unguarded; skipped only when the range is 0.

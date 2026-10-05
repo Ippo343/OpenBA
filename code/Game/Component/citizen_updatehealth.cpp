@@ -391,7 +391,7 @@ extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, fl
 
         int first = grid->cellHead[nodeId];
         if (first >= 0) {
-            const CharacterGridSlot* recs = grid->slots;
+            const CharacterGridSlot* recs = grid->slots._data;
             int idx = first;
             do {
                 CharacterComponent* linkIBP = recs[idx].character.Get();

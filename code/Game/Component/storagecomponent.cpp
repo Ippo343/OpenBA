@@ -18,7 +18,6 @@
 #include "Component/ComponentDescription.h"
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
-#include "Component/coll_bridge.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
@@ -77,7 +76,7 @@ static StorageDescription* GetStorageDescription(StorageComponent* self) {
 // at BuildRoad_Execute+0x7a7 (2026-07-26).
 
 int StorageComponent::QueryAvailable(const ComponentDescription* material) const {
-    for (int i = 0; i < slotCount; i++) {
+    for (int i = 0; i < storageSlots._size; i++) {
         const Item& row = storageSlots[i];
         if (row._resource == material)
             return row._count - row._reserve;
@@ -129,10 +128,11 @@ using StoragePod16Array = Collection::Array<uint8_t, Collection::DefaultAllocato
 }  // namespace
 
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
-    // LEFT: its four callers' arrays (StorageComponent::storageSlots, the trade manifest, the
-    // notify entries) are raw {data, count, capacity} triples (H5): the one erased core is
-    // reached through the header view (the body's original C-style entry cast).
-    ((StoragePod16Array*)arrayBase)->SetSize(newCount);   // LEFT: its four callers' arrays (StorageComponent::storageSlots, the trade manifest, the notify entries) are raw {data, count, capacity} triples (H5): the one erased core is...
+    // LEFT: its one caller's array (TradeComponent::manifest, tradecomponent_serialize.cpp) is a
+    // raw {data, count, capacity} triple whose typing moves TradeComponent's dtor order (the +0x30
+    // / +0x40 / +0x50 arrays and the +0x60 tree are freed in one body): the erased core is reached
+    // through the header view (the body's original C-style entry cast).
+    ((StoragePod16Array*)arrayBase)->SetSize(newCount);   // LEFT: its one caller's array is TradeComponent::manifest, a raw {data, count, capacity} triple (H5: typing it alone breaks the dtor 0x14005c340's release order of +0x60 / +0x50 / +0x40 / +0x30)
 }
 
 // ============================================================================
@@ -150,7 +150,7 @@ void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
 // the compiler's; +0x28 = +0x30 = 0; flags |= 0x81. (Retail leaves +0x38 to
 // OnAdded / the build-complete init; the tree's zero is kept.)
 StorageComponent::StorageComponent()
-    : storageSlots(nullptr), slotCount(0), slotCapacity(0), capacity(0), rawMaterialFlags(0) {
+    : capacity(0), rawMaterialFlags(0) {
     OrFlagsInCtor(0x81);
 }
 
@@ -182,20 +182,19 @@ void StorageComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
 
     // Serialize the slot count through a local
-    int serSlotCount = slotCount;
+    int serSlotCount = storageSlots._size;
     ser.Serialize(serSlotCount, nullptr);
 
     // If loading (encoding direction == 0), resize the slot array
     int encodingDir = static_cast<int>(ser.GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
     if (encodingDir == 0) {
-        // B.3.2 bridge: FUN_14000f090 is Collection::Array<Item>::SetSize(n)
-        // LEFT: the item array is the raw triple (H5).
-        GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&storageSlots).SetSize(serSlotCount);
+        // FUN_14000f090 is Collection::Array<Item>::SetSize(n) (kSpec_Pod16)
+        storageSlots.SetSize(serSlotCount);
     }
 
     // Iterate the items: _count, _reserve, then the ExternalPtr
     if (serSlotCount > 0) {
-        Item* slotBase = storageSlots;
+        Item* slotBase = storageSlots._data;
         for (int i = 0; i < serSlotCount; i++) {
             Item& slotEntry = slotBase[i];
             ser.Serialize(slotEntry._count, nullptr);
@@ -291,9 +290,8 @@ void StorageComponent::OnAdded() {
     uint32_t defaultType = storageDesc->_rawMaterialFlags;
 
     // Resize slot array to 0 (clear existing)
-    // B.3.2 bridge: FUN_14000f090 is Collection::Array<Item>::SetSize(n)
-    // LEFT: the item array is the raw triple (H5).
-    GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&storageSlots).SetSize(0);
+    // FUN_14000f090 is Collection::Array<Item>::SetSize(n) (kSpec_Pod16)
+    storageSlots.SetSize(0);
 
     // Set computed values
     capacity = maxPerSlot * tileArea;
@@ -331,7 +329,7 @@ DEFINE_EXE_TYPE(StorageComponent, "Component")
 // (moved from engine_funcs.h, ENDGAME B.3.9 TR)
 int StorageComponent::QueryCount() const {
     int total = 0;
-    for (int i = 0; i < slotCount; i++) {
+    for (int i = 0; i < storageSlots._size; i++) {
         const Item& slot = storageSlots[i];
         const ComponentDescription* item = slot._resource;
         int itemQty = slot._count;

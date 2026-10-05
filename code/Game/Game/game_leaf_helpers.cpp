@@ -61,44 +61,28 @@
 // one-line forwarder Game_EventNotifierCleanup was deleted in B.4 wave X.
 
 // ------------------------------------------------------------------
-// FUN_140018220 (gameupdateloop.cpp, MusicPlayer_Dtor) — frees 5 buffers at
-// +0x50,+0x40,+0x30,+0x20,+0x10 (high to low) and zeroes each {ptr,len} pair.
-//
-// ENDGAME B.3.2 step 2: each of the five is `Collection::Array<T>::~Array` for a
-// trivially-destructible T (re-decompiled 2026-09-13: MemFree(data); data = 0;
-// one qword over size+capacity = 0 — ArrayDtorImpl exactly, no element step).
-// The element types are not pinned in the tree, and `~Array` of a trivial
-// element never reads the stride, so the header alias `rtcoll::ArrayHdr`
-// (= Array<uint8_t>, the same form runtime/src/collection/array.cpp's
-// ArrayDtorSited uses) is the honest spelling until MusicPlayer is a class.
+// FUN_140018220 — CharacterGrid::~CharacterGrid (Component/CharacterGrid.h): the five
+// `Collection::Array` members' ~Array, +0x50 down to +0x10 (reverse declaration order;
+// MemFree(data); data = 0; one qword over size+capacity = 0). The defaulted dtor is that;
+// GameUpdateLoop::Shutdown runs it by name (Game_MusicPlayerDtor, its C body, is gone).
 // ------------------------------------------------------------------
-void Game_MusicPlayerDtor(CharacterGrid* self) {
-    uint8_t* b = reinterpret_cast<uint8_t*>(self);   // LEFT: Component/CharacterGrid.h declares the five arrays as raw triples (H5): the ~Array runs over their headers by offset
-    static const uint64_t kOffsets[5] = { 0x50, 0x40, 0x30, 0x20, 0x10 };
-    for (uint64_t off : kOffsets)
-        reinterpret_cast<rtcoll::ArrayHdr*>(b + off)->~Array();   // LEFT: Component/CharacterGrid.h: the arrays are raw triples (H5)
-}
 
 // ------------------------------------------------------------------
-// FUN_1400a4fc0 (gameupdateloop.cpp, ImageCapture_Dtor) — virtual scalar-dtor
+// FUN_1400a4fc0 (Minimap::~Minimap, run by GameUpdateLoop::Shutdown) — virtual scalar-dtor
 // of the two sub-objects at +8/+0x10, then frees the two buffers at +0x28/+0x18.
 // ------------------------------------------------------------------
-void Game_ImageCaptureDtor(Minimap* self) {
+Minimap::~Minimap() {
     // Retail is (**(code **)*puVar1)(puVar1, 1): deref the object to get its
     // vtable, deref THAT to get slot 0, then call. This port had only one deref
     // and so called the vtable's own address as if it were code — EXEC of
     // g_NoiseUI_ImageBufferVtable_Standalone when GameUpdateLoop::Shutdown
     // finally reached the minimap ImageBuffers.
-    for (Video::ImageBuffer* obj : {self->terrainImage, self->overlayImage}) {   // +0x08, +0x10
+    for (Video::ImageBuffer* obj : {terrainImage, overlayImage}) {   // +0x08, +0x10
         if (!obj) continue;
         delete obj;   // slot 0, free
     }
-    // ENDGAME B.3.2 step 2: two trivial-element `~Array`s (headers at +0x28 and
-    // +0x18, in that order — re-decompiled 2026-09-13: MemFree, data = 0, one
-    // qword over size+capacity).
-    // LEFT: the pixel arrays are declared as the Array's three fields (H5).
-    reinterpret_cast<rtcoll::ArrayHdr*>(&self->overlayPixels)->~Array();   // LEFT: Minimap.h H5 (gameupdateloop_load.cpp asserts Minimap trivially constructible)
-    reinterpret_cast<rtcoll::ArrayHdr*>(&self->terrainPixels)->~Array();   // LEFT: Minimap.h H5 (gameupdateloop_load.cpp asserts Minimap trivially constructible)
+    // Then the members' two trivial-element `~Array`s, +0x28 and +0x18 in that order
+    // (reverse declaration order: MemFree, data = 0, one qword over size+capacity).
 }
 
 // ------------------------------------------------------------------

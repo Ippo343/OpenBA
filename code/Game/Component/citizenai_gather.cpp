@@ -257,9 +257,9 @@ extern "C" int Storage_GetResourceCount2(const Component* self) {
     StorageComponent* stor = self->_entity->FindComponent<StorageComponent>();
     int total = 0;
     if (stor == nullptr) return 0;
-    int count = stor->slotCount;
+    int count = stor->storageSlots._size;
     for (int i = 0; i < count; ++i) {
-        StorageComponent::Item* rows = stor->storageSlots;
+        StorageComponent::Item* rows = stor->storageSlots._data;
         ComponentDescription* row = rows[i]._resource;
         RawMaterialDescription* rm = FindRawMaterialChild(row);
         if (rm && (rm->_flags >> 6 & 1) != 0) {
@@ -310,14 +310,14 @@ static void SelectAndTransfer(ComponentEntity* found, ::Object::InternalPtr<Acti
             return;
         }
 
-        int rowCount = stor->slotCount;                         // local_60
+        int rowCount = stor->storageSlots._size;                         // local_60
         int chosenIdx = -1;                                     // local_res8 low
         int matchCount = 0;                                    // pvVar21
 
         // pass 1: count matches + preferred index
         StorageComponent::Item* rowsBase = nullptr;  // local_res10 (= *(stor+0x28))
         for (int cur = 0; cur < rowCount; ++cur) {
-            rowsBase = stor->storageSlots;
+            rowsBase = stor->storageSlots._data;
             ComponentDescription* child = rowsBase[cur]._resource;
             RawMaterialDescription* rm = FindRawMaterialChild(child);
             bool flagged = rm && (rm->_flags >> 6 & 1) != 0;
@@ -340,7 +340,7 @@ static void SelectAndTransfer(ComponentEntity* found, ::Object::InternalPtr<Acti
         ComponentDescription* hitChild = nullptr;   // the row child to transfer (lVar5)
         int hitCursor = -1;
         for (int cur = 0; cur < rowCount; ++cur) {
-            StorageComponent::Item* rb = stor->storageSlots;   // local_88
+            StorageComponent::Item* rb = stor->storageSlots._data;   // local_88
             ComponentDescription* child = rb[cur]._resource;
             RawMaterialDescription* rm = FindRawMaterialChild(child);
             bool flagged = rm && (rm->_flags >> 6 & 1) != 0;

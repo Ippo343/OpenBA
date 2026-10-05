@@ -100,7 +100,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
     uint32_t srcCell = WorldToCell(citizenX, citizenZ, gridSize);
 
     // Get storage item count
-    int itemCount = storage->slotCount;
+    int itemCount = storage->storageSlots._size;
 
     if (itemCount <= 0) {
         return 1;  // No items in storage

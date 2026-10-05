@@ -3344,8 +3344,8 @@ int DL_CollectAnimals(const CharacterGrid* grid, int wantType, std::vector<DL_An
                       int* outLive) {
     *outLive = 0;
     if (!grid) return 0;
-    const CharacterGridSlot* slots = grid->slots;
-    const int slotCount = grid->slotCount;
+    const CharacterGridSlot* slots = grid->slots._data;
+    const int slotCount = grid->slots._size;
     if (!slots || slotCount <= 0) return 0;
 
     for (int i = 0; i < slotCount && i < 4096; ++i) {
@@ -3861,7 +3861,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
 static bool StartTown_EnsureResidenceRoster(ResidenceComponent* resComp) {
     if (!resComp) return false;
     ResidenceComponent* rc = resComp;
-    if (rc->residentSlots != nullptr && rc->residentSlotCount >= 1)
+    if (rc->residentSlots._data != nullptr && rc->residentSlots._size >= 1)
         return true;                                   // already sized
 
     const Description* linked = rc->_description;     // ResidenceDescription (trusted, no IsDerivedFrom)
@@ -3877,8 +3877,8 @@ static bool StartTown_EnsureResidenceRoster(ResidenceComponent* resComp) {
 
     rc->SetFamilyCount(capacity);   // 0x140037ad0
 
-    ResidenceComponent::Family* sa = rc->residentSlots;
-    int sc = rc->residentSlotCount;
+    ResidenceComponent::Family* sa = rc->residentSlots._data;
+    int sc = rc->residentSlots._size;
     fprintf(stderr, "[startTown::housing] residence roster sized: comp=%p desc=%p capacity=%d -> "
             "+0x50=%p +0x58=%d\n", resComp, desc, capacity, sa, sc);
     fflush(stderr);
@@ -3918,8 +3918,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
                     "(c7cf0) — skip\n", f, f); fflush(stderr);
             continue;
         }
-        ResidenceComponent::Family* slotArr = resComp->residentSlots;
-        int slotCnt = resComp->residentSlotCount;
+        ResidenceComponent::Family* slotArr = resComp->residentSlots._data;
+        int slotCnt = resComp->residentSlots._size;
         if (slotArr == nullptr || slotCnt < 1) {
             // Roster array not sized (SA ResidenceComponent::Serialize bailed on the
             // IsDerivedFrom gate) — size it faithfully now, else a710 would deref null.
@@ -3928,8 +3928,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
                         "bring-up failed — skip\n", f, f); fflush(stderr);
                 continue;
             }
-            slotArr = resComp->residentSlots;
-            slotCnt = resComp->residentSlotCount;
+            slotArr = resComp->residentSlots._data;
+            slotCnt = resComp->residentSlots._size;
         }
 
         int housed = 0, misfiled = 0;
@@ -3955,8 +3955,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
         // (retail reads *(*(c7cf0+0x50)+8) in FUN_1400d62a0's re-house loop).
         int residents = -1;
         {
-            ResidenceComponent::Family* sa = resComp->residentSlots;
-            if (sa) residents = sa[0].count;
+            ResidenceComponent::Family* sa = resComp->residentSlots._data;
+            if (sa) residents = sa[0]._size;
         }
         // ResidenceDescription carries TWO different numbers and they are easy to confuse:
         //   +0x20 = how many HOUSEHOLD SLOTS the house has (1 for a wood house; it is what
@@ -4096,10 +4096,10 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         ResidenceComponent* rescomp = FindComponentOnEntity<ResidenceComponent>(houseIBP, tidResidence);
         int residents = 0, reqInt = 0;
         if (rescomp) {
-            const ResidenceComponent::Family* slotArr = rescomp->residentSlots;
-            residents = slotArr ? slotArr[0].count : 0;   // slot[0].count
+            const ResidenceComponent::Family* slotArr = rescomp->residentSlots._data;
+            residents = slotArr ? slotArr[0]._size : 0;   // slot[0].count
             if (slotArr) {
-                const Object::InternalPtr<CitizenComponent>* slot0data = slotArr[0].members;   // slot[0].data
+                const Object::InternalPtr<CitizenComponent>* slot0data = slotArr[0]._data;   // slot[0].data
                 const CitizenComponent* resident = slot0data ? slot0data[0].Get() : nullptr;      // data[0]
                 const CitizenDescription* cd = resident ? resident->description : nullptr;   // CitizenDescription
                 if (cd) reqInt = (int)cd->_fc4;

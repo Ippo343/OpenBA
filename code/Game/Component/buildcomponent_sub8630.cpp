@@ -75,8 +75,8 @@ bool BuildComponent::HaveAllMaterials() {
         // Delivered amount = matching site-storage slot's (total - reserved), else 0.
         int delivered = 0;
         if (storage) {
-            int slotCount = storage->slotCount;
-            StorageComponent::Item* slots = storage->storageSlots;
+            int slotCount = storage->storageSlots._size;
+            StorageComponent::Item* slots = storage->storageSlots._data;
             if (slots) {
                 for (int s = 0; s < slotCount; s++) {
                     if (slots[s]._resource == matType) {

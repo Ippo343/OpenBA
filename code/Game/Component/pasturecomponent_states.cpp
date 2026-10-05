@@ -59,7 +59,6 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
-#include "Component/coll_bridge.h"   // GameColl::AsArray (PastureComponent::animals is a raw triple)
 #include "Work/exe_bodies.h"
 #include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Game/exe_constants.h"
@@ -154,7 +153,7 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     pasture = target;
     LivestockComponent* againRef = this;
     if (target) {
-        QwordArraySetSize(&GameColl::AsArray<LivestockComponent*>(&target->animals), target->animalCount + 1, &againRef);   // the raw triple PastureComponent::animals (+0x30) through the coll_bridge view
+        QwordArraySetSize(&target->animals, target->animals._size + 1, &againRef);   // PastureComponent::animals (+0x30)
         PenInPasture();   // 0x1401240a0
     } else if (town) {
         QwordArraySetSize(&town->livestock, town->livestock._size + 1, &againRef);
@@ -184,7 +183,7 @@ void PastureComponent::AdoptWanderers() {
     if (freeCount == 0) return;
 
     const int cap = ComputeCapacity();   // 0x140128570
-    if (animalCount >= cap) return;
+    if (animals._size >= cap) return;
 
     ComponentDescription* wanted = livestockType;
     LivestockComponent** freeList = town->livestock._data;
@@ -193,7 +192,7 @@ void PastureComponent::AdoptWanderers() {
     static const int kMaxCandidates = 64;
     LivestockComponent* candidates[kMaxCandidates];
     int nCand = 0;
-    const int needed = cap - animalCount;
+    const int needed = cap - animals._size;
     for (int i = 0; i < freeCount && nCand < kMaxCandidates && nCand < needed; ++i) {
         LivestockComponent* comp = freeList[i];
         if (!comp) continue;
@@ -207,7 +206,7 @@ void PastureComponent::AdoptWanderers() {
     for (int i = 0; i < nCand; ++i) {
         PastureComponent* pastureRef = this;
         candidates[i]->SetPasture(&pastureRef);   // 0x140123cc0
-        if (animalCount >= cap) break;
+        if (animals._size >= cap) break;
     }
 }
 
@@ -223,8 +222,8 @@ void PastureComponent::AdoptWanderers() {
 void PastureComponent::Reproduce() {
     const int limit = ComputeCapacity() + 3;
 
-    for (int i = 0; i < animalCount; ++i) {
-        Object::InternalPtr<LivestockComponent>* arr = animals;
+    for (int i = 0; i < animals._size; ++i) {
+        Object::InternalPtr<LivestockComponent>* arr = animals._data;
         if (!arr) return;
         LivestockComponent* livestock = arr[i].Get();
         if (!livestock) continue;
@@ -240,9 +239,9 @@ void PastureComponent::Reproduce() {
         if (((newFlags ^ oldFlags) & 0xffff) != 0 && animal->_entity != nullptr) {
             animal->_entity->RefreshEntityFlags();   // 0x1400c3470
         }
-        if (animalCount < limit) {
+        if (animals._size < limit) {
             std::fprintf(stderr, "[Pasture] BIRTH: pasture=%p parent=%p (count=%d limit=%d)\n",
-                         static_cast<void*>(this), static_cast<void*>(animal), animalCount, limit);
+                         static_cast<void*>(this), static_cast<void*>(animal), animals._size, limit);
             std::fflush(stderr);
             AnimalComponent* parent = animal;
             SpawnLivestock(&parent);   // 0x140128670
@@ -270,10 +269,10 @@ void PastureComponent::Reproduce() {
 // ============================================================
 void PastureComponent::OnMessage(int msg, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
     if (msg != 0) return;
-    const int count = animalCount;
+    const int count = animals._size;
     if (count == 0) return;
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
-    Object::InternalPtr<LivestockComponent>* arr = animals;
+    Object::InternalPtr<LivestockComponent>* arr = animals._data;
     if (!w || !arr) return;
 
     uint32_t idx = w->m_random->Rand(static_cast<uint32_t>(count));
@@ -310,16 +309,16 @@ void PastureComponent::ReleaseAllAnimals() {
     CitizenBehavior* town = Town();
 
     int guard = 0;
-    while (animalCount >= 1) {
+    while (animals._size >= 1) {
         if (++guard > 4096) {                       // cannot happen in retail; see above
             std::fprintf(stderr, "[Pasture] release loop guard tripped on %p (count=%d)\n",
-                         static_cast<void*>(this), animalCount);
+                         static_cast<void*>(this), animals._size);
             std::fflush(stderr);
             break;
         }
-        Object::InternalPtr<LivestockComponent>* arr = animals;
+        Object::InternalPtr<LivestockComponent>* arr = animals._data;
         if (!arr) break;
-        LivestockComponent* animal = arr[animalCount - 1].Get();
+        LivestockComponent* animal = arr[animals._size - 1].Get();
         if (!animal) break;
         PastureComponent* cur = animal->pasture;
         if (cur == nullptr) break;                  // already free: retail would spin here
@@ -371,7 +370,7 @@ char PastureComponent::EnterOperational() {
 // ============================================================
 char PastureComponent::EnterTeardown() {
     std::fprintf(stderr, "[Pasture] state 3 ENTER (teardown) pasture=%p count=%d\n",
-                 static_cast<void*>(this), animalCount);
+                 static_cast<void*>(this), animals._size);
     std::fflush(stderr);
     ReleaseAllAnimals();
     return 0;
@@ -633,16 +632,16 @@ uint32_t PastureComponent::CommandMask(int cmd) {
         PastureComponent* p = list[i];
         if (!p || p == this) continue;
         if (p->livestockType != livestockType) continue;
-        freeElsewhere += p->ComputeCapacity() - p->animalCount;
+        freeElsewhere += p->ComputeCapacity() - p->animals._size;
     }
 
     const uint64_t hasType = (livestockType != nullptr) ? 1u : 0u;
     if (cmd == 0) {
-        const int cnt = animalCount;
+        const int cnt = animals._size;
         return (cnt > 0 && cnt <= freeElsewhere) ? hasType : 0;
     }
     if (cmd == 1) {
-        if (animalCount > 9)
+        if (animals._size > 9)
             return (freeElsewhere < 5) ? 0 : hasType;
         return 0;
     }
@@ -711,7 +710,7 @@ void PastureComponent::Command(int cmd) {
     CitizenBehavior* town = Town();
     const int n = town ? town->pastures._size : 0;
     PastureComponent** list = town ? town->pastures._data : nullptr;
-    const int keep = (cmd != 0) ? animalCount - (animalCount >> 1) : 0;
+    const int keep = (cmd != 0) ? animals._size - (animals._size >> 1) : 0;
 
     PastureComponent* best = nullptr;
     int bestFree = 0;
@@ -719,15 +718,15 @@ void PastureComponent::Command(int cmd) {
         PastureComponent* p = list[i];
         if (!p || p == this) continue;
         if (p->livestockType != livestockType) continue;
-        const int freeN = p->ComputeCapacity() - p->animalCount;
+        const int freeN = p->ComputeCapacity() - p->animals._size;
         if (freeN > bestFree) { bestFree = freeN; best = p; }
     }
 
     int moved = 0;
     auto transferInto = [&](PastureComponent* dst) {
-        while (keep < animalCount) {
-            if (dst->ComputeCapacity() <= dst->animalCount) break;
-            Object::InternalPtr<LivestockComponent>* arr = animals;
+        while (keep < animals._size) {
+            if (dst->ComputeCapacity() <= dst->animals._size) break;
+            Object::InternalPtr<LivestockComponent>* arr = animals._data;
             if (!arr) break;                        // standalone guard
             if (!arr[0]) break;                     // standalone guard
             PastureComponent* dstRef = dst;

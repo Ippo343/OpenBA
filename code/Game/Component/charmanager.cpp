@@ -92,8 +92,8 @@ static float* CharMgr_helper_28c0(const Object::InternalPtr<CharacterComponent>*
 //   bump the subtree occupancy counts up the tree.
 // ===========================================================================
 void CharacterGrid::Link(int idx) {
-    CharacterGridSlot* s = slots;
-    int*     occ      = cellOccupancy;
+    CharacterGridSlot* s = slots._data;
+    int*     occ      = cellOccupancy._data;
     CharacterGridSlot* slot = &s[idx];
     int cellIdx = slot->cell;
     int head    = cellHead[cellIdx];
@@ -122,8 +122,8 @@ void CharacterGrid::Link(int idx) {
 //   decrement the subtree occupancy counts up the tree.
 // ===========================================================================
 void CharacterGrid::Unlink(int idx) {
-    CharacterGridSlot* s = slots;
-    int*     occ      = cellOccupancy;
+    CharacterGridSlot* s = slots._data;
+    int*     occ      = cellOccupancy._data;
     CharacterGridSlot* slot = &s[idx];
 
     int cellIdx = slot->cell;
@@ -298,25 +298,25 @@ extern "C" void CharMgr_IntArrayResize_21d0(int32_t*& data, int32_t& count, int3
 //   array). Then spatial-places it via Place.
 // ===========================================================================
 int64_t CharacterGrid::Register(Object::InternalPtr<CharacterComponent>* ibp) {
-    int fc = freeCount;
+    int fc = freeList._size;
     uint64_t index;
 
     if (fc < 1) {
         // ---- append path ----
-        int count = slotCount;
+        int count = slots._size;
         index = static_cast<uint32_t>(count);
         int newCount = count + 1;
         if (newCount != count) {
-            CharacterGridSlot* oldSlots = slots;
-            slotCount = newCount;
-            if (slotCapacity < newCount) {
-                slotCapacity = newCount;
-                if (count != 0) slotCapacity = newCount * 3;
-                slots = static_cast<CharacterGridSlot*>(::System::MemoryAllocator::MemAlloc(
-                    static_cast<uint64_t>(slotCapacity) * 0x18, 8));
+            CharacterGridSlot* oldSlots = slots._data;
+            slots._size = newCount;
+            if (slots._capacity < newCount) {
+                slots._capacity = newCount;
+                if (count != 0) slots._capacity = newCount * 3;
+                slots._data = static_cast<CharacterGridSlot*>(::System::MemoryAllocator::MemAlloc(
+                    static_cast<uint64_t>(slots._capacity) * 0x18, 8));
             }
-            int start = (oldSlots == slots) ? count : 0;
-            CharacterGridSlot* s = slots;
+            int start = (oldSlots == slots._data) ? count : 0;
+            CharacterGridSlot* s = slots._data;
             for (int i = start; i < newCount; ++i) {
                 CharacterGridSlot* dst = &s[i];
                 // source: existing slot (copy) for survivors, else the {ibp,0,-1} template
@@ -339,13 +339,13 @@ int64_t CharacterGrid::Register(Object::InternalPtr<CharacterComponent>* ibp) {
                 dst->next = srcNext;
                 dst->cell = srcCell;
             }
-            if (oldSlots != slots)
+            if (oldSlots != slots._data)
                 ::System::MemoryAllocator::MemFree(oldSlots);
         }
     } else {
         // ---- free-list pop path ----
         index = static_cast<uint32_t>(freeList[fc - 1]);
-        CharMgr_IntArrayResize_21d0(freeList, freeCount, freeCapacity, fc - 1);
+        CharMgr_IntArrayResize_21d0(freeList._data, freeList._size, freeList._capacity, fc - 1);
         CharacterGridSlot* slot = &slots[index];
         slot->character = *ibp;
         slot->prev = 0;
@@ -370,23 +370,23 @@ void CharacterGrid::Release(int idx) {
     slot->cell = -1;
 
     // push idx onto the free-list (grow by 3x on first realloc)
-    int fc = freeCount;
+    int fc = freeList._size;
     int newCount = fc + 1;
     if (newCount != fc) {
-        int32_t* oldFL = freeList;
-        freeCount = newCount;
-        if (freeCapacity < newCount) {
-            freeCapacity = newCount;
-            if (fc != 0) freeCapacity = newCount * 3;
-            freeList = static_cast<int32_t*>(::System::MemoryAllocator::MemAlloc(
-                static_cast<uint64_t>(freeCapacity) << 2, 4));
+        int32_t* oldFL = freeList._data;
+        freeList._size = newCount;
+        if (freeList._capacity < newCount) {
+            freeList._capacity = newCount;
+            if (fc != 0) freeList._capacity = newCount * 3;
+            freeList._data = static_cast<int32_t*>(::System::MemoryAllocator::MemAlloc(
+                static_cast<uint64_t>(freeList._capacity) << 2, 4));
         }
-        int start = (oldFL == freeList) ? fc : 0;
-        int32_t* fl = freeList;
+        int start = (oldFL == freeList._data) ? fc : 0;
+        int32_t* fl = freeList._data;
         for (int i = start; i < newCount; ++i) {
             if (fl) fl[i] = (i < fc) ? oldFL[i] : idx;
         }
-        if (oldFL != freeList)
+        if (oldFL != freeList._data)
             ::System::MemoryAllocator::MemFree(oldFL);
     }
 }

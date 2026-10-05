@@ -263,7 +263,7 @@ void PathTool::ClearHighlight() {
     if (selectedEntity == nullptr) return;
     MultiObjectComponent* list = selectedEntity->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (list != nullptr) {
-        int n = list->childCount;
+        int n = list->children._size;
         for (int i = 0; i < n; i++) {
             ComponentEntity* ent = list->children[i].Get();
             HighlightComponent* hi = ent->FindComponent<HighlightComponent>();   // 0x140007080
@@ -293,7 +293,7 @@ void PathTool::SetHighlight() {
     if (selectedEntity == nullptr) return;
     MultiObjectComponent* list = selectedEntity->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (list != nullptr) {
-        int n = list->childCount;
+        int n = list->children._size;
         for (int i = 0; i < n; i++) {
             ComponentEntity* ent = list->children[i].Get();
             HighlightComponent* hi = ent->FindComponent<HighlightComponent>();   // 0x140007080
@@ -354,11 +354,11 @@ void PathTool::BuildRoutes() {
 
     if (useResidence) {
         if (residence != nullptr) {
-            int outer = residence->residentSlotCount;
+            int outer = residence->residentSlots._size;
             for (int oi = 0; oi < outer; oi++) {
-                int inner = residence->residentSlots[oi].count;
+                int inner = residence->residentSlots[oi]._size;
                 for (int ii = 0; ii < inner; ii++) {
-                    CitizenComponent* member = residence->residentSlots[oi].members[ii].Get();
+                    CitizenComponent* member = residence->residentSlots[oi]._data[ii].Get();
                     if (member->home != nullptr) {
                         if (member->workplace != nullptr) {
                             PushRoute(routes, entry, member);

@@ -105,8 +105,8 @@ void DumpStorage(int frame, ComponentEntity** arr, int n) {
             if (comp->Type() != tidStorage) continue;
             ++storages;
             StorageComponent* st = static_cast<StorageComponent*>(comp);   // exact type id
-            const int stacks = st->slotCount;                    // +0x30
-            const StorageComponent::Item* inv = st->storageSlots;   // +0x28 (stride 0x10)
+            const int stacks = st->storageSlots._size;                    // +0x30
+            const StorageComponent::Item* inv = st->storageSlots._data;   // +0x28 (stride 0x10)
             if (stacks > 0) ++nonEmpty;
             for (int k = 0; inv && k < stacks; ++k) {
                 const StorageComponent::Item& e = inv[k];

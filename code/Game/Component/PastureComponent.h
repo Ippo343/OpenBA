@@ -14,7 +14,7 @@
 //     (dword; +0x40 is not written); member at +0x48 (0x14015f070, 0x140163f10),
 //     back-pointer +0x60; `_flags |= 0x8b`.
 //   dtor 0x140128070: member restamp; MemFree(+0x30), +0x30 = +0x38 = 0 (the animal
-//     list); restamps; ~Internal. [0] 0x140036910 = dtor + MemFree on &1.
+//     list: ~Array of `animals`, after ~_controller in reverse declaration order); restamps; ~Internal. [0] 0x140036910 = dtor + MemFree on &1.
 //   table 0x140163f60, 18 slots: [3] 0x140127f40 Persist, [4] 0x140127a50 Startup
 //     (`MOV qword [RCX+0x28],0`), [6] 0x140127a30 OnAdded, [7] 0x1401277e0 OnRemove
 //     (release every animal), [12] 0x140127540 OnEvent (gate-cell claim), [13]
@@ -31,10 +31,17 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (animals)
+#include "object/Internal.h"         // Object::InternalPtr<T>
 
 class ComponentDescription;
 class LivestockComponent;
 class AnimalComponent;
+
+// The animal list grows through retail's stride-8 row (0x1400032e0 / 0x140003110: stride
+// 8, align 8, the new tail ZEROED, no element destroy) and is freed by the inlined ~Array
+// (dtor 0x1401280a3: MemFree, then +0x30 = +0x38 = 0): kSpec_PtrZero (Entity/EntityList.h).
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 struct PastureCtrlTag { using Owner = class PastureComponent; };   // the handlers' receiver (controller_state_table.h)
 
@@ -75,9 +82,9 @@ public:
     // 0x140127f40 (ExternalPtr +0x28; the +0x30 InternalPtr array validated against
     // LivestockComponent; int +0x40, int +0x44).
     ComponentDescription* livestockType;    // +0x28 ExternalPtr: the template the pasture keeps (Startup clears it)
-    Object::InternalPtr<LivestockComponent>* animals;   // +0x30 Array<InternalPtr<LivestockComponent>> data (freed by the dtor)
-    int32_t               animalCount;      // +0x38
-    int32_t               animalCapacity;   // +0x3c
+    using AnimalList = Collection::Array<Object::InternalPtr<LivestockComponent>, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    AnimalList            animals;          // +0x30 Array<InternalPtr<LivestockComponent>> (count +0x38, capacity +0x3c)
     int32_t               capacity;         // +0x40 ComputeCapacity (OnAdded); not written by the ctor
     int32_t               production;       // +0x44 credited by LivestockComponent::Update, spent by TickOperational
     StateController _controller;   // +0x48 the embedded controller (D6)
@@ -87,8 +94,8 @@ static_assert(sizeof(PastureComponent) == 0x68, "PastureComponent is 0x68 (creat
 static_assert(alignof(PastureComponent) == 8, "PastureComponent alignment");
 static_assert(offsetof(PastureComponent, livestockType) == 0x28, "PastureComponent +0x28");
 static_assert(offsetof(PastureComponent, animals) == 0x30, "PastureComponent +0x30");
-static_assert(offsetof(PastureComponent, animalCount) == 0x38, "PastureComponent +0x38");
-static_assert(offsetof(PastureComponent, animalCapacity) == 0x3c, "PastureComponent +0x3c");
+static_assert(offsetof(PastureComponent, animals) + offsetof(PastureComponent::AnimalList, _size) == 0x38, "PastureComponent +0x38");
+static_assert(offsetof(PastureComponent, animals) + offsetof(PastureComponent::AnimalList, _capacity) == 0x3c, "PastureComponent +0x3c");
 static_assert(offsetof(PastureComponent, capacity) == 0x40, "PastureComponent +0x40");
 static_assert(offsetof(PastureComponent, production) == 0x44, "PastureComponent +0x44 (ctor 0x140128123)");
 static_assert(offsetof(PastureComponent, _controller) == 0x48,

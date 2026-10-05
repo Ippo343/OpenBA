@@ -71,22 +71,22 @@ extern "C" void CharManager_Seed() {
     for (int i = 0; i < totalCells; ++i) { cellHead[i] = -1; cellOcc[i] = 0; }
 
     // allocate + zero the manager struct (0x60 covers all known fields up to +0x58)
-    CharacterGrid* m = static_cast<CharacterGrid*>(System::MemoryAllocator::MemAlloc(0x60, 8));
-    if (!m) return;
-    std::memset(m, 0, sizeof(CharacterGrid));
+    void* mem = System::MemoryAllocator::MemAlloc(0x60, 8);
+    if (!mem) return;
+    CharacterGrid* m = new (mem) CharacterGrid();   // every field zero (the seed's old memset)
     m->worldSize = static_cast<float>(dim);
     m->centerX = static_cast<float>(dim) * 0.5f;
     m->centerY = static_cast<float>(dim) * 0.5f;
     m->levels = levels;
-    m->slots = nullptr;          // slot array (grown on first append)
-    m->slotCount = 0;
-    m->slotCapacity = 0;
-    m->freeList = nullptr;
-    m->freeCount = 0;
-    m->freeCapacity = 0;
-    m->cellHead = cellHead;
-    m->levelOffsets = offTbl;
-    m->cellOccupancy = cellOcc;
+    m->slots._data = nullptr;          // slot array (grown on first append)
+    m->slots._size = 0;
+    m->slots._capacity = 0;
+    m->freeList._data = nullptr;
+    m->freeList._size = 0;
+    m->freeList._capacity = 0;
+    m->cellHead._data = cellHead;
+    m->levelOffsets._data = offTbl;
+    m->cellOccupancy._data = cellOcc;
 
     gw->m_characterGrid = m;
 

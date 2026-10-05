@@ -44,6 +44,7 @@
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Minimap.h"   // m_imageCapture's class (B.4 GAME-a)
+#include "Component/CharacterGrid.h"   // m_characterGrid's class (Shutdown runs ~CharacterGrid)
 #include "Game/EventLog.h"   // m_eventNotifier's class (B.4 GAME-a)
 #include "Game/WorkScheduler.h"   // m_tutorial's class (B.4 GAME-a)
 #include "Game/Calendar.h"   // m_dayCounter's class (B.4 GAME-a)
@@ -1227,7 +1228,7 @@ post_simulation:
             ::Video::Device::_singleton
                 ->Lock();   // B.3.5 bridge
             imageCapture->overlayImage
-                ->CopyToTexture(imageCapture->overlayPixels,
+                ->CopyToTexture(imageCapture->overlayPixels._data,
                                 imageCapture->size,
                                 imageCapture->size);
             ::Video::Device::_singleton
@@ -2119,7 +2120,7 @@ void GameUpdateLoop::Shutdown() {
     // CharacterGrid (Morton quadtree at +0x88)
     if (m_characterGrid != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying CharacterGrid...\n");
-        Game_MusicPlayerDtor(m_characterGrid);   // 0x140018220
+        m_characterGrid->~CharacterGrid();   // 0x140018220
         System::MemoryAllocator::MemFree(m_characterGrid);
     }
 
@@ -2133,7 +2134,7 @@ void GameUpdateLoop::Shutdown() {
     // ImageCapture
     if (m_imageCapture != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying ImageCapture...\n");
-        Game_ImageCaptureDtor(m_imageCapture);   // 0x1400a4fc0
+        m_imageCapture->~Minimap();   // 0x1400a4fc0
         System::MemoryAllocator::MemFree(m_imageCapture);
     }
 

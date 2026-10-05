@@ -191,9 +191,9 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,
     int i = 0;
     for (;;) {
         // The first household of param_2's residence, re-read every pass.
-        const ResidenceComponent::Family* family = (*param_2)->residentSlots;
-        if (!(i < family->count)) break;
-        CitizenComponent* worker = family->members[i].Get();
+        const ResidenceComponent::Family* family = (*param_2)->residentSlots._data;
+        if (!(i < family->_size)) break;
+        CitizenComponent* worker = family->_data[i].Get();
 
         // An adult (desc->adultAge <= age); the null-description test is the tree's.
         CitizenDescription* desc = worker->description;
@@ -239,11 +239,11 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
         ResidenceComponent* resComp = FindComponentDerived<ResidenceComponent>(resEntity, s_tidResidence);
         if (!resComp) continue;                       // retail assumes present; guard for safety
 
-        if (resComp->residentSlotCount >= 2)
+        if (resComp->residentSlots._size >= 2)
             continue;                                 // only single-household residences
 
-        ResidenceComponent::Family* occList = resComp->residentSlots;
-        int occCount = occList->count;
+        ResidenceComponent::Family* occList = resComp->residentSlots._data;
+        int occCount = occList->_size;
         if (occCount == 0) {
             empties.insert(resComp);
         } else {
@@ -282,9 +282,9 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
             // occupant roster, exactly as the retail index-by-8 loop tolerates.
             int j = 0;
             for (;;) {
-                const ResidenceComponent::Family* occList = srcRes->residentSlots;
-                if (!(j < occList->count)) break;
-                CitizenComponent* worker = occList->members[j].Get();
+                const ResidenceComponent::Family* occList = srcRes->residentSlots._data;
+                if (!(j < occList->_size)) break;
+                CitizenComponent* worker = occList->_data[j].Get();
                 ComponentEntity* targetOwner = bestDest->_entity;
                 worker->SetHome(targetOwner, 0);   // 0x1401163d0 (tree: "AssignWorkplace")
                 ++j;
@@ -298,8 +298,8 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
 
             if (srcStorage && dstStorage) {
                 std::vector<std::pair<ComponentDescription*, int>> toSubtract;
-                int itemCount = srcStorage->slotCount;
-                const StorageComponent::Item* items = srcStorage->storageSlots;
+                int itemCount = srcStorage->storageSlots._size;
+                const StorageComponent::Item* items = srcStorage->storageSlots._data;
                 for (int k = 0; k < itemCount; ++k) {
                     const StorageComponent::Item& entry = items[k];
                     ComponentDescription* descriptor = entry._resource;

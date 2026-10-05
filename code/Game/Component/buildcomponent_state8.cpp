@@ -44,7 +44,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "options.h"
 #include "Component/controller_state_table.h"
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -495,9 +494,9 @@ void BuildComponent::State8Finalize() {
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
 
     // (a) refund leftover storage slots to town stock (townMgr+0x170; entry idx*0x20+0xc).
-    int slotCount = storage->slotCount;
+    int slotCount = storage->storageSlots._size;
     for (int k = 0; k < slotCount; ++k) {
-        StorageComponent::Item* slotArr = storage->storageSlots;
+        StorageComponent::Item* slotArr = storage->storageSlots._data;
         StorageComponent::Item* slot = slotArr + k;
         int count = slot->_count;
         ComponentDescription* matType = slot->_resource;
@@ -542,7 +541,7 @@ void BuildComponent::State8Finalize() {
     int perItem   = desc->_pickupValue;
     int acceptTyp = static_cast<int>(desc->_rawMaterialFlags);
     // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
-    GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&storage->storageSlots).SetSize(0);
+    storage->storageSlots.SetSize(0);
     storage->rawMaterialFlags = static_cast<uint32_t>(acceptTyp);
     storage->capacity = perItem * mult;
 }

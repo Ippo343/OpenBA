@@ -315,11 +315,11 @@ int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self) {
     EnsureCallees();
     if (!self) return 0;   // defensive: callers may pass a null/unfound storage
     int total = 0;
-    int rowCount = self->slotCount;
+    int rowCount = self->storageSlots._size;
     if (0 < rowCount) {
         int row = 0;
         do {
-            const StorageComponent::Item* arr = self->storageSlots;
+            const StorageComponent::Item* arr = self->storageSlots._data;
             const ComponentDescription* inv = arr[row]._resource;
             const RawMaterialDescription* mat = nullptr;
             int n = inv->_subDescCount;
@@ -336,7 +336,7 @@ int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self) {
             row++;
             int unitVol = mat ? mat->_weight : 0;
             total += unitVol * slotCount;
-        } while (row < self->slotCount);
+        } while (row < self->storageSlots._size);
     }
     return total;
 }
@@ -357,11 +357,11 @@ int CitizenComp_Storage_GetResourceCount(const Component* self) {
     StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();
     int total = 0;
     if (storage == nullptr) return 0;   // guard: entity without a StorageComponent
-    int rowCount = storage->slotCount;
+    int rowCount = storage->storageSlots._size;
     if (0 < rowCount) {
         int row = 0;
         do {
-            const StorageComponent::Item* arr = storage->storageSlots;
+            const StorageComponent::Item* arr = storage->storageSlots._data;
             const ComponentDescription* inv = arr[row]._resource;
             const RawMaterialDescription* mat = nullptr;
             int n = inv->_subDescCount;
@@ -378,7 +378,7 @@ int CitizenComp_Storage_GetResourceCount(const Component* self) {
                 total += (arr[row]._count - arr[row]._reserve);
             }
             row++;
-        } while (row < storage->slotCount);
+        } while (row < storage->storageSlots._size);
     }
     return total;
 }

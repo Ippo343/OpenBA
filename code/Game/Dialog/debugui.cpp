@@ -369,7 +369,7 @@ static void Game_SpawnItemsInStorage_Impl() {
         if (storage->livestockType == nullptr) continue;
 
         for (int j = 0; j < 5; j++) {
-            int currentCount = storage->animalCount;
+            int currentCount = storage->animals._size;
             // 0x140128570 PastureComponent::ComputeCapacity (the forwarder
             // PastureComponent_ComputeCapacity zero-extended its int; this reads the int).
             int capacity = storage->ComputeCapacity();

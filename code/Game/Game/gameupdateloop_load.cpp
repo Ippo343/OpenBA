@@ -448,8 +448,6 @@ static_assert(std::is_trivially_default_constructible<EventLog>::value,
               "placement new of EventLog runs no code");
 static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
               "placement new of MusicPlayer runs no code");
-static_assert(std::is_trivially_default_constructible<Minimap>::value,
-              "placement new of Minimap runs no code");
 
 // 0x14009ee70 — the Map ctor (+0xF8, 0xf8). The embedded Picking::Scene @ +8
 // is a member: its default ctor (0x1801258e0) runs first, as retail's call of
@@ -519,18 +517,14 @@ void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* clim
 // quadtree over characters, NOT a SkyMesh transform (that older name came from a
 // wrong plate comment on retail Load; corrected 2026-08-30 - see
 // engine/types/GameUpdateLoop.h +0x88).
-static_assert(std::is_trivially_default_constructible<CharacterGrid>::value,
-              "placement new of CharacterGrid runs no code");
-static void CharacterGrid_Construct(CharacterGrid* grid, float param2) {
-    memset(grid, 0, sizeof(CharacterGrid));
-    grid->worldSize = param2;
-    grid->levels = 8;
-    float scale = param2 * 0.5f;
-    grid->centerX = scale;
-    grid->centerY = scale;
+// Retail zeroes +0x04..+0x5F with qword stores (the five Arrays' ctors and the centre
+// pair), then stores worldSize, levels = 8 and the centre (param2 * 0.5).
+CharacterGrid::CharacterGrid(float param2)
+    : worldSize(param2), centerX(param2 * 0.5f), centerY(param2 * 0.5f), levels(8) {
+    CharacterGrid* grid = this;
     Reimpl_Array_Resize_Stride04(&grid->levelOffsets, 8);
     {
-        int32_t* lod = grid->levelOffsets;
+        int32_t* lod = grid->levelOffsets._data;
         if (lod) {
             lod[0] = 0x0; lod[1] = 0x1; lod[2] = 0x5; lod[3] = 0x15;
             lod[4] = 0x55; lod[5] = 0x155; lod[6] = 0x555; lod[7] = 0x1555;
@@ -539,8 +533,8 @@ static void CharacterGrid_Construct(CharacterGrid* grid, float param2) {
     Reimpl_Array_Resize_Stride04(&grid->cellHead, 0x5555);
     Reimpl_Array_Resize_Stride04(&grid->cellOccupancy, 0x5555);
     {
-        int32_t* aFF = grid->cellHead;
-        int32_t* aZ = grid->cellOccupancy;
+        int32_t* aFF = grid->cellHead._data;
+        int32_t* aZ = grid->cellOccupancy._data;
         if (aFF && aZ) {
             for (int idx = 0; idx < 0x5555; ++idx) { aFF[idx] = (int32_t)0xffffffff; aZ[idx] = 0; }
         }
@@ -942,8 +936,7 @@ void GameUpdateLoop::Load() {
     // Step 21 - CharacterGrid: loose Morton quadtree over characters (+0x88, 0x60).
     {
         void* mem = AllocSub<void>(0x60, 8);
-        CharacterGrid* grid = mem ? new (mem) CharacterGrid : nullptr;
-        if (grid) CharacterGrid_Construct(grid, 2048.0f);
+        CharacterGrid* grid = mem ? new (mem) CharacterGrid(2048.0f) : nullptr;   // 0x1400182b0
         m_characterGrid = grid;
     }
 
@@ -1004,8 +997,8 @@ void GameUpdateLoop::Load() {
     // Step 26 — KeyState/map-input struct (+0x148, 0x38) zero-init.
     {
         void* mem = AllocSub<void>(0x38, 4);
+        // Retail's inlined ctor (0x140097276..0x140097291): Minimap::Minimap.
         Minimap* minimap = mem ? new (mem) Minimap : nullptr;
-        if (minimap) memset(minimap, 0, sizeof(Minimap));
         m_imageCapture = minimap;
     }
 
@@ -1192,7 +1185,7 @@ void GameUpdateLoop::Load() {
                 int n = (int)(dim * dim);
                 Reimpl_Array_Resize_Stride04(&mapStruct->overlayPixels, n);
                 Reimpl_Array_Resize_Stride04(&mapStruct->terrainPixels, n);
-                uint32_t* arr = mapStruct->overlayPixels;
+                uint32_t* arr = mapStruct->overlayPixels._data;
                 if (arr) memset(arr, 0, (size_t)n * 4);
             }
 

@@ -312,8 +312,8 @@ void DestroyComponent::ScatterContents(int baseX, int baseY, int width, int dept
         // 0x10 bytes: resource, count, reserve).
         StorageComponent* storage = entity->FindComponent<StorageComponent>();
         if (storage) {
-            int nStacks = storage->slotCount;
-            const StorageComponent::Item* stacks = storage->storageSlots;
+            int nStacks = storage->storageSlots._size;
+            const StorageComponent::Item* stacks = storage->storageSlots._data;
             int divisor = (delivered > 0) ? 2 : 1;
             for (int i = 0; i < nStacks; i++) {
                 const StorageComponent::Item& s = stacks[i];

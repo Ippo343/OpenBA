@@ -178,7 +178,7 @@ void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, i
 // ============================================================
 int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material) {
     StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    for (int i = 0; i < storage->slotCount; ++i) {
+    for (int i = 0; i < storage->storageSlots._size; ++i) {
         const StorageComponent::Item& item = storage->storageSlots[i];
         if (item._resource == material) {
             return item._count - item._reserve;

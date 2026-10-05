@@ -23,9 +23,8 @@
 //   +0x28 Collection::Array<Item> _items: data +0x28, count +0x30, capacity
 //         +0x34 (SetSize 0x14000f090; 0x10-byte items {ExternalPtr resource,
 //         int32 _count, int32 _reserve}; the retail dtor MemFrees the data).
-//         Declared as its three raw members (B.4 H5: an Array member would
-//         give the tree's defaulted dtor the MemFree retail has and the tree
-//         lacks -- the B38 D2 PORT GAP below; a `behaviour:` commit, LISTED).
+//         A real Collection::Array over that row (kSpec_Pod16): its ~Array is
+//         the dtor's MemFree + the +0x28 / +0x30 zero qwords (0x14012c890).
 //   +0x38 int32  capacity: Serialize(int&); OnAdded = StorageDescription
 //         _pickupValue (+0x24) times the footprint area. Not written by the
 //         retail ctor (the tree's ctor zeroes it).
@@ -38,8 +37,12 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (storageSlots)
 
 class ComponentDescription;   // Component/ComponentDescription.h
+// 0x14000f090's row (Array<{u64,u64}>: copy two qwords, zero the new tail, no element
+// destroy); defined in storagecomponent.cpp, shared with CitizenBehavior +0x180.
+namespace CitizenBehaviorRows { extern const rtcoll::ArraySpec kSpec_Pod16; }
 
 class StorageComponent final : public Component {
     DECLARE_EXE_TYPE(StorageComponent)
@@ -57,8 +60,8 @@ public:
 
     StorageComponent();                                           // 0x14012c8d0
 
-    // PORT GAP (retail 0x14012c870) — B38 D2: retail frees the +0x28 slot array;
-    // the tree never did (Inert_ScalarDtor). Kept as the tree's.
+    // 0x14012c870: the body is empty; ~storageSlots frees the +0x28 item array and
+    // zeroes +0x28 / +0x30 (0x14012c890..0x14012c8a0), then ~Component.
     ~StorageComponent() override = default;                       // [0] 0x140038d60
     void Persist(IO::Stream& stream) override;                          // [3] 0x14012c730
     void Startup() override;                                      // [4] 0x14012c720 own RET
@@ -68,9 +71,9 @@ public:
     int  QueryCount() const;                                      // 0x14012cf10 sum of count * RawMaterialDescription::_weight
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    Item*    storageSlots;      // +0x28 _items data (freed by the retail dtor; H5: kept a raw triple)
-    int32_t  slotCount;         // +0x30 _items count
-    int32_t  slotCapacity;      // +0x34 _items capacity
+    using ItemArray = Collection::Array<Item, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&CitizenBehaviorRows::kSpec_Pod16>>;
+    ItemArray storageSlots;     // +0x28 _items (count +0x30, capacity +0x34; freed by the dtor)
     int32_t  capacity;          // +0x38 total capacity (Serialize int&)
     uint32_t rawMaterialFlags;  // +0x3C StorageDescription::_rawMaterialFlags copy
 };
@@ -82,7 +85,7 @@ static_assert(offsetof(StorageComponent::Item, _resource) == 0x00, "item Externa
 static_assert(offsetof(StorageComponent::Item, _count) == 0x08, "item _count +0x08 (Persist 0x14012c730)");
 static_assert(offsetof(StorageComponent::Item, _reserve) == 0x0C, "item _reserve +0x0C (Persist 0x14012c730)");
 static_assert(offsetof(StorageComponent, storageSlots) == 0x28, "");
-static_assert(offsetof(StorageComponent, slotCount) == 0x30, "");
-static_assert(offsetof(StorageComponent, slotCapacity) == 0x34, "StorageComponent _items capacity @ +0x34 (0x14000f090)");
+static_assert(offsetof(StorageComponent, storageSlots) + offsetof(StorageComponent::ItemArray, _size) == 0x30, "");
+static_assert(offsetof(StorageComponent, storageSlots) + offsetof(StorageComponent::ItemArray, _capacity) == 0x34, "StorageComponent _items capacity @ +0x34 (0x14000f090)");
 static_assert(offsetof(StorageComponent, capacity) == 0x38, "StorageComponent::capacity @ +0x38 (Serialize int&)");
 static_assert(offsetof(StorageComponent, rawMaterialFlags) == 0x3C, "StorageComponent::rawMaterialFlags @ +0x3C");

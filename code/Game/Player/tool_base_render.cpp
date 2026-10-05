@@ -502,7 +502,7 @@ void Impl_c4a0(HighlightComponent* hc) {
 
     bool neighbourActive = false;
     if (siblings != nullptr) {
-        int cnt = siblings->childCount;
+        int cnt = siblings->children._size;
         if (cnt > 0) {
             int i = 0;
             do {
@@ -515,7 +515,7 @@ void Impl_c4a0(HighlightComponent* hc) {
                     neighbourActive = neighbourActive || active;
                 }
                 i++;
-            } while (i < siblings->childCount);
+            } while (i < siblings->children._size);
             if (neighbourActive) goto add_prebuilt;
         }
     }
@@ -694,7 +694,7 @@ void ReportDeadSelectedEntity(EditTool* self, const ComponentEntity* ent, uint64
 void SetSelectionHighlight(ComponentEntity* selected, uint8_t flag) {
     MultiObjectComponent* cont = selected->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (cont != nullptr) {
-        int cnt = cont->childCount;
+        int cnt = cont->children._size;
         for (int i = 0; i < cnt; i++) {
             ComponentEntity* sib = cont->children[i].Get();
             HighlightComponent* hi = sib->FindComponent<HighlightComponent>();   // 0x140007080
@@ -704,7 +704,7 @@ void SetSelectionHighlight(ComponentEntity* selected, uint8_t flag) {
                     Impl_c4a0(hi);
                 }
             }
-            cnt = cont->childCount;
+            cnt = cont->children._size;
         }
     }
     HighlightComponent* hi2 = selected->FindComponent<HighlightComponent>();   // 0x140007080

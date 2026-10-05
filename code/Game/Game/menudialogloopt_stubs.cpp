@@ -448,11 +448,11 @@ void MenuDialogLoopT::Shutdown() {
         scene()->RemoveGlobalObject(_mainMesh);
         if (Graphics::Geometry* o = _mainMesh) deleteGeometry(o);
     }
-    // LEFT: +0xbc8 stays void*: retail builds it with MemAlloc(0xf0) + the exe
-    // ctor 0x1400d3f10 (0x14009ac9a) and adds it as a scene global; its class
-    // is not settled from retail (the header's "TradeWork" comment is unverified).
+    // +0xbc8: retail builds it with MemAlloc(0xf0) + the exe Geometry subclass ctor
+    // 0x1400d3f10 (0x14009ac9a: the import Geometry ctor, then its own vtable) and adds it
+    // as a scene global.
     if (_dlcShip) {
-        Graphics::Geometry* ship = static_cast<Graphics::Geometry*>(_dlcShip);   // LEFT: +0xbc8 stays void*: retail builds it with MemAlloc(0xf0) + the exe ctor 0x1400d3f10 (0x14009ac9a) and adds it as a scene global; its class is not settled from retail (...
+        Graphics::Geometry* ship = _dlcShip;
         scene()->RemoveGlobalObject(ship);
         if (ship) deleteGeometry(ship);
     }

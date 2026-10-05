@@ -387,8 +387,8 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
             bool accepted = false;
             if (param_6 == '\0') {
                 int headroom = 0;
-                const int slots = storage->slotCount;
-                const StorageComponent::Item* items = storage->storageSlots;
+                const int slots = storage->storageSlots._size;
+                const StorageComponent::Item* items = storage->storageSlots._data;
                 for (int k = 0; k < slots; ++k) {
                     if (items[k]._resource == material) {
                         headroom = items[k]._count - items[k]._reserve;
