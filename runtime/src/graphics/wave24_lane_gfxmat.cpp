@@ -360,7 +360,7 @@ namespace {
 // String is viewed at the field. (B.4 acceptance MOD: `MaterialConstant::name`
 // is the real String and serializes by name.)
 inline void SerString(void* field, IO::Serializer& ser) {
-    static_cast<System::String*>(field)->Serialize(ser);   // LEFT: its one caller passes &MaterialTexture::name, a char* (a System::String member makes the 0x10 texture element non-trivial and changes MaterialInstance::_textures' spec rows: retail's 0x180061480 grow / copy / free to be read first)
+    static_cast<System::String*>(field)->Serialize(ser);   // LEFT: S4 GFX2 measured: retail's 0x10 element is {String, ExternalPtr} built by AddTexture 0x180103350's stack pair (String copy = refcount bump) and released per element by 0x180005930 (kSpec_StringExt's destroy); a System::String MaterialTexture::name makes the element non-trivially-copyable, so the raw `name` stores in its four hand-written users become String ctor / operator= / ~String calls: save/saveload_draw.cpp ArrayBindingSetSize (a SECOND transcription of 0x180061480: `dst->name = nullptr` then adopt) and its Draw-local binding (ReleaseStringSlot, then an implicit ~String would release again), renderer.cpp AddTexture's local, collection/array.cpp MaterialTextureAssign (RT2's) -- one behaviour unit: _textures as ExplicitSpec<&kSpec_StringExt>, those four onto the String's ctor / dtor, saveload's duplicate resize compared with the row (B3) and replaced
 }
 
 }  // namespace
