@@ -234,7 +234,7 @@ extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
 class WeatherParticleGeometry;
 class Weather;
 extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80
-extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount);  // 0x1400198a0
+// 0x1400198a0 Reimpl_WeatherArray_Resize: declared in Component/EnvironmentDescription.h (it takes the typed array).
 
 // ---- weather_sim.cpp
 class WeatherSimulation; namespace System { class Time; }

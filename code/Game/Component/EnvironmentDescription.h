@@ -25,6 +25,7 @@
 #include <cstddef>
 #include "object/External.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (the +0x28 weather choices)
 
 class ComponentDescription;   // Component/ComponentDescription.h
 class Weather;                // Game/Weather.h
@@ -48,8 +49,9 @@ public:
     // One weather choice (0x10 bytes; Serialize 0x140094040: ExternalPtr<Weather>
     // 0x1400196a0, then ExternalPtr<ComponentDescription> 0x140002340).
     struct WeatherChoice {
-        Weather*              weather;       // +0x00
-        ComponentDescription* description;   // +0x08
+        // Zero-initialised: the array's new element is zeroed (0x1400198a0's tail).
+        Weather*              weather = nullptr;       // +0x00
+        ComponentDescription* description = nullptr;   // +0x08
     };
 
     EnvironmentDescription();
@@ -63,9 +65,10 @@ public:
 
     // ---- fields ----
     ComponentDescription* _environmentRef;   // +0x20 ExternalPtr<ComponentDescription> (0x140002340)
-    WeatherChoice* _weatherArray;   // +0x28 Array<WeatherChoice> data (resize 0x1400198a0)
-    int32_t      _weatherCount;     // +0x30 Serialize(int&) through a local
-    int32_t      _weatherCap;       // +0x34
+    // +0x28 Array<WeatherChoice> {data, count +0x30, capacity +0x34} (resize 0x1400198a0).
+    // Retail's ctor 0x1400941c0 zeroes it; its dtor 0x140019190 frees +0x28 and zeroes
+    // +0x28..+0x37 (0x1400191ad..0x1400191bd) before ~External: ~Array, no element destroy.
+    Collection::Array<WeatherChoice> _weatherArray;
     WeatherEntry _months[12];       // +0x38..+0x1b8
 };
 
@@ -75,6 +78,8 @@ static_assert(sizeof(EnvironmentDescription) == 0x1b8, "EnvironmentDescription i
 static_assert(alignof(EnvironmentDescription) == 8, "EnvironmentDescription alignment");
 static_assert(offsetof(EnvironmentDescription, _environmentRef) == 0x20, "EnvironmentDescription::_environmentRef @ +0x20");
 static_assert(offsetof(EnvironmentDescription, _weatherArray)   == 0x28, "EnvironmentDescription::_weatherArray @ +0x28");
-static_assert(offsetof(EnvironmentDescription, _weatherCount)   == 0x30, "EnvironmentDescription::_weatherCount @ +0x30");
-static_assert(offsetof(EnvironmentDescription, _weatherCap)     == 0x34, "EnvironmentDescription::_weatherCap @ +0x34");
+static_assert(sizeof(Collection::Array<EnvironmentDescription::WeatherChoice>) == 0x10, "the +0x28 Array header is 16 bytes");
 static_assert(offsetof(EnvironmentDescription, _months)         == 0x38, "EnvironmentDescription::_months @ +0x38");
+
+// 0x1400198a0 — the weather-choice array's resize (Game/weather_particles.cpp).
+extern "C" void Reimpl_WeatherArray_Resize(Collection::Array<EnvironmentDescription::WeatherChoice>* hdr, int newCount);

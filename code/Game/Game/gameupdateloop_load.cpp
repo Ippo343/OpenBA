@@ -507,7 +507,7 @@ void WeatherSimulation::Bind(EnvironmentDescription* env, ClimateGenerator* clim
     environment = env;
     climate = climateGen;
     if (env) {
-        int count = env->_weatherCount;          // env+0x30
+        int count = env->_weatherArray._size;    // env+0x30
         effects.SetSize(count);    // 0x1400191f0
         emitters.SetSize(count);   // 0x1400032e0
         int n0 = effects.GetSize();
@@ -894,7 +894,7 @@ void GameUpdateLoop::Load() {
             // The file's root resource is the EnvironmentDescription.
             envRes = ::Object::ExternalFactory::_singleton
                     ->FindOrLoadAs<EnvironmentDescription>(fname);           // B.3.3 bridge
-            int wxCount = envRes ? static_cast<int>(envRes->_weatherCount) : 0;   // env+0x30
+            int wxCount = envRes ? static_cast<int>(envRes->_weatherArray._size) : 0;   // env+0x30
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
                     (void*)envRes, wxCount);
             fflush(stderr);

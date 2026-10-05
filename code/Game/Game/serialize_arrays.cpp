@@ -287,13 +287,13 @@ static_assert(sizeof(SpawnDescription::Entry) == sizeof(SpawnEntry), "the row's 
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     // B.3.2 bridge: Geometry+0x210 and friends are still raw headers.
-    reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);   // LEFT: audit WORK (SIG, callers in Component/ Player/ Tutorial/ menuscene hold other element types; needs Ptr8-zero-row typed wrappers per header type): H5 Geometry+0x210 and the other callers' headers are raw triples (other owners' headers)
+    reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): eight holders of five element types in two header types reach 0x140001bb0 (Collection::Array<T*>: MenuScene +0x40/+0x60, Tutorial steps, TutorialStep's three ExternalPtr arrays; RawArray: WorldGeometry::_batchMaterials, the +0x1E0 inner Vector2 outlines; AmbientEmitterDescription +0x28 raw triple); Array<T*>'s own SetSize leaves the tail unzeroed (trait row), so each typed wrapper would carry this same header cast
 }
 
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     // B.3.2 bridge: the Struct60B +0x08 sub-array header is still raw bytes.
-    reinterpret_cast<Pod14A4Array*>(arrayHeader)->SetSize(newCount);   // LEFT: audit WORK (SIG, as Stride08): H5 the Struct60B +0x08 sub-array header is a raw triple (other owner's header)
+    reinterpret_cast<Pod14A4Array*>(arrayHeader)->SetSize(newCount);   // LEFT: SIG, the last raw holder (B4 Z LAST CODE): MenuScene::particles is a typed Array<MenuSceneParticle> whose trait row equals this one, but GeometryBatch::vertices (+0x08 RawArray<GeometryBatchVertex>, WorldGeometryElements.h, serialize_struct60b_serialize.cpp) is a raw triple of a class the tree memsets and MemFrees by hand (AddDecal's template, GeometryBatchArray_Release): a GeometryBatch CLASS unit first
 }
 
 // ============================================================
