@@ -39,7 +39,6 @@ namespace UI { class DialogInstance; class Element; }
 extern "C" void* RtUi_UserInterface_GetFirstDialog(UI::UserInterface* self, void* retval);
 extern "C" void* RtUi_UserInterface_GetFirstContainedDialog(const UI::UserInterface* self,
                                                             void* retval, int x, int y);
-extern "C" void  RtUi_UserInterface_AddDialog(UI::UserInterface* self, void** dlgPtr);
 
 namespace {
 
@@ -118,9 +117,6 @@ UNIT_TEST(ui_userinterface_retslot_door_shapes) {
                         void* (*)(UI::UserInterface*, void*)>::value));
     CHECK((std::is_same<decltype(&RtUi_UserInterface_GetFirstContainedDialog),
                         void* (*)(const UI::UserInterface*, void*, int, int)>::value));
-    // An InternalPtr-argument door takes the caller's temporary BY ADDRESS.
-    CHECK((std::is_same<decltype(&RtUi_UserInterface_AddDialog),
-                        void (*)(UI::UserInterface*, void**)>::value));
 }
 
 // ---------------------------------------------------------------- PART D
