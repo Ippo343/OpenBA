@@ -39,9 +39,9 @@ insertions, 126,334 deletions. S4 alone (`b6d3fdf62..`): 266 files, 1,432 / 1,74
 | `sa-stress` (recorded, never chased) | exit 0; update 1.67 ms/frame (p95 2.10), 139 fps, EntityList 1.42 ms |
 | true release compile + `make clean` | exit 0, 939 files, exe 6,411,098 bytes |
 | clean rebuild + gate `closeclean` | debug / perf / unit exit 0, 914 / 0, 0 new warnings, three routes + the -O2 route clean, typetable == baseline, resave 3/3, 0 NOT IMPLEMENTED stubs, stub set unchanged |
-| `worldcmp.sh` (seed 12345 against `b2a5434c`) | identical, 118 lines — at `3e57f2ee` and at `b32b283f` (after the MapGenerator / TerrainGenerator ctor commit and the Camera copy ctor). NOT re-run at `9903a0f1f` (two merges later: RT2, LAST; neither touches world generation) |
-| `devlost.sh` | COMPLETE at `d04813af` (219 round trips) and `b32b283f` (207), crash log empty. The run at the close was stopped by the harness for low memory: SEE section 4. NOT re-run at `9903a0f1f` |
-| the removal tool's CalcPath by hand | **OWED: the user** (toolbar Remove button on a new game; the harness route skips CalcPath) |
+| `worldcmp.sh` (seed 12345 against `b2a5434c`) | identical, 118 lines — at `3e57f2ee`, `b32b283f` and the final tree `9903a0f1f` |
+| `devlost.sh` | COMPLETE at `d04813af` (219 round trips) and `b32b283f` (207), crash log empty. The uncapped run at the close was stopped by the harness for low memory (section 4); re-run capped on `9903a0f1f`, default and `DLFRAME=40000` forms: INJECT=1, 5 round trips COMPLETE, crash log empty |
+| the removal tool's CalcPath by hand | done by the user on `9903a0f1f`: buildings and resources removed, no issue |
 
 ## 4. Found on the way
 

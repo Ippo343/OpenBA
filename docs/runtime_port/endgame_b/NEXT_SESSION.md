@@ -2,8 +2,8 @@
 
 B.4 (the cast metric) is done as far as B.4 can take it: **336** counted casts, 240 of them `dx11/` and the
 96 outside it all filed under a deferred or ruled group with **0 open work** (`b4_session/LEFT_FREE.md`
-section C; `python docs/runtime_port/endgame_b/b4_session/leftfree_c.py --check`). Three close checks are
-owed (§1). The next step is the **dx11 seam** (§2). Numbers: `b4_session/CLOSE_NUMBERS.md`. The plan this
+section C; `python docs/runtime_port/endgame_b/b4_session/leftfree_c.py --check`). It is CLOSED: the three
+close checks of §1 passed on the final tree. The next step is the **dx11 seam** (§2). Numbers: `b4_session/CLOSE_NUMBERS.md`. The plan this
 session executed: `git show b6d3fdf62:docs/runtime_port/endgame_b/NEXT_SESSION.md`.
 
 ## 0. Scope, as the user set it (unchanged)
@@ -14,7 +14,7 @@ The differences from retail are a SEPARATE task (`docs/known_port_issues.md` ent
 to 890). A raw-storage member becomes a real member only in a `behaviour:` commit that reproduces retail's
 constructor AND destructor; any other difference found is recorded, not fixed.
 
-## 1. Where it stands, and what is owed before B.4 is called closed
+## 1. Where it stands (CLOSED 2026-10-05)
 
 | | |
 |---|---|
@@ -24,16 +24,13 @@ constructor AND destructor; any other difference found is recorded, not fixed.
 | invariants | new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`, resave 5/5 on every merge, 0 new warnings, unit 914 / 0 |
 | acceptance | 5 lines off: 04 / 05 / 06 / 07 are `dx11/`'s (07 also counts 6 DEFERRED casts that still carry their marker), 10 is the accepted template-field miscount (21). Line 01 is in its CLOSING FORM (casts outside `dx11/` in no DEFERRED / RULED group = 0) |
 
-Owed (cheap; do them first):
-1. **The removal tool's CalcPath BY HAND — the user**: new game, toolbar Remove button, drag over a tree and
-   a building. The harness route skips CalcPath (`removalDesc(+0x38)` null). Nothing else exercises it.
-2. `devlost.sh` once on the final tree. It passed at `d04813af` and `b32b283f`; two merges (RT2, LAST: no
-   video code) came after. **Read §3 first: the script is capped now (`DLMAX`, default 5 round trips).**
-3. `worldcmp.sh .claude/worktrees/oldbase/standalone/build/reimpl-x64.exe standalone/build/reimpl-x64.exe <label>`
-   once on the final tree (identical at `3e57f2ee` and `b32b283f`). After it the `oldbase` worktree and the
-   ten `b4s4-*` branches / agent worktrees can go (all merged: `git worktree remove`, `git branch -d`;
-   `b4y1-CW`, `b4y1-GAMEA`, `b4y1-GAMEB`, `defects-open-5` are older unmerged branches: not this step's).
-4. Then write "CLOSED" on the STATUS block and in the memory file.
+The close checks, all on the final tree `9903a0f1f`:
+1. The removal tool BY HAND (the user): buildings and resources removed, no issue.
+2. `devlost.sh`, default and the gate's `DLFRAME=40000` form: INJECT=1, 5 round trips COMPLETE (the cap),
+   crash log empty, free memory steady at 20 GB.
+3. `worldcmp.sh` against `b2a5434c`: identical, 118 lines.
+The `b4s4-*` branches and agent worktrees are removed; `oldbase` stays until the dx11 step's own
+world comparison. `b4y1-CW`, `b4y1-GAMEA`, `b4y1-GAMEB`, `defects-open-5` are older unmerged branches.
 
 ## 2. The next step: the dx11 seam
 

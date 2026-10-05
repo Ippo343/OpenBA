@@ -21,15 +21,16 @@ built them wrong, and callbacks stored in data.
 ## Endgame (2026-09-13)
 
 - **B.4 FINISHING SESSION (S4) — 2026-10-05: 389 -> 336 (149 -> 96 outside `dx11/`, 0 of them open work);
-  B.4's own work is DONE, three close checks are owed.** 11 gated merges (`b4_session/GATE_TABLE.md` rows
+  B.4 CLOSED.** 11 gated merges (`b4_session/GATE_TABLE.md` rows
   159-169), 0 problems; invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`,
   resave 5/5 on every merge, 0 new warnings, unit 914 / 0). Ran as: recover (39 worktrees, 320 branches;
   the memory was `cpptools`) -> `b4fin-VOID` squashed -> three rounds of opus agents by disjoint file set
   (IBP, SIG, GFX, RTUI; POS, RESOLVE; GFX2, RT2; LAST) -> the coordinator's floor rulings -> `stepclose.sh`
   (clean). The 96 left are 63 retail-difference rows, 23 named prerequisites (13 of them one blocker:
   retail open-codes `~String` / `~Array`), 7 dx11 seam, 3 ruled to stay listed. Acceptance: 5 lines off, 4
-  of them `dx11/`'s, 1 the accepted template-field miscount. OWED: the removal tool's CalcPath by hand (the
-  user), `devlost.sh` and `worldcmp.sh` once on the final tree (both passed two merges earlier). FOUND: the
+  of them `dx11/`'s, 1 the accepted template-field miscount. Close checks on the final tree: the removal tool by hand (the user: buildings and resources
+  removed, no issue), `devlost.sh` both forms (INJECT=1, round trips complete, crash log empty, capped),
+  `worldcmp.sh` identical. FOUND: the
   device-lost route grows to 20 GB after one injection (row 890) — the cause of both low-memory stops.
   Numbers: `b4_session/CLOSE_NUMBERS.md`. Next: the dx11 seam, `endgame_b/NEXT_SESSION.md`.
 - **B.4 THIRD SESSION — 2026-10-05: 1,051 -> 389 (811 -> 149 outside `dx11/`), NOT closed; stopped by the
