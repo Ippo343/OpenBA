@@ -344,11 +344,10 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
         std::memcpy(context._dynamicVertexCursor, batch.vertices.data, vertBytes);
         context._dynamicVertexCursor += vertBytes;
 
-        // LEFT: Context +0x20f0 (the dynamic index cursor) is an integer in
-        // R-VIDEO's header (`_unknown20f0`).
+        // Context +0x20f0, the dynamic index cursor (16-bit indices).
         size_t idxBytes = static_cast<size_t>(idxCount) * 2;
-        std::memcpy(reinterpret_cast<void*>(context._unknown20f0), batch.indices.data, idxBytes);   // LEFT: Context +0x20f0 (the dynamic index cursor) is an integer in R-VIDEO's header (`_unknown20f0`).
-        context._unknown20f0 += idxBytes;
+        std::memcpy(context._dynamicIndexCursor, batch.indices.data, idxBytes);
+        context._dynamicIndexCursor += static_cast<size_t>(idxCount);   // idxBytes / 2
 
         context.EndIndexedVertices(0);
     };

@@ -204,15 +204,15 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
         context.AddVertices(4, vtx);
 
         // 6 indices: base, base+1, base+2, base, base+2, base+3.
-        // LEFT: Video::Context +0x20f0 (the index cursor) is declared uint64_t (R-VIDEO's header).
-        short* ip = reinterpret_cast<short*>(context._unknown20f0);   // LEFT: video/Context.h (R-GFX-1)
+        // Video::Context +0x20f0, the dynamic index cursor (16-bit indices).
+        uint16_t* ip = context._dynamicIndexCursor;
         ip[0] = base;
         ip[1] = static_cast<short>(base + 1);
         ip[2] = static_cast<short>(base + 2);
         ip[3] = base;
         ip[4] = static_cast<short>(base + 2);
         ip[5] = static_cast<short>(base + 3);
-        context._unknown20f0 = reinterpret_cast<uint64_t>(ip + 6);   // LEFT: video/Context.h (X3-RT's) declares the +0x20f0 index cursor as uint64_t
+        context._dynamicIndexCursor = ip + 6;
 
         base = static_cast<short>(base + 4);
         center[0] += advance[0];

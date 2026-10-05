@@ -162,7 +162,7 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     context.Clear(1, 0xff000000, clearDepth, 0);
 
     // Redirect rendering to the off-screen buffer (saving the current + default).
-    void* savedRenderBuffer = context._renderBuffer;
+    const Video::RenderBuffer* savedRenderBuffer = context._renderBuffer;
     Video::RenderBuffer* savedDefaultBuffer = context._defaultRenderBuffer;
 
     // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors

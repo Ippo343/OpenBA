@@ -339,7 +339,7 @@ extern "C" Video::Context* RtVideo_Context_Ctor(Video::Context* self, Video::Dev
 
     self->_dynamicVertexCursor   = nullptr;     // +0x20e0
     self->_dynamicVertexStride   = 0;           // +0x20e8 (a dword)
-    self->_unknown20f0           = 0;           // +0x20f0
+    self->_dynamicIndexCursor    = nullptr;     // +0x20f0
     self->_dynamicVertexBuffer   = nullptr;     // +0x20f8
     self->_unknown2100           = 0;           // +0x2100
     self->_unknown2108           = 0;           // +0x2108

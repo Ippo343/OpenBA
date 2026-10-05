@@ -310,14 +310,20 @@ public:
     void SetTime(float time);                                      // 0x18001a330
     void SetFog(float nearZ, float farZ, const Math::Vector4& color);  // 0x18001a360
     void SetViewport(const Viewport& vp);                          // 0x18001a060
-    // LEFT (B.4 R-VIDEO): the mangled names spell `PEBVImageBuffer@2@`,
-    // `PEBVVertexBuffer@2@`, `PEBVRenderBuffer@2@`, `PEAVRenderBuffer@2@`, but
-    // dx11/src/contextdata.cpp and code/Game callers hand these `void*`, so the
-    // parameters stay untyped until those callers type their pointers.
-    void SetImageBuffer(const void* image, int32_t slot);          // 0x180019ed0 (const ImageBuffer*)
+    // LEFT (B.4 R-VIDEO): the mangled names spell `PEBVVertexBuffer@2@`,
+    // `PEAVRenderBuffer@2@`, but dx11/src/contextdata.cpp and code/Game callers
+    // hand these `void*`, so the parameters stay untyped until those callers
+    // type their pointers.
+    void SetImageBuffer(const ImageBuffer* image, int32_t slot);   // 0x180019ed0
     void SetVertexBuffer(const void* vb, int32_t slot,
                          int32_t offset, int32_t stride);          // 0x180019f20 (const VertexBuffer*)
-    void SetRenderBuffer(const void* rb);                          // 0x1800f2100 (const RenderBuffer*)
+    void SetRenderBuffer(const RenderBuffer* rb);                  // 0x1800f2100
+    // B4 FORWARD: dx11/src/contextdata.cpp:499 hands its default render
+    // buffer as a `void*` (dx11 is outside wave Y); inline, so the dx11 call
+    // site compiles to the typed call.
+    void SetRenderBuffer(const void* rb) {
+        SetRenderBuffer(static_cast<const RenderBuffer*>(rb));    // CAST-OK: dx11_seam
+    }
     void SetDefaultRenderBuffer(void* rb);                         // 0x1800ef3c0 (RenderBuffer*)
     void SetTransform(int32_t slot, const Math::Matrix& m);        // 0x18001a6b0
     void SetTransformScale(int32_t slot, const Math::Matrix& m,
@@ -473,12 +479,10 @@ public:
     uint32_t _vertexBufferDirty;                        // 0x001c
     int32_t  _transformCount;                           // 0x0020
     int32_t  _unknown0024;                              // 0x0024
-    // LEFT `void*` (B.4 R-VIDEO): graphics/wave21_lane_gfxbody.cpp,
-    // graphics/wave27_lane_gfxbig.cpp (R-GFX, running) and save/saveload_draw.cpp
-    // store untyped pointers into these two by name. Retail: const RenderBuffer*,
-    // const ImageBuffer*[16].
-    void*    _renderBuffer;                             // 0x0028
-    void*    _imageBuffers[16];                         // 0x0030
+    // Retail: const RenderBuffer*, const ImageBuffer*[16] (the setters'
+    // mangled names, `PEBVRenderBuffer@2@` / `PEBVImageBuffer@2@`).
+    const RenderBuffer* _renderBuffer;                  // 0x0028
+    const ImageBuffer*  _imageBuffers[16];              // 0x0030
     const VertexLayout* _vertexLayout;                  // 0x00b0
     const VertexBuffer* _vertexBuffers[16];             // 0x00b8
     int32_t  _vertexOffsets[16];                        // 0x0138
@@ -569,7 +573,11 @@ public:
     uint8_t* _dynamicVertexCursor;                      // 0x20e0
     int32_t  _dynamicVertexStride;                      // 0x20e8
     int32_t  _unknown20ec;                              // 0x20ec
-    uint64_t _unknown20f0;                              // 0x20f0
+    // The dynamic INDEX cursor: the backend (dx11 contextdata.cpp
+    // kDynIndexCursor) maps it, the geometry writers store 16-bit indices
+    // through it and step it (wave27_lane_gfxpart.cpp: `ADD R14W,4`, word
+    // stores).
+    uint16_t* _dynamicIndexCursor;                      // 0x20f0
     VertexBuffer* _dynamicVertexBuffer;                 // 0x20f8
     uint64_t _unknown2100;                              // 0x2100
     uint64_t _unknown2108;                              // 0x2108
@@ -601,6 +609,7 @@ static_assert(offsetof(Context, _transformCount)        == 0x0020, "Context::_tr
 static_assert(offsetof(Context, _unknown0024)           == 0x0024, "Context::_unknown0024 (BindResources' second counter)");
 static_assert(offsetof(Context, _renderBuffer)          == 0x0028, "Context::_renderBuffer");
 static_assert(offsetof(Context, _imageBuffers)          == 0x0030, "Context::_imageBuffers");
+static_assert(offsetof(Context, _dynamicIndexCursor)    == 0x20f0, "Context::_dynamicIndexCursor");
 static_assert(offsetof(Context, _vertexLayout)          == 0x00b0, "Context::_vertexLayout");
 static_assert(offsetof(Context, _vertexBuffers)         == 0x00b8, "Context::_vertexBuffers");
 static_assert(offsetof(Context, _vertexOffsets)         == 0x0138, "Context::_vertexOffsets");
