@@ -222,6 +222,44 @@ static_assert(offsetof(ProfessionBucket, _padTail) == 0x34, "");
 static_assert(sizeof(TemplateBucket) == 0x38, "");
 static_assert(sizeof(CitizenBucketSet<Profession>) == 0x10, "{root qword, count dword} + pad");
 
+// ---- 0x140017230: the one keyed insert both bucket trees share ---------------
+// Retail compiled the bucket Set's keyed insert once and folded the two Key
+// instantiations (ICF): 0x140017230 builds a stack element {key, a copy of the
+// entity array} (0x140015ec0), inserts it through 0x1400172f0 (the node ctor
+// 0x140017460 copies the array again), frees the temporary's buffer and returns
+// param_2. The core (Component/keystone_a_restree.cpp) walks the tree through its
+// own {root, count} / 0x38-node view; InsertCitizenBucket<Key> is the typed wrapper
+// the call sites use.
+//
+// The array record (param_4): both retail callers pass an empty
+// Array<InternalPtr<ComponentEntity>> temporary, 0x10 bytes zeroed as two qwords
+// (0x140088e89 / 0x140088e8e). It is a constructor-less POD so a caller's local
+// adds no ctor / dtor.
+struct CitizenBucketEntities {
+    ComponentEntity** data;       // +0x00
+    int32_t           count;      // +0x08
+    int32_t           capacity;   // +0x0C
+};
+static_assert(sizeof(CitizenBucketEntities) == 0x10, "the array record 0x140015ec0 copies");
+static_assert(offsetof(CitizenBucketEntities, count)    == 0x08, "");
+static_assert(offsetof(CitizenBucketEntities, capacity) == 0x0C, "");
+
+namespace CitizenBucketCore { struct Tree; struct Node; }   // the core's own view (keystone_a_restree.cpp)
+extern "C" CitizenBucketCore::Node** ResidenceComponent_impl_7230(CitizenBucketCore::Tree* tree,
+                                                                  CitizenBucketCore::Node** out,
+                                                                  const uint64_t* key,
+                                                                  const CitizenBucketEntities* entities);  // 0x140017230
+
+template <class Key>
+CitizenBucketNode<Key>** InsertCitizenBucket(CitizenBucketSet<Key>* set, CitizenBucketNode<Key>** out,
+                                             const Key* const* key, const CitizenBucketEntities* entities) {
+    ResidenceComponent_impl_7230(reinterpret_cast<CitizenBucketCore::Tree*>(set),  // CAST-OK: elem_stride
+                                 reinterpret_cast<CitizenBucketCore::Node**>(out),  // CAST-OK: elem_stride
+                                 reinterpret_cast<const uint64_t*>(key),           // CAST-OK: elem_stride
+                                 entities);
+    return out;
+}
+
 // ============================================================
 // WaterCellPair — one element of the +0x130 array (stride 8, align 4; 0x140017f60)
 // ============================================================

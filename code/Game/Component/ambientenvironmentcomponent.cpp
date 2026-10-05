@@ -214,8 +214,8 @@ void AmbientEnvironmentComponent::Update(const System::Time* /*time*/) {
     AmbientEnvironmentDescription* desc = ::Object::IsDerivedFromNullSafe(descRaw, s_tidEnvDesc)
                                               ? static_cast<AmbientEnvironmentDescription*>(descRaw) : nullptr;
     if (!desc) return;
-    int count = desc->_entryCount;
-    AmbientEnvironmentBiome* table = desc->_entries;
+    int count = desc->_entries._size;
+    AmbientEnvironmentBiome* table = desc->_entries._data;
     if (count <= 0 || !table) return;
 
     // [PerfX AMBIENT_THROTTLE -- NON-RETAIL] the biome histogram over the emitter's tile

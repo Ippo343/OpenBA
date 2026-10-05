@@ -108,12 +108,17 @@ public:
     // The claim tree's 0x38-byte node: parent +0x18, left +0x20, right +0x28, balance +0x30.
     using ClaimNode = Collection::Set<Claim>::Node;
 
+    // The claim tree's header, Collection::Set<Claim>'s {root, count}, as a POD (no ctor,
+    // no dtor: H5, Set has a dtor; the class's ctor zeroes it and its dtor frees the claims
+    // and their carry lists by hand, as retail's 0x14002a910 / 0x14002af40 do). The tree
+    // entry points (0x14002a9f0, 0x14002aaa0, 0x14002ac40, 0x14002b290) take it.
+    struct ClaimTree {
+        ClaimNode* root;         // +0x00
+        int32_t    count;        // +0x08 (GetPriority 0x140029860 `CMP [RCX+0x50],EAX; SETG`)
+    };
+
     // --- MarketWork fields (+0x48) ---
-    // +0x48 / +0x50: Collection::Set<Claim> {root, count}; the container stays two raw
-    // fields (H5: Set has a dtor).
-    ClaimNode* _field48;         // +0x48: the claim tree root
-    int32_t  _field50;           // +0x50: claim count (GetPriority 0x140029860 `CMP [RCX+0x50],EAX; SETG`)
-    uint8_t  _pad54[4];          // +0x54: padding
+    ClaimTree _field48;          // +0x48: the claim tree {root +0x48, count +0x50}
 };
 
 static_assert(sizeof(MarketWork::Carry) == 0x10, "MarketWork carry entry stride 0x10 (Execute 0x1400f18c0)");
@@ -145,4 +150,5 @@ void WorkLeaf_MarketTreeCleanup_2af40(MarketWork::ClaimNode* const* ctx, MarketW
 static_assert(sizeof(MarketWork) == 0x58, "MarketWork is 0x58 (retail create MemAlloc)");
 static_assert(alignof(MarketWork) == 8, "MarketWork is 8-aligned");
 static_assert(offsetof(MarketWork, _field48) == 0x48, "MarketWork +0x48");
-static_assert(offsetof(MarketWork, _field50) == 0x50, "MarketWork +0x50");
+static_assert(offsetof(MarketWork, _field48.count) == 0x50, "MarketWork +0x50");
+static_assert(sizeof(MarketWork::ClaimTree) == 0x10, "Set header {root, count} + pad");

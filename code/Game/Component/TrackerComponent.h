@@ -21,6 +21,9 @@
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (the two Entry lists)
+
+namespace rtcoll { extern const ArraySpec kSpec_Fill16; }   // stride 0x10, align 8, no destroy (runtime/src/collection/array.cpp)
 
 class ComponentDescription;   // Component/ComponentDescription.h
 
@@ -30,8 +33,9 @@ class TrackerComponent final : public Component {
 public:
     TrackerComponent();                                           // inlined in 0x14000d7a0
 
-    // PORT GAP (retail 0x140059280) — B38 D2: retail frees both arrays; the
-    // tree never did (Inert_ScalarDtor). Kept as the tree's.
+    // Retail 0x140059280: frees +0x38 (produced) then +0x28 (displayed), each
+    // MemFree then its data / count+capacity qwords zeroed, then ~Component. That is
+    // the two Array members' destructors in reverse declaration order.
     ~TrackerComponent() override = default;                       // [0] 0x14000d9a0
     void Persist(IO::Stream& stream) override;                          // [3] 0x140059130
 
@@ -53,14 +57,16 @@ public:
         int32_t capacity;   // +0x0C
     };
 
-    // Two Array<Entry> (H5: raw triples). ProductionUI 0x140075a50 moves the produced
-    // list into the displayed one when the world's generation changes.
-    Entry*   displayed;           // +0x28 the list the production panel shows (freed by the retail dtor)
-    int32_t  displayedCount;      // +0x30
-    int32_t  displayedCapacity;   // +0x34
-    Entry*   produced;            // +0x38 the list the producers upsert into (freed by the retail dtor)
-    int32_t  producedCount;       // +0x40
-    int32_t  producedCapacity;    // +0x44
+    // Array<Entry> (H5, typed: the ctor inlined in 0x14000d7a0 zeroes +0x28 / +0x30 /
+    // +0x38 / +0x40 as qwords, the dtor 0x140059280 frees +0x38 then +0x28). No element
+    // destroy (the ExternalPtr is held bare); resized and copied by the 16-byte core
+    // 0x14000da70 / 0x14000d9d0 (Action/exe_bodies.h), so the spec row only serves ~Array.
+    using EntryList = Collection::Array<Entry, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&rtcoll::kSpec_Fill16>>;
+    // ProductionUI 0x140075a50 moves the produced list into the displayed one when the
+    // world's generation changes.
+    EntryList displayed;          // +0x28 the list the production panel shows
+    EntryList produced;           // +0x38 the list the producers upsert into
     int32_t  trackerId;    // +0x48 game-world item-count generation stamp (ctor -1)
     uint8_t  _pad4C[4];    // +0x4C
 };
@@ -71,10 +77,10 @@ static_assert(sizeof(TrackerComponent::Entry) == 0x10, "tracker entry stride 0x1
 static_assert(sizeof(TrackerComponent::EntryArray) == 0x10, "Array<Entry> is {data, count, capacity}");
 static_assert(offsetof(TrackerComponent::EntryArray, count) == 0x08, "EntryArray::count @ +0x08");
 static_assert(offsetof(TrackerComponent::EntryArray, capacity) == 0x0C, "EntryArray::capacity @ +0x0C");
-static_assert(offsetof(TrackerComponent, displayedCapacity) == 0x34, "");
-static_assert(offsetof(TrackerComponent, producedCapacity) == 0x44, "");
 static_assert(offsetof(TrackerComponent, displayed) == 0x28, "");
-static_assert(offsetof(TrackerComponent, displayedCount) == 0x30, "");
+static_assert(offsetof(TrackerComponent, displayed._size) == 0x30, "");
+static_assert(offsetof(TrackerComponent, displayed._capacity) == 0x34, "");
 static_assert(offsetof(TrackerComponent, produced) == 0x38, "");
-static_assert(offsetof(TrackerComponent, producedCount) == 0x40, "");
+static_assert(offsetof(TrackerComponent, produced._size) == 0x40, "");
+static_assert(offsetof(TrackerComponent, produced._capacity) == 0x44, "");
 static_assert(offsetof(TrackerComponent, trackerId) == 0x48, "");

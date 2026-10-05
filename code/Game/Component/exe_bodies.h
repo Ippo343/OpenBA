@@ -26,10 +26,12 @@ namespace IO { class Serializer; }
 extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0
 
 // ---- ambientemittercomponent.cpp
-extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount);  // 0x140001770
+struct AmbientEmitterSlot;   // Component/AmbientEmitterComponent.h (Collection.h: via Entity/CitizenBehavior.h)
+extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount);  // 0x140001770
 
 // ---- ambientenvironmentdescription.cpp
-extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount);  // 0x140002540
+struct AmbientEnvironmentBiome;   // Component/AmbientEnvironmentDescription.h
+extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount);  // 0x140002540
 
 // ---- attendancecomponent.cpp
 void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll);  // 0x140115a50
@@ -189,7 +191,7 @@ extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
 // ---- keystone_a_map.cpp
 
 // ---- keystone_a_restree.cpp
-extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2, uint64_t* param_3, int64_t* param_4);  // 0x140017230
+// ResidenceComponent_impl_7230 (0x140017230): Entity/CitizenBehavior.h (InsertCitizenBucket<Key>)
 
 // ---- mapcomponent.cpp
 class Minimap;   // Game/Minimap.h

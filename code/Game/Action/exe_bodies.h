@@ -90,8 +90,32 @@ int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
 void PositionRawMaterial(Component* self, int cellIndex, float rotation);  // 0x140129760
-void ActRm_ArrayResize16_da70(int64_t* arr, int newCount);  // 0x14000da70
-void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src);  // 0x14000d9d0
+// 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
+// {material, count, pad} element: ONE retail body each serving four element types
+// (TrackerComponent::Entry, ConsumeRawMaterial::Entry, PickupStoredRawMaterial::Entry,
+// MarketWork::Carry). The core works on its own element view; callers use the typed
+// wrappers MaterialArraySetSize / MaterialArrayAssign over their {data, count, capacity}
+// holder.
+template <class T> struct RawArray;   // Action/PathSearch.h
+struct MaterialCount16 {               // the core's own 16-byte element view
+    ComponentDescription* material;    // +0x00 ExternalPtr<ComponentDescription>
+    int32_t               count;       // +0x08
+    int32_t               pad0C;       // +0x0C (the SetSize tail leaves it unwritten)
+};
+static_assert(sizeof(MaterialCount16) == 0x10, "16-byte stride (0x14000da70)");
+void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70
+void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0
+template <class Holder>
+inline void MaterialArraySetSize(Holder* arr, int newCount) {
+    static_assert(sizeof(Holder) == 0x10, "an Array<16-byte element> {data, count, capacity}");
+    ActRm_ArrayResize16_da70(reinterpret_cast<RawArray<MaterialCount16>*>(arr), newCount);  // CAST-OK: elem_stride
+}
+template <class Holder>
+inline void MaterialArrayAssign(Holder* dst, const Holder* src) {
+    static_assert(sizeof(Holder) == 0x10, "an Array<16-byte element> {data, count, capacity}");
+    ActRm_VectorClone_d9d0(reinterpret_cast<RawArray<MaterialCount16>*>(dst),  // CAST-OK: elem_stride
+                           reinterpret_cast<const RawArray<MaterialCount16>*>(src));  // CAST-OK: elem_stride
+}
 
 // ---- action_child_ctors.cpp
 class ComponentEntity;        // Entity/ComponentEntity.h
@@ -137,8 +161,8 @@ void Pf_VectorResize60_fa80(RawArray<GeometryBatch>* arr, int newSize, const Geo
 // ---- action_pf_region.cpp
 
 // ---- action_pf_road.cpp
-void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, uint8_t blend);  // 0x1400acc10 B4 FORWARD -> BuildRoadQuad
 class WorldGeometry;
+void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend);  // 0x1400acc10
 int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin, const float* maxT, float* outHit, float* outT, float* outNormal);  // 0x1400aaa20 (body: RayTestCell, action_pf_road.cpp)
 float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal);  // 0x1400b0f90 (body: TerrainHeightUnder, action_pf_road.cpp)
 float* InteractNodePosition(const InteractComponent* self, float* out, int kind, int index, float* heading);  // 0x140122e20

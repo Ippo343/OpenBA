@@ -101,9 +101,9 @@ void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer) {
     int count = arr->count;
     serializer->Serialize(count, nullptr);
 
-    // 14002b618..b628 (0x14000da70 takes the array header as int64_t*: LEFT)
+    // 14002b618..b628
     if (SerIsLoading(serializer)) {
-        ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(arr), count);   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
+        MaterialArraySetSize(arr, count);   // 0x14000da70
     }
 
     // 14002b62d..b662: element loop. Note retail reloads the buffer pointer AFTER the
@@ -134,8 +134,7 @@ static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryLis
     n->element.carries.data = nullptr;
     n->element.carries.count = 0;      // with capacity: one 8-byte zero
     n->element.carries.capacity = 0;
-    // (0x14000d9d0 takes both array headers as int64_t*: LEFT.)
-    ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(&n->element.carries), reinterpret_cast<int64_t*>(srcArray));   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
+    MaterialArrayAssign(&n->element.carries, srcArray);   // 0x14000d9d0
     n->parent  = parent;
     n->left    = nullptr;
     n->right   = nullptr;
@@ -156,9 +155,9 @@ static ClaimNode* MarketBst_MakeNode(CitizenComponent* key, MarketWork::CarryLis
 //                (the container is two raw fields: the count is reached from the root
 //                field's address: LEFT)
 //   serializer [RDX]
-void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
+void MarketBst_b290(MarketWork::ClaimTree* tree, IO::Serializer* serializer) {
 
-    int32_t* const treeCount = reinterpret_cast<int32_t*>(tree + 1);   // LEFT: H5 the claim Set is two raw MarketWork fields (+0x48 root, +0x50 count): retail's inlined ~Set (0x14002a910) frees each claim's carry list through 0x14002af40, which a Collection::Set<Claim> member's Clear would not
+    int32_t* const treeCount = &tree->count;
 
     // 14002b2b0..b2c0: node count in/out.
     int nodeCount = *treeCount;
@@ -188,12 +187,12 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             // 14002b334: the per-node payload block.
             MarketBst_b5f0(&payload, serializer);
 
-            ClaimNode* root = *tree;
+            ClaimNode* root = tree->root;
             if (root == nullptr) {
                 // 14002b341..b397: empty tree. NOTE the faithful oddity — when MemAlloc
                 // fails retail stores the NULL straight into the root (MOV [R14],RBX
                 // with RBX=0 at 14002b394) and still bumps the count. No retrace here.
-                *tree = MarketBst_MakeNode(key.Get(), &payload, nullptr);
+                tree->root = MarketBst_MakeNode(key.Get(), &payload, nullptr);
                 *treeCount += 1;   // 14002b4ad
             } else {
                 // 14002b39c..b4ad: unsigned-key descent, insert-if-absent, then retrace.
@@ -225,7 +224,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
                     // 14002b4a1: retrace from the PARENT slot (RBP+0x48 still holds the
                     // node we linked under), NOT from the new child.
                     ClaimNode* parentSlot = cur;
-                    Avl38Retrace(tree, &parentSlot);   // 0x140025920
+                    Avl38Retrace(&tree->root, &parentSlot);   // 0x140025920
                     *treeCount += 1;   // 14002b4ad
                 }
                 // Duplicate key falls through to 14002b4b1 WITHOUT bumping the count and
@@ -244,7 +243,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
     } else {
         // ---------------- SAVE: in-order walk, write each node ----------------
         // 14002b4d5..b5cd.
-        ClaimNode* node = *tree;
+        ClaimNode* node = tree->root;
         if (node == nullptr) return;
         while (node->left != nullptr) node = node->left;   // 14002b4e1: leftmost
 
@@ -265,7 +264,7 @@ void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer) {
             if (SerIsLoading(serializer)) {
                 // 14002b540..b54c. Dead in this arm (we only get here when NOT loading),
                 // but present in retail, so it is kept rather than "cleaned up".
-                ActRm_ArrayResize16_da70(reinterpret_cast<int64_t*>(&node->element.carries), count);   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
+                MaterialArraySetSize(&node->element.carries, count);   // 0x14000da70
             }
             MarketWork::Carry* p = node->element.carries.data;
             for (int i = 0; i < count; ++i) {

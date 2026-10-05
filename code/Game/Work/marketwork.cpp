@@ -32,6 +32,7 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "Work/exe_bodies.h"
+#include "Action/PathAvl.h"        // AvlTreeHead (the version-0 migration set header)
 #include "Action/exe_bodies.h"      // B3R: bodies called by name
 #include "Component/exe_bodies.h"   // B3R: bodies called by name
 #include "Player/exe_bodies.h"      // B3R: 0x140014b00 / 0x140014b40
@@ -132,11 +133,11 @@ int MarketWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, 
 // citizen, its CharacterComponent (+0x278), the action list (+0x48) is cleared.
 //
 int MarketWork::Cleanup() {
-    int count = _field50;
+    int count = _field48.count;
 
     while (count > 0) {
         // Find leftmost node in the claim tree
-        ClaimNode* node = _field48;
+        ClaimNode* node = _field48.root;
         ClaimNode* leftmost = node;
         while (node != nullptr) {
             leftmost = node;
@@ -147,7 +148,7 @@ int MarketWork::Cleanup() {
         CitizenComponent* citizen = leftmost->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
 
-        count = _field50;
+        count = _field48.count;
     }
     return 0;
 }
@@ -162,7 +163,7 @@ int MarketWork::Cleanup() {
 // Uses MarketWork_sub_ac40 for the removal (not CitizenAI_impl_a6e0).
 //
 int MarketWork::Validate() {
-    ClaimNode* root = _field48;
+    ClaimNode* root = _field48.root;
     CitizenComponent** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
@@ -248,7 +249,7 @@ int MarketWork::Validate() {
     if (removeCount > 0) {
         for (uint32_t i = 0; i < removeCount; i++) {
             // Find and remove the node with this key
-            ClaimNode* searchNode = _field48;
+            ClaimNode* searchNode = _field48.root;
             while (searchNode != nullptr) {
                 if (removeArr[i] < searchNode->element.citizen.Get()) {
                     searchNode = searchNode->left;
@@ -308,17 +309,16 @@ void MarketWork::Persist(IO::Stream& stream) {
 
     if (version == 0) {
         // OLD format: deserialize into temp simple BST, then migrate
-        // (Set<InternalPtr<CitizenComponent>>, the T = 8 node; the helper takes the
-        // container as uintptr_t*: LEFT)
+        // (Set<InternalPtr<CitizenComponent>>, the T = 8 node, held as its raw header)
         using SimpleNode = Collection::Set<CitizenComponent*>::Node;
-        uintptr_t tempBST[2] = {0, 0};  // root=0, count=0
+        AvlTreeHead<SimpleNode> tempBST = {};  // root=0, count=0
 
         // Deserialize using simple BST format
-        WorkBST_BST_Serialize_296b0(tempBST, &serializer);
+        WorkBST_BST_Serialize_296b0(&tempBST, &serializer);
 
         // In-order traverse temp BST
         // For each entry, re-insert into MarketWork's BST using market insert
-        SimpleNode* tempRoot = reinterpret_cast<SimpleNode*>(tempBST[0]);   // LEFT: ERASED the WorkBST core takes the set as uintptr_t*; this local set is its raw root + count (a Collection::Set local would add a dtor)
+        SimpleNode* tempRoot = tempBST.root;
         if (tempRoot != nullptr) {
             // Find leftmost in temp
             SimpleNode* node = tempRoot;
@@ -366,8 +366,8 @@ void MarketWork::Persist(IO::Stream& stream) {
 
             // Clean up temp simple BST
             // Free left subtree, then right subtree, then root
-            WorkBase_TreeNodeFree_14c30(tempBST, tempRoot->left);
-            WorkBase_TreeNodeFree_14c30(tempBST, tempRoot->right);
+            WorkBase_TreeNodeFree_14c30(&tempBST, tempRoot->left);
+            WorkBase_TreeNodeFree_14c30(&tempBST, tempRoot->right);
             System::MemoryAllocator::MemFree(tempRoot);
         }
     } else {
@@ -572,7 +572,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // cache of "how many haulers may work here at once", computed by CalcMaxWorkers
     // (0x14012e5c0). Full -> 1 = examined but declined. (The tree has two ports of 0x14012e5c0 that differ; the one
     // called here takes the component as an integer: LEFT.)
-    const int claimed = _field50;
+    const int claimed = _field48.count;
     WorkComponent* workComp = field_18.Get();
     if (workComp->workState == 0) {
         workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
@@ -781,7 +781,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // records take unitSize*qty -- checked at 0x1400f0626 (ADD [RAX+0x10],R8D)
     // versus 0x1400f0648 (ADD [RDX],R9D).
     {
-        ClaimNode* node = _field48;
+        ClaimNode* node = _field48.root;
         if (node != nullptr) {
             while (node->left != nullptr)
                 node = node->left;
@@ -1328,12 +1328,12 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 // MarketWork dtor (inlined in retail slot 0 0x14002a910). The stamps and the `~Internal` call are the compiler's chain.
 MarketWork::~MarketWork() {
     // Free the claim tree using market-specific cleanup
-    ClaimNode* bstRoot = _field48;
+    ClaimNode* bstRoot = _field48.root;
     if (bstRoot != nullptr) {
         // FUN_14002af40 recursively frees left, right, then the node's carry list,
         // zeros it, frees the node
-        WorkLeaf_MarketTreeCleanup_2af40(&_field48, bstRoot->left);
-        WorkLeaf_MarketTreeCleanup_2af40(&_field48, bstRoot->right);
+        WorkLeaf_MarketTreeCleanup_2af40(&_field48.root, bstRoot->left);
+        WorkLeaf_MarketTreeCleanup_2af40(&_field48.root, bstRoot->right);
         // Free root node's carry list and the root itself
         Carry* rootData = bstRoot->element.carries.data;
         if (rootData) {
@@ -1343,8 +1343,8 @@ MarketWork::~MarketWork() {
     }
 
     // Zero out the tree root and count
-    _field48 = nullptr;
-    _field50 = 0;
+    _field48.root = nullptr;
+    _field48.count = 0;
 
 }
 
@@ -1355,14 +1355,14 @@ MarketWork::~MarketWork() {
 // ============================================================
 // 9 bytes, too small to hook.
 int MarketWork::GetPriority() {
-    return _field50 > 0 ? 1 : 0;
+    return _field48.count > 0 ? 1 : 0;
 }
 
 
 
 // Ctor 0x1400f1f70: `??0Internal`, the Work base fields, the leaf fields zeroed (the
 // two stamps are the compiler's).
-MarketWork::MarketWork() : Work(), _field48(nullptr), _field50(0) {
+MarketWork::MarketWork() : Work(), _field48{nullptr, 0} {
 }
 
 // ============================================================

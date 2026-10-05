@@ -22,11 +22,11 @@ extern "C" {
 
 // 0x14002aaa0 -- __fastcall void(int64_t* tree [RCX], void* keyIBP [RDX])
 // Finds the node whose key equals *keyIBP and erases it.  No-op if absent.
-void MarketBst_aaa0(MarketWork::ClaimNode** tree, CitizenComponent** key);
+void MarketBst_aaa0(MarketWork::ClaimTree* tree, CitizenComponent** key);
 
 // 0x14002ac40 -- __fastcall void(int64_t* tree [RCX], void* node [RDX])
 // Erases an already-located node: decrements the count, unlinks, frees, rebalances.
-void MarketBst_ac40(MarketWork::ClaimNode** tree, MarketWork::ClaimNode* node);
+void MarketBst_ac40(MarketWork::ClaimTree* tree, MarketWork::ClaimNode* node);
 
 // 0x14002aee0 -- __fastcall void(void* unusedRcx [RCX], void* node [RDX])
 // Destroys one node.  RCX is a genuinely DEAD parameter in retail (homed, never read);

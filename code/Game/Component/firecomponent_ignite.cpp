@@ -203,8 +203,8 @@ extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ac, in
     AmbientEmitterDescription* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, s_tidEmitterDesc))
                                           ? static_cast<AmbientEmitterDescription*>(obj) : nullptr;
 
-    if (!ac->slots) return;
-    AmbientEmitterSlot& entry = ac->slots[idx];
+    if (!ac->slots._data) return;
+    AmbientEmitterSlot& entry = ac->slots._data[idx];
 
     if (entry.sound == nullptr && desc) {
         if (desc->_emitters)

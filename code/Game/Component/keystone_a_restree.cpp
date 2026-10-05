@@ -44,9 +44,43 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "Component/exe_bodies.h"
+#include "Entity/CitizenBehavior.h"   // CitizenBucketEntities, ResidenceComponent_impl_7230
 #include "Player/exe_bodies.h"          // Avl38Retrace (0x140014b40)
 #include "system/MemoryAllocator.h"     // System::MemoryAllocator::MemAlloc / MemFree
+
+// The node payload record (0x10, 0x140015ec0): Entity/CitizenBehavior.h's POD.
+using RecordArray = CitizenBucketEntities;
+
+// The core's own view of the bucket tree (CitizenBehavior's +0x100 / +0x160
+// Collection::Set<CitizenBucket<Key>>: one body serves both Key instantiations).
+namespace CitizenBucketCore {
+
+// The AVL node (0x38 bytes, 0x140017460).
+struct Node {
+    uint64_t    key;       // +0x00
+    RecordArray items;     // +0x08
+    Node*       parent;    // +0x18
+    Node*       left;      // +0x20
+    Node*       right;     // +0x28
+    int16_t     balance;   // +0x30 rightHeight - leftHeight
+    int16_t     height;    // +0x32
+};
+static_assert(sizeof(Node) == 0x38, "Node is 0x38 (MemAlloc(0x38) at 0x140017460)");
+static_assert(offsetof(Node, items) == 0x08, "Node +0x08");
+static_assert(offsetof(Node, parent) == 0x18, "Node +0x18");
+static_assert(offsetof(Node, left) == 0x20, "Node +0x20");
+static_assert(offsetof(Node, right) == 0x28, "Node +0x28");
+static_assert(offsetof(Node, balance) == 0x30, "Node +0x30");
+static_assert(offsetof(Node, height) == 0x32, "Node +0x32");
+
+// The tree object: the root and the node count.
+struct Tree {
+    Node*   root;    // +0x00
+    int32_t count;   // +0x08
+};
+static_assert(offsetof(Tree, count) == 0x08, "Tree +0x08");
+
+} // namespace CitizenBucketCore
 
 namespace {
 
@@ -54,13 +88,8 @@ namespace {
 // 0x140152b60 / 0x140152b68 (?MemAlloc@ SAPEAX_KH / ?MemFree@ SAXPEAX) point at; the
 // bodies below call them by name (B3R R9).
 
-// The node payload: a growable array of 8-byte elements (Collection::Array, 0x10).
-struct RecordArray {
-    uint64_t* data;       // +0x00
-    int32_t   count;      // +0x08
-    int32_t   capacity;   // +0x0C
-};
-static_assert(sizeof(RecordArray) == 0x10, "RecordArray is 0x10 (0x140015ec0)");
+using RecordNode = CitizenBucketCore::Node;
+using RecordTree = CitizenBucketCore::Tree;
 
 // The record streamed into 7460 / 72f0: a node's first 0x18 bytes.
 struct Record {
@@ -68,28 +97,6 @@ struct Record {
     RecordArray items;    // +0x08
 };
 static_assert(sizeof(Record) == 0x18, "Record is 0x18 (0x140017230's stack record)");
-
-// The AVL node (0x38 bytes, 0x140017460).
-struct RecordNode {
-    uint64_t    key;       // +0x00
-    RecordArray items;     // +0x08
-    RecordNode* parent;    // +0x18
-    RecordNode* left;      // +0x20
-    RecordNode* right;     // +0x28
-    int16_t     balance;   // +0x30 rightHeight - leftHeight
-    int16_t     height;    // +0x32
-};
-static_assert(sizeof(RecordNode) == 0x38, "RecordNode is 0x38 (MemAlloc(0x38) at 0x140017460)");
-static_assert(offsetof(RecordNode, parent) == 0x18, "RecordNode +0x18");
-static_assert(offsetof(RecordNode, left) == 0x20, "RecordNode +0x20");
-static_assert(offsetof(RecordNode, right) == 0x28, "RecordNode +0x28");
-static_assert(offsetof(RecordNode, balance) == 0x30, "RecordNode +0x30");
-
-// The tree object: the root and the node count.
-struct RecordTree {
-    RecordNode* root;    // +0x00
-    int32_t     count;   // +0x08
-};
 
 // ============================================================
 // 0x140015ec0 — ResidenceComponent_helper_5ec0. Growable-array deep-copy.
@@ -107,7 +114,7 @@ RecordArray* CopyRecordArray(RecordArray* dst, const RecordArray* src) {
     dst->count = cnt;
     if (cnt > 0) {
         dst->capacity = cnt;
-        dst->data = static_cast<uint64_t*>(
+        dst->data = static_cast<ComponentEntity**>(
             System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 3, 8));   // data := MemAlloc(cnt*8,8)
     }
 
@@ -115,9 +122,9 @@ RecordArray* CopyRecordArray(RecordArray* dst, const RecordArray* src) {
     if (dst->count > 0) {
         int i = 0;
         do {
-            uint64_t* d = dst->data + i;
+            ComponentEntity** d = dst->data + i;
             if (d != nullptr) {
-                *d = 0;
+                *d = nullptr;
                 *d = src->data[i];
             }
             ++i;
@@ -220,19 +227,16 @@ rebalance:
 // array struct, which 72f0->7460->5ec0 then deep-copies AGAIN into the node; the
 // temporary is freed here. Returns param_2.
 // ============================================================
-extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2,
-                                              uint64_t* param_3, int64_t* param_4) {
-    // Both callers' trees are CitizenBehavior's CitizenBucketNode<Key> trees (+0x100, +0x160);
-    // the node declares the two int16 fields the retrace reads (X3-COMP). This file's
-    // Record* view stays while the tree is two CitizenBehavior fields and the record is the
-    // node's raw entity triple (H5): then 0x140017230 is a template over CitizenBucketNode<Key>.
-    RecordTree* tree = reinterpret_cast<RecordTree*>(param_1);   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
-    RecordNode** out = reinterpret_cast<RecordNode**>(param_2);   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
-    const RecordArray* items = reinterpret_cast<const RecordArray*>(param_4);   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
+extern "C" CitizenBucketCore::Node** ResidenceComponent_impl_7230(CitizenBucketCore::Tree* tree,
+                                                                  CitizenBucketCore::Node** out,
+                                                                  const uint64_t* key,
+                                                                  const CitizenBucketEntities* items) {
+    // Both callers' trees are CitizenBehavior's CitizenBucketSet<Key> trees (+0x100, +0x160),
+    // reached through InsertCitizenBucket<Key> (Entity/CitizenBehavior.h).
 
     // Stack record: local_20 (key) / local_18 (array.data) / local_10 (array.count/cap).
     Record rec;
-    rec.key = *param_3;
+    rec.key = *key;
     rec.items.data = nullptr;
     rec.items.count = 0;
     rec.items.capacity = 0;
@@ -240,5 +244,5 @@ extern "C" void* ResidenceComponent_impl_7230(int64_t* param_1, void** param_2,
     CopyRecordArray(&rec.items, items);   // 5ec0(&local_18, param_4)
     InsertRecord(tree, out, &rec);        // 72f0(param_1, param_2, &local_20)
     System::MemoryAllocator::MemFree(rec.items.data);   // free the temporary array buffer
-    return param_2;
+    return out;
 }

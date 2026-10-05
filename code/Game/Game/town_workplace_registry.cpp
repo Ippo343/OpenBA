@@ -109,12 +109,10 @@ extern "C" void ResidenceComponent_impl_95a0(CitizenBehavior* town, ComponentEnt
 
     // Key absent -> create the profession node (empty entity array).
     if (found == nullptr) {
-        void* out = nullptr;
-        int64_t emptyRec[2] = { 0, 0 };   // array record: +0x00 data / +0x08 count+cap
-        uint64_t key = reinterpret_cast<uint64_t>(profession);   // CAST-OK: ptr_int (0x140017230's key slot holds the profession's address as a qword)
-        ResidenceComponent_impl_7230(reinterpret_cast<int64_t*>(&town->field_0x100._root),   // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
-                                     &out, &key, emptyRec);
-        found = reinterpret_cast<ProfessionBucket*>(out);     // *out = the new node  // LEFT: SIG ResidenceComponent_impl_7230 (Component/exe_bodies.h) still takes the tree as int64_t* / void** / uint64_t* / int64_t*: one erased body (0x140017230) serving CitizenBehavior's +0x100 and +0x160 CitizenBucketSet<Key> trees; its file walks its own Record* view
+        ProfessionBucket* out = nullptr;
+        CitizenBucketEntities emptyRec = {};   // array record: +0x00 data / +0x08 count+cap
+        InsertCitizenBucket(&town->field_0x100, &out, &profession, &emptyRec);   // 0x140017230
+        found = out;     // *out = the new node
         if (found == nullptr) return;
     }
 

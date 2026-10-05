@@ -130,7 +130,7 @@ UNIT_TEST(act_leaf_consumerawmaterial) {
     CHECK_SLOT(ConsumeRawMaterial, GetTarget,   0x48/8);   // [9] 0x1400c5f10
     CHECK_EQ(offsetof(ConsumeRawMaterial, _field20), (size_t)0x20);
     CHECK_EQ(offsetof(ConsumeRawMaterial, _field28), (size_t)0x28);
-    CHECK_EQ(offsetof(ConsumeRawMaterial, _field30), (size_t)0x30);
+    CHECK_EQ(offsetof(ConsumeRawMaterial, _field28.count), (size_t)0x30);
     CHECK_EQ(offsetof(ConsumeRawMaterial, _field38), (size_t)0x38);
 }
 
@@ -231,7 +231,7 @@ UNIT_TEST(act_leaf_pickupstoredrawmaterial) {
     CHECK_EQ(offsetof(PickupStoredRawMaterial, _field20), (size_t)0x20);
     CHECK_EQ(offsetof(PickupStoredRawMaterial, _field28), (size_t)0x28);
     CHECK_EQ(offsetof(PickupStoredRawMaterial, _field30), (size_t)0x30);
-    CHECK_EQ(offsetof(PickupStoredRawMaterial, _field38), (size_t)0x38);
+    CHECK_EQ(offsetof(PickupStoredRawMaterial, _field30.count), (size_t)0x38);
     CHECK_EQ(offsetof(PickupStoredRawMaterial, _field40), (size_t)0x40);
 }
 

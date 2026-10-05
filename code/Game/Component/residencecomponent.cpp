@@ -365,7 +365,7 @@ void ResidenceComponent::RemoveResident(int family, Object::InternalPtr<CitizenC
             Audio::Scene* scene = AudioScene();
             if (em && scene) {
                 // Retail 0x14012a550 reads slot [1] ([slots+0x10]) of the emitter array.
-                AmbientEmitterSlot* slot = &em->slots[1];
+                AmbientEmitterSlot* slot = &em->slots._data[1];
                 uint32_t id = slot->handle;
                 scene->RemoveEmitter(id, em->position);
                 int remaining = scene->GetEmitterCount(id);
@@ -414,8 +414,8 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
             char same = 1;
             if (!same) {
                 if (scene) {
-                    int nEm = em->slotCount;
-                    AmbientEmitterSlot* emArr = em->slots;
+                    int nEm = em->slots._size;
+                    AmbientEmitterSlot* emArr = em->slots._data;
                     for (int i = 0; i < nEm; ++i) {
                         uint32_t id = emArr[i].handle;
                         if (id != 0)
@@ -428,7 +428,7 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
             }
             FireComp_StartAudioEmitter_42c60(em, 1);
             // Retail 0x14012a710 reads slot [1] ([slots+0x10] / [slots+0x14]).
-            AmbientEmitterSlot* slot = &em->slots[1];
+            AmbientEmitterSlot* slot = &em->slots._data[1];
             if (static_cast<uint32_t>(slot->handle) == 0) {
                 slot->volume = 1.0f;   // retail stores 0x3f800000
             } else {

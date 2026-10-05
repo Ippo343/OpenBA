@@ -831,9 +831,7 @@ LAB_1400a5c1b:
                         int iVar3 = evict->regionB;
                         if (iVar3 < piVar6->key1) goto LAB_1400a5c1b;
                         if ((iVar8b <= iVar2) && ((iVar8b < iVar2 || (iVar3 <= piVar6->key1)))) {
-                            // LEFT: 0x14001ca60's C declaration (Work/exe_bodies.h, WORK-c,
-                            // running) takes the index as uintptr_t* and the node as int*.
-                            WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&index), &piVar6->key0);   // 0x14001ca60  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF); the region index is an AvlTreeHead<AvlNode30>
+                            WorkCellBST_Remove_ca60(&index, piVar6);   // 0x14001ca60
                             break;
                         }
                     }

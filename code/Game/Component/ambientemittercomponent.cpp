@@ -73,9 +73,7 @@ static Audio::Scene* WorldAudioScene() {
 // treble rule, copy-then-free, no element destroy). The tree's body keeps ONE step retail
 // lacks -- it skips MemAlloc when System::MemoryAllocator::_singleton is null (known_port_issues
 // row 570) -- so it is not replaced by the erased core; it is typed by element instead.
-extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
-    // LEFT: H5 AmbientEmitterComponent::slots / slotCount / slotCapacity are a raw Array triple
-    auto* arr = reinterpret_cast<Collection::Array<AmbientEmitterSlot>*>(arrayBase);   // LEFT: H5 AmbientEmitterComponent::slots / slotCount / slotCapacity are a raw Array triple (its callers pass &slots)
+extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount) {
     int oldCount = arr->_size;
     if (newCount == oldCount) return;
 
@@ -123,7 +121,7 @@ extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
 // channel; PlayEffect3D (SoundType 3 = ambient) starts a new one; AddEmitter
 // registers this building as a spatial source of that effect.
 void AmbientEmitterComponent::StartEmitters() {
-    int count = slotCount;
+    int count = slots._size;
     if (count <= 0) return;
 
     Audio::Scene* scene = WorldAudioScene();
@@ -131,7 +129,7 @@ void AmbientEmitterComponent::StartEmitters() {
 
     AmbientEmitterDescription* building = GetBuildingData(this);   // may be null
     Audio::SoundEffect** soundArray = building ? building->_emitters : nullptr;
-    AmbientEmitterSlot* arrBase = slots;
+    AmbientEmitterSlot* arrBase = slots._data;
     if (!arrBase) return;
 
     for (int i = 0; i < count; ++i) {
@@ -158,7 +156,7 @@ void AmbientEmitterComponent::PlaySlot(int slot) {
     Audio::Scene* scene = WorldAudioScene();
     if (!scene) return;
     AmbientEmitterDescription* desc = GetBuildingData(this);
-    AmbientEmitterSlot* arr = slots;
+    AmbientEmitterSlot* arr = slots._data;
     if (!arr) return;
     AmbientEmitterSlot* entry = &arr[slot];
 
@@ -185,11 +183,11 @@ void AmbientEmitterComponent::SetSlot(int slot, Audio::SoundEffect* sound, float
     // Ensure the emitter array matches the description's emitter count.
     if (desc) {
         int wantCount = desc->_emitterCount;
-        if (slotCount != wantCount)
+        if (slots._size != wantCount)
             AmbientEmitterResize_Reimpl(&slots, wantCount);
     }
 
-    AmbientEmitterSlot* arr = slots;
+    AmbientEmitterSlot* arr = slots._data;
     if (!arr) return;
     AmbientEmitterSlot* entry = &arr[slot];
 
@@ -249,7 +247,7 @@ void AmbientEmitterComponent::SetSlot(int slot, Audio::SoundEffect* sound, float
 // 0x1400430c0. Component() is the CALL 0x1401188b0; the 0x140158a60 stamp is
 // the compiler's; +0x28, +0x30 (dword), +0x38, +0x40 = 0; flags |= 0x43 (0xc3).
 AmbientEmitterComponent::AmbientEmitterComponent()
-    : position(), _pad34{}, slots(nullptr), slotCount(0), slotCapacity(0) {
+    : position(), _pad34{}, slots() {
     OrFlagsInCtor(0x43);
 }
 
@@ -270,7 +268,7 @@ void AmbientEmitterComponent::Persist(IO::Stream& stream) {
 
     position.Serialize(serializer);
 
-    int localCount = slotCount;
+    int localCount = slots._size;
     serializer.Serialize(localCount, nullptr);
 
     // If loading (stream mode == 0), resize emitter array
@@ -279,7 +277,7 @@ void AmbientEmitterComponent::Persist(IO::Stream& stream) {
     }
 
     if (localCount > 0) {
-        AmbientEmitterSlot* arrayBase = slots;
+        AmbientEmitterSlot* arrayBase = slots._data;
         for (int i = 0; i < localCount; i++) {
             AmbientExternalPtrSerialize_Reimpl(&arrayBase[i].sound, &serializer);   // 0x1400019a0
             serializer.Serialize(arrayBase[i].handle, nullptr);   // retail's int overload (0x1800061d0)

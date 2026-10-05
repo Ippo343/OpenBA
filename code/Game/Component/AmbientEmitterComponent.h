@@ -23,6 +23,7 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 #include "math/Math.h"
+#include "collection/Collection.h"   // Collection::Array (the +0x38 slots)
 
 namespace Audio { class SoundEffect; }
 
@@ -67,14 +68,16 @@ public:
     // ExternalPtr<SoundEffect> (0x1400019a0), the uint and the float.
     Math::Vector3       position;      // +0x28 where the emitter sounds
     uint8_t             _pad34[4];     // +0x34
-    AmbientEmitterSlot* slots;         // +0x38 slot Array data (freed by the retail dtor)
-    int32_t             slotCount;     // +0x40
-    int32_t             slotCapacity;  // +0x44
+    // +0x38 Array<AmbientEmitterSlot> {data, count +0x40, capacity +0x44} (H5, typed: the
+    // ctor 0x1400430c0 zeroes +0x38 / +0x40 as qwords, the dtor 0x1400016d0 MemFrees +0x38
+    // and zeroes both qwords before ~Component; no element destroy). Resized by
+    // 0x140001770 (AmbientEmitterResize_Reimpl).
+    Collection::Array<AmbientEmitterSlot> slots;
 };
 
 static_assert(sizeof(AmbientEmitterComponent) == 0x48, "AmbientEmitterComponent is 0x48 (create 0x1400014b0)");
 static_assert(alignof(AmbientEmitterComponent) == 8, "AmbientEmitterComponent alignment");
 static_assert(offsetof(AmbientEmitterComponent, position) == 0x28, "AmbientEmitterComponent::position @ +0x28 (Vector3::Serialize)");
 static_assert(offsetof(AmbientEmitterComponent, slots) == 0x38, "AmbientEmitterComponent::slots @ +0x38");
-static_assert(offsetof(AmbientEmitterComponent, slotCount) == 0x40, "AmbientEmitterComponent::slotCount @ +0x40");
-static_assert(offsetof(AmbientEmitterComponent, slotCapacity) == 0x44, "AmbientEmitterComponent::slotCapacity @ +0x44");
+static_assert(offsetof(AmbientEmitterComponent, slots._size) == 0x40, "AmbientEmitterComponent::slots count @ +0x40");
+static_assert(offsetof(AmbientEmitterComponent, slots._capacity) == 0x44, "AmbientEmitterComponent::slots capacity @ +0x44");

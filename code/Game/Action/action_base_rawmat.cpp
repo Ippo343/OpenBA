@@ -169,26 +169,27 @@ void StorageAdd(StorageComponent* storage, ComponentDescription* material, int c
 // Resize to newCount: grow buffer (3x on a +1 growth from non-empty) via MemAlloc, copy
 // existing entries, zero new entries (the original zeroes only bytes [+0..+12) of each new
 // 16-byte slot), MemFree old. Leaf (alloc only).
-static void MaterialCountArraySetSize(RawArray<TrackerComponent::Entry>* arr, int newCount) {
+// The one body (Action/exe_bodies.h: MaterialArraySetSize<Holder> is the typed wrapper).
+void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount) {
     int oldCount = arr->size;
     if (newCount == oldCount) return;
 
-    TrackerComponent::Entry* oldBuf = arr->data;
+    MaterialCount16* oldBuf = arr->data;
     arr->size = newCount;
     if (arr->capacity < newCount) {
         arr->capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) arr->capacity = newCount * 3;
-        arr->data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) << 4, 8));
+        arr->data = static_cast<MaterialCount16*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) << 4, 8));
     }
     int srcIdx = (oldBuf == arr->data) ? oldCount : 0;
     for (int i = srcIdx; i < newCount; i++) {
-        TrackerComponent::Entry* dst = arr->data + i;
+        MaterialCount16* dst = arr->data + i;
         if (!dst) continue;
         if (i < oldCount) {
             *dst = oldBuf[i];
         } else {
-            dst->_resource = nullptr;
-            dst->_count = 0;
+            dst->material = nullptr;
+            dst->count = 0;
         }
     }
     if (oldBuf != arr->data)
@@ -275,7 +276,8 @@ int ResourceCategory(const ComponentDescription* material) {
 // ============================================================
 // Frees dst's buffer, resets count/cap to 0, sets count=cap=src.count, allocs a fresh
 // src.count*0x10 buffer, copies each 16-byte element from src. No-op if dst==src.
-static void MaterialCountArrayAssign(RawArray<TrackerComponent::Entry>* dst, const RawArray<TrackerComponent::Entry>* src) {
+// The one body (Action/exe_bodies.h: MaterialArrayAssign<Holder> is the typed wrapper).
+void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src) {
     if (dst == src) return;
     System::MemoryAllocator::MemFree(dst->data);
     dst->size = 0;          // count(+8) and cap(+0xc): one 8-byte write in retail (H7)
@@ -285,11 +287,11 @@ static void MaterialCountArrayAssign(RawArray<TrackerComponent::Entry>* dst, con
     dst->size = srcN;
     if (srcN > 0) {
         dst->capacity = srcN;
-        dst->data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(srcN) << 4, 8));
+        dst->data = static_cast<MaterialCount16*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(srcN) << 4, 8));
     }
     int n = dst->size;
     for (int i = 0; i < n; i++) {
-        TrackerComponent::Entry* d = dst->data + i;
+        MaterialCount16* d = dst->data + i;
         if (!d) continue;
         *d = src->data[i];
     }
@@ -303,50 +305,48 @@ static void MaterialCountArrayAssign(RawArray<TrackerComponent::Entry>* dst, con
 // reset the +0x28 list. Then upsert {material, count} into +0x28: if present add, else
 // append (grow 3x on a non-first append). Leaf.
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value) {
-    // LEFT: TrackerComponent (block COMP-? header) keeps its two lists as raw
-    // {data, count, capacity} triples.
-    RawArray<TrackerComponent::Entry>* live = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->displayed);   // LEFT: H5 TrackerComponent::displayed is a raw {data, count, capacity} triple (retail Array<Entry>; the typed member is its own behaviour commit)
-    RawArray<TrackerComponent::Entry>* archive = reinterpret_cast<RawArray<TrackerComponent::Entry>*>(&tracker->produced);   // LEFT: H5 TrackerComponent::produced is a raw {data, count, capacity} triple (retail Array<Entry>; the typed member is its own behaviour commit)
+    TrackerComponent::EntryList* live = &tracker->displayed;
+    TrackerComponent::EntryList* archive = &tracker->produced;
     int gen = GameUpdateLoop::_singleton->m_dayCounter->year;
     if (gen != tracker->trackerId) {
-        MaterialCountArrayAssign(archive, live);   // 0x14000d9d0
-        System::MemoryAllocator::MemFree(live->data);
-        live->data = nullptr;
+        MaterialArrayAssign(archive, live);   // 0x14000d9d0
+        System::MemoryAllocator::MemFree(live->_data);
+        live->_data = nullptr;
         // Retail stores EIGHT bytes here -- `*(undefined8 *)(param_1 + 0x30) = 0;` --
         // clearing the count AND the capacity (an earlier 4-byte port left a stale capacity:
         // the next upsert then committed a count over a NULL array -> ACCESS_VIOLATION).
-        live->size = 0;
-        live->capacity = 0;
+        live->_size = 0;
+        live->_capacity = 0;
         tracker->trackerId = gen;
     }
 
-    int n = live->size;
+    int n = live->_size;
     if (n > 0) {
-        const TrackerComponent::Entry* p = live->data;
+        const TrackerComponent::Entry* p = live->_data;
         int idx = 0;
         do {
             if (p->_resource == material) {
-                live->data[idx]._count = live->data[idx]._count + value;
+                live->_data[idx]._count = live->_data[idx]._count + value;
                 return;
             }
             idx++;
             p += 1;
-        } while (idx < live->size);
+        } while (idx < live->_size);
     }
 
-    int oldN = live->size;
+    int oldN = live->_size;
     int newN = oldN + 1;
-    TrackerComponent::Entry* oldBuf = live->data;
-    live->size = newN;
-    if (live->capacity < newN) {
-        live->capacity = newN;
-        if (oldN != 0) live->capacity = newN * 3;
-        live->data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(
-                          static_cast<uint64_t>(live->capacity) << 4, 8));
+    TrackerComponent::Entry* oldBuf = live->_data;
+    live->_size = newN;
+    if (live->_capacity < newN) {
+        live->_capacity = newN;
+        if (oldN != 0) live->_capacity = newN * 3;
+        live->_data = static_cast<TrackerComponent::Entry*>(System::MemoryAllocator::MemAlloc(
+                          static_cast<uint64_t>(live->_capacity) << 4, 8));
     }
-    int srcIdx = (oldBuf == live->data) ? oldN : 0;
+    int srcIdx = (oldBuf == live->_data) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        TrackerComponent::Entry* d = live->data + i;
+        TrackerComponent::Entry* d = live->_data + i;
         if (!d) continue;
         if (i < oldN) {
             *d = oldBuf[i];
@@ -356,7 +356,7 @@ void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, in
             d->_pad0C[0] = 0; d->_pad0C[1] = 0; d->_pad0C[2] = 0; d->_pad0C[3] = 0;   // the qword store's high dword
         }
     }
-    if (oldBuf != live->data)
+    if (oldBuf != live->_data)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 
@@ -429,20 +429,4 @@ void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
         objB->yaw = rotation;
         objB->meshInstance.SetTransform(objB->transform);
     }
-}
-
-// ===========================================================================
-// B4 FORWARD: the C spellings other blocks' files still call, one line each.
-// ===========================================================================
-
-// B4 FORWARD: outside callers (Action/consumerawmaterial, pickupstoredrawmaterial;
-// Component/trackercomponent; Work/marketwork_bst_b290)
-void ActRm_ArrayResize16_da70(int64_t* arr, int newCount) {
-    MaterialCountArraySetSize(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(arr), newCount);   // LEFT: SIG ActRm_ArrayResize16_da70 (0x14000da70): one retail body over four 16-byte element types whose holders keep raw {data, count, capacity} triples (TrackerComponent displayed / produced, ConsumeRawMaterial +0x28, PickupStoredRawMaterial +0x30, MarketWork::CarryList); typing a holder as Collection::Array<E> is its own behaviour commit (H5)
-}
-
-// B4 FORWARD: outside callers (Work/marketwork_bst_a9f0, marketwork_bst_b290)
-void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
-    MaterialCountArrayAssign(reinterpret_cast<RawArray<TrackerComponent::Entry>*>(dst),   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
-                             reinterpret_cast<const RawArray<TrackerComponent::Entry>*>(src));   // LEFT: SIG ActRm_VectorClone_d9d0 (0x14000d9d0): one retail body over the 16-byte {material, count} triples of TrackerComponent and MarketWork::CarryList, both raw {data, count, capacity} headers (H5)
 }

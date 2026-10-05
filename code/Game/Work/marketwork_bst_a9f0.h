@@ -36,7 +36,7 @@ MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim* src, Mark
 //   out  [RDX] : out-param; receives the node (existing or newly created)
 //   src  [R8]  : {key@+0x00, payloadArray@+0x08}; *src is the unsigned sort key
 // Returns `out`.
-MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree, MarketWork::ClaimNode** out, MarketWork::Claim* src);
+MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimTree* tree, MarketWork::ClaimNode** out, MarketWork::Claim* src);
 
 // 0x14002a9f0 — insert (key, cloned payload array) into the market BST.
 //   tree [RCX] : tree header
@@ -44,6 +44,6 @@ MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimNode** tree, MarketWork:
 //   key  [R8]  : pointer to the 8-byte InternalBasePtr key to insert
 //   vec  [R9]  : pointer to the payload dynamic array to deep-copy
 // Returns `out`.
-MarketWork::ClaimNode** MarketBst_a9f0(MarketWork::ClaimNode** tree, MarketWork::ClaimNode** out, CitizenComponent** key, MarketWork::CarryList* vec);
+MarketWork::ClaimNode** MarketBst_a9f0(MarketWork::ClaimTree* tree, MarketWork::ClaimNode** out, CitizenComponent** key, MarketWork::CarryList* vec);
 
 } // extern "C"

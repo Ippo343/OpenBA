@@ -253,7 +253,7 @@ UNIT_TEST(wrk_leaf_locationwork) {
 UNIT_TEST(wrk_leaf_marketwork) {
     WRK_LEAF_SHAPE(MarketWork, Work, 0x58);
     CHECK_EQ(offsetof(MarketWork, _field48), (size_t)0x48);
-    CHECK_EQ(offsetof(MarketWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(MarketWork, _field48.count), (size_t)0x50);
 }
 
 UNIT_TEST(wrk_leaf_pasturework) {

@@ -62,9 +62,7 @@
 // System::MemoryAllocator::_singleton is null (known_port_issues row 570) -- so it is not
 // replaced by the erased core; it is typed by element instead. The new tail writes +0x00
 // (dword), +0x08 / +0x10 / +0x18 (qwords), +0x20 (dword); the two padding dwords stay untouched.
-extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
-    // LEFT: H5 AmbientEnvironmentDescription::_entries / _entryCount / _entryCap are a raw Array triple
-    auto* arr = reinterpret_cast<Collection::Array<AmbientEnvironmentBiome>*>(arrayBase);   // LEFT: H5 AmbientEnvironmentDescription::_entries / _entryCount / _entryCap are a raw Array triple
+extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount) {
     int oldCount = arr->_size;
     if (newCount == oldCount) return;
 
@@ -109,26 +107,21 @@ extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
 // the defaults.
 AmbientEnvironmentDescription::AmbientEnvironmentDescription()
     : Description(),
-      _entries(nullptr),
-      _entryCount(0),
-      _entryCap(0),
+      _entries(),
       _f30(32.0f),
       _f34(45.0f) {}
 
-// dtor (slot 0 0x140002100 minus the stamps): frees the entry array.
-// The compiler then chains ~Description -> ~External.
+// dtor (slot 0 0x140002100 minus the stamps): the entry array's ~Array frees it
+// (MemFree, then the data and count+capacity qwords zeroed), then the compiler chains
+// ~Description -> ~External.
 AmbientEnvironmentDescription::~AmbientEnvironmentDescription() {
-    if (_entries) ::System::MemoryAllocator::MemFree(_entries);   // dynamic entry array
-    _entries = nullptr;
-    _entryCount = 0;
-    _entryCap = 0;
 }
 
 // [5] 0x140043950: stream order as retail.
 bool AmbientEnvironmentDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
-    int count = _entryCount;
+    int count = _entries._size;
     ser.Serialize(count, nullptr);   // int count +0x28
 
     // On load: resize the 0x28-byte-element array at +0x20 (0x140002540).
@@ -137,7 +130,7 @@ bool AmbientEnvironmentDescription::Serialize(IO::Stream& stream) {
     }
 
     if (count > 0) {
-        AmbientEnvironmentBiome* elem = _entries;
+        AmbientEnvironmentBiome* elem = _entries._data;
         for (int i = 0; i < count; ++i, ++elem) {
             ser.Serialize(elem->terrainMask, nullptr);                          // enum
             Reimpl_ExternalPtr_Serialize_StringTable(&elem->entityFilter, &ser);  // ExternalPtr, 0x140002340

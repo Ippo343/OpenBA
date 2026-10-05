@@ -51,6 +51,6 @@ void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer);
 //   serializer [RDX] : IO::Serializer*
 // Load: reads nodeCount, then inserts each (key, payload) pair, AVL-retracing via
 //       0x140025920. Save: in-order walk, writing each node's key + payload block.
-void MarketBst_b290(MarketWork::ClaimNode** tree, IO::Serializer* serializer);
+void MarketBst_b290(MarketWork::ClaimTree* tree, IO::Serializer* serializer);
 
 } // extern "C"

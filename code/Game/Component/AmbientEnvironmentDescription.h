@@ -20,6 +20,7 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (the +0x20 biome entries)
 
 class ComponentDescription;             // Component/ComponentDescription.h
 namespace Audio { class SoundEffect; }
@@ -58,9 +59,11 @@ public:
     virtual Object::External* Construct();                                 // [9] 0x140001fb0
 
     // ---- fields (PUBLIC: the components read them at raw offsets today) ----
-    AmbientEnvironmentBiome* _entries;          // +0x20 entry array data
-    int32_t _entryCount;                        // +0x28
-    int32_t _entryCap;                          // +0x2c
+    // +0x20 Array<AmbientEnvironmentBiome> {data, count +0x28, capacity +0x2c} (H5, typed:
+    // the ctor inlined in create 0x140001f40 zeroes +0x20 / +0x28 as qwords, the dtor
+    // 0x140002100 MemFrees +0x20 and zeroes both qwords before ~Description; no element
+    // destroy). Resized by 0x140002540 (AmbientArrayResize_Reimpl).
+    Collection::Array<AmbientEnvironmentBiome> _entries;
     float _f30;                                 // +0x30
     float _f34;                                 // +0x34
 };
@@ -68,7 +71,7 @@ public:
 static_assert(sizeof(AmbientEnvironmentDescription) == 0x38, "AmbientEnvironmentDescription is 0x38 (create 0x140001f40 MemAlloc(0x38))");
 static_assert(alignof(AmbientEnvironmentDescription) == 8, "AmbientEnvironmentDescription alignment");
 static_assert(offsetof(AmbientEnvironmentDescription, _entries) == 0x20, "AmbientEnvironmentDescription::_entries @ +0x20");
-static_assert(offsetof(AmbientEnvironmentDescription, _entryCount) == 0x28, "AmbientEnvironmentDescription::_entryCount @ +0x28");
-static_assert(offsetof(AmbientEnvironmentDescription, _entryCap) == 0x2c, "AmbientEnvironmentDescription::_entryCap @ +0x2c");
+static_assert(offsetof(AmbientEnvironmentDescription, _entries._size) == 0x28, "AmbientEnvironmentDescription entry count @ +0x28");
+static_assert(offsetof(AmbientEnvironmentDescription, _entries._capacity) == 0x2c, "AmbientEnvironmentDescription entry capacity @ +0x2c");
 static_assert(offsetof(AmbientEnvironmentDescription, _f30) == 0x30, "AmbientEnvironmentDescription::_f30 @ +0x30");
 static_assert(offsetof(AmbientEnvironmentDescription, _f34) == 0x34, "AmbientEnvironmentDescription::_f34 @ +0x34");
