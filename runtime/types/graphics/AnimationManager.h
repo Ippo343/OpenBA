@@ -58,6 +58,15 @@
 #include "../object/External.h"   // Object::ExternalPtr<T>, for GetInstanceId
 #include "AnimationState.h"        // B.4: Array<AnimationState>, Array<GraphicsMesh::Node>
 
+// B.4 Y RT: the hand-derived row of `Array<Graphics::AnimationState>`
+// (runtime/src/collection/array_graphics_anim.cpp): SetSize 0x18005b1e0's
+// zeroing init, the copy ctor 0x18005b660, the element destroy 0x18005bce0 that
+// ~Array 0x18005bbb0 runs. The tree's AnimationState ctor / dtor are declared
+// and undefined (retail's are these rows), so `Instance::_states` names it.
+namespace rtcoll { namespace gfxanim {
+extern const ArraySpec kSpec_AnimState;
+} }
+
 // Forward declarations only. Tags match the real declarations (RULE B4b-5).
 namespace System { class Time; }
 namespace Math { class Transform; class Vector3; }
@@ -248,8 +257,12 @@ public:
     // Field for field the same record as `RtGraphics::AnimInstanceRec` above.
     // ------------------------------------------------------------------------
     //
-    // B.4: the Arrays carry their element type. Nothing builds or destroys an
-    // Instance through a C++ ctor / dtor (the copy ctor 0x18005b700 and the
+    // B.4 Y RT: both Arrays carry retail's rows (`NodeArray`, kSpec_AnimState),
+    // so the one C++ local (GetInstanceId's fill, 0x1800fb9d0) zeroes the two
+    // headers through their ctors; its implicit member ~Arrays, after the two
+    // explicit retail ~Array calls zeroed the headers, are no-ops.
+    // B.4: the Arrays carry their element type. Nothing else builds or destroys
+    // an Instance through a C++ ctor / dtor (the copy ctor 0x18005b700 and the
     // element destroy are the registered rows in array_graphics_anim.cpp), so no
     // Array member ctor / dtor is instantiated through this struct.
     struct Instance {
@@ -257,8 +270,10 @@ public:
                                                    //        copied as a RAW qword
         int32_t _animIndex;                        // +0x08  -1 on a blanked slot
         int32_t _refCount;                         // +0x0c
-        Collection::Array<GraphicsMesh::Node> _nodes;  // +0x10  stride 0x48
-        Collection::Array<AnimationState> _states;     // +0x20  stride 0x48
+        GraphicsMesh::NodeArray _nodes;                // +0x10  Array<Node>, stride 0x48
+        Collection::Array<AnimationState, Collection::DefaultAllocator,
+                          Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimState>>
+                                                   _states;  // +0x20  Array<AnimationState>, stride 0x48
     };
 
     // ---- the members retail exports -----------------------------------------
@@ -337,7 +352,7 @@ public:
     //   `nodes` is retail's `const Array<GraphicsMesh::Node>&`, stride 0x48.
     //   `GraphicsMesh` is block G's class and is deliberately not named here.
     int32_t GetInstanceId(Object::ExternalPtr<AnimationGroup> group, int animIndex,
-                          const Collection::Array<GraphicsMesh::Node>& nodes);
+                          const GraphicsMesh::NodeArray& nodes);
 
     // ?FreeInstanceId@AnimationManager@Graphics@@QEAAXH@Z 0x1800fb970 NOT PORTED
     void FreeInstanceId(int handle);

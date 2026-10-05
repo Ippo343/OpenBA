@@ -16,6 +16,7 @@
 #include "../../runtime/types/save/SaveLoad.h"
 #include "../../runtime/types/graphics/Scene.h"
 #include "../../runtime/types/graphics/Animation.h"
+#include "../../runtime/types/graphics/GraphicsMesh.h"   // B.4 Y RT: kSpec_MeshNode
 
 #include <cstdio>
 #include <cstdlib>
@@ -54,3 +55,21 @@ extern "C" void* RtGraphics_DrawGroup_CopyCtor(void*, const void*) { UnlinkedBod
 extern "C" void* RtGraphics_Animation_CopyCtor(void*, const void*) { UnlinkedBody("RtGraphics_Animation_CopyCtor"); }
 extern "C" void  RtGraphics_Animation_Dtor(void*) { UnlinkedBody("RtGraphics_Animation_Dtor"); }
 Save::SaveLoad::SaveInfo::~SaveInfo() { UnlinkedBody("Save::SaveLoad::SaveInfo::~SaveInfo"); }
+
+// B.4 Y RT: `Graphics::GraphicsMesh::_nodes` is `NodeArray`, whose ~Array names
+// the hand-derived row `rtcoll::gfxanim::kSpec_MeshNode`
+// (runtime/src/collection/array_graphics_anim.cpp, not linked into make unit:
+// it pulls in the graphics element copy ctors). The GraphicsMesh probe's inline
+// ctor references it from its cleanup path only; no test sizes or destroys a
+// node array, so the row's operations abort if one ever does.
+namespace {
+void UnlinkedNodeAssign(uint8_t*, const uint8_t*) { UnlinkedBody("kSpec_MeshNode assign"); }
+void UnlinkedNodeInit(uint8_t*) { UnlinkedBody("kSpec_MeshNode init"); }
+void UnlinkedNodeDestroy(void*, uint8_t*, int) { UnlinkedBody("kSpec_MeshNode destroy"); }
+}  // namespace
+namespace rtcoll { namespace gfxanim {
+const ArraySpec kSpec_MeshNode = {
+    "Array<GraphicsMesh::Node> (unit stub)", 0x48, 8,
+    &UnlinkedNodeAssign, &UnlinkedNodeInit, &UnlinkedNodeDestroy, false,
+    0, 0, 0, 0, 0, 0 };
+} }  // namespace rtcoll::gfxanim

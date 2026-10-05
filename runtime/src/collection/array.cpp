@@ -2091,9 +2091,9 @@ static void AnimClipInit(Graphics::Animation* d) {
     d->_events._data     = nullptr;  // 180059f2d  inner event array
     d->_events._size     = 0;        // 180059f30  (one qword, H7)
     d->_events._capacity = 0;
-    d->_name             = nullptr;  // 180059f38  three String slots
-    d->_meshName         = nullptr;  // 180059f3c
-    d->_sourceName       = nullptr;  // 180059f40
+    d->_name._data       = nullptr;  // 180059f38  three String slots
+    d->_meshName._data   = nullptr;  // 180059f3c
+    d->_sourceName._data = nullptr;  // 180059f40
     d->_instanceCount    = 1;        // 180059f44  NOT zero
     d->_instanced        = false;    // 180059f4b  byte, not dword
     d->_startFrame       = 0;        // 180059f4f  (one qword, H7)
@@ -2138,16 +2138,16 @@ const ArraySpec kSpec_AnimClip70 = {              // 0x180059e70
 // B.4 (X-RL): the element is `Graphics::AnimationGroup::Tag` (AnimationGroup.h).
 static void AnimTagAssign(Graphics::AnimationGroup::Tag* d,
                           const Graphics::AnimationGroup::Tag* s) {
-    AdoptString(d->_string00.data, s->_string00.data);              // 18005a2c8 (as AssignStringPair10)
-    AdoptString(d->_string08.data, s->_string08.data);
+    AdoptString(d->_string00._data, s->_string00._data);            // 18005a2c8 (as AssignStringPair10)
+    AdoptString(d->_string08._data, s->_string08._data);
     d->_float10 = s->_float10;                                      // 18005a2ed
 }
 void AssignTagStrStrF18(uint8_t* d, const uint8_t* s) {
     AssignAs<Graphics::AnimationGroup::Tag, &AnimTagAssign>(d, s);
 }
 static void AnimTagInit(Graphics::AnimationGroup::Tag* d) {
-    d->_string00.data = nullptr;                                    // 18005a303
-    d->_string08.data = nullptr;                                    // 18005a306
+    d->_string00._data = nullptr;                                   // 18005a303
+    d->_string08._data = nullptr;                                   // 18005a306
     d->_float10       = 0.1f;                                       // 18005a30a  0x3dcccccd
 }
 void InitTagStrStrF18(uint8_t* d) {

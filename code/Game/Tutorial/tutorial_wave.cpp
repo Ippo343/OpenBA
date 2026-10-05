@@ -131,7 +131,7 @@ void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) 
 }
 
 extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: TutWave_SerializeDialogRef's callers hand the slot as void*
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: the one caller's slot is TutorialSetupDialog::highlightDialog, a `const UI::Dialog*`, which the typed wrapper's T** -> External** cannot take without casting the const away
                                 nullptr, "UI::Dialog");
 }
 
@@ -281,26 +281,16 @@ Object::InternalPtr<UI::DialogInstance> TutorialSetupDialog::FindHighlightDialog
 }
 
 // ===========================================================================
-// 0x14001AF90 — copy-construct a NamedExternalRef {String, generation, cached*}.
-// 0x14001AFE0 — resolve one and hand back the cached External*, destroying the
-//               temporary String the copy owns.
+// 0x14001AF90 — copy-construct a NamedExternalRef {String, generation, cached*}
+//               (B4 Y GAMEA: NamedExternalRef's copy ctor, Goal/goal_exe_helpers.h).
+// 0x14001AFE0 — resolve one and hand back the cached External*; it takes the
+//               reference BY VALUE, so the copy's String dies with the call.
 // Used as a pair by OpenHighlightDialog to look the toolbar External up
 // without disturbing the setup's own cached reference.
 // ===========================================================================
-static NamedExternalRef* TutWave_ExternalRefCopy(NamedExternalRef* dst, const NamedExternalRef* src) {
-    if (!dst || !src) return dst;
-    new (dst->name) System::String(src->Name());
-    dst->generation = src->generation;
-    dst->resolved   = src->resolved;
-    return dst;
-}
-
-static const Object::External* TutWave_ExternalRefResolve(NamedExternalRef* ref) {
-    if (!ref) return nullptr;
-    ResolveExternalByName_Impl(ref);
-    const Object::External* out = ref->resolved;
-    ref->Name().~String();
-    return out;
+static const Object::External* TutWave_ExternalRefResolve(NamedExternalRef ref) {
+    ResolveExternalByName_Impl(&ref);
+    return ref.resolved;
 }
 
 // ===========================================================================
@@ -351,18 +341,14 @@ void TutorialSetupDialog::OpenHighlightDialog(char checkExisting) {
         CitizenBehavior* mgr = gw ? gw->m_citizenList : nullptr;
         TemplateBucket* root = mgr ? mgr->field_0x160._root : nullptr;
 
-        NamedExternalRef refCopy{};
-        TutWave_ExternalRefCopy(&refCopy, &toolbarRef);
-        const Object::External* key = TutWave_ExternalRefResolve(&refCopy);
+        const Object::External* key = TutWave_ExternalRefResolve(toolbarRef);
 
         TemplateBucket* found = BstFind(root, key);
         int count = found ? found->element.entities._size : 0;
         int index = toolbarIndex;
 
         if (count > index) {
-            NamedExternalRef refCopy2{};
-            TutWave_ExternalRefCopy(&refCopy2, &toolbarRef);
-            const Object::External* key2 = TutWave_ExternalRefResolve(&refCopy2);
+            const Object::External* key2 = TutWave_ExternalRefResolve(toolbarRef);
             TemplateBucket* found2 = BstFind(root, key2);
             if (found2 && found2->element.entities._data) {
                 targetElem = found2->element.entities._data[index];

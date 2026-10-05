@@ -308,16 +308,16 @@ extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
     // descending release. Each slot is zeroed first and only then overwritten,
     // exactly as retail does it (`MOV [RBX+off],RSI` with RSI == 0, then the
     // conditional store and `INC dword [RAX-4]`).
-    char* Graphics::Animation::* const kNames[3] = {
+    System::String Graphics::Animation::* const kNames[3] = {
         &Graphics::Animation::_name,             // +0x10
         &Graphics::Animation::_meshName,         // +0x18
         &Graphics::Animation::_sourceName,       // +0x20
     };
     for (int k = 0; k < 3; ++k) {
-        self->*kNames[k] = nullptr;
-        char* const s = src->*kNames[k];
+        (self->*kNames[k])._data = nullptr;
+        char* const s = (src->*kNames[k])._data;
         if (s != nullptr) {
-            self->*kNames[k] = s;
+            (self->*kNames[k])._data = s;
             ++RtSystem::StringRefCount(s);
         }
     }
@@ -366,9 +366,9 @@ extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
 
     rtpickgrid::ArrayDtorTransform(&self->_keys);         // 0x18001c100, +0x60
 
-    ReleaseString(&self->_sourceName);                    // +0x20
-    ReleaseString(&self->_meshName);                      // +0x18
-    ReleaseString(&self->_name);                          // +0x10
+    ReleaseString(&self->_sourceName._data);              // +0x20
+    ReleaseString(&self->_meshName._data);                // +0x18
+    ReleaseString(&self->_name._data);                    // +0x10
 
     rtcoll::RtColl_ArrayDtor_18001c020(&self->_events);   // JMP 0x18001c020, +0x00
 

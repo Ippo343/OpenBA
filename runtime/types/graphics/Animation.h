@@ -452,9 +452,15 @@ public:
     // no Array member ctor / dtor is instantiated through this class.
     Collection::Array<Event> _events;
 
-    char*    _name;          // +0x10  System::String — GetName 0x180015f10
-    char*    _meshName;      // +0x18  System::String — GetMeshName 0x180015f50
-    char*    _sourceName;    // +0x20  System::String — GetSourceName 0x180015f90
+    // B.4 Y RT (`behaviour:`): the three names are the real `System::String`.
+    // An Animation is built, copied and destroyed only by `Array<Animation>`'s
+    // registered row (kSpec_AnimClip70: init 0x180059f2d, copy 0x1800160a0 /
+    // RtGraphics_Animation_CopyCtor, ~Animation 0x1800fb290 /
+    // RtGraphics_Animation_Dtor, which releases +0x20, +0x18, +0x10 in that
+    // order); the C++ ctor / dtor stay undefined, so each name is released once.
+    System::String _name;          // +0x10  GetName 0x180015f10
+    System::String _meshName;      // +0x18  GetMeshName 0x180015f50
+    System::String _sourceName;    // +0x20  GetSourceName 0x180015f90
     int32_t  _instanceCount; // +0x28  GetInstanceCount; ctor default 1
     bool     _instanced;     // +0x2c  IsInstanced 0x180016020
     uint8_t  _gap2d[3];      // +0x2d  NEVER WRITTEN by the ctor — a real hole

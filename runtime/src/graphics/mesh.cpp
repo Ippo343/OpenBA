@@ -2430,7 +2430,7 @@ int32_t GraphicsMesh::GetNodeIndexFromName(const char* name) const {
 
     int32_t ours = -1;
     for (int32_t i = 0; i < count; ++i) {
-        const char* nodeName = nodes[i]._name.data;
+        const char* nodeName = nodes[i]._name._data;
         if (nodeName == nullptr) {
             if (name == nullptr) { ours = i; break; }
             continue;                       // named-vs-null: skip, do not deref

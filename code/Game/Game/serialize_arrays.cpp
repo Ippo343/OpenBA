@@ -213,13 +213,6 @@ template <uint32_t N> void ByteAssign(uint8_t* d, const uint8_t* s) { std::memcp
 // `SpecFor<T>()` re-derives the identical row. The retail addresses stay here as
 // the provenance. `kSpec_SpawnEntry` below does NOT collapse and stays explicit.
 
-// FUN_14001baf0 — stride 0x20, align 4, byte copy, zero tail. (Not the
-// citizenlist ProfessionResourceEntry row: that one seeds 100 at +0x08.)
-using Pod20A4Elem = GameColl::Bytes<0x20, 4>;            // exe 0x14001baf0
-static_assert(sizeof(Pod20A4Elem)  == 0x20, "Pod20A4Elem stride");
-static_assert(alignof(Pod20A4Elem) == 4,    "Pod20A4Elem align");
-using Pod20A4Array = Collection::Array<Pod20A4Elem>;
-
 // FUN_14001bf10 — stride 0x14, align 4, byte copy, zero tail.
 using Pod14A4Elem = GameColl::Bytes20x4;                 // exe 0x14001bf10
 static_assert(sizeof(Pod14A4Elem)  == 0x14, "Pod14A4Elem stride");
@@ -265,11 +258,10 @@ using SpawnEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // ============================================================
 // Helpers #3-#5 — Array resize variants
 // ============================================================
-extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount) {
-    if (!arrayHeader) return;
-    // B.3.2 bridge: the Geometry/Struct60B headers this serves are still raw bytes.
-    reinterpret_cast<Pod20A4Array*>(arrayHeader)->SetSize(newCount);   // LEFT: H5 the Geometry / Struct60B headers this serves are raw triples (other owners' headers)
-}
+// 0x14001baf0 (stride 0x20): B4 Y GAMEA: its one caller, MenuScene's +0x30
+// meshes, is a typed Collection::Array<MenuSceneMesh> whose trait row is this
+// one (byte copy, whole-stride zero tail, no destroy); it calls SetSize, and
+// Reimpl_Array_Resize_Stride20 is deleted.
 
 // NOTE (heap-corruption fix): the stride-0x08 array holds raw 8-byte POINTERS
 // (e.g. the Geometry +0x210 External*/MaterialInstance ref array). The original

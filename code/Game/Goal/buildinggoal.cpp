@@ -33,7 +33,6 @@
 #include "Entity/CitizenBehavior.h"
 #include "Component/ComponentDescription.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
-#include "Game/exe_bodies.h"   // Game_DestroyStringArray18
 #include "system/String.h"
 #include "system/Filename.h"
 #include <new>
@@ -48,13 +47,12 @@
 // ============================================================
 // ctor 0x1400d77a0: Goal() (the base's real ctor), the vptr (the compiler's),
 // then requireAll = 1 and the entry array header zeroed.
-BuildingGoal::BuildingGoal() : _field30(true), _pad31{}, _field38{nullptr, 0, 0} {}
+BuildingGoal::BuildingGoal() : _field30(true), _pad31{}, _field38() {}
 
-// The dtor inside [0] 0x140025e80: destroy the entry array at +0x38
-// (0x14001b030); the compiler then runs ~Goal (retail's CALL).
-BuildingGoal::~BuildingGoal() {
-    Game_DestroyStringArray18(&_field38);   // 0x14001b030
-}
+// The dtor inside [0] 0x140025e80 (body 0x1400d77a0): destroy the entry array at
+// +0x38 (0x14001b030, the member's ~Array after this empty body); the compiler
+// then runs ~Goal (retail's CALL).
+BuildingGoal::~BuildingGoal() {}
 
 // ============================================================
 // BuildingGoal::Serialize (vtable +0x28, 0x1400d76a0)
@@ -76,18 +74,18 @@ bool BuildingGoal::Serialize(IO::Stream& stream) {
     serializer.Serialize(_field30, nullptr);
 
     // the entry count (a local copy)
-    int countLocal = _field38.count;
+    int countLocal = _field38._size;
     serializer.Serialize(countLocal, nullptr);
 
     // Check if loading (encoding mode == 0 means loading)
     int encodingMode = static_cast<int>(serializer.GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
     if (encodingMode == 0) {
-        // Loading: resize the entry array (0x14001b340, ported as Goal_RefArray_Resize).
-        Goal_RefArray_Resize(&_field38, static_cast<uint32_t>(countLocal));
+        // Loading: resize the entry array (0x14001b340, the row's SetSize).
+        _field38.SetSize(countLocal);
     }
 
     // Serialize each entry
-    NamedExternalRef* entry = _field38.data;
+    NamedExternalRef* entry = _field38._data;
     if (countLocal > 0) {
         for (uint32_t i = 0; i < static_cast<uint32_t>(countLocal); i++) {
             // Filename temporary retail's compiler emitted for this loop body.
@@ -95,7 +93,7 @@ bool BuildingGoal::Serialize(IO::Stream& stream) {
             (void)filenameBuf;
 
             // String::Serialize — the entry's name (+0x00)
-            entry->Name().Serialize(serializer);
+            entry->name.Serialize(serializer);
 
             // On load: resolve the entry's description reference (0x14001b1d0,
             // ResolveExternalByName_Impl). Writes +0x10 (resolved) and +0x08
@@ -134,12 +132,12 @@ Achievement::Goal::GoalState BuildingGoal::CheckGoalState() const {
     CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
 
     int matchCount = 0;
-    int entryCount = _field38.count;
+    int entryCount = _field38._size;
     int entryIdx = 0;
 
     if (entryCount > 0) {
         do {
-            const NamedExternalRef& entry = _field38.data[entryIdx];
+            const NamedExternalRef& entry = _field38._data[entryIdx];
 
             // Retail copies the WHOLE 0x18 reference to the stack, resolves into
             // the COPY, and reads the pointer back out of it — the array entry
@@ -147,13 +145,12 @@ Achievement::Goal::GoalState BuildingGoal::CheckGoalState() const {
             //
             // The BST key is not a hash: it is the resolved ComponentDescription
             // pointer.
-            NamedExternalRef refCopy;
-            new (refCopy.name) System::String(entry.Name());   // +0x00 name
-            refCopy.generation = entry.generation;              // +0x08 generation
-            refCopy.resolved = entry.resolved;                  // +0x10 cached ptr
-            ResolveExternalByName_Impl(&refCopy);
-            const Object::External* lookupKey = refCopy.resolved;
-            refCopy.Name().~String();
+            const Object::External* lookupKey;
+            {
+                NamedExternalRef refCopy(entry);   // the stack copy: name, generation, cached ptr
+                ResolveExternalByName_Impl(&refCopy);
+                lookupKey = refCopy.resolved;
+            }                                      // ~String, before the walk
 
             // BST lookup in the +0x160 template tree
             TemplateBucket* node = worldData->field_0x160._root;
@@ -256,34 +253,32 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     if (dumped == 0) fprintf(stderr, "[GoalProbe]   (empty)\n");
 
     // --- Build a one-entry requireAll BuildingGoal and evaluate it ---
-    // LEFT: a vptr-less stack image of the class (diagnostic, not retail),
-    // evaluated through a QUALIFIED (non-dispatching) member call.
-    alignas(8) uint8_t goalBytes[0x48];
-    memset(goalBytes, 0, sizeof(goalBytes));
-    BuildingGoal* goal = reinterpret_cast<BuildingGoal*>(goalBytes);   // LEFT: a vptr-less stack image of the class (diagnostic, not retail), evaluated through a QUALIFIED (non-dispatching) member call.
+    // B4 Y GAMEA: a real BuildingGoal on the stack (was a zeroed vptr-less byte
+    // image); its ~BuildingGoal frees the entry array the probe freed by hand.
+    // Evaluated through a QUALIFIED (non-dispatching) member call, as before.
+    BuildingGoal goalObject;
+    BuildingGoal* goal = &goalObject;
     goal->_field30 = true;                             // requireAll
-    Goal_RefArray_Resize(&goal->_field38, 1);          // seeds generation -1
-    NamedExternalRef* entry = goal->_field38.data;
+    goal->_field38.SetSize(1);                         // seeds generation -1
+    NamedExternalRef* entry = goal->_field38._data;
     if (!entry) { fprintf(stderr, "[GoalProbe] resize FAILED (null array)\n"); fflush(stderr); return; }
 
     fprintf(stderr, "[GoalProbe] seeded entry gen=%d ptr=%p (gen must be -1, else the "
                     "resolver would treat it as cached)\n",
             entry->generation, static_cast<const void*>(entry->resolved));
 
-    new (entry->name) System::String(templateName);    // +0x00 name
+    new (&entry->name) System::String(templateName);   // +0x00 name
 
     // Resolve a copy for reporting — Slot8 deliberately resolves into a throwaway
     // reference and leaves the array entry alone, so read the pointer from our own copy.
-    NamedExternalRef refCopy;
-    new (refCopy.name) System::String(entry->Name());
-    refCopy.generation = entry->generation;
-    refCopy.resolved = entry->resolved;
-    ResolveExternalByName_Impl(&refCopy);
-    const Object::External* resolved = refCopy.resolved;
-    refCopy.Name().~String();
+    const Object::External* resolved;
+    {
+        NamedExternalRef refCopy(*entry);
+        ResolveExternalByName_Impl(&refCopy);
+        resolved = refCopy.resolved;
+    }
 
-    goal->_field38.count = 1;                          // count = 1
-    goal->_field38.capacity = 0;
+    goal->_field38._size = 1;                          // count = 1
     int verdict = static_cast<int>(goal->BuildingGoal::CheckGoalState());
 
     fprintf(stderr, "[GoalProbe] name=\"%s\" resolved=%p verdict=%d "
@@ -295,7 +290,5 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
                         "(see StartTown_ResolveTemplate's FindOrLoad fallback).\n");
     }
     fflush(stderr);
-
-    entry->Name().~String();
-    System::MemoryAllocator::MemFree(entry);
+    // ~BuildingGoal: the entry's ~String, then MemFree of the array (0x14001b030).
 }

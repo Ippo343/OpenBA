@@ -26,6 +26,7 @@
 
 #include "../system/String.h"
 #include "../system/Filename.h"   // B.3.4: IO::FileSystem returns System::Filename by value
+#include "../collection/Collection.h" // B.4 Y RT: _packfiles is Collection::Array<PackageFile*>
 
 namespace RtIO {
 
@@ -620,9 +621,12 @@ public:
     uint8_t            _existsInPackfileGate;  // +0x18
     uint8_t            _platformExistsGate;    // +0x19
     uint8_t            _unknown1A[0x20 - 0x1A];
-    PackageFile**      _packfiles;             // +0x20  Collection::Array<PackageFile*>
-    int32_t            _packfileCount;         // +0x28
-    int32_t            _packfileCapacity;      // +0x2c
+    // B.4 Y RT (`behaviour:`): the real Array. Retail's dtor 0x1800ac6d0 frees
+    // +0x40 and +0x30 (the body), then ~Array<PackageFile*> on +0x20
+    // (0x1800ac71a, J1: free + zero header), then the three Filenames: this
+    // member's own ~Array, after the body and before the Filenames declared
+    // above it. PackageFile* is trivially destructible: no element step.
+    Collection::Array<PackageFile*> _packfiles; // +0x20  size +0x28, capacity +0x2c
     System::Filename*  _userPackFilenames;     // +0x30  Collection::Array<Filename>::_data (H4: a pointer, no ctor / dtor)
     int32_t            _userPackFilenameCount; // +0x38
     int32_t            _unknown3C;             // +0x3C
@@ -642,8 +646,10 @@ static_assert(offsetof(FileSystem, _packDirectory)        == 0x10, "GetPackDirec
 static_assert(offsetof(FileSystem, _existsInPackfileGate) == 0x18, "Exists' `CMP byte [RCX+0x18],0`");
 static_assert(offsetof(FileSystem, _platformExistsGate)   == 0x19, "Exists' `CMP byte [RBX+0x19],0`");
 static_assert(offsetof(FileSystem, _packfiles)            == 0x20, "GetPackfileId's `*(this+0x20)`");
-static_assert(offsetof(FileSystem, _packfileCount)        == 0x28, "the packfile Array's size");
-static_assert(offsetof(FileSystem, _packfileCapacity)     == 0x2c, "LoadPackages 0x1800ab5d4/5f0");
+static_assert(offsetof(FileSystem, _packfiles) + offsetof(Collection::Array<PackageFile*>, _size) == 0x28,
+              "the packfile Array's size");
+static_assert(offsetof(FileSystem, _packfiles) + offsetof(Collection::Array<PackageFile*>, _capacity) == 0x2c,
+              "LoadPackages 0x1800ab5d4/5f0");
 static_assert(offsetof(FileSystem, _userPackFilenames)    == 0x30, "the user pack filenames");
 static_assert(offsetof(FileSystem, _userPackFilenameCount) == 0x38, "AreUserPackFilesEnabled 0x1800acfc0");
 static_assert(offsetof(FileSystem, _packfileIndexRoot)    == 0x40, "GetPackfileId's `*(this+0x40)`");
@@ -655,7 +661,8 @@ static_assert(offsetof(FileSystem, _packDirectory)   == offsetof(RtIO::FileSyste
 static_assert(offsetof(FileSystem, _existsInPackfileGate) == offsetof(RtIO::FileSystem, existsInPackfileGate), "alias");
 static_assert(offsetof(FileSystem, _platformExistsGate)   == offsetof(RtIO::FileSystem, platformExistsGate),   "alias");
 static_assert(offsetof(FileSystem, _packfiles)       == offsetof(RtIO::FileSystem, packfiles),       "alias");
-static_assert(offsetof(FileSystem, _packfileCount)   == offsetof(RtIO::FileSystem, packfileCount),   "alias");
+static_assert(offsetof(FileSystem, _packfiles) + offsetof(Collection::Array<PackageFile*>, _size) ==
+              offsetof(RtIO::FileSystem, packfileCount), "alias");
 static_assert(offsetof(FileSystem, _packfileIndexRoot) == offsetof(RtIO::FileSystem, packfileIndexRoot), "alias");
 static_assert(offsetof(FileSystem, _packfileIndexCount) == offsetof(RtIO::FileSystem, packfileIndexCount), "alias");
 

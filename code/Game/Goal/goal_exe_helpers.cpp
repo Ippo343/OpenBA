@@ -34,15 +34,6 @@
 // In standalone the type-id storage slot (0x140152870) is unregistered → null,
 // so the IsDerivedFrom check is skipped and the Find result is trusted — same
 // strategy as ResolveExternalByName_Impl's TypeId_ComponentDescription_FC guard.
-// The +0x00 String (H5 raw storage; see the header). LEFT: the one
-// reinterpretation of the name storage.
-System::String& NamedExternalRef::Name() {
-    return *reinterpret_cast<System::String*>(name);   // LEFT: the one reinterpretation of the name storage.
-}
-const System::String& NamedExternalRef::Name() const {
-    return *reinterpret_cast<const System::String*>(name);   // LEFT: the one reinterpretation of the name storage.
-}
-
 void NamedExternalRef::Resolve() {
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     if (!efactory) return;
@@ -51,11 +42,11 @@ void NamedExternalRef::Resolve() {
     int32_t factoryGen = efactory->_generation;
     if (refGen == factoryGen) return;
 
-    System::Filename filename(Name());
+    System::Filename filename(name);
     const ::Object::External* found = efactory->Find(filename);
     bool loaded = false;
     if (!found) {
-        const char* text = Name()._data;
+        const char* text = name._data;
         if (text && text[0]) {
             // Only the LOADER rejects backslashes; the factory's key comparison
             // normalizes separators (measured — see tutorial_base.cpp).
@@ -97,7 +88,8 @@ void NamedExternalRef::Resolve() {
 // ============================================================
 // Callers: BuildingGoal::Serialize (0x1400d76a0) and MapGenerator::Serialize
 // (0x1400a2980), both on the LOAD leg only (serializer m_encoding == 0).
-// `arr` is the familiar {data* @+0x00, count @+0x08, capacity @+0x0c} header.
+// B4 Y GAMEA: the resize is `NamedExternalRefArray::SetSize` (the row below);
+// the forwarder Goal_RefArray_Resize is gone with the raw triple.
 //
 // Same primitive as EventArray_Grow in code/Game/Game/eventlog.cpp — including
 // the identical triple-capacity heuristic on a single-element grow — but with a
@@ -133,7 +125,7 @@ namespace {
 // (runtime/types/collection/Collection.h) are the one place the core's stepped
 // byte address becomes it.
 void AssignGoalRefEntry(NamedExternalRef* dst, const NamedExternalRef* src) {
-    new (dst->name) System::String(src->Name());     // +0x00
+    new (&dst->name) System::String(src->name);      // +0x00
     dst->generation = src->generation;               // +0x08
     dst->resolved = src->resolved;                   // +0x10
 }
@@ -144,20 +136,21 @@ void AssignGoalRefEntry(NamedExternalRef* dst, const NamedExternalRef* src) {
 // pointer is still null — the entry would silently never resolve. Faithful to
 // retail, which stores 0xffffffff explicitly.
 void InitGoalRefEntry(NamedExternalRef* e) {
-    e->Name()._data = nullptr;                       // +0x00
+    e->name._data = nullptr;                         // +0x00
     e->generation = -1;                              // +0x08 generation -1
     e->resolved = nullptr;                           // +0x10
 }
 
 void DestroyGoalRefEntry(NamedExternalRef* elems, int count) {
     for (int i = 0; i < count; ++i)
-        elems[i].Name().~String();
+        elems[i].name.~String();
 }
 
 // stays explicit: a String copy-ctor `assign` (byteCopy=false) with a real
 // `destroy`, the load-bearing -1 generation seed in `init`, and an unwritten
 // extent at [0x0c,0x10).
-const rtcoll::ArraySpec kSpec_GoalRefEntry = {          // exe 0x14001b340
+}  // namespace
+const rtcoll::ArraySpec GoalRows::kSpec_GoalRefEntry = {   // exe 0x14001b340 / 0x14001b030
     "Array<{String,int32,External*}>", 0x18, 8,
     &rtcoll::AssignAs<NamedExternalRef, &AssignGoalRefEntry>,
     &rtcoll::InitAs<NamedExternalRef, &InitGoalRefEntry>,
@@ -165,15 +158,3 @@ const rtcoll::ArraySpec kSpec_GoalRefEntry = {          // exe 0x14001b340
     /*assign unwritten*/ 0x0c, 0x10,
     /*init   unwritten*/ 0x0c, 0x10,
     /*seed zero       */ 0,    0 };
-
-using GoalRefArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                       Collection::ExplicitSpec<&kSpec_GoalRefEntry>>;
-
-}  // namespace
-
-void Goal_RefArray_Resize(NamedExternalRefArray* arr, uint32_t newCount) {
-    if (!arr) return;
-    // LEFT: the element ops are a uint8_t ArraySpec row (above), so the typed
-    // header is driven as that Array instantiation.
-    reinterpret_cast<GoalRefArray*>(arr)->SetSize(static_cast<int>(newCount));   // LEFT: H5 NamedExternalRefArray (goal_exe_helpers.h) is a raw {data, count, capacity} triple whose owners free it by hand through 0x14001b030 (Game_DestroyStringArray18, shared with MapGenerator's ref pools): a typed Array member needs that dtor and NamedExternalRef::name typed together
-}
