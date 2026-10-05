@@ -250,6 +250,8 @@ static_assert(offsetof(ShaderProgram, _byteCode)  == 0x40, "ShaderProgram::_byte
 
 static_assert(sizeof(ShaderProgram::Parameter) == 0x10,
               "ShaderProgram::Parameter is 0x10 (SHL RAX,0x4 at 0x18004e103)");
+static_assert(offsetof(ShaderProgram::Parameter, name) == 0x0, "Parameter::name");
+static_assert(offsetof(ShaderProgram::Parameter, _pad0d) == 0xD, "Parameter::_pad0d");
 static_assert(alignof(ShaderProgram::Parameter) == 8, "Parameter is qword-aligned");
 static_assert(offsetof(ShaderProgram::Parameter, dest) == 0x08,
               "Parameter::dest @ +0x08 (MOV EAX,[RAX+R8*8+0x8] at 0x18004e47a)");
@@ -357,6 +359,9 @@ static_assert(offsetof(VertexProgram::Element, semantic) == 0x08, "Element::sema
 static_assert(offsetof(VertexProgram::Element, format)   == 0x10, "Element::format @ +0x10");
 static_assert(offsetof(VertexProgram::Element, index)    == 0x14, "Element::index @ +0x14");
 static_assert(sizeof(VertexProgram::ElementArray) == 0x10, "unrolled Array header");
+static_assert(offsetof(VertexProgram::ElementArray, data) == 0x0, "ElementArray::data");
+static_assert(offsetof(VertexProgram::ElementArray, size) == 0x8, "ElementArray::size");
+static_assert(offsetof(VertexProgram::ElementArray, capacity) == 0xC, "ElementArray::capacity");
 static_assert(sizeof(VertexProgram::Stream) == 0x18, "v0 vertex stream is 0x18 bytes (0x180056af0)");
 static_assert(offsetof(VertexProgram::Stream, elements) == 0x00, "Stream::elements @ +0x00");
 static_assert(offsetof(VertexProgram::Stream, name)     == 0x10, "Stream::name @ +0x10 (0x180056cb0 releases it first)");

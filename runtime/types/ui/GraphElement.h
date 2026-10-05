@@ -115,6 +115,7 @@ struct GraphSeries {
     Collection::Array<int32_t> points;      // +0x08  data / +0x10 size / +0x14 capacity
 };
 static_assert(sizeof(GraphSeries) == GraphElementOffsets::kSeriesStride, "");
+static_assert(offsetof(GraphSeries, hole04) == 0x4, "GraphSeries::hole04");
 static_assert(offsetof(GraphSeries, colour) == GraphElementOffsets::kSeriesColour, "");
 static_assert(offsetof(GraphSeries, points) == GraphElementOffsets::kSeriesPointsArray, "");
 
@@ -191,6 +192,8 @@ public:
 
 static_assert(sizeof(GraphElement) == 0x100,
               "UI::GraphElement is 0x100 (MOV EDX,0x100 in 0x1800408b0)");
+static_assert(offsetof(GraphElement, _padEC) == 0xEC, "GraphElement::_padEC");
+static_assert(offsetof(GraphElement, _seriesCapacity) == 0xFC, "GraphElement::_seriesCapacity");
 static_assert(alignof(GraphElement) == 8, "UI::GraphElement aligns to 8");
 static_assert(offsetof(GraphElement, _width)       == 0xc0, "");
 static_assert(offsetof(GraphElement, _height)      == 0xc4, "");

@@ -313,6 +313,9 @@ public:
 };
 
 static_assert(sizeof(Scene::Entry) == 0x48, "Picking::Scene::Entry must be 0x48 bytes");
+static_assert(offsetof(Scene::Entry, _queryStamp) == 0x0, "Entry::_queryStamp");
+static_assert(offsetof(Scene::Entry, _cellY) == 0xC, "Entry::_cellY");
+static_assert(offsetof(Scene::Entry, _pad14) == 0x14, "Entry::_pad14");
 static_assert(offsetof(Scene::Entry, _nextFree)   == 0x04, "Entry::_nextFree @ +0x04");
 static_assert(offsetof(Scene::Entry, _cellX)      == 0x08, "Entry::_cellX @ +0x08");
 static_assert(offsetof(Scene::Entry, _cellW)      == 0x10, "Entry::_cellW @ +0x10");
@@ -324,8 +327,17 @@ static_assert(offsetof(Scene::Entry, _userValue)  == 0x38, "Entry::_userValue @ 
 static_assert(offsetof(Scene::Entry, _userValue2) == 0x3c, "Entry::_userValue2 @ +0x3c");
 static_assert(offsetof(Scene::Entry, _callback)   == 0x40, "Entry::_callback @ +0x40");
 static_assert(sizeof(Scene::Cell) == 0x10, "Picking::Scene::Cell must be 16 bytes");
+static_assert(offsetof(Scene::Cell, _x) == 0x0, "Cell::_x");
+static_assert(offsetof(Scene::Cell, _y) == 0x4, "Cell::_y");
+static_assert(offsetof(Scene::Cell, _nextInBucket) == 0x8, "Cell::_nextInBucket");
+static_assert(offsetof(Scene::Cell, _firstLink) == 0xC, "Cell::_firstLink");
 static_assert(sizeof(Scene::Link) == 8, "Picking::Scene::Link must be 8 bytes");
+static_assert(offsetof(Scene::Link, _entry) == 0x0, "Link::_entry");
+static_assert(offsetof(Scene::Link, _next) == 0x4, "Link::_next");
 static_assert(sizeof(Scene::AddDesc) == 0x30, "Picking AddMesh descriptor must be 0x30 bytes");
+static_assert(offsetof(Scene::AddDesc, _transforms) == 0x8, "AddDesc::_transforms");
+static_assert(offsetof(Scene::AddDesc, _userValue) == 0x20, "AddDesc::_userValue");
+static_assert(offsetof(Scene::AddDesc, _userValue2) == 0x24, "AddDesc::_userValue2");
 static_assert(offsetof(Scene::AddDesc, _userData) == 0x18, "AddDesc::_userData @ +0x18");
 static_assert(offsetof(Scene::AddDesc, _callback) == 0x28, "AddDesc::_callback @ +0x28");
 static_assert(offsetof(Scene::AddDesc, _mesh) + 0x18 == offsetof(Scene::Entry, _mesh),
@@ -333,6 +345,10 @@ static_assert(offsetof(Scene::AddDesc, _mesh) + 0x18 == offsetof(Scene::Entry, _
 
 static_assert(sizeof(Scene) == 0x60,
               "Picking::Scene is 0x60 (96) bytes (exe MemAlloc(0x60,8) at 0x140097093)");
+static_assert(offsetof(Scene, _cellSize) == 0x0, "Scene::_cellSize");
+static_assert(offsetof(Scene, _invCellSize) == 0x4, "Scene::_invCellSize");
+static_assert(offsetof(Scene, _pad2c) == 0x2C, "Scene::_pad2c");
+static_assert(offsetof(Scene, _pad44) == 0x44, "Scene::_pad44");
 static_assert(alignof(Scene) == 8, "Picking::Scene aligns to 8 (the Array data pointers)");
 static_assert(offsetof(Scene, _cellHeads)  == 0x08, "Scene::_cellHeads @ +0x08");
 static_assert(offsetof(Scene, _cells)      == 0x18, "Scene::_cells @ +0x18");

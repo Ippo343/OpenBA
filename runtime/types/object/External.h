@@ -206,6 +206,7 @@ struct ResourceEntry {
     uint32_t            referenceId;  // +0x14 — GetReferenceId returns this; Add seeds -1
 };
 static_assert(sizeof(ResourceEntry) == 0x18, "ResourceEntry is 0x18 bytes");
+static_assert(offsetof(ResourceEntry, path) == 0x0, "ResourceEntry::path");
 static_assert(offsetof(ResourceEntry, external)    == 0x08, "ResourceEntry::external @ +0x08");
 static_assert(offsetof(ResourceEntry, usageMask)   == 0x10, "ResourceEntry::usageMask @ +0x10");
 static_assert(offsetof(ResourceEntry, referenceId) == 0x14, "ResourceEntry::referenceId @ +0x14");
@@ -228,6 +229,8 @@ struct ReferenceEntry {
     System::Filename path;  // +0x08 — GetPathForReferenceId copies this out
 };
 static_assert(sizeof(ReferenceEntry) == 0x10, "ReferenceEntry is 0x10 bytes");
+static_assert(offsetof(ReferenceEntry, id) == 0x0, "ReferenceEntry::id");
+static_assert(offsetof(ReferenceEntry, _pad) == 0x4, "ReferenceEntry::_pad");
 static_assert(offsetof(ReferenceEntry, path) == 0x08, "ReferenceEntry::path @ +0x08");
 
 // The two Set instantiations. NOTE THE WAVE 2 TRAP (WAVE2.md "Notes for later
@@ -304,6 +307,7 @@ struct PathStackEntry {
 };
 static_assert(sizeof(PathStackEntry) == 0x10,
               "the path-stack stride is 0x10 (SHL RDX,0x4 in both accessors)");
+static_assert(offsetof(PathStackEntry, directory) == 0x0, "PathStackEntry::directory");
 static_assert(offsetof(PathStackEntry, filename) == 0x08,
               "GetPathStackFilename's extra `ADD RDX,0x8`");
 
@@ -770,6 +774,7 @@ public:
 };
 static_assert(sizeof(ExternalList) == 0x30,
               "Object::ExternalList is 0x30 bytes -- the element size of its deleting dtor 0x180007800");
+static_assert(offsetof(ExternalList, _pad2c) == 0x2C, "ExternalList::_pad2c");
 static_assert(offsetof(ExternalList, _resources) == 0x20, "ExternalList::_resources @ +0x20");
 static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count @ +0x28");
 
@@ -997,6 +1002,10 @@ public:
     bool         _loadEnabled;           // +0x41
     bool         _simpleLoadEnabled;     // +0x42
 };
+static_assert(offsetof(ExternalFactory, _cleanBitIndex) == 0x0, "ExternalFactory::_cleanBitIndex");
+static_assert(offsetof(ExternalFactory, _cleanBitMask) == 0x4, "ExternalFactory::_cleanBitMask");
+static_assert(offsetof(ExternalFactory, _generation) == 0x8, "ExternalFactory::_generation");
+static_assert(offsetof(ExternalFactory, _pad0c) == 0xC, "ExternalFactory::_pad0c");
 static_assert(offsetof(ExternalFactory, _resources)  == 0x10, "_resources @ +0x10");
 static_assert(offsetof(ExternalFactory, _references) == 0x20, "_references @ +0x20");
 static_assert(offsetof(ExternalFactory, _pathStack)  == 0x30, "_pathStack @ +0x30");

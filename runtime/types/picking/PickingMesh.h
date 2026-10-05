@@ -233,8 +233,17 @@ public:
 };
 
 static_assert(sizeof(PickingMesh::Triangle) == 0xc, "PickingMesh::Triangle must be 12 bytes");
+static_assert(offsetof(PickingMesh::Triangle, i0) == 0x0, "Triangle::i0");
+static_assert(offsetof(PickingMesh::Triangle, i1) == 0x2, "Triangle::i1");
+static_assert(offsetof(PickingMesh::Triangle, i2) == 0x4, "Triangle::i2");
+static_assert(offsetof(PickingMesh::Triangle, j0) == 0x6, "Triangle::j0");
+static_assert(offsetof(PickingMesh::Triangle, j1) == 0x8, "Triangle::j1");
+static_assert(offsetof(PickingMesh::Triangle, j2) == 0xA, "Triangle::j2");
 static_assert(sizeof(PickingMesh::UV16) == 4, "PickingMesh::UV16 must be 4 bytes");
+static_assert(offsetof(PickingMesh::UV16, u) == 0x0, "UV16::u");
+static_assert(offsetof(PickingMesh::UV16, v) == 0x2, "UV16::v");
 static_assert(sizeof(PickingMesh::SubMesh) == 0x80, "PickingMesh::SubMesh must be 0x80 bytes");
+static_assert(offsetof(PickingMesh::SubMesh, _name) == 0x0, "SubMesh::_name");
 static_assert(offsetof(PickingMesh::SubMesh, _parent)    == 0x08, "SubMesh::_parent @ +0x08");
 static_assert(offsetof(PickingMesh::SubMesh, _local)     == 0x0c, "SubMesh::_local @ +0x0c");
 static_assert(offsetof(PickingMesh::SubMesh, _aabb)      == 0x28, "SubMesh::_aabb @ +0x28");
@@ -245,6 +254,7 @@ static_assert(offsetof(PickingMesh::SubMesh, _uvs)       == 0x70, "SubMesh::_uvs
 
 static_assert(sizeof(PickingMesh) == 0x48,
               "Picking::PickingMesh is 0x48 bytes (MOV EDX,0x48 in slot 0, 0x180072050)");
+static_assert(offsetof(PickingMesh, _pad31) == 0x31, "PickingMesh::_pad31");
 static_assert(alignof(PickingMesh) == 8, "Picking::PickingMesh aligns to 8 (the vptr)");
 static_assert(offsetof(PickingMesh, _string20) == 0x20, "PickingMesh +0x20 String");
 static_assert(offsetof(PickingMesh, _string28) == 0x28, "PickingMesh +0x28 String");

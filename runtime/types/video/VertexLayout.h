@@ -284,6 +284,7 @@ static_assert(offsetof(VertexLayout, _signature) + offsetof(Collection::Array<ui
 static_assert(sizeof(VertexLayout::Element) == 0x20,
               "Video::VertexLayout::Element is 0x20 bytes (the 0x20 stride "
               "0x1800563c0 and 0x180003ff0 both walk in)");
+static_assert(offsetof(VertexLayout::Element, _pad1c) == 0x1C, "Element::_pad1c");
 static_assert(alignof(VertexLayout::Element) == 8, "Element is qword-aligned");
 static_assert(offsetof(VertexLayout::Element, name)       == 0x00, "Element::name @ +0x00");
 static_assert(offsetof(VertexLayout::Element, stream)     == 0x08, "Element::stream @ +0x08 (Add arg1, GetStreamCount 0x1800f5a30)");

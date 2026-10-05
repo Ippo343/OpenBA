@@ -125,7 +125,13 @@ public:
 };
 
 static_assert(sizeof(Stream::Block) == 0x8ba0, "the block stride 0x18000c300 allocates");
+static_assert(offsetof(Stream::Block, cumulativeBytes) == 0x0, "Block::cumulativeBytes");
 static_assert(sizeof(Stream) == 0x88, "Audio::Stream is 0x88 bytes");
+static_assert(offsetof(Stream, _buffers) == 0x30, "Stream::_buffers");
+static_assert(offsetof(Stream, _bufferEvent) == 0x48, "Stream::_bufferEvent");
+static_assert(offsetof(Stream, _bytePosition) == 0x78, "Stream::_bytePosition");
+static_assert(offsetof(Stream, _channel) == 0x7C, "Stream::_channel");
+static_assert(offsetof(Stream, _pad81) == 0x81, "Stream::_pad81");
 static_assert(alignof(Stream) == 8, "Audio::Stream aligns to 8 (the vptr)");
 static_assert(std::is_polymorphic<Stream>::value && !std::is_abstract<Stream>::value,
               "Stream overrides Thread's pure slot 0 (Run)");

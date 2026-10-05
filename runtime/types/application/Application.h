@@ -248,6 +248,7 @@ static_assert(!std::is_polymorphic<Application>::value,
               "Application::Application has no vtable: the ctor's first stores are zeros");
 static_assert(alignof(Application) == 8, "qword-aligned");
 static_assert(sizeof(Application::MessageCallbackEntry) == 0x10, "message-callback element is 0x10 (two qwords)");
+static_assert(offsetof(Application::MessageCallbackEntry, pad04) == 0x4, "MessageCallbackEntry::pad04");
 static_assert(offsetof(Application::MessageCallbackEntry, message)  == 0x00, "element::message @ +0x00");
 static_assert(offsetof(Application::MessageCallbackEntry, callback) == 0x08, "element::callback @ +0x08");
 static_assert(offsetof(Application, _windowHandle)         == 0x00, "Application._windowHandle @ 0x00");
@@ -261,6 +262,7 @@ static_assert(offsetof(Application, _quitRequested)        == 0x28, "Application
 // 0x1800dbbb3 (`MemAlloc(0x30, 4)`), not by this struct's field list.
 static_assert(sizeof(Application) == 0x30,
               "Application is 0x30 bytes -- Engine::Startup 0x1800dbbb3 allocates 0x30");
+static_assert(offsetof(Application, _unknown12) == 0x12, "Application::_unknown12");
 
 }  // namespace Application
 

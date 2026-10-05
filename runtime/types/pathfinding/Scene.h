@@ -104,6 +104,7 @@ public:
 
 static_assert(sizeof(Scene) == 0x90,
               "Pathfinding::Scene is 0x90 (copy ctor 0x18006ca70 ends at the +0x8c dword)");
+static_assert(offsetof(Scene, _pathInfo) == 0x0, "Scene::_pathInfo");
 static_assert(alignof(Scene) == 8, "Pathfinding::Scene aligns to 8 (the leading pointer)");
 static_assert(offsetof(Scene, _nodes)   == 0x08, "GetNodes 0x18006ca50 is LEA [RCX+0x08]");
 static_assert(offsetof(Scene, _links)   == 0x68, "GetLinks 0x18006ca60 is LEA [RCX+0x68]");

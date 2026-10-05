@@ -194,6 +194,7 @@ public:
 };
 
 static_assert(sizeof(Configuration) == 0x30, "System::Configuration is 0x30 bytes");
+static_assert(offsetof(Configuration, _pad0c) == 0xC, "Configuration::_pad0c");
 static_assert(offsetof(Configuration, _entries)     == 0x00, "Array data @ +0x00");
 static_assert(offsetof(Configuration, _entryCount)  == 0x08, "0x180010ab0 reads [this+0x8]");
 static_assert(offsetof(Configuration, _map)         == 0x10, "LEA RAX,[RCX+0x10]");

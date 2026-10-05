@@ -431,6 +431,17 @@ public:
 static_assert(sizeof(ImageBuffer) == 0x68,
               "Video::ImageBuffer is 0x68 bytes (MOV EDX,0x68 in the slot-0 "
               "vector deleting dtor at 0x18001ed20)");
+static_assert(offsetof(ImageBuffer, _width) == 0x20, "ImageBuffer::_width");
+static_assert(offsetof(ImageBuffer, _height) == 0x24, "ImageBuffer::_height");
+static_assert(offsetof(ImageBuffer, _dimension) == 0x28, "ImageBuffer::_dimension");
+static_assert(offsetof(ImageBuffer, _kind) == 0x2C, "ImageBuffer::_kind");
+static_assert(offsetof(ImageBuffer, _format) == 0x30, "ImageBuffer::_format");
+static_assert(offsetof(ImageBuffer, _flags) == 0x34, "ImageBuffer::_flags");
+static_assert(offsetof(ImageBuffer, _addressU) == 0x38, "ImageBuffer::_addressU");
+static_assert(offsetof(ImageBuffer, _addressV) == 0x3C, "ImageBuffer::_addressV");
+static_assert(offsetof(ImageBuffer, _addressW) == 0x40, "ImageBuffer::_addressW");
+static_assert(offsetof(ImageBuffer, _filter) == 0x44, "ImageBuffer::_filter");
+static_assert(offsetof(ImageBuffer, _sourceName) == 0x48, "ImageBuffer::_sourceName");
 static_assert(alignof(ImageBuffer) == 8, "Video::ImageBuffer is qword-aligned");
 
 #define RT_VIDEO_IMAGEBUFFER_PIN(MEMBER, POD_MEMBER, OFFSET)                   \

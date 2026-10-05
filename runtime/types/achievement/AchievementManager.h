@@ -318,6 +318,7 @@ public:
 };
 static_assert(sizeof(AchievementManager) == 0x48,
               "AchievementManager is 0x48 bytes (Engine::Startup MemAlloc(0x48) at 0x1800dbe42)");
+static_assert(offsetof(AchievementManager, _pad44) == 0x44, "AchievementManager::_pad44");
 static_assert(alignof(AchievementManager) == 8, "AchievementManager aligns to 8");
 static_assert(offsetof(AchievementManager, _achievements)          == 0x00, "_achievements @ +0x00");
 static_assert(offsetof(AchievementManager, _completed)             == 0x08, "_completed @ +0x08");

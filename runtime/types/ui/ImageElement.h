@@ -131,6 +131,7 @@ public:
 
 static_assert(sizeof(ImageElement) == 0xE0,
               "UI::ImageElement is 0xE0 bytes (MOV EDX,0xe0 in 0x180036600)");
+static_assert(offsetof(ImageElement, _padDC) == 0xDC, "ImageElement::_padDC");
 static_assert(alignof(ImageElement) == 8, "UI::ImageElement aligns to 8");
 static_assert(std::has_virtual_destructor<ImageElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<ImageElement>::value, "B39 D1: concrete");

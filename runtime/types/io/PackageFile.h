@@ -392,6 +392,8 @@ public:
 // 0xc0 — 0xc0 + 0x30 == 0xf0 exactly.
 static_assert(sizeof(PackageFile) == 0xf0,
               "IO::PackageFile is 0xf0 bytes -- the element size of its deleting dtor 0x1800259d0");
+static_assert(offsetof(PackageFile, _pad94) == 0x94, "PackageFile::_pad94");
+static_assert(offsetof(PackageFile, _padAd) == 0xAD, "PackageFile::_padAd");
 static_assert(sizeof(Object::External) == 0x20,
               "PackageFile's own fields start where External's end");
 

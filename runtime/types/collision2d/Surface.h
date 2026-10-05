@@ -86,6 +86,7 @@ public:
 };
 
 static_assert(sizeof(Surface) == 0x30, "Collision2D::Surface is 0x30 bytes (element size of slot 0)");
+static_assert(offsetof(Surface, _pad2c) == 0x2C, "Surface::_pad2c");
 static_assert(alignof(Surface) == 8, "Collision2D::Surface aligns to 8 (the vptr)");
 static_assert(offsetof(Surface, _f20) == 0x20, "Surface +0x20");
 static_assert(offsetof(Surface, _f24) == 0x24, "Surface +0x24");

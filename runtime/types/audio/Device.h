@@ -189,6 +189,9 @@ public:
 };
 
 static_assert(sizeof(Device::AudioChannel) == 0x28, "Audio::Device::AudioChannel is 0x28");
+static_assert(offsetof(Device::AudioChannel, flags) == 0x0, "AudioChannel::flags");
+static_assert(offsetof(Device::AudioChannel, _pad04) == 0x4, "AudioChannel::_pad04");
+static_assert(offsetof(Device::AudioChannel, _pad1c) == 0x1C, "AudioChannel::_pad1c");
 static_assert(offsetof(Device::AudioChannel, source)     == 0x08, "AudioChannel::source @ +0x08");
 static_assert(offsetof(Device::AudioChannel, userData)   == 0x10, "AudioChannel::userData @ +0x10");
 static_assert(offsetof(Device::AudioChannel, userValue)  == 0x18, "AudioChannel::userValue @ +0x18");
@@ -199,6 +202,7 @@ static_assert(offsetof(Device::PlatformChannel, channel)     == 0x10, "PlatformC
 static_assert(offsetof(Device::PlatformChannel, bufferEvent) == 0x18, "PlatformChannel::bufferEvent @ +0x18");
 
 static_assert(sizeof(Device) == 0x1298, "Audio::Device is 0x1298 (MemAlloc at 0x1800dbdd4)");
+static_assert(offsetof(Device, _channels) == 0x0, "Device::_channels");
 static_assert(alignof(Device) == 8, "Audio::Device aligns to 8");
 static_assert(!std::is_polymorphic<Device>::value, "Audio::Device has no vtable");
 static_assert(offsetof(Device, _stream)           == 0xa00, "ctor: LEA RCX,[RBX+0xa00]; CALL ??0Stream");

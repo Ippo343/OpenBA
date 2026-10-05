@@ -133,6 +133,7 @@ public:
 
 static_assert(sizeof(DocumentTextDescription) == 0xe8,
               "UI::DocumentTextDescription is 0xe8 (MOV EDX,0xe8 in 0x18003bd90)");
+static_assert(offsetof(DocumentTextDescription, _padAC) == 0xAC, "DocumentTextDescription::_padAC");
 static_assert(alignof(DocumentTextDescription) == 8, "UI::DocumentTextDescription aligns to 8");
 static_assert(offsetof(DocumentTextDescription, _documentStringTable) == sizeof(ElementDescription), "");
 // RtUI::DocumentTextDescription is an ALIAS of this class since fragment

@@ -107,6 +107,8 @@ public:
 
 static_assert(sizeof(RibbonElement) == 0xd8,
               "UI::RibbonElement is 0xd8 (MOV EDX,0xd8 in 0x180044ac0)");
+static_assert(offsetof(RibbonElement, _padC2) == 0xC2, "RibbonElement::_padC2");
+static_assert(offsetof(RibbonElement, _extentsCapacity) == 0xD4, "RibbonElement::_extentsCapacity");
 static_assert(alignof(RibbonElement) == 8, "UI::RibbonElement aligns to 8");
 static_assert(offsetof(RibbonElement, _vertical) == sizeof(Element), "");
 static_assert(offsetof(RibbonElement, _uniform)       == 0xc1, "");

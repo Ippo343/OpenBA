@@ -96,9 +96,20 @@ public:
 };
 
 static_assert(sizeof(CollisionMesh::Vec2) == 8, "Vec2 is 8 bytes");
+static_assert(offsetof(CollisionMesh::Vec2, x) == 0x0, "Vec2::x");
+static_assert(offsetof(CollisionMesh::Vec2, y) == 0x4, "Vec2::y");
 static_assert(sizeof(CollisionMesh::Triple3) == 6, "Triple3 is 6 bytes");
+static_assert(offsetof(CollisionMesh::Triple3, a) == 0x0, "Triple3::a");
+static_assert(offsetof(CollisionMesh::Triple3, b) == 0x2, "Triple3::b");
+static_assert(offsetof(CollisionMesh::Triple3, c) == 0x4, "Triple3::c");
 static_assert(sizeof(CollisionMesh::Quad4) == 8, "Quad4 is 8 bytes");
+static_assert(offsetof(CollisionMesh::Quad4, a) == 0x0, "Quad4::a");
+static_assert(offsetof(CollisionMesh::Quad4, b) == 0x2, "Quad4::b");
+static_assert(offsetof(CollisionMesh::Quad4, c) == 0x4, "Quad4::c");
+static_assert(offsetof(CollisionMesh::Quad4, d) == 0x6, "Quad4::d");
 static_assert(sizeof(CollisionMesh::Face) == 0x28, "CollisionMesh::Face is 0x28 bytes");
+static_assert(offsetof(CollisionMesh::Face, field0) == 0x0, "Face::field0");
+static_assert(offsetof(CollisionMesh::Face, _pad04) == 0x4, "Face::_pad04");
 static_assert(offsetof(CollisionMesh::Face, triples) == 0x08, "Face +0x08");
 static_assert(offsetof(CollisionMesh::Face, quads)   == 0x18, "Face +0x18");
 

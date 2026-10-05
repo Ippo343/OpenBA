@@ -108,6 +108,7 @@ public:
 
 static_assert(sizeof(NumberEditDescription) == 0x88,
               "UI::NumberEditDescription is 0x88 (MOV EDX,0x88 at 0x1800461af)");
+static_assert(offsetof(NumberEditDescription, _pad81) == 0x81, "NumberEditDescription::_pad81");
 static_assert(alignof(NumberEditDescription) == 8, "UI::NumberEditDescription aligns to 8");
 static_assert(std::has_virtual_destructor<NumberEditDescription>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<NumberEditDescription>::value, "B39 D1: concrete");

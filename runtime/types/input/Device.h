@@ -194,6 +194,7 @@ static_assert(!std::is_polymorphic<Device>::value,
               "Input::Device has no vtable: the ctor's first stores are State zeroes");
 static_assert(std::is_standard_layout<Device>::value, "reached by offset from outside");
 static_assert(sizeof(Device::State) == 0x18, "State is 0x18");
+static_assert(offsetof(Device::State, _unknown09) == 0x9, "State::_unknown09");
 static_assert(offsetof(Device::State, normalized) == 0x00, "State.normalized @ +0x00");
 static_assert(offsetof(Device::State, value)      == 0x04, "State.value @ +0x04");
 static_assert(offsetof(Device::State, pressed)    == 0x06, "State.pressed @ +0x06");
@@ -220,5 +221,7 @@ static_assert(alignof(Device) == 8, "qword-aligned (the COM pointers)");
 // Engine::Startup 0x1800dbe0b, not by this field list.
 static_assert(sizeof(Device) == 0x1200,
               "Input::Device is 0x1200 bytes -- Engine::Startup 0x1800dbe0b allocates 0x1200");
+static_assert(offsetof(Device, _pad11d1) == 0x11D1, "Device::_pad11d1");
+static_assert(offsetof(Device, _pad11f1) == 0x11F1, "Device::_pad11f1");
 
 }  // namespace Input

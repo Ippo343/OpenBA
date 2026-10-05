@@ -185,6 +185,7 @@ public:
 
 static_assert(sizeof(CriticalSection) == 0x28,
               "System::CriticalSection is sizeof(CRITICAL_SECTION) on x64");
+static_assert(offsetof(CriticalSection, _storage) == 0x0, "CriticalSection::_storage");
 // Stated as assertions so a future `virtual` fails the build rather than the
 // boot: a vptr would make this 0x30 bytes and push the storage eight bytes
 // down, under doors that are registered BY NAME.

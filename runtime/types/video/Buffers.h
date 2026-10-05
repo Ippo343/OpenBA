@@ -213,6 +213,7 @@ public:
 
 // ---- layout assertions, after the classes ----------------------------------
 static_assert(sizeof(Video::IndexBuffer) == 0x20, "IndexBuffer must be 0x20 bytes");
+static_assert(offsetof(Video::IndexBuffer, pad05) == 0x5, "IndexBuffer::pad05");
 static_assert(alignof(Video::IndexBuffer) == 8, "IndexBuffer aligns to 8");
 static_assert(std::is_standard_layout<Video::IndexBuffer>::value, "IndexBuffer stays standard-layout");
 static_assert(!std::is_trivially_destructible<Video::IndexBuffer>::value,
@@ -224,6 +225,7 @@ static_assert(offsetof(Video::IndexBuffer, listPrev) == 0x10, "listPrev at +0x10
 static_assert(offsetof(Video::IndexBuffer, listNext) == 0x18, "listNext at +0x18");
 
 static_assert(sizeof(Video::VertexBuffer) == 0x20, "VertexBuffer must be 0x20 bytes");
+static_assert(offsetof(Video::VertexBuffer, pad05) == 0x5, "VertexBuffer::pad05");
 static_assert(alignof(Video::VertexBuffer) == 8, "VertexBuffer aligns to 8");
 static_assert(std::is_standard_layout<Video::VertexBuffer>::value, "VertexBuffer stays standard-layout");
 static_assert(!std::is_trivially_destructible<Video::VertexBuffer>::value,

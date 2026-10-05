@@ -75,6 +75,7 @@ struct BlockDesc {
 static_assert(offsetof(BlockDesc, offset) == 0x04, "BlockDesc.offset @ 0x04");
 static_assert(offsetof(BlockDesc, size)   == 0x08, "BlockDesc.size @ 0x08");
 static_assert(sizeof(BlockDesc) == 0xc, "the +0x60 array strides 0xc");
+static_assert(offsetof(BlockDesc, id) == 0x0, "BlockDesc::id");
 
 // The `RtIo::Persistence` POD mirror that stood here was deleted by B.4 wave X
 // (X7-RT): `IO::Persistence` below holds the worker and the String as typed
@@ -220,6 +221,9 @@ static_assert(offsetof(SettingsMapNode, parent) == 0x10, "parent @ +0x10 (0x1800
 static_assert(offsetof(SettingsMapNode, left)   == 0x18, "left @ +0x18 (0x18000f7f4)");
 static_assert(offsetof(SettingsMapNode, right)  == 0x20, "right @ +0x20 (0x18000f7fd)");
 static_assert(sizeof(SettingsMapNode) == 0x30, "the Set node set_avl.h pins");
+static_assert(offsetof(SettingsMapNode, balance) == 0x28, "SettingsMapNode::balance");
+static_assert(offsetof(SettingsMapNode, height) == 0x2A, "SettingsMapNode::height");
+static_assert(offsetof(SettingsMapNode, pad2c) == 0x2C, "SettingsMapNode::pad2c");
 
 // The {root, count} header of that map: the `Set` both Map_Insert (0x18002a090:
 // `MOV [RSP+..],RCX`, then [RCX] the root and dword [RCX+0x08] the count it
@@ -265,6 +269,7 @@ struct SaveBlock {
 static_assert(offsetof(SaveBlock, size) == 0x08, "SaveBlock.size @ 0x08");
 static_assert(offsetof(SaveBlock, id)   == 0x0c, "SaveBlock.id @ 0x0c");
 static_assert(sizeof(SaveBlock) == 0x10, "sizeof(IO::Persistence::SaveBlock) == 0x10");
+static_assert(offsetof(SaveBlock, data) == 0x0, "SaveBlock::data");
 
 // ============================================================================
 // IO::Persistence::SaveGameInfo — 0x10 bytes, RETURNED BY VALUE.
@@ -310,6 +315,7 @@ struct SaveGameInfo {
 };
 static_assert(offsetof(SaveGameInfo, name) == 0x08, "SaveGameInfo.name @ 0x08");
 static_assert(sizeof(SaveGameInfo) == 0x10, "sizeof(IO::Persistence::SaveGameInfo) == 0x10");
+static_assert(offsetof(SaveGameInfo, sortKey) == 0x0, "SaveGameInfo::sortKey");
 
 }  // namespace RtIo
 

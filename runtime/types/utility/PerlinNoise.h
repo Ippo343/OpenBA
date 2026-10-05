@@ -47,6 +47,7 @@ static_assert(offsetof(PerlinNoise, _octaves)  == 0x04, "PerlinNoise._octaves @ 
 static_assert(offsetof(PerlinNoise, _offsetX)  == 0x08, "PerlinNoise._offsetX @ 0x08");
 static_assert(offsetof(PerlinNoise, _offsetY)  == 0x0c, "PerlinNoise._offsetY @ 0x0c");
 static_assert(sizeof(PerlinNoise) == 0x10, "sizeof(Utility::PerlinNoise) == 0x10");
+static_assert(offsetof(PerlinNoise, _persistence) == 0x0, "PerlinNoise::_persistence");
 
 }  // namespace RtUtility
 

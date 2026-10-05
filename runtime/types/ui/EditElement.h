@@ -167,6 +167,9 @@ public:
 
 static_assert(sizeof(EditElement) == 0xf8,
               "UI::EditElement is 0xf8 (MOV EDX,0xf8 in 0x18003fed0) — NOT 0xe8");
+static_assert(offsetof(EditElement, _padD5) == 0xD5, "EditElement::_padD5");
+static_assert(offsetof(EditElement, _padE1) == 0xE1, "EditElement::_padE1");
+static_assert(offsetof(EditElement, _padE9) == 0xE9, "EditElement::_padE9");
 static_assert(alignof(EditElement) == 8, "UI::EditElement aligns to 8");
 static_assert(std::has_virtual_destructor<EditElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<EditElement>::value, "B39 D1: concrete");

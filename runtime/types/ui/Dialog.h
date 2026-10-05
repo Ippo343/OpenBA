@@ -142,6 +142,9 @@ static_assert(offsetof(DialogControllerConfigEntry, _config) == 0x10,
               "config entry: the CONFIG is at +0x10 (0x180114a1c -> arg 4)");
 static_assert(sizeof(DialogControllerConfigEntry) == 0x20,
               "Dialog::_controllerConfigs stride is 0x20 (ctor 0x180114870 loop)");
+static_assert(offsetof(DialogControllerConfigEntry, _typeId) == 0x0, "DialogControllerConfigEntry::_typeId");
+static_assert(offsetof(DialogControllerConfigEntry, _pad04) == 0x4, "DialogControllerConfigEntry::_pad04");
+static_assert(offsetof(DialogControllerConfigEntry, _name) == 0x18, "DialogControllerConfigEntry::_name");
 
 // One entry of Dialog::_namedTemplates. Stride 0x10, pinned by
 // ?CreateElement@ (0x180112ed0): the scan starts at `data + 8`, compares that
@@ -155,6 +158,8 @@ struct DialogNamedTemplate {
 };
 static_assert(sizeof(DialogNamedTemplate) == 0x10,
               "Dialog::_namedTemplates stride is 0x10 (CreateElement 0x180112ed0)");
+static_assert(offsetof(DialogNamedTemplate, _description) == 0x0, "DialogNamedTemplate::_description");
+static_assert(offsetof(DialogNamedTemplate, _name) == 0x8, "DialogNamedTemplate::_name");
 
 
 
@@ -348,6 +353,16 @@ public:
 
 static_assert(sizeof(Dialog) == 0x88,
               "UI::Dialog is 0x88 bytes (MOV EDX,0x88 at 0x180038b3f)");
+static_assert(offsetof(Dialog, _spriteName) == 0x28, "Dialog::_spriteName");
+static_assert(offsetof(Dialog, _backgroundColor) == 0x30, "Dialog::_backgroundColor");
+static_assert(offsetof(Dialog, _drawLevel) == 0x34, "Dialog::_drawLevel");
+static_assert(offsetof(Dialog, _rootDescription) == 0x38, "Dialog::_rootDescription");
+static_assert(offsetof(Dialog, _defaultFlags) == 0x40, "Dialog::_defaultFlags");
+static_assert(offsetof(Dialog, _unknown44) == 0x44, "Dialog::_unknown44");
+static_assert(offsetof(Dialog, _controllerConfigs) == 0x48, "Dialog::_controllerConfigs");
+static_assert(offsetof(Dialog, _namedTemplates) == 0x58, "Dialog::_namedTemplates");
+static_assert(offsetof(Dialog, _templates) == 0x68, "Dialog::_templates");
+static_assert(offsetof(Dialog, _references) == 0x78, "Dialog::_references");
 static_assert(alignof(Dialog) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(Dialog, _spriteSheet) == sizeof(Object::External),
               "Dialog's own fields begin at the end of the Object::External base");

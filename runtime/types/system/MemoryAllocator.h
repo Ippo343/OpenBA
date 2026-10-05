@@ -205,7 +205,9 @@ static const uint64_t kThisFreeShl2    = 0x0000800000000000ull; // kTagThisFree 
 struct MemoryTag { uint64_t bits; };
 struct FreeTag   { uint64_t link; };
 static_assert(sizeof(MemoryTag) == 8, "MemoryTag is one packed qword");
+static_assert(offsetof(MemoryTag, bits) == 0x0, "MemoryTag::bits");
 static_assert(sizeof(FreeTag) == 8, "FreeTag is one packed qword");
+static_assert(offsetof(FreeTag, link) == 0x0, "FreeTag::link");
 
 // ---------------------------------------------------------------------------
 // MemoryRange — one VirtualAlloc reservation. 0x18 bytes.
@@ -377,6 +379,7 @@ namespace system {
 using MemoryAllocator = ::System::MemoryAllocator;
 
 static_assert(sizeof(MemoryAllocator) == 0x670, "MemoryAllocator is 0x670 bytes");
+static_assert(offsetof(MemoryAllocator, pad62c) == 0x62C, "MemoryAllocator::pad62c");
 static_assert(offsetof(MemoryAllocator, ranges) == 0x000, "ranges");
 static_assert(offsetof(MemoryAllocator, rangeCount) == 0x008, "rangeCount");
 static_assert(offsetof(MemoryAllocator, rangeCapacity) == 0x00c, "rangeCapacity");

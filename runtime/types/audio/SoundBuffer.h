@@ -163,6 +163,8 @@ public:
 
 static_assert(sizeof(SoundBuffer) == 0x80,
               "Audio::SoundBuffer is 0x80 bytes (MOV EDX,0x80 in slot 0, 0x18000bef0)");
+static_assert(offsetof(SoundBuffer, _pad22) == 0x22, "SoundBuffer::_pad22");
+static_assert(offsetof(SoundBuffer, _pad44) == 0x44, "SoundBuffer::_pad44");
 static_assert(alignof(SoundBuffer) == 8, "Audio::SoundBuffer aligns to 8 (the vptr)");
 static_assert(offsetof(SoundBuffer, _loopForever)     == 0x20, "IsLooping 0x18000bc80 reads +0x20");
 static_assert(offsetof(SoundBuffer, _streamed)        == 0x21, "IsStreamed 0x18000bc90 reads +0x21");

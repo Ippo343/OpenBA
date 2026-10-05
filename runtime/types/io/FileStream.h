@@ -138,6 +138,7 @@ struct FileStream {
     char*            filename;   // +0x18  System::String, refcounted
     RtIO::FileInfo   file;       // +0x20
 };
+static_assert(offsetof(RtIo::FileStream, base) == 0x0, "FileStream::base");
 static_assert(offsetof(FileStream, filename) == 0x18,
               "FileStream.filename @ 0x18 (~FileStream 0x1800aaad4 releases it)");
 // VERIFIED BY AN INDEPENDENT ROUTE, not merely asserted. Ghidra's decompiler on
@@ -193,6 +194,7 @@ static_assert(sizeof(FileStream) == 0x50,
 struct BinaryFileStream {
     FileStream base;  // +0x00 — and that is the whole class
 };
+static_assert(offsetof(RtIo::BinaryFileStream, base) == 0x0, "BinaryFileStream::base");
 static_assert(sizeof(BinaryFileStream) == 0x50,
               "sizeof(IO::BinaryFileStream) == 0x50 (eh_vector_dtor stride 0x180023d80)");
 
@@ -246,6 +248,7 @@ struct CompressedFileStream {
     CompressedStream base;  // +0x00
     BinaryFileStream file;  // +0x68
 };
+static_assert(offsetof(RtIo::CompressedFileStream, base) == 0x0, "CompressedFileStream::base");
 static_assert(offsetof(CompressedFileStream, file) == 0x68,
               "CompressedFileStream.file @ 0x68 (ctor 0x1800a93c8: LEA RCX,[RBX+0x68])");
 static_assert(sizeof(CompressedFileStream) == 0xb8,
@@ -339,6 +342,8 @@ struct TextFileStream {
     void*      buffer;           // +0x70  owned, bare MemFree
     void*      _unk78;           // +0x78  zeroed by the ctor, never freed
 };
+static_assert(offsetof(RtIo::TextFileStream, base) == 0x0, "TextFileStream::base");
+static_assert(offsetof(RtIo::TextFileStream, _unk54) == 0x54, "TextFileStream::_unk54");
 static_assert(offsetof(TextFileStream, objectVersion)   == 0x50,
               "??0TextFileStream 0x1800ba55d writes +0x50 = 0; SetObject writes the version there");
 static_assert(offsetof(TextFileStream, objectName)      == 0x58,
@@ -401,6 +406,7 @@ static_assert(sizeof(TextFileStream) == 0x80,
 struct VisitorStream {
     Stream base;  // +0x00 — and that is the whole class
 };
+static_assert(offsetof(RtIo::VisitorStream, base) == 0x0, "VisitorStream::base");
 static_assert(sizeof(VisitorStream) == 0x18,
               "sizeof(IO::VisitorStream) == 0x18 (eh_vector_dtor stride 0x18002bf80)");
 
@@ -677,6 +683,7 @@ public:
     int32_t _bufSize;          // +0x78  bytes in _buffer — see the banner
     int32_t _bufCursor;        // +0x7c  position IN _buffer
 };
+static_assert(offsetof(IO::TextFileStream, _pad54) == 0x54, "TextFileStream::_pad54");
 
 static_assert(sizeof(TextFileStream) == 0x80,
               "sizeof(IO::TextFileStream) == 0x80 (eh_vector_dtor stride 0x18002ba90)");

@@ -125,6 +125,8 @@ struct MeshNode {
     uint8_t     _unpinned[0x20];  // +0x28 .. +0x47
 };
 static_assert(sizeof(MeshNode) == 0x48, "GraphicsMesh::Node must be 0x48 bytes");
+static_assert(offsetof(MeshNode, _name) == 0x0, "MeshNode::_name");
+static_assert(offsetof(MeshNode, _unpinned) == 0x28, "MeshNode::_unpinned");
 static_assert(offsetof(MeshNode, _parent) == 0x08, "GraphicsMesh::Node::_parent @ +0x08");
 static_assert(offsetof(MeshNode, _local)  == 0x0c, "GraphicsMesh::Node::_local @ +0x0c");
 
@@ -164,6 +166,8 @@ struct GraphicsMeshView {
     uint8_t _pad78[0x08];                       // +0x78 .. +0x7f
     Box         _aabb;                          // +0x80 .. +0x97
 };
+static_assert(offsetof(GraphicsMeshView, _head) == 0x0, "GraphicsMeshView::_head");
+static_assert(offsetof(GraphicsMeshView, _pad78) == 0x78, "GraphicsMeshView::_pad78");
 static_assert(offsetof(GraphicsMeshView, _detailLevels)  == 0x50, "GraphicsMesh detail levels @ +0x50");
 static_assert(offsetof(GraphicsMeshView, _nodes)         == 0x60, "GraphicsMesh nodes @ +0x60");
 static_assert(offsetof(GraphicsMeshView, _materialLists) == 0x70, "GraphicsMesh material lists @ +0x70");
@@ -187,12 +191,18 @@ struct TriangleVertex {
     int16_t w;         // ctor: 0
 };
 static_assert(sizeof(TriangleVertex) == 8, "EdgeMesh::TriangleVertex must be 8 bytes");
+static_assert(offsetof(TriangleVertex, x) == 0x0, "TriangleVertex::x");
+static_assert(offsetof(TriangleVertex, y) == 0x2, "TriangleVertex::y");
+static_assert(offsetof(TriangleVertex, z) == 0x4, "TriangleVertex::z");
+static_assert(offsetof(TriangleVertex, w) == 0x6, "TriangleVertex::w");
 
 struct EdgeVertex {
     TriangleVertex a;  // +0x00, a.w = the int argument truncated to int16
     TriangleVertex b;  // +0x08, b.w = 0
 };
 static_assert(sizeof(EdgeVertex) == 16, "EdgeMesh::EdgeVertex must be 16 bytes");
+static_assert(offsetof(EdgeVertex, a) == 0x0, "EdgeVertex::a");
+static_assert(offsetof(EdgeVertex, b) == 0x8, "EdgeVertex::b");
 
 // The fixed-point scale the TriangleVertex ctor applies. Read from the shipped
 // Runtime-x64.dll at 0x180161728 (bytes 00 00 00 44), not guessed.
@@ -226,6 +236,11 @@ struct VideoBufferHeader {
     void*   _listNext;    // +0x18
 };
 static_assert(sizeof(VideoBufferHeader) == 0x20, "Video vertex/index buffer header must be 0x20 bytes");
+static_assert(offsetof(VideoBufferHeader, _size) == 0x0, "VideoBufferHeader::_size");
+static_assert(offsetof(VideoBufferHeader, _flags) == 0x4, "VideoBufferHeader::_flags");
+static_assert(offsetof(VideoBufferHeader, _pad05) == 0x5, "VideoBufferHeader::_pad05");
+static_assert(offsetof(VideoBufferHeader, _listPrev) == 0x10, "VideoBufferHeader::_listPrev");
+static_assert(offsetof(VideoBufferHeader, _listNext) == 0x18, "VideoBufferHeader::_listNext");
 static_assert(offsetof(VideoBufferHeader, _deviceData) == 0x08, "Video buffer _deviceData @ +0x08");
 
 
@@ -492,6 +507,7 @@ public:
 static_assert(sizeof(MeshInstance) == 0x120,
               "Graphics::MeshInstance is 0x120 bytes (MOV EDX,0x120 in its own "
               "slot-0 vector deleting destructor 0x180017330)");
+static_assert(offsetof(MeshInstance, _pad11e) == 0x11E, "MeshInstance::_pad11e");
 static_assert(alignof(MeshInstance) == 8, "qword aligned (the vptr)");
 
 static_assert(offsetof(MeshInstance, _mesh)                == 0xc0,  "MeshInstance::_mesh @ +0xc0 (??0 0x1800fffc0)");

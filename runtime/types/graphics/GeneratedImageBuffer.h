@@ -196,6 +196,7 @@ public:
 
 static_assert(sizeof(GeneratedImageBuffer) == 0x70,
               "Graphics::GeneratedImageBuffer is 0x70 (0x18001eee0's MOV EDX,0x70)");
+static_assert(offsetof(GeneratedImageBuffer, _pad6c) == 0x6C, "GeneratedImageBuffer::_pad6c");
 static_assert(alignof(GeneratedImageBuffer) == 8, "qword-aligned");
 static_assert(offsetof(GeneratedImageBuffer, _generation) == 0x68, "_generation @ +0x68");
 

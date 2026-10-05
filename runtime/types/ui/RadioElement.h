@@ -125,6 +125,7 @@ public:
 
 static_assert(sizeof(RadioElement) == 0xd8,
               "UI::RadioElement is 0xd8 bytes (MOV EDX,0xd8 in 0x180047d50)");
+static_assert(offsetof(RadioElement, _padD4) == 0xD4, "RadioElement::_padD4");
 static_assert(alignof(RadioElement) == 8, "UI::RadioElement aligns to 8");
 static_assert(std::has_virtual_destructor<RadioElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<RadioElement>::value, "B39 D1: concrete");

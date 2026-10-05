@@ -84,6 +84,10 @@ struct FontGlyph {
     int32_t _offsetY;       // +0x0c
 };
 static_assert(sizeof(FontGlyph) == 0x10, "UI::Font glyph stride 0x10 (SHL RBX,4)");
+static_assert(offsetof(FontGlyph, _preAdvance) == 0x0, "FontGlyph::_preAdvance");
+static_assert(offsetof(FontGlyph, _postKern) == 0x4, "FontGlyph::_postKern");
+static_assert(offsetof(FontGlyph, _postAdvance) == 0x8, "FontGlyph::_postAdvance");
+static_assert(offsetof(FontGlyph, _offsetY) == 0xC, "FontGlyph::_offsetY");
 
 // One placed glyph in a UI::Font::Layout, 16 bytes. Built on the stack at
 // [RSP+0x58] in ComputeLineLayout (0x180116d99..0x180116dc0) and appended by
@@ -100,6 +104,10 @@ struct FontLayoutEntry {
     int32_t _line;          // +0x0c  index into Layout::_lineWidths
 };
 static_assert(sizeof(FontLayoutEntry) == 0x10, "Layout entry stride 0x10");
+static_assert(offsetof(FontLayoutEntry, _glyph) == 0x0, "FontLayoutEntry::_glyph");
+static_assert(offsetof(FontLayoutEntry, _x) == 0x4, "FontLayoutEntry::_x");
+static_assert(offsetof(FontLayoutEntry, _y) == 0x8, "FontLayoutEntry::_y");
+static_assert(offsetof(FontLayoutEntry, _line) == 0xC, "FontLayoutEntry::_line");
 
 // UI::Font::Layout, 0x28 bytes — the out-parameter of ComputeStringLayout.
 // ComputeStringLayout's own prologue names every field: it clears +0x18 with
@@ -120,6 +128,8 @@ static_assert(offsetof(FontLayout, _lineWidths) == 0x18, "Layout::_lineWidths @ 
 static_assert(offsetof(FontLayout, _lineWidths._size) == 0x20,
               "Layout::_lineWidths._size @ +0x20 (MOV EDX,[RDI+0x20] at 0x180117190)");
 static_assert(sizeof(FontLayout) == 0x28, "sizeof(UI::Font::Layout) == 0x28");
+static_assert(offsetof(FontLayout, _width) == 0x0, "FontLayout::_width");
+static_assert(offsetof(FontLayout, _height) == 0x4, "FontLayout::_height");
 
 // UI::Font::Justify, the W4 enum ComputeStringLayout's fifth parameter carries.
 // Only two values are ever tested (0x1801174c5 and 0x1801174d8); 0 is every
