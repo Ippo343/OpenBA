@@ -13,7 +13,8 @@
 //     the tree's in-place entry builds the object and is kept (B38 B8-13).
 //   ctor 0x14004e640: Component ctor; member at +0x28; +0x48 = 0, +0x50 = 0
 //     (dword), +0x58 = +0x60 = 0. No flag OR (0x80).
-//   dtor 0x14004e5d0: MemFree(+0x58), +0x58 = +0x60 = 0, member restamp,
+//   dtor 0x14004e5d0: MemFree(+0x58), +0x58 = +0x60 = 0 (~group, before ~_controller
+//     in reverse declaration order), member restamp,
 //     ~Internal. [0] 0x140007b70 = dtor + MemFree on &1.
 //   table 0x140159b30, 18 slots:
 //     [0] 0x140007b70 dtor  [1]/[2] TypeName/Type  [3] 0x14004e4b0 Persist
@@ -30,6 +31,9 @@
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
 #include "system/Value.h"   // System::Time
+#include "collection/Collection.h"   // Collection::Array (group)
+#include "object/Internal.h"         // Object::InternalPtr<T>
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Entity/EntityList.h)
 
 class ComponentEntity;
 
@@ -76,9 +80,12 @@ public:
     System::Time      waitTimer;      // +0x48 counts down to the arrival season
     int32_t           arrivedCount;   // +0x50 nomads of the group at the hall
     uint8_t           _pad54[4];      // +0x54
-    Object::InternalPtr<ComponentEntity>* group;   // +0x58 Array<InternalPtr<ComponentEntity>> data (freed by the dtor)
-    int32_t           groupCount;     // +0x60
-    int32_t           groupCapacity;  // +0x64
+    // Grows through retail's stride-8 rows (0x1400032e0 / 0x140003110: the new tail
+    // ZEROED, no element destroy); freed by the inlined ~Array (dtor 0x14004e5f0..
+    // 0x14004e600): kSpec_PtrZero.
+    using GroupList = Collection::Array<Object::InternalPtr<ComponentEntity>, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    GroupList         group;          // +0x58 the nomad group (count +0x60, capacity +0x64)
 };
 
 static_assert(sizeof(ImmigrationComponent) == 0x68, "ImmigrationComponent is 0x68 (create 0x140007a20)");
@@ -91,5 +98,5 @@ static_assert(offsetof(ImmigrationComponent, waitTimer) == 0x48, "ImmigrationCom
 static_assert(offsetof(ImmigrationComponent, arrivedCount) == 0x50, "ImmigrationComponent +0x50");
 static_assert(offsetof(ImmigrationComponent, _pad54) == 0x54, "ImmigrationComponent +0x54");
 static_assert(offsetof(ImmigrationComponent, group) == 0x58, "ImmigrationComponent +0x58");
-static_assert(offsetof(ImmigrationComponent, groupCount) == 0x60, "ImmigrationComponent +0x60");
-static_assert(offsetof(ImmigrationComponent, groupCapacity) == 0x64, "ImmigrationComponent +0x64");
+static_assert(offsetof(ImmigrationComponent, group) + offsetof(ImmigrationComponent::GroupList, _size) == 0x60, "ImmigrationComponent +0x60");
+static_assert(offsetof(ImmigrationComponent, group) + offsetof(ImmigrationComponent::GroupList, _capacity) == 0x64, "ImmigrationComponent +0x64");
