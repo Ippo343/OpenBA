@@ -43,7 +43,7 @@ public:
     // DWORD store of `capacity` at +0x48 (the upper dword is not written),
     // +0x50 = 0 (qword), +0x58 = 0 (dword). ENDGAME B.3.9 OBJ: replaces the
     // `??0Internal` door + stamp in FireWork_CtorFull_e9bd0.
-    FireWork(void* pEntityIBP, uint32_t capacity);
+    FireWork(ComponentEntity* const* pEntityIBP, uint32_t capacity);
 
     // retail 0x1400e9ac0 (reached from slot 0 0x14002a230): stamp FireWork, then the
     // +0x50 set's inlined Clear (0x140014c30 on the root's +0x10 / +0x18 children, MemFree

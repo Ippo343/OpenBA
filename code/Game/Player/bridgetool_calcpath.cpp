@@ -200,7 +200,7 @@ void SeatSegmentPickOwner(ComponentEntity* seg, ComponentEntity* masterEntity,
 }
 
 // Construct a ComponentEntity (0x48 bytes) from a template/description.
-ComponentEntity* CloneEntity(void* templateEntity) {
+ComponentEntity* CloneEntity(ComponentDescription* templateEntity) {
     if (!templateEntity) return nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (!mem) return nullptr;

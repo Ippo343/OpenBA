@@ -50,7 +50,8 @@
 #include "Player/RemovalTool.h"
 #include "Player/Tool.h"
 #include "Player/exe_bodies.h"            // UpdateCreateBar (0x1400ffc60)
-#include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, ActHunt_DynArraySetCount_3110
+#include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, QwordArraySetSize
+static void (*const kArrayPush)(RawArray<void*>*, int, void* const*) = &QwordArraySetSize;   // 0x140003110, printed by the MarkRemoval traces
 #include "Dialog/exe_bodies.h"
 #include "graphics/Geometry.h"            // Graphics::Geometry::GetTransform
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc / _singleton
@@ -1034,8 +1035,8 @@ void FireMarkRemoval() {
     // The two backend primitives: ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0) and
     // ActHunt_DynArraySetCount_3110 (0x140003110).
     fprintf(stderr, "[MarkRemoval] MarkForRemoval(c2ea0)=%p ArrayPush(3110)=%p\n",
-            reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
-            reinterpret_cast<void*>(&ActHunt_DynArraySetCount_3110));
+            reinterpret_cast<void*>(&MarkEntityForRemoval),
+            reinterpret_cast<void*>(kArrayPush));
 
     // Scan a rectangle near map centre for the first markable entity (either cell slot).
     const int lo = 110, hi = 146;
@@ -1063,13 +1064,13 @@ void FireMarkRemoval() {
                        row, col, cell, slot, local, flags, compCnt, tid);
 
                 // --- Step 1: MarkForRemoval (sets flag 0x400, notifies components) ---
-                ActHunt_MarkEntityRemoval_c2ea0(local);
+                MarkEntityForRemoval(local);
                 uint32_t flagsAfter = local->_entityFlags;
 
                 // --- Step 2: push onto EntityList removalList (+0xD0) ---
                 IBPArray* rl = &entityList->removalList;
                 int cntBefore = rl->_size;
-                ActHunt_DynArraySetCount_3110(rl, cntBefore + 1, &local);
+                QwordArraySetSize(rl, cntBefore + 1, &local);
                 int cntAfter = rl->_size;
 
                 fprintf(stderr, "[MarkRemoval] MARKED: flags 0x%08x -> 0x%08x (bit0x400 %s), "
@@ -1160,14 +1161,14 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     ComponentEntity* local = house;
     if (!local || !entityList) {
         fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
-               local, reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
-               reinterpret_cast<void*>(&ActHunt_DynArraySetCount_3110), entityList);
+               local, reinterpret_cast<void*>(&MarkEntityForRemoval),
+               reinterpret_cast<void*>(kArrayPush), entityList);
         return;
     }
-    ActHunt_MarkEntityRemoval_c2ea0(local);                                   // 0x1400c2ea0
+    MarkEntityForRemoval(local);                                   // 0x1400c2ea0
     IBPArray* rl = &entityList->removalList;
     int cntBefore = rl->_size;
-    ActHunt_DynArraySetCount_3110(rl, cntBefore + 1, &local);   // 0x140003110
+    QwordArraySetSize(rl, cntBefore + 1, &local);   // 0x140003110
     fprintf(stderr, "[PinPanel] MARKED house flags(+0x40)=0x%08x removalList %d->%d — watching the guard "
            "across the free (rawDS vs CheckPtr-hardened)...\n",
            local->_entityFlags,
@@ -2172,13 +2173,13 @@ void FireClearHarvest() {
 
     // Work scheduler: gw+0x118; primary AVL count at +0x18 (sched[6]).
     WorkScheduler* sched = gw->m_tutorial;
-    int schedBefore = sched ? sched->field_0x18 : -1;
+    int schedBefore = sched ? sched->field_0x10.count : -1;
 
     fprintf(stderr, "[ClearHarvest] house[0]=%p ClearAreaComp=%p resource=(%d,%d) ent=%p — driving "
            "State0Enter (harvest dispatch)...\n", house, caComp, rcCol, rcRow, resEnt);
     ClearArea_State0Enter(caComp, nullptr);   // not-done path: sm unused
 
-    int schedAfter = sched ? sched->field_0x18 : -1;
+    int schedAfter = sched ? sched->field_0x10.count : -1;
 
     // Restore footprint.
     bc->tileX0 = sCol;

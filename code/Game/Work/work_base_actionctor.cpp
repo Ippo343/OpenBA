@@ -298,7 +298,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0 &&
         targetObj->_entity != nullptr) {
         ComponentEntity* detach = targetObj->_entity;
-        ActHunt_NotifyEntityChanged_c3470(detach);
+        NotifyEntityChanged(detach);
     }
 }
 

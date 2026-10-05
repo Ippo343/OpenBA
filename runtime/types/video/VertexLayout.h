@@ -94,6 +94,13 @@
 #include "../collection/Collection.h"
 #include "../object/External.h"
 #include "../object/Internal.h"                // Object::detail::InternalMemFree
+#include "../system/String.h"                  // Element::name
+
+namespace rtcoll {
+// B.4 wave Y (RT-GFX): the row of `Array<VertexLayout::Element>`
+// (runtime/src/collection/array.cpp, SetSize 0x180056240).
+extern const ArraySpec kSpec_VertexElement;
+}
 
 namespace IO { class Stream; }
 
@@ -135,16 +142,15 @@ public:
     // `?GetElement@VertexLayout@Video@@QEBAAEBUElement@12@H@Z` spells `U`,
     // not `V`). Field map and its proof: the banner at the top of this file.
     //
-    // `name` is a `System::String` (one pointer to a refcounted payload whose
-    // count sits at -4). It is spelled `void*` here for the reason
-    // `runtime/types/video/ImageBuffer.h` gives for its own +0x48: a real
-    // `System::String` member would give `Element` a non-trivial destructor
-    // that runs IN ADDITION to the by-hand release the ported
-    // `Array<Element>::~Array` spec already performs (0x18004fa30) — the
-    // double-free shape B31_RULES records. The eight bytes are the same.
+    // `name` is a `System::String` (B.4 wave Y, RT-GFX). Every Element lives in
+    // `_elements`, whose type names retail's row `kSpec_VertexElement` (SetSize
+    // 0x180056240: the String adopt, the zeroing init; destroy 0x18004fe20, the
+    // String release); ~VertexLayout calls the registered ~Array 0x18004fa30,
+    // which zeroes the header, so the member's implicit ~Array releases nothing.
+    // No Element is built, copied or destroyed through C++ outside the row.
     // ============================================================
     struct Element {
-        char*    name;        // +0x00  System::String — the semantic name (B4 R-CORE: char*, H4)
+        System::String name;  // +0x00  the semantic name (the row owns its lifecycle)
         int32_t  stream;      // +0x08  vertex stream / D3D11 InputSlot
         int32_t  offset;      // +0x0c  byte offset within the stream
         Usage    usage;       // +0x10  never read by the DX11 backend
@@ -245,7 +251,9 @@ public:
     // struct and nothing else. Public because `dx11/` reads `_elements` and
     // `_signature` directly — the same posture `Object::External` takes with
     // `_path` / `_refs`.
-    Collection::Array<Element> _elements;   // +0x20  {data, _size +0x28, _capacity +0x2c}
+    Collection::Array<Element, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_VertexElement>>
+        _elements;   // +0x20  {data, _size +0x28, _capacity +0x2c}
     // The `Video::VertexLayoutData*` the Device factory hands back
     // (`DeviceData` vtable +0x70, slot 14 — `Dx11_CreateVertexLayoutData`).
     VertexLayoutData*          _data;       // +0x30  (B.4 R-VIDEO, H4)

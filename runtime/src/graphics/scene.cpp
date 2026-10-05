@@ -818,15 +818,24 @@ extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
 // themselves were correct — only the allocator watchdog
 // (BANISHED_REDZONE=watch) can say that.
 // ============================================================================
-extern "C" void RtGraphics_Scene_Dtor(Scene* self) {
+//
+// B.4 wave Y (RT-GFX): the body is the real `Graphics::Scene::~Scene()`. Its
+// one statement is the +0x60 list's Clear (Collection::LinkedList has no
+// destructor, Collection.h); the five Arrays are members, destroyed after it
+// in reverse declaration order: +0x50, +0x40, +0x30, +0x20 (0x18001c750 each),
+// then +0x10 (the tail JMP 0x18005fc20) -- retail's six calls in its order.
+// The door stays for the exe's raw-storage holders. The CONSTRUCTOR stays the
+// door above: retail's grid initialiser 0x18005e4a0 zeroes the five Array
+// headers itself (rtgfxgrid::GridInit, on the RtGraphics view), so a C++
+// `Scene()` would zero them twice through the members' Array() initialisers.
+namespace Graphics {
+Scene::~Scene() {
+    _globals.Clear();                // +0x60  retail 0x18005f1f0
+}
+}  // namespace Graphics
 
-    self->_globals.Clear();          // +0x60  retail 0x18005f1f0
-    self->_cellCounts.~Array();      // +0x50  retail 0x18001c750
-    self->_levelOffsets.~Array();    // +0x40  retail 0x18001c750
-    self->_cellHeads.~Array();       // +0x30  retail 0x18001c750
-    self->_freeIds.~Array();         // +0x20  retail 0x18001c750
-    self->_nodes.~Array();           // +0x10  retail 0x18005fc20
-
+extern "C" void RtGraphics_Scene_Dtor(Graphics::Scene* self) {
+    self->~Scene();
 }
 
 // ============================================================================

@@ -26,7 +26,7 @@ Work::Work()
 
 // 0x1400f72e0 (Work_Ctor25): `??0Internal`, the compiler's stamp, then
 // Work::InitFromEntity (work_base_reimpl.cpp).
-Work::Work(void* pEntityIBP) : Object::Internal() {
+Work::Work(ComponentEntity* const* pEntityIBP) : Object::Internal() {
     InitFromEntity(pEntityIBP);
 }
 

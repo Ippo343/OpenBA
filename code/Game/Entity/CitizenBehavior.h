@@ -41,6 +41,7 @@
 #include <cstddef>
 #include "collection/Collection.h"   // Collection::Array<int32_t> (the +0x140 buckets)
 #include "system/Value.h"            // System::Time (the five clocks)
+#include "Action/PathAvl.h"          // AvlNode30 / AvlTreeHead (the PathGraph distance cache)
 
 class ComponentEntity;
 class CemeteryComponent;
@@ -139,31 +140,12 @@ static_assert(offsetof(PathCellPair, cellB) == 0x04, "");
 // Insert 0x140025a10: the root is MemAlloc(0x30, 8) with dwords [0..2] = the key
 // and value, [4..10] = 0; a child is built by 0x14001cc40: MemAlloc(0x30, 8),
 // dwords [0..2], qword +0x10 = the parent, qwords +0x18 / +0x20 = 0, dword +0x28 = 0.
-// The key compares signed ints, high first (`regionHigh`, then `regionLow`); the
-// rebalance is 0x14000e360. The +0x0C dword is never written.
-struct PathCostNode {
-    int32_t       regionHigh; // +0x00: max(region A, region B)
-    int32_t       regionLow;  // +0x04: min(region A, region B)
-    int32_t       cost;       // +0x08: the path cost (ProcessPaths' store)
-    int32_t       _pad0C;     // +0x0C: not written by either allocator
-    PathCostNode* parent;     // +0x10
-    PathCostNode* left;       // +0x18
-    PathCostNode* right;      // +0x20
-    int16_t       balance;    // +0x28 (retrace 0x14000e360: MOV word ptr [RDX+0x28]; the allocators zero +0x28..+0x2B with one dword store)
-    int16_t       height;     // +0x2A (retrace 0x14000e360: MOVZX word ptr [RAX+0x2a])
-    int32_t       _pad2C;     // +0x2C
-};
+// The key compares signed ints, high first (key0 = max(region A, region B), then
+// key1 = the min); key2 is the path cost. The rebalance is 0x14000e360. The +0x0C
+// dword is never written. The node is Action/PathAvl.h's AvlNode30 (the same 0x30
+// layout the region-pair cache's tree uses; AvlInsert30 0x14001c940 inserts it).
+using PathCostNode = AvlNode30;
 static_assert(sizeof(PathCostNode) == 0x30, "PathCostNode is MemAlloc(0x30, 8) (0x140025a10, 0x14001cc40)");
-static_assert(offsetof(PathCostNode, regionHigh) == 0x00, "");
-static_assert(offsetof(PathCostNode, regionLow)  == 0x04, "");
-static_assert(offsetof(PathCostNode, cost)       == 0x08, "");
-static_assert(offsetof(PathCostNode, _pad0C)     == 0x0C, "");
-static_assert(offsetof(PathCostNode, parent)     == 0x10, "");
-static_assert(offsetof(PathCostNode, left)       == 0x18, "");
-static_assert(offsetof(PathCostNode, right)      == 0x20, "");
-static_assert(offsetof(PathCostNode, balance)    == 0x28, "");
-static_assert(offsetof(PathCostNode, height)     == 0x2A, "");
-static_assert(offsetof(PathCostNode, _pad2C)     == 0x2C, "");
 
 // ============================================================
 // The +0x100 (Profession) / +0x160 (ComponentDescription template) entity-bucket
@@ -303,9 +285,7 @@ struct PathGraph {
     int32_t  m_pairCapacity;  // +0x0C: Array capacity
     int32_t  m_pendingIdx;    // +0x10: current processing index (-1 = done, >= 0 = in progress)
     int32_t  _pad14;          // +0x14
-    PathCostNode* m_bstRoot;  // +0x18: tree root: the distance cache {(high,low) -> distance}
-    int32_t  m_bstCount;      // +0x20: tree count
-    int32_t  _pad24;          // +0x24
+    AvlTreeHead<PathCostNode> m_bst;   // +0x18: the distance cache {(high,low) -> distance}: root, count
 
     // ---- members (B4 WORK-a; no retail symbol, the tree's names; bodies in
     // citizenbehavior.cpp) ----
@@ -318,9 +298,7 @@ static_assert(offsetof(PathGraph, m_pairCount)    == 0x08, "");
 static_assert(offsetof(PathGraph, m_pairCapacity) == 0x0C, "");
 static_assert(offsetof(PathGraph, m_pendingIdx)   == 0x10, "");
 static_assert(offsetof(PathGraph, _pad14)         == 0x14, "");
-static_assert(offsetof(PathGraph, m_bstRoot)      == 0x18, "");
-static_assert(offsetof(PathGraph, m_bstCount)     == 0x20, "");
-static_assert(offsetof(PathGraph, _pad24)         == 0x24, "");
+static_assert(offsetof(PathGraph, m_bst)          == 0x18, "");
 // 0x1400171b0 — the PathGraph's members (the +0x18 distance tree, then the +0x00
 // pair array); ~CitizenBehavior runs it before freeing the block (body in
 // Game/gameupdateloop_teardown.cpp).

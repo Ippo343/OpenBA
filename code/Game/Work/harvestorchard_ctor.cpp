@@ -49,7 +49,7 @@ extern "C" void OrchardDiag_NoteHarvestConstructed();
 
 // Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
 // reads the pointer once, so passing the caller's IBP is the same read.
-HarvestOrchard::HarvestOrchard(void** entityIBP) : AutoPickupWork(entityIBP) {
+HarvestOrchard::HarvestOrchard(ComponentEntity* const* entityIBP) : AutoPickupWork(entityIBP) {
     // +0x48 / +0x50: the `_cells` member's ctor zeroes the set (retail 0x1400ee060, under its EH state).
     _field58 = nullptr;   // byte-array base
     _field60 = 0;         // count (+0x60) + capacity (+0x64): one qword store in retail
@@ -79,7 +79,7 @@ HarvestOrchard::HarvestOrchard(void** entityIBP) : AutoPickupWork(entityIBP) {
 
 // The door OrchardComponent's state 11 calls (orchardcomponent_states.cpp, block MI-B):
 // the real ctor on caller memory (B8-5).
-extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
+extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP) {
     if (!mem) return nullptr;
     OrchardDiag_NoteHarvestConstructed();
     return new (mem) HarvestOrchard(entityIBP);

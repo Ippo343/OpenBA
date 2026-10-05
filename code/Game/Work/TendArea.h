@@ -37,7 +37,7 @@ class TendArea final : public Work {
 
 public:
     TendArea();                                                     // (Work_GenericCtor shape)
-    TendArea(void** entityIBP, int kind);                           // 0x1400f5a80
+    TendArea(ComponentEntity* const* entityIBP, int kind);                           // 0x1400f5a80
 
     // 0x1400f5970: the +0x48 citizen Set's ~Set (its Clear), then the Work stamp
     ~TendArea() override;                                           // [0]  0x14002c5d0

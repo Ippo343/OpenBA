@@ -204,7 +204,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
         changed = new4 ^ old4;
     }
     if ((changed & 0xffff) != 0 && mesh->_entity != nullptr) {
-        ActHunt_NotifyEntityChanged_c3470(mesh->_entity);   // 0x1400c3470
+        NotifyEntityChanged(mesh->_entity);   // 0x1400c3470
     }
 }
 

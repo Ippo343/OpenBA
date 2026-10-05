@@ -127,6 +127,7 @@
 // `Volume::Rectangle` does not collide with `<wingdi.h>`'s `Rectangle`.
 #include "../../types/graphics/ParticleInstance.h"
 #include "../../types/collection/Collection.h"
+#include <new>
 #include "../../types/system/MemoryAllocator.h"
 
 using RtGraphics::AnimationEvent;
@@ -198,31 +199,28 @@ namespace {
 // function actually computes -- the MT recurrence's correctness, independent
 // of what time it happened to run.
 // ============================================================================
-extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* self) {
-
-    // Retail zeroes +0x00..+0x13 with three stores (8 + 8 + 4). The first
-    // twelve bytes are a Collection::Array<AnimationGroup> — NOT the
-    // CRITICAL_SECTION this file used to name; see the CORRECTION banner in
-    // runtime/types/graphics/Animation.h. Zeroing them IS constructing an empty
-    // array, so the bytes written here are unchanged by that correction.
-    self->_groupData = nullptr;
-    self->_groupCount = 0;
-    self->_groupCapacity = 0;
-    self->_f10 = 0;
+//
+// B.4 wave Y (RT-GFX): the body is the real constructor. Retail's stores:
+// qword 0 at +0x00 and +0x08 (`_instances`' Array(), three named stores, H7),
+// dword 0 at +0x10, `_time64` into +0x14, the 623-step recurrence, then
+// `MOV [0x1801fe7b0],RBX`. +0x9d4 is never written (no initialiser names it).
+namespace Graphics {
+AnimationManager::AnimationManager() : _instances() {
+    _f10 = 0;
 
     const uint32_t seed = static_cast<uint32_t>(std::time(nullptr));
-    self->_rngState[0] = seed;
+    _rngState[0] = seed;
     for (int i = 1; i < 624; ++i) {
-        const uint32_t prev = self->_rngState[i - 1];
-        self->_rngState[i] = (prev ^ (prev >> 30)) * 0x6c078965u + static_cast<uint32_t>(i);
+        const uint32_t prev = _rngState[i - 1];
+        _rngState[i] = (prev ^ (prev >> 30)) * 0x6c078965u + static_cast<uint32_t>(i);
     }
 
-    // `MOV [0x1801fe7b0],RBX` -- publish the instance. (B.3.9: the class
-    // static; the POD view `self` is the same object.)
-    Graphics::AnimationManager::_singleton =
-        reinterpret_cast<Graphics::AnimationManager*>(self);   // B.3.9 bridge (POD view)  // LEFT: POD the AnimationManager ctor door builds the RtGraphics::AnimationManager view; the class static is pointed at that same object
+    _singleton = this;   // MOV [0x1801fe7b0],RBX -- publish the instance
+}
+}  // namespace Graphics
 
-    return self;
+extern "C" Graphics::AnimationManager* RtGraphics_AnimationManager_Ctor(Graphics::AnimationManager* self) {
+    return ::new (static_cast<void*>(self)) Graphics::AnimationManager();
 }
 
 // ============================================================================
@@ -241,22 +239,20 @@ extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* 
 // to observe, so this checks what retail's body must leave behind instead:
 // `_singleton` cleared.
 // ============================================================================
-extern "C" void RtGraphics_AnimationManager_Dtor(AnimationManager* self) {
+//
+// B.4 wave Y (RT-GFX): retail 0x1800fc400 is `MOV [0x1801fe7b0],0` then a tail
+// JMP 0x18005bf60 -- `_instances`' ~Array (its row kSpec_AnimInstance runs the
+// 0x18005c550 element destroy, then the free). The "LPCRITICAL_SECTION" reading
+// above is the retired one (Animation.h's CORRECTION banner): the destructor is
+// the empty-bodied member below, the array its member's implicit destruction.
+namespace Graphics {
+AnimationManager::~AnimationManager() {
+    _singleton = nullptr;   // 0x1801fe7b0 cleared
+}
+}  // namespace Graphics
 
-    Graphics::AnimationManager::_singleton = nullptr;   // 0x1801fe7b0 cleared
-
-    // ENDGAME B.3.2 step 2 (callers) — NOT converted. 0x18005bf60 is the same
-    // retail address `runtime/src/collection/array_destroy.cpp` registers as
-    // `RtColl_ArrayDtorElem_18005bf60` (a one-argument `~Array<T>` whose
-    // element holds two nested Arrays), but THIS call site does not touch any
-    // Collection container at all: `self` (the whole AnimationManager) is
-    // passed as if it were an `LPCRITICAL_SECTION`, per the banner above. There
-    // is no `Collection::Array`/`LinkedList`/`Set` member here to name — the
-    // shared address is coincidental reuse of one small function, not two
-    // views of the same container — so this is a call of that SAME ported
-    // body, `rtcoll::RtColl_ArrayDtorElem_18005bf60`, by name (B3R).
-    rtcoll::RtColl_ArrayDtorElem_18005bf60(self);
-
+extern "C" void RtGraphics_AnimationManager_Dtor(Graphics::AnimationManager* self) {
+    self->~AnimationManager();
 }
 
 // ============================================================================

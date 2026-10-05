@@ -203,11 +203,11 @@ unsigned long long g_texHits    = 0;   // BRANCH: name was non-null
 // NEGATIVE index walks BACKWARD from the array base in retail and must here too
 // — `(uint32_t)index * 16` would read 64 GB away. Ghidra's C prints a MOVSXD as
 // an unsigned widening, which is why this was read off the disassembly.
-inline char* NameAt(const Collection::Array<Video::ShaderProgram::Parameter>& arr,
+inline char* NameAt(const decltype(Video::ShaderProgram::_textures)& arr,
                     int32_t index) {
     const Video::ShaderProgram::Parameter* const e =
         arr._data + static_cast<int64_t>(index);
-    return e->name;
+    return e->name._data;
 }
 
 }  // namespace

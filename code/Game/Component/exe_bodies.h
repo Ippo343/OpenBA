@@ -37,7 +37,8 @@ extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBi
 void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll);  // 0x140115a50
 void AttendanceComponent_ReleaseLink1650(CitizenComponent* worker);  // 0x140111650
 void AttendanceComponent_ReleaseLink59b0(CitizenComponent* worker);  // 0x1401159b0
-void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr);  // 0x140002e10 (returns outPtr)
+class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
+Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, Object::InternalPtr<WorkPlaceComponent>* outPtr);  // 0x140002e10 (returns outPtr)
 
 // ---- buildcomponent.cpp
 int BuildComponent_FindInQueue(const CitizenPtrList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550
@@ -175,7 +176,8 @@ void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decal
 // 0x14012a710's unguarded read faults) is in git history at that file.
 
 // ---- floorcomponent.cpp
-void* FloorComponent_FindResData(void* owner, void* outIBP);  // 0x140004680
+class MapComponent;
+MapComponent** FloorComponent_FindResData(ComponentEntity* owner, MapComponent** outIBP);  // 0x140004680 (returns outIBP)
 
 // ---- frustumoutlineelement.cpp
 extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0

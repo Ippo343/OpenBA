@@ -195,7 +195,7 @@ void DeleteBoatEntity(BoatComponent* boat) {
     if (!entityList) return;
 
     if ((entIBP->_entityFlags >> 10) & 1) return;   // already going
-    ActHunt_MarkEntityRemoval_c2ea0(entIBP);
+    MarkEntityForRemoval(entIBP);
     {
         // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
         void* arr = &entityList->removalList;

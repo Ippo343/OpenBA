@@ -60,7 +60,7 @@ static uint32_t GRMC_BuildDescTypeId() {
 // The base ctor is Work(buildEntityIBP) = Work_Ctor25 (0x1400f72e0) on a temp IBP
 // holding the raw build-entity pointer (it reads *param only, into field_10); the two
 // stamps are the compiler's.
-GatherRawMaterials::GatherRawMaterials(void* buildEntityIBP) : Work(buildEntityIBP) {
+GatherRawMaterials::GatherRawMaterials(ComponentEntity* const* buildEntityIBP) : Work(buildEntityIBP) {
     // The +0x48 / +0x58 arrays and the +0x68 set are members: their ctors zero them (retail
     // 0x1400ec752..0x1400ec771: four qwords, then the set's root qword and count dword).
 
@@ -126,7 +126,7 @@ GatherRawMaterials::GatherRawMaterials(void* buildEntityIBP) : Work(buildEntityI
 }
 // The by-address door (0x1400ec710, standalone/reg_gatherrawmaterials_ctor.cpp; also
 // named by buildcomponent_state1.cpp): the real ctor on caller memory (B8-5).
-extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
+extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, ComponentEntity* const* buildEntityIBP) {
     if (!mem) return nullptr;
     return new (mem) GatherRawMaterials(buildEntityIBP);
 }

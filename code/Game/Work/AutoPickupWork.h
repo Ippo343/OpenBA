@@ -39,7 +39,7 @@ protected:
     // 0x1400e4050 (the default init) and the entity-seeded form the component
     // CreateWork bodies use (Work_Ctor25, then the leaf stamp over this one).
     AutoPickupWork() = default;
-    explicit AutoPickupWork(void* pEntityIBP) : Work(pEntityIBP) {}
+    explicit AutoPickupWork(ComponentEntity* const* pEntityIBP) : Work(pEntityIBP) {}
 
 public:
     // Vtable() (DECLARE_EXE_TYPE): served at 0x140160fa0 (B38 D5)

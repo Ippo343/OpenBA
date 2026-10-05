@@ -812,7 +812,7 @@ void GameUpdateLoop::Load() {
     // Step 7 — Renderer (+0x90, 0x50).
     {
         Graphics::Renderer* mem = AllocSub<Graphics::Renderer>(0x50, 4);
-        if (mem) RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(mem));   // LEFT: the ctor door takes the POD mirror RtGraphics::Renderer (runtime/types/graphics)
+        if (mem) RtGraphics_Renderer_Ctor(mem);   // Renderer() 0x180105180
         m_renderer = mem;
     }
 
@@ -954,7 +954,7 @@ void GameUpdateLoop::Load() {
     // Step 22 — AnimationManager (+0x68, 0x9d8).
     {
         Graphics::AnimationManager* mem = AllocSub<Graphics::AnimationManager>(0x9d8, 8);
-        if (mem) RtGraphics_AnimationManager_Ctor(reinterpret_cast<RtGraphics::AnimationManager*>(mem));   // LEFT: the ctor door takes the POD mirror RtGraphics::AnimationManager (runtime/types/graphics)
+        if (mem) RtGraphics_AnimationManager_Ctor(mem);   // AnimationManager() 0x1800fc430
         m_animationManager = mem;
     }
 

@@ -856,3 +856,8 @@ EdgeMesh::EdgeMesh() {}
 EdgeMesh::~EdgeMesh() {}
 
 }  // namespace Graphics
+
+// The two buffer destructors (retail ??1 0x1800f3480 / 0x1800f55e0, buffers.cpp)
+// the stub ~EdgeMesh / ~DetailLevel reach; the host test does not link video/.
+Video::IndexBuffer::~IndexBuffer() {}
+Video::VertexBuffer::~VertexBuffer() {}

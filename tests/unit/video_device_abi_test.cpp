@@ -225,7 +225,10 @@ UNIT_TEST(video_device_gained_no_vptr_and_stays_a_raw_readable_object) {
     CHECK(std::is_standard_layout<RB>::value);
     CHECK(std::is_trivially_copyable<RB>::value);
     CHECK(std::is_standard_layout<IB>::value);
-    CHECK(std::is_trivially_copyable<VB>::value);
+    // B.4 wave Y: VB / IB have retail's ??1 (PlatformDestruct) now: no vptr,
+    // still standard-layout, no longer trivially destructible.
+    CHECK(std::is_standard_layout<VB>::value);
+    CHECK(!std::is_trivially_destructible<VB>::value);
 
     // The five nested value types too — Collection::Array bulk-copies them.
     CHECK(std::is_trivially_copyable<Dev::RefreshRate>::value);

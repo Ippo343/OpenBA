@@ -137,11 +137,11 @@ void NotifyEntityChanged(ComponentEntity* entity) {
         uint32_t newFlags = entity->_entityFlags;
         if (((oldFlags ^ newFlags) & 4) != 0) {
             ComponentEntity* ibp = entity;
-            ActHunt_DynArraySetCount_3110(&owner->stagingUpdate, owner->stagingUpdate._size + 1, &ibp);
+            QwordArraySetSize(&owner->stagingUpdate, owner->stagingUpdate._size + 1, &ibp);
         }
         if (((oldFlags ^ newFlags) & 0x10) != 0) {
             ComponentEntity* ibp = entity;
-            ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate, owner->stagingPostUpdate._size + 1, &ibp);
+            QwordArraySetSize(&owner->stagingPostUpdate, owner->stagingPostUpdate._size + 1, &ibp);
         }
     }
 }
@@ -151,23 +151,3 @@ void NotifyEntityChanged(ComponentEntity* entity) {
 // Map::FinishRoadCell in action_pf_roots_road.cpp.
 // ============================================================
 
-// ===========================================================================
-// B4 FORWARD: the C spellings other blocks' files still call, one line each.
-// ===========================================================================
-
-
-// B4 FORWARD: outside callers in many files (the arrays arrive as void*)
-void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr) {
-    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arrV), newCount,  // LEFT: SIG ActHunt_DynArraySetCount_3110: 22 call sites in 15 files hand the qword array as void* (raw triples in their owners' headers)
-                      reinterpret_cast<void* const*>(valuePtr));  // LEFT: SIG ActHunt_DynArraySetCount_3110: the fill value arrives as void* from the same 22 call sites
-}
-
-// B4 FORWARD: outside callers in many files
-void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
-    MarkEntityForRemoval(reinterpret_cast<ComponentEntity*>(self));  // LEFT: SIG ActHunt_MarkEntityRemoval_c2ea0: 17 call sites in 15 files (B4 FORWARD) still hand the entity as void*
-}
-
-// B4 FORWARD: outside callers in many files
-void ActHunt_NotifyEntityChanged_c3470(void* self) {
-    NotifyEntityChanged(reinterpret_cast<ComponentEntity*>(self));  // LEFT: SIG ActHunt_NotifyEntityChanged_c3470: 17 call sites in 11 files (B4 FORWARD) still hand the entity as void*
-}

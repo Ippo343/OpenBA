@@ -1555,7 +1555,7 @@ static void DestroySubMesh80(SubMesh* base, int count) {
         FreeArrayField(e->_triangles);            // +0x60
         FreeArrayField(e->_normals);              // +0x50
         FreeArrayField(e->_vertices);             // +0x40
-        ReleaseStringSlot(e->_name);              // +0x00, LAST
+        ReleaseStringSlot(e->_name._data);        // +0x00, LAST
     }
 }
 void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count) {

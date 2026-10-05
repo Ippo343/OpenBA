@@ -71,7 +71,7 @@ BuildStructure::BuildStructure()
 // zeroing every position byte. Without this array Execute's unbuilt-position scan finds
 // nothing (_slots._size == 0 -> unbuiltCount 0) and returns 1 (never assigns labor) — the
 // 2c-B blocker. Faithful offset-for-offset port of the Ghidra decompilation.
-BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
+BuildStructure::BuildStructure(ComponentEntity* const* entityIBP, uint8_t altAnim)
     : Work(entityIBP),   // local_res10 = *entityIBP; Work_Ctor25(this, &local_res10)
       field_48(altAnim), field_4c(0) {
     // The +0x50 array and the +0x60 set are members: their ctors zero data, count and
@@ -811,8 +811,8 @@ extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** bui
 
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute reads *citizenIBP as the
 // citizen entity, so a plain InternalBasePtr* is correct (same shape as the gather driver).
-extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(reinterpret_cast<CitizenComponent**>(citizenIBP), nullptr);   // B.3.8 bridge; LEFT: SIG ForceWork::DriveWhenIdle (Game/force_work.h, X3-GAME) takes every driver as int (*)(void* work, void* citizenIBP)
+extern "C" int BuildStructure_ForceDrive(Work* self, CitizenComponent** citizenIBP) {
+    return static_cast<BuildStructure*>(self)->BuildStructure::Execute(citizenIBP, nullptr);
 }
 
 // Execute-readiness gate for the force harness (no retail address). B3R: BuildStructure's

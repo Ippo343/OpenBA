@@ -473,7 +473,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
         if ((entity->_entityFlags >> 10) & 1) return;
 
-        ActHunt_MarkEntityRemoval_c2ea0(entity);
+        MarkEntityForRemoval(entity);
         if (corpseOwner) {
             // B.3.2 bridge: exe 0x140003110 (ActHunt_DynArraySetCount_3110) IS
             // Collection::Array<void*>::SetSize(n, fill).

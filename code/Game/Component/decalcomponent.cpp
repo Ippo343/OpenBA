@@ -194,7 +194,7 @@ static void DecalComponent_SetDrawFlag(DecalComponent* c, bool on) {
     if (newFlags == oldFlags) return;
     c->_flags = newFlags;
     if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && c->_entity) {
-        ActHunt_NotifyEntityChanged_c3470(c->_entity);
+        NotifyEntityChanged(c->_entity);
     }
 }
 

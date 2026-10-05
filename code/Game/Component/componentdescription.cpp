@@ -210,7 +210,7 @@ static_assert(offsetof(NamedDescriptionRef, resolved) == 0x10, "NamedDescription
 
 // B4 FORWARD: founding_spawn.cpp, starttown.cpp hand the reference in untyped.
 void ResolveExternalByName_Impl(void* nameString) {
-    NamedDescriptionRef* ref = reinterpret_cast<NamedDescriptionRef*>(nameString);   // LEFT: SIG ResolveExternalByName_Impl takes void* (callers in Game / Goal / Tutorial, other agents')
+    NamedDescriptionRef* ref = reinterpret_cast<NamedDescriptionRef*>(nameString);   // LEFT: SIG ResolveExternalByName_Impl takes void*: its 14 callers (Game / Goal / Tutorial) hold Goal/goal_exe_helpers.h's NamedExternalRef, whose `resolved` is a mutable External* while ExternalFactory::Find returns const: typing it needs that header's owner (GAMEA) and a CONST ruling
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
     if (!factory) return;
 

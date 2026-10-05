@@ -348,7 +348,7 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
 
     const RawArray<Math::Vector2>* poly = wgeo->_contourOutlines.data;   // record 0 — retail
     const int   polyCount = poly ? poly->size : 0; // int32 (140045840)
-    const float* polyPts  = poly ? reinterpret_cast<const float*>(poly->data) : nullptr;   // LEFT: the loops below index the Math::Vector2 points as a float run (polyPts[i * 2]); typing them rewrites three COMP loop lines
+    const Math::Vector2* polyPts = poly ? poly->data : nullptr;
 
     // ── 1. the approach lane: every polyline point before the map ────────────────
     int consumed = 0;      // points examined, including the first in-map one
@@ -356,8 +356,8 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     float entryX = 0.0f, entryY = 0.0f;
     if (polyPts) {
         for (int i = 0; i < polyCount; ++i) {
-            const float px = polyPts[i * 2 + 0];
-            const float py = polyPts[i * 2 + 1];
+            const float px = polyPts[i].x;
+            const float py = polyPts[i].y;
             ++consumed;
             entryX = px;
             entryY = py;
@@ -377,8 +377,8 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     float exitX = 0.0f, exitY = 0.0f;
     if (polyPts) {
         for (int i = consumed; i < polyCount; ++i) {
-            const float px = polyPts[i * 2 + 0];
-            const float py = polyPts[i * 2 + 1];
+            const float px = polyPts[i].x;
+            const float py = polyPts[i].y;
             resumeIdx = i + 1;
             if (!TileInMap(px, py, terrain->size)) break;
             exitX = px;
@@ -441,7 +441,7 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     // ── 3. the departure lane: the rest of the polyline ─────────────────────────
     if (polyPts) {
         for (int i = resumeIdx; i < polyCount; ++i) {
-            const float pt[3] = {polyPts[i * 2 + 0], polyPts[i * 2 + 1], 0.0f};
+            const float pt[3] = {polyPts[i].x, polyPts[i].y, 0.0f};
             AppendRoutePoint(this, pt);
         }
     }

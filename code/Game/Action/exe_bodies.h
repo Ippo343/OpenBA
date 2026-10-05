@@ -15,6 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "collection/Collection.h"   // Collection::Array (QwordArraySetSize's typed entry points)
 
 // ---- action_base_cnr.cpp
 class Map;                    // Game/Map.h
@@ -46,11 +47,19 @@ class ComponentEntity;        // Entity/ComponentEntity.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
 void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110
+// The typed entry points of the one erased core 0x140003110: every 8-byte-element
+// Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) is handed to it.
+template <class T, class A, class S>
+inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, T* const* fill) {
+    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
+}
+namespace Object { template <class T> class InternalPtr; }
+template <class T, class A, class S>
+inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, const Object::InternalPtr<T>* fill) {
+    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
+}
 void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
 void NotifyEntityChanged(ComponentEntity* entity);  // 0x1400c3470 (a second body of ComponentEntity::RefreshEntityFlags)
-void ActHunt_DynArraySetCount_3110(void* arrV, int newCount, void* valuePtr);  // 0x140003110 B4 FORWARD -> QwordArraySetSize
-void ActHunt_MarkEntityRemoval_c2ea0(void* self);  // 0x1400c2ea0 B4 FORWARD -> MarkEntityForRemoval
-void ActHunt_NotifyEntityChanged_c3470(void* self);  // 0x1400c3470 B4 FORWARD -> NotifyEntityChanged
 
 // ---- action_base_move.cpp
 class CharacterComponent;     // Component/CharacterComponent.h

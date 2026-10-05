@@ -141,7 +141,7 @@ void TombstoneComponent::Update(const System::Time* timeV) {
             // Check bit 10 of the entity flags
             uint32_t entityFlags = entityPtr->_entityFlags;
             if (((entityFlags >> 10) & 1) == 0) {
-                ActHunt_MarkEntityRemoval_c2ea0(entityPtr);   // 0x1400c2ea0
+                MarkEntityForRemoval(entityPtr);   // 0x1400c2ea0
 
                 // Add to removal queue
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)

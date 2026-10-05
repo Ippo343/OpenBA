@@ -151,9 +151,8 @@ void AttendanceComponent_ReleaseLink59b0(CitizenComponent* self) {
 //   on an entity and return it wrapped in an InternalBasePtr via retbuf)
 // Retail returns the return buffer in RAX, as every by-value return does.
 // ============================================================
-void* AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
-    return new (outPtr) ::Object::InternalPtr<WorkPlaceComponent>(
-        reinterpret_cast<ComponentEntity*>(entity)->FindComponent<WorkPlaceComponent>());   // B4 FORWARD: receiver typed by the callers' blocks  LEFT: FWD (outside callers hold void*)  // LEFT: SIG AttendanceComponent_GetJobHostComponent (B4 FORWARD: its outside callers hold the entity as void*)
+::Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, ::Object::InternalPtr<WorkPlaceComponent>* outPtr) {
+    return new (outPtr) ::Object::InternalPtr<WorkPlaceComponent>(entity->FindComponent<WorkPlaceComponent>());
 }
 
 // ============================================================
