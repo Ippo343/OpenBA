@@ -114,9 +114,7 @@ void CopyMapCell(MapCell* d, const MapCell* s) {
     d->occupant = s->occupant;          // +0x08
     d->field_0x10 = s->field_0x10;      // +0x10
     d->regionId = s->regionId;          // +0x18
-    // +0x1C..+0x24, the 9-byte block: one qword and one byte, as retail moves it
-    *reinterpret_cast<uint64_t*>(&d->field_0x1C[0]) = *reinterpret_cast<const uint64_t*>(&s->field_0x1C[0]);   // LEFT: Map.h (DLG-1 / GAME-3): field_0x1C is uint8_t[9]; the copy is a qword + a byte
-    d->field_0x1C[8] = s->field_0x1C[8];
+    d->field_0x1C = s->field_0x1C;      // +0x1C..+0x24, the 9-byte block (retail: one qword and one byte)
 
     d->zone = s->zone;                  // +0x26
 
@@ -133,8 +131,7 @@ void ZeroMapCell(MapCell* d) {
     d->occupant = nullptr;              // +0x08
     d->field_0x10 = nullptr;            // +0x10
     d->regionId = -1;                   // +0x18 0xffffffff
-    *reinterpret_cast<uint64_t*>(&d->field_0x1C[0]) = 0;   // +0x1C..+0x23 one qword 0  // LEFT: Map.h (DLG-1 / GAME-3): field_0x1C is uint8_t[9]
-    d->field_0x1C[8] = 0;               // +0x24
+    d->field_0x1C = {};                 // +0x1C..+0x24 zero (retail: one qword 0 and one byte 0)
     d->zone = 0;                        // +0x26..+0x29 zero
     d->footprintCount = 0;
     d->terrainType = 0;
@@ -190,7 +187,7 @@ static void GameGrid_SerializeCellArray_ac10(IO::Serializer* serializer, int32_t
 
         Reimpl_ExternalPtr_Serialize_StringTable(&elem->field_0x10, serializer);
 
-        serializer->Serialize(9, elem->field_0x1C, nullptr);
+        serializer->Serialize(9, elem->field_0x1C.data(), nullptr);
 
         serializer->Serialize(elem->zone, nullptr);
 

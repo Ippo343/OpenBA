@@ -60,6 +60,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <type_traits>
+#include <array>
 #include "Action/PathSearch.h"   // MapCellQueue, RegionGraph (B.4 ACT-a)
 #include "picking/Scene.h"       // -Iruntime/types: Picking::Scene (by value at +0x08)
 #include "collection/Collection.h" // Collection::Array<MapCell> (by value at +0x80)
@@ -73,7 +74,8 @@ struct MapCell {
     ComponentEntity* occupant;       // +0x08 InternalBasePtr<ComponentEntity> (0x14009dc20)
     void*    field_0x10;             // +0x10 ExternalPtr, string-table serialized (0x140002340)
     int32_t  regionId;               // +0x18 init -1; not serialized, copied on resize
-    uint8_t  field_0x1C[9];          // +0x1C Serialize(9, uchar*) (0x14001aca0); +0x22 read by 0x140115be0
+    std::array<uint8_t, 9> field_0x1C;   // +0x1C Serialize(9, uchar*) (0x14001aca0); +0x22 read by 0x140115be0;
+                                     //       indexed by influence state (0x14009f990); resize copies it whole
     uint8_t  _pad25;                 // +0x25 written by neither resize arm
     uint16_t zone;                   // +0x26 path-region word (Serialize ushort)
     uint8_t  footprintCount;         // +0x28 (Serialize uchar)
@@ -92,6 +94,7 @@ static_assert(offsetof(MapCell, occupant) == 0x08, "MapCell::occupant @ +0x08");
 static_assert(offsetof(MapCell, field_0x10) == 0x10, "MapCell +0x10");
 static_assert(offsetof(MapCell, regionId) == 0x18, "MapCell::regionId @ +0x18");
 static_assert(offsetof(MapCell, field_0x1C) == 0x1C, "MapCell +0x1C");
+static_assert(sizeof(std::array<uint8_t, 9>) == 9, "MapCell +0x1C is nine bytes (+0x1C..+0x24)");
 static_assert(offsetof(MapCell, _pad25) == 0x25, "MapCell +0x25");
 static_assert(offsetof(MapCell, zone) == 0x26, "MapCell::zone @ +0x26");
 static_assert(offsetof(MapCell, footprintCount) == 0x28, "MapCell::footprintCount @ +0x28");
