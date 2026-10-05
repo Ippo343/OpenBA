@@ -670,8 +670,13 @@ public:
     // ---- the 0x80 bytes, at retail's offsets -------------------------------
     int32_t _objectVersion;    // +0x50  ?GetObjectVersion@ is `MOV EAX,[RCX+0x50]`
     int32_t _pad54;            // +0x54  never written by either constructor
-    char*   _objectName;       // +0x58  a System::String — ?GetObjectName@ LEAs it
-    char*   _objectType;       // +0x60  a System::String — ?GetObjectType@ LEAs it
+    // B.4 Y RT (`behaviour:`): the two object names are real Strings. Ctor
+    // 0x1800ba340 nulls +0x58 then +0x60 (their own ctors, declaration
+    // order); dtor 0x1800ba490 frees `_buffer` (the body), then releases +0x60
+    // then +0x58 (0x1800ba4bf / 0x1800ba4e9) before ~FileStream: the members'
+    // own ~Strings, reverse declaration order, after the body.
+    System::String _objectName;  // +0x58  ?GetObjectName@ LEAs it
+    System::String _objectType;  // +0x60  ?GetObjectType@ LEAs it
     int32_t _requestedFormat;  // +0x68  ctor: 6 ("detect from the data")
     int32_t _activeEncoding;   // +0x6c  ctor: 6 — THE BOM SELECTOR
     uint8_t* _buffer;          // +0x70  owned, bare MemFree in the dtor door (the transcoded bytes OpenWithFormat installs)
