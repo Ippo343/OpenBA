@@ -99,7 +99,12 @@ void CharacterComponent::Persist(IO::Stream& stream) {
 
     int count = actionStack.count;
     ser.Serialize(count, nullptr);
-    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
+    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n). LEFT (B4 H5 A): the
+    // owner is ActionStack (Action/Action.h), whose retail dtor 0x1400c5150 DeletePtr's every
+    // element (0x1400c5180..0x1400c5191) and +0x10 (0x1400c51ac) BEFORE the array free
+    // (0x1400c51b6); CharacterComponent's dtor 0x14002faa0 runs it, the tree's never does
+    // (PORT GAP). A typed `actions` alone would add the free without the deletes: the unit is
+    // ActionStack's ctor/dtor ported whole, which deletes live Actions at component teardown.
     const bool loading = static_cast<int>(ser.GetDirection()) == 0;   // the stream's +8 word
     if (loading) GameColl::AsArray<GameColl::Ptr8>(&actionStack.actions).SetSize(count);
 

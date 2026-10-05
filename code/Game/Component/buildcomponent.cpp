@@ -19,7 +19,6 @@
 #include "Component/BuildComponent.h"
 #include "Component/MultiObjectComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelDescription.h"   // B.3.8 CB1a (TypeId)
-#include "Component/coll_bridge.h"
 #include "Component/ModelComponent.h"
 #include "Component/PickingComponent.h"
 #include "object/TypeInfo.h"
@@ -177,10 +176,10 @@ void BuildComponent::FillModelLists() {
                                       ? static_cast<ModelDescription*>(objBase) : nullptr;
         if (multi && multi->_meshGroupCount > 0) {
             Object::InternalPtr<ModelComponent> b1(_entity->FindComponent<ModelComponent>());
-            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&modelComponents).SetSizeFill(modelComponentCount + 1, &b1);
+            // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
+            modelComponents.SetSizeFill(modelComponents._size + 1, &b1);
             Object::InternalPtr<PickingComponent> b2(_entity->FindComponent<PickingComponent>());
-            GameColl::AsArray<GameColl::Ptr8>(&pickingComponents).SetSizeFill(pickingComponentCount + 1, &b2);
+            pickingComponents.SetSizeFill(pickingComponents._size + 1, &b2);
         }
     }
 
@@ -194,12 +193,12 @@ void BuildComponent::FillModelLists() {
             ComponentEntity* host = multiObj->children[j].Get();
             Component* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
             Object::InternalPtr<Component> ib1(buildComp);
-            GameColl::AsArray<GameColl::Ptr8>(&modelComponents).SetSizeFill(modelComponentCount + 1, &ib1);
+            modelComponents.SetSizeFill(modelComponents._size + 1, &ib1);
 
             ComponentEntity* host2 = multiObj->children[j].Get();
             Component* storeComp = BC_FindComponentByType(host2, s_tid_Picking);
             Object::InternalPtr<Component> ib2(storeComp);
-            GameColl::AsArray<GameColl::Ptr8>(&pickingComponents).SetSizeFill(pickingComponentCount + 1, &ib2);
+            pickingComponents.SetSizeFill(pickingComponents._size + 1, &ib2);
         }
     }
 
@@ -214,7 +213,7 @@ void BuildComponent::FillModelLists() {
     // 8). Retail does not special-case that here; it suppresses this whole function via
     // the instant-build bit at the top (gw+0xd0 bit 0), which the start-town spawner sets
     // across each building's setup + RegisterEntity. See StartTown_SpawnStructures.
-    int buildCount = modelComponentCount;
+    int buildCount = modelComponents._size;
     for (int i = 0; i < buildCount; i++) {
         ModelComponent* node = modelComponents[i].Get();
         int16_t mark = node->meshIndex;
@@ -335,24 +334,15 @@ static const bool s_buildStateTableBuilt = (BuildComponent_PopulateStateTable(),
 // multiplier, 0x140109023), +0x50 = 0 (byte), +0x58..+0x70 = 0; then
 // `_flags |= 0x83`.
 BuildComponent::BuildComponent()
-    : _controller(this), laborProgress(0), costMultiplier(1), buildFlag(0), _pad51{},
-      modelComponents(nullptr), modelComponentCount(0), modelComponentCapacity(0),
-      pickingComponents(nullptr), pickingComponentCount(0), pickingComponentCapacity(0) {
+    : _controller(this), laborProgress(0), costMultiplier(1), buildFlag(0), _pad51{} {
     OrFlagsInCtor(0x83);
 }
 
-// 0x140108f30: the picking list (+0x68/+0x70) and then the mesh list (+0x58/+0x60)
-// are freed and zeroed, in retail's order; the member's and the bases' dtors
-// (restamps only) and ~Internal are the compiler's chain.
+// 0x140108f30: the body is empty. ~pickingComponents (+0x68/+0x70, 0x140108f55) and
+// then ~modelComponents (+0x58/+0x60, 0x140108f69) free and zero the two lists, then
+// ~_controller restamps +0x28 (0x140108f8b) and the bases restamp and ~Internal:
+// reverse declaration order, retail's.
 BuildComponent::~BuildComponent() {
-    Object::detail::InternalMemFree(pickingComponents);
-    pickingComponents = nullptr;
-    pickingComponentCount = 0;      // retail: one qword 0 over +0x70..+0x77
-    pickingComponentCapacity = 0;
-    Object::detail::InternalMemFree(modelComponents);
-    modelComponents = nullptr;
-    modelComponentCount = 0;        // retail: one qword 0 over +0x60..+0x67
-    modelComponentCapacity = 0;
 }
 
 // create 0x14002f2b0: MemAlloc(0x78, 8), then the ctor.
@@ -387,18 +377,18 @@ void BuildComponent::Persist(IO::Stream& stream) {
     ser1.Serialize(buildFlag, nullptr);
 
     // the model list's count (+0x60)
-    int count1 = modelComponentCount;
+    int count1 = modelComponents._size;
     ser1.Serialize(count1, nullptr);
 
     // On load: resize array
     if (static_cast<int>(ser1.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
+        // Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
-        GameColl::AsArray<GameColl::Ptr8>(&modelComponents).SetSize(count1);
+        modelComponents.SetSize(count1);
     }
 
     // Serialize each element, nulled unless IsDerivedFrom ModelComponent (ti 0x1401c7a50)
-    Object::InternalPtr<ModelComponent>* arr1 = modelComponents;
+    Object::InternalPtr<ModelComponent>* arr1 = modelComponents._data;
     if (count1 > 0) {
         for (int i = 0; i < count1; i++) {
             arr1[i].Serialize(ser1, ModelComponent::TypeId());
@@ -406,18 +396,18 @@ void BuildComponent::Persist(IO::Stream& stream) {
     }
 
     // the picking list's count (+0x70)
-    int count2 = pickingComponentCount;
+    int count2 = pickingComponents._size;
     ser1.Serialize(count2, nullptr);
 
     // On load: resize array2
     if (static_cast<int>(ser1.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
+        // Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
-        GameColl::AsArray<GameColl::Ptr8>(&pickingComponents).SetSize(count2);
+        pickingComponents.SetSize(count2);
     }
 
     // Serialize each element, nulled unless IsDerivedFrom PickingComponent (ti 0x1401c7c10)
-    Object::InternalPtr<PickingComponent>* arr2 = pickingComponents;
+    Object::InternalPtr<PickingComponent>* arr2 = pickingComponents._data;
     if (count2 > 0) {
         for (int i = 0; i < count2; i++) {
             arr2[i].Serialize(ser1, PickingComponent::TypeId());

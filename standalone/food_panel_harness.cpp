@@ -555,7 +555,7 @@ void FollowUp(int frameNum) {
     int queued = -1, capacity = -1;
     if (Component* attBase = FindCompOnEntity(s_seatEntity, AttendanceComponent::TypeId())) {
         AttendanceComponent* a = static_cast<AttendanceComponent*>(attBase);   // exact type id
-        queued = a->queueCount;                                                // +0x30
+        queued = a->queue._size;                                                // +0x30
         // An AttendanceComponent's description is its AttendanceDescription.
         if (Description* d = a->_description)                                  // +0x18
             capacity = static_cast<AttendanceDescription*>(d)->_i20;           // desc+0x20
@@ -669,7 +669,7 @@ void FollowUp(int frameNum) {
                                      i, static_cast<void*>(b), static_cast<void*>(sub),
                                      static_cast<void*>(c),
                                      (unsigned long long)k48,
-                                     b->queueCount);                        // +0x30
+                                     b->queue._size);                        // +0x30
                 }
                 std::fprintf(stderr, "[FoodPanel]       this schoolhouse listed in the registry: %s\n",
                              selfListed ? "YES"
@@ -744,7 +744,7 @@ void FollowUp(int frameNum) {
                             std::fprintf(stderr, "[FoodPanel]       enrol probe on minor %p: "
                                          "returned %d, +0x208=%p, that component's queue(+0x30)=%d   %s\n",
                                          static_cast<void*>(victim), (int)ok, static_cast<void*>(att),
-                                         att ? att->queueCount : -1,
+                                         att ? att->queue._size : -1,
                                          ok ? "OK — enrolment works; the edge just had not fired"
                                             : "REFUSED — the finder or its sub_40f0 gate is the defect");
                         }

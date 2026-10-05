@@ -113,7 +113,7 @@ void CitizenComponent::OrFamilyFlags(uint32_t flags) {
 extern "C" uint32_t Cemetery_PickFreeSlot_6c60(CemeteryComponent* self) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return 0xffffffffu;
-    int count = self->plotCount;                                 // +0x50
+    int count = self->plots._size;                                 // +0x50
     if (count <= 0) return 0xffffffffu;
     System::Random* rng = world->m_random;                       // +0xd8
     int idx = static_cast<int>(rng->Rand(static_cast<uint32_t>(count)));
@@ -341,7 +341,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
         fflush(stderr);
     } else {
         flags = 0x40u;
-        const int plotsForTrace = cem->plotCount;   // +0x50
+        const int plotsForTrace = cem->plots._size;   // +0x50
         int slot = static_cast<int>(Cemetery_PickFreeSlot_6c60(cem));
         if (slot >= 0) {   // [STANDALONE GUARD] retail indexes unguarded (9740 just proved >= 0)
             int graveCell = cem->plots[slot];       // +0x48

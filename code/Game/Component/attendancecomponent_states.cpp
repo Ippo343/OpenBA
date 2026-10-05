@@ -32,7 +32,6 @@
 
 #include "Component/controller_state_table.h"
 #include "Work/LocationWork.h"   // B.3.8 CB1a (Vtable)
-#include "Component/coll_bridge.h"
 #include <new>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -57,7 +56,7 @@ using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
 // ── Engine helpers, called directly ───────────────────────────────────────────────
 // 0x140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
 // the exe (ENDGAME B.3.2 step 2) — the town-list append, converted at its call
-// site below to GameColl::AsArray<GameColl::Ptr8>(...).SetSizeFill(n, &fill).
+// site below to the typed attendanceComponents.SetSizeFill(n, &fill).
 // 0x1400f72e0 Work_Ctor25(work, ownerEntityIBP)                — base Work ctor.
 // 0x140003050 WorkBase_FindComponent_3050(entity, outIBP)       — the citizen work ledger.
 // 0x140002e10 AttendanceComponent_GetJobHostComponent(entity, outIBP) — WorkPlaceComponent.
@@ -113,7 +112,7 @@ char AttendanceComponent::AllFull() {
         AttendanceDescription* desc = ::Object::IsDerivedFromNullSafe(d, AttendanceDescription::TypeId())
                                           ? static_cast<AttendanceDescription*>(d) : nullptr;
         const int capacity = desc->_i20;
-        if (entry->queueCount < capacity)
+        if (entry->queue._size < capacity)
             return 0;
     }
     return 1;

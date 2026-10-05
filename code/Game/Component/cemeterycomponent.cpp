@@ -12,7 +12,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/cemeterycomponent_funcs.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
@@ -74,26 +73,26 @@
 // the old count, then frees the old block. 1:1, including the "copy or fill" branch --
 // indices below the old count come from the old block, the rest get the new value.
 static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
-    const int      oldCount = self->plotCount;
+    const int      oldCount = self->plots._size;
     const int      newCount = oldCount + 1;
-    int32_t* const oldPtr   = self->plots;
+    int32_t* const oldPtr   = self->plots._data;
 
-    self->plotCount = newCount;
-    if (newCount > self->plotCapacity) {
+    self->plots._size = newCount;
+    if (newCount > self->plots._capacity) {
         // `lea eax,[rbx+rbx*2]` -- the 3x over-allocate applies only once the array is
         // already non-empty; the very first push allocates exactly one element.
-        self->plotCapacity = (oldCount != 0) ? newCount * 3 : newCount;
-        self->plots = static_cast<int32_t*>(
-            ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->plotCapacity) * 4, 4));
+        self->plots._capacity = (oldCount != 0) ? newCount * 3 : newCount;
+        self->plots._data = static_cast<int32_t*>(
+            ::System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->plots._capacity) * 4, 4));
     }
-    if (!self->plots) { self->plotCount = oldCount; self->plots = oldPtr; return; }
+    if (!self->plots._data) { self->plots._size = oldCount; self->plots._data = oldPtr; return; }
 
     // Retail starts the write at 0 when the block moved (so the old elements are copied
     // across) and at oldCount when it did not (only the new element is written).
-    for (int i = (oldPtr != self->plots) ? 0 : oldCount; i < newCount; ++i)
+    for (int i = (oldPtr != self->plots._data) ? 0 : oldCount; i < newCount; ++i)
         self->plots[i] = (i < oldCount) ? oldPtr[i] : cell;
 
-    if (oldPtr != self->plots && oldPtr) ::System::MemoryAllocator::MemFree(oldPtr);
+    if (oldPtr != self->plots._data && oldPtr) ::System::MemoryAllocator::MemFree(oldPtr);
 }
 
 
@@ -101,7 +100,7 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
 // CemeteryComponent::BuildPlotGrid (vtable slot [6], 0x140047200)
 // ============================================================
 // Ghidra calls this slot Draw; it draws nothing. It BUILDS the grave-plot cell list
-// (self->plots / plotCount / plotCapacity) from the footprint, and it is the reason a
+// (self->plots: data / size / capacity) from the footprint, and it is the reason a
 // graveyard could never accept a burial: the previous port here was a passthrough to
 // `ResolveAddr(Module::Exe, 0x140047200)` -- its OWN address, which resolves to null in
 // standalone -- so the call was silently skipped, the plot array stayed empty, and
@@ -193,7 +192,7 @@ char CemeteryComponent::EnterBuilt() {
     if (!world) return 0;
 
     int claimed = 0;
-    for (int i = 0; i < plotCount; ++i) {
+    for (int i = 0; i < plots._size; ++i) {
         const int cellIdx = plots[i];
         MapCell* const cells = world->cells.GetData();
         if (!cells) break;
@@ -249,7 +248,7 @@ char CemeteryComponent::EnterBuilt() {
             fprintf(stderr, "[Cemetery] graveyard REGISTERED: comp=%p townMgr=%p "
                             "cemeteryCount=%d plots=%d claimed=%d\n",
                     static_cast<void*>(this), static_cast<void*>(townMgr),
-                    townMgr->cemeteries._size, plotCount, claimed);
+                    townMgr->cemeteries._size, plots._size, claimed);
             fflush(stderr);
         }
     }
@@ -304,21 +303,18 @@ static void CemeteryComponent_PopulateStateTable() {
 static const bool s_cemeteryStateTableBuilt = (CemeteryComponent_PopulateStateTable(), true);
 
 // 0x1400476f0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
-// `_controller(this)` is the member's back-pointer; +0x48 = +0x50 = 0; then
+// `_controller(this)` is the member's back-pointer; +0x48 = +0x50 = 0 (plots' Array
+// ctor); then
 // `_flags |= 0x83`.
 CemeteryComponent::CemeteryComponent()
-    : _controller(this), plots(nullptr), plotCount(0), plotCapacity(0) {
+    : _controller(this) {
     OrFlagsInCtor(0x83);
 }
 
-// 0x140047680: the grave-plot list (+0x48 data, +0x50 count, +0x54 capacity) is
-// freed and zeroed; the member's and the bases' dtors (restamps only) and ~Internal
-// are the compiler's chain.
+// 0x140047680: the body is empty. ~plots frees and zeroes the grave-plot list
+// (MemFree(+0x48), +0x48 = +0x50 = 0, 0x1400476a0..0x1400476b0), then ~_controller
+// restamps +0x28 and the bases restamp and ~Internal: reverse declaration order.
 CemeteryComponent::~CemeteryComponent() {
-    Object::detail::InternalMemFree(plots);
-    plots = nullptr;
-    plotCount = 0;
-    plotCapacity = 0;
 }
 
 // create 0x140004040: MemAlloc(0x58, 8), then the ctor.
@@ -342,16 +338,16 @@ void CemeteryComponent::Persist(IO::Stream& stream) {
     Component::Persist(stream);
     { IO::Serializer scope(stream, 0); }
     IO::Serializer ser(stream, 0);
-    int count = plotCount;
+    int count = plots._size;
     ser.Serialize(count, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
-        // here at 14004763a. I32NoInit — a grown tail is left as the allocation found
+        // exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called here at
+        // 14004763a: int32_t's trait-derived row — a grown tail is left as the allocation found
         // it, like retail. Safe: this arm runs only when reading, and the bulk int
         // deserialize below writes all `count` tile indices before any is read.
-        GameColl::AsArray<GameColl::I32NoInit>(&plots).SetSize(count);
+        plots.SetSize(count);
     }
-    ser.Serialize(count, plots, nullptr);
+    ser.Serialize(count, plots._data, nullptr);
 }
 
 // [6] 0x140047200 — build the grave-plot grid from the footprint.
@@ -422,7 +418,7 @@ void CemeteryComponent::OnAdded() {
                 CemeteryComponent_PushPlot(this, (row + y0) * mapWidth + col + x0);
             }
     }
-    CEM_TRACE("built plots=%d cap=%d", plotCount, plotCapacity);
+    CEM_TRACE("built plots=%d cap=%d", plots._size, plots._capacity);
 }
 
 // [7] 0x1400471c0. The erase key is the component itself (0x1400471c4 MOV RDX,RCX

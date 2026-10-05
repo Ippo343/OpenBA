@@ -130,10 +130,10 @@ uint64_t ToolTile_FootprintValidity_d580(
                         bVar13 = footprint[iVar8] == '.';
                     }
                     const char* placeMap = param_8->_data;
-                    if (((0 < param_7->_placeCount) && (placeMap != nullptr)) &&
+                    if (((0 < param_7->_placeArray._size) && (placeMap != nullptr)) &&
                         (param_8->GetLength() != 0)) {
                         // data - 0xc0 + c*4: the code array indexed by the char - '0'.
-                        param_6 = param_7->_placeArray[static_cast<long long>(placeMap[iVar8]) - 0x30];
+                        param_6 = param_7->_placeArray._data[static_cast<long long>(placeMap[iVar8]) - 0x30];
                     }
                     bool ok = PlayerPath_CharComp_f5d0(param_1, iVar10, iVar14, param_6, param_9,
                                                        param_10, param_11, param_12,

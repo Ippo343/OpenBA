@@ -73,7 +73,6 @@
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Geometry.h"
 #include "Component/controller_state_table.h"
-#include "Component/coll_bridge.h"
 #include <new>
 #include "math/Math.h"
 #include "system/Value.h"
@@ -197,10 +196,9 @@ void DeleteBoatEntity(BoatComponent* boat) {
     if ((entIBP->_entityFlags >> 10) & 1) return;   // already going
     MarkEntityForRemoval(entIBP);
     {
-        // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-        void* arr = &entityList->removalList;
+        // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
         const int32_t newCount = entityList->removalList._size + 1;
-        GameColl::AsArray<GameColl::Ptr8>(arr).SetSizeFill(newCount, &entIBP);
+        entityList->removalList.SetSizeFill(newCount, &entIBP);
     }
 }
 
@@ -278,8 +276,8 @@ char BoatComponent::Steer() {
 // receiver is the boat and the three are read by name (TornadoComponent::Path is the
 // same sub-object's class on the tornado; the boat's header keeps the fields flat).
 extern "C" int BoatCtrl_NextRoutePoint(const BoatComponent* boat, const float* ref, float spacing) {
-    const int   count = boat->routeCount;
-    const Math::Vector3* base = boat->route;
+    const int   count = boat->route._size;
+    const Math::Vector3* base = boat->route._data;
     int i = boat->routeIndex;
     if (!base) return -1;
     const float r2 = spacing * spacing;
@@ -347,7 +345,7 @@ char BoatComponent::State0Enter() {
     model = _entity->FindComponent<ModelComponent>();           // 0x140003f60
     character = _entity->FindComponent<CharacterComponent>();   // 0x1400012d0
 
-    const Math::Vector3* pts = route;
+    const Math::Vector3* pts = route._data;
     if (!pts) {
         // Retail derefs this unguarded — it relies on the route builder having run. If we
         // are here with no route the fault is upstream (layer 2), and a silent no-op would

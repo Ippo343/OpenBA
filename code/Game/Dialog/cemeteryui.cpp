@@ -36,7 +36,7 @@
 // kept file-local (LEFT: COMP-a's class).
 static int CemeteryGetBurialCount_Impl(CemeteryComponent* cemetery) {
     int burials = 0;
-    for (int i = 0; i < cemetery->plotCount; i++) {
+    for (int i = 0; i < cemetery->plots._size; i++) {
         // The occupant is the 0x30-byte cell's +0x08 entity.
         const MapCell* cells = GameUpdateLoop::_singleton->m_game->cells.GetData();
         ComponentEntity* occupant = cells[(int64_t)cemetery->plots[i]].occupant.Get();
@@ -81,7 +81,7 @@ void CemeteryUI::OnCreated() {
     CemeteryComponent* cemetery = CemeteryUI_FindComponent(_dataSource);
 
     // Progress maximum = the plot count
-    progress->_maxValue = (float)cemetery->plotCount;
+    progress->_maxValue = (float)cemetery->plots._size;
 }
 
 // ============================================================
@@ -111,7 +111,7 @@ void CemeteryUI::OnUpdateLayout() {
     }
 
     // Text param 1: plot count
-    int maxSlots = cemetery->plotCount;
+    int maxSlots = cemetery->plots._size;
     {
         System::String str = System::String::Format("%i", (unsigned int)maxSlots);
         progress->SetProgressTextParameter(1, str);

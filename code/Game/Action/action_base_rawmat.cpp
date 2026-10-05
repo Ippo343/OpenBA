@@ -204,24 +204,24 @@ void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount) {
 void AutoPickupAppend(AutoPickupComponent* self, uint32_t value) {
     if (!self->isEnabled) return;
 
-    int oldN = self->field30Count;
+    int oldN = self->field30._size;
     int newN = oldN + 1;
     if (newN == oldN) return;
 
-    int32_t* oldBuf = self->field30;
-    self->field30Count = newN;
-    if (self->field30Capacity < newN) {
-        self->field30Capacity = newN;
-        if (oldN != 0) self->field30Capacity = newN * 3;
-        self->field30 = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->field30Capacity) << 2, 4));
+    int32_t* oldBuf = self->field30._data;
+    self->field30._size = newN;
+    if (self->field30._capacity < newN) {
+        self->field30._capacity = newN;
+        if (oldN != 0) self->field30._capacity = newN * 3;
+        self->field30._data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(self->field30._capacity) << 2, 4));
     }
-    int srcIdx = (oldBuf == self->field30) ? oldN : 0;
+    int srcIdx = (oldBuf == self->field30._data) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        int32_t* dst = self->field30 + i;
+        int32_t* dst = self->field30._data + i;
         if (!dst) continue;
         *dst = (i < oldN) ? oldBuf[i] : static_cast<int32_t>(value);
     }
-    if (oldBuf != self->field30)
+    if (oldBuf != self->field30._data)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 

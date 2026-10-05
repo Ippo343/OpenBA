@@ -21,9 +21,15 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (_refs)
 
 class Profession;
 namespace Graphics { class GraphicsMesh; }   // graphics/GraphicsMesh.h (the _refs entries)
+
+// The mesh table grows through exe 0x140001bb0 (stride 8, align 8, the new tail ZEROED,
+// no element destroy) and is freed by the inlined ~Array (dtor 0x140030217: MemFree, then
+// +0x138 = +0x140 = 0, no element release): kSpec_PtrZero (Entity/EntityList.h).
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 class CitizenDescription final : public Description {
     DECLARE_EXE_TYPE(CitizenDescription)
@@ -114,12 +120,12 @@ public:
     float _f12c;                                // +0x12c
     float _f130;                                // +0x130
     uint8_t _pad134[4];                         // +0x134 never written by the ctor
-    Graphics::GraphicsMesh** _refs;             // +0x138 Array<ExternalPtr<GraphicsMesh>> data (entries are
-                                                //        non-owning; Serialize streams it through 0x14001bcc0,
-                                                //        the GraphicsMesh ExternalPtr array; ShowTool 0x1401173b0
-                                                //        hands an entry to MeshInstance::SetMesh)
-    int32_t _refCount;                          // +0x140 Array count
-    int32_t _refCap;                            // +0x144 Array capacity
+    // +0x138 Array<ExternalPtr<GraphicsMesh>> (count +0x140, capacity +0x144; entries are
+    // non-owning; Serialize streams it through 0x14001bcc0, the GraphicsMesh ExternalPtr
+    // array; ShowTool 0x1401173b0 hands an entry to MeshInstance::SetMesh)
+    using MeshTable = Collection::Array<Graphics::GraphicsMesh*, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    MeshTable _refs;
 };
 
 static_assert(sizeof(CitizenDescription) == 0x148, "CitizenDescription is 0x148 (create 0x140030170 MemAlloc(0x148))");
@@ -188,5 +194,5 @@ static_assert(offsetof(CitizenDescription, _f12c) == 0x12c, "CitizenDescription:
 static_assert(offsetof(CitizenDescription, _f130) == 0x130, "CitizenDescription::_f130 @ +0x130");
 static_assert(offsetof(CitizenDescription, _pad134) == 0x134, "CitizenDescription::_pad134 @ +0x134");
 static_assert(offsetof(CitizenDescription, _refs) == 0x138, "CitizenDescription::_refs @ +0x138");
-static_assert(offsetof(CitizenDescription, _refCount) == 0x140, "CitizenDescription::_refCount @ +0x140");
-static_assert(offsetof(CitizenDescription, _refCap) == 0x144, "CitizenDescription::_refCap @ +0x144");
+static_assert(offsetof(CitizenDescription, _refs) + offsetof(CitizenDescription::MeshTable, _size) == 0x140, "CitizenDescription::_refs count @ +0x140");
+static_assert(offsetof(CitizenDescription, _refs) + offsetof(CitizenDescription::MeshTable, _capacity) == 0x144, "CitizenDescription::_refs capacity @ +0x144");
