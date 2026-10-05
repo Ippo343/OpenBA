@@ -161,32 +161,28 @@ inline bool SA_DialogEntityAlive(const UI::DialogController* self) {
 // TrackerComponent rebuild: FUN_14000d9d0 — moves/rebuilds tracker item arrays
 // Called when game world item count changes.
 // param_1 = dst array descriptor, param_2 = src array descriptor: each a
-// TrackerComponent::EntryArray {data, count, capacity}.
+// TrackerComponent::EntryList (Array<Entry>: _data, _size, _capacity).
 // Frees old dst buffer, allocates count*16 bytes, copies 16-byte entries from src.
-inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
-    if (dstArray == srcArray) return;
-    // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp, DLG-2, hands the
-    // addresses of TrackerComponent's +0x38 / +0x28 field triples as void*).
-    TrackerComponent::EntryArray* dst = reinterpret_cast<TrackerComponent::EntryArray*>(dstArray);   // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp passes TrackerComponent's field triples)
-    TrackerComponent::EntryArray* src = reinterpret_cast<TrackerComponent::EntryArray*>(srcArray);   // LEFT: SIG fn_TrackerComponent_Rebuild (productionui.cpp passes TrackerComponent's field triples)
-    System::MemoryAllocator::MemFree(dst->data);
-    dst->count = 0;          // the old qword store over count | capacity
-    dst->capacity = 0;
-    dst->data = nullptr;
-    int count = src->count;
-    dst->count = count;      // the qword store (uint32)count: capacity 0
-    dst->capacity = 0;
+inline void fn_TrackerComponent_Rebuild(TrackerComponent::EntryList* dst, const TrackerComponent::EntryList* src) {
+    if (dst == src) return;
+    System::MemoryAllocator::MemFree(dst->_data);
+    dst->_size = 0;          // the old qword store over count | capacity
+    dst->_capacity = 0;
+    dst->_data = nullptr;
+    int count = src->_size;
+    dst->_size = count;      // the qword store (uint32)count: capacity 0
+    dst->_capacity = 0;
     if (count > 0) {
         // capacity = count on the fresh allocation
-        dst->capacity = count;
-        dst->data = static_cast<TrackerComponent::Entry*>(
+        dst->_capacity = count;
+        dst->_data = static_cast<TrackerComponent::Entry*>(
             System::MemoryAllocator::MemAlloc((uint64_t)count * 16, 8));
     }
     // Copy entries
-    if (dst->count > 0) {
-        TrackerComponent::Entry* dstBuf = dst->data;
-        TrackerComponent::Entry* srcBuf = src->data;
-        int n = dst->count;
+    if (dst->_size > 0) {
+        TrackerComponent::Entry* dstBuf = dst->_data;
+        const TrackerComponent::Entry* srcBuf = src->_data;
+        int n = dst->_size;
         for (int i = 0; i < n; i++) {
             if (dstBuf) {
                 dstBuf[i] = srcBuf[i];   // the 16 bytes (two qwords)
