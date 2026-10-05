@@ -117,14 +117,8 @@ inline void AttachAndPushChild(UI::Element* parent, Object::InternalPtr<UI::Elem
 }
 
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z, reached
-// by rel32 from every one of these appliers. Fragment pass F2: block D's
-// member (sprite.cpp), called directly instead of by address.
-inline int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, char* const* name) {
-    // Its one caller left is SpriteFromName(char* const*) for
-    // AnimatedImageDescription::_frameNames (an Array<char*> over
-    // System::String elements, AnimatedImageDescription.h).
-    return sheet->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(name));   // LEFT: H5 AnimatedImageDescription::_frameNames is Array<char*> holding System::String elements (its ctor / dtor / RtIo_SerializeStringArray caller not converted)
-}
+// by rel32 from every one of these appliers: the `UI::SpriteSheet` member,
+// called directly (SpriteFromName below).
 
 // *** THE SPRITE INDEX IS STORED AS A QWORD READ FROM A SLOT ONLY A DWORD WAS
 // WRITTEN TO. *** Every applier in this family writes `dword [RSP+n]` and then
@@ -135,13 +129,6 @@ inline int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, char* const*
 // is an unwritten stack dword exactly as retail's is. Our arbitrary value is
 // ours, not retail's; what is faithful is the WIDTH.
 // (Identical finding, same words, in runtime/src/ui/imagedescription.cpp.)
-inline UI::Sprite SpriteFromName(UI::SpriteSheet* sheet, char* const* name) {
-    UI::Sprite s;
-    s.spriteSheet = sheet;
-    s.spriteIndex = (sheet != nullptr) ? GetSpriteIndexFromName(sheet, name) : -1;
-    return s;
-}
-// The same, for a description whose name member is a typed System::String.
 inline UI::Sprite SpriteFromName(UI::SpriteSheet* sheet, const System::String& name) {
     UI::Sprite s;
     s.spriteSheet = sheet;

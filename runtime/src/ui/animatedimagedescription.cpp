@@ -166,7 +166,7 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
         // 1800cb530 sheet re-read; 1800cb534..1800cb555 the index (or -1) into
         // a DWORD stack slot; 1800cb564 / 1800cb56d the sheet and a QWORD
         // store of that slot (see rtdesc::SpriteFromName).
-        elem->_frames._data[i] = rtdesc::SpriteFromName(_spriteSheet, &_frameNames._data[i]);
+        elem->_frames._data[i] = rtdesc::SpriteFromName(_spriteSheet, _frameNames._data[i]);
     }
 
     elem->_framesPerSecond = _framesPerSecond;                 // 1800cb586
@@ -184,15 +184,12 @@ Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
 //     stamp ??_7AnimatedImageDescription@UI@@6B@             ; 1800cb6cd (compiler's)
 //     Array<String>::~Array(this + 0x80)                     ; 1800cb6d4
 //     JMP ~ImageDescription                                  ; 1800cb6e2 (compiler's)
-// 0x180010ab0 is the Array destructor that ALSO destroys its elements
-// (array_destroy.cpp's J2 entry point); the plain Array::~Array the other
-// classes use is 0x180039440. Using the wrong one here would leak a
-// System::String per frame name. It ZEROES the array header, so the
-// compiler-emitted member `~Array` that runs after this body sees an empty
-// array (no element destroy, MemFree(null)).
+// 0x180010ab0 is the Array destructor that ALSO destroys its elements: the
+// implicit destructor of the `Collection::Array<System::String>` member (B.4 Z
+// RT2), which runs after this empty body and before ~ImageDescription, where
+// retail's CALL sits. The plain Array::~Array other classes use is 0x180039440.
 namespace UI {
 AnimatedImageDescription::~AnimatedImageDescription() {
-    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_frameNames);          // 1800cb6d4
 }
 }  // namespace UI
 
