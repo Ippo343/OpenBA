@@ -102,8 +102,7 @@ WorldGeometry::WorldGeometry() {
     _contourRangesA.data  = nullptr; _contourRangesA.size  = 0; _contourRangesA.capacity  = 0;
     _contourRangesB.data  = nullptr; _contourRangesB.size  = 0; _contourRangesB.capacity  = 0;
     _contourOutlines.data = nullptr; _contourOutlines.size = 0; _contourOutlines.capacity = 0;
-    _decals.data          = nullptr; _decals.size          = 0; _decals.capacity          = 0;
-    _roadBatches.data     = nullptr; _roadBatches.size     = 0; _roadBatches.capacity     = 0;
+    // +0x1F0 / +0x200 (0x1400b01d5..0x1400b01ea): `_decals` / `_roadBatches`' own ctors.
     _batchMaterials.data  = nullptr; _batchMaterials.size  = 0; _batchMaterials.capacity  = 0;
 
     _materialTypeFlags = 1;             // +0x30 (Graphics::Geometry's)
@@ -214,12 +213,6 @@ template <uint32_t N> void ByteAssign(uint8_t* d, const uint8_t* s) { std::memcp
 // `SpecFor<T>()` re-derives the identical row. The retail addresses stay here as
 // the provenance. `kSpec_SpawnEntry` below does NOT collapse and stays explicit.
 
-// FUN_14001bf10 — stride 0x14, align 4, byte copy, zero tail.
-using Pod14A4Elem = GameColl::Bytes20x4;                 // exe 0x14001bf10
-static_assert(sizeof(Pod14A4Elem)  == 0x14, "Pod14A4Elem stride");
-static_assert(alignof(Pod14A4Elem) == 4,    "Pod14A4Elem align");
-using Pod14A4Array = Collection::Array<Pod14A4Elem>;
-
 // FUN_140001bb0 — stride 8, align 8: raw pointer slots, zeroed on every new
 // slot (the heap-corruption note above Reimpl_Array_Resize_Stride08 says why
 // that zero is load-bearing — `GameColl::Ptr8`'s `= nullptr` NSDMI IS that zero).
@@ -290,11 +283,12 @@ extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
     reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): eight holders of five element types in two header types reach 0x140001bb0 (Collection::Array<T*>: MenuScene +0x40/+0x60, Tutorial steps, TutorialStep's three ExternalPtr arrays; RawArray: WorldGeometry::_batchMaterials, the +0x1E0 inner Vector2 outlines; AmbientEmitterDescription +0x28 raw triple); Array<T*>'s own SetSize leaves the tail unzeroed (trait row), so each typed wrapper would carry this same header cast
 }
 
-extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
-    if (!arrayHeader) return;
-    // B.3.2 bridge: the Struct60B +0x08 sub-array header is still raw bytes.
-    reinterpret_cast<Pod14A4Array*>(arrayHeader)->SetSize(newCount);   // LEFT: SIG, the last raw holder (B4 Z LAST CODE): MenuScene::particles is a typed Array<MenuSceneParticle> whose trait row equals this one, but GeometryBatch::vertices (+0x08 RawArray<GeometryBatchVertex>, WorldGeometryElements.h, serialize_struct60b_serialize.cpp) is a raw triple of a class the tree memsets and MemFrees by hand (AddDecal's template, GeometryBatchArray_Release): a GeometryBatch CLASS unit first
-}
+// 0x14001bf10 (stride 0x14, align 4, byte copy, zero tail): B.4 H5-P2: its last
+// caller, MenuScene's +0x50 particles, is a typed Collection::Array<MenuSceneParticle>
+// whose trait row is this one (stride 0x14, align 4, trivially copyable, no destroy,
+// init = value-initialisation, which zero-fills the 0x14 bytes); it calls SetSize, and
+// Reimpl_Array_Resize_Stride14 is deleted. (GeometryBatch::vertices, its other
+// holder, grows through 0x14001ee40 in retail: Array<GeometryBatchVertex>::SetSize.)
 
 // ============================================================
 // Spawn-entry array resize — FUN_14000c520 (stride 0x10)

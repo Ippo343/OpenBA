@@ -43,9 +43,9 @@
 
 // Sub-callees of the terrain-decal-slot release (FUN_1400b0d00) were
 // Collection::Array<T>::SetSize monomorphised into the exe (ENDGAME B.3.2
-// step 2): FUN_14001ee40 stride 0x14 align 2 (elsewhere in code/Game/, its
-// body — Pf_VectorResize14_ee40 in action_pf_pools.cpp — has NO zero-tail
-// write at all, but both call sites HERE pass newCount==0, so the tail loop
+// step 2): FUN_14001ee40 stride 0x14 align 2 (Array<GeometryBatchVertex>::
+// SetSize, the trait row: NO zero-tail write at all, but both call sites HERE
+// pass newCount==0, so the tail loop
 // never executes and no init policy is ever exercised: any correctly
 // sized/aligned trivial element type gives byte-identical behaviour at
 // count==0). FUN_14001c890 is the already-catalogued U16 SetSize (stride 2,
@@ -63,19 +63,14 @@
 // WorldGeometry::RemoveDecal: the decals are WorldGeometry::_decals (+0x1F0),
 // 0x60-byte GeometryBatch records (WorldGeometryElements.h).
 void WorldGeometry::RemoveDecal(int decalId) {
-    GeometryBatch* slot = _decals.data + decalId;   // +0x1F0
+    GeometryBatch* slot = _decals._data + decalId;   // +0x1F0
     if (slot->slot == decalId) {   // +0x28 id
         slot->slot = -1;           // +0x28 = 0xffffffff
         slot->material = nullptr;  // +0x00 qword
-        // B.3.2 bridge, LEFT (B4 H5): the owner is GeometryBatch (Game/WorldGeometryElements.h,
-        // not this set's), an element of WorldGeometry::_decals / roads whose hand rows
-        // (resize 0x14001f250, copy 0x14001f5e0, destroy 0x14001fb80) build and free
-        // vertices / indices per element: the batch row must be typed with them first.
-        // exe 0x14001ee40 / 0x14001c890 ARE
-        // Collection::Array<T>::SetSize(0) — see the note above the (removed)
-        // typedefs for why the init-policy mismatch never fires at count 0.
-        GameColl::AsArray<GameColl::Bytes<0x14, 2>>(&slot->vertices).SetSize(0);   // +0x08
-        GameColl::AsArray<GameColl::U16>(&slot->indices).SetSize(0);               // +0x18
+        // exe 0x14001ee40 (0x1400b0d4c) / 0x14001c890 (0x1400b0d61): the two typed
+        // arrays' Collection::Array<T>::SetSize(0) (B.4 H5-P2).
+        slot->vertices.SetSize(0);   // +0x08
+        slot->indices.SetSize(0);    // +0x18
     }
 }
 

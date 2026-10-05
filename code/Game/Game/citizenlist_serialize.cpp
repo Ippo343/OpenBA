@@ -207,7 +207,7 @@ void SerializeIBPArray(T*** data, int32_t* countField, IO::Serializer* serialize
     for (int32_t i = 0; i < count; ++i) {
         T** elem = &arr[i];
         // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: audit WORK (CLASS CitizenBehavior; blocked by size, not ownership: the bucket trees' element type is one CLASS unit with its readers, not reached in B4 Z SWEEP): an InternalBasePtr slot held as T* (the IBP's raw pointer; Internal.h)
+        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: B4 H5-P2 (not reached): this one template serves every CitizenBehavior IBP array (+0x00 / +0x10 / +0x20 / +0x30, healers, citizens, pastures, cemeteries, happiness, attendance, livestock, herds, diseases, populations, buildComponents, wells) and the two bucket-node entity arrays, each held as Collection::Array<T*> where retail's element is InternalPtr<T>: the cast goes when the LAST of them is retyped (one element retype + reader sweep per array, as EntityList's UpdateBucket was)
         T* val = *elem;
         if (val != nullptr) {
             if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
@@ -432,7 +432,7 @@ LegacyKeyIntNode* LegacyTreeSucc(LegacyKeyIntNode* n) {
 void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
     // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
     // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
-    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: audit WORK (CLASS CitizenBehavior +0x160; the legacy-path second node type needs the +0x160 tree typed first, not reached in B4 Z SWEEP): +0x160 read as a second node type (legacy path)
+    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: FLOOR? (B4 H5-P2: +0x160 IS typed now, CitizenBucketSet<ComponentDescription>): the version < 2 arm (never reached at save version 6) reads that Set's root slot as a second node type, the 0x30-byte LegacyKeyIntNode; one slot, two node types, so no typed member names it; whether retail's version < 2 arm uses this node type is not read (retail-difference task)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);

@@ -54,7 +54,8 @@ namespace {
 
 // ---- exe sub-callees, called by name (Action/exe_bodies.h) -------------------------
 //   0x1400acc10 Pf_RoadQuad_cc10, 0x1400ae180 Pf_TileShapeLut_ae180,
-//   0x14001ee40 Pf_VectorResize14_ee40, 0x14001f8d0 Pf_VectorResize14Fill_f8d0.
+//   0x14001ee40 / 0x14001f8d0: Collection::Array<GeometryBatchVertex>::SetSize in its two
+//   forms (GeometryBatch::vertices' member; the RawArray pool's RawArraySetSize).
 // Static MemAlloc/MemFree (slots 0x140152b60/0x140152b68) are
 // System::MemoryAllocator::MemAlloc / MemFree.
 //
@@ -78,8 +79,8 @@ namespace {
 // (stride 2, align 2, byteCopy, init == nullptr, destroy == nullptr) is that
 // exactly. The vertex list is only ever destroyed here (its grow is 0x14001ee40,
 // outside this file); its element is the trivially destructible GeometryBatchVertex,
-// so the dtor is MemFree + zero regardless. Both run through the RawArray wrappers
-// (Action/PathSearch.h) over the same erased core.
+// so the dtor is MemFree + zero regardless. Both are typed Collection::Array members
+// of GeometryBatch (B.4 H5-P2) over the same erased core.
 
 // cc10's output: retail's 0x60-byte stack block, the four 0x14-byte corner records
 // first. No constructor: retail does not initialise it.
@@ -92,7 +93,7 @@ static_assert(sizeof(TessCornerBlock) == 0x60, "the ace40 corner block is 0x60 b
 // AppendIndex — inlined "append one short index to the growable index buffer at
 // slot+0x18/+0x20/+0x24" block (orig emits it verbatim per triangle vertex).
 inline void AppendIndex(GeometryBatch* batch, uint16_t idx) {
-    RawArraySetSize(batch->indices, batch->indices.size + 1, idx);
+    batch->indices.SetSize(batch->indices._size + 1, idx);
 }
 
 // EmitVertex — resolve ONE corner descriptor to a vertex index (find/insert/append),
@@ -116,7 +117,7 @@ inline void EmitVertex(GeometryBatch* batch, AvlTreeHead<DecalVertexNode>* set,
         // descriptor bytes; every shared-corner dedup hit then returns a wild index and the
         // triangle stretches off toward the bogus vertex (the "sliver to map center" bug).
         DecalVertexSetInsert(set, outNode, &rec);               // 0x14001f6b0 (key = rec)
-        Pf_VectorResize14Fill_f8d0(pool, curCount + 1, desc);   // 0x14001f8d0 (vertex = desc)
+        RawArraySetSize(*pool, curCount + 1, *desc);            // 0x14001f8d0 (vertex = desc)
     } else {
         idx = (uint16_t)node->key.index;   // the low word (retail reads a word at node+0x14)
     }
@@ -132,7 +133,7 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
                                      int param_4, int param_5) {
     const float fUV = kRdata_14017214c;   // g_fUVScale (1.0f in retail)
 
-    GeometryBatch* batch = param_1->_decals.data + param_2;   // +0x1f0
+    GeometryBatch* batch = param_1->_decals._data + param_2;   // +0x1f0
     int iVar24 = (batch->maxX - batch->minX) + 1; // width
     int iVar28 = (batch->maxY - batch->minY) + 1; // height
 
@@ -252,9 +253,9 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     // then zero _data and the _size/_capacity qword). Now the dtor itself, in place.
     // ppvVar9 keeps the pre-free index pointer because the fnE180 call below still
     // feeds its upper bytes through a register-passthrough byte argument.
-    uint16_t* ppvVar9 = batch->indices.data;
-    RawArrayFree(batch->vertices);
-    RawArrayFree(batch->indices);
+    uint16_t* ppvVar9 = batch->indices._data;
+    batch->vertices.DestroyAndFree();
+    batch->indices.DestroyAndFree();
 
     DecalVertexNode* outNode;
 
@@ -348,12 +349,12 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     }
 
     // finalize: copy pooled vertices into the slot's vertex buffer.
-    Pf_VectorResize14_ee40(&batch->vertices, pool.size);
+    batch->vertices.SetSize(pool.size);                    // 0x14001ee40
     int     total   = pool.size;
     // Each 0x14-byte vertex moves as 8 + 8 + 4 bytes, member by member (a
     // GeometryBatchVertex assignment would compile to one 16-byte + one 4-byte
     // move at -O2, a store-width change).
-    GeometryBatchVertex*       vb  = batch->vertices.data;
+    GeometryBatchVertex*       vb  = batch->vertices._data;
     const GeometryBatchVertex* src = pool.data;
     for (int64_t i = 0; i < total; ++i) {
         std::memcpy(vb[i].position, src[i].position, sizeof vb[i].position);   // +0x00, 8 bytes

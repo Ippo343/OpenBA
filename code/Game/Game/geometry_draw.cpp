@@ -75,11 +75,8 @@ std::atomic<bool> s_itemDrawLogged{false};
 // ============================================================
 //
 // +0x1F0 / +0x200 (0x1400aedd3..0x1400aee28): 0x14001fb80 over the elements
-// (retail passes the header's low dword as the count), then the inlined ~Array.
-void GeometryBatchArray_Release(RawArray<GeometryBatch>& batches) {
-    GeometryBatch_DestroyRange(batches.data, batches.size);
-    RawArrayFree(batches);
-}
+// (retail passes the header's low dword as the count), then the inlined ~Array:
+// GeometryBatchArray's own destructor (kSpec_GeometryBatch, B.4 H5-P2).
 
 // +0xE8 (0x1400aeee0..0x1400aef18): free both subtrees, then the root node;
 // root = 0, the dword count = 0.
@@ -217,9 +214,9 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
     }
 
     // +0x1F0 — the decals.
-    const RawArray<GeometryBatch>& decals = _decals;
-    for (int idx = 0; idx < decals.size; ++idx) {
-        const GeometryBatch& b = decals.data[idx];
+    const GeometryBatchArray& decals = _decals;
+    for (int idx = 0; idx < decals._size; ++idx) {
+        const GeometryBatch& b = decals._data[idx];
         if (b.material == nullptr) continue;
 
         float xmax = static_cast<float>(b.maxX) - fHalfGrid;
@@ -239,11 +236,11 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
     }
 
     // +0x200 — the road batches; also skipped when the vertex count (+0x10) is 0, key1 = 2.
-    const RawArray<GeometryBatch>& roads = _roadBatches;
-    for (int idx = 0; idx < roads.size; ++idx) {
-        const GeometryBatch& b = roads.data[idx];
+    const GeometryBatchArray& roads = _roadBatches;
+    for (int idx = 0; idx < roads._size; ++idx) {
+        const GeometryBatch& b = roads._data[idx];
         if (b.material == nullptr) continue;
-        if (b.vertices.size == 0) continue;
+        if (b.vertices._size == 0) continue;
 
         float xmax = static_cast<float>(b.maxX) - fHalfGrid;
         float ymax = static_cast<float>(b.maxY) - fHalfGrid;
@@ -304,32 +301,32 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     // Indexed draw of one batch's vertices and indices through the context's
     // dynamic buffers (the 0x2000 and 0x4000 branches).
     auto IndexedDrawFromBatch = [&](const GeometryBatch& batch) {
-        int32_t vertCount  = batch.vertices.size;
+        int32_t vertCount  = batch.vertices._size;
         int32_t vertStride = 0x14;             // hardcoded in original
-        int32_t idxCount   = batch.indices.size;
+        int32_t idxCount   = batch.indices._size;
         bool ok = context.BeginIndexedVertices(vertCount, vertStride, idxCount);
         if (!ok) return;
 
         size_t vertBytes = static_cast<size_t>(vertCount) * static_cast<size_t>(context._dynamicVertexStride);
-        std::memcpy(context._dynamicVertexCursor, batch.vertices.data, vertBytes);
+        std::memcpy(context._dynamicVertexCursor, batch.vertices._data, vertBytes);
         context._dynamicVertexCursor += vertBytes;
 
         // Context +0x20f0, the dynamic index cursor (16-bit indices).
         size_t idxBytes = static_cast<size_t>(idxCount) * 2;
-        std::memcpy(context._dynamicIndexCursor, batch.indices.data, idxBytes);
+        std::memcpy(context._dynamicIndexCursor, batch.indices._data, idxBytes);
         context._dynamicIndexCursor += static_cast<size_t>(idxCount);   // idxBytes / 2
 
         context.EndIndexedVertices(0);
     };
 
     if (mode == 0x2000) {
-        GeometryBatch* base = _decals.data;
+        GeometryBatch* base = _decals._data;
         if (!base) return;
         IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
     }
     if (mode == 0x4000) {
-        GeometryBatch* base = _roadBatches.data;
+        GeometryBatch* base = _roadBatches._data;
         if (!base) return;
         IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;

@@ -57,14 +57,18 @@ inline bool IsLoading(IO::Serializer& serializer) {
 // 0x14001f9c0 — a batch's vertex array: the count (on load: resize through
 // 0x14001ee40, stride 0x14), then per vertex Serialize(4 shorts), (4 shorts),
 // (4 bytes).
-void SerializeBatchVertices(RawArray<GeometryBatchVertex>& vertices, IO::Serializer& serializer) {
-    int32_t local_count = vertices.size;
+// B.4 H5-P2 (behaviour:): the load resize is retail's 0x14001ee40 (0x14001f9f8),
+// Array<GeometryBatchVertex>::SetSize: MemAlloc(.., 2), the new tail left as found
+// (every slot is then read from the stream). The tree called 0x14001bf10's row
+// (align 4, zero-filled tail).
+void SerializeBatchVertices(Collection::Array<GeometryBatchVertex>& vertices, IO::Serializer& serializer) {
+    int32_t local_count = vertices._size;
     serializer.Serialize(local_count, nullptr);
     if (IsLoading(serializer)) {
-        Reimpl_Array_Resize_Stride14(&vertices, local_count);   // 0x14001ee40
+        vertices.SetSize(local_count);   // 0x14001ee40
     }
     if (local_count <= 0) return;
-    GeometryBatchVertex* v = vertices.data;
+    GeometryBatchVertex* v = vertices._data;
     if (!v) return;
     for (int i = 0; i < local_count; ++i) {
         serializer.Serialize(4, v[i].position, nullptr);
@@ -117,13 +121,13 @@ void GeometryBatch_Serialize(IO::Serializer& serializer, int count, GeometryBatc
             SerializeBatchVertices(b.vertices, serializer);   // 0x14001f9c0
 
             // The index array: count, on load resize (0x14001c890), then the bulk uint16s.
-            int32_t local_count = b.indices.size;
+            int32_t local_count = b.indices._size;
             serializer.Serialize(local_count, nullptr);
             if (IsLoading(serializer)) {
                 Reimpl_Array_Resize_Stride02(&b.indices, local_count);
             }
-            if (b.indices.data) {
-                serializer.Serialize(local_count, b.indices.data, nullptr);
+            if (b.indices._data) {
+                serializer.Serialize(local_count, b.indices._data, nullptr);
             }
         }
     }

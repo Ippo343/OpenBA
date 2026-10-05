@@ -38,7 +38,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"          // WorkBase_FindComponent_2ed0, WorkBase_ValidateCell_a00f0, WorkBase_CalcDistance_8830
 #include "Component/exe_bodies.h"     // FloorComponent_FindResData
-#include "Game/exe_bodies.h"          // Reimpl_TradeWork_helper_e270, Reimpl_Struct60B_Resize, Reimpl_MapGetTerrainPos
+#include "Game/exe_bodies.h"          // Reimpl_TradeWork_helper_e270, Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"       // kRdata_*
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstring>
@@ -93,7 +93,7 @@ static_assert(std::is_trivially_default_constructible<GeometryBatchVertex>::valu
 // Exe sub-helpers + .rdata constants, called / read by name (B3R).
 // ------------------------------------------------------------
 //   ae270 Reimpl_TradeWork_helper_e270 (road normal)    ae180 Pf_TileShapeLut_ae180
-//   fa80  Pf_VectorResize60_fa80 (grow + dup element)   f250  Reimpl_Struct60B_Resize
+//   fa80 / f250  GeometryBatchArray::SetSize (fill / 2-arg; GeometryBatch_Resize)
 //   aa810 Pf_RayTriIntersect_aa810                       1a4f0 AvlInsert28
 //   a8420 Pf_DirtyCoarseCellB_8420                       123070 Pf_RecursiveChildSum_123070
 //   002ed0 WorkBase_FindComponent_2ed0                   003f60 ActCNR_FindComponent_3f60
@@ -744,34 +744,19 @@ int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
 // identical across the 8 grow-blocks (they differ only by the value written to a freshly-grown
 // slot). Reads count fresh each call; new = old+1; cap rule "cap=new; if new==old+1 && old!=0
 // cap=new*3".
-static void AppendIndex(RawArray<uint16_t>* a, short valueForNew) {
-    int oldN = a->size;
-    int newN = oldN + 1;
-    if (newN == oldN) return;
-    uint16_t* oldBuf = a->data;
-    a->size = newN;
-    if (a->capacity < newN) {
-        a->capacity = newN;
-        if ((newN == oldN + 1) && (oldN != 0)) a->capacity = newN * 3;
-        a->data = static_cast<uint16_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(a->capacity) * 2, 2));
-    }
-    int start = (oldBuf == a->data) ? oldN : 0;
-    for (int64_t j = start; j < newN; j++) {
-        uint16_t* dst = a->data + j;
-        if (dst) {
-            short v = valueForNew;
-            if (j < oldN) v = oldBuf[j];
-            *dst = v;
-        }
-    }
-    if (oldBuf != a->data) System::MemoryAllocator::MemFree(oldBuf);
+// B.4 H5-P2: that block is step for step Collection::Array<uint16_t>::SetSize(n + 1,
+// value) (rtcoll::SetSizeCore over the trait row: stride 2, align 2, byte copy, no
+// init / destroy; the exact-equal test can never fire), so it is that call on the
+// typed GeometryBatch::indices.
+static void AppendIndex(Collection::Array<uint16_t>* a, short valueForNew) {
+    a->SetSize(a->_size + 1, static_cast<uint16_t>(valueForNew));
 }
 
 void WorldGeometry::RebuildRoadMesh(Map* map) {
-    RawArray<GeometryBatch>* meshBatches = &_roadBatches;    // +0x200 (local_a8)
+    GeometryBatchArray* meshBatches = &_roadBatches;         // +0x200 (local_a8)
     const RawArray<Object::External*>* sources = &_batchMaterials; // +0x210
     Collection::Array<int32_t>* counters = &_batchCounters;  // +0x220
-    Reimpl_Struct60B_Resize(meshBatches, 0);                                // f250(local_a8, 0)
+    GeometryBatch_Resize(*meshBatches, 0);                   // f250(local_a8, 0)
 
     int vtxOff = (_gridSize - _fieldC4) >> 1; // iVar12
 
@@ -790,10 +775,13 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
     }
 
     // Phase 2: local working batch array, sized to the batch count.
-    RawArray<GeometryBatch> batches = {nullptr, 0, 0};   // local_108
-    Reimpl_Struct60B_Resize(&batches, static_cast<uint32_t>(sources->size));   // 0x14001f250
+    // Its ctor is retail's two qword zero stores (0x1400af419 / 0x1400af41e); its
+    // destructor at the end of the body is retail's inlined ~Array (0x1400b0053..
+    // 0x1400b00b3: 0x14001fb80's body per batch, MemFree, the header zeroed).
+    GeometryBatchArray batches;                              // local_108
+    GeometryBatch_Resize(batches, static_cast<uint32_t>(sources->size));   // 0x14001f250
 
-    int batchCount = batches.size;                            // (int)local_100
+    int batchCount = batches._size;                           // (int)local_100
     int gridDim = map->size;                                  // MOVSXD R13,[RDI]
     int cellSize = _chunkSize;                                // +0xc8 (block dim)
 
@@ -810,16 +798,17 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                     int seedColMin = local_f4 + vtxOff;   // iVar26 (R15D = local_f4+vtxOff)
                     int seedRowMin = local_f8 + vtxOff;   // iVar16 (R12D = local_f8+vtxOff)
                     for (int b = 0; b < batchCount; b++) {
-                        GeometryBatch& rec = batches.data[b];
+                        GeometryBatch& rec = batches._data[b];
                         // The +0x210 table holds each batch's material (BackfillBatchMaterials copies
                         // GeometryBatch::material into it): a qword copy in retail.
                         rec.material = static_cast<Graphics::MaterialInstance*>(sources->data[b]);
-                        // B.3.2 bridge: FUN_14001c890 == Array<uint16>::SetSize (+0x08);
-                        // FUN_14001ee40 == Array<RoadVertex>::SetSize (+0x18). Both shrink
-                        // to 0 here, so neither body's new-tail arm is ever exercised.
-                        // LEFT (B4 H5): GeometryBatch is the element of RawArray<GeometryBatch> whose resize / copy / destroy are hand-ported element bodies (0x14001f250 / 0x14001f5e0 / 0x14001fb80) and which AddDecal builds from a memset template: its two inner arrays become members only in a GeometryBatch CLASS unit with those three bodies.
-                        GameColl::AsArray<GameColl::U16>(&rec.vertices).SetSize(0);
-                        GameColl::AsArray<GeometryBatchVertex>(&rec.indices).SetSize(0);
+                        // FUN_14001c890 == Array<uint16>::SetSize on +0x18 (0x1400af495),
+                        // then FUN_14001ee40 == Array<GeometryBatchVertex>::SetSize on +0x08
+                        // (0x1400af49f), retail's order (B.4 H5-P2: the tree had them the
+                        // other way round, each under the other's element type). Both
+                        // shrink to 0, so neither body's new-tail arm is exercised.
+                        rec.indices.SetSize(0);
+                        rec.vertices.SetSize(0);
                         // Culling AABB in tile coords, read by the TerrainGenerator cull pass
                         // (0x1400ae490 -> Volume::Frustum::Contains). `slot` (+0x28, f250
                         // seeds -1) must NOT be written here.
@@ -883,8 +872,8 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                                     Pf_RoadQuad_cc10(this, fineCol + vtxOff, fineRow + vtxOff,
                                                   quad, blendVal, blendId);   // 0x1400acc10
 
-                                    GeometryBatch& rec = batches.data[batchId];
-                                    short sVar21 = static_cast<short>(rec.vertices.size);
+                                    GeometryBatch& rec = batches._data[batchId];
+                                    short sVar21 = static_cast<short>(rec.vertices._size);
 
                                     // ---- push the 6 corner indices (parity split on (rowSeed+vtxOff + colSeed+vtxOff)) ----
                                     if (((fineRow + vtxOff + fineCol + vtxOff) & 1) == 0) {
@@ -910,13 +899,11 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                                         short cY = static_cast<short>(kCornerOff[vi * 2]     + static_cast<short>(fineRow)); // local_c8[+0 + i*4]
                                         quad[vi].uv[0] = cX;   // AO-u slot
                                         quad[vi].uv[1] = cY;   // AO-v slot
-                                        int curCount = rec.vertices.size;  // (int)plVar15[1]
-                                        // B.3.2 bridge: FUN_14001f8d0 == Array<RoadVertex>::
+                                        int curCount = rec.vertices._size;  // (int)plVar15[1]
+                                        // FUN_14001f8d0 (0x1400aff5a) == Array<GeometryBatchVertex>::
                                         // SetSize(n, fill) (3-arg form) -- appends the vertex as
-                                        // the new tail element. LEFT (B4 H5): the GeometryBatch CLASS
-                                        // unit above (0x14001f250 / 0x14001f5e0 / 0x14001fb80) first.
-                                        GameColl::AsArray<GeometryBatchVertex>(&rec.vertices)
-                                            .SetSize(curCount + 1, quad[vi]);
+                                        // the new tail element.
+                                        rec.vertices.SetSize(curCount + 1, quad[vi]);
                                     }
                                 }
                                 local_e0++;
@@ -929,9 +916,9 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                 // ---- append each batch with vertices to the mesh batches (fa80) ----
                 if (0 < batchCount) {
                     for (int b = 0; b < batchCount; b++) {
-                        GeometryBatch& rec = batches.data[b];
-                        if (0 < rec.vertices.size) {
-                            Pf_VectorResize60_fa80(meshBatches, meshBatches->size + 1, &rec);   // 0x14001fa80
+                        GeometryBatch& rec = batches._data[b];
+                        if (0 < rec.vertices._size) {
+                            meshBatches->SetSize(meshBatches->_size + 1, rec);   // 0x14001fa80
                         }
                     }
                 }
@@ -942,22 +929,9 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
         } while (local_f8 < gridDim);
     }
 
-    // Phase 5: free every batch's two buffers, then the array.
-    {
-        int n = batches.size;
-        for (int b = 0; b < n; b++) {
-            GeometryBatch& rec = batches.data[b];
-            System::MemoryAllocator::MemFree(rec.indices.data);    // buffer A
-            rec.indices.data = nullptr;
-            rec.indices.size = 0;
-            rec.indices.capacity = 0;
-            System::MemoryAllocator::MemFree(rec.vertices.data);   // buffer B
-            rec.vertices.data = nullptr;
-            rec.vertices.size = 0;
-            rec.vertices.capacity = 0;
-        }
-        System::MemoryAllocator::MemFree(batches.data);
-    }
+    // Phase 5 (0x1400b0053..0x1400b00b3): `batches`' destructor -- every batch's
+    // index buffer, then its vertex buffer (each MemFree, then zeroed), then the
+    // array's buffer and header.
 }
 
 // ===========================================================================

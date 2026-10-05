@@ -1,151 +1,128 @@
 // code/Game/Game/serialize_struct60b.cpp
 //
-// M3.5 Path B session 2 — lifecycle helpers for the 0x60-byte struct array
-// at MenuScene::geometry +0x200 (count +0x208). Used by Geometry::Serialize
-// (FUN_1400b04d0) and the version-gated extra FUN_1400af1a0 to grow/shrink
-// the array of trade-related (likely "merchant order"/"trade slot") structs.
+// The 0x60-byte GeometryBatch record (WorldGeometryElements.h): its two
+// constructors, the owning arrays' element-spec row and the resize entry.
+// WorldGeometry::_decals (+0x1F0), WorldGeometry::_roadBatches (+0x200) and
+// RebuildRoadMesh's working array are GeometryBatchArray.
 //
-// Helper map:
-//   sub_f250  — 0x14001f250  (resize)        — Reimpl_Struct60B_Resize
-//   sub_f5e0  — 0x14001f5e0  (copy ctor)     — Reimpl_Struct60B_CopyCtor
-//   sub_fb80  — 0x14001fb80  (dtor range)    — Reimpl_Struct60B_DtorRange
+// Retail map:
+//   0x14001f250  Array<GeometryBatch>::SetSize(n)        — GeometryBatch_Resize / SetSize
+//   0x14001fa80  Array<GeometryBatch>::SetSize(n, fill)  — SetSize
+//   0x14001f5e0  GeometryBatch copy constructor
+//   0x14001fb80  destroy a range of batches              — the row's destroy
 //
-// 0x60-byte element layout (from FUN_14001f5e0 decompile):
-//   +0x00 : qword  (8B)              — copied raw (likely typed ExternalPtr,
-//                                        FUN_140007140 cascade — but only on
-//                                        SERIALIZE, not on copy/dtor)
-//   +0x08 : array<stride 0x14>       — { void* data; int32 count; int32 cap }
-//                                        owned heap; deep-copy via fdb0,
-//                                        free on dtor
-//   +0x18 : array<stride 0x02>       — { void* data; int32 count; int32 cap }
-//                                        owned heap; deep-copy via fe60,
-//                                        free on dtor
-//   +0x28..+0x44                     — 6 dwords + 1 byte + 1 dword + 1 byte
+// 0x60-byte element layout (from 0x14001f5e0):
+//   +0x00 : qword                    — copied raw (the MaterialInstance ref; only
+//                                       the serializer 0x140007140 resolves it)
+//   +0x08 : Array<GeometryBatchVertex, stride 0x14> — deep-copied (0x14001fdb0)
+//   +0x18 : Array<uint16_t>                          — deep-copied (0x14001fe60)
+//   +0x28..+0x44                     — 5 dwords + 1 byte + 1 dword + 1 byte
 //   +0x48..+0x5d                     — 5 floats + 2 bytes
 //
-// The two embedded sub-arrays are the only fields that own heap memory.
-// Everything else is plain bytes.
-//
-// B.4 GAME-b: the element is GeometryBatch (WorldGeometryElements.h) and the
-// bodies are typed functions; the C entry points forward ACT-a's untyped callers.
-//
-// NOTE: This file is the PUBLIC-INTERFACE-ONLY reimpl. The dispatch logic
-// (delegate to original-via-fn-ptr if resolved, else execute the cleaned C
-// path inline) follows the same pattern as serialize_arrays.cpp /
-// serialize_externals.cpp. The cleaned-C path mirrors the original
-// instruction-for-instruction so a future A/B trace can verify equivalence.
+// B.4 H5-P2 (behaviour:): the two inner arrays are real Collection::Array
+// members; the copy / default constructors and the destructor are the class's,
+// and the hand-written resize body (step for step rtcoll::SetSizeCore) is the
+// one erased core through kSpec_GeometryBatch.
 
-#include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
+#include "system/MemoryAllocator.h"   // System::MemoryAllocator::_singleton (the scaffold guard)
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
+#include <new>
 #include "Game/exe_bodies.h"
 #include "Game/WorldGeometryElements.h"
 
+// ============================================================
+// GeometryBatch's constructors (WorldGeometryElements.h).
+// ============================================================
+// The new-element arm of 0x14001f250 (0x14001f318..0x14001f36a; AddDecal's
+// template 0x1400b0e01..0x1400b0e47 is the same sequence): +0x00, the two array
+// headers, +0x2C..+0x3B and +0x48..+0x57 zeroed, slot = -1, the bytes +0x3C /
+// +0x44 / +0x5D and the dwords +0x40 / +0x58 zeroed. +0x5C and the padding
+// bytes are not written.
+GeometryBatch::GeometryBatch()
+    : material(nullptr), vertices(), indices(), slot(-1),
+      minX(0), minY(0), maxX(0), maxY(0),
+      field_0x3C(0), field_0x40(0), field_0x44(false),
+      field_0x48{0.0f, 0.0f, 0.0f, 0.0f, 0.0f}, alternateKey(false) {}
+
+// 0x14001f5e0: material copied; each array header zeroed (its member ctor) and
+// deep-assigned (0x14001fdb0 / 0x14001fe60 = Collection::Array<T>::operator=:
+// self-test, clear, size, MemAlloc(size * stride, 2), element copy); then the
+// scalars field by field in retail's order (the padding is never written).
+GeometryBatch::GeometryBatch(const GeometryBatch& s)
+    : material(s.material), vertices(), indices() {
+    vertices = s.vertices;                             // 0x14001fdb0
+    indices  = s.indices;                              // 0x14001fe60
+    slot       = s.slot;                               // +0x28
+    minX       = s.minX;                               // +0x2c
+    minY       = s.minY;                               // +0x30
+    maxX       = s.maxX;                               // +0x34
+    maxY       = s.maxY;                               // +0x38
+    field_0x3C = s.field_0x3C;                         // +0x3c byte
+    field_0x40 = s.field_0x40;                         // +0x40
+    field_0x44 = s.field_0x44;                         // +0x44 byte
+    for (int i = 0; i < 5; ++i)                        // +0x48 .. +0x58
+        field_0x48[i] = s.field_0x48[i];
+    field_0x5C   = s.field_0x5C;                       // +0x5c byte
+    alternateKey = s.alternateKey;                     // +0x5d byte
+}
+
+// ============================================================
+// kSpec_GeometryBatch — the owning arrays' row.
+// ============================================================
+// 0x14001f250 (SetSize(n)) and 0x14001fa80 (SetSize(n, fill)) compared with
+// rtcoll::SetSizeCore step for step: exact-equal early return (MOVSXD old size),
+// the size stored before the capacity test, capacity = n and treble on a
+// one-element grow of a non-empty array, MemAlloc(capacity * 0x60, 8); the loop
+// starts at the old size when the block did not move, else 0, tests the COMPUTED
+// element address, copy-constructs (0x14001f5e0) below the old size and above it
+// runs the new-element arm (f250) / the copy constructor from the fill (fa80);
+// then on a move 0x14001fb80 over the whole old block and MemFree, else
+// 0x14001fb80 over the cut tail. The row is that: assign = copy-construct, init =
+// default-construct, destroy = 0x14001fb80.
 namespace {
 
-inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
-
-// Sub-array deep copy — FUN_14001fdb0 (GeometryBatchVertex, stride 0x14) and
-// FUN_14001fe60 (uint16 index, stride 0x02): identical bodies but the element.
-template <class T>
-void CopySubArray(RawArray<T>& dst, const RawArray<T>& src) {
-    if (&dst == &src) return;
-
-    if (!System::MemoryAllocator::_singleton) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[Struct60B::SubArrayDeepCopy] MemAlloc/Free unavailable — "
-                   "leaving dst untouched (stride=%zu)\n", sizeof(T));
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    // Free any existing buffer in dst.
-    if (dst.data) MemFree(dst.data);
-    dst.data = nullptr;
-    // Retail's `param_1[1] = 0` is ONE qword store over offsets 0x08..0x0f, so it
-    // clears size AND capacity together (H7: two named stores).
-    dst.size = 0;
-    dst.capacity = 0;
-
-    int srcCount = src.size;
-    dst.size = srcCount;
-    if (srcCount > 0) {
-        dst.capacity = srcCount;
-        dst.data = static_cast<T*>(System::MemoryAllocator::MemAlloc(
-            static_cast<size_t>(srcCount) * sizeof(T), /*align*/ 2));
-    }
-    if (dst.size <= 0 || !dst.data || !src.data) return;
-
-    for (int i = 0; i < dst.size; ++i) dst.data[i] = src.data[i];
+void CopyConstructBatch(GeometryBatch* d, const GeometryBatch* s) {
+    new (d) GeometryBatch(*s);                         // 0x14001f5e0
 }
-
-} // namespace
-
-// ============================================================
-// 0x14001f5e0 — GeometryBatch copy constructor.
-// ============================================================
-// The two sub-array headers are zeroed first (the caller hands us fresh memory
-// from the Resize allocation) and deep-copied; the trailing scalars are copied
-// field by field in retail's order (the padding is never written).
-void GeometryBatch_CopyConstruct(GeometryBatch& d, const GeometryBatch& s) {
-    d.material = s.material;                           // +0x00 qword raw copy
-
-    d.vertices.data = nullptr;                         // +0x08 header (two qwords)
-    d.vertices.size = 0;
-    d.vertices.capacity = 0;
-    CopySubArray(d.vertices, s.vertices);              // 0x14001fdb0
-
-    d.indices.data = nullptr;                          // +0x18 header (two qwords)
-    d.indices.size = 0;
-    d.indices.capacity = 0;
-    CopySubArray(d.indices, s.indices);                // 0x14001fe60
-
-    d.slot       = s.slot;                             // +0x28
-    d.minX       = s.minX;                             // +0x2c
-    d.minY       = s.minY;                             // +0x30
-    d.maxX       = s.maxX;                             // +0x34
-    d.maxY       = s.maxY;                             // +0x38
-    d.field_0x3C = s.field_0x3C;                       // +0x3c byte
-    d.field_0x40 = s.field_0x40;                       // +0x40
-    d.field_0x44 = s.field_0x44;                       // +0x44 byte
-    for (int i = 0; i < 5; ++i)                        // +0x48 .. +0x58
-        d.field_0x48[i] = s.field_0x48[i];
-    d.field_0x5C   = s.field_0x5C;                     // +0x5c byte
-    d.alternateKey = s.alternateKey;                   // +0x5d byte
+void ConstructBatch(GeometryBatch* d) {
+    new (d) GeometryBatch();                           // 0x14001f250's init arm
 }
-
-// ============================================================
-// 0x14001fb80 — destroy `count` batches: each one's index array (+0x18), then
-// its vertex array (+0x08); each header's data freed, then data and the
-// size|capacity qword zeroed.
-// ============================================================
-void GeometryBatch_DestroyRange(GeometryBatch* first, int count) {
+// 0x14001fb80 — destroy `count` batches (retail returns at once for count <= 0):
+// each one's index array (+0x18), then its vertex array (+0x08), each MemFree then
+// its fields zeroed (~GeometryBatch). The `!first` test is the tree's.
+void DestroyBatches(GeometryBatch* first, int count) {
     if (count <= 0 || !first) return;
-    for (int i = 0; i < count; ++i) {
-        GeometryBatch& b = first[i];
-        if (b.indices.data) MemFree(b.indices.data);
-        b.indices.data = nullptr;
-        b.indices.size = 0;
-        b.indices.capacity = 0;
-        if (b.vertices.data) MemFree(b.vertices.data);
-        b.vertices.data = nullptr;
-        b.vertices.size = 0;
-        b.vertices.capacity = 0;
-    }
+    for (int i = 0; i < count; ++i)
+        first[i].~GeometryBatch();
 }
 
+void AssignBatch(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<GeometryBatch, &CopyConstructBatch>(d, s);
+}
+void InitBatch(uint8_t* d) {
+    rtcoll::InitAs<GeometryBatch, &ConstructBatch>(d);
+}
+void DestroyBatchRange(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<GeometryBatch, &DestroyBatches>(ignoredThis, base, count);
+}
+
+}  // namespace
+
+namespace GeometryBatchRows {
+const rtcoll::ArraySpec kSpec_GeometryBatch = {          // exe 0x14001f250 / 0x14001fa80
+    "Array<GeometryBatch>", 0x60, 8,
+    &AssignBatch, &InitBatch, &DestroyBatchRange, false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+}  // namespace GeometryBatchRows
+
 // ============================================================
-// 0x14001f250 — resize a GeometryBatch array (Collection::Array<T>::SetSize as
-// retail inlines it for this element: exact-equal early return, size stored
-// first, the treble rule on a one-element grow of a non-empty array, align 8;
-// the prefix is copy-constructed only when the block moved, new slots are zeroed
-// with slot = -1, the truncated tail or the whole old block is destroyed).
+// 0x14001f250 — GeometryBatchArray::SetSize(n), behind the tree's two scaffold
+// guards (retail has neither: a negative count and a missing allocator).
 // ============================================================
-void GeometryBatch_Resize(RawArray<GeometryBatch>& hdr, unsigned int newCount) {
+void GeometryBatch_Resize(GeometryBatchArray& hdr, unsigned int newCount) {
     // Defensive: when the deserialize stream is misaligned, we may receive a
     // garbage count (typically a negative int reinterpreted as a huge unsigned).
     // Without this, oldCount - newCount underflows to ~65k and DtorRange iterates
@@ -173,65 +150,5 @@ void GeometryBatch_Resize(RawArray<GeometryBatch>& hdr, unsigned int newCount) {
         return;
     }
 
-    unsigned int oldCount = static_cast<unsigned int>(hdr.size);
-    if (newCount == oldCount) return;
-
-    GeometryBatch* oldData = hdr.data;
-    hdr.size = static_cast<int32_t>(newCount);
-
-    if (hdr.capacity < static_cast<int32_t>(newCount)) {
-        hdr.capacity = static_cast<int32_t>(newCount);
-        if (newCount == oldCount + 1 && oldCount != 0) {
-            hdr.capacity = static_cast<int32_t>(newCount) * 3;
-        }
-        hdr.data = static_cast<GeometryBatch*>(System::MemoryAllocator::MemAlloc(
-            static_cast<size_t>(hdr.capacity) * sizeof(GeometryBatch), /*align*/ 8));
-    }
-
-    // copyStart = oldCount if buffer NOT reallocated, else 0
-    unsigned int copyStart = (oldData == hdr.data) ? oldCount : 0u;
-    if (static_cast<int>(copyStart) < static_cast<int>(newCount)) {
-        for (unsigned int slot = copyStart; slot < newCount; ++slot) {
-            GeometryBatch* elem = hdr.data + slot;
-            if (!elem) continue;
-            if (static_cast<int>(slot) < static_cast<int>(oldCount)) {
-                GeometryBatch_CopyConstruct(*elem, oldData[slot]);   // 0x14001f5e0
-            } else {
-                // New slot: zeroed, slot = -1.
-                std::memset(elem, 0, sizeof(GeometryBatch));
-                elem->slot = -1;
-            }
-        }
-    }
-
-    if (oldData == hdr.data) {
-        // Shrink-in-place — destroy the trailing elements only.
-        if (static_cast<int>(newCount) < static_cast<int>(oldCount)) {
-            GeometryBatch_DestroyRange(oldData + newCount,
-                                       static_cast<int>(oldCount - newCount));
-        }
-    } else {
-        // Realloc happened — destroy the entire old block + free it.
-        if (oldData) {
-            GeometryBatch_DestroyRange(oldData, static_cast<int>(oldCount));
-            MemFree(oldData);
-        }
-    }
+    hdr.SetSize(static_cast<int>(newCount));           // 0x14001f250
 }
-
-// ============================================================
-// The C entry points: action_pf_pools.cpp / action_pf_road.cpp call them.
-// ============================================================
-// Both callers (WorldGeometry::RebuildRoadMesh: _roadBatches and its local) hold a
-// RawArray<GeometryBatch>.
-extern "C" void Reimpl_Struct60B_Resize(RawArray<GeometryBatch>* arrayHeader, unsigned int newCount) {
-    if (!arrayHeader) return;
-    GeometryBatch_Resize(*arrayHeader, newCount);
-}
-
-extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const GeometryBatch* src) {
-    if (!dst || !src) return dst;
-    GeometryBatch_CopyConstruct(*dst, *src);
-    return dst;
-}
-

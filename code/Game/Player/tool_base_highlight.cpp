@@ -36,7 +36,7 @@
 #include "Game/WorldGeometryElements.h"   // GeometryBatch (the decal element)
 
 // The radius tessellation 0x1400ace40 (TradeWork_impl_ace40, tool_base_highlight_tess.cpp)
-// and the tile-entry array grow 0x14001fa80 (Pf_VectorResize60_fa80, Action/exe_bodies.h)
+// and the tile-entry array grow 0x14001fa80 (GeometryBatchArray::SetSize, the fill form)
 // are called by name; so is the static MemAlloc/MemFree pair (slots 0x140152b60 /
 // 0x140152b68) -> System::MemoryAllocator. The vertex-dedup set's nodes are
 // DecalVertexNode (Player/exe_bodies.h); its rotations / retrace are the shared
@@ -223,12 +223,12 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              char param_15, int param_16, int param_17, bool param_19) {
     if (material == nullptr) return -1;
 
-    RawArray<GeometryBatch>& decals = geom->_decals;
+    GeometryBatchArray& decals = geom->_decals;
     int iVar3 = 0;
-    int iVar2 = decals.size;                                     // count
+    int iVar2 = decals._size;                                    // count
     bool grew = false;
     if (0 < iVar2) {
-        const GeometryBatch* batch = decals.data;
+        const GeometryBatch* batch = decals._data;
         do {
             if (batch->slot < 0) {                                // free slot marker
                 if (-1 < iVar3) { grew = false; goto haveSlot; }
@@ -238,21 +238,20 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
             batch++;                                              // stride 0x60 bytes
         } while (iVar3 < iVar2);
     }
-    // no free slot -> grow the array by 1 from a zeroed template (slot = -1)
+    // no free slot -> grow the array by 1 from a default-constructed template
+    // (0x1400b0e01..0x1400b0e47: GeometryBatch(), slot = -1, +0x5C left as found);
+    // its destructor (0x1400b0e64..0x1400b0e84: indices, then vertices) runs at the
+    // end of the block.
     {
         GeometryBatch tmpl;
-        std::memset(&tmpl, 0, sizeof(tmpl));
-        tmpl.slot = -1;
-        Pf_VectorResize60_fa80(&decals, decals.size + 1, &tmpl);   // 0x14001fa80
-        System::MemoryAllocator::MemFree(tmpl.indices.data);
-        System::MemoryAllocator::MemFree(tmpl.vertices.data);
+        decals.SetSize(decals._size + 1, tmpl);                  // 0x14001fa80
         iVar3 = iVar2;
         grew = true;
     }
 haveSlot:
     (void)grew;
     iVar2 = (geom->_gridSize - geom->_fieldC4) >> 1;
-    GeometryBatch* entry = &decals.data[iVar3];
+    GeometryBatch* entry = &decals._data[iVar3];
     entry->material = material;
     entry->slot = iVar3;
     entry->minX = iVar2 + param_2;
