@@ -428,7 +428,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2) {
                     n2 = n2->right;
                 } else {
                     // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&param_1->field_0xE8), n2);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&param_1->field_0xE8), n2);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (Work/exe_bodies.h:100, another region) takes the set as uintptr_t*; Map +0xE8 is an AvlTreeHead<AvlNode28> (Map.h, GAMEA), not the Set<T*> its typed overload takes
                     break;
                 }
             }
@@ -518,7 +518,7 @@ void WorkScheduler::PrioritizeWork(int workId) {
                     pk = pk->right;
                 } else {
                     // LEFT: 0x14001a6e0 is a C door in block WORK's Work/exe_bodies.h.
-                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_0x10), pk);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (X-G2-WAIT)
+                    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(&field_0x10), pk);   // LEFT: SIG WorkBST_BSTRemove_a6e0 (Work/exe_bodies.h:100, another region) takes the set as uintptr_t*; this set header is not the Set<T*> its typed overload takes
                     break;
                 }
             }
