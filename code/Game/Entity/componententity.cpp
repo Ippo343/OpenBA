@@ -622,11 +622,6 @@ void ComponentEntity::Persist(IO::Stream& stream) {
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, ComponentDescription* description) {
     return new (static_cast<void*>(self)) ComponentEntity(description);
 }
-// B4 FORWARD: Game/founding_spawn.cpp:262 and Player/bridgetool_calcpath.cpp:207 still call this (they hold the template as void*).
-ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr) {
-    return ComponentEntity_CtorFromDescription(self,
-        static_cast<ComponentDescription*>(descriptionPtr));   // LEFT: SIG ComponentEntity_CtorFromDescription(void*): the forwarder for founding_spawn.cpp:262 / bridgetool_calcpath.cpp:207, which hold the template as void* (GAME files)
-}
 
 // ============================================================
 // EntityList registration (FUN_1400c48a0 + helpers) — Foundation B
