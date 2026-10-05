@@ -196,7 +196,7 @@ static int EventLog_TileIndex(const ::Object::InternalBasePtr* entityIBP) {
     if (!game) return -1;
 
     MapComponent* mc = nullptr;   // the InternalPtr<MapComponent> FindResData writes
-    FloorComponent_FindResData(entityIBP->Get(), &mc);   // 0x140004680
+    FloorComponent_FindResData(static_cast<ComponentEntity*>(entityIBP->Get()), &mc);   // 0x140004680 (the slot holds the message's entity)
     if (mc == nullptr) return -1;
 
     // The footprint words, read signed (the tree's reads; retail MOVSX).
