@@ -175,13 +175,6 @@
 
 namespace {
 
-// `str` is a `char*` System::String field (Animation.h keeps the three names
-// raw); the member is ?Serialize@String@System@@ 0x1800c9930. LEFT: the one
-// view of the raw field as the real `System::String`.
-inline void StrSer(void* str, IO::Serializer& ser) {
-    static_cast<System::String*>(str)->Serialize(ser);   // LEFT: H5 the caller's field is raw char* storage of a System::String (Animation.h keeps the names raw)
-}
-
 // B.4: the local `{ stream, rw }` pair every External::Serialize in this file
 // builds, the encoding's CreateReader / CreateWriter call and the closing
 // `if (rw) delete rw` are `IO::Serializer`'s ctor and dtor, inlined; the
@@ -227,15 +220,15 @@ using AnimationGroup = ::Graphics::AnimationGroup;
 // retail field name off `Graphics::Animation`, whose layout is pinned in its
 // header against the eleven accessor bodies listed there.
 //
-// B.4: typed on `IO::Serializer&`. LEFT: `datav` is `_clips`' raw storage
-// (AnimationGroup.h keeps `_clips` raw, H5), viewed once as its element type.
-void RtGraphics_AnimationGroup_SerializeClips(IO::Serializer& ser, int count, void* datav) {
+// B.4: typed on `IO::Serializer&` and (B.4 Y RT) on the element: `_clips`
+// carries `Graphics::Animation`, whose three names are real Strings
+// (?Serialize@String@System@@ 0x1800c9930, by name).
+void RtGraphics_AnimationGroup_SerializeClips(IO::Serializer& ser, int count, AnimationClip* c) {
     if (count <= 0) return;
-    AnimationClip* c = static_cast<AnimationClip*>(datav);   // LEFT: FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
     for (int i = 0; i < count; ++i, ++c) {
-        StrSer(&c->_name, ser);
-        StrSer(&c->_meshName, ser);
-        StrSer(&c->_sourceName, ser);
+        c->_name.Serialize(ser);
+        c->_meshName.Serialize(ser);
+        c->_sourceName.Serialize(ser);
 
         ser._readerWriter->SerializeInt  (c->_startFrame, nullptr);
         ser._readerWriter->SerializeInt  (c->_endFrame, nullptr);
@@ -360,9 +353,7 @@ bool AnimationGroup::Serialize(IO::Stream& streamv) {
     }
     RtGraphics_AnimationGroup_SerializeClips(ser, n, _clips._data);
 
-    // +0x38 Array<{String,String,float}>, stride 0x18. LEFT: `_tags` stays a
-    // raw header (its element has no retail name), so the float at +0x10 of
-    // each element is viewed once.
+    // +0x38 Array<{String,String,float}>, stride 0x18.
     n = _tags._size;
     ser._readerWriter->SerializeInt(n, nullptr);
     if (IsReading(stream)) {
@@ -371,8 +362,8 @@ bool AnimationGroup::Serialize(IO::Stream& streamv) {
     {
         Tag* p = _tags._data;
         for (int32_t i = 0; i < n; ++i, ++p) {           // stride 0x18
-            StrSer(&p->_string00, ser);
-            StrSer(&p->_string08, ser);
+            p->_string00.Serialize(ser);
+            p->_string08.Serialize(ser);
             ser._readerWriter->SerializeFloat(p->_float10, nullptr);
         }
     }

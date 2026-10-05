@@ -68,6 +68,16 @@
 
 namespace System { class Time; }
 
+// B.4 Y RT: the hand-derived rows of `_clips` and `_tags`
+// (runtime/src/collection/array.cpp): Array<Animation> SetSize 0x180059e70
+// (element destroy = ~Animation 0x1800fb290, as ~Array 0x18001c1e0 runs it)
+// and Array<Tag> SetSize 0x18005a220 (element destroy 0x18001cbf0, as ~Array
+// 0x18001c2d0 runs it). Declared here so the two members can name them.
+namespace rtcoll {
+extern const ArraySpec kSpec_AnimClip70;
+extern const ArraySpec kSpec_TagStrStrF18;
+}
+
 namespace Graphics {
 
 // ============================================================================
@@ -150,14 +160,8 @@ public:
     // ?GetAnimation@AnimationGroup@Graphics@@QEBAAEBVAnimation@2@H@Z 0x180016660
     //   `imul $0x70` over `_clips`; it is the body that names the element type
     //   and therefore pins `Graphics::Animation`'s size. B.4: PORTED, inline
-    //   (four instructions: MOVSXD / IMUL 0x70 / ADD [RCX+0x20] / RET). The one
-    //   view of `_clips`' raw storage as its element type: `_clips` stays the raw
-    //   header because this class's real destructor runs its members' dtors, and
-    //   an `Array<Animation>` member would instantiate the element destroy of an
-    //   `Animation` whose destructor has no C++ body (LEFT, H5).
-    const Animation& GetAnimation(int index) const {
-        return reinterpret_cast<const Animation*>(_clips._data)[index];   // LEFT: H5 _clips is Array<uint8_t> raw storage of Array<Animation> (Animation has no C++ dtor body)
-    }
+    //   (four instructions: MOVSXD / IMUL 0x70 / ADD [RCX+0x20] / RET).
+    const Animation& GetAnimation(int index) const { return _clips._data[index]; }
 
     // ?GetAnimationFromName@…QEBAHPEBD@Z 0x1800fb340 — NOT PORTED
     int32_t GetAnimationFromName(const char* name) const;
@@ -193,16 +197,17 @@ public:
     // PUBLIC for the same reason `Object::External`'s are: unconverted bodies
     // reach them at these offsets through a cast.
     //
-    // The three Array members are spelled `Collection::Array<uint8_t>` — a RAW
-    // 16-byte header — and NOT `Array<Animation>` / `Array<float>`, for the
-    // reason `AnimationManager.h`'s `AnimStateRec` already spells them that way:
-    // element construction, copy and destruction for these three run through
-    // the REGISTERED `kSpec_*` rows in `runtime/src/collection/array.cpp`, at
-    // retail's own addresses, not through a C++ template instantiation. Giving
-    // the member the typed form would make the compiler emit a SECOND element
-    // lifecycle beside the ported one. The true element type is named here
-    // instead, which is what a reader needs.
-    Collection::Array<uint8_t> _clips;       // +0x20  Array<Graphics::Animation>, stride 0x70
+    // Element construction, copy and destruction of the three Arrays run
+    // through the REGISTERED `kSpec_*` rows in `runtime/src/collection/
+    // array.cpp`, at retail's own addresses; `_clips` and `_tags` name those
+    // rows as their spec, so no trait-derived element lifecycle exists.
+    // B.4 Y RT (`behaviour:`): `_clips` carries its element under retail's row
+    // (kSpec_AnimClip70), so its implicit ~Array is 0x18001c1e0's own shape
+    // (~Animation per element, then J1); the dtor body's explicit 0x18001c1e0
+    // zeroes the header first, so it runs as a no-op.
+    Collection::Array<Animation, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_AnimClip70>>
+             _clips;                         // +0x20  Array<Graphics::Animation>, stride 0x70
     float    _defaultBlend;                  // +0x30  seconds; ctor default 0.1f
     uint32_t _pad34;                         // +0x34  never written by any body read
     // `_tags`' element (B.4 R-GFX): 0x18 bytes, read from its SetSize instance
@@ -210,20 +215,22 @@ public:
     // 0x18005a306) and stores 0x3dcccccd (0.1f, the default `_defaultBlend`
     // also gets) at +0x10 (0x18005a30a); the copy adopts the two Strings and
     // copies the dword (0x18005a2c8..0x18005a2ed); the destroy releases the two
-    // Strings (0x18001cbf0). +0x14 is written by none of them. The POD String
-    // spelling, as `_name` elsewhere in this family. Names by offset: no body
+    // Strings (0x18001cbf0). +0x14 is written by none of them. B.4 Y RT
+    // (`behaviour:`): the two Strings are the real `System::String`; a Tag is
+    // built, copied and destroyed only by that row. Names by offset: no body
     // read says what the two strings and the float mean.
     struct Tag {
-        RtSystem::String _string00;          // +0x00
-        RtSystem::String _string08;          // +0x08
+        System::String _string00;            // +0x00
+        System::String _string08;            // +0x08
         float    _float10;                   // +0x10  init 0.1f
         uint32_t _pad14;                     // +0x14  never written
     };
-    // Typed: `Tag` is trivially default-constructible, copyable and
-    // destructible (POD Strings), so the member's implicit ~Array is the same
-    // free-the-buffer the raw header's was, with no element step; sizing and
-    // teardown stay on the registered rows (0x18005a220, 0x18001c2d0).
-    Collection::Array<Tag> _tags;            // +0x38  stride 0x18 (SetSize 0x18005a220)
+    // B.4 Y RT: `_tags` names retail's row (kSpec_TagStrStrF18), so its
+    // implicit ~Array is 0x18001c2d0's shape; the dtor body's explicit
+    // 0x18001c2d0 zeroes the header first, so it runs as a no-op.
+    Collection::Array<Tag, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_TagStrStrF18>>
+             _tags;                          // +0x38  stride 0x18 (SetSize 0x18005a220)
     // B.4: typed. `float` is trivially destructible, so the member dtor
     // ~AnimationGroup runs is the same Clear-then-J1 as the raw header's.
     Collection::Array<float> _blendTimes;    // +0x48  the fade table
@@ -237,9 +244,9 @@ static_assert(offsetof(AnimationGroup, _defaultBlend)== 0x30, "AnimationGroup::_
 static_assert(offsetof(AnimationGroup, _tags)        == 0x38, "AnimationGroup::_tags @ +0x38");
 static_assert(offsetof(AnimationGroup, _blendTimes)  == 0x48, "AnimationGroup::_blendTimes @ +0x48");
 static_assert(sizeof(AnimationGroup::Tag) == 0x18, "AnimationGroup::Tag stride 0x18 (0x18005a220)");
-static_assert(std::is_trivially_destructible<AnimationGroup::Tag>::value &&
-              std::is_trivially_default_constructible<AnimationGroup::Tag>::value,
-              "Tag stays trivial: `_tags`' implicit ~Array must run no element step");
+static_assert(!std::is_trivially_destructible<AnimationGroup::Tag>::value,
+              "Tag holds two real Strings (B.4 Y RT): `_tags` takes retail's row, "
+              "never the trait-derived one");
 static_assert(offsetof(AnimationGroup::Tag, _string00) == 0x00, "Tag +0x00 String");
 static_assert(offsetof(AnimationGroup::Tag, _string08) == 0x08, "Tag +0x08 String");
 static_assert(offsetof(AnimationGroup::Tag, _float10)  == 0x10, "Tag +0x10 float (init 0.1f)");
