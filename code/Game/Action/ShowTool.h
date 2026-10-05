@@ -39,6 +39,7 @@ public:
 };
 
 static_assert(sizeof(ShowTool) == 0x30, "ShowTool is 0x30 (create 0x1400013b0 MemAlloc)");
+static_assert(offsetof(ShowTool, _pad2C) == 0x2C, "ShowTool::_pad2C");
 static_assert(alignof(ShowTool) == 8, "ShowTool is 8-aligned");
 static_assert(offsetof(ShowTool, _field20) == 0x20, "ShowTool +0x20");
 static_assert(offsetof(ShowTool, _field28) == 0x28, "ShowTool +0x28");

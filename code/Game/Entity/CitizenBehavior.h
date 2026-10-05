@@ -223,6 +223,7 @@ struct CitizenBucketEntities {
     int32_t           capacity;   // +0x0C
 };
 static_assert(sizeof(CitizenBucketEntities) == 0x10, "the array record 0x140015ec0 copies");
+static_assert(offsetof(CitizenBucketEntities, data) == 0x0, "CitizenBucketEntities::data");
 static_assert(offsetof(CitizenBucketEntities, count)    == 0x08, "");
 static_assert(offsetof(CitizenBucketEntities, capacity) == 0x0C, "");
 

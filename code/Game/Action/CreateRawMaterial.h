@@ -52,6 +52,7 @@ public:
 };
 
 static_assert(sizeof(CreateRawMaterial) == 0x58, "CreateRawMaterial is 0x58 (create 0x1400222d0 MemAlloc)");
+static_assert(offsetof(CreateRawMaterial, _pad52) == 0x52, "CreateRawMaterial::_pad52");
 static_assert(alignof(CreateRawMaterial) == 8, "CreateRawMaterial is 8-aligned");
 static_assert(offsetof(CreateRawMaterial, descEntity) == 0x20, "CreateRawMaterial +0x20");
 static_assert(offsetof(CreateRawMaterial, sourceBuilding) == 0x28, "CreateRawMaterial +0x28");

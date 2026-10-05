@@ -62,12 +62,17 @@ public:
 };
 
 static_assert(sizeof(PickupStoredRawMaterial::Entry) == 0x10, "PickupStoredRawMaterial list stride 0x10");
+static_assert(offsetof(PickupStoredRawMaterial::Entry, material) == 0x0, "Entry::material");
 static_assert(offsetof(PickupStoredRawMaterial::Entry, count) == 0x08, "Entry +0x08");
 static_assert(offsetof(PickupStoredRawMaterial::Entry, reserved) == 0x0C, "Entry +0x0C");
 static_assert(offsetof(PickupStoredRawMaterial, _field30.capacity) == 0x3C, "PickupStoredRawMaterial +0x3C");
 static_assert(sizeof(PickupStoredRawMaterial::EntryList) == 0x10, "Array<Entry> header");
+static_assert(offsetof(PickupStoredRawMaterial::EntryList, data) == 0x0, "EntryList::data");
+static_assert(offsetof(PickupStoredRawMaterial::EntryList, count) == 0x8, "EntryList::count");
+static_assert(offsetof(PickupStoredRawMaterial::EntryList, capacity) == 0xC, "EntryList::capacity");
 
 static_assert(sizeof(PickupStoredRawMaterial) == 0x48, "PickupStoredRawMaterial is 0x48 (create 0x140022d60 MemAlloc)");
+static_assert(offsetof(PickupStoredRawMaterial, _pad41) == 0x41, "PickupStoredRawMaterial::_pad41");
 static_assert(alignof(PickupStoredRawMaterial) == 8, "PickupStoredRawMaterial is 8-aligned");
 static_assert(offsetof(PickupStoredRawMaterial, _field20) == 0x20, "PickupStoredRawMaterial +0x20");
 static_assert(offsetof(PickupStoredRawMaterial, _field28) == 0x28, "PickupStoredRawMaterial +0x28");

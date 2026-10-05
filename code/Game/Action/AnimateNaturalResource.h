@@ -40,6 +40,7 @@ public:
 };
 
 static_assert(sizeof(AnimateNaturalResource) == 0x30, "AnimateNaturalResource is 0x30 (create 0x140021dc0 MemAlloc)");
+static_assert(offsetof(AnimateNaturalResource, _pad2D) == 0x2D, "AnimateNaturalResource::_pad2D");
 static_assert(alignof(AnimateNaturalResource) == 8, "AnimateNaturalResource is 8-aligned");
 static_assert(offsetof(AnimateNaturalResource, _field20) == 0x20, "AnimateNaturalResource +0x20");
 static_assert(offsetof(AnimateNaturalResource, animIndex) == 0x28, "AnimateNaturalResource +0x28");

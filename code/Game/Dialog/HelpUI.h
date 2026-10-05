@@ -36,6 +36,8 @@ struct HelpHistoryEntry {
     float   scrollY;     // +0x04 the scroll bar's GetCurrentValue()
 };
 static_assert(sizeof(HelpHistoryEntry) == 8, "HelpHistoryEntry is 8 (the +0x68 array stride)");
+static_assert(offsetof(HelpHistoryEntry, pageIndex) == 0x0, "HelpHistoryEntry::pageIndex");
+static_assert(offsetof(HelpHistoryEntry, scrollY) == 0x4, "HelpHistoryEntry::scrollY");
 
 class HelpUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(HelpUI)

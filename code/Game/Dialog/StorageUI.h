@@ -30,6 +30,7 @@ struct StorageUIRow {
     UI::Element*       cell;           // +0x10 the table cell (InternalPtr<Element>)
 };
 static_assert(sizeof(StorageUIRow) == 0x18, "StorageUI row stride 0x18 (0x1400b8820)");
+static_assert(offsetof(StorageUIRow, labelStorage) == 0x0, "StorageUIRow::labelStorage");
 static_assert(offsetof(StorageUIRow, numberCount) == 0x08, "StorageUIRow::numberCount @ +0x08");
 static_assert(offsetof(StorageUIRow, cell) == 0x10, "StorageUIRow::cell @ +0x10");
 

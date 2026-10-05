@@ -47,6 +47,7 @@ public:
 };
 
 static_assert(sizeof(PerformWork) == 0x48, "PerformWork is 0x48 (create 0x140022b90 MemAlloc)");
+static_assert(offsetof(PerformWork, _pad41) == 0x41, "PerformWork::_pad41");
 static_assert(alignof(PerformWork) == 8, "PerformWork is 8-aligned");
 static_assert(offsetof(PerformWork, workTarget) == 0x20, "PerformWork +0x20");
 static_assert(offsetof(PerformWork, facingYaw) == 0x28, "PerformWork +0x28");

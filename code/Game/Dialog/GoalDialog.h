@@ -33,6 +33,9 @@ struct GoalDialogRow {
     Object::InternalPtr<UI::Element> textGoal;        // +0x10 the goal's text (a TextElement)
 };
 static_assert(sizeof(GoalDialogRow) == 0x18, "GoalDialogRow is 0x18 (the +0xb8 array stride)");
+static_assert(offsetof(GoalDialogRow, imageComplete) == 0x0, "GoalDialogRow::imageComplete");
+static_assert(offsetof(GoalDialogRow, imageFail) == 0x8, "GoalDialogRow::imageFail");
+static_assert(offsetof(GoalDialogRow, textGoal) == 0x10, "GoalDialogRow::textGoal");
 
 class GoalDialog final : public UI::DialogInstance {
     DECLARE_EXE_TYPE(GoalDialog)

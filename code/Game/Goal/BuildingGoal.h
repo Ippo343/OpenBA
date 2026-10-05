@@ -56,4 +56,5 @@ static_assert(offsetof(BuildingGoal, _field30) == 0x30, "BuildingGoal +0x30 requ
 static_assert(offsetof(BuildingGoal, _field38) == 0x38, "BuildingGoal +0x38 entry array");
 static_assert(offsetof(BuildingGoal, _field38) + offsetof(NamedExternalRefArray, _size) == 0x40, "BuildingGoal +0x40 entry count");
 static_assert(sizeof(BuildingGoal) == 0x48, "BuildingGoal is 0x48 (create 0x140025d80 MemAlloc(0x48))");
+static_assert(offsetof(BuildingGoal, _pad31) == 0x31, "BuildingGoal::_pad31");
 static_assert(alignof(BuildingGoal) == 8, "BuildingGoal is qword-aligned");

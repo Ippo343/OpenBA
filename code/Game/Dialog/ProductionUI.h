@@ -28,6 +28,8 @@ struct ProductionUIRow {
     UI::NumberElement* numberCount;    // +0x08
 };
 static_assert(sizeof(ProductionUIRow) == 0x10, "ProductionUIRow is 0x10");
+static_assert(offsetof(ProductionUIRow, labelStorage) == 0x0, "ProductionUIRow::labelStorage");
+static_assert(offsetof(ProductionUIRow, numberCount) == 0x8, "ProductionUIRow::numberCount");
 
 class ProductionUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(ProductionUI)

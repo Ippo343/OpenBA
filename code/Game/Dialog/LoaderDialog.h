@@ -45,4 +45,5 @@ public:
 static_assert(offsetof(LoaderDialog, loadingImage) == 0xB8, "LoaderDialog +0xb8");
 static_assert(offsetof(LoaderDialog, rotation) == 0xC0, "LoaderDialog +0xc0");
 static_assert(sizeof(LoaderDialog) == 0xC8, "LoaderDialog is 0xc8 (create 0x140020bb0)");
+static_assert(offsetof(LoaderDialog, _padC4) == 0xC4, "LoaderDialog::_padC4");
 static_assert(alignof(LoaderDialog) == 8, "LoaderDialog is qword-aligned");

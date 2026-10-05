@@ -45,6 +45,7 @@ public:
 };
 
 static_assert(sizeof(HuntAnimal) == 0x40, "HuntAnimal is 0x40 (create 0x140022700 MemAlloc)");
+static_assert(offsetof(HuntAnimal, _pad39) == 0x39, "HuntAnimal::_pad39");
 static_assert(alignof(HuntAnimal) == 8, "HuntAnimal is 8-aligned");
 static_assert(offsetof(HuntAnimal, _field20) == 0x20, "HuntAnimal +0x20");
 static_assert(offsetof(HuntAnimal, _field28) == 0x28, "HuntAnimal +0x28");

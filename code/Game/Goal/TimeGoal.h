@@ -50,4 +50,5 @@ public:
 static_assert(offsetof(TimeGoal, requiredYears) == 0x30, "TimeGoal::requiredYears offset");
 static_assert(offsetof(TimeGoal, requireOtherGoalsMet) == 0x34, "TimeGoal::requireOtherGoalsMet offset");
 static_assert(sizeof(TimeGoal) == 0x38, "TimeGoal is 0x38 (create 0x1400266f0 MemAlloc(0x38))");
+static_assert(offsetof(TimeGoal, _pad35) == 0x35, "TimeGoal::_pad35");
 static_assert(alignof(TimeGoal) == 8, "TimeGoal is qword-aligned");
