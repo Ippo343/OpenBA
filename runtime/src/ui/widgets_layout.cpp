@@ -83,16 +83,6 @@ inline void WalkDirty(UI::Element* self) {
 // ?UpdateContainers@TabElement@UI@@AEAAXXZ (0x1800d9710) is `UI::TabElement::
 // UpdateContainers` (tabelement.cpp); called as a member.
 
-// ??4String@System@@QEAAAEAV01@AEBV01@@Z -- System::String::operator=.
-//
-// B.3.1 bridge: the destination is a slot in the untyped array storage
-// TextElement keeps its parameters in, so the eight bytes are cast here at the
-// one use site; the cast dies when Collection::Array<T> is a template.
-void RtStringAssign(void* self, const void* other) {
-    *reinterpret_cast<System::String*>(self) =   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-        *reinterpret_cast<const System::String*>(other);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-}
-
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0), called by name.
 void RtMemFree(void* p) {
     System::MemoryAllocator::MemFree(p);
@@ -307,7 +297,7 @@ void LabelElement::SetSprite(const Sprite* sprite) {
 void TextElement::SetParameter(int32_t index, const System::String& value) {
     if (index >= 0 && index < _params._size) {
         WalkDirty(this);
-        RtStringAssign(&_params._data[index], &value);
+        _params._data[index] = value;          // ??4String@System@@ 0x1800c9810
         CacheText();
     }
 }
