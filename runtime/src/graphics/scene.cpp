@@ -521,7 +521,7 @@ void DetachBody(::Graphics::Geometry* self, ::Graphics::Geometry* child) {
 // are retired; this member is the only body.
 // ============================================================================
 Graphics::Geometry::Geometry() {
-    RtGraphics::Geometry* const self = reinterpret_cast<RtGraphics::Geometry*>(this);   // B.3.8 bridge (the POD view)  // LEFT: audit WORK, not executed this pass (POD unit RtGraphics::Geometry (doable)); blocker; POD Geometry ctor writes through the RtGraphics view (closing wave)
+    Geometry* const self = this;   // B.4: the class's own fields (the POD view retired)
     self->_attachParent      = nullptr;
     self->_attachNode        = -1;
     self->_attached._data    = nullptr;
