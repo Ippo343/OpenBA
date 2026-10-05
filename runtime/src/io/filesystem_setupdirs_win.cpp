@@ -137,7 +137,6 @@ namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
-using RtSystem::WideString;
 using RtSystem::StringRefCount;
 using RtSystem::RtMemAlloc;
 using RtSystem::RtMemFree;

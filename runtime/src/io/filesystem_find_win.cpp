@@ -380,7 +380,6 @@ namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
-using RtSystem::WideString;
 using RtSystem::RtString_ReleaseInline;
 using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 

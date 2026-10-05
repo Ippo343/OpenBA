@@ -502,10 +502,7 @@ UNIT_TEST(the_pod_and_the_class_agree_about_which_bytes_the_fields_are) {
 
 UNIT_TEST(system_widestring_is_8_bytes_and_aliases_the_pod_field_for_field) {
     CHECK_EQ(sizeof(System::WideString), static_cast<size_t>(8));
-    CHECK_EQ(sizeof(System::WideString), sizeof(RtSystem::WideString));
-    CHECK_EQ(alignof(System::WideString), alignof(RtSystem::WideString));
     CHECK_EQ(offsetof(System::WideString, _data), static_cast<size_t>(0x00));
-    CHECK_EQ(offsetof(System::WideString, _data), offsetof(RtSystem::WideString, data));
     CHECK(!std::is_polymorphic<System::WideString>::value);
     CHECK(std::is_standard_layout<System::WideString>::value);
 
@@ -520,37 +517,11 @@ UNIT_TEST(the_widestring_class_destroys_and_the_widestring_pod_does_not) {
     // destructor has been deleted and the `??1` door releases nothing.
     CHECK(!std::is_trivially_destructible<System::WideString>::value);
 
-    // The POD must stay trivial: `platform_startup_win.cpp`,
-    // `application_win.cpp`, `updateloop_loadresources.cpp` and
-    // `value_types.cpp` each hold one by value and call the door by hand. A
-    // destructor here would run a SECOND release at scope exit — the
-    // `RtSystem::String` double-free, B34_RULES 1.5 rule 3.
-    CHECK(std::is_trivially_destructible<RtSystem::WideString>::value);
-
     // Retail exports no `??0WideString@System@@QEAA@XZ`, and an implicit
     // default constructor would let `System::WideString w;` leave `_data`
     // uninitialised for that destructor to release. The three real
     // constructors (0x1800cab50 / 0x18000a6e0 / 0x1800cb110) suppress it.
     CHECK(!std::is_default_constructible<System::WideString>::value);
-    CHECK(std::is_trivially_default_constructible<RtSystem::WideString>::value);
-}
-
-UNIT_TEST(a_widestring_written_through_the_pod_reads_back_through_the_class) {
-    // The live mixed state, as PART D does for Thread and PART E for the value
-    // types: the four by-value holders write the POD spelling and the ported
-    // bodies read the class spelling, on the same eight bytes.
-    wchar_t chars[4] = { L'a', L'b', 0, 0 };
-
-    RtSystem::WideString pod{};
-    CHECK(pod.data == nullptr);
-    pod.data = chars;
-
-    System::WideString* asClass = reinterpret_cast<System::WideString*>(&pod);
-    CHECK(asClass->_data == chars);
-    CHECK_EQ(asClass->_data[0], L'a');
-
-    asClass->_data = nullptr;          // what the sharing branch of Release does
-    CHECK(pod.data == nullptr);
 }
 
 // ===========================================================================
