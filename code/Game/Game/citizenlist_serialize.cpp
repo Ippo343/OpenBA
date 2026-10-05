@@ -205,7 +205,7 @@ void SerializeIBPArray(CitizenPtrList<T>& list, IO::Serializer* serializer, uint
     for (int32_t i = 0; i < count; ++i) {
         T** elem = &arr[i];
         // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: B4 H5-P2 (not reached): this one template serves every CitizenBehavior IBP array (+0x00 / +0x10 / +0x20 / +0x30, healers, citizens, pastures, cemeteries, happiness, attendance, livestock, herds, diseases, populations, buildComponents, wells) and the two bucket-node entity arrays, each held as Collection::Array<T*> where retail's element is InternalPtr<T>: the cast goes when the LAST of them is retyped (one element retype + reader sweep per array, as EntityList's UpdateBucket was)
+        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: B4 fin-F2 (measured, not done): the cast goes when the 16 IBP members and the bucket entity list are CitizenIbpList<T> (Array<InternalPtr<T>>, kSpec_PtrZero); that retype breaks about 170 reader lines in 49 files (code/Game Component, Dialog, Entity, Game, Goal, Tutorial, Work, Action and standalone harnesses: T* / T** reads of the elements) and was not reached
         T* val = *elem;
         if (val != nullptr) {
             if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
