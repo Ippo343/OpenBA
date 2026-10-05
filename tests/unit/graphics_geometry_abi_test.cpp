@@ -183,7 +183,7 @@ UNIT_TEST(graphics_derived_fields_begin_at_end_of_base) {
     CHECK_EQ(offsetof(Graphics::ParticleInstance, _resource), (size_t)0xc0);
     CHECK_EQ(offsetof(Graphics::AmbientLight, _colour),       (size_t)0xc0);
     CHECK_EQ(offsetof(Graphics::SpotLight, _frustum),         (size_t)0xc0);
-    CHECK_EQ(offsetof(Graphics::SunLight, _dirX),             (size_t)0xc0);
+    CHECK_EQ(offsetof(Graphics::SunLight, _direction),        (size_t)0xc0);
     // and the one that is two levels deep
     CHECK_EQ(offsetof(Graphics::ParticleSystemInstance, _f_d8),
              sizeof(Graphics::ParticleInstance));
@@ -262,10 +262,10 @@ UNIT_TEST(graphics_light_field_offsets_authored_from_retail) {
 
     // SunLight: the eleven scalars `?Set@SunLight@` copies, the +0xEC hole no
     // body writes, and the three owned pointers.
-    CHECK_EQ(offsetof(Graphics::SunLight, _dirZ),         (size_t)0xC8);
-    CHECK_EQ(offsetof(Graphics::SunLight, _sunR),         (size_t)0xCC);
-    CHECK_EQ(offsetof(Graphics::SunLight, _ambientR),     (size_t)0xDC);
-    CHECK_EQ(offsetof(Graphics::SunLight, _ambientA),     (size_t)0xE8);
+    CHECK_EQ(offsetof(Graphics::SunLight, _direction) + 8, (size_t)0xC8);
+    CHECK_EQ(offsetof(Graphics::SunLight, _sun),          (size_t)0xCC);
+    CHECK_EQ(offsetof(Graphics::SunLight, _ambient),      (size_t)0xDC);
+    CHECK_EQ(offsetof(Graphics::SunLight, _ambient) + 12, (size_t)0xE8);
     CHECK_EQ(offsetof(Graphics::SunLight, _holdEC),       (size_t)0xEC);
     CHECK_EQ(offsetof(Graphics::SunLight, _colourTarget), (size_t)0xF0);
     CHECK_EQ(offsetof(Graphics::SunLight, _depthTarget),  (size_t)0xF8);

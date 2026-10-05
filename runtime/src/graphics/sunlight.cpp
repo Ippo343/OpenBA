@@ -272,17 +272,17 @@ void SunLight::Set(const Math::Vector3& direction, const Math::Vector4& sun,
     const float* const ambientP = &ambient.x;
 
     // ---- the eleven copies, in the shipped order -------------------------
-    _dirX     = dir[0];
-    _dirY     = dir[1];
-    _dirZ     = dir[2];
-    _sunR     = sunP[0];
-    _sunG     = sunP[1];
-    _sunB     = sunP[2];
-    _sunA     = sunP[3];
-    _ambientR = ambientP[0];
-    _ambientG = ambientP[1];
-    _ambientB = ambientP[2];
-    _ambientA = ambientP[3];
+    _direction.x     = dir[0];
+    _direction.y     = dir[1];
+    _direction.z     = dir[2];
+    _sun.x     = sunP[0];
+    _sun.y     = sunP[1];
+    _sun.z     = sunP[2];
+    _sun.w     = sunP[3];
+    _ambient.x = ambientP[0];
+    _ambient.y = ambientP[1];
+    _ambient.z = ambientP[2];
+    _ambient.w = ambientP[3];
 
     // ---- the two rebuild branches ----------------------------------------
     if (DeviceSupportsColourShadowTarget() && _colourTarget == nullptr) {
@@ -329,10 +329,8 @@ void SunLight::Set(const Math::Vector3& direction, const Math::Vector4& sun,
 // gone).
 // ============================================================================
 void Graphics::SunLight::InitFields() {
-    _dirX = 0.0f;  _dirY = 0.0f;  _dirZ = -1.0f;
-    _sunR = 1.0f;  _sunG = 1.0f;  _sunB = 1.0f;  _sunA = 1.0f;
-    _ambientR = 0.0f; _ambientG = 0.0f; _ambientB = 0.0f;
-    _ambientA = 1.0f;
+    // +0xC0..+0xE8 (_direction, _sun, _ambient) are SunLight()'s
+    // mem-initialisers (SunLight.h): retail's first stores after the stamps.
     // +0xEC is NOT written by retail and is NOT written here.
     _colourTarget = nullptr;
     _depthTarget  = nullptr;

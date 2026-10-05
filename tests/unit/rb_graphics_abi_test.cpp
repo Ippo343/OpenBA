@@ -134,7 +134,7 @@ void SpotLight::AddDrawItems(const Scene&, Renderer&) const {}
 void SpotLight::DrawShadowMap(Video::Context&, Renderer&, int, int) const {}
 void SpotLight::DrawLight(Video::Context&, Renderer&, int, int, int, int) const {}
 
-void SunLight::InitFields()    { Log(kSlInit, this); _dirZ = -1.0f; }
+void SunLight::InitFields()    { Log(kSlInit, this); }
 void SunLight::ReleaseFields() { Log(kSlRel, this); }
 void SunLight::Update(const System::Time&) {}
 void SunLight::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}

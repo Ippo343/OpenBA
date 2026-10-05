@@ -104,7 +104,8 @@ public:
     // are the compiler's; InitFields is the rest of retail's body. ENDGAME
     // B.3.9 pilot: the ??0/??1 doors and `DoorBody` are gone -- the exe's one
     // builder spells `::new (p) Graphics::SunLight()` (B39_RULES D1).
-    SunLight() { InitFields(); }
+    SunLight() : _direction(0.0f, 0.0f, -1.0f), _sun(1.0f, 1.0f, 1.0f, 1.0f),
+                 _ambient(0.0f, 0.0f, 0.0f, 1.0f) { InitFields(); }
 
     // [0] CONCRETE: the exe copy's slot 0 is its scalar deleting dtor
     // 0x140019e40 (~SunLight, MemFree on flags & 1) -- the table every SunLight
@@ -155,18 +156,14 @@ private:
     void ReleaseFields();   // sunlight.cpp
 
 public:
-    float    _dirX;             // +0xC0  ctor 0.0f
-    float    _dirY;             // +0xC4  ctor 0.0f
-    float    _dirZ;             // +0xC8  ctor -1.0f
-    float    _sunR;             // +0xCC  ctor 1.0f
-    float    _sunG;             // +0xD0  ctor 1.0f
-    float    _sunB;             // +0xD4  ctor 1.0f
-    float    _sunA;             // +0xD8  ctor 1.0f
-    float    _ambientR;         // +0xDC  ctor 0.0f
-    float    _ambientG;         // +0xE0  ctor 0.0f
-    float    _ambientB;         // +0xE4  ctor 0.0f
-    float    _ambientA;         // +0xE8  ctor 1.0f
-    uint32_t _holdEC;           // +0xEC  NEVER WRITTEN by ctor, Set or dtor
+    // The three `?Set@SunLight@` arguments (0x180107f10). Retail's ctor
+    // (0x1801081f0) stores them FIRST after the two stamps, before +0xF0:
+    // that is the mem-initialiser list of SunLight() above, with the values
+    // retail stores; the dtor (0x180108160) does not touch them.
+    Math::Vector3 _direction;   // +0xC0  ctor (0, 0, -1)
+    Math::Vector4 _sun;         // +0xCC  ctor (1, 1, 1, 1)
+    Math::Vector4 _ambient;     // +0xDC  ctor (0, 0, 0, 1)
+    uint32_t _holdEC;          // +0xEC  NEVER WRITTEN by ctor, Set or dtor
     // B.4: the three pointers carry their classes (the bytes are unchanged).
     Video::ImageBuffer*  _colourTarget;  // +0xF0  (capability-gated)
     Video::ImageBuffer*  _depthTarget;   // +0xF8  (always built)
@@ -176,20 +173,12 @@ public:
 static_assert(sizeof(SunLight) == 0x108,
               "Graphics::SunLight is 0x108 bytes (both exe call sites MemAlloc "
               "exactly 0x108, and the deleting dtor 0x180064620 agrees)");
-static_assert(offsetof(SunLight, _dirY) == 0xC4, "SunLight::_dirY");
-static_assert(offsetof(SunLight, _sunG) == 0xD0, "SunLight::_sunG");
-static_assert(offsetof(SunLight, _sunB) == 0xD4, "SunLight::_sunB");
-static_assert(offsetof(SunLight, _ambientG) == 0xE0, "SunLight::_ambientG");
-static_assert(offsetof(SunLight, _ambientB) == 0xE4, "SunLight::_ambientB");
 static_assert(alignof(SunLight) == 8, "qword aligned (the vptr)");
 
 
-static_assert(offsetof(SunLight, _dirX)         == 0xC0,  "SunLight::_dirX @ +0xC0 (??0 0x1801081f0)");
-static_assert(offsetof(SunLight, _dirZ)         == 0xC8,  "SunLight::_dirZ @ +0xC8 (-1.0f)");
-static_assert(offsetof(SunLight, _sunR)         == 0xCC,  "SunLight::_sunR @ +0xCC (Set arg 2)");
-static_assert(offsetof(SunLight, _sunA)         == 0xD8,  "SunLight::_sunA @ +0xD8");
-static_assert(offsetof(SunLight, _ambientR)     == 0xDC,  "SunLight::_ambientR @ +0xDC (Set arg 3)");
-static_assert(offsetof(SunLight, _ambientA)     == 0xE8,  "SunLight::_ambientA @ +0xE8");
+static_assert(offsetof(SunLight, _direction)    == 0xC0,  "SunLight::_direction @ +0xC0 (??0 0x1801081f0; .z = -1.0f @ +0xC8)");
+static_assert(offsetof(SunLight, _sun)          == 0xCC,  "SunLight::_sun @ +0xCC (Set arg 2)");
+static_assert(offsetof(SunLight, _ambient)      == 0xDC,  "SunLight::_ambient @ +0xDC (Set arg 3; .w @ +0xE8)");
 static_assert(offsetof(SunLight, _holdEC)       == 0xEC,  "SunLight::+0xEC is never written by any of the three bodies");
 static_assert(offsetof(SunLight, _colourTarget) == 0xF0,  "SunLight::_colourTarget @ +0xF0 (Usage 0 = render target)");
 static_assert(offsetof(SunLight, _depthTarget)  == 0xF8,  "SunLight::_depthTarget @ +0xF8 (Usage 1 = depth)");

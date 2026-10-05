@@ -335,14 +335,12 @@ public:
     void SetCamera(const Math::Matrix& view,
                    const Math::Matrix& projection);                // 0x18001a150
     void SetBones(int32_t count, const Math::Matrix* matrices);    // 0x18001a780
-    // 0x18001a950. The parameter list is (const Vector3& direction,
-    // const Vector3& attenuation, const Vector4& colour,
-    // const Vector4& position, float, float, int) — the two Vector3s are read
-    // as three consecutive floats and the two Vector4s as four consecutive
-    // DWORDS (the colour and position are copied, never arithmetic), which is
-    // why the ported body in batchc_context_setlight.cpp takes raw pointers.
-    void SetLight(const void* direction, const void* attenuation,
-                  const void* colour, const void* position,
+    // 0x18001a950 `?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z`:
+    // (const Vector3& direction, const Vector3& attenuation, const Vector4& colour,
+    // const Vector4& position, float, float, int). The two Vector3s are read as
+    // three floats; the two Vector4s are COPIED as four dwords (no arithmetic).
+    void SetLight(const Math::Vector3& direction, const Math::Vector3& attenuation,
+                  const Math::Vector4& colour, const Math::Vector4& position,
                   float nearPlane, float farPlane,
                   int32_t shadowResolution);
     void Reset();                                                  // 0x1800f1e50
