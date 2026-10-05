@@ -770,23 +770,23 @@ static void AppendIndex(RawArray<uint16_t>* a, short valueForNew) {
 void WorldGeometry::RebuildRoadMesh(Map* map) {
     RawArray<GeometryBatch>* meshBatches = &_roadBatches;    // +0x200 (local_a8)
     const RawArray<Object::External*>* sources = &_batchMaterials; // +0x210
-    RawArray<int32_t>* counters = &_batchCounters;           // +0x220
+    Collection::Array<int32_t>* counters = &_batchCounters;  // +0x220
     Reimpl_Struct60B_Resize(meshBatches, 0);                                // f250(local_a8, 0)
 
     int vtxOff = (_gridSize - _fieldC4) >> 1; // iVar12
 
     // Phase 1: counter array length sync (vs the batch count) then zero every counter.
-    if (counters->size != sources->size) {
-        // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize. I32NoInit —
-        // the grown tail is left as the allocation found it, exactly as retail's helper
-        // does at 1400af3df. Safe: the counter-zeroing loop right below (retail
-        // 1400af400) writes all the elements before anything reads one.
-        GameColl::AsArray<GameColl::I32NoInit>(counters).SetSize(sources->size);
+    if (counters->_size != sources->size) {
+        // FUN_1400021d0 == Collection::Array<int32>::SetSize: the grown tail is left as
+        // the allocation found it, exactly as retail's helper does at 1400af3df. Safe:
+        // the counter-zeroing loop right below (retail 1400af400) writes all the
+        // elements before anything reads one.
+        counters->SetSize(sources->size);
     }
     {
-        int cnt = counters->size;
+        int cnt = counters->_size;
         for (int i = 0; i < cnt; i++)
-            counters->data[i] = 0;
+            counters->_data[i] = 0;
     }
 
     // Phase 2: local working batch array, sized to the batch count.
@@ -845,7 +845,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
                                 if (batchId != 0xff) {
                                     if (blendId == 0xff) {
-                                        counters->data[batchId] += 1;
+                                        counters->_data[batchId] += 1;
                                     }
 
                                     // ---- 3x3 corner-occupancy mask local_f0[0..8] ----

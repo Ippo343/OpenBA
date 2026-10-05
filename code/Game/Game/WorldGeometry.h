@@ -143,7 +143,12 @@ public:
     WorldGeometryArray<GeometryBatch, &GeometryBatchArray_Release>
                                           _roadBatches;       // +0x200 0x60-byte batches, mode 0x4000
     WorldGeometryArray<Object::External*> _batchMaterials;    // +0x210 per-batch material refs
-    WorldGeometryArray<int32_t>           _batchCounters;     // +0x220 per-batch fill counters
+    // +0x220: a real Collection::Array<int32_t>, the last member: retail's ctor zeroes
+    // +0x220 / +0x228 as its last two qword member stores (0x1400b01ff / 0x1400b0206,
+    // before the +0x30 body store) and the dtor body 0x1400aed50 releases it FIRST
+    // (MemFree, fields zeroed). Grows through 0x1400021d0 (stride 4, tail as found:
+    // the trait row of int32_t).
+    Collection::Array<int32_t>            _batchCounters;     // +0x220 per-batch fill counters
 };
 
 static_assert(sizeof(WorldGeometry) == 0x230, "WorldGeometry is MemAlloc(0x230)");
@@ -175,3 +180,4 @@ static_assert(offsetof(WorldGeometry, _decals) == 0x1F0, "+0x1F0");
 static_assert(offsetof(WorldGeometry, _roadBatches) == 0x200, "+0x200");
 static_assert(offsetof(WorldGeometry, _batchMaterials) == 0x210, "+0x210");
 static_assert(offsetof(WorldGeometry, _batchCounters) == 0x220, "+0x220");
+static_assert(offsetof(WorldGeometry, _batchCounters) + offsetof(Collection::Array<int32_t>, _size) == 0x228, "+0x228");

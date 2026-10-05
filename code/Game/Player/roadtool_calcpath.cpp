@@ -121,7 +121,7 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object:
     if (!mgr) return;
 
     RawArray<Object::External*>& refs = mgr->_batchMaterials;   // +0x210
-    RawArray<int32_t>& ints = mgr->_batchCounters;              // +0x220
+    Collection::Array<int32_t>& ints = mgr->_batchCounters;     // +0x220
     int oldCount = refs.size;   // +0x218
     int needed   = index + 1;
     if (oldCount < needed) {
@@ -130,8 +130,8 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object:
         // Zero the freshly grown tail of the int array. Retail bounds this by the int
         // array's own dword at +0x228 (0x1400acdd8 / 0x1400ace01: CMP EBX,[RDI+0x228]) -- the
         // low dword of its {data, size|capacity} header, i.e. its size -- NOT by `needed`.
-        int intCount = ints.size;   // +0x228
-        int32_t* intBase = ints.data;
+        int intCount = ints._size;   // +0x228
+        int32_t* intBase = ints._data;
         if (intBase) {
             for (int i = oldCount; i < intCount; ++i)
                 intBase[i] = 0;
