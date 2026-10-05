@@ -644,6 +644,7 @@ static_assert(offsetof(Context, _boneAndProjectionStaging) == 0x0418, "Context::
 static_assert(offsetof(Context, _transforms)            == 0x10d8, "Context::_transforms");
 static_assert(offsetof(Context, _lightStaging)          == 0x1dd8, "Context::_lightStaging");
 static_assert(sizeof(Context::LightStaging) == 0x1a0, "Context::LightStaging is 0x1a0 bytes");
+static_assert(offsetof(Context::LightStaging, colour) == 0x0, "LightStaging::colour");
 static_assert(offsetof(Context::LightStaging, position)       == 0x10, "LightStaging::position");
 static_assert(offsetof(Context::LightStaging, direction)      == 0x20, "LightStaging::direction");
 static_assert(offsetof(Context::LightStaging, attenuation)    == 0x30, "LightStaging::attenuation");
@@ -678,6 +679,15 @@ static_assert(offsetof(Context, _contextData)           == 0x2160, "Context::_co
 
 // The allocation size in Engine::MainLoop::CreateVideoContext (0x1800dd500).
 static_assert(sizeof(Context) == 0x2168, "sizeof(Video::Context) == 0x2168");
+static_assert(offsetof(Context, _unknown0014) == 0x14, "Context::_unknown0014");
+static_assert(offsetof(Context, _unknown01c4) == 0x1C4, "Context::_unknown01c4");
+static_assert(offsetof(Context, _unknown03b8) == 0x3B8, "Context::_unknown03b8");
+static_assert(offsetof(Context, _unknown20ec) == 0x20EC, "Context::_unknown20ec");
+static_assert(offsetof(Context, _unknown2100) == 0x2100, "Context::_unknown2100");
+static_assert(offsetof(Context, _unknown2108) == 0x2108, "Context::_unknown2108");
+static_assert(offsetof(Context, _unknown2114) == 0x2114, "Context::_unknown2114");
+static_assert(offsetof(Context, _unknown2120) == 0x2120, "Context::_unknown2120");
+static_assert(offsetof(Context, _unknown2128) == 0x2128, "Context::_unknown2128");
 static_assert(alignof(Context) == 8, "Video::Context is qword-aligned (MemAlloc's align 8)");
 
 // The property that makes the 0x2168-byte block a flat block: nine files read

@@ -245,6 +245,8 @@ static_assert(sizeof(ConstantBuffer) == 0x48,
               "Video::ConstantBuffer is 0x48 bytes — the STRIDE between the "
               "seven instances embedded in Video::Context (0x2e0 - 0x298, and "
               "the five at 0x1f78/0x1fc0/0x2008/0x2050/0x2098)");
+static_assert(offsetof(ConstantBuffer, _pad1a) == 0x1A, "ConstantBuffer::_pad1a");
+static_assert(offsetof(ConstantBuffer, _unknown24) == 0x24, "ConstantBuffer::_unknown24");
 static_assert(alignof(ConstantBuffer) == 8, "Video::ConstantBuffer is qword-aligned");
 
 // RULE B5-4, the properties `Video::Context` depends on.

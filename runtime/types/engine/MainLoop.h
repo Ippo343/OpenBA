@@ -162,6 +162,7 @@ struct VideoResourceEntry {
     ::System::Filename   _path;     // +0x10  refcounted
 };
 static_assert(sizeof(VideoResourceEntry) == 0x18, "VideoResourceEntry is 0x18 bytes");
+static_assert(offsetof(VideoResourceEntry, _pad04) == 0x4, "VideoResourceEntry::_pad04");
 static_assert(offsetof(VideoResourceEntry, _typeId) == 0x00, "VideoResourceEntry::_typeId");
 static_assert(offsetof(VideoResourceEntry, _object) == 0x08, "VideoResourceEntry::_object");
 static_assert(offsetof(VideoResourceEntry, _path)   == 0x10, "VideoResourceEntry::_path");
@@ -311,6 +312,7 @@ public:
 };
 
 static_assert(sizeof(MainLoop) == 0xa0, "MainLoop is 0xa0 bytes (exe MemAlloc(0xa0,8) 0x140041f77)");
+static_assert(offsetof(MainLoop, _pad1a) == 0x1A, "MainLoop::_pad1a");
 static_assert(alignof(MainLoop) == 8, "qword-aligned");
 static_assert(!std::is_polymorphic<MainLoop>::value,
               "Engine::MainLoop has no vtable: the ctor's first store is a zero");

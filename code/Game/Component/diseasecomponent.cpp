@@ -302,8 +302,8 @@ extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription
 void ParticleComponent::StopEmitterFade() {
     Description* base = _description;
     ParticleDescription* desc = static_cast<ParticleDescription*>(base);
-    int count = emitterCount;
-    ParticleEmitterSlot* slots = emitters;
+    int count = emitters._size;
+    ParticleEmitterSlot* slots = emitters._data;
     if (!desc || !slots) return;
     const ParticleEmitterDescription* elems = desc->_emitters;
     if (!elems) return;
@@ -486,7 +486,7 @@ void DiseaseComponent::Infect() {
     ParticleComponent* particle = _entity->FindComponent<ParticleComponent>();   // 0x140005200
     int emitters = 0;
     if (particle) {
-        emitters = particle->emitterCount;
+        emitters = particle->emitters._size;
         for (int i = 0; i < emitters; ++i)
             ParticleComponent_StartEmitterFade(particle, i);
     }

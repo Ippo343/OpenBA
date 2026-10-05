@@ -110,6 +110,9 @@ struct AnimationLayer {
     uint8_t _unpinned_31[7];   // +0x31  no reader in Update
 };
 static_assert(sizeof(AnimationLayer) == 0x38, "Graphics AnimationLayer stride is 0x38");
+static_assert(offsetof(AnimationLayer, group) == 0x0, "AnimationLayer::group");
+static_assert(offsetof(AnimationLayer, _unpinned_14) == 0x14, "AnimationLayer::_unpinned_14");
+static_assert(offsetof(AnimationLayer, _unpinned_31) == 0x31, "AnimationLayer::_unpinned_31");
 static_assert(offsetof(AnimationLayer, clipIndex)     == 0x08, "AnimationLayer::clipIndex @ +0x08");
 static_assert(offsetof(AnimationLayer, handle)        == 0x0c, "AnimationLayer::handle @ +0x0c");
 static_assert(offsetof(AnimationLayer, speed)         == 0x10, "AnimationLayer::speed @ +0x10");
@@ -178,6 +181,13 @@ static_assert(sizeof(AnimationClipPrefix) == 0x60,
               "the PREFIX of an animation clip Update reads ends at +0x60; the "
               "record itself is 0x70 and this struct deliberately covers only "
               "the part that has a named reader");
+static_assert(offsetof(AnimationClipPrefix, _head_00) == 0x0, "AnimationClipPrefix::_head_00");
+static_assert(offsetof(AnimationClipPrefix, _head_0c) == 0xC, "AnimationClipPrefix::_head_0c");
+static_assert(offsetof(AnimationClipPrefix, _unpinned_38) == 0x38, "AnimationClipPrefix::_unpinned_38");
+static_assert(offsetof(AnimationClipPrefix, _unpinned_3d) == 0x3D, "AnimationClipPrefix::_unpinned_3d");
+static_assert(offsetof(AnimationClipPrefix, _unpinned_44) == 0x44, "AnimationClipPrefix::_unpinned_44");
+static_assert(offsetof(AnimationClipPrefix, _unpinned_4c) == 0x4C, "AnimationClipPrefix::_unpinned_4c");
+static_assert(offsetof(AnimationClipPrefix, _unpinned_54) == 0x54, "AnimationClipPrefix::_unpinned_54");
 
 // ============================================================================
 // Graphics::AnimationState — 0x48 bytes.
@@ -446,9 +456,13 @@ public:
 static_assert(sizeof(AnimationState) == 0x18,
               "Graphics::AnimationState is 0x18 bytes -- its ctor 0x1800fdaf0 "
               "writes +0x00 / +0x08 / +0x10 and its dtor 0x1800fe380 frees +0x08");
+static_assert(offsetof(AnimationState, _pad01) == 0x1, "AnimationState::_pad01");
 static_assert(alignof(AnimationState) == 8, "Graphics::AnimationState aligns to 8");
 static_assert(sizeof(AnimationState::Layer) == 0x38,
               "Graphics::AnimationState::Layer stride is 0x38");
+static_assert(offsetof(AnimationState::Layer, _group) == 0x0, "Layer::_group");
+static_assert(offsetof(AnimationState::Layer, _unpinned_14) == 0x14, "Layer::_unpinned_14");
+static_assert(offsetof(AnimationState::Layer, _unpinned_31) == 0x31, "Layer::_unpinned_31");
 static_assert(offsetof(AnimationState, _instanced)  == 0x00, "AnimationState::_instanced @ +0x00");
 static_assert(offsetof(AnimationState, _layers)     == 0x08, "AnimationState::_layers @ +0x08");
 
@@ -496,6 +510,7 @@ struct InstancedAnimationState {
 static_assert(sizeof(InstancedAnimationState) == 0x48,
               "the AnimationManager's per-frame record is 0x48 bytes -- the stride "
               "AnimationManager::Update walks and the record kD_InnerArr3_48 destroys");
+static_assert(offsetof(InstancedAnimationState, _pad24) == 0x24, "InstancedAnimationState::_pad24");
 static_assert(alignof(InstancedAnimationState) == 8, "aligns to 8");
 static_assert(offsetof(InstancedAnimationState, _state)      == 0x00, "_state @ +0x00");
 static_assert(offsetof(InstancedAnimationState, _rootOffset) == 0x18, "_rootOffset @ +0x18");

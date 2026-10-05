@@ -133,6 +133,9 @@ public:
 };
 
 static_assert(sizeof(SliderElement) == 0x130, "deleting dtor 0x18004a180: MOV EDX,0x130");
+static_assert(offsetof(SliderElement, _trackMiddle) == 0xD0, "SliderElement::_trackMiddle");
+static_assert(offsetof(SliderElement, _trackEnd) == 0xE0, "SliderElement::_trackEnd");
+static_assert(offsetof(SliderElement, _pad125) == 0x125, "SliderElement::_pad125");
 static_assert(alignof(SliderElement) == 8, "UI::SliderElement aligns to 8");
 static_assert(offsetof(SliderElement, _trackStart)  == sizeof(Element), "");
 static_assert(offsetof(SliderElement, _trackStart)  == 0xC0,  "");

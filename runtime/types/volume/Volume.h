@@ -123,6 +123,7 @@ struct Frustum {
     bool    isOrthographic;  // +0x60
     // +0x61..+0x63: compiler alignment padding, not read by any known caller.
 };
+static_assert(offsetof(Frustum, planes) == 0x0, "Frustum::planes");
 static_assert(sizeof(struct Frustum) == 0x64, "Volume::Frustum must be 0x64 (100) bytes");
 static_assert(offsetof(struct Frustum, isOrthographic) == 0x60, "Volume::Frustum::isOrthographic @ +0x60");
 

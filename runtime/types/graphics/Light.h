@@ -355,6 +355,7 @@ public:
 
 static_assert(sizeof(SpotLight) == 0x168,
               "Graphics::SpotLight is 0x168 bytes (MOV EDX,0x168 in 0x1800642b0)");
+static_assert(offsetof(SpotLight, _pad124) == 0x124, "SpotLight::_pad124");
 static_assert(alignof(SpotLight) == 8, "qword aligned");
 static_assert(offsetof(SpotLight, _frustum)      == 0xc0,  "SpotLight::_frustum @ +0xc0 (twelve zeroed qwords + isOrthographic at +0x120)");
 static_assert(offsetof(SpotLight, _near)         == 0x128, "SpotLight::_near @ +0x128 (0.1f)");

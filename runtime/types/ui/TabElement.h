@@ -148,6 +148,7 @@ public:
 
 static_assert(sizeof(TabElement) == 0x108,
               "UI::TabElement is 0x108 (MOV EDX,0x108 in 0x18004ca90)");
+static_assert(offsetof(TabElement, _pad104) == 0x104, "TabElement::_pad104");
 static_assert(alignof(TabElement) == 8, "UI::TabElement aligns to 8");
 static_assert(offsetof(TabElement, _tabCount)     == sizeof(Element), "");
 static_assert(offsetof(TabElement, _gap)          == 0xc4, "");

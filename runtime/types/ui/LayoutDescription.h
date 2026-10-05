@@ -143,6 +143,8 @@ public:
 
 static_assert(sizeof(LayoutDescription::LayoutHorizontal) == 4, "a W4 enum is four bytes");
 static_assert(sizeof(LayoutDescription::Entry) == 0x38, "Array<Entry> stride (0x180043d80)");
+static_assert(offsetof(LayoutDescription::Entry, desc) == 0x0, "Entry::desc");
+static_assert(offsetof(LayoutDescription::Entry, _pad31) == 0x31, "Entry::_pad31");
 static_assert(offsetof(LayoutDescription::Entry, name)        == 0x08, "");
 static_assert(offsetof(LayoutDescription::Entry, relativeToX) == 0x10, "");
 static_assert(offsetof(LayoutDescription::Entry, relativeToY) == 0x18, "");

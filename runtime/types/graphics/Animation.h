@@ -457,9 +457,16 @@ public:
 static_assert(sizeof(Animation) == 0x70,
               "Graphics::Animation is 0x70 bytes -- the imul 0x70 in GetAnimation "
               "(0x180016660) and the ctor store list at 0x1800fb1d0");
+static_assert(offsetof(Animation, _events) == 0x0, "Animation::_events");
+static_assert(offsetof(Animation, _gap2d) == 0x2D, "Animation::_gap2d");
+static_assert(offsetof(Animation, _gap3d) == 0x3D, "Animation::_gap3d");
+static_assert(offsetof(Animation, _gap54) == 0x54, "Animation::_gap54");
 static_assert(alignof(Animation) == 8, "Graphics::Animation aligns to 8");
 static_assert(sizeof(Animation::Event) == 0x10,
               "Animation::Event stride 0x10 -- SHL RAX,0x4 at 0x180016093");
+static_assert(offsetof(Animation::Event, _frame) == 0x0, "Event::_frame");
+static_assert(offsetof(Animation::Event, _pad04) == 0x4, "Event::_pad04");
+static_assert(offsetof(Animation::Event, _event) == 0x8, "Event::_event");
 static_assert(offsetof(Animation, _name)          == 0x10, "Animation::_name @ +0x10");
 static_assert(offsetof(Animation, _meshName)      == 0x18, "Animation::_meshName @ +0x18");
 static_assert(offsetof(Animation, _sourceName)    == 0x20, "Animation::_sourceName @ +0x20");

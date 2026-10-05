@@ -111,6 +111,7 @@ public:
 
 static_assert(sizeof(CheckElement) == 0xe0,
               "UI::CheckElement is 0xe0 bytes (MOV EDX,0xe0 in 0x180048d80)");
+static_assert(offsetof(CheckElement, _padD9) == 0xD9, "CheckElement::_padD9");
 static_assert(alignof(CheckElement) == 8, "UI::CheckElement aligns to 8");
 static_assert(offsetof(CheckElement, _checked) == sizeof(ButtonElement),
               "CheckElement's byte begins at the end of ButtonElement");

@@ -352,6 +352,7 @@ public:
 };
 
 static_assert(sizeof(Camera) == 0xd8, "Graphics::Camera is 0xd8 bytes");
+static_assert(offsetof(Camera, _frustum) == 0x0, "Camera::_frustum");
 static_assert(alignof(Camera) == 4, "Camera's widest member is a float");
 // RULE B5-4's assert. What it buys, stated exactly: retail passes and returns a
 // `Camera` as a plain 0xd8 blob (`GetSunCamera`/`GetSpotCamera` return one
@@ -394,6 +395,8 @@ public:
     int32_t     _pad0c;     // +0x0c  NEVER WRITTEN — see the banner
 };
 static_assert(sizeof(RendererDrawable) == 0x10, "Renderer::Drawable is 0x10");
+static_assert(offsetof(RendererDrawable, _object) == 0x0, "RendererDrawable::_object");
+static_assert(offsetof(RendererDrawable, _value) == 0x8, "RendererDrawable::_value");
 static_assert(std::is_trivially_copyable_v<RendererDrawable>, "byteCopy element");
 static_assert(offsetof(RendererDrawable, _pad0c) == 0x0c, "Drawable::_pad0c @ +0x0c");
 
@@ -420,6 +423,15 @@ public:
     int32_t     _pad34;      // +0x34  NEVER WRITTEN
 };
 static_assert(sizeof(RendererDrawItem) == 0x38, "Renderer::DrawItem is 0x38");
+static_assert(offsetof(RendererDrawItem, _geometry) == 0x0, "RendererDrawItem::_geometry");
+static_assert(offsetof(RendererDrawItem, _material) == 0x8, "RendererDrawItem::_material");
+static_assert(offsetof(RendererDrawItem, _instance) == 0x10, "RendererDrawItem::_instance");
+static_assert(offsetof(RendererDrawItem, _flags) == 0x18, "RendererDrawItem::_flags");
+static_assert(offsetof(RendererDrawItem, _arg5) == 0x1A, "RendererDrawItem::_arg5");
+static_assert(offsetof(RendererDrawItem, _sortKey) == 0x1C, "RendererDrawItem::_sortKey");
+static_assert(offsetof(RendererDrawItem, _arg8) == 0x20, "RendererDrawItem::_arg8");
+static_assert(offsetof(RendererDrawItem, _userData) == 0x28, "RendererDrawItem::_userData");
+static_assert(offsetof(RendererDrawItem, _arg10) == 0x30, "RendererDrawItem::_arg10");
 static_assert(std::is_trivially_copyable_v<RendererDrawItem>, "byteCopy element");
 static_assert(offsetof(RendererDrawItem, _pad24)    == 0x24, "DrawItem::_pad24 @ +0x24");
 static_assert(offsetof(RendererDrawItem, _pad34)    == 0x34, "DrawItem::_pad34 @ +0x34");
@@ -444,6 +456,7 @@ public:
     Collection::Array<RendererDrawItem> _items[3];            // +0x1c0..+0x1ef
 };
 static_assert(sizeof(RendererDrawGroup) == 0x1f0, "Renderer draw group is 0x1f0");
+static_assert(offsetof(RendererDrawGroup, _renderBuffer) == 0x0, "RendererDrawGroup::_renderBuffer");
 // NOT trivially copyable, and never was — see Camera's assert block.
 static_assert(!std::is_trivially_destructible_v<RendererDrawGroup>,
               "the three Collection::Array<RendererDrawItem> members are what "
@@ -498,6 +511,12 @@ public:
     Collection::Array<int32_t> _drawableIds;       // +0x100..+0x10f
 };
 static_assert(sizeof(RendererSceneEntry) == 0x110, "Renderer::SceneGroup is 0x110");
+static_assert(offsetof(RendererSceneEntry, _scene) == 0x0, "RendererSceneEntry::_scene");
+static_assert(offsetof(RendererSceneEntry, _renderBuffer) == 0x8, "RendererSceneEntry::_renderBuffer");
+static_assert(offsetof(RendererSceneEntry, _shaderDetail) == 0xE8, "RendererSceneEntry::_shaderDetail");
+static_assert(offsetof(RendererSceneEntry, _shader) == 0xEC, "RendererSceneEntry::_shader");
+static_assert(offsetof(RendererSceneEntry, _materialTypeFlags) == 0xF0, "RendererSceneEntry::_materialTypeFlags");
+static_assert(offsetof(RendererSceneEntry, _drawGroupIndex) == 0xF4, "RendererSceneEntry::_drawGroupIndex");
 static_assert(!std::is_trivially_destructible_v<RendererSceneEntry>,
               "_drawableIds is what kSpec_SceneEntry's destroy hook frees");
 static_assert(offsetof(RendererSceneEntry, _camera)        == 0x010, "sceneGroup::_camera @ +0x10");

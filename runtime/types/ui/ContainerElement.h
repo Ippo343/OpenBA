@@ -115,6 +115,8 @@ public:
 static_assert(sizeof(ContainerElement) == 0xd8,
               "UI::ContainerElement is 0xd8 bytes (MOV EDX,0xd8 in its slot-0 "
               "vector deleting destructor 0x18003a050)");
+static_assert(offsetof(ContainerElement, _padce) == 0xCE, "ContainerElement::_padce");
+static_assert(offsetof(ContainerElement, _padd4) == 0xD4, "ContainerElement::_padd4");
 static_assert(alignof(ContainerElement) == 8, "UI::ContainerElement aligns to 8");
 static_assert(offsetof(ContainerElement, _requestedWidth) == sizeof(Element), "");
 static_assert(offsetof(ContainerElement, _requestedWidth)  == 0xc0, "");

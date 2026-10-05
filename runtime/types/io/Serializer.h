@@ -98,6 +98,7 @@ namespace io {
 struct Encoding {
     void** vtable;   // +0x00
 };
+static_assert(offsetof(rt::io::Encoding, vtable) == 0x0, "Encoding::vtable");
 
 namespace encoding_vtbl {
     // (this, Serializer*, int version) -> ReaderWriter*   [reading]
@@ -123,6 +124,8 @@ struct ReaderWriter {
     void*   serializer;             // +0x10  the IO::Serializer that owns it
     void*   stream;                 // +0x18  == serializer->stream
 };
+static_assert(offsetof(rt::io::ReaderWriter, vtable) == 0x0, "ReaderWriter::vtable");
+static_assert(offsetof(rt::io::ReaderWriter, _pad09) == 0x9, "ReaderWriter::_pad09");
 static_assert(offsetof(ReaderWriter, allowCustomSerialize) == 0x08, "ReaderWriter+0x08");
 static_assert(offsetof(ReaderWriter, serializer)           == 0x10, "ReaderWriter+0x10");
 static_assert(offsetof(ReaderWriter, stream)               == 0x18, "ReaderWriter+0x18");
@@ -143,6 +146,10 @@ struct BinaryCodec {
 };
 static_assert(offsetof(BinaryCodec, version) == 0x28, "BinaryCodec.version @ 0x28");
 static_assert(sizeof(BinaryCodec) == 0x30, "BinaryCodec is 0x30 bytes (allocator asks for 0x30)");
+static_assert(offsetof(BinaryCodec, base) == 0x0, "BinaryCodec::base");
+static_assert(offsetof(BinaryCodec, word20) == 0x20, "BinaryCodec::word20");
+static_assert(offsetof(BinaryCodec, word24) == 0x24, "BinaryCodec::word24");
+static_assert(offsetof(BinaryCodec, _pad2c) == 0x2C, "BinaryCodec::_pad2c");
 
 // The THIRD ReaderWriter the engine actually produces is an IO::Visitor (the
 // resource-reference VISIT pass: ExternalFactory::Add re-invokes slot +0x28
@@ -162,6 +169,8 @@ struct VisitorCodec {
 };
 static_assert(offsetof(VisitorCodec, version) == 0x20, "VisitorCodec.version @ 0x20");
 static_assert(sizeof(VisitorCodec) == 0x28, "VisitorCodec is 0x28 bytes (allocator asks for 0x28)");
+static_assert(offsetof(VisitorCodec, base) == 0x0, "VisitorCodec::base");
+static_assert(offsetof(VisitorCodec, _pad24) == 0x24, "VisitorCodec::_pad24");
 
 // ---------------------------------------------------------------------------
 // ReaderWriter vtable — RETAIL byte offsets.
@@ -234,6 +243,7 @@ struct Stream {
     int32_t   _pad0c;      // +0x0C
     Encoding* encoding;    // +0x10  the encoding POLICY object (see above)
 };
+static_assert(offsetof(Stream, vtable) == 0x0, "Stream::vtable");
 static_assert(offsetof(Stream, direction) == 0x08, "Stream.direction @ 0x08");
 static_assert(offsetof(Stream, encoding)  == 0x10, "Stream.encoding @ 0x10");
 
@@ -538,6 +548,7 @@ protected:
     // +0x09..+0x0f are not written. Defined after `Serializer` below.
     explicit ReaderWriter(Serializer& ser);
 };
+static_assert(offsetof(IO::ReaderWriter, _pad09) == 0x9, "ReaderWriter::_pad09");
 
 // ??1ReaderWriter@IO@@UEAA@XZ 0x1800b9150 is a bare base-table stamp, which the
 // compiler does for us: the body of the pure virtual destructor is empty and
@@ -699,8 +710,11 @@ public:
 };
 
 static_assert(sizeof(BinaryReader) == 0x30, "the factory asks MemAlloc for 0x30");
+static_assert(offsetof(BinaryReader, _pad2c) == 0x2C, "BinaryReader::_pad2c");
 static_assert(sizeof(BinaryWriter) == 0x30, "the factory asks MemAlloc for 0x30");
+static_assert(offsetof(BinaryWriter, _pad2c) == 0x2C, "BinaryWriter::_pad2c");
 static_assert(sizeof(Visitor)      == 0x28, "the factory asks MemAlloc for 0x28");
+static_assert(offsetof(Visitor, _pad24) == 0x24, "Visitor::_pad24");
 static_assert(sizeof(BinaryReader) == sizeof(rt::io::BinaryCodec), "POD agrees");
 static_assert(sizeof(BinaryWriter) == sizeof(rt::io::BinaryCodec), "POD agrees");
 static_assert(sizeof(Visitor)      == sizeof(rt::io::VisitorCodec), "POD agrees");

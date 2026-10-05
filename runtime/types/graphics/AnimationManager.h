@@ -101,6 +101,9 @@ struct AnimStateRec {
     Collection::Array<uint8_t> _nodes;           // +0x38  Array<InterpolatedState<Transform>>, 0x38
 };
 static_assert(sizeof(AnimStateRec) == 0x48, "Graphics::AnimationState is 0x48 bytes");
+static_assert(offsetof(AnimStateRec, _needsUniqueCopy) == 0x0, "AnimStateRec::_needsUniqueCopy");
+static_assert(offsetof(AnimStateRec, _pad01) == 0x1, "AnimStateRec::_pad01");
+static_assert(offsetof(AnimStateRec, _pad24) == 0x24, "AnimStateRec::_pad24");
 static_assert(offsetof(AnimStateRec, _layers)     == 0x08, "AnimationState::_layers @ +0x08");
 static_assert(offsetof(AnimStateRec, _rootOffset) == 0x18, "AnimationState::_rootOffset @ +0x18");
 static_assert(offsetof(AnimStateRec, _pose)       == 0x28, "AnimationState::_pose @ +0x28");
@@ -125,6 +128,7 @@ struct AnimInstanceRec {
     Collection::Array<uint8_t> _states;          // +0x20  Array<AnimationState>,     stride 0x48
 };
 static_assert(sizeof(AnimInstanceRec) == 0x30, "AnimationManager::Instance is 0x30 bytes");
+static_assert(offsetof(AnimInstanceRec, _group) == 0x0, "AnimInstanceRec::_group");
 static_assert(offsetof(AnimInstanceRec, _animIndex) == 0x08, "Instance::_animIndex @ +0x08");
 static_assert(offsetof(AnimInstanceRec, _refCount)  == 0x0c, "Instance::_refCount @ +0x0c");
 static_assert(offsetof(AnimInstanceRec, _nodes)     == 0x10, "Instance::_nodes @ +0x10");
@@ -394,9 +398,11 @@ public:
 };
 static_assert(sizeof(AnimationManager) == 0x9d8,
               "Graphics::AnimationManager must match AllocSub(0x9d8, 8)");
+static_assert(offsetof(AnimationManager, _pad9d4) == 0x9D4, "AnimationManager::_pad9d4");
 static_assert(alignof(AnimationManager) == 8, "Graphics::AnimationManager aligns to 8");
 static_assert(sizeof(AnimationManager::Instance) == 0x30,
               "AnimationManager::Instance is 0x30 bytes");
+static_assert(offsetof(AnimationManager::Instance, _group) == 0x0, "Instance::_group");
 static_assert(offsetof(AnimationManager, _instances) == 0x00, "_instances @ +0x00");
 static_assert(offsetof(AnimationManager, _f10)       == 0x10, "_f10 @ +0x10");
 static_assert(offsetof(AnimationManager, _rngState)  == 0x14, "_rngState @ +0x14");

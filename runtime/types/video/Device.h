@@ -880,6 +880,9 @@ static_assert(offsetof(Video::Device::InterfaceSlot, createDeviceData) == 0x10, 
 
 // ---- Video::Device ----
 static_assert(sizeof(Video::Device) == 0x108, "Device is 0x108 bytes");
+static_assert(offsetof(Video::Device, gap1C) == 0x1C, "Device::gap1C");
+static_assert(offsetof(Video::Device, gap9E) == 0x9E, "Device::gap9E");
+static_assert(offsetof(Video::Device, gapFC) == 0xFC, "Device::gapFC");
 static_assert(alignof(Video::Device) == 8, "Device aligns to 8");
 // RULE B5-6 in assert form: no vptr, no user ctor/dtor, so the object our ports
 // and dx11 reach into by raw offset is still exactly retail's bytes.
@@ -924,6 +927,7 @@ static_assert(offsetof(Video::Device, deviceData) == 0x100, "Device::deviceData 
 // the class. These two bracket it instead, from the ctor's last store.
 static_assert(sizeof(Video::Configuration) >= 0x43,
               "Configuration must cover the ctor's last store at +0x42 (0x1800f6f64)");
+static_assert(offsetof(Video::Configuration, pad01) == 0x1, "Configuration::pad01");
 static_assert(sizeof(Video::Configuration) <= 0x44,
               "Configuration must not grow past natural alignment of its +0x42 byte");
 static_assert(alignof(Video::Configuration) == 4, "Configuration aligns to 4");

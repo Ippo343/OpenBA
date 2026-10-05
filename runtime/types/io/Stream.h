@@ -86,6 +86,8 @@ struct Stream {
     uint32_t    pad0c;       // +0x0c   never written by any ctor
     void*       encoding;    // +0x10   IO::Encoding* (lane A owns the type)
 };
+static_assert(offsetof(RtIo::Stream, vptr) == 0x0, "Stream::vptr");
+static_assert(offsetof(RtIo::Stream, pad0c) == 0xC, "Stream::pad0c");
 static_assert(offsetof(Stream, direction) == 0x08, "Stream.direction @ 0x08");
 static_assert(offsetof(Stream, encoding)  == 0x10, "Stream.encoding @ 0x10");
 static_assert(sizeof(Stream) == 0x18, "sizeof(IO::Stream) == 0x18");
@@ -133,6 +135,9 @@ struct MemoryStream {
     uint32_t size;        // +0x28
     uint32_t pad2c;
 };
+static_assert(offsetof(RtIo::MemoryStream, base) == 0x0, "MemoryStream::base");
+static_assert(offsetof(RtIo::MemoryStream, pad21) == 0x21, "MemoryStream::pad21");
+static_assert(offsetof(RtIo::MemoryStream, pad2c) == 0x2C, "MemoryStream::pad2c");
 static_assert(offsetof(MemoryStream, data)     == 0x18, "MemoryStream.data @ 0x18");
 static_assert(offsetof(MemoryStream, ownsData) == 0x20, "MemoryStream.ownsData @ 0x20");
 static_assert(offsetof(MemoryStream, cursor)   == 0x24, "MemoryStream.cursor @ 0x24");
@@ -196,6 +201,13 @@ struct CompressedStream {
     int32_t  blockCap;        // +0x5c
     void*    compression;     // +0x60  System::Compression*, owned
 };
+static_assert(offsetof(RtIo::CompressedStream, base) == 0x0, "CompressedStream::base");
+static_assert(offsetof(RtIo::CompressedStream, unknown18) == 0x18, "CompressedStream::unknown18");
+static_assert(offsetof(RtIo::CompressedStream, unknown24) == 0x24, "CompressedStream::unknown24");
+static_assert(offsetof(RtIo::CompressedStream, windowCap) == 0x3C, "CompressedStream::windowCap");
+static_assert(offsetof(RtIo::CompressedStream, headerCap) == 0x4C, "CompressedStream::headerCap");
+static_assert(offsetof(RtIo::CompressedStream, blockSize) == 0x58, "CompressedStream::blockSize");
+static_assert(offsetof(RtIo::CompressedStream, blockCap) == 0x5C, "CompressedStream::blockCap");
 static_assert(offsetof(CompressedStream, position)     == 0x1c, "CompressedStream.position @ 0x1c");
 static_assert(offsetof(CompressedStream, activeWindow) == 0x20, "CompressedStream.activeWindow @ 0x20");
 static_assert(offsetof(CompressedStream, source)       == 0x28, "CompressedStream.source @ 0x28");
@@ -233,6 +245,8 @@ struct CompressedStreamWindow {
 };
 static_assert(sizeof(CompressedStreamWindow) == 0x18,
               "SetWindow 0x1800a9acb: `LEA RCX,[R10+R10*2]` then scale 8 = stride 24");
+static_assert(offsetof(CompressedStreamWindow, useCount) == 0x0, "CompressedStreamWindow::useCount");
+static_assert(offsetof(CompressedStreamWindow, _pad0c) == 0xC, "CompressedStreamWindow::_pad0c");
 static_assert(offsetof(CompressedStreamWindow, start)  == 0x04,
               "SetWindow 0x1800a9acf: `MOV R8D,[RDI + RCX*8 + 0x4]`");
 static_assert(offsetof(CompressedStreamWindow, end)    == 0x08,
@@ -264,6 +278,7 @@ struct CompressedStreamHeader {
 };
 static_assert(sizeof(CompressedStreamHeader) == 8,
               "Open 0x1800aa5c4: `LEA EAX,[RDX*0x8]` sizes the directory");
+static_assert(offsetof(CompressedStreamHeader, sourceOffset) == 0x0, "CompressedStreamHeader::sourceOffset");
 static_assert(offsetof(CompressedStreamHeader, compressedSize) == 4,
               "DecompressFromSource 0x1800a9718: `MOVZX EDX,word ptr [RDI + 0x4]`");
 static_assert(offsetof(CompressedStreamHeader, uncompressedSize) == 6,
@@ -320,6 +335,7 @@ struct CompressedMemoryStream {
     CompressedStream base;          // +0x00
     MemoryStream     memoryStream;  // +0x68
 };
+static_assert(offsetof(RtIo::CompressedMemoryStream, base) == 0x0, "CompressedMemoryStream::base");
 static_assert(offsetof(CompressedMemoryStream, memoryStream) == 0x68,
               "CompressedMemoryStream.memoryStream @ 0x68");
 static_assert(sizeof(CompressedMemoryStream) == 0x98,
@@ -539,6 +555,8 @@ public:
 protected:
     friend class CompressedMemoryStream;   // the by-value holder, +0x68
 };
+static_assert(offsetof(IO::MemoryStream, _pad21) == 0x21, "MemoryStream::_pad21");
+static_assert(offsetof(IO::MemoryStream, _pad2c) == 0x2C, "MemoryStream::_pad2c");
 
 static_assert(sizeof(MemoryStream) == 0x30, "IO::MemoryStream is 0x30 bytes");
 static_assert(offsetof(MemoryStream, _data)     == 0x18, "MemoryStream.data @ 0x18");
@@ -729,6 +747,12 @@ protected:
         _encoding = enc;
     }
 };
+static_assert(offsetof(IO::CompressedStream, _unknown18) == 0x18, "CompressedStream::_unknown18");
+static_assert(offsetof(IO::CompressedStream, _unknown24) == 0x24, "CompressedStream::_unknown24");
+static_assert(offsetof(IO::CompressedStream, _windowCap) == 0x3C, "CompressedStream::_windowCap");
+static_assert(offsetof(IO::CompressedStream, _headerCap) == 0x4C, "CompressedStream::_headerCap");
+static_assert(offsetof(IO::CompressedStream, _blockSize) == 0x58, "CompressedStream::_blockSize");
+static_assert(offsetof(IO::CompressedStream, _blockCap) == 0x5C, "CompressedStream::_blockCap");
 
 static_assert(sizeof(CompressedStream) == 0x68, "IO::CompressedStream is 0x68 bytes");
 static_assert(offsetof(CompressedStream, _position)     == 0x1c, "+0x1c");

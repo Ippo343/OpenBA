@@ -152,6 +152,7 @@ public:
 static_assert(sizeof(Registry) == 0x18,
               "IO::Registry is exactly 0x18 bytes -- pinned by the member-wise "
               "copy ctor ??0Registry@IO@@QEAA@AEBV01@@Z (retail 0x18002b140)");
+static_assert(offsetof(Registry, _path) == 0x0, "Registry::_path");
 static_assert(offsetof(Registry, _key)            == 0x08, "IO::Registry::_key @ +0x08");
 static_assert(offsetof(Registry, _enumIndex)      == 0x10, "IO::Registry::_enumIndex @ +0x10");
 static_assert(offsetof(Registry, _enumGroupIndex) == 0x14, "IO::Registry::_enumGroupIndex @ +0x14");

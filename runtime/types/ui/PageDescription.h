@@ -111,6 +111,7 @@ public:
 
 static_assert(sizeof(PageDescription) == 0x80,
               "UI::PageDescription is 0x80 bytes (MOV EDX,0x80 at 0x1800471d2)");
+static_assert(offsetof(PageDescription, _pad7c) == 0x7C, "PageDescription::_pad7c");
 static_assert(alignof(PageDescription) == 8, "UI::PageDescription aligns to 8");
 static_assert(std::has_virtual_destructor<PageDescription>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<PageDescription>::value, "B39 D1: concrete");

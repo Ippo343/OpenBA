@@ -114,6 +114,7 @@ public:
     Scalar Max(const Scalar& other) const;          // 0x18005ff60
 };
 static_assert(sizeof(Scalar) == 4, "Math::Scalar must be 4 bytes");
+static_assert(offsetof(Scalar, v) == 0x0, "Scalar::v");
 
 // ============================================================
 // Math::Vector2 — {x, y}. The global `Vector2` that the exe-side tree spells
@@ -138,6 +139,8 @@ public:
     void    Serialize(IO::Serializer& serializer);                  // 0x18005ff40
 };
 static_assert(sizeof(Vector2) == 8, "Math::Vector2 must be 8 bytes");
+static_assert(offsetof(Vector2, x) == 0x0, "Vector2::x");
+static_assert(offsetof(Vector2, y) == 0x4, "Vector2::y");
 
 // ============================================================
 // Math::Vector3 — {x, y, z}.
@@ -164,6 +167,9 @@ public:
     void    Serialize(IO::Serializer& serializer);                  // 0x1800150e0
 };
 static_assert(sizeof(Vector3) == 12, "Math::Vector3 must be 12 bytes");
+static_assert(offsetof(Vector3, x) == 0x0, "Vector3::x");
+static_assert(offsetof(Vector3, y) == 0x4, "Vector3::y");
+static_assert(offsetof(Vector3, z) == 0x8, "Vector3::z");
 
 // ============================================================
 // Math::Vector4 — {x, y, z, w}.
@@ -181,6 +187,10 @@ public:
     void Serialize(IO::Serializer& serializer);                     // 0x18001d360
 };
 static_assert(sizeof(Vector4) == 16, "Math::Vector4 must be 16 bytes");
+static_assert(offsetof(Vector4, x) == 0x0, "Vector4::x");
+static_assert(offsetof(Vector4, y) == 0x4, "Vector4::y");
+static_assert(offsetof(Vector4, z) == 0x8, "Vector4::z");
+static_assert(offsetof(Vector4, w) == 0xC, "Vector4::w");
 
 // ============================================================
 // Math::Quaternion — {x, y, z, w}, w LAST.
@@ -203,6 +213,10 @@ public:
     static Quaternion FromYawPitch(const Scalar& yawDeg, const Scalar& pitchDeg);  // 0x18007d710
 };
 static_assert(sizeof(Quaternion) == 16, "Math::Quaternion must be 16 bytes");
+static_assert(offsetof(Quaternion, x) == 0x0, "Quaternion::x");
+static_assert(offsetof(Quaternion, y) == 0x4, "Quaternion::y");
+static_assert(offsetof(Quaternion, z) == 0x8, "Quaternion::z");
+static_assert(offsetof(Quaternion, w) == 0xC, "Quaternion::w");
 
 // ============================================================
 // Math::Matrix — 16 floats, column-major storage in the sense used by
@@ -240,6 +254,7 @@ public:
     static Matrix Identity();                                       // 0x18002c030
 };
 static_assert(sizeof(Matrix) == 64, "Math::Matrix must be 64 bytes");
+static_assert(offsetof(Matrix, m) == 0x0, "Matrix::m");
 
 // ============================================================
 // Math::Transform — a rigid transform stored as quaternion + translation.
@@ -276,6 +291,7 @@ public:
                                         const Vector3& offset);
 };
 static_assert(sizeof(Transform) == 0x1c, "Math::Transform must be 0x1c bytes");
+static_assert(offsetof(Transform, rotation) == 0x0, "Transform::rotation");
 static_assert(offsetof(Transform, translation) == 0x10, "Transform::translation @ +0x10");
 
 // ============================================================
@@ -300,6 +316,8 @@ public:
     static Transform2 FromYawOffset(const Scalar& yawDeg, const Vector2& offset);  // 0x1800787f0
 };
 static_assert(sizeof(Transform2) == 0x18, "Math::Transform2 must be 0x18 bytes");
+static_assert(offsetof(Transform2, rotX) == 0x0, "Transform2::rotX");
+static_assert(offsetof(Transform2, rotY) == 0x8, "Transform2::rotY");
 static_assert(offsetof(Transform2, translation) == 0x10, "Transform2::translation @ +0x10");
 
 // ============================================================
@@ -339,6 +357,7 @@ public:
     static Transform3 FromLookAt(const Vector3& position, const Vector3& target);  // 0x180064750
 };
 static_assert(sizeof(Transform3) == 0x30, "Math::Transform3 must be 0x30 bytes");
+static_assert(offsetof(Transform3, axisX) == 0x0, "Transform3::axisX");
 static_assert(offsetof(Transform3, axisY) == 0x0c, "Transform3::axisY @ +0x0c");
 static_assert(offsetof(Transform3, axisZ) == 0x18, "Transform3::axisZ @ +0x18");
 static_assert(offsetof(Transform3, translation) == 0x24, "Transform3::translation @ +0x24");

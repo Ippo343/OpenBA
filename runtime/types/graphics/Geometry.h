@@ -72,6 +72,7 @@ struct ExternalPtr {
     void* p;
 };
 static_assert(sizeof(ExternalPtr) == 8, "Object::ExternalPtr must be 8 bytes");
+static_assert(offsetof(ExternalPtr, p) == 0x0, "ExternalPtr::p");
 
 // ============================================================
 // Graphics::Geometry — 0xC0 bytes.
@@ -473,6 +474,7 @@ public:
 static_assert(sizeof(Geometry) == 0xC0,
               "Graphics::Geometry is 0xC0 bytes (MOV EDX,0xc0 in its own slot-0 "
               "vector deleting destructor, 0x180015e90)");
+static_assert(offsetof(Geometry, _pad14) == 0x14, "Geometry::_pad14");
 static_assert(alignof(Geometry) == 8, "Graphics::Geometry is qword aligned (the vptr)");
 
 // Cross-asserts against the POD: every field at the same offset in both.

@@ -111,6 +111,7 @@ public:
 
 static_assert(sizeof(RadioDescription) == 0x80,
               "UI::RadioDescription is 0x80 bytes (MOV EDX,0x80 at 0x180047962)");
+static_assert(offsetof(RadioDescription, _pad7c) == 0x7C, "RadioDescription::_pad7c");
 static_assert(alignof(RadioDescription) == 8, "UI::RadioDescription aligns to 8");
 static_assert(std::has_virtual_destructor<RadioDescription>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<RadioDescription>::value, "B39 D1: concrete");

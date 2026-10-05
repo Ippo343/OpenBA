@@ -64,6 +64,10 @@ struct Binding {
     uint8_t     _pad14[4];    // +0x14..+0x17 — never written by RegisterInput; garbage
 };
 static_assert(sizeof(Binding) == 0x18, "Binding must be 0x18 (Collection::Set element)");
+static_assert(offsetof(Binding, id) == 0x0, "Binding::id");
+static_assert(offsetof(Binding, exclusive) == 0x1, "Binding::exclusive");
+static_assert(offsetof(Binding, _pad02) == 0x2, "Binding::_pad02");
+static_assert(offsetof(Binding, _pad14) == 0x14, "Binding::_pad14");
 static_assert(offsetof(Binding, description) == 0x08, "Binding.description @ +0x08");
 static_assert(offsetof(Binding, device)      == 0x10, "Binding.device @ +0x10");
 static_assert(offsetof(Binding, inputId)     == 0x12, "Binding.inputId @ +0x12");
@@ -83,6 +87,8 @@ struct BindingNode {
     uint32_t     _padTail;  // +0x34
 };
 static_assert(sizeof(BindingNode) == 0x38, "BindingNode must be 0x38 (0x180023060 allocates 0x38)");
+static_assert(offsetof(BindingNode, element) == 0x0, "BindingNode::element");
+static_assert(offsetof(BindingNode, _padTail) == 0x34, "BindingNode::_padTail");
 static_assert(offsetof(BindingNode, parent)  == 0x18, "BindingNode.parent @ +0x18");
 static_assert(offsetof(BindingNode, left)    == 0x20, "BindingNode.left @ +0x20");
 static_assert(offsetof(BindingNode, right)   == 0x28, "BindingNode.right @ +0x28");
@@ -165,6 +171,8 @@ static_assert(alignof(KeyMap) == 8, "qword-aligned (the root pointer)");
 // B37_RULES sec. 2.3: `MemAlloc(0x18, 4)` in Configuration::Startup 0x1800e0d76.
 static_assert(sizeof(KeyMap) == 0x18,
               "Input::KeyMap is 0x18 bytes -- Configuration::Startup 0x1800e0d76 allocates 0x18");
+static_assert(offsetof(KeyMap, _pad04) == 0x4, "KeyMap::_pad04");
+static_assert(offsetof(KeyMap, _pad14) == 0x14, "KeyMap::_pad14");
 
 // ============================================================================
 // Input::Configuration — 3 bools behind an owned KeyMap pointer. 0x10 bytes,
@@ -225,6 +233,7 @@ static_assert(alignof(Configuration) == 8, "qword-aligned (the KeyMap pointer)")
 // B37_RULES sec. 2.3: `MemAlloc(0x10)` at Engine::Startup 0x1800dbd51.
 static_assert(sizeof(Configuration) == 0x10,
               "Input::Configuration is 0x10 bytes -- Engine::Startup 0x1800dbd51 allocates 0x10");
+static_assert(offsetof(Configuration, _pad0b) == 0xB, "Configuration::_pad0b");
 
 
 // The erased Set<E24> core's two views of a KeyMap's tree (input.cpp): the

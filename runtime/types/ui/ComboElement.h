@@ -167,6 +167,7 @@ public:
 
 static_assert(sizeof(ComboElement) == 0x128,
               "UI::ComboElement is 0x128 bytes (MOV EDX,0x128 in 0x180075390)");
+static_assert(offsetof(ComboElement, _pad11c) == 0x11C, "ComboElement::_pad11c");
 static_assert(alignof(ComboElement) == 8, "UI::ComboElement aligns to 8");
 static_assert(std::has_virtual_destructor<ComboElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<ComboElement>::value, "B39 D1: concrete");

@@ -147,6 +147,7 @@ public:
 static_assert(sizeof(TableElement) == 0xf0,
               "UI::TableElement is 0xf0 bytes (MOV EDX,0xf0 in its slot-0 "
               "vector deleting destructor 0x180079600)");
+static_assert(offsetof(TableElement, _padcc) == 0xCC, "TableElement::_padcc");
 static_assert(alignof(TableElement) == 8, "UI::TableElement aligns to 8");
 static_assert(offsetof(TableElement, _rowCount) == sizeof(Element), "");
 static_assert(offsetof(TableElement, _rowCount)    == TableElementOffsets::kRowCount, "");

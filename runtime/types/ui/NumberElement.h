@@ -219,6 +219,8 @@ public:
 };
 
 static_assert(sizeof(NumberElement) == 0xe8, "UI::NumberElement is 0xe8");
+static_assert(offsetof(NumberElement, _padCC) == 0xCC, "NumberElement::_padCC");
+static_assert(offsetof(NumberElement, _padE1) == 0xE1, "NumberElement::_padE1");
 static_assert(alignof(NumberElement) == 8, "UI::NumberElement aligns to 8");
 static_assert(std::has_virtual_destructor<NumberElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<NumberElement>::value, "B39 D1: concrete");

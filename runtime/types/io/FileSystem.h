@@ -61,6 +61,7 @@ struct PackfileIndexPair {
     PackfileIndexValue value;   // +0x08
 };
 static_assert(sizeof(PackfileIndexPair) == 0x10, "the element of the 0x30-byte node");
+static_assert(offsetof(PackfileIndexPair, key) == 0x0, "PackfileIndexPair::key");
 static_assert(offsetof(PackfileIndexPair, value) == 0x08, "GetPackfileId reads +0x08 of the node");
 
 using PackfileIndexSet  = Collection::Set<PackfileIndexPair>;
@@ -85,6 +86,7 @@ struct PackfileIndexTree {
     int32_t            _pad0c;  // +0x0c — never written
 };
 static_assert(sizeof(PackfileIndexTree) == 0x10, "the {root, count} header");
+static_assert(offsetof(PackfileIndexTree, _pad0c) == 0xC, "PackfileIndexTree::_pad0c");
 static_assert(offsetof(PackfileIndexTree, count) == 0x08, "count @ +0x08");
 
 // ---- PackageFile — only the field GetPackfileId returns -------------------
@@ -114,6 +116,7 @@ struct PackageFileEntry {
 };
 static_assert(sizeof(PackageFileEntry) == 16,
               "GetFileName 0x180025470: `SHL RDX,0x4` is the stride");
+static_assert(offsetof(PackageFileEntry, name) == 0x0, "PackageFileEntry::name");
 static_assert(offsetof(PackageFileEntry, offset) == 0x08,
               "GetFileOffset 0x1800254cd: `MOV EAX,dword ptr [RAX + R8*0x8 + 0x8]`");
 static_assert(offsetof(PackageFileEntry, size)   == 0x0C,
@@ -191,6 +194,8 @@ struct FileInfo {
     System::Filename _name1;   // +0x28
 };
 static_assert(sizeof(FileInfo) == 0x30, "FileInfo is 0x30 bytes (OpenFile's frame)");
+static_assert(offsetof(FileInfo, handle) == 0x0, "FileInfo::handle");
+static_assert(offsetof(FileInfo, _unk04) == 0x4, "FileInfo::_unk04");
 static_assert(offsetof(FileInfo, size)       == 0x08,
               "OpenFile 0x1800acb94: `MOV dword ptr [RDI+0x8],R9D` (the entry size)");
 static_assert(offsetof(FileInfo, cursor)     == 0x0C,
@@ -228,6 +233,7 @@ struct FilenameArray {
     int32_t             capacity;   // +0x0c
 };
 static_assert(sizeof(FilenameArray) == 0x10, "Collection::Array is 16 bytes");
+static_assert(offsetof(FilenameArray, data) == 0x0, "FilenameArray::data");
 static_assert(offsetof(FilenameArray, size)     == 0x08, "0x180026880: MOV EBP,[RCX+0x8]");
 static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[RCX+0xc]");
 
@@ -559,6 +565,7 @@ public:
     RtIO::ModArrayOf<System::Filename> _userPackFilenames;   // +0x30 {data, size +0x38, capacity +0x3c}
     RtIO::PackfileIndexTree _packfileIndex;     // +0x40 root, +0x48 count
 };
+static_assert(offsetof(FileSystem, _unknown1A) == 0x1A, "FileSystem::_unknown1A");
 
 // The POD carries no `sizeof` assert because its tail is opaque padding and
 // nothing pins the total size; the class inherits that honestly. A class MAY

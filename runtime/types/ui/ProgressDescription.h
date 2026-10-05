@@ -104,6 +104,7 @@ public:
 
 static_assert(sizeof(ProgressDescription) == 0xb0,
               "UI::ProgressDescription is 0xb0 (MOV EDX,0xb0 in 0x180077c80)");
+static_assert(offsetof(ProgressDescription, _pad6c) == 0x6C, "ProgressDescription::_pad6c");
 static_assert(alignof(ProgressDescription) == 8, "UI::ProgressDescription aligns to 8");
 static_assert(offsetof(ProgressDescription, _unknown68) == sizeof(ElementDescription), "");
 static_assert(offsetof(ProgressDescription, _unknown68)        == 0x68, "");

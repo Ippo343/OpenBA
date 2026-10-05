@@ -118,10 +118,13 @@ public:
 };
 
 static_assert(sizeof(TableDescription::Cell) == 0x10, "Array<Cell> stride (0x1800799a0)");
+static_assert(offsetof(TableDescription::Cell, column) == 0x0, "Cell::column");
+static_assert(offsetof(TableDescription::Cell, row) == 0x4, "Cell::row");
 static_assert(offsetof(TableDescription::Cell, desc) == 0x08, "");
 static_assert(sizeof(TableDescription) == 0x98,
               "UI::TableDescription is 0x98 bytes (MOV EDX,0x98 in its slot-0 "
               "vector deleting destructor 0x180079210)");
+static_assert(offsetof(TableDescription, _pad74) == 0x74, "TableDescription::_pad74");
 static_assert(alignof(TableDescription) == 8, "UI::TableDescription aligns to 8");
 static_assert(offsetof(TableDescription, _columnCount) == sizeof(ElementDescription), "");
 static_assert(offsetof(TableDescription, _columnCount) == 0x68, "");
