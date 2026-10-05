@@ -91,7 +91,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
     // 1) Model transform = Lerp(state, t) -> AsMatrix -> Context::SetTransform(0, M).
     //    Keep the Lerp'd Transform around: its position (+0x10) is the billboard origin
     //    used by the cc!=0 camera-constant-screen-size projection below.
-    // B.3.5 bridge -- ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?A
+    // The Lerp is ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?A
     // VTransform@Math@@AEBVScalar@4@@Z (0x18001aff0). The class did not exist in
     // runtime/types/graphics until the closing pass authored
     // `graphics/InterpolatedState.h`; it does now, and `geometry + 0x84` is one --
