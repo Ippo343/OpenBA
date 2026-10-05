@@ -302,21 +302,20 @@ void KeyMap::Save() {
 // ============================================================================
 Input::KeyMap* RtInput_KeyMap_DeletingDtor(Input::KeyMap* self) {
 
-    // KeyMap's +0x08 {_root, _count, _pad14} seen as the rtsetavl24 core's Set,
-    // whose nodes are untyped (set_avl_e24.h); LEFT until the core takes a
-    // BindingNode.
-    auto* set = reinterpret_cast<rtsetavl24::Set*>(&self->_root);   // LEFT: ERASED KeyMap's {_root, _count, _pad14} viewed as the rtsetavl24 core's Set header (the core's nodes are untyped, set_avl_e24.h)
-    auto* root = set->root;
-    const int countBefore = set->count;
+    // KeyMap's +0x08 {_root, _count, _pad14} handed to the rtsetavl24 core
+    // through input.cpp's two views (Input::AsSet24 / AsNode24).
+    void* const setPtr = &self->_root;
+    Input::BindingNode* const root = self->_root;
+    const int countBefore = self->_count;
     const unsigned visitsBefore = rtsetavl24::g_destroyVisits;
 
     if (root) {
-        rtsetavl24::DestroySubtree(set, root->left);
-        rtsetavl24::DestroySubtree(set, root->right);
-        rtsetavl24::SetNodeFree(set, root);
+        rtsetavl24::DestroySubtree(Input::AsSet24(setPtr), Input::AsNode24(root->left));
+        rtsetavl24::DestroySubtree(Input::AsSet24(setPtr), Input::AsNode24(root->right));
+        rtsetavl24::SetNodeFree(setPtr, root);
     }
-    set->root  = nullptr;
-    set->count = 0;
+    self->_root  = nullptr;
+    self->_count = 0;
 
     // 0x180006a10 — `if (p) { Enter; Free(_singleton, p); Leave; }`, one
     // argument (video/context_lifecycle.cpp).

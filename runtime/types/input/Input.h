@@ -32,6 +32,8 @@
 #include "Device.h"
 #include "../collection/Collection.h"   // Collection::Array<int> (KeyMap::GetIdList)
 
+namespace rtsetavl24 { struct Set; struct Node; }
+
 namespace Input {
 
 // ============================================================================
@@ -223,6 +225,12 @@ static_assert(alignof(Configuration) == 8, "qword-aligned (the KeyMap pointer)")
 // B37_RULES sec. 2.3: `MemAlloc(0x10)` at Engine::Startup 0x1800dbd51.
 static_assert(sizeof(Configuration) == 0x10,
               "Input::Configuration is 0x10 bytes -- Engine::Startup 0x1800dbd51 allocates 0x10");
+
+
+// The erased Set<E24> core's two views of a KeyMap's tree (input.cpp): the
+// {_root, _count, _pad14} header as its Set, a BindingNode as its Node.
+rtsetavl24::Set*  AsSet24(void* p);
+rtsetavl24::Node* AsNode24(BindingNode* n);
 
 }  // namespace Input
 
