@@ -211,14 +211,6 @@
 #include "../../src/system/string.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/collection/Collection.h"
-#include "../system/pod_bridge.h"   // Sys(tmp): the POD String locals ReadStringUtf16 / ReadStringRaw fill
-
-// Lane String's port. Forward-declared rather than pulled in from a header for
-// the same reason filesystem_openfile_win.cpp does it: that lane publishes
-// none, and the linker checks the two declarations against each other.
-namespace RtSystem {
-void RtSystem_Filename_AdjustDelimiters(String* self);
-}  // namespace RtSystem
 
 // ---- the ported callees, called DIRECTLY --------------------------------
 // Every one of these is this lane's own port from an earlier rung. They are
@@ -231,11 +223,6 @@ namespace RtIO {
 
 namespace RtIO {
 
-using RtSystem::String;          // the POD the metadata readers below still fill (BuildStringFrom)
-using RtSystem::StringRefCount;
-using RtSystem::RtString_ReleaseInline;
-using RtSystem::RtString_SetLength;
-using RtSystem::RtSystem_Filename_AdjustDelimiters;
 
 
 namespace {
@@ -310,12 +297,12 @@ inline int32_t Encode2(int32_t cp, uint8_t* dst) {
 //     copy length is `min(len + 1, strlen + 1)`.
 //  3. The trailing `if (n2 > cap) data[cap-1] = 0` is retail's own truncation
 //     guard, and it indexes `cap - 1`, not `n2 - 1`.
-void BuildStringFrom(const uint8_t* buf, String* tmp) {
-    tmp->data = nullptr;                                   // 1800b4fce
-
+// B.4 Z LAST IO: `tmp` is the caller's String local; its null store
+// (1800b4fce) is that local's default ctor, run at its declaration.
+void BuildStringFrom(const uint8_t* buf, System::String& tmp) {
     int32_t n1 = 0;                                        // 1800b4fd3..4fe9
     while (buf[n1] != 0) ++n1;
-    RtString_SetLength(tmp, n1);                           // 1800b4ff2  0x1800c8220
+    System::StringPrivateAccess::SetLength(tmp, n1);       // 1800b4ff2  0x1800c8220
 
     const int32_t cap = n1 + 1;                            // 1800b4ff7  LEA ESI,[RBX+1]
     int32_t n2 = 0;                                        // 1800b4ffa..5019
@@ -323,23 +310,14 @@ void BuildStringFrom(const uint8_t* buf, String* tmp) {
     ++n2;                                                  // 1800b501b  INC EDI
 
     const int32_t copyLen = (cap < n2) ? cap : n2;         // 1800b501d..5021  MIN
-    std::memcpy(tmp->data, buf, static_cast<size_t>(copyLen));   // 1800b5033
+    std::memcpy(tmp._data, buf, static_cast<size_t>(copyLen));   // 1800b5033
     if (n2 > cap)                                          // 1800b5038  CMP EDI,ESI / JLE
-        tmp->data[cap - 1] = 0;                            // 1800b503f
+        tmp._data[cap - 1] = 0;                            // 1800b503f
 }
 
-// The inlined `String::operator=` at 0x1800b5044 and its five clones. Retail
-// SKIPS the whole thing (including the AddRef) when the pointers are already
-// equal, and on the freeing branch leaves `data - 8` in the slot before
-// overwriting it — both of which RtString_ReleaseInline already reproduces.
-void AssignStringField(String* field, const String* tmp) {
-    if (field->data != tmp->data) {                        // 1800b5048  CMP / JZ
-        RtString_ReleaseInline(field);                     // 1800b504d..506b
-        field->data = tmp->data;                           // 1800b506f
-        if (field->data != nullptr)                        // 1800b5073
-            ++StringRefCount(field->data);                 // 1800b5078
-    }
-}
+// (B.4 Z LAST IO: `AssignStringField` is gone. Its six metadata uses were
+// `String::operator=` (0x1800b5044 and clones) and are spelled as that; its
+// entry-loop use was the inlined Filename copy ctor of the entry's name.)
 
 // ---- §95's determinism test ------------------------------------------------
 // "Did a terminator appear inside the bytes actually read?" — decided from data
@@ -362,7 +340,7 @@ bool RawTerminatorInRead(const uint8_t* buf, int32_t len) {
 // `cs->IO::CompressedStream::Read` is retail's direct CALL 0x1800aa780 (a
 // qualified, non-virtual call, as the door that stood here was).
 bool ReadStringUtf16(IO::CompressedStream* cs, uint8_t* buf60, uint8_t* buf860,
-                     String* tmp) {
+                     System::String& tmp) {
     int32_t len = 0;                                       // 1800b4e22
     cs->IO::CompressedStream::Read(4, &len);               // 1800b4e2e group
     if (len > 0)                                           // 1800b4eba  TEST/JLE
@@ -400,7 +378,7 @@ bool ReadStringUtf16(IO::CompressedStream* cs, uint8_t* buf60, uint8_t* buf860,
 // ---- PATH B's string group (0x1800b559f and its two clones) ----------------
 // Read a length, read that many bytes STRAIGHT into the output buffer. No
 // transcode, and — note — no terminator is written either.
-bool ReadStringRaw(IO::CompressedStream* cs, uint8_t* buf60, String* tmp) {
+bool ReadStringRaw(IO::CompressedStream* cs, uint8_t* buf60, System::String& tmp) {
     int32_t len = 0;                                       // 1800b55a2
     cs->IO::CompressedStream::Read(4, &len);               // 1800b55ae group
     if (len > 0)                                           // 1800b5633  TEST/JLE
@@ -549,34 +527,44 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
             cs->IO::CompressedStream::Read(*n90, _previewData._data);  // 1800b4e09
         }
 
-        String tmp;
+        // Each group builds a String (BuildStringFrom's null store is the
+        // local's ctor), assigns it (String::operator=) and releases it: one
+        // block-scoped local per group.
         if (formatVersion <= 2) {
             // ---- PATH A (§81): UTF-16 metadata, with the §76 over-read -----
-            ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b4e1f  group 1
-            _name = RtSystem::Sys(tmp);                   // 1800b5044  +0x40
-            RtString_ReleaseInline(&tmp);                      // 1800b507b
-
-            ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b530d  group 2
-            _author = RtSystem::Sys(tmp);                 // 1800b52b4  +0x48
-            RtString_ReleaseInline(&tmp);
-
-            ReadStringUtf16(cs, buf60, buf860, &tmp);      // group 3
-            _description = RtSystem::Sys(tmp);            // 1800b5536  +0x50
-            RtString_ReleaseInline(&tmp);
+            {
+                System::String tmp;
+                ReadStringUtf16(cs, buf60, buf860, tmp);   // 1800b4e1f  group 1
+                _name = tmp;                               // 1800b5044  +0x40
+            }                                              // ~tmp 1800b507b
+            {
+                System::String tmp;
+                ReadStringUtf16(cs, buf60, buf860, tmp);   // 1800b530d  group 2
+                _author = tmp;                             // 1800b52b4  +0x48
+            }
+            {
+                System::String tmp;
+                ReadStringUtf16(cs, buf60, buf860, tmp);   // group 3
+                _description = tmp;                        // 1800b5536  +0x50
+            }
             // 1800b558e / 559a  JMP 0x1800b5b6c  (reloads formatVersion; §92(c))
         } else {
             // ---- PATH B (§81): the bytes are already UTF-8 -----------------
-            ReadStringRaw(cs, buf60, &tmp);                // 1800b559f  group 4
-            _name = RtSystem::Sys(tmp);                   // 1800b5726  +0x40
-            RtString_ReleaseInline(&tmp);
-
-            ReadStringRaw(cs, buf60, &tmp);                // 1800b5783  group 5
-            _author = RtSystem::Sys(tmp);                 // 1800b58f6  +0x48
-            RtString_ReleaseInline(&tmp);
-
-            ReadStringRaw(cs, buf60, &tmp);                // 1800b5953  group 6
-            _description = RtSystem::Sys(tmp);            // 1800b5ac6  +0x50
-            RtString_ReleaseInline(&tmp);
+            {
+                System::String tmp;
+                ReadStringRaw(cs, buf60, tmp);             // 1800b559f  group 4
+                _name = tmp;                               // 1800b5726  +0x40
+            }
+            {
+                System::String tmp;
+                ReadStringRaw(cs, buf60, tmp);             // 1800b5783  group 5
+                _author = tmp;                             // 1800b58f6  +0x48
+            }
+            {
+                System::String tmp;
+                ReadStringRaw(cs, buf60, tmp);             // 1800b5953  group 6
+                _description = tmp;                        // 1800b5ac6  +0x50
+            }
             // 1800b5b1a / 5b23  JMP 0x1800b5b73
         }
     } else {
@@ -642,26 +630,25 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
             cs->IO::CompressedStream::Read(4, &entryOffset);   // 1800b5de3  -> +0x08
             cs->IO::CompressedStream::Read(4, &entrySize);     // 1800b5e59  -> +0x0c
 
-            String tmp;
-            BuildStringFrom(buf60, &tmp);                      // 1800b5ec6..5f3d
-            RtSystem_Filename_AdjustDelimiters(&tmp);          // 1800b5f42
+            // Set-then-AdjustDelimiters on a null String: the Filename local.
+            System::Filename tmp;
+            BuildStringFrom(buf60, tmp);                       // 1800b5ec6..5f3d
+            System::FilenamePrivateAccess::AdjustDelimiters(tmp);   // 1800b5f42
 
-            PackageFileEntry entry;
-            entry.name.data = nullptr;                         // 1800b5f4a
-            AssignStringField(&entry.name, &tmp);              // 1800b5f4e..5f8e
-            // TWICE. 0x1800b5f95 and 0x1800b5f9e, back to back, on the same
-            // object. Idempotent, and reproduced rather than folded.
-            RtSystem_Filename_AdjustDelimiters(&entry.name);   // 1800b5f95
-            RtSystem_Filename_AdjustDelimiters(&entry.name);   // 1800b5f9e
-
-            entry.offset = static_cast<uint32_t>(entryOffset); // 1800b5fa4  §91
-            entry.size   = static_cast<uint32_t>(entrySize);   // 1800b5faa  §91
+            // The entry's name is the Filename COPY CTOR from tmp, inlined
+            // (1800b5f4a null store, 1800b5f4e..5f8e the guarded adopt, then
+            // AdjustDelimiters TWICE, 0x1800b5f95 / 0x1800b5f9e — the copy
+            // ctor's own two calls, 0x1800067d0); then the two dwords.
+            PackageFileEntry entry = {
+                tmp,
+                static_cast<uint32_t>(entryOffset),            // 1800b5fa4  §91
+                static_cast<uint32_t>(entrySize) };            // 1800b5faa  §91
 
             rtcoll::RtColl_ArraySetSizeFill_1800298f0(&_entries,  // 1800b5b86
                              _entries._size + 1, &entry);      // 1800b5fb1..fbe
 
-            RtString_ReleaseInline(&entry.name);               // 1800b5fc4..5fe9
-            RtString_ReleaseInline(&tmp);                      // 1800b5fed..6015
+            // ~entry (its name, 1800b5fc4..5fe9), then ~tmp (1800b5fed..6015):
+            // reverse declaration order, at the end of the iteration.
 
         }
     }

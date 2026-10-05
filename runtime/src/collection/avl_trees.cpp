@@ -131,7 +131,7 @@
 #include "set_avl.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 #include "../../funcs/rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc)
-#include "../../types/system/Filename.h"   // B3R: RtSystem_Filename_CtorCopy (0x1800067d0)
+#include "../../types/system/Filename.h"   // the Filename copy ctor (0x1800067d0)
 
 namespace rtavl {
 

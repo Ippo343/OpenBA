@@ -430,29 +430,8 @@ static_assert(sizeof(PackageFile::EntryArray) == 0x10, "the 16-byte Array header
 static_assert(offsetof(PackageFile, _file)        == 0xc0, "ctor 1800b44f1 ADD RCX,0xc0");
 static_assert(sizeof(RtIO::FileInfo) == 0x30, "the embedded FileInfo is what makes 0xc0 + 0x30 == 0xf0");
 
-// ---- the cross-asserts against the partial POD view ------------------------
-// `RtIO::PackageFileView` is NOT replaced by this class and must not be: it is
-// read by `filesystem_packages.cpp`, `filesystem_find_win.cpp` and
-// `filesystem.cpp`, and B33 §7's rule is that the POD stays, trivially
-// destructible, until its last user converts. These asserts are what keep the
-// two spellings from drifting — exactly as `RtObject::BaseTypeInfo` was kept
-// against `Object::BaseTypeInfo`.
-static_assert(offsetof(PackageFile, _name)        == offsetof(RtIO::PackageFileView, name),        "alias name");
-static_assert(offsetof(PackageFile, _author)      == offsetof(RtIO::PackageFileView, author),      "alias author");
-static_assert(offsetof(PackageFile, _description) == offsetof(RtIO::PackageFileView, description), "alias description");
-static_assert(offsetof(PackageFile, _string58)    == offsetof(RtIO::PackageFileView, _string58),   "alias _string58");
-static_assert(offsetof(PackageFile, _string60)    == offsetof(RtIO::PackageFileView, _string60),   "alias _string60");
-static_assert(offsetof(PackageFile, _version)     == offsetof(RtIO::PackageFileView, version),     "alias version");
-static_assert(offsetof(PackageFile, _userVersion) == offsetof(RtIO::PackageFileView, userVersion), "alias userVersion");
-static_assert(offsetof(PackageFile, _priority)    == offsetof(RtIO::PackageFileView, priority),    "alias priority");
-static_assert(offsetof(PackageFile, _platform)    == offsetof(RtIO::PackageFileView, platform),    "alias platform");
-static_assert(offsetof(PackageFile, _iconWidth)   == offsetof(RtIO::PackageFileView, iconWidth),   "alias iconWidth");
-static_assert(offsetof(PackageFile, _iconHeight)  == offsetof(RtIO::PackageFileView, iconHeight),  "alias iconHeight");
-static_assert(offsetof(PackageFile, _crc)         == offsetof(RtIO::PackageFileView, packfileId),  "alias packfileId/CRC");
-static_assert(offsetof(PackageFile, _overridable) == offsetof(RtIO::PackageFileView, overridable), "alias overridable");
-static_assert(offsetof(PackageFile, _entries)     == offsetof(RtIO::PackageFileView, entries),     "alias entries");
-static_assert(offsetof(PackageFile, _entries) + offsetof(PackageFile::EntryArray, _size) ==
-              offsetof(RtIO::PackageFileView, entryCount),  "alias entryCount");
+// (B.4 Z LAST IO: the cross-asserts against the `RtIO::PackageFileView` POD
+// are gone with the POD; the pins above are the class's own.)
 
 // The class IS polymorphic and that is the point — unlike `IO::Serializer`,
 // `IO::Registry` and `IO::Modification`, this one has a live nine-row minted

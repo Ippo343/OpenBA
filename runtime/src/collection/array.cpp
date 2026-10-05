@@ -120,7 +120,7 @@
 #include "../../types/collection/Collection.h"
 #include "array_internal.h"
 // B3R RT-Core: the element ops below call their bodies by name.
-#include "../../types/system/Filename.h"      // RtSystem_Filename_CtorCopy 0x1800067d0
+#include "../../types/system/Filename.h"      // PkgEntryAssign: the Filename copy ctor 0x1800067d0
 #include "../../types/io/Modification.h"      // RtColl_ArrayU8Assign_180011220
 #include "../../types/save/SaveLoad.h"        // RtSave_MetaData_CopyCtor 0x180032f70
 #include "../../types/graphics/Scene.h"       // RtGraphics_DrawGroup_CopyCtor 0x18001be60
@@ -1085,8 +1085,7 @@ const ArraySpec kSpec_U64ZeroA4 = {               // 0x180024d70  Array<Header>
 // assign below therefore delegates to the ported copy ctor rather than
 // reimplementing its String half.
 static void PkgEntryAssign(RtIO::PackageFileEntry* d, const RtIO::PackageFileEntry* s) {
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(&d->name),        // 1800299bd  // LEFT: audit WORK, not executed this pass (CLASS unit RtIO::PackageFileEntry (doable-with:PackageFileEntry::name as Sy); blocker; PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
-                                         reinterpret_cast<const RtSystem::Filename*>(&s->name));  // LEFT: audit WORK, not executed this pass (CLASS unit RtIO::PackageFileEntry (doable-with:PackageFileEntry::name as Sy); blocker; PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
+    new (&d->name) System::Filename(s->name);   // 1800299bd  the copy ctor 0x1800067d0 into the raw element
     d->offset = s->offset;                   // 1800299c3
     d->size   = s->size;                     // 1800299c9
 }

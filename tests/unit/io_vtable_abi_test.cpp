@@ -1897,17 +1897,8 @@ UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
     CHECK_EQ(offsetof(IO::PackageFile, _entries) + 8,   static_cast<size_t>(0xb8));
     CHECK_EQ(offsetof(IO::PackageFile, _file),          static_cast<size_t>(0xc0));
 
-    // The partial POD view is NOT replaced and must not drift from the class:
-    // filesystem_packages.cpp, filesystem_find_win.cpp and filesystem.cpp all
-    // still read it (B33 section 7 -- the POD stays until its last user converts).
-    CHECK_EQ(offsetof(IO::PackageFile, _name),
-             offsetof(RtIO::PackageFileView, name));
-    CHECK_EQ(offsetof(IO::PackageFile, _crc),
-             offsetof(RtIO::PackageFileView, packfileId));
-    CHECK_EQ(offsetof(IO::PackageFile, _entries),
-             offsetof(RtIO::PackageFileView, entries));
-    CHECK_EQ(offsetof(IO::PackageFile, _entries) + 8,
-             offsetof(RtIO::PackageFileView, entryCount));
+    // (B.4 Z LAST IO: the `RtIO::PackageFileView` POD is deleted; the four
+    // cross-checks against it went with it.)
 
     // 0xc0 + 0x30 == 0xf0: the embedded FileInfo is what closes the object, and
     // it is also why the constructor's last store is at object offset 0xd8.

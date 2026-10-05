@@ -83,83 +83,18 @@ static_assert(offsetof(PackfileIndexNode, right) == 0x20,
 // is pinned by the one-instruction body that reads it — every accessor named
 // below is `MOV EAX,[RCX+off] ; RET` or the String AddRef idiom, so the offset
 // is the whole function and there is nothing to misread.
-struct PackageFileView {
-    void*    _vtable;              // +0x00 — ??_7PackageFile@IO@@6B@, 0x180155700
-    uint8_t  _unknown08[0x40 - 0x08];
-    // +0x40/+0x48/+0x50 — three System::String fields, each returned by a
-    // getter that AddRefs rather than copies:
-    //   ?GetName@        0x18002532a `MOV RAX,qword ptr [RCX+0x40]`
-    //   ?GetAuthor@      0x18002536a `MOV RAX,qword ptr [RCX+0x48]`
-    //   ?GetDescription@ 0x1800253aa `MOV RAX,qword ptr [RCX+0x50]`
-    // The destructor (0x1800b4540) releases +0x40..+0x60 with the inlined
-    // refcount idiom, which is the independent second pin on all three.
-    RtSystem::String name;         // +0x40
-    RtSystem::String author;       // +0x48
-    RtSystem::String description;  // +0x50
-    // +0x58 and +0x60 — TWO MORE System::String fields, pinned Wave 25 lane
-    // BODY by the destructor (0x1800b4540): it releases FIVE slots with the
-    // inlined refcount idiom, at +0x60, +0x58, +0x50, +0x48 and +0x40, in that
-    // (descending) order. The idiom is unmistakable — `DEC [RAX-4]` on the
-    // refcount word, the freeing arm storing `data - 8` back into the slot and
-    // the sharing arm nulling it — so the TYPE of these two is settled.
-    //
-    // THEY ARE DELIBERATELY NOT NAMED. A destructor pins a field's TYPE and
-    // says nothing whatever about its MEANING, and no reader of either offset
-    // has been found. Inventing `url`/`tag`/`category` here would put a guess
-    // where the header everywhere else carries an instruction.
-    RtSystem::String _string58;    // +0x58 — purpose unknown; type from ~PackageFile
-    RtSystem::String _string60;    // +0x60 — purpose unknown; type from ~PackageFile
-
-    int32_t  version;              // +0x68 — ?GetVersion@     0x1800253d0
-    int32_t  userVersion;          // +0x6C — ?GetUserVersion@ 0x1800253e0
-    // +0x70 — the SORT KEY, and the only field the packfile sort compares.
-    // 0x1800264a0 is an introsort over `PackageFile*` whose entire comparator is
-    // `MOV EAX,[RAX+0x70] ; CMP dword ptr [RCX+0x70],EAX`, and the constructor
-    // seeds it with the qword 0x2710 (10000) — so an unread packfile sorts to a
-    // fixed default and ReadPackfile is what makes one package outrank another.
-    //
-    // Lane PKG modelled this as a `uint64_t` because the constructor's store is
-    // one qword. It is TWO dwords: `?GetPriority@` (0x1800254e0) reads the low
-    // half and `?GetPlatform@` (0x1800253f0) reads `[RCX+0x74]`, the high half.
-    // The qword store therefore seeds priority=0x2710 AND platform=0. Splitting
-    // it changes no offset and no static_assert; nothing in the tree read the
-    // field as a qword (checked by grep before the change).
-    int32_t  priority;             // +0x70 — ?GetPriority@ 0x1800254e0
-    int32_t  platform;             // +0x74 — ?GetPlatform@ 0x1800253f0
-    // +0x78/+0x7C — the icon dimensions, and the ONLY two fields in this struct
-    // the constructor does NOT initialise: its store list jumps 0x70 -> 0x80.
-    // That is not an omission in the transcription, it is retail leaving them
-    // to ReadPackfile, and it is why the constructor's byte oracle must not
-    // compare them (reference_oracle_must_not_compare_unwritten_bytes.md).
-    int32_t  iconWidth;            // +0x78 — ?GetIconWidth@  0x180025510
-    int32_t  iconHeight;           // +0x7C — ?GetIconHeight@ 0x180025520
-    uint8_t  _unknown80[0xA8 - 0x80];
-    // +0xA8 — the package CRC, which is ALSO the packfile id. Two exported
-    // readers hit the same four bytes: ?GetCRC@ (0x180025500) and
-    // FileSystem::GetPackfileId (0x1800ab050). They are the same field, not two.
-    uint32_t packfileId;           // +0xA8
-    // +0xAC — the OVERRIDE flag, born 1 in the constructor
-    // (`MOV byte ptr [RCX+0xac],0x1` at 0x1800b44dc). LoadPackages' index pass
-    // reads it on the package that ALREADY owns a colliding path
-    // (`CMP byte ptr [RCX+0xac],0x0` at 0x1800ab91e): nonzero means the later
-    // package takes the entry over, zero means the incumbent keeps it. That is
-    // the whole of the loose-file / .pkg / .pkm precedence rule.
-    uint8_t  overridable;
-    uint8_t  _unknownAD[0xB0 - 0xAD];
-    // +0xB0/+0xB8 — the package's file table, array + count, stride 16.
-    // The stride is not inferred: ?GetFileName@PackageFile@IO@@ (0x180025450)
-    // is `MOVSXD RDX,R8D ; SHL RDX,0x4 ; ADD RDX,[RCX+0xb0]` and then a Filename
-    // copy ctor from that address, so entry+0 is a Filename and the entries are
-    // 16 bytes apart. LoadPackages reads the count as a dword at +0xB8
-    // (`MOV EAX,dword ptr [RCX+0xb8]`).
-    void*    entries;
-    int32_t  entryCount;
-};
+// B.4 Z LAST IO: the `PackageFileView` POD that stood here is deleted: nothing
+// read it but its own asserts and `IO::PackageFile`'s alias asserts, and the
+// class (runtime/types/io/PackageFile.h) pins every one of these offsets with
+// the same instructions. Its two facts not repeated there: +0x58 / +0x60 are
+// Strings by ~PackageFile's release idiom (0x1800b45c0 / 0x1800b4599), purpose
+// unknown; +0x78 / +0x7c are the only two fields the ctor 0x1800b4440 does not
+// write (ReadPackfile does).
 // One entry of the +0xB0 table. Stride 16, pinned three independent ways:
 // GetFileName's `SHL RDX,0x4`, GetFileOffset's `[RAX + R8*8 + 0x8]` after
 // `ADD R8,R8` (= index*16 + 8) and GetFileSize's `+ 0xc` (= index*16 + 12).
 struct PackageFileEntry {
-    RtSystem::String name;         // +0x00 — the Filename GetFileName AddRefs
+    System::Filename name;         // +0x00 — the Filename GetFileName copies (B.4 Z LAST IO: the class)
     uint32_t         offset;       // +0x08 — ?GetFileOffset@ 0x1800254c0
     uint32_t         size;         // +0x0C — ?GetFileSize@   0x1800254a0
 };
@@ -170,36 +105,6 @@ static_assert(offsetof(PackageFileEntry, offset) == 0x08,
 static_assert(offsetof(PackageFileEntry, size)   == 0x0C,
               "GetFileSize 0x1800254ad: `MOV EAX,dword ptr [RAX + R8*0x8 + 0xc]`");
 
-static_assert(offsetof(PackageFileView, name)        == 0x40,
-              "GetName 0x18002532a: `MOV RAX,qword ptr [RCX+0x40]`");
-static_assert(offsetof(PackageFileView, author)      == 0x48,
-              "GetAuthor 0x18002536a: `MOV RAX,qword ptr [RCX+0x48]`");
-static_assert(offsetof(PackageFileView, description) == 0x50,
-              "GetDescription 0x1800253aa: `MOV RAX,qword ptr [RCX+0x50]`");
-static_assert(offsetof(PackageFileView, _string58)   == 0x58,
-              "~PackageFile 0x1800b45c0: the String release idiom on [RBX+0x58]");
-static_assert(offsetof(PackageFileView, _string60)   == 0x60,
-              "~PackageFile 0x1800b4599: the String release idiom on [RBX+0x60]");
-static_assert(offsetof(PackageFileView, version)     == 0x68,
-              "GetVersion 0x1800253d0: `MOV EAX,dword ptr [RCX+0x68]`");
-static_assert(offsetof(PackageFileView, userVersion) == 0x6C,
-              "GetUserVersion 0x1800253e0: `MOV EAX,dword ptr [RCX+0x6c]`");
-static_assert(offsetof(PackageFileView, priority)   == 0x70,
-              "sort 0x1800264a0: `CMP dword ptr [RCX+0x70],EAX` is its whole comparator");
-static_assert(offsetof(PackageFileView, platform)   == 0x74,
-              "GetPlatform 0x1800253f0: `MOV EAX,dword ptr [RCX+0x74]`");
-static_assert(offsetof(PackageFileView, iconWidth)  == 0x78,
-              "GetIconWidth 0x180025510: `MOV EAX,dword ptr [RCX+0x78]`");
-static_assert(offsetof(PackageFileView, iconHeight) == 0x7C,
-              "GetIconHeight 0x180025520: `MOV EAX,dword ptr [RCX+0x7c]`");
-static_assert(offsetof(PackageFileView, packfileId) == 0xA8,
-              "GetPackfileId 0x1800ab050: `*(uint*)(pkg + 0xa8)` on the resolved match");
-static_assert(offsetof(PackageFileView, overridable) == 0xAC,
-              "LoadPackages 0x1800ab91e: `CMP byte ptr [RCX+0xac],0x0`");
-static_assert(offsetof(PackageFileView, entries)    == 0xB0,
-              "GetFileName 0x180025475: `ADD RDX,qword ptr [RCX+0xb0]`");
-static_assert(offsetof(PackageFileView, entryCount) == 0xB8,
-              "LoadPackages 0x1800ab889: `MOV EAX,dword ptr [RCX+0xb8]`");
 
 // ---- IO::FileSystem::FileInfo ---------------------------------------------
 // Moved here from runtime/src/io/filesystem_setupdirs_win.cpp by Wave 9 lane

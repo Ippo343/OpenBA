@@ -476,15 +476,9 @@ Filename Filename::GetPathExtension() const {
 // ############################################################################
 namespace RtSystem {
 
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other) {
-    new (AsSys(self)) System::Filename(*AsSys(other));
-    return self;
-}
-
-// The package reader (0x1800b5f42 / 0x1800b5f95 / 0x1800b5f9e) runs Filename's private
-// AdjustDelimiters on a String slot: retail's Filename IS a String (Filename.h's pins).
-void RtSystem_Filename_AdjustDelimiters(String* self) {
-    System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(reinterpret_cast<Filename*>(self)));   // LEFT: audit DEFERRED:a base-class relation would run String ctor/dtor (H5, behaviour); retail Filename; retail calls Filename's private member on a String slot (Filename IS a String, one field)
-}
+// (B.4 Z LAST IO: `RtSystem_Filename_CtorCopy` and
+// `RtSystem_Filename_AdjustDelimiters`, the POD spellings of the copy ctor
+// 0x1800067d0 and of AdjustDelimiters 0x1800c6970, are gone with their last
+// callers: the package entry's name is a real Filename.)
 
 }  // namespace RtSystem

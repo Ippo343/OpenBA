@@ -877,9 +877,9 @@ System::Filename PackageFile::GetFileName(int index) const {
     // prints it as a zero extension and that cost Wave 6 three defects. It only
     // matters for a negative index, which retail never passes; it is written as
     // int64 anyway because that is what the instruction says.
-    // The entry's `name` (+0x00) is a Filename on the RtSystem::String POD;
-    // `Filename(const Filename&)` is the copy ctor 0x1800067d0.
-    return System::Filename(RtSystem::SysFile(_entries._data[static_cast<int64_t>(index)].name));
+    // The entry's `name` (+0x00) is a Filename; `Filename(const Filename&)`
+    // is the copy ctor 0x1800067d0, into the hidden return slot.
+    return _entries._data[static_cast<int64_t>(index)].name;
 }
 
 }  // namespace IO
