@@ -29,6 +29,7 @@
 #include "Component/StateMachineComponent.h"
 #include "options.h"
 #include "object/TypeInfo.h"
+#include "object/VSlot.h"       // Object::SlotAddressOf
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -84,17 +85,14 @@ Component* FindComp(ComponentEntity* ent, uint32_t tid) {
 void PostNodeEvent(StateMachineComponent* smc, int eventId) {
     if (!smc) return;
     StateMachine* sm = &smc->stateMachine;          // +0x48
-    void* node = sm->current;                       // sm+0x00
+    ControllerComponent::Controller* node = sm->current;   // sm+0x00
     if (!node) return;
-    // LEFT: the harness's own "slot 2 is filled" guard reads the node's vtable, so
-    // the call stays a slot call (Controller::PostEvent would drop the guard).
-    void** vt = *reinterpret_cast<void***>(node);   // LEFT: FLOOR? vtable probe: the harness reads the node's vtable word to test slot 2 before calling it
-    if (!vt || !vt[2]) return;
+    // The harness's "PostEvent is filled" test, on the slot the member names.
+    if (!::Object::SlotAddressOf(node, &ControllerComponent::Controller::PostEvent)) return;
     const int curIdx = sm->activeState;             // +0x51
-    reinterpret_cast<char (*)(void*, void*, int, int)>(vt[2])(   // LEFT: FLOOR? vtable probe: calls slot 2 (PostEvent) through the word tested above; Controller::PostEvent would drop the harness's guard
-        node, sm, curIdx, eventId);
+    node->PostEvent(sm, curIdx, eventId);
     std::fprintf(stderr, "[CropStart]   posted node event %d (node=%p curIdx=%d)\n",
-                 eventId, node, curIdx);
+                 eventId, static_cast<void*>(node), curIdx);
 }
 
 void Fire(int frame) {
