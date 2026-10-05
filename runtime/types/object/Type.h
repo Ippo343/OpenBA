@@ -62,8 +62,13 @@ static_assert(std::is_trivially_destructible<Type>::value, "value type, no teard
 // declared here, copied from its definition (linkage, namespace, types), so the
 // reader can call it by name. Nothing calls it through this declaration yet.
 
+namespace IO { class Serializer; }
+
 namespace RtObject {
 // ---- object/type_system.cpp
-void RtObject_Type_Serialize(void* self, void* serializer);  // 0x1800c0c40
+// `self` stays `void*`: the callers' fields are uint32_t, int32_t and
+// Object::Type (code/Game headers), and one typed parameter needs them all
+// declared Object::Type. Every caller hands a local IO::Serializer.
+void RtObject_Type_Serialize(void* self, ::IO::Serializer* serializer);  // 0x1800c0c40
 }  // namespace RtObject
 // ==== end B3R W0-P0c ====

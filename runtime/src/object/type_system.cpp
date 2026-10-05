@@ -84,18 +84,6 @@ namespace {
 // ONE body. The name is kept here because six sites below read better with it.
 inline uint32_t TypeNameCRC(const char* name) { return ::Object::TypeNameCRC(name); }
 
-// The object, viewed as the real class (ENDGAME B.3.3 step 4). The B.3.3 bridge
-// from a caller that still hands us a `void*`.
-//
-// THIS IS SAFE FOR AN OBJECT CARRYING A MINTED VTABLE, which is every object in
-// the game today: `p->Type()` compiles to `(*(void***)p)[2](p)`, the exact
-// instruction the hand-written cast below used to be, and
-// tests/unit/object_vtable_abi_test.cpp proves a real class's virtual call
-// lands correctly in a hand-built table at retail slot indices. It is what
-// makes the class usable before any of its subclasses convert.
-inline const ::Object::Base* AsBase(const void* self) {
-    return reinterpret_cast<const ::Object::Base*>(self);  // LEFT: audit WORK, left: RtObject_Base_IsDerivedFrom's caller InternalPtrIsDerivedFrom serves InternalPtr<T> over non-Internal T (Internal.h, DEFERRED), so `self` stays const void*
-}
 
 
 } // namespace
@@ -159,12 +147,12 @@ uint32_t TypeIdFromName(const char* name) { return TypeNameCRC(name); }
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
-bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
+bool RtObject_Base_IsDerivedFrom(const ::Object::Base* self, uint32_t typeId) {
     // The body is `Object::Base::IsDerivedFrom` as of step 4, which keeps the
     // singleton-before-virtual-call order and the unguarded find. `_singleton`
     // is reached through `Factory::Get()` — the same minted cell this file used
     // to resolve by hand.
-    return AsBase(self)->IsDerivedFrom(typeId);
+    return self->IsDerivedFrom(typeId);
 }
 
 // ============================================================================
@@ -202,8 +190,8 @@ bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
 // the member is IO::Serializer::Serialize(unsigned int&) — an Object::Type is
 // the 4-byte type id and `self` was already the field pointer. The old third
 // argument `0` was the ignored `const char* name`.
-void RtObject_Type_Serialize(void* self, void* serializer) {
-    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(self), nullptr);   // B.3.4 bridge  (0x98 = uint door)  // LEFT: audit WORK, left: the callers' fields are uint32_t (SendComponentMessage, ConsumeProduceDescription, ControlUIConfig), int32_t (ConsumeProduce::field_50) and Object::Type (UIDescription) in code/ headers; one typed signature needs them declared Object::Type
+void RtObject_Type_Serialize(void* self, ::IO::Serializer* serializer) {
+    serializer->Serialize(*reinterpret_cast<unsigned int*>(self), nullptr);   // B.3.4 bridge  (0x98 = uint door)  // LEFT: audit WORK, left: the callers' fields are uint32_t (SendComponentMessage, ConsumeProduceDescription, ControlUIConfig), int32_t (ConsumeProduce::field_50) and Object::Type (UIDescription) in code/ headers; one typed signature needs them declared Object::Type
 }
 
 // ============================================================================
