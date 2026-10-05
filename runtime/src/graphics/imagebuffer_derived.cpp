@@ -609,12 +609,8 @@ namespace Graphics {
 void ReflectionImageBuffer::Render(Renderer& rend, const Scene& scene,
                                    const Camera& cam, int32_t generation) const {
     // `?Render@` is `UEBA` — CONST — and the body's last act WRITES `_generation`
-    // (0x1800a6e91). Retail's own signature and retail's own body disagree, which
-    // MSVC source can only have expressed with a cast too. The const-ness is
-    // transcribed because it is what the slot's mangled name says, and the write
-    // is spelled with the cast at the one site rather than by making the field
-    // `mutable`, which would hide the disagreement in the declaration.
-    ReflectionImageBuffer* const p = const_cast<ReflectionImageBuffer*>(this);  // LEFT: retail's Render slot is const (UEBA) and its body writes _generation (0x1800a6e91): the const_cast is retail's own disagreement
+    // (0x1800a6e91): the field is `mutable` (GeneratedImageBuffer.h).
+    const ReflectionImageBuffer* const p = this;
 
     if (p->_generation == generation) return;      // CMP [RCX+0x68],ESI / JZ
 

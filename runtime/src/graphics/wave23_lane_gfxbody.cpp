@@ -600,9 +600,8 @@ bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format forma
 
 // ---------------------------------------------------------------------------
 // ?Generate@FrameCopyImageBuffer@Graphics@@  0x1800a3b20 -- slot 10, block GC.
-// `UEBA` is CONST and the body still writes `_generation` through it; the
-// `const_cast` is at the site rather than hidden in a `mutable`, which is
-// GeneratedImageBuffer.h's own rule for exactly these two slots. The
+// `UEBA` is CONST and the body still writes `_generation` through it: the
+// field is `mutable` (GeneratedImageBuffer.h, B.4 const_slot). The
 // four-argument platform slot-3 call (`MOV R9B,0x1`) is unchanged.
 // ---------------------------------------------------------------------------
 void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
@@ -617,7 +616,7 @@ void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
     _destTarget->platformData   // faithful: unguarded
         ->Resolve(context, _sourceTarget, true);
 
-    const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;  // [RBX+0x68]   // LEFT: FLOOR? retail's const (UEBA) Generate slot writes _generation; GeneratedImageBuffer.h keeps the const_cast at the two sites on purpose (no `mutable`)
+    _generation = generation;  // [RBX+0x68]: the const (UEBA) slot writes the mutable latch
 }
 
 }  // namespace Graphics

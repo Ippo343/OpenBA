@@ -465,8 +465,8 @@ static inline uint32_t CompressHash(uint32_t dv) {
 // NOT NULL-CHECKED: retail stores the result and memsets it unconditionally.
 // An allocation failure here is an upstream fault to find.
 System::Compression::Compression() {
-    void* p = RtSystem::RtMemAlloc(0x40000u, 4);
-    _table = static_cast<uint32_t*>(p);  // LEFT: an alloc result; the tier-I shape does not match the RtMemAlloc spelling
+    uint32_t* const p = static_cast<uint32_t*>(RtSystem::RtMemAlloc(0x40000u, 4));
+    _table = p;
     std::memset(p, 0, 0x40000u);
 }
 
