@@ -394,8 +394,8 @@ void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
         // ENDGAME B.3.1 step 2: the `?Set@String@System@@QEAAXPEBD@Z` door is gone
         // with its one call site — it is `work.Set(...)` below.
 
-        for (int32_t i = 0; i < mods->_count; ++i) {
-            RtIO::Mod* entry = &mods->_mods[i];
+        for (int32_t i = 0; i < mods->_mods.size; ++i) {
+            RtIO::Mod* entry = &mods->_mods.data[i];
             if (entry->enabled == 0) continue;
 
             // ModInfo's real default ctor IS retail's two stores here (name and

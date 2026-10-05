@@ -305,9 +305,9 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 // delete the surrounding code -- the deref has to actually
                 // happen, because that fault IS how a missing registration
                 // reports itself (type_system.cpp, "NO ADDED NULL GUARDS").
-                const BaseTypeInfo* const volatile* infoSlot =
+                const ::Object::BaseTypeInfo* const volatile* infoSlot =
                     &n->element.record.info;                      // n + 0x10
-                const BaseTypeInfo* info = *infoSlot;
+                const ::Object::BaseTypeInfo* info = *infoSlot;
 
                 ::Object::Base* const created = info->factoryFn();   // 1800bc742
                 obj = static_cast<::Object::External*>(created);   // the record's type is an External (no checked downcast in retail)

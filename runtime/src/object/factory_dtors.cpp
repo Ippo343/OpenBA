@@ -387,7 +387,7 @@ void ReferenceSubtreeFree(void* set, RtObject::ReferenceSet::Node* node) {
     ReferenceSubtreeFree(set, node->left);    // +0x18
     ReferenceSubtreeFree(set, node->right);   // +0x20
     // ~Filename (0x180006980) over `ReferenceEntry::path` (+0x08).
-    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();   // LEFT: H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)
+    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (ReferenceEntry: element of an erased container); H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
@@ -416,7 +416,7 @@ void ResourceSubtreeFree(void* set, RtObject::ResourceSet::Node* node) {
     ResourceSubtreeFree(set, node->left);     // +0x20
     ResourceSubtreeFree(set, node->right);    // +0x28
     // ~Filename over `ResourceEntry::path`, the key at +0x00.
-    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();  // LEFT: H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)
+    reinterpret_cast<System::Filename*>(&node->element.path)->~Filename();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (ReferenceEntry: element of an erased container); H10 ReferenceEntry::path is the RtSystem::Filename POD (External.h; the mirror is named tree-wide)
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 

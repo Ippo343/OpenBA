@@ -800,7 +800,7 @@ Graphics::MeshInstance::~MeshInstance() {
 // constructor (0x180015070) first, stores retail's caller does not make.
 TriangleVertex* RtGraphics_EdgeMesh_TriangleVertex_Ctor(TriangleVertex* self, const void* vec3) {
     TriangleVertex* tv = self;
-    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: SIG its caller (tool_base_render.cpp EdgeSegment) holds the endpoints as float[3] (a Math::Vector3 local would add its zeroing ctor's stores)
+    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: audit WORK, left: the code/ caller (tool_base_render.cpp EdgeSegment) holds the endpoints as float[3]; a Math::Vector3 local would add its zeroing ctor (0x180015070)
     tv->x = static_cast<int16_t>(static_cast<int>(v->x * kEdgeMeshVertexScale));
     tv->y = static_cast<int16_t>(static_cast<int>(v->y * kEdgeMeshVertexScale));
     tv->z = static_cast<int16_t>(static_cast<int>(v->z * kEdgeMeshVertexScale));
@@ -2031,7 +2031,7 @@ void MeshInstance::SetMesh(Object::ExternalPtr<GraphicsMesh> mesh) {
     // LEFT: `_animation` is the 0x18-byte retail AnimationState (Mesh.h's
     // MeshAnimationState); the tree's 0x48 class is only its prefix-compatible
     // superset, so the member is reached through a view of the same bytes.
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // LEFT: POD _animation is the RtGraphics::MeshAnimationState mirror of Graphics::AnimationState
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // LEFT: audit DEFERRED:the tree Graphics::AnimationState is 0x48, retail embeds a 0x18 AnimationState at; POD _animation is the RtGraphics::MeshAnimationState mirror of Graphics::AnimationState
         ->::Graphics::AnimationState::ResetAnimationState();
     rtcoll::Rt_SetSize_18005ac50(&_nodes, newMesh->_nodes._size);
     this->MeshInstance::UpdateHierarchy();
@@ -2053,12 +2053,12 @@ void MeshInstance::SetMesh(Object::ExternalPtr<GraphicsMesh> mesh) {
 // B4 FORWARD: action_base_complete.cpp and buildcomponent_state8.cpp hold
 // their GraphicsMesh as a void*; action_base_movedeps.cpp its AnimationGroup.
 void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
-    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: B4 FORWARD for the two void* callers
+    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: audit WORK, not this agent's: the SetMesh B4 FORWARD overload, z-CODEB converts its code/ callers and may delete it
 }
 void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
                                  const System::Time* startTime, const System::Time* blendTime,
                                  float weight) {
-    PlayAnimation(Object::ExternalPtr<AnimationGroup>(static_cast<AnimationGroup*>(group.p)),  // LEFT: B4 FORWARD for the void* caller (action_base_movedeps.cpp)
+    PlayAnimation(Object::ExternalPtr<AnimationGroup>(static_cast<AnimationGroup*>(group.p)),  // LEFT: audit WORK, not this agent's: the PlayAnimation B4 FORWARD overload, z-CODEB converts its code/ caller and may delete it
                   index, startTime, blendTime, weight);
 }
 
@@ -2076,7 +2076,7 @@ void MeshInstance::PlayAnimation(Object::ExternalPtr<AnimationGroup> group, int 
     // ENDGAME B.3.5 caller batch. `GetMesh()->_nodes` is the embedded
     // `Array<Node>` at mesh+0x60, handed over by ADDRESS (Mesh.h's banner).
     // LEFT: the `_animation` view (see SetMesh).
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: POD MeshInstance::_animation is the 0x18-byte RtGraphics::MeshAnimationState held raw (Mesh.h), viewed as Graphics::AnimationState
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: audit DEFERRED:the tree Graphics::AnimationState is 0x48, retail embeds a 0x18 AnimationState at; POD MeshInstance::_animation is the 0x18-byte RtGraphics::MeshAnimationState held raw (Mesh.h), viewed as Graphics::AnimationState
         ->::Graphics::AnimationState::PlayAnimation(
             group,
             index,

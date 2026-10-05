@@ -346,10 +346,10 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
     }
 
     // 12. The result (`_result`, +0x24), re-read through the caller's InternalPtr.
-    // B.4 LEFT: the defect-2 control reads the low dword of `_parent` (+0x28),
-    // which is no field.
+    // The defect-2 control returns the low dword of `_parent` (+0x28): the
+    // pointer's integer value, truncated.
     if (g_RtShowDialogDefect == 2)                                       // control
-        return *reinterpret_cast<int*>(   // LEFT: the defect-2 control reads the low dword of _parent (+0x28), which is no field
-            reinterpret_cast<uintptr_t>(dialogArg->Get()) + 0x28);   // LEFT: the defect-2 control reads the low dword of _parent (+0x28), which is no field
+        return static_cast<int32_t>(
+            reinterpret_cast<uintptr_t>(dialogArg->Get()->_parent.Get()));   // LEFT: ptr_int: the defect-2 control's value is the parent pointer's low dword as an integer
     return dialogArg->Get()->_result;
 }

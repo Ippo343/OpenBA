@@ -158,8 +158,8 @@ void DisableAllModifications() {
     IO::Modification* modification = engine->_modification;
     if (modification == nullptr) return;
 
-    const int32_t count = modification->_count;          // +0x10
-    RtIO::Mod* base = modification->_mods;               // +0x08
+    const int32_t count = modification->_mods.size;          // +0x10
+    RtIO::Mod* base = modification->_mods.data;               // +0x08
     for (int32_t i = 0; i < count; ++i)
         base[i].enabled = 0;                             // Mod +0x50, stride 0x80
 

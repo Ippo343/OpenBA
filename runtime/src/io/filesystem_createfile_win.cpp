@@ -377,7 +377,7 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
     // in retail's order (the UTF-8 String first, then the WideString).
     {
         RtIO::WideStr w{};  w.data = nullptr;                // 1800adefc
-        reinterpret_cast<System::WideString*>(&w)->Set(      // B.3.x bridge  // LEFT: System::WideString held as a POD slot (system/WideString, R-SYS)
+        reinterpret_cast<System::WideString*>(&w)->Set(      // B.3.x bridge  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
             tempFile);                                       // 1800adf0f
 
         // AsUTF8's hidden return slot is still POD-shaped (System::WideString
@@ -385,7 +385,7 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
         // steals it: `utf8Pod` is left null, so ~utf8 is the one release.
         RtSystem::String utf8Pod{};  utf8Pod.data = nullptr; // 1800adf15
         ::new (&RtIO::Sys(utf8Pod)) System::String(           // B.3.x bridge
-            reinterpret_cast<const System::WideString*>(&w)->AsUTF8());   // 1800adf21  // LEFT: System::WideString held as a POD slot (system/WideString, R-SYS)
+            reinterpret_cast<const System::WideString*>(&w)->AsUTF8());   // 1800adf21  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; System::WideString held as a POD slot (system/WideString, R-SYS)
         System::String utf8(std::move(RtIO::Sys(utf8Pod)));
 
         // adopt-then-AdjustDelimiters == Filename(const String&), 0x18000c780.
@@ -594,7 +594,7 @@ FileSystem::~FileSystem() {
     // its ADDRESS as `this` and the root as the node.
     void* tree = &_packfileIndexRoot;
     rtavl::SubtreeFree(tree,                          // 1800ac6ff
-        reinterpret_cast<rtsetavl::Node*>(_packfileIndexRoot));  // LEFT: the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
+        reinterpret_cast<rtsetavl::Node*>(_packfileIndexRoot));  // LEFT: audit WORK, not executed this pass (a typed element / node accessor over the erased set (one hand-off, elem_str); blocker; the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
 
     _packfileIndexRoot  = nullptr;                    // 1800ac706
     _packfileIndexCount = 0;                          // 1800ac709

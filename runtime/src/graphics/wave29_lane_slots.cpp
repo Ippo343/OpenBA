@@ -121,7 +121,7 @@ Transform28 g_identityTable[48] = {};        // retail 0x1801ff310 .. 0x1801ff85
 static_assert(sizeof(g_identityTable) == 1344, "0x540 bytes, the mint row's size");
 uint32_t*    UpdateInitGuard() { return &g_updateInitGuard; }
 // LEFT: the one view of the raw storage as the Transforms it holds (above).
-Math::Transform* IdentityTable() { return reinterpret_cast<Math::Transform*>(g_identityTable); }   // LEFT: the table's storage is raw bytes so it zero-initialises as retail's .data does (a Math::Transform array is constant-initialised to identity); the one view as the Transforms
+Math::Transform* IdentityTable() { return reinterpret_cast<Math::Transform*>(g_identityTable); }   // LEFT: audit ruling floor static_init (the marker is the coordinator's); the table's storage is raw bytes so it zero-initialises as retail's .data does (a Math::Transform array is constant-initialised to identity); the one view as the Transforms
 
 //   SYMBOL:      ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA, retail
 //                0x1801fc70b, ordinal 4796 — a DATA export, a single static
@@ -288,7 +288,7 @@ void MeshInstance::Update(const System::Time& timeRef) {
     // the embedded +0x60 with the pointer-to-array +0x70 cost Wave 6 an
     // integration run, and is silent whenever the garbage count reads 0.
     const bool ok =
-        reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: H5 MeshInstance::_animation raw storage
+        reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: audit DEFERRED:the tree Graphics::AnimationState is 0x48, retail embeds a 0x18 AnimationState at; H5 MeshInstance::_animation raw storage
             ->::Graphics::AnimationState::Update(
                 timeRef,
                 GetMesh()->GetNodes(),                 // &mesh->_nodes (+0x60)

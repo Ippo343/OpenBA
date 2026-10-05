@@ -89,7 +89,7 @@ const ::IO::FileSystem* FileSystemSingleton() {
 // [RAX+0x38],0 / JG done` — `IO::FileSystem::AreUserPackFilesEnabled`
 // (0x1800acfc0): the user (mod) pack-file COUNT is positive.
 bool UserPackFilesEnabled(const ::IO::FileSystem* fs) {
-    return fs->_userPackFilenameCount > 0;
+    return fs->_userPackFilenames.size > 0;
 }
 
 }  // namespace

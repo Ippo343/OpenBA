@@ -1085,8 +1085,8 @@ const ArraySpec kSpec_U64ZeroA4 = {               // 0x180024d70  Array<Header>
 // assign below therefore delegates to the ported copy ctor rather than
 // reimplementing its String half.
 static void PkgEntryAssign(RtIO::PackageFileEntry* d, const RtIO::PackageFileEntry* s) {
-    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(&d->name),        // 1800299bd  // LEFT: PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
-                                         reinterpret_cast<const RtSystem::Filename*>(&s->name));  // LEFT: PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
+    RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(&d->name),        // 1800299bd  // LEFT: audit WORK, not executed this pass (CLASS unit RtIO::PackageFileEntry (doable-with:PackageFileEntry::name as Sy); blocker; PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
+                                         reinterpret_cast<const RtSystem::Filename*>(&s->name));  // LEFT: audit WORK, not executed this pass (CLASS unit RtIO::PackageFileEntry (doable-with:PackageFileEntry::name as Sy); blocker; PackageFileEntry::name is RtSystem::String (R-IO's FileSystem.h), retail's Filename
     d->offset = s->offset;                   // 1800299c3
     d->size   = s->size;                     // 1800299c9
 }
@@ -2318,7 +2318,7 @@ namespace rtcoll {
 
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
@@ -2470,9 +2470,9 @@ J1_ENTRY(180043cb0)   // UI:          LayoutElement::_rows       (+0xC0)
 #undef J1_ENTRY
 
 // 0x18001cdf0 — `Array<int32>::operator=`. Body and evidence above.
-void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
-    void* r = RtColl_I32ArrayAssign(static_cast<Collection::Array<int32_t>*>(dst),  // LEFT: SIG RtColl_I32ArrayAssign_18001cdf0: wave9_lane_gfxd.cpp's RtArrayAssignI32 (X-G2-4's file) hands it void*
-                                    static_cast<const Collection::Array<int32_t>*>(src));  // LEFT: SIG RtColl_I32ArrayAssign_18001cdf0: wave9_lane_gfxd.cpp's RtArrayAssignI32 (X-G2-4's file) hands it void*
+void* RtColl_I32ArrayAssign_18001cdf0(Collection::Array<int32_t>* dst,
+                                      const Collection::Array<int32_t>* src) {
+    void* r = RtColl_I32ArrayAssign(dst, src);
     return r;
 }
 
@@ -3140,7 +3140,7 @@ const ArraySpec kSpec_StringRefZ_PP = {           // 0x1800547e0
 //   destroy       0x180054ba0 (Body B, `kD_Str_10`), both arms
 void AssignPpSampler10(uint8_t* d, const uint8_t* s) {
     AssignStringRef(d, s);                                   // +0x00
-    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);  // LEFT: Video PixelProgram::Sampler has no type in any header (R-VIDEO)
+    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);  // LEFT: audit WORK, not executed this pass (CLASS unit Video::PixelProgram::Sampler (doable)); blocker; Video PixelProgram::Sampler has no type in any header (R-VIDEO)
     d[0x0c] = s[0x0c];
     d[0x0d] = s[0x0d];
     d[0x0e] = s[0x0e];
@@ -3280,7 +3280,7 @@ const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
 
 #define D1_J1_ENTRY(ADDR)                                                     \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 
@@ -3396,7 +3396,7 @@ void RtColl_ArraySetSize_18003d430(void* a) {
 // unchanged and one body still serves them all.
 #define J1_ENTRY(ADDR)                                                        \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));  /* LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? macro: the erased entry views its caller's Array<T> (void*) as the ArrayHdr core */ \
         return nullptr;                                                       \
     }
 

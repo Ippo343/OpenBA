@@ -521,7 +521,7 @@ void DetachBody(::Graphics::Geometry* self, ::Graphics::Geometry* child) {
 // are retired; this member is the only body.
 // ============================================================================
 Graphics::Geometry::Geometry() {
-    RtGraphics::Geometry* const self = reinterpret_cast<RtGraphics::Geometry*>(this);   // B.3.8 bridge (the POD view)  // LEFT: POD Geometry ctor writes through the RtGraphics view (closing wave)
+    RtGraphics::Geometry* const self = reinterpret_cast<RtGraphics::Geometry*>(this);   // B.3.8 bridge (the POD view)  // LEFT: audit WORK, not executed this pass (POD unit RtGraphics::Geometry (doable)); blocker; POD Geometry ctor writes through the RtGraphics view (closing wave)
     self->_attachParent      = nullptr;
     self->_attachNode        = -1;
     self->_attached._data    = nullptr;
@@ -1194,7 +1194,7 @@ bool Geometry::Clean() {
         const Math::Transform xf = _transform;
         float box[6];
         const float* world = rtpickgrid::BoxTransform(box, &xf,
-                                                      reinterpret_cast<const float*>(&_localBounds));  // LEFT: SIG rtpickgrid::BoxTransform takes the six floats (its scene_grid caller hands it a float[6] copy; a typed ::Box local would run Vector3's zeroing ctor)
+                                                      reinterpret_cast<const float*>(&_localBounds));  // LEFT: audit WORK, left: rtpickgrid::BoxTransform's scene_grid caller hands a float[6] copy; a typed Box local would add Vector3's zeroing ctor stores
         _prevWorldBounds = _worldBounds;
         _worldBounds.min.x = world[0];
         _worldBounds.min.y = world[1];
@@ -1325,8 +1325,8 @@ Scene::ObjectId Scene::AddObject(Geometry* geometry) {
     Geometry* local = geometry;
     // The grid insert reads `MOV RAX,[RSI]`, i.e. a POINTER TO the Geometry*,
     // which is why retail spills its argument to a local first.
-    return RtSceneGridAdd(reinterpret_cast<RtGraphics::Scene*>(this),          // B.3.5 bridge  // LEFT: POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
-                          reinterpret_cast<RtGraphics::Geometry* const*>(&local));  // LEFT: POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
+    return RtSceneGridAdd(reinterpret_cast<RtGraphics::Scene*>(this),          // B.3.5 bridge  // LEFT: audit DEFERRED:ctor/dtor doors; POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
+                          reinterpret_cast<RtGraphics::Geometry* const*>(&local));  // LEFT: audit DEFERRED:ctor/dtor doors; POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
 }
 
 // ---------------------------------------------------------------------------
@@ -1350,7 +1350,7 @@ void Scene::RemoveObject(ObjectId id) {
     SceneNode* node = &_nodes[static_cast<int32_t>(id)];
     const ObjectId local = id;
 
-    RtSceneGridUnthread(reinterpret_cast<RtGraphics::Scene*>(this),            // B.3.5 bridge  // LEFT: POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
+    RtSceneGridUnthread(reinterpret_cast<RtGraphics::Scene*>(this),            // B.3.5 bridge  // LEFT: audit DEFERRED:ctor/dtor doors; POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
                         static_cast<int32_t>(id));
 
     node->_object = nullptr;
@@ -1430,7 +1430,7 @@ void Scene::Clean() {
         do {
             Geometry* geo = _nodes[i]._object;
             if (geo->_dirtyFlags != 0 && geo->Clean())          // VIRTUAL, slot 8
-                RtSceneGridReindex(reinterpret_cast<RtGraphics::Scene*>(this), i);  // B.3.5 bridge  // LEFT: POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
+                RtSceneGridReindex(reinterpret_cast<RtGraphics::Scene*>(this), i);  // B.3.5 bridge  // LEFT: audit DEFERRED:ctor/dtor doors; POD the grid helpers (picking/scene_grid, rtgfxgrid) take RtGraphics::Scene* (wave X)
 
             count = _nodes.GetSize();
             ++i;

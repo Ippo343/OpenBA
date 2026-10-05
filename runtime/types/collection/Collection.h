@@ -454,7 +454,7 @@ inline void Array<T, Allocator, SpecPolicy>::ClearCallback(Array<uint8_t>* hdr) 
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::DestroyAndFree() {
-    ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(this));  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+    ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(this));  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
 }
 
 template <class T, class Allocator, class SpecPolicy>
@@ -468,7 +468,7 @@ inline Array<T, Allocator, SpecPolicy>::~Array() {
 template <class T, class Allocator, class SpecPolicy>
 inline Array<T, Allocator, SpecPolicy>&
 Array<T, Allocator, SpecPolicy>::Assign(const Array& src) {
-    rtcoll::ArrayAssignCore(reinterpret_cast<rtcoll::ArrayHdr*>(this),  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+    rtcoll::ArrayAssignCore(reinterpret_cast<rtcoll::ArrayHdr*>(this),  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
                             reinterpret_cast<const rtcoll::ArrayHdr*>(&src),  // CAST-OK: elem_stride
                             Spec(), &ClearCallback);
     return *this;
@@ -476,19 +476,19 @@ Array<T, Allocator, SpecPolicy>::Assign(const Array& src) {
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSize(int newSize) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
                         nullptr, Spec());
 }
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSize(int newSize, const T& fill) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
                         reinterpret_cast<const uint8_t*>(&fill), Spec());  // CAST-OK: elem_stride
 }
 
 template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSizeFill(int newSize, const void* fill) {
-    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? Array<T> hands its own header to the erased core; M2 bars a this operand: decision at the close (ledger, R-COLL)
                         static_cast<const uint8_t*>(fill), Spec());  // CAST-OK: elem_stride
 }
 
@@ -1922,7 +1922,8 @@ void RtColl_DestroyStrings_180054ba0(void* ignoredThis, void* base, int count); 
 void RtColl_DestroyStrings_180056960(void* ignoredThis, void* base, int count);  // 0x180056960
 void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count);  // 0x180056cb0
 // ---- collection/array.cpp
-void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src);  // 0x18001cdf0
+void* RtColl_I32ArrayAssign_18001cdf0(Collection::Array<int32_t>* dst,
+                                      const Collection::Array<int32_t>* src);  // 0x18001cdf0
 // ---- collection/array_destroy.cpp
 void* RtColl_LayoutEntryAssign_180043980(uint8_t* dst, const uint8_t* src);  // 0x180043980 (B.4: the element op)
 void* RtColl_SpriteEntryAssign_180004220(uint8_t* dst, const uint8_t* src);  // 0x180004220 (B.4: the element op)

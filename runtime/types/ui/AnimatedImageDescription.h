@@ -66,6 +66,7 @@
 
 #include "ImageDescription.h"
 #include "../collection/Collection.h"
+#include "../system/String.h"     // B.4 Z RT2: Array<System::String> _frameNames
 #include "../object/Internal.h"   // Object::detail::InternalMemFree
 
 namespace UI {
@@ -113,7 +114,10 @@ public:
 private:
 
 public:
-    Collection::Array<char*> _frameNames;   // +0x80 .. +0x8f  Array<System::String>
+    // B.4 Z RT2: the real member (ctor 0x1800cb6f0 zeroes +0x80 / +0x88 as the
+    // Array ctor does; dtor 0x1800cb6b0 runs ~Array<String> 0x180010ab0, the
+    // element-releasing ~Array, which is this member's implicit destructor).
+    Collection::Array<System::String> _frameNames;   // +0x80 .. +0x8f
     int32_t  _framesPerSecond;              // +0x90  ctor 0x1e
     uint32_t _pad94;                        // +0x94  written by nothing
 };

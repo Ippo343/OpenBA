@@ -673,8 +673,8 @@ void Save::SaveLoad::UpdateLoad() {
             // Nothing in the loop can change either, so hoisting would be
             // equivalent — and would still be a claim about the callee-free
             // loop that the next reader has to re-derive. Transcribed.
-            for (int32_t i = 0; i < mods->_count; ++i) {
-                mods->_mods[i].enabled = 0;
+            for (int32_t i = 0; i < mods->_mods.size; ++i) {
+                mods->_mods.data[i].enabled = 0;
             }
         }
         mods->_dirty = 1;
@@ -724,8 +724,8 @@ void Save::SaveLoad::UpdateLoad() {
                 // counting as length 0 rather than faulting), then _stricmp.
                 // Same re-read pair as the clear loop above (0x1800c27d0 /
                 // 0x1800c280f).
-                for (int32_t j = 0; j < mods->_count; ++j) {
-                    const char* entryName = mods->_mods[j].file.data;
+                for (int32_t j = 0; j < mods->_mods.size; ++j) {
+                    const char* entryName = mods->_mods.data[j].file.data;
                     const int lenEntry = entryName ? RtSystem::StringLength(entryName) : 0;
                     const int lenWork  = work.GetLength();
                     if (lenEntry == lenWork && _stricmp(entryName, work._data) == 0) {
@@ -738,7 +738,7 @@ void Save::SaveLoad::UpdateLoad() {
             if (found < 0) continue;
 
             mods->_dirty = 1;
-            mods->_mods[found].enabled = 1;
+            mods->_mods.data[found].enabled = 1;
 
             // Bubble `found` down to index 0. Retail's inner test is
             // `if (k != k-1)`, which is never false; it is the inlined remains
@@ -747,8 +747,8 @@ void Save::SaveLoad::UpdateLoad() {
             for (int32_t k = found; k >= 1; --k) {
                 mods->_dirty = 1;
 
-                RtIO::Mod* a = &mods->_mods[k];
-                RtIO::Mod* b = &mods->_mods[k - 1];
+                RtIO::Mod* a = &mods->_mods.data[k];
+                RtIO::Mod* b = &mods->_mods.data[k - 1];
 
                 // The four-call dance (copy-construct, assign, assign,
                 // destroy) through a stack temporary: 0x1800101e0 /

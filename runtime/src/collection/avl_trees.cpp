@@ -265,7 +265,7 @@ static_assert(sizeof(PtrArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 // drives BOTH.
 // ---------------------------------------------------------------------------
 void* PtrArrayDtor(void* self) {
-    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);  // LEFT: void* door (the Array<T*> operator= / dtor pair; outside callers hold void*)
+    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);  // LEFT: audit WORK, left: the callers (factory_dtors.cpp) hand &TypeRecord::children, the _data word of a raw {children, childCount, childCapacity} triple read by name in object/; a typed header needs that triple retyped first
     MemFree(a->_data);        // retail's `if (p)` lives inside 0x1800c7ad0
     a->_data     = nullptr;
     a->_size     = 0;
@@ -828,11 +828,11 @@ Node** FilenameSetInsert(Set* set, Node** outSlot,
 
     RtSystem::RtSystem_Filename_CtorCopy(                      // 0x1800067d0
         &temp.key,
-        static_cast<const RtSystem::Filename*>(key));  // LEFT: POD RtSystem::Filename — FilenamePair's key is the mirror (RtSystem_Filename_CtorCopy); the caller holds a System::Filename
+        static_cast<const RtSystem::Filename*>(key));  // LEFT: audit DEFERRED:X-R3 mirror count (RtSystem::Filename 38 files, none deletable yet); POD RtSystem::Filename — FilenamePair's key is the mirror (RtSystem_Filename_CtorCopy); the caller holds a System::Filename
 
     temp.value = *value;
 
-    FilenameInsertCore(reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(outSlot), &temp);  // LEFT: SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
+    FilenameInsertCore(reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(outSlot), &temp);  // LEFT: audit WORK, left: FilenamePairNode (RtSystem::Filename key mirror, DEFERRED) and RtIO::PackfileIndexNode are two declarations of one 0x30 node; the insert's +0x08 qword copy vs the readers' two dwords needs the node unified first
 
     StringReleaseInline(&temp.key.data);
     return outSlot;
@@ -881,7 +881,7 @@ void SubtreeFree(void* ignoredThis, Node* node) {
     SubtreeFree(ignoredThis, node->left);
     SubtreeFree(ignoredThis, node->right);
 
-    FilenamePairNode* n = reinterpret_cast<FilenamePairNode*>(node);  // LEFT: SIG SubtreeFree (outside caller holds the erased rtsetavl::Node: filesystem_createfile_win.cpp)
+    FilenamePairNode* n = reinterpret_cast<FilenamePairNode*>(node);  // LEFT: audit WORK, left: SubtreeFree's outside caller (filesystem_createfile_win.cpp) holds the erased rtsetavl::Node; same FilenamePairNode / PackfileIndexNode unification as the insert
     if (n->element.key.data != nullptr) ++g_pc.freeStringsReleased;
     StringReleaseInline(&n->element.key.data);
 

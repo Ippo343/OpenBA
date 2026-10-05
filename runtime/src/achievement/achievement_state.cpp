@@ -214,7 +214,7 @@ Object::InternalPtr<AchievementInstance> Achievement::CreateInstance() const {
         ::new (static_cast<void*>(inst)) AchievementInstance();
 
     Object::InternalPtr<AchievementInstance> result(inst);
-    inst->_achievement = const_cast<Achievement*>(this);   // faithful: not guarded   // LEFT: the instance's _achievement is non-const, the slot is const (retail stores this; a const member type is the owner's decision)
+    inst->_achievement = const_cast<Achievement*>(this);   // faithful: not guarded   // LEFT: audit WORK, left: retail's const CreateInstance stores `this` into the instance's non-const ExternalPtr<Achievement> (+0x20), which code/ readers (goaldialog, gameupdateloop) use non-const; a const pointee would change ExternalPtr<const T> across the readers
 
     // The by-value temporary. `GoalArray::Assign` IS retail's deep
     // `Array<ExternalPtr<Goal>>::operator=` (0x180003970, the J4

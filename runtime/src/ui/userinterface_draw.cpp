@@ -289,7 +289,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // B.4 LEFT: `_captureViewport` stays bytes (a `Video::Viewport` member
     // would pull video/Context.h into every exe includer of this header).
     sc->Begin(_uiScale, _spriteCapture,
-              reinterpret_cast<Video::Viewport*>(_captureViewport));   // +0x118  // LEFT: _captureViewport is raw bytes (typing it embeds Video::Viewport, which pulls Context.h into UserInterface.h)
+              reinterpret_cast<Video::Viewport*>(_captureViewport));   // +0x118  // LEFT: audit WORK, not executed this pass (CLASS unit UI::UserInterface (doable-with:Video::Viewport trivially constru); blocker; _captureViewport is raw bytes (typing it embeds Video::Viewport, which pulls Context.h into UserInterface.h)
 
     // A local lambda for retail's repeated "switch the batch key" preamble,
     // which appears FIVE times verbatim (0x180121e96, 0x180121f79, 0x180122084,

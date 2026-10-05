@@ -347,17 +347,13 @@ void* ArrayAssignCore(ArrayHdr* dst, const ArrayHdr* src,
     return dst;
 }
 
-// ---- the four clear functions, i.e. the four ~Array bodies -----------------
-// Two are lane Q's J1 (free + zero the header) and two are lane D2's J2
-// (per-element destroy, then J1). None of the four is a new algorithm.
+// ---- the clear functions, i.e. the ~Array bodies of the untyped doors -----
+// Both are lane Q's J1 (free + zero the header). The J2 body of
+// Array<AnimationState> (0x18005bbb0: per-element destroy, then J1) is
+// `AnimationStateArray::~Array` over kSpec_AnimState (B.4 Z RT2).
 
 void Clear_18001c480(ArrayHdr* a) { ArrayDtorImpl(a); }           // Array<Layer>
 void Clear_18001c550(ArrayHdr* a) { ArrayDtorImpl(a); }           // Array<InterpolatedState>
-
-void Clear_18005bbb0(ArrayHdr* a) {                                // Array<AnimationState>
-    FreeInnerArraysCore(a->_data, a->_size, &kD_InnerArr3_48);     // CALL 0x18005bce0
-    ArrayDtorImpl(a);
-}
 
 }  // namespace gfxanim
 }  // namespace rtcoll
@@ -379,7 +375,10 @@ void* Rt_ArrayDtor_18001c550(void* a) { rtcoll::AsArray<&kSpec_InterpTransform>(
 // destroy (ReleaseStringsCore over kD_Str_48, CALL 0x180014a40) when the size
 // is positive, then the J1 free-and-zero.
 void* Rt_ArrayDtor_180014090(Graphics::GraphicsMesh::NodeArray* a) { a->~Array(); return nullptr; }
-void* Rt_ArrayDtor_18005bbb0(void* a) { Clear_18005bbb0(static_cast<ArrayHdr*>(a)); return nullptr; }  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
+// B.4 Z RT2: typed. `AnimationStateArray`'s ~Array IS 0x18005bbb0:
+// kSpec_AnimState's destroy (FreeInnerArraysCore over kD_InnerArr3_48, CALL
+// 0x18005bce0, which returns at once for a size <= 0) then the J1 free-and-zero.
+void* Rt_ArrayDtor_18005bbb0(Graphics::AnimationStateArray* a) { a->~Array(); return nullptr; }
 
 // ---- the three per-element destroy helpers --------------------------------
 // Retail's arity, including the `this` every one of them spills to the shadow
@@ -389,8 +388,8 @@ void* Rt_ArrayDtor_18005bbb0(void* a) { Clear_18005bbb0(static_cast<ArrayHdr*>(a
 void Rt_SetSize_18005aa30(Graphics::GraphicsMesh::NodeArray* a, int n) {   // Array<GraphicsMesh::Node>
     a->SetSize(n);                                 // kSpec_MeshNode
 }
-void Rt_SetSize_18005b1e0(void* a, int n) {   // Array<AnimationState>
-    rtcoll::AsArray<&kSpec_AnimState>(a)->SetSize(n);
+void Rt_SetSize_18005b1e0(Graphics::AnimationStateArray* a, int n) {   // Array<AnimationState>
+    a->SetSize(n);                                 // kSpec_AnimState
 }
 void Rt_SetSize_18005c8a0(void* a, int n) {   // Array<AnimationState::Layer>
     rtcoll::AsArray<&kSpec_AnimLayer>(a)->SetSize(n);
@@ -418,16 +417,21 @@ Graphics::GraphicsMesh::NodeArray* Rt_ArrayAssign_180013960(Graphics::GraphicsMe
     d->Assign(*s);
     return d;
 }
-void* Rt_ArrayAssign_18005b130(void* d, const void* s) {   // Array<AnimationState>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
-                           0x48, 8, &Clear_18005bbb0, &AssignAnimState);
+// B.4 Z RT2: typed. `AnimationStateArray::Assign` is the same J4 body
+// (array_destroy.cpp's ArrayAssignCore: self-test, clear = the ~Array above,
+// grow, then kSpec_AnimState's assign = the copy ctor 0x18005b660 per element)
+// with the row's stride 0x48 and alignment 8.
+Graphics::AnimationStateArray* Rt_ArrayAssign_18005b130(Graphics::AnimationStateArray* d,
+                                                        const Graphics::AnimationStateArray* s) {
+    d->Assign(*s);
+    return d;
 }
 void* Rt_ArrayAssign_18001b700(void* d, const void* s) {   // Array<AnimationState::Layer>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
+    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: audit WORK, left: Array<AnimationState::Layer>'s callers are AnimationState::_layers and MeshInstance::_animation._layers (DEFERRED H5 member), both on the trait row, not kSpec_AnimLayer; typing the door needs both members on retail's row
                            0x38, 8, &Clear_18001c480, &Assign38Q);
 }
 void* Rt_ArrayAssign_18001b810(void* d, const void* s) {   // Array<InterpolatedState<Transform>>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
+    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: audit WORK, left: Array<InterpolatedState<Transform>>'s callers hold two element types (AnimationState::_nodes over Graphics::InterpolatedState<Math::Transform>, MeshInstance::_nodes over the RtGraphics::InterpolatedTransform mirror): unify the twin first
                            0x38, 4, &Clear_18001c550, &Assign38D);
 }
 

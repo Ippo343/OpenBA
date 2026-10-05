@@ -97,7 +97,7 @@ namespace {
 
 // Offsets asserted against the headers that already pin them, so a header edit
 // cannot silently move a field out from under a transcribed byte-offset store.
-static_assert(offsetof(RtIO::Modification, mods) == 0x08,
+static_assert(offsetof(IO::Modification, _mods) == 0x08,
               "Modification ctor 0x1800b04b0: MOV qword [RCX+0x8],RAX");
 static_assert(offsetof(RtIO::FileSystem, existsInPackfileGate) == 0x18,
               "FileSystem ctor 0x1800ac7c0: MOV word [RCX+0x18],0x100 — low byte");
@@ -169,12 +169,12 @@ void Dtor_MemoryAllocator(rt::system::MemoryAllocator* self) {
 IO::Modification* Ctor_Modification(IO::Modification* self) {
     self->_dirty          = 1;
     self->_savingSettings = 1;
-    self->_mods           = nullptr;
-    self->_count          = 0;
-    self->_capacity       = 0;
-    self->_savedMods      = nullptr;
-    self->_savedCount     = 0;
-    self->_savedCapacity  = 0;
+    self->_mods.data           = nullptr;
+    self->_mods.size          = 0;
+    self->_mods.capacity       = 0;
+    self->_savedMods.data      = nullptr;
+    self->_savedMods.size     = 0;
+    self->_savedMods.capacity  = 0;
     IO::Modification::_singleton = self;
     return self;
 }
@@ -295,9 +295,9 @@ IO::FileSystem* Ctor_FileSystem(IO::FileSystem* self) {
     self->_packfiles._data         = nullptr;
     self->_packfiles._size         = 0;
     self->_packfiles._capacity     = 0;
-    self->_userPackFilenames       = nullptr;
-    self->_userPackFilenameCount   = 0;
-    self->_unknown3C               = 0;
+    self->_userPackFilenames.data     = nullptr;
+    self->_userPackFilenames.size     = 0;
+    self->_userPackFilenames.capacity = 0;
     self->_packfileIndexRoot       = nullptr;
     self->_packfileIndexCount      = 0;
     IO::FileSystem::_singleton = self;

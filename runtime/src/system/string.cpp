@@ -52,10 +52,10 @@ namespace RtSystem {
 // One reinterpret_cast, in one place, over two types that ARE the same bytes
 // (both are `{ char* }`, both static_asserted at 8). It goes with the PODs.
 static inline System::String*       AsSys(String* s) {
-    return reinterpret_cast<System::String*>(s);  // LEFT: POD String / Filename bridge (H10)
+    return reinterpret_cast<System::String*>(s);  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
 }
 static inline const System::String* AsSys(const String* s) {
-    return reinterpret_cast<const System::String*>(s);  // LEFT: POD String / Filename bridge (H10)
+    return reinterpret_cast<const System::String*>(s);  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
 }
 
 // ============================================================

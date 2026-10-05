@@ -481,19 +481,19 @@ extern "C" int32_t RtIo_TextCodec_ConvertText(int32_t srcFmt, uint8_t forceDetec
 // allocator's critical section at 0x180029c90, `0x1800c7ad0` bare at
 // 0x180029e14. That asymmetry is retail's.
 // ============================================================================
-extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, void* datav,
-                                          void* /*unused*/) {
+extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count,
+                                          ::System::String* data, void* /*unused*/) {
     if (count <= 0) return;                                        // 0x180029bb0
 
-    char** slot = static_cast<char**>(datav);                      // R12  // LEFT: SIG RtIo_SerializeStringArray: two element types by caller (System::String* from PackageFile / Pixel- / VertexProgram, char* from AnimatedImageDescription::_frameNames / DocumentTextDescription::_frameNamesData, Array<String>s held as char*)
+    ::System::String* slot = data;                                 // R12
 
     for (int32_t i = 0; i < count; ++i, ++slot) {                  // 0x180029bf0
         // `len + 1`, or 0 for a null String. The length lives at `str - 8`
         // (the refcount is at `str - 4`).
         uint32_t tagged = 0;
-        if (*slot != nullptr)
+        if (slot->_data != nullptr)
             tagged = static_cast<uint32_t>(
-                *reinterpret_cast<const int32_t*>(*slot - 8) + 1);  // CAST-OK: string_header
+                *reinterpret_cast<const int32_t*>(slot->_data - 8) + 1);  // CAST-OK: string_header
         tagged |= 0x80000000u;                                     // BTS EAX,31
 
         ser->_readerWriter->SerializeUInt(tagged, nullptr);    // +0x98
@@ -504,13 +504,13 @@ extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, 
         const bool reading = (ser->_stream->_direction == rt::io::kDirectionReading);
 
         if (reading && len != 0)
-            RtSystem::RtString_SetLength(reinterpret_cast<RtSystem::String*>(slot),  // LEFT: SIG RtString_SetLength takes the RtSystem::String POD (system/, R-SYS)
-                                         static_cast<int>(len) - 1);   // 0x1800c8220
+            ::System::StringPrivateAccess::SetLength(*slot,
+                                                     static_cast<int>(len) - 1);   // 0x1800c8220
 
         if (!wasWide || !reading || len == 0) {
             // ---- PLAIN: the payload is bytes --------------------- 0x180029e23
             ser->_readerWriter->SerializeCharArray(
-                static_cast<int32_t>(len), *slot, nullptr);        // +0x18
+                static_cast<int32_t>(len), slot->_data, nullptr);  // +0x18
             continue;
         }
 
@@ -535,12 +535,11 @@ extern "C" void RtIo_SerializeStringArray(::IO::Serializer* ser, int32_t count, 
                 utf8Len += RtIo_TextCodec_EncodeOne(cp, &cp, 2);    // dst == &cp
         }
 
-        RtSystem::RtString_SetLength(reinterpret_cast<RtSystem::String*>(slot),  // LEFT: SIG RtString_SetLength takes the RtSystem::String POD (system/, R-SYS)
-                                     utf8Len);                     // 0x180029d5b
-        (*slot)[utf8Len] = 0;                                      // 0x180029d67
+        ::System::StringPrivateAccess::SetLength(*slot, utf8Len);  // 0x180029d5b
+        slot->_data[utf8Len] = 0;                                  // 0x180029d67
 
         // PASS 2 — write.                                          0x180029d94
-        char* const base = *slot;
+        char* const base = slot->_data;
         char* out = base;
         int32_t written = 0;
         uint8_t enc[8];                                            // [RSP+0x30]

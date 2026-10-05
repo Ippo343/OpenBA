@@ -309,8 +309,8 @@ int Modification::Find(const RtSystem::Filename& path) const {
     const char* pathData = path.data;
     const int pathLen = pathData ? RtIO::StringLength(pathData) : 0;
 
-    for (int i = 0; i < _count; ++i) {
-        const char* modData = _mods[i].file.data;
+    for (int i = 0; i < _mods.size; ++i) {
+        const char* modData = _mods.data[i].file.data;
         const int modLen = modData ? RtIO::StringLength(modData) : 0;
         if (modLen == pathLen && RtIO::StriCmpAscii(modData, pathData) == 0) {
             ours = i;
