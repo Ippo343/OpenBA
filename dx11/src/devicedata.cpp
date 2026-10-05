@@ -1925,11 +1925,10 @@ void* Factory_VertexBufferData(DeviceData* /*self*/, ::Video::VertexBuffer* owne
 }
 
 void* Factory_VertexLayoutData(DeviceData* /*self*/, ::Video::VertexLayout* owner) {
-    VertexLayoutData* p = AllocData<VertexLayoutData, ::Video::VertexLayoutData>(0x18, owner,
-                                                      Vt::VertexLayoutData);
-    if (!p) return nullptr;
-    p->inputLayout = nullptr;
-    return p;
+    // B5 RES: the base's operator new is retail's MemAlloc(0x18, 4); the ctor chain
+    // is retail's `??0VertexLayoutData` + the vptr store (now the compiler's table)
+    // + `inputLayout = nullptr`.
+    return new VertexLayoutData(owner);
 }
 
 void* Factory_VertexProgramData(DeviceData* /*self*/, ::Video::VertexProgram* owner) {

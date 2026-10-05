@@ -23,6 +23,11 @@
 // below derive from.
 #include "video/CompanionData.h"
 
+// B5 (the dx11 seam) D4: the converted classes hold TYPED COM pointers. Forward
+// declarations only, so this header stays free of <d3d11.h> (mingw-w64's
+// `interface` is `struct`, so these name the same types).
+struct ID3D11InputLayout;
+
 namespace VideoDX11 {
 
 // ============================================================
@@ -416,14 +421,25 @@ static_assert(offsetof(VertexBufferData, locked) == offsetof(IndexBufferData, lo
 // fields slot 2 reads (element array @ +0x20/+0x28, input signature @
 // +0x38/+0x40) and the 0x20-byte Element layout are pinned with static_asserts
 // in dx11/src/dx11_backend_access.h.
-struct VertexLayoutData {
-    void* vptr;         // +0x00
-    void* vertexLayout; // +0x08  Video::VertexLayout*
-    void* inputLayout;  // +0x10  ID3D11InputLayout* (built with the "TEXCOORD" semantic string)
+//
+// B5 RES: a real C++ subclass of `Video::VertexLayoutData`; the compiler builds
+// its vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
+// `_owner` (+0x08, `Video::VertexLayout*`) is the base's and replaces the old
+// `vertexLayout` field; `inputLayout` is the typed COM pointer (B5_RULES D4).
+class VertexLayoutData final : public ::Video::VertexLayoutData {
+public:
+    // Factory 0x180005880: MemAlloc(0x18, 4) + ??0VertexLayoutData(owner) + the
+    // vptr store + `inputLayout = nullptr`. Nothing else is stored.
+    explicit VertexLayoutData(::Video::VertexLayout* owner)
+        : ::Video::VertexLayoutData(owner), inputLayout(nullptr) {}
+    ~VertexLayoutData() override;                        // [0] 0x180003f60, chains ??1VertexLayoutData@Video@@UEAA@XZ
+    void Bind(void* context) override;                   // [1] 0x180003fc0  IASetInputLayout
+    void PlatformCreate() override;                      // [2] 0x180003ff0  CreateInputLayout
+
+    ID3D11InputLayout* inputLayout;  // +0x10  built with the "TEXCOORD" semantic string
 };
-static_assert(sizeof(VertexLayoutData) == 0x18, "VertexLayoutData size");
-static_assert(offsetof(VertexLayoutData, vptr) == 0x0, "VertexLayoutData::vptr");
-static_assert(offsetof(VertexLayoutData, vertexLayout) == 0x08, "VertexLayoutData::vertexLayout");
+static_assert(sizeof(VertexLayoutData) == 0x18, "MemAlloc 0x18 @ 0x180005880");
+static_assert(offsetof(VertexLayoutData, _owner) == 0x08, "VertexLayoutData::_owner (the base's)");
 static_assert(offsetof(VertexLayoutData, inputLayout) == 0x10, "VertexLayoutData::inputLayout");
 
 // 0x30, vtable 0x180018890 (3 slots), factory 0x1800058f0

@@ -12,7 +12,7 @@
 //
 // B5 (the dx11 seam): a class whose dx11 subclass is converted moves to
 // CheckDataB5 -- `virtual ~T()`, `delete` instead of `DeletingDtor` (so far:
-// RenderBufferData, VideoProgramData).
+// RenderBufferData, VideoProgramData; block RES: VertexLayoutData).
 //
 // The out-of-line destructors live in runtime/src/video/companion_data.cpp
 // (which cannot link into the host test), so they are defined HERE as markers.
@@ -144,7 +144,7 @@ UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckData<Video::IndexBufferDat
 UNIT_TEST(b39_vid_vertexbufferdata_concrete)   { CheckData<Video::VertexBufferData>(); }
 UNIT_TEST(b39_vid_constantbufferdata_concrete) { CheckData<Video::ConstantBufferData>(); }
 UNIT_TEST(b39_vid_renderbufferdata_concrete)   { CheckDataB5<Video::RenderBufferData>(); }
-UNIT_TEST(b39_vid_vertexlayoutdata_concrete)   { CheckData<Video::VertexLayoutData>(); }
+UNIT_TEST(b39_vid_vertexlayoutdata_concrete)   { CheckDataB5<Video::VertexLayoutData>(); }
 UNIT_TEST(b39_vid_vertexprogramdata_concrete)  { CheckData<Video::VertexProgramData>(); }
 UNIT_TEST(b39_vid_pixelprogramdata_concrete)   { CheckData<Video::PixelProgramData>(); }
 UNIT_TEST(b39_vid_renderstatedata_concrete)    { CheckData<Video::RenderStateData>(); }
@@ -160,6 +160,14 @@ UNIT_TEST(b5_vid_flipped_companion_slots_by_pmf) {
     using V = Video::VideoProgramData;
     CHECK_SLOT(V, Slot1, 1);
     CHECK_SLOT(V, Bind,  2);
+}
+
+// B5 RES: the block's flipped classes, in RETAIL numbers. `Video::VertexLayout::
+// Serialize` reaches PlatformCreate as retail slot 2 (+0x10).
+UNIT_TEST(b5_res_flipped_companion_slots_by_pmf) {
+    using L = Video::VertexLayoutData;
+    CHECK_SLOT(L, Bind,           1);
+    CHECK_SLOT(L, PlatformCreate, 2);
 }
 
 // The slot ORDER of the two 20-slot tables, by PMF: the Device-side callers

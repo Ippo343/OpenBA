@@ -217,17 +217,18 @@ public:
 };
 
 // Mirrors `Video::VertexLayoutData` — the 3-slot shape. Slot 2
-// (`PlatformCreate`, byte offset +0x10) is what
+// (`PlatformCreate`, retail byte offset +0x10) is what
 // `Video::VertexLayout::Serialize` calls on the read path.
+// B5 RES: the real class flipped (B5_RULES D1) -- retail slot 0 is
+// `virtual ~T()` (D1 + D0 under GCC), so the mirror follows it and every raw
+// read below goes through RetailByteOffset<T> (retail slot 2 is compiler slot 3).
 class MirrorVertexLayoutData {
 public:
-    virtual MirrorVertexLayoutData* DeletingDtor(unsigned flags) { Note(this, 0, flags); return this; }
-    virtual void Bind(void* context) = 0;
-    virtual void PlatformCreate() = 0;
+    virtual ~MirrorVertexLayoutData() = default;   // [0] D1 + D0
+    virtual void Bind(void* context) = 0;           // [1]
+    virtual void PlatformCreate() = 0;              // [2]
 
     void* _owner;
-protected:
-    ~MirrorVertexLayoutData() = default;
 };
 
 class ProbeVertexLayoutData final : public MirrorVertexLayoutData {
@@ -293,7 +294,11 @@ UNIT_TEST(video_companion_data_slot_order) {
 
     ProbeVertexLayoutData vl;
     MirrorVertexLayoutData* v = &vl;
-    // `Video::VertexLayout::Serialize` calls PlatformCreate as `_data->vt[2]`.
+    // `Video::VertexLayout::Serialize` calls PlatformCreate as retail `_data->vt[2]`.
+    CHECK(std::has_virtual_destructor<MirrorVertexLayoutData>::value ==
+          std::has_virtual_destructor<Video::VertexLayoutData>::value);
+    Reset(); SlotAt<void (*)(void*, void*), MirrorVertexLayoutData>(v, 0x08)(v, nullptr);
+    CHECK_EQ(g_lastMark, 1); CHECK(g_lastSelf == v);
     Reset(); SlotAt<void (*)(void*), MirrorVertexLayoutData>(v, 0x10)(v);
     CHECK_EQ(g_lastMark, 2); CHECK(g_lastSelf == v);
 }
