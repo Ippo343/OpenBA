@@ -187,8 +187,8 @@ namespace UI {
 void DocumentTextElement::ComputeSize() {
     if (((_flags >> 27) & 1u) == 0) return;
 
-    rtcoll::RtColl_ArraySetSize_18003d1c0(&_itemsData);
-    rtcoll::RtColl_ArraySetSize_18003d430(&_linksData);
+    rtcoll::RtColl_ArraySetSize_18003d1c0(&_items);
+    rtcoll::RtColl_ArraySetSize_18003d430(&_links);
 
     if (_layoutWidth < _wrapWidth)
         _layoutWidth = _wrapWidth;
@@ -229,10 +229,10 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
     if (_border != nullptr)
         _border->Draw(context, alpha);   // slot 6
 
-    Font* const* const fonts = _fontsData;
-    const int32_t count = _itemsCount;
+    Font* const* const fonts = _fonts._data;
+    const int32_t count = _items._size;
     for (int32_t i = 0; i < count; ++i) {
-        const Item* item = _itemsData + i;
+        const Item* item = _items._data + i;
         const uint8_t kind = item->kind;
         const int L = _layoutLeft;
         const int T = _layoutTop;
@@ -242,9 +242,9 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
             // as raw char* storage.
             char* tmp = nullptr;
             new (static_cast<void*>(&tmp)) System::String(                 // 0x1800c9230, retslot
-                reinterpret_cast<const System::String*>(&_sourceText)->SubString(item->first, item->last));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+                _sourceText.SubString(item->first, item->last));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 
-            Font* font = _fontsData[item->index];
+            Font* font = _fonts._data[item->index];
             context.AddFont(Object::ExternalPtr<UI::Font>(font),          // 0x18011ccb0
                             *reinterpret_cast<const System::String*>(&tmp), false, 0, 0, -1,   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
                             item->x + L, item->y + T, static_cast<uint32_t>(item->color));
@@ -264,7 +264,7 @@ void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
             ReleaseString(&tmp);
         } else if (kind == 1) {
             UI::Sprite sprite;
-            sprite.spriteSheet = _sheetsData[item->index];
+            sprite.spriteSheet = _sheets._data[item->index];
             sprite.spriteIndex = item->first;
             context.AddSprite(sprite,                                       // 0x18011cf00
                               L + item->x, T + item->y, 0xffffffffu);
@@ -308,9 +308,9 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
 
     if ((_flags & kFlagHidden) != 0) return;
 
-    const int32_t linkCount = _linksCount;
+    const int32_t linkCount = _links._size;
     for (int32_t li = 0; li < linkCount; ++li) {
-        Link* link = _linksData + li;
+        Link* link = _links._data + li;
 
         uint32_t colour = _linkColor;
         bool hit = false;
@@ -320,11 +320,11 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
             int32_t j = link->firstItem;
             const int32_t end = link->lastItem;
             for (; j < end; ++j) {
-                const Item* item = _itemsData + j;
+                const Item* item = _items._data + j;
                 int y0 = item->y + _layoutTop;
                 int y1 = item->height + y0;
                 if (item->kind == 0) {
-                    const Font* f = _fontsData[item->index];
+                    const Font* f = _fonts._data[item->index];
                     const int adj = f->_baseLine - f->_lineHeight;
                     y0 += adj;
                     y1 += adj;
@@ -355,7 +355,7 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
         }
 
         for (int32_t j = link->firstItem; j < link->lastItem; ++j) {
-            Item* item = _itemsData + j;
+            Item* item = _items._data + j;
             if (item->kind != 0) continue;
             item->color = static_cast<int32_t>(colour);
             if (j == link->lastItem - 1 && pressed) item->byte21 = 2;
@@ -387,15 +387,11 @@ void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
 // destroyed in retail's order. The entry restamp and the TAIL JUMP to ~Element
 // are the compiler's.
 DocumentTextElement::~DocumentTextElement() {
-    ReleaseString(&_openLink.text);                  // +0x198
-    ReleaseString(&_sourceText);                     // +0x168
-
-    rtcoll::RtColl_ArrayDtorElem_18003e310(&_linksData);       // +0x158
-    rtcoll::RtColl_ArrayDtor_18003e0c0(&_itemsData);           // +0x148
-    rtcoll::RtColl_ArrayDtor_18003db40(&_colorsData);          // +0x130
-    rtcoll::RtColl_ArrayDtor_18003da00(&_sheetsData);          // +0x120
-    rtcoll::RtColl_ArrayDtor_18003d8c0(&_fontsData);           // +0x110
-    rtcoll::RtColl_ArrayDtor_180037310(&_frameTableData);      // +0x0e8
+    // B4 Y RT-UI: empty. +0x198 (`_openLink`'s String), +0x168 (`_sourceText`),
+    // then ~Array +0x158 (0x18003e310, kSpec_Link18's destroy 0x18003e3e0 then
+    // J1), +0x148 (0x18003e0c0), +0x130 (0x18003db40), +0x120 (0x18003da00),
+    // +0x110 (0x18003d8c0), +0xe8 (0x180037310) are the member destructors,
+    // run after this body in reverse declaration order: retail's order.
 }
 
 // ?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ 0x18003bf40 --

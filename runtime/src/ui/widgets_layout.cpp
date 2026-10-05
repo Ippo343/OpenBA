@@ -323,8 +323,7 @@ void TextElement::SetText(const String* text) {
 // (Adopt: null stays null, non-null gets `++refcount`). No bounds check on
 // `index` (matches SpriteSheet::GetSpriteNameFromIndex's pattern).
 System::String DocumentTextElement::GetLink(int32_t index) const {
-    const Link* links = static_cast<const Link*>(_linksData);
-    return *reinterpret_cast<const System::String*>(&links[index].text);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    return _links._data[index].text;      // the copy ctor: adopt (null stays null)
 }
 
 // ?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z  0x18003bfd0. UI::String
@@ -347,7 +346,7 @@ void DocumentTextElement::SetText(const System::String& text) {
     _text.table = nullptr;
     _text.index = -1;
 
-    char* oldStr = _sourceText;
+    char* oldStr = _sourceText._data;
     char* newStr = text._data;
     if (oldStr != newStr) {
         if (oldStr) {
@@ -356,9 +355,9 @@ void DocumentTextElement::SetText(const System::String& text) {
             if (*rc == 0) {
                 RtMemFree(oldStr - 8);
             }
-            _sourceText = nullptr;
+            _sourceText._data = nullptr;
         }
-        _sourceText = newStr;
+        _sourceText._data = newStr;
         if (newStr) RtSystem::StringRefCount(newStr) += 1;
     }
     WalkDirty(this);

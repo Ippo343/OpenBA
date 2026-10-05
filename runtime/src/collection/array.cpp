@@ -3080,7 +3080,7 @@ const ArraySpec kSpec_DocItem24 = {               // 0x18003df80, 0x18003d1c0
 // +0x11..+0x17 is written by NEITHER arm.
 static void DocLinkAssign(UI::DocumentTextElement::Link* d,
                           const UI::DocumentTextElement::Link* s) {
-    AdoptString(d->text, s->text);          // +0x00, zero-then-adopt
+    AdoptString(d->text._data, s->text._data);  // +0x00, zero-then-adopt
     d->firstItem = s->firstItem;
     d->lastItem  = s->lastItem;
     d->armed     = s->armed;
@@ -3089,7 +3089,7 @@ void AssignLink18(uint8_t* d, const uint8_t* s) {
     AssignAs<UI::DocumentTextElement::Link, &DocLinkAssign>(d, s);
 }
 static void DocLinkInit(UI::DocumentTextElement::Link* d) {
-    d->text      = nullptr;
+    d->text._data = nullptr;
     d->firstItem = -1;                      // ONE qword of -1 in retail (H7)
     d->lastItem  = -1;
     d->armed     = 0;

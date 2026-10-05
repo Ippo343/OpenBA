@@ -225,7 +225,7 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
     element->Get()->_spriteSheet = _spriteSheet;            // 1800cf58e / 1800cf595
     {
         rtcoll::RtColl_ArraySetSize_1800370c0(
-            &element->Get()->_frameTableData, _frameNamesCount);        // 1800cf59c / 1800cf5ac
+            &element->Get()->_frameTable, _frameNamesCount);        // 1800cf59c / 1800cf5ac
     }
 
     // The bound is RE-READ from _frameNamesCount at the bottom of every
@@ -234,7 +234,7 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
         // 1800cf5ce sheet, 1800cf5da the index slot, 1800cf5ed the row
         // (re-read), 1800cf5f7 / 1800cf600 the sheet and a QWORD slot store.
         const UI::Sprite s = SpriteFromName(_spriteSheet, &_frameNamesData[i]);
-        element->Get()->_frameTableData[i] = s;
+        element->Get()->_frameTable._data[i] = s;
     }
 
     // 1800cf613..1800cf648, the same shape.
@@ -247,29 +247,29 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
     element->Get()->_wrapWidth        = _wrapWidth;
 
     {
-        rtcoll::RtColl_ArrayAssign_18003ce30(&element->Get()->_fontsData, &_fontsData);    // 1800cf69a / 1800cf6ab
-        rtcoll::RtColl_ArrayAssign_18003cf20(&element->Get()->_sheetsData, &_sheetsData);  // 1800cf6b0 / 1800cf6c1
+        rtcoll::RtColl_ArrayAssign_18003ce30(&element->Get()->_fonts, &_fontsData);    // 1800cf69a / 1800cf6ab
+        rtcoll::RtColl_ArrayAssign_18003cf20(&element->Get()->_sheets, &_sheetsData);  // 1800cf6b0 / 1800cf6c1
     }
 
     // ---- the open-coded Array<int> copy -------------------------------------
     {
         DocumentTextElement* e = element->Get();            // 1800cf6c6
-        if (static_cast<const void*>(&e->_colorsData) !=
+        if (static_cast<const void*>(&e->_colors) !=
             static_cast<const void*>(&_colorsData)) {       // 1800cf6d7
-            if (e->_colorsData != nullptr) MemFree(e->_colorsData);     // 1800cf70f (locked Free)
+            if (e->_colors._data != nullptr) MemFree(e->_colors._data);     // 1800cf70f (locked Free)
 
-            e->_colorsData     = nullptr;                   // 1800cf71e
-            e->_colorsCount    = 0;                         // 1800cf721  size+capacity, one qword
-            e->_colorsCapacity = 0;
+            e->_colors._data     = nullptr;                   // 1800cf71e
+            e->_colors._size    = 0;                         // 1800cf721  size+capacity, one qword
+            e->_colors._capacity = 0;
             const int32_t n = _colorsCount;                 // 1800cf725
-            e->_colorsCount = n;                            // 1800cf72a
+            e->_colors._size = n;                            // 1800cf72a
             if (n > 0) {                                    // 1800cf730
-                e->_colorsCapacity = n;                     // 1800cf732 capacity
-                e->_colorsData = static_cast<int32_t*>(MemAlloc(static_cast<uint64_t>(n) * 4, 4));   // 1800cf76a
+                e->_colors._capacity = n;                     // 1800cf732 capacity
+                e->_colors._data = static_cast<int32_t*>(MemAlloc(static_cast<uint64_t>(n) * 4, 4));   // 1800cf76a
             }
-            if (e->_colorsCount > 0) {                      // 1800cf77e
-                for (int32_t i = 0; i < e->_colorsCount; ++i) {
-                    int32_t* out = e->_colorsData + i;          // 1800cf788
+            if (e->_colors._size > 0) {                      // 1800cf77e
+                for (int32_t i = 0; i < e->_colors._size; ++i) {
+                    int32_t* out = e->_colors._data + i;          // 1800cf788
                     if (out != nullptr)                     // 1800cf78e
                         *out = _colorsData[i];              // 1800cf797
                 }
