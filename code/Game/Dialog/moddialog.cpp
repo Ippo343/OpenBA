@@ -339,16 +339,14 @@ void ModDialog::OnOpened() {
         // Load "Material/UI/UIMaterial.rsc", IsDerivedFrom Material, SetMaterial
         {
             System::Filename filenameBuf("Material/UI/UIMaterial.rsc");
-            const ::Object::External* ext =
-                ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
-            const Graphics::Material* material = nullptr;
+            ::Object::External* ext =
+                ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
+            Graphics::Material* material = nullptr;
             if (ext) {
                 bool derived = ::Object::IsDerivedFromNullSafe(ext, Graphics::Material::TypeId());
-                if (derived) material = static_cast<const Graphics::Material*>(ext);
+                if (derived) material = static_cast<Graphics::Material*>(ext);
             }
-            // LEFT: ExternalPtr<Material> wraps a non-const Material (FindOrLoad returns const).
-            matInst->SetMaterial(
-                Object::ExternalPtr<Graphics::Material>(const_cast<Graphics::Material*>(material)));   // LEFT: ExternalFactory::FindOrLoad returns const; ExternalPtr<Material> holds non-const
+            matInst->SetMaterial(Object::ExternalPtr<Graphics::Material>(material));
         }
 
         // AddTexture("diffuse", imageBuffer)
@@ -411,15 +409,13 @@ void ModDialog::OnOpened() {
     // (cell 0x1401c5210; the TypeId_BrowserController name lies -- see Table 1/3)
     {
         System::Filename filenameBuf("Dialog/Mod.rsc:browser");
-        const ::Object::External* ext =
-            ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+        ::Object::External* ext =
+            ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
 
         // Pass browser external directly; original has IsDerivedFrom check but the
         // _typeInfo_exref is context-dependent (Ghidra merges refs) and the browser
         // controller IS the right type — passing null would silently break the UI.
-        // LEFT: ExternalPtr<T> wraps a non-const T (FindOrLoad returns const).
-        UI::ElementDescription* browserExt =
-            const_cast<UI::ElementDescription*>(static_cast<const UI::ElementDescription*>(ext));   // LEFT: ExternalFactory::FindOrLoad returns const; AddController takes the description non-const
+        UI::ElementDescription* browserExt = static_cast<UI::ElementDescription*>(ext);
 
         // AddController(this, typeId, 0, 0, browserExt, "groupBrowse")
         System::String groupStr("groupBrowse");

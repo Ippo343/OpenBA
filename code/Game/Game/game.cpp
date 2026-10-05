@@ -101,10 +101,11 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
     CitizenBehavior* citizenList = gameWorld->m_citizenList;   // gw+0xf0
 
     // Iterate all ComponentDescription-type externals
-    const ::Object::External* ext = efactory->FindNext(ComponentDescription::TypeId(), nullptr);
+    ::Object::External* ext =
+        efactory->FindNextAs<::Object::External>(ComponentDescription::TypeId(), nullptr);
     while (ext != nullptr) {
         if (::Object::IsDerivedFromNullSafe(ext, ComponentDescription::TypeId())) {
-            const ComponentDescription* desc = static_cast<const ComponentDescription*>(ext);
+            ComponentDescription* desc = static_cast<ComponentDescription*>(ext);
             // Find SelectDescription sub-component
             int compCount = desc->_subDescCount;    // +0x30
             Description** compArray = desc->_subDescs;   // +0x28
@@ -137,11 +138,11 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
                 }
                 // Check if SelectDescription.type (+0x40) matches requested disaster type
                 if (selectDesc && static_cast<int>(selectDesc->_u40) == disasterType) {
-                    citizenList->RemoveEntity(const_cast<ComponentDescription*>(desc));   // 0x140091a20   // LEFT: FindNext returns a const ComponentDescription*; RemoveEntity takes it non-const (retail drops the const: PASS2_LEDGER S3, the close decides)
+                    citizenList->RemoveEntity(desc);   // 0x140091a20
                 }
             }
         }
-        ext = efactory->FindNext(ComponentDescription::TypeId(), ext);
+        ext = efactory->FindNextAs<::Object::External>(ComponentDescription::TypeId(), ext);
     }
 }
 

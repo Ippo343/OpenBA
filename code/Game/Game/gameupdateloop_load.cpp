@@ -155,8 +155,8 @@ static void LoadProfessionList_Step2(GameUpdateLoop* self) {
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     System::Filename fname("Game/Profession/Profession.rsc");
-    ::Object::External* profList = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-        efactory->FindOrLoad(fname));                                       // B.3.3 bridge
+    ::Object::External* profList =
+        efactory->FindOrLoadAs<::Object::External>(fname);                  // B.3.3 bridge
     self->m_professionList = static_cast<ProfessionList*>(profList);   // unchecked, as before
 
     ProfessionList* profs = self->m_professionList;
@@ -199,9 +199,8 @@ static void LoadUIMaterial_Step3(GameUpdateLoop* self) {
 
     System::Filename fname("Material/UI/UIMaterialNoBlend.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* mat = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-        ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname));                                          // B.3.3 bridge
+    ::Object::External* mat = ::Object::ExternalFactory::_singleton
+            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
 
     // Retail's type gate: Graphics::Material's type id (ENDGAME B.3.9 TR: the class
     // accessor; was an RT_DATA_SLOT read of its ?_typeInfo@ record).
@@ -227,9 +226,8 @@ static void LoadHelpTopics_Step4(GameUpdateLoop* self) {
 
     System::Filename fname("Game/Help/HelpTopics.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* list = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-        ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname));                                          // B.3.3 bridge
+    ::Object::External* list = ::Object::ExternalFactory::_singleton
+            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
 
     // Retail's type gate: Object::ExternalList's type id (retail reads it through the
     // exe import slot 0x140151ef0; ENDGAME B.3.9 TR: the class accessor).
@@ -280,9 +278,8 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
 
     System::Filename fname("Game/Disease/Diseases.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    ::Object::External* list = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-        ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname));                                          // B.3.3 bridge
+    ::Object::External* list = ::Object::ExternalFactory::_singleton
+            ->FindOrLoadAs<::Object::External>(fname);                     // B.3.3 bridge
 
     // Retail's type gate (same ExternalList type id as the HelpTopics list).
     bool isList = false;
@@ -671,12 +668,12 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     self->m_skyMesh = sky;
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
-    void* meshRes = nullptr;
+    Graphics::GraphicsMesh* meshRes = nullptr;
     if (::Object::ExternalFactory::_singleton) {
         // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
         ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
         System::Filename fname("Models/Sky/SkyMesh.rsc");
-        meshRes = const_cast<::Object::External*>(efactory->FindOrLoad(fname));  // B.3.3 bridge  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
+        meshRes = efactory->FindOrLoadAs<Graphics::GraphicsMesh>(fname);  // B.3.3 bridge
     }
 
     // B.3.5 bridge — ?SetMesh@MeshInstance@Graphics@@…. The `s_SetMesh` cache, its
@@ -684,7 +681,7 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
     // all went in the closing pass: a diagnostic that prints the address of a door
     // nobody calls any more reports nothing. `meshRes` is an object test and stays.
     if (meshRes)
-        sky->SetMesh(Graphics::ExternalPtrHandle{meshRes});   // B.3.5 bridge
+        sky->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshRes));   // B.3.5 bridge
 
     // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
     // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
@@ -903,9 +900,8 @@ void GameUpdateLoop::Load() {
             System::Filename fname("Environment/Environment.rsc");
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
             // The file's root resource is the EnvironmentDescription.
-            envRes = static_cast<EnvironmentDescription*>(const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(fname)));                                   // B.3.3 bridge
+            envRes = ::Object::ExternalFactory::_singleton
+                    ->FindOrLoadAs<EnvironmentDescription>(fname);           // B.3.3 bridge
             int wxCount = envRes ? static_cast<int>(envRes->_weatherCount) : 0;   // env+0x30
             fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
                     (void*)envRes, wxCount);
@@ -1067,8 +1063,8 @@ void GameUpdateLoop::Load() {
                 // Retail: String(name) then Filename::AdjustDelimiters on it —
                 // Filename(const char*) is exactly Set + AdjustDelimiters.
                 System::Filename fname(name);
-                ::Object::External* ext = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                    efactory->FindOrLoad(fname));                            // B.3.3 bridge
+                ::Object::External* ext =
+                    efactory->FindOrLoadAs<::Object::External>(fname);       // B.3.3 bridge
                 if (!ext) return nullptr;
                 if (stTid != 0 && !::Object::IsDerivedFromNullSafe(ext, stTid)) return nullptr;
                 return static_cast<UI::StringTable*>(ext);   // checked above (B10)

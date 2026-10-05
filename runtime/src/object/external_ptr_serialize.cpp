@@ -292,15 +292,15 @@ bool ExternalPtrSerializeBody(External* cur, IO::Serializer& ser,
     // Saving skips it entirely: retail re-tests the direction here and jumps
     // straight to the release below.
     if (stream->_direction == IO::kReading) {
-        const External* found = ExternalFactory::_singleton->FindOrLoad(path);
+        External* found = ExternalFactory::_singleton->FindOrLoadAs<External>(path);
         External* result = nullptr;
         if (found != nullptr && found->IsDerivedFrom(typeInfo.typeId)) {
             // CMOVNE: the loaded object survives only if it IS a T. A resource
             // of the wrong type is dropped, not kept — this is the check the
             // exe-side sibling in code/Game/Component/ambient_externalptr_serialize.cpp
             // deliberately relaxes, and this one must not. `FindOrLoad` is
-            // retail's `QEAAPEBV` (const result); the field is a non-const T*.
-            result = const_cast<External*>(found);  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: retail drops the const in inlined template code; decide at the close)
+            // retail's `QEAAPEBV` (const result); FindOrLoadAs drops it once.
+            result = found;
         }
         loaded = result;
         return true;                            // 0x180004555 `*self = result`

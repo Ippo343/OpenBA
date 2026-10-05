@@ -469,8 +469,7 @@ static Graphics::MaterialInstance* wg_ResolveMaterial_fd10(const System::String*
     System::Filename fnbuf(*name);
     // The tree trusts Find's result (retail checks IsDerivedFrom MaterialInstance in
     // 0x14001fd10; known_port_issues 14).
-    return static_cast<Graphics::MaterialInstance*>(
-        const_cast<::Object::External*>(factory->Find(fnbuf)));   // LEFT: CONST Find returns const External*
+    return factory->FindAs<Graphics::MaterialInstance>(fnbuf);
 }
 
 // ============================================================

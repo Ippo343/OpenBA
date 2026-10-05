@@ -402,7 +402,8 @@ void Modification::SetupFileSystem() {
     // ========================= ACT 3 — DIFF =================================
     ReloadArray queue = { nullptr, 0, 0 };                     // [RSP+0x30]
 
-    for (const ::Object::External* ext = extFactoryObj->FindNext(kExternalTypeId, nullptr);
+    for (::Object::External* ext =
+             extFactoryObj->FindNextAs<::Object::External>(kExternalTypeId, nullptr);
          ext != nullptr; ) {
         System::Filename compiled;                             // [RBP+0x7f]
         {
@@ -436,7 +437,7 @@ void Modification::SetupFileSystem() {
                 // ---- queue the reload, 0x1800af03d --------------------------
                 ReloadEntry entry;
                 entry.typeId   = ext->Type();   // 0x1800af052
-                entry.external = const_cast<::Object::External*>(ext);  // LEFT: FindNext returns the walk const (Factory::FindNext); retail drops the const in inlined code
+                entry.external = ext;
                 // entry._hole04 is DELIBERATELY left uninitialised: retail's
                 // first store is a DWORD and nothing ever writes +0x04..+0x07.
                 {
@@ -469,7 +470,7 @@ void Modification::SetupFileSystem() {
             // ~compiled2 releases here, retail's 0x1800af243 release
         }
 
-        ext = extFactoryObj->FindNext(kExternalTypeId, ext);   // 0x1800af275
+        ext = extFactoryObj->FindNextAs<::Object::External>(kExternalTypeId, ext);   // 0x1800af275
         // ~compiled releases here, retail's 0x1800af281 release
     }
 

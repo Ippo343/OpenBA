@@ -82,8 +82,8 @@ void GameContainer_EnsureLists() {
         if (slot) continue;                       // already loaded
         System::Filename fnameObj(e.path);   // ctor already normalises delimiters
         // Trusted, not IsDerivedFrom-checked (see above).
-        Object::ExternalList* ext = static_cast<Object::ExternalList*>(const_cast<::Object::External*>(   // LEFT: ExternalFactory::FindOrLoad returns const External*; the GameContainer slot holds ExternalPtr<ExternalList> (non-const)
-            ::Object::ExternalFactory::_singleton->FindOrLoad(fnameObj)));
+        Object::ExternalList* ext =
+            ::Object::ExternalFactory::_singleton->FindOrLoadAs<Object::ExternalList>(fnameObj);
         slot = ext;
         fprintf(stderr, "[GameContainer] +0x%02zx '%s' -> %p\n", e.off, e.path, (void*)ext);
     }

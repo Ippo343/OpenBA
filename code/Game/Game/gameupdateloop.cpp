@@ -1715,9 +1715,8 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(filename));                                 // B.3.3 bridge
+            foundBase = ::Object::ExternalFactory::_singleton
+                    ->FindOrLoadAs<::Object::External>(filename);           // B.3.3 bridge
         }
 
         const UI::Dialog* dialogRes = nullptr;
@@ -1775,9 +1774,8 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(filename));                                 // B.3.3 bridge
+            foundBase = ::Object::ExternalFactory::_singleton
+                    ->FindOrLoadAs<::Object::External>(filename);           // B.3.3 bridge
         }
         const UI::Dialog* dialogRes = nullptr;
         if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))
@@ -1826,9 +1824,8 @@ void GameUpdateLoop::Startup() {
         if (foundBase == nullptr &&
             ::Object::ExternalFactory::_singleton) {
             // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-            foundBase = const_cast<::Object::External*>(  // LEFT: const_cast FindOrLoad returns a const External* (ledger S3: decide at the close)
-                ::Object::ExternalFactory::_singleton
-                    ->FindOrLoad(filename));                                 // B.3.3 bridge
+            foundBase = ::Object::ExternalFactory::_singleton
+                    ->FindOrLoadAs<::Object::External>(filename);           // B.3.3 bridge
         }
         const UI::Dialog* dialogRes = nullptr;
         if (foundBase != nullptr && ::Object::IsDerivedFromNullSafe(foundBase, UI::Dialog::TypeId()))

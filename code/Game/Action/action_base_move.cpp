@@ -183,12 +183,12 @@ void ActMv_ExternalPtrSerialize_22970(CharacterDescription** pSlot, IO::Serializ
     if (didFind) {
         int streamFlag = static_cast<int>(ser->GetDirection());   // IO::Serializer::GetDirection, retail 0x180006210
         if (streamFlag == 0) {
-            const ::Object::External* found = nullptr;
+            ::Object::External* found = nullptr;
             if (::Object::ExternalFactory::_singleton)
-                found = efactory->FindOrLoad(fnLocal);
+                found = efactory->FindOrLoadAs<::Object::External>(fnLocal);
             CharacterDescription* result = nullptr;
             if (found && ::Object::IsDerivedFromNullSafe(found, typeId))
-                result = static_cast<CharacterDescription*>(const_cast<::Object::External*>(found));   // LEFT: CONST FindOrLoad returns const (S3: floor decision at the close)
+                result = static_cast<CharacterDescription*>(found);
             *pSlot = result;
         }
     }

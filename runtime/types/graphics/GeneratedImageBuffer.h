@@ -184,11 +184,10 @@ public:
     // is the only place a pure slot's name can be read from.
     //
     // BOTH ARE `const` (`UEBA`) AND BOTH SUBCLASSES WRITE `_generation` THROUGH
-    // THEM. Retail's own const-ness is transcribed and the write is spelled with
-    // a `const_cast` at the two sites, rather than making `_generation` mutable:
-    // the field is not logically mutable state, it is the latch the caller's
-    // generation counter is compared against, and hiding the cast in the
-    // declaration would hide that retail's signature and retail's body disagree.
+    // THEM. Retail's own const-ness is transcribed, so `_generation` is declared
+    // `mutable` (B.4 const_slot ruling): the latch the caller's generation
+    // counter is compared against is written by retail's const slots
+    // (0x1800a6e91 Render; FrameCopyImageBuffer's Generate).
     virtual void Generate(void* context, int32_t generation) const = 0;   // [10]
     virtual void Render(Renderer& renderer, const Scene& scene, const Camera& camera,
                         int32_t generation) const = 0;                    // [11]
@@ -221,7 +220,7 @@ public:
     // 0x1800a3e96) and the dtor touches nothing of its own. `_pad6c` is NEVER
     // WRITTEN by either body; it is the four bytes MSVC leaves before the
     // 8-aligned tail of the derived classes. Recorded, not zeroed.
-    int32_t  _generation;   // +0x68
+    mutable int32_t _generation;   // +0x68  written by the const slots [10] / [11]
     uint32_t _pad6c;        // +0x6c  never written
 };
 

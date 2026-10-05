@@ -2050,11 +2050,10 @@ void MeshInstance::SetMesh(Object::ExternalPtr<GraphicsMesh> mesh) {
     }
 }
 
-// B4 FORWARD: action_base_complete.cpp, buildcomponent_state8.cpp and
-// gameupdateloop_load.cpp hold their GraphicsMesh as a void*;
-// action_base_movedeps.cpp its AnimationGroup.
+// B4 FORWARD: action_base_complete.cpp and buildcomponent_state8.cpp hold
+// their GraphicsMesh as a void*; action_base_movedeps.cpp its AnimationGroup.
 void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
-    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: B4 FORWARD for the three void* callers
+    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: B4 FORWARD for the two void* callers
 }
 void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
                                  const System::Time* startTime, const System::Time* blendTime,

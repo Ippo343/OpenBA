@@ -144,10 +144,9 @@ void EnsureTrackList(MusicPlayer* mp) {
 
     System::Filename fname("Game/MusicTracks.rsc");
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
-    // FindOrLoad answers `const External*`; the resource is the MusicList.
-    MusicList* list = static_cast<MusicList*>(const_cast<::Object::External*>(   // LEFT: CONST FindOrLoad returns const External*
-        ::Object::ExternalFactory::_singleton
-            ->FindOrLoad(fname)));                                           // B.3.3 bridge
+    // The resource is the MusicList.
+    MusicList* list = ::Object::ExternalFactory::_singleton
+            ->FindOrLoadAs<MusicList>(fname);                                // B.3.3 bridge
     mp->trackList = list;
 
     fprintf(stderr, "[MusicPlayer] MusicTracks.rsc -> %p tracks=%d\n", static_cast<void*>(list),

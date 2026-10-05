@@ -309,12 +309,13 @@ static void Game_DestroyAllRawMaterials_Impl() {
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;
 
     // Iterate all entities with ComponentDescription type
-    const ::Object::External* entity = factory->FindNext(ComponentDescription::TypeId(), nullptr);
+    ::Object::External* entity =
+        factory->FindNextAs<::Object::External>(ComponentDescription::TypeId(), nullptr);
     while (entity) {
         // IsDerivedFrom check against ComponentDescription
         bool isBuild = ::Object::IsDerivedFromNullSafe(entity, ComponentDescription::TypeId());
-        const ComponentDescription* buildEntity =
-            isBuild ? static_cast<const ComponentDescription*>(entity) : nullptr;
+        ComponentDescription* buildEntity =
+            isBuild ? static_cast<ComponentDescription*>(entity) : nullptr;
 
         // Search entity's sub-descriptions for RawMaterialDescription
         int compCount = buildEntity->_subDescCount;
@@ -334,15 +335,13 @@ static void Game_DestroyAllRawMaterials_Impl() {
                     // 0x140091e60 RawMaterialComponent_RegisterRawMaterial (B3R: the
                     // binding decides, INVENTORY_E §5.8).
                     // (RawMaterialComponent_RegisterRawMaterial's member.)
-                    // LEFT: the factory walk hands out const Externals; the member takes non-const.
-                    GameUpdateLoop::_singleton->m_citizenList->RegisterRawMaterial(
-                        const_cast<ComponentDescription*>(buildEntity));   // LEFT: CitizenBehavior::RegisterRawMaterial takes ComponentDescription* (Entity/CitizenBehavior.h); the factory walk hands out const
+                    GameUpdateLoop::_singleton->m_citizenList->RegisterRawMaterial(buildEntity);
                 }
                 break;
             }
         }
 
-        entity = factory->FindNext(ComponentDescription::TypeId(), entity);
+        entity = factory->FindNextAs<::Object::External>(ComponentDescription::TypeId(), entity);
     }
 }
 
@@ -469,18 +468,18 @@ static void Game_SpawnCitizens_Impl() {
 
                             // Load citizen template
                             System::Filename filenameBuf("Template/Citizen.rsc");
-                            const ::Object::External* extTemplate =
-                                ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+                            ::Object::External* extTemplate =
+                                ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
 
                             // Determine entity description (RDI in disasm)
                             // If extTemplate is null, use null.
                             // If non-null, IsDerivedFrom check; use result (may be null).
-                            const ComponentDescription* entityDesc = nullptr;
+                            ComponentDescription* entityDesc = nullptr;
                             if (extTemplate == nullptr) {
                                 entityDesc = nullptr;
                             } else {
                                 bool isBuildDesc = ::Object::IsDerivedFromNullSafe(extTemplate, ComponentDescription::TypeId());
-                                entityDesc = isBuildDesc ? static_cast<const ComponentDescription*>(extTemplate) : nullptr;
+                                entityDesc = isBuildDesc ? static_cast<ComponentDescription*>(extTemplate) : nullptr;
                             }
 
                             // Allocate and create entity (0x48 bytes)
@@ -488,7 +487,7 @@ static void Game_SpawnCitizens_Impl() {
                             ComponentEntity* newEntity = nullptr;
                             if (memBlock != nullptr) {
                                 newEntity = ComponentEntity_CtorFromDescription(
-                                    memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720  // LEFT: the factory walk hands out const ComponentDescription* and the ctor takes it mutable (ComponentEntity.h)
+                                    memBlock, entityDesc);   // 0x1400c3720
                             }
 
                             // Find the CitizenComponent (DAT_1401c7158) on the new entity:
@@ -607,15 +606,15 @@ static void Game_SpawnTornado_Impl() {
 
     // Load tornado template
     System::Filename filenameBuf("Template/Tornado.rsc");
-    const ::Object::External* extTemplate =
-        ::Object::ExternalFactory::_singleton->FindOrLoad(filenameBuf);
+    ::Object::External* extTemplate =
+        ::Object::ExternalFactory::_singleton->FindOrLoadAs<::Object::External>(filenameBuf);
 
     // Cast to entity description (must be derived from ComponentDescription type)
-    const ComponentDescription* entityDesc = nullptr;
+    ComponentDescription* entityDesc = nullptr;
     if (extTemplate) {
         bool isEntityDesc = ::Object::IsDerivedFromNullSafe(extTemplate, ComponentDescription::TypeId());
         if (isEntityDesc) {
-            entityDesc = static_cast<const ComponentDescription*>(extTemplate);
+            entityDesc = static_cast<ComponentDescription*>(extTemplate);
         }
     }
 
@@ -626,7 +625,7 @@ static void Game_SpawnTornado_Impl() {
     ComponentEntity* memBlock = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (memBlock) {
         newEntity = ComponentEntity_CtorFromDescription(
-            memBlock, const_cast<ComponentDescription*>(entityDesc));   // 0x1400c3720  // LEFT: the factory walk hands out const ComponentDescription* and the ctor takes it mutable (ComponentEntity.h)
+            memBlock, entityDesc);   // 0x1400c3720
     }
 
     // Register entity with entity manager

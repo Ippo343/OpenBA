@@ -921,6 +921,27 @@ public:
     //   retail 0x1800bec10 — a STATIC returning by value.
     static System::Filename GetCompiledPath(const System::Filename& path);
 
+    // ---- the typed lookups (B.4 const_api ruling) ---------------------------
+    // Retail's lookups return `const External*` (mangled `PEBV`) while every
+    // slot that keeps the result holds a non-const `T*` (`ExternalPtr<T>`):
+    // retail drops that const once, in an inlined template. These three are
+    // that template: the const drop and the downcast in one place, for every
+    // caller. `T` is External or a class derived from it; `static_cast` is the
+    // same downcast the callers spelled. Inline, so the call sites compile to
+    // the bare lookup.
+    template <class T>
+    T* FindAs(const System::Filename& path) const {
+        return static_cast<T*>(const_cast<External*>(Find(path)));  // CAST-OK: const_api
+    }
+    template <class T>
+    T* FindNextAs(uint32_t typeId, const External* prev) const {
+        return static_cast<T*>(const_cast<External*>(FindNext(typeId, prev)));  // CAST-OK: const_api
+    }
+    template <class T>
+    T* FindOrLoadAs(const System::Filename& path) {
+        return static_cast<T*>(const_cast<External*>(FindOrLoad(path)));  // CAST-OK: const_api
+    }
+
     // ---- the 0x43 bytes, in retail order (ctor 0x1800be7e0 pins every one) --
     int32_t      _cleanBitIndex;         // +0x00
     uint32_t     _cleanBitMask;          // +0x04 — the 32 UpdateLoop slots

@@ -476,7 +476,7 @@ void Engine::MainLoop::OnVideoError() {
     for (int i = 0; i < 10; ++i) {
         const uint32_t wanted = types[i];
 
-        const ::Object::External* e = factory->FindNext(externalTypeId, nullptr);
+        ::Object::External* e = factory->FindNextAs<::Object::External>(externalTypeId, nullptr);
         while (e != nullptr) {
             if (e->Type() == wanted) {                       // [[obj] + 0x10]
                 // Its release is ~Filename.
@@ -484,9 +484,8 @@ void Engine::MainLoop::OnVideoError() {
 
                 VideoResourceEntry rec;
                 rec._typeId = static_cast<int32_t>(e->Type());
-                // FindNext hands the walk out const; the record keeps the object
-                // it will Destruct and reload.
-                rec._object = const_cast< ::Object::External*>(e);   // LEFT: FindNext returns the walk const (Factory::FindNext); retail drops the const in inlined code (the close decides const_cast, ledger S3)
+                // The record keeps the object it will Destruct and reload.
+                rec._object = e;
                 // 0x1800dcac0: retail zeroes the slot, adopts, and normalises —
                 // `operator=` (0x180006770) is release-adopt-normalise, and the
                 // release arm is a no-op on the null the default ctor just put
@@ -503,7 +502,7 @@ void Engine::MainLoop::OnVideoError() {
                 // `rec.path` then `fromGetPath` release here (0x1800dcaf6 and
                 // 0x1800dcb02) — C++'s reverse declaration order.
             }
-            e = factory->FindNext(externalTypeId, e);
+            e = factory->FindNextAs<::Object::External>(externalTypeId, e);
         }
     }
 
