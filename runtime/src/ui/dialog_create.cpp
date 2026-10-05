@@ -194,8 +194,8 @@ void* MemAlloc(uint64_t bytes, int align) {
 
 // ?_singleton@Factory@Object@@0PEAV12@EA — the class static now (ENDGAME
 // B.3.9 SS1, B39_RULES D7): read fresh, no lazy cache (B9-10).
-RtObject::Factory* FactorySingleton() {
-    return reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);   // LEFT: H10 the RtObject::Factory POD mirror (TypeInfo.h / Factory, R-OBJ)
+::Object::Factory* FactorySingleton() {
+    return ::Object::Factory::_singleton;
 }
 
 // ============================================================================
@@ -429,18 +429,19 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
                                    Object::ExternalPtr<DialogControllerConfig> config,
                                    Object::InternalPtr<Element> container) {
     // Object::Factory's AVL find, inlined by retail (0x1801133c1).
-    RtObject::Factory* const factory = FactorySingleton();
-    RtObject::TypeNode* node = factory ? factory->root : nullptr;
-    RtObject::TypeNode* found = nullptr;
+    ::Object::Factory* const factory = FactorySingleton();
+    using TypeNode = ::Object::Factory::TypeSet::Node;
+    TypeNode* node = factory ? factory->GetTypes().GetRoot() : nullptr;
+    TypeNode* found = nullptr;
     while (node) {
-        const uint32_t key = node->key;
+        const uint32_t key = node->element.typeId;
         if (typeId < key)      node = node->left;
         else if (key >= typeId) { found = node; break; }
         else                    node = node->right;
     }
 
     // 0x1801133f7 `MOV RCX,[RAX+0x10]` with RAX possibly zero. FAITHFUL.
-    RtObject::BaseTypeInfo* const info = found->value.info;
+    RtObject::BaseTypeInfo* const info = found->element.record.info;
 
     // info+0x20 (`factoryFn`, `Base* (*)()`). Retail's RCX still holds `info`
     // at the call; the callee takes no argument and does not read it.

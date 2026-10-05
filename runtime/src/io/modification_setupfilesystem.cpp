@@ -339,8 +339,7 @@ void Modification::SetupFileSystem() {
     // `Object::Factory::_singleton` is captured HERE, at 0x1800aebef, and used
     // only in act 4. Retail spills it to [RBP-0x39] across the whole function
     // rather than re-reading it, and so does this.
-    const RtObject::Factory* const factory =
-        reinterpret_cast<RtObject::Factory*>(::Object::Factory::_singleton);  // LEFT: the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)
+    const ::Object::Factory* const factory = ::Object::Factory::_singleton;
 
     // `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` + 0x00 — the type id
     // FindNext filters on. Read through the NAME door so a promotion of the row
@@ -484,14 +483,15 @@ void Modification::SetupFileSystem() {
         // the type-tree descent, inlined; a MISS yields null and is then
         // dereferenced. See the banner.
         const uint32_t typeId = e->typeId;                     // 0x1800af309
-        RtObject::TypeNode* node = factory->root;              // 0x1800af30c
-        RtObject::TypeNode* found = nullptr;
+        using TypeNode = ::Object::Factory::TypeSet::Node;
+        TypeNode* node = factory->GetTypes().GetRoot();        // 0x1800af30c
+        TypeNode* found = nullptr;
         while (node != nullptr) {
-            if (typeId < node->key)  { node = node->left;  continue; }
-            if (node->key >= typeId) { found = node; break; }
+            if (typeId < node->element.typeId)  { node = node->left;  continue; }
+            if (node->element.typeId >= typeId) { found = node; break; }
             node = node->right;
         }
-        RtObject::BaseTypeInfo* const info = found->value.info;   // 0x1800af330
+        RtObject::BaseTypeInfo* const info = found->element.record.info;   // 0x1800af330
         // IN-PLACE factory, +0x28 — not the allocating one at +0x20.
         info->inPlaceFactoryFn(ext);   // the returned Base* is not read
 
