@@ -722,8 +722,6 @@ public:
 
     // PORTED, body in `mesh.cpp`. `MeshInstance*` is the outline's back-pointer.
     void SetMesh(Object::ExternalPtr<EdgeMesh> mesh, MeshInstance* followed);  // 0x1800a3a20
-    // B4 FORWARD: tool_base_render.cpp:607 still calls this (its mesh is a void*)
-    void SetMesh(ExternalPtrHandle mesh, MeshInstance* followed);
 
     // Exported, NOT PORTED, no caller: declared, deliberately undefined.
     Object::ExternalPtr<EdgeMesh> GetMesh() const;                        // 0x1800174c0
