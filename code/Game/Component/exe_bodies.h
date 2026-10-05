@@ -145,7 +145,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
 // ---- citizencomponent_lifecycle.cpp
 
 void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0
-void CitizenComp_DeferredInit_117080(CitizenComponent* self, const float* pos, uint32_t gender, char isElder, float age, char forceEmploy, int64_t* parentIBP, int64_t spawnKey);  // 0x140117080
+void CitizenComp_DeferredInit_117080(CitizenComponent* self, const float* pos, uint32_t gender, char isElder, float age, char forceEmploy, CitizenComponent* const* parentIBP, Profession* spawnKey);  // 0x140117080
 
 // ---- cropfieldcomponent.cpp
 struct CropSlot;

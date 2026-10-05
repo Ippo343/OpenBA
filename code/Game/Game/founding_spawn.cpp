@@ -312,21 +312,23 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     float pos[3] = { base[0] + jx, base[1] + jy, base[2] };
 
     // 6. the Laborer profession key (ProfessionList at gw+0xb0, +0x30)
-    int64_t laborerProf = 0;
+    Profession* laborer = nullptr;
+    int64_t laborerProf = 0;   // the trace below prints the key as an integer
     if (GameUpdateLoop::_singleton != nullptr) {
         ProfessionList* profList = GameUpdateLoop::_singleton->m_professionList;
-        // LEFT: 0x140117080's port takes the profession as int64 (Component/exe_bodies.h).
-        if (profList) laborerProf = reinterpret_cast<int64_t>(profList->field_0x30);   // LEFT: 0x140117080's port takes the profession as int64 (Component/exe_bodies.h).
+        if (profList) {
+            laborer = profList->field_0x30;
+            laborerProf = reinterpret_cast<int64_t>(laborer);   // LEFT: the [FoundingSpawn] trace prints the profession key as "0x%llx" (an integer; changing it to %p changes the log text)
+        }
     }
 
     // 7. the whole per-citizen init
-    int64_t nullIBP = 0;
+    CitizenComponent* nullIBP = nullptr;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    // LEFT: 0x140117080's port takes the component as int64 (Component/exe_bodies.h).
     CitizenComp_DeferredInit_117080(comp, pos,   // 0x140117080
                                     static_cast<uint32_t>(genderSel == '\0'),
                                     isChild ? '\x01' : '\0', age, educated, &nullIBP,
-                                    laborerProf);
+                                    laborer);
 
     // 8. register with the world entity list under the template's category
     tmpl = FoundingSpawn_RefreshTemplate(startConfig, tmpl);
