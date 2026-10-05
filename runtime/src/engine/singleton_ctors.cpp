@@ -99,9 +99,9 @@ namespace {
 // cannot silently move a field out from under a transcribed byte-offset store.
 static_assert(offsetof(IO::Modification, _mods) == 0x08,
               "Modification ctor 0x1800b04b0: MOV qword [RCX+0x8],RAX");
-static_assert(offsetof(RtIO::FileSystem, existsInPackfileGate) == 0x18,
+static_assert(offsetof(IO::FileSystem, _existsInPackfileGate) == 0x18,
               "FileSystem ctor 0x1800ac7c0: MOV word [RCX+0x18],0x100 — low byte");
-static_assert(offsetof(RtIO::FileSystem, platformExistsGate) == 0x19,
+static_assert(offsetof(IO::FileSystem, _platformExistsGate) == 0x19,
               "FileSystem ctor 0x1800ac7c0: ... high byte, so platformExistsGate starts at 1");
 static_assert(offsetof(RtObject::ExternalFactory, _referenceModeEnabled) == 0x40,
               "ExternalFactory ctor 0x1800be7e0: MOV word [RCX+0x40],DX");

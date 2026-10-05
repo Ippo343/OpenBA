@@ -310,72 +310,65 @@ static_assert(sizeof(FilenameArray) == 0x10, "Collection::Array is 16 bytes");
 static_assert(offsetof(FilenameArray, size)     == 0x08, "0x180026880: MOV EBP,[RCX+0x8]");
 static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[RCX+0xc]");
 
-// ---- IO::FileSystem --------------------------------------------------------
-// Full-size fields at +0x00/+0x08 are RtSystem::String, NOT RtSystem::Filename:
+// ---- IO::FileSystem: the per-offset evidence ------------------------------
+// B.4 Z LAST IO: the `RtIO::FileSystem` POD that stood here is deleted (nothing
+// named it but its own alias asserts); the class `IO::FileSystem` below holds
+// the same bytes with real members. Its per-field evidence is kept here, as
+// it was written against the POD's field names:
+//
+// Full-size fields at +0x00/+0x08 are String, NOT Filename:
 // retail casts the pointer at the call site (`(Filename*)(this+8)`), it never
 // declares the field as one. Filename and String are layout-identical (see
 // runtime/types/system/Filename.h), so the cast is free either way; the type
 // used here just matches what the field actually is.
-struct FileSystem {
-    RtSystem::String sourceDirectory;    // +0x00 — GetSourceDirectory's `(Filename*)this`
-    RtSystem::String dataDirectory;      // +0x08 — GetDataDirectory's `this+8`; GetPackfileId's prefix
-    // +0x10 — the PACK directory, and the third field
-    // ?SetupDirectories@FileSystem@IO@@ (0x1800abd00) writes: it is seeded as
-    // a copy of dataDirectory (retail's inlined String::operator= at
-    // 0x1800ac1b0 with RSI = this+0x10, RDI = this+8) and then overridden by a
-    // `-pathpkg` command-line switch. `?GetPackDirectory@FileSystem@IO@@`
-    // (0x180007c10) is its reader. Named by Wave 9 lane FS; it was
-    // `_unknown10[8]` before, and nothing anywhere read that padding.
-    RtSystem::String packDirectory;
-    uint8_t          existsInPackfileGate; // +0x18 — Exists()'s `CMP byte [RCX+0x18],0`
-    uint8_t          platformExistsGate;   // +0x19 — Exists()'s `CMP byte [RBX+0x19],0`
-    uint8_t          _unknown1A[0x20 - 0x1A];
-    PackageFileView** packfiles;         // +0x20 — GetPackfileId's `*(this+0x20)`, array of PackageFile*
-    int32_t          packfileCount;      // +0x28 — read by ModProbe_DumpPackageIndex, not by this lane
-    // +0x2C — the packfiles array's CAPACITY. Named by Wave 9 lane PKG from
-    // LoadPackages' two inlined array-growth loops, which read it
-    // (`CMP R14D,dword ptr [RSI+0x2c]` at 0x1800ab5d4) and write it
-    // (`MOV dword ptr [RSI+0x2c],EAX` at 0x1800ab5f0). So +0x20/+0x28/+0x2C is
-    // a Collection::Array<PackageFile*> laid out exactly like every other
-    // Array in this engine (_data / _size / _capacity — see
-    // runtime/types/collection/Collection.h); retail INLINES the growth here
-    // rather than calling Array::SetSize, which is why the three fields were
-    // never named together before.
-    int32_t          packfileCapacity;
-    // +0x30/+0x38 — the USER (mod) pack filenames, array + count.
-    //
-    // CORRECTION, Wave 9 lane PKG: this comment used to call +0x38 "the flag
-    // IO::FileSystem::AreUserPackFilesEnabled returns". It is not a flag, it is
-    // an int COUNT, and the whole of that accessor (0x1800acfc0, four
-    // instructions) is `XOR EAX,EAX / CMP dword ptr [RCX+0x38],EAX / SETG AL`
-    // — i.e. it returns `count > 0`. Both readings agree on the gate that
-    // BANISHED_ACH_IGNORE_MODS turns on, so nothing built on the old wording is
-    // wrong; but LoadPackages' second loop uses +0x38 as a LOOP BOUND
-    // (`CMP R14D,dword ptr [RSI+0x38]` at 0x1800ab864) while indexing +0x30,
-    // and a bool there would have been a one-iteration loop.
-    RtSystem::String* userPackFilenames;   // +0x30
-    int32_t           userPackFilenameCount; // +0x38
-    int32_t           _unknown3C;            // +0x3C — the matching capacity; unread here
-    PackfileIndexNode* packfileIndexRoot; // +0x40 — GetPackfileId's `*(this+0x40)`
-    // +0x48 — the node count of the BST rooted at +0x40, so +0x40/+0x48 is one
-    // tree object. Pinned twice: the insert helper at 0x180025c70 takes
-    // `this+0x40` as its tree and does `INC dword ptr [R14+0x8]` on every node
-    // it creates, and ClosePackages zeroes it (`MOV dword ptr [RSI+0x8],EBP`
-    // at 0x1800abbf0, with RSI = this+0x40).
-    int32_t          packfileIndexCount;
-};
-static_assert(offsetof(FileSystem, sourceDirectory)      == 0x00, "see field comment");
-static_assert(offsetof(FileSystem, dataDirectory)        == 0x08, "see field comment");
-static_assert(offsetof(FileSystem, packDirectory)        == 0x10, "see field comment");
-static_assert(offsetof(FileSystem, existsInPackfileGate) == 0x18, "see field comment");
-static_assert(offsetof(FileSystem, platformExistsGate)   == 0x19, "see field comment");
-static_assert(offsetof(FileSystem, packfiles)            == 0x20, "see field comment");
-static_assert(offsetof(FileSystem, packfileCount)        == 0x28, "see field comment");
-static_assert(offsetof(FileSystem, packfileCapacity)      == 0x2c, "see field comment");
-static_assert(offsetof(FileSystem, userPackFilenames)    == 0x30, "see field comment");
-static_assert(offsetof(FileSystem, userPackFilenameCount) == 0x38, "see field comment");
-static_assert(offsetof(FileSystem, packfileIndexRoot)    == 0x40, "see field comment");
-static_assert(offsetof(FileSystem, packfileIndexCount)   == 0x48, "see field comment");
+// struct FileSystem {
+//     String sourceDirectory;    // +0x00 — GetSourceDirectory's `(Filename*)this`
+//     String dataDirectory;      // +0x08 — GetDataDirectory's `this+8`; GetPackfileId's prefix
+//     // +0x10 — the PACK directory, and the third field
+//     // ?SetupDirectories@FileSystem@IO@@ (0x1800abd00) writes: it is seeded as
+//     // a copy of dataDirectory (retail's inlined String::operator= at
+//     // 0x1800ac1b0 with RSI = this+0x10, RDI = this+8) and then overridden by a
+//     // `-pathpkg` command-line switch. `?GetPackDirectory@FileSystem@IO@@`
+//     // (0x180007c10) is its reader. Named by Wave 9 lane FS; it was
+//     // `_unknown10[8]` before, and nothing anywhere read that padding.
+//     String packDirectory;
+//     uint8_t          existsInPackfileGate; // +0x18 — Exists()'s `CMP byte [RCX+0x18],0`
+//     uint8_t          platformExistsGate;   // +0x19 — Exists()'s `CMP byte [RBX+0x19],0`
+//     uint8_t          _unknown1A[0x20 - 0x1A];
+//     PackageFileView** packfiles;         // +0x20 — GetPackfileId's `*(this+0x20)`, array of PackageFile*
+//     int32_t          packfileCount;      // +0x28 — read by ModProbe_DumpPackageIndex, not by this lane
+//     // +0x2C — the packfiles array's CAPACITY. Named by Wave 9 lane PKG from
+//     // LoadPackages' two inlined array-growth loops, which read it
+//     // (`CMP R14D,dword ptr [RSI+0x2c]` at 0x1800ab5d4) and write it
+//     // (`MOV dword ptr [RSI+0x2c],EAX` at 0x1800ab5f0). So +0x20/+0x28/+0x2C is
+//     // a Collection::Array<PackageFile*> laid out exactly like every other
+//     // Array in this engine (_data / _size / _capacity — see
+//     // runtime/types/collection/Collection.h); retail INLINES the growth here
+//     // rather than calling Array::SetSize, which is why the three fields were
+//     // never named together before.
+//     int32_t          packfileCapacity;
+//     // +0x30/+0x38 — the USER (mod) pack filenames, array + count.
+//     //
+//     // CORRECTION, Wave 9 lane PKG: this comment used to call +0x38 "the flag
+//     // IO::FileSystem::AreUserPackFilesEnabled returns". It is not a flag, it is
+//     // an int COUNT, and the whole of that accessor (0x1800acfc0, four
+//     // instructions) is `XOR EAX,EAX / CMP dword ptr [RCX+0x38],EAX / SETG AL`
+//     // — i.e. it returns `count > 0`. Both readings agree on the gate that
+//     // BANISHED_ACH_IGNORE_MODS turns on, so nothing built on the old wording is
+//     // wrong; but LoadPackages' second loop uses +0x38 as a LOOP BOUND
+//     // (`CMP R14D,dword ptr [RSI+0x38]` at 0x1800ab864) while indexing +0x30,
+//     // and a bool there would have been a one-iteration loop.
+//     String* userPackFilenames;   // +0x30
+//     int32_t           userPackFilenameCount; // +0x38
+//     int32_t           _unknown3C;            // +0x3C — the matching capacity; unread here
+//     PackfileIndexNode* packfileIndexRoot; // +0x40 — GetPackfileId's `*(this+0x40)`
+//     // +0x48 — the node count of the BST rooted at +0x40, so +0x40/+0x48 is one
+//     // tree object. Pinned twice: the insert helper at 0x180025c70 takes
+//     // `this+0x40` as its tree and does `INC dword ptr [R14+0x8]` on every node
+//     // it creates, and ClosePackages zeroes it (`MOV dword ptr [RSI+0x8],EBP`
+//     // at 0x1800abbf0, with RSI = this+0x40).
+//     int32_t          packfileIndexCount;
+// };
 
 }  // namespace RtIO
 
@@ -623,11 +616,10 @@ public:
     static FileSystem* _singleton;
 
     // ---- the pinned fields, at retail's offsets ---------------------------
-    // PUBLIC for the same reason `IO::Serializer`'s two are: the fifteen
-    // unconverted bodies across `runtime/src/io/` and the exe-side probes reach
-    // these offsets through `RtIO::FileSystem`, and `offsetof` on them has to be
-    // well formed for the pins below. Field-for-field with the POD above, whose
-    // per-offset evidence comments are not repeated here.
+    // PUBLIC for the same reason `IO::Serializer`'s two are: bodies outside
+    // the class and the exe-side probes read these fields, and `offsetof` on
+    // them has to be well formed for the pins below. The per-offset evidence
+    // is the commented table above (the deleted POD's).
     System::Filename   _sourceDirectory;       // +0x00  ctor 0x1800ac7d8, dtor 0x1800ac775 (see the banner)
     System::Filename   _dataDirectory;         // +0x08  ctor 0x1800ac7e4, dtor 0x1800ac74a
     System::Filename   _packDirectory;         // +0x10  ctor 0x1800ac7f0, dtor 0x1800ac720
@@ -652,8 +644,6 @@ public:
 // nothing pins the total size; the class inherits that honestly. A class MAY
 // keep opaque padding, but it may never invent a field and may never shrink or
 // grow the struct — so every offset below is the POD's, cross-asserted.
-static_assert(sizeof(FileSystem) == sizeof(RtIO::FileSystem),
-              "IO::FileSystem and the RtIO::FileSystem POD describe the same bytes");
 static_assert(offsetof(FileSystem, _sourceDirectory)      == 0x00, "GetSourceDirectory's `(Filename*)this`");
 static_assert(offsetof(FileSystem, _dataDirectory)        == 0x08, "GetDataDirectory's `this+8`");
 static_assert(offsetof(FileSystem, _packDirectory)        == 0x10, "GetPackDirectory 0x180007c10");
@@ -668,16 +658,6 @@ static_assert(offsetof(FileSystem, _userPackFilenames)    == 0x30, "the user pac
 static_assert(offsetof(FileSystem, _packfileIndexRoot)    == 0x40, "GetPackfileId's `*(this+0x40)`");
 static_assert(offsetof(FileSystem, _packfileIndexCount)   == 0x48, "ClosePackages 0x1800abbf0");
 
-static_assert(offsetof(FileSystem, _sourceDirectory) == offsetof(RtIO::FileSystem, sourceDirectory), "alias");
-static_assert(offsetof(FileSystem, _dataDirectory)   == offsetof(RtIO::FileSystem, dataDirectory),   "alias");
-static_assert(offsetof(FileSystem, _packDirectory)   == offsetof(RtIO::FileSystem, packDirectory),   "alias");
-static_assert(offsetof(FileSystem, _existsInPackfileGate) == offsetof(RtIO::FileSystem, existsInPackfileGate), "alias");
-static_assert(offsetof(FileSystem, _platformExistsGate)   == offsetof(RtIO::FileSystem, platformExistsGate),   "alias");
-static_assert(offsetof(FileSystem, _packfiles)       == offsetof(RtIO::FileSystem, packfiles),       "alias");
-static_assert(offsetof(FileSystem, _packfiles) + offsetof(Collection::Array<PackageFile*>, _size) ==
-              offsetof(RtIO::FileSystem, packfileCount), "alias");
-static_assert(offsetof(FileSystem, _packfileIndexRoot) == offsetof(RtIO::FileSystem, packfileIndexRoot), "alias");
-static_assert(offsetof(FileSystem, _packfileIndexCount) == offsetof(RtIO::FileSystem, packfileIndexCount), "alias");
 
 static_assert(!std::is_polymorphic<FileSystem>::value,
               "IO::FileSystem must never acquire a vtable: retail has none for it, and a "

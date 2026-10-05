@@ -63,8 +63,6 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.9 SS1: Configuration::_singleton
 
-using RtIO::FileSystem;
-
 // ============================================================================
 // ?Startup@FileSystem@IO@@QEAA_NXZ                          retail 0x1800abc50
 // ============================================================================
