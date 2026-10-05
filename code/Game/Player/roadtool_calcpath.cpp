@@ -37,6 +37,7 @@
 #include "Game/exe_bodies.h"
 #include "Work/buildroad_funcs.h"
 #include "Work/BuildRoad.h"   // BuildRoad_CtorParams_Impl returns the BuildRoad (a Work)
+#include "graphics/Material.h"   // Graphics::MaterialInstance is-an Object::External (the decal store)
 #include "system/MemoryAllocator.h"
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"
@@ -116,7 +117,7 @@ extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDesc
 // (count +0x218) with a parallel int array at +0x220 (count +0x228); both grow to
 // `index+1` and the new int slots are zeroed.
 // ============================================================================
-extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* decal) {
+extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object::External* decal) {
     if (!mgr) return;
 
     RawArray<Object::External*>& refs = mgr->_batchMaterials;   // +0x210
@@ -136,7 +137,7 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* d
                 intBase[i] = 0;
         }
     }
-    void** ptrBase = (void**)refs.data;  // LEFT: SIG RoadTool_DecalStore_acd90 takes the decal as void*: its one caller (:289) reads it from DecalDescription::_materials, a void** (Component/DecalDescription.h, CW)
+    Object::External** ptrBase = refs.data;
     if (ptrBase) ptrBase[index] = decal;
 }
 
@@ -273,7 +274,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     if (!decalComp) {
         return false;
     }
-    void* decal = decalComp->_materials[0];   // the first ExternalPtr of the +0x28 array
+    Graphics::MaterialInstance* decal = decalComp->_materials[0];   // the first ExternalPtr of the +0x28 array
 
     MapDescription* mapDesc = nullptr;
     RoadTool_FindMapDescription_6990(descEntity, &mapDesc);
