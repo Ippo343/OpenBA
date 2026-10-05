@@ -2178,9 +2178,9 @@ static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
 
     // The camera's position: its cameraToWorld translation (+0x34 + 0x88).
     const Math::Vector3& camPos = playerCtrl->camera._cameraToWorld.translation;
-    float dx = camPos.x - playerCtrl->targetX;
-    float dy = camPos.y - playerCtrl->targetY;
-    float dz = camPos.z - playerCtrl->targetZ;
+    float dx = camPos.x - playerCtrl->target.x;
+    float dy = camPos.y - playerCtrl->target.y;
+    float dz = camPos.z - playerCtrl->target.z;
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 

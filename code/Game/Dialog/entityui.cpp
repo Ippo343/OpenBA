@@ -637,9 +637,9 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
 
         if (gotPos) {
             PlayerController* cameraTarget = game->m_playerController;
-            cameraTarget->targetX = focus[0];
-            cameraTarget->targetY = focus[1];
-            cameraTarget->targetZ = 0.0f;
+            cameraTarget->target.x = focus[0];
+            cameraTarget->target.y = focus[1];
+            cameraTarget->target.z = 0.0f;
         }
         return;
     }

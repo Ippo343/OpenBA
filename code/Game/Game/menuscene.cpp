@@ -72,7 +72,7 @@ std::atomic<bool> s_tailWarned{false};
 // distance are left unwritten, as retail's.
 PlayerController::PlayerController()
     : transform(),
-      targetX(0.0f), targetY(0.0f), targetZ(0.0f),
+      target(0.0f, 0.0f, 0.0f),
       camera([] {
                  // Frustum ctor takes 4 Scalar* args in order (near, far, fovX,
                  // fovY) — the first two are stored as raw plane distances, the
@@ -245,7 +245,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
                "+0x28=%.2f +0x2c=%.2f +0x30=%.2f\n",
                xf.translation.x, xf.translation.y, xf.translation.z,
                xf.rotation.x, xf.rotation.y, xf.rotation.z, xf.rotation.w,
-               transform.targetX, transform.targetY, transform.targetZ,
+               transform.target.x, transform.target.y, transform.target.z,
                transform.yaw, transform.pitch, transform.distance);
         fflush(stdout);
     }

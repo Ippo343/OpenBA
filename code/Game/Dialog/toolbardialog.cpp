@@ -1405,9 +1405,9 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             point->field_0x10 = gameSys->field_0x40;
             // Copy the camera's yaw and look-at target
             point->field_0x0C = cameraSys->yaw;
-            float camY = cameraSys->targetY;
-            float camZ = cameraSys->targetZ;
-            point->position.x = cameraSys->targetX;
+            float camY = cameraSys->target.y;
+            float camZ = cameraSys->target.z;
+            point->position.x = cameraSys->target.x;
             point->position.y = camY;
             point->position.z = camZ;
 
@@ -1618,9 +1618,9 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
     PlayerController* cameraSys = game->m_playerController;
 
     // Set camera target position
-    cameraSys->targetX = targetPos[0];
-    cameraSys->targetY = targetPos[1];
-    cameraSys->targetZ = targetPos[2];
+    cameraSys->target.x = targetPos[0];
+    cameraSys->target.y = targetPos[1];
+    cameraSys->target.z = targetPos[2];
 
     // Zero-duration time for instant snap (matches original)
     {
