@@ -24,18 +24,20 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
 
 // ---- buildstructure.cpp
 class BuildStructure;
+class Work;               // Work/Work.h
+class GatherRawMaterials; // Work/GatherRawMaterials.h
 extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, uint8_t altAnim);  // 0x1400e59c0 (buildcomponent_state8.cpp, destroycomponent_states.cpp)
 extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** buildEntityIBP);  // no retail address (standalone harness entry)
-extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
+extern "C" int BuildStructure_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)
 
 // ---- foresterwork.cpp
 bool ForesterWork_ExecuteReady();  // no retail address (standalone harness entry)
-extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
+extern "C" int ForesterWork_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
 
 // ---- gatherrawmaterials.cpp
-extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);  // no retail address (standalone harness entry)
-extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
+extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);  // no retail address (standalone harness entry)
+extern "C" int GatherRawMaterials_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalone harness entry)
 
 // ---- gatherrawmaterials_ctor.cpp

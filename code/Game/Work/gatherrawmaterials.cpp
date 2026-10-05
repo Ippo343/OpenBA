@@ -707,16 +707,16 @@ DEFINE_EXE_TYPE(GatherRawMaterials, "Work")
 // site ctor (seeds per-material slots from the site's BuildDescription + the amount
 // already in the site StorageComponent) rather than the generic factory. buildEntityIBP
 // is an InternalBasePtr* whose *value is the site entity pointer.
-extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP) {
+extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(void* buildEntityIBP) {
     void* mem = Object::detail::InternalMemAlloc(sizeof(GatherRawMaterials), 8);
     if (!mem) return nullptr;
-    return static_cast<Object::Base*>(new (mem) GatherRawMaterials(buildEntityIBP));
+    return new (mem) GatherRawMaterials(buildEntityIBP);
 }
 
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute's param3 is a
 // scratch WpExt out-IBP (written internally) and param4 is unused, so 0/0 is safe.
-extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
-    return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute((CitizenComponent**)citizenIBP, nullptr);   // B.3.8 bridge; LEFT: SIG ForceWork::DriveWhenIdle (Game/force_work.h, X3-GAME) takes every driver as int (*)(void* work, void* citizenIBP)
+extern "C" int GatherRawMaterials_ForceDrive(Work* self, CitizenComponent** citizenIBP) {
+    return static_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute(citizenIBP, nullptr);
 }
 
 // Execute-readiness gate for the force harness. B3R: every helper Execute and its pushed
