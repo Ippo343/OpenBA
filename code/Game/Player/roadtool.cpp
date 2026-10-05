@@ -35,6 +35,7 @@
 #include "Game/PlayerToolManager.h"
 #include <cstdint>
 #include <cstdio>
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // Road pathfinding (0x14009ce00, code/Game/Action/keystone_a_zone.cpp). Used by

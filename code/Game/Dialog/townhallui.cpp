@@ -83,6 +83,7 @@
 #include "Work/exe_bodies.h"   // B3R: WorkBase_TreeNodeFree_14c30
 #include "Game/Calendar.h"     // GameUpdateLoop::m_dayCounter (year, yearTime)
 #include "Game/PlayerToolManager.h"   // CenterOnEntity 0x140103040
+#include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
 
 // ============================================================
 // Helpers
@@ -582,7 +583,7 @@ void TownHallUI::InitAgriculture() {
 
                 if (subTypeId == (int)selectDescId) {
                     // Found a SelectDescription sub-component
-                    void* subObj = buildComp->_subDescs[j];
+                    ::Object::Base* subObj = buildComp->_subDescs[j];
                     if (::Object::IsDerivedFromNullSafe(subObj, selectDescId) && subObj) {
                         // Insert buildComp into agriculture BST at +0x1D8
                         const ComponentDescription* key = buildComp;

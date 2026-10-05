@@ -64,6 +64,7 @@
 #include "Player/exe_bodies.h"
 #include "system/MemoryAllocator.h"
 #include <cstdint>
+#include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
 
 // ============================================================================
 // 0x14002ae50 — create one market BST node

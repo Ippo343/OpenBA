@@ -34,6 +34,7 @@
 #include "Action/MoveTo.h"
 #include "Action/PerformWork.h"
 #include "Action/HuntAnimal.h"
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // Sub-callees, called by name (B3R)

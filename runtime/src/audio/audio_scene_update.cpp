@@ -271,7 +271,7 @@ inline float RandUnitScale() {
 // Random::NextGroup were reached BY NAME behind function-local first-call
 // caches; they are direct member calls now. The one address door left
 // (0x180050d30, Collection code) resolves through a namespace-scope atomic slot.
-void ArrayAssign16(void* dst, const void* src) {
+void ArrayAssign16(Collection::Array<Audio::Scene::EmitterInstance>* dst, const void* src) {
     // 0x180050d30 Array<T16>::operator= -- unexported, ported in
     // collection/introsort.cpp; called by name (B3R).
     rtsort::Array16Assign(dst, src);

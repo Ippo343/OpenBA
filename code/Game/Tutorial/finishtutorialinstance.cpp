@@ -33,6 +33,7 @@
 #include "Tutorial/Tutorial.h"
 #include "Game/PlayerToolManager.h"
 #include "Component/ComponentDescription.h"
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // Startup/Update call TutWave_TutorialTreeInsert / TutWave_StepExecute by name.
 // ENDGAME B.3.8 (B6-5): the one-shot diagnostic counters are namespace-scope

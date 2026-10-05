@@ -31,6 +31,8 @@
 #include "Dialog/EntityUI.h"
 #include "Player/exe_bodies.h"
 #include "Work/TradeWork.h"   // TradeWork::Node (the assignment set)
+#include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 namespace {
 

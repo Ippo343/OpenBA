@@ -25,6 +25,7 @@
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)

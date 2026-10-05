@@ -89,6 +89,8 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/clearareacomponent_funcs.h"   // ClearAreaCtrl_IsDone / _BuildWork
 #include "Work/ClearArea.h"
+#include "Component/FruitComponent.h"   // B4 S4 RT2: InternalPtr<FruitComponent>::Get() needs the class complete
+#include "Component/NaturalResourceComponent.h"   // B4 S4 RT2: InternalPtr<NaturalResourceComponent>::Get() needs the class complete
 
 // OrchardCtrlTag lives in OrchardComponent.h (the member type needs it).
 using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;

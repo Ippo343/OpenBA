@@ -30,6 +30,7 @@
 #include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
 #include "Game/PlayerToolManager.h"
 #include "Component/ToolbarDescription.h"
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // DragTool members (dragtool.h). ENDGAME B.3.8 TOOL: the hand-rolled

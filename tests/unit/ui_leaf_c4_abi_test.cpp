@@ -45,6 +45,7 @@
 #include "runtime/types/ui/ScrollElement.h"
 #include "runtime/types/ui/TableDescription.h"
 #include "runtime/types/ui/TableElement.h"
+#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

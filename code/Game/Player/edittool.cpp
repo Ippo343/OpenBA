@@ -682,7 +682,7 @@ void EditTool::Shutdown() { EditTool_CloseInfoDialog(this, entityRef); }   // LE
 // FencedTool+0x30 = 0xffffffff00008263 (endCell 0x8263, lastEndCell -1), which
 // Entity_impl_cb40 handed straight to the 0x140004740 component finder and faulted on
 // entity+0x38. So the answer decides whether this pointer may be used as an EditTool.
-extern "C" bool EditTool_IsEditTool(void* tool) {
+extern "C" bool EditTool_IsEditTool(Tool* tool) {
     if (!tool) return false;
     const uint32_t tid = EditTool::TypeId();   // B38 D4: the class static, not a lazy cache
     if (tid == 0 || tid == 0xFFFFFFFFu) return false;

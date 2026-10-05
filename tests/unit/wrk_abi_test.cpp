@@ -45,6 +45,7 @@
 #include "Work/PlantOrchard.h"
 #include "Work/TendArea.h"
 #include "Work/TradeWork.h"
+#include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
 
 #include <cstdint>
 #include <cstddef>

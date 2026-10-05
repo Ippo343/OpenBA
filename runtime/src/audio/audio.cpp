@@ -936,7 +936,7 @@ void Scene::Pause(int32_t soundType, bool paused) {
 // (runtime/types/audio/Audio.h) with `EmitterInstance` a trivially destructible
 // POD, so the trait-derived `~Array()` on the stack temporary IS that body.
 // B3R: called by name (it was an address door behind an atomic slot).
-static void ArrayAssign16(void* dst, const void* src) {
+static void ArrayAssign16(Collection::Array<Audio::Scene::EmitterInstance>* dst, const void* src) {
     rtsort::Array16Assign(dst, src);
 }
 

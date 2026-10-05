@@ -265,7 +265,7 @@ static_assert(sizeof(PtrArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 // drives BOTH.
 // ---------------------------------------------------------------------------
 void* PtrArrayDtor(void* self) {
-    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);  // LEFT: measured S4: the callers (factory_dtors.cpp:165 / :209) hand &TypeRecord::children, the _data word of TypeInfo.h's raw {children, childCount, childCapacity} triple (retail: Collection::Array<TypeRecord*>, this is its ~Array); typing it an Array is H5: Startup builds the record in a stack `entry` copied into the node (type_reflection.cpp:338), so an Array member adds a ~Array call on that local, and the growth at type_reflection.cpp:396-423 is hand-inlined on the three fields
+    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);  // LEFT: measured S4 RT2: the callers (factory_dtors.cpp:165 / :209) hand &TypeRecord::children, the _data word of TypeInfo.h's raw {children, childCount, childCapacity} triple (retail: Collection::Array<TypeRecord*>, this is its ~Array). H5 not doable as a typing: retail Startup builds the record on the stack at RSP+0x20 (0x1800c06e3..0x1800c06fa, four zero qwords; key and record one address), Inserts it (0x1800c071f), then ends the local's Array with two bare zero stores (0x1800c0728 / 0x1800c072d, free elided); a Collection::Array member makes that local's ~Array an out-of-line ArrayDtorImpl call (MemFree + three stores) and the node teardown would run ~Array implicitly beside factory_dtors' explicit call
     MemFree(a->_data);        // retail's `if (p)` lives inside 0x1800c7ad0
     a->_data     = nullptr;
     a->_size     = 0;

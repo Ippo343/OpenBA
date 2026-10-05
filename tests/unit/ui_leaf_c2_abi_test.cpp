@@ -49,6 +49,7 @@
 #include "runtime/types/ui/ImageElement.h"
 #include "runtime/types/ui/AnimatedImageDescription.h"
 #include "runtime/types/ui/AnimatedImageElement.h"
+#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

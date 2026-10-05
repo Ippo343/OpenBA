@@ -82,6 +82,7 @@
 #include "ui/UserInterface.h"           // RtUi_UserInterface_Ctor
 #include "save/SaveLoad.h"              // RtSave_SaveLoad_Ctor / RtSave_SavedState_Dtor
 #include "utility/PerlinNoise.h"        // RtUtility_PerlinNoise_Ctor
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)

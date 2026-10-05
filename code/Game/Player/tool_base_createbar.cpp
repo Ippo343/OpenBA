@@ -66,6 +66,7 @@
 #include "Game/Map.h"
 #include "Game/PlayerToolManager.h"
 #include "ui/DialogController.h"
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 namespace {
 

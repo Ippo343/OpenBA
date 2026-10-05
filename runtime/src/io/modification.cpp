@@ -269,7 +269,7 @@ static void ArrayAssignGrow(ModArrayOf<T>* dst, const ModArrayOf<T>* src,
 
 // 0x180011110 — Collection::Array<int32>::operator=
 void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
-    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: measured S4: retail's GetIconData / GetPreviewData (0x180025530 / 0x180025580) return Collection::Array<uint32_t> by value (?$Array@I), but their caller LoadMods (modification_refresh.cpp:660 / :668) holds the temporary as a ctor-less RtIO::ModArrayOf local freed by hand; typing it Collection::Array adds the zeroing ctor (3 stores) and a ~Array EH cleanup pad, so the slot stays ModArrayOf and this entry keeps the void* door
+    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: measured S4 RT2: the by-value shape (Collection::Array<uint32_t> GetXData() const, NRVO, caller temporary destroyed at scope end) was BUILT: -O2 adds an EH landing pad (ArrayDtorImpl + _Unwind_Resume) to the callee 0x180025530 and turns the caller's inline MemFree + zero stores into an out-of-line rtcoll::ArrayDtorImpl call, while retail RefreshList inlines the free (lock, 0x1800c6c00, unlock) and the zero stores (0x1800afb71..0x1800afbb6); the slot stays the ctor-less ModArrayOf and this entry keeps the void* door
     const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: the source is Collection::Array<uint32_t> (Mod::ints, PackageFile::_iconData) while the destination at GetIconData is the ModArrayOf return slot (line 272's finding): two header types by caller
     ArrayFreeBuffer(dst);                       // CALL 0x1800111a0
     ArrayAssignGrow(dst, src, 4, 4);
@@ -283,7 +283,7 @@ void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
 
 // 0x180011220 — Collection::Array<uint8>::operator=
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
-    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: measured S4: retail's GetIconData / GetPreviewData (0x180025530 / 0x180025580) return Collection::Array<uint8_t> by value (?$Array@E), but their caller LoadMods (modification_refresh.cpp:660 / :668) holds the temporary as a ctor-less RtIO::ModArrayOf local freed by hand; typing it Collection::Array adds the zeroing ctor (3 stores) and a ~Array EH cleanup pad, so the slot stays ModArrayOf and this entry keeps the void* door
+    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: measured S4 RT2: the by-value shape (Collection::Array<uint8_t> GetXData() const, NRVO, caller temporary destroyed at scope end) was BUILT: -O2 adds an EH landing pad (ArrayDtorImpl + _Unwind_Resume) to the callee 0x180025580 and turns the caller's inline MemFree + zero stores into an out-of-line rtcoll::ArrayDtorImpl call, while retail RefreshList inlines the free (lock, 0x1800c6c00, unlock) and the zero stores (0x1800afb71..0x1800afbb6); the slot stays the ctor-less ModArrayOf and this entry keeps the void* door
     const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: the source is Collection::Array<uint8_t> (Mod::bytes, PackageFile::_previewData, array.cpp's inner-array op) while the destination at GetPreviewData is the ModArrayOf return slot (line 286's finding)
     ArrayFreeBuffer(dst);                       // CALL 0x1800112a0
     ArrayAssignGrow(dst, src, 1, 1);

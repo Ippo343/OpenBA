@@ -47,6 +47,7 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
 

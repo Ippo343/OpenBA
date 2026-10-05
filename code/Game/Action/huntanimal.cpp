@@ -53,6 +53,7 @@
 #include "Component/CitizenComponent.h"
 #include "Component/AnimalDescription.h"
 #include "Component/WildAnimalComponent.h"
+#include "Component/HerdComponent.h"   // B4 S4 RT2: InternalPtr<HerdComponent>::Get() needs the class complete
 
 // ============================================================
 // Helpers, called by name (B3R)

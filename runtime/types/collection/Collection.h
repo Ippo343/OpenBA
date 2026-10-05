@@ -1933,7 +1933,7 @@ namespace IO { class PackageFile; }   // io/PackageFile.h
 namespace rtsort {
 // ---- collection/introsort.cpp
 void SortByKey70(IO::PackageFile** first, int32_t count);  // 0x1800264a0
-void* Array16Assign(void* dstRaw, const void* srcRaw);  // 0x180050d30
+// Array16Assign (0x180050d30): declared in audio/Audio.h beside its element type.
 void  EffectSlotAssign(uint8_t* dst, const uint8_t* src);  // 0x180051650 (B.4: the element op, rtcoll::AssignAs)
 }  // namespace rtsort
 

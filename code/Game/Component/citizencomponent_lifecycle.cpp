@@ -53,6 +53,7 @@
 #include "Game/WorkScheduler.h"        // B4 P2 CIT-4: GameUpdateLoop::m_tutorial trees
 #include "Game/WorkSchedulerNodes.h"   // B4 P2 CIT-4: WorkSchedulerIdNode
 #include "Work/Work.h"                 // B4 P2 CIT-4: Work::field_24
+#include "Component/CharacterComponent.h"   // B4 S4 RT2: InternalPtr<CharacterComponent>::Get() needs the class complete
 
 // Clean C++ name generator (code/Game/Game/citizen_names.cpp) — replaces the retail
 // name-gen chain (FUN_1400a4c60/a4b30/a4880) that 0x140117080 would otherwise call.

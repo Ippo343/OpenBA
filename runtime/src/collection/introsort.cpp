@@ -350,9 +350,9 @@ using EmitterArray = Collection::Array<Audio::Scene::EmitterInstance>;
 // The `old`-treble branch is dead here for the same reason it is dead in the
 // other two (the destructor has already zeroed `_size`), and is kept.
 // ---------------------------------------------------------------------------
-void* Array16Assign(void* dstRaw, const void* srcRaw) {
-    EmitterArray*       dst = static_cast<EmitterArray*>(dstRaw);  // LEFT: audit WORK, left: the 0x1800dfd10 caller (audio_scene_update.cpp) hands a bare zeroed int64[2] stack header retail never destroys; a typed EmitterArray local would add a ~Array call, and moving the cast there raises that file's column
-    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: audit WORK, left: as line 353's src: the 0x1800dfd10 caller's empty source is a bare zeroed stack header, not an EmitterArray
+void* Array16Assign(EmitterArray* dstArg, const void* srcRaw) {
+    EmitterArray* dst = dstArg;
+    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: measured S4 RT2: the 0x1800dfd10 caller (audio_scene_update.cpp:593) hands a bare zeroed int64[2]; retail builds a whole stack EffectSlot there (0x1800dfcad..0x1800dfccc) and ends its positions with two bare zero stores after the call (0x1800dfd19 / 0x1800dfd1d, free elided); a typed EmitterArray local's ~Array is an out-of-line ArrayDtorImpl call instead, so the source stays void* (dst typed: every caller holds &EffectSlot::positions)
     if (dst == src) return dst;
 
     rtcoll::RtColl_ArrayDtor_180051d80(dst);

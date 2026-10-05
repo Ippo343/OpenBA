@@ -11,6 +11,8 @@
 #include "object/Internal.h"               // Object::detail::InternalMemFree
 #include <cstdint>
 #include <cstdio>
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
+#include "Component/WorkComponent.h"   // B4 S4 RT2: InternalPtr<WorkComponent>::Get() needs the class complete
 
 // ============================================================================
 // Work — ENDGAME B.3.8 block WRK (Work.h). Retail table 0x140161a80.
