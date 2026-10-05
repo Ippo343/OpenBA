@@ -48,6 +48,8 @@ Coordinator rulings on the 18 floor candidates and the hand-in proposals (marker
 - `ptr_int` 133 -> 136: the dead-argument rows (`citizenai_findhelpers.cpp:479`, `tornadocomponent.cpp:500 / :536`):
   retail never loads RCX at those calls; the tree passes the leftover value as an integer.
 - `crash_walk` 128 -> 129: `scene_watch.cpp:583-584` (the watch diagnostic's container_of).
+- `const_api` 3 -> 4: `batchc_gfx_leaves.cpp:801` (retail's AddDrawItem 0x1801057b0 stores a `const MaterialInstance*`
+  that Geometry's Draw slot takes non-const: retail drops the const itself).
 - NO marker (section 4 bars a `this` / `self` operand; the casts stay counted and listed in `LEFT_FREE.md` C):
   `tool_base_render.cpp:724`, `achievement_state.cpp:217`, `widestring.cpp:196`.
 - DEFERRED, not floor: `pickup.cpp:514` (a tree-only vptr guard: retail-difference task), the two harness puns
@@ -84,11 +86,11 @@ category needs the coordinator (M2).
 | `hash` | 5 | 5 | a pointer hashed as an integer | unchanged |
 | `vslot` | 2 | 2 | `Object::SlotAddressOf` (`VSlot.h`), the one sanctioned look into a compiler vtable, and `splash_loop_stubs.cpp`'s retail vptr identity compare (GameUpdateLoop has no type id) | 8 -> 2: six log / harness reads re-filed `crash_walk`, `buildrequirementui.cpp`'s guard unmarked |
 | `dx11_seam` | 20 | 20 | deferred: the VideoDX11 seam, removed by plan §4.1 (`CompanionData.h`'s 12 `DeletingDtor` arms, `Context.h`, `video_interface.cpp`) | 39 -> 20 measured: dx11/ itself carries no marker yet |
-| `const_api` | 3 | 3 | NEW: the const a retail Runtime API puts on its result (`PEBV`), dropped ONCE in the typed wrapper that mirrors retail's inlined template (`External.h` `FindAs` / `FindNextAs` / `FindOrLoadAs`); never at a call site | new |
+| `const_api` | 4 | 4 | NEW: the const a retail Runtime API puts on its result (`PEBV`), dropped ONCE in the typed wrapper that mirrors retail's inlined template (`External.h` `FindAs` / `FindNextAs` / `FindOrLoadAs`); never at a call site | new |
 | `user_data` | 9 | 9 | NEW: a `void*` that a RETAIL engine API (signature `PEAX`) stores for its caller and hands back unchanged, or a message payload whose type the message id selects, cast back to the type the registration stored. Not for a tree-only API, nor for a `void*` a template could carry | new |
 | `null_receiver` | 2 | 2 | NEW: retail's faithful read through a null receiver, spelled as the faulting address (`work_act_consume.cpp`, §5) | new |
 | `static_init` | 1 | 1 | NEW: the view of a file-static byte table that emulates MSVC's guarded function-local static (`wave29_lane_slots.cpp` `g_identityTable`: zero `.data`, filled by the first Update; a typed array would be constant-initialised to identity) | new |
-| **total** | **763** | **708** | | |
+| **total** | **764** | **709** | | |
 
 **`elem_stride`, as re-defined at the B.4 close.** The one ported type-erased container / tree
 core: its view of a container's header, element storage or node handed to it untyped; its

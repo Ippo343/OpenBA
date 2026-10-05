@@ -352,7 +352,7 @@ using EmitterArray = Collection::Array<Audio::Scene::EmitterInstance>;
 // ---------------------------------------------------------------------------
 void* Array16Assign(EmitterArray* dstArg, const void* srcRaw) {
     EmitterArray* dst = dstArg;
-    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: measured S4 RT2: the 0x1800dfd10 caller (audio_scene_update.cpp:593) hands a bare zeroed int64[2]; retail builds a whole stack EffectSlot there (0x1800dfcad..0x1800dfccc) and ends its positions with two bare zero stores after the call (0x1800dfd19 / 0x1800dfd1d, free elided); a typed EmitterArray local's ~Array is an out-of-line ArrayDtorImpl call instead, so the source stays void* (dst typed: every caller holds &EffectSlot::positions)
+    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); measured S4 RT2: the 0x1800dfd10 caller (audio_scene_update.cpp:593) hands a bare zeroed int64[2]; retail builds a whole stack EffectSlot there (0x1800dfcad..0x1800dfccc) and ends its positions with two bare zero stores after the call (0x1800dfd19 / 0x1800dfd1d, free elided); a typed EmitterArray local's ~Array is an out-of-line ArrayDtorImpl call instead, so the source stays void* (dst typed: every caller holds &EffectSlot::positions)
     if (dst == src) return dst;
 
     rtcoll::RtColl_ArrayDtor_180051d80(dst);

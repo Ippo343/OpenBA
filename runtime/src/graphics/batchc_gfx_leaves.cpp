@@ -798,7 +798,7 @@ void Renderer::DrawItemList(Video::Context& context, int groupIndex, int listInd
             item._geometry->Draw(
                 context,
                 group._cullCamera,
-                ExternalPtrHandle{ const_cast<MaterialInstance*>(item._instance) },  // LEFT: FLOOR? (const_api proposed) retail drops this const itself: ?AddDrawItem@Renderer 0x1801057b0 takes and stores `const MaterialInstance*` (PEBV), and Geometry slot 2 Draw takes ExternalPtr<MaterialInstance> by value (non-const) -- no typing on either side removes it
+                ExternalPtrHandle{ const_cast<MaterialInstance*>(item._instance) },  // LEFT: FLOOR? (const_api proposed) retail drops this const itself: ?AddDrawItem@Renderer 0x1801057b0 takes and stores `const MaterialInstance*` (PEBV), and Geometry slot 2 Draw takes ExternalPtr<MaterialInstance> by value (non-const) -- no typing on either side removes it  // CAST-OK: const_api (S4 ruling)
                 _alphaT,
                 static_cast<int32_t>(item._arg5),
                 shaderIndex,

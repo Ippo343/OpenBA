@@ -53,8 +53,18 @@ def line(nn, what, value, target, ok=None, note=''):
 
 
 # ---- §6.1
-line('01', 'castmetric.py PROD total (unmarked casts that are not tier I)', tot['total'], 0,
-     note=f'tier_i {tot["tier_i"]}, cast_ok {tot["cast_ok"]}')
+# S4 closing form (NEXT_SESSION 2.2, ruled 2026-10-05): the PROD total cannot reach 0 inside B.4
+# (dx11/ is the next step's, the retail-difference rows a separate task). Line 01 is the casts
+# outside dx11/ that leftfree_c.py (LEFT_FREE.md section C) files under NO DEFERRED / RULED group.
+# The dx11 seam step restores the PROD-total form when it closes.
+import leftfree_c as LC
+_c = LC.collect()
+_dx = sum(c['total'] for rel, c, sc, hits in rows if rel.startswith('dx11/'))
+line('01', 'unmarked casts outside dx11/ in no DEFERRED / RULED group (leftfree_c.py WORK)',
+     len(_c[LC.G_WK]), 0,
+     note=f'PROD total {tot["total"]} = dx11 {_dx} + '
+          + ' + '.join(f'{len(v)} {k.split(" (")[0]}' for k, v in _c.items())
+          + f'; tier_i {tot["tier_i"]}, cast_ok {tot["cast_ok"]}')
 ceiling = {}
 fm = os.path.join(HERE, 'FLOOR.md')
 if os.path.exists(fm):
