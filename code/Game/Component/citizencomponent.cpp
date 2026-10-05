@@ -934,7 +934,7 @@ static Work* LookupRegionByID(const WorkScheduler* areaMap, int32_t regionId) {
 // Component/exe_bodies.h, where it was an inline body: this file is its only caller.)
 // ============================================================
 static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceComp) {
-    int roster = workplaceComp->workerCount;
+    int roster = workplaceComp->workers._size;
     WorkComponent* sl = nullptr;   // the InternalPtr fn_FindComponent_Work writes
     fn_FindComponent_Work(workplaceComp->_entity.Get(), &sl);
     if (sl == nullptr) return false;
@@ -1084,7 +1084,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
             int workerSlots = slc->workState;
 
             // Get current worker count from WorkplaceComponent
-            int currentWorkers = wpIBP->workerCount;
+            int currentWorkers = wpIBP->workers._size;
 
             int gap = workerSlots - currentWorkers;
             if (gap > maxGap) maxGap = gap;
@@ -1206,7 +1206,7 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
 
         // the entry's WorkPlaceComponent (DAT_1401c80e0)
         WorkPlaceComponent* wp = entry->FindComponent<WorkPlaceComponent>();
-        int curWorkers = wp->workerCount;
+        int curWorkers = wp->workers._size;
 
         // the WorkComponent (DAT_1401c8070) on wp's entity (+0x10)
         WorkComponent* sloc = wp->_entity->FindComponent<WorkComponent>();
@@ -1226,7 +1226,7 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
                         s2slots = WorkComponent_CalcMaxWorkers(s2);
                         s2->workState = s2slots;
                     }
-                    int gap = s2slots - wp->workerCount;
+                    int gap = s2slots - wp->workers._size;
                     if (bestSlots < gap) {
                         best = entry;
                         bestSlots = gap;
@@ -1272,7 +1272,7 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
         ComponentEntity* entry = node->element.entities._data[i];
 
         WorkPlaceComponent* wp = entry->FindComponent<WorkPlaceComponent>();
-        int curWorkers = wp->workerCount;
+        int curWorkers = wp->workers._size;
 
         WorkComponent* sloc = wp->_entity->FindComponent<WorkComponent>();
         int maxSlots = sloc->workState;
@@ -1318,7 +1318,7 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
             maxSlots = WorkComponent_CalcMaxWorkers(sloc);
             sloc->workState = maxSlots;
         }
-        if (wp->workerCount < maxSlots) {
+        if (wp->workers._size < maxSlots) {
             System::MemoryAllocator::MemFree(cand);
             return entry;
         }
@@ -2065,7 +2065,7 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
     if (att->queueCount >= cap) { g_sub40f0_exit = 1; return false; }
 
     WorkPlaceComponent* bldg = att->_entity->FindComponent<WorkPlaceComponent>();
-    if (bldg->workerCount == 0) { g_sub40f0_exit = 2; return false; }
+    if (bldg->workers._size == 0) { g_sub40f0_exit = 2; return false; }
 
     Map* mapInfo = GameUpdateLoop::_singleton->m_game;
     InteractComponent* posComp = att->_entity->FindComponent<InteractComponent>();

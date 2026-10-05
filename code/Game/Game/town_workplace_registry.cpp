@@ -253,7 +253,7 @@ extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, cons
         WorkPlaceComponent* wpcPtr = wpcIBP.Get();
         if (wpcPtr == nullptr) continue;                  // defensive (never in valid data)
 
-        int workerCount = wpcPtr->workerCount;            // WPC+0x60 = live workers
+        int workerCount = wpcPtr->workers._size;            // WPC+0x60 = live workers
 
         // owning entity is the embedded IBP at WPC+0x10 — CheckPtr then deref.
         ComponentEntity* owner = wpcPtr->_entity.Get();

@@ -18,7 +18,6 @@
 #include "Component/workplacecomponent_funcs.h"
 #include "Component/WorkPlaceDescription.h"
 #include "Component/CitizenComponent.h"
-#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
@@ -115,7 +114,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
     // Build-time roster-only mode (see g_wpcRosterOnly): stop after the roster removal,
     // skipping the gameplay-time Scene mesh-visual toggle that deadlocks mid-build.
     if (g_wpcRosterOnly) return;
-    if (workerCount != 0) return;
+    if (workers._size != 0) return;
 
     _entity->SendEvent(3);   // 0x1400c2b70
 
@@ -213,7 +212,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
 // worker to the roster (+0x58, new count = +0x60 + 1).
 void WorkPlaceComponent::Attach(Object::InternalPtr<CitizenComponent>* worker) {
     if (!g_wpcRosterOnly) {
-        if (workerCount == 0) {
+        if (workers._size == 0) {
             Profession* jobSlot = profession;
             // Guard the description before IsDerivedFrom (no null-check) and before the
             // +0x20 read — an inert standalone workplace may have a null description.
@@ -233,8 +232,8 @@ void WorkPlaceComponent::Attach(Object::InternalPtr<CitizenComponent>* worker) {
         if (mesh) mesh->SetFlag(4, '\0');   // 0x14012c3f0
     }
 
-    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
-    GameColl::AsArray<GameColl::Ptr8>(&workers).SetSizeFill(workerCount + 1, worker);
+    // FUN_140003110 is Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero)
+    workers.SetSizeFill(workers._size + 1, worker);
 }
 
 // ============================================================
@@ -277,8 +276,8 @@ void WorkPlaceComponent::EvictRoster() {
     g_wpcRosterOnly = true;
 
     int guard = 0;
-    while (workerCount > 0) {
-        int before = workerCount;
+    while (workers._size > 0) {
+        int before = workers._size;
 
         CitizenComponent* worker = workers[0].Get();
 
@@ -293,10 +292,10 @@ void WorkPlaceComponent::EvictRoster() {
         // Re-read the roster base — the finders above can reallocate it.
         workers[0].Get()->SetWorkplace(newWorkplace);   // 0x140111ee0 (the tree's "AssignHousing")
 
-        if (workerCount >= before || ++guard > 4096) {
+        if (workers._size >= before || ++guard > 4096) {
             std::fprintf(stderr, "[WorkPlace] pause eviction made no progress on comp=%p "
                          "(roster %d -> %d, worker=%p) — breaking to avoid a spin\n",
-                         static_cast<void*>(this), before, workerCount, static_cast<void*>(worker));
+                         static_cast<void*>(this), before, workers._size, static_cast<void*>(worker));
             std::fflush(stderr);
             break;
         }
@@ -379,7 +378,7 @@ void WorkPlaceComponent::SetAccepting(bool accepting) {
         mesh->SetFlag(2, '\0');
         mesh->SetFlag(3, '\0');
         mesh->SetFlag(4, '\0');
-    } else if (workerCount == 0) {
+    } else if (workers._size == 0) {
         // Raise the "no workers" warning (bit 4) only for an UNSTAFFED workplace still on
         // its designated job (roster empty && profession == desc.profession) — the faithful raise.
         WorkPlaceDescription* desc = WPC_Description(this);
@@ -434,7 +433,7 @@ void WorkPlaceComponent::ApplyOccupiedVisual() {
 // 0x14012ee60 — release every seated worker: detach each from its current workplace
 // and reattach it to the (empty) replacement.
 void WorkPlaceComponent::ReleaseWorkers() {
-    while (workerCount > 0) {
+    while (workers._size > 0) {
         // Termination depends on the detach below removing worker[0] from this
         // component's array (+0x58 / count +0x60) — which it only does when the
         // worker's own workplace (+0x248) still names this workplace.
@@ -442,7 +441,7 @@ void WorkPlaceComponent::ReleaseWorkers() {
         // paths (WorkPlaceUI spinners, the builder pool auto-seat), so a stale
         // back-pointer would spin here forever. A HANG is far worse than a leaked
         // roster slot, so drop the entry ourselves if an iteration made no progress.
-        const int countBefore = workerCount;
+        const int countBefore = workers._size;
 
         ComponentEntity* emptyHost = nullptr;   // the InternalBasePtr(nullptr) retail builds
 
@@ -461,12 +460,12 @@ void WorkPlaceComponent::ReleaseWorkers() {
             comp->Attach(&workerIbp);   // 0x14012fa20
         }
 
-        if (workerCount >= countBefore) {
+        if (workers._size >= countBefore) {
             // No progress — shift worker[0] out by hand and keep going.
-            int n = workerCount;
-            Object::InternalPtr<CitizenComponent>* arr = workers;
+            int n = workers._size;
+            Object::InternalPtr<CitizenComponent>* arr = workers._data;
             if (arr) for (int i = 1; i < n; ++i) arr[i - 1] = arr[i];
-            workerCount = n - 1;
+            workers._size = n - 1;
             static int s_reported = 0;
             if (s_reported++ < 10) {
                 printf("[WorkPlaceComponent] release: worker[0]=%p did not detach "
@@ -580,7 +579,7 @@ static void WPC_TraceEnter(const char* which, const WorkPlaceComponent* comp) {
     ++n;
     fprintf(stderr, "[WPCCtrl] %s enter: comp=%p key(+0x48)=%p roster(+0x60)=%d\n",
             which, static_cast<const void*>(comp), static_cast<void*>(comp->profession),
-            comp->workerCount);
+            comp->workers._size);
     fflush(stderr);
 }
 
@@ -718,19 +717,15 @@ static void WorkPlaceComponent_RecordCensus(WorkPlaceComponent* wpc) {
 // (accepting: FindAvailableBuilding's gate reads it); +0x58 = +0x60 = 0; then
 // `_flags |= 2` (0x82).
 WorkPlaceComponent::WorkPlaceComponent()
-    : _controller(this), profession(nullptr), isAccepting(1), _pad51{},
-      workers(nullptr), workerCount(0), workerCapacity(0) {
+    : _controller(this), profession(nullptr), isAccepting(1), _pad51{} {
     OrFlagsInCtor(0x2);
     WorkPlaceComponent_RecordCensus(this);
 }
 
-// 0x14012f270: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
-// (the compiler chain).
+// 0x14012f270: MemFree(+0x58), +0x58 = +0x60 = 0 (~workers: kSpec_PtrZero has no
+// element destroy), then the controller's restamp (~_controller), the restamps and
+// ~Internal (the compiler chain, reverse declaration order). The body is empty.
 WorkPlaceComponent::~WorkPlaceComponent() {
-    Object::detail::InternalMemFree(workers);
-    workers = nullptr;
-    workerCount = 0;       // retail: one qword 0 over +0x60..+0x67
-    workerCapacity = 0;
 }
 
 // create 0x14003a030: MemAlloc(0x68, 8), then the ctor.
@@ -767,7 +762,7 @@ void WorkPlaceComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
 
     // Serialize the worker count from +0x60
-    int countBuf = workerCount;
+    int countBuf = workers._size;
     ser.Serialize(countBuf, nullptr);
 
     // On load, resize the worker array to the count just read.
@@ -785,14 +780,14 @@ void WorkPlaceComponent::Persist(IO::Stream& stream) {
     // across saves because it is stream content, not heap garbage) which it used
     // to index its id map out of bounds -> ACCESS_VIOLATION on load.
     const bool loadingLeg = ser._stream && (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
-    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
+    // FUN_1400032e0 is Collection::Array<void*>::SetSize(n) (kSpec_PtrZero)
     if (loadingLeg) {
-        GameColl::AsArray<GameColl::Ptr8>(&workers).SetSize(countBuf);
+        workers.SetSize(countBuf);
     }
 
     // Serialize each worker InternalBasePtr, nulled when it is not a CitizenComponent
     // (import slot 0x140152a98).
-    Object::InternalPtr<CitizenComponent>* workerArray = workers;
+    Object::InternalPtr<CitizenComponent>* workerArray = workers._data;
     int64_t count = (int64_t)countBuf;
     if (count > 0 && workerArray) {
         for (int64_t i = 0; i < count; i++)

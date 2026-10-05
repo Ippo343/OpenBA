@@ -133,7 +133,7 @@ void PopulateCounts(WorkPlaceUI* self) {
     }
 
     // Roster = seated workers/builders at this site.
-    uint32_t roster = static_cast<uint32_t>(workPlace->workerCount);
+    uint32_t roster = static_cast<uint32_t>(workPlace->workers._size);
 
     // Capacity = the site's WorkComponent capacity, on the workplace's entity.
     uint32_t capacity = 0;
@@ -234,14 +234,14 @@ void WorkPlaceUI::AdjustJobCount(int delta) {
 
     // No g_wpcRosterOnly wrapper here: the ported SetMaxWorkers body holds that guard
     // across its own eviction loop (destroycomponent_workerrelease.cpp).
-    const int rosterBefore = workPlace->workerCount;
+    const int rosterBefore = workPlace->workers._size;
     workPlace->SetMaxWorkers(cur + delta);   // 0x14012fb00
 
     fprintf(stderr, "[WorkPlaceUI] jobCount delta=%+d %s WorkComponent+0x30 %d->%d (asked %d) "
                     "roster %d->%d\n",
             delta, "applied",
             cur, work->workState, cur + delta,
-            rosterBefore, workPlace->workerCount);
+            rosterBefore, workPlace->workers._size);
     fflush(stderr);
 }
 
@@ -256,10 +256,10 @@ void WorkPlaceUI::CycleWorkplace() {
         ? static_cast<ComponentEntity*>(source) : nullptr;
     WorkPlaceComponent* workPlace = entity->FindComponent<WorkPlaceComponent>();
 
-    if (workPlace->workerCount == 0) return;
+    if (workPlace->workers._size == 0) return;
 
     workplaceIndex += 1;
-    if (workPlace->workerCount <= workplaceIndex)
+    if (workPlace->workers._size <= workplaceIndex)
         workplaceIndex = 0;
 
     CitizenComponent* worker = workPlace->workers[workplaceIndex].Get();
@@ -375,7 +375,7 @@ void WorkPlaceUI::OnUpdateLayout() {
         jobCountDown->SetFlagsOnOff(1, 0);
     }
 
-    uint32_t workerCount = static_cast<uint32_t>(workPlace->workerCount);
+    uint32_t workerCount = static_cast<uint32_t>(workPlace->workers._size);
 
     // The capacity of the WorkComponent on the workplace's own entity.
     WorkComponent* siteWork = workPlace->_entity->FindComponent<WorkComponent>();

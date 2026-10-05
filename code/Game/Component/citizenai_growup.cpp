@@ -256,7 +256,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
         }
         WorkPlaceComponent* wpIBP = wp;  // local_98
         // workerCount (+0x60) != 0 → this workplace accepts a worker
-        if (wpIBP != nullptr && wpIBP->workerCount != 0) {
+        if (wpIBP != nullptr && wpIBP->workers._size != 0) {
             InteractComponent* posBuf[2] = {nullptr, nullptr};
             posBuf[0] = entity->FindComponent<InteractComponent>();   // 0x140002ed0
             float wpos[4] = {0, 0, 0, 0};

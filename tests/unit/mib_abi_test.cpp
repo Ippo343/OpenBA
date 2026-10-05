@@ -201,7 +201,7 @@ UNIT_TEST(mib_controller_member_fields) {
     CHECK_EQ(offsetof(TradeComponent, merchant),       (size_t)0x80);
     CHECK_EQ(offsetof(WorkPlaceComponent, profession), (size_t)0x48);
     CHECK_EQ(offsetof(WorkPlaceComponent, isAccepting),(size_t)0x50);
-    CHECK_EQ(offsetof(WorkPlaceComponent, workerCount),(size_t)0x60);
+    CHECK_EQ(offsetof(WorkPlaceComponent, workers) + offsetof(WorkPlaceComponent::WorkerList, _size),(size_t)0x60);
 }
 
 UNIT_TEST(mib_controller_own_slots_land_on_retail_indices) {

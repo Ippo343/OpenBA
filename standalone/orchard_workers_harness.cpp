@@ -162,9 +162,9 @@ void Fire(int frameNum) {
             continue;
         }
 
-        const int32_t rosterBefore = wpcIBP->workerCount;          // +0x60
+        const int32_t rosterBefore = wpcIBP->workers._size;          // +0x60
         int seated = CitizenEmploy_SeatWorkers(townMgr, profKey, s_count);
-        const int32_t rosterAfter  = wpcIBP->workerCount;
+        const int32_t rosterAfter  = wpcIBP->workers._size;
 
         if (s_seatedCount < kMaxTracked) s_seated[s_seatedCount++] = orchComp;
 

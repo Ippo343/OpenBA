@@ -683,7 +683,7 @@ static uint32_t Helper_86e0(const Object::External* ext) {
         }
         ComponentEntity* entityRef = node ? node->element.entities._data[bi] : nullptr;
         WorkPlaceComponent* comp = entityRef->FindComponent<WorkPlaceComponent>();
-        total += comp->workerCount;
+        total += comp->workers._size;
     }
     return (uint32_t)total;
 }

@@ -223,7 +223,7 @@ bool HappinessComponent::IsActive() {
     if (desc->_needsWorkers) {
         WorkPlaceComponent* wp = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
         if (wp) {
-            if (wp->workerCount == 0) return false;
+            if (wp->workers._size == 0) return false;
             if (!wp->isAccepting) return false;
         }
     }

@@ -323,12 +323,12 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
             ComponentEntity* ent = found->element.entities._data[i];
             WorkPlaceComponent* comp = FindWorkPlaceComp(ent);
             if (!comp) continue;
-            int workers = comp->workerCount;
+            int workers = comp->workers._size;
             if (bestWorkers < workers) { bestEntity = ent; bestWorkers = workers; }
         }
         if (bestEntity) {
             WorkPlaceComponent* comp = FindWorkPlaceComp(bestEntity);
-            if (comp && comp->workers != nullptr) {
+            if (comp && comp->workers._data != nullptr) {
                 CitizenComponent* worker = comp->workers[0].Get();
                 if (worker) { DemoteToLaborer(worker, laborer); return; }
             }
