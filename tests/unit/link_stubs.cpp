@@ -17,6 +17,7 @@
 #include "../../runtime/types/graphics/Scene.h"
 #include "../../runtime/types/graphics/Animation.h"
 #include "../../runtime/types/graphics/GraphicsMesh.h"   // B.4 Y RT: kSpec_MeshNode
+#include "../../runtime/types/graphics/AnimationState.h" // B.4 Z: kSpec_AnimLayer
 
 #include <cstdio>
 #include <cstdlib>
@@ -71,5 +72,26 @@ namespace rtcoll { namespace gfxanim {
 const ArraySpec kSpec_MeshNode = {
     "Array<GraphicsMesh::Node> (unit stub)", 0x48, 8,
     &UnlinkedNodeAssign, &UnlinkedNodeInit, &UnlinkedNodeDestroy, false,
+    0, 0, 0, 0, 0, 0 };
+} }  // namespace rtcoll::gfxanim
+
+// B.4 Z MIRROR2 GFX: `Graphics::AnimationState::_layers` (MeshInstance::_animation)
+// is on the hand-derived row `kSpec_AnimLayer`, same file, same reason. Its
+// destroy step is null in the real row too (J1 only), so a MeshInstance probe's
+// ~Array frees exactly as the real build does; assign / init abort.
+namespace {
+void UnlinkedLayerAssign(uint8_t*, const uint8_t*) { UnlinkedBody("kSpec_AnimLayer assign"); }
+void UnlinkedLayerInit(uint8_t*) { UnlinkedBody("kSpec_AnimLayer init"); }
+}  // namespace
+namespace rtcoll { namespace gfxanim {
+const ArraySpec kSpec_AnimLayer = {
+    "Array<Graphics::AnimationState::Layer> (unit stub)", 0x38, 8,
+    &UnlinkedLayerAssign, &UnlinkedLayerInit, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+// `MeshInstance::_nodes` / `InstancedAnimationState::_nodes`: kSpec_InterpTransform,
+// likewise (real row: stride 0x38, alignment 4, no destroy step).
+const ArraySpec kSpec_InterpTransform = {
+    "Array<Graphics::InterpolatedState<Math::Transform>> (unit stub)", 0x38, 4,
+    &UnlinkedLayerAssign, &UnlinkedLayerInit, nullptr, true,
     0, 0, 0, 0, 0, 0 };
 } }  // namespace rtcoll::gfxanim

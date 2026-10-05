@@ -491,11 +491,7 @@ namespace Graphics {
 void MeshInstance::Serialize(IO::Serializer& serializer) {
     ++g_meshSerCalls;
 
-    // LEFT: `_animation` is the 0x18-byte retail AnimationState (Mesh.h's
-    // MeshAnimationState); the tree's 0x48 class is its prefix-compatible
-    // superset, so the member is reached through a view of the same bytes.
-    reinterpret_cast<Graphics::AnimationState*>(&_animation)      // +0xd8, 0x1800fe250   // LEFT: audit DEFERRED:the tree Graphics::AnimationState is 0x48, retail embeds a 0x18 AnimationState at; H5 MeshInstance::_animation is retail's 0x18-byte AnimationState held raw (Mesh.h); the tree's Graphics::AnimationState is its 0x48 prefix-compatible superset (ledger finding)
-        ->Graphics::AnimationState::Serialize(serializer);
+    _animation.Serialize(serializer);                             // +0xd8, 0x1800fe250
 
     int32_t n = _materials._size;                                 // +0xd0
     serializer._readerWriter->SerializeInt(n, nullptr);

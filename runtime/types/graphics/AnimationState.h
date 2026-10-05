@@ -256,51 +256,10 @@ static_assert(offsetof(AnimationState, rootOffset)    == 0x18, "AnimationState::
 static_assert(offsetof(AnimationState, pose)          == 0x28, "AnimationState::pose @ +0x28");
 static_assert(offsetof(AnimationState, nodes)         == 0x38, "AnimationState::nodes @ +0x38");
 
-// ============================================================================
-// Math::InterpolatedState<Math::Transform> — 0x38 bytes, two Math::Transform.
-//
-// MEASURED from Update's dt==0 arm (0x1800fdc50..0x1800fdcb1): the iteration
-// step is `LEA RBX,[RBX+0x38]` and the arm copies the seven dwords at
-// `base+0x00..base+0x1b` to `base+0x1c..base+0x37`. A Math::Transform is 0x1c
-// bytes (quaternion then Vector3) — already asserted in wave23_lane_gfxbody.cpp
-// — and 2 * 0x1c == 0x38 exactly.
-// ============================================================================
-// The two members are named BY POSITION (`first` / `second`), not by role. The
-// only thing Update's dt==0 arm proves is the COPY DIRECTION — +0x00 is the
-// source and +0x1c the destination. Calling them "previous" and "current" would
-// be an inference about which one the interpolator samples, and no body this
-// lane read establishes that (reference_a_writer_beats_readers_agreeing_on_a_
-// sign.md: a single writer does not name a field's meaning either).
-// *** THIS IS NOW THE TREE'S ONE AND ONLY DEFINITION. *** ENDGAME B.3.5 block GC
-// collapsed a LATENT ODR DEFECT: `Mesh.h` carried a SECOND
-// `RtGraphics::InterpolatedTransform`, same 0x38 size and same offsets but spelled
-// `Transform _state[2]`, with neither guarding against the other. The two
-// coexisted only because no translation unit had ever included both headers;
-// `GraphicsMesh.h`'s banner records block G hitting the redefinition and routing
-// around it rather than editing two other blocks' files. Block GC hit it for real
-// — `animationstate_transforms.cpp` needs `Mesh.h` for `Graphics::MeshInstance`
-// AND this header for `Graphics::AnimationState` — so `Mesh.h` now INCLUDES this
-// header instead of redeclaring the type.
-//
-// THE FIELD NAMES ARE THESE ONES AND THE SEMANTICS ARE Mesh.h's, which is the
-// stronger read of the two. `?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@`
-// (0x18001aff0, eleven instructions) calls `Math::Transform::Lerp` with `this+0x1c`
-// as the RECEIVER and `this+0x00` as the argument, and `Transform::Lerp`'s
-// SUBSS/MULSS/ADDSS order (0x18001d6d8..0x18001d6fa) makes the receiver the FROM
-// end. So the interpolation runs FROM +0x1c TO +0x00: **+0x00 is CURRENT and +0x1c
-// is PREVIOUS**, the ordinary render-interpolation arrangement, and it agrees with
-// `GetNodeToWorld` reading the first one. The POSITIONAL names are kept because
-// they are the live spelling in `wave27_lane_gfxbig.cpp` and `mesh.cpp` (nothing
-// ever used `_state[...]` as a member access — only comments named it), and the
-// meaning lives in the comments, where the evidence travels with it.
-struct InterpolatedTransform {
-    float first[7];    // +0x00  Math::Transform — CURRENT (the dt==0 copy's SOURCE)
-    float second[7];   // +0x1c  Math::Transform — PREVIOUS (its DESTINATION)
-};
-static_assert(sizeof(InterpolatedTransform) == 0x38,
-              "InterpolatedState<Math::Transform> is two 0x1c Transforms");
-static_assert(offsetof(InterpolatedTransform, second) == 0x1c,
-              "InterpolatedTransform::second @ +0x1c");
+// B.4 Z MIRROR2 GFX: `RtGraphics::InterpolatedTransform`, the POD twin of
+// `Graphics::InterpolatedState<Math::Transform>` (InterpolatedState.h: +0x00
+// CURRENT, +0x1c PREVIOUS, per `?Lerp@` 0x18001aff0), is deleted: its one user,
+// the `RtGraphics::MeshInstance` POD in Mesh.h, had no reader left.
 
 }  // namespace RtGraphics
 
@@ -339,22 +298,41 @@ static_assert(offsetof(InterpolatedTransform, second) == 0x1c,
 // `AnimationLayer` now binds the CLASS. Spell the PODs `RtGraphics::` there.
 // ############################################################################
 
+// The row of `Array<AnimationState::Layer>` (array_graphics_anim.cpp): SetSize
+// 0x18005c8a0's init, operator= 0x18001b700, ~Array 0x18001c480.
+namespace rtcoll { namespace gfxanim {
+extern const ArraySpec kSpec_AnimLayer;
+// The row of `Array<InterpolatedState<Math::Transform>>`: SetSize 0x18005ac50's
+// identity init, operator= 0x18001b810, ~Array 0x18001c550 (J1).
+extern const ArraySpec kSpec_InterpTransform;
+} }
+
 namespace Graphics {
 
 // ============================================================================
-// Graphics::AnimationState — 0x48 bytes, NO vtable.
+// Graphics::AnimationState — 0x18 bytes, NO vtable.
 //
-// NO REAL CONSTRUCTOR OR DESTRUCTOR IS DEFINED, and that is not B4b-2's
-// vtable argument (there is no vtable to get wrong) — it is the weaker and
-// sufficient one: `??0AnimationState@Graphics@@QEAA@XZ` (0x1800fdaf0),
-// `??0…@AEBV01@@Z` (0x1800168d0) and `??1…@QEAA@XZ` (0x1800fe380) are UNPORTED
-// and UNCALLED in this tree, and an uncalled port is an unverified port. Every
-// live one is an element of a `Collection::Array<AnimationState>` whose
-// construction, copy and destruction run through the REGISTERED rows at retail's
-// own addresses (`0x18005b660` copy-ctor and `kD_InnerArr3_48` destroy, both in
-// this block's files). A C++ constructor or destructor here would add a SECOND
-// element lifecycle beside the ported one. They are declared for the record and
-// deliberately left undefined.
+// B.4 Z MIRROR2 GFX: RETAIL'S CLASS IS 0x18 BYTES, read from its own ctor and
+// dtor in the disassembly:
+//   ??0AnimationState@Graphics@@QEAA@XZ 0x1800fdaf0:
+//       MOV byte [RCX],0 ; MOV qword [RCX+0x8],0 ; MOV qword [RCX+0x10],0 ; RET
+//   ??1AnimationState@Graphics@@QEAA@XZ 0x1800fe380:
+//       ADD RCX,0x8 ; JMP 0x18001c480                (~Array<Layer> on +0x08)
+//   ?IsInstanced@ 0x1800168a0: MOVZX EAX,byte [RCX]  (the bool at +0x00)
+// and every member body (Serialize, ResetAnimationState, PlayAnimation, Update,
+// UpdateRootOnly, UpdateNodes) reads `this` at +0x00 / +0x08 / +0x10 only. The
+// 0x48 record the AnimationManager keeps per frame of an instanced clip EMBEDS
+// one at +0x00 (its copy ctor 0x18005b660 opens with this class's inlined copy
+// ctor 0x1800168d0 -- the byte, then the zeroed header and CALL 0x18001b700 --
+// and its element destroy 0x18005bce0 frees +0x08 last): that record is
+// `InstancedAnimationState` below. `MeshInstance` embeds one at +0xd8 (its ctor
+// 0x1800fffc0 inlines 0x1800fdaf0, its dtor 0x180017060 inlines 0x1800fe380).
+//
+// The ctor and dtor are retail's inlined bodies (defined here, inline, as retail
+// inlines them at both sites). The copy ctor and operator= stay declared and
+// undefined: nothing in the tree copies one as a C++ object (the record's copy
+// is the registered 0x18005b660 row, MeshInstance's copy ctor 0x1800170c0 is
+// hand-written in retail's store order).
 // ============================================================================
 class AnimationState {
 public:
@@ -385,16 +363,18 @@ public:
     };
 
     // ---- the members retail exports ----------------------------------------
-    // ??0AnimationState@Graphics@@QEAA@XZ        0x1800fdaf0  NOT PORTED
+    // ??0AnimationState@Graphics@@QEAA@XZ        0x1800fdaf0  the bool, then the
+    //   Array header's two qwords; +0x01..+0x07 not written.
+    AnimationState() : _instanced(false), _layers() {}
     // ??0AnimationState@Graphics@@QEAA@AEBV01@@Z 0x1800168d0  NOT PORTED
-    //   (the UNEXPORTED array-element copy constructor at 0x18005b660 IS ported,
-    //    as `RtGraphics_AnimState_CopyCtor` in animationstate.cpp — a different
-    //    address and a different function)
-    // ??1AnimationState@Graphics@@QEAA@XZ        0x1800fe380  NOT PORTED
-    // ??4AnimationState@Graphics@@QEAAAEAV01@AEBV01@@Z 0x180016910 NOT PORTED
-    AnimationState();
+    //   (the UNEXPORTED array-element copy constructor of the 0x48 record at
+    //    0x18005b660 IS ported, as `RtGraphics_AnimState_CopyCtor` in
+    //    animationstate.cpp — a different address and a different function)
     AnimationState(const AnimationState&);
-    ~AnimationState();
+    // ??1AnimationState@Graphics@@QEAA@XZ        0x1800fe380  `JMP 0x18001c480`
+    //   on +0x08: the body is empty, the member ~Array<Layer> is the release.
+    ~AnimationState() {}
+    // ??4AnimationState@Graphics@@QEAAAEAV01@AEBV01@@Z 0x180016910 NOT PORTED
     AnimationState& operator=(const AnimationState&);
 
     // ?Serialize@AnimationState@Graphics@@QEAAXAEAVSerializer@IO@@@Z 0x1800fe250
@@ -501,44 +481,79 @@ public:
     // ?UpdateRootOnly@ 0x1800fc870 — body in wave28_lane_gfxbody.cpp
     void UpdateRootOnly(float speed, Math::Vector3& rootOffsetOut);
 
-    // ---- the 0x48 bytes ----------------------------------------------------
-    // PUBLIC for the same reason `IO::Serializer`'s are: unconverted bodies
-    // across `runtime/src/graphics/` reach them at these offsets through a cast.
-    //
-    // The three Array members are the RAW 16-byte header, not `Array<Layer>` /
-    // `Array<Math::Transform>` / `Array<InterpolatedState<Transform>>`, for the
-    // reason `AnimStateRec` already spells them that way: element lifecycle for
-    // all three runs through the REGISTERED `kSpec_*` / `kD_InnerArr3_48` rows at
-    // retail's addresses, and the typed form would make the compiler emit a
-    // second one beside the ported one.
-
-    // +0x00  "the unique node set is stale". Set to 1 when there is exactly one
-    //        layer whose handle is >= 0; `Update` then calls
+    // ---- the 0x18 bytes ----------------------------------------------------
+    // +0x00  the bool `?IsInstanced@` (0x1800168a0) returns and retail's
+    //        Serialize writes with SerializeBool (0x1800fe250). `Update` sets
+    //        it when exactly one layer's handle is >= 0, then calls
     //        `CopyInstancedToUnique` and clears it.
-    bool     _needsUniqueCopy;   // B.4: bool -- retail's SerializeBool (0x1800fe250)
-    uint8_t  _pad01[7];
-    //
-    // B.4: the three Arrays carry their ELEMENT TYPE now. No lifecycle changed:
-    // this class's ctors and dtor are declared and never defined, so no member
-    // ctor / dtor of these Arrays is ever instantiated through it; element
-    // construction, copy and destruction still run through the registered
-    // `rtcoll::Rt_*` rows at retail's addresses (array_graphics_anim.cpp).
-    Collection::Array<Layer> _layers;    // +0x08  stride 0x38
-    Math::Vector3 _rootOffset;           // +0x18
-    int32_t  _pad24;                     // +0x24  the Array triple's _capacity half
-    Collection::Array<Math::Transform> _pose;   // +0x28  stride 0x1c
-    Collection::Array<InterpolatedState<Math::Transform>> _nodes;  // +0x38  stride 0x38
+    bool     _instanced;
+    uint8_t  _pad01[7];                  // +0x01  never written by the ctor
+    // B.4 Z MIRROR2 GFX: on retail's row, kSpec_AnimLayer -- its SetSize is
+    // 0x18005c8a0, operator= 0x18001b700, ~Array 0x18001c480 (J1: the row has
+    // no destroy step, as the trait row of the trivially destructible Layer
+    // did not).
+    using LayerArray = Collection::Array<Layer, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimLayer>>;
+    LayerArray _layers;                  // +0x08  stride 0x38
 };
-static_assert(sizeof(AnimationState) == 0x48,
-              "Graphics::AnimationState is 0x48 bytes -- the stride AnimationManager"
-              "::Update walks and the record kD_InnerArr3_48 destroys");
+static_assert(sizeof(AnimationState) == 0x18,
+              "Graphics::AnimationState is 0x18 bytes -- its ctor 0x1800fdaf0 "
+              "writes +0x00 / +0x08 / +0x10 and its dtor 0x1800fe380 frees +0x08");
 static_assert(alignof(AnimationState) == 8, "Graphics::AnimationState aligns to 8");
 static_assert(sizeof(AnimationState::Layer) == 0x38,
               "Graphics::AnimationState::Layer stride is 0x38");
+static_assert(offsetof(AnimationState, _instanced)  == 0x00, "AnimationState::_instanced @ +0x00");
 static_assert(offsetof(AnimationState, _layers)     == 0x08, "AnimationState::_layers @ +0x08");
-static_assert(offsetof(AnimationState, _rootOffset) == 0x18, "AnimationState::_rootOffset @ +0x18");
-static_assert(offsetof(AnimationState, _pose)       == 0x28, "AnimationState::_pose @ +0x28");
-static_assert(offsetof(AnimationState, _nodes)      == 0x38, "AnimationState::_nodes @ +0x38");
+
+// B.4 Z MIRROR2 GFX: `Array<InterpolatedState<Math::Transform>>` on retail's
+// row (kSpec_InterpTransform: stride 0x38, alignment 4, no destroy step) --
+// `MeshInstance::_nodes` and `InstancedAnimationState::_nodes`, the two members
+// retail's 0x18005ac50 / 0x18001b810 / 0x18001c550 serve.
+using InterpTransformArray = Collection::Array<InterpolatedState<Math::Transform>,
+                                               Collection::DefaultAllocator,
+                                               Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_InterpTransform>>;
+
+// ============================================================================
+// Graphics::InstancedAnimationState — 0x48 bytes, the element of
+// `AnimationManager::Instance::_states` (one per frame of the instanced clip).
+//
+// Retail's own name for this record is not in the export table (its Array
+// instantiation 0x18005b130 / 0x18005b1e0 / 0x18005bbb0 is unexported); it is
+// named by role -- the INSTANCED pool slot `MeshInstance` reads when its
+// `_animation._instanced` is set. Its layout, from retail:
+//   * copy ctor 0x18005b660: the AnimationState at +0x00 (byte, zeroed header,
+//     CALL 0x18001b700), three dwords +0x18..+0x20, then the zeroed headers at
+//     +0x28 (CALL 0x18001b360) and +0x38 (CALL 0x18001b810);
+//   * element destroy 0x18005bce0: frees +0x38, then +0x28, then +0x08 -- the
+//     reverse member order, the AnimationState last;
+//   * `?GetPose@AnimationManager@` 0x1800fb8e0 reads +0x28 as the pose buffer.
+//
+// NO C++ CONSTRUCTOR OR DESTRUCTOR IS DEFINED: every live one is an element of
+// `AnimationStateArray`, whose construction, copy and destruction run through
+// the REGISTERED `kSpec_AnimState` row at retail's addresses (0x18005b1e0's
+// zeroing init, the copy ctor 0x18005b660, the destroy 0x18005bce0). Declared
+// and undefined so no second lifecycle can be generated beside the row's.
+// ============================================================================
+struct InstancedAnimationState {
+    InstancedAnimationState();
+    InstancedAnimationState(const InstancedAnimationState&);
+    ~InstancedAnimationState();
+    InstancedAnimationState& operator=(const InstancedAnimationState&);
+
+    AnimationState _state;               // +0x00  0x18 bytes
+    Math::Vector3 _rootOffset;           // +0x18  Update's rootOffsetOut
+    int32_t  _pad24;                     // +0x24  never written by the copy ctor
+    Collection::Array<Math::Transform> _pose;   // +0x28  stride 0x1c
+    InterpTransformArray _nodes;         // +0x38  stride 0x38
+};
+static_assert(sizeof(InstancedAnimationState) == 0x48,
+              "the AnimationManager's per-frame record is 0x48 bytes -- the stride "
+              "AnimationManager::Update walks and the record kD_InnerArr3_48 destroys");
+static_assert(alignof(InstancedAnimationState) == 8, "aligns to 8");
+static_assert(offsetof(InstancedAnimationState, _state)      == 0x00, "_state @ +0x00");
+static_assert(offsetof(InstancedAnimationState, _rootOffset) == 0x18, "_rootOffset @ +0x18");
+static_assert(offsetof(InstancedAnimationState, _pose)       == 0x28, "_pose @ +0x28");
+static_assert(offsetof(InstancedAnimationState, _nodes)      == 0x38, "_nodes @ +0x38");
 static_assert(offsetof(AnimationState::Layer, _clipIndex)     == 0x08, "Layer::_clipIndex @ +0x08");
 static_assert(offsetof(AnimationState::Layer, _handle)        == 0x0c, "Layer::_handle @ +0x0c");
 static_assert(offsetof(AnimationState::Layer, _speed)         == 0x10, "Layer::_speed @ +0x10");
@@ -546,18 +561,18 @@ static_assert(offsetof(AnimationState::Layer, _time)          == 0x18, "Layer::_
 static_assert(offsetof(AnimationState::Layer, _fadeLength)    == 0x20, "Layer::_fadeLength @ +0x20");
 static_assert(offsetof(AnimationState::Layer, _fadeRemaining) == 0x28, "Layer::_fadeRemaining @ +0x28");
 static_assert(offsetof(AnimationState::Layer, _restarted)     == 0x30, "Layer::_restarted @ +0x30");
-// The class and all three PODs describe the same bytes.
-static_assert(sizeof(AnimationState) == sizeof(RtGraphics::AnimationState), "alias GFXBIG's POD");
+// The record and the PODs describe the same bytes.
+static_assert(sizeof(InstancedAnimationState) == sizeof(RtGraphics::AnimationState), "alias GFXBIG's POD");
 static_assert(sizeof(AnimationState::Layer) == sizeof(RtGraphics::AnimationLayer), "alias Layer");
-static_assert(offsetof(AnimationState, _layers) ==
+static_assert(offsetof(InstancedAnimationState, _state) + offsetof(AnimationState, _layers) ==
               offsetof(RtGraphics::AnimationState, layers), "alias layers");
-static_assert(offsetof(AnimationState, _rootOffset) ==
+static_assert(offsetof(InstancedAnimationState, _rootOffset) ==
               offsetof(RtGraphics::AnimationState, rootOffset), "alias rootOffset");
 static_assert(!std::is_polymorphic<AnimationState>::value,
               "Graphics::AnimationState must never acquire a vtable: retail exports "
               "no ??_7AnimationState@Graphics@@6B@ and its ctor/dtor are QEAA");
-static_assert(std::is_standard_layout<AnimationState>::value,
-              "the ported doors reach these fields through a reinterpret_cast");
+static_assert(std::is_standard_layout<InstancedAnimationState>::value,
+              "the kSpec_AnimState row's callbacks reach the record through its element pointer");
 
 }  // namespace Graphics
 
@@ -592,26 +607,28 @@ namespace Graphics {
 // `Collection::Array<AnimationState>` with retail's element lifecycle: SetSize
 // 0x18005b1e0, operator= 0x18005b130, ~Array 0x18005bbb0 are the
 // `kSpec_AnimState` row (AnimationManager::Instance::_states).
-using AnimationStateArray = Collection::Array<AnimationState, Collection::DefaultAllocator,
+using AnimationStateArray = Collection::Array<InstancedAnimationState, Collection::DefaultAllocator,
                                               Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimState>>;
 }  // namespace Graphics
 namespace rtcoll {
-void* Rt_ArrayDtor_18001c480(void* a);  // 0x18001c480 ~Array<AnimationState::Layer>
-void* Rt_ArrayDtor_18001c550(void* a);  // 0x18001c550 ~Array<InterpolatedState<Transform>>
 void* Rt_ArrayDtor_180014090(Graphics::GraphicsMesh::NodeArray* a);  // 0x180014090 ~Array<GraphicsMesh::Node>
 void* Rt_ArrayDtor_18005bbb0(Graphics::AnimationStateArray* a);  // 0x18005bbb0 ~Array<AnimationState>
 void Rt_SetSize_18005aa30(Graphics::GraphicsMesh::NodeArray* a, int n);  // 0x18005aa30 Array<GraphicsMesh::Node>
 void Rt_SetSize_18005b1e0(Graphics::AnimationStateArray* a, int n);  // 0x18005b1e0 Array<AnimationState>
-void Rt_SetSize_18005c8a0(void* a, int n);  // 0x18005c8a0 Array<AnimationState::Layer>
-void Rt_SetSize_18005ac50(void* a, int n);  // 0x18005ac50 Array<InterpolatedState<Transform>>
+void Rt_SetSize_18005c8a0(Graphics::AnimationState::LayerArray* a, int n);  // 0x18005c8a0 Array<AnimationState::Layer>
+void Rt_SetSize_18005ac50(Graphics::InterpTransformArray* a, int n);  // 0x18005ac50 Array<InterpolatedState<Transform>>
 void Rt_SetSize_18005c3d0(void* a, int n);  // 0x18005c3d0 Array<Instance>
 void Rt_SetSize_18005be30(void* a, int n, const void* fill);  // 0x18005be30 Array<Instance>, fill
 Graphics::GraphicsMesh::NodeArray* Rt_ArrayAssign_180013960(Graphics::GraphicsMesh::NodeArray* d,
                                                             const Graphics::GraphicsMesh::NodeArray* s);  // 0x180013960 Array<GraphicsMesh::Node>
 Graphics::AnimationStateArray* Rt_ArrayAssign_18005b130(Graphics::AnimationStateArray* d,
                                                         const Graphics::AnimationStateArray* s);  // 0x18005b130 Array<AnimationState>
-void* Rt_ArrayAssign_18001b700(void* d, const void* s);  // 0x18001b700 Array<AnimationState::Layer>
-void* Rt_ArrayAssign_18001b810(void* d, const void* s);  // 0x18001b810 Array<InterpolatedState<Transform>>
+Graphics::AnimationState::LayerArray* Rt_ArrayAssign_18001b700(
+        Graphics::AnimationState::LayerArray* d,
+        const Graphics::AnimationState::LayerArray* s);  // 0x18001b700 Array<AnimationState::Layer>
+Graphics::InterpTransformArray* Rt_ArrayAssign_18001b810(
+        Graphics::InterpTransformArray* d,
+        const Graphics::InterpTransformArray* s);  // 0x18001b810 Array<InterpolatedState<Transform>>
 }  // namespace rtcoll
 // ---- graphics/wave27_lane_gfxbig.cpp: the Update door (it counts its calls
 // for the [GFXBIG27] line, then calls Graphics::AnimationState::Update)

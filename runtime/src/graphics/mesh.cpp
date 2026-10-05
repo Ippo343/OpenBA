@@ -154,7 +154,7 @@ namespace {
 //     0x180014c70  operator=   rtcoll::RtColl_ArrayAssign_180014c70
 //     0x180014d00  ~Array      rtcoll::RtColl_ArrayDtor_180014d00
 //   Array<AnimationState layer>, element 0x38, alignment 8:
-//     0x18001b700 / 0x18001c480  rtcoll::Rt_ArrayAssign_18001b700 / Rt_ArrayDtor_18001c480
+//     0x18001b700 / 0x18001c480  rtcoll::Rt_ArrayAssign_18001b700 / AnimationState::LayerArray::~Array
 //   Array<InterpolatedState<Transform>>, element 0x38, alignment 4 (a DIFFERENT
 //   instantiation from the layer array even though the stride matches — its
 //   SetSize default-constructs new elements to an identity Transform pair):
@@ -400,8 +400,8 @@ namespace {
 //
 // B.4: the three steps by name. `_singleton->_instances._data` is the second
 // dereference; `[hi]._states._data` the bank; `[lo]` the slot. The slot is the
-// 0x48 per-frame record (`Graphics::AnimationState` in this tree).
-const ::Graphics::AnimationState* RtInstancedPoolSlot(const ::Graphics::MeshInstance* mi) {
+// 0x48 per-frame record (`Graphics::InstancedAnimationState`).
+const ::Graphics::InstancedAnimationState* RtInstancedPoolSlot(const ::Graphics::MeshInstance* mi) {
     // MOVSXD: the stored pool id is a SIGNED int32 widened to 64 bits.
     const int64_t poolId =
         mi->_animation._layers._data[mi->_animation._layers._size - 1]._handle;
@@ -751,14 +751,16 @@ Graphics::MeshInstance::MeshInstance(const MeshInstance& other) : Geometry(other
 // ??1MeshInstance 0x180017060 before ~Geometry -- the B.3.8 `InitFields` /
 // `ReleaseFields` split, now the members themselves (B.4: by name).
 // ============================================================================
+//
+// B.4 Z MIRROR2 GFX: `_animation` is the real `AnimationState`; its member ctor
+// (0x1800fdaf0, inlined by retail at 0x180100009..0x18010000f) is the byte and
+// header stores, and ~MeshInstance's body is empty: retail's three releases
+// (0x18001c550 / 0x18001c480 / 0x180014d00) are the implicit member dtors of
+// _nodes, _animation and _materials, in that reverse declaration order.
 Graphics::MeshInstance::MeshInstance() : _mesh(nullptr) {   // +0xc0 first, 0x1800fffe8
     _materials._data = nullptr;
     _materials._size = 0;
     _materials._capacity = 0;
-    _animation._instanced = false;
-    _animation._layers._data = nullptr;
-    _animation._layers._size = 0;
-    _animation._layers._capacity = 0;
     _nodes._data = nullptr;
     _nodes._size = 0;
     _nodes._capacity = 0;
@@ -773,9 +775,6 @@ Graphics::MeshInstance::MeshInstance() : _mesh(nullptr) {   // +0xc0 first, 0x18
 }
 
 Graphics::MeshInstance::~MeshInstance() {
-    rtcoll::Rt_ArrayDtor_18001c550(&_nodes);
-    rtcoll::Rt_ArrayDtor_18001c480(&_animation._layers);
-    rtcoll::RtColl_ArrayDtor_180014d00(&_materials);
 }
 
 // ============================================================================
@@ -2028,11 +2027,7 @@ void MeshInstance::SetMesh(Object::ExternalPtr<GraphicsMesh> mesh) {
         }
     }
 
-    // LEFT: `_animation` is the 0x18-byte retail AnimationState (Mesh.h's
-    // MeshAnimationState); the tree's 0x48 class is only its prefix-compatible
-    // superset, so the member is reached through a view of the same bytes.
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // LEFT: audit DEFERRED:the tree Graphics::AnimationState is 0x48, retail embeds a 0x18 AnimationState at; POD _animation is the RtGraphics::MeshAnimationState mirror of Graphics::AnimationState
-        ->::Graphics::AnimationState::ResetAnimationState();
+    _animation.ResetAnimationState();
     rtcoll::Rt_SetSize_18005ac50(&_nodes, newMesh->_nodes._size);
     this->MeshInstance::UpdateHierarchy();
 
@@ -2075,9 +2070,7 @@ void MeshInstance::PlayAnimation(Object::ExternalPtr<AnimationGroup> group, int 
                                  float weight) {
     // ENDGAME B.3.5 caller batch. `GetMesh()->_nodes` is the embedded
     // `Array<Node>` at mesh+0x60, handed over by ADDRESS (Mesh.h's banner).
-    // LEFT: the `_animation` view (see SetMesh).
-    reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: audit DEFERRED:the tree Graphics::AnimationState is 0x48, retail embeds a 0x18 AnimationState at; POD MeshInstance::_animation is the 0x18-byte RtGraphics::MeshAnimationState held raw (Mesh.h), viewed as Graphics::AnimationState
-        ->::Graphics::AnimationState::PlayAnimation(
+    _animation.PlayAnimation(
             group,
             index,
             GetMesh()->GetNodes(),

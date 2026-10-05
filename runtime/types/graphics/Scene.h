@@ -53,16 +53,8 @@ namespace RtGraphics {
 // Consequence for this lane: no oracle may compare +0x14, and our port must not
 // pretend to a value retail does not have.
 // ============================================================
-struct SceneNode {
-    Geometry* _object;    // +0x00
-    int32_t   _next;      // +0x08  next node index in this cell's chain
-    int32_t   _prev;      // +0x0c  previous node index
-    int32_t   _cell;      // +0x10  cell index; < 0 means the slot is free
-    int32_t   _pad14;     // +0x14  DON'T CARE — retail stores uninitialised stack here
-};
-static_assert(sizeof(SceneNode) == 0x18, "Graphics::Scene::Node must be 0x18 bytes");
-static_assert(offsetof(SceneNode, _next) == 0x08, "SceneNode::_next @ +0x08");
-static_assert(offsetof(SceneNode, _cell) == 0x10, "SceneNode::_cell @ +0x10");
+// (B.4 Z MIRROR2 GFX: the POD this banner described had no reader left and is
+// deleted; the evidence above is the class's, declared in namespace Graphics below.)
 
 // ============================================================
 // Graphics::Scene — 0x78 bytes.
@@ -101,27 +93,8 @@ static_assert(offsetof(SceneNode, _cell) == 0x10, "SceneNode::_cell @ +0x10");
 //                           (runtime/types/collection/Collection.h).
 //   +0x74  padding, never touched (the LinkedList's own _pad14).
 // ============================================================
-struct Scene {
-    float                          _cellSize;      // +0x00
-    float                          _halfCellX;     // +0x04
-    float                          _halfCellY;     // +0x08
-    int32_t                        _levelCount;    // +0x0c
-    Collection::Array<SceneNode>   _nodes;         // +0x10 {data, size@0x18, cap@0x1c}
-    Collection::Array<uint32_t>    _freeIds;       // +0x20
-    Collection::Array<int32_t>     _cellHeads;     // +0x30
-    Collection::Array<int32_t>     _levelOffsets;  // +0x40
-    Collection::Array<int32_t>     _cellCounts;    // +0x50
-    Collection::LinkedList<Geometry*> _globals;    // +0x60 {head, tail@0x68, count@0x70}
-};
-
-static_assert(sizeof(Scene) == 0x78, "Graphics::Scene must be 0x78 bytes");
-static_assert(offsetof(Scene, _levelCount)   == 0x0c, "Scene::_levelCount @ +0x0c");
-static_assert(offsetof(Scene, _nodes)        == 0x10, "Scene::_nodes @ +0x10");
-static_assert(offsetof(Scene, _freeIds)      == 0x20, "Scene::_freeIds @ +0x20");
-static_assert(offsetof(Scene, _cellHeads)    == 0x30, "Scene::_cellHeads @ +0x30");
-static_assert(offsetof(Scene, _levelOffsets) == 0x40, "Scene::_levelOffsets @ +0x40");
-static_assert(offsetof(Scene, _cellCounts)   == 0x50, "Scene::_cellCounts @ +0x50");
-static_assert(offsetof(Scene, _globals)      == 0x60, "Scene::_globals @ +0x60");
+// (B.4 Z MIRROR2 GFX: the POD this banner described had no reader left and is
+// deleted; the evidence above is the class's, declared in namespace Graphics below.)
 
 // The grid's cell-head / cell-count arrays are both this many entries. Written
 // as a literal because the ctor's fill loop is bounded by 0x15554 bytes, i.e.
@@ -233,12 +206,6 @@ public:
 };
 static_assert(sizeof(SceneNode) == 0x18, "Graphics::Scene::Node is 0x18 bytes");
 static_assert(alignof(SceneNode) == 8, "the Geometry* at +0x00");
-static_assert(sizeof(SceneNode) == sizeof(RtGraphics::SceneNode),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(SceneNode, _next)  == offsetof(RtGraphics::SceneNode, _next),  "alias _next");
-static_assert(offsetof(SceneNode, _prev)  == offsetof(RtGraphics::SceneNode, _prev),  "alias _prev");
-static_assert(offsetof(SceneNode, _cell)  == offsetof(RtGraphics::SceneNode, _cell),  "alias _cell");
-static_assert(offsetof(SceneNode, _pad14) == offsetof(RtGraphics::SceneNode, _pad14), "alias _pad14");
 static_assert(offsetof(SceneNode, _next)  == 0x08, "SceneNode::_next @ +0x08 (FUN_18005f090)");
 static_assert(offsetof(SceneNode, _cell)  == 0x10, "SceneNode::_cell @ +0x10 (Scene::Clean 0x1801023f0)");
 
@@ -315,22 +282,11 @@ public:
 
 static_assert(sizeof(Scene) == 0x78, "Graphics::Scene is 0x78 bytes");
 static_assert(alignof(Scene) == 8, "Scene's widest members are pointers");
-static_assert(sizeof(Scene) == sizeof(RtGraphics::Scene),
-              "the real class and the POD describe the same bytes");
 // Nothing holds a Scene by value (§13 item 5, closed above), but the Arrays and
 // the LinkedList still own heap, so the destructor must NOT be trivial — that is
 // what `??1Scene@` frees, in retail's order, through its door.
 static_assert(!std::is_trivially_destructible_v<Scene>,
               "the five Arrays and the global list are what ??1Scene@ frees");
-
-static_assert(offsetof(Scene, _cellSize)     == offsetof(RtGraphics::Scene, _cellSize),     "alias _cellSize");
-static_assert(offsetof(Scene, _levelCount)   == offsetof(RtGraphics::Scene, _levelCount),   "alias _levelCount");
-static_assert(offsetof(Scene, _nodes)        == offsetof(RtGraphics::Scene, _nodes),        "alias _nodes");
-static_assert(offsetof(Scene, _freeIds)      == offsetof(RtGraphics::Scene, _freeIds),      "alias _freeIds");
-static_assert(offsetof(Scene, _cellHeads)    == offsetof(RtGraphics::Scene, _cellHeads),    "alias _cellHeads");
-static_assert(offsetof(Scene, _levelOffsets) == offsetof(RtGraphics::Scene, _levelOffsets), "alias _levelOffsets");
-static_assert(offsetof(Scene, _cellCounts)   == offsetof(RtGraphics::Scene, _cellCounts),   "alias _cellCounts");
-static_assert(offsetof(Scene, _globals)      == offsetof(RtGraphics::Scene, _globals),      "alias _globals");
 
 // And against the retail bodies directly, so a POD edit cannot move both.
 static_assert(offsetof(Scene, _levelCount)   == 0x0c, "Scene::_levelCount @ +0x0c (FUN_18005ee30)");
@@ -368,6 +324,6 @@ extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill); 
 
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
 // ---- graphics/scene.cpp
-extern "C" RtGraphics::Scene* RtGraphics_Scene_Ctor(RtGraphics::Scene* self);  // 0x180102730
+extern "C" Graphics::Scene* RtGraphics_Scene_Ctor(Graphics::Scene* self);  // 0x180102730
 extern "C" void RtGraphics_Scene_Dtor(Graphics::Scene* self);  // 0x1801026c0: ~Scene()
 // ==== end B3R G-Game ====

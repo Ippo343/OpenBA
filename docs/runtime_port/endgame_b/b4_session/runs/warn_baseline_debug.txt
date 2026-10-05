@@ -28,7 +28,7 @@ runtime/src/collection/array_destroy.cpp: warning: variable 'realloced' set but 
 runtime/src/engine/mainloop_frame.cpp: warning: multi-line comment [-Wcomment]
 runtime/src/graphics/renderer.cpp: warning: unused variable 'cleared' [-Wunused-variable]
 runtime/src/graphics/scene.cpp: warning: multi-line comment [-Wcomment]
-runtime/src/graphics/scene_grid.cpp: warning: 'void* memset(void*, int, size_t)' clearing an object of type 'class Collection::Array<RtGraphics::SceneNode>' with no trivial copy-assignment; use assignment or value-initialization instead [-Wclass-memaccess]
+runtime/src/graphics/scene_grid.cpp: warning: 'void* memset(void*, int, size_t)' clearing an object of type 'class Collection::Array<Graphics::SceneNode>' with no trivial copy-assignment; use assignment or value-initialization instead [-Wclass-memaccess]
 runtime/src/input/keymap_save.cpp: warning: unused variable 'ok' [-Wunused-variable]
 runtime/src/io/filesystem_packages.cpp: warning: unused variable 'foundCount' [-Wunused-variable]
 runtime/src/io/filesystem_packages.cpp: warning: unused variable 'hadIndex' [-Wunused-variable]

@@ -796,12 +796,12 @@ bool AnimationState::Update(const System::Time& timeRef,
     if (layerCount == 1 && lastLayer->_handle >= 0) {
         // CMP ECX,0x1 / JNE, then CMP [RDX+0xc],0 / JL, then MOV [RSI],CL —
         // and CL is the LAYER COUNT, which on this branch is exactly 1.
-        _needsUniqueCopy = true;
+        _instanced = true;
     } else {
-        if (_needsUniqueCopy) {
+        if (_instanced) {
             this->Graphics::AnimationState::CopyInstancedToUnique(
                 nodes, root, interp, lastLayer->_handle);
-            _needsUniqueCopy = false;
+            _instanced = false;
         }
         if (rootOnly) {
             this->Graphics::AnimationState::UpdateRootOnly(dt, rootOffsetOut);
