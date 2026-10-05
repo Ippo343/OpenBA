@@ -14,7 +14,6 @@
 #include "Entity/ComponentEntity.h"
 #include "Entity/EntityList.h"   // EntityList::removalList
 #include "Component/TombstoneDescription.h"
-#include "Component/coll_bridge.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton

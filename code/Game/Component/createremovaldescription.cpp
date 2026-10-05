@@ -13,7 +13,7 @@
 // Serialize (vtable +0x28, 0x140119ac0 CreateRemovalDescription_Slot5), stream order:
 //   bool  @ +0x20
 //   int count (local copy of +0x30)
-//   [if loading: resize array @+0x28 to count via FUN_140001bb0 = Array<ptr>::SetSize]
+//   [if loading: resize array @+0x28 to count via FUN_140001bb0 = Array<ptr>::SetSize (kSpec_PtrZero)]
 //   ExternalRefArray(count) @ *(+0x28)  (FUN_1400049c0 / fn_ExternalRefArray_Serialize)
 //   ExternalPtr @ +0x38  (FUN_140002340 / Reimpl_ExternalPtr_Serialize_StringTable)
 //   bool  @ +0x40   bool @ +0x41   bool @ +0x42   bool @ +0x43
@@ -21,7 +21,7 @@
 // Dtor (vtable +0x00, 0x140032ca0): MemFree(array @+0x28) + External::~External + free.
 //
 // NOTE: count is serialized into a local; the on-disk count then drives array resize +
-// the per-element load. The resize is `Collection::Array<Ptr8>::SetSize` (B.3.2).
+// the per-element load. The resize is `_refs.SetSize` (kSpec_PtrZero).
 // fn_ExternalRefArray_Serialize -> exe FUN_1400049c0, null in standalone until 0x1400049c0
 // is registered (REPORTED). param4 is a dead init -> nullptr safe.
 //
@@ -38,7 +38,6 @@
 #include "Object/factory_registration.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
@@ -46,41 +45,34 @@
 
 // ctor (inlined into create 0x140032b70 / createInPlace 0x140032be0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
-// the defaults.
+// the defaults (+0x28 = +0x30 = 0 is _refs' Array ctor, 0x140032bbe / 0x140032bc2).
 CreateRemovalDescription::CreateRemovalDescription()
     : Description(),
       _b20(false),
-      _refs(nullptr),
-      _refCount(0),
-      _refCap(0),
       _ref38(nullptr),
       _b40(false),
       _b41(false),
       _b42(false),
       _b43(false) {}
 
-// dtor (slot 0 0x140032ca0 minus the stamps): frees the ExternalPtr array.
-// The compiler then chains ~Description -> ~External.
+// dtor (slot 0 0x140032ca0 minus the stamps): the body is empty. ~_refs frees the
+// ExternalPtr array unconditionally and zeroes +0x28 / +0x30 (0x140032cc7..0x140032cd7; the
+// entries are non-owning, no element release); the compiler then chains ~Description -> ~External.
 CreateRemovalDescription::~CreateRemovalDescription() {
-    if (_refs) ::System::MemoryAllocator::MemFree(_refs);   // heap ExternalPtr array
-    _refs = nullptr;
-    _refCount = 0;
-    _refCap = 0;
 }
 
 // [5] 0x140119ac0: stream order as retail.
 bool CreateRemovalDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ser.Serialize(_b20, nullptr);
-    int count = _refCount;
+    int count = _refs._size;
     ser.Serialize(count, nullptr);   // a local copy, as retail
     // On load (stream mode == 0): resize the heap ExternalPtr array at +0x28.
     if (ser._stream && static_cast<int>(ser.GetDirection()) == 0) {
-        // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8, new tail zeroed.
-        // Element is the 8-byte ExternalPtr slot the ExternalRefArray serializer walks below.
-        GameColl::AsArray<GameColl::Ptr8>(&_refs).SetSize(count);
+        // retail 0x140001bb0 IS Collection::Array<T>::SetSize(n): stride 8 align 8, new tail zeroed.
+        _refs.SetSize(count);
     }
-    Reimpl_ExternalPtrArray_Serialize(&ser, count, _refs, nullptr);   // ExtPtr[count] (0x1400049c0)
+    Reimpl_ExternalPtrArray_Serialize(&ser, count, _refs._data, nullptr);   // ExtPtr[count] (0x1400049c0)
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref38, &ser);
     ser.Serialize(_b40, nullptr);
     ser.Serialize(_b41, nullptr);

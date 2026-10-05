@@ -18,7 +18,6 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/Map.h"   // Map, MapCell
 #include "Entity/CitizenBehavior.h"       // CitizenBehavior::populations (GameUpdateLoop::m_citizenList)
-#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include <new>
 #include "object/TypeInfo.h"
@@ -39,7 +38,7 @@
 //   0x1400c3720 ComponentEntity_CtorFromDescription (ComponentEntity copy ctor)
 //   0x1400c48a0 EntityList_RegisterEntity_Impl
 //   0x140002cc0 CemeteryListErase_Reimpl (DynArray8_EraseByValue)
-//   0x140003110 DynArray8_ResizeFill = GameColl::AsArray<GameColl::Ptr8>(h).SetSizeFill
+//   0x140003110 DynArray8_ResizeFill = the typed array's own SetSizeFill (kSpec_PtrZero)
 //   the GameWorld cell 0x1401c3dd8 is g_pGameWorldSingleton.
 
 // Density smoothing interval constant: 300.0f seconds

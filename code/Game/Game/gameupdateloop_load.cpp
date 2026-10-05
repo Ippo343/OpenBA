@@ -60,7 +60,6 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "collection/Collection.h"
-#include "Component/coll_bridge.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include <cstdio>
@@ -318,7 +317,7 @@ static void LoadDiseaseList_Step1(GameUpdateLoop* self) {
 // Array-resize leaf helpers (verified, m5-load-ctor-drafts)
 // Header layout: +0x00 ptr, +0x08 int count, +0x0C int capacity.
 // NB: the stride-8 ZERO-FILL variant (FUN_1400032e0) is reached as
-// Collection::Array<GameColl::Ptr8>::SetSize — not redefined here.
+// the typed array's own SetSize (kSpec_PtrZero) — not redefined here.
 // ============================================================
 
 // ENDGAME B.3.2 step 2: the five resize bodies in this block (0x1400191f0,

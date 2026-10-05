@@ -49,7 +49,6 @@
 #include "Work/exe_bodies.h"     // WorkBase_TaskListCleanup_c5400
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

@@ -249,7 +249,7 @@ uint64_t RemovalTool::CanRemoveField(ComponentEntity* const* param_2, int param_
     if (removalDesc->_b20 && (matched != nullptr) && (*param_2 != nullptr)) {
         NaturalResourceComponent* resource = (*param_2)->FindComponent<NaturalResourceComponent>();
         if (resource != nullptr) {
-            int compCount = removalDesc->_refCount;
+            int compCount = removalDesc->_refs._size;
             int iVar12 = compCount;  // captured before the loop (decompile semantics)
 
             // Determine whether param_2's entity belongs to this field.
@@ -264,7 +264,7 @@ uint64_t RemovalTool::CanRemoveField(ComponentEntity* const* param_2, int param_
                         break;
                     }
                     idx++;
-                    compCount = removalDesc->_refCount;
+                    compCount = removalDesc->_refs._size;
                 }
             }
             if (!atWorkBlock && iVar12 == 0) atWorkBlock = true;  // 'if (iVar12 == 0) goto LAB_140104a0f'

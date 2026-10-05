@@ -57,7 +57,6 @@
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
 #include "video/ImageBuffer.h"
 #include "graphics/Material.h"
-#include "Component/coll_bridge.h"
 #include "options.h"
 #include "runtime/types/ui/DialogInstance.h"
 #include "object/TypeInfo.h"
