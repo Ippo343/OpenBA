@@ -84,7 +84,7 @@ void GenericArrayResize(void* arrayHeader, int newCount,   // LEFT: void* is the
         return;
     }
 
-    RawArray<uint8_t>& hdr = *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): GenericArrayResize serves six C entries (Stride02/16A/16B/04/0C/Byte) over holders of six element types (geometry, NameDatabase, plant area, worldgen); a typed wrapper per holder would carry this same header cast
+    RawArray<uint8_t>& hdr = *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): GenericArrayResize serves six C entries (Stride02/16A/16B/04/0C/Byte) over holders of six element types (geometry, NameDatabase, plant area, worldgen); a typed wrapper per holder would carry this same header cast  // CAST-OK: elem_stride (S4 ruling)
 
     int oldCount = hdr.size;
     if (newCount == oldCount) return;

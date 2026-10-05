@@ -617,7 +617,7 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
                 new (&citizen->home) ::Object::InternalBasePtr(
                         g_pForceWorkBuilding);
                 // the harness plants a non-disease pointer in the Disease* slot
-                *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;   // LEFT: the force-work harness plants the ComponentEntity* in the Disease* slot (a harness pun, kept)
+                *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;   // LEFT: DEFERRED (named prerequisite: the harness decision, retire or retype the force-work harness); the force-work harness plants the ComponentEntity* in the Disease* slot (a harness pun, kept)
                 if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
                     fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p housed+0x68=%p\n",
                             (void*)citizen.Get(), g_pForceWorkBuilding, g_pForceWorkBuilding);

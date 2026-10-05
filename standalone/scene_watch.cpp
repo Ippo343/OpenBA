@@ -580,8 +580,8 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera
             // from its embedded MeshInstance (+0x28) by the member's offset: a MeshInstance
             // has no pointer back to its owner (the step is the diagnostic's own; the range
             // test below rejects an instance that is not a ModelComponent's).
-            const ModelComponent* owner = reinterpret_cast<const ModelComponent*>(   // LEFT: diagnostic container_of, a FLOOR ruling candidate (B4 Z LAST CODE): a MeshInstance has no pointer back to its owner, so the embedded-member-to-ModelComponent step has no typed spelling; the range test below rejects a non-ModelComponent instance
-                reinterpret_cast<const char*>(mi) - offsetof(ModelComponent, meshInstance));   // LEFT: the same container_of step (FLOOR ruling candidate, line above)
+            const ModelComponent* owner = reinterpret_cast<const ModelComponent*>(   // LEFT: diagnostic container_of, a FLOOR ruling candidate (B4 Z LAST CODE): a MeshInstance has no pointer back to its owner, so the embedded-member-to-ModelComponent step has no typed spelling; the range test below rejects a non-ModelComponent instance  // CAST-OK: crash_walk (S4 ruling)
+                reinterpret_cast<const char*>(mi) - offsetof(ModelComponent, meshInstance));   // LEFT: the same container_of step (FLOOR ruling candidate, line above)  // CAST-OK: crash_walk (S4 ruling)
             const int16_t vi = owner->meshGroup;
             const int16_t mv = owner->meshIndex;
             if (vi >= -1 && vi < 64 && mv >= -1 && mv < 64) {

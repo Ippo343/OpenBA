@@ -511,7 +511,7 @@ int Pickup::Slot5(CitizenComponent** citizenSlot, System::Time* param3) {
         // Call Slot4 via vtable (guard against freed self after CancelAllWork)
         // (port guard, not retail: a zeroed vptr means self was freed during
         // CancelAllWork; the object's first word read as its vptr: LEFT)
-        if (*reinterpret_cast<uintptr_t*>(this) == 0) {   // LEFT: the port's freed-self probe reads the vptr word (a port guard retail lacks)
+        if (*reinterpret_cast<uintptr_t*>(this) == 0) {   // LEFT: DEFERRED (retail-difference task): a tree-only vptr guard retail lacks; the port's freed-self probe reads the vptr word (a port guard retail lacks)
             return 0;
         }
         // retail 0x1400f3991: CALL [RAX+0x20] with RCX/RDX/R8 only (slot 4

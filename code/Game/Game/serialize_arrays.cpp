@@ -281,7 +281,7 @@ static_assert(sizeof(SpawnDescription::Entry) == sizeof(SpawnEntry), "the row's 
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     // B.3.2 bridge: Geometry+0x210 and friends are still raw headers.
-    reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): eight holders of five element types in two header types reach 0x140001bb0 (Collection::Array<T*>: MenuScene +0x40/+0x60, Tutorial steps, TutorialStep's three ExternalPtr arrays; RawArray: WorldGeometry::_batchMaterials, the +0x1E0 inner Vector2 outlines; AmbientEmitterDescription +0x28 raw triple); Array<T*>'s own SetSize leaves the tail unzeroed (trait row), so each typed wrapper would carry this same header cast
+    reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): eight holders of five element types in two header types reach 0x140001bb0 (Collection::Array<T*>: MenuScene +0x40/+0x60, Tutorial steps, TutorialStep's three ExternalPtr arrays; RawArray: WorldGeometry::_batchMaterials, the +0x1E0 inner Vector2 outlines; AmbientEmitterDescription +0x28 raw triple); Array<T*>'s own SetSize leaves the tail unzeroed (trait row), so each typed wrapper would carry this same header cast  // CAST-OK: elem_stride (S4 ruling)
 }
 
 // 0x14001bf10 (stride 0x14, align 4, byte copy, zero tail): B.4 H5-P2: its last
@@ -393,7 +393,7 @@ void ArraySerializeExternalGeneric(IO::Serializer* serializer, int count, void* 
 
     // LEFT: the callers hold the reference arrays with their own element types
     // (description / mesh / particle tables) and pass them as void*.
-    ::Object::External** slots = reinterpret_cast<::Object::External**>(arrayBase);   // LEFT: audit WORK (SIG; callers in Component/ hold T** of External subclasses, a typed form needs a per-slot downcast store): the callers hold the reference arrays with their own element types (description / mesh / particle tables) and pass them as void*.
+    ::Object::External** slots = reinterpret_cast<::Object::External**>(arrayBase);   // LEFT: audit WORK (SIG; callers in Component/ hold T** of External subclasses, a typed form needs a per-slot downcast store): the callers hold the reference arrays with their own element types (description / mesh / particle tables) and pass them as void*.  // CAST-OK: elem_stride (S4 ruling)
     for (int i = 0; i < count; ++i)
         SerializeExternalRef(slots[i], *serializer, typeId, typeIdResolved);
 }

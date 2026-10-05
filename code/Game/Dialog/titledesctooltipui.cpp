@@ -50,7 +50,7 @@ void TitleDescToolTipUI::OnCreated() {
         // The user data is a TitleDescToolTipData (TitleDescToolTipUI.h) that the
         // tooltip's owner hands over through the Object::Base* slot; retail reads
         // it the same way.
-        const TitleDescToolTipData* strings = reinterpret_cast<const TitleDescToolTipData*>(userData);   // LEFT: UI::Element's user data is Object::Base* (R-UI); the producer is not ported
+        const TitleDescToolTipData* strings = reinterpret_cast<const TitleDescToolTipData*>(userData);   // LEFT: UI::Element's user data is Object::Base* (R-UI); the producer is not ported  // CAST-OK: user_data (S4 ruling)
         if (titleElement) {
             titleElement->SetParameter(0, strings->title);
         }

@@ -175,7 +175,7 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
     serializer.Serialize(intCount, field_68._data, nullptr);
 
     // --- Serialize ConsumeProduce fields ---
-    serializer.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: WORK:H8, byte_io candidate: retail 0x1400e911a / 0x1400e9126 hands &this+0x48 to slot 0x140152a58 = Serialize(bool&), the byte as retail's bool, which Execute compares raw; typed bool (tried, B11 -O2), Execute's `field_48 == 0` (cmpb $0x0 / jne) becomes cmpb $0x1 / je, which reads a loaded byte > 1 differently; the field stays uint8_t
+    serializer.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: WORK:H8, byte_io candidate: retail 0x1400e911a / 0x1400e9126 hands &this+0x48 to slot 0x140152a58 = Serialize(bool&), the byte as retail's bool, which Execute compares raw; typed bool (tried, B11 -O2), Execute's `field_48 == 0` (cmpb $0x0 / jne) becomes cmpb $0x1 / je, which reads a loaded byte > 1 differently; the field stays uint8_t  // CAST-OK: byte_io (S4 ruling)
     serializer.Serialize(field_4c, nullptr);    // int at +0x4C
     RtObject::RtObject_Type_Serialize(&field_50, &serializer);            // Type at +0x50
     serializer.Serialize(field_54, nullptr);    // int at +0x54

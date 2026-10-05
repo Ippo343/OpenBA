@@ -721,7 +721,7 @@ void Impl_cb40(EditTool* self) {
     {
         const uint64_t ref = reinterpret_cast<uint64_t>(self->lastEntityRef);   // CAST-OK: ptr_int (the tree's tripwire range probe)
         if (ref < 0x10000 || ref > 0x00007FFFFFFFFFFFULL) {
-            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);   // LEFT: FLOOR? vtable probe: ReportBadSelectionRef keeps the tool as an integer so GCC cannot devirtualise its Type() probe (EditTool is final)
+            ReportBadSelectionRef(reinterpret_cast<int64_t>(self), (int64_t)ref);   // LEFT: FLOOR? vtable probe: ReportBadSelectionRef keeps the tool as an integer so GCC cannot devirtualise its Type() probe (EditTool is final); S4 ruling: no marker (FLOOR section 4 bars a marker on a this / self operand), the cast stays listed
         } else {
             // The pointer itself can look fine while the ENTITY behind it is freed and
             // its allocation recycled — that is the other shape the reported crash can

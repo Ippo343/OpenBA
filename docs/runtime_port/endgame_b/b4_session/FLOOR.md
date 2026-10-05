@@ -35,6 +35,31 @@ word (`force_work.cpp`, `game_main.cpp`) were re-filed `vslot` -> `crash_walk`; 
 marked `win32` / `alloc_header` (`perf_terrain.cpp`, `linkedlist.cpp`) are tier I now. Every
 ceiling in §1 is the count MEASURED after those markers, not an estimate.
 
+## Changes at the S4 session (2026-10-05, the B.4 finishing session)
+
+Coordinator rulings on the 18 floor candidates and the hand-in proposals (markers carry `(S4 ruling)`):
+- `byte_io` 38 -> 41: `game_settings_persist.cpp:94`, `eventlogui.cpp:203`, `consumeproduce.cpp:178` — the three
+  H8 lines. Retail moves the raw byte through its bool overload / field (addresses on the lines); a typed
+  bool changes codegen (tried twice).
+- `elem_stride` 189 -> 192: `serialize_arrays.cpp:284` and `:396`, `serialize_resize_helpers.cpp:87` — the one
+  erased array-resize core and the ExternalPtr serialize core's view of an untyped reference array.
+- `user_data` 8 -> 9: `titledesctooltipui.cpp:53` (retail hands userData and userData+8 straight to
+  SetParameter, 0x14007b861 / 0x14007b87c).
+- `ptr_int` 133 -> 136: the dead-argument rows (`citizenai_findhelpers.cpp:479`, `tornadocomponent.cpp:500 / :536`):
+  retail never loads RCX at those calls; the tree passes the leftover value as an integer.
+- `crash_walk` 128 -> 129: `scene_watch.cpp:583-584` (the watch diagnostic's container_of).
+- NO marker (section 4 bars a `this` / `self` operand; the casts stay counted and listed in `LEFT_FREE.md` C):
+  `tool_base_render.cpp:724`, `achievement_state.cpp:217`, `widestring.cpp:196`.
+- DEFERRED, not floor: `pickup.cpp:514` (a tree-only vptr guard: retail-difference task), the two harness puns
+  (`clearareacomponent.cpp:191`, `citizenaicomponent.cpp:620`: the harness decision), `componententity.cpp:511`
+  (row 820), `citizenlist_serialize.cpp:431` (row 810), `set_clear.cpp:210` (H5, the SettingsMap member).
+- `Vector3Slot` (`code/Game/Action/exe_bodies.h`): a struct holding a single-member union over `Math::Vector3`
+  with an empty ctor, used where retail's caller leaves the 12-byte return slot of `InteractNodePosition`
+  (0x140122e20) unconstructed. RULED acceptable: M5 forbids replacing a reinterpretation by a union; this
+  union has one member and reinterprets nothing, it only withholds the zeroing ctor. Not for any other use.
+- The 10 raw-address probe signatures tagged by `b4fin-VOID` stay as tagged (diagnostic probes; listed in
+  `LEFT_FREE.md` for acceptance line 09).
+
 ## 1. The ceiling, by category
 
 `acceptance.sh` line 02 fails when a category's `cast_ok` exceeds its ceiling. Since the B.4 close
@@ -45,14 +70,14 @@ category needs the coordinator (M2).
 | category | ceiling | lines | what the cast does | change at the B.4 close |
 |---|---:|---:|---|---|
 | `alloc_header` | 64 | 61 | reads / writes an allocator block's boundary tag, free-list link, footer, canary or range page arithmetic: memory the allocator owns as raw bytes | 65 -> 64: `linkedlist.cpp`'s `malloc` line is tier I (§3) |
-| `ptr_int` | 133 | 124 | a pointer used as an integer: unsigned pointer compares, byte distance between two addresses, pointer bits grafted, a pointer printed / returned as an integer | as measured; +`founding_spawn.cpp`'s log key, +`userinterface_showdialog.cpp`'s defect-2 control (the parent pointer's low dword as the result) |
-| `crash_walk` | 128 | 110 | crash / hang / watchpoint diagnostics: RIP and RSP from a CONTEXT, return addresses as module offsets, raw stack words, readable-memory probes, raw memory dumps, harness / log reads of a vtable word | as measured; -4 tree-only guards (part C), +6 re-filed from `vslot`, +4 `tool_base_render.cpp` tripwire (`block`), +1 `stress_harness.cpp` profiler key |
+| `ptr_int` | 136 | 126 | a pointer used as an integer: unsigned pointer compares, byte distance between two addresses, pointer bits grafted, a pointer printed / returned as an integer | as measured; +`founding_spawn.cpp`'s log key, +`userinterface_showdialog.cpp`'s defect-2 control (the parent pointer's low dword as the result) |
+| `crash_walk` | 129 | 111 | crash / hang / watchpoint diagnostics: RIP and RSP from a CONTEXT, return addresses as module offsets, raw stack words, readable-memory probes, raw memory dumps, harness / log reads of a vtable word | as measured; -4 tree-only guards (part C), +6 re-filed from `vslot`, +4 `tool_base_render.cpp` tripwire (`block`), +1 `stress_harness.cpp` profiler key |
 | `win32` | 85 | 83 | a Win32 / CRT API's own untyped parameter or result: `LPVOID` thread parameters, `LPARAM` message structs, `BYTE*` registry buffers, `intptr_t` OS handles, a CRITICAL_SECTION kept as opaque bytes because the type header cannot include `<windows.h>` | as measured; `perf_terrain.cpp`'s `malloc` is tier I |
 | `float_bits` | 12 | 10 | a float read or written as its bit pattern | 25 -> 12 measured: `citizencomponent.cpp`'s fabs mask (2) and `tool_base_highlight_tess.cpp`'s by-value Vector2 packing (10, which the audit calls QUESTIONABLE); the five `tool_base_highlight.cpp` stores left it |
 | `string_header` | 37 | 35 | the `System::String` `{length, refCount}` header at `data - 8` | as measured |
 | `pe_walk` | 12 | 11 | walks a loaded module's PE headers and export directory | unchanged |
-| `byte_io` | 38 | 36 | a byte buffer handed to / read from a stream, CRC or file API | as measured |
-| `elem_stride` | 189 | 174 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 189 (16 of them the macro lines; +1 the draw-group copy row's element op) |
+| `byte_io` | 41 | 39 | a byte buffer handed to / read from a stream, CRC or file API | as measured |
+| `elem_stride` | 192 | 177 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 189 (16 of them the macro lines; +1 the draw-group copy row's element op) |
 | `gpu_map` | 0 | 0 | memory returned by a GPU buffer map | nothing marked (dx11/ is the next step) |
 | `com_iid` | 2 | 2 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID | unchanged |
 | `crt` | 11 | 11 | the ported CRT's own `void*` / `char*` parameters (qsort and its comparators' `const void*`, `_stricmp`) | as measured |
@@ -60,10 +85,10 @@ category needs the coordinator (M2).
 | `vslot` | 2 | 2 | `Object::SlotAddressOf` (`VSlot.h`), the one sanctioned look into a compiler vtable, and `splash_loop_stubs.cpp`'s retail vptr identity compare (GameUpdateLoop has no type id) | 8 -> 2: six log / harness reads re-filed `crash_walk`, `buildrequirementui.cpp`'s guard unmarked |
 | `dx11_seam` | 20 | 20 | deferred: the VideoDX11 seam, removed by plan §4.1 (`CompanionData.h`'s 12 `DeletingDtor` arms, `Context.h`, `video_interface.cpp`) | 39 -> 20 measured: dx11/ itself carries no marker yet |
 | `const_api` | 3 | 3 | NEW: the const a retail Runtime API puts on its result (`PEBV`), dropped ONCE in the typed wrapper that mirrors retail's inlined template (`External.h` `FindAs` / `FindNextAs` / `FindOrLoadAs`); never at a call site | new |
-| `user_data` | 8 | 8 | NEW: a `void*` that a RETAIL engine API (signature `PEAX`) stores for its caller and hands back unchanged, or a message payload whose type the message id selects, cast back to the type the registration stored. Not for a tree-only API, nor for a `void*` a template could carry | new |
+| `user_data` | 9 | 9 | NEW: a `void*` that a RETAIL engine API (signature `PEAX`) stores for its caller and hands back unchanged, or a message payload whose type the message id selects, cast back to the type the registration stored. Not for a tree-only API, nor for a `void*` a template could carry | new |
 | `null_receiver` | 2 | 2 | NEW: retail's faithful read through a null receiver, spelled as the faulting address (`work_act_consume.cpp`, §5) | new |
 | `static_init` | 1 | 1 | NEW: the view of a file-static byte table that emulates MSVC's guarded function-local static (`wave29_lane_slots.cpp` `g_identityTable`: zero `.data`, filled by the first Update; a typed array would be constant-initialised to identity) | new |
-| **total** | **752** | **698** | | |
+| **total** | **763** | **708** | | |
 
 **`elem_stride`, as re-defined at the B.4 close.** The one ported type-erased container / tree
 core: its view of a container's header, element storage or node handed to it untyped; its
