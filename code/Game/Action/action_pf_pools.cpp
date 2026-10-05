@@ -17,14 +17,13 @@
 // a free node's first qword is the free-list link (PathPoolLink). Those casts are the
 // pool's own raw memory becoming a node (each carries an elem_stride marker).
 //
-// Pf_VectorResize60_fa80 (0x14001fa80) calls TradeWork_impl_sub_f5e0 (0x14001f5e0, element
-// copy-ctor) and TradeWork_impl_sub_f250_sub_fb80 (0x14001fb80, 0x60-stride element free),
-// now Reimpl_Struct60B_CopyCtor / Reimpl_Struct60B_DtorRange (Game), called by name.
+// (The GeometryBatch array bodies 0x14001fa80 / 0x14001ee40 / 0x14001f8d0 that sat
+// here are Collection::Array<T>::SetSize on GeometryBatch's typed arrays, B.4 H5-P2.)
 #include "Action/exe_bodies.h"
 #include "Action/PathSearch.h"
 
-#include "Game/exe_bodies.h"          // Reimpl_Struct60B_CopyCtor, Reimpl_Struct60B_DtorRange
-#include "Game/WorldGeometryElements.h"   // GeometryBatch, GeometryBatchVertex (the 0x60 / 0x14 elements)
+#include "Game/exe_bodies.h"
+#include "Game/WorldGeometryElements.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <cstdio>    // [POOLDIAG] diagnostic reporting
@@ -291,97 +290,10 @@ void RegionNodesFree(RegionNode* first, int count) {
     }
 }
 
-// ============================================================
-// FUN_14001ee40 — resize a GeometryBatch's vertex array (element 0x14), copy only.
-// ============================================================
-// Resize to newCount: grow (3x on +1 from non-empty) via MemAlloc(cap*0x14, 2), copy
-// the existing elements from the old buffer; new slots are NOT written (the copy is
-// guarded by lVar5 < iVar1 and there is no else branch). MemFree old.
-// The element is GeometryBatchVertex (Game/WorldGeometryElements.h): retail's callers
-// are the vertex-array serializer 0x14001f9c0, the decal / road builders 0x1400ace40,
-// 0x1400b0d00 and 0x1400af370; the copy is retail's qword, qword, dword
-// (0x14001eec4..0x14001eed9).
-void Pf_VectorResize14_ee40(RawArray<GeometryBatchVertex>* arr, int param_2) {
-    int iVar1 = arr->size;
-    if (param_2 != iVar1) {
-        GeometryBatchVertex* old = arr->data;
-        arr->size = param_2;
-        if (arr->capacity < param_2) {
-            arr->capacity = param_2;
-            if ((param_2 == iVar1 + 1) && (iVar1 != 0)) {
-                arr->capacity = param_2 * 3;
-            }
-            arr->data = static_cast<GeometryBatchVertex*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) * 0x14, 2));
-        }
-        int iVar3 = 0;
-        if (old == arr->data) {
-            iVar3 = iVar1;
-        }
-        int64_t lVar5 = iVar3;
-        if (iVar3 < param_2) {
-            do {
-                if ((lVar5 < iVar1)) {
-                    GeometryBatchVertex* dst = &arr->data[lVar5];
-                    if (dst != nullptr) {
-                        *dst = old[lVar5];
-                    }
-                }
-                lVar5 = lVar5 + 1;
-            } while (lVar5 < param_2);
-        }
-        if (old != arr->data) {
-            System::MemoryAllocator::MemFree(old);
-        }
-    }
-}
-
-// ============================================================
-// FUN_14001f8d0 — resize a GeometryBatch's vertex array (element 0x14), fill from *param_3.
-// ============================================================
-// Variant of ee40 that fills new slots (lVar7>=iVar1) from the template vertex *param_3.
-// Copy existing elements from the old buffer; for slots at or past the old count, copy
-// from the template. MemFree old. The loop counts (param_2-iVar4) iterations and walks
-// the dst and the old-buffer cursor in lockstep. Callers: the decal tessellator
-// 0x1400ace40 (twelve sites) and the road mesh rebuild 0x1400af370.
-void Pf_VectorResize14Fill_f8d0(RawArray<GeometryBatchVertex>* arr, int param_2, const GeometryBatchVertex* fill) {
-    int iVar1 = arr->size;
-    if (param_2 != iVar1) {
-        GeometryBatchVertex* old = arr->data;
-        arr->size = param_2;
-        if (arr->capacity < param_2) {
-            arr->capacity = param_2;
-            if ((param_2 == iVar1 + 1) && (iVar1 != 0)) {
-                arr->capacity = param_2 * 3;
-            }
-            arr->data = static_cast<GeometryBatchVertex*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) * 0x14, 2));
-        }
-        int iVar4 = 0;
-        if (old == arr->data) {
-            iVar4 = iVar1;
-        }
-        int64_t lVar7 = iVar4;
-        if (iVar4 < param_2) {
-            uint64_t uVar10 = static_cast<uint64_t>(static_cast<uint32_t>(param_2 - iVar4));
-            const GeometryBatchVertex* puVar9 = old + lVar7;
-            do {
-                GeometryBatchVertex* dst = &arr->data[lVar7];
-                if (dst != nullptr) {
-                    const GeometryBatchVertex* src = fill;
-                    if (lVar7 < iVar1) {
-                        src = puVar9;
-                    }
-                    *dst = *src;
-                }
-                puVar9 = puVar9 + 1;
-                lVar7 = lVar7 + 1;
-                uVar10 = uVar10 - 1;
-            } while (uVar10 != 0);
-        }
-        if (old != arr->data) {
-            System::MemoryAllocator::MemFree(old);
-        }
-    }
-}
+// (0x14001ee40 / 0x14001f8d0, a GeometryBatch's vertex-array SetSize in its two
+// forms, are Collection::Array<GeometryBatchVertex>::SetSize on the typed member,
+// Game/WorldGeometryElements.h: each body was step for step rtcoll::SetSizeCore
+// over the trait row of GeometryBatchVertex.)
 
 // ============================================================
 // 0x14001d940 — resize the result-slot array (element 0x18, owns its path array).
@@ -452,55 +364,8 @@ void PathResultsResize(RawArray<PathResult>* results, int newSize, const PathRes
     }
 }
 
-// ============================================================
-// FUN_14001fa80 — resize a GeometryBatch array (element 0x60) with element copy-ctor + dtor.
-// ============================================================
-// The element is GeometryBatch (Game/WorldGeometryElements.h): its copy-ctor 0x14001f5e0
-// and its range dtor 0x14001fb80 are called here. Callers: the decal slot manager
-// 0x1400b0d80 (WorldGeometry +0x1F0) and the road mesh rebuild 0x1400af370 (+0x200).
-// Resize: grow (3x on +1 from non-empty) via MemAlloc(cap*0x60, 8). For each slot,
-// copy-construct from the old buffer (or the template *param_3 for appended slots). On
-// shrink-in-place, destruct the tail; on realloc, destruct the whole old buffer then
-// MemFree it.
-void Pf_VectorResize60_fa80(RawArray<GeometryBatch>* arr, int param_2, const GeometryBatch* fill) {
-    int iVar1 = arr->size;
-    if (param_2 != iVar1) {
-        GeometryBatch* old = arr->data;
-        arr->size = param_2;
-        if (arr->capacity < param_2) {
-            arr->capacity = param_2;
-            if ((param_2 == iVar1 + 1) && (iVar1 != 0)) {
-                arr->capacity = param_2 * 3;
-            }
-            arr->data = static_cast<GeometryBatch*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(arr->capacity) * 0x60, 8));
-        }
-        int iVar6 = 0;
-        if (old == arr->data) {
-            iVar6 = iVar1;
-        }
-        if (iVar6 < param_2) {
-            do {
-                GeometryBatch* dst = &arr->data[iVar6];
-                if (dst != nullptr) {
-                    const GeometryBatch* src = old + iVar6;
-                    if (iVar1 <= iVar6) {
-                        src = fill;
-                    }
-                    Reimpl_Struct60B_CopyCtor(dst, src);   // 0x14001f5e0
-                }
-                iVar6 = iVar6 + 1;
-            } while (iVar6 < param_2);
-        }
-        if (old == arr->data) {
-            if (param_2 < iVar1) {
-                GeometryBatch_DestroyRange(old + param_2, iVar1 - param_2);   // 0x14001fb80
-            }
-        } else {
-            GeometryBatch_DestroyRange(old, iVar1);   // 0x14001fb80
-            System::MemoryAllocator::MemFree(old);
-        }
-    }
-}
+// (0x14001fa80, Array<GeometryBatch>::SetSize(n, fill), is GeometryBatchArray::
+// SetSize over kSpec_GeometryBatch: Game/serialize_struct60b.cpp.)
 
 // ============================================================
 // 0x14001e210 — resize the region-node array (element 0x30, owns two int arrays).

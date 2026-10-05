@@ -55,9 +55,6 @@ struct WorldGeometryArray : RawArray<T> {
     ~WorldGeometryArray() { Release(*this); }
 };
 
-// +0x1F0 / +0x200: 0x14001fb80 over the elements (count = the header's low
-// dword), then MemFree and the fields zeroed (0x1400aedd3..0x1400aee28).
-void GeometryBatchArray_Release(RawArray<GeometryBatch>& batches);          // geometry_draw.cpp
 // +0x1E0: 0x1400175d0, each inner {data, size|cap} freed and zeroed in
 // ascending order, then the outer block (gameupdateloop_teardown.cpp).
 void ArrayOfArrays_Clear_175d0(RawArray<RawArray<Math::Vector2>>& outlines);  // 0x1400175d0
@@ -138,10 +135,13 @@ public:
     WorldGeometryArray<GeometryDrawRange> _contourRangesB;    // +0x1D0 draw ranges, mode 0x8000
     WorldGeometryArray<RawArray<Math::Vector2>, &ArrayOfArrays_Clear_175d0>
                                           _contourOutlines;   // +0x1E0 array of point arrays
-    WorldGeometryArray<GeometryBatch, &GeometryBatchArray_Release>
-                                          _decals;            // +0x1F0 0x60-byte batches, mode 0x2000
-    WorldGeometryArray<GeometryBatch, &GeometryBatchArray_Release>
-                                          _roadBatches;       // +0x200 0x60-byte batches, mode 0x4000
+    // +0x1F0 / +0x200: real Collection::Arrays over kSpec_GeometryBatch (B.4 H5-P2,
+    // behaviour:): the ctor's two qword zero stores each (0x1400b01d5..0x1400b01ea)
+    // are the member ctor; retail's release (0x1400aedd3..0x1400aee28: 0x14001fb80
+    // over the elements, count = the header's low dword, then MemFree and the fields
+    // zeroed) is ~Array's ClearCallback over the row.
+    GeometryBatchArray                    _decals;            // +0x1F0 0x60-byte batches, mode 0x2000
+    GeometryBatchArray                    _roadBatches;       // +0x200 0x60-byte batches, mode 0x4000
     WorldGeometryArray<Object::External*> _batchMaterials;    // +0x210 per-batch material refs
     // +0x220: a real Collection::Array<int32_t>, the last member: retail's ctor zeroes
     // +0x220 / +0x228 as its last two qword member stores (0x1400b01ff / 0x1400b0206,

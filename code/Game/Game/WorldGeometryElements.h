@@ -22,7 +22,7 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "Action/PathSearch.h"   // RawArray<T>
+#include "Action/PathSearch.h"   // RawArray<T>, Collection::Array (collection/Collection.h)
 
 namespace Object { class External; }
 namespace Math { class Vector2; }
@@ -55,12 +55,31 @@ static_assert(offsetof(GeometryBatchVertex, uv) == 0x08, "GeometryBatchVertex::u
 static_assert(offsetof(GeometryBatchVertex, normal) == 0x10, "GeometryBatchVertex::normal @ +0x10");
 
 // One mesh batch (stride 0x60): the decals at +0x1F0 (draw mode 0x2000) and the
-// road meshes at +0x200 (mode 0x4000). Resize 0x14001f250, copy 0x14001f5e0,
-// destroy 0x14001fb80, serialize 0x14001ffa0. ACT-a's RoadBatch is the same record.
+// road meshes at +0x200 (mode 0x4000). Serialize 0x14001ffa0. ACT-a's RoadBatch is
+// the same record.
+//
+// B.4 H5-P2 (behaviour:): the two inner arrays are real Collection::Array members
+// and the record's constructors / destructor are retail's:
+//   GeometryBatch()        the new-element arm of SetSize 0x14001f250 (0x14001f318..
+//                          0x14001f36a) and AddDecal's template (0x1400b0e01..
+//                          0x1400b0e47): every field zeroed, slot = -1; +0x5C and
+//                          the padding are NOT written (retail leaves them as found)
+//   GeometryBatch(const&)  0x14001f5e0: material, vertices zeroed + Array<Vertex>::
+//                          operator= (0x14001fdb0), indices zeroed + Array<uint16>::
+//                          operator= (0x14001fe60), then the scalars field by field
+//   ~GeometryBatch         the per-element body of 0x14001fb80: indices, then
+//                          vertices (each MemFree, then its fields zeroed): the
+//                          reverse declaration order of the two members
+// The owning arrays are GeometryBatchArray (below): their SetSize / ~Array are the
+// one erased core driven by kSpec_GeometryBatch (serialize_struct60b.cpp).
 struct GeometryBatch {
-    Graphics::MaterialInstance*      material;     // +0x00 (0x140007140 serializes it; null = unused slot)
-    RawArray<GeometryBatchVertex>    vertices;     // +0x08
-    RawArray<uint16_t>               indices;      // +0x18
+    GeometryBatch();                               // 0x14001f250's init arm
+    GeometryBatch(const GeometryBatch& src);       // 0x14001f5e0
+    GeometryBatch& operator=(const GeometryBatch&) = delete;   // retail has none for the record
+
+    Graphics::MaterialInstance*            material;   // +0x00 (0x140007140 serializes it; null = unused slot)
+    Collection::Array<GeometryBatchVertex> vertices;   // +0x08 (SetSize 0x14001ee40 / 0x14001f8d0)
+    Collection::Array<uint16_t>            indices;    // +0x18 (SetSize 0x14001c890)
     int32_t  slot;                                 // +0x28 -1 = free
     int32_t  minX;                                 // +0x2C culling box, tile coords
     int32_t  minY;                                 // +0x30
@@ -94,6 +113,23 @@ static_assert(offsetof(GeometryBatch, field_0x44) == 0x44, "GeometryBatch +0x44"
 static_assert(offsetof(GeometryBatch, field_0x48) == 0x48, "GeometryBatch +0x48");
 static_assert(offsetof(GeometryBatch, field_0x5C) == 0x5C, "GeometryBatch +0x5C");
 static_assert(offsetof(GeometryBatch, alternateKey) == 0x5D, "GeometryBatch +0x5D");
+static_assert(offsetof(GeometryBatch, vertices) + offsetof(Collection::Array<GeometryBatchVertex>, _size) == 0x10,
+              "GeometryBatch::vertices._size @ +0x10 (the road draw's vertex-count test)");
+static_assert(offsetof(GeometryBatch, indices) + offsetof(Collection::Array<uint16_t>, _size) == 0x20,
+              "GeometryBatch::indices._size @ +0x20");
+static_assert(alignof(GeometryBatch) == 8, "MemAlloc(cap * 0x60, 8) (0x14001f2b3)");
+
+// The owning arrays' hand-derived row (serialize_struct60b.cpp): assign = the copy
+// constructor 0x14001f5e0, init = the default constructor (0x14001f250's new-element
+// arm), destroy = 0x14001fb80. Retail's SetSize 0x14001f250 (2-arg) / 0x14001fa80
+// (fill form) and the inlined ~Array (0x1400aedd3, 0x1400b005b) ARE rtcoll::SetSizeCore
+// / ClearCallback over this row, arm for arm.
+namespace GeometryBatchRows {
+extern const rtcoll::ArraySpec kSpec_GeometryBatch;   // exe 0x14001f250 / 0x14001fa80
+}
+using GeometryBatchArray = Collection::Array<GeometryBatch, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&GeometryBatchRows::kSpec_GeometryBatch>>;
+static_assert(sizeof(GeometryBatchArray) == 0x10, "the Array header {data, size, capacity}");
 
 // One contour draw range (stride 0x10): +0x1C0 (mode 0x6000) and +0x1D0 (mode
 // 0x8000). Draw passes DrawIndexed(0, [1], [2], [0], [3], 1).
@@ -106,8 +142,8 @@ static_assert(offsetof(GeometryDrawRange, values) == 0x0, "GeometryDrawRange::va
 namespace IO { class Serializer; }
 
 // The batch helpers (serialize_struct60b.cpp / serialize_struct60b_serialize.cpp).
-void GeometryBatch_Resize(RawArray<GeometryBatch>& array, unsigned int newCount);        // 0x14001f250
-void GeometryBatch_CopyConstruct(GeometryBatch& dst, const GeometryBatch& src);        // 0x14001f5e0
-void GeometryBatch_DestroyRange(GeometryBatch* first, int count);                      // 0x14001fb80
+// GeometryBatch_Resize is GeometryBatchArray::SetSize (0x14001f250) behind the
+// tree's two scaffold guards (a negative count, no allocator yet).
+void GeometryBatch_Resize(GeometryBatchArray& array, unsigned int newCount);           // 0x14001f250
 void GeometryBatch_Serialize(IO::Serializer& serializer, int count, GeometryBatch* batches);  // 0x14001ffa0
 void SerializeMaterialRefs(IO::Serializer& serializer, int count, Object::External** refs);  // 0x140020150
