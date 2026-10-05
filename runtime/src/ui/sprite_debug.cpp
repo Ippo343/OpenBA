@@ -22,7 +22,7 @@
 // Original: 0x18011b9c0
 // Resolves sprite name to index via SpriteSheet::GetSpriteIndexFromName
 // ============================================================
-void* Debug_Sprite_Ctor(void* retval, UI::SpriteSheet* sheet, const System::String* name) {
+UI::Sprite* Debug_Sprite_Ctor(void* retval, UI::SpriteSheet* sheet, const System::String* name) {
 #ifdef _DEBUG
     const char* nameStr = "(null)";
     if (name) {
@@ -46,7 +46,7 @@ void* Debug_Sprite_Ctor(void* retval, UI::SpriteSheet* sheet, const System::Stri
 // Original: 0x18011ba10
 // Sets sheet=null, index=-1
 // ============================================================
-void* Debug_Sprite_DefaultCtor(void* retval) {
+UI::Sprite* Debug_Sprite_DefaultCtor(void* retval) {
 #ifdef _DEBUG
     printf("[Sprite::DefaultCtor] retval=%p\n", retval);
 #endif

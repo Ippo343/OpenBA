@@ -193,7 +193,7 @@ int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
 // whole file is built on, and `RtString_ReleaseInline` is String's own
 // primitive.
 inline void WideReleaseInline(System::WideString* self) {
-    RtString_ReleaseInline(reinterpret_cast<System::String*>(self));  // LEFT: WideString's release IS String's, on the same block header (String.h); retail inlines the one idiom for both
+    RtString_ReleaseInline(reinterpret_cast<System::String*>(self));  // LEFT: measured S4: retail has no WideString::Release (its WideString functions are the five ctors and ~WideString 0x18000a730, which open-codes the release); the tree shares String::Release (0x1800c9870, out of line) over the same block header, and open-coding it here would replace that CALL with inline code (a codegen change); proposed CAST-OK string_header
 }
 
 inline int WideLength(const wchar_t* d) {

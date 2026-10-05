@@ -46,7 +46,8 @@
 #include <algorithm>
 #include <vector>
 
-#include "collection/Collection.h"
+#include "collection/Collection.h"   // rtsort::SortByKey70 (0x1800264a0)
+#include "io/PackageFile.h"          // the sorted element
 #include "../../runtime/src/collection/introsort_msvc.h"
 
 // ---------------------------------------------------------------------------
@@ -64,10 +65,6 @@ extern uint64_t g_listNodeFrees;
 extern uint64_t g_listNodeDoubleFrees;
 }  // namespace detail
 }  // namespace Collection
-
-namespace rtsort {
-void SortByKey70(void** first, int32_t count);   // 0x1800264a0
-}
 
 namespace {
 
@@ -313,16 +310,15 @@ UNIT_TEST(LinkedListLayoutIsRetails) {
 
 namespace {
 
-// `rtsort::SortByKey70` sorts an array of POINTERS, DESCENDING, comparing the
-// signed int32 at element+0x70 and nothing else. `tag` records where each
-// element started so the resulting PERMUTATION can be compared, not just the
+// `rtsort::SortByKey70` sorts an array of `IO::PackageFile*`, DESCENDING,
+// comparing the signed int32 `_priority` (+0x70) and nothing else. The
+// elements are real PackageFiles (their inline ctor; ~PackageFile is the host
+// stub). `_version`, which the sort never reads, carries the TAG: where each
+// element started, so the resulting PERMUTATION can be compared, not just the
 // key sequence.
-struct Pkg {
-    int32_t tag;
-    uint8_t pad[0x70 - sizeof(int32_t)];
-    int32_t key;     // +0x70 — the whole comparator
-};
-static_assert(offsetof(Pkg, key) == 0x70, "the comparator field is at +0x70");
+using Pkg = IO::PackageFile;
+static int32_t& Tag(Pkg& p) { return p._version; }
+static int32_t& Key70(Pkg& p) { return p._priority; }
 
 // One deterministic LCG so the corpus is identical on every machine and in the
 // golden dump. Not std::mt19937: the goldens must not move with the library.
@@ -336,18 +332,18 @@ struct Lcg {
 // and return the resulting permutation of the original indices.
 std::vector<int> SortByKey70Permutation(int n, int distinct, uint32_t seed) {
     std::vector<Pkg>   pkgs(static_cast<size_t>(n));
-    std::vector<void*> ptrs(static_cast<size_t>(n));
+    std::vector<Pkg*>  ptrs(static_cast<size_t>(n));
     Lcg rng(seed);
     for (int i = 0; i < n; ++i) {
-        pkgs[static_cast<size_t>(i)].tag = i;
-        pkgs[static_cast<size_t>(i)].key =
+        Tag(pkgs[static_cast<size_t>(i)]) = i;
+        Key70(pkgs[static_cast<size_t>(i)]) =
             static_cast<int32_t>(rng.Next() % static_cast<uint32_t>(distinct));
         ptrs[static_cast<size_t>(i)] = &pkgs[static_cast<size_t>(i)];
     }
     rtsort::SortByKey70(ptrs.data(), n);
     std::vector<int> out(static_cast<size_t>(n));
     for (int i = 0; i < n; ++i)
-        out[static_cast<size_t>(i)] = static_cast<Pkg*>(ptrs[static_cast<size_t>(i)])->tag;
+        out[static_cast<size_t>(i)] = Tag(*ptrs[static_cast<size_t>(i)]);
     return out;
 }
 
@@ -453,13 +449,13 @@ UNIT_TEST(SortByKey70OrdersDescendingLikeStdSort) {
     // for the permutation — that is the test above).
     const int n = 2000;
     std::vector<Pkg>   pkgs(static_cast<size_t>(n));
-    std::vector<void*> ptrs(static_cast<size_t>(n));
+    std::vector<Pkg*>  ptrs(static_cast<size_t>(n));
     std::vector<int32_t> keys(static_cast<size_t>(n));
     Lcg rng(0xC0FFEEu);
     for (int i = 0; i < n; ++i) {
-        pkgs[static_cast<size_t>(i)].tag = i;
-        pkgs[static_cast<size_t>(i)].key = static_cast<int32_t>(rng.Next() % 1000000u);
-        keys[static_cast<size_t>(i)] = pkgs[static_cast<size_t>(i)].key;
+        Tag(pkgs[static_cast<size_t>(i)]) = i;
+        Key70(pkgs[static_cast<size_t>(i)]) = static_cast<int32_t>(rng.Next() % 1000000u);
+        keys[static_cast<size_t>(i)] = Key70(pkgs[static_cast<size_t>(i)]);
         ptrs[static_cast<size_t>(i)] = &pkgs[static_cast<size_t>(i)];
     }
     rtsort::SortByKey70(ptrs.data(), n);
@@ -467,7 +463,7 @@ UNIT_TEST(SortByKey70OrdersDescendingLikeStdSort) {
 
     bool ok = true;
     for (int i = 0; i < n; ++i) {
-        if (static_cast<Pkg*>(ptrs[static_cast<size_t>(i)])->key !=
+        if (Key70(*ptrs[static_cast<size_t>(i)]) !=
             keys[static_cast<size_t>(i)]) { ok = false; break; }
     }
     CHECK(ok);
@@ -475,7 +471,7 @@ UNIT_TEST(SortByKey70OrdersDescendingLikeStdSort) {
     // Every element is still present exactly once — a sort is a permutation.
     std::vector<int> seen(static_cast<size_t>(n), 0);
     for (int i = 0; i < n; ++i) ++seen[static_cast<size_t>(
-        static_cast<Pkg*>(ptrs[static_cast<size_t>(i)])->tag)];
+        Tag(*ptrs[static_cast<size_t>(i)]))];
     bool once = true;
     for (int i = 0; i < n; ++i) if (seen[static_cast<size_t>(i)] != 1) once = false;
     CHECK(once);
@@ -511,19 +507,19 @@ UNIT_TEST(IntrosortSkeletonOrdersAscendingLikeStdSort) {
 UNIT_TEST(SortByKey70SmallRangeEdges) {
     // n == 0 and n == 1 pop immediately (`CMP R10,R11 / JBE`), and n == 2 is the
     // shortest path through the selection pass.
-    void* none[1] = {nullptr};
+    Pkg* none[1] = {nullptr};
     rtsort::SortByKey70(none, 0);            // must not touch, must not fault
 
-    Pkg one{};
-    one.tag = 0; one.key = 5;
-    void* p1[1] = {&one};
+    Pkg one;
+    Tag(one) = 0; Key70(one) = 5;
+    Pkg* p1[1] = {&one};
     rtsort::SortByKey70(p1, 1);
     CHECK(p1[0] == &one);
 
-    Pkg a{}, b{};
-    a.tag = 0; a.key = 1;
-    b.tag = 1; b.key = 2;
-    void* p2[2] = {&a, &b};
+    Pkg a, b;
+    Tag(a) = 0; Key70(a) = 1;
+    Tag(b) = 1; Key70(b) = 2;
+    Pkg* p2[2] = {&a, &b};
     rtsort::SortByKey70(p2, 2);
     CHECK(p2[0] == &b);                      // descending: the larger key first
     CHECK(p2[1] == &a);

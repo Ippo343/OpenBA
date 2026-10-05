@@ -193,7 +193,7 @@ void ComboDialog::OnUpdate(const System::Time& /*time*/) {
     if (!anyButtonDown) return;                                          // 180111c33
 
     if ((_flags & 0x4) == 0) {                                           // 180111c3f
-        Element* const root = _root;
+        Element* const root = _root.Get();
         if (_flags & 0x8) {                                              // 180111c47
             if (root->Contains(mx, my, _ui))                             // Element slot 9
                 return;                                                  // 180111c55

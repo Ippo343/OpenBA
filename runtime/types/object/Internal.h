@@ -257,6 +257,12 @@ public:
     InternalBasePtr() : _ptr(nullptr) {}
     // 0x1800062a0 -- one instruction, `mov qword ptr [rcx], rdx`.
     InternalBasePtr(Internal* p) : _ptr(p) {}
+    // No store at all: a member that retail never zeroes before it is built in
+    // place (a callee's hidden return slot pointed at it, or an explicit store
+    // later in the owner's ctor body). Retail's InternalPtr has no ctor of its
+    // own to run there; this is that absence (B.4 S4: DialogInstance::_root).
+    struct NoStore {};
+    explicit InternalBasePtr(NoStore) {}
 
     // Trivial by construction and by assertion; see the banner.
     InternalBasePtr(const InternalBasePtr&) = default;
@@ -336,6 +342,7 @@ template <class T>
 class InternalPtr : public InternalBasePtr {
 public:
     InternalPtr() : InternalBasePtr() {}
+    explicit InternalPtr(NoStore n) : InternalBasePtr(n) {}   // see InternalBasePtr(NoStore)
     InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<Internal*>(p)) {}   // LEFT: audit DEFERRED:every InternalPtr<T> instantiation over an Object::Internal subclass (RtObject::I; ERASED InternalPtr<T> is instantiated over T that are not Object::Internal subclasses (RtObject::Internal in the tests, Work records), so the upcast cannot be a static_cast for every T
 
     InternalPtr(const InternalPtr&) = default;

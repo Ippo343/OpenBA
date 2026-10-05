@@ -367,11 +367,11 @@ void EventNotifyDialog::OnUpdateLayout() {
     // -------------------------------------------------------
     UI::DialogInstance* parentDlg = parentDialog.Get();
     if (!parentDlg) return;
-    UI::Element* parentRoot = parentDlg->_root;
+    UI::Element* parentRoot = parentDlg->_root.Get();
     if (!parentRoot) return;
     int   parentY    = parentRoot->_layoutWidth;
 
-    UI::Element* selfRoot = _root;
+    UI::Element* selfRoot = _root.Get();
     if (!selfRoot) return;
     int   selfY    = selfRoot->_layoutWidth;
 

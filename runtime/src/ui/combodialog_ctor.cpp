@@ -352,7 +352,8 @@ extern "C" void* RtUi_ComboDialog_OperatorNew(uint64_t bytes) {
 UI::DialogInstance::DialogInstance(UserInterface* ui, Object::InternalPtr<Element> root,
                                    Object::InternalPtr<DialogInstance> parent,
                                    Object::Base* dataSource, void* userData,
-                                   int32_t userFlags) {
+                                   int32_t userFlags)
+    : _root(Object::InternalBasePtr::NoStore()) {   // stored below, retail's two stores
     _ui         = ui;                           // +0x10
     _dialog     = nullptr;                      // +0x18  no Dialog resource
     _flags      = 0;                            // +0x20  \ one qword store
@@ -368,7 +369,7 @@ UI::DialogInstance::DialogInstance(UserInterface* ui, Object::InternalPtr<Elemen
     _children._tail  = nullptr;                 // +0x40
     _children._count = 0;                       // +0x48   (+0x4c left alone)
     _root       = nullptr;                      // +0x50  written 0 then...
-    _root       = root.Get();                   // +0x50  ...the real value
+    _root       = root;                         // +0x50  ...the real value
     _spriteSheet = nullptr;                     // +0x58
     _spriteIndex = -1;                          // +0x60   (+0x64 left alone)
     // +0x68..+0x87: the two Array headers, zeroed by their own ctors.

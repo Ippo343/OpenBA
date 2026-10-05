@@ -152,11 +152,11 @@ void AssignString(char** slot, char* value) {
 
 // ---- the Runtime helpers these bodies call ---------------------------------
 // A System::String / Filename held in a raw slot.
-System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge  // LEFT: GetNextItem / SubString hold their Strings as raw char* locals released by hand between other stores (ReleaseString / AssignString); String locals would move each release to scope exit -- a LOCAL unit to transcribe release by release against retail's GetNextItem listing
+System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge  // LEFT: measured S4 (retail GetNextItem 0x1800cdf40): every String release there is OPEN-CODED (dec refcount, MemFree 0x1800c7ad0 called directly at 1800ce43f / ce780 / ce973 / cea38 / cea68 / ceacb / cebb2 / ced7e / cee00 / ceedb / cef9f; no ~String call anywhere in the body), with the slot left holding data-8 on the free arm and nulled on the other; the tree's ~String (0x180006c80) and String::Release (0x1800c9870) are out-of-line, so a System::String local puts a CALL where retail has none at each release, plus EH cleanup pads -- typed locals do not reproduce retail; stays until String's release is inline
 const System::String& Str(char* const* slot) {
-    return *reinterpret_cast<const System::String*>(slot);                            // B.3.x bridge  // LEFT: as line 155 (the const view)
+    return *reinterpret_cast<const System::String*>(slot);                            // B.3.x bridge  // LEFT: the const view of the raw char* String slot of line 155 (retail open-codes every release in GetNextItem 0x1800cdf40; a String local adds ~String calls)
 }
-System::Filename& Path(char** slot) { return *reinterpret_cast<System::Filename*>(slot); }   // B.3.x bridge  // LEFT: as line 155 (GetNextItem's raw Filename local `wanted` / `path`)
+System::Filename& Path(char** slot) { return *reinterpret_cast<System::Filename*>(slot); }   // B.3.x bridge  // LEFT: GetNextItem's raw Filename locals `wanted` / `path`: retail releases them open-coded (MemFree 0x1800c7ad0 at 1800ce973 / cea38 / cea68, no ~Filename call); a Filename local adds the out-of-line dtor call and EH pads
 
 // ?SubString@String@System@@QEBA?AV12@HH@Z — 0x1800c9230. The last argument is
 // the INCLUSIVE end index, not a length: its body computes `end - start + 1`

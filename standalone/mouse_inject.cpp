@@ -505,7 +505,7 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
     for (ListNode* n = head; n; n = n->next) {
         UI::DialogInstance* dlg = n->element;   // DialogInstancePtr (UserInterface.h)
         if (!dlg) continue;
-        UI::Element* root = dlg->_root;   // +0x50
+        UI::Element* root = dlg->_root.Get();   // +0x50
         if (!root) continue;
 
         Scan sc;

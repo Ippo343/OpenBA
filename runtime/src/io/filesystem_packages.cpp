@@ -710,7 +710,7 @@ void FileSystem::LoadPackages() {
     // B3R RT-IO: the call is rtsort::SortByKey70 by name (it was the address
     // door, which resolved to the same body).
     if (_packfiles._size > 1) {
-        rtsort::SortByKey70(reinterpret_cast<void**>(_packfiles._data), _packfiles._size);  // LEFT: audit WORK, not executed this pass (SortByKey70(IO::PackageFile**, int); the element's _priority by name (one P); blocker; SIG rtsort::SortByKey70(void**, int) (Collection.h, R-COLL); the element is IO::PackageFile, _priority +0x70
+        rtsort::SortByKey70(_packfiles._data, _packfiles._size);
     }
 
     // ---- LOOP 2: the user/mod pack filenames already on the FileSystem -----
