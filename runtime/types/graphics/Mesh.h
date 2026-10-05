@@ -1073,9 +1073,13 @@ void RtGraphics_EdgeMesh_SerializeTriangleListArray(IO::Serializer& ser, int cou
 // ==== B3R RT-VG: the two EdgeMesh vertex constructors (graphics/mesh.cpp) ====
 // C++ linkage, global namespace; given external linkage for their exe-side reader.
 // ??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z
-void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3);  // 0x1800a2f50
+RtGraphics::TriangleVertex* RtGraphics_EdgeMesh_TriangleVertex_Ctor(RtGraphics::TriangleVertex* self,
+                                                                    const void* vec3);  // 0x1800a2f50
 // ??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z
-void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags);  // 0x1800a2df0
+RtGraphics::EdgeVertex* RtGraphics_EdgeMesh_EdgeVertex_Ctor(RtGraphics::EdgeVertex* self,
+                                                            const RtGraphics::TriangleVertex* a,
+                                                            const RtGraphics::TriangleVertex* b,
+                                                            int flags);  // 0x1800a2df0
 // ==== end B3R RT-VG ====
 
 // ==== B3R W2-RES: the body the 0x180100f20 address row held (graphics/mesh.cpp) ====
