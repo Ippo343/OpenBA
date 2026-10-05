@@ -25,8 +25,14 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 #include "system/Value.h"   // System::Time
+#include "collection/Collection.h"   // Collection::Array (timers)
 
 class SpawnDescription;   // Component/SpawnDescription.h
+
+// The timer array grows through retail's stride-8 row (0x140001bb0 SetSize(n): stride 8,
+// align 8, the new tail ZEROED, no element destroy) and is freed by the inlined ~Array
+// (dtor 0x14000c377: MemFree(+0x28), then +0x28 = +0x30 = 0): kSpec_PtrZero (Entity/EntityList.h).
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 class SpawnComponent final : public Component {
     DECLARE_EXE_TYPE(SpawnComponent)
@@ -34,9 +40,8 @@ class SpawnComponent final : public Component {
 public:
     SpawnComponent();                                             // 0x140056030
 
-    // PORT GAP (retail 0x14000c350) — B38 D2: retail frees the timer array at
-    // +0x28; the tree never did (Inert_ScalarDtor).
-    ~SpawnComponent() override = default;                         // [0] 0x14000c350
+    // 0x14000c350: the body is empty; ~timers frees the timer array (+0x28) after it.
+    ~SpawnComponent() override;                                   // [0] 0x14000c350
     void Persist(IO::Stream& stream) override;                          // [3] 0x140055ee0
     void Startup() override;                                      // [4] 0x140055e90
     void Update(const System::Time* time) override;                             // [9] 0x140055ad0
@@ -48,13 +53,13 @@ public:
     void DoSpawn(SpawnDescription* desc, int entryIndex, char randomGrowth);
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Persist 0x140055ee0.
-    System::Time* timers;  // +0x28 Array<Time> data, one per spawn entry (freed by the retail dtor)
-    int32_t  timerCount;   // +0x30
-    int32_t  timerCapacity; // +0x34
+    using TimerList = Collection::Array<System::Time, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    TimerList timers;      // +0x28 one Time per spawn entry (count +0x30, capacity +0x34)
 };
 
 static_assert(sizeof(SpawnComponent) == 0x38, "SpawnComponent is 0x38 (create 0x14000c170)");
 static_assert(alignof(SpawnComponent) == 8, "SpawnComponent alignment");
 static_assert(offsetof(SpawnComponent, timers) == 0x28, "");
-static_assert(offsetof(SpawnComponent, timerCount) == 0x30, "");
-static_assert(offsetof(SpawnComponent, timerCapacity) == 0x34, "");
+static_assert(offsetof(SpawnComponent, timers) + offsetof(SpawnComponent::TimerList, _size) == 0x30, "SpawnComponent +0x30 timer count");
+static_assert(offsetof(SpawnComponent, timers) + offsetof(SpawnComponent::TimerList, _capacity) == 0x34, "SpawnComponent +0x34 timer capacity");

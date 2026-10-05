@@ -20,7 +20,6 @@
 #include "Entity/ComponentEntity.h"
 #include "Entity/EntityList.h"   // EntityList::shuttingDown
 #include "Game/Map.h"   // Map::size
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"
@@ -50,9 +49,8 @@ static constexpr float SECS_PER_SEASON = 300.0f;
 // 0x140055780 SpawnComponent::DoSpawn (below) — performs actual spawn operation
 
 // FUN_140001bb0 — dynamic Time-array resize (stride 8). Sizes the per-entry timer
-// array in the OnCreate/Startup body-init. ENDGAME B.3.2 step 2:
-// converted to GameColl::AsArray<GameColl::Ptr8>(h).SetSize(n) (same stride/align/
-// zero-tail as Collection::Array<void*>::SetSize).
+// array in the OnCreate/Startup body-init: `timers.SetSize(n)` (kSpec_PtrZero: stride 8,
+// align 8, zero tail).
 
 // The stream serializer (vtable slot [3]) validates with ?IsDerivedFrom@Base@Object@@
 // (import slot 0x140152a98), called on the object.
@@ -320,9 +318,16 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
 #include "Component/SpawnComponent.h"
 
 // 0x140056030. Component() is the CALL 0x1401188b0; the 0x14015a670 stamp is
-// the compiler's; +0x28 = +0x30 = 0; flags |= 0x88.
-SpawnComponent::SpawnComponent() : timers(nullptr), timerCount(0), timerCapacity(0) {
+// the compiler's; +0x28 = +0x30 = 0 (timers' Array ctor, 0x14005605d / 0x140056061);
+// flags |= 0x88.
+SpawnComponent::SpawnComponent() {
     OrFlagsInCtor(0x88);
+}
+
+// 0x14000c350: the body is empty. ~timers frees the timer array and zeroes +0x28 / +0x30
+// (0x14000c377..0x14000c387; System::Time needs no element destroy), then the Component
+// restamp and ~Internal: the compiler's chain.
+SpawnComponent::~SpawnComponent() {
 }
 
 // ============================================================
@@ -331,11 +336,11 @@ SpawnComponent::SpawnComponent() : timers(nullptr), timerCount(0), timerCapacity
 // serializer, not a dtor).
 // ============================================================
 // Fields (verified against retail decompile/disassembly at 0x140055ee0):
-//   timerCount  per-entry timer count (also written BACK by the resize helper
+//   timers._size per-entry timer count (also written BACK by the resize helper
 //               itself, not by an explicit store).
 //   timers      Time[count] per-entry accumulation timers, load-side resized via
-//               the same stride-8 resizer (0x140001bb0,
-//               GameColl::AsArray<GameColl::Ptr8>::SetSize) used by Startup.
+//               the same stride-8 resizer (0x140001bb0, timers.SetSize) used by
+//               Startup.
 //   On load only, retail then reconciles the restored count against the LIVE
 //   SpawnDescription's entry count (desc->_entries._size, desc validated by
 //   IsDerivedFrom(desc, SpawnDescription typeid) — DAT_1401c4918): if they
@@ -345,13 +350,13 @@ void SpawnComponent::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    int count = timerCount;
+    int count = timers._size;
     ser.Serialize(count, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0)   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::Ptr8>(&timers).SetSize(count);  // also writes timerCount = count
+        timers.SetSize(count);  // also writes timers._size = count
 
-    System::Time* timer = timers;
-    int n = timerCount;
+    System::Time* timer = timers._data;
+    int n = timers._size;
     for (int i = 0; i < n && timer; ++i, ++timer)
         timer->Serialize(ser);
 
@@ -364,8 +369,8 @@ void SpawnComponent::Persist(IO::Stream& stream) {
         if (desc && desc->IsDerivedFrom(SpawnDescription::TypeId()))
             validated = static_cast<SpawnDescription*>(desc);
         int descCount = validated ? validated->_entries._size : 0;
-        if (timerCount != descCount)
-            GameColl::AsArray<GameColl::Ptr8>(&timers).SetSize(descCount);
+        if (timers._size != descCount)
+            timers.SetSize(descCount);
     }
 }
 // ============================================================
@@ -387,7 +392,7 @@ void SpawnComponent::Startup() {
     if (entryCount <= 0) return;
 
     // Resize the timer array. Zero-initialised entries.
-    GameColl::AsArray<GameColl::Ptr8>(&timers).SetSize(entryCount);
+    timers.SetSize(entryCount);
 }
 
 // [9] 0x140055ad0. RDX is a pointer to the elapsed System::Time (EntityList
@@ -402,10 +407,10 @@ void SpawnComponent::Update(const System::Time* timeV) {
     // the timers are still null but the description is present, run the body-init
     // now (idempotent). The loop below indexes the timers unconditionally, so bail
     // if still unset.
-    if (timers == nullptr) {
+    if (timers._data == nullptr) {
         if (_description != nullptr)
             SpawnComponent::Startup();
-        if (timers == nullptr) {
+        if (timers._data == nullptr) {
             return;
         }
     }
