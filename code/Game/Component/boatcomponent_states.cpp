@@ -73,7 +73,6 @@
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Geometry.h"
 #include "Component/controller_state_table.h"
-#include "Component/coll_bridge.h"
 #include <new>
 #include "math/Math.h"
 #include "system/Value.h"
@@ -197,10 +196,9 @@ void DeleteBoatEntity(BoatComponent* boat) {
     if ((entIBP->_entityFlags >> 10) & 1) return;   // already going
     MarkEntityForRemoval(entIBP);
     {
-        // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-        void* arr = &entityList->removalList;
+        // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
         const int32_t newCount = entityList->removalList._size + 1;
-        GameColl::AsArray<GameColl::Ptr8>(arr).SetSizeFill(newCount, &entIBP);
+        entityList->removalList.SetSizeFill(newCount, &entIBP);
     }
 }
 
