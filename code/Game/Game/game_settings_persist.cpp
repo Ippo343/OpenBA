@@ -119,7 +119,7 @@ extern "C" void GameSettings_Save(GameSettings* settings) {
         p->Set("Game", k.key, settings->*k.field);
     for (const auto& k : kBoolKeys)
         p->Set(
-            "Game", k.key, (settings->*k.field) != 0);   // B.3.4 bridge
+            "Game", k.key, (settings->*k.field) != 0);
 
     fprintf(stderr, "[GameSettings] Save: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d\n",

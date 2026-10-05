@@ -330,8 +330,8 @@ void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
     System::Random* rng = Rng();
     if (!rng) return;
 
-    const float r1 = fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */;
-    const float r0 = fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */;
+    const float r1 = fn_Random_RandFloatTol(rng);
+    const float r0 = fn_Random_RandFloatTol(rng);
     const Math::Vector3 src(r0, r1, 0.0f);
 
     Math::Vector3 dir = src.Normalize();
@@ -413,7 +413,7 @@ void AnimalComponent::Startup() {
         return;
     }
 
-    float tol = fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */;
+    float tol = fn_Random_RandFloatTol(rng);
     deathAge = tol * desc->_f2c + desc->_f28;
 }
 void AnimalComponent::OnAdded() {
@@ -475,8 +475,6 @@ void AnimalComponent::Update(const System::Time* time) {
 
         MarkEntityForRemoval(entity);
         if (corpseOwner) {
-            // B.3.2 bridge: exe 0x140003110 (ActHunt_DynArraySetCount_3110) IS
-            // Collection::Array<void*>::SetSize(n, fill).
             const int newCount = corpseOwner->removalList._size + 1;
             corpseOwner->removalList
                 .SetSize(newCount, entity);
@@ -678,8 +676,8 @@ void AnimalComponent::Update(const System::Time* time) {
                 dest[1] = world[1];
                 dest[2] = world[2];
 
-                const float jy = rng ? fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */ : 0.0f;
-                const float jx = rng ? fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */ : 0.0f;
+                const float jy = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
+                const float jx = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
                 dest[0] += jx * jitter;
                 dest[1] += jy * jitter;
 

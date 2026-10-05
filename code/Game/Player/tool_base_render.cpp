@@ -395,7 +395,7 @@ void Impl_b930(HighlightComponent* hc) {
     Graphics::GraphicsMesh::TriangleList triList0 = {0, fillVtx._size, 0, fillIdx._size, 0, 0};
     Graphics::GraphicsMesh::TriangleList triList1 = {0, edgeVtx._size, 0, edgeIdx._size, 0, 0};
 
-    // B.3.5 bridge -- ?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@
+    // ?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@
     // H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z (0x1800a23e0). The member was
     // deliberately undeclared until the closing pass -- Mesh.h now carries the
     // 25-slot list tokenised out of the mangled name and the body lives on the
@@ -427,7 +427,7 @@ void Impl_b930(HighlightComponent* hc) {
     const uint32_t tidDesc = HighlightDescription::TypeId();
     HighlightDescription* desc = Object::IsDerivedFromNullSafe(obj, tidDesc)
         ? static_cast<HighlightDescription*>(obj) : nullptr;
-    // B.3.5 bridge — the four parameters are `Object::ExternalPtr<MaterialInstance>`
+    // the four parameters are `Object::ExternalPtr<MaterialInstance>`
     // BY VALUE, and constructing them from the raw pointers the HighlightDescription
     // holds adds NO refcount traffic the door did not do: `ExternalPtr(T*)` is a bare
     // `_ptr = p` store and its copy/assign/dtor are `= default` and MUST stay trivial
@@ -441,7 +441,7 @@ void Impl_b930(HighlightComponent* hc) {
             ->SetMaterials(Object::ExternalPtr<Graphics::MaterialInstance>(m0),
                            Object::ExternalPtr<Graphics::MaterialInstance>(m1),
                            Object::ExternalPtr<Graphics::MaterialInstance>(m0),
-                           Object::ExternalPtr<Graphics::MaterialInstance>(m1));   // B.3.5 bridge
+                           Object::ExternalPtr<Graphics::MaterialInstance>(m1));
     }
 
     // fillIdx / fillVtx / edgeIdx / edgeVtx are released by ~Array at scope exit —
@@ -526,12 +526,12 @@ void Impl_c4a0(HighlightComponent* hc) {
         if (r && desc && desc->_ref0 != nullptr) {
             Impl_b930(hc);
             inst.SetMesh(Object::ExternalPtr<Graphics::EdgeMesh>(hc->fieldF8),
-                         nullptr);   // B.3.5 bridge
+                         nullptr);
             inst.SetTransform(hc->transform);
             System::Time time;
             RtSystem_Time_Ctor(&time, 0.0f);
             inst.Update(time);   // slot 1
-            hc->highlightId = static_cast<int32_t>(scene->AddObject(&inst));   // B.3.5 bridge
+            hc->highlightId = static_cast<int32_t>(scene->AddObject(&inst));
             return;
         }
     }
@@ -605,7 +605,7 @@ add_prebuilt:
         System::Time time;
         RtSystem_Time_Ctor(&time, 0.0f);
         inst.Update(time);   // slot 1
-        uint32_t id = scene->AddObject(&inst);   // B.3.5 bridge
+        uint32_t id = scene->AddObject(&inst);
         uint32_t f0 = hc->_flags;
         hc->highlightId = static_cast<int32_t>(id);
         uint32_t f1 = f0 | 4;

@@ -540,7 +540,6 @@ void BuildComponent::State8Finalize() {
     }
     int perItem   = desc->_pickupValue;
     int acceptTyp = static_cast<int>(desc->_rawMaterialFlags);
-    // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
     storage->storageSlots.SetSize(0);
     storage->rawMaterialFlags = static_cast<uint32_t>(acceptTyp);
     storage->capacity = perItem * mult;

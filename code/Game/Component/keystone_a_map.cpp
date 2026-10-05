@@ -194,7 +194,6 @@ void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint
                                         if (participating == 0) ++g_dc20EvictNoParticipant;
                                     }
                                     MarkEntityForRemoval(local_68);   // 0x1400c2ea0
-                                    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
                                     entityList->removalList
                                         .SetSize(entityList->removalList._size + 1, local_68);
                                 }

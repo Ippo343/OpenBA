@@ -146,7 +146,7 @@ void EnsureTrackList(MusicPlayer* mp) {
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     // The resource is the MusicList.
     MusicList* list = ::Object::ExternalFactory::_singleton
-            ->FindOrLoadAs<MusicList>(fname);                                // B.3.3 bridge
+            ->FindOrLoadAs<MusicList>(fname);
     mp->trackList = list;
 
     fprintf(stderr, "[MusicPlayer] MusicTracks.rsc -> %p tracks=%d\n", static_cast<void*>(list),

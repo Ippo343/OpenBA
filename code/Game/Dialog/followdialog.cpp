@@ -64,7 +64,7 @@ static Object::InternalPtr<Work>* WorldGrid_FindEntity_Impl(const WorkScheduler*
     const WorkSchedulerIdNode* node = scheduler->trees[0].root;
     while (true) {
         if (node == nullptr) {
-            new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (retval) ::Object::InternalBasePtr(nullptr);
             return retval;
         }
         if (node->key <= tileIndex) {
@@ -75,7 +75,7 @@ static Object::InternalPtr<Work>* WorldGrid_FindEntity_Impl(const WorkScheduler*
                     *retval = node->work;
                     return retval;
                 }
-                new (retval) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+                new (retval) ::Object::InternalBasePtr(nullptr);
                 return retval;
             }
             node = node->right;  // right child

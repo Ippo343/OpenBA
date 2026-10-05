@@ -72,16 +72,14 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
     // GetAchievement returns ExternalPtr<Achievement> BY VALUE (a retslot in
     // retail); the ExternalPtr is one raw pointer and holds no reference.
     const Object::ExternalPtr<Achievement::Achievement> achievementPtr =
-        mgr->GetAchievement(achievementId);   // B.3.7 bridge
+        mgr->GetAchievement(achievementId);
     Achievement::Achievement* achievement = achievementPtr.Get();
     if (achievement == nullptr) {
         return;
     }
 
     System::String titleKey;  // the achievement's title KEY
-    // B.3.7 bridge: GetTitle returns System::String BY VALUE; constructed
-    // straight into titleKey's storage (one AddRef, as the door did).
-    ::new (&titleKey) System::String(achievement->GetTitle());   // B.3.7 bridge
+    ::new (&titleKey) System::String(achievement->GetTitle());
 
     // UI::String(ExternalPtr<StringTable> = *(achievement+0x20), key), then
     // operator System::String() — the LOOKED-UP display text. This is the

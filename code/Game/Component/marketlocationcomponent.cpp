@@ -59,7 +59,6 @@ static char MarketLoc_State2Enter(MarketLocationComponent* self, StateMachine* /
     if (GameUpdateLoop::_singleton == nullptr) return 0;
     ComponentEntity* entityPtr = self->_entity.Get();
     CitizenBehavior* town = MarketTown();
-    // B.3.2 bridge: 0x140003110 is Collection::Array<void*>::SetSize(n, fill).
     const int count = town->field_0x10._size;
     town->field_0x10
         .SetSizeFill(count + 1, &entityPtr);

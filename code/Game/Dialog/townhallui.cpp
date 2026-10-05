@@ -1129,12 +1129,6 @@ void TownHallUI::UpdateProduction() {
     // Collect entries from invBST in-order traversal
     using ProdEntry = TownHallInventoryEntry;   // Dialog/TownHallUI.h
 
-    // B.3.2 bridge: this is a local Collection::Array<ProdEntry> — retail's
-    // hand-inlined SetSize over a stack-local {data,size,capacity} triple, not a
-    // struct field — so it becomes a real instance of the template. ProdEntry is
-    // 0x18 bytes at align 8, exactly the stride/alignment the MemAlloc call it
-    // replaces passed, and every appended element is fully written (including
-    // `_pad = 0`), so the spec's init arm is never reached.
     Collection::Array<ProdEntry> entryArr;
 
     InventoryNode* bstRoot = invBST.root;
@@ -1537,11 +1531,6 @@ void TownHallUI::UpdateAll() {
 
     // Phase 2: Collect all entities from 4 entity lists
     // The town's first four arrays (+0x00/+0x10/+0x20/+0x30, each {data, count})
-    //
-    // B.3.2 bridge: this is a local Collection::Array<uint64_t> (retail's
-    // hand-inlined SetSize on a stack-local {data,size,capacity} triple, not a
-    // struct field), so it is a real instance of the template rather than a
-    // GameColl::ArrayAt view over someone else's bytes.
     Collection::Array<ComponentEntity*> entityArr;
 
     ComponentEntity** const lists[4] = { town->field_0x00._data, town->field_0x10._data, town->field_0x20._data, town->field_0x30._data };

@@ -398,7 +398,6 @@ void PopulationComponent::OnAdded() {
     if (!townMgr) return;
 
     Object::InternalPtr<PopulationComponent> selfRef(this);
-    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     townMgr->populations
         .SetSizeFill(townMgr->populations._size + 1, &selfRef);
 

@@ -144,7 +144,7 @@ static System::String EventLog_SeasonString(GameUpdateLoop* gameWorld, const Eve
     System::String retStr;
     const UI::StringTable* seasonsTable = eventLog->seasons;
     if (seasonsTable) {
-        ::new (&retStr) System::String(seasonsTable->GetText(idx));  // B.3.6 bridge
+        ::new (&retStr) System::String(seasonsTable->GetText(idx));
     } else {
         retStr = System::String("");
     }
@@ -251,7 +251,7 @@ void EventLog::AddEventCore(int eventType, int severity, const ::Object::Interna
 
     const UI::StringTable* eventsTable = events;  // +0x00
     if (eventsTable) {
-        ::new (&templateStr) System::String(eventsTable->GetText(eventType));  // B.3.6 bridge
+        ::new (&templateStr) System::String(eventsTable->GetText(eventType));
     } else {
         templateStr = System::String("Event");
     }

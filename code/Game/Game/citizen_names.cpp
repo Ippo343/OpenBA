@@ -204,7 +204,7 @@ static NameDatabase* LoadNameDb(const char* path) {
     // above still gates the same cell and the same registered body still runs.
     // (retail's IsDerivedFrom on the result is skipped, as before: see above)
     return ::Object::ExternalFactory::_singleton
-        ->FindOrLoadAs<NameDatabase>(fname);                               // B.3.3 bridge
+        ->FindOrLoadAs<NameDatabase>(fname);
 }
 
 // Public entry: generate a citizen name for `female` into `out` (>=0x100 bytes,

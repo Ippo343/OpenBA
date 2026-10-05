@@ -148,7 +148,7 @@ void       ConsumeProduceComponent::Persist(IO::Stream& stream) {
     // Version-0 migration: on load, if consumeResourceId < 0, reset to 0
     if (ser.GetVersion() == 0 && consumeResourceId < 0) {
         // Check if we're loading (stream direction == 0)
-        if (static_cast<int>(stream.GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        if (static_cast<int>(stream.GetDirection()) == 0) {   // (IO::Stream::GetDirection, retail 0x180006200)
             consumeResourceId = 0;
         }
     }

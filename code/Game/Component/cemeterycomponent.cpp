@@ -185,7 +185,6 @@ char CemeteryComponent::EnterBuilt() {
 
     Object::InternalPtr<CemeteryComponent> ibp(this);
     const int count = townMgr->cemeteries._size;
-    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     townMgr->cemeteries
         .SetSizeFill(count + 1, &ibp);
 
