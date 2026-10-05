@@ -159,9 +159,9 @@ void Game_TerrainResolveMaterial(MapGenerator::ExternalRef* ref) {
     // The record is TerrainGenerator's material ref (+0x38 / +0x50 / +0x68), a
     // MapGenerator::ExternalRef {String, generation, External*}.
     int factoryGen = efactory->_generation;   // factory+8
-    if (ref->factoryGen == factoryGen) return;
+    if (ref->generation == factoryGen) return;
 
-    System::Filename fnameBuf(ref->strPtr);  // String @ +0
+    System::Filename fnameBuf(ref->name);  // String @ +0
     ::Object::External* obj = efactory->FindAs<::Object::External>(fnameBuf);
 
     ::Object::External* result = nullptr;
@@ -173,5 +173,5 @@ void Game_TerrainResolveMaterial(MapGenerator::ExternalRef* ref) {
             result = obj;
     }
     ref->resolved = result;
-    ref->factoryGen = factoryGen;
+    ref->generation = factoryGen;
 }

@@ -53,8 +53,9 @@ public:
     bool     _field30;           // +0x30: 1 (bool, enabled?; retail serializes it through Serialize(bool&))
     uint8_t  _pad31[7];          // +0x31: padding
     // The three material refs, each {String filename, int32 generation (-1 =
-    // unresolved), External* resolved} (B4 X7-GAME-A: MapGenerator's ExternalRef;
-    // the ctor 0x1400b1810 stores 0 / -1 / 0, the dtor ~String of each name).
+    // unresolved), External* resolved} (B4 S4 RESOLVE: the one NamedExternalRef;
+    // the ctor 0x1400b1810 builds each as a member, 0 / -1 / 0, the dtor ~String
+    // of each name).
     MapGenerator::ExternalRef _field38;   // +0x38: noise layer 1 (the terrain material)
     MapGenerator::ExternalRef _field50;   // +0x50: noise layer 2 (water material A)
     MapGenerator::ExternalRef _field68;   // +0x68: noise layer 3 (water material B)
