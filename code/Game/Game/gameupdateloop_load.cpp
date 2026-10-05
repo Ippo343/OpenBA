@@ -586,7 +586,7 @@ PlayerToolManager::PlayerToolManager() {
     field_0x10 = 0;
     field_0x18 = 0;
     field_0x20 = 0;
-    currentTool = nullptr;
+    // +0x28 currentTool: the member's InternalPtr ctor stores the null (0x1401025fe).
     paused = false;
     field_0x34 = 1;
     field_0x38 = false;

@@ -309,7 +309,7 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
     if (currentTool != nullptr) {
         currentTool->Shutdown();   // slot 5
         // InternalBasePtr::DeletePtr: the scalar deleting dtor, then null
-        delete currentTool;
+        delete currentTool.Get();
         currentTool = nullptr;
     }
 
@@ -429,7 +429,7 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
 
     // Step 8: Configure and start the tool
     ToolSetting* toolSettingRef = foundNode->toolSetting;
-    Tool* tool = currentTool;
+    Tool* tool = currentTool.Get();
     tool->dialogPtr = this;                 // back-pointer to the manager
     tool->descriptionPtr = field_0x20;      // the group
     tool->toolSetting = toolSettingRef;     // ToolSetting ref
@@ -1642,8 +1642,8 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
     // EditTool::TypeId() (cell 0x1401c6dd8).
     EditTool* editTool = nullptr;
     if (currentTool) {
-        if (::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId())) {
-            editTool = static_cast<EditTool*>(currentTool);
+        if (::Object::IsDerivedFromNullSafe(currentTool.Get(), EditTool::TypeId())) {
+            editTool = static_cast<EditTool*>(currentTool.Get());
         }
     }
 
@@ -1654,8 +1654,8 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
         // Re-read current tool after mode switch
         editTool = nullptr;
         if (currentTool) {
-            if (::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId())) {
-                editTool = static_cast<EditTool*>(currentTool);
+            if (::Object::IsDerivedFromNullSafe(currentTool.Get(), EditTool::TypeId())) {
+                editTool = static_cast<EditTool*>(currentTool.Get());
             }
         }
     }

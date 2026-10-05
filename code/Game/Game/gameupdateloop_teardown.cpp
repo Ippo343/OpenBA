@@ -265,7 +265,7 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
     // drop the IBP.
     if (self->currentTool != nullptr) {
         self->currentTool->Shutdown();   // slot 5
-        reinterpret_cast< ::Object::InternalBasePtr*>(&self->currentTool)->DeletePtr();   // LEFT: PlayerToolManager::currentTool is a bare Tool* where retail holds an InternalPtr<Tool> (ctor 0x1401025fe, DeletePtr 0x14010250c); typing it rewrites its reader lines in eight X6-GAME-B / X6-CW files
+        self->currentTool.DeletePtr();   // 0x14010250c
     }
 
     self->cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)

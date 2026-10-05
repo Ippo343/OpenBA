@@ -1529,7 +1529,7 @@ void GameUpdateLoop::Draw(float alpha) {
         uint64_t drawFlag = (hasInput || pauseCheck) ? 1 : 0;
 
         // +0x28 is the InternalPtr to the current tool
-        Tool* tool = toolManager->currentTool;
+        Tool* tool = toolManager->currentTool.Get();
         if (tool) {
             // Caller batch CB6: slot 8 (vtable +0x40) `Tool::Draw(context, active)`.
             // The receiver is PROVED by its only writer, Toolbar_ShowGroup_Impl

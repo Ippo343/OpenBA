@@ -352,12 +352,12 @@ void FireActivatePlacement(PlayerToolManager* entityUI) {
     fprintf(stderr, "[ToolHarness] template -> %p\n", tmpl);
     if (!tmpl) { fprintf(stderr, "[ToolHarness] ERROR: template resolve returned null\n"); return; }
 
-    Tool* before = entityUI->currentTool;
+    Tool* before = entityUI->currentTool.Get();
     fprintf(stderr, "[ToolHarness] SetEditMode(entityUI=%p, descriptor=%p) — activating PlacementTool "
            "via the tool-mode tree (activeTool before=%p)...\n", entityUI, tmpl, before);
     entityUI->SelectTool(tmpl);   // 0x140102b60
 
-    Tool* tool = entityUI->currentTool;
+    Tool* tool = entityUI->currentTool.Get();
     fprintf(stderr, "[ToolHarness] after SetEditMode: activeTool(entityUI+0x28)=%p\n", tool);
     if (tool) {
         // The tool the tree installs for a CreatePlacedDescription is the PlacementTool.
@@ -411,7 +411,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
            "activating RoadTool via the tool-mode tree...\n", entityUI, tmpl, used);
     entityUI->SelectTool(tmpl);   // 0x140102b60
 
-    Tool* tool = entityUI->currentTool;
+    Tool* tool = entityUI->currentTool.Get();
     fprintf(stderr, "[ToolHarness][road] after SetEditMode: activeTool(entityUI+0x28)=%p\n", tool);
     if (!tool) {
         fprintf(stderr, "[ToolHarness][road] activation FAILED — tree miss or CreateObject null. "
@@ -595,7 +595,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
     fprintf(stderr, "[ToolHarness][pasture] SetEditMode — activating FencedTool via the tree...\n");
     entityUI->SelectTool(tmpl);   // 0x140102b60
 
-    Tool* tool = entityUI->currentTool;
+    Tool* tool = entityUI->currentTool.Get();
     fprintf(stderr, "[ToolHarness][pasture] after SetEditMode: activeTool=%p\n", tool);
     if (!tool) {
         fprintf(stderr, "[ToolHarness][pasture] activation FAILED — check the [Tools] fenced node line.\n");
@@ -753,7 +753,7 @@ void FirePastureTool(PlayerToolManager* entityUI) {
 // Phase-3B TransformFromYaw fix (was null in standalone → invisible ghost).
 void FirePreviewPlacement(PlayerToolManager* entityUI) {
     FireActivatePlacement(entityUI);
-    Tool* tool = entityUI ? entityUI->currentTool : nullptr;
+    Tool* tool = entityUI ? entityUI->currentTool.Get() : nullptr;
     if (!tool) {
         fprintf(stderr, "[ToolHarness] preview: no active tool — cannot drive ghost preview\n");
         return;
@@ -2305,11 +2305,11 @@ void FireUpgradeArm(PlayerToolManager* entityUI, int frameNum) {
 bool UpgradeOpenDialog() {
     if (!s_up_entityUI || !s_up_entity) return false;
     // The current tool, taken as the EditTool (SelectEntity refuses any other tool).
-    EditTool* tool = static_cast<EditTool*>(s_up_entityUI->currentTool);
+    EditTool* tool = static_cast<EditTool*>(s_up_entityUI->currentTool.Get());
     if (!tool) {
         fprintf(stderr, "[Upgrade] installing default EditTool via SetEditMode(pc,0)...\n");
         s_up_entityUI->SelectTool(nullptr);
-        tool = static_cast<EditTool*>(s_up_entityUI->currentTool);
+        tool = static_cast<EditTool*>(s_up_entityUI->currentTool.Get());
     }
     if (!tool) {
         fprintf(stderr, "[Upgrade] EditTool activation FAILED (needs BANISHED_LIVE_TOOLS=1)\n");
@@ -2553,7 +2553,7 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
     if (!tmpl) { fprintf(stderr, "[ToolHarness][bridge] ERROR: template did not resolve\n"); return; }
 
     entityUI->SelectTool(tmpl);   // 0x140102b60
-    Tool* tool = entityUI->currentTool;
+    Tool* tool = entityUI->currentTool.Get();
     fprintf(stderr, "[ToolHarness][bridge] after SetEditMode: activeTool=%p\n", tool);
     if (!tool) {
         fprintf(stderr, "[ToolHarness][bridge] activation FAILED — expect a node{CreateBridge -> "
@@ -2809,7 +2809,7 @@ void BridgeSelectFire(PlayerToolManager* entityUI) {
     // default EditTool (the one a player would be holding when they click a bridge).
     // The current tool is taken as the EditTool (SelectEntity refuses any other tool).
     entityUI->SelectTool(nullptr);
-    EditTool* tool = entityUI ? static_cast<EditTool*>(entityUI->currentTool)
+    EditTool* tool = entityUI ? static_cast<EditTool*>(entityUI->currentTool.Get())
                               : nullptr;
     if (!tool) {
         fprintf(stderr, "[Bridge][select] EditTool activation FAILED (nothing at entityUI+0x28) — "
