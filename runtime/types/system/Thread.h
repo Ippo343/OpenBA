@@ -36,7 +36,6 @@
 #include <cstddef>
 #include <type_traits>   // B.3.4b: the "CriticalSection has no vptr" pin
 
-namespace RtSystem {
 
 // ----------------------------------------------------------------------------
 // RtSystem::CriticalSection — the POD
@@ -87,26 +86,7 @@ namespace RtSystem {
 // THE POD KEEPS AN EXPLICIT `vtable` FIELD; THE CLASS DOES NOT. On the class
 // the compiler's own vptr occupies +0x00, which is why that one member is the
 // only field in this file with no cross-assert — see the class below.
-struct Thread {
-    void*    vtable;      // +0x00
-    uint32_t runFlags;    // +0x08
-    uint32_t _pad0c;      // +0x0c
-    void*    hThread;     // +0x10  HANDLE
-    void*    hStart;      // +0x18  HANDLE
-    void*    hStop;       // +0x20  HANDLE
-    void*    hFinished;   // +0x28  HANDLE
-};
-static_assert(offsetof(Thread, vtable)    == 0x00, "Thread::vtable offset");
-static_assert(offsetof(Thread, runFlags)  == 0x08, "Thread::runFlags offset");
-static_assert(offsetof(Thread, hThread)   == 0x10, "Thread::hThread offset");
-static_assert(offsetof(Thread, hStart)    == 0x18, "Thread::hStart offset");
-static_assert(offsetof(Thread, hStop)     == 0x20, "Thread::hStop offset");
-static_assert(offsetof(Thread, hFinished) == 0x28, "Thread::hFinished offset");
-static_assert(sizeof(Thread) == 0x30, "Thread base size");
-static_assert(std::is_trivially_destructible<Thread>::value,
-              "B34_RULES 1.5 rule 3: the POD stays trivially destructible");
 
-}  // namespace RtSystem
 
 // ============================================================================
 // ENDGAME B.3.4b — the REAL `System::CriticalSection` and `System::Thread`.
@@ -310,8 +290,6 @@ private:
 };
 
 static_assert(sizeof(Thread) == 0x30, "System::Thread is 0x30 bytes");
-static_assert(sizeof(Thread) == sizeof(RtSystem::Thread),
-              "the class and the POD stay interchangeable");
 static_assert(std::is_polymorphic<Thread>::value,
               "System::Thread MUST be polymorphic: +0x00 is the vptr the four "
               "constructing sites stamp");
@@ -330,12 +308,6 @@ static_assert(offsetof(Thread, _hStop)     == 0x20, "Thread::hStop @ +0x20");
 static_assert(offsetof(Thread, _hFinished) == 0x28, "Thread::hFinished @ +0x28");
 // The cross-asserts. `vtable` has none on purpose: the POD spells +0x00 as a
 // field, the class lets the compiler own it.
-static_assert(offsetof(Thread, _runFlags)  == offsetof(RtSystem::Thread, runFlags),  "alias runFlags");
-static_assert(offsetof(Thread, _pad0c)     == offsetof(RtSystem::Thread, _pad0c),    "alias pad0c");
-static_assert(offsetof(Thread, _hThread)   == offsetof(RtSystem::Thread, hThread),   "alias hThread");
-static_assert(offsetof(Thread, _hStart)    == offsetof(RtSystem::Thread, hStart),    "alias hStart");
-static_assert(offsetof(Thread, _hStop)     == offsetof(RtSystem::Thread, hStop),     "alias hStop");
-static_assert(offsetof(Thread, _hFinished) == offsetof(RtSystem::Thread, hFinished), "alias hFinished");
 
 }  // namespace System
 

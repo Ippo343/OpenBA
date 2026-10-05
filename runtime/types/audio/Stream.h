@@ -129,6 +129,5 @@ static_assert(sizeof(Stream) == 0x88, "Audio::Stream is 0x88 bytes");
 static_assert(alignof(Stream) == 8, "Audio::Stream aligns to 8 (the vptr)");
 static_assert(std::is_polymorphic<Stream>::value && !std::is_abstract<Stream>::value,
               "Stream overrides Thread's pure slot 0 (Run)");
-static_assert(offsetof(Stream, _runFlags)      == offsetof(RtSystem::Thread, runFlags), "alias runFlags");
 
 }  // namespace Audio

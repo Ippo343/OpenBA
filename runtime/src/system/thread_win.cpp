@@ -86,7 +86,6 @@
 // bodies that used to live in the doors; nothing was reordered.
 // ============================================================================
 
-using RtSystem::Thread;
 
 
 // ---- System::CriticalSection -----------------------------------------------
@@ -258,41 +257,28 @@ void Thread::OnCompleted() {
 
 // 0x1800ca440  ?ThreadFunc@Thread@System@@CAIPEAX@Z
 //
-// THE RAW SLOT CALLS STAY, DELIBERATELY (B34_RULES §3.1's rule, applied here).
-// `param` is a Thread-DERIVED object wearing a minted or a derived table —
-// `Engine::Loader` (0x180157a08), `IO::Persistence`'s worker (0x180155860),
-// `Audio::Stream`, the pathfinder (exe 0x14015ef18). Slot 0 is `Run`, which is
-// pure in this class, so there is nothing to virtual-call; slot 1 resolves back
-// to this file's own OnCompleted door, so a virtual call would be §A.1's
-// recursion. Both therefore keep reading the table by hand, exactly as retail's
-// 0x1800ca440 does.
-//
-// Retail RELOADS the vtable between slot 0 and slot 1 (0x1800ca48c); that
-// reload is reproduced faithfully, because a port that cached the vtable would
-// call the wrong OnCompleted if the work call re-stamped it.
+// `param` is the Thread-derived object `Start` handed to _beginthreadex — every
+// one in the tree is a real C++ subclass wearing its compiler table
+// (`Engine::Loader`, `IO::PersistenceWorker`, `Audio::Stream`, the exe's
+// PathfinderThread), so slot 0 is `Run` and slot 1 `OnCompleted`, called by
+// name. Retail's loop body is exactly two virtual calls: `MOV RAX,[RBX]; OR
+// [RBX+8],1; CALL [RAX]` then `MOV RAX,[RBX]; CALL [RAX+8]` — the vptr is
+// re-read for the second call, which a C++ virtual call after an opaque call
+// does as well.
 unsigned int __stdcall Thread::ThreadFunc(void* param) {
-    // Spelled as the POD: this body reads the vptr AS A FIELD, which is the one
-    // thing the class deliberately does not expose (+0x00 belongs to the
-    // compiler there). Same bytes either way -- the cross-asserts in Thread.h
-    // are what say so.
-    RtSystem::Thread* self = static_cast<RtSystem::Thread*>(param);  // CAST-OK: win32
+    Thread* self = static_cast<Thread*>(param);  // CAST-OK: win32
 
-    HANDLE handles[2] = { self->hStart,
-                          self->hStop };
+    HANDLE handles[2] = { self->_hStart,
+                          self->_hStop };
 
     unsigned int r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
     while (r == 0) {
-        using WorkFn = void (*)(RtSystem::Thread*);
+        self->_runFlags |= 1u;
+        self->Run();           // slot 0 — the work
+        self->OnCompleted();   // slot 1
 
-        void** vt = static_cast<void**>(self->vtable);  // LEFT: audit DEFERRED:System::Thread slots typed (FLOOR 5 / B34 3.1: slot 1 recursion settled first); the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
-        self->runFlags |= 1u;
-        reinterpret_cast<WorkFn>(vt[0])(self);        // slot 0 — the work  // LEFT: audit DEFERRED:System::Thread slots typed (FLOOR 5 / B34 3.1: slot 1 recursion settled first); the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
-
-        void** vtAfter = static_cast<void**>(self->vtable);   // reloaded, as retail does  // LEFT: audit DEFERRED:System::Thread slots typed (FLOOR 5 / B34 3.1: slot 1 recursion settled first); the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
-        reinterpret_cast<WorkFn>(vtAfter[1])(self);   // slot 1 — OnCompleted  // LEFT: audit DEFERRED:System::Thread slots typed (FLOOR 5 / B34 3.1: slot 1 recursion settled first); the Thread slot calls stay raw (B34_RULES §3.1; slot 1 would recurse)
-
-        HANDLE finished = self->hFinished;
-        self->runFlags &= ~1u;
+        HANDLE finished = self->_hFinished;
+        self->_runFlags &= ~1u;
         SetEvent(finished);
 
         r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);

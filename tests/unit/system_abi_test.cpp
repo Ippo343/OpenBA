@@ -86,20 +86,6 @@ struct ThreadProbe : System::Thread {
     void Run() override         { ++g_probeRunCalls; }
     void OnCompleted() override { ++g_probeOnCompletedCalls; }
 };
-
-// The hand-built table direction B drives — the exact shape
-// `standalone/rt_data_mint_tables.inc` publishes: an array of two `void*`,
-// slot 0 then slot 1, no offset-to-top and no RTTI pointer in play because
-// nothing reads them.
-int g_freeRunCalls = 0;
-int g_freeOnCompletedCalls = 0;
-
-void FreeRun(void* /*self*/)         { ++g_freeRunCalls; }
-void FreeOnCompleted(void* /*self*/) { ++g_freeOnCompletedCalls; }
-
-void* g_mintedThreadTable[2] = { reinterpret_cast<void*>(&FreeRun),
-                                 reinterpret_cast<void*>(&FreeOnCompleted) };
-
 using SlotFn = void (*)(void*);
 
 // Read slot `n` out of whatever `p`'s vptr points at, the way every
@@ -121,7 +107,6 @@ SlotFn RawSlot(void* p, int n) {
 
 UNIT_TEST(system_thread_is_0x30_bytes_and_aliases_the_pod_field_for_field) {
     CHECK_EQ(sizeof(System::Thread), static_cast<size_t>(0x30));
-    CHECK_EQ(sizeof(System::Thread), sizeof(RtSystem::Thread));
 
     CHECK_EQ(offsetof(System::Thread, _runFlags),  static_cast<size_t>(0x08));
     CHECK_EQ(offsetof(System::Thread, _pad0c),     static_cast<size_t>(0x0c));
@@ -130,16 +115,10 @@ UNIT_TEST(system_thread_is_0x30_bytes_and_aliases_the_pod_field_for_field) {
     CHECK_EQ(offsetof(System::Thread, _hStop),     static_cast<size_t>(0x20));
     CHECK_EQ(offsetof(System::Thread, _hFinished), static_cast<size_t>(0x28));
 
-    CHECK_EQ(offsetof(System::Thread, _runFlags),  offsetof(RtSystem::Thread, runFlags));
-    CHECK_EQ(offsetof(System::Thread, _hThread),   offsetof(RtSystem::Thread, hThread));
-    CHECK_EQ(offsetof(System::Thread, _hStart),    offsetof(RtSystem::Thread, hStart));
-    CHECK_EQ(offsetof(System::Thread, _hStop),     offsetof(RtSystem::Thread, hStop));
-    CHECK_EQ(offsetof(System::Thread, _hFinished), offsetof(RtSystem::Thread, hFinished));
 
     // `vtable` is the one member with no cross-assert: the POD spells +0x00 as
     // a field, the class lets the compiler own it. This is the assertion that
     // says the two nonetheless agree about WHERE it is.
-    CHECK_EQ(offsetof(RtSystem::Thread, vtable), static_cast<size_t>(0x00));
 }
 
 UNIT_TEST(system_thread_base_is_0x30_so_engine_loader_loop_stays_at_0x30) {
@@ -150,7 +129,6 @@ UNIT_TEST(system_thread_base_is_0x30_so_engine_loader_loop_stays_at_0x30) {
     // same pin `rt_data_mint.cpp:149` carries. Restated here so B.3.4b's
     // re-spelling of the member is covered by `make unit` as well as by the
     // standalone build.
-    CHECK_EQ(sizeof(RtSystem::Thread), static_cast<size_t>(0x30));
     CHECK_EQ(sizeof(System::Thread),   static_cast<size_t>(0x30));
 }
 
@@ -181,8 +159,6 @@ UNIT_TEST(system_thread_is_abstract_which_is_what_forbids_constructing_one) {
 
     // The POD is NOT abstract and NOT polymorphic — it is what the four
     // construction sites and `ThreadFunc` still write `self->vtable` through.
-    CHECK(!std::is_polymorphic<RtSystem::Thread>::value);
-    CHECK(std::is_trivially_destructible<RtSystem::Thread>::value);
 }
 
 UNIT_TEST(a_virtual_destructor_would_shift_oncompleted_off_slot_1) {
@@ -239,50 +215,6 @@ UNIT_TEST(a_real_thread_has_exactly_two_reachable_slots_in_declaration_order) {
     reinterpret_cast<SlotFn>(vt[1])(&probe);
     CHECK_EQ(g_probeRunCalls, 1);
     CHECK_EQ(g_probeOnCompletedCalls, 1);
-}
-
-// ===========================================================================
-// PART D — DIRECTION B: a real class's virtual call on a MINTED table.
-// ===========================================================================
-// This is the direction every live Thread in the build depends on, because not
-// one of them wears GCC's table.
-
-UNIT_TEST(a_minted_two_slot_table_drives_the_real_class_virtual_call) {
-    RtSystem::Thread pod{};
-    pod.vtable = static_cast<void*>(g_mintedThreadTable);
-
-    System::Thread* asClass = reinterpret_cast<System::Thread*>(&pod);
-
-    g_freeRunCalls = 0;
-    g_freeOnCompletedCalls = 0;
-
-    asClass->Run();                 // pure in the class -> slot 0 of the table
-    CHECK_EQ(g_freeRunCalls, 1);
-    CHECK_EQ(g_freeOnCompletedCalls, 0);
-
-    asClass->OnCompleted();         // slot 1 of the table, NOT the stub body
-    CHECK_EQ(g_freeRunCalls, 1);
-    CHECK_EQ(g_freeOnCompletedCalls, 1);
-}
-
-UNIT_TEST(the_qualified_call_suppresses_dispatch_and_reaches_the_class_body) {
-    // B34_BRIEFS §A.1, which is why `RtSystem_Thread_OnCompleted` writes
-    // `self->System::Thread::OnCompleted()`. On an object wearing the minted
-    // table, whose slot 1 resolves back to that very door, an UNqualified call
-    // would recurse forever. The qualification has to reach the class body
-    // instead — here, the stub standing in for it.
-    RtSystem::Thread pod{};
-    pod.vtable = static_cast<void*>(g_mintedThreadTable);
-
-    System::Thread* asClass = reinterpret_cast<System::Thread*>(&pod);
-
-    g_freeOnCompletedCalls = 0;
-    const int before = g_systemStub_OnCompletedCalls;
-
-    asClass->System::Thread::OnCompleted();
-
-    CHECK_EQ(g_freeOnCompletedCalls, 0);                    // did NOT dispatch
-    CHECK_EQ(g_systemStub_OnCompletedCalls, before + 1);    // reached the body
 }
 
 // ===========================================================================
@@ -452,31 +384,6 @@ UNIT_TEST(system_crc_compute_matches_the_standard_crc32_check_vector) {
     // of an empty chunk on the persistence path.
     CHECK_EQ(System::CRC::Compute(kCheck, 0, 0xFFFFFFFFu), 0x00000000u);
     CHECK_EQ(System::CRC::Compute(kCheck, -1, 0x12345678u), ~0x12345678u);
-}
-
-UNIT_TEST(the_pod_and_the_class_agree_about_which_bytes_the_fields_are) {
-    // The live mixed state in one test: a POD written through the POD spelling
-    // (what `RtSystem_Thread_Ctor` and `ThreadFunc` do) and read back through
-    // the CLASS spelling (what `Start`/`WaitForFinish` do), and the reverse.
-    RtSystem::Thread pod{};
-    pod.vtable    = static_cast<void*>(g_mintedThreadTable);
-    pod.runFlags  = 0x5a5a5a5au;
-    pod.hThread   = reinterpret_cast<void*>(static_cast<uintptr_t>(0x1111));
-    pod.hStart    = reinterpret_cast<void*>(static_cast<uintptr_t>(0x2222));
-    pod.hStop     = reinterpret_cast<void*>(static_cast<uintptr_t>(0x3333));
-    pod.hFinished = reinterpret_cast<void*>(static_cast<uintptr_t>(0x4444));
-
-    System::Thread* asClass = reinterpret_cast<System::Thread*>(&pod);
-    CHECK_EQ(asClass->_runFlags, 0x5a5a5a5au);
-    CHECK_EQ(asClass->_hThread,   pod.hThread);
-    CHECK_EQ(asClass->_hStart,    pod.hStart);
-    CHECK_EQ(asClass->_hStop,     pod.hStop);
-    CHECK_EQ(asClass->_hFinished, pod.hFinished);
-
-    asClass->_runFlags |= 1u;               // what `ThreadFunc` sets
-    CHECK_EQ(pod.runFlags, 0x5a5a5a5bu);
-    asClass->_runFlags &= ~1u;
-    CHECK_EQ(pod.runFlags, 0x5a5a5a5au);
 }
 
 // ===========================================================================
