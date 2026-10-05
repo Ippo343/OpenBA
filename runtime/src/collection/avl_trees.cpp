@@ -265,7 +265,7 @@ static_assert(sizeof(PtrArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 // drives BOTH.
 // ---------------------------------------------------------------------------
 void* PtrArrayDtor(void* self) {
-    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);  // LEFT: audit WORK, left: the callers (factory_dtors.cpp) hand &TypeRecord::children, the _data word of a raw {children, childCount, childCapacity} triple read by name in object/; a typed header needs that triple retyped first
+    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);  // LEFT: measured S4: the callers (factory_dtors.cpp:165 / :209) hand &TypeRecord::children, the _data word of TypeInfo.h's raw {children, childCount, childCapacity} triple (retail: Collection::Array<TypeRecord*>, this is its ~Array); typing it an Array is H5: Startup builds the record in a stack `entry` copied into the node (type_reflection.cpp:338), so an Array member adds a ~Array call on that local, and the growth at type_reflection.cpp:396-423 is hand-inlined on the three fields
     MemFree(a->_data);        // retail's `if (p)` lives inside 0x1800c7ad0
     a->_data     = nullptr;
     a->_size     = 0;
