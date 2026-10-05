@@ -360,7 +360,7 @@ template <class T>
 class InternalPtr : public InternalBasePtr {
 public:
     InternalPtr() : InternalBasePtr() {}
-    InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<Internal*>(p)) {}   // LEFT: ERASED InternalPtr<T> is instantiated over T that are not Object::Internal subclasses (RtObject::Internal in the tests, Work records), so the upcast cannot be a static_cast for every T
+    InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<Internal*>(p)) {}   // LEFT: audit DEFERRED:every InternalPtr<T> instantiation over an Object::Internal subclass (RtObject::I; ERASED InternalPtr<T> is instantiated over T that are not Object::Internal subclasses (RtObject::Internal in the tests, Work records), so the upcast cannot be a static_cast for every T
 
     InternalPtr(const InternalPtr&) = default;
     InternalPtr& operator=(const InternalPtr&) = default;
@@ -369,7 +369,7 @@ public:
     // TRANSITIONAL CAST, same reason as ExternalPtr<T>::Serialize: `T` is not a
     // class deriving from `Object::Internal` in this tree yet, so the downcast
     // cannot be spelled `static_cast` here. It becomes one in B.3 step 3.
-    T* Get() const        { return reinterpret_cast<T*>(InternalBasePtr::Get()); }   // LEFT: ERASED the downcast from Object::Internal* to a T that is not a subclass for every instantiation (the ctor's reason)
+    T* Get() const        { return reinterpret_cast<T*>(InternalBasePtr::Get()); }   // LEFT: audit DEFERRED:every InternalPtr<T> instantiation over an Object::Internal subclass (RtObject::I; ERASED the downcast from Object::Internal* to a T that is not a subclass for every instantiation (the ctor's reason)
     T* operator->() const { return Get(); }
     T& operator*()  const { return *Get(); }
 

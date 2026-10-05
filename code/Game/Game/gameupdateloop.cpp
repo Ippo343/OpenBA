@@ -915,7 +915,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 }
                 if (s_ignoreMods == 1) {
                     if (::IO::FileSystem::_singleton) {
-                        modGate = &::IO::FileSystem::_singleton->_userPackFilenameCount;   // +0x38
+                        modGate = &::IO::FileSystem::_singleton->_userPackFilenames.size;   // +0x38
                         savedGate = *modGate;
                         if (savedGate > 0) {
                             *modGate = 0;

@@ -333,7 +333,7 @@ bool Factory::Startup() {
         entry._pad04               = 0;
         entry.record.typeId        = info->typeId;
         entry.record._pad04        = 0;
-        entry.record.info          = reinterpret_cast<RtObject::BaseTypeInfo*>(info);   // LEFT: H10 POD mirror; TypeRecord::info is RtObject::BaseTypeInfo* and five files of other blocks read it as the POD
+        entry.record.info          = info;
         entry.record.parent        = nullptr;
         entry.record.children      = nullptr;
         entry.record.childCount    = 0;
@@ -348,7 +348,7 @@ bool Factory::Startup() {
     // ---- Pass 2: link parents, fill children -------------------------------
     for (TypeSet::Iterator it = _types.Begin(); it != _types.End(); ++it) {
         TypeSet::Node* const node = it.GetNode();
-        RtObject::BaseTypeInfo* const info = node->element.record.info;
+        BaseTypeInfo* const info = node->element.record.info;
         const char* const parentName = info->parentName;
         if (!parentName) continue;                    // 0x1800c076b
 
@@ -519,7 +519,7 @@ uint32_t Factory::GetChildType(uint32_t typeId, int32_t index) const {
 uint32_t Factory::GetTypeIdForFileExtension(const char* extension) const {
     if (!extension) return 0u;
     for (TypeSet::Iterator it = _types.Begin(); it != _types.End(); ++it) {
-        const RtObject::BaseTypeInfo* info = it.GetNode()->element.record.info;
+        const BaseTypeInfo* info = it.GetNode()->element.record.info;
         const char* ext = info ? info->fileExtension : nullptr;
         if (!ext) continue;
         // _stricmp, spelled out rather than pulled from <cstring>'s

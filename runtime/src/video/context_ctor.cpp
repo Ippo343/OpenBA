@@ -467,10 +467,6 @@ void Engine::MainLoop::CreateVideoContext() {
 // ctor may have allocated (+0x2138) without freeing it — retail leaks it
 // deliberately, because the caller owns the buffer it hands in. Faithfully
 // reproduced; do not add a delete here.
-void Video::Context::SetDefaultRenderBuffer(void* rb) {
-
-    // LEFT (B.4 R-VIDEO): code/Game/Game/minimap_paint.cpp hands this `void*`;
-    // the field is typed.
-    _defaultRenderBuffer = static_cast<Video::RenderBuffer*>(rb);   // LEFT: SIG minimap_paint.cpp (another agent's) hands the render buffer as void*
-
+void Video::Context::SetDefaultRenderBuffer(Video::RenderBuffer* rb) {
+    _defaultRenderBuffer = rb;
 }

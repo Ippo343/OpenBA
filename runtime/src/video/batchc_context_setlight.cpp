@@ -141,10 +141,10 @@ void Video::Context::SetLight(const void* directionRaw, const void* attenuationR
                               float nearPlane, float farPlane,
                               int32_t shadowResolution) {
     Context* const self = this;
-    const float*    direction   = static_cast<const float*>(directionRaw);  // LEFT: SIG SetLight raw pointers (callers pass float arrays and fields; see banner)
-    const float*    attenuation = static_cast<const float*>(attenuationRaw);  // LEFT: SIG SetLight raw pointers (callers pass float arrays and fields; see banner)
-    const uint32_t* colour      = static_cast<const uint32_t*>(colourRaw);  // LEFT: SIG SetLight raw pointers (callers pass float arrays and fields; see banner)
-    const uint32_t* position    = static_cast<const uint32_t*>(positionRaw);  // LEFT: SIG SetLight raw pointers (callers pass float arrays and fields; see banner)
+    const float*    direction   = static_cast<const float*>(directionRaw);  // LEFT: audit WORK, left: SunLight's direction / sun / ambient are separate float fields and the Ambient / Spot callers pass float[4] locals; typed Vector3 / Vector4 members would run the vectors' zeroing ctors in SunLight's ctor (B11 not identical)
+    const float*    attenuation = static_cast<const float*>(attenuationRaw);  // LEFT: audit WORK, left: SunLight's direction / sun / ambient are separate float fields and the Ambient / Spot callers pass float[4] locals; typed Vector3 / Vector4 members would run the vectors' zeroing ctors in SunLight's ctor (B11 not identical)
+    const uint32_t* colour      = static_cast<const uint32_t*>(colourRaw);  // LEFT: audit WORK, left: SunLight's direction / sun / ambient are separate float fields and the Ambient / Spot callers pass float[4] locals; typed Vector3 / Vector4 members would run the vectors' zeroing ctors in SunLight's ctor (B11 not identical)
+    const uint32_t* position    = static_cast<const uint32_t*>(positionRaw);  // LEFT: audit WORK, left: SunLight's direction / sun / ambient are separate float fields and the Ambient / Spot callers pass float[4] locals; typed Vector3 / Vector4 members would run the vectors' zeroing ctors in SunLight's ctor (B11 not identical)
     LightStaging& L = _lightStaging;
 
     // +0x1dd8 .. +0x1de4 — the colour, four dwords copied as dwords.

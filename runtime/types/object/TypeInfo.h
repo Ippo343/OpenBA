@@ -42,6 +42,7 @@
 #include <cstddef>
 
 namespace Object { class Base; }   // the factory pair's return type (below)
+namespace Object { class BaseTypeInfo; }   // B.4 Z RT2: TypeRecord::info, the real class
 
 namespace RtObject {
 
@@ -153,7 +154,7 @@ static_assert(sizeof(BaseTypeInfo)                     == 0x38, "sizeof(BaseType
 struct TypeRecord {
     uint32_t    typeId;        // +0x00  profile: `_type`
     uint32_t    _pad04;
-    BaseTypeInfo* info;        // +0x08  the static this record was built from
+    ::Object::BaseTypeInfo* info;  // +0x08  the static this record was built from
     TypeRecord* parent;        // +0x10  base class's record, or nullptr at a root
     TypeRecord** children;     // +0x18  Array<TypeRecord*>::_data
     int32_t     childCount;    // +0x20  Array<TypeRecord*>::_size
@@ -402,7 +403,7 @@ inline void Destroy(Base* p) { delete p; }
 // behaviour; removing the deviation is not this step. ENDGAME B.3R, W0-P0c.
 inline bool IsDerivedFromNullSafe(const void* p, uint32_t typeId) {
     if (!p) return false;
-    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);  // LEFT: SIG `const void* p` (callers tree-wide hand in untyped refs)
+    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);  // LEFT: audit WORK, left: IsDerivedFromNullSafe has 586 call sites (mostly code/, other partitions), many holding void*; typing p needs every caller's argument Base-derived
 }
 
 using TypeRecord = RtObject::TypeRecord;

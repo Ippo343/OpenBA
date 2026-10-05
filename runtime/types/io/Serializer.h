@@ -1022,5 +1022,6 @@ inline Visitor::Visitor(Serializer& ser, int ver) : ReaderWriter(ser), version(v
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- io/text_codec.cpp
-extern "C" void RtIo_SerializeStringArray(IO::Serializer* ser, int32_t count, void* datav, void*);  // 0x180029bb0
+namespace System { class String; }
+extern "C" void RtIo_SerializeStringArray(IO::Serializer* ser, int32_t count, System::String* data, void*);  // 0x180029bb0
 // ==== end B3R W0-P0c ====

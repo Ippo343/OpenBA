@@ -580,20 +580,36 @@ void RtGraphics_SerializeTransformArray(Collection::Array<Math::Transform>* a,
 // ==== B3R RT-VG: the graphics-anim Collection::Array instantiations ====
 // Defined in runtime/src/collection/array_graphics_anim.cpp (given external
 // linkage for their direct readers in runtime/src/graphics/).
+// B.4 Y RT: the hand-derived row of `Array<Graphics::AnimationState>`
+// (runtime/src/collection/array_graphics_anim.cpp): SetSize 0x18005b1e0's
+// zeroing init, the copy ctor 0x18005b660, the element destroy 0x18005bce0 that
+// ~Array 0x18005bbb0 runs. The tree's AnimationState ctor / dtor are declared
+// and undefined (retail's are these rows), so `AnimationStateArray` names it.
+namespace rtcoll { namespace gfxanim {
+extern const ArraySpec kSpec_AnimState;
+} }
+namespace Graphics {
+// `Collection::Array<AnimationState>` with retail's element lifecycle: SetSize
+// 0x18005b1e0, operator= 0x18005b130, ~Array 0x18005bbb0 are the
+// `kSpec_AnimState` row (AnimationManager::Instance::_states).
+using AnimationStateArray = Collection::Array<AnimationState, Collection::DefaultAllocator,
+                                              Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimState>>;
+}  // namespace Graphics
 namespace rtcoll {
 void* Rt_ArrayDtor_18001c480(void* a);  // 0x18001c480 ~Array<AnimationState::Layer>
 void* Rt_ArrayDtor_18001c550(void* a);  // 0x18001c550 ~Array<InterpolatedState<Transform>>
 void* Rt_ArrayDtor_180014090(Graphics::GraphicsMesh::NodeArray* a);  // 0x180014090 ~Array<GraphicsMesh::Node>
-void* Rt_ArrayDtor_18005bbb0(void* a);  // 0x18005bbb0 ~Array<AnimationState>
+void* Rt_ArrayDtor_18005bbb0(Graphics::AnimationStateArray* a);  // 0x18005bbb0 ~Array<AnimationState>
 void Rt_SetSize_18005aa30(Graphics::GraphicsMesh::NodeArray* a, int n);  // 0x18005aa30 Array<GraphicsMesh::Node>
-void Rt_SetSize_18005b1e0(void* a, int n);  // 0x18005b1e0 Array<AnimationState>
+void Rt_SetSize_18005b1e0(Graphics::AnimationStateArray* a, int n);  // 0x18005b1e0 Array<AnimationState>
 void Rt_SetSize_18005c8a0(void* a, int n);  // 0x18005c8a0 Array<AnimationState::Layer>
 void Rt_SetSize_18005ac50(void* a, int n);  // 0x18005ac50 Array<InterpolatedState<Transform>>
 void Rt_SetSize_18005c3d0(void* a, int n);  // 0x18005c3d0 Array<Instance>
 void Rt_SetSize_18005be30(void* a, int n, const void* fill);  // 0x18005be30 Array<Instance>, fill
 Graphics::GraphicsMesh::NodeArray* Rt_ArrayAssign_180013960(Graphics::GraphicsMesh::NodeArray* d,
                                                             const Graphics::GraphicsMesh::NodeArray* s);  // 0x180013960 Array<GraphicsMesh::Node>
-void* Rt_ArrayAssign_18005b130(void* d, const void* s);  // 0x18005b130 Array<AnimationState>
+Graphics::AnimationStateArray* Rt_ArrayAssign_18005b130(Graphics::AnimationStateArray* d,
+                                                        const Graphics::AnimationStateArray* s);  // 0x18005b130 Array<AnimationState>
 void* Rt_ArrayAssign_18001b700(void* d, const void* s);  // 0x18001b700 Array<AnimationState::Layer>
 void* Rt_ArrayAssign_18001b810(void* d, const void* s);  // 0x18001b810 Array<InterpolatedState<Transform>>
 }  // namespace rtcoll

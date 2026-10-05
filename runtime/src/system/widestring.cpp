@@ -194,7 +194,7 @@ int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
 // whole file is built on, and `RtString_ReleaseInline` is String's own
 // primitive.
 inline void WideReleaseInline(System::WideString* self) {
-    RtString_ReleaseInline(reinterpret_cast<String*>(self));  // LEFT: POD String / Filename bridge (H10)
+    RtString_ReleaseInline(reinterpret_cast<String*>(self));  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
 }
 
 inline int WideLength(const wchar_t* d) {

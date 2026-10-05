@@ -328,7 +328,7 @@ public:
     void SetRenderBuffer(const void* rb) {
         SetRenderBuffer(static_cast<const RenderBuffer*>(rb));    // CAST-OK: dx11_seam
     }
-    void SetDefaultRenderBuffer(void* rb);                         // 0x1800ef3c0 (RenderBuffer*)
+    void SetDefaultRenderBuffer(RenderBuffer* rb);                 // 0x1800ef3c0
     void SetTransform(int32_t slot, const Math::Matrix& m);        // 0x18001a6b0
     void SetTransformScale(int32_t slot, const Math::Matrix& m,
                            const Math::Vector4& scale);            // 0x18001a400

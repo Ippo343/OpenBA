@@ -101,7 +101,7 @@ SortCounters g_sc = {};
 // SIGNED dword the PackageFile constructor seeds with 0x2710 and only
 // ReadPackfile changes (filesystem_packages.cpp §"the comparator").
 static inline int32_t Key(void* elem) {
-    return *reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(elem) + 0x70);  // LEFT: SortByKey70 sorts R-IO's void** packfile list; the element is PackageFile (FileSystem.h PackageFileView::priority)
+    return *reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(elem) + 0x70);  // LEFT: audit WORK, not executed this pass (SortByKey70(IO::PackageFile**, int); the element's _priority by name (one P); blocker; SortByKey70 sorts R-IO's void** packfile list; the element is PackageFile (FileSystem.h PackageFileView::priority)
 }
 
 // ---------------------------------------------------------------------------
@@ -350,8 +350,8 @@ using EmitterArray = Collection::Array<Audio::Scene::EmitterInstance>;
 // other two (the destructor has already zeroed `_size`), and is kept.
 // ---------------------------------------------------------------------------
 void* Array16Assign(void* dstRaw, const void* srcRaw) {
-    EmitterArray*       dst = static_cast<EmitterArray*>(dstRaw);  // LEFT: void* door (audio.cpp / audio_scene_update.cpp hold void*)
-    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: void* door (audio.cpp / audio_scene_update.cpp hold void*)
+    EmitterArray*       dst = static_cast<EmitterArray*>(dstRaw);  // LEFT: audit WORK, left: the 0x1800dfd10 caller (audio_scene_update.cpp) hands a bare zeroed int64[2] stack header retail never destroys; a typed EmitterArray local would add a ~Array call, and moving the cast there raises that file's column
+    const EmitterArray* src = static_cast<const EmitterArray*>(srcRaw);  // LEFT: audit WORK, left: as line 353's src: the 0x1800dfd10 caller's empty source is a bare zeroed stack header, not an EmitterArray
     if (dst == src) return dst;
 
     rtcoll::RtColl_ArrayDtor_180051d80(dst);

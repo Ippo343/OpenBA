@@ -42,10 +42,10 @@ namespace RtSystem {
 // The transitional bridge from the POD the tree still uses to the class; one
 // cast, over two types that ARE the same bytes. It goes with the POD.
 static inline System::Filename*       AsSys(Filename* f) {
-    return reinterpret_cast<System::Filename*>(f);  // LEFT: POD String / Filename bridge (H10)
+    return reinterpret_cast<System::Filename*>(f);  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
 }
 static inline const System::Filename* AsSys(const Filename* f) {
-    return reinterpret_cast<const System::Filename*>(f);  // LEFT: POD String / Filename bridge (H10)
+    return reinterpret_cast<const System::Filename*>(f);  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
 }
 
 }  // namespace RtSystem
@@ -481,7 +481,7 @@ Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other) {
 // The package reader (0x1800b5f42 / 0x1800b5f95 / 0x1800b5f9e) runs Filename's private
 // AdjustDelimiters on a String slot: retail's Filename IS a String (Filename.h's pins).
 void RtSystem_Filename_AdjustDelimiters(String* self) {
-    System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(reinterpret_cast<Filename*>(self)));   // LEFT: retail calls Filename's private member on a String slot (Filename IS a String, one field)
+    System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(reinterpret_cast<Filename*>(self)));   // LEFT: audit DEFERRED:a base-class relation would run String ctor/dtor (H5, behaviour); retail Filename; retail calls Filename's private member on a String slot (Filename IS a String, one field)
 }
 
 }  // namespace RtSystem

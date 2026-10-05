@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace UI { class SpriteSheet; }
+namespace UI { class SpriteSheet; class Sprite; }
 namespace System { class String; }
 
 // Wraps UI::Sprite(sheet, name) — logs sheet, name, resolved index. `retval` is the
@@ -15,4 +15,4 @@ void* Debug_Sprite_Ctor(void* retval, UI::SpriteSheet* sheet, const System::Stri
 void* Debug_Sprite_DefaultCtor(void* retval);
 
 // Wraps UI::Sprite::IsValid — logs validity check result
-bool Debug_Sprite_IsValid(void* sprite);
+bool Debug_Sprite_IsValid(const UI::Sprite* sprite);

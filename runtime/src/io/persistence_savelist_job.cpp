@@ -188,7 +188,7 @@ void IO::PersistenceWorker::GetSaveListJob() {
         System::String dir(saveDir.AsString() + kSaveSubDir);       // [RBP+0x50]
 
         fs->FindFiles(dir, pattern,                                 // 0x1800b6315
-            false, reinterpret_cast<RtIO::FilenameArray*>(&found));  // LEFT: this job reads the elements as System::Filename, RtIO::FilenameArray holds the RtSystem::Filename POD (system/Filename, R-SYS)
+            false, reinterpret_cast<RtIO::FilenameArray*>(&found));  // LEFT: audit WORK, not executed this pass (POD unit RtIO::FilenameArray (doable-with:RtSystem::Filename elements -> Sy); blocker; this job reads the elements as System::Filename, RtIO::FilenameArray holds the RtSystem::Filename POD (system/Filename, R-SYS)
 
         // ~dir, ~saveDir, ~pattern are retail's release sequence at
         // 0x1800b631b/0x1800b6343/0x1800b636c, now the three destructors

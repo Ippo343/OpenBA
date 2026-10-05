@@ -348,19 +348,19 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(
             // `_data` is re-read at each of the three uses, as retail and the
             // tree before B.4 did (the destructors in between are calls).
             RtObject::PathStackElement* e =
-                reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
+                reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
             e->filename.~Filename();
             e->directory.~Filename();
 
             const int32_t next = i + 1;
             if (next < a->_size) {
                 RtObject::PathStackElement* dst =
-                    reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
+                    reinterpret_cast<RtObject::PathStackElement*>(a->_data) + i;   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
                 // Retail tests the COMPUTED address, which can only be null
                 // when _data is null and i == 0.
                 if (dst != nullptr) {
                     const RtObject::PathStackElement* src =
-                        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;   // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
+                        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + next;   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
                     ++RtObject::g_psc.elemsShifted;
                     new (&dst->directory) System::Filename(src->directory);
                     new (&dst->filename)  System::Filename(src->filename);
@@ -387,9 +387,9 @@ extern "C" RtObject::PathStackEntry* RtObject_PathStackRemoveLast_18002ccb0(
 
     const int32_t idx = a->_size - 1;
     const RtObject::PathStackElement* e =
-        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;  // LEFT: H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
+        reinterpret_cast<const RtObject::PathStackElement*>(a->_data) + idx;  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 PathStackEntry's halves are the RtSystem::Filename POD (External.h; the array is a member of both ExternalFactory declarations)
     RtObject::PathStackElement* o =
-        reinterpret_cast<RtObject::PathStackElement*>(out);  // LEFT: H10 the out slot is a PathStackEntry whose halves are the RtSystem::Filename POD (External.h)
+        reinterpret_cast<RtObject::PathStackElement*>(out);  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (PathStackEntry: element of an erased container with; H10 the out slot is a PathStackEntry whose halves are the RtSystem::Filename POD (External.h)
     new (&o->directory) System::Filename(e->directory);
     new (&o->filename)  System::Filename(e->filename);
     RtObject_PathStackRemoveAt_18002de30(a, idx);

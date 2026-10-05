@@ -739,8 +739,8 @@ int Save::SaveLoad::CheckMod(int saveIndex, int modIndex) const {
     // (0x18000c780), so this one line spends both.
     System::Filename work(joined);
 
-    count = mods->_count;
-    base  = mods->_mods;
+    count = mods->_mods.size;
+    base  = mods->_mods.data;
     for (int i = 0; i < count; ++i) {
         const char* entry = base[i].file.data;
         const int lenEntry = entry ? RtSystem::StringLength(entry) : 0;

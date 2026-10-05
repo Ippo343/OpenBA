@@ -94,7 +94,7 @@ inline uint32_t TypeNameCRC(const char* name) { return ::Object::TypeNameCRC(nam
 // lands correctly in a hand-built table at retail slot indices. It is what
 // makes the class usable before any of its subclasses convert.
 inline const ::Object::Base* AsBase(const void* self) {
-    return reinterpret_cast<const ::Object::Base*>(self);  // LEFT: SIG RtObject_Base_IsDerivedFrom takes const void* self (its callers hand in untyped refs)
+    return reinterpret_cast<const ::Object::Base*>(self);  // LEFT: audit WORK, left: RtObject_Base_IsDerivedFrom's caller InternalPtrIsDerivedFrom serves InternalPtr<T> over non-Internal T (Internal.h, DEFERRED), so `self` stays const void*
 }
 
 
@@ -203,7 +203,7 @@ bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId) {
 // the 4-byte type id and `self` was already the field pointer. The old third
 // argument `0` was the ignored `const char* name`.
 void RtObject_Type_Serialize(void* self, void* serializer) {
-    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(self), nullptr);   // B.3.4 bridge  (0x98 = uint door)  // LEFT: SIG Type.h `(void*, void*)`: caller code/Game/Action/sendcomponentmessage.cpp:61 passes uint32_t* / IO::Serializer* (wave X)
+    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(self), nullptr);   // B.3.4 bridge  (0x98 = uint door)  // LEFT: audit WORK, left: the callers' fields are uint32_t (SendComponentMessage, ConsumeProduceDescription, ControlUIConfig), int32_t (ConsumeProduce::field_50) and Object::Type (UIDescription) in code/ headers; one typed signature needs them declared Object::Type
 }
 
 // ============================================================================

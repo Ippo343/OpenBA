@@ -152,11 +152,11 @@ void AssignString(char** slot, char* value) {
 
 // ---- the Runtime helpers these bodies call ---------------------------------
 // A System::String / Filename held in a raw slot.
-System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge  // LEFT: H5 the raw char* String locals of DocumentText::GetNextItem / its SubString helper (released by hand between other stores; not converted this pass) are viewed here
+System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // B.3.x bridge  // LEFT: audit WORK, not executed this pass (LOCAL unit raw String locals (documenttext.cpp) (doable)); blocker; H5 the raw char* String locals of DocumentText::GetNextItem / its SubString helper (released by hand between other stores; not converted this pass) are viewed here
 const System::String& Str(char* const* slot) {
-    return *reinterpret_cast<const System::String*>(slot);                            // B.3.x bridge  // LEFT: H5 the raw char* String locals of DocumentText::GetNextItem / its SubString helper (released by hand between other stores; not converted this pass) are viewed here
+    return *reinterpret_cast<const System::String*>(slot);                            // B.3.x bridge  // LEFT: audit WORK, not executed this pass (LOCAL unit raw String locals (documenttext.cpp) (doable)); blocker; H5 the raw char* String locals of DocumentText::GetNextItem / its SubString helper (released by hand between other stores; not converted this pass) are viewed here
 }
-System::Filename& Path(char** slot) { return *reinterpret_cast<System::Filename*>(slot); }   // B.3.x bridge  // LEFT: H5 the raw char* Filename locals of DocumentText::GetNextItem (released by hand between other stores; not converted this pass) are viewed here
+System::Filename& Path(char** slot) { return *reinterpret_cast<System::Filename*>(slot); }   // B.3.x bridge  // LEFT: audit WORK, not executed this pass (LOCAL unit raw String locals (documenttext.cpp) (doable)); blocker; H5 the raw char* Filename locals of DocumentText::GetNextItem (released by hand between other stores; not converted this pass) are viewed here
 
 // ?SubString@String@System@@QEBA?AV12@HH@Z — 0x1800c9230. The last argument is
 // the INCLUSIVE end index, not a length: its body computes `end - start + 1`

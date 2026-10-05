@@ -253,9 +253,9 @@ void DestroyFilenameArray(void* ignoredThis, uint8_t* base, int count);
 
 // 0x1800098d0 — Collection::Array<Filename>::~Array. Releases every element
 // through 0x180009af0 first, then frees the buffer.
-void* RtColl_ArrayFilenameDtor_1800098d0(void* av) {
-    ModArray* a = static_cast<ModArray*>(av);   // LEFT: SIG RtColl_ArrayFilenameDtor_1800098d0 (void* core entry: callers hand Collection::Array<Filename>)
-    DestroyFilenameArray(a, static_cast<uint8_t*>(a->data), a->size);   // CAST-OK: elem_stride
+void* RtColl_ArrayFilenameDtor_1800098d0(ModArrayOf<System::Filename>* a) {
+    void* const elems = a->data;
+    DestroyFilenameArray(a, static_cast<uint8_t*>(elems), a->size);   // CAST-OK: elem_stride
     return ArrayFreeBuffer(a);
 }
 
@@ -296,8 +296,8 @@ static void ArrayAssignGrow(ModArrayOf<T>* dst, const ModArrayOf<T>* src,
 
 // 0x180011110 — Collection::Array<int32>::operator=
 void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
-    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
-    const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: SIG RtColl_ArrayI32Assign_180011110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: audit WORK, left: two header types by caller: RtIO::ModArrayOf<uint32_t> (Mod::ints, DEFERRED with Mod; GetIconData's ret) and Collection::Array<uint32_t> (PackageFile::_iconData)
+    const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: audit WORK, left: as line 299 (the source is PackageFile::_iconData, a Collection::Array<uint32_t>, at GetIconData)
     ArrayFreeBuffer(dst);                       // CALL 0x1800111a0
     ArrayAssignGrow(dst, src, 4, 4);
     for (int32_t i = 0; i < dst->size; ++i) {
@@ -310,8 +310,8 @@ void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
 
 // 0x180011220 — Collection::Array<uint8>::operator=
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
-    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (the erased core entry takes void*; one body serves every Array<T> of that element width)
-    const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: SIG RtColl_ArrayU8Assign_180011220 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: audit WORK, left: two header types by caller: RtIO::ModArrayOf<uint8_t> (Mod::bytes, DEFERRED with Mod; GetPreviewData's ret) and Collection::Array<uint8_t> (PackageFile::_previewData, array.cpp's shader byte-code inner arrays)
+    const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: audit WORK, left: as line 313 (sources: PackageFile::_previewData and the inner Array<uint8> element op)
     ArrayFreeBuffer(dst);                       // CALL 0x1800112a0
     ArrayAssignGrow(dst, src, 1, 1);
     for (int32_t i = 0; i < dst->size; ++i) {
@@ -329,7 +329,7 @@ void* RtColl_ArrayFilenameAssign_1800091f0(ModArrayOf<Filename>* dst, const ModA
     if (dst == src) return dst;
     // ENDGAME B.3.2 step 2 — retail 0x1800098d0; see the identical conversion's
     // rationale on Mod::~Mod's +0x70 site below (trait-derived, no explicit spec).
-    reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
+    reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
     ArrayAssignGrow(dst, src, 8, 8);
     for (int32_t i = 0; i < dst->size; ++i) {
         Filename* d = dst->data + i;
@@ -411,7 +411,7 @@ ModSetNode* RtColl_SetCloneSubtree_1800104f0(void* set, const ModSetNode* src) {
 // signature because retail's 0x180010470 takes it and ignores it.
 void RtColl_SetDestroySubtree_180010470(void* set, void* nodev) {
     (void)set;
-    ModSetT::DestroySubtree(static_cast<ModSetT::Node*>(nodev));   // LEFT: H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
+    ModSetT::DestroySubtree(static_cast<ModSetT::Node*>(nodev));   // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
 }
 
 // ============================================================================
@@ -529,7 +529,7 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
     // trait-derived `Collection::Array<System::Filename>` needs no explicit
     // spec. `files` stays the `ModArray` POD (Mod is not yet a class), so this
     // is the transitional bridge, not a field re-type.
-    reinterpret_cast<Collection::Array<System::Filename>&>(self->files).~Array();  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
+    reinterpret_cast<Collection::Array<System::Filename>&>(self->files).~Array();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
 
     RtColl_SetDestroySubtree_180010470(&self->set, self->set.root);   // +0x60
     self->set.root = nullptr;
@@ -545,8 +545,8 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
     // `destroy = nullptr` and the class's dtor is exactly `ArrayFreeBuffer`
     // (`MemFree(_data)` then zero the three fields) through the same
     // `rtcoll::MemFree` door (0x1800c7ad0) — no explicit spec needed.
-    reinterpret_cast<Collection::Array<uint8_t>&>(self->bytes).~Array();   // +0x40  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
-    reinterpret_cast<Collection::Array<int32_t>&>(self->ints).~Array();   // +0x30  // LEFT: H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
+    reinterpret_cast<Collection::Array<uint8_t>&>(self->bytes).~Array();   // +0x40  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
+    reinterpret_cast<Collection::Array<int32_t>&>(self->ints).~Array();   // +0x30  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
 
     char** shared[3] = { &self->description, &self->author, &self->name };
     for (int i = 0; i < 3; ++i) {
@@ -562,8 +562,7 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
 }
 
 // 0x180010b80 — Collection::Array<Mod>::~Array
-void* RtColl_ArrayModDtor_180010b80(void* av) {
-    ModArrayOf<Mod>* a = static_cast<ModArrayOf<Mod>*>(av);   // LEFT: SIG RtColl_ArrayModDtor_180010b80 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+void* RtColl_ArrayModDtor_180010b80(ModArrayOf<Mod>* a) {
     Mod* p = a->data;
     for (int32_t i = a->size; i > 0; --i, ++p)
         RtIo_Mod_Dtor_180011460(p);
@@ -573,9 +572,7 @@ void* RtColl_ArrayModDtor_180010b80(void* av) {
 // 0x180010110 — Collection::Array<Mod>::operator=, resolved in our tree as
 // fn_ModArrayCopy (engine_funcs.cpp:1747) and again as ModArrayCopy()
 // (runtime/src/engine/loops.cpp:230). Both doors now land here.
-void* RtColl_ArrayModAssign_180010110(void* dstv, const void* srcv) {
-    ModArrayOf<Mod>* dst = static_cast<ModArrayOf<Mod>*>(dstv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
-    const ModArrayOf<Mod>* src = static_cast<const ModArrayOf<Mod>*>(srcv);   // LEFT: SIG RtColl_ArrayModAssign_180010110 (the erased core entry takes void*; one body serves every Array<T> of that element width)
+ModArrayOf<Mod>* RtColl_ArrayModAssign_180010110(ModArrayOf<Mod>* dst, const ModArrayOf<Mod>* src) {
     if (dst == src) return dst;
     RtColl_ArrayModDtor_180010b80(dst);          // CALL 0x180010b80
     ArrayAssignGrow(dst, src, 0x80, 8);
@@ -661,7 +658,7 @@ namespace IO {
 Modification* Modification::_singleton = nullptr;
 
 int Modification::GetCount() const {
-    return _count;
+    return _mods.size;
 }
 
 // ?GetModification@Modification@IO@@QEBAAEBUMod@12@H@Z      retail 0x18000da80
@@ -673,7 +670,7 @@ int Modification::GetCount() const {
 // index -1 into an 8-GB forward offset. `static_cast<int64_t>` is the sign
 // extension, and it is load-bearing. Unbounded, exactly as retail is.
 const RtIO::Mod& Modification::GetModification(int index) const {
-    return _mods[index];   // a signed int index: MOVSXD, then the 0x80 stride
+    return _mods.data[index];   // a signed int index: MOVSXD, then the 0x80 stride
 }
 
 // ?Enable@Modification@IO@@QEAAXH_N@Z                       retail 0x1800aeab0
@@ -687,7 +684,7 @@ const RtIO::Mod& Modification::GetModification(int index) const {
 // early" tidy-up would be a real behaviour change to IsDirty.
 void Modification::Enable(int index, bool value) {
     _dirty = 1;
-    _mods[index].enabled = static_cast<uint8_t>(value);
+    _mods.data[index].enabled = static_cast<uint8_t>(value);
 }
 
 // ?Swap@Modification@IO@@QEAAXHH@Z                          retail 0x1800aeb20
@@ -709,9 +706,9 @@ void Modification::Swap(int a, int b) {
     _dirty = 1;
 
     RtIO::Mod tmp;   // a POD: uninitialised stack, as retail's
-    RtIO::RtIo_Mod_CopyCtor_1800101e0(&tmp, _mods + a);
-    RtIO::RtIo_Mod_Assign_180026ef0(_mods + a, _mods + b);
-    RtIO::RtIo_Mod_Assign_180026ef0(_mods + b, &tmp);
+    RtIO::RtIo_Mod_CopyCtor_1800101e0(&tmp, _mods.data + a);
+    RtIO::RtIo_Mod_Assign_180026ef0(_mods.data + a, _mods.data + b);
+    RtIO::RtIo_Mod_Assign_180026ef0(_mods.data + b, &tmp);
     RtIO::RtIo_Mod_Dtor_180011460(&tmp);
 }
 
@@ -746,8 +743,8 @@ void Modification::SaveList() {
 
     ::IO::Persistence* p = ::IO::Persistence::_singleton;   // ENDGAME B.3.9 IO (D7): the class static
 
-    for (int i = 0; i < _count; ++i) {
-        RtIO::Mod* m = _mods + i;
+    for (int i = 0; i < _mods.size; ++i) {
+        RtIO::Mod* m = _mods.data + i;
         m->order = i;
 
         // GetPathFilename's by-value return constructs `tmp` in place (the
@@ -755,7 +752,7 @@ void Modification::SaveList() {
         // not-yet-converted `Mod`, so it is reached through a cast.
         char* ref;
         {
-            System::Filename tmp(reinterpret_cast<const System::Filename*>(&m->file)   // B.3.x bridge  // LEFT: H5 Mod::file is the RtSystem::Filename POD
+            System::Filename tmp(reinterpret_cast<const System::Filename*>(&m->file)   // B.3.x bridge  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::file is the RtSystem::Filename POD
                                      ->GetPathFilename(true));
 
             // 0x1800b0676..0x1800b06be: take a REFERENCE to the returned

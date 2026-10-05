@@ -287,12 +287,12 @@ namespace RtIo {
 // ===========================================================================
 // ??1Modification@IO@@QEAA@XZ   0x1800b0470   — header §5
 // ===========================================================================
-extern "C" void RtIo_Modification_Dtor(RtIO::Modification* self) {
+extern "C" void RtIo_Modification_Dtor(IO::Modification* self) {
     // Publish into the DLL's exported slot; see header §5.
     ::IO::Modification::_singleton = nullptr;                   // 1800b0486  (B.3.9 IO: the class static)
 
-    RtIO::RtColl_ArrayModDtor_180010b80(&self->savedMods);      // 1800b0495  +0x18
-    RtIO::RtColl_ArrayModDtor_180010b80(&self->mods);           // 1800b04a4  +0x08  TAIL
+    RtIO::RtColl_ArrayModDtor_180010b80(&self->_savedMods);     // 1800b0495  +0x18
+    RtIO::RtColl_ArrayModDtor_180010b80(&self->_mods);          // 1800b04a4  +0x08  TAIL
 }
 
 }  // namespace RtIo

@@ -648,7 +648,7 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
             // Retail's order: entry (0x1800ad915), full (0x1800ad94e),
             // utf8 (0x1800ad97f), nameW (0x1800ad9b0) — the first three are
             // the destructors, in reverse declaration order, which is that.
-            RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+            RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
         } while (::FindNextFileW(h, &fd));
         ::FindClose(h);
     }
@@ -685,7 +685,7 @@ static void FindFilesImpl(const void* fs, const System::String* dir,
 
                 // subDir, sub and utf8 are released by their destructors, in
                 // retail's order (reverse of declaration).
-                RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));  // LEFT: the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+                RtString_ReleaseInline(reinterpret_cast<String*>(&nameW));  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
             } while (::FindNextFileW(h2, &fd));
             ::FindClose(h2);
         }

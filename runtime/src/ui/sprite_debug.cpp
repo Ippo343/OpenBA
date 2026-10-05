@@ -69,8 +69,8 @@ void* Debug_Sprite_DefaultCtor(void* retval) {
 // Original: 0x180030c40
 // Returns true if index >= 0 AND sheet != null
 // ============================================================
-bool Debug_Sprite_IsValid(void* sprite) {
-    const UI::Sprite* const s = reinterpret_cast<const UI::Sprite*>(sprite);  // B.3.6 bridge  // LEFT: SIG the code/Game extern passes void* (debug harness; wave X)
+bool Debug_Sprite_IsValid(const UI::Sprite* sprite) {
+    const UI::Sprite* const s = sprite;
 #ifdef _DEBUG
     bool result = s->IsValid();
     printf("[Sprite::IsValid] sprite=%p sheet=%p index=%d -> %s\n",

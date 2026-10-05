@@ -192,8 +192,8 @@ void Engine::UpdateLoop::LoadResources() {
     // and derefs it unguarded. The null test below is ours ONLY for the case
     // the mint leaves the slot empty; with the DLL present it is never taken.
     if (IO::Modification* mods = IO::Modification::_singleton) {
-        const int32_t count = mods->_count;
-        RtIO::Mod* base = mods->_mods;
+        const int32_t count = mods->_mods.size;
+        RtIO::Mod* base = mods->_mods.data;
         for (int32_t i = 0; i < count; ++i) {
             RtIO::Mod& mod = base[i];
             if (mod.enabled == 0) continue;
