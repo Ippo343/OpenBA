@@ -124,7 +124,7 @@ void InnerArrayAssign(void* dst, const void* src) {
 //
 // Returns `this` (`MOV RAX,RBX`).
 DetailLevel* TriangleListCtor(DetailLevel* d) {
-    d->_name.data  = nullptr;                            // the String slot
+    d->_name._data = nullptr;                            // the String slot
     d->_image._ptr = nullptr;
     d->_distance   = 10000.0f;                           // 0x461c4000
 
@@ -170,10 +170,10 @@ DetailLevel* TriangleListCtor(DetailLevel* d) {
 //
 // +0xa8 is copied last. +0xac..+0xaf are NEVER WRITTEN.
 DetailLevel* TriangleListCopyCtor(DetailLevel* d, const DetailLevel* s) {
-    d->_name.data = nullptr;
-    char* const name = s->_name.data;
+    d->_name._data = nullptr;
+    char* const name = s->_name._data;
     if (name != nullptr) {
-        d->_name.data = name;
+        d->_name._data = name;
         ++RtSystem::StringRefCount(name);
     }
 
@@ -236,7 +236,7 @@ void DestroyTriangleListRange(DetailLevel* base, int count) {
         IndexBufferPlatformDestruct(&e->_indexBuffer);        // +0x38
         VertexBufferPlatformDestruct(&e->_vertexBuffer);      // +0x18
 
-        char** const nameSlot = &e->_name.data;
+        char** const nameSlot = &e->_name._data;
         char* const name = *nameSlot;
         if (name == nullptr) continue;
         int32_t* const refs = &RtSystem::StringRefCount(name);

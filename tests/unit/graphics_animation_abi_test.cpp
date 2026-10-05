@@ -286,6 +286,9 @@ UNIT_TEST(graphics_animationgroup_layout) {
         static_cast<Graphics::AnimationGroup*>(&probe));
     CHECK_EQ(*reinterpret_cast<const float*>(bytes + 0x30), 0.1f);
     CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x28), 7);
+    // B.4 Y RT: `_clips` carries retail's element destroy now, so the probe's
+    // dtor must not see seven elements over a null buffer.
+    probe._clips._size  = 0;
 }
 
 // ---------------------------------------------------------------------------

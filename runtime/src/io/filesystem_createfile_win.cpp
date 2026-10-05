@@ -154,22 +154,6 @@ void WideRelease(WideStr* w) {
 // value, so RCX = this, RDX = the return slot, R8/R9 the two ints.
 typedef String* (*SubStringFn)(const String* self, String* ret, int a, int b);
 
-// Collection::Array<T>::~Array for a POD element, retail 0x1800097f0.
-// `if (data) MemFree(data); data = 0; size = capacity = 0;`
-//
-// TRANSCRIBED AS A FILE-LOCAL HELPER AND DELIBERATELY *NOT* REGISTERED. It is a
-// Collection-namespace body, not IO's, and this lane does not mint rows in
-// another namespace's census. Nothing else in the tree reaches 0x1800097f0
-// (grepped), so calling our own copy directly leaves no door open at cutover;
-// if a Collection lane later ports and registers it, this call site is
-// unaffected because it never went through a door.
-struct PodArray { void* data; int32_t size; int32_t capacity; };
-void PodArrayDtor(PodArray* a) {
-    if (a->data) RtSystem::RtMemFree(a->data);   // 180009814..44 (the locked free)
-    a->data = nullptr;                           // 18000984c
-    a->size = 0; a->capacity = 0;                // 18000984f (one qword store)
-}
-
 // Collection::Array<Filename>::~Array, retail 0x1800098d0, is
 // RtIO::RtColl_ArrayFilenameDtor_1800098d0 (modification.cpp); the unexported
 // AVL subtree free at 0x180008340 is rtavl::SubtreeFree (avl_trees.cpp). Both
@@ -313,7 +297,7 @@ void RtIoFileSystemCreateFileCounters(unsigned long long* out) {
 // Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
 // namespace ENCLOSING the class (B34_BRIEFS section A.2); these bodies reach
 // this translation unit's `RtIO`-scoped names — the anonymous-namespace
-// helpers `WideStr`/`WideFromString`/`WideRelease`/`PodArrayDtor`, the
+// helpers `WideStr`/`WideFromString`/`WideRelease`, the
 // attendance counters `g_fcc`, and the `using`-ed System names — as `RtIO::X`.
 // Every POD is spelled `RtIO::` or `RtSystem::` and every real class `System::`
 // (B34_RULES section 7.2).
@@ -618,9 +602,9 @@ FileSystem::~FileSystem() {
     // Step 3 — Array<Filename>, ported by modification.cpp and registered.
     RtIO::RtColl_ArrayFilenameDtor_1800098d0(&_userPackFilenames);   // 1800ac710
 
-    // Step 4 — the POD array free, our own copy. See the note above.
-    RtIO::PodArrayDtor(
-        reinterpret_cast<RtIO::PodArray*>(&_packfiles));  // 1800ac71a  // LEFT: H5 FileSystem::_packfiles is raw storage of a Collection::Array<PackageFile*>
+    // Step 4 — ~Array<PackageFile*> (0x1800097f0, called at 1800ac71a): the
+    // `_packfiles` member's own destructor (B.4 Y RT), run by the compiler
+    // after this body and before the three Filenames — retail's order.
 
     // Step 5: ~Filename on _packDirectory, _dataDirectory, _sourceDirectory, run
     // by the compiler after this body (1800ac720 / 1800ac74a / 1800ac775).

@@ -78,9 +78,8 @@ namespace {
 // (stride 2, align 2, byteCopy, init == nullptr, destroy == nullptr) is that
 // exactly. The vertex list is only ever destroyed here (its grow is 0x14001ee40,
 // outside this file); its element is the trivially destructible GeometryBatchVertex,
-// so the dtor is MemFree + zero regardless.
-using TessVertexArray = Collection::Array<GeometryBatchVertex>;
-using TessIndexArray  = Collection::Array<uint16_t>;
+// so the dtor is MemFree + zero regardless. Both run through the RawArray wrappers
+// (Action/PathSearch.h) over the same erased core.
 
 // cc10's output: retail's 0x60-byte stack block, the four 0x14-byte corner records
 // first. No constructor: retail does not initialise it.
@@ -93,8 +92,7 @@ static_assert(sizeof(TessCornerBlock) == 0x60, "the ace40 corner block is 0x60 b
 // AppendIndex — inlined "append one short index to the growable index buffer at
 // slot+0x18/+0x20/+0x24" block (orig emits it verbatim per triangle vertex).
 inline void AppendIndex(GeometryBatch* batch, uint16_t idx) {
-    TessIndexArray* a = reinterpret_cast<TessIndexArray*>(&batch->indices);   // LEFT: GeometryBatch::indices is a RawArray, not a Collection::Array (Game/WorldGeometryElements.h, X6-GAME-A partition; typing it is an H5 member change of GeometryBatch)
-    a->SetSize(a->_size + 1, idx);
+    RawArraySetSize(batch->indices, batch->indices.size + 1, idx);
 }
 
 // EmitVertex — resolve ONE corner descriptor to a vertex index (find/insert/append),
@@ -269,8 +267,8 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     // ppvVar9 keeps the pre-free index pointer because the fnE180 call below still
     // feeds its upper bytes through a register-passthrough byte argument.
     uint16_t* ppvVar9 = batch->indices.data;
-    reinterpret_cast<TessVertexArray*>(&batch->vertices)->~Array();   // LEFT: GeometryBatch::vertices / indices are RawArray, not Collection::Array (Game/WorldGeometryElements.h, X6-GAME-A partition; typing them is an H5 member change of GeometryBatch)
-    reinterpret_cast<TessIndexArray*>(&batch->indices)->~Array();     // LEFT: GeometryBatch::vertices / indices are RawArray, not Collection::Array (Game/WorldGeometryElements.h, X6-GAME-A partition; typing them is an H5 member change of GeometryBatch)
+    RawArrayFree(batch->vertices);
+    RawArrayFree(batch->indices);
 
     DecalVertexNode* outNode;
 

@@ -86,13 +86,8 @@ using Graphics::GraphicsMesh;
 // Named dependencies — RT_EXPORT_ONCE, so a ported one is reached as ours.
 // ---------------------------------------------------------------------------
 // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` — retail 0x1800c9930,
-// the member System::String::Serialize. LEFT: `GraphicsMesh::_name` is the POD
-// `RtSystem::Filename` and `DetailLevel::_name` the POD `RtSystem::String`
-// (GraphicsMesh.h keeps both trivially destructible; see its `_name` note), so
-// the one view of either as the real `System::String` is here.
-void StringSerialize(void* str, IO::Serializer& ser) {
-    static_cast<System::String*>(str)->Serialize(ser);   // LEFT: H5 the caller's field is the RtSystem::String / Filename POD, viewed as the real System::String (GraphicsMesh.h keeps it trivially destructible)
-}
+// the member System::String::Serialize, called by name on the typed members
+// (B.4 Y RT: `GraphicsMesh::_name` and `DetailLevel::_name` are real Strings).
 
 
 // `?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z` —
@@ -256,8 +251,9 @@ Object::External* GraphicsMesh::Reconstruct() {
 // header, so the members' implicit ~Array that runs after this body is a
 // no-op (no element destroy, MemFree(null)) -- nothing runs twice.
 //
-// THE STRING RELEASE IS THE `str-4` / `str-8` IDIOM and its two arms leave the
-// slot holding DIFFERENT THINGS — the asymmetry array_destroy.cpp's Body B
+// THE STRING RELEASE IS THE `str-4` / `str-8` IDIOM (since B.4 Y RT it is
+// `System::String::Release`, the member's own ~String) and its two arms leave
+// the slot holding DIFFERENT THINGS — the asymmetry array_destroy.cpp's Body B
 // documents:
 //     if (p) { if (--p[-1] == 0) { slot = p - 8; MemFree(slot); }
 //              else               slot = nullptr; }
@@ -273,17 +269,8 @@ GraphicsMesh::~GraphicsMesh() {
     rtcoll::Rt_ArrayDtor_180014090(&self->_nodes);             // ~Array<Node>
     rtcoll::Rt_ArrayDtor_180013fb0(&self->_detailLevels);      // ~Array<DetailLevel>
 
-    char* const name = self->_name.data;
-    if (name != nullptr) {
-        int32_t* const refs = reinterpret_cast<int32_t*>(name) - 1;  // CAST-OK: string_header
-        --*refs;
-        if (*refs == 0) {
-            self->_name.data = name - 8;                       // ADD qword [RBX+0x20],-8
-            System::MemoryAllocator::MemFree(self->_name.data);   // 0x1800c7ad0
-        } else {
-            self->_name.data = nullptr;                        // MOV qword [RBX+0x20],0
-        }
-    }
+    // B.4 Y RT: `_name` (0x1800ff2ae..0x1800ff2d0) is the member's own
+    // ~String, which runs after this body: the same `str-8` release.
     // 0x1800ff2d8 restamp + `JMP 0x1800bc950`: the compiler's chain.
 }
 
@@ -492,7 +479,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
     *SerializeCounter()     = 0;
     *SerializeCurrentMesh() = this;
 
-    StringSerialize(&_name, ser);
+    _name.Serialize(ser);
     rw->SerializeFloatArray(3, &_vector28.x, nullptr);
     rw->SerializeFloatArray(3, &_vector34.x, nullptr);
     rw->SerializeInt  (_field40, nullptr);
@@ -508,7 +495,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
         DetailLevel* e = _detailLevels._data;
         for (int32_t i = 0; i < n; ++i, ++e) {     // ++e strides retail's 0xb0
             rw->SerializeFloat(e->_distance, nullptr);
-            StringSerialize(&e->_name, ser);
+            e->_name.Serialize(ser);
             e->_image.Serialize(ser);                                     // 0x18005d0f0
             if (rw->GetVersion() == 0)
                 RtGraphics_GraphicsMeshTriangleList_Serialize(e, ser);
@@ -535,8 +522,7 @@ bool GraphicsMesh::Serialize(IO::Stream& streamv) {
         int32_t n = _nodes._size;
         rw->SerializeInt(n, nullptr);
         if (reading) rtcoll::Rt_SetSize_18005aa30(&_nodes, n);
-        // LEFT: `_nodes` stays a raw header (GraphicsMesh.h's `Node` note).
-        RtGraphics_SerializeMeshNodes(ser, n, reinterpret_cast<Node*>(_nodes._data));  // 0x18005c120   // LEFT: H5 GraphicsMesh::_nodes is Array<uint8_t> raw storage of Array<Node> (GraphicsMesh.h: an Array<Node> member instantiates the element destroy)
+        RtGraphics_SerializeMeshNodes(ser, n, _nodes._data);  // 0x18005c120
     }
 
     rw->SerializeFloatArray(3, &_aabb.min.x, nullptr);

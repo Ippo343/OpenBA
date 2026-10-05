@@ -801,7 +801,7 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(MenuDialogLoopT* self, float deltaSecon
                "dist=%.3f target=(%.2f,%.2f,%.2f) "
                "camPos=(%.2f,%.2f,%.2f)\n",
                logCount, animYaw, transform->yaw, transform->pitch, transform->distance,
-               transform->targetX, transform->targetY, transform->targetZ,
+               transform->target.x, transform->target.y, transform->target.z,
                pos.x, pos.y, pos.z);
     }
 }

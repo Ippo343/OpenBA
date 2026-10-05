@@ -538,7 +538,7 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
             if (ds && ::Object::IsDerivedFromNullSafe(ds, ComponentEntity::TypeId())) {
                 PlayerToolManager* pc = GameUpdateLoop::_singleton->m_toolManager;
                 if (pc) {
-                    Tool* activeTool = pc->currentTool;
+                    Tool* activeTool = pc->currentTool.Get();
                     // ONLY an EditTool keeps a selected entity at +0x30. When a build
                     // tool is armed instead, that offset is DragTool's endCell /
                     // lastEndCell int pair, and cb40 would hand those two ints to the

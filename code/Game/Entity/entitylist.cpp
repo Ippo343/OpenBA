@@ -770,7 +770,7 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
     PlayerToolManager* toolManager = gw->m_toolManager;
     if (!toolManager) return;
     if (toolManager->currentTool == nullptr) return;   // +0x28
-    Tool* currentTool = toolManager->currentTool;
+    Tool* currentTool = toolManager->currentTool.Get();
     if (!currentTool) return;
 
     const uint32_t s_tidEditTool = EditTool::TypeId();   // caller batch CB6: was a lazy by-name cache

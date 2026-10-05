@@ -88,7 +88,7 @@ bool     FileStream::Open(const System::Filename&) { StubReached("FileStream::Op
 // SetObject (the probes read neither).
 FileStream::~FileStream() {}
 TextFileStream::TextFileStream(const System::String&, const System::String&, int)
-    : _objectName(nullptr), _objectType(nullptr), _requestedFormat(6),
+    : _objectName(), _objectType(), _requestedFormat(6),
       _activeEncoding(6), _buffer(nullptr), _bufSize(0), _bufCursor(0) {}
 TextFileStream::~TextFileStream() {}
 

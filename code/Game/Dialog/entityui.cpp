@@ -509,7 +509,7 @@ void EntityUI::UpdateInput() {
 
     // Get current tool from the tool manager (IBP at +0x28, needs CheckPtr)
     PlayerToolManager* playerController = GameUpdateLoop::_singleton->m_toolManager;
-    Tool* currentTool = playerController->currentTool;
+    Tool* currentTool = playerController->currentTool.Get();
 
     // Check if current tool is EditTool
     bool isEditTool = ::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId());
@@ -520,7 +520,7 @@ void EntityUI::UpdateInput() {
         playerController->SelectTool(nullptr);
 
         // Re-read current tool after deselect (with CheckPtr)
-        currentTool = playerController->currentTool;
+        currentTool = playerController->currentTool.Get();
         isEditTool = ::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId());
         editTool = isEditTool ? static_cast<EditTool*>(currentTool) : nullptr;
     }
@@ -637,9 +637,9 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
 
         if (gotPos) {
             PlayerController* cameraTarget = game->m_playerController;
-            cameraTarget->targetX = focus[0];
-            cameraTarget->targetY = focus[1];
-            cameraTarget->targetZ = 0.0f;
+            cameraTarget->target.x = focus[0];
+            cameraTarget->target.y = focus[1];
+            cameraTarget->target.z = 0.0f;
         }
         return;
     }

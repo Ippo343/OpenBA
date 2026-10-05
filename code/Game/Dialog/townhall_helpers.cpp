@@ -46,19 +46,9 @@
 #include "Dialog/TownHallUI.h"   // TownHallInventoryEntry
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
-// B4 X-G1-2b: the entry points take their retail objects; the two rating-group
-// bodies and the two array pushes keep a `void*` array argument because
-// TownHallUI's arrays are raw {data, count, capacity} storage (H5).
+// B4 X-G1-2b / Y GAMEB: the entry points take their retail objects.
 
 namespace {
-
-// 0x14006abf0 / 0x14006aed0's argument: a rating group, the whole and the
-// half icon of each child row (two Collection::Array<InternalPtr<ImageElement>>).
-struct RatingGroup {
-    Collection::Array<UI::Element*> whole;   // +0x00
-    Collection::Array<UI::Element*> half;    // +0x10
-};
-static_assert(sizeof(RatingGroup) == 0x20, "rating group 0x20");
 
 // The row's element of that name, narrowed to an ImageElement (null if not one).
 UI::Element* FindImage(UI::Element* row, const char* name) {
@@ -74,8 +64,8 @@ UI::Element* FindImage(UI::Element* row, const char* name) {
 // For each child row of the group element, cache the "whole" and "half"
 // ImageElements (heart/star icons) as InternalPtrs.
 // ===========================================================================
-extern "C" void TownHall_GroupRatingInit(void* rating, UI::Element* const* groupElem) {
-    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);   // LEFT: H5 TownHallUI::RatingGroup is raw {data, count, capacity} storage (~TownHallUI frees it by hand)
+// The group is TownHallUI::RatingGroup (Dialog/TownHallUI.h).
+void TownHall_GroupRatingInit(TownHallUI::RatingGroup* group, UI::Element* const* groupElem) {
     int childCount = (*groupElem)->ChildCount();
     for (int i = 0; i < childCount; i++) {
         // child(i) -> FindElement("whole") -> cast ImageElement -> push
@@ -95,8 +85,7 @@ extern "C" void TownHall_GroupRatingInit(void* rating, UI::Element* const* group
 // halfSteps = round(value/max * 2N). Whole icon i shows while 2i+1 < halfSteps;
 // the half icon shows only at 2i+1 == halfSteps. (DAT_140172114 = 0.5f.)
 // ===========================================================================
-extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxValue) {
-    RatingGroup* group = reinterpret_cast<RatingGroup*>(rating);   // LEFT: H5 TownHallUI::RatingGroup is raw {data, count, capacity} storage (~TownHallUI frees it by hand)
+void TownHall_GroupRatingUpdate(TownHallUI::RatingGroup* group, float value, float maxValue) {
     int wholeCount = group->whole.GetSize();
     int halfSteps = (int)((value / maxValue) * (float)(wholeCount * 2) + 0.5f);
     int odd = 1;
@@ -107,26 +96,23 @@ extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxV
 }
 
 // ===========================================================================
-// 0x140015800 — profession-row array push (0x40-byte rows).
+// 0x140015800 — Array<TownHallUI::ProfessionRow>::SetSize (0x40-byte rows): the
+// one erased core (rtcoll::SetSizeCore, which the hand-written push here was
+// step for step) driven by the hand-derived row below.
 // Row: +0x00 counts, +0x08..+0x28 five element InternalPtrs, +0x30 the
 // entity list. Row copy (0x140015dd0) deep-copies the entity list
-// (0x140015ec0-style ptr-array clone); realloc frees every old row's list;
-// shrink (0x140015e50) frees the removed rows' lists.
+// (0x140015ec0-style ptr-array clone); realloc destroys every old row;
+// shrink (0x140015e50) destroys the removed rows: a destroy frees the row's
+// entity list. A deep copy together with a per-element destroy is the
+// combination Collection.h's banner says a trait-derived row cannot produce.
 // ===========================================================================
 namespace {
 
-// TownHallUI's profession row (stride 0x40; TownHallUI.h).
 using ProfRow = TownHallUI::ProfessionRow;
 static_assert(sizeof(ProfRow) == 0x40, "profession row stride 0x40");
 static_assert(offsetof(ProfRow, entities) == 0x30, "");
 
-// The array header the caller hands over (TownHallUI +0x40).
-struct ProfRowArray {
-    ProfRow* data;       // +0x00
-    int32_t  size;       // +0x08
-    int32_t  capacity;   // +0x0C
-};
-
+// 0x140015dd0: the row copy into the new (unconstructed) slot.
 void ProfRow_Copy(ProfRow* dst, const ProfRow* src) {
     dst->workers = src->workers;
     dst->slots = src->slots;
@@ -135,90 +121,48 @@ void ProfRow_Copy(ProfRow* dst, const ProfRow* src) {
     dst->slotsNumber = src->slotsNumber;
     dst->buildingsNumber = src->buildingsNumber;
     dst->button = src->button;
-    dst->entities = nullptr;
-    dst->entityCount = 0;
-    dst->entityCapacity = 0;
+    dst->entities._data = nullptr;
+    dst->entities._size = 0;
+    dst->entities._capacity = 0;
     // deep-copy entity list (ResidenceComponent_helper_5ec0)
-    int cnt = src->entityCount;
-    dst->entityCount = cnt;
+    int cnt = src->entities._size;
+    dst->entities._size = cnt;
     if (cnt > 0) {
-        dst->entityCapacity = cnt;
-        dst->entities = static_cast<ComponentEntity**>(
+        dst->entities._capacity = cnt;
+        dst->entities._data = static_cast<ComponentEntity**>(
             System::MemoryAllocator::MemAlloc((uint64_t)cnt << 3, 8));
-        for (int i = 0; i < cnt; i++) dst->entities[i] = src->entities[i];
+        for (int i = 0; i < cnt; i++) dst->entities._data[i] = src->entities._data[i];
     }
 }
 
-// The removed row's entity list goes (0x140015e50)
-void ProfRow_Free(ProfRow* row) {
-    System::MemoryAllocator::MemFree(row->entities);
-    row->entities = nullptr;
-    row->entityCount = 0;
-    row->entityCapacity = 0;
+// 0x140015e50: each destroyed row's entity list goes (~ProfessionRow ->
+// ~Array<ComponentEntity*>: MemFree, then the three fields zeroed).
+void ProfRows_Destroy(ProfRow* rows, int count) {
+    for (int i = 0; i < count; i++) rows[i].~ProfRow();
+}
+
+void AssignProfRow(uint8_t* d, const uint8_t* s) {
+    rtcoll::AssignAs<ProfRow, &ProfRow_Copy>(d, s);
+}
+void DestroyProfRow(void* ignoredThis, uint8_t* base, int count) {
+    rtcoll::DestroyAs<ProfRow, &ProfRows_Destroy>(ignoredThis, base, count);
 }
 
 } // namespace
 
-// B.3.2 NOT CONVERTED to Collection::Array<T>::SetSize. This row is byteCopy in
-// the copy direction (ProfRow_Copy deep-copies the +0x30 entity list) but ALSO
-// has a per-element DESTROY step: both the shrink arm and the realloc arm free
-// every removed/old row's entity list before the buffer goes. Collection.h's
-// banner names that combination explicitly as one C++ traits cannot produce —
-// `is_trivially_copyable` implies a trivial destructor — so it needs a
-// hand-derived ArraySpec (kSpec_PkgEntry / kSpec_StringExt are the Runtime-side
-// examples) rather than the trait-derived blob. It stays hand-rolled until this
-// array gets its own spec or its owning struct becomes a real class (§B.2).
-extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, const ProfRow* entry) {
-    ProfRowArray* rows = reinterpret_cast<ProfRowArray*>(arrayBase);   // LEFT: H5 TownHallUI +0x40 is the raw triple of an Array<ProfessionRow> (TownHallUI.h: the hand-written dtor frees it)
-    const ProfRow* fill = entry;
-    int oldCount = rows->size;
-    if (newCount == oldCount) return;
-    ProfRow* oldBuf = rows->data;
-    rows->size = newCount;
-    if (rows->capacity < newCount) {
-        int newCap = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) newCap = newCount * 3;
-        rows->capacity = newCap;
-        rows->data = static_cast<ProfRow*>(
-            System::MemoryAllocator::MemAlloc((uint64_t)newCap << 6, 8));
-    }
-    int copyStart = (oldBuf == rows->data) ? oldCount : 0;
-    for (int i = copyStart; i < newCount; i++) {
-        ProfRow* dst = &rows->data[i];
-        if (!dst) continue;
-        const ProfRow* src = (i < oldCount) ? &oldBuf[i] : fill;
-        ProfRow_Copy(dst, src);
-    }
-    if (oldBuf == rows->data) {
-        if (newCount < oldCount) {
-            // shrink in place — free removed rows' entity lists (0x140015e50)
-            for (int i = newCount; i < oldCount; i++) ProfRow_Free(&oldBuf[i]);
-        }
-    } else {
-        // realloc'd — every old row was deep-copied; free old lists + buffer
-        for (int i = 0; i < oldCount; i++) ProfRow_Free(&oldBuf[i]);
-        System::MemoryAllocator::MemFree(oldBuf);
-    }
-}
+namespace TownHallRows {
+// init null: the array only ever grows through the fill form (InitProfessions).
+const rtcoll::ArraySpec kSpec_ProfessionRow = {          // exe 0x140015800
+    "Array<TownHallUI::ProfessionRow>", 0x40, 8,
+    &AssignProfRow, nullptr, &DestroyProfRow, false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+}  // namespace TownHallRows
 
-// ===========================================================================
-// 0x1400159b0 — production-limits array push (0x28-byte rows, plain copy).
-// This is literally retail's Collection::Array<T>::SetSize(n, fill) (stride
-// 0x28, plain copy rows, no per-element destroy) — every newly-added row
-// [oldCount, newCount) is filled from the same `entry`, not just the tail,
-// which is exactly rtcoll::SetSizeCore's fill loop.
-// ===========================================================================
-namespace {
-// TownHallUI's production row (stride 0x28; TownHallUI.h's ProductionRow): five
-// NumberElement InternalPtrs.
-using ProdRow = TownHallUI::ProductionRow;
-static_assert(sizeof(ProdRow) == 0x28, "production row stride 0x28");
-} // namespace
-
-extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, const ProdRow* entry) {
-    Collection::Array<ProdRow>* rows = reinterpret_cast<Collection::Array<ProdRow>*>(arrayBase);   // LEFT: H5 TownHallUI +0xF0 is the raw triple of an Array<ProductionRow> (TownHallUI.h: the hand-written dtor frees it)
-    rows->SetSize(newCount, *entry);
-}
+// 0x1400159b0 — Array<TownHallUI::ProductionRow>::SetSize (0x28-byte rows, plain
+// copy, no per-element destroy): the trait-derived row, called as the member
+// (TownHallUI::InitProduction).
 
 // ===========================================================================
 // 0x140090f20 — sum a town history series (CitizenBehavior +0x150) over
