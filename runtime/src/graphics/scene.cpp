@@ -338,14 +338,12 @@ Matrix* RtTransformAsMatrix(const Transform* xf, Matrix* ret) {
 // accurate; what changed is WHO executes it.
 // ---------------------------------------------------------------------------
 
-// The Scene grid initialiser — retail 0x18005e4a0. Seeds cellSize / half-cell /
-// level count, then SetSize()s the three int32 arrays (8 level offsets seeded
+// The Scene grid initialiser — retail 0x18005e4a0 — is Graphics::SceneGrid's
+// constructor (scene_grid.cpp). Seeds cellSize / half-cell / level count, then
+// SetSize()s the three int32 arrays (8 level offsets seeded
 // {0,1,5,0x15,0x55,0x155,0x555,0x1555}, 0x5555 cell heads filled with -1 and
 // 0x5555 cell counts filled with 0). ~350 KB of allocation, all through the
 // allocator lock.
-void RtSceneGridInit(Scene* self, float cellSize) {
-    rtgfxgrid::GridInit(self, cellSize);
-}
 
 // The grid insert — retail 0x18005e5e0. Takes a slot off the free-id array (or
 // appends a new node), stores the Geometry*, computes the object's quadtree
@@ -785,14 +783,21 @@ Graphics::Geometry::~Geometry() {
 // constructed a handful of times in a session (the game world's and the
 // minimap's), not per frame.
 // ============================================================================
+// B.4 final RT: a real constructor. The grid base is retail's CALL 0x18005e4a0
+// with 2048.0f; `_globals` (LinkedList, no constructor) gets the three stores
+// retail makes itself.
+namespace Graphics {
+Scene::Scene() : SceneGrid(kSceneCellSize) {
+    _globals._head  = nullptr;
+    _globals._tail  = nullptr;
+    _globals._count = 0;
+}
+}  // namespace Graphics
+
+// The exe's raw-storage holders (MemAlloc(0x78) / minimap's stack buffer)
+// construct through this forwarder; retail returns `this` in RAX.
 extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
-
-    RtSceneGridInit(self, kSceneCellSize);
-    self->_globals._head  = nullptr;
-    self->_globals._tail  = nullptr;
-    self->_globals._count = 0;
-
-    return self;   // retail returns `this` in RAX
+    return ::new (static_cast<void*>(self)) Scene();
 }
 
 // ============================================================================
@@ -823,11 +828,9 @@ extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
 // one statement is the +0x60 list's Clear (Collection::LinkedList has no
 // destructor, Collection.h); the five Arrays are members, destroyed after it
 // in reverse declaration order: +0x50, +0x40, +0x30, +0x20 (0x18001c750 each),
-// then +0x10 (the tail JMP 0x18005fc20) -- retail's six calls in its order.
-// The door stays for the exe's raw-storage holders. The CONSTRUCTOR stays the
-// door above: retail's grid initialiser 0x18005e4a0 zeroes the five Array
-// headers itself (rtgfxgrid::GridInit, on the RtGraphics view), so a C++
-// `Scene()` would zero them twice through the members' Array() initialisers.
+// then +0x10 (the tail JMP 0x18005fc20) -- retail's six calls in its order
+// (the five Arrays are the SceneGrid base's members since B.4 final RT).
+// The door stays for the exe's raw-storage holders.
 namespace Graphics {
 Scene::~Scene() {
     _globals.Clear();                // +0x60  retail 0x18005f1f0

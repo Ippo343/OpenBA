@@ -25,10 +25,8 @@ using Graphics::Geometry;
 // The six bodies. Signatures are the retail raw ABI, argument for argument.
 // ---------------------------------------------------------------------------
 
-// 0x18005e4a0 — the grid initialiser Scene::Scene calls with 2048.0f.
-// Returns `self` in RAX, exactly as retail does (`MOV RAX,RBP` before the
-// epilogue), because the caller is free to use it.
-Scene* GridInit(Scene* self, float cellSize);
+// 0x18005e4a0 — the grid initialiser Scene::Scene calls with 2048.0f, is
+// Graphics::SceneGrid's constructor (Scene.h; defined in scene_grid.cpp).
 
 // 0x18005e5e0 — the grid insert. `geo` is a POINTER TO a Geometry* (retail
 // reads `MOV RAX,[RSI]`), which is why Scene::AddObject spills its argument to
