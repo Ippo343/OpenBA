@@ -380,7 +380,7 @@ void SpriteContext::Flush() {
         count -= n;
 
         Video::ContextData* cd = _context->_contextData;
-        const bool ok = cd->BeginVertices(n * vertsPer, 0x20);   // B.3.5 bridge
+        const bool ok = cd->BeginVertices(n * vertsPer, 0x20);
 
         if (!ok) {
             // 0x18011bc0d/0x18011bc0f: the chunk's records are SKIPPED and
@@ -503,7 +503,7 @@ void SpriteContext::Flush() {
         // 0x18011c5c5..0x18011c5e3. `_context` and `+0x2160` are re-read.
         Video::ContextData* cd2 = _context->_contextData;
         const int32_t prim = isLine ? 2 : 0;
-        cd2->EndVertices(prim);                                  // B.3.5 bridge
+        cd2->EndVertices(prim);
     }
 
     // --- 0x18011c674..0x18011c685 ------------------------------------------
