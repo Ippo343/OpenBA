@@ -764,7 +764,13 @@ def find_markers(src, code, starts):
         le = len(code) if le < 0 else le
         sl = src.rfind('//', ls, m.start())
         if sl < 0 or code[sl:le].strip():
-            continue
+            # B.4 close: a line of a multi-line MACRO cannot end in a `//` comment (it would
+            # swallow the continuation), so there the marker is a block comment directly
+            # before the trailing backslash: `... /* CAST-OK: elem_stride */ \`.
+            bl = src.rfind('/*', ls, m.start())
+            be = src.find('*/', m.end(), le)
+            if bl < 0 or be < 0 or src[be + 2:le].strip() != '\\' or code[bl:le].strip() != '\\':
+                continue
         out[ln] = m.group(1)
     return out
 

@@ -52,7 +52,7 @@ category needs the coordinator (M2).
 | `string_header` | 37 | 35 | the `System::String` `{length, refCount}` header at `data - 8` | as measured |
 | `pe_walk` | 12 | 11 | walks a loaded module's PE headers and export directory | unchanged |
 | `byte_io` | 38 | 36 | a byte buffer handed to / read from a stream, CRC or file API | as measured |
-| `elem_stride` | 172 | 157 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 172 |
+| `elem_stride` | 188 | 173 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 188 (16 of them the macro lines) |
 | `gpu_map` | 0 | 0 | memory returned by a GPU buffer map | nothing marked (dx11/ is the next step) |
 | `com_iid` | 2 | 2 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID | unchanged |
 | `crt` | 11 | 11 | the ported CRT's own `void*` / `char*` parameters (qsort and its comparators' `const void*`, `_stricmp`) | as measured |
@@ -63,7 +63,7 @@ category needs the coordinator (M2).
 | `user_data` | 8 | 8 | NEW: a `void*` that a RETAIL engine API (signature `PEAX`) stores for its caller and hands back unchanged, or a message payload whose type the message id selects, cast back to the type the registration stored. Not for a tree-only API, nor for a `void*` a template could carry | new |
 | `null_receiver` | 2 | 2 | NEW: retail's faithful read through a null receiver, spelled as the faulting address (`work_act_consume.cpp`, §5) | new |
 | `static_init` | 1 | 1 | NEW: the view of a file-static byte table that emulates MSVC's guarded function-local static (`wave29_lane_slots.cpp` `g_identityTable`: zero `.data`, filled by the first Update; a typed array would be constant-initialised to identity) | new |
-| **total** | **735** | **681** | | |
+| **total** | **751** | **697** | | |
 
 **`elem_stride`, as re-defined at the B.4 close.** The one ported type-erased container / tree
 core: its view of a container's header, element storage or node handed to it untyped; its
@@ -80,8 +80,9 @@ container into it.
   caller); any `+ 0x…` operand; a field write by offset inside an element op; a stack byte image
   viewed as a record to skip its ctor (`wave9_lane_gfxd.cpp` `AddScene`'s `raw`).
 - Macro bodies: a cast on a `#define` continuation line (ending in `\`) cannot carry a `//`
-  marker; 16 such lines in `array.cpp` / `array_destroy.cpp` are floor by the ruling but stay in
-  `total` until the tool reads a marker there or the entries are written as functions.
+  marker. There, and only there, the marker is a BLOCK comment directly before the trailing
+  backslash (`... /* CAST-OK: elem_stride ... */ \`); `castmetric.py` `find_markers` reads it. The 16
+  such lines of `array.cpp` / `array_destroy.cpp` are marked that way (the coordinator, at the close).
 
 E's own names map as: `crash_diag` → `crash_walk`, `pe_image` → `pe_walk`, `value_pun` →
 `float_bits`, `container_storage` → `elem_stride`, `gpu_mapped` → `gpu_map`, `vtable_diag` →
