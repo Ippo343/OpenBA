@@ -66,6 +66,13 @@
 #include "../collection/Collection.h"
 #include "../object/External.h"
 #include "../object/Internal.h"                // Object::detail::InternalMemFree
+#include "../system/String.h"                  // SubMesh::_name
+
+namespace rtcoll {
+// B.4 wave Y (RT-GFX): the row of `Array<PickingMesh::SubMesh>`
+// (runtime/src/collection/array.cpp, SetSize 0x18007aa40).
+extern const ArraySpec kSpecD2_SubMesh80;
+}
 
 namespace System { class Filename; }
 
@@ -126,13 +133,16 @@ public:
     // | 0x70 | _uvs        | Serialize's loop tail: size at elem+0x78, resize  |
     // |      |             | 0x18007a900 (stride 4, align 2)                   |
     //
-    // `_name` STAYS A RAW POINTER: Array<SubMesh> is grown by the transcribed
-    // 0x18007aa40 body (element copy ctor 0x1800734a0 adopts the String with a
-    // refcount bump) and destroyed by 0x180073ee0; a real String member would
-    // be a second owner the compiler thinks it controls.
+    // `_name` is a System::String (B.4 wave Y, RT-GFX). Array<SubMesh> is grown
+    // by the transcribed 0x18007aa40 body (element copy ctor 0x1800734a0 adopts
+    // the String with a refcount bump) and destroyed by 0x180073ee0 -- the row
+    // kSpecD2_SubMesh80 that `_nodes` names. ~PickingMesh calls the registered
+    // ~Array 0x180073720, which zeroes the header, so the member's implicit
+    // ~Array releases nothing; no SubMesh is built, copied or destroyed through
+    // C++ outside the row.
     // ========================================================================
     struct SubMesh {
-        char*                        _name;           // +0x00  System::String (B4 R-CORE: char*, H4)
+        System::String               _name;           // +0x00  (the row owns its lifecycle)
         int32_t                      _parent;         // +0x08
         ::Transform                  _local;          // +0x0c  (0x1c bytes)
         ::Box                        _aabb;           // +0x28
@@ -217,7 +227,9 @@ public:
     System::String              _string28;   // +0x28
     bool                        _flag30;     // +0x30  kScalarBool
     uint8_t                     _pad31[7];   // +0x31  never written (one-byte store)
-    Collection::Array<SubMesh>  _nodes;      // +0x38  data, size@+0x40, cap@+0x44
+    Collection::Array<SubMesh, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpecD2_SubMesh80>>
+                                _nodes;      // +0x38  data, size@+0x40, cap@+0x44
 };
 
 static_assert(sizeof(PickingMesh::Triangle) == 0xc, "PickingMesh::Triangle must be 12 bytes");

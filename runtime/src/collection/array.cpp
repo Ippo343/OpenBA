@@ -3551,7 +3551,7 @@ void DestroyFace28Range(void* ignoredThis, uint8_t* base, int count) {
 using PickingSubMesh = Picking::PickingMesh::SubMesh;
 static void SubMeshAssign(PickingSubMesh* d, const PickingSubMesh* s) {
     // the String at +0x00: null the slot, adopt, bump the shared refcount
-    AdoptString(d->_name, s->_name);
+    AdoptString(d->_name._data, s->_name._data);
     // +0x08..+0x3f: fourteen plain DWORD moves in retail
     d->_parent = s->_parent;
     d->_local  = s->_local;
@@ -3575,7 +3575,7 @@ void AssignSubMesh80(uint8_t* d, const uint8_t* s) { AssignSubMesh80Impl(d, s); 
 // -1e8 max -- 0x4cbebc20 / 0xccbebc20) and four empty inner Arrays. All 0x80
 // bytes are written; there is no init window.
 static void SubMeshInit(PickingSubMesh* d) {
-    d->_name                   = nullptr;   // +0x00
+    d->_name._data             = nullptr;   // +0x00
     d->_parent                 = -1;        // +0x08 0xffffffff
     d->_local.rotation.x       = 0.0f;      // +0x0c qword
     d->_local.rotation.y       = 0.0f;
