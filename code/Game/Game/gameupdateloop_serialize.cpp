@@ -849,24 +849,26 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::Sa
     const char* e = Opt().saveTest;
     if (!e || _stricmp(e, "roundtrip") != 0) return;
 
-    // The fresh image is a SavedState's three fields on the stack, WITHOUT its
-    // destructor (freed by hand below, on the success path only, as before).
-    struct SS { uint32_t id; uint32_t size; void* data; };
+    // The fresh image is a real Save::SavedState (B4 Y GAMEA: was a dtor-less
+    // stack twin of its three fields). Its ~SavedState is the `if (data)
+    // MemFree` this probe ran by hand on the success path; the error path
+    // below still leaves the image allocated, as before.
     const Save::SavedState* loaded = loadedState;
-    SS fresh = { loaded->_id, 0, nullptr };
+    Save::SavedState fresh(loaded->_id);
     int out = 0;
     fprintf(stderr, "[Roundtrip] SaveRestore(save) into a fresh SavedState (loaded image %u bytes)\n",
             loaded->_size);
     fflush(stderr);
-    self->SaveRestoreOut(true, reinterpret_cast<Save::SavedState*>(&fresh), &out);   // B.3.8 bridge   // LEFT: the round-trip probe's local SS image stands in for a Save::SavedState (diagnostic, not retail)
+    self->SaveRestoreOut(true, &fresh, &out);
 
     uint8_t* a = nullptr; uint32_t an = 0;
     uint8_t* b = nullptr; uint32_t bn = 0;
     const bool okA = RoundtripDecompress(loadedState, &a, &an);
-    const bool okB = RoundtripDecompress(reinterpret_cast<Save::SavedState*>(&fresh), &b, &bn);   // LEFT: the destructor-less stack twin
+    const bool okB = RoundtripDecompress(&fresh, &b, &bn);
     if (!okA || !okB) {
         fprintf(stderr, "[Roundtrip] RESULT=ERROR decompress loaded=%d resaved=%d\n", okA, okB);
         fflush(stderr);
+        fresh._data = nullptr;   // not freed on this arm (the probe's behaviour before)
         return;
     }
     RoundtripDump("standalone_roundtrip_loaded.bin",  a, an);
@@ -880,9 +882,9 @@ extern "C" void GameUpdateLoop_SaveRoundtripCheck(GameUpdateLoop* self, Save::Sa
     const bool equal = (an == bn) && diffs == 0;
     fprintf(stderr, "[Roundtrip] RESULT=%s raw loaded=%u resaved=%u compressed loaded=%u resaved=%u"
                     " firstDiff=%u diffBytes=%u tail=%u\n",
-            equal ? "PASS" : "DIFF", an, bn, loaded->_size, fresh.size,
+            equal ? "PASS" : "DIFF", an, bn, loaded->_size, fresh._size,
             first, diffs, an > bn ? an - bn : bn - an);
     fflush(stderr);
     std::free(a); std::free(b);
-    if (fresh.data) System::MemoryAllocator::MemFree(fresh.data);
+    // ~SavedState: `if (_data) MemFree(_data)`.
 }

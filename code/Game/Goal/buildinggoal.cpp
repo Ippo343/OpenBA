@@ -253,11 +253,11 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     if (dumped == 0) fprintf(stderr, "[GoalProbe]   (empty)\n");
 
     // --- Build a one-entry requireAll BuildingGoal and evaluate it ---
-    // LEFT: a vptr-less stack image of the class (diagnostic, not retail),
-    // evaluated through a QUALIFIED (non-dispatching) member call.
-    alignas(8) uint8_t goalBytes[0x48];
-    memset(goalBytes, 0, sizeof(goalBytes));
-    BuildingGoal* goal = reinterpret_cast<BuildingGoal*>(goalBytes);   // LEFT: a vptr-less stack image of the class (diagnostic, not retail), evaluated through a QUALIFIED (non-dispatching) member call.
+    // B4 Y GAMEA: a real BuildingGoal on the stack (was a zeroed vptr-less byte
+    // image); its ~BuildingGoal frees the entry array the probe freed by hand.
+    // Evaluated through a QUALIFIED (non-dispatching) member call, as before.
+    BuildingGoal goalObject;
+    BuildingGoal* goal = &goalObject;
     goal->_field30 = true;                             // requireAll
     goal->_field38.SetSize(1);                         // seeds generation -1
     NamedExternalRef* entry = goal->_field38._data;
@@ -279,7 +279,6 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     }
 
     goal->_field38._size = 1;                          // count = 1
-    goal->_field38._capacity = 0;
     int verdict = static_cast<int>(goal->BuildingGoal::CheckGoalState());
 
     fprintf(stderr, "[GoalProbe] name=\"%s\" resolved=%p verdict=%d "
@@ -291,7 +290,5 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
                         "(see StartTown_ResolveTemplate's FindOrLoad fallback).\n");
     }
     fflush(stderr);
-
-    entry->name.~String();
-    System::MemoryAllocator::MemFree(entry);
+    // ~BuildingGoal: the entry's ~String, then MemFree of the array (0x14001b030).
 }
