@@ -74,7 +74,7 @@ bool GraphDescription::Serialize(IO::Stream& streamArg) {
     rw->SerializeUInt(_unknown74, nullptr);                             // 1800d1acd
 
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);            // 1800d1adc ExternalPtr<SpriteSheet>
-    StringSerialize(&_spriteName, &ser);             // 1800d1aed System::String
+    _spriteName.Serialize(ser);             // 1800d1aed System::String
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                             // 1800d1b05
     return true;
@@ -112,7 +112,7 @@ Object::InternalPtr<Element>* GraphDescription::CreateInstance(
 
     // 1800d19cf..1800d19e2 the sheet and the index slot; 1800d19f5 / 1800d1a01
     // the sheet and a QWORD store of the slot (rtdesc::SpriteFromName).
-    elem->_lineSprite = SpriteFromName(_spriteSheet, &_spriteName);
+    elem->_lineSprite = SpriteFromName(_spriteSheet, _spriteName);
 
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800d1a08
     return ret;
@@ -126,7 +126,8 @@ namespace UI {
 // retired door (ENDGAME B.3.9 UI-B): the +0x80 String; the base restamp, the
 // base's +0x60 String and the tail JMP into ~External are the compiler's chain.
 GraphDescription::~GraphDescription() {
-    ReleaseStringField(_spriteName);                                  // 1800d1b50 (+0x80)
+    // B4 Y RT-UI: the +0x80 release is the member `_spriteName`'s ~String,
+    // run after this (empty) body and before ~ElementDescription.
 }
 
 // ?CreateNewObject@GraphDescription@UI@@SAPEAVBase@Object@@XZ 0x180040180 --

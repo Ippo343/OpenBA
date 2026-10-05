@@ -652,7 +652,7 @@ UNIT_TEST(b39_uib_c5_graph_ctor_stores) {
     CHECK_EQ(gd->_tickSize, 4);
     CHECK_EQ(gd->_unknown74, 0xffffffffu);
     CHECK(gd->_spriteSheet == nullptr);
-    CHECK(gd->_spriteName == nullptr);
+    CHECK(gd->_spriteName._data == nullptr);
     CHECK_EQ(gd->_id, -1);
     gd->~GraphDescription();
 
