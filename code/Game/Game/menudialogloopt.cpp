@@ -137,19 +137,12 @@ static void MenuScene_Helper_8660(PlayerController& controller, float fovY_deg, 
 // cap = n; if (count != 0) cap = n*3; MemAlloc(cap << 3 | << 2, 8 | 4) }`, copy
 // the prefix on a move else start at count, `dst[i] = i < count ? old[i] :
 // elem`, skip a null computed address, `if (old != data) MemFree(old)`; the
-// trait-derived row (void* / uint32_t: byteCopy, no init, no destroy, align 8 /
-// 4). LEFT: the loop's +0xbd0 / +0xbe0 / +0xbf0 arrays are raw {data, count|cap}
-// storage (H5: their ctor / dtor are menudialogloopt_stubs.cpp's, STANDALONE).
+// trait-derived row (Geometry* / uint32_t: byteCopy, no init, no destroy, align 8 /
+// 4). The loop's +0xbd0 / +0xbe0 / +0xbf0 arrays are real Collection::Array
+// members (MenuDialogLoopT.h).
 template <typename T>
-static void AppendToDynArray(uint8_t* arrayStorage, const T& value) {
-    auto* arr = reinterpret_cast<Collection::Array<T>*>(arrayStorage);   // LEFT: the loop's +0xbd0 / +0xbe0 / +0xbf0 arrays are raw {data, count|cap} storage (H5: their ctor / dtor are menudialogloopt_stubs.cpp's, STANDALONE).
-    arr->SetSize(arr->GetSize() + 1, value);
-}
-
-// The loop's arrays, read by count / data (the same raw storage).
-template <typename T>
-static Collection::Array<T>& LoopArray(uint8_t* arrayStorage) {
-    return *reinterpret_cast<Collection::Array<T>*>(arrayStorage);   // LEFT: H5 the loop's +0xbd0 / +0xbe0 / +0xbf0 arrays are raw {data, count|cap} storage (MenuDialogLoopT.h; a typed Array member makes a dtor run)
+static void AppendToDynArray(Collection::Array<T>& arr, const T& value) {
+    arr.SetSize(arr.GetSize() + 1, value);
 }
 
 // ============================================================
@@ -189,7 +182,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     Graphics::MeshInstance* inst = ::new (mem) Graphics::MeshInstance();   // B.3.9 EXA: the real class (exe table 0x14015e240 is its own)
 
     // 2. Append to MenuDLT+0xbe0 (shared instance list).
-    AppendToDynArray<void*>(self->_instanceArray, inst);
+    AppendToDynArray<Graphics::Geometry*>(self->_instanceArray, inst);
 
     // 3. Per-element setup — mirror MenuScene_helper_3b60.
     int16_t meshIdx = elem.meshIndex;
@@ -394,7 +387,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(MenuDialogLoopT* self, MenuScene* menu
             ::new (mem) Graphics::ParticleSystemInstance();   // B.3.9 GFX: the real ctor
 
         // 2. Append to all-instance array (+0xbe0).
-        AppendToDynArray<void*>(self->_instanceArray, inst);
+        AppendToDynArray<Graphics::Geometry*>(self->_instanceArray, inst);
 
         // 3. helper_3ca0 inline.
         const MenuSceneParticle& elem = elemArr[i];
@@ -414,7 +407,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(MenuDialogLoopT* self, MenuScene* menu
         inst->Update(timeZero);
 
         // 4. Append to particle-only array (+0xbd0) — drives per-frame Update.
-        AppendToDynArray<void*>(self->_particleArray, inst);
+        AppendToDynArray<Graphics::Geometry*>(self->_particleArray, inst);
 
         // 5. Scene::AddObject + append id.
         uint32_t id = scene->AddObject(inst);
@@ -442,7 +435,7 @@ void MenuDialogLoopT_TickParticles(MenuDialogLoopT* self, const System::Time* ti
 
     // Retail reads the +0xbd0 array AS `Geometry**` (exe 0x14009b6e0).
     Collection::Array<Graphics::Geometry*>& particles =
-        LoopArray<Graphics::Geometry*>(self->_particleArray);
+        self->_particleArray;
     Graphics::Geometry** arr = particles.GetData();
     int32_t count = particles.GetSize();
 
@@ -906,7 +899,7 @@ void MenuDialogLoopT_StartMusic(MenuDialogLoopT* self) {
     // 1. Register the loop's embedded Audio::Scene (+0xb30) with the
     //    DialogInstance base at +0xd0 (where UI sound effects route). The
     //    original writes this even before PlayEffect.
-    Audio::Scene* audioScene = self->AudioScene();   // the embedded Audio::Scene (+0xb30)
+    Audio::Scene* audioScene = &self->_audioScene;   // the embedded Audio::Scene (+0xb30)
     self->_ui._audioScene = audioScene;              // +0xd0 = UI (+0x40) + 0x90
 
     // 2. Play the looping menu music.
@@ -949,7 +942,7 @@ void MenuDialogLoopT_StartMusic(MenuDialogLoopT* self) {
 // freed/null array (STATUS open defect (c), ~1 in 60 resave runs).
 void MenuDialogLoopT_StopMusic(MenuDialogLoopT* self) {
     if (!self) return;
-    self->AudioScene()->StopAll();   // the embedded Audio::Scene (+0xb30)
+    self->_audioScene.StopAll();   // the embedded Audio::Scene (+0xb30)
 }
 
 // ============================================================
@@ -1018,7 +1011,7 @@ void MenuDialogLoopT_BindUISounds(MenuDialogLoopT* self) {
 void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, const System::Time* time) {
     if (!self || !time) return;
 
-    Audio::Scene* audioScene = self->AudioScene();   // the embedded Audio::Scene (+0xb30)
+    Audio::Scene* audioScene = &self->_audioScene;   // the embedded Audio::Scene (+0xb30)
 
     System::Time elapsed = *time;
     System::Time timeZero; timeZero._ticks = 0;            // Time(0), passed by value

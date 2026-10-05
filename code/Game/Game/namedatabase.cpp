@@ -77,7 +77,7 @@ bool NameDatabase::Serialize(IO::Stream& stream) {
     if (c1 > 0) {
         NameDatabaseEntry* p = _array1.GetData();   // element0
         for (int i = 0; i < c1; ++i) {
-            ser.SerializeBytes(4, p[i].field_0x00, nullptr);   // field0: 4 raw bytes
+            ser.SerializeBytes(4, &p[i].field_0x00, nullptr);   // field0: 4 raw bytes
             ser.Serialize(p[i].field_0x04, nullptr);           // field1: uchar
             ser.Serialize(p[i].field_0x08, nullptr);           // field2: uint
         }

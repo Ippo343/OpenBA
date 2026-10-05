@@ -52,7 +52,7 @@ public:
     float    tempVariation;      // +0x38: 30.0f
     float    precipitation;      // +0x3C: 5.0f
     float    windSpeed;          // +0x40: 10.0f
-    uint8_t  _climateData[0xC0]; // +0x44: 48 floats (seasonal/biome data, memset to 0)
+    float    _climateData[48];   // +0x44: 48 floats (seasonal/biome data, memset to 0; Serialize(0x30, float*))
     float    _field104;          // +0x104: 0.0f (serialized as float)
     float    _field108;          // +0x108: 1.0f
     float    _field10C;          // +0x10C: 1.0f

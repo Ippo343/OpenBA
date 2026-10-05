@@ -39,6 +39,7 @@
 #include "Game/exe_bodies.h"
 #include "Game/MapGenerator.h"        // ExternalRef / InitialStructure, the element rows (B4 P2 GAME-1)
 #include "Game/Minimap.h"             // Game_ImageCaptureDtor's class (B.4 GAME-a)
+#include "Game/MenuScene.h"           // MenuSceneTreeMap (0x14001b860)
 #include "Game/WeatherSimulation.h"   // Game_WeatherDtor's class (B.4 GAME-a)
 #include "Work/exe_bodies.h"   // WorkBase_TreeNodeFree_e320
 
@@ -103,50 +104,22 @@ void Game_ImageCaptureDtor(Minimap* self) {
 }
 
 // ------------------------------------------------------------------
-// FUN_14001b860 (menuscene.cpp) — tear down a small tree at +0x10 (root's two
-// children freed via the registered recursive tree-free 0x14000e320), then free
-// the backing array at +0. Mirrors FUN_14000a8a0's sibling layout but with a
-// tree node rather than a String element.
+// 0x14001b860 — MenuSceneTreeMap::~MenuSceneTreeMap (Game/MenuScene.h; MenuScene
+// holds two, at +0x1C8 and +0x1E8, destroyed by ~MenuScene's member
+// destruction). Free the tree at +0x10 (the root's two children through the
+// shared recursive free 0x14000e320, then the root), zero root and count; the
+// compiler then runs ~Array on the backing array at +0 (MemFree(*p); p[0] = 0;
+// p[1] = 0), as retail does after the body.
 // ------------------------------------------------------------------
-//
-// B4 P2 GAME-1: the record is {Array @+0, tree root @+0x10, int32 count @+0x18}
-// (retail 0x14001b860: MemFree(*p), p[0] = p[1] = 0; root at p[2], a dword 0 at
-// p[3]); MenuScene holds two of them (+0x1C8, +0x1E8). The node's only fields
-// this body reads are its two children at +0x18 / +0x20 (the shared tree free
-// 0x14000e320 walks the same two); its key and size are not read here.
-namespace {
-struct MenuSceneTreeNode {
-    uint8_t            _key[0x18];   // +0x00 not read by 0x14001b860
-    MenuSceneTreeNode* left;         // +0x18
-    MenuSceneTreeNode* right;        // +0x20
-};
-static_assert(offsetof(MenuSceneTreeNode, left)  == 0x18, "MenuSceneTreeNode::left @ +0x18 (0x14001b860)");
-static_assert(offsetof(MenuSceneTreeNode, right) == 0x20, "MenuSceneTreeNode::right @ +0x20 (0x14001b860)");
-struct MenuSceneTreeMap {
-    rtcoll::ArrayHdr   array;        // +0x00 trivial-element Array
-    MenuSceneTreeNode* root;         // +0x10
-    int32_t            count;        // +0x18
-    uint8_t            _pad1C[4];    // +0x1C
-};
-static_assert(sizeof(MenuSceneTreeMap) == 0x20, "MenuScene +0x1C8 / +0x1E8 records are 0x20 apart");
-static_assert(offsetof(MenuSceneTreeMap, root)  == 0x10, "MenuSceneTreeMap::root @ +0x10 (0x14001b860)");
-static_assert(offsetof(MenuSceneTreeMap, count) == 0x18, "MenuSceneTreeMap::count @ +0x18 (0x14001b860)");
-}  // namespace
-
-void Game_MenuSceneArrayDtor(void* self) {
-    MenuSceneTreeMap* map = reinterpret_cast<MenuSceneTreeMap*>(self);   // LEFT: H5 MenuScene.h +0x1C8 / +0x1E8 are raw fields of a {Array, root, count} record (an Array member would make ~MenuScene run ~Array; retail 0x14001b860 is called explicitly)
-    MenuSceneTreeNode* node = map->root;  // *(self + 0x10)
+MenuSceneTreeMap::~MenuSceneTreeMap() {
+    MenuSceneTreeNode* node = root;  // *(self + 0x10)
     if (node) {
-        WorkBase_TreeNodeFree_e320(&map->root, node->left);   // 0x14000e320
-        WorkBase_TreeNodeFree_e320(&map->root, node->right);
+        WorkBase_TreeNodeFree_e320(&root, node->left);   // 0x14000e320
+        WorkBase_TreeNodeFree_e320(&root, node->right);
         System::MemoryAllocator::MemFree(node);
     }
-    map->root = nullptr;
-    map->count = 0;
-    // ENDGAME B.3.2 step 2: the backing array at +0 is a trivial-element
-    // `~Array` (re-decompiled 2026-09-13: MemFree(*p); p[0] = 0; p[1] = 0).
-    // The tree at +0x10 above is a {root, count} pair, not an Array; untouched.
-    map->array.~Array();
+    root = nullptr;
+    count = 0;
 }
 
 // ------------------------------------------------------------------

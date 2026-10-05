@@ -454,10 +454,10 @@ static_assert(std::is_trivially_default_constructible<MusicPlayer>::value,
 static_assert(std::is_trivially_default_constructible<Minimap>::value,
               "placement new of Minimap runs no code");
 
-// 0x14009ee70 — the Map ctor (+0xF8, 0xf8). Embedded Picking::Scene @ +8
-// (raw storage, H5: constructed by hand, as the tree always has).
+// 0x14009ee70 — the Map ctor (+0xF8, 0xf8). The embedded Picking::Scene @ +8
+// is a member: its default ctor (0x1801258e0) runs first, as retail's call of
+// the import does; then the zero stores.
 Map::Map() {
-    RtPicking_Scene_Ctor(pickingScene);
     memset(&pathfinder, 0, sizeof(Map) - offsetof(Map, pathfinder));   // zero +0x68..+0xf8 (keeps the Scene at +8)
     field_0xA2 = true;
     cellQueue.pool.growCount = 8;             // +0xD0 / +0xD4: one qword store of 8 (H7: two stores)

@@ -22,6 +22,7 @@
 
 #include "game_main.h"
 #include <windows.h>
+#include <xaudio2.h>   // IXAudio27 / IXAudio2MasteringVoice (Audio::Device +0xa88 / +0xa90)
 #include "system/Value.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "system/Filename.h"
@@ -199,16 +200,14 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
     // 5. Audio sub-object teardown — vtable[+0x12] / [+0x2] of two children
     // at audio_device+0xa90 / +0xa88, then null those slots.
     if (Audio::Device* ad = engine->GetAudioDevice()) {   // +0x6d0
-        // LEFT: the XAudio2 interfaces are held as void* (Audio/Device.h); the two
-        // calls are IXAudio2MasteringVoice::DestroyVoice and IXAudio2::Release.
-        if (void* sub1 = ad->_masteringVoice) {                  // +0xa90
-            void** vt = *reinterpret_cast<void***>(sub1);   // LEFT: FLOOR? COM vtable read by index: Audio/Device.h (RT) keeps the XAudio2 interfaces as void*
-            reinterpret_cast<void(*)(void*)>(vt[0x90/8])(sub1);   // LEFT: FLOOR? COM vtable read by index: Audio/Device.h (RT) keeps the XAudio2 interfaces as void*
+        // The two calls are IXAudio2MasteringVoice::DestroyVoice (vtable +0x90)
+        // and IXAudio2::Release (+0x10) on the typed interfaces (Audio/Device.h).
+        if (IXAudio2MasteringVoice* sub1 = ad->_masteringVoice) {   // +0xa90
+            sub1->DestroyVoice();
         }
         ad->_masteringVoice = nullptr;
-        if (void* sub2 = ad->_xaudio2) {                         // +0xa88
-            void** vt = *reinterpret_cast<void***>(sub2);   // LEFT: FLOOR? COM vtable read by index: Audio/Device.h (RT) keeps the XAudio2 interfaces as void*
-            reinterpret_cast<void(*)(void*)>(vt[0x10/8])(sub2);   // LEFT: FLOOR? COM vtable read by index: Audio/Device.h (RT) keeps the XAudio2 interfaces as void*
+        if (IXAudio27* sub2 = ad->_xaudio2) {                       // +0xa88
+            sub2->Release();
         }
         ad->_xaudio2 = nullptr;
     }
