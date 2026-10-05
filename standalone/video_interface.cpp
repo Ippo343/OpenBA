@@ -48,20 +48,14 @@
 #include "video/Device.h"    // Video::Device, Video::Device::InterfaceSlot
 
 #include "dx11_seam.h"
+// B5 DEV-A: the two DLL exports (dx11/src/exports.cpp) and the cutover-only DX9
+// placeholder (dx11/src/dx9_placeholder.cpp), declared by the plugin's header
+// instead of a local extern block.
+#include "VideoDX11Plugin.h"
 
 #include <windows.h>
 #include <cstdint>
 #include <cstdio>
-
-namespace VideoDX11 {
-// dx11/src/exports.cpp — our ports of the two DLL exports.
-struct DeviceData;
-DeviceData* Dx11_CreateDeviceData(::Video::Device* device);
-const char* Dx11_GetDeviceName();
-// dx11/src/devicedata.cpp -- the cutover-only DX9 placeholder (see there).
-void*       Dx9Placeholder_CreateDeviceData(void* device);
-const char* Dx9Placeholder_GetDeviceName();
-}  // namespace VideoDX11
 
 namespace {
 

@@ -109,6 +109,7 @@
 // corresponding factory. That is 17 independent confirmations of one constant.
 
 #include "dx11_seam.h"
+#include "VideoDX11Plugin.h"   // Dx11EnumerateDxgiInterfaces (defined here)
 #include "stall_debug.h"
 #include "boot_window.h"
 #include "dx11_backend_access.h"
@@ -1538,7 +1539,8 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
 //     out-pointer for null before calling through it.
 // ============================================================
 // The adapter/output/mode walk, factored out of DeviceData_EnumerateInterfaces
-// so the cutover-only DX9 placeholder below can list the SAME adapters under
+// so the cutover-only DX9 placeholder (dx9_placeholder.cpp, through
+// Dx11EnumerateDxgiInterfaces at the end of this file) can list the SAME adapters under
 // its own name (on a retail machine the DX9 plugin enumerates the same GPUs and
 // modes through d3d9). Byte-for-byte the shipped walk; only `dev` and the
 // interface name are parameters now.
@@ -1756,56 +1758,6 @@ bool DeviceData_EnumerateInterfaces(DeviceData* self) {
 }
 
 // ============================================================
-// The DX9 PLACEHOLDER slot -- cutover only
-//
-// VideoDX9-x64.dll imports Runtime-x64.dll, so with the Runtime DLL absent it
-// cannot load and slot 0 stays empty. Retail then appends nothing for it and
-// the Device's GraphicsInterface array holds ONE entry (ours, DX11) while the
-// configuration's interface index -- a SLOT index, 1 -- stays 1: the Options
-// dialog's PopulateResolutionCombo (retail 0x140073ec0) does
-// GetInterface(cfgIndex) with no bounds check and reads past the array. Retail
-// never meets this because both plugin DLLs always load and each appends one
-// entry, so array index == slot index. This placeholder keeps that invariant:
-// it appends a "DirectX 9" interface listing the SAME adapters and modes the
-// DX11 walk finds (which is what the real plugin reports on a machine that has
-// both). Its Create() returns false, so choosing it in Options leaves the
-// fallback loop in Device::PlatformStartup to step back to DX11. Filled only by
-// VideoInterfaceFillDx9Placeholder (standalone/video_interface.cpp), which the
-// ported InitializeInterfaces calls only when the DLL is absent.
-// ============================================================
-namespace {
-struct Dx9Placeholder { void* vptr; void* device; };
-
-void Dx9P_DeletingDtor(Dx9Placeholder* self, int flag) {   // vtable +0x00
-    if (flag & 1) delete self;
-}
-bool Dx9P_EnumerateInterfaces(Dx9Placeholder* self) {       // vtable +0x08
-    CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
-    D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
-    if (!createFactory || !createDevice) return false;
-    // The same adapters and modes DX11 lists, under the DX9 name: what the
-    // real plugin reports on this machine. A zero-adapter entry was tried
-    // first and selecting it in Options died in UserInterface::Draw.
-    return EnumerateDxgiInterfaceInto(self->device, "DirectX 9",
-                                      createFactory, createDevice);
-}
-bool Dx9P_Create(Dx9Placeholder*)  { return false; }        // vtable +0x10
-void Dx9P_Destroy(Dx9Placeholder*) {}                       // vtable +0x18
-
-void* g_dx9PlaceholderVtable[4] = {
-    reinterpret_cast<void*>(&Dx9P_DeletingDtor),
-    reinterpret_cast<void*>(&Dx9P_EnumerateInterfaces),
-    reinterpret_cast<void*>(&Dx9P_Create),
-    reinterpret_cast<void*>(&Dx9P_Destroy),
-};
-}  // namespace
-
-void*       Dx9P_CreateImpl(void* device) {
-    return new Dx9Placeholder{ g_dx9PlaceholderVtable, device };
-}
-const char* Dx9P_NameImpl() { return "DirectX 9"; }
-
-// ============================================================
 // Slots 9..19 — the eleven resource factories
 //
 // Every one is the same five steps:
@@ -1982,6 +1934,18 @@ int Dx11_DeviceData_Resize(void* deviceData) {
     return DeviceData_Resize(static_cast<DeviceData*>(deviceData));
 }
 
+// The slot-1 walk with external linkage (VideoDX11Plugin.h): DeviceData's own
+// EnumerateInterfaces and the DX9 placeholder (dx9_placeholder.cpp) both run
+// it, under their own interface name — one body, never a copy. B5 DEV-A (D9):
+// the two graphics entry points failing to resolve returns false; there is no
+// shipped DLL behind it to forward to.
+bool Dx11EnumerateDxgiInterfaces(::Video::Device* device, const char* interfaceName) {
+    CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
+    D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
+    if (!createFactory || !createDevice) return false;
+    return EnumerateDxgiInterfaceInto(device, interfaceName, createFactory, createDevice);
+}
+
 }  // namespace VideoDX11
 
 // ============================================================
@@ -2050,10 +2014,3 @@ DX11_REGISTER_SLOT(DeviceData, 18, &::VideoDX11::Factory_VideoProgramData,
                    "DeviceData::CreateVideoProgramData");
 DX11_REGISTER_SLOT(DeviceData, 19, &::VideoDX11::Factory_RenderBufferData,
                    "DeviceData::CreateRenderBufferData");
-
-// The two placeholder entry points, with EXTERNAL linkage (the bodies above sit
-// in this file's unnamed namespace, as every DX11 body does).
-namespace VideoDX11 {
-void*       Dx9Placeholder_CreateDeviceData(void* device) { return Dx9P_CreateImpl(device); }
-const char* Dx9Placeholder_GetDeviceName()                { return Dx9P_NameImpl(); }
-}  // namespace VideoDX11
