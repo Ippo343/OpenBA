@@ -221,7 +221,7 @@ UNIT_TEST(wrk_leaf_harvestarea) {
     CHECK_EQ(offsetof(HarvestArea, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(HarvestArea, _cells) + offsetof(HarvestArea::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestArea, _field58), (size_t)0x58);
-    CHECK_EQ(offsetof(HarvestArea, _field60), (size_t)0x60);
+    CHECK_EQ(offsetof(HarvestArea, _field58) + offsetof(HarvestArea::SlotFlags, _size), (size_t)0x60);
 }
 
 UNIT_TEST(wrk_leaf_harvestorchard) {
@@ -274,7 +274,7 @@ UNIT_TEST(wrk_leaf_plantarea) {
     CHECK_EQ(offsetof(PlantArea, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(PlantArea, _cells) + offsetof(PlantArea::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(PlantArea, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(PlantArea, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(PlantArea, field_58) + offsetof(PlantArea::SlotFlags, _size), (size_t)0x60);
     CHECK_EQ(offsetof(PlantArea, field_68), (size_t)0x68);
 }
 

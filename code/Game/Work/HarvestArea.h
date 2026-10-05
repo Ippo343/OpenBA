@@ -67,14 +67,14 @@ public:
     // its +0x0c pad (+0x54), which retail leaves (known_port_issues row 640).
     using CellSet = Collection::Set<Claim>;
     CellSet _cells;
-    // +0x58 / +0x60 / +0x64: Collection::Array<bool> {data, count, capacity}, one flag per
-    // crop-field slot (Persist 0x1400ed350 serializes it through the bool-array door
-    // 0x140151458 with the int count at +0x60; Execute and OnComplete 0x1400ecc20 read
-    // +0x60 as a dword; the ctor 0x1400ed4c0 and the dtor clear +0x60/+0x64 with one
-    // qword store). The container stays raw (H5).
-    bool*    _field58;           // +0x58: zeroed
-    int32_t  _field60;           // +0x60: count
-    int32_t  _field64;           // +0x64: capacity
+    // +0x58: Collection::Array<bool> {data, count +0x60, capacity +0x64}, one flag per
+    // crop-field slot (Persist 0x1400ed350 serializes it through the bool-array door 0x140151458 with
+    // the int count at +0x60). A real member: the ctor 0x1400ed4c0 zeroes +0x58 / +0x60 as two
+    // qwords after the set; the dtor 0x1400ed410 restamps, MemFree(+0x58), +0x58 = +0x60 = 0,
+    // THEN clears the set: reverse declaration order (~Array before ~Set). It grows through
+    // 0x14000a590 (stride 1, align 1, NO tail write: the trait row of a trivial bool).
+    using SlotFlags = Collection::Array<bool>;
+    SlotFlags _field58;
 };
 
 static_assert(sizeof(HarvestArea::Claim) == 0x10, "HarvestArea claim element 0x10");
@@ -91,5 +91,5 @@ static_assert(alignof(HarvestArea) == 8, "HarvestArea is 8-aligned");
 static_assert(offsetof(HarvestArea, _cells) == 0x48, "HarvestArea +0x48");
 static_assert(offsetof(HarvestArea, _cells) + offsetof(HarvestArea::CellSet, _count) == 0x50, "HarvestArea +0x50");
 static_assert(offsetof(HarvestArea, _field58) == 0x58, "HarvestArea +0x58");
-static_assert(offsetof(HarvestArea, _field60) == 0x60, "HarvestArea +0x60");
-static_assert(offsetof(HarvestArea, _field64) == 0x64, "HarvestArea +0x64");
+static_assert(offsetof(HarvestArea, _field58) + offsetof(HarvestArea::SlotFlags, _size) == 0x60, "HarvestArea +0x60");
+static_assert(offsetof(HarvestArea, _field58) + offsetof(HarvestArea::SlotFlags, _capacity) == 0x64, "HarvestArea +0x64");
