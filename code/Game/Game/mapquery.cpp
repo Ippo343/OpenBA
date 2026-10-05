@@ -177,8 +177,10 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
 
     // outTri (param_5) receives the surface normal — only [2] (slope/flatness) is
     // consumed downstream (the tile classifier), but we fill a true unit normal.
-    // LEFT: outTri is `void*` in the C declaration ~150 callers hold.
-    float* tri = (float*)outTri;   // LEFT: outTri is `void*` in the C declaration ~150 callers hold.
+    // LEFT: outTri is `void*` in the C declaration (Game/exe_bodies.h) ~90 callers
+    // hold; a float* parameter breaks fencedtool.cpp (GAMEB), which hands a
+    // uint32_t[2] (known_port_issues row 730).
+    float* tri = (float*)outTri;   // LEFT: SIG Reimpl_MapGetTerrainPos's outTri is void*: fencedtool.cpp (GAMEB) hands a uint32_t[2], which a float* parameter rejects (known_port_issues row 730)
     if (tri)
         MapQuery_SampleNormal(worldGeom, inX, inZ, tri);
 

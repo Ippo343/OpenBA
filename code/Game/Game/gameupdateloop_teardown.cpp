@@ -93,7 +93,7 @@ extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
     // Array<ArrayHdr>::~Array — the trait-derived row's destroy is ~ArrayHdr on
     // each of `count` 0x10-byte elements in ascending order (retail's loop),
     // then ArrayDtorImpl on the outer header.
-    reinterpret_cast<Collection::Array<rtcoll::ArrayHdr>*>(hdrV)->~Array();   // LEFT: its one caller (~WorldGeometry, geometry_draw.cpp) holds _contourOutlines as RawArray<RawArray<Vector2>> (Action/PathSearch.h, X6-CW); a Collection::Array member would be destroyed after ~WorldGeometry's body, where retail frees it inside the body between +0x1f0 and +0x1d0
+    reinterpret_cast<Collection::Array<rtcoll::ArrayHdr>*>(hdrV)->~Array();   // LEFT: its one caller (~WorldGeometry, geometry_draw.cpp) holds _contourOutlines as RawArray<RawArray<Vector2>>; retail's dtor 0x1400aed50 destroys +0x220..+0xd8 as members (the buffers through the imported ~IndexBuffer / ~VertexBuffer, 0x1400aeeaf..0x1400aeed9), so typing it needs Video::IndexBuffer / VertexBuffer destructors (runtime/types/video/Buffers.h, RT) and the +0xe8 tree / +0xd8 array typed in the same commit
 }
 
 // ============================================================

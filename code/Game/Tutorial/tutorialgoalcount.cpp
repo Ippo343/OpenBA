@@ -127,20 +127,14 @@ static const T* ResolveTypePtr(NamedExternalRef& ref) {
 TutorialGoalCount::TutorialGoalCount()
     : countMode(0), targetCount(0),          // one qword store at +0x20
       greaterOrEqual(false), _pad29{},
-      typeRef{{}, -1, {}, nullptr},          // null name, generation sentinel
-      elementName(0) {}                      // null string
+      typeRef(),                             // null name, generation sentinel
+      elementName() {}                       // null string
 
-// LEFT H5: the +0x48 String is raw storage (see the header).
-System::String& TutorialGoalCount::ElementName() {
-    return *reinterpret_cast<System::String*>(&elementName);   // LEFT: H5 TutorialGoalCount::elementName (+0x48) is raw String storage: retail's dtor 0x140027820 releases +0x48 (0x14002784b) BEFORE typeRef's name +0x30 (0x14002785b); a String member would be released after the body's manual typeRef release, reversing that, until NamedExternalRef::name is typed in the same commit
-}
-
-// The dtor inside [0] 0x140027820: ~String +0x48, ~String +0x30; the
-// compiler re-stamps TutorialGoal and runs ~External.
-TutorialGoalCount::~TutorialGoalCount() {
-    ElementName().~String();
-    typeRef.Name().~String();
-}
+// The dtor inside [0] 0x140027820: ~String +0x48 (0x14002784b), ~String +0x30
+// (0x14002785b); the compiler re-stamps TutorialGoal and runs ~External.
+// B4 Y GAMEA (H5): both are the members', after this empty body, in reverse
+// declaration order.
+TutorialGoalCount::~TutorialGoalCount() {}
 
 // ============================================================
 // TutorialGoalCount::Serialize (vtable +0x28, 0x1400df900)
@@ -160,7 +154,7 @@ bool TutorialGoalCount::Serialize(IO::Stream& stream) {
     ser.Serialize(targetCount, nullptr);
 
     // the type's name (+0x30) as String
-    typeRef.Name().Serialize(ser);
+    typeRef.name.Serialize(ser);
 
     // If loading (serializer version == 0), resolve the external ref
     int version = ser.GetVersion();
@@ -172,7 +166,7 @@ bool TutorialGoalCount::Serialize(IO::Stream& stream) {
     ser.Serialize(greaterOrEqual, nullptr);
 
     // elementName (+0x48) as String
-    ElementName().Serialize(ser);
+    elementName.Serialize(ser);
     return true;
 }
 
@@ -452,7 +446,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     // SpinnerElement (0x140013920), reads its value if not active.
     case 9: {
         Object::InternalPtr<UI::Element> found;
-        FindUIElementByPath_Impl(&found, &ElementName(), nullptr);   // 0x1400e1870
+        FindUIElementByPath_Impl(&found, &elementName, nullptr);   // 0x1400e1870
 
         UI::Element* element = found.Get();
         if (!element) { break; }
