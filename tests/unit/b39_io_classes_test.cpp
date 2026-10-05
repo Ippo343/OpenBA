@@ -411,11 +411,11 @@ UNIT_TEST(b39_io_filestream_and_binaryfilestream_ctor_stores) {
     CHECK_EQ(fs->_file.cursor, 0);
     CHECK_EQ(fs->_file.baseOffset, 0);
     CHECK_EQ(fs->_file.winHandle, INVALID_HANDLE_VALUE);
-    CHECK(fs->_file._name0.data == nullptr);
-    CHECK(fs->_file._name1.data == nullptr);
+    CHECK(fs->_file._name0._data == nullptr);
+    CHECK(fs->_file._name1._data == nullptr);
     for (int i = 0x0c; i < 0x10; ++i) CHECK_EQ((int)mem[i], 0xCD);
     for (int i = 0x24; i < 0x28; ++i) CHECK_EQ((int)mem[i], 0xCD);   // FileInfo::_unk04
-    for (int i = 0x34; i < 0x38; ++i) CHECK_EQ((int)mem[i], 0xCD);   // FileInfo::_pad14
+    for (int i = 0x34; i < 0x38; ++i) CHECK_EQ((int)mem[i], 0xCD);   // FileInfo padding at +0x14
     fs->~FileStream();                                  // retail flags 0
 
     alignas(8) uint8_t mem2[0x50];
@@ -573,12 +573,12 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     CHECK(pf->_previewData._data == nullptr);
     CHECK_EQ(pf->_crc, 0u);
     CHECK_EQ((int)pf->_overridable, 1);
-    CHECK_EQ(pf->_entryCount, 0);
+    CHECK_EQ(pf->_entries._size, 0);
     CHECK_EQ(pf->_file.handle, -1);
     CHECK_EQ(pf->_file.size, 0);
     CHECK_EQ(pf->_file.baseOffset, 0);
     CHECK_EQ(pf->_file.winHandle, INVALID_HANDLE_VALUE);
-    CHECK(pf->_file._name1.data == nullptr);
+    CHECK(pf->_file._name1._data == nullptr);
     for (int i = 0x78; i < 0x80; ++i) CHECK_EQ((int)mem[i], 0xCD);
     for (int i = 0x90; i < 0x98; ++i) CHECK_EQ((int)mem[i], 0xCD);
     for (int i = 0xad; i < 0xb0; ++i) CHECK_EQ((int)mem[i], 0xCD);

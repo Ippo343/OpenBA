@@ -758,7 +758,7 @@ void Modification::RefreshList() {
         // and sends the walk right, while a null SEARCH key descends LEFT in the
         // first arm and ends the walk with NO INSERT in the second.
         // -------------------------------------------------------------------
-        const int32_t entryCount = pkgObj->_entryCount;          // +0xb8
+        const int32_t entryCount = pkgObj->_entries._size;       // +0xb8
         for (int32_t e = 0; e < entryCount; ++e) {
             // GetFileName's by-value return is constructed straight into `key`
             // (the hidden return slot).

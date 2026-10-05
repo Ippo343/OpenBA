@@ -336,14 +336,11 @@ void FileSystem::SetupDirectories() {
     // --- 0x1800abe08-0x1800abf50: the cmd.txt response file ----------------
     // NOT REACHED on any boot of this project (there is no cmd.txt).
     if (exists) {
-        RtIO::FileInfo fi;
-        {
-            // Filename(const String&) again, 0x18000c780; retail releases it
-            // immediately after the OpenFile call (0x1800abe6a), which is what
-            // this inner scope is.
-            System::Filename f(cmdPath);
-            OpenFile(&fi, f);
-        }
+        // OpenFile into `fi` as its hidden return slot. The argument is
+        // Filename(const String&) again, 0x18000c780, a temporary retail
+        // releases immediately after the OpenFile call (0x1800abe6a): the end
+        // of this full-expression.
+        RtIO::FileInfo fi = OpenFile(System::Filename(cmdPath));
 
         if (fi.handle != -1) {
             const int size = static_cast<int>(static_cast<uint32_t>(fi.size));
@@ -359,9 +356,8 @@ void FileSystem::SetupDirectories() {
             RtIO::RtMemFree(buf);
             // ~text is retail's release at 0x1800abf4b.
         }
-        // ~FileInfo, reverse order — 0x1800abef2 then 0x1800abf23.
-        RtIO::RtString_ReleaseInline(&fi._name1);
-        RtIO::RtString_ReleaseInline(&fi._name0);
+        // ~fi (FileInfo's dtor, reverse order: 0x1800abef2 then 0x1800abf23)
+        // at the end of this block.
     }
 
     // --- 0x1800abf54-0x1800ac06a: `sub`, the "-bin" sub-directory ----------

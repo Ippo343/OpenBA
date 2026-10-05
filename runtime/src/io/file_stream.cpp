@@ -155,20 +155,10 @@
 #include "../system/string.h"
 #include "../system/pod_bridge.h"
 
-// Rung 4 of Wave 9 lane PKG2 (filesystem_openfile_win.cpp), already ported and
-// registered. Declared here rather than pulled in from a header because that
-// lane publishes none and this lane does not edit another lane's files.
-extern "C" RtIO::FileInfo* RtIo_FileInfo_Assign(RtIO::FileInfo*, const RtIO::FileInfo*);
-extern "C" RtIO::FileInfo* RtIo_FileInfo_CopyCtor(RtIO::FileInfo*, const RtIO::FileInfo*);
-
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
 using RtSystem::StringRefCount;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
-using RtSystem::SysFile;  //   "
 
 // The stream layouts live in `RtIo` (lower-case o) while FileInfo/FileSystem
 // live in `RtIO`. Both spellings are long-standing in this tree — FileSystem.h
@@ -249,22 +239,10 @@ FileStreamCounters g_fsc{};
 // ============================================================================
 // ~FileInfo                                              retail 0x18000c180
 // ============================================================================
-// UNEXPORTED, 25 instructions, and it is nothing but the String release idiom
-// twice — _name1 (+0x28) FIRST, then _name0 (+0x20). Ported and registered by
-// ADDRESS here because `~FileStream` calls it and nothing else in the tree had
-// registered it; at cutover an unregistered address is a call through null
-// (`reference_by_address_door_dies_at_cutover.md`).
-//
-// The release idiom's ASYMMETRY is retail's and is preserved by
-// RtString_ReleaseInline: on the freeing branch the slot is left holding
-// `data - 8` (0x18000c1b0 `ADD qword [RAX],-0x8` before the free) and only the
-// NON-freeing branch nulls it (0x18000c1be).
-// ============================================================================
-extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
-    ++g_fsc.fileInfoDtor;
-    SysFile(self->_name1).~Filename();       // 18000c19f  +0x28 FIRST
-    SysFile(self->_name0).~Filename();       // 18000c1ce  +0x20
-}
+// B.4 Z LAST IO: FileInfo's own (implicit) destructor now — the String release
+// idiom twice, _name1 (+0x28) FIRST, then _name0 (+0x20): reverse declaration
+// order of its two Filename members. The `RtIo_FileInfo_Dtor` body that stood
+// here, and its `fileInfoDtor` attendance count, are gone with it.
 
 // ============================================================================
 // ??1FileStream@IO@@UEAA@XZ          retail 0x1800aaab0
@@ -462,11 +440,9 @@ bool IO::FileStream::Create(const System::Filename& path) {
     // ---- 1800aa960..1800aa9ef -------------------------------------------
     // NOT zero-initialised: CreateFileW writes every field of it that anything
     // reads, and _unk04 is one neither side ever writes.
-    RtIO::FileInfo tmp;
-    ::IO::FileSystem::_singleton->CreateFileW(&tmp, path);      // 1800aa96f
-    RtIo_FileInfo_Assign(&_file, &tmp);                         // 1800aa97c
-    RtSystem::SysFile(tmp._name1).~Filename();                  // 1800aa982  +0x28 first
-    RtSystem::SysFile(tmp._name0).~Filename();                  // 1800aa9b9  +0x20
+    // CreateFileW into a temporary (1800aa96f), FileInfo::operator=
+    // (1800aa97c), ~FileInfo on the temporary (1800aa982 +0x28, 1800aa9b9 +0x20).
+    _file = ::IO::FileSystem::_singleton->CreateFileW(path);
 
     const bool ok = (_file.handle != -1);                       // 1800aa9f0
     if (ok) ++RtIO::g_fsc.createTrue;
@@ -730,11 +706,9 @@ bool FileStream::Open(const System::Filename& path) {
 
     _direction = 0;                                      // 1800aaccd — READING
 
-    RtIO::FileInfo tmp;                                   // not zero-initialised
-    FileSystem::_singleton->OpenFile(&tmp, path);          // 1800aacdf
-    RtIo_FileInfo_Assign(&_file, &tmp);                   // 1800aacec
-    RtSystem::SysFile(tmp._name1).~Filename();            // 1800aacf2  +0x28 first
-    RtSystem::SysFile(tmp._name0).~Filename();            // 1800aad29  +0x20
+    // OpenFile into a temporary (1800aacdf), FileInfo::operator= (1800aacec),
+    // ~FileInfo on the temporary (1800aacf2 +0x28, 1800aad29 +0x20).
+    _file = FileSystem::_singleton->OpenFile(path);
 
     const bool ok = (_file.handle != -1);                 // 1800aad60
     if (ok) ++RtIO::g_fss.openTrue;
@@ -757,7 +731,9 @@ FileStream::~FileStream() {
     ++RtIO::g_fsc.fsDtor;
     if (_file.handle != -1)                                       // 1800aaad5
         FileSystem::_singleton->CloseFile(_file);                 // 1800aaae6
-    RtIO::RtIo_FileInfo_Dtor(&_file);                             // 1800aaaf0
+    // 1800aaaf0 (~FileInfo 0x18000c180 on +0x20) and 1800aaaf6 (~String on
+    // +0x18) are the members' own destructors, run after this body in reverse
+    // declaration order (B.4 Z LAST IO).
 }
 
 // ============================================================================

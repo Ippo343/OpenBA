@@ -106,25 +106,14 @@
 // first was the tail of a mutating Filename entry point, which the class
 // spells as itself with AdjustDelimiters private inside it.
 
-// Rung 4 of Wave 9 lane PKG2, already ported and registered.
-extern "C" RtIO::FileInfo* RtIo_FileInfo_Assign(RtIO::FileInfo*, const RtIO::FileInfo*);
-
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
-using RtSystem::SysFile;  //   "
 
 namespace {
 
 // (B.4 Z MIRROR2: the WideStr slot, WideFromString and WideRelease are gone:
 // the four sites hold real System::WideString locals, whose ctor 0x1800cab50 /
 // 0x18000a6e0 and dtor 0x18000a730 are retail's, the release inlined there.)
-
-// ?SubString@String@System@@QEBA?AV12@HH@Z — ported (string.cpp), returns by
-// value, so RCX = this, RDX = the return slot, R8/R9 the two ints.
-typedef String* (*SubStringFn)(const String* self, String* ret, int a, int b);
 
 // Collection::Array<Filename>::~Array, retail 0x1800098d0, is
 // RtIO::RtColl_ArrayFilenameDtor_1800098d0 (modification.cpp); the unexported
@@ -352,14 +341,13 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
 
         // adopt-then-AdjustDelimiters == Filename(const String&), 0x18000c780.
         System::Filename norm(utf8);                         // 1800adf27..47
-        // Filename::operator=(const Filename&), 0x180006770. `_name0` is a
-        // `RtSystem::String` member of the not-yet-converted FileInfo.
-        RtIO::SysFile(info->_name0) = norm;                  // 1800adf58
+        // Filename::operator=(const Filename&), 0x180006770.
+        info->_name0 = norm;                                 // 1800adf58
 
     }
 
     // the CALLER's path -> _name1
-    RtIO::SysFile(info->_name1) = path;                      // 1800adfea/f1
+    info->_name1 = path;                                     // 1800adfea/f1
 
     ++RtIO::g_fcc.createOk;
     return true;                                             // 1800adff6
@@ -382,23 +370,15 @@ bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
 // -2 only on the success path — so the information is carried by the field, not
 // by the bool.
 // ============================================================================
-RtIO::FileInfo* FileSystem::CreateFileW(RtIO::FileInfo* ret,
-                                        const System::Filename& path) {
+RtIO::FileInfo FileSystem::CreateFileW(const System::Filename& path) {
     ++RtIO::g_fcc.createFileW;
 
-    ret->handle      = -1;          // 1800acc6c
-    ret->size        = 0;           // 1800acc72 (qword +0x08, covers cursor)
-    ret->cursor      = 0;
-    ret->baseOffset  = 0;           // 1800acc76
-    // `ret` is the hidden return slot: raw bytes, so these are two default
-    // ctors (??0Filename@System@@QEAA@XZ, 0x180006220), not stores through
-    // live objects.
-    new (&ret->_name0) System::Filename();   // 1800acc82
-    new (&ret->_name1) System::Filename();   // 1800acc8e
-    ret->winHandle   = INVALID_HANDLE_VALUE;          // 1800acc91
-    // +0x04 deliberately untouched, exactly as in ??0FileStream's prologue.
+    // FileInfo's default ctor in the hidden return slot (1800acc6c..91: the
+    // four fields, the two Filename() null stores 0x180006220, then winHandle;
+    // +0x04 untouched, exactly as in ??0FileStream's prologue).
+    RtIO::FileInfo ret;
 
-    PlatformCreateFile(*ret, path);          // 1800acca4 — result discarded
+    PlatformCreateFile(ret, path);           // 1800acca4 — result discarded
 
     return ret;                              // 1800acca9
 }
@@ -436,14 +416,14 @@ void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
     ::CloseHandle(info->winHandle);// 1800ae047
     info->winHandle = INVALID_HANDLE_VALUE;                                    // 1800ae04d
 
-    if (!info->_name0.data) return;                          // 1800ae059/5f
-    if (RtSystem::StringLength(info->_name0.data) == 0) return;  // 1800ae065/69
+    if (!info->_name0._data) return;                         // 1800ae059/5f
+    if (RtSystem::StringLength(info->_name0._data) == 0) return;  // 1800ae065/69
 
     ++RtIO::g_fcc.closeRenamed;
 
     // 3. delete the destination
     {
-        const System::WideString w(RtIO::Sys(info->_name1)); // 1800ae07b: 0x1800cab50
+        const System::WideString w(info->_name1);            // 1800ae07b: 0x1800cab50
         ::DeleteFileW(w._data);                              // 1800ae084 — discarded
         // ~w: 1800ae08d..b9
     }
@@ -452,16 +432,16 @@ void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
     //    FIRST (0x1800ae0c1, over _name1) and the SOURCE second (0x1800ae0d1,
     //    over _name0), then calls MoveFileW(source, destination).
     {
-        const System::WideString dst(RtIO::Sys(info->_name1));// 1800ae0c1
-        const System::WideString src(RtIO::Sys(info->_name0));// 1800ae0d1
+        const System::WideString dst(info->_name1);          // 1800ae0c1
+        const System::WideString src(info->_name0);          // 1800ae0d1
         ::MoveFileW(src._data, dst._data);                   // 1800ae0dd — discarded
         // ~src (1800ae0e4..111) then ~dst (1800ae111..13e): reverse declaration order.
     }
 
     // 5. clear both, through Filename::operator= from a null temporary
     //    (0x180006770); the temporary's own destructor is a no-op on null.
-    RtIO::SysFile(info->_name0) = System::Filename();        // 1800ae13e/14b
-    RtIO::SysFile(info->_name1) = System::Filename();        // 1800ae151/15e
+    info->_name0 = System::Filename();                       // 1800ae13e/14b
+    info->_name1 = System::Filename();                       // 1800ae151/15e
 }
 
 // ============================================================================
@@ -488,22 +468,11 @@ void FileSystem::CloseFile(RtIO::FileInfo& infoRef) {
 
     PlatformCloseFile(*info);                        // 1800accde
 
-    RtIO::FileInfo fresh;                            // NOT zero-initialised: see above
-    fresh.handle      = -1;                          // 1800acce3
-    fresh.size        = 0;                           // 1800accec (qword)
-    fresh.cursor      = 0;
-    fresh.baseOffset  = 0;                           // 1800accf0
-    // Two empty Filenames constructed into the raw stack slots (0x180006220);
-    // FileInfo is not a converted class, so they are built and destroyed by
-    // hand — one release each, in retail's order.
-    new (&fresh._name0) System::Filename();          // 1800accfb
-    new (&fresh._name1) System::Filename();          // 1800acd07
-    fresh.winHandle   = INVALID_HANDLE_VALUE;                          // 1800acd0b
-
-    ::RtIo_FileInfo_Assign(info, &fresh);            // 1800acd1a
-
-    RtIO::SysFile(fresh._name1).~Filename();         // 1800acd20  +0x28 first
-    RtIO::SysFile(fresh._name0).~Filename();         // 1800acd50  +0x20
+    // FileInfo's default ctor on the temporary (1800acce3..acd0b: the four
+    // fields, the two Filename() null stores 0x180006220, winHandle; +0x04
+    // NOT written), FileInfo::operator= (1800acd1a), then ~FileInfo on the
+    // temporary (1800acd20 +0x28 first, 1800acd50 +0x20).
+    *info = RtIO::FileInfo();
 
     // ---- NOT PART OF THE PORT ------------------------------------------
     // A one-shot trigger for file_stream_slots_probe.cpp, which needs a LIVE

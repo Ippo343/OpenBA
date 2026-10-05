@@ -225,7 +225,32 @@ static_assert(offsetof(PackageFileView, entryCount) == 0xB8,
 // and so happened to be right. It would not have stayed right for anyone who
 // used the field as a size on a file opened from inside a package, where +0x0C
 // is a live cursor rather than zero.
+// B.4 Z LAST IO (`behaviour:`): the two names are real `System::Filename`
+// members and FileInfo has retail's special members:
+//   * the default ctor is the one every retail site inlines (??0FileStream
+//     0x1800aaa10, ??0PackageFile 0x1800b44f1.., OpenFile 0x1800ac8b3,
+//     CreateFileW 0x1800acc6c, CloseFile 0x1800acce3, PlatformOpenFile
+//     0x1800add08): handle -1, size / cursor 0 (one qword), baseOffset 0, the
+//     two Filename() null stores, THEN winHandle = INVALID_HANDLE_VALUE. +0x04
+//     and +0x14 are never written;
+//   * the copy ctor is 0x18000c110 (five dwords, the qword at +0x18, then the
+//     Filename copy ctor 0x1800067d0 on +0x20 and +0x28; +0x14 not copied:
+//     it is padding, not a field);
+//   * operator= is 0x18000c200 (the same moves, then Filename::operator= on
+//     both names);
+//   * the dtor is 0x18000c180 (+0x28 released first, then +0x20: reverse
+//     declaration order).
+// No move operations (retail has none): the declared copy members suppress
+// them, so an rvalue FileInfo is copied, as retail's code does.
 struct FileInfo {
+    FileInfo()
+        : handle(-1), size(0), cursor(0), baseOffset(0) {
+        winHandle = reinterpret_cast<void*>(intptr_t{-1});   // INVALID_HANDLE_VALUE (no <windows.h> in a type header), stored after the names as retail does  // CAST-OK: win32
+    }
+    FileInfo(const FileInfo&) = default;              // 0x18000c110
+    FileInfo& operator=(const FileInfo&) = default;   // 0x18000c200
+    ~FileInfo() = default;                            // 0x18000c180
+
     // +0x00 — WHAT KIND OF FILE THIS IS, and it is not a plain handle:
     //   -1  nothing opened
     //   -2  a LOOSE file; the real Win32 HANDLE is at +0x18
@@ -241,16 +266,10 @@ struct FileInfo {
     int32_t  size;        // +0x08 — byte size of the file or of the pack entry
     int32_t  cursor;      // +0x0C — READ POSITION, advanced by ReadFile
     int32_t  baseOffset;  // +0x10 — a pack entry's offset within the .pkg; 0 for loose
-    int32_t  _pad14;      // +0x14 — not copied by the copy ctor
+                          // +0x14 — padding: no ctor, copy or assign writes it
     void*    winHandle;   // +0x18 — the Win32 HANDLE (INVALID_HANDLE_VALUE when there is none)
-    RtSystem::String _name0;   // +0x20 — a Filename (the copy ctor is ??0Filename@)
-    RtSystem::String _name1;   // +0x28
-    // LEFT: H5 _name0 / _name1 stay POD. FileInfo is built in RAW return slots
-    // (CreateFileW / OpenFile placement-construct both names, 0x1800acc82/8e,
-    // 0x1800acbae/bc) and destroyed by explicit calls at retail's positions
-    // (~FileInfo 0x18000c180). Typed, every `FileInfo tmp;` would construct
-    // them first (twice) and destroy them at scope end: OpenFile / CreateFileW
-    // must return by value first (B4 X-R3).
+    System::Filename _name0;   // +0x20 — the copy ctor is ??0Filename@ 0x1800067d0
+    System::Filename _name1;   // +0x28
 };
 static_assert(sizeof(FileInfo) == 0x30, "FileInfo is 0x30 bytes (OpenFile's frame)");
 static_assert(offsetof(FileInfo, size)       == 0x08,
@@ -534,14 +553,10 @@ public:
     void PlatformCloseFile(RtIO::FileInfo& info);
     // ?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z
     //                                                             0x1800acc50
-    // Retail returns `FileInfo` BY VALUE through a hidden return slot, and the
-    // member KEEPS THE OUT-PARAMETER rather than returning by value. That is not
-    // laziness: `RtIO::FileInfo` is a POD holding two `RtSystem::String` slots,
-    // so a by-value return would be a BITWISE copy with no AddRef and no
-    // release — the `RtSystem::String` double-free trap from the other side.
-    // The slot is raw bytes and the body placement-constructs the two Filenames
-    // into it, exactly as retail's 0x1800acc82/8e do.
-    RtIO::FileInfo* CreateFileW(RtIO::FileInfo* ret, const System::Filename& path);
+    // Retail returns `FileInfo` BY VALUE through a hidden return slot (B.4 Z
+    // LAST IO: FileInfo is a real class, so the return is retail's: the slot
+    // is default-constructed in place, 0x1800acc6c..91).
+    RtIO::FileInfo CreateFileW(const System::Filename& path);
     // ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z            0x1800accc0
     void CloseFile(RtIO::FileInfo& info);
     // ---- commit 5b: the members whose doors live in the THREE §D-BOUND files
@@ -555,9 +570,8 @@ public:
     // -- filesystem_openfile_win.cpp ----------------------------------------
     // ?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z
     //                                                             0x1800ac880
-    // Retail returns FileInfo by value; the member keeps the out-parameter for
-    // the same reason `CreateFileW` does — see that declaration.
-    RtIO::FileInfo* OpenFile(RtIO::FileInfo* ret, const System::Filename& name);
+    // Retail returns FileInfo by value (hidden return slot), as CreateFileW.
+    RtIO::FileInfo OpenFile(const System::Filename& name);
     // ?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z       0x1800ace00
     // RECURSIVE (0x1800ace7e re-enters itself with the containing package's
     // FileInfo). `ReadFile` is a plain function name in <windows.h>, not a
@@ -680,8 +694,6 @@ static_assert(std::is_standard_layout<FileSystem>::value,
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 namespace RtIO {
-// ---- io/file_stream.cpp
-extern "C" void RtIo_FileInfo_Dtor(FileInfo* self);  // 0x18000c180
 // ---- io/filesystem_find_win.cpp
 void RtColl_ArraySetSizeFill_180026880(void* a, int n, const void* fill);  // 0x180026880
 }  // namespace RtIO

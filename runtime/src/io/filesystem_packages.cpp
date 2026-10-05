@@ -774,7 +774,7 @@ void FileSystem::LoadPackages() {
     int64_t inserted = 0, overridden = 0, kept = 0;
     for (int32_t pi = 0; pi < _packfiles._size; ++pi) {
         PackageFile* pkg = _packfiles[pi];
-        const int32_t entries = pkg->_entryCount;         // MOV EAX,[RCX+0xb8]
+        const int32_t entries = pkg->_entries._size;      // MOV EAX,[RCX+0xb8]
         for (int32_t fi = 0; fi < entries; ++fi) {
             // Retail RE-INDEXES the array here too rather than reusing `pkg`.
             PackageFile* owner = _packfiles[pi];
@@ -883,7 +883,7 @@ System::Filename PackageFile::GetFileName(int index) const {
     // int64 anyway because that is what the instruction says.
     // The entry's `name` (+0x00) is a Filename on the RtSystem::String POD;
     // `Filename(const Filename&)` is the copy ctor 0x1800067d0.
-    return System::Filename(RtSystem::SysFile(_entries[static_cast<int64_t>(index)].name));
+    return System::Filename(RtSystem::SysFile(_entries._data[static_cast<int64_t>(index)].name));
 }
 
 }  // namespace IO

@@ -464,16 +464,11 @@ public:
     // stores and nothing else (no encoding): the Stream base, `_filename`
     // null, then the FileInfo's handle -1, size/cursor (one qword) 0,
     // baseOffset 0, both names null, winHandle -1. FileInfo::_unk04 (+0x24)
-    // and _pad14 are NOT written -- a `= {}` would be a divergence.
-    FileStream() {
-        _file.handle      = -1;                                  // 1800a8243
-        _file.size        = 0;                                   // 1800a8249 (qword)
-        _file.cursor      = 0;
-        _file.baseOffset  = 0;                                   // 1800a824d
-        _file._name0.data = nullptr;                             // 1800a8259
-        _file._name1.data = nullptr;                             // 1800a8265
-        _file.winHandle   = reinterpret_cast<void*>(intptr_t{-1});  // 1800a8268 INVALID_HANDLE_VALUE (no <windows.h> in a type header)  // CAST-OK: win32
-    }
+    // and the padding at +0x34 are NOT written -- a `= {}` would be a
+    // divergence. B.4 Z LAST IO: the FileInfo's stores (1800a8243..1800a8268)
+    // are its own default ctor, run as the member's construction after
+    // `_filename`'s.
+    FileStream() {}
 
     // slot 0  +0x00  0x18000c090 — MSVC's vector deleting dtor, stride 0x50.
     // A plain FileStream IS built (the persistence loader, Audio::Stream::Run).
@@ -501,7 +496,7 @@ public:
 
     // ---- the 0x50 bytes, at retail's offsets -------------------------------
     System::String _filename;   // +0x18  see the banner (ctor 0x1800aaa43, dtor 0x1800aaaf6)
-    RtIO::FileInfo _file;       // +0x20  0x30 bytes, RtIO::FileInfo
+    RtIO::FileInfo _file;       // +0x20  0x30 bytes; ctor 1800a8243..68, dtor 1800aaaf0 (0x18000c180)
 };
 
 static_assert(sizeof(FileStream) == 0x50,
@@ -578,10 +573,9 @@ static_assert(offsetof(FileStream, _filename) ==
                   offsetof(RtIo::FileStream, filename), "alias filename");
 static_assert(offsetof(FileStream, _file) ==
                   offsetof(RtIo::FileStream, file), "alias file");
-static_assert(std::is_trivially_destructible<RtIo::FileStream>::value,
-              "the POD must stay trivially destructible while both views are live");
-static_assert(std::is_trivially_destructible<RtIo::BinaryFileStream>::value,
-              "the POD must stay trivially destructible while both views are live");
+// B.4 Z LAST IO: the RtIo POD view holds a FileInfo, which has real special
+// members now; the view is never built or destroyed by value (grepped), so
+// its old "trivially destructible" pin is gone.
 
 // ---------------------------------------------------------------------------
 // IO::TextFileStream — vtable 0x180155980, 10 slots, 0x80 bytes.
@@ -799,8 +793,9 @@ static_assert(offsetof(TextFileStream, _bufSize) ==
 static_assert(sizeof(RtIo::TextFileStream::_unk78) ==
                   sizeof(TextFileStream::_bufSize) + sizeof(TextFileStream::_bufCursor),
               "two int32s cover exactly the POD's one pointer-sized field");
-static_assert(std::is_trivially_destructible<RtIo::TextFileStream>::value,
-              "the POD must stay trivially destructible while both views are live");
+// B.4 Z LAST IO: the RtIo POD view holds a FileInfo, which has real special
+// members now; the view is never built or destroyed by value (grepped), so
+// its old "trivially destructible" pin is gone.
 
 static_assert(sizeof(VisitorStream) == sizeof(RtIo::VisitorStream),
               "IO::VisitorStream and its POD stay interchangeable");
@@ -865,7 +860,8 @@ static_assert(sizeof(CompressedFileStream) == sizeof(RtIo::CompressedFileStream)
               "IO::CompressedFileStream and its POD stay interchangeable");
 static_assert(offsetof(CompressedFileStream, _file) ==
                   offsetof(RtIo::CompressedFileStream, file), "alias member");
-static_assert(std::is_trivially_destructible<RtIo::CompressedFileStream>::value,
-              "the POD must stay trivially destructible while both views are live");
+// B.4 Z LAST IO: the RtIo POD view holds a FileInfo, which has real special
+// members now; the view is never built or destroyed by value (grepped), so
+// its old "trivially destructible" pin is gone.
 
 }  // namespace IO

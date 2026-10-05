@@ -1894,7 +1894,7 @@ UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
     CHECK_EQ(offsetof(IO::PackageFile, _crc),           static_cast<size_t>(0xa8));
     CHECK_EQ(offsetof(IO::PackageFile, _overridable),   static_cast<size_t>(0xac));
     CHECK_EQ(offsetof(IO::PackageFile, _entries),       static_cast<size_t>(0xb0));
-    CHECK_EQ(offsetof(IO::PackageFile, _entryCount),    static_cast<size_t>(0xb8));
+    CHECK_EQ(offsetof(IO::PackageFile, _entries) + 8,   static_cast<size_t>(0xb8));
     CHECK_EQ(offsetof(IO::PackageFile, _file),          static_cast<size_t>(0xc0));
 
     // The partial POD view is NOT replaced and must not drift from the class:
@@ -1906,7 +1906,7 @@ UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
              offsetof(RtIO::PackageFileView, packfileId));
     CHECK_EQ(offsetof(IO::PackageFile, _entries),
              offsetof(RtIO::PackageFileView, entries));
-    CHECK_EQ(offsetof(IO::PackageFile, _entryCount),
+    CHECK_EQ(offsetof(IO::PackageFile, _entries) + 8,
              offsetof(RtIO::PackageFileView, entryCount));
 
     // 0xc0 + 0x30 == 0xf0: the embedded FileInfo is what closes the object, and

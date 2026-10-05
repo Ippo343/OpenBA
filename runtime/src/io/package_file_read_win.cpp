@@ -226,7 +226,6 @@ void RtSystem_Filename_AdjustDelimiters(String* self);
 // to reach the shipped body by accident
 // (reference_bypassed_port_needs_a_source_checker.md).
 namespace RtIO {
-extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo*, const FileInfo*);      // 0x18000c200
 }  // namespace RtIO
 
 
@@ -460,16 +459,10 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
     FileInfo* const fi =
         &_file   /* +0xC0, the embedded FileInfo */;
 
-    {
-        // Deliberately uninitialised: retail hands OpenFile an untouched
-        // `[RBP+0x10]` as the hidden return slot and OpenFile writes it.
-        FileInfo opened;
-        fs->OpenFile(&opened, name);                           // 1800b4707
-        RtIo_FileInfo_Assign(fi, &opened);                     // 1800b471a
-        // Retail releases +0x38 (_name1) FIRST, then +0x30 (_name0).
-        RtString_ReleaseInline(&opened._name1);                // 1800b472e..4757
-        RtString_ReleaseInline(&opened._name0);                // 1800b4762..478b
-    }
+    // OpenFile into the hidden return slot `[RBP+0x10]` (1800b4707),
+    // FileInfo::operator= (1800b471a), then ~FileInfo on the temporary: +0x38
+    // (_name1) FIRST (1800b472e..4757), then +0x30 (_name0) (1800b4762..478b).
+    *fi = fs->OpenFile(name);
 
     fs = IO::FileSystem::_singleton;                           // 1800b478b
     fs->_platformExistsGate = savedGate;                       // 1800b4792
@@ -666,7 +659,7 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
             entry.size   = static_cast<uint32_t>(entrySize);   // 1800b5faa  §91
 
             rtcoll::RtColl_ArraySetSizeFill_1800298f0(&_entries,  // 1800b5b86
-                             _entryCount + 1, &entry);         // 1800b5fb1..fbe
+                             _entries._size + 1, &entry);      // 1800b5fb1..fbe
 
             RtString_ReleaseInline(&entry.name);               // 1800b5fc4..5fe9
             RtString_ReleaseInline(&tmp);                      // 1800b5fed..6015
