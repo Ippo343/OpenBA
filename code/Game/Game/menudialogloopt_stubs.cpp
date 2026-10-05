@@ -473,14 +473,13 @@ void MenuDialogLoopT::Shutdown() {
     // 6. +0xbb8 (the Transform block): freed.
     if (void* t = _transform) System::MemoryAllocator::MemFree(t);
     // 7. +0xba0 Graphics::Scene: ~Scene (??1Scene@Graphics@@ 0x1801026c0) then freed.
-    // LEFT (R-GFX): the ~Scene / ~Renderer doors take the RtGraphics POD mirrors.
-    if (void* g = _scene) {
-        RtGraphics_Scene_Dtor(static_cast<RtGraphics::Scene*>(g));   // B.3.x bridge   // LEFT: R-GFX: the ~Scene / ~Renderer doors take the RtGraphics POD mirrors.
+    if (Graphics::Scene* g = _scene) {
+        RtGraphics_Scene_Dtor(g);
         System::MemoryAllocator::MemFree(g);
     }
     // 8. +0xb98 Graphics::Renderer: ~Renderer (??1Renderer@Graphics@@ 0x1800180a0) then freed.
-    if (void* r = _renderer) {
-        RtGraphics_Renderer_Dtor(static_cast<RtGraphics::Renderer*>(r));   // B.3.x bridge   // LEFT: R-GFX: the ~Scene / ~Renderer doors take the RtGraphics POD mirrors.
+    if (Graphics::Renderer* r = _renderer) {
+        RtGraphics_Renderer_Dtor(r);
         System::MemoryAllocator::MemFree(r);
     }
     // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad (??1SaveLoad@Save@@ 0x1800c3c90) then freed.

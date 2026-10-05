@@ -667,10 +667,10 @@ public:
     using Drawable   = RendererDrawable;
 
     // ---- the four lifetime exports, ALL FOUR DOORS (B4b-2, §11) -----------
-    Renderer();                                    // 0x180105180  door: renderer.cpp
+    Renderer();                                    // 0x180105180  renderer.cpp (the door placement-news it)
     Renderer(const Renderer& src);                 // 0x1800180e0  not ported, no caller
     Renderer& operator=(const Renderer& src);      // 0x180018180  not ported, no caller
-    ~Renderer();                                   // 0x1800180a0  door: renderer.cpp
+    ~Renderer();                                   // 0x1800180a0  renderer.cpp: the three Arrays, reverse order
 
     // ---- the four big bodies, ALL PORTED but NOT IN BLOCK F'S FILE SET -----
     // Declared here so no later block or caller batch has to edit this header,
@@ -767,6 +767,6 @@ Graphics::Camera* RtGraphics_Camera_CopyCtor(Graphics::Camera* self,
 // ==== end B3R RT-VG ====
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
 // ---- graphics/renderer.cpp
-extern "C" RtGraphics::Renderer* RtGraphics_Renderer_Ctor(RtGraphics::Renderer* self);  // 0x180105180
-extern "C" void RtGraphics_Renderer_Dtor(RtGraphics::Renderer* self);  // 0x1800180a0
+extern "C" Graphics::Renderer* RtGraphics_Renderer_Ctor(Graphics::Renderer* self);  // 0x180105180: placement-new Renderer()
+extern "C" void RtGraphics_Renderer_Dtor(Graphics::Renderer* self);  // 0x1800180a0: ~Renderer()
 // ==== end B3R G-Game ====

@@ -2008,7 +2008,7 @@ void GameUpdateLoop::Shutdown() {
     // Renderer
     if (m_renderer != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Renderer...\n");
-        RtGraphics_Renderer_Dtor(reinterpret_cast<RtGraphics::Renderer*>(m_renderer));   // the dtor door takes the POD mirror  // LEFT: POD RtGraphics::Renderer: the runtime dtor door takes the mirror (runtime/types/graphics, outside this set)
+        RtGraphics_Renderer_Dtor(m_renderer);   // ~Renderer 0x1800180a0
         System::MemoryAllocator::MemFree(m_renderer);
     }
 
@@ -2079,7 +2079,7 @@ void GameUpdateLoop::Shutdown() {
     // Graphics::Scene
     if (m_graphicsScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Graphics::Scene...\n");
-        RtGraphics_Scene_Dtor(reinterpret_cast<RtGraphics::Scene*>(m_graphicsScene));  // LEFT: POD RtGraphics::Scene: the runtime dtor door takes the mirror (runtime/types/graphics, outside this set)
+        RtGraphics_Scene_Dtor(m_graphicsScene);   // ~Scene 0x1801026c0
         System::MemoryAllocator::MemFree(m_graphicsScene);
     }
 
@@ -2115,7 +2115,7 @@ void GameUpdateLoop::Shutdown() {
     // AnimationManager
     if (m_animationManager != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying AnimationManager...\n");
-        RtGraphics_AnimationManager_Dtor(reinterpret_cast<RtGraphics::AnimationManager*>(m_animationManager));  // LEFT: POD RtGraphics::AnimationManager: the runtime dtor door takes the mirror (runtime/types/graphics, outside this set)
+        RtGraphics_AnimationManager_Dtor(m_animationManager);   // ~AnimationManager 0x1800fc400
         System::MemoryAllocator::MemFree(m_animationManager);
     }
 

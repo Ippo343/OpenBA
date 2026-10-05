@@ -360,6 +360,6 @@ static_assert(offsetof(Thread, _hFinished) == offsetof(RtSystem::Thread, hFinish
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- system/thread_win.cpp
-RtSystem::CriticalSection* RtSystem_CriticalSection_Ctor(RtSystem::CriticalSection* self);  // 0x18000c5c0
-void RtSystem_CriticalSection_Dtor(RtSystem::CriticalSection* self);  // 0x18000c5b0
+System::CriticalSection* RtSystem_CriticalSection_Ctor(System::CriticalSection* self);  // 0x18000c5c0
+void RtSystem_CriticalSection_Dtor(System::CriticalSection* self);  // 0x18000c5b0
 // ==== end B3R W0-P0c ====

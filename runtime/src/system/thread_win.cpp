@@ -94,7 +94,10 @@ using RtSystem::Thread;
 
 // 0x18000c5c0  ??0CriticalSection@System@@QEAA@XZ
 // NOT a real constructor — see the banner above.
-CriticalSection* RtSystem_CriticalSection_Ctor(CriticalSection* self) {
+// B.4 wave Y (RT-GFX): both doors take the real class (the POD describes the
+// same 0x28 bytes); the class keeps no C++ ctor / dtor (its one holder,
+// PathfinderThread, asserts it trivial and calls these two by hand).
+System::CriticalSection* RtSystem_CriticalSection_Ctor(System::CriticalSection* self) {
     InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self->_storage));  // CAST-OK: win32
     SetCriticalSectionSpinCount(reinterpret_cast<LPCRITICAL_SECTION>(self->_storage), 5000);  // CAST-OK: win32
     return self;
@@ -102,7 +105,7 @@ CriticalSection* RtSystem_CriticalSection_Ctor(CriticalSection* self) {
 
 // 0x18000c5b0  ??1CriticalSection@System@@QEAA@XZ
 // NOT a real destructor — see the banner above.
-void RtSystem_CriticalSection_Dtor(CriticalSection* self) {
+void RtSystem_CriticalSection_Dtor(System::CriticalSection* self) {
     DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(self->_storage));  // CAST-OK: win32
 }
 

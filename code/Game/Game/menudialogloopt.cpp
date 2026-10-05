@@ -547,9 +547,8 @@ bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
     printf("[MenuDLT::LoadScene] loaded MenuScene variant %u at %p\n", variant, (void*)menuScene);
 
     // --- Allocate Renderer (0x50 bytes, alignment 4) ---
-    // LEFT: the Renderer / Scene ctors are doors on the POD mirrors (R-GFX).
     Graphics::Renderer* renderer = static_cast<Graphics::Renderer*>(System::MemoryAllocator::MemAlloc(0x50, 4));
-    if (renderer) RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(renderer));   // LEFT: the Renderer / Scene ctors are doors on the POD mirrors (R-GFX).
+    if (renderer) RtGraphics_Renderer_Ctor(renderer);   // Renderer() 0x180105180
     self->_renderer = renderer;
 
     // --- Allocate Graphics::Scene (0x78 bytes, alignment 8) ---

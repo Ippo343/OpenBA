@@ -165,14 +165,15 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     const Video::RenderBuffer* savedRenderBuffer = context._renderBuffer;
     Video::RenderBuffer* savedDefaultBuffer = context._defaultRenderBuffer;
 
-    // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors
-    // (R-GFX); both live in stack storage of their size.
+    // The Renderer and the Scene live in stack storage of their size: their
+    // destructors run at a fixed point mid-function (after context.Reset()
+    // below), where a C++ local's would run at scope exit.
     alignas(16) uint8_t rendererStorage[256];
     alignas(16) uint8_t sceneStorage[256];
-    RtGraphics_Renderer_Ctor(reinterpret_cast<RtGraphics::Renderer*>(rendererStorage));   // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors (R-GFX); both live in stack storage of their size.
-    RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(sceneStorage));   // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors (R-GFX); both live in stack storage of their size.
-    Graphics::Renderer* renderer = reinterpret_cast<Graphics::Renderer*>(rendererStorage);   // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors (R-GFX); both live in stack storage of their size.
-    Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(sceneStorage);   // LEFT: the Renderer / Scene ctors and dtors are doors on the POD mirrors (R-GFX); both live in stack storage of their size.
+    Graphics::Renderer* renderer = reinterpret_cast<Graphics::Renderer*>(rendererStorage);   // LEFT: stack storage the door constructs in place; ~Renderer runs mid-function (a local's dtor would move to scope exit)
+    RtGraphics_Renderer_Ctor(renderer);   // Renderer() 0x180105180
+    RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(sceneStorage));   // LEFT: the Scene ctor door takes the POD mirror RtGraphics::Scene (its grid initialiser is typed on it); stack storage of its size
+    Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(sceneStorage);   // LEFT: stack storage the Scene ctor door builds in place; ~Scene runs mid-function (a local's dtor would move to scope exit)
 
     context.SetDefaultRenderBuffer(renderBuffer);
     context.SetRenderBuffer(renderBuffer);
@@ -237,8 +238,8 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     CreateAndUpload();
 
     context.Reset();
-    RtGraphics_Scene_Dtor(reinterpret_cast<RtGraphics::Scene*>(sceneStorage));   // LEFT: POD RtGraphics::Scene / Renderer: the ctor / dtor doors take the mirrors (R-GFX); the objects live in stack storage of their size
-    RtGraphics_Renderer_Dtor(reinterpret_cast<RtGraphics::Renderer*>(rendererStorage));   // LEFT: POD RtGraphics::Scene / Renderer: the ctor / dtor doors take the mirrors (R-GFX); the objects live in stack storage of their size
+    RtGraphics_Scene_Dtor(scene);         // ~Scene 0x1801026c0
+    RtGraphics_Renderer_Dtor(renderer);   // ~Renderer 0x1800180a0
 
     if (s_trace)
         printf("[MinimapPaint] painted terrain: width=%d colorBuf=%p terrainPixels=%p "

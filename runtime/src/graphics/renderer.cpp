@@ -269,57 +269,39 @@ const Matrix kZUpToYUp = {{
 // so retail's behaviour does not depend on the value — but our object would stop
 // being byte-identical to the DLL's, and the scratch oracle below would report
 // a divergence on whatever the two buffers happened to contain.
-// THIS STAYS A CONSTRUCTOR DOOR (B4b-2; B35_RULES §11's leave list names
-// `fn_Graphics_Renderer_Ctor`), and it operates on the `RtGraphics` POD on
-// purpose: a real `Graphics::Renderer` constructor with a member-initialiser
-// list is exactly what RULE B5-13 forbids, because the list would have to
-// mention `_shaderDetail` (+0x3c) and `_pad_4c` (+0x4c) or leave a reader
-// wondering why it does not.
-extern "C" Renderer* RtGraphics_Renderer_Ctor(Renderer* self) {
-    self->scenes._data        = nullptr;
-    self->scenes._size        = 0;
-    self->scenes._capacity    = 0;
-    self->drawGroups._data    = nullptr;
-    self->drawGroups._size    = 0;
-    self->drawGroups._capacity = 0;
-    self->drawables._data     = nullptr;
-    self->drawables._size     = 0;
-    self->drawables._capacity = 0;
-    self->currentScene        = -1;
-    self->currentDrawGroup    = -1;
-    self->field_38            = 0;
-    self->frameAlpha          = 0.0f;
-    self->contextSerial       = -1;
-    self->field_48            = 0;
+// B.4 wave Y (RT-GFX): the body is the real `Graphics::Renderer::Renderer()`.
+// Retail's stores, in order: six qword zeroes over the three Array headers
+// (+0x00..+0x2f: the members' Array() initialisers, three named stores each,
+// H7), one qword -1 over +0x30/+0x34 (two dword stores here, H7), then +0x38,
+// +0x40, +0x44, +0x48. +0x3c (_shaderDetail) and +0x4c are NOT written: they
+// have no initialiser and the body does not name them (B5-13). The door stays
+// for the exe's raw-storage holders and placement-constructs.
+namespace Graphics {
 
-    return self;
+Renderer::Renderer() : _sceneGroups(), _drawGroups(), _drawables() {
+    _currentSceneGroup = -1;     // +0x30  (with +0x34: one qword -1 in retail)
+    _currentDrawGroup  = -1;     // +0x34
+    _drawGroupsUsed    = 0;      // +0x38
+    _alphaT            = 0.0f;   // +0x40
+    _frameIndex        = -1;     // +0x44
+    _detailId          = 0;      // +0x48
 }
 
-// ??1Renderer@Graphics@@QEAA@XZ — retail 0x1800180a0.
-//
-// ORACLE: POST-STATE ONLY, and this is the honest limit rather than a shortcut.
-// The three callees free heap buffers. Running the original a second time on a
-// scratch copy of the object would hand the allocator the SAME `_data` pointers
-// our call just released — a double free, which is a defect the harness would be
-// creating rather than detecting. So there is no "theirs" to compare against and
-// the diff oracle carries what can be checked: that all three array triples come
-// back fully zeroed, which is what each of the three DLL destructors ends with.
-extern "C" void RtGraphics_Renderer_Dtor(Renderer* self) {
+// ??1Renderer@Graphics@@QEAA@XZ — retail 0x1800180a0: ~Array on +0x20
+// (0x18001c9e0), +0x10 (0x18001c8c0), then a tail JMP to +0x00's (0x18001c7e0)
+// and nothing else. That is the three Array members' implicit destruction in
+// reverse declaration order after an empty body; the free order the old door
+// spelled out by hand (drawables, draw groups, scenes) is unchanged.
+Renderer::~Renderer() {}
 
-    // The retail order is drawables, then draw groups, then scenes. It matters:
-    // the group and scene destructors walk their elements' own arrays, and doing
-    // them in declaration order would not reproduce the allocator's free
-    // sequence, which is observable through the boundary tags.
-    self->drawables.~Array();    // retail 0x18001c9e0
-    self->drawGroups.~Array();   // retail 0x18001c8c0
-    self->scenes.~Array();       // retail 0x18001c7e0
+}  // namespace Graphics
 
-    const bool cleared = self->scenes._data == nullptr && self->scenes._size == 0 &&
-                         self->scenes._capacity == 0 &&
-                         self->drawGroups._data == nullptr && self->drawGroups._size == 0 &&
-                         self->drawGroups._capacity == 0 &&
-                         self->drawables._data == nullptr && self->drawables._size == 0 &&
-                         self->drawables._capacity == 0;
+extern "C" Graphics::Renderer* RtGraphics_Renderer_Ctor(Graphics::Renderer* self) {
+    return ::new (static_cast<void*>(self)) Graphics::Renderer();
+}
+
+extern "C" void RtGraphics_Renderer_Dtor(Graphics::Renderer* self) {
+    self->~Renderer();
 }
 
 // ============================================================================
