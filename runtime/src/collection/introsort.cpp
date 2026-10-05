@@ -75,6 +75,7 @@
 #include "avl_trees.h"
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree by name
 #include "../../types/audio/Audio.h"   // B.4: Audio::Scene::EmitterInstance / AttenutedEffect
+#include "../../types/io/PackageFile.h"   // B.4 S4: the sorted element, PackageFile::_priority
 
 namespace rtsort {
 
@@ -97,11 +98,11 @@ struct SortCounters {
 };
 SortCounters g_sc = {};
 
-// The one field the comparator reads. `elem` is a `PackageFile*`; +0x70 is a
+// The one field the comparator reads: PackageFile::_priority at +0x70, a
 // SIGNED dword the PackageFile constructor seeds with 0x2710 and only
 // ReadPackfile changes (filesystem_packages.cpp §"the comparator").
-static inline int32_t Key(void* elem) {
-    return *reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(elem) + 0x70);  // LEFT: audit WORK, not executed this pass (SortByKey70(IO::PackageFile**, int); the element's _priority by name (one P); blocker; SortByKey70 sorts R-IO's void** packfile list; the element is PackageFile (FileSystem.h PackageFileView::priority)
+static inline int32_t Key(const IO::PackageFile* elem) {
+    return elem->_priority;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,18 +118,18 @@ static inline int32_t Key(void* elem) {
 //   RAX -> i      the forward cursor
 //   R8  -> j      the backward cursor
 // ---------------------------------------------------------------------------
-void SortByKey70(void** first, int32_t count) {
+void SortByKey70(IO::PackageFile**first, int32_t count) {
     ++g_sc.calls;
     // Self-scheduled probe, same contract as the tree entry points: it
     // allocates, so it cannot run from a *PortInit. In practice THIS is the
     // first of the lane's entry points the boot reaches, because LoadPackages
     // runs before Object::Factory::Startup.
-    void** stackLo[62];
-    void** stackHi[62];
+    IO::PackageFile**stackLo[62];
+    IO::PackageFile**stackHi[62];
     int64_t depth = 0;
 
-    void** lo = first;
-    void** hi = first + (static_cast<int64_t>(count) - 1);   // MOVSXD / DEC
+    IO::PackageFile**lo = first;
+    IO::PackageFile**hi = first + (static_cast<int64_t>(count) - 1);   // MOVSXD / DEC
 
     for (;;) {
         // 0x1800264c0 — `(hi - lo)/8 + 1`, truncated to 32 bits by `INC EAX`.
@@ -140,13 +141,13 @@ void SortByKey70(void** first, int32_t count) {
             // range pops immediately. The comparison is UNSIGNED on the
             // pointers, which is why it is written as `>` on pointers here.
             if (hi > lo) {
-                void** const scanFrom = lo + 1;      // 0x1800264d6, HOISTED —
+                IO::PackageFile**const scanFrom = lo + 1;      // 0x1800264d6, HOISTED —
                                                      // it is NOT recomputed as
                                                      // `hi` shrinks
                 do {
                     ++g_sc.smallPasses;
-                    void** best = lo;                // 0x1800264e0
-                    for (void** p = scanFrom; p <= hi; ++p) {
+                    IO::PackageFile**best = lo;                // 0x1800264e0
+                    for (IO::PackageFile**p = scanFrom; p <= hi; ++p) {
                         // 0x1800264f0: CMOVG — move to p only when the tracked
                         // element is STRICTLY greater, so among equal keys the
                         // EARLIEST position wins. That tie rule is the whole
@@ -155,8 +156,8 @@ void SortByKey70(void** first, int32_t count) {
                     }
                     // 0x180026509 — swap *best with *hi, then hi--.
                     ++g_sc.smallSwaps;
-                    void* a = *hi;
-                    void* b = *best;
+                    IO::PackageFile* a = *hi;
+                    IO::PackageFile* b = *best;
                     --hi;
                     *best     = a;
                     *(hi + 1) = b;
@@ -177,23 +178,23 @@ void SortByKey70(void** first, int32_t count) {
         // positive count they agree; the sign extension is transcribed because
         // a negative `count` is already a corrupt call and this port should
         // fail the same way.
-        void** pivot = lo + (static_cast<int64_t>(n) >> 1);
+        IO::PackageFile**pivot = lo + (static_cast<int64_t>(n) >> 1);
 
         {   // 0x180026542 — if (mid > lo) swap
-            void* a = *lo; void* b = *pivot;
+            IO::PackageFile* a = *lo; IO::PackageFile* b = *pivot;
             if (Key(b) > Key(a)) { ++g_sc.medianSwaps; *lo = b; *pivot = a; }
         }
         {   // 0x180026553 — if (hi > lo) swap
-            void* a = *lo; void* b = *hi;
+            IO::PackageFile* a = *lo; IO::PackageFile* b = *hi;
             if (Key(b) > Key(a)) { ++g_sc.medianSwaps; *lo = b; *hi = a; }
         }
         {   // 0x180026567 — if (hi > mid) swap
-            void* a = *pivot; void* b = *hi;
+            IO::PackageFile* a = *pivot; IO::PackageFile* b = *hi;
             if (Key(b) > Key(a)) { ++g_sc.medianSwaps; *pivot = b; *hi = a; }
         }
 
-        void** i = lo;    // RAX
-        void** j = hi;    // R8
+        IO::PackageFile**i = lo;    // RAX
+        IO::PackageFile**j = hi;    // R8
 
         // ---- the partition loop, 0x180026581 ------------------------------
         ++g_sc.partitions;
@@ -237,8 +238,8 @@ void SortByKey70(void** first, int32_t count) {
             if (j < i) break;                               // JC 0x1800265f2
 
             ++g_sc.partitionSwaps;
-            void* a = *j;
-            void* b = *i;
+            IO::PackageFile* a = *j;
+            IO::PackageFile* b = *i;
             *i = a;
             *j = b;
             // 0x1800265e8 — if the pivot SLOT was the one just moved out of
