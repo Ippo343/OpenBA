@@ -925,7 +925,7 @@ void GameUpdateLoop::Load() {
     // Step 18 — Graphics::Scene (+0x60, 0x78).
     {
         Graphics::Scene* mem = AllocSub<Graphics::Scene>(0x78, 8);
-        if (mem) RtGraphics_Scene_Ctor(reinterpret_cast<RtGraphics::Scene*>(mem));   // LEFT: audit DEFERRED (ctor door; RtGraphics_Scene_Ctor is runtime/, z-RT): the ctor door takes the POD mirror RtGraphics::Scene (runtime/types/graphics)
+        if (mem) RtGraphics_Scene_Ctor(mem);
         m_graphicsScene = mem;
     }
 

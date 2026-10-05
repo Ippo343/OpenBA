@@ -17,9 +17,9 @@
 
 namespace rtgfxgrid {
 
-using RtGraphics::Scene;
-using RtGraphics::SceneNode;
-using RtGraphics::Geometry;
+using Graphics::Scene;
+using Graphics::SceneNode;
+using Graphics::Geometry;
 
 // ---------------------------------------------------------------------------
 // The six bodies. Signatures are the retail raw ABI, argument for argument.

@@ -368,6 +368,6 @@ extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill); 
 
 // ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
 // ---- graphics/scene.cpp
-extern "C" RtGraphics::Scene* RtGraphics_Scene_Ctor(RtGraphics::Scene* self);  // 0x180102730
+extern "C" Graphics::Scene* RtGraphics_Scene_Ctor(Graphics::Scene* self);  // 0x180102730
 extern "C" void RtGraphics_Scene_Dtor(Graphics::Scene* self);  // 0x1801026c0: ~Scene()
 // ==== end B3R G-Game ====
