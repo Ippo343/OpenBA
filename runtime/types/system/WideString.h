@@ -76,21 +76,12 @@
 // `#if` (B31 hygiene / B34_BRIEFS §A.8).
 #include "String.h"
 
-namespace RtSystem {
-
-// ---- the POD ---------------------------------------------------------------
-struct WideString {
-    wchar_t* data;   // +0x00 — block + 8, or null for "no buffer"
-};
-static_assert(sizeof(WideString) == 8, "System::WideString must be 8 bytes");
+// B.4 Z MIRROR2: the `RtSystem::WideString` POD (and the banner's by-value
+// holders above) is gone: its last holders (GetRootDirectory, FindFilesImpl)
+// hold the class, and nothing else names it. The class below is the one type.
 static_assert(sizeof(wchar_t) == 2,
               "WideString is UTF-16: this port assumes a 2-byte wchar_t, which "
               "is what both MSVC and MinGW give on Windows");
-static_assert(std::is_trivially_destructible<WideString>::value,
-              "B34_RULES 1.5 rule 3: the POD stays trivially destructible -- "
-              "three files hold one by value and release it through the door");
-
-}  // namespace RtSystem
 
 namespace System {
 
@@ -160,13 +151,7 @@ public:
 };
 
 static_assert(sizeof(WideString) == 8, "System::WideString is 8 bytes");
-static_assert(sizeof(WideString) == sizeof(RtSystem::WideString),
-              "the class and the POD stay interchangeable");
-static_assert(alignof(WideString) == alignof(RtSystem::WideString),
-              "alias alignment");
 static_assert(offsetof(WideString, _data) == 0x00, "WideString::_data @ +0x00");
-static_assert(offsetof(WideString, _data) == offsetof(RtSystem::WideString, data),
-              "alias data");
 static_assert(!std::is_polymorphic<WideString>::value,
               "System::WideString must never acquire a vtable: retail has none");
 static_assert(std::is_standard_layout<WideString>::value,

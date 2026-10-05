@@ -186,7 +186,7 @@ static_assert(offsetof(LoaderLoop, _autoAdvance)  == 0x40, "LoaderLoop::_autoAdv
 // which is as strong as evidence gets: the UI is AT +0x40, by name.
 struct DialogLoopT {
     UpdateLoop         _base;             // +0x000 .. +0x027
-    RtSystem::String   _dialogFilename;   // +0x028  ctor arg, refcount acquired
+    System::String     _dialogFilename;   // +0x028  ctor arg, refcount acquired (the class's own type; this twin is never built)
     void*              _dialogExternal;   // +0x030  Object::External* (Load)
     void*              _dialogInstance;   // +0x038  UI::DialogInstance* (Startup)
     UI::UserInterface  _ui;               // +0x040, 0x128 bytes
@@ -209,7 +209,7 @@ static_assert(offsetof(DialogLoopT, _ui)             == 0x40, "DialogLoopT::_ui 
 // an independent confirmation that the UI sits at +0x60).
 struct DialogLoaderLoopT {
     LoaderLoop         _base;             // +0x000 .. +0x047
-    RtSystem::String   _dialogFilename;   // +0x048
+    System::String     _dialogFilename;   // +0x048
     void*              _dialogExternal;   // +0x050
     void*              _dialogInstance;   // +0x058
     UI::UserInterface  _ui;               // +0x060, 0x128 bytes
@@ -585,7 +585,5 @@ B37_LOOP_PIN(DialogLoaderLoopT, _dialogExternal, 0x50)
 B37_LOOP_PIN(DialogLoaderLoopT, _dialogInstance, 0x58)
 B37_LOOP_PIN(DialogLoaderLoopT, _ui,             0x60)
 #undef B37_LOOP_PIN
-static_assert(sizeof(System::String) == sizeof(RtSystem::String),
-              "_dialogFilename is the real String; the POD spells the same 8 bytes");
 
 }  // namespace Engine

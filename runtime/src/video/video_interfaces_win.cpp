@@ -64,7 +64,6 @@
 #include "../system/widestring.h"
 #include "video_interface.h"   // -Istandalone; this header is windows.h-free
 
-using RtSystem::WideString;
 using System::String;
 using Video::Device;
 using InterfaceSlot = Video::Device::InterfaceSlot;

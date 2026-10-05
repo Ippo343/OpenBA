@@ -243,9 +243,8 @@ bool SameText(const char* a, const char* b) {
 //     and then re-terminates. The two are equal by construction; transcribed
 //     as written rather than folded, because folding it would silently change
 //     what happens if a caller ever mutated `src` between the two walks.
-void RtSystem_WideString_Set(WideString* self, const wchar_t* src) {
-    Sys(self)->Set(src);
-}
+// (B.4 Z MIRROR2: the `RtSystem_WideString_Set` door is gone with its last
+// caller; the body is System::WideString::Set below.)
 
 // ============================================================================
 // ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ            retail 0x1800cacd0
@@ -266,10 +265,8 @@ void RtSystem_WideString_Set(WideString* self, const wchar_t* src) {
 // member's prvalue is placement-CONSTRUCTED into it and never assigned to; an
 // assignment would Release() whatever garbage pointer the caller's stack
 // happened to hold. Same shape as `string.cpp`'s `RtSystem_String_SubString`.
-String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
-    new (Sys(ret)) System::String(Sys(self)->AsUTF8());
-    return ret;
-}
+// (B.4 Z MIRROR2: the `RtSystem_WideString_AsUTF8` door is gone with its last
+// caller; the body is System::WideString::AsUTF8 below.)
 
 }  // namespace RtSystem
 

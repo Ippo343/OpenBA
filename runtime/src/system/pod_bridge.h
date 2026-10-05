@@ -46,15 +46,8 @@ inline const System::String& Sys(const String& s)  { return reinterpret_cast<con
 inline System::String*       Sys(String* s)        { return reinterpret_cast<System::String*>(s); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
 inline const System::String* Sys(const String* s)  { return reinterpret_cast<const System::String*>(s); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
 
-// ---- WideString (ENDGAME B.3.4b SYSTEM (4a)) -------------------------------
-// The same transitional cast one type over. `RtSystem::WideString` is the POD
-// three `runtime/src/` files still hold by value and seed through the ctor
-// door; `System::WideString` is the class the doors now delegate to. Both are
-// one `wchar_t*`, pinned field for field in WideString.h.
-inline System::WideString&       Sys(WideString& w)       { return reinterpret_cast<System::WideString&>(w); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
-inline const System::WideString& Sys(const WideString& w) { return reinterpret_cast<const System::WideString&>(w); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
-inline System::WideString*       Sys(WideString* w)       { return reinterpret_cast<System::WideString*>(w); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
-inline const System::WideString* Sys(const WideString* w) { return reinterpret_cast<const System::WideString*>(w); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)
+// (B.4 Z MIRROR2: the four WideString overloads are gone with the
+// `RtSystem::WideString` POD.)
 
 // ---- Filename -------------------------------------------------------------
 inline System::Filename&       Sys(Filename& f)       { return reinterpret_cast<System::Filename&>(f); }  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename slot read as the class (H10 bridge)

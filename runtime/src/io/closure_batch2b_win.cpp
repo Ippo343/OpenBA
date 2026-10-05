@@ -50,31 +50,9 @@ using RtIO::FileInfo;
 
 namespace {
 
-// ---- System::WideString, the inlined idiom -----------------------------------
-//
-// Retail inlines this; it is written out rather than routed through a ~String
-// call because the ASYMMETRY is observable: the freeing branch leaves the slot
-// holding `str-8` and the surviving branch nulls it. Same shape
-// runtime/src/collection/array_destroy.cpp's Body B documents. WideString is
-// not a B.3.1 class, so this stays hand-written C (ENDGAME B.3.1 step 2: the
-// String/Filename equivalents, `AdoptString`/`ReleaseString`, are gone -- both
-// call sites below are now `System::Filename`, whose ctor/dtor are that pair).
-struct WideStr { wchar_t* data; };
-
-// `??0WideString@System@@QEAA@AEBVString@1@@Z` is constructed straight into
-// the WideStr slot (B3R RT-IO: by name, it was a door).
-inline void WideRelease(WideStr* w) {
-    if (!w->data) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;  // CAST-OK: string_header
-    --*rc;
-    if (*rc == 0) {
-        w->data = reinterpret_cast<wchar_t*>(reinterpret_cast<uint8_t*>(w->data) - 8);  // CAST-OK: string_header
-        ::System::MemoryAllocator::MemFree(w->data);   // 0x1800c7ad0
-    } else {
-        w->data = nullptr;
-    }
-}
-
+// (B.4 Z MIRROR2: the hand-written WideStr slot and its inlined release are
+// gone; DeleteJob holds a real System::WideString, whose destructor 0x18000a730
+// is that same release, asymmetry included.)
 
 }  // namespace
 
@@ -97,15 +75,14 @@ inline void WideRelease(WideStr* w) {
 void IO::PersistenceWorker::DeleteJob() {
     // ENDGAME B.3.1 step 2: Adopt+AdjustDelimiters on a freshly-nulled dst is
     // Filename(const String&), retail 0x18000c780.
-    System::Filename f(_pendingFilename);
-
-    WideStr w;
-    ::new (static_cast<void*>(&w)) System::WideString(f.AsString());   // B.3.x bridge
-
-    const BOOL ok = DeleteFileW(w.data);
-
-    WideRelease(&w);
-    // ~f is retail's release of the adopted Filename.
+    // B.4 Z MIRROR2: the WideString is a real local; the block's scope exit is
+    // retail's "release w; release f", both before the status store.
+    BOOL ok;
+    {
+        System::Filename f(_pendingFilename);
+        const System::WideString w(f);   // ??0WideString(const String&) 0x1800cab50
+        ok = DeleteFileW(w._data);
+    }   // ~w, then ~f
 
     _status = static_cast<int32_t>((ok != 1) + 1);
 }

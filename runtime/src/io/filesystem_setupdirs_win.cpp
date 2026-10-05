@@ -137,7 +137,6 @@ namespace RtIO {
 
 using RtSystem::String;
 using RtSystem::Filename;
-using RtSystem::WideString;
 using RtSystem::StringRefCount;
 using RtSystem::RtMemAlloc;
 using RtSystem::RtMemFree;
@@ -146,8 +145,6 @@ using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 using RtSystem::SysFile;  //   "
 using RtSystem::RtSystem_Configuration_GetPlatformName;
 using RtSystem::RtSystem_Configuration_GetBuildName;
-using RtSystem::RtSystem_WideString_Set;
-using RtSystem::RtSystem_WideString_AsUTF8;
 
 // IO::FileSystem::FileInfo now lives in runtime/types/io/FileSystem.h.
 // It moved there when Wave 9 lane PKG2 rung 3 needed it in a second
@@ -264,16 +261,14 @@ System::Filename FileSystem::GetRootDirectory() {
     wchar_t buf[0x1000];
     ::GetModuleFileNameW(nullptr, buf, 0x1000);
 
-    RtIO::WideString ws{nullptr};
-    RtIO::RtSystem_WideString_Set(&ws, buf);
-
-    // AsUTF8's hidden return slot is still POD-shaped (System::WideString is
-    // not a B.3.1 class), so the value lands in a POD and is then STOLEN into
-    // the class: the move ctor is a pure pointer steal, so `utf8Pod` is left
-    // null and exactly one release happens, `utf8`'s destructor.
-    RtSystem::String utf8Pod{nullptr};
-    RtIO::RtSystem_WideString_AsUTF8(&ws, &utf8Pod);
-    System::String utf8(std::move(RtIO::Sys(utf8Pod)));
+    // B.4 Z MIRROR2 (`behaviour:`, known_port_issues row 580): the three
+    // locals in declaration order, so scope exit releases them as retail's
+    // epilogue does: f (0x1800ad6fa), utf8 (0x1800ad72f), ws LAST
+    // (0x1800ad75c). ws is WideString(const wchar_t*) 0x18000a6e0 inlined
+    // (null store 0x1800ad692, Set 0x1800caf40); utf8 is AsUTF8 0x1800cacd0's
+    // return slot ([RSP+0x20]).
+    const System::WideString ws(buf);
+    System::String utf8 = ws.AsUTF8();
 
     // `Filename f = utf8;` — retail's inlined Filename(const String&) at
     // 0x18000c780: adopt the buffer (AddRef, no copy), then normalise.
@@ -285,9 +280,7 @@ System::Filename FileSystem::GetRootDirectory() {
     // is still exactly one AddRef.
     System::Filename out(f.GetPathDirectory());
 
-    // ~f and ~utf8 are retail's two releases at 0x1800ad6d1/0x1800ad6e3; only
-    // the WideString, whose class does not exist yet, is still released by hand.
-    RtIO::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(&ws));  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 rows 580-582 (four sites free the WideString before t; the WideString POD slot released through the RtSystem::String POD (system/, R-SYS)
+    // ~f, ~utf8, ~ws: the destructors, reverse declaration order.
 
     // Safe to replay: reads no FileSystem state and allocates a fresh buffer
     // every call, so ours and theirs never share a pointer and only the TEXT

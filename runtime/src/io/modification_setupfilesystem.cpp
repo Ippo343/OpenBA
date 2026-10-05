@@ -434,31 +434,18 @@ void Modification::SetupFileSystem() {
 
             if (present) {
                 // ---- queue the reload, 0x1800af03d --------------------------
-                ReloadEntry entry;
-                entry.typeId   = ext->Type();   // 0x1800af052
-                entry.external = ext;
-                // entry._hole04 is DELIBERATELY left uninitialised: retail's
-                // first store is a DWORD and nothing ever writes +0x04..+0x07.
-                {
-                    System::Filename raw3(ext->GetPath());   // 0x1800af044  [RBP-0x79]
-                    // `entry.file` is raw, uninitialised bytes here (a fresh
-                    // ReloadEntry), so placement-construct. Release-then-adopt
-                    // on a null destination is a plain adopt, and the ctor's
-                    // OWN body already carries the duplicated AdjustDelimiters
-                    // (filename.cpp's `Filename(const Filename&)`, retail
-                    // 0x1800067d0, calls it twice) -- so this one construction
-                    // is retail's 0x1800af064..0x1800af0b2 in full.
-                    new (&Sys(entry.file)) System::Filename(raw3);
-                }  // ~raw3 releases here, retail's release after 0x1800af044
+                // B.4 Z MIRROR2 (`behaviour:`, disassembly read): GetPath
+                // 0x180006250 returns into raw3 [RBP-0x79] FIRST, then the
+                // Type() slot (0x1800af052); the entry is built from both
+                // (ReloadEntry's ctor: the copy ctor 0x1800067d0 inlined on
+                // +0x10, _hole04 never written), pushed, and then released in
+                // reverse declaration order: entry.file (0x1800af0d5), raw3
+                // LAST (0x1800af130). (The tree released raw3 before the push.)
+                const System::Filename raw3 = ext->GetPath();   // 0x1800af044
+                ReloadEntry entry(ext->Type(), ext, raw3);
 
                 rtcoll::RtColl_ArraySetSizeFill_180028cd0(&queue, queue.size + 1, &entry);   // 0x1800af0c7
-
-                // 0x180028cd0 is a raw byte copy (not a converted class), so it
-                // never AddRefs: the array's copy inherits
-                // entry.file's own reference, and dropping that reference here
-                // is retail's release of the local -- ownership transfer via
-                // copy-then-release, not a double free.
-                Sys(entry.file).~Filename();
+                // ~entry (its file), then ~raw3.
             } else {
                 // ---- drop it, 0x1800af195 ----------------------------------
                 System::Filename raw4(ext->GetPath());   // 0x1800af19d  [RBP-0x?]
@@ -499,12 +486,11 @@ void Modification::SetupFileSystem() {
         // AdjustDelimiters after release-then-adopt on an object that already
         // owns a string is `Filename::operator=(const Filename&)`, 0x180006770
         // (Filename.h's DELIMITERS note). `ext->_path` is the class's
-        // `System::Filename`; `e->file` is the `ReloadEntry` POD member (see its
-        // banner), reached through the bridge.
-        ext->_path = Sys(e->file);                         // 0x1800af341/0x1800af3b3
+        // `System::Filename`, and so is `e->file`.
+        ext->_path = e->file;                              // 0x1800af341/0x1800af3b3
 
         System::Filename compiled(                            // 0x1800af3c0  [RBP+0x6f]
-            ::Object::ExternalFactory::GetCompiledPath(Sys(e->file)));
+            ::Object::ExternalFactory::GetCompiledPath(e->file));
         RtObject::RtObject_External_Load(&compiled, ext);      // 0x1800af3cc
         // ~compiled releases here, retail's 0x1800af3d2 release
     }
@@ -516,7 +502,7 @@ void Modification::SetupFileSystem() {
     // storage is raw bytes (see ReloadEntry's banner), so the release is
     // spelled as the explicit destructor rather than a member's own RAII.
     for (int64_t i = 0; i < static_cast<int64_t>(queue.size); ++i)
-        Sys(queue.data[i].file).~Filename();
+        queue.data[i].file.~Filename();
     if (queue.data) MemFree(queue.data);
     queue.data = nullptr;
     queue.size = 0;
