@@ -555,9 +555,9 @@ void EventNotifyDialog::NavigateToEvent(int32_t index) {
     Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
 
     PlayerController* camTarget = game->m_playerController;
-    camTarget->targetX = outPos[0];
-    camTarget->targetY = outPos[1];
-    camTarget->targetZ = outPos[2];
+    camTarget->target.x = outPos[0];
+    camTarget->target.y = outPos[1];
+    camTarget->target.z = outPos[2];
 }
 
 void EventNotifyDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {

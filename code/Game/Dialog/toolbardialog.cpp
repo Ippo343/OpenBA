@@ -309,7 +309,7 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
     if (currentTool != nullptr) {
         currentTool->Shutdown();   // slot 5
         // InternalBasePtr::DeletePtr: the scalar deleting dtor, then null
-        delete currentTool;
+        delete currentTool.Get();
         currentTool = nullptr;
     }
 
@@ -428,8 +428,8 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
     }
 
     // Step 8: Configure and start the tool
-    ToolSetting* toolSettingRef = foundNode->toolSetting;
-    Tool* tool = currentTool;
+    ToolSetting* toolSettingRef = foundNode->toolSetting.Get();
+    Tool* tool = currentTool.Get();
     tool->dialogPtr = this;                 // back-pointer to the manager
     tool->descriptionPtr = field_0x20;      // the group
     tool->toolSetting = toolSettingRef;     // ToolSetting ref
@@ -1405,9 +1405,9 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
             point->field_0x10 = gameSys->field_0x40;
             // Copy the camera's yaw and look-at target
             point->field_0x0C = cameraSys->yaw;
-            float camY = cameraSys->targetY;
-            float camZ = cameraSys->targetZ;
-            point->position.x = cameraSys->targetX;
+            float camY = cameraSys->target.y;
+            float camZ = cameraSys->target.z;
+            point->position.x = cameraSys->target.x;
             point->position.y = camY;
             point->position.z = camZ;
 
@@ -1618,9 +1618,9 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
     PlayerController* cameraSys = game->m_playerController;
 
     // Set camera target position
-    cameraSys->targetX = targetPos[0];
-    cameraSys->targetY = targetPos[1];
-    cameraSys->targetZ = targetPos[2];
+    cameraSys->target.x = targetPos[0];
+    cameraSys->target.y = targetPos[1];
+    cameraSys->target.z = targetPos[2];
 
     // Zero-duration time for instant snap (matches original)
     {
@@ -1642,8 +1642,8 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
     // EditTool::TypeId() (cell 0x1401c6dd8).
     EditTool* editTool = nullptr;
     if (currentTool) {
-        if (::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId())) {
-            editTool = static_cast<EditTool*>(currentTool);
+        if (::Object::IsDerivedFromNullSafe(currentTool.Get(), EditTool::TypeId())) {
+            editTool = static_cast<EditTool*>(currentTool.Get());
         }
     }
 
@@ -1654,8 +1654,8 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
         // Re-read current tool after mode switch
         editTool = nullptr;
         if (currentTool) {
-            if (::Object::IsDerivedFromNullSafe(currentTool, EditTool::TypeId())) {
-                editTool = static_cast<EditTool*>(currentTool);
+            if (::Object::IsDerivedFromNullSafe(currentTool.Get(), EditTool::TypeId())) {
+                editTool = static_cast<EditTool*>(currentTool.Get());
             }
         }
     }

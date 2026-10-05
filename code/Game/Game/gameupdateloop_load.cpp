@@ -416,7 +416,7 @@ Math::Transform PlayerController::CalcTransform() {
     // ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z  retail 0x1800220b0
     Math::Vector3 dir = Math::Vector3::FromYawPitch(yaw, pitch);
     // The camera focus point: the three target floats at +0x1c.
-    const Math::Vector3 pos(targetX, targetY, targetZ);
+    const Math::Vector3 pos(target.x, target.y, target.z);
     Math::Vector3 eye(pos.x - dir.x * distance,
                       pos.y - dir.y * distance,
                       pos.z - dir.z * distance);
@@ -435,7 +435,7 @@ Math::Transform PlayerController::CalcTransform() {
 // member order, the camera its last entry.
 PlayerController::PlayerController(const ::Frustum& frustum, float yaw_, float pitch_, float distance_)
     : transform(),
-      targetX(0.0f), targetY(0.0f), targetZ(0.0f),
+      target(0.0f, 0.0f, 0.0f),
       yaw(yaw_), pitch(pitch_), distance(distance_),
       camera(frustum, CalcTransform().AsTransform3(), true) {
 }
@@ -586,7 +586,7 @@ PlayerToolManager::PlayerToolManager() {
     field_0x10 = 0;
     field_0x18 = 0;
     field_0x20 = 0;
-    currentTool = nullptr;
+    // +0x28 currentTool: the member's InternalPtr ctor stores the null (0x1401025fe).
     paused = false;
     field_0x34 = 1;
     field_0x38 = false;
@@ -1242,9 +1242,9 @@ void GameUpdateLoop::Load() {
                 if (startCfg && playerCtrl && game && dim > 0) {
                     float camPos[3] = { 0, 0, 0 };
                     StartTown_ComputeCamera(startCfg, game, camPos);
-                    playerCtrl->targetX = camPos[0];   // +0x1c
-                    playerCtrl->targetY = camPos[1];   // +0x20
-                    playerCtrl->targetZ = camPos[2];   // +0x24
+                    playerCtrl->target.x = camPos[0];   // +0x1c
+                    playerCtrl->target.y = camPos[1];   // +0x20
+                    playerCtrl->target.z = camPos[2];   // +0x24
                     fprintf(stderr, "[startTown::DIAG]   camPos = (%.2f, %.2f, %.2f)\n",
                             camPos[0], camPos[1], camPos[2]);
                     fflush(stderr);

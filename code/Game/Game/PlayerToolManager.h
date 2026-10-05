@@ -18,8 +18,8 @@
 //                      0x140102b60 when the flag is set
 //   +0x70              a Collection::Array sized to 5 by the ctor
 //                      (0x14002e000): data +0x70, count +0x78, capacity +0x7C
-//   The InternalBasePtrs (+0x00, +0x28) are declared as plain pointers (B.4
-//   H5: an InternalBasePtr member's ctor would run). Every other field is a
+//   +0x28 is an InternalPtr<Tool> member (its ctor is retail's null store);
+//   +0x00 is still declared as a plain pointer. Every other field is a
 //   typed guess from the ctor's store; the tree reads +0x30 as the paused
 //   flag and +0x34 as the game speed (ctor 1) — not yet confirmed in retail.
 // ============================================================================
@@ -29,6 +29,7 @@
 #include "math/Math.h"   // Math::Vector3 (the saved camera view's position)
 #include "collection/Collection.h"   // Collection::Array (the camera views, +0x70)
 #include "Action/PathAvl.h"           // AvlTreeHead (the two sets, +0x50 / +0x60)
+#include "object/Internal.h"          // Object::InternalPtr (the current tool, +0x28)
 
 class ComponentEntity;
 class ComponentDescription;
@@ -141,7 +142,10 @@ public:
     int32_t  field_0x18;         // +0x18 ctor 0
     uint8_t  _pad1C[4];          // +0x1C
     ComponentDescription* field_0x20; // +0x20 ctor 0; the active tool group SelectTool 0x140102b60 stores (B4 H4: typed, DLG-d)
-    class Tool* currentTool;     // +0x28 InternalPtr<Tool> (ctor null; B4 H4: typed, DLG-a)
+    // +0x28: retail's ctor 0x1401025c0 builds it with ??0InternalBasePtr(null)
+    // (0x1401025fe); the teardown 0x1401024d0 DeletePtr()s it. Trivially
+    // destructible, so the class still runs no destructor.
+    Object::InternalPtr<Tool> currentTool;
     bool     paused;             // +0x30 ctor 0; the toolbar pause / unpause buttons write it (0x1400b92a0 cases 7 / 8), their enable state (0x1400b8d40) and Draw read it (B4 DLG-d)
     uint8_t  _pad31[3];          // +0x31
     int32_t  field_0x34;         // +0x34 ctor 1 (the tree: game speed)
