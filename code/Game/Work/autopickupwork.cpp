@@ -41,11 +41,11 @@ void AutoPickupWork::Persist(IO::Stream& stream) {
 // and zero the list pair (+0x30/+0x38). Retail's two CheckPtr calls are bare RETs.
 int AutoPickupWork::Cleanup() {
     AutoPickupComponent* component = field_10->FindComponent<AutoPickupComponent>();
-    System::MemoryAllocator::MemFree(component->field30);
+    System::MemoryAllocator::MemFree(component->field30._data);
 
-    component->field30 = nullptr;
-    component->field30Count = 0;      // H7: retail zeroes +0x38 with one qword store
-    component->field30Capacity = 0;
+    component->field30._data = nullptr;
+    component->field30._size = 0;      // H7: retail zeroes +0x38 with one qword store
+    component->field30._capacity = 0;
     return 0;
 }
 
