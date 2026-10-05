@@ -818,7 +818,7 @@ void TornadoComponent::Tick(const System::Time* time) {
     // always has one, so a null here is an upstream problem, not something to paper
     // over. Startup already logged whether the finder found it.
     const bool particleAlive =
-        (pc->emitterCount > 0) &&
+        (pc->emitters._size > 0) &&
         (pc->emitters[0].sceneId >= 0);
 
     if (!particleAlive) {
@@ -907,7 +907,7 @@ void TornadoComponent::Tick(const System::Time* time) {
         // emitters[0].instance (**(pc+0x38) + 0x7c). The value only feeds the PORT GAP audio
         // branch below (never taken), so no run can see the difference; listed, not changed.
         const float volume =
-            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pc->emitters) + 0x7c);   // LEFT: retail DIFFERENCE (known_port_issues row 430): retail reads emitters[0].instance->_opacity
+            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pc->emitters._data) + 0x7c);   // LEFT: retail DIFFERENCE (known_port_issues row 430): retail reads emitters[0].instance->_opacity
 
         AmbientEmitterComponent* audio2 = nullptr;   // PORT GAP 0x140002280 (see above)
         if (audio2) {
