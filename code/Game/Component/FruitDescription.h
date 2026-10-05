@@ -21,6 +21,8 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
+class ComponentDescription;
+
 class FruitDescription final : public Description {
     DECLARE_EXE_TYPE(FruitDescription)
 
@@ -40,7 +42,7 @@ public:
     float _optimalTemp;                         // +0x24 ctor stores int 0
     float _tempRange;                           // +0x28 ctor stores int 0; |temp - optimal| / range
     uint8_t _pad2c[4];                          // +0x2c never written by the ctor
-    void* _ref30;                               // +0x30 ExternalPtr (a raw pointer)
+    ComponentDescription* _ref30;               // +0x30 ExternalPtr<ComponentDescription> (Serialize 0x14004a1e0: the component-ref serializer); the fruit's raw material
 };
 
 static_assert(sizeof(FruitDescription) == 0x38, "FruitDescription is 0x38 (create 0x140005980 MemAlloc(0x38))");
