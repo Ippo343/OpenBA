@@ -177,7 +177,6 @@ using RtGraphics::Renderer;
 using RtGraphics::RendererDrawable;
 using RtGraphics::RendererDrawGroup;
 using RtGraphics::RendererSceneEntry;
-using RtGraphics::Scene;
 // `Transform` is at GLOBAL scope in runtime/types/math/Math.h -- the header is
 // named for the Math NAMESPACE of the DLL, but declares its structs unwrapped.
 // Checked rather than assumed: `grep -n namespace Math.h` finds only
