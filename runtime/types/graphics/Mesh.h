@@ -409,7 +409,7 @@ public:
     void            UpdateHierarchy();                                    // 0x1800ff910
     void            SetMaterialInstance(int index, Object::ExternalPtr<MaterialInstance> value); // 0x1800ffe80
     void            SetMesh(Object::ExternalPtr<GraphicsMesh> mesh);      // 0x1800ffea0
-    // B4 FORWARD: action_base_complete.cpp, buildcomponent_state8.cpp still call this (their mesh is a void*)
+    // B4 FORWARD: action_base_complete.cpp still calls this (their mesh is a void*)
     void            SetMesh(ExternalPtrHandle mesh);
     void            PlayAnimation(Object::ExternalPtr<AnimationGroup> group, int index,
                                   const System::Time* startTime, const System::Time* blendTime,

@@ -798,7 +798,7 @@ Graphics::MeshInstance::~MeshInstance() {
 // constructor (0x180015070) first, stores retail's caller does not make.
 TriangleVertex* RtGraphics_EdgeMesh_TriangleVertex_Ctor(TriangleVertex* self, const void* vec3) {
     TriangleVertex* tv = self;
-    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: audit WORK, left: the code/ caller (tool_base_render.cpp EdgeSegment) holds the endpoints as float[3]; a Math::Vector3 local would add its zeroing ctor (0x180015070)
+    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: S4 GFX measured: retail's caller 0x14004b930 builds each ribbon endpoint as a Vector3 through the import at IAT 0x140152a30 after GetTerrainPos 0x14009f3e0 and passes Vector3* to EdgeSegment 0x14004b440; the port's code/ caller (tool_base_render.cpp cellToRel / RelVec / EdgeSegment) holds float[3] locals instead -- typing this parameter needs that code/Game/Player reconstruction first (not a reader-line edit)
     tv->x = static_cast<int16_t>(static_cast<int>(v->x * kEdgeMeshVertexScale));
     tv->y = static_cast<int16_t>(static_cast<int>(v->y * kEdgeMeshVertexScale));
     tv->z = static_cast<int16_t>(static_cast<int>(v->z * kEdgeMeshVertexScale));
@@ -2044,15 +2044,14 @@ void MeshInstance::SetMesh(Object::ExternalPtr<GraphicsMesh> mesh) {
     }
 }
 
-// B4 FORWARD: action_base_complete.cpp and buildcomponent_state8.cpp hold
-// their GraphicsMesh as a void*; action_base_movedeps.cpp its AnimationGroup.
+// B4 FORWARD: action_base_complete.cpp holds its GraphicsMesh as a void*; action_base_movedeps.cpp its AnimationGroup.
 void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
-    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: audit WORK, not this agent's: the SetMesh B4 FORWARD overload, z-CODEB converts its code/ callers and may delete it
+    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: S4 GFX measured: 1 caller left, action_base_complete.cpp:361, whose meshPtr is a void* from CitizenDescription::MeshTable _refs (code/Game/Component header) and from the known_port_issues entry-14 FenceComponent read at :333 -- the overload goes when those code/ sources are typed
 }
 void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
                                  const System::Time* startTime, const System::Time* blendTime,
                                  float weight) {
-    PlayAnimation(Object::ExternalPtr<AnimationGroup>(static_cast<AnimationGroup*>(group.p)),  // LEFT: audit WORK, not this agent's: the PlayAnimation B4 FORWARD overload, z-CODEB converts its code/ caller and may delete it
+    PlayAnimation(Object::ExternalPtr<AnimationGroup>(static_cast<AnimationGroup*>(group.p)),  // LEFT: S4 GFX measured: 1 caller left, action_base_movedeps.cpp:121, whose animData is ModelDescription::_meshGroups[i].field_0x00 (Object::External*, "class not settled", code/Game/Component/ModelDescription.h) -- the overload goes when that field is typed AnimationGroup
                   index, startTime, blendTime, weight);
 }
 
