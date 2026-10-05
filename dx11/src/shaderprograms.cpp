@@ -52,14 +52,12 @@
 // would hide a caller bug rather than surface it, and would be a behavioural
 // divergence in exactly the case that matters.
 
-#include "dx11_seam.h"
 #include "dx11_backend_access.h"
 
-// ENDGAME B.3.5 block B, RULE B5-3 — the real `Video::VertexProgramData` /
-// `PixelProgramData` abstract bases (block A), so the two destructors below can
-// call their base destructor as a qualified non-virtual member call instead of
-// resolving a mangled name. The twelve CONCRETE `*Data` classes in this
-// directory and the 84-slot seam remain the declared leave of RULE B5-8.
+// The real `Video::VertexProgramData` / `PixelProgramData` abstract bases. B5
+// RES: the two `VideoDX11::` classes derive from them in C++
+// (dx11/types/VideoDX11Data.h), so the compiler chains their destructors and
+// builds their vtables.
 #include "video/CompanionData.h"
 
 namespace VideoDX11 {
@@ -82,29 +80,13 @@ namespace VideoDX11 {
 // variant pointers after releasing them; neither do we — the storage is about
 // to be freed or the object re-created, and writing them would be an extra
 // store the original never made.
-static void* VertexProgramData_Dtor(VertexProgramData* self, unsigned flags) {
-    self->vptr = Dx11VtableAddress(Vt::VertexProgramData);
-
+//
+// B5 RES: the vptr store, the base-destructor chain and the conditional MemFree
+// are the compiler's (its D0 + the base's class-scope `operator delete`, B5 W0,
+// companion_operators.cpp). The body is the four Releases, in index order.
+VertexProgramData::~VertexProgramData() {
     for (int i = 0; i < kShaderVariantCount; ++i)
-        Dx11Release(self->variants[i]);
-
-    // ENDGAME B.3.5 block B, RULE B5-3. Was a `Dx11ResolveRuntimeImport
-    // ("??1VertexProgramData@Video@@UEAA@XZ", 0x180013318)` + indirect call —
-    // spelling 9 of the nine caller bindings (RULE B5-14), one of dx11's 76
-    // mangled-name literals. `Video::VertexProgramData` is a real class now, so
-    // this is the MSVC derived-destructor idiom written as C++: a QUALIFIED
-    // non-virtual call on the base subobject, reached through the bridge cast
-    // because `VideoDX11::VertexProgramData` is the declared leave of RULE B5-8
-    // and does not inherit in C++.
-    //
-    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this
-    // function. The base destructor is in no slot, which is why the
-    // qualification is safe and the virtual call is not.
-    reinterpret_cast< ::Video::VertexProgramData*>(self)
-        -> ::Video::VertexProgramData::~VertexProgramData();   // B.3.5 bridge
-
-    if (flags & 1) System::MemoryAllocator::MemFree(self);
-    return self;
+        if (variants[i]) variants[i]->Release();
 }
 
 // 0x1800041a0 — VertexProgram::PlatformCreate. Returns bool.
@@ -141,7 +123,7 @@ static void* VertexProgramData_Dtor(VertexProgramData* self, unsigned flags) {
 // [device+0x28] == index 5 == CreateTexture2D, and 0x180002870 calls
 // [device+0x48] == index 9 == CreateRenderTargetView and [device+0x50] ==
 // index 10 == CreateDepthStencilView, both of which match this numbering.
-static bool VertexProgramData_PlatformCreate(VertexProgramData* self) {
+bool VertexProgramData::PlatformCreate() {
     ID3D11Device* device = Dx11Device();
 
     for (int i = 0; i < kShaderVariantCount; ++i) {
@@ -150,8 +132,8 @@ static bool VertexProgramData_PlatformCreate(VertexProgramData* self) {
         // now and this is the same two offsets. The owner is a
         // `Video::VertexProgram`; the fields read here are its ShaderProgram
         // base's, which is what made the view's offsets base-class offsets.
-        const Video::ShaderProgram* owner =
-            static_cast<const Video::ShaderProgram*>(self->vertexProgram);
+        // B5 RES: the base's `_owner` is typed `Video::VertexProgram*`.
+        const Video::ShaderProgram* owner = _owner;
         if (i >= owner->_byteCode.GetSize()) continue;
 
         // ENDGAME B.3.2 step 2 — `byteCode` is the real
@@ -162,7 +144,7 @@ static bool VertexProgramData_PlatformCreate(VertexProgramData* self) {
             blobs[i].GetData(),
             static_cast<SIZE_T>(blobs[i].GetSize()),
             nullptr,
-            reinterpret_cast<ID3D11VertexShader**>(&self->variants[i]));
+            &variants[i]);
         if (hr != 0) return false;
     }
     return true;
@@ -187,13 +169,11 @@ static bool VertexProgramData_PlatformCreate(VertexProgramData* self) {
 // Corroborated within this DLL: IASetInputLayout is index 17 == 0x88 in
 // 0x180003fc0, IASetIndexBuffer index 19 == 0x98 in 0x180003380,
 // OMSetRenderTargets index 33 == 0x108 in 0x180001070 — all consistent.
-static void VertexProgramData_Bind(VertexProgramData* self,
-                                   void* /*Video::Context& — ignored, see header*/,
-                                   int permutation) {
+void VertexProgramData::Bind(void* /*Video::Context& — ignored, see header*/,
+                             int permutation) {
     ID3D11DeviceContext* ctx = Dx11Context();
-    const int i = self->variants[permutation] ? permutation : 0;
-    ctx->VSSetShader(static_cast<ID3D11VertexShader*>(self->variants[i]),
-                     nullptr, 0);
+    const int i = variants[permutation] ? permutation : 0;
+    ctx->VSSetShader(variants[i], nullptr, 0);
 }
 
 // ============================================================
@@ -203,33 +183,23 @@ static void VertexProgramData_Bind(VertexProgramData* self,
 // 0x180003580 — scalar deleting destructor.
 //   1800035a7 LEA RAX,[0x180018800] / 1800035da CALL [0x180013358]
 //   (Video::PixelProgramData::~PixelProgramData) / 1800035e9 CALL [0x1800134d0]
-static void* PixelProgramData_Dtor(PixelProgramData* self, unsigned flags) {
-    self->vptr = Dx11VtableAddress(Vt::PixelProgramData);
-
+//   B5 RES: as ~VertexProgramData above -- the four Releases; the vptr store,
+//   the base chain and the MemFree are the compiler's.
+PixelProgramData::~PixelProgramData() {
     for (int i = 0; i < kShaderVariantCount; ++i)
-        Dx11Release(self->variants[i]);
-
-    // RULE B5-3, as in VertexProgramData_Dtor above: was
-    // `Dx11ResolveRuntimeImport("??1PixelProgramData@Video@@UEAA@XZ",
-    // 0x180013358)` + an indirect call.
-    reinterpret_cast< ::Video::PixelProgramData*>(self)
-        -> ::Video::PixelProgramData::~PixelProgramData();      // B.3.5 bridge
-
-    if (flags & 1) System::MemoryAllocator::MemFree(self);
-    return self;
+        if (variants[i]) variants[i]->Release();
 }
 
 // 0x180003610 — PixelProgram::PlatformCreate. Byte-identical to 0x1800041a0
 // except for the device vtable offset: 0x78 == index 15 == CreatePixelShader
 // (CreateVertexShader 12, CreateGeometryShader 13,
 // CreateGeometryShaderWithStreamOutput 14, CreatePixelShader 15).
-static bool PixelProgramData_PlatformCreate(PixelProgramData* self) {
+bool PixelProgramData::PlatformCreate() {
     ID3D11Device* device = Dx11Device();
 
     for (int i = 0; i < kShaderVariantCount; ++i) {
-        // B.3.5 block B, as in VertexProgramData_PlatformCreate above.
-        const Video::ShaderProgram* owner =
-            static_cast<const Video::ShaderProgram*>(self->pixelProgram);
+        // B.3.5 block B / B5 RES, as in VertexProgramData::PlatformCreate above.
+        const Video::ShaderProgram* owner = _owner;
         if (i >= owner->_byteCode.GetSize()) continue;
 
         // ENDGAME B.3.2 step 2 — `byteCode` is the real
@@ -240,7 +210,7 @@ static bool PixelProgramData_PlatformCreate(PixelProgramData* self) {
             blobs[i].GetData(),
             static_cast<SIZE_T>(blobs[i].GetSize()),
             nullptr,
-            reinterpret_cast<ID3D11PixelShader**>(&self->variants[i]));
+            &variants[i]);
         if (hr != 0) return false;
     }
     return true;
@@ -249,30 +219,14 @@ static bool PixelProgramData_PlatformCreate(PixelProgramData* self) {
 // 0x1800036a0 — PixelProgram::Bind(Context&, int permutation).
 // Same instruction sequence as 0x180004230 with the tail-jmp through
 // [ctxvt+0x48] == index 9 == PSSetShader.
-static void PixelProgramData_Bind(PixelProgramData* self,
-                                  void* /*Video::Context& — ignored*/,
-                                  int permutation) {
+void PixelProgramData::Bind(void* /*Video::Context& — ignored*/,
+                            int permutation) {
     ID3D11DeviceContext* ctx = Dx11Context();
-    const int i = self->variants[permutation] ? permutation : 0;
-    ctx->PSSetShader(static_cast<ID3D11PixelShader*>(self->variants[i]),
-                     nullptr, 0);
+    const int i = variants[permutation] ? permutation : 0;
+    ctx->PSSetShader(variants[i], nullptr, 0);
 }
 
 }  // namespace VideoDX11
 
 // All live. Verified in-game and RenderDoc-diffed against the shipped DLL —
 // see dx11/README.md §"Per-draw pipeline-state equality".
-
-DX11_REGISTER_SLOT(VertexProgramData, 0, &::VideoDX11::VertexProgramData_Dtor,
-                   "VertexProgramData::~ (scalar deleting)");
-DX11_REGISTER_SLOT(VertexProgramData, 1, &::VideoDX11::VertexProgramData_PlatformCreate,
-                   "VertexProgramData::PlatformCreate");
-DX11_REGISTER_SLOT(VertexProgramData, 2, &::VideoDX11::VertexProgramData_Bind,
-                   "VertexProgramData::Bind");
-
-DX11_REGISTER_SLOT(PixelProgramData, 0, &::VideoDX11::PixelProgramData_Dtor,
-                   "PixelProgramData::~ (scalar deleting)");
-DX11_REGISTER_SLOT(PixelProgramData, 1, &::VideoDX11::PixelProgramData_PlatformCreate,
-                   "PixelProgramData::PlatformCreate");
-DX11_REGISTER_SLOT(PixelProgramData, 2, &::VideoDX11::PixelProgramData_Bind,
-                   "PixelProgramData::Bind");

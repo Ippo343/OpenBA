@@ -27,6 +27,8 @@
 // declarations only, so this header stays free of <d3d11.h> (mingw-w64's
 // `interface` is `struct`, so these name the same types).
 struct ID3D11InputLayout;
+struct ID3D11VertexShader;
+struct ID3D11PixelShader;
 
 namespace VideoDX11 {
 
@@ -463,14 +465,26 @@ static_assert(offsetof(VertexLayoutData, inputLayout) == 0x10, "VertexLayoutData
 // permutation, pinned with static_asserts in dx11/src/dx11_backend_access.h.
 // Owner type confirmed by the Runtime ctor export
 // ??0VertexProgramData@Video@@QEAA@PEAVVertexProgram@1@@Z.
-struct VertexProgramData {
-    void* vptr;          // +0x00
-    void* vertexProgram; // +0x08  Video::VertexProgram*
-    void* variants[4];   // +0x10  ID3D11VertexShader*[4]
+//
+// B5 RES: a real C++ subclass of `Video::VertexProgramData`; the compiler builds
+// its vtable. `_owner` (+0x08, `Video::VertexProgram*`) is the base's and
+// replaces the old `vertexProgram` field; the variants are typed (D4).
+class VertexProgramData final : public ::Video::VertexProgramData {
+public:
+    // Factory 0x1800058f0: MemAlloc(0x30, 4) + ??0VertexProgramData(owner) + the
+    // vptr store + the four `variants[i] = nullptr`. Nothing else is stored.
+    explicit VertexProgramData(::Video::VertexProgram* owner)
+        : ::Video::VertexProgramData(owner) {
+        for (int i = 0; i < 4; ++i) variants[i] = nullptr;
+    }
+    ~VertexProgramData() override;                       // [0] 0x180004110, chains ??1VertexProgramData@Video@@UEAA@XZ
+    bool PlatformCreate() override;                      // [1] 0x1800041a0  CreateVertexShader x4
+    void Bind(void* context, int permutation) override;  // [2] 0x180004230  VSSetShader
+
+    ID3D11VertexShader* variants[4];  // +0x10  one per shader permutation
 };
-static_assert(sizeof(VertexProgramData) == 0x30, "VertexProgramData size");
-static_assert(offsetof(VertexProgramData, vptr) == 0x0, "VertexProgramData::vptr");
-static_assert(offsetof(VertexProgramData, vertexProgram) == 0x08, "VertexProgramData::vertexProgram");
+static_assert(sizeof(VertexProgramData) == 0x30, "MemAlloc 0x30 @ 0x1800058f0");
+static_assert(offsetof(VertexProgramData, _owner) == 0x08, "VertexProgramData::_owner (the base's)");
 static_assert(offsetof(VertexProgramData, variants) == 0x10, "VertexProgramData::variants");
 static_assert(sizeof(VertexProgramData::variants) == 0x20, "4 shader permutations");
 
@@ -485,14 +499,26 @@ static_assert(sizeof(VertexProgramData::variants) == 0x20, "4 shader permutation
 // equivalents. Owner type confirmed by
 // ??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@1@@Z; it derives from the
 // same Video::ShaderProgram, and slot 1 reads the identical +0x40/+0x48 fields.
-struct PixelProgramData {
-    void* vptr;         // +0x00
-    void* pixelProgram; // +0x08  Video::PixelProgram*
-    void* variants[4];  // +0x10  ID3D11PixelShader*[4]
+//
+// B5 RES: a real C++ subclass of `Video::PixelProgramData`, the mirror of the
+// vertex class above; `_owner` (+0x08, `Video::PixelProgram*`) replaces the old
+// `pixelProgram` field.
+class PixelProgramData final : public ::Video::PixelProgramData {
+public:
+    // Factory 0x180005960: MemAlloc(0x30, 4) + ??0PixelProgramData(owner) + the
+    // vptr store + the four `variants[i] = nullptr`. Nothing else is stored.
+    explicit PixelProgramData(::Video::PixelProgram* owner)
+        : ::Video::PixelProgramData(owner) {
+        for (int i = 0; i < 4; ++i) variants[i] = nullptr;
+    }
+    ~PixelProgramData() override;                        // [0] 0x180003580, chains ??1PixelProgramData@Video@@UEAA@XZ
+    bool PlatformCreate() override;                      // [1] 0x180003610  CreatePixelShader x4
+    void Bind(void* context, int permutation) override;  // [2] 0x1800036a0  PSSetShader
+
+    ID3D11PixelShader* variants[4];   // +0x10  one per shader permutation
 };
-static_assert(sizeof(PixelProgramData) == 0x30, "PixelProgramData size");
-static_assert(offsetof(PixelProgramData, vptr) == 0x0, "PixelProgramData::vptr");
-static_assert(offsetof(PixelProgramData, pixelProgram) == 0x08, "PixelProgramData::pixelProgram");
+static_assert(sizeof(PixelProgramData) == 0x30, "MemAlloc 0x30 @ 0x180005960");
+static_assert(offsetof(PixelProgramData, _owner) == 0x08, "PixelProgramData::_owner (the base's)");
 static_assert(offsetof(PixelProgramData, variants) == 0x10, "PixelProgramData::variants");
 static_assert(sizeof(PixelProgramData::variants) == 0x20, "4 shader permutations");
 
