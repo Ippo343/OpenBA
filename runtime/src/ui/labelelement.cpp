@@ -58,13 +58,6 @@
 
 using namespace rtuielem;
 
-namespace {
-
-const System::String& AsString(char* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-}
-
-}  // namespace
 
 namespace UI {
 
@@ -107,10 +100,10 @@ void LabelElement::ComputeSize() {
     int textW = 0;
     int textH = 0;
     if (_font != nullptr) {
-        char* str = _cachedText;
+        char* str = _cachedText._data;
         if (str != nullptr && RtSystem::StringLength(str) > 0) {
             int w = 0, h = 0;
-            _font->ComputeStringLayout(AsString(_cachedText), _wrap != 0,
+            _font->ComputeStringLayout(_cachedText, _wrap != 0,
                                        _lineSpacing, _maxWidth, 0,
                                        w, h, nullptr);
             _textWidth = w;
@@ -174,7 +167,7 @@ void LabelElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
     alpha = DimAlpha(this, alpha);
 
     Font* font = _font;
-    char* str  = _cachedText;
+    char* str  = _cachedText._data;
 
     int textW = 0, textH = 0;
     bool hasText = false;
@@ -296,11 +289,11 @@ void LabelElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
     const int baselineAdj = font->_lineHeight - font->_baseLine;
 
     if (_drawShadow != 0) {
-        ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(_cachedText), _wrap != 0,
+        ctx.AddFont(Object::ExternalPtr<Font>(font), _cachedText, _wrap != 0,
                     _lineSpacing, _justify, _maxWidth,
                     textX + 1, baselineAdj + 1 + textY, 0xff000000u);
     }
-    ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(_cachedText), _wrap != 0,
+    ctx.AddFont(Object::ExternalPtr<Font>(font), _cachedText, _wrap != 0,
                 _lineSpacing, _justify, _maxWidth,
                 textX, baselineAdj + textY,
                 rtuielem::ComputeColor(baseColor, alpha));   // the inlined helper,

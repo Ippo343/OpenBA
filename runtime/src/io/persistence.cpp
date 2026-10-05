@@ -24,7 +24,6 @@
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"   // RtSystem::String, RtString_ReleaseInline (Wave 2, lane String)
-#include "../system/pod_bridge.h"             // Sys(): _savePath stays the POD (H5)
 #include "../collection/avl_trees.h"          // rtavl::StringMapInsert
 #include "../../types/system/Configuration.h"  // RtSystem_ConfigMap_Find
 
@@ -134,6 +133,15 @@ namespace IO {
 // (ENDGAME B.3.9 IO, D7); RtIoPortInit redirects the minted row onto it.
 Persistence* Persistence::_singleton = nullptr;
 
+// ??0Persistence@IO@@QEAA@XZ  retail 0x1800b8020 (B.4 wave X X7-RT). The three
+// members' constructors are retail's stores in retail's order (Persistence.h
+// quotes the sequence): the map's qword root + dword count, the embedded
+// worker (??0Thread(0x10000), its vptr, its member stores), `_savePath`'s
+// null data; then the singleton store, the body's one statement.
+Persistence::Persistence() : _settingsMap(), _worker(), _savePath() {
+    _singleton = this;                                           // 0x1800b809c
+}
+
 bool Persistence::Get(const char* section, const char* key, int& outRef) const {
     int* const out = &outRef;
 
@@ -229,10 +237,8 @@ System::String Persistence::GetSavePath() const {
     // `String(const String&)` (retail 0x180006cb0) is exactly the "adopt
     // savePath's buffer, AddRef if non-null" sequence the C body wrote out by
     // hand; the DOOR's placement-new is retail's hidden-return-slot
-    // construction, so this is still exactly one AddRef. `_savePath` is a
-    // `RtSystem::String` member (the header says why it stays a POD), reached
-    // through the one transitional bridge.
-    return System::String(RtSystem::Sys(_savePath));
+    // construction, so this is still exactly one AddRef.
+    return System::String(_savePath);
 }
 
 }  // namespace IO

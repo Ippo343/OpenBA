@@ -228,11 +228,11 @@ bool PackageFile::Serialize(IO::Stream& streamv) {
     RecInt(rw, &_iconHeight);                 // 1800b6209
 
     {
-        int32_t k = _iconCount;                                   // 1800b620f
+        int32_t k = _iconData._size;                                 // 1800b620f
         RecInt(rw, &k);                                           // 1800b6226
         if (ser._stream->_direction == rt::io::kDirectionReading)  // 1800b6230
             rtcoll::RtColl_ArraySetSize_180029510(&_iconData, k);       // 1800b6240
-        RecArrayUInt(rw, k, _iconData);                            // 1800b6259
+        RecArrayUInt(rw, k, _iconData._data);                          // 1800b6259
     }
 
     return true;                              // 1800b6270  MOV AL,1

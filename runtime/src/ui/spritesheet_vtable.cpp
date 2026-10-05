@@ -195,10 +195,10 @@ Object::Base* SpriteSheet::CreateInPlaceObject(void* place) {
 //     ^ RCX for all three is reloaded from [RSP+0x30] each time — the
 //       ReaderWriter, not the Encoding. See the banner.
 //
-//   18011d7cf  MOV EAX,[RBX+0x28] / MOV [RSP+0x50],EAX   count = m_spriteCount
+//   18011d7cf  MOV EAX,[RBX+0x28] / MOV [RSP+0x50],EAX   count = m_sprites._size
 //   18011d7e6  CALL [RAX+0xa0]   (&count, null)          int count
 //     ^ a STACK COPY is serialised, never the field. On the read path the
-//       count arrives here and m_spriteCount is updated by SetSize below, not
+//       count arrives here and m_sprites._size is updated by SetSize below, not
 //       by this record.
 //
 //   18011d7ec  MOV RAX,[RSP+0x28] / CMP [RAX+0x8],0 / JNZ
@@ -400,14 +400,14 @@ bool SpriteSheet::Serialize(IO::Stream& streamv) {
     // CreateReader / CreateWriter of its encoding, version 0.
     IO::Serializer ser(streamv, 0);
 
-    StringSerialize(&m_groupName,   &ser);   // +0x40 FIRST — see banner
-    StringSerialize(&m_textureName, &ser);   // +0x38 second
+    m_groupName.Serialize(ser);     // +0x40 FIRST — see banner
+    m_textureName.Serialize(ser);   // +0x38 second
 
     ser.Serialize(m_field48, nullptr);       // +0x48
     ser.Serialize(m_field4C, nullptr);       // +0x4c
     ser.Serialize(m_field50, nullptr);       // +0x50, Serialize(bool&)
 
-    int32_t count = m_spriteCount;   // +0x28, into the RSP+0x50 temporary
+    int32_t count = m_sprites._size;   // +0x28, into the RSP+0x50 temporary
     ser.Serialize(count, nullptr);
 
     if (ser._stream->_direction == 0)
@@ -415,7 +415,7 @@ bool SpriteSheet::Serialize(IO::Stream& streamv) {
             ->SetSize(static_cast<int>(count));            // retail 0x180078950
 
     // Re-read AFTER SetSize: it reallocates.
-    RtUi_SpriteSheet_SerializeEntries(&ser, count, m_sprites);   // 0x180078ad0
+    RtUi_SpriteSheet_SerializeEntries(&ser, count, m_sprites._data);   // 0x180078ad0
 
     MaterialPtrSerialize(&m_field30, &ser);  // +0x30
 

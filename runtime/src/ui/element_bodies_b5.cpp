@@ -539,7 +539,7 @@ int32_t ScrollSpriteExtent(const ::Sprite& sprite, bool vertical) {
     // `SpriteInfo` lives at GLOBAL scope in runtime/types/ui/SpriteSheet.h, not
     // in namespace UI, and its sizeof is static_asserted there to be 0x38 —
     // which is the stride retail's `IMUL RDX,RDX,0x38` uses.
-    const ::SpriteInfo& info = sheet->m_sprites[(uint32_t)idx];   // m_sprites +0x20
+    const ::SpriteInfo& info = sheet->m_sprites._data[(uint32_t)idx];   // m_sprites +0x20
     return vertical ? info.height : info.width;                    // +0x20 / +0x1c
 }
 

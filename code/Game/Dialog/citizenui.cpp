@@ -99,14 +99,14 @@ static inline bool CitUI_OkTextParam(const UI::TextElement* elem) {
     if (!CitUI_OkPtr(elem)) return false;
     int count = elem->_params._size;
     if (count <= 0) return false;  // SetParameter is a no-op for 0 params anyway
-    char** arr = elem->_params._data;
+    const System::String* arr = elem->_params._data;
     if (!CitUI_OkPtr(arr)) return false;
     // The destination param slot arr[0] holds the CURRENT System::String (an 8-byte
     // ref-counted buffer pointer); SetParameter releases it (touches buffer+8) before
     // assigning the new one. A standalone dialog can allocate the param array but leave
     // its String entries uninitialized (garbage buffer pointer), faulting in the release.
     // Require the slot to be null (empty String) or a real pointer.
-    char* cur = arr[0];   // index 0 (all our SetParameter calls use 0)
+    char* cur = arr[0]._data;   // index 0 (all our SetParameter calls use 0)
     if (cur != nullptr && !CitUI_OkPtr(cur)) return false;
     // SetParameter also walks the element's _parent chain setting a dirty flag on
     // each ancestor. A detached / uninitialized standalone element can have a garbage

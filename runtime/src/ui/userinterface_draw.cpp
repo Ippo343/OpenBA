@@ -390,7 +390,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
                             const int64_t idx = d->_spriteIndex;
                             if (idx >= 0) {
                                 const SpriteInfo* const tbl =
-                                    d->_spriteSheet->m_sprites;
+                                    d->_spriteSheet->m_sprites._data;
                                 sw = tbl[idx].width;                   // +0x1c
                             }
                         }
@@ -398,7 +398,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
                             const int64_t idx = d->_spriteIndex;
                             if (idx >= 0) {
                                 const SpriteInfo* const tbl =
-                                    d->_spriteSheet->m_sprites;
+                                    d->_spriteSheet->m_sprites._data;
                                 sh = tbl[idx].height;                  // +0x20
                             }
                         }
@@ -551,7 +551,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
 
                 // UNGUARDED, and sprite index 0 is implicit: the size comes
                 // from the FIRST table entry, with no index arithmetic.
-                const SpriteInfo* const tbl = sheet->m_sprites;           // +0x20
+                const SpriteInfo* const tbl = sheet->m_sprites._data;           // +0x20
                 const int32_t sh = tbl->height;                           // +0x20
                 const int32_t sw = tbl->width;                            // +0x1c
 

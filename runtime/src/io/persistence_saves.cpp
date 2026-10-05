@@ -72,12 +72,8 @@
 #include "../../types/io/Persistence.h"
 #include "../../types/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
 #include "../../types/collection/Collection.h"   // rtsetclear::Clear
 
-using RtSystem::String;
-using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
-using RtIo::Persistence;
 using RtIo::SaveGameInfo;
 using RtIo::SaveBlock;
 
@@ -173,7 +169,7 @@ const char kRtPersistSaveFilenameFormat[] = "%sSave\\%s.sav";
 namespace IO {
 
 int Persistence::GetSaveCount() const {
-    int ours = (_flags & 1u) ? 0 : _saveCount;
+    int ours = (_worker._runFlags & 1u) ? 0 : _worker._saves._size;
 
     return ours;
 }
@@ -186,10 +182,10 @@ RtIo::SaveGameInfo Persistence::GetSaveInfo(int index) const {
     // out by hand.
     //
     // FAITHFUL: there is still NO bounds check on `index`.
-    if (_flags & 1u) {
+    if (_worker._runFlags & 1u) {
         return RtIo::SaveGameInfo{0, System::String()};
     }
-    const RtIo::SaveGameInfo& e = _saves[index];
+    const RtIo::SaveGameInfo& e = _worker._saves._data[index];
     return RtIo::SaveGameInfo{e.sortKey, e.name};
 }
 
@@ -197,7 +193,7 @@ System::Filename Persistence::GetSaveFilename(const System::String& name) const 
 
     // ?Format@String@System@@SA?AV12@PEBDZZ (retail 0x1800c9730), by name.
     System::String tmp = System::String::Format(
-        ::kRtPersistSaveFilenameFormat, _savePath.data, name._data);
+        ::kRtPersistSaveFilenameFormat, _savePath._data, name._data);
 
     // The manual "zero, AddRef-adopt tmp's buffer, then AdjustDelimiters" IS
     // `Filename(const String&)` (retail 0x18000c780) -- see B31_RULES
@@ -212,7 +208,7 @@ System::Filename Persistence::GetSaveFilename(const System::String& name) const 
 
 bool Persistence::BeginDelete(const System::String& name) {
 
-    if (_flags & 1u) return false;
+    if (_worker._runFlags & 1u) return false;
 
     // GetSaveFilename is retail's own member and is now ours, so this is the
     // direct member call retail's `CALL 0x1800b7c80` is. C++17 constructs the
@@ -221,7 +217,7 @@ bool Persistence::BeginDelete(const System::String& name) {
     // eight bytes (Filename IS a String, layout-identically), which is what
     // retail hands the enqueue helper.
     System::Filename fn(GetSaveFilename(name));
-    RtIo_PersistenceWorker_EnqueueDelete(&_workerVtable,             // 0x1800b7390
+    RtIo_PersistenceWorker_EnqueueDelete(&_worker,                 // 0x1800b7390
         &fn.AsString());
     // ~fn is retail's release.
     return true;
@@ -230,27 +226,22 @@ bool Persistence::BeginDelete(const System::String& name) {
 bool Persistence::BeginLoad(const System::String& name, int blockCount,
                             const RtIo::SaveBlock* blocks) {
 
-    if (_flags & 1u) return false;
+    if (_worker._runFlags & 1u) return false;
 
     // Same shape as BeginDelete above.
     System::Filename fn(GetSaveFilename(name));
-    RtIo_PersistenceWorker_EnqueueLoad(&_workerVtable,               // 0x1800b7460
+    RtIo_PersistenceWorker_EnqueueLoad(&_worker,                    // 0x1800b7460
         &fn.AsString(), blockCount, blocks);
     // ~fn is retail's release.
     return true;
 }
 
 Persistence::~Persistence() {
-
-    // `_savePath` is a `RtSystem::String` member and stays one (the header says
-    // why): retail's release is spelled as the String destructor through the
-    // bridge, BY HAND, exactly here. Retyping it would add an implicit member
-    // destructor running in ADDITION to this line.
-    ::Sys(_savePath).~String();
-    // ENDGAME B.3.9 IO (W2): the embedded worker's destructor (0x1800b7740),
-    // called directly where retail calls it -- the class's own, not a door.
-    reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();  // LEFT: H5 Persistence::_workerVtable is the embedded PersistenceWorker held as loose fields
-    rtsetclear::Clear(&_settingsMap);                                 // 0x18000f7d0
+    // B.4 wave X (X7-RT): the body is empty. retail 0x1800b7fb0 is the three
+    // member destructors in reverse declaration order -- ~_savePath (the
+    // String release at 0x1800b7fc6), ~_worker (CALL 0x1800b7740 at
+    // 0x1800b8000), ~_settingsMap (JMP 0x18000f7d0 at 0x1800b8013) -- and the
+    // compiler runs exactly those after this body.
 }
 
 }  // namespace IO

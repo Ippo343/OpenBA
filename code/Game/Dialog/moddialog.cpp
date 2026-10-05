@@ -375,8 +375,8 @@ void ModDialog::OnOpened() {
             // operator= empty strings at +0x40 and +0x38 (the two String fields).
             // LEFT: SpriteSheet holds them as char* (H5, R-UI's header).
             System::String emptyStr1, emptyStr2;
-            *reinterpret_cast<System::String*>(&sprSheet->m_groupName) = emptyStr1;   // LEFT: H5 SpriteSheet::m_groupName is char* String storage (runtime/types/ui/SpriteSheet.h)
-            *reinterpret_cast<System::String*>(&sprSheet->m_textureName) = emptyStr2;   // LEFT: H5 SpriteSheet::m_textureName is char* String storage (runtime/types/ui/SpriteSheet.h)
+            sprSheet->m_groupName = emptyStr1;
+            sprSheet->m_textureName = emptyStr2;
 
             // w/h at +0x48/+0x4c = 48 (0x30)
             sprSheet->m_field48 = 0x30;

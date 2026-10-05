@@ -312,7 +312,6 @@ Object::Factory*       Ctor_Factory(Object::Factory* self);                     
 Object::ExternalFactory* Ctor_ExternalFactory(Object::ExternalFactory* self);           // 0x1800be7e0
 Object::InternalFactory* Ctor_InternalFactory(Object::InternalFactory* self);           // 0x1800c0030
 IO::FileSystem*        Ctor_FileSystem(IO::FileSystem* self);                           // 0x1800ac7c0
-IO::Persistence*       Ctor_Persistence(IO::Persistence* self);                         // 0x1800b8020
 Video::Device*         Ctor_VideoDevice(Video::Device* self, int32_t type);             // 0x1800f7160
 Video::Configuration*  Ctor_VideoConfiguration(Video::Configuration* self);             // 0x1800f6f10
 Application::Application* Ctor_Application(Application::Application* self, void* hinstance);  // 0x18009f590

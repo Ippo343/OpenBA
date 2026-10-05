@@ -84,6 +84,16 @@
 
 #include "../object/External.h"
 #include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
+#include "../collection/Collection.h" // B4 X7-RT: the three Array members
+#include "Sprite.h"                   // B4 X7-RT: Array<Sprite> needs the complete element
+
+// The hand-derived row of `Array<UI::SpriteCapture::CaptureEntry>` (array.cpp,
+// 0x18004bde0): its destroy releases each entry's `name` String (0x18003f070),
+// which is what retail's ~Array 0x18003e4a0 runs. Declared here so the member
+// can name it.
+namespace rtcoll {
+extern const ArraySpec kSpec_CaptureEntry;
+}
 
 namespace UI {
 
@@ -91,18 +101,6 @@ class Sprite;
 class SpriteContext;
 class SpriteSheet;
 
-// The array header every Collection::Array<T> uses. Same shape as
-// runtime/src/collection/array.cpp's ArrayHdr, spelled again here so this
-// header stays standalone. A plain header over typed storage: as
-// `Collection::Array<T>` members the three would run their own destructors
-// beside retail's three ~Array calls in ~SpriteCapture (B4_RULES H5).
-template <class T>
-struct CaptureArray {
-    T*      data;       // +0x00
-    int32_t size;       // +0x08
-    int32_t capacity;   // +0x0c
-};
-static_assert(sizeof(CaptureArray<int32_t>) == 0x10, "CaptureArray must be 0x10 bytes");
 
 // One recorded draw or scissor. Stride 0x28 — proved by 0x18004bde0's
 // `LEA RCX,[RAX+RAX*4]; SHL RCX,3`, see the banner.
@@ -226,18 +224,24 @@ public:
     // ??0SpriteCapture@UI@@QEAA@XZ 0x1800d9140 — the REAL constructor, PUBLIC:
     // External() and the stamps are the compiler's; then the seven zero
     // stores +0x20..+0x50.
-    SpriteCapture() : Object::External() {
-        _sheets   = {};                 // +0x20, +0x28
-        _entries  = {};                 // +0x30, +0x38
-        _sprites  = {};                 // +0x40, +0x48
+    // B4 X7-RT: the three Arrays are members, so their zero triples are their
+    // own constructors, in declaration order (+0x20, +0x30, +0x40), then the
+    // one qword at +0x50 written as the two named fields (H7).
+    SpriteCapture() : Object::External(), _sheets(), _entries(), _sprites() {
         _width = 0; _height = 0;        // +0x50 (one qword)
     }
 
 public:
     // ---- the 0x38 bytes SpriteCapture adds (public: the doors reach them) --
-    CaptureArray<SpriteSheet*> _sheets;   // +0x20  Array<ExternalPtr<SpriteSheet>>, stride 8
-    CaptureArray<CaptureEntry> _entries;  // +0x30  Array<CaptureEntry>,             stride 0x28
-    CaptureArray<Sprite>       _sprites;  // +0x40  Array<UI::Sprite>,               stride 0x10
+    // B4 X7-RT (`behaviour:`): typed members. Retail's ~SpriteCapture
+    // 0x1800d91b0 calls ~Array on +0x40 (0x1800d91d4, 0x180037310), +0x30
+    // (0x1800d91de, 0x18003e4a0: releases each entry's name) and +0x20
+    // (0x1800d91e8, 0x18003da00), then ~External: reverse declaration order.
+    Collection::Array<SpriteSheet*> _sheets;   // +0x20  Array<ExternalPtr<SpriteSheet>>, stride 8
+    Collection::Array<CaptureEntry, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_CaptureEntry>>
+                                    _entries;  // +0x30  Array<CaptureEntry>,             stride 0x28
+    Collection::Array<Sprite>       _sprites;  // +0x40  Array<UI::Sprite>,               stride 0x10
     int32_t      _width;      // +0x50  GetWidth
     int32_t      _height;     // +0x54  GetHeight
 };

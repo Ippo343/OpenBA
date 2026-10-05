@@ -46,17 +46,6 @@
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/system/String.h"
 
-namespace {
-
-
-// System::String is ONE char* (runtime/types/system/String.h): the member
-// fields are spelled `char*`, so the Font/SpriteContext calls see them as the
-// String they are.
-const System::String& AsString(char* const& field) {
-    return *reinterpret_cast<const System::String*>(&field);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-}
-
-}  // namespace
 
 namespace UI {
 
@@ -68,16 +57,17 @@ namespace UI {
 // element-destroying ~Array (`_params` is a plain three-field header, so no
 // member ~Array follows); then the compiler chains ~Element (0x1801161a0).
 TextElement::~TextElement() {
-    System::StringPrivateAccess::Release(
-        *reinterpret_cast<System::String*>(&_cachedText));   // LEFT: H5 TextElement::_cachedText: retail dtor 0x18011eda0 releases +0xf8 BEFORE destroying the +0xc8 _params array; a String member would release it AFTER this body, i.e. after _params, unless _params (the kSpec_StringRefZ erased core) is typed in the same commit
-    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_params);
+    // B4 X7-RT: empty. The release of +0xf8 (0x18011edc0..0x18011edeb) and
+    // ~Array<String> on +0xc8 (0x18011edfd CALL 0x180010ab0) are the two typed
+    // members' destructors, which the compiler runs after this body in that
+    // order (reverse declaration order), then ~Element (0x18011ee0b).
 }
 
 // slot 4 — 0x18011f060
 void TextElement::ComputeSize() {
     if ((_flags & kElementFlagNeedsSizeCalc) == 0) return;
 
-    _font->ComputeStringLayout(AsString(_cachedText), _wrap != 0, _lineSpacing,
+    _font->ComputeStringLayout(_cachedText, _wrap != 0, _lineSpacing,
                                _maxWidth, _justify, _layoutWidth, _layoutHeight,
                                nullptr);
 
@@ -140,13 +130,13 @@ void TextElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
     const int32_t baseline = font->_lineHeight - font->_baseLine;
 
     if (_drawShadow != 0) {
-        ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(_cachedText), _wrap != 0,
+        ctx.AddFont(Object::ExternalPtr<Font>(font), _cachedText, _wrap != 0,
                     _lineSpacing, _justify, _maxWidth,
                     _layoutLeft + 1, _layoutTop + 1 + baseline,
                     0xff000000u);
     }
 
-    ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(_cachedText), _wrap != 0,
+    ctx.AddFont(Object::ExternalPtr<Font>(font), _cachedText, _wrap != 0,
                 _lineSpacing, _justify, _maxWidth,
                 _layoutLeft, baseline + _layoutTop,
                 rtuielem::ComputeColor(raw, alpha));

@@ -85,7 +85,6 @@
 #include "../../types/system/Filename.h"
 #include <new>
 
-using RtIo::Persistence;
 using RtSystem::String;
 using RtSystem::Sys;   // the transitional POD->class bridge (pod_bridge.h)
 
@@ -139,10 +138,8 @@ bool Persistence::Startup() {
     System::String tmp(std::move(::Sys(tmpPod)));
 
     // String::operator=, retail 0x1800c9810, inlined at 0x1800b7f10 -- the
-    // exact self-assignment guard on the BUFFER (the banner above). `savePath`
-    // is a `RtSystem::String` member of the not-yet-converted `Persistence`,
-    // reached through the one transitional bridge.
-    ::Sys(_savePath) = tmp;
+    // exact self-assignment guard on the BUFFER (the banner above).
+    _savePath = tmp;
 
     // ~tmp is retail's release at 0x1800b7f5d.
 

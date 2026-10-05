@@ -100,9 +100,10 @@ Object::Base* SpriteCapture::CreateInPlaceObject(void* place) {
 // order. ENDGAME B.3.9 UI-D: the retired `RtUi_SpriteCapture_Dtor` door ran
 // this same body by hand.
 SpriteCapture::~SpriteCapture() {
-    rtcoll::RtColl_ArrayDtor_180037310(&_sprites);          // 1800d91d4  ~Array<Sprite>, +0x40
-    rtcoll::RtColl_ArrayDtorElem_18003e4a0(&_entries);      // 1800d91de  ~Array<CaptureEntry>, +0x30
-    rtcoll::RtColl_ArrayDtor_18003da00(&_sheets);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>, +0x20
+    // B4 X7-RT: empty. 1800d91d4 (~Array<Sprite> +0x40), 1800d91de
+    // (~Array<CaptureEntry> +0x30, names released) and 1800d91e8
+    // (~Array<ExternalPtr<SpriteSheet>> +0x20) are the three members'
+    // destructors, run after this body in that order.
 }
 
 }  // namespace UI
@@ -152,32 +153,32 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(*stream, 0);                          // [RBP-0x38], [RBP-0x30]
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    int32_t n = _sheets.size;       // 1800d9586  _sheets._size
+    int32_t n = _sheets._size;       // 1800d9586  _sheets._size
     rw->SerializeInt(n, nullptr);                            // 1800d959b
 
 
     if (ser._stream->_direction == 0) {                      // 1800d95a5 (re-read)
         rtcoll::RtColl_ArraySetSize_18003ea50(&_sheets, n);      // 1800d95b2
     }
-    Object::SerializeExternalArray<UI::SpriteSheet>(ser, n, _sheets.data);
+    Object::SerializeExternalArray<UI::SpriteSheet>(ser, n, _sheets._data);
 
     rw->SerializeInt(_width, nullptr);                       // 1800d95d5  _width
     rw->SerializeInt(_height, nullptr);                      // 1800d95e9  _height
 
-    n = _entries.size;               // 1800d95ef  _entries._size
+    n = _entries._size;               // 1800d95ef  _entries._size
     rw->SerializeInt(n, nullptr);                            // 1800d9604
 
     if (ser._stream->_direction == 0) {                      // 1800d960e (re-read)
         rtcoll::RtColl_ArraySetSize_18004ba90(&_entries, n);      // 1800d961b
     }
-    RtUi_SpriteCapture_SerializeEntries(&ser, n, _entries.data);   // 0x18004c0d0
+    RtUi_SpriteCapture_SerializeEntries(&ser, n, _entries._data);   // 0x18004c0d0
 
     if (stream->_direction == 0) {                           // 1800d9630  the ORIGINAL stream
         rtcoll::RtColl_ArraySetSize_1800370c0(
-            &_sprites, _entries.size);         // 1800d9642
+            &_sprites, _entries._size);         // 1800d9642
 
-        for (int32_t i = 0; i < _sprites.size; ++i) {
-            const CaptureEntry* entries = _entries.data;                 // 1800d9660
+        for (int32_t i = 0; i < _sprites._size; ++i) {
+            const CaptureEntry* entries = _entries._data;                 // 1800d9660
             const int32_t sheetIndex = entries[i].sheetIndex;
 
             uint64_t idxSlot;                                // see the banner
@@ -186,10 +187,10 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
             if (sheetIndex < 0) {                            // 1800d9664 CMP/JGE
                 const int32_t minusOne = -1;
                 __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);  // 1800d966b
-                sprites = _sprites.data;                                 // 1800d9672
+                sprites = _sprites._data;                                 // 1800d9672
                 sheet   = nullptr;                                       // 1800d9676 (RDI==0)
             } else {
-                sheet = _sheets.data[sheetIndex];                        // 1800d968f
+                sheet = _sheets._data[sheetIndex];                        // 1800d968f
                 if (sheet != nullptr) {                                  // 1800d9693
                     // ENDGAME B.3.6 block D: was an RT_EXPORT_ONCE door;
                     // now the member. The entry's `name` IS a System::String
@@ -201,7 +202,7 @@ bool SpriteCapture::Serialize(IO::Stream& streamv) {
                     const int32_t minusOne = -1;
                     __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne); // 1800d96ad
                 }
-                sprites = _sprites.data;                                 // 1800d96b4
+                sprites = _sprites._data;                                 // 1800d96b4
             }
             // One QWORD store over `spriteIndex` and `pad0C` (1800d96c0).
             Sprite& slot = sprites[i];
@@ -260,9 +261,9 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
     const int32_t sw = static_cast<int32_t>(static_cast<float>(savedW) * scale);
     const int32_t sh = static_cast<int32_t>(static_cast<float>(savedH) * scale);
 
-    // `_entries.size` and `.data` are re-read every iteration, as retail does.
-    for (int32_t i = 0; i < _entries.size; ++i) {
-        const CaptureEntry& e = _entries.data[i];                     // 1800d92e3
+    // `_entries._size` and `.data` are re-read every iteration, as retail does.
+    for (int32_t i = 0; i < _entries._size; ++i) {
+        const CaptureEntry& e = _entries._data[i];                     // 1800d92e3
 
         if (e.sheetIndex == -1) {                                     // 1800d92eb
             int32_t x1 = e.x1 + ox;
@@ -305,7 +306,7 @@ void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
         }
 
         // A recorded sprite. The Sprite the scissor entries do NOT have.
-        const Sprite& sprite = _sprites.data[i];
+        const Sprite& sprite = _sprites._data[i];
         const SpriteSheet* const sheet = sprite.spriteSheet;
 
         const int32_t x1 = e.x1 + ox;

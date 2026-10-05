@@ -801,8 +801,8 @@ void Save::SaveLoad::Update(const System::Time& delta) {
     _elapsed = _elapsed + delta._ticks;
 
     const ::IO::Persistence* p = PersistenceSingleton();
-    if ((p->_flags & 1) != 0) return;
-    if (p->_status == 0) return;
+    if ((p->_worker._runFlags & 1) != 0) return;
+    if (p->_worker._status == 0) return;
 
     // ENDGAME B.3.7 B2: the five targets are members of this class now, called
     // directly (they were five RT_EXPORT_ONCE doors onto our own ports).

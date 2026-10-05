@@ -135,30 +135,17 @@ class Dialog;
 
 class TextElement : public Element {
 public:
-    // Retail's `Array<System::String>` header, spelled as its three fields so
-    // this class holds no non-trivial member (the resize goes through the
-    // hand-derived `kSpec_StringRefZ` row, textelement_cachetext.cpp).
-    struct ParamArray {
-        char**  _data;       // +0x00  System::String[] (each one char*)
-        int32_t _size;       // +0x08  SetParameter's bound
-        int32_t _capacity;   // +0x0c
-    };
-
     // ??0TextElement@UI@@QEAA@XZ 0x18011eb80 — the REAL constructor: CALL
     // ??0Element (Element()), then the stores the banner lists at retail's
-    // widths (`_text` is UI::String's own default ctor, {nullptr, -1}; +0xe4
-    // and +0xea..+0xeb NOT written), then `CALL 0x18011ec10` — CacheText.
-    TextElement() : Element() {
-        _font = nullptr;
-        _params._data     = nullptr;
-        _params._size     = 0;
-        _params._capacity = 0;
-        _drawShadow  = 0;
-        _wrap        = 0;
-        _lineSpacing = 0x64;
-        _maxWidth    = -1;
-        _justify     = 0;
-        _cachedText  = nullptr;
+    // widths and in retail's order (`_params` is Array()'s zero triple, `_text`
+    // UI::String's own default ctor {nullptr, -1}, `_cachedText` String()'s
+    // null; +0xe4 and +0xea..+0xeb NOT written), all in the init list so the
+    // two typed members keep their place in the sequence (B4 X7-RT), then
+    // `CALL 0x18011ec10` — CacheText.
+    TextElement()
+        : Element(), _font(nullptr), _params(), _text(),
+          _drawShadow(0), _wrap(0), _lineSpacing(0x64), _maxWidth(-1),
+          _justify(0), _cachedText() {
         CacheText();                                             // 18011ebf9
     }
 
@@ -212,8 +199,13 @@ private:
 
 public:
     // ---- the 0x40 bytes TextElement adds ------------------------------------
+    // B4 X7-RT (`behaviour:`): `_params` and `_cachedText` are typed members.
+    // Retail's ~TextElement 0x18011eda0 releases +0xf8 first, then calls
+    // ~Array<String> 0x180010ab0 on +0xc8, then ~Element: the compiler's
+    // reverse-declaration member destruction after the (empty) body. `_text`
+    // (UI::String, a table pointer and an index) has no destructor.
     Font*      _font;          // +0xc0  ExternalPtr<UI::Font>
-    ParamArray _params;        // +0xc8  Array<System::String>
+    Collection::Array<System::String> _params;   // +0xc8  {data, size +0xd0, capacity +0xd4}
     String     _text;          // +0xd8  UI::String
     uint8_t    _drawShadow;    // +0xe8
     uint8_t    _wrap;          // +0xe9
@@ -221,7 +213,7 @@ public:
     int32_t    _lineSpacing;   // +0xec  ctor 100
     int32_t    _maxWidth;      // +0xf0  ctor -1
     int32_t    _justify;       // +0xf4  UI::Font::Justify
-    char*      _cachedText;    // +0xf8  System::String (refcounted char*)
+    System::String _cachedText;   // +0xf8  owned by CacheText
 };
 
 static_assert(sizeof(TextElement) == 0x100,
@@ -233,9 +225,9 @@ static_assert(offsetof(TextElement, _font) == sizeof(Element),
               "TextElement's own fields begin at the end of Element");
 static_assert(offsetof(TextElement, _font)        == 0xc0, "");
 static_assert(offsetof(TextElement, _params)      == TextElementOffsets::kParamArrayData, "");
-static_assert(offsetof(TextElement, _params) + offsetof(TextElement::ParamArray, _size)
+static_assert(offsetof(TextElement, _params) + offsetof(Collection::Array<System::String>, _size)
               == TextElementOffsets::kParamCount, "");
-static_assert(offsetof(TextElement, _params) + offsetof(TextElement::ParamArray, _capacity)
+static_assert(offsetof(TextElement, _params) + offsetof(Collection::Array<System::String>, _capacity)
               == TextElementOffsets::kParamCapacity, "");
 static_assert(offsetof(TextElement, _text)        == TextElementOffsets::kTextString, "");
 static_assert(offsetof(TextElement, _drawShadow)  == 0xe8, "");

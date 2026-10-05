@@ -128,10 +128,10 @@ using RtSaveDetail::SetupLoadFn;
 uint32_t LookupSlotSize(const ::IO::Persistence* persistence, uint32_t id, bool* found) {
     if (found) *found = false;
     if (persistence == nullptr) return 0;
-    if ((persistence->_flags & 1) != 0) return 0;               // 0x1800c0c9b
-    const int32_t count = persistence->_blockDescCount;
+    if ((persistence->_worker._runFlags & 1) != 0) return 0;               // 0x1800c0c9b
+    const int32_t count = persistence->_worker._blockDescs._size;
     if (count <= 0) return 0;                                    // 0x1800c0ca8
-    const RtIo::BlockDesc* table = persistence->_blockDescData;
+    const RtIo::BlockDesc* table = persistence->_worker._blockDescs._data;
     for (int32_t i = 0; i < count; ++i) {                        // 0x1800c0cb7
         if (table[i].id == id) {
             if (found) *found = true;

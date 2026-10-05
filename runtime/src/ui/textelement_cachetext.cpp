@@ -147,42 +147,28 @@ void TextElement::CacheText() {
 
     Str result;                                               // [RBP+0x38]
     Str param0;                                               // [RBP+0x40]
-    char* newData = nullptr;
+    const Str* src = nullptr;                                 // the String whose buffer is adopted
 
     // The branch selector is the parameter Array's _size, which the call above
     // has just set. Retail reads it at 0x18011ec39 — BEFORE the operator call,
     // which is immaterial (the operator does not touch `this`).
     if (_params._size == 0) {
-        newData = tmp._data;
+        src = &tmp;
     } else {
         if (tmp._data) { param0._data = tmp._data; ++RtSystem::StringRefCount(tmp._data); }  // 0x18011ecb3
         // The params pointer is the parameter Array's DATA pointer, not the
         // Array header — Ghidra's decompiled C drops this third argument
         // (reference_ghidra_c_output_vs_disassembly.md).
-        result = System::String::FormatParamList(
-            param0, reinterpret_cast<const Str*>(_params._data));   // LEFT: TextElement::ParamArray::_data is char** (citizenui.cpp, DLG, reads it as char**)
-        newData = result._data;                               // 0x18011ecd1: R14 = &result
+        result = System::String::FormatParamList(param0, _params._data);
+        src = &result;                                        // 0x18011ecd1: R14 = &result
     }
 
-    char* cur = _cachedText;
-    if (cur != newData) {                                     // 0x18011ec55 / ecdb
-        if (cur) {
-            if (--RtSystem::StringRefCount(cur) == 0) {
-                // Retail stores the decremented pointer back into the
-                // MEMBER before freeing (`ADD qword ptr [RDI+0xf8],-0x8;
-                // MOV RCX,[RDI+0xf8]`), so MemFree's argument comes out of
-                // the element, not out of a register. Reproduced literally.
-                _cachedText = cur - 8;
-                MemFree(_cachedText);
-            } else {
-                _cachedText = nullptr;
-            }
-        }
-
-        _cachedText = newData;
-
-        if (newData) ++RtSystem::StringRefCount(newData);
-    }
+    // `String::operator=` (retail 0x1800c9810), inlined at 0x18011ec55 /
+    // 0x18011ecdb: the guard on the buffer, the release that stores `data - 8`
+    // back into the member before freeing (`ADD qword ptr [RDI+0xf8],-0x8`) or
+    // nulls it, then the adopt and AddRef, from whichever String the branch above
+    // chose.
+    _cachedText = *src;
 
     // Retail releases `result` and `param0` here (0x18011ed1d, 0x18011ed46) and
     // `tmp` last (0x18011ed66) — which is exactly reverse declaration order,

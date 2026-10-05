@@ -569,8 +569,8 @@ UNIT_TEST(b39_io_packagefile_shape_ctor_and_both_arms) {
     CHECK_EQ(pf->_version, 0);
     CHECK_EQ(pf->_priority, 0x2710);
     CHECK_EQ(pf->_platform, 0);
-    CHECK_EQ(pf->_iconCount, 0);
-    CHECK(pf->_previewData == nullptr);
+    CHECK_EQ(pf->_iconData._size, 0);
+    CHECK(pf->_previewData._data == nullptr);
     CHECK_EQ(pf->_crc, 0u);
     CHECK_EQ((int)pf->_overridable, 1);
     CHECK_EQ(pf->_entryCount, 0);

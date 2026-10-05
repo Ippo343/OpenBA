@@ -619,7 +619,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
 
                     int32_t w = 0, h = 0;
                     if (sprite >= 0) {                         // 1800cec9a / 1800cecba
-                        const SpriteInfo& s = entry.spriteSheet->m_sprites[sprite];
+                        const SpriteInfo& s = entry.spriteSheet->m_sprites._data[sprite];
                         w = s.width;                           // 1800cecb1
                         h = s.height;                          // 1800cecd0
                     }
@@ -838,7 +838,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     sprite = sheet->GetSpriteIndexFromName(Str(&name));
                 }
                 if (sheet != nullptr && sprite >= 0) {          // 1800ceb80
-                    const SpriteInfo& s = sheet->m_sprites[sprite];   // 1800cedb6
+                    const SpriteInfo& s = sheet->m_sprites._data[sprite];   // 1800cedb6
                     out->color  = _colorsData[_colorIndex];     // 1800cedab
                     out->height = s.height;                     // 1800cedbe
                     out->width  = s.width;                      // 1800cedca

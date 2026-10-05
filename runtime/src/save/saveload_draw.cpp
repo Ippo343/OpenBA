@@ -580,7 +580,7 @@ void Save::SaveLoad::Draw(Video::Context& context,
     // through an accessor. The width/height recomputation is the same
     // ImageBuffer::Width()/Height() pair as above, evaluated a second time.
     {
-        SpriteInfo* entry = static_cast<SpriteInfo*>(sheet->m_sprites);
+        SpriteInfo* entry = sheet->m_sprites._data;
         entry->width  = frameCopy->Width();
         entry->height = frameCopy->Height();
         entry->u0 = static_cast<float>(offX) / fDevW;
