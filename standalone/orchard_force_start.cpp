@@ -131,12 +131,12 @@ bool TryAssignRealTreeType(PlayerToolManager* entityUI, ComponentEntity* orchEnt
     ++s_treeTurn;
     combo->SetCurrentItem(wantItem);
     // Slot 9, OrchardUI's OnElementEvent (real class, ENDGAME B.3.8): the real
-    // combo-change event, msg 0x14 elem 500. The combo element pointer goes in the
-    // element argument exactly as the raw dispatch passed it.
-    // LEFT: that argument is an InternalPtr<Element>* and the harness hands it the
-    // element itself (the old raw dispatch's value); naming it would change the value.
+    // combo-change event, msg 0x14 elem 500. The element argument is the address of
+    // an InternalPtr to the combo, as UpgradeUI's click in tool_harness.cpp builds one
+    // (known_port_issues row 155: SelectResourceUI's body never reads it).
+    Object::InternalPtr<UI::Element> comboRef(combo);   // the slot takes the element's InternalPtr (its body never reads it)
     oui->OnElementEvent(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,   // LEFT: the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)
+        &comboRef, 0x14, 500,
         0, 0, 0, nullptr);
 
     ComponentDescription* treeTypeAfter = orchComp->treeType;          // +0x60

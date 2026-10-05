@@ -362,7 +362,7 @@ void WeatherSimulation::SetEffectEnabled(int slot, bool enable) {
 
     EnvironmentDescription* envRes = environment;   // +0x00
     if (!envRes) return;
-    EnvironmentDescription::WeatherChoice* arrayBase = envRes->_weatherArray;   // +0x28
+    EnvironmentDescription::WeatherChoice* arrayBase = envRes->_weatherArray._data;   // +0x28
     if (!arrayBase) return;
     Weather* descriptor = arrayBase[slot].weather;
     if (!descriptor) return;
@@ -415,10 +415,12 @@ namespace {
 using WeatherEntryElem = GameColl::Bytes<0x10, 8>;   // exe 0x1400198a0
 static_assert(sizeof(WeatherEntryElem)  == 0x10, "WeatherEntryElem stride");
 static_assert(alignof(WeatherEntryElem) == 8,    "WeatherEntryElem align");
-using WeatherEntryArray = Collection::Array<WeatherEntryElem>;
 }  // namespace
 
-extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {
-    // B.3.2 bridge: EnvironmentDescription's weather array is still a raw triple.
-    reinterpret_cast<WeatherEntryArray*>(hdr)->SetSize(newCount);   // LEFT: audit WORK (CLASS EnvironmentDescription::_weatherArray raw triple + its loader; not reached in B4 Z SWEEP): H5 EnvironmentDescription::_weatherArray is the raw triple of an Array<WeatherChoice> (Component/EnvironmentDescription.h, not this agent's)
+extern "C" void Reimpl_WeatherArray_Resize(Collection::Array<EnvironmentDescription::WeatherChoice>* hdr, int newCount) {
+    // EnvironmentDescription +0x28, typed: the zero-initialised WeatherChoice's trait row is
+    // WeatherEntryElem's (stride 0x10, align 8, byte copy, zeroed tail, no destroy).
+    hdr->SetSize(newCount);
 }
+static_assert(sizeof(EnvironmentDescription::WeatherChoice) == sizeof(WeatherEntryElem), "0x1400198a0 stride");
+static_assert(alignof(EnvironmentDescription::WeatherChoice) == alignof(WeatherEntryElem), "0x1400198a0 align");

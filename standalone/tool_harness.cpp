@@ -1684,8 +1684,9 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
             if (combo && items > 0) {
                 if (wantItem >= items) wantItem = items - 1;
                 combo->SetCurrentItem(wantItem);
+                Object::InternalPtr<UI::Element> comboRef(combo);   // the slot takes the element's InternalPtr (its body never reads it)
                 pui->OnElementEvent(
-                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,   // LEFT: the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)
+                    &comboRef, 0x14, 500,
                     0, 0, 0, nullptr);
                 fprintf(stderr, "[PasturePanel] SELECT fired: item=%d -> pasture type(+0x28)=%p "
                        "max(+0x40)=%d\n", wantItem,
@@ -1821,8 +1822,9 @@ void FireOrchardPanel(PlayerToolManager* entityUI) {
         if (combo && items > 0) {
             if (wantItem >= items) wantItem = items - 1;
             combo->SetCurrentItem(wantItem);
+            Object::InternalPtr<UI::Element> comboRef(combo);   // the slot takes the element's InternalPtr (its body never reads it)
             oui->OnElementEvent(
-                reinterpret_cast<Object::InternalPtr<UI::Element>*>(combo), 0x14, 500,   // LEFT: the element itself handed where the slot takes an InternalPtr<Element>* (known_port_issues 14f row 155)
+                &comboRef, 0x14, 500,
                 0, 0, 0, nullptr);
             fprintf(stderr, "[OrchardPanel] SELECT fired: item=%d -> orchard type(+0x60)=%llx "
                    "(%s)\n", wantItem, orchType(),

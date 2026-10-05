@@ -44,29 +44,23 @@ inline int SerStreamErr(IO::Serializer& ser) {
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
 // the defaults.
 SpawnDescription::SpawnDescription()
-    : Description(),
-      _entries(nullptr),
-      _entryCount(0),
-      _entryCap(0) {}
+    : Description() {}   // _entries: Array's three zero stores
 
-// dtor (slot 0 0x14000c2e0 minus the stamps): frees the entry array buffer.
-// The compiler then chains ~Description -> ~External.
-SpawnDescription::~SpawnDescription() {
-    if (_entries) System::MemoryAllocator::MemFree(_entries);
-    _entries = nullptr;
-}
+// dtor (slot 0 0x14000c2e0 minus the stamps): an empty body; the member ~Array
+// frees the entry buffer and zeroes the triple, then ~Description -> ~External.
+SpawnDescription::~SpawnDescription() {}
 
 // [5] 0x1400560b0: stream order as retail.
 bool SpawnDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    int count = _entryCount;
+    int count = _entries.GetSize();
     ser.Serialize(count, nullptr);
     if (SerStreamErr(ser) == 0) {
         // exe-internal 16-byte-stride array resize (0x14000c520)
         Reimpl_Array_Resize_Stride10_Spawn(&_entries, count);   // header at +0x20 {ptr, count, cap}
     }
     if (count > 0) {
-        Entry* elem = _entries;
+        Entry* elem = _entries.GetData();
         for (int i = 0; i < count && elem; ++i, ++elem) {
             Reimpl_ExternalPtr_Serialize_StringTable(&elem->_template, &ser);   // 0x140002340
             ser.Serialize(elem->_minSpawnAge, nullptr);

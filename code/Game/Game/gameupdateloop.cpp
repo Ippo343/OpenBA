@@ -825,7 +825,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", m_citizenList);
                 { PhaseTimer pt(kPhCitizenList);
-                m_citizenList->Update(const_cast<int64_t*>(&time->_ticks));   // 0x14008c2b0  // LEFT: audit WORK (SIG; CitizenBehavior::Update's int64_t* time and its callers, not reached in B4 Z SWEEP): SIG CitizenBehavior::Update(int64_t* deltaTime) (Entity/CitizenBehavior.h, X6-CW's partition): retail passes the slot's const Time*
+                m_citizenList->Update(time);   // 0x14008c2b0 (the slot's const Time*)
                 }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 

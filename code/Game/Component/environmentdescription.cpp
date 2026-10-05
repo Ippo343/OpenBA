@@ -55,10 +55,7 @@ inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f
 // monthly entries all start from the same lighting.
 EnvironmentDescription::EnvironmentDescription()
     : Object::External(),
-      _environmentRef(nullptr),
-      _weatherArray(nullptr),
-      _weatherCount(0),
-      _weatherCap(0) {
+      _environmentRef(nullptr) {   // _weatherArray: Array's three zero stores
     for (WeatherEntry& w : _months) {
         w.skyColor     = 0xff595965;
         w.groundColor  = 0xffcbcbbc;
@@ -71,14 +68,9 @@ EnvironmentDescription::EnvironmentDescription()
     }
 }
 
-// dtor (slot 0 0x140019190 minus the stamps): free the dynamic weather array.
-// The compiler then runs ~External.
-EnvironmentDescription::~EnvironmentDescription() {
-    if (_weatherArray) ::System::MemoryAllocator::MemFree(_weatherArray);
-    _weatherArray = nullptr;
-    _weatherCount = 0;
-    _weatherCap = 0;
-}
+// dtor (slot 0 0x140019190 minus the stamps): an empty body; the member ~Array
+// frees the weather array and zeroes its triple, then ~External.
+EnvironmentDescription::~EnvironmentDescription() {}
 
 // [5] 0x140094040.
 bool EnvironmentDescription::Serialize(IO::Stream& stream) {
@@ -87,7 +79,7 @@ bool EnvironmentDescription::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&_environmentRef, &ser);   // ExternalPtr +0x20
 
     // count through a local (the resize below owns +0x30)
-    int count = _weatherCount;
+    int count = _weatherArray._size;
     ser.Serialize(count, nullptr);
 
     // On load: resize the dynamic weather-entry array.

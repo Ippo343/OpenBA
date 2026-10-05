@@ -218,8 +218,8 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 // ============================================================
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
-             bool param_9, uint32_t param_10, uint32_t param_11,
-             uint32_t param_12, uint32_t param_13, uint32_t param_14,
+             bool param_9, float param_10, float param_11,
+             float param_12, float param_13, float param_14,
              char param_15, int param_16, int param_17, bool param_19) {
     if (material == nullptr) return -1;
 
@@ -262,13 +262,12 @@ haveSlot:
     entry->field_0x3C = param_6;
     entry->field_0x40 = static_cast<int32_t>(param_7);
     entry->field_0x44 = param_9;   // the bool parameter's byte, stored as is
-    // LEFT: +0x48..+0x58 are floats; retail stores the caller's raw 32-bit words
-    // (the callers pass the bits in integer registers / stack slots).
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[1]) = param_11;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[2]) = param_12;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[3]) = param_13;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
+    // +0x48..+0x58: retail's five float stack parameters, each a MOVSS load / store (0x1400b0ee7).
+    entry->field_0x48[0] = param_10;
+    entry->field_0x48[1] = param_11;
+    entry->field_0x48[2] = param_12;
+    entry->field_0x48[3] = param_13;
+    entry->field_0x48[4] = param_14;
     entry->field_0x5C = true;
     entry->alternateKey = param_19;
     TradeWork_impl_ace40(geom, iVar3, param_15, param_16, param_17);
@@ -297,11 +296,11 @@ int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2) {
     int col = param_2 % mapSize;
     int r   = param_1->_radius;
 
-    const uint32_t uv = 0x3f800000u;   // the bits of 1.0f (kRdata_14017214c), passed in an int register
+    const float uv = kRdata_14017214c;   // 1.0f; retail MOVSSes it (and 0.0f) into the float stack slots (0x1400554c0)
 
     return AddDecal(highlightMgr,                                   // 0x1400b0d80
                     col - r, row - r, r + col, r + row,
                     0xff, 0, target, false,
-                    uv, 0, 0, uv, uv,
+                    uv, 0.0f, 0.0f, uv, uv,
                     1, r - 2, r + 2, true);
 }

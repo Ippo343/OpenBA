@@ -104,7 +104,7 @@ void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& c
     // LEFT: Graphics::Geometry declares the pair as two Transforms (+0x84 / +0xa0), not
     // as the InterpolatedState<Transform> retail's Lerp reads (R-GFX's header).
     const Math::Transform xf =        // .translation is the billboard origin
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: graphics/Geometry.h (R-GFX-1)
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: waits on a runtime/ type (B4 Z LAST CODE): Graphics::Geometry's +0x84 / +0xa0 pair as one InterpolatedState<Math::Transform> (runtime/types/graphics/Geometry.h plus the RtGraphics mirror's alias asserts); ~40 reader lines in runtime/src/graphics (scene.cpp, mesh.cpp, meshinstance_draw.cpp, wave27_lane_gfxpart.cpp, closure_batch2b.cpp) and scene_watch.cpp rename with it
             ->Lerp(Math::Scalar(t));
     {
         Math::Matrix mat = xf.AsMatrix();

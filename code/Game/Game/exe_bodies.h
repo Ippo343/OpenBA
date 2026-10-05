@@ -145,7 +145,7 @@ class PlayerController;
 extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);  // 0x14001bf10
-extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount);  // 0x14000c520
+// 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
 namespace IO { class Serializer; }
 extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0
@@ -204,8 +204,9 @@ extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  
 extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0x14000a590
 
 // ---- serialize_struct60b.cpp
-extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);  // 0x14001f250
+template <class T> struct RawArray;   // Action/PathSearch.h
 struct GeometryBatch;   // Game/WorldGeometryElements.h
+extern "C" void Reimpl_Struct60B_Resize(RawArray<GeometryBatch>* arrayHeader, unsigned int newCount);  // 0x14001f250
 extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const GeometryBatch* src);  // 0x14001f5e0
 
 // ---- town_storage_seed.cpp
@@ -233,7 +234,7 @@ extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
 class WeatherParticleGeometry;
 class Weather;
 extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80
-extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount);  // 0x1400198a0
+// 0x1400198a0 Reimpl_WeatherArray_Resize: declared in Component/EnvironmentDescription.h (it takes the typed array).
 
 // ---- weather_sim.cpp
 class WeatherSimulation; namespace System { class Time; }
@@ -303,4 +304,5 @@ void ResizeStride0x10(void* hdr, int n);  // 0x140017640
 // serialize_image_upload.cpp
 // serialize_resize_helpers.cpp
 extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount);
-extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount);
+namespace Math { class Vector2; }
+extern "C" void Reimpl_Array_Resize_ArrayOfArrays(RawArray<RawArray<Math::Vector2>>* arrayHeader, int newCount);  // WorldGeometry +0x1E0

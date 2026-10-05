@@ -371,9 +371,9 @@ public:
     CitizenBehavior& operator=(const CitizenBehavior&) = delete;
 
     // ---- members (B4 WORK-a; bodies in citizenbehavior.cpp) ----
-    void Update(int64_t* deltaTime);       // 0x14008c2b0 (deltaTime: a System::Time*)
+    void Update(const System::Time* deltaTime);   // 0x14008c2b0
     void CountResources();                 // 0x140089ed0
-    void CheckThresholds(int64_t* deltaTime); // 0x14008c100
+    void CheckThresholds(const System::Time* deltaTime); // 0x14008c100
     void CollectStats();                   // 0x14008a730
     // The water search FireWork's Execute (slot 4) runs from the citizen's cell:
     // an expanding ring over the +0x140 coarse index, closest reachable well or

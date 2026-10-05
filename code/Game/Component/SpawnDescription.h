@@ -20,8 +20,13 @@
 #include <cstddef>
 #include "Component/Description.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (the +0x20 entry table)
 
 class ComponentDescription;   // Component/ComponentDescription.h
+
+// The entry array's hand-derived row (exe 0x14000c520: stride 0x10, byte copy, new
+// element {0, 0.0f, 10.0f}); defined in Game/serialize_arrays.cpp.
+extern const rtcoll::ArraySpec kSpec_SpawnEntry;
 
 class SpawnDescription final : public Description {
     DECLARE_EXE_TYPE(SpawnDescription)
@@ -46,14 +51,19 @@ public:
     };
 
     // ---- fields (PUBLIC while the components read them) ----
-    Entry* _entries;                            // +0x20 Array<Entry> data
-    int32_t _entryCount;                        // +0x28
-    int32_t _entryCap;                          // +0x2c
+    // +0x20 Array<Entry> {data, count +0x28, capacity +0x2c}. Retail's ctor zeroes
+    // the triple; its dtor 0x14000c2e0 frees +0x20 and zeroes +0x20..+0x2f before
+    // ~External (0x14000c30b..0x14000c317): ~Array, with no element destroy.
+    using EntryArray = Collection::Array<Entry, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&kSpec_SpawnEntry>>;
+    EntryArray _entries;
 };
 
 static_assert(sizeof(SpawnDescription) == 0x30, "SpawnDescription is 0x30 (create 0x14000c1d0 MemAlloc(0x30))");
 static_assert(alignof(SpawnDescription) == 8, "SpawnDescription alignment");
 static_assert(sizeof(SpawnDescription::Entry) == 0x10, "SpawnDescription::Entry stride 0x10 (0x14000c520)");
 static_assert(offsetof(SpawnDescription, _entries) == 0x20, "SpawnDescription::_entries @ +0x20");
-static_assert(offsetof(SpawnDescription, _entryCount) == 0x28, "SpawnDescription::_entryCount @ +0x28");
-static_assert(offsetof(SpawnDescription, _entryCap) == 0x2c, "SpawnDescription::_entryCap @ +0x2c");
+static_assert(sizeof(SpawnDescription::EntryArray) == 0x10, "SpawnDescription::_entries is the 16-byte Array header");
+
+// 0x14000c520 — the entry array's resize (Game/serialize_arrays.cpp).
+extern "C" void Reimpl_Array_Resize_Stride10_Spawn(SpawnDescription::EntryArray* arrayHeader, int newCount);

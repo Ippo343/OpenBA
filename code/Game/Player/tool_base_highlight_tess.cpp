@@ -175,25 +175,11 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     Math::Scalar local_29c((float)batch->field_0x40);     // yawDeg
     Math::Scalar local_2b0_0;                              // 0.0f
 
-    uint64_t local_208 = (uint64_t)(uint32_t&)fVar35;  // CAST-OK: float_bits
-    uint64_t local_200 = (uint64_t)(uint32_t&)fVar35 << 0x20;  // CAST-OK: float_bits
-    uint64_t local_1f8 = 0;
-
-    uint64_t local_280 = (uint64_t)(uint32_t&)fVar31;  // CAST-OK: float_bits
-    uint64_t local_220 = local_280;
-    uint64_t local_218 = (uint64_t)(uint32_t&)fVar32 << 0x20;  // CAST-OK: float_bits
-    uint64_t local_210 = ((uint64_t)(uint32_t&)fVar34 << 32) | (uint32_t&)fVar33;  // CAST-OK: float_bits
     Math::Vector2 local_228(fVar8, fVar8);
 
     Math::Vector2 local_298;
 
     Math::Vector2 local_2a8(-fVar8, -fVar8);   // XORPS with the sign mask at 0x1401722c0
-
-    uint32_t local_290_lo = 0;
-    local_280 = (uint64_t)(uint32_t&)fVar36;  // CAST-OK: float_bits
-    uint64_t local_2e8 = local_280;
-    uint64_t uStack_2e0 = (uint64_t)(uint32_t&)local_290_hi << 0x20;  // CAST-OK: float_bits
-    uint64_t local_2d8 = ((uint64_t)(uint32_t&)fStack_284 << 32) | (uint32_t&)local_288;  // CAST-OK: float_bits
 
     // Transform2 chain (orig slots 0x140152648/650/640). Each Transform2 is 0x18 bytes
     // (6 floats: [m00, m01, m10, m11, tx, ty]).
@@ -385,7 +371,5 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     bst.count = 0;
     if (pool.data) System::MemoryAllocator::MemFree(pool.data);
 
-    (void)local_208; (void)local_200; (void)local_1f8; (void)local_280; (void)local_220;
-    (void)local_218; (void)local_210; (void)local_290_lo; (void)local_2e8; (void)uStack_2e0;
-    (void)local_2d8; (void)corner;
+    (void)corner;
 }

@@ -55,7 +55,7 @@ extern "C" { extern thread_local void* g_allocStatsCtx; }   // allocator_lock.cp
 namespace {
 
 RawArray<uint8_t>& ByteHeader(void* arrayHeader) {
-    return *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);   // LEFT: audit WORK (SIG; blocked by the callers' raw triples (geometry, name database, ...): each holder typed first): the C entry points receive each caller's header as void* (geometry, name database, plant-area, worldgen, ...), so the one cast below is where it is read as a byte-elem...
+    return *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): GenericArrayResize serves six C entries (Stride02/16A/16B/04/0C/Byte) over holders of six element types (geometry, NameDatabase, plant area, worldgen); a typed wrapper per holder would carry this same header cast
 }
 
 void GenericArrayResize(void* arrayHeader, int newCount,
@@ -280,8 +280,8 @@ void FreeOutline(Outline& o) {
 // The decompile structure is unusual because the outer "shrink" path walks
 // the OLD buffer, not the new one — we follow that exact pattern.
 //
-// LEFT: worldgen.cpp (GAME-c) passes the header as void*.
-extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount) {
+// Both callers (geometry_serialize.cpp, worldgen.cpp) hand WorldGeometry +0x1E0.
+extern "C" void Reimpl_Array_Resize_ArrayOfArrays(RawArray<RawArray<Math::Vector2>>* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     if (newCount < 0) {
         // Defensive: see GenericArrayResize note. The shrink-path here would
@@ -307,7 +307,7 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
         return;
     }
 
-    RawArray<Outline>& hdr = *reinterpret_cast<RawArray<Outline>*>(arrayHeader);   // LEFT: audit WORK (SIG; blocked by the callers' raw triples (geometry, name database, ...): each holder typed first): the C entry receives each caller's header as void* (other owners' raw triples, H5)
+    RawArray<Outline>& hdr = *arrayHeader;
 
     int oldCount = hdr.size;
     if (newCount == oldCount) return;

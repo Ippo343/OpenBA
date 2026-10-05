@@ -233,8 +233,8 @@ void DebugUI::OnWeatherComboChanged() {
     WeatherSimulation* drawMgr = world->m_weather;  // R14 = plVar1
 
     EnvironmentDescription* env = drawMgr->environment;  // *plVar1
-    int drawCount = (int)env->_weatherCount;
-    EnvironmentDescription::WeatherChoice* descArray = env->_weatherArray;  // {descriptor, audio descriptor} pairs
+    int drawCount = (int)env->_weatherArray._size;
+    EnvironmentDescription::WeatherChoice* descArray = env->_weatherArray._data;  // {descriptor, audio descriptor} pairs
 
     Graphics::Geometry** geometryArray = drawMgr->effects._data;  // R14+0x50 (WeatherParticleGeometry each)
     // R14+0x60 = plVar1[0xC] (offset 0x60) is the audio object array; only the
@@ -1173,7 +1173,7 @@ void DebugUI::OnCreated() {
             // STANDALONE: guard a null weather manager / list.
             WeatherSimulation* weatherListPtr = gameWorld->m_weather;
             EnvironmentDescription* env = weatherListPtr ? weatherListPtr->environment : nullptr;
-            int weatherCount = env ? (int)env->_weatherCount : 0;
+            int weatherCount = env ? (int)env->_weatherArray._size : 0;
             int selectedIndex = 0;
             for (int i = 0; i < weatherCount; i++) {
                 const ::Object::External* entry = env->_weatherArray[i].weather;
