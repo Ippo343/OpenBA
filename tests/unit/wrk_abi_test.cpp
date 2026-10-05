@@ -175,7 +175,7 @@ UNIT_TEST(wrk_leaf_consumeproduce) {
     CHECK_EQ(offsetof(ConsumeProduce, field_4c), (size_t)0x4c);
     CHECK_EQ(offsetof(ConsumeProduce, field_50), (size_t)0x50);
     CHECK_EQ(offsetof(ConsumeProduce, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(ConsumeProduce, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(ConsumeProduce, field_58) + offsetof(ConsumeProduce::CitizenRefList, _size), (size_t)0x60);
     CHECK_EQ(offsetof(ConsumeProduce, field_68), (size_t)0x68);
     CHECK_EQ(offsetof(ConsumeProduce, field_70), (size_t)0x70);
     CHECK_EQ(offsetof(ConsumeProduce, field_74), (size_t)0x74);
