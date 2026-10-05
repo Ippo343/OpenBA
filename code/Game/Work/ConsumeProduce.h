@@ -57,7 +57,8 @@ public:
     uint8_t  field_48;           // +0x48: bool (serialized)
     uint8_t  _pad49[3];          // +0x49: padding
     int32_t  field_4c;           // +0x4C: int (serialized)
-    int32_t  field_50;           // +0x50: Type (zeroed, serialized)
+    uint32_t field_50;           // +0x50: Type id (zeroed, serialized through Object::Type::Serialize; retail
+                                 //        reads it only as a dword copy, 0x1400e8d00)
     int32_t  field_54;           // +0x54: int (serialized)
     // Both arrays are real members: the ctor 0x1400e9340 zeroes +0x58 / +0x60 / +0x68 /
     // +0x70 as four qwords (0x1400e939d..0x1400e93a9); the dtor 0x1400e9190 restamps,

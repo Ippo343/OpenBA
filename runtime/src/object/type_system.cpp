@@ -190,8 +190,11 @@ bool RtObject_Base_IsDerivedFrom(const ::Object::Base* self, uint32_t typeId) {
 // the member is IO::Serializer::Serialize(unsigned int&) — an Object::Type is
 // the 4-byte type id and `self` was already the field pointer. The old third
 // argument `0` was the ignored `const char* name`.
-void RtObject_Type_Serialize(void* self, ::IO::Serializer* serializer) {
-    serializer->Serialize(*reinterpret_cast<unsigned int*>(self), nullptr);   // B.3.4 bridge  (0x98 = uint door)  // LEFT: measured S4 RT2: of the five callers three hold uint32_t (SendComponentMessage::_field30, ConsumeProduceDescription::_toolType, ControlUIConfig::_componentType) and UIDescription an Object::Type (passes &type._type); the ONE blocker is ConsumeProduce::field_50, declared int32_t in Work/ConsumeProduce.h:60 (not this region) and read signed at consumeproduce.cpp:785 (actionPriority); with it uint32_t the parameter becomes uint32_t* and this cast goes, moving it to that caller raises consumeproduce.cpp's column
+// B4 S4 LAST: `self` is uint32_t* — every caller's field is the 4-byte type id
+// (ConsumeProduce::field_50 retyped uint32_t: retail reads it only as a dword
+// copy, 0x1400e8d00).
+void RtObject_Type_Serialize(uint32_t* self, ::IO::Serializer* serializer) {
+    serializer->Serialize(*self, nullptr);   // 0x98 = uint door
 }
 
 // ============================================================================
