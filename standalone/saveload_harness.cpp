@@ -1,7 +1,7 @@
 // standalone/saveload_harness.cpp
 // Save/load end-to-end harness. Env BANISHED_SAVE_TEST (unset/0 = off; a value
 // > 1 overrides the trigger frame, default 900 ≈ 15s in-game) drives the REAL
-// retail autosave path at the trigger frame: Dialog_AutoSaveHandler — the ported
+// retail autosave path at the trigger frame: AutoSaveDialog::Autosave — the ported
 // FUN_14005dec0 — which does SetMinOperationTime(1.0s) + SetSaveSprite +
 // SetSaveName("Autosave",2) + SetOperation(4,-4). The engine's
 // Save::SaveLoad::UpdateSave then calls the current loop's vtable +0x38
@@ -21,8 +21,10 @@
 #include "save/SaveLoad.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "Game/GameUpdateLoop.h"   // B4: m_userInterface by name
 
-// code/Game/Dialog/dialog_exe_helpers.cpp — ported retail autosave trigger.
-void Dialog_AutoSaveHandler(void* self, void* p2, int p3, int p4);
+#include "Dialog/AutoSaveDialog.h"   // AutoSaveDialog::Autosave (the ported FUN_14005dec0)
+#include "runtime/types/ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"
+#include "object/TypeInfo.h"
 
 namespace {
 
@@ -106,15 +108,29 @@ extern "C" void SaveLoadHarness_Tick(GameUpdateLoop* gul, int frameNum) {
         if (frameNum < trigger) return;
         DumpSaveDir("pre-save");
 
-        // Dialog_AutoSaveHandler only reads self+0x10 (UserInterface*).
-        // GameUpdateLoop keeps it at +0x98.
-        struct { uint8_t pad[0x10]; void* ui; } fake = {};
-        fake.ui = gul->m_userInterface;   // +0x98
+        // The live AutoSaveDialog (GameUpdateLoop::Startup adds it): its
+        // Autosave reads only its own _ui (+0x10), the game's UserInterface.
+        // (B.4 Y GAMEB: was a stack fake carrying only that pointer.)
+        AutoSaveDialog* autoSave = nullptr;
+        const uint32_t autoSaveTid = AutoSaveDialog::TypeId();
+        for (auto it = gul->m_userInterface->_dialogs.GetFirst(); it; ++it) {
+            UI::DialogInstance* dialog = it.node->element;
+            if (dialog && ::Object::IsDerivedFromNullSafe(dialog, autoSaveTid)) {
+                autoSave = static_cast<AutoSaveDialog*>(dialog);   // the dialog IS the AutoSaveDialog (a DialogInstance)
+                break;
+            }
+        }
+        if (!autoSave) {
+            fprintf(stderr, "[SaveTest] frame %d: no AutoSaveDialog open; not triggered\n", frameNum);
+            fflush(stderr);
+            s_state = 1;
+            return;
+        }
 
         fprintf(stderr, "[SaveTest] frame %d: invoking retail autosave handler "
                         "(SetOperation(4,-4))\n", frameNum);
         fflush(stderr);
-        Dialog_AutoSaveHandler(&fake, nullptr, 0x13, 0);
+        autoSave->Autosave();
 
         int op = saveLoad->GetOperation();
         fprintf(stderr, "[SaveTest] handler returned; GetOperation()=%d "
