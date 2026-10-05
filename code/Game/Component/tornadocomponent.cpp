@@ -499,7 +499,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
             NaturalResourceComponent* probe = cellEntity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
             if (probe != nullptr) {
                 ComponentEntity* ibp = cellEntity;
-                Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(cellEntity), &ibp, &hitTree, &hitTreeNoKnock,   // LEFT: the dead first argument holds what retail's register holds
+                Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(cellEntity), &ibp, &hitTree, &hitTreeNoKnock,   // LEFT: WORK (audit dead-argument row) not executable: the dead first parameter is fed a pointer here and at :538 and an integer (off * 6) at :561, so no one declared type lets all three pass without a cast
                                      &hitBuilding, &hitBuildingNoFire, &hitAnimal, &hitCitizen);
             }
         }
@@ -535,7 +535,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
         for (int i = 0; i < found.size; i++) {
             CharacterComponent** slot = &found.data[i];
             ComponentEntity* ownerEntity = (*slot)->_entity;
-            Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: the dead first argument of Tornado_StrikeEntityCounted holds what retail's RCX holds (B6: retail leaves the register)
+            Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: WORK (audit dead-argument row) not executable: pointer here and at :502, integer (off * 6) at :561; no one declared type lets all three pass without a cast
                                  &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
                                  &hitAnimal, &hitCitizen);
         }
