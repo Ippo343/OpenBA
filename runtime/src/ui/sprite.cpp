@@ -277,7 +277,7 @@ void SpriteSheet::AddSpriteInfo(const System::String& name, const System::String
 namespace UI {
 
 // StringTable::GetCount() const — retail 0x180002610: `return *(int*)(this+0x28)`.
-int32_t StringTable::GetCount() const { return _size; }
+int32_t StringTable::GetCount() const { return _entries._size; }
 
 // StringTable::GetText(int) const — retail 0x180002550. Bounds-checked both
 // ways (unlike Sprite/SpriteSheet's UV accessors); returns an empty String on
@@ -310,8 +310,8 @@ int32_t StringTable::GetCount() const { return _size; }
 System::String StringTable::GetText(int32_t index) const {
     System::String out;                                          // data == null
     if (index >= 0) {                                            // 0x18000256c
-        if (index < _size) {                                     // 0x180002573
-            char* text = _data[index].text._data;                      // 0x180002585
+        if (index < _entries._size) {                            // 0x180002573
+            char* text = _entries._data[index].text._data;             // 0x180002585
             if (text) {
                 RtSystem::StringRefCount(text) += 1;
                 out._data = text;
@@ -343,8 +343,8 @@ int32_t StringTable::GetIndexFromName(const System::String& keyString) const {
     const int keyLen = (key != nullptr) ? RtSystem::StringLength(key) : 0;
 
     int result = -1;
-    for (int i = 0; i < _size; ++i) {
-        const char* name = _data[i].name._data;
+    for (int i = 0; i < _entries._size; ++i) {
+        const char* name = _entries._data[i].name._data;
         const int nameLen = (name != nullptr) ? RtSystem::StringLength(name) : 0;
         if (nameLen != keyLen) continue;
         if (name == nullptr || nameLen == 0) { result = i; break; }
