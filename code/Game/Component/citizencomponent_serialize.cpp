@@ -144,7 +144,7 @@ void ResizeCitizenExternalArray(ComponentDescription**& data, int32_t& count,
 // the loaded object is nulled when it is not a `tid`.
 void SerializeValidatedIBP(Object::InternalBasePtr* ibp, IO::Serializer& ser, uint32_t tid) {
     ibp->Serialize(ser);
-    void* obj = ibp->Get();
+    Object::Internal* obj = ibp->Get();
     const bool checked = (obj && tid);
     const bool derived = checked ? Object::IsDerivedFromNullSafe(obj, tid) : true;
     if (checked && !derived)

@@ -338,9 +338,9 @@ inline void Destroy(Base* p) { delete p; }
 // dozens of ported call sites hand that ref straight in. The readers of
 // `fn_IsDerivedFrom` convert to this helper (B3R_RULES §3) so no site changes
 // behaviour; removing the deviation is not this step. ENDGAME B.3R, W0-P0c.
-inline bool IsDerivedFromNullSafe(const void* p, uint32_t typeId) {
+inline bool IsDerivedFromNullSafe(const Base* p, uint32_t typeId) {
     if (!p) return false;
-    return reinterpret_cast<const Base*>(p)->IsDerivedFrom(typeId);  // LEFT: audit WORK, left: IsDerivedFromNullSafe has 586 call sites (mostly code/, other partitions), many holding void*; typing p needs every caller's argument Base-derived
+    return p->IsDerivedFrom(typeId);
 }
 
 using TypeRecord = RtObject::TypeRecord;

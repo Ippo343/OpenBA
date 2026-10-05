@@ -57,7 +57,7 @@
 // code/Game/Object/factory_registration.cpp
 
 // Forward declaration — defined in entityui.cpp
-extern "C" bool EditTool_IsEditTool(void* tool);   // code/Game/Player/edittool.cpp
+extern "C" bool EditTool_IsEditTool(Tool* tool);   // code/Game/Player/edittool.cpp
 
 // ============================================================
 // UIDescription::AddControllers (0x14012e100; the tree's UIDesc_AddControllers_Impl)

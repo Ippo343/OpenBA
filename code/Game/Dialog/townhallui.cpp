@@ -582,7 +582,7 @@ void TownHallUI::InitAgriculture() {
 
                 if (subTypeId == (int)selectDescId) {
                     // Found a SelectDescription sub-component
-                    void* subObj = buildComp->_subDescs[j];
+                    ::Object::Base* subObj = buildComp->_subDescs[j];
                     if (::Object::IsDerivedFromNullSafe(subObj, selectDescId) && subObj) {
                         // Insert buildComp into agriculture BST at +0x1D8
                         const ComponentDescription* key = buildComp;

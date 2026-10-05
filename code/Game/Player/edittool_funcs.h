@@ -16,7 +16,7 @@ void EditTool_CloseInfoDialog(EditTool* self, UI::DialogInstance* dialog);
 // The harnesses' EditTool entry points (defined in edittool.cpp; no retail address:
 // standalone drivers). B4 P2 SA: declared here once, in place of each harness's local
 // `extern "C"` copy.
-extern "C" bool      EditTool_IsEditTool(void* tool);
+extern "C" bool      EditTool_IsEditTool(Tool* tool);
 extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI);
 extern "C" int       EditTool_HarnessSelectEntity(EditTool* editTool, ComponentEntity* entity);
 extern "C" int       EditTool_HarnessSelectCitizen(EditTool* editTool);

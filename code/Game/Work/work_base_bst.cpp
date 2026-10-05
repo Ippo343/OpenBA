@@ -327,7 +327,7 @@ joined:
         // The key is an InternalPtr retail serializes through InternalBasePtr::Serialize.
         reinterpret_cast<Object::InternalBasePtr*>(&pIVar6->element)->Serialize(*ser);   // the core's Set<uint64_t> element is the InternalPtr retail serializes (banner)  // CAST-OK: elem_stride
         if (pIVar6->element != 0 && citTid &&
-            !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(pIVar6->element), citTid))   // the core's Set<uint64_t> element is the InternalPtr<CitizenComponent> retail type-checks after loading it  // CAST-OK: elem_stride
+            !Object::IsDerivedFromNullSafe(reinterpret_cast<Object::Internal*>(pIVar6->element), citTid))   // the core's Set<uint64_t> element is the InternalPtr<CitizenComponent> retail type-checks after loading it  // CAST-OK: elem_stride
             pIVar6->element = 0;
         pIVar1 = pIVar6->right;   // right child
         if (pIVar1 == nullptr) {
