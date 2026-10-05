@@ -265,7 +265,7 @@ void MeshInstance::Update(const System::Time& timeRef) {
     // ---- the base Transform, Geometry::_transform (+0x84) -------------------
     // Retail copies it as SEVEN dword moves (0x18010086b..0x1801008ad); a
     // trivially-copyable struct copy is the same 28 bytes, bit for bit.
-    const Math::Transform base = _transform;
+    const Math::Transform base = _transform._current;
 
     // ---- the animator call (0x1801008b1 .. 0x1801008ff) --------------------
     // ENDGAME B.3.5 block GC item 6: this was a `ResolveExport` name door onto

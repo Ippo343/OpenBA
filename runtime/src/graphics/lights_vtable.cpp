@@ -331,9 +331,9 @@ void AmbientLight::DrawLight(Video::Context& context, Renderer& renderer,
 
     const Math::Vector3 zeroV3a;                   // Vector3(): zero
     const Math::Vector3 zeroV3b;
-    const float zeroV4[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Math::Vector4 zeroV4;                    // Vector4(): zero
 
-    context.SetLight(&zeroV3a, &zeroV3b, zeroV4, &_colour, 0.0f, _intensity, 1);
+    context.SetLight(zeroV3a, zeroV3b, zeroV4, _colour, 0.0f, _intensity, 1);
 
     renderer.DrawItemList(context, a4, a6, a7);
 }
@@ -426,7 +426,7 @@ void SpotLight::AddDrawItems(const Scene& scene, Renderer& renderer) const {
     if (_shadowMap == nullptr) return;
     if (_shadowDepth == nullptr) return;
 
-    const Math::Transform xform = _transform;       // +0x84, 0x1c
+    const Math::Transform xform = _transform._current;       // +0x84, 0x1c
     const Math::Transform3 t3 = xform.AsTransform3();
 
     const Camera camera(_frustum, t3, true);   // 0x1800fe960, MOV R9B,1
@@ -522,10 +522,10 @@ void SpotLight::DrawLight(Video::Context& context, Renderer& renderer,
 
     const int32_t dim = _shadowDepth->Width();
 
-    const float zeroV4[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    context.SetLight(&groupCamera._cameraToWorld.translation,   // RDX, +0x90
-                     &groupCamera._cameraToWorld.axisY,         // R8,  +0x78
-                     &_colour,
+    const Math::Vector4 zeroV4;                    // Vector4(): zero
+    context.SetLight(groupCamera._cameraToWorld.translation,   // RDX, +0x90
+                     groupCamera._cameraToWorld.axisY,          // R8,  +0x78
+                     _colour,
                      zeroV4,
                      _spotScalarA,
                      _spotScalarB,
@@ -586,7 +586,7 @@ void SunLight::DrawLight(Video::Context& context, Renderer& renderer,
     // direction Vector3 at +0xc0, the sun Vector4 at +0xcc and the ambient
     // Vector4 at +0xdc — the three `?Set@SunLight@` writes, under their names.
     const Math::Vector3 zeroV3;
-    context.SetLight(&zeroV3, &_dirX, &_sunR, &_ambientR, 0.0f, 1.0f, dim);
+    context.SetLight(zeroV3, _direction, _sun, _ambient, 0.0f, 1.0f, dim);
 
     // arg4 here, where SpotLight used arg5 + 1.
     renderer.DrawItemList(context, a4, a6, a7);
@@ -655,7 +655,7 @@ void SunLight::DrawShadowMap(Video::Context& context, Renderer& renderer,
     const int32_t dim = _depthTarget->Width();       // re-read
 
     const Math::Vector3 zeroV3;
-    context.SetLight(&zeroV3, &_dirX, &_sunR, &_ambientR, 0.0f, 1.0f, dim);
+    context.SetLight(zeroV3, _direction, _sun, _ambient, 0.0f, 1.0f, dim);
 
     renderer.DrawItemList(context, a4, 0, a5);
 }

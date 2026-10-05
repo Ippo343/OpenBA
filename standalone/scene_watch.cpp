@@ -258,13 +258,13 @@ void SceneWatch_Census(Graphics::Scene* scene) {
         if (geo->_dirtyFlags != 0) ++dirty;               // +0x2c
         if (geo->_materialTypeFlags == 0) ++layer0;       // +0x30
 
-        const float x = geo->_transform.translation.x;    // +0x94
-        const float y = geo->_transform.translation.y;    // +0x98
-        const float z = geo->_transform.translation.z;    // +0x9c
+        const float x = geo->_transform._current.translation.x;    // +0x94
+        const float y = geo->_transform._current.translation.y;    // +0x98
+        const float z = geo->_transform._current.translation.z;    // +0x9c
         // Previous transform the renderer interpolates FROM (+0xB0..+0xB8).
-        const float ox = geo->_prevTransform.translation.x;
-        const float oy = geo->_prevTransform.translation.y;
-        const float oz = geo->_prevTransform.translation.z;
+        const float ox = geo->_transform._previous.translation.x;
+        const float oy = geo->_transform._previous.translation.y;
+        const float oz = geo->_transform._previous.translation.z;
         const float pdx = x - ox, pdy = y - oy, pdz = z - oz;
         if (pdx * pdx + pdy * pdy + pdz * pdz > kJumpDist * kJumpDist) ++staleprev;
 

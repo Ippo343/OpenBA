@@ -129,29 +129,21 @@ static_assert(kPixelRow0 + 3 * 0x10 == kPixelPosition, "position = pixel[3] (+0x
 // ?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z
 //                                                   retail 0x18001a950, ord 3903
 // ============================================================================
-// The parameters are raw pointers, not `const Math::Vector3&` /
-// `const Math::Vector4&`, and that is deliberate rather than laziness: the two
-// Vector3s are read as three consecutive floats and the two Vector4s are COPIED
-// as four consecutive DWORDS (retail never does arithmetic on the colour or the
-// position, which is why the copy is a dword copy and not four float loads).
-// Typing them would invite a later reader to do float arithmetic on bytes retail
-// only ever moves. Context.h's declaration carries the same note.
-void Video::Context::SetLight(const void* directionRaw, const void* attenuationRaw,
-                              const void* colourRaw, const void* positionRaw,
+// The two Vector3s are read as three floats; the two Vector4s are COPIED as
+// four DWORDS (retail never does arithmetic on the colour or the position, so
+// the copy is a byte copy into the dword staging, not four float loads).
+void Video::Context::SetLight(const Math::Vector3& direction, const Math::Vector3& attenuation,
+                              const Math::Vector4& colour, const Math::Vector4& position,
                               float nearPlane, float farPlane,
                               int32_t shadowResolution) {
     Context* const self = this;
-    const float*    direction   = static_cast<const float*>(directionRaw);  // LEFT: audit WORK, left: SunLight's direction / sun / ambient are separate float fields and the Ambient / Spot callers pass float[4] locals; typed Vector3 / Vector4 members would run the vectors' zeroing ctors in SunLight's ctor (B11 not identical)
-    const float*    attenuation = static_cast<const float*>(attenuationRaw);  // LEFT: audit WORK, left: SunLight's direction / sun / ambient are separate float fields and the Ambient / Spot callers pass float[4] locals; typed Vector3 / Vector4 members would run the vectors' zeroing ctors in SunLight's ctor (B11 not identical)
-    const uint32_t* colour      = static_cast<const uint32_t*>(colourRaw);  // LEFT: audit WORK, left: SunLight's direction / sun / ambient are separate float fields and the Ambient / Spot callers pass float[4] locals; typed Vector3 / Vector4 members would run the vectors' zeroing ctors in SunLight's ctor (B11 not identical)
-    const uint32_t* position    = static_cast<const uint32_t*>(positionRaw);  // LEFT: audit WORK, left: SunLight's direction / sun / ambient are separate float fields and the Ambient / Spot callers pass float[4] locals; typed Vector3 / Vector4 members would run the vectors' zeroing ctors in SunLight's ctor (B11 not identical)
     LightStaging& L = _lightStaging;
 
     // +0x1dd8 .. +0x1de4 — the colour, four dwords copied as dwords.
-    std::memcpy(L.colour, colour, 16);
+    std::memcpy(L.colour, &colour, 16);
 
     // +0x1de8 .. +0x1df4 — the position, four dwords.
-    std::memcpy(L.position, position, 16);
+    std::memcpy(L.position, &position, 16);
 
     // +0x1e18 / +0x1e1c / +0x1e20 / +0x1e24 — see banner points 1 and 2.
     const float invRange = AsFloat(kBits_one) / (farPlane - nearPlane);
@@ -161,18 +153,18 @@ void Video::Context::SetLight(const void* directionRaw, const void* attenuationR
     L.zero4c       = 0.0f;
 
     // +0x1df8 .. +0x1e04 — the direction, with w = 1.0f.
-    L.direction[0] = direction[0];
-    L.direction[1] = direction[1];
-    L.direction[2] = direction[2];
+    L.direction[0] = direction.x;
+    L.direction[1] = direction.y;
+    L.direction[2] = direction.z;
     L.direction[3] = AsFloat(kBits_one);
 
     // +0x1e08 .. +0x1e10 — the attenuation, then its dot with the direction at
     // +0x1e14. Association order per banner point 3.
-    L.attenuation[0] = attenuation[0];
-    L.attenuation[1] = attenuation[1];
-    L.attenuation[2] = attenuation[2];
-    const float dot = (attenuation[1] * direction[1] + attenuation[0] * direction[0]) +
-                      attenuation[2] * direction[2];
+    L.attenuation[0] = attenuation.x;
+    L.attenuation[1] = attenuation.y;
+    L.attenuation[2] = attenuation.z;
+    const float dot = (attenuation.y * direction.y + attenuation.x * direction.x) +
+                      attenuation.z * direction.z;
     L.attenuationDot = dot;
 
     // +0x1e28 — 1.0f / (float)shadowResolution. CVTDQ2PS: a SIGNED int-to-float

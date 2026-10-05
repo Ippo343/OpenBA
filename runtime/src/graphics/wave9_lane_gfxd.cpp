@@ -577,7 +577,7 @@ void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuf
                         const Camera& camera, int shaderDetail, int detailId,
                         int shader, uint32_t materialTypeFlags) {
     alignas(RendererSceneEntry) uint8_t raw[sizeof(RendererSceneEntry)];  // ON PURPOSE
-    RendererSceneEntry* const rec = reinterpret_cast<RendererSceneEntry*>(raw);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+    RendererSceneEntry* const rec = reinterpret_cast<RendererSceneEntry*>(raw);  // LEFT: S4 GFX measured: retail AddScene 0x180105700 builds the record field by field and calls Camera copy 0x180017a70 (leaves +0xd5..+0xd7 unwritten) then ~Array 0x18001c750; a RendererSceneEntry ctor would build _camera either by Camera()=default (Frustum / Transform3 / Matrix zeroing ctors: stores retail lacks) or by Camera's defaulted copy (a 0xd8 byte copy incl. the 3 pad bytes, not 0x180017a70) -- waits on Camera's copy ctor becoming retail's partial 0x180017a70 body (Camera.h keeps it = default for RULE B5-4)
 
     rec->_scene        = scene;
     rec->_renderBuffer = renderBuffer;

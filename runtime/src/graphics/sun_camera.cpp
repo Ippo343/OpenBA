@@ -173,7 +173,7 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
     const Vector3    origin = { kZero, kZero, kZero };
     // `_dirX/_dirY/_dirZ` are three consecutive floats (+0xc0); FromLookAt
     // takes them as the Vector3 they are.
-    const Vector3    sunDir(self->_dirX, self->_dirY, self->_dirZ);
+    const Vector3    sunDir(self->_direction.x, self->_direction.y, self->_direction.z);
     const Transform3 look = Transform3::FromLookAt(origin, sunDir);
     const float* const p = &look.axisX.x;
 
@@ -290,9 +290,9 @@ Camera SunLight::GetSunCamera(Renderer& renderer) const {
     const float skew   = RtLibm::Sqrt(AbsF((m[4] * kZero + m[3] * kZero) - m[5] * kOne));
     const float radius = RtLibm::Sqrt(r2);
 
-    cz = self->_dirZ * kEyePull + cz;
-    cx = self->_dirX * kEyePull + cx;
-    cy = self->_dirY * kEyePull + cy;
+    cz = self->_direction.z * kEyePull + cz;
+    cx = self->_direction.x * kEyePull + cx;
+    cy = self->_direction.y * kEyePull + cy;
 
     // `Video::ImageBuffer::Width()` (0x1800f2530) INLINED by retail: the flags
     // word at +0x34, the device's back-buffer width for bits 8 / 9 (signed /2),

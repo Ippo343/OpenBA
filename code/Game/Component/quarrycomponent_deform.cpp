@@ -180,7 +180,7 @@ void QuarryComponent::ApplyDepth(float depth) {
         // Transform::operator*(const Vector3&) — slot 0x140151470. LEFT: the picking
         // mesh's element is the global engine Vector3, Math::Vector3's layout twin.
         const Math::Vector3 world =
-            xform * *reinterpret_cast<const Math::Vector3*>(&data[i]);   // LEFT: POD the vertex is runtime PickingMesh.h's ::Vector3, a separate struct from Math::Vector3 (RT's header)
+            xform * data[i];   // ::Vector3 is Math::Vector3 (engine/types/common.h alias)
 
         float z = world.z;
         if (z < depth) z = depth;          // floor clamp — this IS the progressive dig

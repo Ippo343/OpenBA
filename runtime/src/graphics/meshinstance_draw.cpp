@@ -261,12 +261,12 @@ void MeshInstance::Draw(Video::Context& context, const Camera& camera,
             // --- the SKINNED arm: pose 48 bones from this object's own state
             Math::Matrix bones[kBoneMatrices];     // 48 x 0x40, zeroed
 
-            world = LerpTransform(_transform, _prevTransform, t);
+            world = LerpTransform(_transform._current, _transform._previous, t);
 
             // GetBones is handed the FIRST of the two Transforms verbatim (the
             // seven dwords at +0x84), NOT the lerped one — retail copies
             // `[RBX+0x00 .. RBX+0x18]` into the argument buffer at 0x180100b12.
-            const Math::Transform bindPose = _transform;
+            const Math::Transform bindPose = _transform._current;
 
             const int32_t count = GetBones(t, bindPose, bones);
             context.SetBones(count, bones);
@@ -365,9 +365,9 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
         // --- SKINNED: pose 48 bones through the OTHER MeshInstance -----------
         Math::Matrix bones[kBoneMatrices];          // zeroed
 
-        world = LerpTransform(_transform, _prevTransform, t);
+        world = LerpTransform(_transform._current, _transform._previous, t);
 
-        const Math::Transform bindPose = _transform;
+        const Math::Transform bindPose = _transform._current;
         const int32_t count = poseSource->GetBones(t, bindPose, bones);
         context.SetBones(count, bones);
 
@@ -378,7 +378,7 @@ void EdgeMeshInstance::Draw(Video::Context& context, const Camera& camera,
         scale = ColorOf(*poseSource);                // +0x10c
     } else {
         // --- RIGID, standalone: lerp our own state and use a UNIT scale ------
-        world = LerpTransform(_transform, _prevTransform, t);
+        world = LerpTransform(_transform._current, _transform._previous, t);
         scale.x = 1.0f; scale.y = 1.0f; scale.z = 1.0f; scale.w = 0.0f;
     }
 

@@ -307,7 +307,7 @@ void TutHLDiag(const ComponentEntity* entity, bool ok, const Rectangle& rect) {
     }
     float mi[7] = {0,0,0,0,0,0,0};
     if (model) {
-        const Math::Transform& t = model->meshInstance._transform;
+        const Math::Transform& t = model->meshInstance._transform._current;
         mi[0] = t.rotation.x; mi[1] = t.rotation.y; mi[2] = t.rotation.z; mi[3] = t.rotation.w;
         mi[4] = t.translation.x; mi[5] = t.translation.y; mi[6] = t.translation.z;
     }

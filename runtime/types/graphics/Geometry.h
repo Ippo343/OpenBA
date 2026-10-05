@@ -48,6 +48,7 @@
 #include "../math/Math.h"                   // Quaternion, Transform, Matrix, Scalar
 #include "../volume/Volume.h"               // Box
 #include "../collection/Collection.h"       // Collection::Array
+#include "InterpolatedState.h"              // Graphics::InterpolatedState<Math::Transform>
 
 namespace RtGraphics {
 
@@ -464,8 +465,14 @@ public:
     ::Box                        _prevWorldBounds;   // +0x64
     float                        _opacity;           // +0x7c
     float                        _opacityPrev;       // +0x80
-    Math::Transform              _transform;         // +0x84
-    Math::Transform              _prevTransform;     // +0xa0
+    // +0x84 `_current` / +0xa0 `_previous`: ONE InterpolatedState<Transform>.
+    // StatusIconComponent's and the game geometry's Draw hand &this+0x84 to
+    // ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@ (0x18001aff0);
+    // SetTransform (0x1800155a0) rolls _current into _previous. Its default
+    // ctor is the two identity Transforms retail's ctor (0x1800a4270) stores
+    // inline at +0x84..+0xb8; trivially destructible, as retail's dtor
+    // (0x1800a41c0) has no store there.
+    InterpolatedState<Math::Transform> _transform;   // +0x84 (0x38)
     uint32_t                     _padBC;             // +0xbc  uninitialised, unused
 };
 
@@ -490,7 +497,8 @@ static_assert(offsetof(Geometry, _prevWorldBounds)   == 0x64, "Geometry::_prevWo
 static_assert(offsetof(Geometry, _opacity)           == 0x7c, "Geometry::_opacity @ +0x7c (GetOpacity 0x1800156f0)");
 static_assert(offsetof(Geometry, _opacityPrev)       == 0x80, "Geometry::_opacityPrev @ +0x80");
 static_assert(offsetof(Geometry, _transform)         == 0x84, "Geometry::_transform @ +0x84 (SetTransform 0x1800155a0)");
-static_assert(offsetof(Geometry, _prevTransform)     == 0xa0, "Geometry::_prevTransform @ +0xa0");
+static_assert(offsetof(Geometry, _transform) + offsetof(InterpolatedState<Math::Transform>, _previous) == 0xa0,
+              "Geometry::_transform._previous @ +0xa0");
 static_assert(offsetof(Geometry, _padBC)             == 0xbc, "Geometry::+0xbc is the never-written tail dword");
 
 }  // namespace Graphics

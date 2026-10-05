@@ -78,6 +78,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Particle.h"
@@ -270,7 +271,7 @@ bool Particle::Serialize(IO::Stream& streamv) {
         // align 8, new tail UNINITIALISED — kSpec_Fill8 exactly; by name.
         //
         // The pool-record constructor at retail 0x180103bf0, UNNAMED (checked by
-        // VA): RtGraphics_ParticlePoolRecord_Ctor (below), by name. It seeds
+        // VA): ParticleBoundsRecord(const Particle*) (below), placement-new. It seeds
         // the Box, zeroes the counters, writes -1 at `frameTag` and sizes its
         // own `_records` to `particle->_subCount` through 0x180061bb0.
         //
@@ -281,7 +282,7 @@ bool Particle::Serialize(IO::Stream& streamv) {
         for (int32_t i = 0; i < _recordCount; ++i) {
             void* const p = rtcoll::MemAlloc(0x40, 8);
             RtGraphics::ParticleBoundsRecord* const v =
-                p ? RtGraphics_ParticlePoolRecord_Ctor(p, this) : nullptr;
+                p ? ::new (p) RtGraphics::ParticleBoundsRecord(this) : nullptr;
             _records._data[i] = v;
             ++g_particleSerRecords;
         }
@@ -345,8 +346,8 @@ Math::Matrix* ParticleInstance::GetInstanceTransform(Math::Matrix* out, int inde
     (void)index;         // ignored, see the banner above
     ++g_piGetInstanceXform;
 
-    const Math::Transform& cur = _transform;
-    const Math::Transform& prv = _prevTransform;
+    const Math::Transform& cur = _transform._current;
+    const Math::Transform& prv = _transform._previous;
 
     const float t = alpha;
 
@@ -431,9 +432,9 @@ void ParticleInstance::AddDrawItems(const Scene& scene, Renderer& renderer) cons
     const Math::Vector3& eye =
         renderer._drawGroups._data[gi]._camera._cameraToWorld.translation;   // group + 0x90
 
-    float dx = _transform.translation.x - eye.x;
-    float dy = _transform.translation.y - eye.y;
-    float dz = _transform.translation.z - eye.z;
+    float dx = _transform._current.translation.x - eye.x;
+    float dy = _transform._current.translation.y - eye.y;
+    float dz = _transform._current.translation.z - eye.z;
     dx *= dx; dy *= dy; dz *= dz;
     // Retail: (dy + dx) + dz. ADDSS XMM2,XMM0 then ADDSS XMM2,XMM1, where XMM2
     // held the Y term, XMM0 the X term and XMM1 the Z term.
@@ -532,7 +533,7 @@ void ParticleInstance::SetParticle(Object::ExternalPtr<Particle> particle) {
         if (m) {
             // The pool-record ctor at 0x180103bf0, UNNAMED; the same body
             // Particle::Serialize above calls, by name.
-            rec = RtGraphics_ParticlePoolRecord_Ctor(m, p);
+            rec = ::new (m) RtGraphics::ParticleBoundsRecord(p);
         }
     }
     _boundsPtr = rec;
@@ -734,8 +735,8 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
     // `?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z`
     // (0x18001a400), a DEFINED member. The `instances <= 1` test is retail's.
     if (instances <= 1) {
-        const Math::Transform& cur = _transform;
-        const Math::Transform& prv = _prevTransform;
+        const Math::Transform& cur = _transform._current;
+        const Math::Transform& prv = _transform._previous;
 
         Math::Transform blended;
         const float px = prv.translation.x, py = prv.translation.y, pz = prv.translation.z;
@@ -900,27 +901,19 @@ extern "C" void* RtGraphics_ParticlePool_OperatorNew() {
 //     counters 0
 // then `SetSize(&_records, particle->_subCount)` through 0x180061bb0.
 // +1e8f / -1e8f are exact floats (0x4cbebc20 / 0xccbebc20).
-// B.4: on `RtGraphics::ParticleBoundsRecord`'s named fields; the raw block is
-// viewed once as the record the ctor builds in it (LEFT: no C++ constructor
-// runs -- retail's body is these stores).
-extern "C" RtGraphics::ParticleBoundsRecord* RtGraphics_ParticlePoolRecord_Ctor(
-        void* recv, const Graphics::Particle* particle) {
-    RtGraphics::ParticleBoundsRecord* const r =
-        static_cast<RtGraphics::ParticleBoundsRecord*>(recv);   // LEFT: audit WORK, left: both callers (Particle::Serialize, the pool's acquire arm) hold the void* their allocator returns (MemAlloc / 0x180061a80), so typing the parameter moves this cast to two callers; removing it is a CLASS unit -- 0x180103bf0 as ParticleBoundsRecord's real C++ ctor(const Particle*) and both callers placement-new
-    r->_bounds.min.x = 1e8f;   r->_bounds.min.y = 1e8f;   r->_bounds.min.z = 1e8f;
-    r->_bounds.max.x = -1e8f;  r->_bounds.max.y = -1e8f;  r->_bounds.max.z = -1e8f;
-    r->_records._data     = nullptr;   // +0x18
-    r->_records._size     = 0;         // +0x20 \ one qword
-    r->_records._capacity = 0;         // +0x24 /
-    r->_liveCount   = 0;               // +0x28
-    r->frameTag     = -1;              // +0x2c
-    r->_spawnAccum  = 0;               // +0x30
-    r->_totalTicks  = 0;               // +0x38
-
+// B.4: the record's real C++ constructor; both callers placement-new it into
+// the block they allocate. The member initialisers are retail's stores, in
+// retail's order (`_records` by Array()'s three zero stores).
+RtGraphics::ParticleBoundsRecord::ParticleBoundsRecord(const Graphics::Particle* particle)
+    : _bounds{ { 1e8f, 1e8f, 1e8f }, { -1e8f, -1e8f, -1e8f } },
+      _records(),          // +0x18 {_data, _size, _capacity} zero
+      _liveCount(0),       // +0x28
+      frameTag(-1),        // +0x2c
+      _spawnAccum(0),      // +0x30
+      _totalTicks(0) {     // +0x38
     // 0x180061bb0, `Collection::Array<T>::SetSize` for the record's 0x58-byte
     // live-particle slot: rtcoll::RtColl_ArraySetSize_180061bb0 (array.cpp).
-    rtcoll::RtColl_ArraySetSize_180061bb0(&r->_records, particle->_subCount);
-    return r;
+    rtcoll::RtColl_ArraySetSize_180061bb0(&_records, particle->_subCount);
 }
 
 // The attendance line names THIS lane, so a run log carries a line only this

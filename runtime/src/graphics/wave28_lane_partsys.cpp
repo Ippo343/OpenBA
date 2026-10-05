@@ -552,7 +552,7 @@ void ParticleSystemInstance::Update(const System::Time& timeRef) {
         // (Geometry::_transform.rotation, +0x84..+0x90) and hand THAT to
         // FromDirection as the look direction — with a ZEROED Vector3 as the
         // second argument, the argument Ghidra dropped.
-        const Math::Quaternion& q = _transform.rotation;
+        const Math::Quaternion& q = _transform._current.rotation;
         const Vec3f emitDir = { ps->_emitDirX, ps->_emitDirY, ps->_emitDirZ };
         const Vec3f dir = QuatRotate(q.x, q.y, q.z, q.w, emitDir);
 

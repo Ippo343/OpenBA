@@ -80,11 +80,14 @@ static_assert(offsetof(ParticleRecord, _size)      == 0x50, "ParticleRecord::_si
 static_assert(offsetof(ParticleRecord, _sizePrev)  == 0x54, "ParticleRecord::_sizePrev @ +0x54");
 
 // The 0x40-byte POOL RECORD (`ParticleInstance::_boundsPtr`, element of
-// `Particle::_records`). Built by the unexported ctor 0x180103bf0, never by a
-// C++ constructor: `_bounds` seeded (+1e8 x3, -1e8 x3), `_records` zeroed and
-// then sized to `particle->_subCount`, `_liveCount` 0, `frameTag` -1, the two
-// tick counters 0.
+// `Particle::_records`). Built by the unexported C++ ctor 0x180103bf0 (it
+// carries an EH state for `_records`), placement-new'd into the 0x40 block its
+// two callers allocate: `_bounds` seeded (+1e8 x3, -1e8 x3), `_records` zeroed
+// and then sized to `particle->_subCount`, `_liveCount` 0, `frameTag` -1, the
+// two tick counters 0.
 struct ParticleBoundsRecord {
+    explicit ParticleBoundsRecord(const Graphics::Particle* particle);   // 0x180103bf0 (wave27_lane_gfxpart.cpp)
+
     ::Box    _bounds;                             // +0x00  handed to SetBounds as `const Box&`
     Collection::Array<ParticleRecord> _records;   // +0x18  {_data, _size@0x20, _capacity@0x24}
     int32_t  _liveCount;                          // +0x28  read by both Draws and AddDrawItems

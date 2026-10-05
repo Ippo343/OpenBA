@@ -277,12 +277,10 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
         fflush(stdout);
     }
 
-    // 1. Lerp the InterpolatedState<Transform> at +0x84 (_transform, _prevTransform)
-    //    with the alpha. LEFT: Graphics::Geometry (R-GFX) holds the pair as two
-    //    Transforms, not as the InterpolatedState Lerp is a member of.
+    // 1. Lerp the InterpolatedState<Transform> at +0x84 (Geometry::_transform)
+    //    with the alpha.
     const Math::Transform lerpedTransform =
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: waits on a runtime/ type (B4 Z LAST CODE): Graphics::Geometry's +0x84 / +0xa0 pair as one InterpolatedState<Math::Transform> (see statusicon_geometry.cpp:107)
-            ->Lerp(Math::Scalar(param5));
+        _transform.Lerp(Math::Scalar(param5));
 
     // 2. Convert to Matrix and SetTransform(0, matrix).
     Math::Matrix matrixBuf = lerpedTransform.AsMatrix();
