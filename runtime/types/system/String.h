@@ -90,6 +90,8 @@ struct StringBlock {
     char    chars[1];  // +0x00 = String::data
 };
 static_assert(offsetof(StringBlock, chars) == 8, "String chars @ block+8");
+static_assert(offsetof(StringBlock, length) == 0x0, "StringBlock::length");
+static_assert(offsetof(StringBlock, refCount) == 0x4, "StringBlock::refCount");
 
 // Header accessors, spelled the way the DLL spells them.
 inline int32_t& StringLength(char* data)   { return reinterpret_cast<int32_t*>(data)[-2]; }  // CAST-OK: string_header
@@ -211,6 +213,7 @@ public:
     char* _data;
 };
 static_assert(sizeof(String) == 8, "System::String must be 8 bytes");
+static_assert(offsetof(String, _data) == 0x0, "String::_data");
 
 // The three private members, reachable by the step-1 shims (and by Filename's
 // bodies, which retail also wrote against String's privates by pointer cast).

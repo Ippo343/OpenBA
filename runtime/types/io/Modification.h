@@ -93,6 +93,8 @@ static_assert(offsetof(ModSetNode, left)   == 0x10, "0x180010535 MOV [RBX+0x10],
 static_assert(offsetof(ModSetNode, right)  == 0x18, "0x18001054e MOV [RBX+0x18],RAX");
 static_assert(offsetof(ModSetNode, balance) == 0x20, "0x180027529 MOV [RDX+0x20],CX");
 static_assert(offsetof(ModSetNode, height)  == 0x22, "0x180027525 MOV [RDX+0x22],AX");
+static_assert(offsetof(ModSetNode, key) == 0x0, "ModSetNode::key");
+static_assert(offsetof(ModSetNode, _pad24) == 0x24, "ModSetNode::_pad24");
 
 // (B.4 acceptance MOD: the `ModSet` header POD is gone; Mod+0x60 is the real
 // `Collection::Set<System::Filename, FilenameICompare>` below. `ModSetNode`
@@ -259,6 +261,8 @@ struct ReloadEntry {
 static_assert(offsetof(ReloadEntry, external) == 0x08, "0x1800af058 MOV [RBP-0x69],R14");
 static_assert(offsetof(ReloadEntry, file)     == 0x10, "0x1800af064 MOV [RBP-0x61],R13");
 static_assert(sizeof(ReloadEntry) == 0x18, "0x180028d2d stride, cap*3*8");
+static_assert(offsetof(ReloadEntry, typeId) == 0x0, "ReloadEntry::typeId");
+static_assert(offsetof(ReloadEntry, _hole04) == 0x4, "ReloadEntry::_hole04");
 
 // (B.4 Z RT2: the RtIO::Modification POD mirror is gone; IO::Modification below
 // is the one layout.)
@@ -382,6 +386,9 @@ static_assert(sizeof(Modification) == 0x28, "ctor 0x1800b04b0 zeroes +0x08..+0x2
 static_assert(offsetof(Modification, _mods)      == 0x08, "Find()'s `*(longlong*)(this + 8)`, count at +0x10");
 static_assert(offsetof(Modification, _savedMods) == 0x18,
               "SaveList 0x1800b0619: ModArrayCopy(this+0x18, this+0x08)");
+static_assert(offsetof(Modification, _dirty) == 0x0, "Modification::_dirty");
+static_assert(offsetof(Modification, _savingSettings) == 0x1, "Modification::_savingSettings");
+static_assert(offsetof(Modification, _pad02) == 0x2, "Modification::_pad02");
 // The guard, as an assertion so a future `virtual` fails the build rather than
 // the boot: a vptr would push every field eight bytes down under doors that are
 // registered BY ADDRESS and under a live singleton five other files read.
