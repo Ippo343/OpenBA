@@ -10,7 +10,6 @@
 //
 
 #include "Component/multiobjectcomponent_funcs.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -34,7 +33,7 @@
 void MultiObjectComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
-    for (int i = 0; i < childCount; i++) {
+    for (int i = 0; i < children._size; i++) {
         ComponentEntity* entityPtr = children[i].Get();
         EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;   // +0xE8
 
@@ -81,7 +80,7 @@ using MultiObjectCtrlDispatch = ::ControllerLive::Dispatcher<MultiObjectCtrlTag>
 // then `XOR AL,AL`. Retail derefs the MapComponent unguarded: every child of a
 // multi-object structure carries one (a faithful crash if not, not a guard here).
 char MultiObjectComponent::EnterState2() {
-    for (int i = 0; i < childCount; ++i) {
+    for (int i = 0; i < children._size; ++i) {
         ComponentEntity* child = children[i].Get();
         MapComponent* map = child->FindComponent<MapComponent>();
         map->AddToMap();   // 0x1401241b0
@@ -115,17 +114,14 @@ static const bool s_multiObjectStateTableBuilt = (MultiObjectComponent_PopulateS
 // +0x58 = 1; then `_flags |= 2` (0x82).
 // (+0x58 is the cell count the bridge/fence tools stamp; the tree's factory zeroed it.)
 MultiObjectComponent::MultiObjectComponent()
-    : _controller(this), children(nullptr), childCount(0), childCapacity(0), multiCount(1), _pad5C{} {
+    : _controller(this), multiCount(1), _pad5C{} {
     OrFlagsInCtor(0x2);
 }
 
-// 0x140125a00: MemFree(+0x48), +0x48 = +0x50 = 0, then the restamps and ~Internal
-// (the compiler chain).
+// 0x140125a00: MemFree(+0x48), +0x48 = +0x50 = 0 (~children: kSpec_PtrZero has no element
+// destroy), then the controller's restamp (~_controller), the restamps and ~Internal (the
+// compiler chain, reverse declaration order). The body is empty.
 MultiObjectComponent::~MultiObjectComponent() {
-    Object::detail::InternalMemFree(children);
-    children = nullptr;
-    childCount = 0;
-    childCapacity = 0;
 }
 
 // create 0x140035ef0: MemAlloc(0x60, 8), then the ctor.
@@ -160,17 +156,17 @@ void MultiObjectComponent::Persist(IO::Stream& stream) {
     // Second serializer block with entity array + multiCount
     IO::Serializer ser(*st, 0);
 
-    int localCount = childCount;
+    int localCount = children._size;
     ser.Serialize(localCount, nullptr);
 
     // If loading (stream+8 == 0), resize array
     // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
     if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        GameColl::AsArray<GameColl::Ptr8>(&children).SetSize(localCount);
+        children.SetSize(localCount);
     }
 
     // Serialize each InternalBasePtr in the array
-    Object::InternalPtr<ComponentEntity>* arrayBase = children;
+    Object::InternalPtr<ComponentEntity>* arrayBase = children._data;
     if (localCount > 0) {
         for (int i = 0; i < localCount; i++) {
             Object::InternalPtr<ComponentEntity>& ibp = arrayBase[i];
@@ -196,9 +192,9 @@ void MultiObjectComponent::Persist(IO::Stream& stream) {
 
     // On load: compact array — remove null entries
     if (static_cast<int>(st->GetDirection()) == 0) {   // IO::Stream::GetDirection, retail 0x180006200
-        int count = childCount;
+        int count = children._size;
         for (int i = 0; i < count; /* no increment */) {
-            Object::InternalPtr<ComponentEntity>* arr = children;
+            Object::InternalPtr<ComponentEntity>* arr = children._data;
             if (arr[i].Get() == nullptr) {
                 // Shift remaining entries down
                 for (int j = i; j < count - 1; j++) {
@@ -207,7 +203,7 @@ void MultiObjectComponent::Persist(IO::Stream& stream) {
                     arr[j] = arr[j + 1];
                 }
                 count--;
-                childCount = count;
+                children._size = count;
                 // Don't increment i, re-check this slot
             } else {
                 i++;
@@ -231,8 +227,8 @@ void MultiObjectComponent::Persist(IO::Stream& stream) {
 // one "msg 4 -> deform" (the master), both mesh passes correctly skipped on a null mesh,
 // and FootprintPass converting 18 cells -- master-level work only, no carve.
 void MultiObjectComponent::OnEvent(int eventId) {
-    const int count = childCount;
-    Object::InternalPtr<ComponentEntity>* list = children;
+    const int count = children._size;
+    Object::InternalPtr<ComponentEntity>* list = children._data;
     if (count <= 0 || !list) return;
 
     for (int i = 0; i < count; ++i) {

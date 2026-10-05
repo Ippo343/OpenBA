@@ -14,7 +14,8 @@
 //   ctor 0x140125a70: Component ctor; member at +0x28 (0x14015f070, 0x140163ca0),
 //     back-pointer +0x40; +0x48 = +0x50 = 0; `MOV dword [RBX+0x58],1`;
 //     `_flags |= 2`.
-//   dtor 0x140125a00: MemFree(+0x48), +0x48 = +0x50 = 0 (the child list), restamps,
+//   dtor 0x140125a00: MemFree(+0x48), +0x48 = +0x50 = 0 (the child list: ~children,
+//     before ~_controller in reverse declaration order), restamps,
 //     ~Internal. [0] 0x1400360c0 = dtor + MemFree on &1.
 //   table 0x140163cf0, 18 slots: [3] 0x140125880 Persist, [7] 0x1401257c0 OnRemove
 //     (mark every child entity for removal), [12] 0x140125490 OnEvent (relay the
@@ -32,6 +33,13 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (children)
+#include "object/Internal.h"         // Object::InternalPtr<T>
+
+// The child list grows through retail's stride-8 row (0x1400032e0 / 0x140003110: stride
+// 8, align 8, the new tail ZEROED, no element destroy) and is freed by the inlined ~Array
+// (dtor 0x140125a20: MemFree, then +0x48 = +0x50 = 0): kSpec_PtrZero (Entity/EntityList.h).
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 struct MultiObjectCtrlTag { using Owner = class MultiObjectComponent; };   // the handlers' receiver (controller_state_table.h)
 
@@ -58,9 +66,9 @@ public:
     // 0x140125880 (int count +0x50 with the +0x48 IBP array, each validated against
     // ComponentEntity; int +0x58).
     StateController _controller;   // +0x28 the embedded controller (D6)
-    Object::InternalPtr<ComponentEntity>* children; // +0x48 the child-entity list (Array<InternalBasePtr> data)
-    int32_t  childCount;           // +0x50
-    int32_t  childCapacity;        // +0x54
+    using ChildList = Collection::Array<Object::InternalPtr<ComponentEntity>, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    ChildList children;            // +0x48 the child-entity list (count +0x50, capacity +0x54)
     int32_t  multiCount;           // +0x58 1 in retail's ctor (Persist: Serialize(int&))
     uint8_t  _pad5C[4];            // +0x5c
 };
@@ -72,6 +80,6 @@ static_assert(offsetof(MultiObjectComponent, _controller) == 0x28,
 static_assert(offsetof(MultiObjectComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x40,
               "controller back-pointer at +0x40 (ctor 0x140125acc)");
 static_assert(offsetof(MultiObjectComponent, children) == 0x48, "MultiObjectComponent +0x48");
-static_assert(offsetof(MultiObjectComponent, childCount) == 0x50, "MultiObjectComponent +0x50");
-static_assert(offsetof(MultiObjectComponent, childCapacity) == 0x54, "MultiObjectComponent +0x54");
+static_assert(offsetof(MultiObjectComponent, children) + offsetof(MultiObjectComponent::ChildList, _size) == 0x50, "MultiObjectComponent +0x50");
+static_assert(offsetof(MultiObjectComponent, children) + offsetof(MultiObjectComponent::ChildList, _capacity) == 0x54, "MultiObjectComponent +0x54");
 static_assert(offsetof(MultiObjectComponent, multiCount) == 0x58, "MultiObjectComponent +0x58 (ctor 0x140125ad8)");

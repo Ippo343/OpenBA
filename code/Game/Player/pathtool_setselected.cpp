@@ -263,7 +263,7 @@ void PathTool::ClearHighlight() {
     if (selectedEntity == nullptr) return;
     MultiObjectComponent* list = selectedEntity->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (list != nullptr) {
-        int n = list->childCount;
+        int n = list->children._size;
         for (int i = 0; i < n; i++) {
             ComponentEntity* ent = list->children[i].Get();
             HighlightComponent* hi = ent->FindComponent<HighlightComponent>();   // 0x140007080
@@ -293,7 +293,7 @@ void PathTool::SetHighlight() {
     if (selectedEntity == nullptr) return;
     MultiObjectComponent* list = selectedEntity->FindComponent<MultiObjectComponent>();   // 0x140004740
     if (list != nullptr) {
-        int n = list->childCount;
+        int n = list->children._size;
         for (int i = 0; i < n; i++) {
             ComponentEntity* ent = list->children[i].Get();
             HighlightComponent* hi = ent->FindComponent<HighlightComponent>();   // 0x140007080
