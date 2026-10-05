@@ -508,7 +508,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
     }
 
     // Serialize entityFlags at +0x40
-    ser.Serialize(*reinterpret_cast<int*>(&_entityFlags), nullptr);   // LEFT: WORK:H8 signedness kept: retail calls the int& overload; retyping _entityFlags int32_t (tried) changes codegen in 14 reader functions across 12 files (bit-10 tests lose testb $0x4,+0x41) and a uint32_t* reader in Game/starttown.cpp: needs its own B11-read commit
+    ser.Serialize(*reinterpret_cast<int*>(&_entityFlags), nullptr);   // LEFT: retail difference, known_port_issues row 820: retail 0x1400c321e calls slot 0x140152a50 = Serialize(unsigned int&) on +0x40, the tree's own uint32_t type, so the cast goes with the one-line `behaviour:` fix ser.Serialize(_entityFlags, nullptr) (SerializeUInt in place of SerializeInt). Earlier finding (written as if retail called int&): retyping _entityFlags int32_t (tried) changes codegen in 14 reader functions across 12 files (bit-10 tests lose testb $0x4,+0x41) and a uint32_t* reader in Game/starttown.cpp: needs its own B11-read commit
 
     // On load: create missing components from description
     if (encodingMode == 0) {
