@@ -50,8 +50,8 @@
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
 #include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
-extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData);
-extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, void* spriteData);
+extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprite* sprite);
+extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, const UI::Sprite* sprite);
 #endif
 
 // ============================================================
@@ -273,8 +273,8 @@ void BuildUI::OnCreated() {
                 // Set sprite from resource type
                 #ifdef _DEBUG
                 uint8_t spriteBuf[16];
-                Debug_Sprite_Ctor(spriteBuf, resType->_spriteSheet, &resType->_name);
-                Debug_LabelElement_SetSprite(labelStorage, spriteBuf);
+                Debug_LabelElement_SetSprite(labelStorage,
+                    Debug_Sprite_Ctor(spriteBuf, resType->_spriteSheet, &resType->_name));
 #else
                 UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(resType->_spriteSheet),
                                   resType->_name);
@@ -314,8 +314,7 @@ void BuildUI::OnCreated() {
             {
 #ifdef _DEBUG
                 uint8_t emptySprite[16];
-                Debug_Sprite_DefaultCtor(emptySprite);
-                Debug_LabelElement_SetSprite(labelStorage, emptySprite);
+                Debug_LabelElement_SetSprite(labelStorage, Debug_Sprite_DefaultCtor(emptySprite));
 #else
                 UI::Sprite emptySprite;
                 labelStorage->SetSprite(&emptySprite);

@@ -37,11 +37,9 @@ static void PrintSpriteValue(const char* label, const UI::Sprite& sprite) {
 
 // Debug wrapper: log before/after ImageElement::SetSprite
 // Call this instead of fn_ImageElement_SetSprite to get logging.
-// spriteData points to a 0x10-byte Sprite struct passed by value (on stack).
-// The void* receivers stay: code/Game declares these two with local externs.
-void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData) {
+// `sprite` is the Sprite the caller built in place (Debug_Sprite_Ctor's result).
+void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprite* sprite) {
     UI::ImageElement* elem = self;
-    const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: audit WORK, left: buildui / buildrequirementui pass raw uint8_t[16/24] buffers the Debug Sprite ctor fills (a UI::Sprite local would construct twice)
 #ifdef _DEBUG
     printf("[ImageElement::SetSprite] this=%p\n", self);
     PrintSpriteValue("  OLD", elem->_sprite);
@@ -71,10 +69,9 @@ void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData) {
 // ============================================================
 
 // Debug wrapper: log before/after LabelElement::SetSprite
-// spriteData points to a 0x10-byte Sprite struct passed by value.
-void Debug_LabelElement_SetSprite(UI::LabelElement* self, void* spriteData) {
+// `sprite` is the Sprite the caller built in place.
+void Debug_LabelElement_SetSprite(UI::LabelElement* self, const UI::Sprite* sprite) {
     UI::LabelElement* elem = self;
-    const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: audit WORK, left: as line 44 (the LabelElement callers pass raw uint8_t buffers)
 #ifdef _DEBUG
     printf("[LabelElement::SetSprite] this=%p\n", self);
     PrintSpriteValue("  OLD", elem->_sprite);

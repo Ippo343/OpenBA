@@ -50,8 +50,8 @@
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
 #include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
-extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData);
-extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, void* spriteData);
+extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprite* sprite);
+extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, const UI::Sprite* sprite);
 #endif
 
 // Helper: find a sub-description by type ID in a ComponentDescription's list
@@ -227,8 +227,8 @@ void BuildRequirementUI::OnCreated() {
             // The icon: sprite sheet (+0x20) and sprite name (+0x28)
 #ifdef _DEBUG
             uint8_t sprite[16];
-            Debug_Sprite_Ctor(sprite, buildReqComp->_spriteSheet, &buildReqComp->_name);
-            Debug_ImageElement_SetSprite(imagePtr, sprite);
+            Debug_ImageElement_SetSprite(imagePtr,
+                Debug_Sprite_Ctor(sprite, buildReqComp->_spriteSheet, &buildReqComp->_name));
 #else
             UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(buildReqComp->_spriteSheet),
                               buildReqComp->_name);
@@ -333,8 +333,8 @@ void BuildRequirementUI::OnCreated() {
                 // The small sprite: sheet (+0x20) and _nameSmall (+0x38)
                 #ifdef _DEBUG
                 uint8_t sprite[24];
-                Debug_Sprite_Ctor(sprite, resType->_spriteSheet, &resType->_nameSmall);
-                Debug_LabelElement_SetSprite(label, sprite);
+                Debug_LabelElement_SetSprite(label,
+                    Debug_Sprite_Ctor(sprite, resType->_spriteSheet, &resType->_nameSmall));
 #else
                 UI::Sprite sprite(Object::ExternalPtr<UI::SpriteSheet>(resType->_spriteSheet),
                                   resType->_nameSmall);

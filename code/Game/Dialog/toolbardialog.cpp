@@ -92,7 +92,7 @@
 // Debug sprite logging wrappers (runtime/src/ui/)
 #include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern bool Debug_Sprite_IsValid(const UI::Sprite* sprite);
-extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData);
+extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprite* sprite);
 #endif
 
 // ============================================================
