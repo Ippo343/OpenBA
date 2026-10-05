@@ -31,11 +31,14 @@ Object::InternalPtr<UI::Element>* FindUIElementByPath_Impl(Object::InternalPtr<U
                                                           UI::DialogInstance** outDialog);  // 0x1400e1870
 
 // ---- tutorial_base.cpp
-extern "C" void TutBase_SerializeStepArray(void* serializer, int count, void* arrayData, void*);  // 0x140026fb0
-extern "C" void TutBase_SerializeImageArray(void* serializer, int count, void* arrayData, void*);  // 0x140028cf0
-extern "C" void TutBase_SerializeSetupArray(void* serializer, int count, void* arrayData, void*);  // 0x140028f40
-extern "C" void TutBase_SerializeGoalArray(void* serializer, int count, void* arrayData, void*);  // 0x140029190
-extern "C" void TutBase_SerializeImageRef(void* fieldPtr, void* serializer);  // 0x140027ad0
+namespace IO { class Serializer; }
+namespace UI { class ElementDescription; }
+class TutorialStep; class TutorialImage; class TutorialSetup; class TutorialGoal;
+extern "C" void TutBase_SerializeStepArray(IO::Serializer* serializer, int count, TutorialStep** arrayData, void*);  // 0x140026fb0
+extern "C" void TutBase_SerializeImageArray(IO::Serializer* serializer, int count, TutorialImage** arrayData, void*);  // 0x140028cf0
+extern "C" void TutBase_SerializeSetupArray(IO::Serializer* serializer, int count, TutorialSetup** arrayData, void*);  // 0x140028f40
+extern "C" void TutBase_SerializeGoalArray(IO::Serializer* serializer, int count, TutorialGoal** arrayData, void*);  // 0x140029190
+extern "C" void TutBase_SerializeImageRef(UI::ElementDescription** fieldPtr, IO::Serializer* serializer);  // 0x140027ad0
 class WorkComponent;
 extern "C" int WorkComponent_CalcMaxWorkers(const WorkComponent* workComp);  // 0x14012e5c0  (+ the tree's two guards, tutorial_base.cpp)
 
