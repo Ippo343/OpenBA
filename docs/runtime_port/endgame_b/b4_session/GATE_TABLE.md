@@ -440,3 +440,18 @@ Metric at `60dc218a`: **434** to remove (of which `dx11/` 240; 194 in scope).
 | 153 | ACC asserts RT | `c87a2d2b` | 596 compiler-derived `offsetof` asserts in 101 runtime / dx11 / engine headers (line 10: 650 -> 54) | exit 0 · 914 / 0 · 0 | ok | 5/5 | — | 0 |
 | 154 | H5-P2 (+ ACC bridge RT `7b15ce62`) | `4e3fef95` | `behaviour:` `GeometryBatch` a real class (0x14001f250 / 0x14001f5e0 / 0x14001fb80) and its owning arrays on `kSpec_GeometryBatch` through the erased core (row 795; eight hand-written helpers deleted); EntityList's update buckets hold InternalPtr elements; row 796 recorded open; 26 stale runtime bridge comments removed | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
 | 155 | ACC-MOD | `018f53d5` | acceptance line 11: 2 -> 0. `behaviour:` `IO::Modification::Mod` a real class (0x1800101e0 / 0x180026ef0 / 0x180011460) on `kSpec_Mod` (row 752), `MaterialConstant::name` a real String (0x1800616c0; row 753); `RtSystem::String`, `RtSystem::Filename`, `pod_bridge.h` deleted. Mods route with two `.pkm` mounted (list, select, details, apply): exit 0, no crash | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok · mods ok | 0 |
+| 156 | FIN-F2 | `239c7591` | `behaviour:` `CreateRemovalDescription::_refs` (0x140032b70 / 0x140032ca0), `SpawnComponent::timers` (0x140056030 / 0x14000c350; freed as retail, row 805), the citizen bucket-tree load through a real local Array (0x140017a40 / 0x140017cd0, row 806); `TradeMerchantOrder::goods` typed | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 157 | FIN-F1 | `8a67fc68` | `behaviour:` `ComponentEntity::_components` a real Array of InternalPtr (0x1400c3620 / 0x1400c3720 / 0x1400c3550), the WorkScheduler serializer passes retail's root-and-count headers (0x1400f97c5 / 0x1400f989a; row 796 fixed by 800); EntityList's master array InternalPtr elements | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 158 | FIN-RT | `12b982db` | `SceneGrid` (0x18005e4a0) a member and `Scene()` a real ctor (0x180102730), the persist-state Serializer and Clone's MemoryStreams real locals, offset asserts for the last four headers, stale mirror comments fixed | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `4f8da1d4` (main): **389** to remove (of which `dx11/` 240; **149 in scope**). `4f8da1d4` itself adds one floor marker with a
+parameter rename (`runtime/src/graphics/closure_batch2b.cpp`: `self` -> `dst`) that was committed WITHOUT a build: build it first.
+
+Close checks run at `12b982db`: `worldcmp.sh` (seed 12345, against the pre-B.4 exe `b2a5434c`): all 118 pointer-free world lines
+identical once pointer print widths are normalised; `devlost.sh` alone: exit 0, INJECT=1, round trip COMPLETE, no crash / hang.
+
+**NOT MERGED: `b4fin-VOID` (`eed39411`).** Its squash-merge was staged and its pre-merge build was running when the harness stopped the
+command for low system memory; the main checkout was reset to `4f8da1d4` and nothing of it is on main. The branch builds and passes
+unit at its tip by its own hand-in (62 `void*`-first functions: 27 typed, 15 deleted, 10 tagged probes, 10 left; `coll_bridge.h`
+deleted; metric 389 -> 386). Its first commit `6f1c444e` swept in a stale index and `026a2101` reverses it: merge it SQUASHED
+(`git merge --squash b4fin-VOID`), build, gate with `ui tools`.

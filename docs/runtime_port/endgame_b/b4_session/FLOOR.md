@@ -52,7 +52,7 @@ category needs the coordinator (M2).
 | `string_header` | 37 | 35 | the `System::String` `{length, refCount}` header at `data - 8` | as measured |
 | `pe_walk` | 12 | 11 | walks a loaded module's PE headers and export directory | unchanged |
 | `byte_io` | 38 | 36 | a byte buffer handed to / read from a stream, CRC or file API | as measured |
-| `elem_stride` | 188 | 173 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 188 (16 of them the macro lines) |
+| `elem_stride` | 189 | 174 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 189 (16 of them the macro lines; +1 the draw-group copy row's element op) |
 | `gpu_map` | 0 | 0 | memory returned by a GPU buffer map | nothing marked (dx11/ is the next step) |
 | `com_iid` | 2 | 2 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID | unchanged |
 | `crt` | 11 | 11 | the ported CRT's own `void*` / `char*` parameters (qsort and its comparators' `const void*`, `_stricmp`) | as measured |
@@ -63,7 +63,7 @@ category needs the coordinator (M2).
 | `user_data` | 8 | 8 | NEW: a `void*` that a RETAIL engine API (signature `PEAX`) stores for its caller and hands back unchanged, or a message payload whose type the message id selects, cast back to the type the registration stored. Not for a tree-only API, nor for a `void*` a template could carry | new |
 | `null_receiver` | 2 | 2 | NEW: retail's faithful read through a null receiver, spelled as the faulting address (`work_act_consume.cpp`, §5) | new |
 | `static_init` | 1 | 1 | NEW: the view of a file-static byte table that emulates MSVC's guarded function-local static (`wave29_lane_slots.cpp` `g_identityTable`: zero `.data`, filled by the first Update; a typed array would be constant-initialised to identity) | new |
-| **total** | **751** | **697** | | |
+| **total** | **752** | **698** | | |
 
 **`elem_stride`, as re-defined at the B.4 close.** The one ported type-erased container / tree
 core: its view of a container's header, element storage or node handed to it untyped; its
