@@ -278,8 +278,8 @@ char BoatComponent::Steer() {
 // receiver is the boat and the three are read by name (TornadoComponent::Path is the
 // same sub-object's class on the tornado; the boat's header keeps the fields flat).
 extern "C" int BoatCtrl_NextRoutePoint(const BoatComponent* boat, const float* ref, float spacing) {
-    const int   count = boat->routeCount;
-    const Math::Vector3* base = boat->route;
+    const int   count = boat->route._size;
+    const Math::Vector3* base = boat->route._data;
     int i = boat->routeIndex;
     if (!base) return -1;
     const float r2 = spacing * spacing;
@@ -347,7 +347,7 @@ char BoatComponent::State0Enter() {
     model = _entity->FindComponent<ModelComponent>();           // 0x140003f60
     character = _entity->FindComponent<CharacterComponent>();   // 0x1400012d0
 
-    const Math::Vector3* pts = route;
+    const Math::Vector3* pts = route._data;
     if (!pts) {
         // Retail derefs this unguarded — it relies on the route builder having run. If we
         // are here with no route the fault is upstream (layer 2), and a silent no-op would

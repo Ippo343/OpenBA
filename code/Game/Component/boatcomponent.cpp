@@ -14,7 +14,6 @@
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
 #include "Entity/ComponentEntity.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "math/Math.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -56,17 +55,14 @@ static const bool s_boatStateTableBuilt = (BoatCtrl_PopulateTable(), true);
 // `_controller(this)` is the member's back-pointer at +0x90. No flag OR (0x80).
 BoatComponent::BoatComponent()
     : destination(), model(), character(), dockPosition(), dockHeading(0.0f), waypoint(),
-      _pad5C{}, route(nullptr), routeCount(0), routeCapacity(0), routeIndex(-1), _pad74{},
+      _pad5C{}, routeIndex(-1), _pad74{},
       _controller(this) {}
 
-// 0x140046770: the route waypoint array (+0x60 data, +0x68 count/capacity) is freed
-// and zeroed; the member's and the bases' dtors (restamps only) and ~Internal are
-// the compiler's chain.
+// 0x140046770: the body is empty. ~_controller restamps +0x78 (0x1400467a5), THEN
+// ~route frees and zeroes the waypoint array (+0x60 data, +0x68 count/capacity,
+// 0x1400467b1..0x1400467c1), then the bases' restamps and ~Internal: reverse
+// declaration order, the compiler's chain.
 BoatComponent::~BoatComponent() {
-    Object::detail::InternalMemFree(route);
-    route = nullptr;
-    routeCount = 0;      // retail: one qword 0 over +0x68..+0x6f
-    routeCapacity = 0;
 }
 
 // create 0x1400036e0: MemAlloc(0x98, 8), then the ctor.
@@ -102,13 +98,13 @@ void BoatComponent::Persist(IO::Stream& stream) {
     character.Serialize(ser, CharacterComponent::TypeId());
     waypoint.Serialize(ser);
     ser.Serialize(routeIndex, nullptr);
-    int count = routeCount;
+    int count = route._size;
     ser.Serialize(count, nullptr);
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-        // B.3.2 bridge: exe 0x14000d030 IS Collection::Array<Vector3>::SetSize(n).
-        GameColl::AsArray<GameColl::Vec3>(&route).SetSize(count);
+        // exe 0x14000d030 IS Collection::Array<Vector3>::SetSize(n).
+        route.SetSize(count);
     }
-    Math::Vector3* points = route;
+    Math::Vector3* points = route._data;
     if (count > 0 && points) {
         for (int i = 0; i < count; i++)
             points[i].Serialize(ser);
