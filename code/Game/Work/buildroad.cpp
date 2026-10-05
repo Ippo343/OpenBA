@@ -27,6 +27,7 @@
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
 #include "Component/RawMaterialComponent.h"
+#include "Component/RawMaterialDescription.h"   // _weight (+0x48)
 #include "Component/NaturalResourceComponent.h"
 #include "Component/WorkComponent.h"
 #include "Component/StorageComponent.h"
@@ -263,10 +264,13 @@ static Math::Vector3 CellToWorldVec3(const Map* map, int cellIndex) {
 }
 
 // Shared epilogue: finalize action on citizen entity
-static int FinalizeAction(BuildRoad* self, CitizenComponent** entityIBP, void* actionIBP, int priority) {
+static int FinalizeAction(BuildRoad* self, CitizenComponent** entityIBP, int priority) {
     CitizenComponent* citizenEntity = *entityIBP;
 
-    Profession* actionPtr = *self->GetTarget(static_cast<Profession**>(actionIBP));   // LEFT: the return buffer is the caller's reused scratch slot (FinalizeAction takes it as void*)
+    // GetTarget's return buffer: retail reuses the caller's scratch stack slot (the
+    // value written there is dead after this read); a typed local of its own here.
+    Profession* targetBuf;
+    Profession* actionPtr = *self->GetTarget(&targetBuf);
 
     citizenEntity->field_0x30 = priority;
     citizenEntity->statusFlags |= 4;
@@ -368,7 +372,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             &citizenRef, field_20, &targetRef, terrainPos, 0, 0);
 
         int priority = field_20;
-        return FinalizeAction(this, entityIBP, &targetRef, priority);
+        return FinalizeAction(this, entityIBP, priority);
     }
 
     if (field_50 == nullptr) {
@@ -390,7 +394,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             velocity, &actionRef);
 
         int priority = field_20;
-        return FinalizeAction(this, entityIBP, &actionRef, priority);
+        return FinalizeAction(this, entityIBP, priority);
 
     } else {
         // The citizen's entity (+0x10) storage, through the guarded finder
@@ -417,7 +421,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
                 field_50, 0, velocity, &actionRef);
 
             int priority = field_20;
-            return FinalizeAction(this, entityIBP, &actionRef, priority);
+            return FinalizeAction(this, entityIBP, priority);
 
         } else {
             map = gameWorld->m_game;
@@ -427,18 +431,21 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             cellIndex = PosToCellIndex(map, GetPositionData(entityIBP));
 
             float velocity[3] = { 0.0f, 0.0f, 0.0f };
-            uint64_t foundStorageIBP = 0;   // the reused scratch slot (exclude, the 0x140006330 out, the src entity)
+            // Retail reuses one stack slot for the exclude entity, the 0x140006330 out and
+            // the source entity; three typed locals here.
+            const Object::InternalPtr<ComponentEntity> excludeEntity;   // null
 
             ComponentEntity* foundEntity = nullptr;
             PickBestDropTarget(
                 citizenList, &foundEntity,
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
-                field_50, 1, '\0', velocity, reinterpret_cast<const Object::InternalPtr<ComponentEntity>*>(&foundStorageIBP));   // 0x14008d590  // LEFT: the scratch slot is reused for three types
+                field_50, 1, '\0', velocity, &excludeEntity);   // 0x14008d590
 
             // 0x140006330 — scans the RawMaterialDescription list for field_50's
             // entry. This is NOT the entity component finder (0x1400223c0) used above;
             // both were called fn_FindComponent_RawMaterialC before the rename.
-            WorkAcc_FindComponent_6330(field_50, (RawMaterialDescription**)&foundStorageIBP);   // LEFT: the scratch slot is reused for three types (the exclude entity, this out, the source entity)
+            RawMaterialDescription* materialDesc;
+            WorkAcc_FindComponent_6330(field_50, &materialDesc);
 
             if (foundEntity == nullptr) {
                 return 1;
@@ -447,12 +454,12 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             int remainingCapacity = WorkLeaf_FreeStorageCapacity_116540(*entityIBP);
 
             // (0x140006330 returns a RawMaterialDescription whose +0x48 is the weight)
-            if (remainingCapacity < *(int32_t*)(foundStorageIBP + 0x48)) {   // LEFT: the scratch slot is reused for three types
+            if (remainingCapacity < materialDesc->_weight) {
                 (*entityIBP)->LongTermPlan();   // 0x140115e60
                 return 2;
             }
 
-            foundStorageIBP = (uint64_t)foundEntity;   // LEFT: the scratch slot is reused for three types
+            ComponentEntity* const sourceEntity = foundEntity;
 
             Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
 
@@ -465,10 +472,10 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
                 &citizenRef, field_20, terrainPos,
                 (uint64_t)(uint32_t)targetCell,
                 (uint32_t)field_5c, 0xff, 1,
-                field_50, 1, velocity, reinterpret_cast<ComponentEntity* const*>(&foundStorageIBP));   // LEFT: the scratch slot is reused for three types
+                field_50, 1, velocity, &sourceEntity);
 
             int priority = field_20;
-            return FinalizeAction(this, entityIBP, &foundStorageIBP, priority);
+            return FinalizeAction(this, entityIBP, priority);
         }
     }
 }

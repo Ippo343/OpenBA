@@ -253,15 +253,8 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
 // ============================================================
 // ShowTool helpers (Entity_impl_73b0 / FUN_1401176e0)
 // ============================================================
-// These attach/detach a "tool" mesh to a citizen. The citizen's tool MeshInstance is the
-// raw storage CitizenComponent::meshInstance (+0xB8; H5, block COMP-b's header).
-
-namespace {
-// LEFT: CitizenComponent::meshInstance is raw storage (H5).
-static Graphics::MeshInstance* ToolMesh(CitizenComponent* citizen) {
-    return reinterpret_cast<Graphics::MeshInstance*>(citizen->meshInstance);  // LEFT: H5 CitizenComponent::meshInstance (+0xB8) is raw storage for a Graphics::MeshInstance (CitizenComponent.h; declaring it makes its ctor / dtor run)
-}
-} // namespace
+// These attach/detach a "tool" mesh to a citizen. The citizen's tool MeshInstance is
+// CitizenComponent::meshInstance (+0xB8), built by the citizen's ctor (0x140114808).
 
 // Reimpl of FUN_1401176e0 — hide/detach the current tool mesh: if toolSceneId is valid
 // (>= 0), detach the tool geometry from the citizen's model geometry and remove the scene
@@ -270,7 +263,7 @@ void HideCitizenTool(CitizenComponent* citizen) {
     if (citizen->toolSceneId < 0) return;
 
     ModelComponent* model = citizen->character->modelComponent.Get();
-    model->meshInstance.Detach(ToolMesh(citizen));
+    model->meshInstance.Detach(&citizen->meshInstance);
 
     if (GameUpdateLoop::_singleton) {
         Graphics::Scene* scene = GameUpdateLoop::_singleton->m_graphicsScene;
@@ -367,16 +360,8 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
         uvScale = kRdata_14017214c;   // g_fUVScale, 0x14017214c
     }
 
-    Graphics::MeshInstance* tool = ToolMesh(citizen);
-    // Ensure the held-item MeshInstance is a constructed object before any
-    // SetMesh/Attach/Update/AddObject. Retail treats +0xb8 as an embedded, already-
-    // constructed Graphics::MeshInstance; in standalone a builder/worker showing its first
-    // tool has never had that slot initialized (zeroed vtable). Default-construct it in
-    // place with sceneId(+0x120) = -1 — the same guard showtool.cpp uses for carried items.
-    if (*reinterpret_cast<void* const*>(citizen->meshInstance) == nullptr) {  // LEFT: H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls when the member is typed)
-        ::new (citizen->meshInstance) Graphics::MeshInstance();   // B.3.9 EXA: the real class
-        citizen->toolId = -1;   // +0x1D8 = +0xb8 + 0x120: sceneId = -1
-    }
+    // The citizen's ctor built +0xB8 (0x140114808); retail SetMesh's it straight away.
+    Graphics::MeshInstance* tool = &citizen->meshInstance;
 
     tool->SetMesh(Graphics::ExternalPtrHandle{meshPtr});
 
@@ -395,8 +380,9 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     int nodeIdx = graphicsMesh ? graphicsMesh->GetNodeIndexFromName("tool") : -1;
     model->meshInstance.Attach(tool, nodeIdx);
 
-    // MeshInstance::Update(time=0) via slot 1 (skip if the instance has no vtable)
-    if (*reinterpret_cast<void* const*>(citizen->meshInstance) != nullptr) {  // LEFT: H5 CitizenComponent::meshInstance (Component/CitizenComponent.h, X3-COMP) is raw storage the tree constructs lazily; this vptr-word test is its "constructed yet" probe (no floor category: it falls when the member is typed)
+    // MeshInstance::Update(time=0) via slot 1, unconditionally as retail
+    // (0x14011766c Time(0.0f), 0x140117688 CALL [RAX+0x8]).
+    {
         System::Time timeVal;
         RtSystem_Time_Ctor(&timeVal, 0.0f);   // slot 0x140152b00
         static_cast<Graphics::Geometry*>(tool)->Update(timeVal);

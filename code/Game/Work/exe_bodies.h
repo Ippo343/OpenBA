@@ -186,9 +186,9 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int pa
 // ---- work_leaf_clear.cpp
 class CropFieldComponent;
 void WorkLeaf_PlantArea_b390(CropFieldComponent* crop);  // 0x14011b390 (a CropFieldComponent member; its header is COMP-c's)
-struct WorkEntityAssignment;   // Work/Work.h
+#include "Work/Work.h"   // WorkEntityAssignment, WorkEntitySetNode (the 0x140029920 out slot)
 void WorkLeaf_BstRemoveByIBP_298a0(Collection::Set<WorkEntityAssignment>* set, ComponentEntity* const* key);  // 0x1400298a0
-void* WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssignment>* set, void* outNode, const WorkEntityAssignment* ins);  // 0x140029920
+WorkEntitySetNode** WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssignment>* set, WorkEntitySetNode** outNode, const WorkEntityAssignment* ins);  // 0x140029920
 void WorkLeaf_BstSerializeIBPpair_29c10(Collection::Set<WorkEntityAssignment>* set, IO::Serializer* ser);  // 0x140029c10
 struct GridTile;   // Work/GridTile.h
 template <class T> struct RawArray;   // Action/PathSearch.h

@@ -27,10 +27,10 @@
 //     every other slot = Component's
 //
 // THE +0xB8 MeshInstance: retail constructs and destroys a real
-// Graphics::MeshInstance there. The tree has always kept it as zero-filled raw
-// bytes (the inert factory memset) that the ported bodies drive by offset; this
-// class keeps that (PORT GAP, ctor and dtor — B38 D1/D2), a behaviour change for
-// its own titled commit.
+// Graphics::MeshInstance there (ctor CALL [0x140151490] at 0x140114808, dtor
+// CALL [0x1401514a8] at 0x140114717). It is a real member (B4 Y CW): built by
+// the ctor between +0xAC and +0x1D8, destroyed first of the three non-trivial
+// members, exactly as retail (known_port_issues row 650, FIXED by row 720).
 //
 // FIELDS (ENDGAME B.4 W0-H1): every field from retail's ctor 0x140114770, dtor
 // 0x1401146f0 and serializer 0x140114160 (its import slots: 0x140152ac8 int,
@@ -43,10 +43,9 @@
 // A field with neither keeps a typed guess name `field_0xNN`.
 //
 // H5 (the rule sheet): +0x28 (System::String), +0x98 (Collection::Array) and
-// +0xB8 (Graphics::MeshInstance) have destructors in retail that the tree's
-// defaulted dtor does not run, so they are raw storage of the right size here,
-// with the real type named on the line. Declaring the real type is the
-// `behaviour:` commit of B38 D2. System::Time fields are `System::Time`
+// +0xB8 (Graphics::MeshInstance) are real members: the defaulted dtor runs
+// ~MeshInstance(+0xB8), ~Array(+0x98: MemFree + zero) and ~String(+0x28) in
+// that order, which is retail's dtor 0x1401146f0. System::Time fields are `System::Time`
 // (runtime/types/system/Value.h: one int64 tick count, no vtable, trivially
 // constructible and destructible, so declaring it runs no code; B4 P2 CIT-4),
 // except +0x60 / +0x70 / +0x78 / +0x1E8, still `int64_t` ticks: member bodies in
@@ -74,6 +73,8 @@
 #include "Component/Component.h"
 #include "Object/exe_type.h"
 #include "system/Value.h"   // System::Time (8 bytes, trivial)
+#include "collection/Collection.h"   // Collection::Array (+0x98)
+#include "graphics/Mesh.h"           // Graphics::MeshInstance (+0xB8, embedded)
 
 class Disease;
 class Profession;
@@ -91,9 +92,9 @@ class CitizenComponent final : public Component {
 public:
     CitizenComponent();                                           // 0x140114770
 
-    // PORT GAP (retail 0x1401146f0) — B38 D2: retail runs ~MeshInstance(+0xb8),
-    // frees the +0x98 array and runs ~String on +0x28; the tree's
-    // Inert_ScalarDtor never did.
+    // 0x1401146f0: ~MeshInstance(+0xB8) 0x140114717, MemFree(+0x98) + zero
+    // +0x98 / +0xA0, ~String(+0x28) 0x14011473f: the members' own destructors,
+    // in reverse declaration order.
     ~CitizenComponent() override = default;                       // [0]  0x140030270
     void Persist(IO::Stream& stream) override;                          // [3]  0x140114160
     void Startup() override;                                      // [4]  0x140114050
@@ -185,18 +186,20 @@ public:
     uint32_t happinessFlags;       // +0x88 the bits the happiness update 0x140112ae0 scores
     uint8_t  _pad8C[4];            // +0x8C
     System::Time happinessTimer;   // +0x90 += dt; each desc+0xA0 -> the happiness update
-    ComponentDescription** consumedTypes; // +0x98 Collection::Array<ExternalPtr<ComponentDescription>>
-                                   //       data (H5 raw triple: MemFree'd by the retail dtor);
+    Collection::Array<ComponentDescription*> consumedTypes;
+                                   // +0x98 Array<ExternalPtr<ComponentDescription>> (the tree's
+                                   //       bare-pointer convention for ExternalPtr): ctor zeroes
+                                   //       +0x98 / +0xA0, dtor MemFrees it and zeroes them;
                                    //       serialized by 0x1400049c0 (validated ComponentDescription);
-                                   //       EatFrom 0x1401152e0 appends the eaten material's description
-    int32_t  consumedTypeCount;    // +0xA0 Array count; the happiness update compares it with desc+0xA8/+0xAC
-    int32_t  consumedTypeCapacity; // +0xA4 Array capacity
-    int32_t  field_0xA8;           // +0xA8 int, ctor -1; serialized (version > 0)
+                                   //       EatFrom 0x1401152e0 appends the eaten material's description;
+                                   //       the happiness update compares its count (+0xA0) with desc+0xA8/+0xAC
+    int32_t  field_0xA8;          // +0xA8 int, ctor -1; serialized (version > 0)
     int32_t  field_0xAC;           // +0xAC int, ctor 0; serialized
     uint32_t field_0xB0;           // +0xB0 uint (Encoding slot 0x98), ctor 0
     uint8_t  _padB4[4];            // +0xB4
 
-    uint8_t  meshInstance[0x120];  // +0xB8 Graphics::MeshInstance storage (H5, see above)
+    Graphics::MeshInstance meshInstance; // +0xB8 the carried tool / item mesh (ctor 0x140114808,
+                                         //       dtor 0x140114717; ShowTool 0x1401173b0 SetMesh's it)
 
     int32_t  toolId;               // +0x1D8 int, ctor -1 (one qword store with +0x1DC); serialized
     int32_t  toolSceneId;          // +0x1DC int, ctor -1; NOT serialized; HideTool 0x1401176e0 guards >= 0
@@ -253,8 +256,8 @@ static_assert(offsetof(CitizenComponent, happinessFlags)       == 0x88,  "");
 static_assert(offsetof(CitizenComponent, _pad8C)               == 0x8C,  "");
 static_assert(offsetof(CitizenComponent, happinessTimer)       == 0x90,  "");
 static_assert(offsetof(CitizenComponent, consumedTypes)        == 0x98,  "");
-static_assert(offsetof(CitizenComponent, consumedTypeCount)    == 0xA0,  "");
-static_assert(offsetof(CitizenComponent, consumedTypeCapacity) == 0xA4,  "");
+static_assert(sizeof(Collection::Array<ComponentDescription*>) == 0x10, "+0x98 Array is {data, size, capacity}");
+static_assert(sizeof(Graphics::MeshInstance) == 0x120, "+0xB8 MeshInstance ends at +0x1D8");
 static_assert(offsetof(CitizenComponent, field_0xA8)           == 0xA8,  "");
 static_assert(offsetof(CitizenComponent, field_0xAC)           == 0xAC,  "");
 static_assert(offsetof(CitizenComponent, field_0xB0)           == 0xB0,  "");

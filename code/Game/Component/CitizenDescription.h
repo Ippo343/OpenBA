@@ -79,8 +79,8 @@ public:
     float _f9c;                                 // +0x9c
     float happinessInterval;                    // +0xa0 the happiness update each Time(happinessInterval * k)
     float maxHappiness;                         // +0xa4 happiness is clamped to [0, maxHappiness]
-    int32_t _ia8;                               // +0xa8 compared with CitizenComponent::consumedTypeCount
-    int32_t _iac;                               // +0xac compared with CitizenComponent::consumedTypeCount
+    int32_t _ia8;                               // +0xa8 compared with CitizenComponent::consumedTypes._size
+    int32_t _iac;                               // +0xac compared with CitizenComponent::consumedTypes._size
     int32_t _ib0;                               // +0xb0 compared with CitizenComponent::field_0x84
     float _fb4;                                 // +0xb4
     float _fb8;                                 // +0xb8

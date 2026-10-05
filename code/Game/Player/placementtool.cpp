@@ -405,10 +405,10 @@ void PlacementTool::Update(void* /*param2*/, char param3) {
     uint32_t strIndex = (tileValid == 0) ? 1 : 0;
     System::String costString;  // System::String (8-byte COW refcounted)
 
-    if (costResult != nullptr && (int)strIndex < costResult->_entryCount) {
+    if (costResult != nullptr && (int)strIndex < costResult->_entries._size) {
         // Retail copy-constructs a temporary, copies that into costString and
         // then releases the temporary — the scope below does both.
-        System::String tempString(costResult->_entries[strIndex]);
+        System::String tempString(costResult->_entries._data[strIndex]);
         costString = tempString;
     } else {
         // Empty-string fallback: retail aliases the zeroed costResult local as an
