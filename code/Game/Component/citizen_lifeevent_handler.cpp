@@ -271,7 +271,7 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     TombstoneComponent* tsIBP = nullptr;
     ComponentEntity_FindTombstoneComp_4800(entIBP, &tsIBP);
     if (tsIBP) Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));
-    ComponentEntity* regIBP = entIBP;
+    Object::InternalPtr<ComponentEntity> regIBP = entIBP;
     EntityList_RegisterEntity_Impl(world->m_entityList, &regIBP,   // +0xe8
                                    static_cast<int>(tombDesc->_category));   // +0x20
 }

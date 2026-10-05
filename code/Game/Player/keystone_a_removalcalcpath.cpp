@@ -619,7 +619,7 @@ static void PlaceRemovalMarker(const CreateRemovalDescription* desc, int col, in
     comp->tileX1 = 1;
     comp->tileY1 = 1;
     comp->extraField = 0;
-    ComponentEntity* local_70 = cloned;
+    Object::InternalPtr<ComponentEntity> local_70 = cloned;
     EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &local_70,
                                    static_cast<int>(desc->_ref38->_category));
 }

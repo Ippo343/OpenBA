@@ -484,7 +484,7 @@ void PastureProduce(PastureComponent* self) {
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
         ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, produced) : nullptr;
         if (!ent) break;
-        ComponentEntity* entRef = ent;
+        Object::InternalPtr<ComponentEntity> entRef = ent;
         RawMaterialComponent* rawComp = ent->FindComponent<RawMaterialComponent>();
         if (rawComp) {
             // Position the pile on the cell with a random quarter-turn:

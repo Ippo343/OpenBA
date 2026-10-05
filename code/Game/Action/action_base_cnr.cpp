@@ -390,7 +390,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
         work->workFlags = surfMatId;
     }
 
-    ComponentEntity* listIBP = newEntity;
+    Object::InternalPtr<ComponentEntity> listIBP = newEntity;
     EntityList_RegisterEntity_Impl(gameWorld->m_entityList, &listIBP,   // 0x1400c48a0
                    static_cast<int>(d->_building->_category));
 

@@ -191,7 +191,7 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     ModelSelectMesh(modelSet, (uint16_t)variant, (int16_t)subVariant);   // 0x1401253d0
 
     // Register entity with the entity list
-    ComponentEntity* entityRef = entityIBP;
+    Object::InternalPtr<ComponentEntity> entityRef = entityIBP;
     int typeGroup = static_cast<int>(descEntity->_category);
     gameWorld->m_entityList->RegisterEntity(&entityRef, typeGroup);   // 0x1400c48a0
 

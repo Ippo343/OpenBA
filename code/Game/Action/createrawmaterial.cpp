@@ -286,7 +286,7 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
                 placeNearFlag, descEntity, batchSize);
 
             // Register entity with entity list
-            ComponentEntity* entityRef = entityIBP;
+            Object::InternalPtr<ComponentEntity> entityRef = entityIBP;
             int typeGroup = static_cast<int>(descEntity->_category);
             gameWorld->m_entityList->RegisterEntity(&entityRef, typeGroup);   // 0x1400c48a0
 

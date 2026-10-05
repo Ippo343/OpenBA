@@ -125,7 +125,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
         PositionRawMaterial(pile, cell, static_cast<float>(randv) * kRdata_140172204);   // 0x140129760
         pile->quantity = count;
         pile->profession = nullptr;
-        ComponentEntity* registered = created;
+        Object::InternalPtr<ComponentEntity> registered = created;
         EntityList_RegisterEntity_Impl(world->m_entityList, &registered,
                                        static_cast<int>(material->_category));   // 0x1400c48a0
     }

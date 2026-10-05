@@ -414,8 +414,8 @@ void ForceTornado(int frameNum, int want) {
     EntityList* entityList = gw->m_entityList;                  // +0xe8
     ComponentEntity* (*createEntity)(ComponentEntity*, ComponentDescription*) =
         &ComponentEntity_CtorFromDescription;                   // the typed overload
-    [[maybe_unused]] void (*registerEntity)(EntityList*, ComponentEntity**, int) =
-        &EntityList_RegisterEntity_Impl;                        // the ComponentEntity** overload
+    [[maybe_unused]] void (*registerEntity)(EntityList*, Object::InternalPtr<ComponentEntity>*, int) =
+        &EntityList_RegisterEntity_Impl;
     DLOG("Tornado", "frame %d: preconditions — CreateEntity=%p "
          "RegisterEntity=%p entityList=%p\n", frameNum,
          reinterpret_cast<void*>(createEntity),

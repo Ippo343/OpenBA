@@ -267,7 +267,7 @@ void HerdComponent::AdjustSize(int targetSize) {
 
         // Build the animal entity from the template.
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-        ComponentEntity* entity = mem ? new (mem) ComponentEntity(descr) : nullptr;   // 0x1400c3720
+        Object::InternalPtr<ComponentEntity> entity = mem ? new (mem) ComponentEntity(descr) : nullptr;   // 0x1400c3720
 
         // Retail looks up three components in this order and uses two of them:
         // the WildAnimalComponent is what gets linked back to the herd, and the
@@ -446,7 +446,7 @@ void HerdComponent::Populate(int count) {
         int rndY = rng->Rand(static_cast<uint32_t>(bh));
 
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);
-        ComponentEntity* entity = mem ? new (mem) ComponentEntity(descr) : nullptr;   // 0x1400c3720
+        Object::InternalPtr<ComponentEntity> entity = mem ? new (mem) ComponentEntity(descr) : nullptr;   // 0x1400c3720
         if (!entity) continue;
 
         AnimalComponent* animal = entity->FindComponent<AnimalComponent>();

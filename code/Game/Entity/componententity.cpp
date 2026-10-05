@@ -684,11 +684,11 @@ void ComponentEntity::OnAddedPass() {
 //   entity+0x1C low-24     = bucket index (pre-insert bucket count); +0x1F = category.
 //   category 6 = no bucket (entity+0x1C low-24 set to 0xFFFFFF sentinel).
 // Also registers update/draw (c33e0) and runs the OnAdded pass (c2f60).
-void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
+void EntityList::RegisterEntity(Object::InternalPtr<ComponentEntity>* entityIBP, int category) {
     if (shuttingDown) {                                 // list closed -> drop the entity
         // Object::InternalBasePtr::DeletePtr (0x1800c0150) on the slot: delete
         // through the virtual dtor, null the slot.
-        if (ComponentEntity* dying = *entityIBP) {
+        if (ComponentEntity* dying = entityIBP->Get()) {
             delete dying;
             *entityIBP = nullptr;
         }
@@ -707,7 +707,7 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
     // Append to the main entity array (count -> id+1).
     // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
     // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-    ComponentEntity* fill = *entityIBP;
+    ComponentEntity* fill = entityIBP->Get();
     masterArray.SetSize(id + 1, fill);
 
     // The category byte +0x1F (the handle's high byte): retail stores the BYTE.
@@ -724,7 +724,7 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
         int bcount = bucket->_size;
         // B.3.2: Collection::Array<T>::SetSize(n, fill) — retail 0x140003110,
         // stride 8 align 8. Element is the 8-byte entity InternalBasePtr.
-        ComponentEntity* bfill = *entityIBP;
+        ComponentEntity* bfill = entityIBP->Get();
         bucket->SetSize(bcount + 1, bfill);
     }
 
@@ -734,14 +734,9 @@ void EntityList::RegisterEntity(ComponentEntity** entityIBP, int category) {
 // B4 FORWARD: 38 outside caller(s) (code/Game/Action, Component, Game, Work,
 // standalone; componententity_funcs.h). The null guards are the tree's (retail's
 // 0x1400c48a0 has none); kept here, not extended into the member.
-void EntityList_RegisterEntity_Impl(EntityList* entityList, ComponentEntity** entityIBP, int category) {
+void EntityList_RegisterEntity_Impl(EntityList* entityList, Object::InternalPtr<ComponentEntity>* entityIBP, int category) {
     if (!entityList || !entityIBP) return;
     entityList->RegisterEntity(entityIBP, category);
-}
-
-// The callers that hold the retail InternalPtr<ComponentEntity> slot (same one qword).
-void EntityList_RegisterEntity_Impl(EntityList* entityList, Object::InternalPtr<ComponentEntity>* entityIBP, int category) {
-    EntityList_RegisterEntity_Impl(entityList, reinterpret_cast<ComponentEntity**>(entityIBP), category);   // LEFT: POD bare-T*-for-InternalPtr<T>: EntityList::RegisterEntity (0x1400c48a0) reads and clears the slot as ComponentEntity** (the tree-wide InternalPtr convention)
 }
 
 // ============================================================

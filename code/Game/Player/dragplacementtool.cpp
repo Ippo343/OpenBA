@@ -482,7 +482,7 @@ bool DragPlacementTool::CalcPath(int startCell, int endCell) {
     }
 
     // The entity's InternalBasePtr is its eight bytes
-    ComponentEntity* entityIBP = newEntity;
+    Object::InternalPtr<ComponentEntity> entityIBP = newEntity;
 
     // Find its MapComponent (0x140004680, cell 0x1401c79e0)
     MapComponent* buildComp = entityIBP->FindComponent<MapComponent>();

@@ -518,7 +518,7 @@ static void Game_SpawnCitizens_Impl() {
 
                             // Register entity with entity manager
                             // Use the new entity (the InternalBasePtr value) as the entity ref
-                            ComponentEntity* entityRef = newEntity;
+                            Object::InternalPtr<ComponentEntity> entityRef = newEntity;
                             EntityList_RegisterEntity_Impl(GameUpdateLoop::_singleton->m_entityList, &entityRef,
                                                          entityDesc->_category);   // 0x1400c48a0
 
@@ -629,7 +629,7 @@ static void Game_SpawnTornado_Impl() {
     }
 
     // Register entity with entity manager
-    ComponentEntity* entityRef = newEntity;
+    Object::InternalPtr<ComponentEntity> entityRef = newEntity;
     EntityList_RegisterEntity_Impl(game->m_entityList, &entityRef,
                                   entityDesc->_category);   // 0x1400c48a0
 }

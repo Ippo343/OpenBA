@@ -1465,7 +1465,7 @@ void CitizenComponent::GiveBirth() {
 
     newborn->Initialize(pos, gender, '\x01', 0, '\0', this, spawnArg);
 
-    ComponentEntity* addArg = child;
+    Object::InternalPtr<ComponentEntity> addArg = child;
     {
         ComponentDescription* desc = _entity->_description;
         EntityList_RegisterEntity_Impl(gw->m_entityList, &addArg, desc->_category);
