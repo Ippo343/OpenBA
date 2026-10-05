@@ -81,7 +81,7 @@
 #include "object/External.h"   // ENDGAME B.3.9 SS2: Object::ExternalFactory::_singleton
 #include "Game/exe_bodies.h"
 #include "Action/exe_bodies.h"         // ActHunt_DynArraySetCount_3110
-#include "Dialog/exe_bodies.h"         // ToolbarUtility_BstInsert_4890
+#include "Dialog/exe_bodies.h"         // Avl38SetInsert (0x140014890)
 #include "Player/exe_bodies.h"         // Avl38Retrace (0x140025920)
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
@@ -108,7 +108,7 @@ namespace {
 //   0x14009f100 GameGrid_Serialize_9f100 (+0xF8), 0x1400f9240 Goals_Serialize_f9240 (+0x118)
 //   0x140003110 ActHunt_DynArraySetCount_3110                  (Action/exe_bodies.h)
 //   0x1400021d0 Reimpl_Array_Resize_Stride04, 0x140002340 Reimpl_ExternalPtr_Serialize_StringTable
-//   0x140014890 ToolbarUtility_BstInsert_4890                  (Dialog/exe_bodies.h)
+//   0x140014890 Avl38SetInsert (PinnedToolNode wrapper)        (Dialog/exe_bodies.h)
 //   0x140025920 Avl38Retrace                                   (Player/exe_bodies.h)
 // The "[GUL::Serialize] resolved:" stderr line went with the caches.
 //
@@ -302,31 +302,32 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
 // ported 0x140014890.
 // The set is PlayerToolManager's {root +0x50, count +0x58}: `root` is its
 // header (the count is the int at root + 8, read as the header's).
-static void GoalRefTree_Serialize_e2e0(TrackedEntityNode** root, int32_t* countField,
+static void GoalRefTree_Serialize_e2e0(AvlTreeHead<PinnedToolNode>* set,
                                        IO::Serializer* serializer) {
-    int count = *countField;
+    PinnedToolNode** root = &set->root;
+    int count = set->count;
     serializer->Serialize(count, nullptr);
 
     if (static_cast<int>(serializer->GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         // LOAD: read `count` records, insert each
         for (int i = 0; i < count; i++) {
-            struct { void* ref; int a; int b; bool used; } rec;
-            rec.ref = nullptr; rec.a = 0; rec.b = 0; rec.used = false;
-            Reimpl_ExternalPtr_Serialize_StringTable(&rec.ref, serializer);   // 0x140002340
-            serializer->Serialize(rec.a, nullptr);
-            serializer->Serialize(rec.b, nullptr);
-            serializer->Serialize(rec.used, nullptr);
-            void* outNode = nullptr;
-            // LEFT: the shared set insert takes the header as int64_t* and the
-            // record as uint64_t* (Dialog/exe_bodies.h, not GAME-a's).
-            ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(root), &outNode,   // LEFT: the shared set insert takes the header as int64_t* and the record as uint64_t* (Dialog/exe_bodies.h, not GAME-a's).
-                                          reinterpret_cast<uint64_t*>(&rec.ref));   // 0x140014890   // LEFT: the shared set insert takes the header as int64_t* and the record as uint64_t* (Dialog/exe_bodies.h, not GAME-a's).
+            // The record's +0x10 byte is read through the bool overload, as
+            // before (B.4 Y GAMEB: the record is the set's element type now).
+            PinnedToolEntry rec;
+            bool used = false;
+            rec.key = nullptr; rec.x = 0; rec.y = 0;
+            Reimpl_ExternalPtr_Serialize_StringTable(&rec.key, serializer);   // 0x140002340
+            serializer->Serialize(rec.x, nullptr);
+            serializer->Serialize(rec.y, nullptr);
+            serializer->Serialize(used, nullptr);
+            rec.active = used;
+            Avl38SetInsert(set, rec);   // 0x140014890
         }
     } else {
         // SAVE: leftmost-first in-order walk
-        TrackedEntityNode* node = *root;
+        PinnedToolNode* node = *root;
         if (!node) { return; }
-        TrackedEntityNode* cur = node;
+        PinnedToolNode* cur = node;
         while (cur->left) cur = cur->left;
         while (cur) {
             Reimpl_ExternalPtr_Serialize_StringTable(&cur->key, serializer);   // 0x140002340
@@ -334,12 +335,12 @@ static void GoalRefTree_Serialize_e2e0(TrackedEntityNode** root, int32_t* countF
             serializer->Serialize(cur->y, nullptr);
             serializer->Serialize(cur->active, nullptr);
             // in-order successor
-            TrackedEntityNode* next = cur->right;
+            PinnedToolNode* next = cur->right;
             if (next) {
                 while (next->left) next = next->left;
                 cur = next;
             } else {
-                TrackedEntityNode* parent = cur->parent;
+                PinnedToolNode* parent = cur->parent;
                 while (parent && parent->right == cur) {
                     cur = parent;
                     parent = parent->parent;
@@ -468,9 +469,9 @@ void PlayerToolManager::Serialize(IO::Stream& stream) {
     ser.Serialize(field_0x3C, nullptr);
     ser.Serialize(field_0x40, nullptr);
     ser.Serialize(field_0x44, nullptr);
-    GoalRefTree_Serialize_e2e0(&field_0x50, &field_0x58, &ser);
+    GoalRefTree_Serialize_e2e0(&field_0x50, &ser);
     if (ser.GetVersion() > 0) {
-        IbpTree_Serialize_e470(&field_0x60, &field_0x68, &ser);
+        IbpTree_Serialize_e470(&field_0x60.root, &field_0x60.count, &ser);
     }
     if (ser.GetVersion() > 1) {
         int count = cameraViews.GetSize();

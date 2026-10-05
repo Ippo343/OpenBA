@@ -28,6 +28,7 @@
 #include <cstddef>
 #include "math/Math.h"   // Math::Vector3 (the saved camera view's position)
 #include "collection/Collection.h"   // Collection::Array (the camera views, +0x70)
+#include "Action/PathAvl.h"           // AvlTreeHead (the two sets, +0x50 / +0x60)
 
 class ComponentEntity;
 class ComponentDescription;
@@ -81,6 +82,39 @@ static_assert(offsetof(TrackedEntityNode, right) == 0x28, "+0x28");
 static_assert(offsetof(TrackedEntityNode, balance) == 0x30, "+0x30");
 static_assert(offsetof(TrackedEntityNode, height) == 0x32, "TrackedEntityNode::height @ +0x32");
 
+// B.4 Y GAMEB: the +0x50 set's node. The same 0x38 shape as TrackedEntityNode,
+// but its key is a dialog's description, not an entity: 0x1401001f0 (the
+// tutorial record), ToggleUtilityDialog 0x140101a80 (its insert through
+// 0x140014890) and the save 0x14002e2e0 (the key serialized as an ExternalPtr).
+// The 0x18-byte element is the node's base: the shared insert 0x140014890
+// copies it whole into the new node.
+struct PinnedToolEntry {
+    ComponentDescription* key;    // +0x00 compared by address (unsigned); ToggleUtilityDialog 0x140101a80 takes it
+    int32_t            x;         // +0x08 the dialog's saved upper-left x
+    int32_t            y;         // +0x0C ... and y
+    uint8_t            active;    // +0x10 the "open it" byte
+    uint8_t            _pad11[7]; // +0x11 copied with the record
+};
+static_assert(sizeof(PinnedToolEntry) == 0x18, "the 0x18-byte element 0x140014890 copies");
+struct PinnedToolNode : PinnedToolEntry {
+    PinnedToolNode*    parent;    // +0x18
+    PinnedToolNode*    left;      // +0x20
+    PinnedToolNode*    right;     // +0x28
+    int16_t            balance;   // +0x30
+    int16_t            height;    // +0x32
+    uint8_t            _pad34[4]; // +0x34
+};
+static_assert(sizeof(PinnedToolNode) == 0x38, "0x140014890 MemAlloc(0x38)");
+static_assert(offsetof(PinnedToolNode, key) == 0x00, "PinnedToolNode::key @ +0x00");
+static_assert(offsetof(PinnedToolNode, x) == 0x08, "PinnedToolNode::x @ +0x08");
+static_assert(offsetof(PinnedToolNode, y) == 0x0C, "PinnedToolNode::y @ +0x0C");
+static_assert(offsetof(PinnedToolNode, active) == 0x10, "PinnedToolNode::active @ +0x10");
+static_assert(offsetof(PinnedToolNode, parent) == 0x18, "PinnedToolNode::parent @ +0x18");
+static_assert(offsetof(PinnedToolNode, left) == 0x20, "PinnedToolNode::left @ +0x20");
+static_assert(offsetof(PinnedToolNode, right) == 0x28, "PinnedToolNode::right @ +0x28");
+static_assert(offsetof(PinnedToolNode, balance) == 0x30, "PinnedToolNode::balance @ +0x30");
+static_assert(offsetof(PinnedToolNode, height) == 0x32, "PinnedToolNode::height @ +0x32");
+
 class Tool;
 class ComponentEntity;
 
@@ -117,12 +151,10 @@ public:
     float    field_0x40;         // +0x40 ctor 0; Serialize float
     float    field_0x44;         // +0x44 ctor 0.75
     int64_t  field_0x48;         // +0x48 ctor 0; a Time the camera update (0x1400feec0) counts down to 0
-    TrackedEntityNode* field_0x50; // +0x50 ctor 0; the pinned entity set's root (EntityUI unpin removes, 0x14002c690)
-    int32_t  field_0x58;         // +0x58 ctor 0; its count
-    uint8_t  _pad5C[4];          // +0x5C
-    TrackedEntityNode* field_0x60; // +0x60 ctor 0; the open-entity set's root (EntityUI::OnClosed removes)
-    int32_t  field_0x68;         // +0x68 ctor 0; its count
-    uint8_t  _pad6C[4];          // +0x6C
+    // +0x50 / +0x60: two Collection::Set headers {root, int count} (POD: the ctor
+    // zeroes them, 0x1401024d0 frees their nodes by hand; no C++ dtor runs).
+    AvlTreeHead<PinnedToolNode> field_0x50;      // +0x50 ctor 0 (root +0x50, count +0x58); the pinned tool-dialog set (key = the dialog's description; 0x140101a80 inserts)
+    AvlTreeHead<TrackedEntityNode> field_0x60;   // +0x60 ctor 0 (root +0x60, count +0x68); the open-entity set (EntityUI::SyncPin 0x1400666b0 inserts / removes, EntityUI::OnClosed removes)
     // +0x70 Array<CameraView> (sized to 5 by the ctor; saved views 1-5). Retail's
     // ctor 0x1401025c0 zeroes it inline and SetSizes it to 5; its dtor 0x1401024d0
     // frees it (inlined ~Array) after the current tool and before the two sets.
@@ -188,11 +220,9 @@ static_assert(offsetof(PlayerToolManager, field_0x40) == 0x40, "+0x40");
 static_assert(offsetof(PlayerToolManager, field_0x44) == 0x44, "+0x44");
 static_assert(offsetof(PlayerToolManager, field_0x48) == 0x48, "+0x48");
 static_assert(offsetof(PlayerToolManager, field_0x50) == 0x50, "+0x50");
-static_assert(offsetof(PlayerToolManager, field_0x58) == 0x58, "+0x58");
-static_assert(offsetof(PlayerToolManager, _pad5C) == 0x5C, "+0x5C");
+static_assert(offsetof(PlayerToolManager, field_0x50.count) == 0x58, "+0x58 the pinned set's count");
 static_assert(offsetof(PlayerToolManager, field_0x60) == 0x60, "+0x60");
-static_assert(offsetof(PlayerToolManager, field_0x68) == 0x68, "+0x68");
-static_assert(offsetof(PlayerToolManager, _pad6C) == 0x6C, "+0x6C");
+static_assert(offsetof(PlayerToolManager, field_0x60.count) == 0x68, "+0x68 the open-entity set's count");
 static_assert(offsetof(PlayerToolManager, cameraViews) == 0x70, "PlayerToolManager::cameraViews @ +0x70 (count +0x78, capacity +0x7C)");
 static_assert(offsetof(PlayerToolManager, field_0x80) == 0x80, "+0x80");
 static_assert(offsetof(PlayerToolManager, _pad81) == 0x81, "+0x81");

@@ -136,7 +136,7 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* d
                 intBase[i] = 0;
         }
     }
-    void** ptrBase = (void**)refs.data;  // LEFT: WorldGeometry.h declares its nine arrays as raw {void* data; uint64_t sizeCap} headers (header outside this set)
+    void** ptrBase = (void**)refs.data;  // LEFT: SIG RoadTool_DecalStore_acd90 takes the decal as void*: its one caller (:289) reads it from DecalDescription::_materials, a void** (Component/DecalDescription.h, CW)
     if (ptrBase) ptrBase[index] = decal;
 }
 
