@@ -539,7 +539,7 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*u
         ComponentEntity** slot = hdr->_data;
         for (int i = 0; i < count; i++, slot++) {
             // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: audit WORK (CLASS TrackedEntityNode / EntityList bucket element), owner Entity/ (z-CODEB): EntityList.h (X6-CW) holds each bucket element as ComponentEntity* (IBPArray) where retail holds an InternalPtr<ComponentEntity>: Serialize writes the slot itself
+            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: audit WORK (CLASS EntityList IBPArray element: Collection::Array<ComponentEntity*> -> InternalPtr<ComponentEntity> over every bucket / master / removal reader, not reached in B4 Z SWEEP): EntityList.h (X6-CW) holds each bucket element as ComponentEntity* (IBPArray) where retail holds an InternalPtr<ComponentEntity>: Serialize writes the slot itself
             if (*slot != nullptr && s_tidCompEnt &&
                 !::Object::IsDerivedFromNullSafe(*slot, s_tidCompEnt)) {
                 *slot = nullptr;
