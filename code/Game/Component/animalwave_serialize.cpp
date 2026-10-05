@@ -178,12 +178,12 @@ void HerdComponent::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    int count = memberCount;
+    int count = members._size;
     ser.Serialize(count, nullptr);
-    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&members).SetSize(count);
+    // exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n) (kSpec_PtrZero).
+    if (Loading(ser)) members.SetSize(count);
 
-    Object::InternalPtr<WildAnimalComponent>* member = members;
+    Object::InternalPtr<WildAnimalComponent>* member = members._data;
     for (int i = 0; i < count && member; ++i, ++member)
         SerializeValidatedIBP(member, ser, WildAnimalComponent::TypeId());
 

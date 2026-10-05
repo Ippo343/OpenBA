@@ -393,7 +393,7 @@ void HerdStartMigration(HerdComponent* herd) {
     herd->tile = iVar4;
 
     if (iVar4 < 0) {
-        if (0 < herd->memberCount) {
+        if (0 < herd->members._size) {
             do {
                 ComponentEntity* local_res8 = herd->members[0]->_entity.Get();
                 EntityList* list = GameUpdateLoop::_singleton->m_entityList;
@@ -404,7 +404,7 @@ void HerdStartMigration(HerdComponent* herd) {
                                  list->removalList._size + 1, &local_res8);
                     }
                 }
-            } while (0 < herd->memberCount);
+            } while (0 < herd->members._size);
         }
         return;
     }
@@ -428,7 +428,7 @@ void HerdStartMigration(HerdComponent* herd) {
         local_res10 = (worldW - local_res20) - 2;
     }
 
-    if (0 < herd->memberCount) {
+    if (0 < herd->members._size) {
         uint32_t memberIdx = 0;
         do {
             ComponentEntity* local_58 = herd->members[memberIdx]->_entity.Get();
@@ -456,7 +456,7 @@ void HerdStartMigration(HerdComponent* herd) {
             foundComp->wanderHeight = (int16_t)local_res10;
 
             memberIdx = memberIdx + 1;
-        } while ((int)memberIdx < herd->memberCount);
+        } while ((int)memberIdx < herd->members._size);
     }
 }
 
