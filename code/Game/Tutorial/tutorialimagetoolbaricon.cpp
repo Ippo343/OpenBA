@@ -57,13 +57,12 @@
 // ctor 0x1400e0c30: External(), TutorialImage's stamp + zeroed fields
 // (TutorialImage()), the own stamp, then String +0x30 = 0, tag -1, ref null.
 TutorialImageToolbarIcon::TutorialImageToolbarIcon()
-    : _toolbarRef{{}, -1, {}, nullptr} {}
+    : _toolbarRef() {}
 
-// The dtor inside [0] 0x140028090: ~String +0x30; the compiler re-stamps
-// TutorialImage and runs ~External.
-TutorialImageToolbarIcon::~TutorialImageToolbarIcon() {
-    _toolbarRef.Name().~String();
-}
+// The dtor inside [0] 0x140028090: ~String +0x30 (0x1400280c0, B4 Y GAMEA: the
+// member's, after this empty body); the compiler re-stamps TutorialImage and
+// runs ~External.
+TutorialImageToolbarIcon::~TutorialImageToolbarIcon() {}
 
 // The resolved Toolbar entry (NamedExternalRef::ResolveToolbar validated the
 // type: a downcast within Object::External's hierarchy).
@@ -92,7 +91,7 @@ bool TutorialImageToolbarIcon::Serialize(IO::Stream& stream) {
     (void)filenameBuf;
 
     // String::Serialize on +0x30
-    _toolbarRef.Name().Serialize(serializer2);
+    _toolbarRef.name.Serialize(serializer2);
 
     // If loading (serializer stream mode == 0), resolve toolbar
     if (serializer2._stream) {

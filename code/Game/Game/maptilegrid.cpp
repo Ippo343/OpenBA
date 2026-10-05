@@ -42,7 +42,7 @@ enum TileType { TILE_BUILDABLE = 2, TILE_MOUNTAIN_HI = 6, TILE_SHORE = 7,
                 TILE_DEEP_WATER = 8, TILE_MOUNTAIN_LO = 10 };
 
 // CreateNaturalResource_helper_e2c0 — classify one cell into a terrain type.
-static int MapTileGrid_Classify(void* game, int dim, int idx) {
+static int MapTileGrid_Classify(Map* game, int dim, int idx) {
     const float center = (float)(dim >> 1) - kCenterBias;
     float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
     float out[3] = { 0, 0, 0 };
@@ -57,10 +57,8 @@ static int MapTileGrid_Classify(void* game, int dim, int idx) {
 }
 
 // Build the dim*dim tile grid at Map::cells (front-half of CreateNaturalResource).
-extern "C" void MapTileGrid_Build(void* gameVoid, int dim) {
-    if (!gameVoid || dim <= 0) return;
-    // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map.
-    Map* game = (Map*)gameVoid;   // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map.
+extern "C" void MapTileGrid_Build(Map* game, int dim) {
+    if (!game || dim <= 0) return;
     game->size = dim;
 
     const int    count = dim * dim;
@@ -83,6 +81,6 @@ extern "C" void MapTileGrid_Build(void* gameVoid, int dim) {
 
     // Classify pass — write the terrain type (+0x29) for every cell.
     for (int i = 0; i < count; ++i)
-        cells[i].terrainType = (uint8_t)MapTileGrid_Classify(gameVoid, dim, i);
+        cells[i].terrainType = (uint8_t)MapTileGrid_Classify(game, dim, i);
     PerfX::TerrainInvalidate();   // [PerfX] fresh grid: mirror rebuilds on first read
 }

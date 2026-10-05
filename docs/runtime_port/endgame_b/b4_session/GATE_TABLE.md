@@ -383,3 +383,12 @@ Metric at `91709c75`: **1,051** to remove (of which `dx11/` 240). **Session clos
 77 gated merges this session (rows 45-121); one problem (row 119). The per-merge evidence (`gate_*.out`, the
 merge / premerge logs, `runs/<label>/`) was deleted at the close on the user's request; `runs/baseline` and the
 warning baselines are kept (the gate compares against them). This table is the record.
+
+### Wave Y, rounds 2 onward (the following session; baseline gate `s3_base` on `e4e5a78a`: 0 problems, invariants as above)
+
+| 122 | Y2-GAMEA | `f0d89817` | `behaviour:` TutorialStep (0x1400e3480 / 0x1400e33f0; the `b4y1-GAMEA` takeover, verified), MenuDialogLoopT `_audioScene` + three arrays (0x14009bb00 / 0x14001a310; the Scene member is built before the body seeds `_random`, retail seeds first: disjoint bytes), MenuScene's tree records (0x14001b860), `Map::pickingScene` (0x14009ee70 / 0x14009ed60); Audio::Device teardown by name, NameDatabase, ClimateGenerator: 1051 -> 1023 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 123 | Y2-RT | `5b2932b8` | `Video::Context` `_renderBuffer` / `_imageBuffers` / `_dynamicIndexCursor` typed, `ReloadEntry` declared; `behaviour:` `ComboElement::_strings` (0x1801123f0 / 0x180112490), Text / Label / Border / Scroll description names, `Audio::Stream::_buffers` (0x1800a0e30 / 0x1800a0d90); `EdgeMesh::_reserved20`, `RendererDrawable::_object`: -> 990 | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 124 | Y2-CW | `836d88de` | the `b4y1-CW` takeover (scratch slots as typed locals, verified); `behaviour:` `CitizenComponent::meshInstance` + `consumedTypes` (0x140114770 / 0x1401146f0: row 650 fixed by row 720; the null-vptr probes replaced by retail's unconditional `Update`), `ToolbarDescription::_entries` (0x140039490 / 0x14012db70, row 721); FruitDescription, DecalDescription, ComponentEntity's category byte, `CitizenComp_DeferredInit_117080` typed; row 705 recorded | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 125 | Y2-GAMEB | `c85074f1` | `behaviour:` HighlightComponent holds a real `EdgeMeshInstance` (0x14004c930 / 0x14004c8c0; row 573 fixed by row 740: the outline mesh is freed with the component); PlayerToolManager's two set headers (`PinnedToolNode`; row 741 recorded), `Avl38SetInsert` / `Remove` / `FindRemove` typed wrappers over one core, the tess vertex copy, `Dialog_AutoSaveHandler` deleted | exit 0 · 918 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+
+Metric at `c85074f1`: **911** to remove (of which `dx11/` 240). Wave Y round 2 done.

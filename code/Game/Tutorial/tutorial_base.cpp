@@ -38,6 +38,12 @@
 #include "Game/Toolbar.h"                // B.3.9 EXA: Toolbar::TypeId()
 #include "ui/SpinnerElement.h"           // UI::SpinnerElement::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "Tutorial/exe_bodies.h"
+#include "Tutorial/TutorialStep.h"    // the SerArray element classes (B4 Y GAMEA)
+#include "Tutorial/TutorialImage.h"
+#include "Tutorial/TutorialSetup.h"
+#include "Tutorial/TutorialGoal.h"
+#include "ui/ElementDescription.h"
+#include "io/Serializer.h"
 #include "Goal/goal_exe_helpers.h"           // NamedExternalRef, the entity-bucket trees
 #include "Entity/CitizenBehavior.h"
 #include "Entity/ComponentEntity.h"
@@ -51,12 +57,13 @@
 // Family A — ExternalPtr serialize helpers
 // ============================================================
 
-// Per-element ExternalPtr<T>::Serialize via the canonical generic body.
-// typeId resolves lazily by name (cascade-safe: loads without type validation
-// if the name is not yet registered — never crashes).
-static inline void SerOne(void* field, void* serializer, const char* typeName) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(field), serializer,   // LEFT: SIG ExternalPtrSerializeGeneric's void** overload: SerOne's callers hand the slot as void* (the tutorial array helpers)
-                                /*typeIdPtr*/ nullptr, typeName);
+// Per-element ExternalPtr<T>::Serialize via the canonical generic body (its
+// typed wrapper, Game/serialize_externals.h). typeId resolves lazily by name
+// (cascade-safe: loads without type validation if the name is not yet
+// registered — never crashes).
+template <class T>
+static inline void SerOne(T** field, IO::Serializer* serializer, const char* typeName) {
+    ExternalPtrSerializeGeneric(field, serializer, /*typeIdPtr*/ nullptr, typeName);
 }
 
 // Array-of-ExternalPtr<T>::Serialize (8-byte stride). param_4 is an unused
@@ -65,30 +72,31 @@ static inline void SerOne(void* field, void* serializer, const char* typeName) {
 //   0x140028cf0  TutorialStep images (TutorialImage)
 //   0x140028f40  TutorialStep setups (TutorialSetup)
 //   0x140029190  TutorialStep goals  (TutorialGoal)
-static void SerArray(void* serializer, int count, void* arrayData, const char* typeName) {
+// B4 Y GAMEA: the slots are the callers' typed Array<T*> elements (stride 8).
+template <class T>
+static void SerArray(IO::Serializer* serializer, int count, T** arrayData, const char* typeName) {
     if (!arrayData || count <= 0) return;
-    uint8_t* base = reinterpret_cast<uint8_t*>(arrayData);   // LEFT: the 8-byte ExternalPtr slots of the callers' arrays arrive as void* (elem stride of SerArray's callers)
     for (int i = 0; i < count; ++i) {
-        SerOne(base + static_cast<size_t>(i) * 8, serializer, typeName);
+        SerOne(&arrayData[i], serializer, typeName);
     }
 }
 
-extern "C" void TutBase_SerializeStepArray(void* serializer, int count, void* arrayData, void*) {
+extern "C" void TutBase_SerializeStepArray(IO::Serializer* serializer, int count, TutorialStep** arrayData, void*) {
     SerArray(serializer, count, arrayData, "TutorialStep");
 }
-extern "C" void TutBase_SerializeImageArray(void* serializer, int count, void* arrayData, void*) {
+extern "C" void TutBase_SerializeImageArray(IO::Serializer* serializer, int count, TutorialImage** arrayData, void*) {
     SerArray(serializer, count, arrayData, "TutorialImage");
 }
-extern "C" void TutBase_SerializeSetupArray(void* serializer, int count, void* arrayData, void*) {
+extern "C" void TutBase_SerializeSetupArray(IO::Serializer* serializer, int count, TutorialSetup** arrayData, void*) {
     SerArray(serializer, count, arrayData, "TutorialSetup");
 }
-extern "C" void TutBase_SerializeGoalArray(void* serializer, int count, void* arrayData, void*) {
+extern "C" void TutBase_SerializeGoalArray(IO::Serializer* serializer, int count, TutorialGoal** arrayData, void*) {
     SerArray(serializer, count, arrayData, "TutorialGoal");
 }
 
 // 0x140027ad0 — single ExternalPtr serialize for a TutorialImage's image ref.
 // The original validates against UI::ElementDescription (_typeInfo slot 0x140151a50).
-extern "C" void TutBase_SerializeImageRef(void* fieldPtr, void* serializer) {
+extern "C" void TutBase_SerializeImageRef(UI::ElementDescription** fieldPtr, IO::Serializer* serializer) {
     SerOne(fieldPtr, serializer, "ElementDescription");
 }
 
@@ -104,7 +112,7 @@ void NamedExternalRef::ResolveToolbar() {
     int32_t factoryGen = efactory->_generation;
     if (refGen == factoryGen) return;
 
-    System::Filename filename(Name());
+    System::Filename filename(name);
     const ::Object::External* found = efactory->Find(filename);
 
     // STANDALONE DEVIATION, deliberate — retail uses Find() alone and would crash
@@ -131,7 +139,7 @@ void NamedExternalRef::ResolveToolbar() {
     // does; until then this loads on demand, which is what retail's environment
     // has already done by this point.
     if (!found) {
-        const char* text = Name()._data;
+        const char* text = name._data;
         if (text) {
             char normalized[260];
             size_t k = 0;

@@ -95,7 +95,7 @@ bool TutorialStep::Serialize(IO::Stream& stream) {
 
     // 5. / 6. / 7. The three ExternalPtr arrays: count, resize on load, elements.
     auto leg = [&serializer](auto& array, int32_t count,
-                             void (*serializeArray)(void* serializer, int count, void* arrayData, void* p4)) {
+                             auto serializeArray) {
         int32_t localCount = count;
         serializer.Serialize(localCount, nullptr);
         // On load (encoding mode 0): resize the array

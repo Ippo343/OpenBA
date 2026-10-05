@@ -63,13 +63,12 @@ namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex
 // ctor 0x1400e0680: External(), the TutorialImage stamp + its two zeroed
 // fields (TutorialImage()), the own stamp, then the derived fields.
 TutorialImageHotKey::TutorialImageHotKey()
-    : hotkeyRef{{}, -1, {}, nullptr} {}
+    : hotkeyRef() {}
 
-// The dtor inside [0] 0x140027d70: ~String +0x30; the compiler re-stamps
-// TutorialImage and runs ~External.
-TutorialImageHotKey::~TutorialImageHotKey() {
-    hotkeyRef.Name().~String();
-}
+// The dtor inside [0] 0x140027d70: ~String +0x30 (0x140027da0, B4 Y GAMEA: the
+// member's, after this empty body); the compiler re-stamps TutorialImage and
+// runs ~External.
+TutorialImageHotKey::~TutorialImageHotKey() {}
 
 // ============================================================
 // TutorialImageHotKey::Serialize (vtable +0x28, 0x1400e0540)
@@ -89,7 +88,7 @@ bool TutorialImageHotKey::Serialize(IO::Stream& stream) {
     IO::Serializer ser2(stream, 0);
 
     // Serialize String at +0x30
-    hotkeyRef.Name().Serialize(ser2);
+    hotkeyRef.name.Serialize(ser2);
 
     // If loading (version == 0), resolve the hotkey string to an External ref
     int version = ser2.GetVersion();

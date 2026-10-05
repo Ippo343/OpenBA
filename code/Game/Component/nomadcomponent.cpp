@@ -14,7 +14,7 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/PlayerToolManager.h"
 #include "Dialog/exe_bodies.h"   // Toolbar_ShowGroup_Impl
-#include "Player/exe_bodies.h"   // PlayerTrade_BSTFindRemove_2c690
+#include "Player/exe_bodies.h"   // Avl38SetFindRemove (0x14002c690)
 #include "math/Math.h"
 #include "ui/UserInterface.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -33,7 +33,7 @@
 
 // Helpers, called by name (B3R): Object::Base::IsDerivedFrom (import slot 0x140152a98),
 // NomadComp_FUN_140103480 (0x140103480, below), Toolbar_ShowGroup_Impl (0x140102b60),
-// PlayerTrade_BSTFindRemove_2c690 (0x14002c690).
+// Avl38SetFindRemove (0x14002c690).
 
 // ============================================================
 // Reimpl of FUN_140103480 (Component reg wave "people")
@@ -68,7 +68,7 @@
 // The fault address was stale-register garbage, not a resolve failure. (Same trap family
 // as reference_byvalue_return_hidden_rdx.)
 // The slot is Tool [10] IsSelected(uint64_t* entityRef) (Player/Tool.h), called by name below.
-// 0x140102b60 is Toolbar_ShowGroup_Impl, 0x14002c690 PlayerTrade_BSTFindRemove_2c690.
+// 0x140102b60 is Toolbar_ShowGroup_Impl, 0x14002c690 Avl38SetFindRemove.
 // slot 0x140151768 -- member, non-trivial return AND a THIRD argument Ghidra hides.
 // Retail 0x140103480 at 0x140103517: `MOV R8D,[0x1401c4f00]` (EntityUI) immediately
 // before `CALL [0x140151768]`. The mangled name confirms it: ...@Object@@I@Z -- the
@@ -102,7 +102,7 @@ void PlayerToolManager::OnEntityRemoved(ComponentEntity* const* entity) {
     }
 
     ComponentEntity* key = *entity;
-    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&field_0x60), &key);   // 0x14002c690   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 (Player/exe_bodies.h, GAME's) takes the tree root as int64_t*
+    Avl38SetFindRemove(&field_0x60, &key);   // 0x14002c690
 
     UI::UserInterface* ui = GameUpdateLoop::_singleton->m_userInterface;
     // HISTORY, kept because it cost two bugs. Retail reaches this list through

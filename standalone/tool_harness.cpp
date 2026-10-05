@@ -540,10 +540,10 @@ void FireRoadTool(PlayerToolManager* entityUI) {
         // &tileW, &extra) -> int. The harness's local out-types are its own; the
         // pointers are the same bytes.
         {
-            uint32_t pathType = 0; int tileH = 0, tileW = 0; uint64_t extra = 0;   // printed %d / %u as before
+            uint32_t pathType = 0; int tileH = 0, tileW = 0; int extra = 0;   // printed %d / %u as before
             int rc = drag->CalcCost(startCell, endCell,
                                     &pathType, &tileH, &tileW,
-                                    reinterpret_cast<int*>(&extra));   // LEFT: OTHER the harness hands its 8-byte uint64_t local to CalcCost's int* out-param; narrowing the local to int is a resize, not B.4's
+                                    &extra);
             // RoadTool's CalcCost returns 0 on success / 3 on reject (it is NOT a count —
             // that differs from RemovalTool). The path length comes back in the out-params,
             // and param_4 is the validity: 1 = valid, 2 = invalid.
@@ -2717,9 +2717,9 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
         ++attempts;
         bridge->startCell = c.a;
         bridge->endCell   = c.b;
-        uint32_t pathType = 0; int h = 0, wd = 0; uint64_t extra = 0;   // pathType printed %d as before
+        uint32_t pathType = 0; int h = 0, wd = 0; int extra = 0;   // pathType printed %d as before
         int rc = drag->CalcCost(c.a, c.b, &pathType, &h, &wd,
-                                reinterpret_cast<int*>(&extra));   // LEFT: OTHER the harness hands its 8-byte uint64_t local to CalcCost's int* out-param; narrowing the local to int is a resize, not B.4's
+                                &extra);
         if (rc == 0 && pathType == 1) {
             startCell = c.a; endCell = c.b;
             fprintf(stderr, "[ToolHarness][bridge] span accepted after %d of %d candidates "
