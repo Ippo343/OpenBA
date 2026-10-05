@@ -109,6 +109,7 @@ static void WAC_AppendInline(CharacterComponent* character, Action* actionIbpVal
     } else if (character->actionStack.current + 1 == iVar16) {
         // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize on the
         // array header at +0x48 (data, count +0x50, capacity +0x54).
+        // LEFT (B4 H5): ActionStack's retail dtor 0x1400c5150 DeletePtr's every element and +0x10 before MemFree(+0x00); the tree's ActionStack has no dtor (CharacterComponent's implicit dtor releases nothing), so typing `actions` needs 0x1400c5150 ported as ~ActionStack in CharacterComponent (Component/) first.
         GameColl::AsArray<GameColl::Ptr8>(&character->actionStack.actions).SetSize(iVar16 * 2);
     }
 

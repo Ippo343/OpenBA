@@ -817,6 +817,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                         // B.3.2 bridge: FUN_14001c890 == Array<uint16>::SetSize (+0x08);
                         // FUN_14001ee40 == Array<RoadVertex>::SetSize (+0x18). Both shrink
                         // to 0 here, so neither body's new-tail arm is ever exercised.
+                        // LEFT (B4 H5): GeometryBatch is the element of RawArray<GeometryBatch> whose resize / copy / destroy are hand-ported element bodies (0x14001f250 / 0x14001f5e0 / 0x14001fb80) and which AddDecal builds from a memset template: its two inner arrays become members only in a GeometryBatch CLASS unit with those three bodies.
                         GameColl::AsArray<GameColl::U16>(&rec.vertices).SetSize(0);
                         GameColl::AsArray<GeometryBatchVertex>(&rec.indices).SetSize(0);
                         // Culling AABB in tile coords, read by the TerrainGenerator cull pass
@@ -912,7 +913,8 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
                                         int curCount = rec.vertices.size;  // (int)plVar15[1]
                                         // B.3.2 bridge: FUN_14001f8d0 == Array<RoadVertex>::
                                         // SetSize(n, fill) (3-arg form) -- appends the vertex as
-                                        // the new tail element.
+                                        // the new tail element. LEFT (B4 H5): the GeometryBatch CLASS
+                                        // unit above (0x14001f250 / 0x14001f5e0 / 0x14001fb80) first.
                                         GameColl::AsArray<GeometryBatchVertex>(&rec.vertices)
                                             .SetSize(curCount + 1, quad[vi]);
                                     }
