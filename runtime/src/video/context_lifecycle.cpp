@@ -335,7 +335,7 @@ void Video::Context::ClearResources() {
 // ============================================================================
 extern "C" void RtVideo_Context_Dtor(Context* self) {
     if (self->_contextData)
-        (void)self->_contextData->DeletingDtor(1);
+        delete self->_contextData;   // B5 CTX (C1): retail's slot-0 call with flags 1
 
     if (Video::VertexBuffer* p = self->_dynamicVertexBuffer) {
         p->Video::VertexBuffer::PlatformDestruct();

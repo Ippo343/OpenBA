@@ -12,7 +12,7 @@
 //
 // B5 (the dx11 seam): a class whose dx11 subclass is converted moves to
 // CheckDataB5 -- `virtual ~T()`, `delete` instead of `DeletingDtor` (so far:
-// RenderBufferData, VideoProgramData).
+// RenderBufferData, VideoProgramData, ContextData).
 //
 // The out-of-line destructors live in runtime/src/video/companion_data.cpp
 // (which cannot link into the host test), so they are defined HERE as markers.
@@ -138,7 +138,7 @@ VideoProgramData::~VideoProgramData()     { NoteDtor(this); }
 }  // namespace Video
 
 UNIT_TEST(b39_vid_devicedata_concrete)         { CheckData<Video::DeviceData>(); }
-UNIT_TEST(b39_vid_contextdata_concrete)        { CheckData<Video::ContextData>(); }
+UNIT_TEST(b39_vid_contextdata_concrete)        { CheckDataB5<Video::ContextData>(); }
 UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckData<Video::ImageBufferData>(); }
 UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckData<Video::IndexBufferData>(); }
 UNIT_TEST(b39_vid_vertexbufferdata_concrete)   { CheckData<Video::VertexBufferData>(); }
@@ -160,6 +160,27 @@ UNIT_TEST(b5_vid_flipped_companion_slots_by_pmf) {
     using V = Video::VideoProgramData;
     CHECK_SLOT(V, Slot1, 1);
     CHECK_SLOT(V, Bind,  2);
+    // B5 CTX: all twenty ContextData slots, retail numbers.
+    using C = Video::ContextData;
+    CHECK_SLOT(C, BeginCommands,                  1);
+    CHECK_SLOT(C, EndCommands,                    2);
+    CHECK_SLOT(C, Finish,                         3);
+    CHECK_SLOT(C, Clear,                          4);
+    CHECK_SLOT(C, BindRenderBuffer,               5);
+    CHECK_SLOT(C, BindViewport,                   6);
+    CHECK_SLOT(C, BindScissor,                    7);
+    CHECK_SLOT(C, BindTransforms,                 8);
+    CHECK_SLOT(C, BindTextureNone,                9);
+    CHECK_SLOT(C, BindIndexNone,                 10);
+    CHECK_SLOT(C, BindVertexNone,                11);
+    CHECK_SLOT(C, DrawIndexed,                   12);
+    CHECK_SLOT(C, GetMaxDynamicInstances,        13);
+    CHECK_SLOT(C, BeginVertices,                 14);
+    CHECK_SLOT(C, EndVertices,                   15);
+    CHECK_SLOT(C, BeginIndexedVertices,          16);
+    CHECK_SLOT(C, EndIndexedVertices,            17);
+    CHECK_SLOT(C, BeginInstancedIndexedVertices, 18);
+    CHECK_SLOT(C, EndInstancedIndexedVertices,   19);
 }
 
 // The slot ORDER of the two 20-slot tables, by PMF: the Device-side callers

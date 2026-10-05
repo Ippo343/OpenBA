@@ -23,6 +23,9 @@
 // below derive from.
 #include "video/CompanionData.h"
 
+// B5 (D4): forward declarations of the typed COM pointers; never <d3d11.h> here.
+struct ID3D11DeviceContext;
+
 namespace VideoDX11 {
 
 // ============================================================
@@ -201,18 +204,64 @@ enum DeviceDataSlot : int {
 // class would set — so the first draw always issues the call. Proven by
 // 0x180001de4 (`CMP [RBX+0x10],4` guarding `[ctxvt+0xc0]` = index 24 =
 // IASetPrimitiveTopology) and by slots 15/19 which do the same for topology 2.
-struct ContextData {
-    void*   vptr;       // +0x00
-    void*   context;    // +0x08  Video::Context*
-    int32_t topology;   // +0x10  last D3D11_PRIMITIVE_TOPOLOGY set; factory writes 0
-    int32_t pad14;
-    void*   d3dContext; // +0x18  ID3D11DeviceContext*, cached by slot 1
+//
+// B5 CTX: a real C++ subclass of `Video::ContextData`; the compiler builds its
+// vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
+// `_owner` (+0x08, `Video::Context*`) is the base's and replaces the old
+// `context` field. Owner type confirmed by
+// ??0ContextData@Video@@QEAA@PEAVContext@1@@Z.
+class ContextData final : public ::Video::ContextData {
+public:
+    // Factory 0x180005650: MemAlloc(0x20, 4) + ??0ContextData(owner) + the vptr
+    // store, then exactly these three: +0x10 and +0x14 as DWORDS (0 =
+    // D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED), +0x18 as a qword. Nothing else.
+    explicit ContextData(::Video::Context* owner)
+        : ::Video::ContextData(owner) {
+        topology   = 0;
+        pad14      = 0;
+        d3dContext = nullptr;
+    }
+    ~ContextData() override;                                                // [ 0] 0x180001600, chains ??1ContextData@Video@@UEAA@XZ
+    bool BeginCommands() override;                                          // [ 1] 0x180001650
+    void EndCommands() override;                                            // [ 2] 0x180001720
+    void Finish() override;                                                 // [ 3] 0x1800017c0  Present + device-lost
+    void Clear(unsigned flags, unsigned color,
+               float depth, int stencil) override;                          // [ 4] 0x180001920
+    void BindRenderBuffer() override;                                       // [ 5] 0x180001ad0
+    void BindViewport() override;                                           // [ 6] 0x180001b60
+    void BindScissor() override;                                            // [ 7] 0x180001be0
+    void BindTransforms() override;                                         // [ 8] 0x180001c40
+    void BindTextureNone(int slot) override;                                // [ 9] 0x180001cb0
+    void BindIndexNone() override;                                          // [10] 0x180001d10  (a tail)
+    void BindVertexNone(int slot) override;                                 // [11] 0x180001d30
+    void DrawIndexed(int primitiveType, int baseVertex, int vertexCount,
+                     int startIndex, int indexCount,
+                     int instanceCount) override;                           // [12] 0x180001d80
+    int  GetMaxDynamicInstances(int a, int b, int c) override;              // [13] 0x180001ef0  (a tail) -> 52
+    bool BeginVertices(int vertexCount, int vertexStride) override;         // [14] 0x180001e60
+    void EndVertices(int primitiveType) override;                           // [15] 0x180001f00
+    bool BeginIndexedVertices(int vertexCount, int vertexStride,
+                              int indexCount) override;                     // [16] 0x180002000
+    void EndIndexedVertices(int primitiveType) override;                    // [17] 0x180002020  `jmp` slot 19
+    bool BeginInstancedIndexedVertices(int vertexCount, int vertexStride,
+                                       int indexCount,
+                                       int instanceCount) override;         // [18] 0x180002030
+    void EndInstancedIndexedVertices(int primitiveType) override;           // [19] 0x180002150
+
+    int32_t              topology;   // +0x10  last D3D11_PRIMITIVE_TOPOLOGY set; factory writes 0
+    int32_t              pad14;      // +0x14  factory writes 0 (a dword)
+    ID3D11DeviceContext* d3dContext; // +0x18  cached by slot 1; BORROWED (never AddRef'd / Released)
+
+private:
+    // Slots 4 and 7 share this (inlined at 0x180001920, standalone at 0x180001be0).
+    void SetScissorFromContext();
+    // Slots 15, 17 and 19's identical topology filter.
+    void ApplyPrimitiveType(int primitiveType);
 };
-static_assert(sizeof(ContextData) == 0x20, "ContextData size");
-static_assert(offsetof(ContextData, vptr) == 0x0, "ContextData::vptr");
-static_assert(offsetof(ContextData, pad14) == 0x14, "ContextData::pad14");
-static_assert(offsetof(ContextData, context)    == 0x08, "ContextData::context");
+static_assert(sizeof(ContextData) == 0x20, "MemAlloc 0x20 @ 0x180005650");
+static_assert(offsetof(ContextData, _owner)     == 0x08, "ContextData::_owner (the base's)");
 static_assert(offsetof(ContextData, topology)   == 0x10, "ContextData::topology");
+static_assert(offsetof(ContextData, pad14)      == 0x14, "ContextData::pad14");
 static_assert(offsetof(ContextData, d3dContext) == 0x18, "ContextData::d3dContext");
 
 // ContextData vtable slot indices (0x1800186f0, 20 slots).
