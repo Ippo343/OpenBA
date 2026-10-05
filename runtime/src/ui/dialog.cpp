@@ -1351,7 +1351,7 @@ void ElementDescription::InitFields() {
     _width = 0;          _height = 0;         // +0x28
     _minWidth = 0;       _minHeight = 0;      // +0x30
     _tabOrder = 0;                            // +0x38
-    _id = -1;                                 // +0x3c
+    _id = 0xFFFFFFFFu;                        // +0x3c
     _elementType = 3;    _flags = 0;          // +0x40 (QWORD 3)
     _childDesc = nullptr;                     // +0x48
     _toolTipDialog = nullptr;                 // +0x50
@@ -1416,7 +1416,7 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     ED_ELEM->_minWidth         = _minWidth;                            // +0x28
     ED_ELEM->_minHeight        = _minHeight;                           // +0x2c
     ED_ELEM->_flags           |= _flags;                               // +0x34  OR, never assign
-    ED_ELEM->_color            = static_cast<uint32_t>(_id);           // +0x38  _id -> +0x38
+    ED_ELEM->_color            = _id;                                  // +0x38  _id -> +0x38
     ED_ELEM->_mouseCursorIndex = _tabOrder;                            // +0x3c  _tabOrder -> +0x3c
     ED_ELEM->_toolTipDialog    = _toolTipDialog;                       // +0x40
 

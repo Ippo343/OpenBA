@@ -128,7 +128,7 @@ uint32_t RandImpl(System::Random* self) {
     y ^= y >> 11;
     y ^= (y & 0xff3a58adu) << 7;
     y ^= (y & 0xffffdf8cu) << 15;
-    int next = self->_index + 1;
+    uint32_t next = self->_index + 1;
     self->_index = (next == 0x270) ? 0 : next;
     return y ^ (y >> 18);
 }
@@ -224,7 +224,7 @@ void System::Random::NextGroup() {
 // Two calls: slot +0x98 serializes the plain `index`, slot +0x40 the
 // 624-entry uint32 array.
 void System::Random::Serialize(::IO::Serializer& s) {
-    s.Serialize(*reinterpret_cast<unsigned int*>(&_index), nullptr);   // B.3.4 bridge  (0x98 = uint door)  // LEFT: an int32 field through the uint overload (serialize_signedness, H8: needs retail's field type)
+    s.Serialize(_index, nullptr);   // slot +0x98, the uint overload
     s.Serialize(0x270, _mt, nullptr);   // B.3.4 bridge  (0x40 = uint-array door)
 }
 

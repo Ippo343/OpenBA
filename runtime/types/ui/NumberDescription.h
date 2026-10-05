@@ -102,7 +102,7 @@ public:
     uint32_t _u70;        // +0x70  kScalarUInt
     int32_t  _i74;        // +0x74  kScalarInt
     float    _f78;        // +0x78  kScalarFloat (the ctor stores integer 0 = 0.0f)
-    uint8_t  _b7c;        // +0x7c  kScalarBool
+    bool     _b7c;        // +0x7c  kScalarBool
     uint8_t  _pad7d[11];  // +0x7d  never written
 };
 

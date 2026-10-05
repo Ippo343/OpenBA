@@ -123,6 +123,16 @@ public:
     using MessageCallback = int (*)(void* hwnd, uint32_t message,
                                     uint64_t wParam, int64_t lParam);
 
+    // The 16-byte element of `_messageCallbacks` (node +0x00..+0x0f). The node
+    // alloc 0x18000a5b0 copies it as two qwords; RegisterMessageCallback writes
+    // `message` and `callback` only, so `pad04` carries a dword of the
+    // registering caller's stack frame (message_callbacks.cpp): never compared.
+    struct MessageCallbackEntry {
+        uint32_t        message;   // +0x00  the key (unsigned compare)
+        uint32_t        pad04;     // +0x04  never written, never read
+        MessageCallback callback;  // +0x08
+    };
+
     // ---- the 27 exports (B37_SLOTS.md sec. 6), ALL PORTED -----------------
     static Application* Get();                                      // 0x18000a2f0  application_accessors.cpp
     // ?_singleton@Application@1@0PEAV11@EA (0x1801fc678) — the class static (ENDGAME B.3.9 ENG, B39_RULES D7).
@@ -237,6 +247,9 @@ public:
 static_assert(!std::is_polymorphic<Application>::value,
               "Application::Application has no vtable: the ctor's first stores are zeros");
 static_assert(alignof(Application) == 8, "qword-aligned");
+static_assert(sizeof(Application::MessageCallbackEntry) == 0x10, "message-callback element is 0x10 (two qwords)");
+static_assert(offsetof(Application::MessageCallbackEntry, message)  == 0x00, "element::message @ +0x00");
+static_assert(offsetof(Application::MessageCallbackEntry, callback) == 0x08, "element::callback @ +0x08");
 static_assert(offsetof(Application, _windowHandle)         == 0x00, "Application._windowHandle @ 0x00");
 static_assert(offsetof(Application, _platformHandle)       == 0x08, "Application._platformHandle @ 0x08");
 static_assert(offsetof(Application, _cursorEnabled)        == 0x10, "Application._cursorEnabled @ 0x10");

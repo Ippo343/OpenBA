@@ -161,7 +161,8 @@ UNIT_TEST(save_saveinfo_template_ctor_is_updatelist_state1) {
     CHECK(row->description == nullptr);                         // +0x10
     CHECK(row->imageBuffer == nullptr);                         // +0x18
     CHECK(row->thumbPixels == nullptr);                         // +0x28
-    CHECK_EQ(row->sortKey, (uint64_t)0);                        // +0x30
+    CHECK_EQ(row->sortKey._lowDateTime, 0u);                    // +0x30
+    CHECK_EQ(row->sortKey._highDateTime, 0u);                   // +0x34
     CHECK(row->name == nullptr);                                // +0x38
     CHECK_EQ(row->saveIndex, 7);                                // +0x40
     CHECK_EQ(row->field44, -1);                                 // +0x44

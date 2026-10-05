@@ -64,6 +64,7 @@
 
 #include "../collection/Collection.h"
 #include "../system/String.h"   // System::String, held by value below (B.4 R-IO)
+#include "../system/Value.h"    // System::DateTime (SaveInfo::sortKey)
 #include "../ui/Sprite.h"   // UI::Sprite, held by value below
 
 namespace System   { class Time; }
@@ -295,7 +296,7 @@ public:
               description(),               // +0x10  String(): the qword 0
               imageBuffer(nullptr),        // +0x18
               thumbPixels(nullptr),        // +0x28
-              sortKey(0),                  // +0x30
+              sortKey(),                   // +0x30  the qword 0
               name(),                      // +0x38  String(): the qword 0
               saveIndex(index),            // +0x40
               field44(-1),                 // +0x44
@@ -325,7 +326,7 @@ public:
         int32_t     thumbWidth;      // +0x20  upload arg 3
         int32_t     thumbHeight;     // +0x24  upload arg 4
         void*       thumbPixels;     // +0x28  upload arg 2: the raw pixel block
-        uint64_t    sortKey;         // +0x30  SaveGameInfo+0x00; qsort key, DESCENDING
+        System::DateTime sortKey;    // +0x30  SaveGameInfo+0x00; qsort key (its 64-bit ticks), DESCENDING
         System::String name;         // +0x38
         int32_t     saveIndex;       // +0x40  Persistence save index; -1 == the blank row
         int32_t     field44;         // +0x44  LoadMetaData out-param 6 (format version)
