@@ -357,6 +357,11 @@ static_assert(offsetof(Configuration, effectVolume)  == 0x0c, "GetEffectVolume: 
 
 }  // namespace Audio
 
+namespace rtsort {
+// collection/introsort.cpp -- 0x180050d30 `Collection::Array<EmitterInstance>::operator=`.
+void* Array16Assign(Collection::Array<Audio::Scene::EmitterInstance>* dst, const void* srcRaw);
+}  // namespace rtsort
+
 // ----------------------------------------------------------------------------
 // The pre-B.3.7 spellings, kept as ALIASES of the classes (one definition per
 // layout, B7-6) until their last user converts.
