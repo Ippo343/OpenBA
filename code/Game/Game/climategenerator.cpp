@@ -101,7 +101,7 @@ bool ClimateGenerator::Serialize(IO::Stream& stream) {
 
     // Serialize climate data block: 0x30 (48) floats = 0xC0 bytes at +0x44 — declared
     // uint8_t[0xC0]: reinterpret to float* per the float-array door
-    s.Serialize(0x30, reinterpret_cast<float*>(_climateData), nullptr);   // LEFT: ClimateGenerator.h _climateData stays uint8_t[0xC0]: weather_sim.cpp:173 indexes it as bytes
+    s.Serialize(0x30, _climateData, nullptr);
 
     // Serialize float fields at end: field104(+0x104), field108(+0x108), field10C(+0x10C)
     s.Serialize(_field104, nullptr);

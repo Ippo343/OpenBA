@@ -51,11 +51,6 @@
 
 // M3.5 Path B session 8 — top-level Geometry serializers used by Serialize.
 
-// FUN_14001b860 — the tree/map cleanup for +0x1C8 / +0x1E8 (game_leaf_helpers.cpp,
-// registered at that address in reg_game_leaf.cpp). Called directly: the old
-// lazily-resolved pointer (a non-atomic first-call cache, B6-5) resolved to it.
-void Game_MenuSceneArrayDtor(void* self);
-
 // One-shot log latches for Serialize (namespace scope, atomic: B6-5 — the scene
 // loads on the loader thread).
 namespace {
@@ -116,17 +111,6 @@ MenuScene::MenuScene() {
     sunIntensity     = 120.0f;      // 0x42f00000
     ambientIntensity = 65.0f;       // 0x42820000
 
-    // Tree/map at +0x1C8 (ptr, ptr, root, count)
-    _field1C8 = nullptr;
-    _field1D0 = nullptr;
-    _field1D8 = nullptr;
-    _field1E0 = 0;
-
-    // Tree/map at +0x1E8 (same layout)
-    _field1E8 = nullptr;
-    _field1F0 = nullptr;
-    _field1F8 = nullptr;
-    _field200 = 0;
 }
 
 // ============================================================
@@ -152,9 +136,8 @@ MenuScene::~MenuScene() {
         delete geometry;  // flags=1 => free memory
     }
 
-    // Cleanup tree/map at +0x1E8 and +0x1C8
-    Game_MenuSceneArrayDtor(&_field1E8);
-    Game_MenuSceneArrayDtor(&_field1C8);
+    // Then the compiler runs ~MenuSceneTreeMap (0x14001b860) on +0x1E8 and
+    // +0x1C8, frees the four arrays and destroys the String: retail's order.
 }
 
 // ============================================================

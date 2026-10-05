@@ -61,9 +61,9 @@
 // (0x14001ced0), RegionGraph::ReleaseStorage (0x1400a8570),
 // PathfinderThread::~PathfinderThread (0x1400a6720) / DrainQueue (0x1400a6690),
 // Map::~Map (0x14009ed60); 0x14001a450 / 0x14001dac0 / 0x14001e3a0 are inlined
-// into their one caller each, on the named arrays. LEFT: Map::pickingScene and
-// the PathfinderThread lock are raw storage reached through their doors /
-// ~Scene (H5), Map::regionPairCache is int64_t* (gameupdateloop.cpp hands it to
+// into their one caller each, on the named arrays. Map::pickingScene is a real member
+// (B4 wave Y). LEFT: the PathfinderThread lock is raw storage reached through
+// its door (H5), Map::regionPairCache is int64_t* (gameupdateloop.cpp hands it to
 // a body taking int64_t*).
 #include "Game/PathfinderThread.h"
 #include "Game/Map.h"
@@ -310,8 +310,7 @@ Map::~Map() {
     cellCount = 0;                                              // [+0x88] = 0 (one qword, H7)
     cellCapacity = 0;
 
-    // LEFT: +0x08 is raw storage (H5: Picking::Scene's ctor / dtor would run).
-    reinterpret_cast<Picking::Scene*>(pickingScene)->Picking::Scene::~Scene();   // tail-call   // LEFT: +0x08 is raw storage (H5: Picking::Scene's ctor / dtor would run).
+    // Then the compiler runs ~Picking::Scene on +0x08 (retail's tail-JMP).
 }
 
 // B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a). The caller MemFrees

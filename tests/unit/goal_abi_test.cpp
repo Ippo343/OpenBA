@@ -293,7 +293,7 @@ UNIT_TEST(tutorial_and_step_are_retail_9_slots) {
     CHECK_SLOT(TutorialStep, Construct, 0x40/8);
     CheckShape<TutorialStep, Object::External>(false);
     CHECK_EQ(sizeof(TutorialStep), (size_t)0x70);
-    CHECK_EQ(offsetof(TutorialStep, goalCount), (size_t)0x68);
+    CHECK_EQ(offsetof(TutorialStep, goals._size), (size_t)0x68);
 }
 
 // ===========================================================================
