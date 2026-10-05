@@ -283,8 +283,8 @@ UNIT_TEST(wrk_leaf_plantorchard) {
     CHECK_EQ(offsetof(PlantOrchard, _cells), (size_t)0x48);
     CHECK_EQ(offsetof(PlantOrchard, _cells) + offsetof(PlantOrchard::CellSet, _count), (size_t)0x50);
     CHECK_EQ(offsetof(PlantOrchard, field_58), (size_t)0x58);
-    CHECK_EQ(offsetof(PlantOrchard, field_60), (size_t)0x60);
-    CHECK_EQ(offsetof(PlantOrchard, field_64), (size_t)0x64);
+    CHECK_EQ(offsetof(PlantOrchard, field_58) + offsetof(PlantOrchard::SlotFlags, _size), (size_t)0x60);
+    CHECK_EQ(offsetof(PlantOrchard, field_58) + offsetof(PlantOrchard::SlotFlags, _capacity), (size_t)0x64);
     CHECK_EQ(offsetof(PlantOrchard, field_68), (size_t)0x68);
 }
 
