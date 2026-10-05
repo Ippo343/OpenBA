@@ -1222,7 +1222,7 @@ void EntityList::Serialize(IO::Stream& stream) {
     if (ibpCount > 0) {
         for (int64_t j = 0; j < ibpCount; j++) {
             ComponentEntity** currentIBP = &ibpIter[j];
-            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge   // LEFT: the IBPArray element is the InternalPtr<ComponentEntity> slot held as ComponentEntity* (EntityList.h): InternalBasePtr::Serialize reads the slot
+            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge   // LEFT: B4 H5-P2 (not reached): masterArray is IBPArray (Array<ComponentEntity*>) where retail's element is InternalPtr<ComponentEntity> (the buckets are retyped, UpdateBucket); its readers are ~25 files, 20 of them standalone harnesses walking `ComponentEntity** arr = masterArray._data`: the master-array retype is that sweep
 
             // After loading, verify it's a ComponentEntity
             if (*currentIBP != nullptr) {
