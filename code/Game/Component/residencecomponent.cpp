@@ -448,7 +448,7 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
         _entity->SendEvent(2);   // variant 2 = occupied
     }
     // Grow the family array to count+1 and append the citizen pointer (*citizenIBP).
-    ActHunt_DynArraySetCount_3110(rec, rec->count + 1, citizenIBP);
+    QwordArraySetSize(&GameColl::AsArray<CitizenComponent*>(rec), rec->count + 1, citizenIBP);   // Family is a raw triple: the coll_bridge view
     // Re-read count (3110 updated it) and sort the family when it holds >1 member.
     int newCount = rec->count;
     if (newCount > 1)

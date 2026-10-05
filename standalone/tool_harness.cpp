@@ -1035,7 +1035,7 @@ void FireMarkRemoval() {
     // ActHunt_DynArraySetCount_3110 (0x140003110).
     fprintf(stderr, "[MarkRemoval] MarkForRemoval(c2ea0)=%p ArrayPush(3110)=%p\n",
             reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
-            reinterpret_cast<void*>(&ActHunt_DynArraySetCount_3110));
+            reinterpret_cast<void*>(static_cast<void (*)(RawArray<void*>*, int, void* const*)>(&QwordArraySetSize)));
 
     // Scan a rectangle near map centre for the first markable entity (either cell slot).
     const int lo = 110, hi = 146;
@@ -1069,7 +1069,7 @@ void FireMarkRemoval() {
                 // --- Step 2: push onto EntityList removalList (+0xD0) ---
                 IBPArray* rl = &entityList->removalList;
                 int cntBefore = rl->_size;
-                ActHunt_DynArraySetCount_3110(rl, cntBefore + 1, &local);
+                QwordArraySetSize(rl, cntBefore + 1, &local);
                 int cntAfter = rl->_size;
 
                 fprintf(stderr, "[MarkRemoval] MARKED: flags 0x%08x -> 0x%08x (bit0x400 %s), "
@@ -1161,13 +1161,13 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     if (!local || !entityList) {
         fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
                local, reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
-               reinterpret_cast<void*>(&ActHunt_DynArraySetCount_3110), entityList);
+               reinterpret_cast<void*>(static_cast<void (*)(RawArray<void*>*, int, void* const*)>(&QwordArraySetSize)), entityList);
         return;
     }
     ActHunt_MarkEntityRemoval_c2ea0(local);                                   // 0x1400c2ea0
     IBPArray* rl = &entityList->removalList;
     int cntBefore = rl->_size;
-    ActHunt_DynArraySetCount_3110(rl, cntBefore + 1, &local);   // 0x140003110
+    QwordArraySetSize(rl, cntBefore + 1, &local);   // 0x140003110
     fprintf(stderr, "[PinPanel] MARKED house flags(+0x40)=0x%08x removalList %d->%d — watching the guard "
            "across the free (rawDS vs CheckPtr-hardened)...\n",
            local->_entityFlags,

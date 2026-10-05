@@ -748,7 +748,7 @@ bool RemovalTool::CalcPath(int param_2, int param_3) {
                             EntityList* lst = GameUpdateLoop::_singleton->m_entityList;
                             if ((local_e0->_entityFlags >> 10 & 1) == 0) {
                                 MarkEntityForRemoval(local_e0);
-                                ActHunt_DynArraySetCount_3110(&lst->removalList,
+                                QwordArraySetSize(&lst->removalList,
                                                               lst->removalList._size + 1, &local_e0);
                             }
                         } else {

@@ -59,6 +59,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"
+#include "Component/coll_bridge.h"   // GameColl::AsArray (PastureComponent::animals is a raw triple)
 #include "Work/exe_bodies.h"
 #include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Game/exe_constants.h"
@@ -143,7 +144,7 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     CitizenBehavior* town = Town();
     LivestockComponent* selfRef = this;
     if (cur == nullptr) {
-        if (town) CemeteryListErase_Reimpl(&town->livestock._data, &selfRef);
+        if (town) CemeteryListErase_Reimpl(&town->livestock, &selfRef);
     } else {
         CemeteryListErase_Reimpl(&cur->animals, &selfRef);
         AnimalComponent* animal = _entity->FindComponent<AnimalComponent>();   // 0x140005500
@@ -153,10 +154,10 @@ void LivestockComponent::SetPasture(PastureComponent* const* pastureRef) {
     pasture = target;
     LivestockComponent* againRef = this;
     if (target) {
-        ActHunt_DynArraySetCount_3110(&target->animals, target->animalCount + 1, &againRef);
+        QwordArraySetSize(&GameColl::AsArray<LivestockComponent*>(&target->animals), target->animalCount + 1, &againRef);   // the raw triple PastureComponent::animals (+0x30) through the coll_bridge view
         PenInPasture();   // 0x1401240a0
     } else if (town) {
-        ActHunt_DynArraySetCount_3110(&town->livestock._data, town->livestock._size + 1, &againRef);
+        QwordArraySetSize(&town->livestock, town->livestock._size + 1, &againRef);
     }
 }
 
@@ -332,11 +333,11 @@ void PastureComponent::ReleaseAllAnimals() {
         animal->pasture = nullptr;
         LivestockComponent* backRef = animal;
         if (town)
-            ActHunt_DynArraySetCount_3110(&town->livestock._data, town->livestock._size + 1, &backRef);
+            QwordArraySetSize(&town->livestock, town->livestock._size + 1, &backRef);
     }
 
     PastureComponent* selfRef = this;
-    if (town) CemeteryListErase_Reimpl(&town->pastures._data, &selfRef);
+    if (town) CemeteryListErase_Reimpl(&town->pastures, &selfRef);
 }
 
 // ============================================================
@@ -356,7 +357,7 @@ char PastureComponent::EnterOperational() {
     CitizenBehavior* town = Town();
     PastureComponent* selfRef = this;
     if (town)
-        ActHunt_DynArraySetCount_3110(&town->pastures._data, town->pastures._size + 1, &selfRef);
+        QwordArraySetSize(&town->pastures, town->pastures._size + 1, &selfRef);
 
     WorkPlaceComponent* wpc = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
     if (wpc) wpc->SetAccepting(false);   // 0x14012fc00 (WorkPlaceComponent_SetAccepting's member)
