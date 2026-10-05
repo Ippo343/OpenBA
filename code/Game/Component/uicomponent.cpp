@@ -15,8 +15,8 @@
 #include "Component/UIComponent.h"
 
 // 0x14012de00: Component() is the CALL 0x1401188b0; the 0x1401649f0 stamp is
-// the compiler's; +0x28 = +0x30 = 0; flags |= 0x80.
-UIComponent::UIComponent() : data(nullptr), dataCount(0), dataCap(0) {
+// the compiler's; +0x28 = +0x30 = 0 (the inlined Array ctor); flags |= 0x80.
+UIComponent::UIComponent() {
     OrFlagsInCtor(0x80);
 }
 

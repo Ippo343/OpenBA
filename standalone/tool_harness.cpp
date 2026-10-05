@@ -1289,18 +1289,18 @@ static void DlgSettings_InstallBuffer(ComponentEntity* entity, int idx) {
         fprintf(stderr, "\n");
         return;
     }
-    void* existing = uiComp->data;
+    void* existing = uiComp->data._data;
     if (existing) {
         fprintf(stderr, "[DlgSettings:route] house[%d] ALREADY has a buffer %p count=%u -- left alone\n",
-                idx, existing, uiComp->dataCount);
+                idx, existing, uiComp->data._size);
         return;
     }
     uint8_t* buf = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(bytes), 8));
     if (!buf) { fprintf(stderr, "[DlgSettings:route] house[%d] MemAlloc failed\n", idx); return; }
     std::memset(buf, 0, static_cast<size_t>(bytes));
-    uiComp->data      = buf;
-    uiComp->dataCount = bytes;
-    uiComp->dataCap   = bytes;
+    uiComp->data._data     = buf;
+    uiComp->data._size     = bytes;
+    uiComp->data._capacity = bytes;
     fprintf(stderr, "[DlgSettings:route] house[%d] UIComponent=%p settings buffer=%p bytes=%d "
             "(zeroed -- first open must report badMagic)\n", idx, uiComp, buf, bytes);
 }
@@ -1437,9 +1437,9 @@ static void FireUIComponentCensus() {
         if (!uiComp) continue;
         ++withUI;
 
-        void* buf   = uiComp->data;
-        uint32_t n  = uiComp->dataCount;
-        uint32_t cap= uiComp->dataCap;
+        void* buf   = uiComp->data._data;
+        uint32_t n  = uiComp->data._size;
+        uint32_t cap= uiComp->data._capacity;
         if (buf && n) ++withBuffer;
         if (shown < maxShow) {
             ++shown;
@@ -1577,7 +1577,7 @@ static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
             if (!comp) continue;
             const uint32_t tid = comp->Type();
             if (tid != tidUIComp) continue;
-            uint8_t* buf = static_cast<UIComponent*>(comp)->data;
+            uint8_t* buf = static_cast<UIComponent*>(comp)->data._data;
             fprintf(stderr, "[DlgSettings:route] after close, A's buffer=%p "
                     "head=%08x (0xdeadbeef means SaveSettings wrote it)\n",
                     buf, buf ? *reinterpret_cast<uint32_t*>(buf) : 0u);   // the settings buffer's first dword (the magic), byte storage  // CAST-OK: byte_io

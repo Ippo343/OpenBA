@@ -31,7 +31,6 @@
 // yet (GameUpdateLoop::SaveRestore is a no-op stub), so this is unreachable
 // today; it brings the class to parity with the rest of the save/load wave.
 #include "Component/UIComponent.h"
-#include "Component/coll_bridge.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 
@@ -44,13 +43,14 @@ void UIComponent::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    int count = dataCount;   // +0x30
+    int count = data._size;   // +0x30
     ser.Serialize(count, nullptr);
-    // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
+    // FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n): no init arm, and the
+    // byte read below writes every one of the `count` bytes.
     // True when the serializer is READING (retail: *(int*)(stream + 8) == 0).
     if (static_cast<int>(ser.GetDirection()) == 0)   // IO::Serializer::GetDirection, retail 0x180006210
-        GameColl::AsArray<GameColl::U8>(&data).SetSize(count);
+        data.SetSize(count);
 
-    ser.Serialize(count, data, nullptr);
+    ser.Serialize(count, data._data, nullptr);
 }
 
