@@ -196,7 +196,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
             animal->_flags = after;
             if (static_cast<uint16_t>(before) != static_cast<uint16_t>(after) &&
                 animal->_entity != nullptr) {
-                ActHunt_NotifyEntityChanged_c3470(animal->_entity);
+                NotifyEntityChanged(animal->_entity);
             }
 
             // The roam rect: where this animal is allowed to wander.

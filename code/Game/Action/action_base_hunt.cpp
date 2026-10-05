@@ -151,17 +151,3 @@ void NotifyEntityChanged(ComponentEntity* entity) {
 // Map::FinishRoadCell in action_pf_roots_road.cpp.
 // ============================================================
 
-// ===========================================================================
-// B4 FORWARD: the C spellings other blocks' files still call, one line each.
-// ===========================================================================
-
-
-// B4 FORWARD: outside callers in many files
-void ActHunt_MarkEntityRemoval_c2ea0(void* self) {
-    MarkEntityForRemoval(reinterpret_cast<ComponentEntity*>(self));  // LEFT: SIG ActHunt_MarkEntityRemoval_c2ea0: 17 call sites in 15 files (B4 FORWARD) still hand the entity as void*
-}
-
-// B4 FORWARD: outside callers in many files
-void ActHunt_NotifyEntityChanged_c3470(void* self) {
-    NotifyEntityChanged(reinterpret_cast<ComponentEntity*>(self));  // LEFT: SIG ActHunt_NotifyEntityChanged_c3470: 17 call sites in 11 files (B4 FORWARD) still hand the entity as void*
-}

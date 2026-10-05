@@ -489,7 +489,7 @@ int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, i
         // If the component has an entity (+0x10), update it
         ComponentEntity* parentEntity = natResObj->_entity;
         if (parentEntity != nullptr) {
-            ActHunt_NotifyEntityChanged_c3470(parentEntity);
+            NotifyEntityChanged(parentEntity);
         }
     }
     return 0;

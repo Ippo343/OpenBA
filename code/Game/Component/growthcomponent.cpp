@@ -150,7 +150,7 @@ void Component::ModifyFlags(uint32_t orMask, uint32_t andNotMask) {
     uint32_t newF = (oldF | orMask) & ~andNotMask;
     _flags = newF;
     if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
-        ActHunt_NotifyEntityChanged_c3470(_entity);
+        NotifyEntityChanged(_entity);
     }
 }
 
@@ -194,7 +194,7 @@ void NaturalResourceComponent::ResetGrowthState() {
     uint32_t newF = oldF | 0x200000;
     _flags = newF;
     if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
-        ActHunt_NotifyEntityChanged_c3470(_entity);
+        NotifyEntityChanged(_entity);
     }
     NaturalResourceSetAnimation(this, 2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
 }
@@ -473,7 +473,7 @@ void GrowthComponent::Update(const System::Time* time) {
 
         // Notify entity if flags changed
         if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
-            ActHunt_NotifyEntityChanged_c3470(_entity);
+            NotifyEntityChanged(_entity);
         }
 
         // Sub-resource spawning check
@@ -531,7 +531,7 @@ void GrowthComponent::Update(const System::Time* time) {
 
         // Notify entity if flags changed
         if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
-            ActHunt_NotifyEntityChanged_c3470(_entity);
+            NotifyEntityChanged(_entity);
         }
     }
 }
@@ -623,7 +623,7 @@ void GrowthComponent::PostUpdate() {
     uint32_t newFlags = oldFlags & ~0x10u;
     _flags = newFlags;
     if (((newFlags ^ oldFlags) & 0xffff) != 0 && _entity != nullptr) {
-        ActHunt_NotifyEntityChanged_c3470(_entity);
+        NotifyEntityChanged(_entity);
     }
 }
 

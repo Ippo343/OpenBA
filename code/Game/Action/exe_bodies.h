@@ -60,8 +60,6 @@ inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, co
 }
 void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
 void NotifyEntityChanged(ComponentEntity* entity);  // 0x1400c3470 (a second body of ComponentEntity::RefreshEntityFlags)
-void ActHunt_MarkEntityRemoval_c2ea0(void* self);  // 0x1400c2ea0 B4 FORWARD -> MarkEntityForRemoval
-void ActHunt_NotifyEntityChanged_c3470(void* self);  // 0x1400c3470 B4 FORWARD -> NotifyEntityChanged
 
 // ---- action_base_move.cpp
 class CharacterComponent;     // Component/CharacterComponent.h

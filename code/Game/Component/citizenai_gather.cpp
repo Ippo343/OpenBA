@@ -215,7 +215,7 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(c
         changed = after ^ before;
     }
     if ((changed & 0xffff) != 0 && mi->_entity != nullptr) {
-        ActHunt_NotifyEntityChanged_c3470(mi->_entity);
+        NotifyEntityChanged(mi->_entity);
     }
 }
 
