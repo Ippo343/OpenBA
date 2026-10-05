@@ -35,7 +35,7 @@
 #include "Component/BuildDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Player/EditTool.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/exe_bodies.h"
-#include "Player/exe_bodies.h"   // B3R: PlayerTrade_BSTRemove_25740, Avl38Retrace
+#include "Player/exe_bodies.h"   // B3R: Avl38SetRemove (0x140025740), Avl38Retrace
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "ui/CheckElement.h"          // B4 DLG-a: EntityUI::checkPin
 #include "Component/StateMachineComponent.h"
@@ -56,9 +56,9 @@
 // it the +0x50 pinned-dialog set, whose keys are descriptions; the compare is by
 // address, as 0x14002c690's.)
 template <class Node>
-static void EntityTrackingSet_Remove_Impl(Node** root, ComponentEntity* const* key)
+static void EntityTrackingSet_Remove_Impl(AvlTreeHead<Node>* set, ComponentEntity* const* key)
 {
-    Node* node = *root;
+    Node* node = set->root;
     const void* const keyAddr = *key;
 
     while (node != nullptr) {
@@ -67,8 +67,7 @@ static void EntityTrackingSet_Remove_Impl(Node** root, ComponentEntity* const* k
             node = node->left;
         } else if (keyAddr <= nodeKey) {
             // Found the node — delete it
-            // LEFT: the shared AVL helper takes the root as int64_t* (PLAYER's declaration).
-            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740   // LEFT: SIG PlayerTrade_BSTRemove_25740 (B4 FORWARD; Work/tradework.cpp still calls it)
+            Avl38SetRemove(set, node);   // 0x140025740
             return;
         } else {
             node = node->right;
@@ -364,7 +363,7 @@ void EntityUI::OnClosed() {
     // The tracking set: the tool manager (g_pGameWorldSingleton +0x120) +0x60
     PlayerToolManager* tools = GameUpdateLoop::_singleton->m_toolManager;
 
-    EntityTrackingSet_Remove_Impl(&tools->field_0x60.root, &entityKey);
+    EntityTrackingSet_Remove_Impl(&tools->field_0x60, &entityKey);
 }
 
 // ============================================================
@@ -670,7 +669,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         if (checkPin->_checked == 0) {
             ComponentEntity* entityKey = entity;
             PlayerToolManager* worldObj = GameUpdateLoop::_singleton->m_toolManager;
-            EntityTrackingSet_Remove_Impl(&worldObj->field_0x50.root, &entityKey);
+            EntityTrackingSet_Remove_Impl(&worldObj->field_0x50, &entityKey);
             return;
         }
 

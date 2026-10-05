@@ -275,22 +275,33 @@ void TrackManagerPinEntity(PlayerToolManager* manager, ComponentEntity* const* k
 
 } // namespace
 
-// ---- the C entry points other blocks' files still bind (B4 FORWARD) ----------
-// Their callers hold the set and its nodes as integers / void* (WORK's
-// tradework.cpp / tradework_serialize.cpp / marketwork_bst_*.cpp, GAME's
-// gameupdateloop_serialize.cpp, DLG's entityui.cpp, COMP's nomadcomponent.cpp):
-// the casts below are LEFT until those callers hold typed sets. Their nodes are
-// the generic Avl38Node (Player/exe_bodies.h): retail runs the same bodies on
-// every 0x18-element set.
-
-// B4 FORWARD: 2 outside callers (Dialog/entityui.cpp, Work/tradework.cpp)
-extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
-    Avl38Remove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<Avl38Node*>(nodeArg));   // LEFT: B4 FORWARD entityui.cpp / tradework.cpp (other agents') pass int64_t* / void*
+// ---- the typed wrappers (Player/exe_bodies.h) over the two cores ------------
+// B.4 Y GAMEB: the tool manager's two sets reach 0x140025740 / 0x14002c690
+// through these.
+void Avl38SetRemove(AvlTreeHead<TrackedEntityNode>* set, TrackedEntityNode* node) {
+    Avl38Remove(set, node);   // 0x140025740
+}
+void Avl38SetRemove(AvlTreeHead<PinnedToolNode>* set, PinnedToolNode* node) {
+    Avl38Remove(set, node);   // 0x140025740
+}
+void Avl38SetFindRemove(AvlTreeHead<TrackedEntityNode>* set, ComponentEntity* const* key) {
+    Avl38FindRemove(set, key);   // 0x14002c690
 }
 
-// B4 FORWARD: 2 outside callers (Work/tradework.cpp, Component/nomadcomponent.cpp)
+// ---- the C entry points another block's file still binds (B4 FORWARD) -------
+// Work/tradework.cpp holds TradeWork's set as root + count on its own node
+// (Work/TradeWork.h, not this block's): the casts below are LEFT until that
+// set is typed. Their node is the generic Avl38Node (Player/exe_bodies.h):
+// retail runs the same bodies on every 0x18-element set.
+
+// B4 FORWARD: 1 outside caller (Work/tradework.cpp)
+extern "C" void PlayerTrade_BSTRemove_25740(int64_t* root, void* nodeArg) {
+    Avl38Remove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<Avl38Node*>(nodeArg));   // LEFT: B4 FORWARD Work/tradework.cpp passes TradeWork's root + count as int64_t* and its node as void* (Work/TradeWork.h)
+}
+
+// B4 FORWARD: 1 outside caller (Work/tradework.cpp, two sites)
 extern "C" void PlayerTrade_BSTFindRemove_2c690(int64_t* root, void* keyIBP) {
-    Avl38FindRemove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<const void* const*>(keyIBP));   // LEFT: B4 FORWARD tradework.cpp (another agent's) and nomadcomponent.cpp pass int64_t* / void*
+    Avl38FindRemove(reinterpret_cast<AvlTreeHead<Avl38Node>*>(root), reinterpret_cast<const void* const*>(keyIBP));   // LEFT: B4 FORWARD Work/tradework.cpp passes TradeWork's root + count as int64_t* (Work/TradeWork.h)
 }
 
 // ============================================================
