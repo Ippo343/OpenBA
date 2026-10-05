@@ -827,7 +827,7 @@ void DiseaseComponent::Startup() {
 
     if (CDTrace()) {
         printf("[CropDisease] STARTUP this=%p pasture=%d desc=%p entity=%p\n",
-               (void*)this, (int)isPasture, _description, _entity);
+               (void*)this, (int)isPasture, _description, (void*)_entity.Get());
         fflush(stdout);
     }
 }

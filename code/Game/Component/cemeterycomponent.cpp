@@ -357,7 +357,7 @@ void CemeteryComponent::Persist(IO::Stream& stream) {
 
 // [6] 0x140047200 — build the grave-plot grid from the footprint.
 void CemeteryComponent::OnAdded() {
-    CEM_TRACE("enter comp=%p owner=%p", (void*)this, _entity);
+    CEM_TRACE("enter comp=%p owner=%p", (void*)this, (void*)_entity.Get());
     if (GameUpdateLoop::_singleton == nullptr) {
         CEM_TRACE("BAIL deps: gs=%p",
                   (void*)(GameUpdateLoop::_singleton));
