@@ -50,6 +50,7 @@
 #include <type_traits>
 
 #include "../system/Thread.h"
+#include "../collection/Collection.h"   // Collection::Array<Block> _buffers
 
 namespace RtAudio {
 
@@ -135,9 +136,10 @@ public:
 
     // ---- the 0x58 bytes Stream adds, at retail's offsets (public: the doors
     // and Audio::Device reach them) ----
-    Block*   _buffers;                  // +0x30  Array<Block>::_data (Run reads it)
-    int32_t  _buffersSize;              // +0x38  Array<Block>::_size
-    int32_t  _buffersCapacity;          // +0x3c  Array<Block>::_capacity
+    // ctor 0x1800a0e67/0x1800a0e6b zero stores; ~Stream 0x1800a0dd4 CALL
+    // 0x18000c4a0 (J1: free, zero; Block is trivial) after the body's handles
+    // and critical section.
+    Collection::Array<Block> _buffers;  // +0x30  (Run reads it)
     void*    _wakeEvent;                // +0x40  HANDLE — Play's "track changed"
     void*    _bufferEvent;              // +0x48  HANDLE — PlatformChannel OnBufferEnd
     alignas(8) uint8_t _lock[0x28];     // +0x50  CRITICAL_SECTION (B5-6: opaque)
@@ -155,7 +157,7 @@ static_assert(std::is_polymorphic<Stream>::value && !std::is_abstract<Stream>::v
 static_assert(sizeof(Stream) == sizeof(RtAudio::Stream), "Stream class == POD");
 static_assert(offsetof(Stream, _runFlags)      == offsetof(RtSystem::Thread, runFlags), "alias runFlags");
 static_assert(offsetof(Stream, _buffers)       == offsetof(RtAudio::Stream, _buffers),       "alias +0x30");
-static_assert(offsetof(Stream, _buffersSize)   == offsetof(RtAudio::Stream, _buffersSize),   "alias +0x38");
+static_assert(offsetof(Stream, _buffers) + 0x08 == offsetof(RtAudio::Stream, _buffersSize),  "alias +0x38");
 static_assert(offsetof(Stream, _wakeEvent)     == offsetof(RtAudio::Stream, _wakeEvent),     "alias +0x40");
 static_assert(offsetof(Stream, _bufferEvent)   == offsetof(RtAudio::Stream, _bufferEvent),   "alias +0x48");
 static_assert(offsetof(Stream, _lock)          == offsetof(RtAudio::Stream, _lock),          "alias +0x50");
