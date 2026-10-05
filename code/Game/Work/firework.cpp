@@ -517,7 +517,7 @@ FireWork::FireWork() : Work(), _field48(0), _field4C(0) {
 
 // 0x1400e9bd0: `MOV dword [RDI+0x48],EBX` -- a DWORD store; +0x4C keeps whatever
 // the allocation held (retail's).
-FireWork::FireWork(void* pEntityIBP, uint32_t capacity)
+FireWork::FireWork(ComponentEntity* const* pEntityIBP, uint32_t capacity)
     : Work(pEntityIBP), _field48(static_cast<int32_t>(capacity)) {
 }
 

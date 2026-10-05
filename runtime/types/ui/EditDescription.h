@@ -59,10 +59,9 @@ public:
     // bytes after +0x7c stay unwritten.
     EditDescription() : ElementDescription() {
         _ptr68    = nullptr;
-        _string70 = nullptr;
+        // +0x70 / +0x80: the System::String members' own String() (B4 Y RT-UI).
         _word78   = 0;
         _flag7c   = 0;
-        _string80 = nullptr;
     }
 
     // [0] 0x18003fa20 — MSVC's VECTOR deleting destructor, both arms exactly as
@@ -96,11 +95,11 @@ private:
 
 public:
     Font*   _ptr68;       // +0x68  ExternalPtr<UI::Font>
-    char*   _string70;    // +0x70  System::String (refcounted char*)
+    System::String _string70;  // +0x70  ctor 0x1800d12c0, dtor 0x1800d11f0 (second release)
     int32_t _word78;      // +0x78  kScalarInt
     bool    _flag7c;      // +0x7c  kScalarBool (B4: retail's SerializeBool operand)
     uint8_t _pad7d[3];    // +0x7d  never written
-    char*   _string80;    // +0x80  System::String (refcounted char*)
+    System::String _string80;  // +0x80  ctor 0x1800d12c0, dtor 0x1800d11f0 (first release)
 };
 
 static_assert(sizeof(EditDescription) == 0x88,

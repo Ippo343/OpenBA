@@ -85,7 +85,7 @@ int ClearAreaComponent::FootprintSweep() {
             if (occ->_entityFlags & 0x400) continue;   // already marked for removal
 
             // Mark + push (the proven backend).
-            ActHunt_MarkEntityRemoval_c2ea0(occ);
+            MarkEntityForRemoval(occ);
             IBPArray* rl = &entityList->removalList;
             int cnt = rl->_size;
             // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).

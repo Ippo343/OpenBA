@@ -41,7 +41,7 @@ public:
     // DestroyComponent's state-3 exit (retail builds it inline, 0x14011cfd0):
     // the entity-seeded Work base ctor 0x1400f72e0, then +0x48..+0x60 zero as
     // four qwords. ENDGAME B.3.9 OBJ: replaces the `??0Internal` door + stamp.
-    explicit ClearStorage(void* pEntityIBP);
+    explicit ClearStorage(ComponentEntity* const* pEntityIBP);
 
     // 0x1400e73b0: the compiler's chain over the two members (set, then +0x48)
     ~ClearStorage() override;                                       // [0]  0x14002a100

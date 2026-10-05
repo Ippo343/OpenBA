@@ -1274,20 +1274,20 @@ Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const
 
     const ElementDescription* target = desc;   // the no-match answer: the argument itself
     bool  matched = false;
-    const int32_t count = _namedTemplateCount;
+    const int32_t count = _namedTemplates._size;
     for (int32_t i = 0; i < count; ++i) {
         const RtUI::DialogNamedTemplate& e = _namedTemplates[i];
         const int32_t lenOurs   = name    ? RtSystem::StringLength(name)    : 0;
-        const int32_t lenTheirs = e._name ? RtSystem::StringLength(e._name) : 0;
+        const int32_t lenTheirs = e._name._data ? RtSystem::StringLength(e._name._data) : 0;
         if (lenOurs != lenTheirs) continue;
 
         if (!name)             { matched = true; }            // 0x180112fd5
         else if (lenOurs == 0) { matched = true; }            // 0x180112fdb
-        else if (!e._name)     { matched = false; }           // LEA ECX,[R8+1] -> 1
+        else if (!e._name._data) { matched = false; }           // LEA ECX,[R8+1] -> 1
         else {
             // The inlined strcmp at 0x180112fe8..0x180113021, transcribed.
             const char* a = name;
-            const char* b = e._name;
+            const char* b = e._name._data;
             size_t k = 0;
             unsigned char c = static_cast<unsigned char>(a[0]);
             if (c == static_cast<unsigned char>(b[0])) {
@@ -1363,26 +1363,12 @@ void ElementDescription::InitFields() {
     _childDesc = nullptr;                     // +0x48
     _toolTipDialog = nullptr;                 // +0x50
     _stringTable = nullptr;                   // +0x58
-    _textName = nullptr;                      // +0x60
+    // +0x60: the member `_textName`'s String() (B4 Y RT-UI).
 }
 
-// ??1ElementDescription@UI@@UEAA@XZ 0x180116100 MINUS the restamp and the
-// ~External tail: the one String release, the body of `~ElementDescription()`.
-void ElementDescription::ReleaseFields() {
-    // Retail's String release, with its asymmetry intact: the FREEING branch
-    // leaves the field holding `data - 8` (dangling), the SHARING branch nulls
-    // it. See runtime/types/system/String.h.
-    if (char* p = _textName) {
-        if (--RtSystem::StringRefCount(p) == 0) {
-            _textName = p - 8;
-            // No function-local cache (B9-10: UI is torn down on the loader
-            // thread too); MemFreeStatic is the retry-a-miss door.
-            MemFreeStatic(_textName);
-        } else {
-            _textName = nullptr;
-        }
-    }
-}
+// ??1ElementDescription@UI@@UEAA@XZ 0x180116100: the one String release (+0x60)
+// is the member `_textName`'s ~String (B4 Y RT-UI: the hand-written
+// ReleaseFields, with the same two arms, is gone).
 
 
 // ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z
@@ -1445,9 +1431,7 @@ void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) c
     StringTable* const table = _stringTable;
     int32_t index = -1;
     if (table) {
-        // LEFT (H5): _textName is a System::String held as raw char* storage.
-        index = table->GetIndexFromName(                               // 0x180002470
-            *reinterpret_cast<const System::String*>(&_textName));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        index = table->GetIndexFromName(_textName);                    // 0x180002470
     }
     elem = ED_ELEM;
     elem->_toolTip.table = table;                                      // +0x48

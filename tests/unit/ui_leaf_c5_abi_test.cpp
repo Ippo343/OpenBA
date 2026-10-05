@@ -608,7 +608,7 @@ UNIT_TEST(ui_c5_documenttext_layout) {
     CHECK_EQ(offsetof(UI::DocumentTextDescription, _linkColor), (size_t)0x98);
     CHECK_EQ(offsetof(UI::DocumentTextDescription, _resourceList), (size_t)0xe0);
     CHECK_EQ(offsetof(UI::DocumentTextElement, _text), sizeof(UI::Element));
-    CHECK_EQ(offsetof(UI::DocumentTextElement, _linksData),
+    CHECK_EQ(offsetof(UI::DocumentTextElement, _links),
              (size_t)UI::DocumentTextElementOffsets::kLinkArrayData);
     CHECK_EQ(offsetof(UI::DocumentTextElement, _sourceText),
              (size_t)UI::DocumentTextElementOffsets::kContentString);
@@ -652,7 +652,7 @@ UNIT_TEST(b39_uib_c5_graph_ctor_stores) {
     CHECK_EQ(gd->_tickSize, 4);
     CHECK_EQ(gd->_unknown74, 0xffffffffu);
     CHECK(gd->_spriteSheet == nullptr);
-    CHECK(gd->_spriteName == nullptr);
+    CHECK(gd->_spriteName._data == nullptr);
     CHECK_EQ(gd->_id, -1);
     gd->~GraphDescription();
 
@@ -683,15 +683,15 @@ UNIT_TEST(b39_uib_c5_documenttext_ctor_stores) {
     std::memset(d, 0xCD, sizeof d);
     auto* dd = ::new (static_cast<void*>(d)) UI::DocumentTextDescription();
     CHECK(dd->_documentStringTable == nullptr);
-    CHECK(dd->_frameNamesData == nullptr);
-    CHECK_EQ(dd->_frameNamesCount, 0);
+    CHECK(dd->_frameNames._data == nullptr);
+    CHECK_EQ(dd->_frameNames._size, 0);
     CHECK_EQ(dd->_linkColor, 0xffeeee00u);
     CHECK_EQ(dd->_linkHoverColor, 0xffffff00u);
     CHECK_EQ(dd->_linkPressedColor, 0xffcccc00u);
     CHECK_EQ(dd->_tabWidth, 4);
     CHECK_EQ(dd->_wrapWidth, 0x12c);
     CHECK_EQ((int)d[0xac], 0xCD);
-    CHECK(dd->_colorsData == nullptr);
+    CHECK(dd->_colors._data == nullptr);
     CHECK(dd->_resourceList == nullptr);
     dd->~DocumentTextDescription();
 
@@ -708,10 +708,10 @@ UNIT_TEST(b39_uib_c5_documenttext_ctor_stores) {
     CHECK_EQ(de->_linkColor, 0xffeeee00u);
     CHECK_EQ(de->_tabWidth, 4);
     CHECK_EQ(de->_wrapWidth, 0x12c);
-    CHECK(de->_itemsData == nullptr);
-    CHECK(de->_linksData == nullptr);
-    CHECK(de->_sourceText == nullptr);
-    CHECK(de->_openLink.text == nullptr);
+    CHECK(de->_items._data == nullptr);
+    CHECK(de->_links._data == nullptr);
+    CHECK(de->_sourceText._data == nullptr);
+    CHECK(de->_openLink.text._data == nullptr);
     CHECK_EQ(de->_openLink.firstItem, -1);
     CHECK_EQ(de->_openLink.lastItem, -1);
     CHECK_EQ((int)de->_openLink.armed, 0);

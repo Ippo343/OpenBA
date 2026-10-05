@@ -306,7 +306,7 @@ System::String StringTable::GetText(int32_t index) const {
     System::String out;                                          // data == null
     if (index >= 0) {                                            // 0x18000256c
         if (index < _size) {                                     // 0x180002573
-            char* text = _data[index].text;                      // 0x180002585
+            char* text = _data[index].text._data;                      // 0x180002585
             if (text) {
                 RtSystem::StringRefCount(text) += 1;
                 out._data = text;
@@ -339,7 +339,7 @@ int32_t StringTable::GetIndexFromName(const System::String& keyString) const {
 
     int result = -1;
     for (int i = 0; i < _size; ++i) {
-        const char* name = _data[i].name;
+        const char* name = _data[i].name._data;
         const int nameLen = (name != nullptr) ? RtSystem::StringLength(name) : 0;
         if (nameLen != keyLen) continue;
         if (name == nullptr || nameLen == 0) { result = i; break; }

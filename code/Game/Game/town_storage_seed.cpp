@@ -209,7 +209,7 @@ extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLoc
     }
     ComponentEntity* entityRef = storageLocationComp->_entity;   // the component's +0x10 entity
     int newCount = townMgr->field_0x00._size + 1;
-    ActHunt_DynArraySetCount_3110(&townMgr->field_0x00._data, newCount, &entityRef);   // 0x140003110
+    QwordArraySetSize(&townMgr->field_0x00, newCount, &entityRef);   // 0x140003110
     // Retail does not dedup here, so EVERY caller is an append. On a LOADED world the
     // tutorial's single starting stockpile came back registered TWICE (count=2, same
     // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of

@@ -551,15 +551,15 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
             EntityList* owner = e->_entityList;
             uint32_t flags = e->_entityFlags;
             if (flags & 4) {
-                void* ibp = nullptr;
+                ::Object::InternalPtr<ComponentEntity> ibp;   // the zeroed slot the placement ctor fills
                 new (&ibp) ::Object::InternalBasePtr(e);   // ComponentEntity is-an Object::Internal (its one base)
-                ActHunt_DynArraySetCount_3110(&owner->stagingUpdate,
+                QwordArraySetSize(&owner->stagingUpdate,
                                               owner->stagingUpdate._size + 1, &ibp);   // 0x140003110
             }
             if (flags & 0x10) {
-                void* ibp = nullptr;
+                ::Object::InternalPtr<ComponentEntity> ibp;   // the zeroed slot the placement ctor fills
                 new (&ibp) ::Object::InternalBasePtr(e);   // ComponentEntity is-an Object::Internal (its one base)
-                ActHunt_DynArraySetCount_3110(&owner->stagingPostUpdate,
+                QwordArraySetSize(&owner->stagingPostUpdate,
                                               owner->stagingPostUpdate._size + 1, &ibp);   // 0x140003110
             }
         }

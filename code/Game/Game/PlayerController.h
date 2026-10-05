@@ -58,9 +58,7 @@ public:
     void UpdateCamera(float fovY, float nearZ, float farZ);
 
     Math::Transform transform;   // +0x00 (both ctors run Transform::Transform first, as retail's do)
-    float   targetX;             // +0x1C look-at target
-    float   targetY;             // +0x20
-    float   targetZ;             // +0x24
+    Math::Vector3 target;        // +0x1C look-at target (Serialize 0x1400988c0: Vector3::Serialize)
     float   yaw;                 // +0x28
     float   pitch;               // +0x2C
     float   distance;            // +0x30
@@ -72,9 +70,9 @@ static_assert(std::is_trivially_destructible<PlayerController>::value,
 static_assert(sizeof(PlayerController) == 0x10C, "PlayerController is 0x10C (Load MemAlloc(0x10c, 4))");
 static_assert(alignof(PlayerController) == 4, "PlayerController is dword-aligned");
 static_assert(offsetof(PlayerController, transform) == 0x00, "PlayerController::transform @ +0x00");
-static_assert(offsetof(PlayerController, targetX) == 0x1C, "PlayerController::targetX @ +0x1C");
-static_assert(offsetof(PlayerController, targetY) == 0x20, "PlayerController::targetY @ +0x20");
-static_assert(offsetof(PlayerController, targetZ) == 0x24, "PlayerController::targetZ @ +0x24");
+static_assert(offsetof(PlayerController, target) == 0x1C, "PlayerController::target @ +0x1C");
+static_assert(offsetof(PlayerController, target.y) == 0x20, "PlayerController::target.y @ +0x20");
+static_assert(offsetof(PlayerController, target.z) == 0x24, "PlayerController::target.z @ +0x24");
 static_assert(offsetof(PlayerController, yaw) == 0x28, "PlayerController::yaw @ +0x28");
 static_assert(offsetof(PlayerController, pitch) == 0x2C, "PlayerController::pitch @ +0x2C");
 static_assert(offsetof(PlayerController, distance) == 0x30, "PlayerController::distance @ +0x30");

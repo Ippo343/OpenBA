@@ -296,9 +296,9 @@ void FollowDialog::OnUpdate(const System::Time& /*time*/) {
         GameUpdateLoop* world = GameUpdateLoop::_singleton;
         PlayerController* cameraSys = world ? world->m_playerController : nullptr;
         if (cameraSys) {
-            cameraSys->targetX = posX;
-            cameraSys->targetY = posZ;
-            cameraSys->targetZ = 0.0f;
+            cameraSys->target.x = posX;
+            cameraSys->target.y = posZ;
+            cameraSys->target.z = 0.0f;
         }
     }
 

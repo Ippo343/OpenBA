@@ -54,6 +54,7 @@
 #include "Game/Map.h"
 #include "Game/PlayerToolManager.h"
 #include "Action/exe_bodies.h"
+#include "Component/coll_bridge.h"   // GameColl::AsArray (MultiObjectComponent::children is a raw triple)
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"
 #include "Entity/componententity_funcs.h"
@@ -130,7 +131,7 @@ void CellWorldPos(Map* mapGrid, int col, int row, float out[3]) {
 // Append the entity to the master's MultiObject list (0x140003110 on +0x48).
 void AppendChild(MultiObjectComponent* multi, ComponentEntity* entity) {
     ComponentEntity* val = entity;
-    ActHunt_DynArraySetCount_3110(&multi->children, multi->childCount + 1, &val);
+    QwordArraySetSize(&GameColl::AsArray<ComponentEntity*>(&multi->children), multi->childCount + 1, &val);   // children is a raw triple: the coll_bridge view
 }
 
 // Register the entity with the EntityList under its template's category (+0x20).

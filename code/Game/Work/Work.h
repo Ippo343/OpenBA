@@ -136,7 +136,7 @@ public:
     // The body of the shared base ctor 0x1400f72e0 MINUS its `??0Internal` call
     // and vptr store. `Work(void*)` runs it after the compiler's stamps (its
     // by-address door `Work_Ctor25_Impl` went at ENDGAME B.3.9 OBJ).
-    void InitFromEntity(void* pEntityIBP);
+    void InitFromEntity(ComponentEntity* const* pEntityIBP);
 
     // 0x1400f7100: is `citizen` still working this job? True when one of the
     // citizen's actions up to the running one (CharacterComponent +0x48 array,
@@ -163,7 +163,7 @@ protected:
     // 0x1400e4ad0). The vptr stores are the compiler's.
     Work();
     // 0x1400f72e0: the entity-seeded base ctor (Work_Ctor25).
-    explicit Work(void* pEntityIBP);
+    explicit Work(ComponentEntity* const* pEntityIBP);
 
 public:
     // Vtable() (DECLARE_EXE_TYPE) is the compiler's vtable (B38 D5): served at

@@ -70,7 +70,7 @@ extern bool ForesterWork_ExecuteReady();
 // ForesterWork::Execute driver (foresterwork.cpp): runs the forester work tick directly with
 // the worker citizen's IBP (the Work-driver ABI). Returns the work result code; on finding a
 // harvestable tree it pushes a PerformWork (cut) sequence onto the citizen's action stack.
-extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP);
+extern "C" int ForesterWork_ForceDrive(Work* self, CitizenComponent** citizenIBP);
 
 static bool ForceForesterEnvOn() {
     static int s = -1;

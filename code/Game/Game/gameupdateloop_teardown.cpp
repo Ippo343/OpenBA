@@ -101,14 +101,14 @@ extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
 // pair array (+0x00)
 // ============================================================
 extern "C" void ArrayPlusTree_Clear_171b0(PathGraph* self) {
-    PathCostNode* root = self->m_bstRoot;
+    PathCostNode* root = self->m_bst.root;
     if (root) {
-        WorkBase_TreeNodeFree_e320(&self->m_bstRoot, root->left);
-        WorkBase_TreeNodeFree_e320(&self->m_bstRoot, root->right);
+        WorkBase_TreeNodeFree_e320(&self->m_bst.root, root->left);
+        WorkBase_TreeNodeFree_e320(&self->m_bst.root, root->right);
         MemFree(root);
     }
-    self->m_bstRoot = nullptr;
-    self->m_bstCount = 0;
+    self->m_bst.root = nullptr;
+    self->m_bst.count = 0;
     Arr(self, 0x00).~Array();   // LEFT: PathGraph::m_pairs (Entity/CitizenBehavior.h, X6-CW) is three raw fields, not a Collection::Array (H5)
 }
 
@@ -163,7 +163,7 @@ extern "C" void TreeNodeFree_2df90(void* hdrV, ToolRegistryNode* node) {
     TreeNodeFree_2df90(hdrV, node->left);
     TreeNodeFree_2df90(hdrV, node->right);
     if (node->toolSetting != nullptr)
-        reinterpret_cast< ::Object::InternalBasePtr*>(&node->toolSetting)->DeletePtr();   // LEFT: ToolRegistryNode::toolSetting is an InternalPtr<ToolSetting> held as T* (H5, as Tool::toolSetting)
+        node->toolSetting.DeletePtr();
     MemFree(node);
 }
 
@@ -176,7 +176,7 @@ extern "C" void IbpTree_Clear_2de90(ToolRegistryNode** hdrV) {
         TreeNodeFree_2df90(hdrV, root->left);
         TreeNodeFree_2df90(hdrV, root->right);
         if (root->toolSetting != nullptr)
-            reinterpret_cast< ::Object::InternalBasePtr*>(&root->toolSetting)->DeletePtr();   // LEFT: ToolRegistryNode::toolSetting is an InternalPtr<ToolSetting> held as T* (H5, as Tool::toolSetting)
+            root->toolSetting.DeletePtr();
         MemFree(root);
     }
     *hdrV = nullptr;
@@ -265,7 +265,7 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
     // drop the IBP.
     if (self->currentTool != nullptr) {
         self->currentTool->Shutdown();   // slot 5
-        reinterpret_cast< ::Object::InternalBasePtr*>(&self->currentTool)->DeletePtr();   // LEFT: PlayerToolManager::currentTool is a bare Tool* where retail holds an InternalPtr<Tool> (ctor 0x1401025fe, DeletePtr 0x14010250c); typing it rewrites its reader lines in eight X6-GAME-B / X6-CW files
+        self->currentTool.DeletePtr();   // 0x14010250c
     }
 
     self->cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)
@@ -349,13 +349,13 @@ extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self) {
 
     // Tree at +0x10 (kids +0x10/+0x18).
     {
-        WorkSchedulerCountNode* root = self->field_0x10;
+        WorkSchedulerCountNode* root = self->field_0x10.root;
         if (root) {
-            WorkBase_TreeNodeFree_14c30(&self->field_0x10, root->left);
-            WorkBase_TreeNodeFree_14c30(&self->field_0x10, root->right);
+            WorkBase_TreeNodeFree_14c30(&self->field_0x10.root, root->left);
+            WorkBase_TreeNodeFree_14c30(&self->field_0x10.root, root->right);
             MemFree(root);
         }
-        self->field_0x18 = 0;
-        self->field_0x10 = nullptr;
+        self->field_0x10.count = 0;
+        self->field_0x10.root = nullptr;
     }
 }

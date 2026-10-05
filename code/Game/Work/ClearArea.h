@@ -36,7 +36,7 @@ public:
     ClearArea();                                                    // 0x1400e68d0
     // 0x1400e6960: `Work(pEntityIBP)` (retail's CALL Work_Ctor25 on a copy of
     // *pEntityIBP), then +0x48..+0x60 = 0, +0x68 = descRef (raw), +0x70..+0x72.
-    ClearArea(void* pEntityIBP, ComponentDescription* descRef, uint8_t clearTrees,
+    ClearArea(ComponentEntity* const* pEntityIBP, ComponentDescription* descRef, uint8_t clearTrees,
               uint8_t clearGround, uint8_t clearBuildings);
 
     // 0x1400e6810: frees both BSTs

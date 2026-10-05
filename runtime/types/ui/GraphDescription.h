@@ -57,7 +57,6 @@ public:
         _tickSize    = 4;
         _unknown74   = 0xffffffffu;
         _spriteSheet = nullptr;
-        _spriteName  = nullptr;
     }
 
     // ---- the ten slots, in retail order -----------------------------------
@@ -95,7 +94,7 @@ public:
     int32_t  _tickSize;     // +0x70  ctor 4   -> GraphElement::_tickSize  (+0xc8)
     uint32_t _unknown74;    // +0x74  ctor -1  -> GraphElement::_unknownCC (+0xcc); kScalarUInt
     SpriteSheet* _spriteSheet; // +0x78 (B4 H4: typed)  ExternalPtr<UI::SpriteSheet>
-    char*    _spriteName;   // +0x80  System::String, looked up in _spriteSheet
+    System::String _spriteName;  // +0x80  ctor 0x1800d1bd0, dtor 0x1800d1b30 (B4 Y RT-UI: a real member)
 };
 
 static_assert(sizeof(GraphDescription) == 0x88,

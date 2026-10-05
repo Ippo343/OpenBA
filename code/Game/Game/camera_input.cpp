@@ -211,8 +211,8 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
         const float fwdX   =  sy, fwdY   = -cy;   // cross(right, up=(0,0,1))
         const float aR = panSpeed * nx; // along right
         const float aF = panSpeed * ny; // along forward
-        pc->targetX += (rightX * aR + fwdX * aF) * dt;
-        pc->targetY += (rightY * aR + fwdY * aF) * dt;
+        pc->target.x += (rightX * aR + fwdX * aF) * dt;
+        pc->target.y += (rightY * aR + fwdY * aF) * dt;
         // z basis is 0 for both vectors, so focus.z is unaffected by panning.
     }
 
@@ -222,8 +222,8 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
         if (grid) {
             float factor = clampf(1.0f - (pc->distance - kClampBase) / kClampSpan, 0.0f, 1.0f);
             float halfExtent = (float)grid->size * kHalf * factor;
-            pc->targetX = clampf(pc->targetX, -halfExtent, halfExtent);
-            pc->targetY = clampf(pc->targetY, -halfExtent, halfExtent);
+            pc->target.x = clampf(pc->target.x, -halfExtent, halfExtent);
+            pc->target.y = clampf(pc->target.y, -halfExtent, halfExtent);
         }
     }
 
@@ -242,9 +242,9 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
             Reimpl_MapGetTerrainPos(grid, worldB, inB, '\0', nullptr);
             float midX = (worldA[0] + worldB[0]) * kHalf;
             float midY = (worldA[1] + worldB[1]) * kHalf;
-            float* fx = &pc->targetX;
-            float* fy = &pc->targetY;
-            float* fz = &pc->targetZ;
+            float* fx = &pc->target.x;
+            float* fy = &pc->target.y;
+            float* fz = &pc->target.z;
             *fx = midX * kFollowLerp + *fx * kFollowKeep;
             *fy = midY * kFollowLerp + *fy * kFollowKeep;
             *fz = 0.0f * kFollowLerp + *fz * kFollowKeep;
@@ -290,9 +290,9 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
         }
     }
     if (s_pin) {
-        pc->targetX = s_pinX;
-        pc->targetY = s_pinY;
-        pc->targetZ = 0.0f;
+        pc->target.x = s_pinX;
+        pc->target.y = s_pinY;
+        pc->target.z = 0.0f;
         pc->distance = s_pinDist;
         field_0x3C = s_pinDist;   // zoom target, so smoothing doesn't fight it
     }
@@ -318,9 +318,9 @@ void PlayerToolManager::ApplyCameraView(int index) {
     if (!pc) return;
     pc->distance = p->field_0x14; // distance
     pc->yaw = p->field_0x0C;      // yaw
-    pc->targetX = p->position.x;  // focus x
-    pc->targetY = p->position.y;  // focus y
-    pc->targetZ = p->position.z;  // focus z
+    pc->target.x = p->position.x;  // focus x
+    pc->target.y = p->position.y;  // focus y
+    pc->target.z = p->position.z;  // focus z
     pc->pitch = p->field_0x10;    // pitch
     field_0x3C = p->field_0x14;   // zoom target
     field_0x40 = p->field_0x10;   // pitch target

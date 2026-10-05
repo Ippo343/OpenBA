@@ -67,7 +67,6 @@ public:
         _partDescs[0] = nullptr;
         _partDescs[1] = nullptr;
         _spriteSheet  = nullptr;
-        _spriteName   = nullptr;
         _hoverColor   = 0xff808080u;
         _selectColor  = 0xffffffffu;
     }
@@ -104,7 +103,7 @@ public:
     // [1] as the ListElement's _children[0] (backdrop) and [1] (content).
     ElementDescription* _partDescs[2]; // +0x68, +0x70 (B4 H4: typed)
     SpriteSheet* _spriteSheet;    // +0x78 (B4 H4: typed)  ExternalPtr<UI::SpriteSheet>  -> ListElement::_highlight.sheet
-    char*    _spriteName;         // +0x80  System::String                -> ListElement::_highlight.index
+    System::String _spriteName;  // +0x80  ctor 0x1800d49b0, dtor 0x1800d4910 (B4 Y RT-UI: a real member)
     uint32_t _hoverColor;         // +0x88  ctor 0xff808080 -> ListElement::_hoverColor (+0xd0)
     uint32_t _selectColor;        // +0x8c  ctor 0xffffffff -> ListElement::_selectColor (+0xd4)
 };

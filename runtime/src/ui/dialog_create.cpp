@@ -378,14 +378,13 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
     // `ExternalPtr<DialogControllerConfig>` (entry+0x10) and argument 5 the
     // `ExternalPtr<ElementDescription>` (entry+0x08): 0x180114a13 /
     // 0x180114a1c, Dialog.h's banner.
-    for (int32_t i = 0; i < dlg->_controllerCount; ++i) {
+    for (int32_t i = 0; i < dlg->_controllerConfigs._size; ++i) {
         const Dialog::ElementController& e = dlg->_controllerConfigs[i];
         AddController(
             e._typeId, _dataSource,
             Object::ExternalPtr<UI::DialogControllerConfig>(e._config),       // entry+0x10 -> R9
             Object::ExternalPtr<UI::ElementDescription>(e._elementDesc),      // entry+0x08 -> a5
-            // LEFT (H5): the entry's +0x18 is a System::String held as char*.
-            *reinterpret_cast<const System::String*>(&e._name));  // B.3.6 bridge  entry+0x18 -> a6  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+            e._name);                                                       // entry+0x18 -> a6
     }
 }
 

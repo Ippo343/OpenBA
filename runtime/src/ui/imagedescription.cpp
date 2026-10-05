@@ -110,7 +110,7 @@ bool ImageDescription::Serialize(IO::Stream& streamv) {
     IO::ReaderWriter* rw = ser._readerWriter; // 1801184fa
 
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 180118508 ExternalPtr<SpriteSheet>
-    StringSerialize(&_spriteName, &ser);    // 180118516 String
+    _spriteName.Serialize(ser);    // 180118516 String
 
     rw->SerializeInt(_width, nullptr);
     rw->SerializeInt(_height, nullptr);
@@ -154,7 +154,7 @@ void ImageDescription::CreateInstance(Object::InternalPtr<ImageElement>* element
     // 180118597 the sheet; 1801185ac / 1801185b2 the DWORD index slot (see
     // note 2); rtdesc::SpriteFromName returns the {sheet, slot} pair whose
     // index half is that slot read back as a QWORD.
-    const UI::Sprite sprite = SpriteFromName(_spriteSheet, &_spriteName);
+    const UI::Sprite sprite = SpriteFromName(_spriteSheet, _spriteName);
 
     ImageElement* e = element->Get();                          // 1801185ba
     e->_sprite = sprite;                                       // 1801185c2 / 1801185ce  QWORD stores
@@ -209,7 +209,8 @@ Object::InternalPtr<Element>* ImageDescription::CreateInstance(
 // and ~External (retail's tail JMP at 0x1801183f6). +0x68 is NOT released.
 namespace UI {
 ImageDescription::~ImageDescription() {
-    ReleaseStringField(_spriteName);                           // 180118394..1801183b2
+    // B4 Y RT-UI: the +0x70 release is the member `_spriteName`'s ~String,
+    // run after this (empty) body and before ~ElementDescription.
 }
 }  // namespace UI
 

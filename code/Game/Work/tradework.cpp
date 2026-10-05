@@ -428,9 +428,9 @@ cleanup:
 // ============================================================
 // TradeWork::OnComplete [6] -- BSTFindRemove + return false (0x1400f5d20)
 // ============================================================
-// LEFT (both slots): 0x14002c690's C signature (PLAYER) takes the set as int64_t*.
+// Both slots call 0x14002c690 through its B4 FORWARD (see the LEFT on the call).
 int TradeWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&bstRoot), param2);   // LEFT: both slots: 0x14002c690's C signature (PLAYER) takes the set as int64_t*.
+    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&bstRoot), param2);   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 / PlayerTrade_BSTRemove_25740 (Player/exe_bodies.h, B4 FORWARD): the typed Avl38SetFindRemove / Avl38SetRemove take only the tool manager's TrackedEntityNode / PinnedToolNode sets, and Player's Avl38 templates read the node's `key`, which TradeWork::Node spells value.citizen (+0x00)
     return false;
 }
 
@@ -439,7 +439,7 @@ int TradeWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*/,
 // TradeWork::OnCancel [7] -- BSTFindRemove thunk (0x1400f5d10)
 // ============================================================
 int TradeWork::OnCancel(CitizenComponent** param2, ComponentEntity** /*arg2*/, int /*arg3*/) {
-    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&bstRoot), param2);   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 (Player/exe_bodies.h) takes the set as int64_t*
+    PlayerTrade_BSTFindRemove_2c690(reinterpret_cast<int64_t*>(&bstRoot), param2);   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 / PlayerTrade_BSTRemove_25740 (Player/exe_bodies.h, B4 FORWARD): the typed Avl38SetFindRemove / Avl38SetRemove take only the tool manager's TrackedEntityNode / PinnedToolNode sets, and Player's Avl38 templates read the node's `key`, which TradeWork::Node spells value.citizen (+0x00)
     return 0;
 }
 
@@ -561,8 +561,7 @@ int TradeWork::Validate() {
                     searchNode = searchNode->left;
                 } else {
                     if (removeArr[i] <= searchNode->value.citizen.Get()) {
-                        // LEFT: 0x140025740's C signature (PLAYER) takes the set as int64_t*.
-                        PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(&bstRoot), searchNode);   // LEFT: 0x140025740's C signature (PLAYER) takes the set as int64_t*.
+                        PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(&bstRoot), searchNode);   // LEFT: SIG PlayerTrade_BSTFindRemove_2c690 / PlayerTrade_BSTRemove_25740 (Player/exe_bodies.h, B4 FORWARD): the typed Avl38SetFindRemove / Avl38SetRemove take only the tool manager's TrackedEntityNode / PinnedToolNode sets, and Player's Avl38 templates read the node's `key`, which TradeWork::Node spells value.citizen (+0x00)
                         break;
                     }
                     searchNode = searchNode->right;

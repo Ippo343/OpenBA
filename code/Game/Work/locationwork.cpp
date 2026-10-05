@@ -291,7 +291,7 @@ int LocationWork::GetPriority() {
 LocationWork::LocationWork() : Work(), _field48(nullptr) {
 }
 
-LocationWork::LocationWork(void* pEntityIBP) : Work(pEntityIBP), _field48(nullptr) {
+LocationWork::LocationWork(ComponentEntity* const* pEntityIBP) : Work(pEntityIBP), _field48(nullptr) {
 }
 
 // ============================================================

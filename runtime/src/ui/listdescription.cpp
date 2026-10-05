@@ -68,17 +68,6 @@ namespace {
 // (B4: the file-local IO::Stream / IO::Serializer shadows are gone -- H10;
 // the Serialize body builds a real IO::Serializer.)
 
-void ReleaseStringField(char** field) {
-    char* s = *field;
-    if (s == nullptr) return;
-    if (--RtSystem::StringRefCount(s) == 0) {
-        *field = s - 8;
-        System::MemoryAllocator::MemFree(*field);
-    } else {
-        *field = nullptr;
-    }
-}
-
 void AddChild(const UI::Dialog* dialog, Object::InternalPtr<UI::Element>* slot, UI::Element* elem,
               UI::ElementDescription* childDesc) {
     // ?CreateElement@Dialog@UI@@ 0x180112ed0: RETSLOT, the member's prvalue
@@ -129,7 +118,7 @@ bool ListDescription::Serialize(IO::Stream& streamv) {
     Object::SerializeExternal<UI::ElementDescription>(ser, _partDescs[0]);  // 1800d4868
     Object::SerializeExternal<UI::ElementDescription>(ser, _partDescs[1]);  // 1800d4876
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 1800d4884
-    rtdesc::StringSerialize(&_spriteName, &ser);   // 1800d4895
+    _spriteName.Serialize(ser);   // 1800d4895
 
     rw->SerializeUInt(_hoverColor, nullptr);
     rw->SerializeUInt(_selectColor, nullptr);
@@ -183,7 +172,7 @@ Object::InternalPtr<Element>* ListDescription::CreateInstance(
     // read of the index slot.
     // 1800d472d..1800d473e the index (or -1) into [RSP+0x30]; 1800d474c /
     // 1800d4758 the sheet and a QWORD store of that slot (rtdesc::SpriteFromName).
-    elem->_highlight = rtdesc::SpriteFromName(_spriteSheet, &_spriteName);
+    elem->_highlight = rtdesc::SpriteFromName(_spriteSheet, _spriteName);
 
     elem->_hoverColor  = _hoverColor;                          // 1800d4765
     elem->_selectColor = _selectColor;                         // 1800d4771
@@ -212,7 +201,8 @@ Object::InternalPtr<Element>* ListDescription::CreateInstance(
 // restamps, the base's _textName (+0x60) and the tail JMP are the compiler's
 // chain. The three ExternalPtrs are not released.
 ListDescription::~ListDescription() {
-    ReleaseStringField(&_spriteName);                          // 1800d4930
+    // B4 Y RT-UI: the +0x80 release is the member `_spriteName`'s ~String,
+    // run after this (empty) body and before ~ElementDescription.
 }
 
 // ?CreateNewObject@ListDescription@UI@@SAPEAVBase@Object@@XZ 0x180044c90 --

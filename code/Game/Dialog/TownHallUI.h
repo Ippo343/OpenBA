@@ -16,26 +16,28 @@
 //
 // ~TownHallUI 0x1400810d0: frees the agriculture tree (+0x1d8) and label array
 // (+0x1c8), the inventory tree (+0x138) and row array (+0x118), the production
-// rows (+0xf0), the two rating groups (+0xd0, +0xb0: each two arrays), the
-// profession tree (+0x50) and the profession rows (+0x40, 0x140015930).
+// rows (+0xf0), the two rating groups (+0xd0, +0xb0: each two arrays, the half
+// one first), the profession tree (+0x50) and the profession rows (+0x40,
+// 0x140015930) -- strictly descending offset, then ~DialogController.
 //
 // The element pointers are retail's InternalPtr<X> (8 bytes, no refcount),
 // spelled as the typed raw pointer (B4 H4); each is the FindElement result of
 // the resource element its comment names (InitGeneral 0x1400807f0 and the
 // other Init bodies).
 //
-// H5: the arrays stay raw {data, count, capacity} storage: the tree's
-// ~TownHallUI frees them by hand in retail's order, and the rows are copied
-// byte-wise by the exe helpers (TownHall_ProfArrayPush 0x140015800,
-// TownHall_ProdArrayPush 0x1400159b0). A real Collection::Array member would
-// add a destructor run.
+// B.4 Y GAMEB (behaviour:): the eleven owned containers are typed members.
+// The ctor (0x140081280) zeroes each one where its member ctor does; ~TownHallUI
+// has an empty body and the members are destroyed in reverse declaration order,
+// which is retail's descending-offset order above.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
-#include "Action/PathAvl.h"   // AvlTreeHead (the inventory tree, +0x138)
+#include "collection/Collection.h"   // Collection::Array (the row arrays)
+#include "Player/exe_bodies.h"        // Avl38FreeSubtree (the three trees' subtree free)
+#include "system/MemoryAllocator.h"
 
 class ComponentDescription;
 class ComponentEntity;
@@ -65,11 +67,21 @@ static_assert(sizeof(TownHallInventoryEntry) == 0x18, "inventory entry stride 0x
 static_assert(offsetof(TownHallInventoryEntry, desc) == 0x08, "TownHallInventoryEntry::desc @ +0x08");
 static_assert(offsetof(TownHallInventoryEntry, value) == 0x10, "TownHallInventoryEntry::value @ +0x10");
 
+// The profession-row array's hand-derived row (Dialog/townhall_helpers.cpp): the
+// growth body 0x140015800 deep-copies each row's entity list (0x140015dd0) and
+// destroys every removed / old row (0x140015e50): a deep assign together with a
+// per-element destroy, which a trait-derived row cannot express (Collection.h).
+namespace TownHallRows {
+extern const rtcoll::ArraySpec kSpec_ProfessionRow;   // 0x140015800 Array<TownHallUI::ProfessionRow> (+0x40)
+}
+
 class TownHallUI final : public UI::DialogController {
     DECLARE_EXE_TYPE(TownHallUI)
 
 public:
     // +0x40: one row per profession (InitProfessions 0x140080160), stride 0x40.
+    // Destroying a row frees its entity list (0x140015930's per-row MemFree, the
+    // data qword and the count / capacity qword zeroed).
     struct ProfessionRow {
         int32_t                workers;        // +0x00 adult citizens with the profession
         int32_t                slots;          // +0x04 worker slots over its buildings
@@ -78,20 +90,41 @@ public:
         UI::NumberElement*     slotsNumber;    // +0x18 row child(2)
         UI::NumberElement*     buildingsNumber;// +0x20 row child(3)
         UI::ButtonElement*     button;         // +0x28 row child(4), id 0x1999 + i
-        // +0x30 Collection::Array<ComponentEntity*> (H5 raw: MemFree'd by hand)
-        ComponentEntity**      entities;       // +0x30
-        int32_t                entityCount;    // +0x38
-        int32_t                entityCapacity; // +0x3C
+        Collection::Array<ComponentEntity*> entities;   // +0x30
     };
-    // +0xB0 / +0xD0: a rating group (TownHall_GroupRatingInit 0x14006abf0):
-    // two arrays of the group's whole and half icons (H5 raw).
+    using ProfessionRowArray = Collection::Array<ProfessionRow, Collection::DefaultAllocator,
+                                                 Collection::ExplicitSpec<&TownHallRows::kSpec_ProfessionRow>>;
+    // +0xB0 / +0xD0: a rating group (TownHall_GroupRatingInit 0x14006abf0): the
+    // whole and the half icon of each child row (two Array<InternalPtr<
+    // ImageElement>>; retail's dtor frees the half array first, 0x1400811cc).
     struct RatingGroup {
-        void*   whole;          // +0x00
-        int32_t wholeCount;     // +0x08
-        int32_t wholeCapacity;  // +0x0C
-        void*   half;           // +0x10
-        int32_t halfCount;      // +0x18
-        int32_t halfCapacity;   // +0x1C
+        Collection::Array<UI::Element*> whole;   // +0x00
+        Collection::Array<UI::Element*> half;    // +0x10
+    };
+    // The three trees' owning header {root, int32 count}: retail's ctor
+    // (0x140081280) writes the root qword and the count dword; its dtor
+    // (0x1400810d0) frees the root's left subtree, its right subtree (the
+    // recursive free 0x140014c30 / 0x140014b00 / 0x14000e320, one body per node
+    // width), the root itself, then zeroes the root and the count. The tail dword
+    // is never written by retail; the tree zeroes it at construction.
+    template <class Node>
+    struct OwnedTree {
+        Node*    root  = nullptr;   // +0x00
+        int32_t  count = 0;         // +0x08
+        uint32_t tail  = 0;         // +0x0C
+        OwnedTree() = default;
+        OwnedTree(const OwnedTree&) = delete;
+        OwnedTree& operator=(const OwnedTree&) = delete;
+        ~OwnedTree() {
+            Node* n = root;
+            if (n != nullptr) {
+                Avl38FreeSubtree(this, n->left);
+                Avl38FreeSubtree(this, n->right);
+                System::MemoryAllocator::MemFree(n);
+            }
+            root = nullptr;
+            count = 0;
+        }
     };
     // +0xF0: one row per "limits" table row (InitProduction 0x14007fc30), stride 0x28.
     struct ProductionRow {
@@ -144,13 +177,12 @@ public:
         int32_t          _pad24;   // +0x24
     };
 
-    TownHallUI() = default;                              // 0x140014660 (ctor inlined in the factory)
+    TownHallUI() = default;                              // 0x140081280 (create 0x140014660)
 
-    // 0x1400146b0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // Retail (0x1400810d0) releases the owned trees/arrays at +0x1d8, +0x1c8, +0x138,
-    // +0x118, +0xf0, +0xe0, +0xd0, +0xc0, +0xb0, +0x50 and +0x40; the tree's teardown
-    // body (moved into ~TownHallUI unchanged) does the same frees.
+    // 0x1400146b0 minus the free; ~TownHallUI is 0x1400810d0. The body is empty:
+    // the owned containers are members, destroyed in reverse declaration order
+    // (+0x1d8, +0x1c8, +0x138, +0x118, +0xf0, +0xd0 / +0xe0, +0xb0 / +0xc0, +0x50,
+    // +0x40: retail's order), then ~DialogController -> ~Internal.
     ~TownHallUI() override;                                       // [0] 0x1400146b0
     void OnCreated() override;   // [4] 0x140081000
     void OnUpdateLayout() override;   // [7] 0x14007d550
@@ -180,12 +212,8 @@ public:
     UI::TabElement* tabElement = nullptr;         // +0x30 "tabs"
     uint32_t profButtonIdx = 0;                   // +0x38 current profession button cycle index
     uint8_t _pad3C[4] = {};                       // +0x3C gap
-    ProfessionRow* professionRows = nullptr;      // +0x40 Array<ProfessionRow> data (H5 raw)
-    int32_t professionRowCount = 0;               // +0x48
-    int32_t professionRowCapacity = 0;            // +0x4C
-    ProfessionNode* professionTree = nullptr;     // +0x50 profession tree root (sorted by Profession)
-    uint32_t professionTreeCount = 0;             // +0x58
-    uint8_t _pad5C[4] = {};                       // +0x5C gap
+    ProfessionRowArray professionRows;            // +0x40 one row per profession
+    OwnedTree<ProfessionNode> professionTree;     // +0x50 profession tree (sorted by Profession)
     // --- General tab elements ---
     UI::NumberElement* numberYear = nullptr;      // +0x60 "numberYear"
     UI::TextElement* textMonth = nullptr;         // +0x68 "textMonth"
@@ -197,22 +225,18 @@ public:
     UI::NumberElement* numberChildren = nullptr;  // +0x98 "numberChildren"
     UI::TextElement* percentClothed = nullptr;    // +0xA0 "percentClothed" (retail writes the EDUCATED % here, 0x14007d030)
     UI::TextElement* percentEducated = nullptr;   // +0xA8 "percentEducated" (retail writes the CLOTHED % here)
-    RatingGroup groupHearts = {};                 // +0xB0 "groupHearts"
-    RatingGroup groupStars = {};                  // +0xD0 "groupStars"
+    RatingGroup groupHearts;                      // +0xB0 "groupHearts"
+    RatingGroup groupStars;                       // +0xD0 "groupStars"
     // --- Production tab elements ---
-    ProductionRow* prodLimits = nullptr;          // +0xF0 Array<ProductionRow> data (H5 raw)
-    int32_t prodLimitsCount = 0;                  // +0xF8
-    int32_t prodLimitsCapacity = 0;               // +0xFC
+    Collection::Array<ProductionRow> prodLimits;  // +0xF0 one per "limits" row (growth 0x1400159b0)
     UI::ComboElement* productionCombo = nullptr;  // +0x100 "productionCombo"
     UI::TextElement* limitPrevUsedHdr = nullptr;  // +0x108 "limitPrevUsedHeader"
     UI::TextElement* limitPrevProdHdr = nullptr;  // +0x110 "limitPrevProducedHeader"
     // --- Inventory tab elements ---
-    InventoryRow* invTable = nullptr;             // +0x118 Array<InventoryRow> data (H5 raw)
-    int32_t invTableCount = 0;                    // +0x120
-    int32_t invTableCap = 0;                      // +0x124
+    Collection::Array<InventoryRow> invTable;     // +0x118 one per "inventoryTable" cell
     UI::ComboElement* inventoryCombo = nullptr;   // +0x128 "inventoryCombo"
     UI::ComboElement* sortCombo = nullptr;        // +0x130 "sortCombo" (sort order)
-    AvlTreeHead<InventoryNode> invBST = {};       // +0x138 inventory tree {root, count +0x140, +0x144 gap}
+    OwnedTree<InventoryNode> invBST;              // +0x138 inventory tree {root, count +0x140, +0x144 tail}
     int32_t cachedGameTick = 0;                   // +0x148 cached game time tick for graph refresh
     uint8_t _pad14C[4] = {};                      // +0x14C gap
     // --- Graph tab elements ---
@@ -232,18 +256,17 @@ public:
     UI::LabelElement* label2 = nullptr;           // +0x1B8 "label2" (graph legend 2)
     UI::LabelElement* label3 = nullptr;           // +0x1C0 "label3" (graph legend 3)
     // --- Agriculture tab elements ---
-    UI::LabelElement** agriLabels = nullptr;      // +0x1C8 Array<LabelElement*> data (H5 raw)
-    int32_t agriLabelCount = 0;                   // +0x1D0
-    int32_t agriLabelCap = 0;                     // +0x1D4
-    AgricultureNode* agriBST = nullptr;           // +0x1D8 agriculture tree root (sorted by description)
-    uint32_t agriBSTCount = 0;                    // +0x1E0
-    // +0x1E4: tail padding in retail (nothing reads it); the tree's OnUpdate
-    // counts its throttled OnUpdateLayout refresh here (STANDALONE DEVIATION).
-    uint32_t _pad1E4 = 0;                         // +0x1E4
+    Collection::Array<UI::LabelElement*> agriLabels;   // +0x1C8 one per agriculture table cell
+    // +0x1D8 agriculture tree (sorted by description). Its tail dword +0x1E4 is
+    // padding in retail (nothing reads it); the tree's OnUpdate counts its
+    // throttled OnUpdateLayout refresh there (STANDALONE DEVIATION).
+    OwnedTree<AgricultureNode> agriBST;
 };
 
 static_assert(sizeof(TownHallUI::ProfessionRow) == 0x40, "profession row stride 0x40 (0x140015800)");
 static_assert(offsetof(TownHallUI::ProfessionRow, entities) == 0x30, "ProfessionRow::entities @ +0x30");
+static_assert(offsetof(TownHallUI::RatingGroup, half) == 0x10, "RatingGroup::half @ +0x10 (0x1400811cc)");
+static_assert(sizeof(TownHallUI::OwnedTree<TownHallUI::InventoryNode>) == 0x10, "tree header {root, count, tail}");
 static_assert(sizeof(TownHallUI::RatingGroup) == 0x20, "rating group 0x20 (0x1400811c0)");
 static_assert(sizeof(TownHallUI::ProductionRow) == 0x28, "production row stride 0x28 (0x1400159b0)");
 static_assert(sizeof(TownHallUI::InventoryRow) == 0x10, "inventory row stride 0x10");
@@ -267,9 +290,9 @@ static_assert(alignof(TownHallUI) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(TownHallUI, tabElement) == 0x30, "tabElement @ 0x30");
 static_assert(offsetof(TownHallUI, profButtonIdx) == 0x38, "profButtonIdx @ 0x38");
 static_assert(offsetof(TownHallUI, professionRows) == 0x40, "professionRows @ 0x40 (dtor 0x140081254)");
-static_assert(offsetof(TownHallUI, professionRowCount) == 0x48, "professionRowCount @ 0x48");
+static_assert(offsetof(TownHallUI, professionRows._size) == 0x48, "professionRows._size @ 0x48");
 static_assert(offsetof(TownHallUI, professionTree) == 0x50, "professionTree @ 0x50 (dtor 0x14008121c)");
-static_assert(offsetof(TownHallUI, professionTreeCount) == 0x58, "professionTreeCount @ 0x58 (dtor 0x140081251)");
+static_assert(offsetof(TownHallUI, professionTree.count) == 0x58, "professionTree.count @ 0x58 (dtor 0x140081251)");
 static_assert(offsetof(TownHallUI, numberYear) == 0x60, "numberYear @ 0x60");
 static_assert(offsetof(TownHallUI, textMonth) == 0x68, "textMonth @ 0x68");
 static_assert(offsetof(TownHallUI, numberHomes) == 0x70, "numberHomes @ 0x70");
@@ -283,12 +306,12 @@ static_assert(offsetof(TownHallUI, percentEducated) == 0xA8, "percentEducated @ 
 static_assert(offsetof(TownHallUI, groupHearts) == 0xB0, "groupHearts @ 0xB0 (dtor 0x1400811ee)");
 static_assert(offsetof(TownHallUI, groupStars) == 0xD0, "groupStars @ 0xD0 (dtor 0x1400811c0)");
 static_assert(offsetof(TownHallUI, prodLimits) == 0xF0, "prodLimits @ 0xF0 (dtor 0x1400811a5)");
-static_assert(offsetof(TownHallUI, prodLimitsCount) == 0xF8, "prodLimitsCount @ 0xF8");
+static_assert(offsetof(TownHallUI, prodLimits._size) == 0xF8, "prodLimits._size @ 0xF8");
 static_assert(offsetof(TownHallUI, productionCombo) == 0x100, "productionCombo @ 0x100");
 static_assert(offsetof(TownHallUI, limitPrevUsedHdr) == 0x108, "limitPrevUsedHdr @ 0x108");
 static_assert(offsetof(TownHallUI, limitPrevProdHdr) == 0x110, "limitPrevProdHdr @ 0x110");
 static_assert(offsetof(TownHallUI, invTable) == 0x118, "invTable @ 0x118 (dtor 0x14008118a)");
-static_assert(offsetof(TownHallUI, invTableCount) == 0x120, "invTableCount @ 0x120");
+static_assert(offsetof(TownHallUI, invTable._size) == 0x120, "invTable._size @ 0x120");
 static_assert(offsetof(TownHallUI, inventoryCombo) == 0x128, "inventoryCombo @ 0x128");
 static_assert(offsetof(TownHallUI, sortCombo) == 0x130, "sortCombo @ 0x130");
 static_assert(offsetof(TownHallUI, invBST) == 0x138, "invBST @ 0x138 (dtor 0x14008114f)");
@@ -305,18 +328,17 @@ static_assert(offsetof(TownHallUI, number4) == 0x1A0, "number4 @ 0x1A0");
 static_assert(offsetof(TownHallUI, label0) == 0x1A8, "label0 @ 0x1A8");
 static_assert(offsetof(TownHallUI, label3) == 0x1C0, "label3 @ 0x1C0");
 static_assert(offsetof(TownHallUI, agriLabels) == 0x1C8, "agriLabels @ 0x1C8 (dtor 0x140081134)");
-static_assert(offsetof(TownHallUI, agriLabelCount) == 0x1D0, "agriLabelCount @ 0x1D0");
+static_assert(offsetof(TownHallUI, agriLabels._size) == 0x1D0, "agriLabels._size @ 0x1D0");
 static_assert(offsetof(TownHallUI, agriBST) == 0x1D8, "agriBST @ 0x1D8 (dtor 0x1400810f7)");
-static_assert(offsetof(TownHallUI, agriBSTCount) == 0x1E0, "agriBSTCount @ 0x1E0 (dtor 0x140081131)");
-static_assert(offsetof(TownHallUI, _pad1E4) == 0x1E4, "_pad1E4 @ 0x1E4");
+static_assert(offsetof(TownHallUI, agriBST.count) == 0x1E0, "agriBST.count @ 0x1E0 (dtor 0x140081131)");
+static_assert(offsetof(TownHallUI, agriBST.tail) == 0x1E4, "agriBST.tail @ 0x1E4");
 
-// townhall_helpers.cpp: the two row-array pushes. arrayBase is the raw {data, count,
-// capacity} triple at +0x40 / +0xF0 (H5, above); entry is the row every new slot copies.
-extern "C" void TownHall_ProfArrayPush(void* arrayBase, int newCount, const TownHallUI::ProfessionRow* entry);  // 0x140015800
-extern "C" void TownHall_ProdArrayPush(void* arrayBase, int newCount, const TownHallUI::ProductionRow* entry);  // 0x1400159b0
+// townhall_helpers.cpp: the rating group's two bodies.
+void TownHall_GroupRatingInit(TownHallUI::RatingGroup* group, UI::Element* const* groupElem);  // 0x14006abf0
+void TownHall_GroupRatingUpdate(TownHallUI::RatingGroup* group, float value, float maxValue);  // 0x14006aed0
 
 // 0x140014890 (Dialog/toolbar_utility_helpers.cpp): the shared 0x38-node
 // find-or-insert, the inventory tree's typed wrapper (the PinnedToolNode one is in
 // Dialog/exe_bodies.h).
-TownHallUI::InventoryNode* Avl38SetInsert(AvlTreeHead<TownHallUI::InventoryNode>* set,
+TownHallUI::InventoryNode* Avl38SetInsert(TownHallUI::OwnedTree<TownHallUI::InventoryNode>* set,
                                           const TownHallUI::InventoryEntry& rec);   // 0x140014890

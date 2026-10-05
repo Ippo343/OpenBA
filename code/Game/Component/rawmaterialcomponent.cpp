@@ -72,7 +72,7 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
             // Check bit 10 of entity flags at +0x40
             if (((entity->_entityFlags >> 10) & 1) == 0) {
 
-                ActHunt_MarkEntityRemoval_c2ea0(entity);
+                MarkEntityForRemoval(entity);
 
                 // Add to world pending list
                 // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)

@@ -24,36 +24,38 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
 
 // ---- buildstructure.cpp
 class BuildStructure;
+class Work;               // Work/Work.h
+class GatherRawMaterials; // Work/GatherRawMaterials.h
 extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, uint8_t altAnim);  // 0x1400e59c0 (buildcomponent_state8.cpp, destroycomponent_states.cpp)
 extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** buildEntityIBP);  // no retail address (standalone harness entry)
-extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
+extern "C" int BuildStructure_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)
 
 // ---- foresterwork.cpp
 bool ForesterWork_ExecuteReady();  // no retail address (standalone harness entry)
-extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
+extern "C" int ForesterWork_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
 
 // ---- gatherrawmaterials.cpp
-extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);  // no retail address (standalone harness entry)
-extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP);  // no retail address (standalone harness entry)
+extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(ComponentEntity* const* buildEntityIBP);  // no retail address (standalone harness entry)
+extern "C" int GatherRawMaterials_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalone harness entry)
 
 // ---- gatherrawmaterials_ctor.cpp
 class Work;   // Work/Work.h
-extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // 0x1400ec710 (caller buildcomponent_state1.cpp)
+extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, ComponentEntity* const* buildEntityIBP);  // 0x1400ec710 (caller buildcomponent_state1.cpp)
 
 // ---- harvestorchard_ctor.cpp
-extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- pasturework.cpp
-extern "C" Work* PastureWork_CreateForEntity(void* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)
+extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)
 
 // ---- plantorchard_ctor.cpp
 class ComponentDescription;
-extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- tendarea_ctor.cpp
-extern "C" Work* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
+extern "C" Work* TendArea_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, int kind);  // no retail address (local extern in orchardcomponent_states.cpp)
 
 // ---- work_act_clear.cpp
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
@@ -127,6 +129,11 @@ template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
 template <class Node>
 inline void WorkBST_BST_Serialize_296b0(AvlTreeHead<Node>* head, IO::Serializer* serializer) {
     WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(head), serializer);  // CAST-OK: elem_stride
+}
+// The same core unlinking a node of a raw {root, count} tree (WorkScheduler's queue-order tree).
+template <class Node>
+inline void WorkBST_BSTRemove_a6e0(AvlTreeHead<Node>* head, Node* node) {
+    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(head), node);  // CAST-OK: elem_stride
 }
 
 // ---- work_base_cellbst.cpp

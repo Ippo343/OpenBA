@@ -214,12 +214,12 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
         ws->field_0x04 = prio + 1;
     } else {
         // dedup: while a primary node already holds `prio`, decrement and restart search
-        WorkSchedulerCountNode* p = ws->field_0x10;
+        WorkSchedulerCountNode* p = ws->field_0x10.root;
         while (p != nullptr) {
             int nodeKey = p->key;
             if (prio < nodeKey)      p = p->left;
             else if (nodeKey < prio) p = p->right;
-            else { prio -= 1; p = ws->field_0x10; }
+            else { prio -= 1; p = ws->field_0x10.root; }
         }
     }
 
@@ -232,7 +232,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
     // --- insert into the primary AVL (0x28 nodes) at sched+0x10, keyed by prio ---
     // key node scratch = {prio, id}
     struct { int prio; int id; } keyNode = { prio, id };
-    WorkSchedulerCountNode* proot = ws->field_0x10;
+    WorkSchedulerCountNode* proot = ws->field_0x10.root;
     if (proot == nullptr) {
         WorkSchedulerCountNode* n = static_cast<WorkSchedulerCountNode*>(System::MemoryAllocator::MemAlloc(sizeof(WorkSchedulerCountNode), 8));
         if (n) {
@@ -244,7 +244,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
             n->balance = 0;
             n->height = 0;
         }
-        ws->field_0x10 = n;
+        ws->field_0x10.root = n;
     } else {
         WorkSchedulerCountNode* cur = proot;
         WorkSchedulerCountNode* parent = cur;
@@ -289,8 +289,8 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
         }
         if (linked) {
             WorkSchedulerCountNode* tmp = parent;
-            AvlRebalance(&ws->field_0x10, &tmp);   // 0x14001a8c0
-            ws->field_0x18 += 1;   // +0x18 primary count
+            AvlRebalance(&ws->field_0x10.root, &tmp);   // 0x14001a8c0
+            ws->field_0x10.count += 1;   // +0x18 primary count
         }
     }
 

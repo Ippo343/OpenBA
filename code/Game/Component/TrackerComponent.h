@@ -47,16 +47,6 @@ public:
         uint8_t _pad0C[4];                 // +0x0C
     };
 
-    // One Array<Entry>'s three fields as a POD (no ctor, no dtor): the record
-    // the array copy 0x14000d9d0 reads and writes through its two pointer
-    // arguments (data +0x00, count +0x08, capacity +0x0C), the shape of the
-    // displayed / produced triples below. (B.4 P2 DLG-1)
-    struct EntryArray {
-        Entry*  data;       // +0x00
-        int32_t count;      // +0x08
-        int32_t capacity;   // +0x0C
-    };
-
     // Array<Entry> (H5, typed: the ctor inlined in 0x14000d7a0 zeroes +0x28 / +0x30 /
     // +0x38 / +0x40 as qwords, the dtor 0x140059280 frees +0x38 then +0x28). No element
     // destroy (the ExternalPtr is held bare); resized and copied by the 16-byte core
@@ -74,9 +64,6 @@ public:
 static_assert(sizeof(TrackerComponent) == 0x50, "TrackerComponent is 0x50 (create 0x14000d7a0)");
 static_assert(alignof(TrackerComponent) == 8, "TrackerComponent alignment");
 static_assert(sizeof(TrackerComponent::Entry) == 0x10, "tracker entry stride 0x10 (0x14000da70)");
-static_assert(sizeof(TrackerComponent::EntryArray) == 0x10, "Array<Entry> is {data, count, capacity}");
-static_assert(offsetof(TrackerComponent::EntryArray, count) == 0x08, "EntryArray::count @ +0x08");
-static_assert(offsetof(TrackerComponent::EntryArray, capacity) == 0x0C, "EntryArray::capacity @ +0x0C");
 static_assert(offsetof(TrackerComponent, displayed) == 0x28, "");
 static_assert(offsetof(TrackerComponent, displayed._size) == 0x30, "");
 static_assert(offsetof(TrackerComponent, displayed._capacity) == 0x34, "");

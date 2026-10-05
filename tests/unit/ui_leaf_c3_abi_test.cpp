@@ -650,11 +650,11 @@ UNIT_TEST(b39_uia_edit_number_ctors_make_retails_stores) {
         UI::EditDescription* d = ::new (buf) UI::EditDescription();
         CHECK_EQ(d->_id, -1);
         CHECK(d->_ptr68 == nullptr);
-        CHECK(d->_string70 == nullptr);
+        CHECK(d->_string70._data == nullptr);
         CHECK_EQ(d->_word78, 0);
         CHECK_EQ((int)d->_flag7c, 0);
         CHECK_EQ((int)buf[0x7d], 0xCD);
-        CHECK(d->_string80 == nullptr);
+        CHECK(d->_string80._data == nullptr);
         g_b39DtorCount = 0;
         d->~EditDescription();
         CHECK_EQ(g_b39DtorCount, 1);
