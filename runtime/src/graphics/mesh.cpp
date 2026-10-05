@@ -791,14 +791,14 @@ Graphics::MeshInstance::~MeshInstance() {
 // ============================================================================
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h) for the
 // exe-side reader in code/Game/Player/tool_base_render.cpp.
-// B.4 wave Y: `self` is typed; `vec3` stays `const void*` (retail's is
-// `const Math::Vector3&`) because its one outside caller
-// (code/Game/Player/tool_base_render.cpp) holds the ribbon endpoints as float[3]
-// locals filled by RelVec: a Math::Vector3 local would run its zeroing
-// constructor (0x180015070) first, stores retail's caller does not make.
-TriangleVertex* RtGraphics_EdgeMesh_TriangleVertex_Ctor(TriangleVertex* self, const void* vec3) {
+// B.4 wave Y: `self` is typed. B.4 S4 GFX2: `vec3` is retail's
+// `const Math::Vector3&` (as a pointer): its caller's ribbon endpoints
+// (tool_base_render.cpp) are Math::Vector3s now, held in Vector3Slots so no
+// zeroing constructor runs (retail 0x14004b930 builds each with the 3-float
+// ctor, IAT 0x140152a30: three stores, as RelVec's).
+TriangleVertex* RtGraphics_EdgeMesh_TriangleVertex_Ctor(TriangleVertex* self, const Math::Vector3* vec3) {
     TriangleVertex* tv = self;
-    const Math::Vector3* v = static_cast<const Math::Vector3*>(vec3);   // LEFT: S4 GFX measured: retail's caller 0x14004b930 builds each ribbon endpoint as a Vector3 through the import at IAT 0x140152a30 after GetTerrainPos 0x14009f3e0 and passes Vector3* to EdgeSegment 0x14004b440; the port's code/ caller (tool_base_render.cpp cellToRel / RelVec / EdgeSegment) holds float[3] locals instead -- typing this parameter needs that code/Game/Player reconstruction first (not a reader-line edit)
+    const Math::Vector3* v = vec3;
     tv->x = static_cast<int16_t>(static_cast<int>(v->x * kEdgeMeshVertexScale));
     tv->y = static_cast<int16_t>(static_cast<int>(v->y * kEdgeMeshVertexScale));
     tv->z = static_cast<int16_t>(static_cast<int>(v->z * kEdgeMeshVertexScale));

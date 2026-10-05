@@ -226,7 +226,7 @@ void SampleTile(const WorldGeometry* hf, int col, int row, float* out) {
 //   EdgeVertex (the two endpoints extruded +/-0x200) to `evtx`, then 6 triangle
 //   indices {0,1,2,0,2,3} (base-offset by the pre-append vertex count) to `idx`.
 // ===========================================================================
-void EdgeSegment(const float* v0, const float* v1, IdxArray* idx, EdgeVtxArray* evtx) {
+void EdgeSegment(const Math::Vector3* v0, const Math::Vector3* v1, IdxArray* idx, EdgeVtxArray* evtx) {
     // ??0TriangleVertex@EdgeMesh@Graphics@@ 0x1800a2f50 / ??0EdgeVertex@EdgeMesh@Graphics@@
     // 0x1800a2df0, called by name (B3R Leftovers; the readiness guard went with the doors).
     int16_t baseIdx = (int16_t)evtx->_size;   // sVar2 = (short)param_5[1]
@@ -262,10 +262,10 @@ void EdgeSegment(const float* v0, const float* v1, IdxArray* idx, EdgeVtxArray* 
 }
 
 // convenience: build a world-relative Vector3 (p - origin) into `dst`
-inline void RelVec(float* dst, const float* p, float ox, float oy) {
-    dst[0] = p[0] - ox;
-    dst[1] = p[1] - oy;
-    dst[2] = p[2] - 0.0f;
+inline void RelVec(Math::Vector3* dst, const float* p, float ox, float oy) {
+    dst->x = p[0] - ox;
+    dst->y = p[1] - oy;
+    dst->z = p[2] - 0.0f;
 }
 
 // ===========================================================================
@@ -312,7 +312,7 @@ void Impl_b930(HighlightComponent* hc) {
     IdxArray     edgeIdx;   // local_208 / local_200  (short indices)
     EdgeVtxArray edgeVtx;   // local_218 / local_210  (16-byte EdgeVertex)
 
-    auto cellToRel = [&](int idx, float* rel) {
+    auto cellToRel = [&](int idx, Math::Vector3* rel) {
         float cell[3], world[3];
         cell[0] = (float)(idx % g) - (float)(g >> 1);
         cell[1] = (float)(idx / g) - (float)(g >> 1);
@@ -323,23 +323,23 @@ void Impl_b930(HighlightComponent* hc) {
 
     // Loop A — top & bottom edges (iterate columns).
     for (int col = rx, n = 0; n < rw; n++, col++) {
-        float p1[3], p2[3], p3[3], p4[3];
-        cellToRel(g * ry + (col + 1), p1);       // top, col+1
-        cellToRel(g * ry + col,       p2);       // top, col
-        EdgeSegment(p2, p1, &edgeIdx, &edgeVtx);
-        cellToRel(g * (ry + rh) + (col + 1), p3); // bottom, col+1
-        cellToRel(g * (ry + rh) + col,       p4); // bottom, col
-        EdgeSegment(p4, p3, &edgeIdx, &edgeVtx);
+        Vector3Slot p1, p2, p3, p4;   // B.4 S4 GFX2: unconstructed Vector3s (RelVec writes x, y, z)
+        cellToRel(g * ry + (col + 1), &p1.v);       // top, col+1
+        cellToRel(g * ry + col,       &p2.v);       // top, col
+        EdgeSegment(&p2.v, &p1.v, &edgeIdx, &edgeVtx);
+        cellToRel(g * (ry + rh) + (col + 1), &p3.v); // bottom, col+1
+        cellToRel(g * (ry + rh) + col,       &p4.v); // bottom, col
+        EdgeSegment(&p4.v, &p3.v, &edgeIdx, &edgeVtx);
     }
     // Loop B — left & right edges (iterate rows).
     for (int row = ry, n = 0; n < rh; n++, row++) {
-        float p1[3], p2[3], p3[3], p4[3];
-        cellToRel(g * (row + 1) + rx, p1);        // left, row+1
-        cellToRel(g * row + rx,       p2);        // left, row
-        EdgeSegment(p2, p1, &edgeIdx, &edgeVtx);
-        cellToRel(g * (row + 1) + rx + rw, p3);   // right, row+1
-        cellToRel(g * row + rx + rw,       p4);   // right, row
-        EdgeSegment(p4, p3, &edgeIdx, &edgeVtx);
+        Vector3Slot p1, p2, p3, p4;   // B.4 S4 GFX2: unconstructed Vector3s (RelVec writes x, y, z)
+        cellToRel(g * (row + 1) + rx, &p1.v);        // left, row+1
+        cellToRel(g * row + rx,       &p2.v);        // left, row
+        EdgeSegment(&p2.v, &p1.v, &edgeIdx, &edgeVtx);
+        cellToRel(g * (row + 1) + rx + rw, &p3.v);   // right, row+1
+        cellToRel(g * row + rx + rw,       &p4.v);   // right, row
+        EdgeSegment(&p4.v, &p3.v, &edgeIdx, &edgeVtx);
     }
 
     // Fill section — per-tile top-face triangles from the heightfield.
