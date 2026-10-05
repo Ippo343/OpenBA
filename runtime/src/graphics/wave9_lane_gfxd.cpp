@@ -116,6 +116,7 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <new>
 
 #include "../../types/graphics/Camera.h"
 #include "../collection/array_destroy_internal.h"
@@ -175,15 +176,29 @@ using rtcoll::ArraySpec;
 // 0xd8, so +0xd5..+0xd7 is a hole retail does not touch — see the banner.
 // B.4: on the real class -- the 53 dwords are the frustum (incl. its pad), the
 // Transform3 and the projection, then the `_zUp` byte.
+//
+// B.4 S4 GFX2 (behaviour): the body is `Graphics::Camera`'s own copy
+// constructor (it was `= default`, a full 0xd8 blit, on the C++ copy path).
+// Every member is built by its mem-initialiser, so no default constructor
+// (Vector4 / Transform3 / Matrix zero) runs first; `_pad_d5` has none and is
+// left unwritten, as retail leaves +0xd5..+0xd7. `Frustum`'s implicit copy is
+// trivial and moves all 0x64 bytes, its +0x61..+0x63 pad included, as retail's
+// dword run does.
+}  // namespace rtgfxd
+
+Graphics::Camera::Camera(const Camera& src)
+    : _frustum(src._frustum),               // +0x00..+0x63 (25 dwords)
+      _cameraToWorld(src._cameraToWorld),   // +0x64..+0x93
+      _projection(src._projection),         // +0x94..+0xd3
+      _zUp(src._zUp) {}                     // +0xd4 (MOVZX / MOV byte)
+
+namespace rtgfxd {
+
+// The door's `(this, src)` shape, returning `this`: the copy ctor above,
+// placement-constructed into the caller's member.
 Graphics::Camera* RtGraphics_Camera_CopyCtor(Graphics::Camera* self,
                                              const Graphics::Camera* src) {
-    // 53 dwords, +0x00..+0xd3: the whole frustum (its +0x61..+0x63 pad
-    // included, as the dword run includes it), the Transform3, the projection.
-    std::memcpy(&self->_frustum, &src->_frustum, sizeof self->_frustum);
-    self->_cameraToWorld = src->_cameraToWorld;
-    self->_projection    = src->_projection;
-    self->_zUp = src->_zUp;                                     // +0xd4
-    return self;
+    return ::new (static_cast<void*>(self)) Graphics::Camera(*src);
 }
 
 // ??0Camera@Graphics@@QEAA@XZ — retail 0x1800fe7f0. Returns `this`.

@@ -253,6 +253,13 @@
 // makes is still retail's partial one. The deviation is reachable only from C++
 // code that copies a `Graphics::Camera` directly, and nothing does.
 //
+// SUPERSEDED FOR THE COPY CONSTRUCTOR (B.4 S4 GFX2, a `behaviour:` commit): the
+// copy ctor IS retail's partial body 0x180017a70 now, because every retail
+// copy-construction of a Camera goes through it — including the holders' own
+// copy ctors, which is exactly what the holders' implicit C++ copy ctors become
+// (the measurement is at the static_asserts below). `RtGraphics_Camera_CopyCtor`
+// is the door's `(this, src)` shape over it. `operator=` is unchanged.
+//
 // -------------------------------------------------------------------------
 // NO REAL CONSTRUCTOR, NO REAL DESTRUCTOR (ENDGAME §B.1 decision 2, B4b-2,
 // B35_RULES §11)
@@ -296,9 +303,12 @@ class Renderer;
 // ============================================================
 class Camera {
 public:
-    // Both copies are `= default` ON PURPOSE — see the banner's three-byte
-    // deviation note. Retail's partial bodies stay behind their doors.
-    Camera(const Camera& src) = default;                 // 0x180017a70  door: wave9_lane_gfxd.cpp
+    // B.4 S4 GFX2 (behaviour): the copy constructor is retail's PARTIAL body
+    // 0x180017a70 (defined in wave9_lane_gfxd.cpp): 53 dwords +0x00..+0xd3,
+    // then the byte at +0xd4; +0xd5..+0xd7 unwritten. `operator=` stays
+    // `= default` (its partial body 0x180017c40 keeps its door in renderer.cpp)
+    // — see the banner.
+    Camera(const Camera& src);                            // 0x180017a70
     Camera& operator=(const Camera& src) = default;       // 0x180017c40  door: renderer.cpp
 
     // `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`
@@ -367,10 +377,20 @@ static_assert(alignof(Camera) == 4, "Camera's widest member is a float");
 // a real `destroy` hook for both — which is exactly what renderer.cpp's
 // `~Renderer` comment and `wave9_lane_gfxd.cpp`'s `kSpec_SceneEntry` rely on.
 // The asserts below pin that half too, so an edit cannot quietly flip it.
-static_assert(std::is_trivially_copyable_v<Camera>,
-              "RULE B5-4: Camera is held BY VALUE in two Collection::Array "
-              "element types; a non-trivial copy would change how array.cpp's "
-              "trait-derived TAssign moves them");
+// B.4 S4 GFX2: the copy constructor is retail's 0x180017a70, so `Camera` is no
+// longer trivially COPY-CONSTRUCTIBLE. Measured before the change (the copy ctor
+// `= delete`d, the whole tree, the unit tests and both builds compiled): the only
+// C++ copy-construction of a `Camera` in the tree is the implicit copy ctor of
+// its two holders, reached through `rtcoll::TAssign<RendererDrawGroup>` /
+// `<RendererSceneEntry>` (Collection.h). Both holders were already
+// byteCopy = false, and retail copy-constructs each Camera in them with
+// 0x180017a70 (the draw-group copy ctor 0x18001be60, the SceneGroup ctor
+// 0x1800628d0, the draw-group ctor 0x1800625c0, SceneEntryAssign 0x18001bdc0).
+// The assign and the destructor stay trivial.
+static_assert(!std::is_trivially_copy_constructible_v<Camera>,
+              "Camera(const Camera&) is retail's partial 0x180017a70");
+static_assert(std::is_trivially_copy_assignable_v<Camera> && std::is_trivially_destructible_v<Camera>,
+              "operator= stays = default (door 0x180017c40), no destructor");
 static_assert(offsetof(Camera, _cameraToWorld) == 0x64, "Camera::_cameraToWorld @ +0x64 (GetCameraToWorld 0x180017e70)");
 static_assert(offsetof(Camera, _projection)    == 0x94, "Camera::_projection @ +0x94 (GetProjection 0x180017ed0)");
 static_assert(offsetof(Camera, _zUp)           == 0xd4, "Camera::_zUp @ +0xd4 (SetZUp 0x1800fe550)");
@@ -641,7 +661,8 @@ static_assert(offsetof(Renderer, _pad_4c)            == 0x4c, "Renderer::+0x4c i
 // ==== B3R RT-VG ====
 // The copy door `??0Camera@Graphics@@QEAA@AEBV01@@Z` (retail 0x180017a70), which
 // copies +0x00..+0xd4 and leaves the +0xd5..+0xd7 hole retail does not touch
-// (the defaulted `Graphics::Camera` copy ctor would copy the hole too).
+// (B.4 S4 GFX2: `Graphics::Camera`'s copy ctor IS that body now; the door
+// placement-constructs through it).
 namespace rtgfxd {
 // ---- graphics/wave9_lane_gfxd.cpp
 // B.4: typed on the real class (the POD describes the same 0xd8 bytes).
