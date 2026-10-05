@@ -116,9 +116,9 @@ void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float 
     // is a safe no-op rather than a null deref.
     if (animHolder) {
         short animIndex = model->meshGroup;
-        void* animData = animHolder->_meshGroups[static_cast<uintptr_t>(animIndex)].field_0x00;
+        Graphics::AnimationGroup* animData = animHolder->_meshGroups[static_cast<uintptr_t>(animIndex)].field_0x00;
         // PlayAnimation(meshInstance, animData, animId, &tB=p3, &tA=p4, p5)
-        model->meshInstance.PlayAnimation(Graphics::ExternalPtrHandle{animData}, static_cast<int>(animId),
+        model->meshInstance.PlayAnimation(Object::ExternalPtr<Graphics::AnimationGroup>(animData), static_cast<int>(animId),
                                           &timeB, &timeA, p5);
     }
 

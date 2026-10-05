@@ -2044,18 +2044,6 @@ void MeshInstance::SetMesh(Object::ExternalPtr<GraphicsMesh> mesh) {
     }
 }
 
-// B4 FORWARD: action_base_complete.cpp and buildcomponent_state8.cpp hold
-// their GraphicsMesh as a void*; action_base_movedeps.cpp its AnimationGroup.
-void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
-    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: audit WORK, not this agent's: the SetMesh B4 FORWARD overload, z-CODEB converts its code/ callers and may delete it
-}
-void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
-                                 const System::Time* startTime, const System::Time* blendTime,
-                                 float weight) {
-    PlayAnimation(Object::ExternalPtr<AnimationGroup>(static_cast<AnimationGroup*>(group.p)),  // LEFT: audit WORK, not this agent's: the PlayAnimation B4 FORWARD overload, z-CODEB converts its code/ caller and may delete it
-                  index, startTime, blendTime, weight);
-}
-
 // ---------------------------------------------------------------------------
 // ?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@…HAEBVTime@…1M@Z
 //                                                        retail 0x1800ff840

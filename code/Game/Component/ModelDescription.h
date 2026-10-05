@@ -21,16 +21,18 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 
-namespace Graphics { class GraphicsMesh; }
+namespace Graphics { class GraphicsMesh; class AnimationGroup; }
 namespace Object { class External; }
 
 // One element of ModelDescription's mesh-group array (stride 0x18), from Serialize
-// 0x140124dc0: an ExternalPtr at +0x00 (0x140035b40, type cell import 0x140152980,
-// not settled), then an Array of ExternalPtr<GraphicsMesh> (0x14001bcc0, type cell
+// 0x140124dc0: an ExternalPtr<AnimationGroup> at +0x00 (0x140035b40, type cell import
+// 0x140152980; B4 S4 RESOLVE: AnimalComponent's 0x1401250f0 hands this qword to
+// ?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@... by
+// value), then an Array of ExternalPtr<GraphicsMesh> (0x14001bcc0, type cell
 // import 0x140151f20 = GraphicsMesh) whose element is the mesh a ModelComponent's
 // meshIndex selects (0x140107400, 0x140124ac0).
 struct ModelMeshGroup {
-    Object::External*        field_0x00;   // +0x00 ExternalPtr (class not settled)
+    Graphics::AnimationGroup* field_0x00;  // +0x00 ExternalPtr<AnimationGroup> (the group's animations)
     Graphics::GraphicsMesh** meshes;       // +0x08 Array<ExternalPtr<GraphicsMesh>> data
     int32_t                  meshCount;    // +0x10
     int32_t                  meshCapacity; // +0x14
