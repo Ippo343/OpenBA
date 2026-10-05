@@ -698,7 +698,7 @@ extern "C" bool EditTool_IsEditTool(void* tool) {
 extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI) {
     if (!entityUI) return nullptr;
     PlayerToolManager* manager = entityUI;
-    Tool* tool = manager->currentTool;
+    Tool* tool = manager->currentTool.Get();
     if (EditTool_IsEditTool(tool)) return static_cast<EditTool*>(tool);   // IsDerivedFrom(EditTool) above
     if (tool) {
         static int warned = 0;
@@ -710,7 +710,7 @@ extern "C" EditTool* EditTool_HarnessAcquire(PlayerToolManager* entityUI) {
         }
     }
     entityUI->SelectTool(nullptr);
-    tool = manager->currentTool;
+    tool = manager->currentTool.Get();
     return EditTool_IsEditTool(tool) ? static_cast<EditTool*>(tool) : nullptr;
 }
 

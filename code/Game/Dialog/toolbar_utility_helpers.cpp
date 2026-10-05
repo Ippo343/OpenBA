@@ -29,6 +29,7 @@
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include <type_traits>  // BstInsertCore's node type
 #include "Dialog/ToolUI.h"   // X::TypeId() (B.3.8 callers)
 #include "Dialog/exe_bodies.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
@@ -66,8 +67,11 @@ Node* BstNodeAlloc(const Element& rec, Node* parent) {
 //   returns:  the found-or-inserted node (retail: *retNode)
 // Faithful AVL find-or-insert keyed by the element's +0x00 (compared as an
 // unsigned 64-bit value); rebalances from the insertion point via 0x140014b40.
-template <class Node, class Element>
-Node* BstInsertCore(AvlTreeHead<Node>* set, const Element& rec) {
+// SetT is the set header {Node* root, int32 count} (AvlTreeHead<Node>, or
+// TownHallUI::OwnedTree<Node> for the inventory tree).
+template <class SetT, class Element>
+auto BstInsertCore(SetT* set, const Element& rec) -> decltype(set->root) {
+    using Node = typename std::remove_pointer<decltype(set->root)>::type;
     Node* result = nullptr;
     if (set->root == nullptr) {
         // Empty tree — the new node becomes the root.
@@ -171,7 +175,7 @@ UI::DialogInstance* PlayerToolManager::FindUtilityDialog(const ComponentDescript
 PinnedToolNode* Avl38SetInsert(AvlTreeHead<PinnedToolNode>* set, const PinnedToolEntry& rec) {
     return BstInsertCore(set, rec);
 }
-TownHallUI::InventoryNode* Avl38SetInsert(AvlTreeHead<TownHallUI::InventoryNode>* set,
+TownHallUI::InventoryNode* Avl38SetInsert(TownHallUI::OwnedTree<TownHallUI::InventoryNode>* set,
                                           const TownHallUI::InventoryEntry& rec) {
     return BstInsertCore(set, rec);
 }

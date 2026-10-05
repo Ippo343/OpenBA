@@ -305,7 +305,7 @@ extern "C" int EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag,
     if (mgr->field_0x80 && mgr->field_0x88 != nullptr) {
         const uint32_t tidEditTool = EditTool::TypeId();
 
-        Tool* cur = mgr->currentTool;
+        Tool* cur = mgr->currentTool.Get();
         bool replaceable = (cur == nullptr) ||
                            (tidEditTool && cur->IsA(tidEditTool));
         if (replaceable) {
@@ -315,7 +315,7 @@ extern "C" int EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag,
     }
 
     // (1) OnKey (+0x30): open/close CreateBar dialog, rotate/flip, left-click confirm.
-    Tool* tool = mgr->currentTool;
+    Tool* tool = mgr->currentTool.Get();
     if (!tool) return -1;
     char onKeyResult = tool->OnKey((char)activeFlag);  // slot 6, +0x30
 
@@ -330,7 +330,7 @@ extern "C" int EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag,
         const Input::KeyMap* km =
             Input::Configuration::_singleton ? Input::Configuration::_singleton->_keyMap : nullptr;
         if (km && km->Pressed(0, 6)) {
-            Tool* t2 = mgr->currentTool;
+            Tool* t2 = mgr->currentTool.Get();
             int canStay = 1;
             if (t2) canStay = t2->OnCancel();  // slot 9, +0x48
             if (canStay == 0) {
@@ -341,7 +341,7 @@ extern "C" int EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag,
     }
 
     // (2) Update (+0x38): update the ghost-mesh preview + CreateBar cost/validity.
-    tool = mgr->currentTool;
+    tool = mgr->currentTool.Get();
     if (!tool) return -1;
     {
         int64_t timeLocal = time;
@@ -349,7 +349,7 @@ extern "C" int EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag,
     }
 
     // (3) cursor (+0x60): id used for SetCursor.
-    tool = mgr->currentTool;
+    tool = mgr->currentTool.Get();
     if (!tool) return -1;
     return tool->GetCursor();  // slot 12, +0x60
 }
@@ -361,7 +361,7 @@ extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context
     if (!entityUI) return;
     PlayerToolManager* mgr = entityUI;
     if (mgr->currentTool == nullptr) return;
-    Tool* tool = mgr->currentTool;
+    Tool* tool = mgr->currentTool.Get();
     if (!tool) return;
     tool->Draw(context, (char)activeFlag);  // slot 8, +0x40
 }

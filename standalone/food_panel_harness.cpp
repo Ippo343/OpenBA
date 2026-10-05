@@ -505,7 +505,7 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
                              "build tool NOT armed\n");
             } else {
                 entityUI->SelectTool(tmpl);   // 0x140102b60
-                Tool* armed = entityUI->currentTool;                          // +0x28
+                Tool* armed = entityUI->currentTool.Get();                          // +0x28
                 std::fprintf(stderr, "[FoodPanel]   teardown: armed build tool %p at "
                              "EntityUI+0x28 before the close click\n", armed);
             }
@@ -522,7 +522,7 @@ void ProbeClass(PlayerToolManager* entityUI, const FoodClass& fc) {
             // Re-read the CURRENT active tool: with ARM_BUILDTOOL the EditTool we
             // opened with has been destroyed by SetEditMode, so the captured `tool`
             // pointer is dangling and must not be dereferenced.
-            Tool* nowTool = entityUI->currentTool;                            // +0x28
+            Tool* nowTool = entityUI->currentTool.Get();                            // +0x28
             UI::DialogInstance* afterBtn = (nowTool && EditTool_IsEditTool(nowTool))
                 ? static_cast<EditTool*>(nowTool)->entityRef : nullptr;       // IsDerivedFrom(EditTool); +0x28
             std::fprintf(stderr, "[FoodPanel]   teardown: close button -> activeTool=%p%s "

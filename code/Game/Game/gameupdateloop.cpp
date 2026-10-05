@@ -1529,7 +1529,7 @@ void GameUpdateLoop::Draw(float alpha) {
         uint64_t drawFlag = (hasInput || pauseCheck) ? 1 : 0;
 
         // +0x28 is the InternalPtr to the current tool
-        Tool* tool = toolManager->currentTool;
+        Tool* tool = toolManager->currentTool.Get();
         if (tool) {
             // Caller batch CB6: slot 8 (vtable +0x40) `Tool::Draw(context, active)`.
             // The receiver is PROVED by its only writer, Toolbar_ShowGroup_Impl
@@ -2178,9 +2178,9 @@ static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
 
     // The camera's position: its cameraToWorld translation (+0x34 + 0x88).
     const Math::Vector3& camPos = playerCtrl->camera._cameraToWorld.translation;
-    float dx = camPos.x - playerCtrl->targetX;
-    float dy = camPos.y - playerCtrl->targetY;
-    float dz = camPos.z - playerCtrl->targetZ;
+    float dx = camPos.x - playerCtrl->target.x;
+    float dy = camPos.y - playerCtrl->target.y;
+    float dz = camPos.z - playerCtrl->target.z;
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 

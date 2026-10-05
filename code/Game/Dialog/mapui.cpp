@@ -224,9 +224,9 @@ static void MapUI_HandleClick(Object::InternalPtr<UI::Element>* /*element*/, int
 
     // Set the camera focus (the same field WASD panning drives).
     // Maps click position: X = (clickX - halfWidth) * scale, Y = (halfHeight - clickY) * scale
-    camCtrl->targetX = (float)(clickX - (mapWidth >> 1)) * worldScale;
-    camCtrl->targetY = (float)((mapHeight >> 1) - clickY) * worldScale;
-    camCtrl->targetZ = 0.0f;
+    camCtrl->target.x = (float)(clickX - (mapWidth >> 1)) * worldScale;
+    camCtrl->target.y = (float)((mapHeight >> 1) - clickY) * worldScale;
+    camCtrl->target.z = 0.0f;
 }
 
 // ---- MapUI: PROMOTED to the real reimpl (map-render bring-up) ----------------

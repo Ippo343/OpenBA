@@ -46,6 +46,23 @@ static_assert(sizeof(RawArray<int32_t>) == 0x10, "RawArray is Collection::Array'
 static_assert(offsetof(RawArray<int32_t>, size) == 0x08, "RawArray::size @ +0x08");
 static_assert(offsetof(RawArray<int32_t>, capacity) == 0x0C, "RawArray::capacity @ +0x0C");
 
+// B.4 Y GAMEB: the two Collection::Array<T> bodies a RawArray's owner runs by
+// hand, as typed wrappers over the one erased core (the Array header is the
+// same three fields): the fill-form SetSize (rtcoll::SetSizeCore over T's
+// trait-derived row) and, for a trivially destructible T, ~Array (the buffer
+// freed, then the three fields zeroed: rtcoll::ArrayDtorImpl).
+template <class T>
+inline void RawArraySetSize(RawArray<T>& a, int newSize, const T& fill) {
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(&a), newSize,  // CAST-OK: elem_stride
+                        reinterpret_cast<const uint8_t*>(&fill),           // CAST-OK: elem_stride
+                        rtcoll::SpecFor<T>());
+}
+template <class T>
+inline void RawArrayFree(RawArray<T>& a) {
+    static_assert(std::is_trivially_destructible<T>::value, "~Array with no element destroy");
+    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(&a));        // CAST-OK: elem_stride
+}
+
 // ---------------------------------------------------------------------------
 // The node pool: nodes carved out of chunks, a free list threaded through the
 // first qword of each free node. Retail's three allocators 0x14001a9b0 (queue

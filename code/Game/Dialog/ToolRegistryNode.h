@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "object/Internal.h"   // Object::InternalPtr (toolSetting)
 
 class ToolSetting;   // Player/ToolSetting.h
 
@@ -32,7 +33,7 @@ struct ToolRegistryNode {
     uint32_t          _pad04;          // +0x04
     uint32_t          factoryTypeId;   // +0x08 the Tool class Factory::CreateObject builds
     uint32_t          _pad0C;          // +0x0C
-    ToolSetting*      toolSetting;     // +0x10 InternalPtr<ToolSetting>, created lazily
+    Object::InternalPtr<ToolSetting> toolSetting;   // +0x10 created lazily (SelectTool 0x140102b60); the teardown DeletePtr()s it
     ToolRegistryNode* parent;          // +0x18
     ToolRegistryNode* left;            // +0x20
     ToolRegistryNode* right;           // +0x28

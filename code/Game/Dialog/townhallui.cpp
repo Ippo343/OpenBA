@@ -281,7 +281,7 @@ void TownHallUI::InitProfessions() {
         profEntry.workers = i;  // profession index
 
         // Insert into profession BST at +0x50
-        ProfessionNode* curNode = professionTree;
+        ProfessionNode* curNode = professionTree.root;
 
         if (curNode == nullptr) {
             // Allocate first BST node (0x30 bytes)
@@ -295,7 +295,7 @@ void TownHallUI::InitProfessions() {
                 newNode->balance = 0;               // +0x28: balance
                 newNode->height = 0;
             }
-            professionTree = newNode;
+            professionTree.root = newNode;
         } else {
             // Walk BST and insert
             ProfessionNode* parent = nullptr;
@@ -317,7 +317,7 @@ void TownHallUI::InitProfessions() {
                         }
                         parent->left = newNode;
                         // Rebalance
-                        AvlRebalance(&professionTree, &curNode);   // 0x140013480
+                        AvlRebalance(&professionTree.root, &curNode);   // 0x140013480
                         inserted = true;
                     } else {
                         curNode = curNode->left;
@@ -336,7 +336,7 @@ void TownHallUI::InitProfessions() {
                             newNode->height = 0;
                         }
                         parent->right = newNode;
-                        AvlRebalance(&professionTree, &curNode);   // 0x140013480
+                        AvlRebalance(&professionTree.root, &curNode);   // 0x140013480
                         inserted = true;
                     } else {
                         curNode = curNode->right;
@@ -347,7 +347,7 @@ void TownHallUI::InitProfessions() {
                 }
             }
         }
-        professionTreeCount = professionTreeCount + 1;
+        professionTree.count = professionTree.count + 1;
 
         // Set label text from the profession:
         //   +0x20 = StringTable pointer, +0x28 = SpriteSheet pointer,
@@ -380,14 +380,10 @@ void TownHallUI::InitProfessions() {
         button->UI::Element::SetElementId(i + 0x1999);
 
         // Push profession entry into dynamic array at +0x40
-        TownHall_ProfArrayPush(&professionRows, professionRowCount + 1, &profEntry);   // 0x140015800
+        professionRows.SetSize(professionRows.GetSize() + 1, profEntry);   // 0x140015800
 
-        // Free entity list if allocated (profEntry.entities was zeroed, so nothing to free);
-        // the size and capacity are retail's one qword store (H7).
-        System::MemoryAllocator::MemFree(profEntry.entities);
-        profEntry.entities = nullptr;
-        profEntry.entityCount = 0;
-        profEntry.entityCapacity = 0;
+        // profEntry's destructor frees its entity list (it was zeroed, so
+        // nothing to free): MemFree, then the three fields zeroed.
     }
 }
 
@@ -429,7 +425,7 @@ void TownHallUI::InitProduction() {
         }
 
         // Push entry into production limits array at +0xF0
-        TownHall_ProdArrayPush(&prodLimits, prodLimitsCount + 1, &entry);   // 0x1400159b0
+        prodLimits.SetSize(prodLimits.GetSize() + 1, entry);   // 0x1400159b0
 
         childBase += colCount;  // advance to next row
     }
@@ -520,10 +516,7 @@ void TownHallUI::InitInventory() {
         UI::NumberElement* numElem = CastElement<UI::NumberElement>(cell2->Child(1).Get());
 
         // Push {label, number} into the inventory table array at +0x118.
-        // B.3.2 bridge: TownHallUI+0x118 is Collection::Array<InventoryRow>
-        // (stride 0x10, count +0x120, capacity +0x124), raw storage (H5).
-        auto& invRows = GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&invTable);
-        invRows.SetSize(invRows.GetSize() + 1, GameColl::Bytes<0x10, 8>(labelElem, numElem));
+        invTable.SetSize(invTable.GetSize() + 1, InventoryRow{labelElem, numElem});
     }
 
     // Load inventoryType string table
@@ -594,7 +587,7 @@ void TownHallUI::InitAgriculture() {
                     if (::Object::IsDerivedFromNullSafe(subObj, selectDescId) && subObj) {
                         // Insert buildComp into agriculture BST at +0x1D8
                         const ComponentDescription* key = buildComp;
-                        AgricultureNode* curNode = agriBST;
+                        AgricultureNode* curNode = agriBST.root;
 
                         if (curNode == nullptr) {
                             // First node (0x28 bytes)
@@ -607,8 +600,8 @@ void TownHallUI::InitAgriculture() {
                                 newNode->balance = 0;
                                 newNode->height = 0;
                             }
-                            agriBST = newNode;
-                            agriBSTCount = agriBSTCount + 1;
+                            agriBST.root = newNode;
+                            agriBST.count = agriBST.count + 1;
                         } else {
                             // Walk BST and insert
                             AgricultureNode* parent = nullptr;
@@ -627,7 +620,7 @@ void TownHallUI::InitAgriculture() {
                                             newNode->height = 0;
                                         }
                                         parent->left = newNode;
-                                        AvlRebalance(&agriBST, &curNode);   // 0x1400149a0
+                                        AvlRebalance(&agriBST.root, &curNode);   // 0x1400149a0
                                         inserted = true;
                                     } else {
                                         curNode = curNode->left;
@@ -644,7 +637,7 @@ void TownHallUI::InitAgriculture() {
                                             newNode->height = 0;
                                         }
                                         parent->right = newNode;
-                                        AvlRebalance(&agriBST, &curNode);   // 0x1400149a0
+                                        AvlRebalance(&agriBST.root, &curNode);   // 0x1400149a0
                                         inserted = true;
                                     } else {
                                         curNode = curNode->right;
@@ -654,7 +647,7 @@ void TownHallUI::InitAgriculture() {
                                     inserted = true;
                                 }
                             }
-                            agriBSTCount = agriBSTCount + 1;
+                            agriBST.count = agriBST.count + 1;
                         }
                     }
                     break;  // Found matching sub-component, stop inner loop
@@ -666,7 +659,7 @@ void TownHallUI::InitAgriculture() {
     }
 
     // Now set up the table with agriculture BST count
-    int agriCount = agriBSTCount;
+    int agriCount = agriBST.count;
     int colCount = table->_columnCount;
 
     UI::Element* templateChild = table->Child(0).Get();
@@ -696,10 +689,7 @@ void TownHallUI::InitAgriculture() {
         UI::LabelElement* labelElem = CastElement<UI::LabelElement>(table->Child(i).Get());
 
         // Push the label into the label array at +0x1C8.
-        // B.3.2 bridge: TownHallUI+0x1C8 is Collection::Array<LabelElement*>
-        // (stride 8, count +0x1D0, capacity +0x1D4), raw storage (H5).
-        auto& labelRows = GameColl::AsArray<GameColl::Bytes<8, 8>>(&agriLabels);
-        labelRows.SetSize(labelRows.GetSize() + 1, GameColl::Bytes<8, 8>(labelElem));
+        agriLabels.SetSize(agriLabels.GetSize() + 1, labelElem);
     }
 }
 
@@ -995,7 +985,7 @@ void TownHallUI::UpdateProfessions() {
     CitizenBehavior* town =
         GameUpdateLoop::_singleton->m_citizenList;
     uint32_t resIdx = 10;
-    int prodCount = prodLimitsCount;
+    int prodCount = prodLimits.GetSize();
 
     if (prodCount > 0) {
         for (int i = 0; i < prodCount; i++) {
@@ -1217,8 +1207,8 @@ void TownHallUI::UpdateProduction() {
     }
 
     // Clear remaining entries
-    if (displayIdx < invTableCount) {
-        for (int i = displayIdx; i < invTableCount; i++) {
+    if (displayIdx < invTable.GetSize()) {
+        for (int i = displayIdx; i < invTable.GetSize(); i++) {
             // Empty sprite
             UI::Sprite emptySprite;
             invTable[i].label->SetSprite(&emptySprite);
@@ -1306,7 +1296,7 @@ next_entity: ;
     }
 
     // Traverse agriBST (+0x1D8) in-order
-    AgricultureNode* agriBSTRoot = agriBST;
+    AgricultureNode* agriBSTRoot = agriBST.root;
     int displayIdx = 0;
 
     if (agriBSTRoot) {
@@ -1364,8 +1354,8 @@ next_entity: ;
     }
 
     // Hide remaining label elements
-    if (displayIdx < agriLabelCount) {
-        for (int i = displayIdx; i < agriLabelCount; i++) {
+    if (displayIdx < agriLabels.GetSize()) {
+        for (int i = displayIdx; i < agriLabels.GetSize(); i++) {
             agriLabels[i]->SetFlagsOnOff(1, 0);
         }
     }
@@ -1427,10 +1417,8 @@ void TownHallUI::UpdateInventory() {
             ComponentEntity* entity = bstNode->element.entities._data[slot];
 
             // Push the entity into this profession row's entity array at +0x30.
-            // B.3.2 bridge: ProfessionRow::entities is Collection::Array<ComponentEntity*>
-            // (stride 8, count +0x38, capacity +0x3C), raw storage (H5).
-            auto& profEntities = GameColl::AsArray<GameColl::Bytes<8, 8>>(&professionRows[p].entities);
-            profEntities.SetSize(profEntities.GetSize() + 1, GameColl::Bytes<8, 8>(entity));
+            Collection::Array<ComponentEntity*>& profEntities = professionRows[p].entities;
+            profEntities.SetSize(profEntities.GetSize() + 1, entity);
 
             // Check entity for WorkPlaceComponent -> active flag + worker count
             WorkPlaceComponent* workplaceComp = entity->FindComponent<WorkPlaceComponent>();
@@ -1461,7 +1449,7 @@ void TownHallUI::UpdateInventory() {
         ProfessionRow& profEntry = professionRows[p];
         profEntry.slotsNumber->SetValue(static_cast<int32_t>(profEntry.slots));
 
-        int entityArrayCount = profEntry.entityCount;
+        int entityArrayCount = profEntry.entities.GetSize();
         profEntry.buildingsNumber->SetValue(static_cast<int32_t>(entityArrayCount));
 
         // Set visibility via vtable+0x40 (UI::Element slot 8, Enable)
@@ -1480,7 +1468,7 @@ void TownHallUI::UpdateInventory() {
         if (age >= adultAge && school == nullptr) {
             // Adult citizen — look up profession in profBST (+0x50)
             Profession* profId = citizen->profession;
-            ProfessionNode* profNode = professionTree;
+            ProfessionNode* profNode = professionTree.root;
             while (profNode) {
                 Profession* nodeKey = profNode->key;
                 if (profId < nodeKey)
@@ -1503,7 +1491,7 @@ void TownHallUI::UpdateInventory() {
     professionRows[0].desired->SetMinMax(professionRows[0].workers, professionRows[0].workers);
 
     // Remaining profession entries
-    int totalProfs = professionRowCount;
+    int totalProfs = professionRows.GetSize();
     for (int p = 1; p < totalProfs; p++) {
         professionRows[p].desired->SetValue(professionRows[p].workers);
 
@@ -1616,7 +1604,7 @@ void TownHallUI::UpdateAll() {
 void TownHallUI::OnProfessionButton(int index) {
     ProfessionRow& entryBase = professionRows[index];
 
-    int entityCount = entryBase.entityCount;
+    int entityCount = entryBase.entities.GetSize();
     if (entityCount == 0) return;
 
     profButtonIdx++;
@@ -1735,12 +1723,12 @@ bool TownReady() {
 static void Trace(const char* what, const TownHallUI* self) {
     fprintf(stderr, "[TownHallUI] %s self=%p ready=%d town=%d built=%d\n",
             what, static_cast<const void*>(self), Ready() ? 1 : 0, TownReady() ? 1 : 0,
-            self ? self->professionRowCount : -1);
+            self ? self->professionRows.GetSize() : -1);
     fflush(stderr);
 }
 
 // InitProfessions pushed at least one row once Serialize has run.
-inline bool Built(const TownHallUI* self) { return self->professionRowCount != 0; }
+inline bool Built(const TownHallUI* self) { return self->professionRows.GetSize() != 0; }
 
 // Controller bound to its element + dialog instance (framework sets +0x18/+0x20).
 inline bool Bound(const TownHallUI* self) {
@@ -1785,26 +1773,6 @@ void DiagPrint(const char* where, const TownHallUI* self) {
     fflush(stderr);
 }
 
-// ---- destructor: free the owned containers (mirrors exe 0x1400810d0) ----
-
-void FreeAgricultureTree(TownHallUI::AgricultureNode* node) {
-    if (!node) return;
-    FreeAgricultureTree(node->left);
-    FreeAgricultureTree(node->right);
-    System::MemoryAllocator::MemFree(node);
-}
-void FreeInventoryTree(TownHallUI::InventoryNode* node) {
-    if (!node) return;
-    FreeInventoryTree(node->left);
-    FreeInventoryTree(node->right);
-    System::MemoryAllocator::MemFree(node);
-}
-void FreeProfessionTree(TownHallUI::ProfessionNode* node) {
-    if (!node) return;
-    FreeProfessionTree(node->left);
-    FreeProfessionTree(node->right);
-    System::MemoryAllocator::MemFree(node);
-}
 }  // namespace townhallui_sa
 
 // ============================================================
@@ -1903,7 +1871,7 @@ void TownHallUI::OnUpdate(const System::Time& /*time*/) {
 
     UpdateInventory();
     UpdateAll();
-    if ((_pad1E4)++ % 30 == 0) TownHallUI::OnUpdateLayout();
+    if ((agriBST.tail)++ % 30 == 0) TownHallUI::OnUpdateLayout();
 }
 
 // ============================================================
@@ -1968,41 +1936,13 @@ extern "C" void TownHallSA_Diag(int frameNum) {
     s_done = true;
 }
 
-// ~TownHallUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
-// WITHOUT ~DialogController); moved here unchanged. The compiler now chains
-// ~DialogController -> ~Internal after it. Each {data, count, capacity} pair is
-// retail's one qword store over count and capacity (H7).
+// ~TownHallUI (0x1400810d0): the body is empty. The owned containers are members
+// and are destroyed in reverse declaration order after it -- agriBST, agriLabels,
+// invBST, invTable, prodLimits, groupStars (half, whole), groupHearts (half, whole),
+// professionTree, professionRows (each row's entity list, then the buffer:
+// 0x140015930) -- retail's descending-offset order; then ~DialogController ->
+// ~Internal.
 TownHallUI::~TownHallUI() {
-    {
-        townhallui_sa::FreeAgricultureTree(agriBST);
-        agriBST = nullptr; agriBSTCount = 0;
-        System::MemoryAllocator::MemFree(agriLabels);
-        agriLabels = nullptr; agriLabelCount = 0; agriLabelCap = 0;
-        townhallui_sa::FreeInventoryTree(invBST.root);
-        invBST.root = nullptr; invBST.count = 0;
-        System::MemoryAllocator::MemFree(invTable);
-        invTable = nullptr; invTableCount = 0; invTableCap = 0;
-        System::MemoryAllocator::MemFree(prodLimits);
-        prodLimits = nullptr; prodLimitsCount = 0; prodLimitsCapacity = 0;
-        System::MemoryAllocator::MemFree(groupStars.half);
-        groupStars.half = nullptr; groupStars.halfCount = 0; groupStars.halfCapacity = 0;
-        System::MemoryAllocator::MemFree(groupStars.whole);
-        groupStars.whole = nullptr; groupStars.wholeCount = 0; groupStars.wholeCapacity = 0;
-        System::MemoryAllocator::MemFree(groupHearts.half);
-        groupHearts.half = nullptr; groupHearts.halfCount = 0; groupHearts.halfCapacity = 0;
-        System::MemoryAllocator::MemFree(groupHearts.whole);
-        groupHearts.whole = nullptr; groupHearts.wholeCount = 0; groupHearts.wholeCapacity = 0;
-        townhallui_sa::FreeProfessionTree(professionTree);
-        professionTree = nullptr; professionTreeCount = 0;
-        int profRows = professionRowCount;
-        ProfessionRow* profArr = professionRows;
-        for (int i = 0; i < profRows && profArr; i++) {
-            System::MemoryAllocator::MemFree(profArr[i].entities);
-            profArr[i].entities = nullptr; profArr[i].entityCount = 0; profArr[i].entityCapacity = 0;
-        }
-        System::MemoryAllocator::MemFree(professionRows);
-        professionRows = nullptr; professionRowCount = 0; professionRowCapacity = 0;
-    }
 }
 
 
