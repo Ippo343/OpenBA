@@ -62,20 +62,11 @@ static_assert(offsetof(App, _messageCallbacks) + offsetof(Set, count)
 
 namespace {
 
-// The message callback signature retail stores: the mangled name spells it
-// `P6AHPEAUHWND__@@I_K_J@Z` — `int (*)(HWND, unsigned, uintptr_t, intptr_t)`.
-// Never called here; only stored and compared.
-using MessageCallbackFn = int (*)(void*, unsigned, uint64_t, int64_t);
-
-// The 16-byte element. `0x18000a5b0` copies it as two qword loads/stores, so
-// the three padding bytes after `message` are copied verbatim from the caller's
-// stack rather than zeroed — see AllocNode.
-struct Element {
-    unsigned          message;   // +0x00
-    unsigned          pad04;     // +0x04
-    MessageCallbackFn callback;  // +0x08
-};
-static_assert(sizeof(Element) == 0x10, "Set element is 0x10 bytes (0x18000a5b0 copies two qwords)");
+// The 16-byte element (Application.h). `0x18000a5b0` copies it as two qword
+// loads/stores, so the padding bytes after `message` are copied verbatim from
+// the caller's stack rather than zeroed — see AllocNode. The callback type is
+// the mangled `P6AHPEAUHWND__@@I_K_J@Z`, Application::MessageCallback.
+using Element = App::MessageCallbackEntry;
 
 
 // ---------------------------------------------------------------------------
@@ -184,7 +175,7 @@ void Application::Application::RegisterMessageCallback(uint32_t id, MessageCallb
     // `message` written, `pad04` left alone. See AllocNode's banner.
     Element elem;                      // deliberately uninitialised
     elem.message  = id;                // 0x18009fa83
-    elem.callback = reinterpret_cast<MessageCallbackFn>(callback);  // 0x18009fa86  // LEFT: the public MessageCallback type (Application.h) and the set element's MessageCallbackFn differ in parameter types: one function-pointer view
+    elem.callback = callback;          // 0x18009fa86
 
     Node* root = set->root;
     if (!root) {
