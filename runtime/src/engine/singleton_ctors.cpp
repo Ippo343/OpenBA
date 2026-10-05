@@ -292,9 +292,9 @@ IO::FileSystem* Ctor_FileSystem(IO::FileSystem* self) {
     self->_packDirectory._data     = nullptr;   // 0x1800ac7f0
     self->_existsInPackfileGate    = 0;
     self->_platformExistsGate      = 1;
-    self->_packfiles               = nullptr;
-    self->_packfileCount           = 0;
-    self->_packfileCapacity        = 0;
+    self->_packfiles._data         = nullptr;
+    self->_packfiles._size         = 0;
+    self->_packfiles._capacity     = 0;
     self->_userPackFilenames       = nullptr;
     self->_userPackFilenameCount   = 0;
     self->_unknown3C               = 0;
