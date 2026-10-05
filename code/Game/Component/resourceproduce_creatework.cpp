@@ -105,15 +105,15 @@ W* AllocWork(int size) {
         if (pos) {
             const int n0 = InteractNodeCount(pos, 0);
             const int n2 = InteractNodeCount(pos, 2);
-            // B.3.2 bridge: 0x1400032e0 is Array<void*>::SetSize, 0x1400021d0 is Array<int32>::SetSize
-            // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). I32NoInit:
-            // 0x1400021d0 leaves a grown tail as-found. Safe — the zero loop right below
-            // (retail 1400eaba0) writes all the spot slots before any is read.
-            GameColl::AsArray<GameColl::Ptr8>(&work->citizenRefs).SetSize(n0);
-            GameColl::AsArray<GameColl::I32NoInit>(&work->spotStates).SetSize(n2);
+            // 0x1400032e0 is citizenRefs.SetSize, 0x1400021d0 is spotStates.SetSize
+            // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). 0x1400021d0
+            // leaves a grown tail as-found. Safe — the zero loop right below (retail
+            // 1400eaba0) writes all the spot slots before any is read.
+            work->citizenRefs.SetSize(n0);
+            work->spotStates.SetSize(n2);
             // Zero the kind-2 slot array the ctor allocates (retail's trailing loop).
-            const int cnt = work->spotCount;
-            int32_t* slots = work->spotStates;
+            const int cnt = work->spotStates._size;
+            int32_t* slots = work->spotStates._data;
             if (slots) for (int i = 0; i < cnt; ++i) slots[i] = 0;
         }
     }

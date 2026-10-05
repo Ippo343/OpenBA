@@ -26,6 +26,10 @@
 #include <cstddef>
 #include "Work/Work.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (citizenRefs, spotStates)
+#include "object/Internal.h"         // Object::InternalPtr<T>
+
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 class CitizenComponent;
 
@@ -36,10 +40,9 @@ class FishingWork final : public Work {
 public:
     FishingWork();                                                  // (Work_GenericCtor shape)
 
-    // PORT GAP (retail 0x1400eaa50) — B38 D9: retail's dtor (reached from slot 0
-    // 0x14002a2c0) is its own body and very likely frees the two arrays; the tree's
-    // slot 0 was Work_GenericScalarDtor (stamp Work, ~Internal), which is what this
-    // empty dtor + the compiler chain still does (the arrays leak, as before).
+    // Retail dtor 0x1400eaa50 (reached from slot 0 0x14002a2c0): restamp, then the two
+    // arrays' ~Array (+0x58 first, then +0x48), then the Work stamp and ~Internal. The
+    // body is empty: reverse declaration order of the members below is that order.
     ~FishingWork() override = default;                              // [0]  0x14002a2c0
     void  Persist(IO::Stream& stream) override;                           // [3]  0x1400ea910
     int   Execute(CitizenComponent** citizenIBP, System::Time* time) override;  // [4]  0x1400e9f20
@@ -51,13 +54,19 @@ public:
     int   GetPriority() override;                                   // [11] 0x140029860
 
     // --- FishingWork fields (+0x48) ---
-    Object::InternalPtr<CitizenComponent>* citizenRefs; // +0x48: Array<InternalPtr<CitizenComponent>> data (Persist
-                                    //        0x1400ea910 validates each against CitizenComponent)
-    int32_t  citizenCount;       // +0x50: count of citizenRefs array
-    int32_t  citizenCapacity;    // +0x54: capacity of citizenRefs array
-    int32_t* spotStates;         // +0x58: Array<int> data (0=avail, 1=assigned, 2=done)
-    int32_t  spotCount;          // +0x60: count of spotStates array
-    int32_t  spotCapacity;       // +0x64: capacity of spotStates array
+    // Both arrays are real members: the ctor 0x1400eabe0 zeroes +0x48 / +0x50 / +0x58 /
+    // +0x60 as four qwords (0x1400eac3a..0x1400eac46); the dtor 0x1400eaa50 MemFrees
+    // +0x58 then zeroes +0x58 / +0x60, then MemFrees +0x48 and zeroes +0x48 / +0x50
+    // (0x1400eaa75..0x1400eaa97): ~Array in reverse declaration order.
+    // +0x48: the citizens holding a slot (Persist 0x1400ea910 validates each against
+    // CitizenComponent); grows through 0x1400032e0 (stride 8, the new tail ZEROED, no
+    // element destroy): kSpec_PtrZero, the row the AsArray<Ptr8> view reached.
+    using CitizenRefList = Collection::Array<Object::InternalPtr<CitizenComponent>, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    CitizenRefList citizenRefs;  // +0x48 (count +0x50, capacity +0x54)
+    // +0x58: per-spot state (0=avail, 1=assigned, 2=done); grows through 0x1400021d0
+    // (stride 4, the new tail left as found): Array<int32_t>'s trait row.
+    Collection::Array<int32_t> spotStates;   // +0x58 (count +0x60, capacity +0x64)
     int32_t  retryCount;         // +0x68: retry counter for fishing spot search
     uint8_t  _pad6C[4];          // +0x6C: padding
 };
@@ -66,9 +75,9 @@ static_assert(sizeof(FishingWork) == 0x70, "FishingWork is 0x70 (retail create M
 static_assert(offsetof(FishingWork, _pad6C) == 0x6C, "FishingWork::_pad6C");
 static_assert(alignof(FishingWork) == 8, "FishingWork is 8-aligned");
 static_assert(offsetof(FishingWork, citizenRefs) == 0x48, "FishingWork +0x48");
-static_assert(offsetof(FishingWork, citizenCount) == 0x50, "FishingWork +0x50");
-static_assert(offsetof(FishingWork, citizenCapacity) == 0x54, "FishingWork +0x54");
+static_assert(offsetof(FishingWork, citizenRefs) + offsetof(FishingWork::CitizenRefList, _size) == 0x50, "FishingWork +0x50");
+static_assert(offsetof(FishingWork, citizenRefs) + offsetof(FishingWork::CitizenRefList, _capacity) == 0x54, "FishingWork +0x54");
 static_assert(offsetof(FishingWork, spotStates) == 0x58, "FishingWork +0x58");
-static_assert(offsetof(FishingWork, spotCount) == 0x60, "FishingWork +0x60");
-static_assert(offsetof(FishingWork, spotCapacity) == 0x64, "FishingWork +0x64");
+static_assert(offsetof(FishingWork, spotStates) + offsetof(Collection::Array<int32_t>, _size) == 0x60, "FishingWork +0x60");
+static_assert(offsetof(FishingWork, spotStates) + offsetof(Collection::Array<int32_t>, _capacity) == 0x64, "FishingWork +0x64");
 static_assert(offsetof(FishingWork, retryCount) == 0x68, "FishingWork +0x68");

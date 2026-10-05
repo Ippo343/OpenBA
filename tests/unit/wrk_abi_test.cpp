@@ -191,11 +191,11 @@ UNIT_TEST(wrk_leaf_firework) {
 UNIT_TEST(wrk_leaf_fishingwork) {
     WRK_LEAF_SHAPE(FishingWork, Work, 0x70);
     CHECK_EQ(offsetof(FishingWork, citizenRefs), (size_t)0x48);
-    CHECK_EQ(offsetof(FishingWork, citizenCount), (size_t)0x50);
-    CHECK_EQ(offsetof(FishingWork, citizenCapacity), (size_t)0x54);
+    CHECK_EQ(offsetof(FishingWork, citizenRefs) + offsetof(FishingWork::CitizenRefList, _size), (size_t)0x50);
+    CHECK_EQ(offsetof(FishingWork, citizenRefs) + offsetof(FishingWork::CitizenRefList, _capacity), (size_t)0x54);
     CHECK_EQ(offsetof(FishingWork, spotStates), (size_t)0x58);
-    CHECK_EQ(offsetof(FishingWork, spotCount), (size_t)0x60);
-    CHECK_EQ(offsetof(FishingWork, spotCapacity), (size_t)0x64);
+    CHECK_EQ(offsetof(FishingWork, spotStates) + offsetof(Collection::Array<int32_t>, _size), (size_t)0x60);
+    CHECK_EQ(offsetof(FishingWork, spotStates) + offsetof(Collection::Array<int32_t>, _capacity), (size_t)0x64);
     CHECK_EQ(offsetof(FishingWork, retryCount), (size_t)0x68);
 }
 
