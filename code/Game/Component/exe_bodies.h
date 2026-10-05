@@ -235,7 +235,9 @@ int StorageComponent_QueryAvailable(StorageComponent* storageComp, const Compone
 void StorageComponent_DynArrayResize(void* arrayBase, int newCount);  // 0x14000f090
 
 // ---- toolbardescription.cpp
-extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCount);  // 0x140028860
+#include "collection/Collection.h"   // Collection::Array (the resize's header)
+namespace System { class String; }
+extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount);  // 0x140028860
 
 // ---- tradecomponent.cpp
 // B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.
