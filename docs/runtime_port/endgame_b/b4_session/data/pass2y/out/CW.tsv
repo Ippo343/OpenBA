@@ -1,0 +1,175 @@
+file	line	unit	note
+code/Game/Action/action_base_complete.cpp	104	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Action/action_base_complete.cpp	201	CLASS:WorkScheduler	+0x10 / +0x18 root + count as two fields; needs one AvlTreeHead member + an AvlTreeHead wrapper of a6e0
+code/Game/Action/action_base_complete.cpp	262	CLASS:CitizenComponent	+0xB8 meshInstance raw bytes, placement-new on a null vptr; row 650: retail ctor builds it, dtor destroys it
+code/Game/Action/action_base_complete.cpp	345	RULING:retail_diff:45	ShowCitizenTool toolId < 0 read (known_port_issues row 45)
+code/Game/Action/action_base_complete.cpp	376	CLASS:CitizenComponent	+0xB8 meshInstance raw bytes, placement-new on a null vptr; row 650: retail ctor builds it, dtor destroys it
+code/Game/Action/action_base_complete.cpp	399	CLASS:CitizenComponent	+0xB8 meshInstance raw bytes, placement-new on a null vptr; row 650: retail ctor builds it, dtor destroys it
+code/Game/Action/action_base_hunt.cpp	161	SIG:ActHunt_DynArraySetCount_3110	void* array + void* fill value; B4 FORWARD -> QwordArraySetSize
+code/Game/Action/action_base_hunt.cpp	162	SIG:ActHunt_DynArraySetCount_3110	void* array + void* fill value; B4 FORWARD -> QwordArraySetSize
+code/Game/Action/action_base_hunt.cpp	167	SIG:ActHunt_MarkEntityRemoval_c2ea0	void* entity; B4 FORWARD -> MarkEntityForRemoval
+code/Game/Action/action_base_hunt.cpp	172	SIG:ActHunt_NotifyEntityChanged_c3470	void* entity; B4 FORWARD -> NotifyEntityChanged
+code/Game/Action/action_base_move.cpp	170	RULING:h8	raw byte through the bool& overload (a bool field would normalise it)
+code/Game/Action/action_base_move.cpp	191	RULING:const_find	FindOrLoad returns const (ledger S3)
+code/Game/Action/action_pf_road.cpp	394	CLASS:WorldGeometry	+0xE8 / +0xF0 two fields; the insert takes AvlTreeHead<AvlNode28>
+code/Game/Action/action_pf_road.cpp	986	SIG:Pf_EntityResolvePos_2e20	void* self; callers hand an InteractComponent from a type-id scan
+code/Game/Action/action_pf_roots_road.cpp	219	CLASS:Map	14: +0xE8 / +0xF0 root + count two fields (a6e0); 68 / 69: +0x08 pickingScene raw Picking::Scene
+code/Game/Action/performwork.cpp	269	RULING:retail_diff:51	Time low dword read as float bits where retail calls Time::AsSeconds
+code/Game/Action/performwork.cpp	270	RULING:retail_diff:51	Time low dword read as float bits where retail calls Time::AsSeconds
+code/Game/Action/showtool.cpp	167	CLASS:CitizenComponent	+0xB8 meshInstance raw bytes, placement-new on a null vptr; row 650: retail ctor builds it, dtor destroys it
+code/Game/Action/showtool.cpp	179	CLASS:CitizenComponent	+0xB8 meshInstance raw bytes, placement-new on a null vptr; row 650: retail ctor builds it, dtor destroys it
+code/Game/Action/showtool.cpp	208	CLASS:CitizenComponent	+0xB8 meshInstance raw bytes, placement-new on a null vptr; row 650: retail ctor builds it, dtor destroys it
+code/Game/Component/ambient_externalptr_serialize.cpp	87	RULING:const_find	FindOrLoad returns const (ledger S3)
+code/Game/Component/animalwave_serialize.cpp	70	POD:bare-T*-for-InternalPtr<T>	InternalPtr member / local declared as the bare T* it holds; InternalBasePtr::Serialize needs the slot
+code/Game/Component/attendancecomponent.cpp	156	SIG:AttendanceComponent_GetJobHostComponent	void* entity, void* out (B4 FORWARD)
+code/Game/Component/boatcomponent_route.cpp	351	LOCAL:boatcomponent_route Vector2 loop	type the three polyPts[i*2] loop lines of the same file as Math::Vector2 reads
+code/Game/Component/cemeterycomponent.cpp	148	ERASED:CemeteryListErase_Reimpl	one erase body 0x140002cc0 over every 8-byte-pointer list (19 caller files)
+code/Game/Component/cemeterycomponent.cpp	152	ERASED:CemeteryListErase_Reimpl	one erase body 0x140002cc0 over every 8-byte-pointer list (19 caller files)
+code/Game/Component/cemeterycomponent.cpp	152	ERASED:CemeteryListErase_Reimpl	one erase body 0x140002cc0 over every 8-byte-pointer list (19 caller files)
+code/Game/Component/cemeterycomponent.cpp	154	ERASED:CemeteryListErase_Reimpl	one erase body 0x140002cc0 over every 8-byte-pointer list (19 caller files)
+code/Game/Component/cemeterycomponent.cpp	157	ERASED:CemeteryListErase_Reimpl	one erase body 0x140002cc0 over every 8-byte-pointer list (19 caller files)
+code/Game/Component/cemeterycomponent.cpp	224	LOCAL:Map::field_0xA2 is uint8_t	stale tag: the field is uint8_t (Map.h:122); the cast is a no-op
+code/Game/Component/citizen_lifeevent.cpp	72	LOCAL:raw UI::String local	a typed local adds ~UI::String: read the retail body first (behaviour: only if retail runs it)
+code/Game/Component/citizen_lifeevent_handler.cpp	244	LOCAL:Map::field_0xA2 is uint8_t	stale tag: the field is uint8_t (Map.h:122); the cast is a no-op
+code/Game/Component/citizen_needsupdate.cpp	147	RULING:callback_ctx	Component::OnMessage void* data (ledger wave X round 0: a type per message, stays)
+code/Game/Component/citizenai_findhelpers.cpp	479	SIG:CitizenComp_Entity_impl_ef40	dead first param const void*; the tree passes the flags register as it
+code/Game/Component/citizenai_findhelpers.cpp	479	SIG:CitizenComp_Entity_impl_ef40	dead first param const void*; the tree passes the flags register as it
+code/Game/Component/citizenai_growup.cpp	184	RULING:retail_diff:280	null-vptr guard in ScanArray (14d row 280)
+code/Game/Component/citizenai_leisure.cpp	461	LOCAL:leisure home-box locals	merge local_d8 / local_d0 into one AvlTreeHead local; the hand count increment goes (B11)
+code/Game/Component/citizenai_work_scheduler.cpp	301	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Component/citizenai_work_scheduler.cpp	609	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Component/citizenai_work_scheduler.cpp	642	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Component/citizenaicomponent.cpp	436	RULING:retail_diff:1	CheckEducation reads the wrong object (row 1)
+code/Game/Component/citizenaicomponent.cpp	436	RULING:retail_diff:1	CheckEducation reads the wrong object (row 1)
+code/Game/Component/citizenaicomponent.cpp	439	RULING:retail_diff:1	CheckEducation reads the wrong object (row 1)
+code/Game/Component/citizenaicomponent.cpp	618	LOCAL:g_pForceWorkBuilding is typed	stale tag: declared ComponentEntity* (starttown.cpp:149, citizenaicomponent.cpp:50)
+code/Game/Component/citizenaicomponent.cpp	620	LOCAL:force-work harness pun	the harness plants a ComponentEntity* in the Disease* slot; a harness decision, nothing outside blocks
+code/Game/Component/citizenaicomponent_serialize.cpp	67	POD:bare-T*-for-InternalPtr<T>	InternalPtr member / local declared as the bare T* it holds; InternalBasePtr::Serialize needs the slot
+code/Game/Component/citizencomponent.cpp	2414	RULING:retail_diff:unrecorded	Startup skips retail IsDerivedFrom 0x1401c7190 on _description; no known_port_issues row found for it
+code/Game/Component/citizencomponent_lifecycle.cpp	195	SIG:CitizenComp_DeferredInit_117080	pos float* / parent IBP int64 / profession key int64 at the outside callers
+code/Game/Component/citizencomponent_lifecycle.cpp	268	SIG:CitizenComp_DeferredInit_117080	pos float* / parent IBP int64 / profession key int64 at the outside callers
+code/Game/Component/citizencomponent_lifecycle.cpp	269	SIG:CitizenComp_DeferredInit_117080	pos float* / parent IBP int64 / profession key int64 at the outside callers
+code/Game/Component/citizencomponent_serialize.cpp	147	POD:bare-T*-for-InternalPtr<T>	InternalPtr member / local declared as the bare T* it holds; InternalBasePtr::Serialize needs the slot
+code/Game/Component/citizencomponent_serialize.cpp	148	POD:bare-T*-for-InternalPtr<T>	InternalPtr member / local declared as the bare T* it holds; InternalBasePtr::Serialize needs the slot
+code/Game/Component/citizencomponent_serialize.cpp	152	POD:bare-T*-for-InternalPtr<T>	InternalPtr member / local declared as the bare T* it holds; InternalBasePtr::Serialize needs the slot
+code/Game/Component/clearareacomponent.cpp	193	RULING:alloc_shape:harness-stack-buffer	the harness builds a zeroed ClearAreaComponent in its own buffer without the ctor
+code/Game/Component/coll_bridge.h	237	ERASED:coll_bridge	B.3.2 Array view over raw triples; dies with the last raw-triple caller (89 includes)
+code/Game/Component/coll_bridge.h	241	ERASED:coll_bridge	B.3.2 Array view over raw triples; dies with the last raw-triple caller (89 includes)
+code/Game/Component/coll_bridge.h	245	ERASED:coll_bridge	B.3.2 Array view over raw triples; dies with the last raw-triple caller (89 includes)
+code/Game/Component/coll_bridge.h	253	ERASED:coll_bridge	B.3.2 Array view over raw triples; dies with the last raw-triple caller (89 includes)
+code/Game/Component/coll_bridge.h	257	ERASED:coll_bridge	B.3.2 Array view over raw triples; dies with the last raw-triple caller (89 includes)
+code/Game/Component/coll_bridge.h	261	ERASED:coll_bridge	B.3.2 Array view over raw triples; dies with the last raw-triple caller (89 includes)
+code/Game/Component/coll_bridge.h	262	ERASED:coll_bridge	B.3.2 Array view over raw triples; dies with the last raw-triple caller (89 includes)
+code/Game/Component/component.cpp	50	POD:bare-T*-for-InternalPtr<T>	InternalPtr member / local declared as the bare T* it holds; InternalBasePtr::Serialize needs the slot
+code/Game/Component/componentdescription.cpp	66	ERASED:Desc_LoadExternalArray	one load body 0x140032090 over five callers External-derived pointer arrays
+code/Game/Component/componentdescription.cpp	213	SIG:ResolveExternalByName_Impl	void* ref; file-local NamedDescriptionRef mirror (TUT NamedExternalRef H5)
+code/Game/Component/decalcomponent.cpp	310	CLASS:DecalDescription	_materials void** -> Graphics::MaterialInstance**
+code/Game/Component/diseasecomponent.cpp	432	LOCAL:raw UI::String local	a typed local adds ~UI::String: read the retail body first (behaviour: only if retail runs it)
+code/Game/Component/firecomponent_ignite.cpp	226	POD:::Vector3	engine POD ::Vector3 (Audio::Scene, PickingMesh vertex) vs Math::Vector3
+code/Game/Component/floorcomponent.cpp	113	SIG:FloorComponent_FindResData	void* owner, void* out
+code/Game/Component/floorcomponent.cpp	128	CLASS:Map	14: +0xE8 / +0xF0 root + count two fields (a6e0); 68 / 69: +0x08 pickingScene raw Picking::Scene
+code/Game/Component/floorcomponent.cpp	189	CLASS:Map	14: +0xE8 / +0xF0 root + count two fields (a6e0); 68 / 69: +0x08 pickingScene raw Picking::Scene
+code/Game/Component/growthcomponent.cpp	243	RULING:retail_diff:400	Particle finder result read as the ModelComponent
+code/Game/Component/growthcomponent.cpp	243	RULING:retail_diff:400	Particle finder result read as the ModelComponent
+code/Game/Component/growthcomponent.cpp	266	RULING:retail_diff:400	Particle finder result read as the ModelComponent
+code/Game/Component/growthcomponent.cpp	268	RULING:retail_diff:400	Particle finder result read as the ModelComponent
+code/Game/Component/highlightcomponent.cpp	62	CLASS:HighlightComponent	null-vptr never-outlined probe on the raw EdgeMeshInstance (row 573)
+code/Game/Component/huntcomponent.cpp	63	RULING:retail_diff:511	HuntComponent::Update reads the Time* bits as ticks
+code/Game/Component/naturalresourcecomponent.cpp	51	RULING:retail_diff:552	wrong finder; retail reads the ModelComponent +0x28
+code/Game/Component/naturalresourcecomponent.cpp	52	RULING:retail_diff:552	wrong finder; retail reads the ModelComponent +0x28
+code/Game/Component/nomadcomponent.cpp	105	SIG:PlayerTrade_BSTFindRemove_2c690	int64_t* root; pure forwarder -> Avl38FindRemove<TrackedEntityNode>
+code/Game/Component/quarrycomponent_deform.cpp	183	POD:::Vector3	engine POD ::Vector3 (Audio::Scene, PickingMesh vertex) vs Math::Vector3
+code/Game/Component/spawncomponent.cpp	361	RULING:retail_diff:17	SpawnComponent::Persist tests the stream as a Serializer (14b row 17)
+code/Game/Component/statemachinecomponent.cpp	250	RULING:retail_diff:510	StateMachine_TickReimpl integer tick
+code/Game/Component/statemachinecomponent.cpp	528	RULING:h8	StateMachine int8 bytes persisted through the uchar overload retail calls; readers sign-test them
+code/Game/Component/statemachinecomponent.cpp	529	RULING:h8	StateMachine int8 bytes persisted through the uchar overload retail calls; readers sign-test them
+code/Game/Component/statemachinecomponent.cpp	530	RULING:h8	StateMachine int8 bytes persisted through the uchar overload retail calls; readers sign-test them
+code/Game/Component/statemachinecomponent.cpp	531	RULING:h8	StateMachine int8 bytes persisted through the uchar overload retail calls; readers sign-test them
+code/Game/Component/statusicon_geometry.cpp	107	CLASS:Graphics::Geometry	RT header: +0x84 / +0xa0 two Transforms vs the InterpolatedState<Transform> retail Lerps
+code/Game/Component/statusicon_geometry.cpp	208	CLASS:Video::Context	RT header: the +0x20f0 index cursor declared uint64_t
+code/Game/Component/statusicon_geometry.cpp	215	CLASS:Video::Context	RT header: the +0x20f0 index cursor declared uint64_t
+code/Game/Component/storagecomponent.cpp	135	ERASED:StorageComponent_DynArrayResize	kSpec_Pod16 SetSize over raw triples (storageSlots, trade manifest, notify entries)
+code/Game/Component/terraformcomponent.cpp	76	CLASS:WorldGeometry	+0xE8 / +0xF0 two fields; the insert takes AvlTreeHead<AvlNode28>
+code/Game/Component/terraformcomponent.cpp	235	POD:::Vector3	engine POD ::Vector3 (Audio::Scene, PickingMesh vertex) vs Math::Vector3
+code/Game/Component/terraformcomponent.cpp	243	SIG:Reimpl_MapGetTerrainPos	float* inXY2 non-const
+code/Game/Component/toolbardescription.cpp	72	CLASS:ToolbarDescription	_entries raw String triple; the resize takes void* hdr
+code/Game/Component/tornadocomponent.cpp	502	LOCAL:Tornado_StrikeEntityCounted dead arg	file-static (tornadocomponent.cpp:339): retype the dead first parameter const void*
+code/Game/Component/tornadocomponent.cpp	538	LOCAL:Tornado_StrikeEntityCounted dead arg	file-static (tornadocomponent.cpp:339): retype the dead first parameter const void*
+code/Game/Component/tornadocomponent.cpp	915	RULING:retail_diff:430	emitter ARRAY +0x7c read
+code/Game/Component/tornadocomponent.cpp	915	RULING:retail_diff:430	emitter ARRAY +0x7c read
+code/Game/Entity/citizenbehavior.cpp	263	CLASS:PathGraph	+0x18 / +0x20 two fields of PathCostNode; the insert runs on AvlTreeHead<AvlNode30>
+code/Game/Entity/citizenbehavior.cpp	264	CLASS:PathGraph	+0x18 / +0x20 two fields of PathCostNode; the insert runs on AvlTreeHead<AvlNode30>
+code/Game/Entity/citizenbehavior.cpp	545	CLASS:PathGraph	+0x18 / +0x20 two fields of PathCostNode; the insert runs on AvlTreeHead<AvlNode30>
+code/Game/Entity/citizenbehavior.cpp	546	CLASS:PathGraph	+0x18 / +0x20 two fields of PathCostNode; the insert runs on AvlTreeHead<AvlNode30>
+code/Game/Entity/componententity.cpp	443	LOCAL:componententity trace probes	port-only stream-cursor trace on a stream of unknown class: delete, or CAST-OK crash_walk
+code/Game/Entity/componententity.cpp	443	LOCAL:componententity trace probes	port-only stream-cursor trace on a stream of unknown class: delete, or CAST-OK crash_walk
+code/Game/Entity/componententity.cpp	444	LOCAL:componententity trace probes	port-only stream-cursor trace on a stream of unknown class: delete, or CAST-OK crash_walk
+code/Game/Entity/componententity.cpp	444	LOCAL:componententity trace probes	port-only stream-cursor trace on a stream of unknown class: delete, or CAST-OK crash_walk
+code/Game/Entity/componententity.cpp	529	RULING:h8	_entityFlags uint32 persisted through the int& overload retail calls
+code/Game/Entity/componententity.cpp	626	SIG:ComponentEntity_CtorFromDescription	void* description forwarder
+code/Game/Entity/componententity.cpp	718	CLASS:ComponentEntity	_handle: byte store [3] = category on a uint32 field
+code/Game/Entity/componententity.cpp	742	SIG:EntityList_RegisterEntity_Impl	void* list, void* entity IBP (B4 FORWARD)
+code/Game/Entity/componententity.cpp	742	SIG:EntityList_RegisterEntity_Impl	void* list, void* entity IBP (B4 FORWARD)
+code/Game/Entity/entity_findcomponent.cpp	100	SIG:fn_FindComponent_Storage	uintptr_t* out (residenceui.cpp:460 reads past StorageComponent)
+code/Game/Entity/entitylist.cpp	1225	POD:bare-T*-for-InternalPtr<T>	InternalPtr member / local declared as the bare T* it holds; InternalBasePtr::Serialize needs the slot
+code/Game/Entity/entitylist.cpp	1280	CLASS:ComponentEntity	_handle: byte store [3] = category on a uint32 field
+code/Game/Work/buildroad.cpp	79	SIG:BuildRoad_CtorParams_Impl	road description as uint64_t
+code/Game/Work/buildroad.cpp	269	LOCAL:scratch-slot	BuildRoad reuses one local for three types (retail: one stack slot); split into typed locals, B11 decides
+code/Game/Work/buildroad.cpp	436	LOCAL:scratch-slot	BuildRoad reuses one local for three types (retail: one stack slot); split into typed locals, B11 decides
+code/Game/Work/buildroad.cpp	441	LOCAL:scratch-slot	BuildRoad reuses one local for three types (retail: one stack slot); split into typed locals, B11 decides
+code/Game/Work/buildroad.cpp	450	LOCAL:scratch-slot	BuildRoad reuses one local for three types (retail: one stack slot); split into typed locals, B11 decides
+code/Game/Work/buildroad.cpp	455	LOCAL:scratch-slot	BuildRoad reuses one local for three types (retail: one stack slot); split into typed locals, B11 decides
+code/Game/Work/buildroad.cpp	468	LOCAL:scratch-slot	BuildRoad reuses one local for three types (retail: one stack slot); split into typed locals, B11 decides
+code/Game/Work/buildstructure.cpp	175	RULING:h8	raw byte through the bool& overload (a bool field would normalise it)
+code/Game/Work/buildstructure.cpp	815	SIG:ForceWork::DriveWhenIdle	driveFn int (*)(void* work, void* citizenIBP)
+code/Game/Work/buildstructure.cpp	815	SIG:ForceWork::DriveWhenIdle	driveFn int (*)(void* work, void* citizenIBP)
+code/Game/Work/cleararea.cpp	118	RULING:h8	raw byte through the bool& overload (a bool field would normalise it)
+code/Game/Work/cleararea.cpp	127	RULING:h8	raw byte through the bool& overload (a bool field would normalise it)
+code/Game/Work/cleararea.cpp	130	RULING:h8	raw byte through the bool& overload (a bool field would normalise it)
+code/Game/Work/cleararea.cpp	583	LOCAL:cleararea zeroed position	12-byte {int64, int32} zero local; a ctor-less POD with the same two integer stores (H7)
+code/Game/Work/cleararea.cpp	701	RULING:retail_diff:220	ClearArea::Validate removal list holds the citizen
+code/Game/Work/cleararea.cpp	818	RULING:retail_diff:220	ClearArea::Validate removal list holds the citizen
+code/Game/Work/consumeproduce.cpp	195	RULING:h8	raw byte through the bool& overload (a bool field would normalise it)
+code/Game/Work/consumeproduce.cpp	243	LOCAL:scratch-slot	the out slot is the caller reused scratch local; split into typed locals, B11 decides
+code/Game/Work/consumeproduce.cpp	493	RULING:retail_diff:260	8-byte slot written as float[3]
+code/Game/Work/consumeproduce.cpp	509	RULING:retail_diff:260	8-byte slot written as float[3]
+code/Game/Work/consumeproduce.cpp	510	RULING:retail_diff:260	8-byte slot written as float[3]
+code/Game/Work/consumeproduce.cpp	511	RULING:retail_diff:260	8-byte slot written as float[3]
+code/Game/Work/consumeproduce.cpp	512	RULING:retail_diff:260	8-byte slot written as float[3]
+code/Game/Work/consumeproduce.cpp	537	RULING:retail_diff:260	8-byte slot written as float[3]
+code/Game/Work/fishingwork.cpp	321	LOCAL:scratch-slot	the out slot is the caller reused scratch local; split into typed locals, B11 decides
+code/Game/Work/fishingwork.cpp	346	LOCAL:scratch-slot	the out slot is the caller reused scratch local; split into typed locals, B11 decides
+code/Game/Work/foresterwork.cpp	119	SIG:ForceWork::DriveWhenIdle	driveFn int (*)(void* work, void* citizenIBP)
+code/Game/Work/foresterwork.cpp	119	SIG:ForceWork::DriveWhenIdle	driveFn int (*)(void* work, void* citizenIBP)
+code/Game/Work/gatherrawmaterials.cpp	362	RULING:slot_pun	retail hands the reused param3 slot (holding a WorkPlaceComponent) as the Time (faithful)
+code/Game/Work/gatherrawmaterials.cpp	719	SIG:ForceWork::DriveWhenIdle	driveFn int (*)(void* work, void* citizenIBP)
+code/Game/Work/gatherrawmaterials.cpp	719	SIG:ForceWork::DriveWhenIdle	driveFn int (*)(void* work, void* citizenIBP)
+code/Game/Work/harvestorchard.cpp	239	CLASS:FruitDescription	_ref30 void* -> ComponentDescription* (its serializer is the ExternalPtrSerializeSlot template)
+code/Game/Work/harvestorchard.cpp	299	CLASS:FruitDescription	_ref30 void* -> ComponentDescription* (its serializer is the ExternalPtrSerializeSlot template)
+code/Game/Work/pasturework.cpp	700	SIG:Work(void*)/Work::InitFromEntity(void*)	the entity IBP slot as void* at the leaves builders
+code/Game/Work/pickup.cpp	514	RULING:vptr_probe	port freed-self probe reads the vptr word
+code/Game/Work/tradework.cpp	433	SIG:PlayerTrade_BSTFindRemove_2c690	int64_t* root; pure forwarder -> Avl38FindRemove<TrackedEntityNode>
+code/Game/Work/tradework.cpp	442	SIG:PlayerTrade_BSTFindRemove_2c690	int64_t* root; pure forwarder -> Avl38FindRemove<TrackedEntityNode>
+code/Game/Work/tradework.cpp	565	SIG:PlayerTrade_BSTRemove_25740	int64_t* root; pure forwarder -> Avl38Remove<TrackedEntityNode>
+code/Game/Work/work_act_consume.cpp	264	RULING:null_receiver	faithful null-receiver read spelled as the address it faults on
+code/Game/Work/work_act_consume.cpp	298	RULING:null_receiver	faithful null-receiver read spelled as the address it faults on
+code/Game/Work/work_base_bst.cpp	153	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	154	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	155	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	202	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	203	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	275	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	276	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	299	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	328	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_bst.cpp	330	ERASED:WorkBST-8byte-keyset	one body (RegisterWork_1a30 / BSTRemove_a6e0 / FindRemove_25520 / Serialize_296b0) over every 8-byte-key set
+code/Game/Work/work_base_cellbst.cpp	145	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Work/work_base_cellbst.cpp	146	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Work/work_base_cellbst.cpp	147	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Work/work_base_cellbst.cpp	187	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Work/work_base_cellbst.cpp	188	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Work/work_base_cellbst.cpp	261	ERASED:WorkCellBST	one ICF body (Insert_9a40 / Remove_ca60 / Serialize_9de0) over five node / header types
+code/Game/Work/work_base_reimpl.cpp	67	SIG:Work(void*)/Work::InitFromEntity(void*)	the entity IBP slot as void* at the leaves builders
+code/Game/Work/work_base_reimpl.cpp	127	SIG:WorkBase_TreeNodeFree_14c30	void* root, void* node
+code/Game/Work/work_base_reimpl.cpp	137	SIG:WorkBase_TreeNodeFree_e320	void* root, void* node
+code/Game/Work/work_leaf_clear.cpp	147	LOCAL:scratch-slot	the out slot is the caller reused scratch local; split into typed locals, B11 decides

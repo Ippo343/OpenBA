@@ -1,0 +1,129 @@
+file	line	unit	note
+code/Game/Dialog/debugui.cpp	339	RULING:const_find	FindNext returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/debugui.cpp	491	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/debugui.cpp	519	SIG:CitizenComp_DeferredInit_117080	spawnKey int64_t is a Profession*; callers debugui.cpp, founding_spawn.cpp
+code/Game/Dialog/debugui.cpp	630	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/dialog_exe_helpers.cpp	39	SIG:Dialog_AutoSaveHandler	void* self; its one caller standalone/saveload_harness.cpp hands a stack fake (only +0x10 UserInterface*)
+code/Game/Dialog/dialog_exe_helpers.cpp	88	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/entityui.cpp	65	SIG:PlayerTrade_BSTRemove_25740	B4 FORWARD (int64_t* root, void*); callers entityui.cpp (TrackedEntityNode set) and Work/tradework.cpp
+code/Game/Dialog/eventlogui.cpp	201	RULING:h8	bool field stored as the caller raw byte
+code/Game/Dialog/exe_bodies.h	165	SIG:fn_TrackerComponent_Rebuild	stale: TrackerComponent produced / displayed are Array members since round 7; take EntryArray* (one caller productionui.cpp:246)
+code/Game/Dialog/exe_bodies.h	166	SIG:fn_TrackerComponent_Rebuild	stale: TrackerComponent produced / displayed are Array members since round 7; take EntryArray* (one caller productionui.cpp:246)
+code/Game/Dialog/loaderdialog.cpp	86	RULING:retail_diff:572	null-allocator arm zeroes 16 bytes over an 8-byte InternalPtr slot (row 572 b)
+code/Game/Dialog/loaderdialog.cpp	87	RULING:retail_diff:572	null-allocator arm zeroes 16 bytes over an 8-byte InternalPtr slot (row 572 b)
+code/Game/Dialog/mainmenudialog.cpp	91	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/mapui.cpp	93	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/moddetailsdialog.cpp	113	POD:RtSystem::Filename	RtIO::ModSetNode::key is the RtSystem::Filename mirror; operator< needs System::Filename
+code/Game/Dialog/moddetailsdialog.cpp	116	POD:RtSystem::Filename	RtIO::ModSetNode::key is the RtSystem::Filename mirror; operator< needs System::Filename
+code/Game/Dialog/moddetailsdialog.cpp	175	CLASS:RtIO::Mod	name/author/description are char* String bodies; Mod is an element of erased containers with hand-written lifecycles (ledger wave X r1)
+code/Game/Dialog/moddetailsdialog.cpp	177	CLASS:RtIO::Mod	name/author/description are char* String bodies; Mod is an element of erased containers with hand-written lifecycles (ledger wave X r1)
+code/Game/Dialog/moddetailsdialog.cpp	195	CLASS:RtIO::Mod	name/author/description are char* String bodies; Mod is an element of erased containers with hand-written lifecycles (ledger wave X r1)
+code/Game/Dialog/moddialog.cpp	154	CLASS:RtIO::Mod	name/author/description are char* String bodies; Mod is an element of erased containers with hand-written lifecycles (ledger wave X r1)
+code/Game/Dialog/moddialog.cpp	156	CLASS:RtIO::Mod	name/author/description are char* String bodies; Mod is an element of erased containers with hand-written lifecycles (ledger wave X r1)
+code/Game/Dialog/moddialog.cpp	158	CLASS:RtIO::Mod	name/author/description are char* String bodies; Mod is an element of erased containers with hand-written lifecycles (ledger wave X r1)
+code/Game/Dialog/moddialog.cpp	351	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/moddialog.cpp	422	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/noiseui.cpp	81	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/optionsdialog.cpp	492	CLASS:Video::Device::GraphicsInterface	name +0x00 void* String (Adapter::name the same); dtors 0x18000cdc0 / 0x18000cc10 run in reverse-declaration order
+code/Game/Dialog/optionsdialog.cpp	520	CLASS:Video::Device::GraphicsInterface	name +0x00 void* String (Adapter::name the same); dtors 0x18000cdc0 / 0x18000cc10 run in reverse-declaration order
+code/Game/Dialog/residenceui.cpp	465	RULING:retail_diff:452	ResidenceUI::GoToCitizen reads StorageComponent past its 0x40 bytes as retail does
+code/Game/Dialog/residenceui.cpp	468	RULING:retail_diff:452	ResidenceUI::GoToCitizen reads StorageComponent past its 0x40 bytes as retail does
+code/Game/Dialog/residenceui.cpp	469	RULING:retail_diff:452	ResidenceUI::GoToCitizen reads StorageComponent past its 0x40 bytes as retail does
+code/Game/Dialog/residenceui.cpp	474	RULING:retail_diff:452	ResidenceUI::GoToCitizen reads StorageComponent past its 0x40 bytes as retail does
+code/Game/Dialog/residenceui.cpp	475	RULING:retail_diff:452	ResidenceUI::GoToCitizen reads StorageComponent past its 0x40 bytes as retail does
+code/Game/Dialog/residenceui.cpp	475	RULING:retail_diff:452	ResidenceUI::GoToCitizen reads StorageComponent past its 0x40 bytes as retail does
+code/Game/Dialog/residenceui.cpp	479	RULING:retail_diff:452	ResidenceUI::GoToCitizen reads StorageComponent past its 0x40 bytes as retail does
+code/Game/Dialog/saveloaddialog.cpp	253	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/saveloaddialog.cpp	326	CLASS:SaveLoad::SaveInfo	+0x30 sortKey uint64_t is the System::DateTime
+code/Game/Dialog/titledesctooltipui.cpp	53	RULING:callback_ctx	UI::Element user-data slot is Object::Base* but carries a TitleDescToolTipData; the producer is not ported
+code/Game/Dialog/toolbar_utility_helpers.cpp	128	SIG:ToolbarUtility_BstInsert_4890	one erased Set insert serves TrackedEntityNode (PlayerToolManager +0x50), TownHallUI::InventoryNode and two more trees: typed wrappers over the erased core
+code/Game/Dialog/toolbardialog.cpp	564	SIG:ToolbarUtility_BstInsert_4890	one erased Set insert serves TrackedEntityNode (PlayerToolManager +0x50), TownHallUI::InventoryNode and two more trees: typed wrappers over the erased core
+code/Game/Dialog/toolbardialog.cpp	565	SIG:ToolbarUtility_BstInsert_4890	one erased Set insert serves TrackedEntityNode (PlayerToolManager +0x50), TownHallUI::InventoryNode and two more trees: typed wrappers over the erased core
+code/Game/Dialog/toolbardialog.cpp	1674	SIG:Toolbar_CenterOnEntity_Impl	the two remaining callers pass wrong objects: citizenui.cpp (row 690) and residenceui.cpp (row 452)
+code/Game/Dialog/toolbardialog.cpp	1675	SIG:Toolbar_CenterOnEntity_Impl	the two remaining callers pass wrong objects: citizenui.cpp (row 690) and residenceui.cpp (row 452)
+code/Game/Dialog/toolbardialog.cpp	1676	SIG:Toolbar_CenterOnEntity_Impl	the two remaining callers pass wrong objects: citizenui.cpp (row 690) and residenceui.cpp (row 452)
+code/Game/Dialog/townhall_helpers.cpp	78	CLASS:TownHallUI	raw {data,count,cap} arrays +0x40 / +0xB0..+0xE0 / +0xF0; dtor 0x1400810d0 frees in descending offset order
+code/Game/Dialog/townhall_helpers.cpp	99	CLASS:TownHallUI	raw {data,count,cap} arrays +0x40 / +0xB0..+0xE0 / +0xF0; dtor 0x1400810d0 frees in descending offset order
+code/Game/Dialog/townhall_helpers.cpp	172	CLASS:TownHallUI	raw {data,count,cap} arrays +0x40 / +0xB0..+0xE0 / +0xF0; dtor 0x1400810d0 frees in descending offset order
+code/Game/Dialog/townhall_helpers.cpp	219	CLASS:TownHallUI	raw {data,count,cap} arrays +0x40 / +0xB0..+0xE0 / +0xF0; dtor 0x1400810d0 frees in descending offset order
+code/Game/Dialog/townhallui.cpp	176	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/townhallui.cpp	182	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/townhallui.cpp	452	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/townhallui.cpp	535	RULING:const_find	FindOrLoad returns const External*; the consumer takes it non-const (ledger S3)
+code/Game/Dialog/townhallui.cpp	1545	SIG:ToolbarUtility_BstInsert_4890	one erased Set insert serves TrackedEntityNode (PlayerToolManager +0x50), TownHallUI::InventoryNode and two more trees: typed wrappers over the erased core
+code/Game/Dialog/townhallui.cpp	1546	SIG:ToolbarUtility_BstInsert_4890	one erased Set insert serves TrackedEntityNode (PlayerToolManager +0x50), TownHallUI::InventoryNode and two more trees: typed wrappers over the erased core
+code/Game/Dialog/tradeui_buyentries.cpp	137	ERASED:TradeUI_GetBuyEntries_59670	0x140059670 serves Array<PurchaseItem> (tradeui.cpp:660) and StackArray<ComponentDescription*> (tradecomponent_dock.cpp:273)
+code/Game/Dialog/tradeui_leaves.cpp	260	CLASS:TradeComponent	+0x60 / +0x68 stockRoot / stockCount; TradeUI_StorageTree_Insert_e1c0 takes the root slot
+code/Game/Player/bridgetool_calcpath.cpp	376	CLASS:MultiObjectComponent	+0x48 children Array as three raw fields
+code/Game/Player/edittool.cpp	585	RULING:callback_ctx	Picking::Scene::GetUserData returns retail void* (PEAX); the owner stored is a ComponentEntity
+code/Game/Player/edittool.cpp	759	RULING:callback_ctx	Picking::Scene::GetUserData returns retail void* (PEAX); the owner stored is a ComponentEntity
+code/Game/Player/keystone_a_removalcalcpath.cpp	298	LOCAL:time_slot	one 8-byte slot is the Time and the handlers int out (seeded 3); a union local names both views but stays a pun: may need a ruling
+code/Game/Player/keystone_a_removalcalcpath.cpp	431	SIG:WorkBST_BSTRemove_a6e0	a typed Set<T*> overload exists; these pass Map +0xE8 (AvlNode28) and WorkScheduler +0x10 (WorkSchedulerCountNode): per-node-type wrappers
+code/Game/Player/keystone_a_removalcalcpath.cpp	521	SIG:WorkBST_BSTRemove_a6e0	a typed Set<T*> overload exists; these pass Map +0xE8 (AvlNode28) and WorkScheduler +0x10 (WorkSchedulerCountNode): per-node-type wrappers
+code/Game/Player/pathtool.cpp	143	RULING:callback_ctx	Picking::Scene::GetUserData returns retail void* (PEAX); the owner stored is a ComponentEntity
+code/Game/Player/pathtool_setselected.cpp	70	POD:AvlNode28	AvlNode28 element is int32 key + pad; the path-segment tree stores an 8-byte PathSegment there
+code/Game/Player/pathtool_setselected.cpp	160	POD:AvlNode28	AvlNode28 element is int32 key + pad; the path-segment tree stores an 8-byte PathSegment there
+code/Game/Player/pathtool_setselected.cpp	453	POD:AvlNode28	AvlNode28 element is int32 key + pad; the path-segment tree stores an 8-byte PathSegment there
+code/Game/Player/roadtool_calcpath.cpp	139	SIG:RoadTool_DecalStore_acd90	stale tag: _batchMaterials is RawArray<External*> already; the decal parameter is void* (one caller roadtool_calcpath.cpp:289)
+code/Game/Player/roadtool_calcpath.cpp	212	CLASS:Map	+0xE8 / +0xF0 Set header as two fields; AvlTreeHead<AvlNode28> is a POD
+code/Game/Player/roadtool_calcpath.cpp	286	SIG:BuildRoad::BuildRoad	the ctor takes the road description as uint64_t (Work/BuildRoad.h:36); one caller
+code/Game/Player/tool_activation_standalone.cpp	170	CLASS:PlayerToolManager	+0x50 set nodes hold a ComponentDescription* key in TrackedEntityNode::key (ComponentEntity*): +0x50 needs its own node type
+code/Game/Player/tool_base_highlight.cpp	266	RULING:h8	bool field stored as the caller raw byte
+code/Game/Player/tool_base_highlight.cpp	275	RULING:h8	bool field stored as the caller raw byte
+code/Game/Player/tool_base_highlight_tess.cpp	95	CLASS:GeometryBatch	vertices / indices are RawArray<T>; the code borrows Collection::Array SetSize / ~Array through a view
+code/Game/Player/tool_base_highlight_tess.cpp	271	CLASS:GeometryBatch	vertices / indices are RawArray<T>; the code borrows Collection::Array SetSize / ~Array through a view
+code/Game/Player/tool_base_highlight_tess.cpp	272	CLASS:GeometryBatch	vertices / indices are RawArray<T>; the code borrows Collection::Array SetSize / ~Array through a view
+code/Game/Player/tool_base_highlight_tess.cpp	368	LOCAL:vertex_copy_8_8_4	GeometryBatchVertex is typed (row 662); copy per member (memcpy position 8, uv 8, normal 4) keeps the 8+8+4 store widths; confirm the -O2 object code
+code/Game/Player/tool_base_highlight_tess.cpp	369	LOCAL:vertex_copy_8_8_4	GeometryBatchVertex is typed (row 662); copy per member (memcpy position 8, uv 8, normal 4) keeps the 8+8+4 store widths; confirm the -O2 object code
+code/Game/Player/tool_base_highlight_tess.cpp	371	LOCAL:vertex_copy_8_8_4	GeometryBatchVertex is typed (row 662); copy per member (memcpy position 8, uv 8, normal 4) keeps the 8+8+4 store widths; confirm the -O2 object code
+code/Game/Player/tool_base_highlight_tess.cpp	371	LOCAL:vertex_copy_8_8_4	GeometryBatchVertex is typed (row 662); copy per member (memcpy position 8, uv 8, normal 4) keeps the 8+8+4 store widths; confirm the -O2 object code
+code/Game/Player/tool_base_highlight_tess.cpp	372	LOCAL:vertex_copy_8_8_4	GeometryBatchVertex is typed (row 662); copy per member (memcpy position 8, uv 8, normal 4) keeps the 8+8+4 store widths; confirm the -O2 object code
+code/Game/Player/tool_base_highlight_tess.cpp	372	LOCAL:vertex_copy_8_8_4	GeometryBatchVertex is typed (row 662); copy per member (memcpy position 8, uv 8, normal 4) keeps the 8+8+4 store widths; confirm the -O2 object code
+code/Game/Player/tool_base_highlight_tess.cpp	373	LOCAL:vertex_copy_8_8_4	GeometryBatchVertex is typed (row 662); copy per member (memcpy position 8, uv 8, normal 4) keeps the 8+8+4 store widths; confirm the -O2 object code
+code/Game/Player/tool_base_highlight_tess.cpp	373	LOCAL:vertex_copy_8_8_4	GeometryBatchVertex is typed (row 662); copy per member (memcpy position 8, uv 8, normal 4) keeps the 8+8+4 store widths; confirm the -O2 object code
+code/Game/Player/tool_base_render.cpp	464	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	473	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	474	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	540	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	543	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	547	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	548	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	551	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	606	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	621	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	626	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	627	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	629	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	658	RULING:vptr_probe	vtable-word probe / tripwire (ledger wave X r1: ReportBadSelectionRef keeps its integer receiver)
+code/Game/Player/tool_base_render.cpp	664	RULING:vptr_probe	raw dump of the tool block from the integer self: a crash_walk candidate, same ruling as the probes around it
+code/Game/Player/tool_base_render.cpp	683	RULING:vptr_probe	vtable-word probe / tripwire (ledger wave X r1: ReportBadSelectionRef keeps its integer receiver)
+code/Game/Player/tool_base_render.cpp	684	RULING:vptr_probe	vtable-word probe / tripwire (ledger wave X r1: ReportBadSelectionRef keeps its integer receiver)
+code/Game/Player/tool_base_render.cpp	745	RULING:vptr_probe	vtable-word probe / tripwire (ledger wave X r1: ReportBadSelectionRef keeps its integer receiver)
+code/Game/Player/tool_base_render.cpp	873	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	874	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	875	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_render.cpp	881	CLASS:HighlightComponent	edgeMeshInstance +0x28 raw bytes; retail ctor builds it, the tree builds it lazily and tests the null vptr (row 573)
+code/Game/Player/tool_base_trade.cpp	288	SIG:PlayerTrade_BSTRemove_25740	B4 FORWARD (int64_t* root, void*); callers entityui.cpp (TrackedEntityNode set) and Work/tradework.cpp
+code/Game/Player/tool_base_trade.cpp	288	SIG:PlayerTrade_BSTRemove_25740	B4 FORWARD (int64_t* root, void*); callers entityui.cpp (TrackedEntityNode set) and Work/tradework.cpp
+code/Game/Player/tool_base_trade.cpp	293	SIG:PlayerTrade_BSTFindRemove_2c690	B4 FORWARD; callers Work/tradework.cpp x2, Component/nomadcomponent.cpp (PlayerToolManager +0x60)
+code/Game/Player/tool_base_trade.cpp	293	SIG:PlayerTrade_BSTFindRemove_2c690	B4 FORWARD; callers Work/tradework.cpp x2, Component/nomadcomponent.cpp (PlayerToolManager +0x60)
+code/Game/Player/tool_base_trade.cpp	334	CLASS:PlayerToolManager	+0x60/+0x68 set declared root + count; AvlTreeHead<TrackedEntityNode> is a POD
+standalone/boot_window.cpp	49	RULING:dx11_seam	DX11 DeviceData subclass field / cfg handed as void* (plan 4.1)
+standalone/cropfield_force_start.cpp	91	RULING:vptr_probe	vtable-word probe / tripwire (ledger wave X r1: ReportBadSelectionRef keeps its integer receiver)
+standalone/cropfield_force_start.cpp	94	RULING:vptr_probe	vtable-word probe / tripwire (ledger wave X r1: ReportBadSelectionRef keeps its integer receiver)
+standalone/main.cpp	663	CLASS:Object::BaseTypeInfo	+0x20 factoryFn declared void*; the FactoryFn alias exists (TypeInfo.h:480)
+standalone/main.cpp	880	RULING:dx11_seam	DX11 DeviceData subclass field / cfg handed as void* (plan 4.1)
+standalone/main.cpp	880	RULING:dx11_seam	DX11 DeviceData subclass field / cfg handed as void* (plan 4.1)
+standalone/main.cpp	952	RULING:dx11_seam	DX11 DeviceData subclass field / cfg handed as void* (plan 4.1)
+standalone/main.cpp	952	RULING:dx11_seam	DX11 DeviceData subclass field / cfg handed as void* (plan 4.1)
+standalone/modal_driver.cpp	227	RULING:callback_ctx	MainLoopCallback::_context void* (ledger round 8: one element serves two arrays; split the element)
+standalone/orchard_force_start.cpp	139	RULING:retail_diff:155	harness hands the ComboElement where slot 9 takes InternalPtr<Element>*
+standalone/perf_experimental.cpp	143	LOCAL:frustum_local	geometry_draw.cpp:189 / weather_particle_draw.cpp:203 pass a ::Frustum local to the same body; check the s_planes memcpy
+standalone/scene_watch.cpp	582	RULING:erased_self	diagnostic steps from the embedded MeshInstance back to its owning ModelComponent (+0x13c/+0x13e); a container-of stays a reinterpretation even with a typed member
+standalone/scene_watch.cpp	583	RULING:erased_self	diagnostic steps from the embedded MeshInstance back to its owning ModelComponent (+0x13c/+0x13e); a container-of stays a reinterpretation even with a typed member
+standalone/scene_watch.cpp	584	RULING:erased_self	diagnostic steps from the embedded MeshInstance back to its owning ModelComponent (+0x13c/+0x13e); a container-of stays a reinterpretation even with a typed member
+standalone/stress_harness.cpp	566	RULING:vptr_probe	vtable-word probe / tripwire (ledger wave X r1: ReportBadSelectionRef keeps its integer receiver)
+standalone/tool_harness.cpp	546	LOCAL:CalcCost_out	narrow the harness uint64_t local to int (printed %d)
+standalone/tool_harness.cpp	1687	RULING:retail_diff:155	harness hands the ComboElement where slot 9 takes InternalPtr<Element>*
+standalone/tool_harness.cpp	1824	RULING:retail_diff:155	harness hands the ComboElement where slot 9 takes InternalPtr<Element>*
+standalone/tool_harness.cpp	2722	LOCAL:CalcCost_out	narrow the harness uint64_t local to int (printed %d)

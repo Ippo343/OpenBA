@@ -1,0 +1,182 @@
+file	line	unit	note
+code/Game/Game/MenuDialogLoopT.h	62	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/citizen_names.cpp	64	CLASS:NameDatabase	FIELD: the 4-gram field_0x00 uint8_t[4] -> uint32_t (retail reads one dword; SerializeBytes(4) takes the address)
+code/Game/Game/citizen_names.cpp	65	LOCAL:dword store into the caller's char buffer	4-byte memcpy emits the same single store; or CAST-OK byte_io
+code/Game/Game/citizen_names.cpp	101	CLASS:NameDatabase	FIELD: the 4-gram field_0x00 uint8_t[4] -> uint32_t (retail reads one dword; SerializeBytes(4) takes the address)
+code/Game/Game/citizen_names.cpp	168	CLASS:NameDatabase	FIELD: _array3 Array<uint8_t> read as a char pool -> Array<char>
+code/Game/Game/citizen_names.cpp	204	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/citizenlist_serialize.cpp	210	CLASS:CitizenBehavior	FIELD: its entity arrays hold T* where retail holds InternalPtr<T> (lines 347-504); then InternalPtr<T>::SerializeArray
+code/Game/Game/citizenlist_serialize.cpp	233	RULING:retail_diff:none	the version-5 clamp passes the +0x160 Set header as an Array (tree defect, dead at version 6); no known_port_issues row yet
+code/Game/Game/citizenlist_serialize.cpp	435	CLASS:CitizenBehavior	blocked: +0x160 holds two node types (legacy <v2 0x30-byte nodes vs TemplateBucket 0x38); dead path
+code/Game/Game/citizenlist_serialize.cpp	608	RULING:retail_diff:13	known_port_issues row 13: tree serializes the Time at +0x14, retail +0x18 (stream must stay byte-identical)
+code/Game/Game/climategenerator.cpp	93	RULING:h8	raw byte serialized as bool
+code/Game/Game/climategenerator.cpp	104	CLASS:ClimateGenerator	FIELD: _climateData uint8_t[0xC0] -> float[48] (weather_sim.cpp indexes (month*4+type)*4 bytes = one float index); memset stays
+code/Game/Game/eventlog.cpp	125	CLASS:EventLog	entries {data,count,cap} raw triple
+code/Game/Game/eventlog.cpp	133	CLASS:EventLog	entries {data,count,cap} raw triple
+code/Game/Game/eventlog.cpp	302	CLASS:EventLogEntry	stack image of the entry: a real local runs String's ctor/dtor around retail's in-place String; stays
+code/Game/Game/exe_bodies.h	183	ERASED:Object::ExternalPtrSerializeBody	FLOOR? typed wrapper hands its T** slot to the one erased External** core (retail ICF)
+code/Game/Game/exe_bodies.h	285	CLASS:System::Random	blocked: no C++ default ctor (door RtSystem_Random_Ctor 0x1800c7f20); a local would also run a dtor retail does not
+code/Game/Game/forester_force_harness.cpp	185	SIG:DECLARE_EXE_TYPE CreateNewObject/CreateInPlaceObject	returns void* where BaseTypeInfo::FactoryFn returns Object::Base* (~630 definitions)
+code/Game/Game/founding_spawn.cpp	319	SIG:CitizenComp_DeferredInit_117080	Component/exe_bodies.h:148 takes the profession as int64_t
+code/Game/Game/game.cpp	140	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/game_leaf_helpers.cpp	57	CLASS:NamedExternalRef	name[8] raw String + NamedExternalRefArray raw triple (0x14001b030 / 0x14001b340)
+code/Game/Game/game_leaf_helpers.cpp	77	CLASS:CharacterGrid	five raw array triples +0x10..+0x50
+code/Game/Game/game_leaf_helpers.cpp	80	CLASS:CharacterGrid	five raw array triples +0x10..+0x50
+code/Game/Game/game_leaf_helpers.cpp	101	CLASS:Minimap	terrainPixels +0x18 / overlayPixels +0x28 raw triples
+code/Game/Game/game_leaf_helpers.cpp	102	CLASS:Minimap	terrainPixels +0x18 / overlayPixels +0x28 raw triples
+code/Game/Game/game_leaf_helpers.cpp	137	CLASS:MenuScene	+0x1C8 / +0x1E8 {Array, root, count} records (file-local MenuSceneTreeMap)
+code/Game/Game/game_leaf_helpers.cpp	210	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/game_main.cpp	205	LOCAL:Audio::Device is typed	STALE tag: Device.h:186-187 holds IXAudio27* / IXAudio2MasteringVoice*; include <xaudio2.h> and call DestroyVoice() / Release()
+code/Game/Game/game_main.cpp	206	LOCAL:Audio::Device is typed	STALE tag: Device.h:186-187 holds IXAudio27* / IXAudio2MasteringVoice*; include <xaudio2.h> and call DestroyVoice() / Release()
+code/Game/Game/game_main.cpp	210	LOCAL:Audio::Device is typed	STALE tag: Device.h:186-187 holds IXAudio27* / IXAudio2MasteringVoice*; include <xaudio2.h> and call DestroyVoice() / Release()
+code/Game/Game/game_main.cpp	211	LOCAL:Audio::Device is typed	STALE tag: Device.h:186-187 holds IXAudio27* / IXAudio2MasteringVoice*; include <xaudio2.h> and call DestroyVoice() / Release()
+code/Game/Game/game_main.cpp	335	CLASS:Engine::Engine	blocked: stack storage memset then ctor door (RULE B5-4)
+code/Game/Game/game_settings_persist.cpp	94	RULING:h8	raw byte serialized as bool
+code/Game/Game/gamegrid_serialize.cpp	118	LOCAL:MapCell 9-byte copy	field_0x1C uint8_t[9]: a 9-byte memcpy / assignment emits the same qword + byte (B11 to confirm)
+code/Game/Game/gamegrid_serialize.cpp	118	LOCAL:MapCell 9-byte copy	field_0x1C uint8_t[9]: a 9-byte memcpy / assignment emits the same qword + byte (B11 to confirm)
+code/Game/Game/gamegrid_serialize.cpp	136	LOCAL:MapCell 9-byte copy	field_0x1C uint8_t[9]: a 9-byte memcpy / assignment emits the same qword + byte (B11 to confirm)
+code/Game/Game/gamegrid_serialize.cpp	169	CLASS:Map	pickingScene +0x08 raw Picking::Scene, cells +0x80 raw triple
+code/Game/Game/gamegrid_serialize.cpp	187	CLASS:MapCell	FIELD: blocker / occupant ComponentEntity* -> InternalPtr<ComponentEntity>
+code/Game/Game/gamegrid_serialize.cpp	193	CLASS:MapCell	FIELD: blocker / occupant ComponentEntity* -> InternalPtr<ComponentEntity>
+code/Game/Game/gameupdateloop.cpp	827	SIG:CitizenBehavior::Update(int64_t*)	retail passes const System::Time*; defined in Entity/ (COMP partition)
+code/Game/Game/gameupdateloop.cpp	1419	CLASS:Video::Context	blocked: _pixelConstantStaging row as Vector4 runs the constexpr zeroing ctor in Context's ctor (ledger X-RL FIELD left)
+code/Game/Game/gameupdateloop.cpp	1718	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop.cpp	1778	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop.cpp	1829	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop.cpp	2011	POD:RtGraphics::Renderer	ctor/dtor doors take the mirror; 113 views the storage as Graphics::Renderer
+code/Game/Game/gameupdateloop.cpp	2082	POD:RtGraphics::Scene	ctor/dtor doors take the mirror; 114 views the storage as Graphics::Scene
+code/Game/Game/gameupdateloop.cpp	2118	POD:RtGraphics::AnimationManager	ctor/dtor doors take the mirror
+code/Game/Game/gameupdateloop_load.cpp	158	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop_load.cpp	202	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop_load.cpp	230	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop_load.cpp	283	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop_load.cpp	575	CLASS:Frustum	blocked: ::Frustum's implicit ctor zeroes six Vector4 planes before the perspective ctor 0x1800fa1e0
+code/Game/Game/gameupdateloop_load.cpp	578	CLASS:Frustum	blocked: ::Frustum's implicit ctor zeroes six Vector4 planes before the perspective ctor 0x1800fa1e0
+code/Game/Game/gameupdateloop_load.cpp	669	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop_load.cpp	805	CLASS:Frustum	blocked: ::Frustum's implicit ctor zeroes six Vector4 planes before the perspective ctor 0x1800fa1e0
+code/Game/Game/gameupdateloop_load.cpp	815	POD:RtGraphics::Renderer	ctor/dtor doors take the mirror; 113 views the storage as Graphics::Renderer
+code/Game/Game/gameupdateloop_load.cpp	896	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop_load.cpp	928	POD:RtGraphics::Scene	ctor/dtor doors take the mirror; 114 views the storage as Graphics::Scene
+code/Game/Game/gameupdateloop_load.cpp	957	POD:RtGraphics::AnimationManager	ctor/dtor doors take the mirror
+code/Game/Game/gameupdateloop_load.cpp	1060	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/gameupdateloop_serialize.cpp	206	CLASS:EventLog	entries {data,count,cap} raw triple
+code/Game/Game/gameupdateloop_serialize.cpp	230	RULING:h8	colour through the int overload, retail the uint overload (0x1400952c0)
+code/Game/Game/gameupdateloop_serialize.cpp	322	SIG:ToolbarUtility_BstInsert_4890	0x140014890 takes the root as int64_t* and the record as uint64_t* (Dialog/exe_bodies.h, B4 FORWARD)
+code/Game/Game/gameupdateloop_serialize.cpp	323	SIG:ToolbarUtility_BstInsert_4890	0x140014890 takes the root as int64_t* and the record as uint64_t* (Dialog/exe_bodies.h, B4 FORWARD)
+code/Game/Game/gameupdateloop_serialize.cpp	435	CLASS:TrackedEntityNode	FIELD: key ComponentEntity* -> InternalPtr<ComponentEntity> (PlayerToolManager.h)
+code/Game/Game/gameupdateloop_serialize.cpp	592	CLASS:EntityList	FIELD: bucket elements ComponentEntity* -> InternalPtr<ComponentEntity> (EntityList.h)
+code/Game/Game/gameupdateloop_serialize.cpp	833	RULING:alloc_shape:malloc	CRT malloc in the round-trip diagnostic
+code/Game/Game/gameupdateloop_serialize.cpp	861	LOCAL:round-trip probe SS image	diagnostic, not retail: a real Save::SavedState local (or delete the probe)
+code/Game/Game/gameupdateloop_serialize.cpp	866	LOCAL:round-trip probe SS image	diagnostic, not retail: a real Save::SavedState local (or delete the probe)
+code/Game/Game/gameupdateloop_teardown.cpp	67	CLASS:PathGraph	m_pairs raw triple; 0x1400171b0 is its dtor; helpers B / Arr go with the last user
+code/Game/Game/gameupdateloop_teardown.cpp	68	CLASS:PlayerToolManager	field_0x10 root / field_0x18 count -> one {root,count} tree header member
+code/Game/Game/gameupdateloop_teardown.cpp	73	CLASS:PathGraph	m_pairs raw triple; 0x1400171b0 is its dtor; helpers B / Arr go with the last user
+code/Game/Game/gameupdateloop_teardown.cpp	96	CLASS:WorldGeometry	_contourOutlines RawArray<RawArray<Vector2>> +0x1E0
+code/Game/Game/gameupdateloop_teardown.cpp	112	CLASS:PathGraph	m_pairs raw triple; 0x1400171b0 is its dtor; helpers B / Arr go with the last user
+code/Game/Game/gameupdateloop_teardown.cpp	166	CLASS:ToolRegistryNode	FIELD: toolSetting ToolSetting* -> InternalPtr<ToolSetting> (also Tool::toolSetting +0x18)
+code/Game/Game/gameupdateloop_teardown.cpp	179	CLASS:ToolRegistryNode	FIELD: toolSetting ToolSetting* -> InternalPtr<ToolSetting> (also Tool::toolSetting +0x18)
+code/Game/Game/gameupdateloop_teardown.cpp	183	CLASS:PlayerToolManager	field_0x10 root / field_0x18 count -> one {root,count} tree header member
+code/Game/Game/gameupdateloop_teardown.cpp	268	CLASS:PlayerToolManager	FIELD: currentTool Tool* -> InternalPtr<Tool> (ctor 0x1401025fe, DeletePtr 0x14010250c)
+code/Game/Game/geometry_draw.cpp	304	SIG:Video::Context::BindIndexBuffer	binds non-const IndexBuffer* from WorldGeometry's const Draw slot; a const-taking overload or a non-const slot
+code/Game/Game/geometry_draw.cpp	317	CLASS:Graphics::Geometry	FIELD (R-GFX): _transform/_prevTransform -> InterpolatedState<Math::Transform>
+code/Game/Game/geometry_draw.cpp	350	CLASS:Video::Context	FIELD: _unknown20f0 integer is the dynamic index cursor -> uint8_t* (readers statusicon_geometry, geometry_draw, weather_particle_draw)
+code/Game/Game/geometry_serialize.cpp	176	RULING:retail_diff:61	known_port_issues row 61: ushort overload is the port's
+code/Game/Game/goals_serialize.cpp	86	SIG:WorkCellBST_Remove_ca60	one body over five node/header types (ICF); WORK partition (ledger round 1: one agent owning every Work leaf)
+code/Game/Game/goals_serialize.cpp	89	SIG:WorkBST_BSTRemove_a6e0	root slot as uintptr_t*; WORK partition (ledger round 1)
+code/Game/Game/inputbindings.cpp	196	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/keystone_a_gamedtor.cpp	218	POD:RtSystem::CriticalSection	ctor/dtor doors on the mirror (System::CriticalSection trivial by design, Thread.h)
+code/Game/Game/keystone_a_gamedtor.cpp	314	CLASS:Map	pickingScene +0x08 raw Picking::Scene, cells +0x80 raw triple
+code/Game/Game/mapgenerator.cpp	329	RULING:retail_diff:470	known_port_issues row 470 (14d): families keeps the tree's if(data) guard
+code/Game/Game/mapquery.cpp	181	SIG:CanonicalMapGrid / map query C declaration	outTri void* in the C declaration ~150 callers hold
+code/Game/Game/mapquery.cpp	208	CLASS:Map	pickingScene +0x08 raw Picking::Scene, cells +0x80 raw triple
+code/Game/Game/maptilegrid.cpp	63	SIG:MapTileGrid_Build	void* map; local extern in gameupdateloop_load.cpp; callers growthcomponent, starttown, gameupdateloop_load
+code/Game/Game/menudialogloopt.cpp	145	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/menudialogloopt.cpp	152	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/menudialogloopt.cpp	546	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/menudialogloopt.cpp	559	POD:RtGraphics::Renderer	ctor/dtor doors take the mirror; 113 views the storage as Graphics::Renderer
+code/Game/Game/menudialogloopt.cpp	564	POD:RtGraphics::Scene	ctor/dtor doors take the mirror; 114 views the storage as Graphics::Scene
+code/Game/Game/menudialogloopt.cpp	887	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/menudialogloopt_stubs.cpp	107	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/menudialogloopt_stubs.cpp	161	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/menudialogloopt_stubs.cpp	208	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/menudialogloopt_stubs.cpp	269	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/menudialogloopt_stubs.cpp	270	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/menudialogloopt_stubs.cpp	271	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/menudialogloopt_stubs.cpp	459	CLASS:MenuDialogLoopT	_dlcShip +0xbc8: class not settled (MemAlloc(0xf0) + exe ctor 0x1400d3f10); FIELD, separate from the H5 commit
+code/Game/Game/menudialogloopt_stubs.cpp	467	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/menudialogloopt_stubs.cpp	468	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/menudialogloopt_stubs.cpp	470	CLASS:MenuDialogLoopT	+0xb30 Audio::Scene and the +0xbd0/+0xbe0/+0xbf0 arrays typed together
+code/Game/Game/menudialogloopt_stubs.cpp	477	POD:RtGraphics::Scene	ctor/dtor doors take the mirror; 114 views the storage as Graphics::Scene
+code/Game/Game/menudialogloopt_stubs.cpp	482	POD:RtGraphics::Renderer	ctor/dtor doors take the mirror; 113 views the storage as Graphics::Renderer
+code/Game/Game/menudialogloopt_stubs.cpp	506	RULING:retail_diff:none	standalone first-tick clamp writes MainLoop's Time through retail's const& (our divergence; no row)
+code/Game/Game/minimap_paint.cpp	172	POD:RtGraphics::Renderer	ctor/dtor doors take the mirror; 113 views the storage as Graphics::Renderer
+code/Game/Game/minimap_paint.cpp	173	POD:RtGraphics::Scene	ctor/dtor doors take the mirror; 114 views the storage as Graphics::Scene
+code/Game/Game/minimap_paint.cpp	174	POD:RtGraphics::Renderer	ctor/dtor doors take the mirror; 113 views the storage as Graphics::Renderer
+code/Game/Game/minimap_paint.cpp	175	POD:RtGraphics::Scene	ctor/dtor doors take the mirror; 114 views the storage as Graphics::Scene
+code/Game/Game/minimap_paint.cpp	240	POD:RtGraphics::Scene	ctor/dtor doors take the mirror; 114 views the storage as Graphics::Scene
+code/Game/Game/minimap_paint.cpp	241	POD:RtGraphics::Renderer	ctor/dtor doors take the mirror; 113 views the storage as Graphics::Renderer
+code/Game/Game/pathfinder_seed.cpp	125	SIG:Pathfinder_Seed	void* map; local extern in gameupdateloop_load.cpp holding a void*
+code/Game/Game/pathfinder_seed.cpp	137	POD:RtSystem::CriticalSection	ctor/dtor doors on the mirror (System::CriticalSection trivial by design, Thread.h)
+code/Game/Game/professionlist.cpp	151	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/serialize_arrays.cpp	139	CLASS:PlayerController	FIELD: targetX/Y/Z -> Math::Vector3 target (+0x1C); init in the mem-init list so the constexpr ctor adds no store
+code/Game/Game/serialize_arrays.cpp	273	SIG:Reimpl_Array_Resize_Stride20	void* header of other owners' raw triples (menuscene, serialize_resize_helpers)
+code/Game/Game/serialize_arrays.cpp	297	SIG:Reimpl_Array_Resize_Stride08	void* header (geometry_serialize, menuscene, ambientemitterdescription, roadtool_calcpath, tutorial, tutorialstep)
+code/Game/Game/serialize_arrays.cpp	303	SIG:Reimpl_Array_Resize_Stride14	void* header (menuscene, serialize_struct60b_serialize)
+code/Game/Game/serialize_arrays.cpp	328	SIG:Reimpl_Array_Resize_Stride10_Spawn	void* header: SpawnDescription+0x20 (spawndescription.cpp)
+code/Game/Game/serialize_arrays.cpp	350	RULING:retail_diff:63	known_port_issues row 63: eight uint32 words per record
+code/Game/Game/serialize_arrays.cpp	409	SIG:ArraySerializeExternalGeneric	callers pass their reference arrays as void*
+code/Game/Game/serialize_externals.cpp	98	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/serialize_externals.cpp	156	SIG:ForwardRef	void* C entry points Reimpl_ExternalPtr_Serialize_* (~150 call lines, ~90 files)
+code/Game/Game/serialize_externals.cpp	157	SIG:ForwardRef	void* C entry points Reimpl_ExternalPtr_Serialize_* (~150 call lines, ~90 files)
+code/Game/Game/serialize_externals.h	38	ERASED:Object::ExternalPtrSerializeBody	FLOOR? typed wrapper hands its T** slot to the one erased External** core (retail ICF)
+code/Game/Game/serialize_resize_helpers.cpp	58	SIG:serialize_resize_helpers C entries (ByteHeader)	void* headers of geometry, name database, plant-area, worldgen
+code/Game/Game/serialize_resize_helpers.cpp	310	SIG:serialize_resize_helpers Outline entry	void* header of other owners' raw triples
+code/Game/Game/serialize_struct60b.cpp	228	SIG:Reimpl_Struct60B_Resize	void* header (action_pf_road.cpp, geometry_serialize.cpp)
+code/Game/Game/splash_loop_stubs.cpp	265	RULING:retail_diff:none	standalone first-tick clamp writes MainLoop's Time through retail's const& (our divergence; no row)
+code/Game/Game/splash_loop_stubs.cpp	428	RULING:vptr_probe	GameUpdateLoop vptr identity compare (unreflected)
+code/Game/Game/starttown.cpp	586	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/starttown.cpp	1815	RULING:retail_diff:95	known_port_issues row 95: low dword of WorkPlaceComponent::workers as a count (dead arm)
+code/Game/Game/starttown.cpp	1815	RULING:retail_diff:95	known_port_issues row 95: low dword of WorkPlaceComponent::workers as a count (dead arm)
+code/Game/Game/starttown.cpp	3589	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/terraingenerator.cpp	219	RULING:h8	raw byte serialized as bool
+code/Game/Game/unreg_lane5_musicplayer.cpp	148	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/water_contour_mesh.cpp	204	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	207	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	231	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	272	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	273	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	274	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	365	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	426	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	486	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	487	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	535	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	536	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/water_contour_mesh.cpp	546	RULING:alloc_shape:malloc	CRT malloc / realloc of the tree's own contour scratch
+code/Game/Game/weather_particle_draw.cpp	336	CLASS:Video::Context	FIELD: _unknown20f0 integer is the dynamic index cursor -> uint8_t* (readers statusicon_geometry, geometry_draw, weather_particle_draw)
+code/Game/Game/weather_particle_draw.cpp	339	CLASS:Video::Context	FIELD: _unknown20f0 integer is the dynamic index cursor -> uint8_t* (readers statusicon_geometry, geometry_draw, weather_particle_draw)
+code/Game/Game/weather_particles.cpp	423	CLASS:EnvironmentDescription	_weatherArray raw triple of Array<WeatherChoice> (Component/, COMP partition); then the entry takes it typed
+code/Game/Game/weather_sim.cpp	173	CLASS:ClimateGenerator	FIELD: _climateData uint8_t[0xC0] -> float[48] (weather_sim.cpp indexes (month*4+type)*4 bytes = one float index); memset stays
+code/Game/Game/worldgen.cpp	473	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Game/worldgen_f390_ranges.cpp	231	ERASED:kSpec_RgPathVec / kSpec_WgPathVec twin rows	TerrainPathList driven through a twin spec row (keeps CopyVec1c's OOM return)
+code/Game/Goal/buildinggoal.cpp	263	LOCAL:BuildingGoal diagnostic stack image	vptr-less image evaluated by a qualified call; not retail: delete the probe or build a real object
+code/Game/Goal/goal_exe_helpers.cpp	40	CLASS:NamedExternalRef	name[8] raw String + NamedExternalRefArray raw triple (0x14001b030 / 0x14001b340)
+code/Game/Goal/goal_exe_helpers.cpp	43	CLASS:NamedExternalRef	name[8] raw String + NamedExternalRefArray raw triple (0x14001b030 / 0x14001b340)
+code/Game/Goal/goal_exe_helpers.cpp	87	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Goal/goal_exe_helpers.cpp	178	CLASS:NamedExternalRef	name[8] raw String + NamedExternalRefArray raw triple (0x14001b030 / 0x14001b340)
+code/Game/Object/exe_type.h	99	SIG:DECLARE_EXE_TYPE CreateNewObject/CreateInPlaceObject	returns void* where BaseTypeInfo::FactoryFn returns Object::Base* (~630 definitions)
+code/Game/Object/exe_type.h	100	SIG:DECLARE_EXE_TYPE CreateNewObject/CreateInPlaceObject	returns void* where BaseTypeInfo::FactoryFn returns Object::Base* (~630 definitions)
+code/Game/Tutorial/tutorial_base.cpp	58	SIG:ExternalPtrSerializeGeneric(void**)	the void** overload; SerOne / TutWave callers hand the slot as void*
+code/Game/Tutorial/tutorial_base.cpp	70	SIG:SerArray	tutorial_base.cpp file-local: the 8-byte ExternalPtr slots arrive as void* (callers 0x140026fb0/0x140028cf0/0x140028f40/0x140029190)
+code/Game/Tutorial/tutorial_base.cpp	159	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Tutorial/tutorial_wave.cpp	134	SIG:ExternalPtrSerializeGeneric(void**)	the void** overload; SerOne / TutWave callers hand the slot as void*
+code/Game/Tutorial/tutorial_wave.cpp	176	SIG:ToolbarUtility_BstInsert_4890	0x140014890 takes the root as int64_t* and the record as uint64_t* (Dialog/exe_bodies.h, B4 FORWARD)
+code/Game/Tutorial/tutorial_wave.cpp	177	SIG:ToolbarUtility_BstInsert_4890	0x140014890 takes the root as int64_t* and the record as uint64_t* (Dialog/exe_bodies.h, B4 FORWARD)
+code/Game/Tutorial/tutorialgoalcount.cpp	135	CLASS:TutorialGoalCount	elementName +0x48 raw String
+code/Game/Tutorial/tutorialsetupdialog.cpp	130	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Tutorial/tutorialsetuprestrictplayer.cpp	107	RULING:const_find	FindOrLoad / Find / FindNext const result (ledger S3)
+code/Game/Tutorial/tutorialstep.cpp	59	CLASS:TutorialStep	titleStr/descStr raw Strings + three raw Array<ExternalPtr<T>> triples
+code/Game/Tutorial/tutorialstep.cpp	60	CLASS:TutorialStep	titleStr/descStr raw Strings + three raw Array<ExternalPtr<T>> triples
+code/Game/Tutorial/tutorialstep.cpp	61	CLASS:TutorialStep	titleStr/descStr raw Strings + three raw Array<ExternalPtr<T>> triples
+code/Game/Tutorial/tutorialstep.cpp	94	CLASS:TutorialStep	titleStr/descStr raw Strings + three raw Array<ExternalPtr<T>> triples
+code/Game/Tutorial/tutorialstep.cpp	97	CLASS:TutorialStep	titleStr/descStr raw Strings + three raw Array<ExternalPtr<T>> triples
