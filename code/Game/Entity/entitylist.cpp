@@ -1129,7 +1129,7 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
 
     if (lastMasterIdx != entityMasterIdx) {
         // Swap last element into removed element's slot
-        ComponentEntity** masterData = masterArray._data;
+        Object::InternalPtr<ComponentEntity>* masterData = masterArray._data;
         masterData[entityMasterIdx] = masterData[lastMasterIdx];
 
         // Update swapped entity's master array index
@@ -1238,18 +1238,18 @@ void EntityList::Serialize(IO::Stream& stream) {
     }
 
     // Serialize each entity IBP in master array
-    ComponentEntity** ibpIter = masterArray._data;
+    Object::InternalPtr<ComponentEntity>* ibpIter = masterArray._data;
     int64_t ibpCount = (int64_t)serializedCount;
     if (ibpCount > 0) {
         for (int64_t j = 0; j < ibpCount; j++) {
-            ComponentEntity** currentIBP = &ibpIter[j];
-            reinterpret_cast<Object::InternalBasePtr*>(currentIBP)->Serialize(serializer);   // B.3.4 bridge   // LEFT: B4 H5-P2 (not reached): masterArray is IBPArray (Array<ComponentEntity*>) where retail's element is InternalPtr<ComponentEntity> (the buckets are retyped, UpdateBucket); its readers are ~25 files, 20 of them standalone harnesses walking `ComponentEntity** arr = masterArray._data`: the master-array retype is that sweep
+            Object::InternalPtr<ComponentEntity>* currentIBP = &ibpIter[j];
+            currentIBP->Object::InternalBasePtr::Serialize(serializer);   // IAT 0x140152aa0 (0x1400c4587)
 
             // After loading, verify it's a ComponentEntity
-            if (*currentIBP != nullptr) {
-                bool isDerived = ::Object::IsDerivedFromNullSafe(*currentIBP, ComponentEntity::TypeId());
+            if (currentIBP->Get() != nullptr) {
+                bool isDerived = ::Object::IsDerivedFromNullSafe(currentIBP->Get(), ComponentEntity::TypeId());
                 if (!isDerived) {
-                    *currentIBP = nullptr;
+                    *currentIBP = Object::InternalPtr<ComponentEntity>();
                 }
             }
         }
@@ -1293,7 +1293,7 @@ void EntityList::Serialize(IO::Stream& stream) {
             // Write back deserialized metadata to entity
             masterArray._data[entityIdx]->_entityId = masterIdxField;
 
-            ComponentEntity* ent = masterArray._data[entityIdx];
+            ComponentEntity* ent = masterArray._data[entityIdx].Get();
             ent->_handle = ent->_handle ^ ((static_cast<uint32_t>(bucketIdxField) ^ ent->_handle) & 0xFFFFFF);
 
             // The category byte +0x1F: retail stores the BYTE, the

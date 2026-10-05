@@ -177,13 +177,13 @@ void ProbeClass(const FoodClass& fc) {
     if (!gw) return;
     EntityList* el = gw->m_entityList;   // +0xe8
     if (!el) return;
-    ComponentEntity** arr = el->masterArray._data;   // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = el->masterArray._data;   // +0x08
     const int n = el->masterArray._size;   // +0x10
 
     int instances = 0;
     ComponentEntity* ent = nullptr; Component* comp = nullptr;
     for (int i = 0; i < n && arr; ++i) {
-        ComponentEntity* e = arr[i];
+        ComponentEntity* e = arr[i].Get();
         if (!e) continue;
         if (Component* c = FindComp(e, tid)) {
             ++instances;

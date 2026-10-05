@@ -1406,7 +1406,7 @@ static void FireUIComponentCensus() {
     }
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     EntityList* entityList = gw->m_entityList;
-    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;
+    Object::InternalPtr<ComponentEntity>* arr = entityList ? entityList->masterArray._data : nullptr;
     int       en  = entityList ? entityList->masterArray._size : 0;
 
     const uint32_t tidUIComp = UIComponent::TypeId();
@@ -1418,7 +1418,7 @@ static void FireUIComponentCensus() {
     }
 
     for (int i = 0; i < en && arr; ++i) {
-        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
+        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)].Get();
         if (!ent) continue;
         ++entities;
 
@@ -1507,13 +1507,13 @@ static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     EntityList* entityList = gw->m_entityList;
-    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;
+    Object::InternalPtr<ComponentEntity>* arr = entityList ? entityList->masterArray._data : nullptr;
     int       en  = entityList ? entityList->masterArray._size : 0;
     const uint32_t tidUIComp = UIComponent::TypeId();
 
     ComponentEntity* A = nullptr; int aIdx = -1;
     for (int i = 0; i < en && arr && !A; ++i) {
-        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
+        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)].Get();
         if (!ent) continue;
         const int       cN = ent->_components._size;
         Object::InternalPtr<Component>* const cA = ent->_components._data;
@@ -1622,11 +1622,11 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
     if (!pastureComp) {
         GameUpdateLoop* gw = GameUpdateLoop::_singleton;
         EntityList* entityList = gw->m_entityList;
-        ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;
+        Object::InternalPtr<ComponentEntity>* arr = entityList ? entityList->masterArray._data : nullptr;
         int       en  = entityList ? entityList->masterArray._size : 0;
         const uint32_t tidPastureComp = PastureComponent::TypeId();
         for (int i = 0; i < en && arr && !pastureComp; ++i) {
-            ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
+            ComponentEntity* ent = arr[static_cast<uintptr_t>(i)].Get();
             if (!ent) continue;
             int       cN = ent->_components._size;
             Object::InternalPtr<Component>* cA = ent->_components._data;
@@ -1741,7 +1741,7 @@ void FireOrchardPanel(PlayerToolManager* entityUI) {
     if (!gw) { fprintf(stderr, "[OrchardPanel] gameWorld null\n"); return; }
     EntityList* entityList = gw->m_entityList;
     if (!entityList) { fprintf(stderr, "[OrchardPanel] EntityList (gw+0xe8) null\n"); return; }
-    ComponentEntity** arr = entityList->masterArray._data;
+    Object::InternalPtr<ComponentEntity>* arr = entityList->masterArray._data;
     int       n   = entityList->masterArray._size;
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
@@ -1753,7 +1753,7 @@ void FireOrchardPanel(PlayerToolManager* entityUI) {
     ComponentEntity* orchEnt = nullptr;
     OrchardComponent* orchComp = nullptr;
     for (int i = 0; i < n && !orchEnt; ++i) {
-        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
+        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)].Get();
         if (!ent) continue;
         int       cN = ent->_components._size;
         Object::InternalPtr<Component>* cA = ent->_components._data;
@@ -1849,7 +1849,7 @@ void FireTradePanel(PlayerToolManager* entityUI) {
     if (!gw) { fprintf(stderr, "[TradePanel] gameWorld null\n"); return; }
     EntityList* entityList = gw->m_entityList;
     if (!entityList) { fprintf(stderr, "[TradePanel] EntityList (gw+0xe8) null\n"); return; }
-    ComponentEntity** arr = entityList->masterArray._data;
+    Object::InternalPtr<ComponentEntity>* arr = entityList->masterArray._data;
     int       n   = entityList->masterArray._size;
     const uint32_t tidTradeComp = TradeComponent::TypeId();
     if (!arr || n <= 0 || !tidTradeComp) {
@@ -1860,7 +1860,7 @@ void FireTradePanel(PlayerToolManager* entityUI) {
 
     ComponentEntity* postEnt = nullptr;
     for (int i = 0; i < n && !postEnt; ++i) {
-        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
+        ComponentEntity* ent = arr[static_cast<uintptr_t>(i)].Get();
         if (!ent) continue;
         int       cN = ent->_components._size;
         Object::InternalPtr<Component>* cA = ent->_components._data;

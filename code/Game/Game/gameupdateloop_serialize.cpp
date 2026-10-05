@@ -481,8 +481,8 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
 
     int count = el->masterArray._size;
     for (int i = 0; i < count; i++) {
-        ComponentEntity** entSlot = &el->masterArray._data[i];
-        ComponentEntity* ent = *entSlot;
+        Object::InternalPtr<ComponentEntity>* entSlot = &el->masterArray._data[i];
+        ComponentEntity* ent = entSlot->Get();
 
         int compCount = ent->_components._size;
         for (int j = 0; j < compCount; j++) {
@@ -494,7 +494,7 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
 
         (*entSlot)->_entityList = el;
 
-        ComponentEntity* e = *entSlot;
+        ComponentEntity* e = entSlot->Get();
         if (e->_entityList != nullptr) {
             // Retail re-reads the owner it has just stored.
             EntityList* owner = e->_entityList;

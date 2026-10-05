@@ -100,7 +100,7 @@ void Fire(int frame) {
     if (!gw) return;
     EntityList* el = gw->m_entityList;                 // +0xe8
     if (!el) return;
-    ComponentEntity** arr = el->masterArray._data;      // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = el->masterArray._data;      // +0x08
     const int n = el->masterArray._size;               // +0x10
     const uint32_t tidCrop = CropFieldComponent::TypeId();
     const uint32_t tidSM   = StateMachineComponent::TypeId();
@@ -108,7 +108,7 @@ void Fire(int frame) {
 
     int found = 0;
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         Component* comp = FindComp(ent, tidCrop);
         if (!comp) continue;

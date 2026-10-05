@@ -56,7 +56,7 @@ extern "C" void OrchardCutHarness_Tick(int frameNum) {
 
     GameUpdateLoop* gw = (GameUpdateLoop::_singleton != nullptr) ? GameUpdateLoop::_singleton : nullptr;
     EntityList* entityList = gw ? gw->m_entityList : nullptr;                     // +0xe8
-    ComponentEntity** arr = entityList ? entityList->masterArray._data : nullptr;   // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = entityList ? entityList->masterArray._data : nullptr;   // +0x08
     const int n   = entityList ? entityList->masterArray._size : 0;               // +0x10
     const uint32_t tid = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tid) {
@@ -68,7 +68,7 @@ extern "C" void OrchardCutHarness_Tick(int frameNum) {
 
     int found = 0, clicked = 0;
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         const int cN = ent->_components._size;                     // +0x38
         Object::InternalPtr<Component>* cA = ent->_components._data;   // +0x30

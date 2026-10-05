@@ -179,7 +179,7 @@ extern "C" void PanelHoldHarness_Tick(PlayerToolManager* entityUI, int frameNum)
     if (!gw) return;
     EntityList* el = gw->m_entityList;   // +0xe8
     if (!el) return;
-    ComponentEntity** arr = el->masterArray._data;   // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = el->masterArray._data;   // +0x08
     const int n = el->masterArray._size;   // +0x10
     const uint32_t tid = Tid(s_want);
     if (!arr || n <= 0 || !tid) {
@@ -190,7 +190,7 @@ extern "C" void PanelHoldHarness_Tick(PlayerToolManager* entityUI, int frameNum)
     }
 
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent || !FindComp(ent, tid)) continue;
 
         EditTool* tool = EditTool_HarnessAcquire(entityUI);

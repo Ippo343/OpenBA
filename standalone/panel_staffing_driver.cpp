@@ -210,14 +210,14 @@ extern "C" void PanelStaffingDriver_Tick(PlayerToolManager* entityUI, int frameN
     if (!gw) return;
     EntityList* const el = gw->m_entityList;                    // +0xe8
     if (!el) return;
-    ComponentEntity** const arr = el->masterArray._data;         // +0x08
+    Object::InternalPtr<ComponentEntity>* const arr = el->masterArray._data;         // +0x08
     const int n = el->masterArray._size;                        // +0x10
     const uint32_t tidWpc = WorkPlaceComponent::TypeId();
     const uint32_t tidWc  = WorkComponent::TypeId();
     if (!tidWpc || !arr) return;
 
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         Component* wpcP = FindComp(ent, tidWpc);
         if (!wpcP) continue;

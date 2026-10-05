@@ -319,7 +319,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
     CitizenBehavior* townMgr = gw->m_citizenList;     // +0xF0
     EntityList* entityList   = gw->m_entityList;      // +0xE8
     if (!townMgr || !entityList) return;
-    ComponentEntity** arr = entityList->masterArray._data;   // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = entityList->masterArray._data;   // +0x08
     const int n = entityList->masterArray._size;            // +0x10
     if (!arr || n <= 0) return;
 
@@ -331,7 +331,7 @@ void StaffPass(GameUpdateLoop* gw, int worldFrame) {
     std::vector<Need> needs;
     int workplaces = 0, notAccepting = 0;
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         if (ent->_entityFlags & 0x400) continue;   // removed (+0x40)
         WorkPlaceComponent* wpc = ent->FindComponent<WorkPlaceComponent>();   // 0x140002e10

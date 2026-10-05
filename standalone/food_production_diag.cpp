@@ -82,7 +82,7 @@ Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     return nullptr;
 }
 
-void DumpStorage(int frame, ComponentEntity** arr, int n) {
+void DumpStorage(int frame, Object::InternalPtr<ComponentEntity>* arr, int n) {
     const uint32_t tidStorage = StorageComponent::TypeId();
     if (!tidStorage || !arr || n <= 0) {
         std::fprintf(stderr, "[FoodDiag] frame=%d storage: CANNOT SCAN "
@@ -95,7 +95,7 @@ void DumpStorage(int frame, ComponentEntity** arr, int n) {
     long long grand = 0;
 
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         const int cN = ent->_components._size;                     // +0x38
         Object::InternalPtr<Component>* cA = ent->_components._data;   // +0x30
@@ -139,7 +139,7 @@ void DumpAll(int frame) {
         std::fprintf(stderr, "[FoodDiag] frame=%d: EntityList (gw+0xe8) null\n", frame);
         return;
     }
-    ComponentEntity** arr = entityList->masterArray._data;       // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = entityList->masterArray._data;       // +0x08
     int       n   = entityList->masterArray._size;              // +0x10
 
     ClassRow rows[] = {
@@ -155,7 +155,7 @@ void DumpAll(int frame) {
     const uint32_t tidWPC = WorkPlaceComponent::TypeId();
 
     for (int i = 0; i < n && arr; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
 
         for (int r = 0; r < nRows; ++r) {

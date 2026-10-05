@@ -100,7 +100,7 @@ void Fire(int frameNum) {
                 static_cast<void*>(entityList));
         return;
     }
-    ComponentEntity** arr = entityList->masterArray._data;       // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = entityList->masterArray._data;       // +0x08
     int       n   = entityList->masterArray._size;              // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     if (!arr || n <= 0 || !tidOrchardComp) {
@@ -117,7 +117,7 @@ void Fire(int frameNum) {
 
     int found = 0, considered = 0;
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
 
         int       cN = ent->_components._size;                     // +0x38

@@ -89,12 +89,22 @@ using UpdateBucket = Collection::Array<Object::InternalPtr<ComponentEntity>, Col
                                        Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
 static_assert(sizeof(UpdateBucket) == 0x10, "UpdateBucket must be 0x10 bytes");
 
+// MasterEntityArray — the +0x08 master array: retail's Array<InternalPtr<ComponentEntity>>.
+// The serializer 0x1400c44a0 resizes it through 0x1400032e0 (0x1400c4569) and then, per
+// slot, calls InternalBasePtr::Serialize (IAT 0x140152aa0, 0x1400c4587) and nulls a
+// slot whose object is not IsDerivedFrom ComponentEntity (cell 0x1401c5d70,
+// 0x1400c4595..0x1400c45a5). Same kSpec_PtrZero row as before (ctor zero qwords,
+// ~Array in the dtor): only the element's C++ type changes.
+using MasterEntityArray = Collection::Array<Object::InternalPtr<ComponentEntity>, Collection::DefaultAllocator,
+                                            Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+static_assert(sizeof(MasterEntityArray) == 0x10, "MasterEntityArray must be 0x10 bytes");
+
 // EntityList — main entity management structure
 // Size: 0xE8 bytes (GameUpdateLoop::Load 0x140096b00: MemAlloc(0xe8, 4) + ctor 0x1400c3f90)
 struct EntityList {
     System::Time    accumulatedTime;    // +0x00: accumulated simulation time (Serialize 0x1400c44a0:
                                         //        System::Time::Serialize on +0x00)
-    IBPArray        masterArray;        // +0x08: master array of all entity IBPs {data, count, cap}
+    MasterEntityArray masterArray;      // +0x08: master array of all entity IBPs {data, count, cap}
     UpdateBucket    buckets[5];         // +0x18: 5 round-robin update buckets (each 0x10)
     EntityTree      updateTree;         // +0x68: the per-tick entity tree {root, int32 count}
                                         //        (ctor 0x1400c3fe8 `MOV dword ptr [RAX+0x8],EDI`)

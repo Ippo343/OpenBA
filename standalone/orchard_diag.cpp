@@ -123,7 +123,7 @@ uint64_t s_harvestExecuted    = 0; // Slot4 successfully created a harvest actio
 // storage in town gives a number that only moves when goods are actually deposited.
 //
 // This is a HARNESS probe, not a port: it reads published fields and writes nothing.
-void DumpTownStorage(int frameNum, ComponentEntity** arr, int n) {
+void DumpTownStorage(int frameNum, Object::InternalPtr<ComponentEntity>* arr, int n) {
     const uint32_t tidStorage = StorageComponent::TypeId();
     if (!tidStorage || !arr || n <= 0) {
         fprintf(stderr, "[OrchardDiag] frame=%d: town storage — cannot scan "
@@ -139,7 +139,7 @@ void DumpTownStorage(int frameNum, ComponentEntity** arr, int n) {
     int    storages = 0, nonEmpty = 0;
 
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
         const int cN = ent->_components._size;                     // +0x38
         Object::InternalPtr<Component>* cA = ent->_components._data;   // +0x30
@@ -185,7 +185,7 @@ void DumpOrchards(int frameNum) {
         fprintf(stderr, "[OrchardDiag] frame=%d: EntityList (gw+0xe8) null — cannot scan\n", frameNum);
         return;
     }
-    ComponentEntity** arr = entityList->masterArray._data;       // +0x08
+    Object::InternalPtr<ComponentEntity>* arr = entityList->masterArray._data;       // +0x08
     int       n   = entityList->masterArray._size;              // +0x10
     const uint32_t tidOrchardComp = OrchardComponent::TypeId();
     const uint32_t tidWorkPlaceComp = WorkPlaceComponent::TypeId();
@@ -199,7 +199,7 @@ void DumpOrchards(int frameNum) {
 
     int found = 0;
     for (int i = 0; i < n; ++i) {
-        ComponentEntity* ent = arr[i];
+        ComponentEntity* ent = arr[i].Get();
         if (!ent) continue;
 
         int       cN = ent->_components._size;                     // +0x38

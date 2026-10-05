@@ -509,7 +509,7 @@ void WorkScheduler::Serialize(IO::Stream& stream) {
             int32_t entityCount = entityList->masterArray._size;
 
             for (int32_t i = 0; i < entityCount; ++i) {
-                ComponentEntity* entity = entityList->masterArray._data[i];
+                ComponentEntity* entity = entityList->masterArray._data[i].Get();
                 WorkComponent* workComponent = entity->FindComponent<WorkComponent>();
                 if (workComponent != nullptr) {
                     int32_t workId = workComponent->workId;
