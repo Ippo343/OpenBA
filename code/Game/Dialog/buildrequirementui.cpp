@@ -51,8 +51,8 @@
 // Debug sprite logging wrappers (runtime/src/ui/)
 #include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
 extern void* Debug_Sprite_DefaultCtor(void* retval);
-extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
-extern void Debug_LabelElement_SetSprite(void* self, void* spriteData);
+extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData);
+extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, void* spriteData);
 #endif
 
 // Helper: find a sub-description by type ID in a ComponentDescription's list

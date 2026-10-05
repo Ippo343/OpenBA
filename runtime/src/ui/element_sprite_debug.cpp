@@ -39,8 +39,8 @@ static void PrintSpriteValue(const char* label, const UI::Sprite& sprite) {
 // Call this instead of fn_ImageElement_SetSprite to get logging.
 // spriteData points to a 0x10-byte Sprite struct passed by value (on stack).
 // The void* receivers stay: code/Game declares these two with local externs.
-void Debug_ImageElement_SetSprite(void* self, void* spriteData) {
-    UI::ImageElement* elem = reinterpret_cast<UI::ImageElement*>(self);            // B.3.6 bridge  // LEFT: SIG the code/Game extern passes void* self / spriteData (debug harness; wave X)
+void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData) {
+    UI::ImageElement* elem = self;
     const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: SIG the code/Game extern passes the Sprite as a void* byte buffer (debug harness; wave X)
 #ifdef _DEBUG
     printf("[ImageElement::SetSprite] this=%p\n", self);
@@ -72,8 +72,8 @@ void Debug_ImageElement_SetSprite(void* self, void* spriteData) {
 
 // Debug wrapper: log before/after LabelElement::SetSprite
 // spriteData points to a 0x10-byte Sprite struct passed by value.
-void Debug_LabelElement_SetSprite(void* self, void* spriteData) {
-    UI::LabelElement* elem = reinterpret_cast<UI::LabelElement*>(self);            // B.3.6 bridge  // LEFT: SIG the code/Game extern passes void* self / spriteData (debug harness; wave X)
+void Debug_LabelElement_SetSprite(UI::LabelElement* self, void* spriteData) {
+    UI::LabelElement* elem = self;
     const UI::Sprite* sprite = reinterpret_cast<const UI::Sprite*>(spriteData);    // LEFT: SIG the code/Game extern passes the Sprite as a void* byte buffer (debug harness; wave X)
 #ifdef _DEBUG
     printf("[LabelElement::SetSprite] this=%p\n", self);
