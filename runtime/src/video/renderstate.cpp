@@ -37,7 +37,8 @@
 //
 //   * `_data` is a real `Video::RenderStateData*` (block A, RULE B5-1), so
 //     `PlatformCreate` / `PlatformDestruct` / `Bind` call `Create()`,
-//     `DeletingDtor(1)` and `Bind(context)` as VIRTUALS instead of indexing
+//     the deleting destructor (`delete`, since B5 RES) and `Bind(context)` as
+//     VIRTUALS instead of indexing
 //     `programdata_vtbl::kCreate / kDeletingDtor / kBind` by byte offset. The
 //     three offsets were +0x08, +0x00 and +0x10, i.e. slots 1, 0 and 2 — which
 //     is exactly the order `CompanionData.h` declares them in.
@@ -163,14 +164,16 @@ void RenderState::Depth::Serialize(IO::Serializer& ser) {
 void RenderState::Stencil::Serialize(IO::Serializer& ser) {
     ser.Serialize(enabled, nullptr);
     ser.Serialize(twoSided, nullptr);
-    ser.Serialize(readMask, nullptr);
-    ser.Serialize(writeMask, nullptr);   // UChar, not UInt — see this file's banner
-    ser.Serialize(func, nullptr);
-    ser.Serialize(failOp, nullptr);
-    ser.Serialize(depthFailOp, nullptr);
-    ser.Serialize(passOp, nullptr);
-    ser.Serialize(backFunc, nullptr);
-    ser.Serialize(reference, nullptr);
+    // B5 RES: names corrected from the dx11 consumer (RenderState.h's Stencil
+    // banner); the order and the widths are unchanged.
+    ser.Serialize(func, nullptr);              // +0x04
+    ser.Serialize(reference, nullptr);         // +0x08  UChar, not UInt — see this file's banner
+    ser.Serialize(failOp, nullptr);            // +0x0c
+    ser.Serialize(depthFailOp, nullptr);       // +0x10
+    ser.Serialize(passOp, nullptr);            // +0x14
+    ser.Serialize(backFailOp, nullptr);        // +0x18
+    ser.Serialize(backDepthFailOp, nullptr);   // +0x1c
+    ser.Serialize(backPassOp, nullptr);        // +0x20
 }
 
 // ---- the three private platform halves ------------------------------------
@@ -189,7 +192,10 @@ void RenderState::PlatformCreate() {
 // ?PlatformDestruct@RenderState@Video@@AEAAXXZ (0x1800f4e80)
 void RenderState::PlatformDestruct() {
     if (_data == nullptr) return;
-    _data->DeletingDtor(1);   // slot 0, +0x00, flags 1 = destroy AND free
+    // slot 0, +0x00, flags 1 = destroy AND free. B5 RES (B5_RULES D10): that is
+    // `delete` -- the virtual destructor, then the base's class-scope operator
+    // delete (MemFree).
+    delete _data;
     // Retail does NOT null `_data` afterwards. Neither do we.
 }
 

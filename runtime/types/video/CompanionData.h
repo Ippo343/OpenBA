@@ -737,29 +737,14 @@ public:
     static void  operator delete(void* p);
 
     // [0] 0x180058690 -- MSVC's VECTOR deleting destructor (element 0x10, over
-    // ~RenderStateData), both arms as the retired RT_DELDTOR row ran them. Reached only on
-    // an object wearing THIS table; a live companion wears dx11's.
-    virtual void* DeletingDtor(unsigned flags) {
-        if (flags & 2u) {
-            void* const block = this;   // element 0 of a vector-new block
-            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
-            for (int32_t i = *cookie; --i >= 0;)
-                this[i].~RenderStateData();
-            if (flags & 1u) Object::detail::InternalMemFree(cookie);
-            return cookie;
-        }
-        this->~RenderStateData();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ~RenderStateData). B5 RES (B5_RULES D1): a real virtual destructor -- the
+    // compiler's D0/D1 pair is slot 0 now, and the base's class-scope `operator
+    // delete` above is retail's MemFree on `flags & 1`. The body (empty) stays in
+    // companion_data.cpp: ??1RenderStateData@Video@@UEAA@XZ  0x1800f8d70 (its old
+    // registered door in device.cpp is retired, B.3.9 VID).
+    virtual ~RenderStateData();
     virtual bool Create() { detail::CompanionPureCall(); }                                   // [1]
     virtual void Bind(void* context) { detail::CompanionPureCall(); }                        // [2]
-
-    // ??1RenderStateData@Video@@UEAA@XZ. Its registered DOOR is in
-    // `runtime/src/video/device.cpp` (Wave 6 lane B), not in
-    // companion_data.cpp — see the banner there. Same arrangement as
-    // `ImageBufferData`'s above.
-    ~RenderStateData();
 
     Owner* _owner;           // +0x08  Video::RenderState*
 };
@@ -865,9 +850,8 @@ static_assert(std::has_virtual_destructor<VertexProgramData>::value,
               "B5: the dx11 subclass wears the compiler's table");
 static_assert(std::has_virtual_destructor<PixelProgramData>::value,
               "B5: the dx11 subclass wears the compiler's table");
-static_assert(!std::has_virtual_destructor<RenderStateData>::value,
-              "Video::RenderStateData is exempt from the normal-virtual cutover -- the live "
-              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(std::has_virtual_destructor<RenderStateData>::value,
+              "B5: the dx11 subclass wears the compiler's table");
 static_assert(std::has_virtual_destructor<VideoProgramData>::value,
               "B5: the dx11 subclass wears the compiler's table");
 

@@ -1946,13 +1946,10 @@ void* Factory_PixelProgramData(DeviceData* /*self*/, ::Video::PixelProgram* owne
 }
 
 void* Factory_RenderStateData(DeviceData* /*self*/, ::Video::RenderState* owner) {
-    RenderStateData* p = AllocData<RenderStateData, ::Video::RenderStateData>(0x28, owner,
-                                                    Vt::RenderStateData);
-    if (!p) return nullptr;
-    p->blendState        = nullptr;
-    p->depthStencilState = nullptr;
-    p->rasterizerState   = nullptr;
-    return p;
+    // B5 RES: the base's operator new is retail's MemAlloc(0x28, 4); the ctor chain
+    // is retail's `??0RenderStateData` + the vptr store (now the compiler's table)
+    // + the three null stores.
+    return new RenderStateData(owner);
 }
 
 void* Factory_VideoProgramData(DeviceData* /*self*/, ::Video::VideoProgram* owner) {

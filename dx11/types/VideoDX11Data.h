@@ -29,6 +29,9 @@
 struct ID3D11InputLayout;
 struct ID3D11VertexShader;
 struct ID3D11PixelShader;
+struct ID3D11BlendState;
+struct ID3D11DepthStencilState;
+struct ID3D11RasterizerState;
 
 namespace VideoDX11 {
 
@@ -539,18 +542,30 @@ static_assert(sizeof(PixelProgramData::variants) == 0x20, "4 shader permutations
 // rasterizer — which is deliberately not the creation order.
 //
 // The +0x08 owner is a Video::RenderState; its field map (the source of every
-// state-desc value) is documented in dx11/src/renderstatedata.cpp and in the
+// state-desc value) is the real class's (runtime/types/video/RenderState.h),
+// read by name in dx11/src/renderstatedata.cpp, and is described in the
 // "RenderState -> D3D11 state objects" section of ../../decomp/videodx11.md.
-struct RenderStateData {
-    void* vptr;              // +0x00
-    void* renderState;       // +0x08  Video::RenderState*
-    void* blendState;        // +0x10  ID3D11BlendState*
-    void* depthStencilState; // +0x18  ID3D11DepthStencilState*
-    void* rasterizerState;   // +0x20  ID3D11RasterizerState*
+//
+// B5 RES: a real C++ subclass of `Video::RenderStateData`; the compiler builds
+// its vtable. `_owner` (+0x08, `Video::RenderState*`) is the base's and replaces
+// the old `renderState` field; the three state objects are typed (D4).
+class RenderStateData final : public ::Video::RenderStateData {
+public:
+    // Factory 0x1800059d0: MemAlloc(0x28, 4) + ??0RenderStateData(owner) + the
+    // vptr store + the three null stores. Nothing else is stored.
+    explicit RenderStateData(::Video::RenderState* owner)
+        : ::Video::RenderStateData(owner),
+          blendState(nullptr), depthStencilState(nullptr), rasterizerState(nullptr) {}
+    ~RenderStateData() override;                         // [0] 0x1800036e0, chains ??1RenderStateData@Video@@UEAA@XZ
+    bool Create() override;                              // [1] 0x180003760  the three CreateXxxState
+    void Bind(void* context) override;                   // [2] 0x180003a90  OMSet* / RSSetState
+
+    ID3D11BlendState*        blendState;        // +0x10
+    ID3D11DepthStencilState* depthStencilState; // +0x18
+    ID3D11RasterizerState*   rasterizerState;   // +0x20
 };
-static_assert(sizeof(RenderStateData) == 0x28, "RenderStateData size");
-static_assert(offsetof(RenderStateData, vptr) == 0x0, "RenderStateData::vptr");
-static_assert(offsetof(RenderStateData, renderState)       == 0x08, "RenderStateData::renderState");
+static_assert(sizeof(RenderStateData) == 0x28, "MemAlloc 0x28 @ 0x1800059d0");
+static_assert(offsetof(RenderStateData, _owner) == 0x08, "RenderStateData::_owner (the base's)");
 static_assert(offsetof(RenderStateData, blendState)        == 0x10, "RenderStateData::blendState");
 static_assert(offsetof(RenderStateData, depthStencilState) == 0x18, "RenderStateData::depthStencilState");
 static_assert(offsetof(RenderStateData, rasterizerState)   == 0x20, "RenderStateData::rasterizerState");
