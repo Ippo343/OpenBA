@@ -146,11 +146,11 @@ static constexpr float kRayMaxDist = 100.0f;   // DAT_140172208
 // site passes *(gw+0xf8); our ported call sites are not all provably doing so, and a wrong
 // param_1 would read a bogus dim and a bogus cell-array pointer. So resolve the canonical
 // grid from the singleton and only refine when param_1 agrees (or is null).
-static Map* CanonicalMapGrid(void* game) {
+static Map* CanonicalMapGrid(Map* game) {
     if (GameUpdateLoop::_singleton == nullptr) return nullptr;
     Map* canonical = GameUpdateLoop::_singleton->m_game;
     if (!canonical) return nullptr;
-    if (game && game != (void*)canonical) {
+    if (game && game != canonical) {
         static bool warned = false;
         if (!warned) {
             warned = true;
@@ -164,8 +164,8 @@ static Map* CanonicalMapGrid(void* game) {
 
 // FUN_14009f3e0 — Map terrain-position query. param_1 = the map grid (int*, *(gw+0xf8)),
 // outPos3=float[3] result, inXY2=float[2+] {worldX, worldZ}, flag, outTri = out normal.
-extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inXY2,
-                                          char flag, void* outTri) {
+extern "C" float* Reimpl_MapGetTerrainPos(Map* game, float* outPos3, const float* inXY2,
+                                          char flag, float* outTri) {
     const float inX = inXY2[0];
     const float inZ = inXY2[1];
 
@@ -175,12 +175,9 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
 
     const float height = MapQuery_SampleHeight(worldGeom, inX, inZ);
 
-    // outTri (param_5) receives the surface normal — only [2] (slope/flatness) is
-    // consumed downstream (the tile classifier), but we fill a true unit normal.
-    // LEFT: outTri is `void*` in the C declaration (Game/exe_bodies.h) ~90 callers
-    // hold; a float* parameter breaks fencedtool.cpp (GAMEB), which hands a
-    // uint32_t[2] (known_port_issues row 730).
-    float* tri = (float*)outTri;   // LEFT: SIG Reimpl_MapGetTerrainPos's outTri is void*: fencedtool.cpp (GAMEB) hands a uint32_t[2], which a float* parameter rejects (known_port_issues row 730)
+    // outTri (param_5) receives the surface normal, three floats (retail: 0x1400b0f90
+    // hands it to 0x1400aaa20, whose 0x1400aa810 stores [0], [1], [2] on a hit).
+    float* tri = outTri;
     if (tri)
         MapQuery_SampleNormal(worldGeom, inX, inZ, tri);
 

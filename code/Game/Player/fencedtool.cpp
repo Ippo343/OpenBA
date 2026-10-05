@@ -328,7 +328,7 @@ int FencedTool::CalcCost(int startCell, int endCell,
                 float inPos[4] = {(float)(cellIdx % mapWidth) - halfOffset,
                                   (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                 float outPos[4] = {0};
-                uint32_t extra[2] = {0};
+                float extra[3] = {0};   // retail: a Vector3 (0x1400db702 / 0x1400dc890), [2] read after the call
                 Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
 
                 if (!heightInitialized) { baseHeight = outPos[2]; heightInitialized = true; }
@@ -526,7 +526,7 @@ void FencedTool::Draw(Video::Context* context, char param3) {
                         float inPos[4] = {(float)(cellIdx % mapWidth) - halfOffset,
                                           (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                         float outPos[4] = {0};
-                        uint32_t extra[2] = {0};
+                        float extra[3] = {0};   // retail: a Vector3 (0x1400db702 / 0x1400dc890), [2] read after the call
                         Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
 
                         Math::Scalar heightDiff(outPos[2] - 0.0f);
