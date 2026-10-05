@@ -885,8 +885,7 @@ void Engine::Engine::Shutdown() {
         MemFree(p);
     }
     if (IO::Modification* p = _modification) {
-        // LEFT: the ??1 body takes the RtIO::Modification POD (Modification.h, R-IO).
-        RtIo::RtIo_Modification_Dtor(reinterpret_cast<RtIO::Modification*>(p));   // 0x1800b0470   // LEFT: POD the ??1 body takes the RtIO::Modification POD (Modification.h, not this set's)
+        RtIo::RtIo_Modification_Dtor(p);                                      // 0x1800b0470
         MemFree(p);
     }
     if (IO::Persistence* p = _persistence) {

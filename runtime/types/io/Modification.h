@@ -149,22 +149,8 @@ static_assert(offsetof(ReloadEntry, external) == 0x08, "0x1800af058 MOV [RBP-0x6
 static_assert(offsetof(ReloadEntry, file)     == 0x10, "0x1800af064 MOV [RBP-0x61],R13");
 static_assert(sizeof(ReloadEntry) == 0x18, "0x180028d2d stride, cap*3*8");
 
-struct Modification {
-    uint8_t  dirty;           // +0x00 — IsDirty 0x18000daa0
-    uint8_t  savingSettings;  // +0x01 — EnableSavingSettings 0x1800aead0
-    uint8_t  _pad02[6];
-    Mod*     mods;    // +0x08 — Find()'s `*(longlong*)(this + 8)`
-    int32_t  count;   // +0x10 — Find()'s `*(int*)(this + 0x10)`
-    int32_t  capacity;// +0x14
-    Mod*     savedMods;     // +0x18 — the backup EnableSavingSettings(false) makes
-    int32_t  savedCount;    // +0x20
-    int32_t  savedCapacity; // +0x24
-};
-static_assert(sizeof(Modification) == 0x28, "ctor 0x1800b04b0 zeroes +0x08..+0x27");
-static_assert(offsetof(Modification, mods)  == 0x08, "see field comment");
-static_assert(offsetof(Modification, count) == 0x10, "see field comment");
-static_assert(offsetof(Modification, savedMods) == 0x18,
-              "SaveList 0x1800b0619: ModArrayCopy(this+0x18, this+0x08)");
+// (B.4 Z RT2: the RtIO::Modification POD mirror is gone; IO::Modification below
+// is the one layout.)
 
 }  // namespace RtIO
 
@@ -200,8 +186,8 @@ static_assert(offsetof(Modification, savedMods) == 0x18,
 // ---------------------------------------------------------------
 // `IO::Modification::Mod` is retail's nested struct — `?GetModification@` spells
 // it `UMod@12@`, `U` for struct, `12` for `Modification::IO`. It is NOT nested
-// here and it is NOT converted, for the plain reason that `RtIO::Mod` and
-// `RtIO::Modification` are read outside this block's file set entirely:
+// here and it is NOT converted, for the plain reason that `RtIO::Mod` is
+// read outside this block's file set entirely:
 // `runtime/src/engine/{loops,engine_platform,singleton_ctors}.cpp` and
 // `runtime/src/save/{saveload_meta,saveload_update}.cpp` all include this
 // header. B33 §7's rule applies verbatim — the POD stays, trivially
@@ -269,9 +255,8 @@ public:
 
     // ---- the 0x28 bytes, at retail's offsets -------------------------------
     // PUBLIC for the same reason `IO::Serializer`'s are: unconverted bodies
-    // across `runtime/src/engine` and `runtime/src/save` reach them at these
-    // offsets through the `RtIO::Modification` POD, and `offsetof` on them has
-    // to be well formed for the pins below.
+    // across `runtime/src/engine` and `runtime/src/save` read them by name, and
+    // `offsetof` on them has to be well formed for the pins below.
     uint8_t  _dirty;           // +0x00 — IsDirty 0x18000daa0
     uint8_t  _savingSettings;  // +0x01 — EnableSavingSettings 0x1800aead0
     uint8_t  _pad02[6];
@@ -292,26 +277,13 @@ public:
 };
 
 static_assert(sizeof(Modification) == 0x28, "ctor 0x1800b04b0 zeroes +0x08..+0x27");
-static_assert(sizeof(Modification) == sizeof(RtIO::Modification),
-              "IO::Modification and the RtIO::Modification POD stay interchangeable");
 static_assert(offsetof(Modification, _mods)      == 0x08, "see the POD's field comment");
 static_assert(offsetof(Modification, _count)     == 0x10, "see the POD's field comment");
 static_assert(offsetof(Modification, _capacity)  == 0x14, "the Array capacity");
 static_assert(offsetof(Modification, _savedMods) == 0x18,
               "SaveList 0x1800b0619: ModArrayCopy(this+0x18, this+0x08)");
 static_assert(offsetof(Modification, _savedCount) == 0x20, "the saved Array size");
-static_assert(offsetof(Modification, _dirty)          == offsetof(RtIO::Modification, dirty),
-              "alias dirty");
-static_assert(offsetof(Modification, _savingSettings) == offsetof(RtIO::Modification, savingSettings),
-              "alias savingSettings");
-static_assert(offsetof(Modification, _mods)      == offsetof(RtIO::Modification, mods),      "alias mods");
-static_assert(offsetof(Modification, _count)     == offsetof(RtIO::Modification, count),     "alias count");
-static_assert(offsetof(Modification, _capacity)  == offsetof(RtIO::Modification, capacity),  "alias capacity");
-static_assert(offsetof(Modification, _savedMods) == offsetof(RtIO::Modification, savedMods), "alias savedMods");
-static_assert(offsetof(Modification, _savedCount) == offsetof(RtIO::Modification, savedCount),
-              "alias savedCount");
-static_assert(offsetof(Modification, _savedCapacity) == offsetof(RtIO::Modification, savedCapacity),
-              "alias savedCapacity");
+static_assert(offsetof(Modification, _savedCapacity) == 0x24, "the saved Array capacity");
 // The guard, as an assertion so a future `virtual` fails the build rather than
 // the boot: a vptr would push every field eight bytes down under doors that are
 // registered BY ADDRESS and under a live singleton five other files read.
@@ -330,7 +302,7 @@ static_assert(std::is_standard_layout<Modification>::value,
 
 namespace RtIo {
 // ---- io/iobase_vtables.cpp
-extern "C" void RtIo_Modification_Dtor(RtIO::Modification* self);  // 0x1800b0470
+extern "C" void RtIo_Modification_Dtor(IO::Modification* self);  // 0x1800b0470
 }  // namespace RtIo
 
 namespace RtIO {

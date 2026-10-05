@@ -97,7 +97,7 @@ namespace {
 
 // Offsets asserted against the headers that already pin them, so a header edit
 // cannot silently move a field out from under a transcribed byte-offset store.
-static_assert(offsetof(RtIO::Modification, mods) == 0x08,
+static_assert(offsetof(IO::Modification, _mods) == 0x08,
               "Modification ctor 0x1800b04b0: MOV qword [RCX+0x8],RAX");
 static_assert(offsetof(RtIO::FileSystem, existsInPackfileGate) == 0x18,
               "FileSystem ctor 0x1800ac7c0: MOV word [RCX+0x18],0x100 — low byte");
