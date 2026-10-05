@@ -272,9 +272,6 @@ void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
 void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*camera*/,
                          Graphics::ExternalPtrHandle /*material*/,
                          float param5, int a, int /*b*/, int /*c*/) const {
-    // LEFT: the context binds
-    // this object's buffers through its non-const `void*` _indexBuffer.
-    WorldGeometry& self = const_cast<WorldGeometry&>(*this);   // LEFT: the context binds this object's index buffers through a non-const Video::IndexBuffer* (BindIndexBuffer), in a const virtual slot.
     const uint32_t param6 = static_cast<uint32_t>(a);
 
     if (!s_itemDrawLogged.exchange(true)) {
@@ -326,13 +323,13 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     };
 
     if (mode == 0x2000) {
-        GeometryBatch* base = self._decals.data;
+        GeometryBatch* base = _decals.data;
         if (!base) return;
         IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
     }
     if (mode == 0x4000) {
-        GeometryBatch* base = self._roadBatches.data;
+        GeometryBatch* base = _roadBatches.data;
         if (!base) return;
         IndexedDrawFromBatch(base[static_cast<int>(key)]);
         return;
@@ -340,7 +337,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
 
     // Binds an index buffer the way the inlined SetIndexBuffer does: dirty bit
     // 0x10 when the bound buffer or its offset differs.
-    auto BindIndexBuffer = [&](Video::IndexBuffer* ib) {
+    auto BindIndexBuffer = [&](const Video::IndexBuffer* ib) {
         if (context._indexBuffer != ib || context._indexOffset != 0) {
             context._dirty |= 0x10;
             context._indexBuffer = ib;
@@ -351,7 +348,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     // The contour vertex/index buffers, then DrawIndexed from one range record.
     auto DrawContourRange = [&](const GeometryDrawRange* ranges) {
         context.SetVertexBuffer(&_waterVertexBuffer, 0, 0, 0x10);
-        BindIndexBuffer(&self._waterIndexBuffer);
+        BindIndexBuffer(&_waterIndexBuffer);
         const GeometryDrawRange& range = ranges[static_cast<int>(key)];
         // DrawIndexed(context, primType=0, [1], [2], [0], [3], 1)
         // Original order at LAB_1400aed0e: (param_2, 0, iVar7, iVar8, iVar9, iVar10, 1)
@@ -360,13 +357,13 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     };
 
     if (mode == 0x8000) {
-        const GeometryDrawRange* ranges = self._contourRangesB.data;   // +0x1D0
+        const GeometryDrawRange* ranges = _contourRangesB.data;   // +0x1D0
         if (!ranges) return;
         DrawContourRange(ranges);
         return;
     }
     if (mode == 0x6000) {
-        const GeometryDrawRange* ranges = self._contourRangesA.data;   // +0x1C0
+        const GeometryDrawRange* ranges = _contourRangesA.data;   // +0x1C0
         if (!ranges) return;
         DrawContourRange(ranges);
         return;
@@ -385,7 +382,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
         // Water overlay chunk — same chunk draw as terrain but from the water
         // VB/IB (+0x160/+0x180) and WITHOUT the height-image bind.
         context.SetVertexBuffer(&_waterVertexBuffer, 0, 0, 0x10);
-        BindIndexBuffer(&self._waterIndexBuffer);
+        BindIndexBuffer(&_waterIndexBuffer);
         context.DrawIndexed(0, start, scale, 0, primCount, 1);
         return;
     }
@@ -395,6 +392,6 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     //   bind the IB at +0x120, DrawIndexed(0, start, scale, 0, primCount, 1).
     context.SetImageBuffer(_heightImage, 6);
     context.SetVertexBuffer(&_vertexBuffer, 0, 0, 0x10);
-    BindIndexBuffer(&self._indexBuffer);
+    BindIndexBuffer(&_indexBuffer);
     context.DrawIndexed(0, start, scale, 0, primCount, 1);
 }
