@@ -87,21 +87,12 @@ using rtsetavl::Node;
 
 namespace {
 
-// The message callback retail stores in the Set: the mangled name spells it
-// `P6AHPEAUHWND__@@I_K_J@Z`. Identical to message_callbacks.cpp's, which is the
-// file that PUTS them in the tree; this is the file that CALLS them.
-using MessageCallbackFn = int (*)(void*, unsigned, uint64_t, int64_t);
-
-// The 16-byte element. Only the key at +0x00 and the callback at +0x08 are ever
-// read here — the four padding bytes at +0x04 carry a dword of the REGISTERING
-// caller's stack frame (message_callbacks.cpp documents why), so nothing may
-// compare them.
-struct Element {
-    unsigned          message;   // +0x00
-    unsigned          pad04;     // +0x04 — never read, never compared
-    MessageCallbackFn callback;  // +0x08
-};
-static_assert(sizeof(Element) == 0x10, "Set element is 0x10 bytes");
+// The 16-byte element (Application.h). Only the key at +0x00 and the callback
+// at +0x08 are ever read here — the four padding bytes at +0x04 carry a dword
+// of the REGISTERING caller's stack frame (message_callbacks.cpp documents
+// why), so nothing may compare them.
+using Element = App::MessageCallbackEntry;
+using MessageCallbackFn = App::MessageCallback;
 
 
 // `?SetText@Error@System@@SAXPEBD_N@Z` @ 0x1800c5fa0 — ported in Wave 2
@@ -165,7 +156,7 @@ int64_t Application::Application::WindowProc(void* hwndArg, uint32_t msg,
         if (n != nullptr) {                                 // 0x18009f965
             Node* found = nullptr;
             while (n != nullptr) {
-                const unsigned key = reinterpret_cast<const Element*>(n)->message;   // LEFT: the message-callback set's node is walked as its element (Application::_messageCallbacks' node type is the owner's header)
+                const unsigned key = rtsetavl::ElementOf<Element>(n).message;
                 if (msg < key) {                            // 0x18009f976 JC
                     n = n->left;
                 } else if (key < msg) {                     // 0x18009f97b JNC
@@ -177,7 +168,7 @@ int64_t Application::Application::WindowProc(void* hwndArg, uint32_t msg,
             }
             if (found != nullptr) {                         // 0x18009f98e, retail re-tests
                 MessageCallbackFn cb =
-                    reinterpret_cast<const Element*>(found)->callback;   // LEFT: the message-callback set's node is walked as its element (Application::_messageCallbacks' node type is the owner's header)
+                    rtsetavl::ElementOf<Element>(found).callback;
                 if (cb(hwnd, msg, static_cast<uint64_t>(wParam),
                        static_cast<int64_t>(lParam)) != 0) {
                     return 0;                               // 0x18009f99b -> 0x18009f9f0

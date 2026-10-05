@@ -310,7 +310,7 @@ extern "C" ::Object::External* RtObject_External_Load(const System::Filename* pa
                 const BaseTypeInfo* info = *infoSlot;
 
                 ::Object::Base* const created = info->factoryFn();   // 1800bc742
-                obj = reinterpret_cast<::Object::External*>(created);   // LEFT: ERASED the factory slot returns Object::Base*; retail uses the result as the External with no type check, so there is no checked downcast to spell
+                obj = static_cast<::Object::External*>(created);   // the record's type is an External (no checked downcast in retail)
                 ++g_lc.created;
 
                 // `External::TypeId()` (0x180029350): the record's +0x00,

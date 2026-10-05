@@ -196,16 +196,9 @@ namespace {
 constexpr unsigned kWmSetCursor = 0x20;
 
 // Application's message-callback element: `{unsigned message; int(*)(HWND,
-// unsigned, WPARAM, LPARAM) callback;}` at node+0x00/+0x08 — the same shape
-// message_callbacks.cpp's `Element` and platform_startup_win.cpp's `Element`
-// declare, re-declared locally here for the same reason platform_startup_win
-// gives for its own copy: this file must not depend on either of theirs.
-using CursorCallbackFn = int (*)(void*, unsigned, uint64_t, int64_t);
-struct CursorCallbackElement {
-    unsigned         message;   // +0x00
-    unsigned         pad04;     // +0x04 — never read, never compared
-    CursorCallbackFn callback;  // +0x08
-};
+// unsigned, WPARAM, LPARAM) callback;}` at node+0x00/+0x08 (Application.h).
+using CursorCallbackFn = Application::Application::MessageCallback;
+using CursorCallbackElement = Application::Application::MessageCallbackEntry;
 
 // The body, written against the live sink (rt_sink.h): every store goes
 // through `out` and lands for real.
@@ -220,14 +213,14 @@ void EnableCursorBody(App* self, bool enabled, RtSink& out) {
     Node* n = self->_messageCallbacks.root;
     const Node* found = nullptr;
     while (n != nullptr) {
-        const unsigned key = reinterpret_cast<const CursorCallbackElement*>(n)->message;  // LEFT: rtsetavl::Node keeps its element opaque (erased AVL core, R-COLL / wave X)
+        const unsigned key = rtsetavl::ElementOf<CursorCallbackElement>(n).message;
         if (kWmSetCursor < key)      n = n->left;                // 0x18009f820
         else if (key < kWmSetCursor) n = n->right;                // 0x18009f81a
         else { found = n; break; }                                // 0x18009f826
     }
     if (found != nullptr) {
         CursorCallbackFn cb =
-            reinterpret_cast<const CursorCallbackElement*>(found)->callback;  // LEFT: rtsetavl::Node keeps its element opaque (erased AVL core, R-COLL / wave X)
+            rtsetavl::ElementOf<CursorCallbackElement>(found).callback;
         if (out.Call("Application message callback @ WM_SETCURSOR",
                      reinterpret_cast<const void*>(cb),  // CAST-OK: ptr_int
                      reinterpret_cast<int64_t>(self->_windowHandle),  // CAST-OK: win32

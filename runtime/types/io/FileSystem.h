@@ -26,6 +26,7 @@
 
 #include "../system/String.h"
 #include "../system/Filename.h"   // B.3.4: IO::FileSystem returns System::Filename by value
+#include "../system/Value.h"      // System::DateTime (GetFileTimeStamp)
 #include "../collection/Collection.h" // B.4 Y RT: _packfiles is Collection::Array<PackageFile*>
 
 namespace RtIO {
@@ -510,12 +511,9 @@ public:
     // -- filesystem_timestamp_win.cpp ---------------------------------------
     // ?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@AEBVFilename@4@@Z
     //                                                             0x1800ae270
-    // Retail returns `System::DateTime` BY VALUE, which is one qword (the raw
-    // FILETIME). There is no `System::DateTime` class in this tree yet, so the
-    // member returns the qword itself and the door keeps the hidden return slot
-    // it has always had. Inventing a DateTime here to make the signature look
-    // like the mangling would be a new class with no layout evidence.
-    uint64_t GetFileTimeStamp(const System::Filename& path) const;
+    // Retail returns `System::DateTime` BY VALUE (Value.h: the raw FILETIME,
+    // two dwords).
+    System::DateTime GetFileTimeStamp(const System::Filename& path) const;
 
     // -- filesystem_createfile_win.cpp --------------------------------------
     // ?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z     0x1800ae430

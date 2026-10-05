@@ -68,7 +68,7 @@
 //   0x30  _minWidth       int32     Serialize +0xa0; CreateInstance -> elem+0x28
 //   0x34  _minHeight      int32     Serialize +0xa0; CreateInstance -> elem+0x2c
 //   0x38  _tabOrder       int32     Serialize +0xa0; CreateInstance -> elem+0x3c
-//   0x3c  _id             int32     ctor sets -1; Serialize +0x98 (as uint);
+//   0x3c  _id             uint32    ctor sets 0xffffffff; Serialize +0x98 (uint);
 //                                   CreateInstance -> elem+0x38
 //   0x40  _elementType    uint32    ctor sets 3; Serialize +0x98;
 //                                   CreateInstance -> elem+0x30
@@ -124,7 +124,7 @@ struct ElementDescription {
     int32_t  _minWidth;                // +0x30
     int32_t  _minHeight;               // +0x34
     int32_t  _tabOrder;                // +0x38
-    int32_t  _id;                      // +0x3c  ctor: -1
+    uint32_t _id;                      // +0x3c  ctor: 0xffffffff; serialized by the uint slot, copied to Element::_color
     uint32_t _elementType;             // +0x40  ctor: 3
     uint32_t _flags;                   // +0x44
     // +0x48 / +0x50 / +0x58 ARE ALL `Object::ExternalPtr<T>`, NOT the scalars
@@ -316,7 +316,7 @@ public:
     int32_t  _minWidth;                // +0x30
     int32_t  _minHeight;               // +0x34
     int32_t  _tabOrder;                // +0x38
-    int32_t  _id;                      // +0x3c  ctor: -1
+    uint32_t _id;                      // +0x3c  ctor: 0xffffffff; serialized by the uint slot, copied to Element::_color
     uint32_t _elementType;             // +0x40  ctor: 3 — the Alignment, see above
     uint32_t _flags;                   // +0x44
     ElementDescription* _childDesc;    // +0x48  ExternalPtr<UI::ElementDescription> (B4 H4)

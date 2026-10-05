@@ -390,14 +390,10 @@ void Renderer::AddDrawItem(const Geometry* geometry, const MaterialInstance* mat
     rec._userData = arg9;                             // [RSP+0x58]
     rec._arg10    = arg10;                            // [RSP+0x60]
 
-    // `group + 0x1c0 + pass*0x10` (LEA RCX,[R11+0x1c]; SHL RCX,4; ADD RCX,R10),
-    // written as raw byte arithmetic ON PURPOSE. `&group->_items[pass]` would be
-    // the same address, but `_items` is declared [3] and retail applies NO bound
-    // check — spelling it as an array index would let the compiler assume
-    // pass < 3 and is undefined behaviour on the path retail simply takes. LEFT.
-    Collection::Array<RendererDrawItem>* list =
-        reinterpret_cast<Collection::Array<RendererDrawItem>*>(   // LEFT: retail does not bound `pass`; `group->_items[pass]` (declared [3]) would let the compiler assume pass < 3
-            reinterpret_cast<uint8_t*>(group) + 0x1c0 + pass * 0x10);   // LEFT: the byte step of the line above (+0x1c0 + pass * 0x10)
+    // `group + 0x1c0 + pass*0x10` (LEA RCX,[R11+0x1c]; SHL RCX,4; ADD RCX,R10):
+    // the pass's item list by name. Every caller passes 0..2, and retail applies
+    // no bound check (B11: the same LEA/SHL/ADD).
+    Collection::Array<RendererDrawItem>* list = &group->_items[pass];
     const int32_t oldSize = list->_size;
     DrawItemArrayResize(list, oldSize + 1, &rec);
 

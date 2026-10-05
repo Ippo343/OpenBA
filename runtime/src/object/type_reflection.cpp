@@ -206,11 +206,11 @@ BaseTypeInfo::BaseTypeInfo(const char* nameIn, const char* parentNameIn,
 
     name             = nameIn;
     parentName       = parentNameIn;
-    factoryFn        = reinterpret_cast<void*>(factory);   // LEFT: Object::BaseTypeInfo::factoryFn stays void* (standalone/main.cpp prints it with %p, tests/unit/b39_ti_* compare it with void*)
+    factoryFn        = factory;
     typeId           = 0xFFFFFFFFu;
     _pad04           = 0;
     fileExtension    = fileExtensionIn;
-    inPlaceFactoryFn = reinterpret_cast<void*>(inPlace);  // LEFT: Object::BaseTypeInfo::inPlaceFactoryFn stays void* (standalone/main.cpp prints it with %p, tests/unit/b39_ti_* compare it)
+    inPlaceFactoryFn = inPlace;
     next             = prevHead;
     _firstTypeInfo   = this;
 

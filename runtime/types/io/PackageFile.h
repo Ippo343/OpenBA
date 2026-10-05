@@ -164,7 +164,7 @@ public:
           _iconData(),                                          // 1800b44b9 / 1800b44c0
           _previewData() {                                      // 1800b44c7 / 1800b44ce
         _crc = 0;                                               // 1800b44d5
-        _overridable = 1;                                       // 1800b44dc
+        _overridable = true;                                    // 1800b44dc
         _entries = nullptr;                                     // 1800b44e3
         _entryCount = 0; _entryCapacity = 0;                    // 1800b44ea
         _file.handle = -1;                                      // 1800b44fd
@@ -363,7 +363,7 @@ public:
     // LoadPackages' index pass reads it on the package that ALREADY owns a
     // colliding path: nonzero means the later package takes the entry over.
     // That is the whole of the loose-file / .pkg / .pkm precedence rule.
-    uint8_t  _overridable;   // +0xac
+    bool     _overridable;   // +0xac  Serialize's bool slot (+0x78)
     uint8_t  _padAd[3];      // +0xad
 
     RtIO::PackageFileEntry* _entries;   // +0xb0  Collection::Array<PackageFileEntry>, stride 16

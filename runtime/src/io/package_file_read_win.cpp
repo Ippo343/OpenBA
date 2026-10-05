@@ -594,7 +594,7 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
         _priority = 0x2710;                               // 1800b5b2d
         _platform = 0;
         _crc  = 0;                                 // 1800b5b35
-        _overridable = 1;                                 // 1800b5b3c
+        _overridable = true;                              // 1800b5b3c
         _iconWidth  = 1;                                  // 1800b5b49
         _iconHeight = 1;                                  // 1800b5b4d
         rtcoll::RtColl_ArraySetSize_180029510(&_iconData, 1);  // 1800b5b5a

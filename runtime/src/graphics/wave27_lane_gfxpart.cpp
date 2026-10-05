@@ -255,7 +255,7 @@ bool Particle::Serialize(IO::Stream& streamv) {
     IO::Serializer ser(stream, 0);
     IO::ReaderWriter* const rw = ser._readerWriter;
 
-    rw->SerializeBool(*reinterpret_cast<bool*>(&_active), nullptr);   // +0x78; LEFT: `_active` is the byte retail stores (Particle.h)   // CAST-OK: byte_io
+    rw->SerializeBool(_active, nullptr);       // +0x78
     rw->SerializeInt(_recordCount, nullptr);   // +0xa0
     rw->SerializeInt(_subCount, nullptr);      // +0xa0
 

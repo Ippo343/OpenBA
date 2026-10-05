@@ -198,7 +198,7 @@ void IO::PersistenceWorker::GetSaveListJob() {
     // ---- 3. one SaveGameInfo per hit --------------------------------------
     for (int32_t i = 0; i < found.size; ++i) {                  // 0x1800b6397
         SaveGameInfo entry;                                     // name: 0x1800b63a8's zero
-        entry.sortKey = 0;                                      // 0x1800b63a0
+        entry.sortKey = System::DateTime{};                     // 0x1800b63a0
 
         {
             // `Filename::GetPathFilename(true)` returns a Filename BY VALUE,

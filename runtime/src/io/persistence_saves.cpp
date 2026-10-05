@@ -183,7 +183,7 @@ RtIo::SaveGameInfo Persistence::GetSaveInfo(int index) const {
     //
     // FAITHFUL: there is still NO bounds check on `index`.
     if (_worker._runFlags & 1u) {
-        return RtIo::SaveGameInfo{0, System::String()};
+        return RtIo::SaveGameInfo{System::DateTime{}, System::String()};
     }
     const RtIo::SaveGameInfo& e = _worker._saves._data[index];
     return RtIo::SaveGameInfo{e.sortKey, e.name};

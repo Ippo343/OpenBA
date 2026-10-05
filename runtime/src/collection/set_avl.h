@@ -58,6 +58,16 @@ static_assert(offsetof(Node, right)   == 0x20, "Set::Node::right   @ +0x20");
 static_assert(offsetof(Node, balance) == 0x28, "Set::Node::balance @ +0x28");
 static_assert(offsetof(Node, height)  == 0x2a, "Set::Node::height  @ +0x2a");
 
+// The ONE typed view of a node's element for the set's owners (B.4): the
+// caller names the element type its own instantiation stores in the 0x10
+// bytes at +0x00 (e.g. Application::MessageCallbackEntry) and reads it by
+// field. The core above never reads the element; this is its only hand-off.
+template <class E>
+const E& ElementOf(const Node* n) {
+    static_assert(sizeof(E) <= sizeof(n->element), "the element fits the node's 0x10 bytes");
+    return *reinterpret_cast<const E*>(n->element);  // LEFT: elem_stride (the erased set core's one element view; marker at the close)
+}
+
 // ---------------------------------------------------------------------------
 // The container header.
 //
