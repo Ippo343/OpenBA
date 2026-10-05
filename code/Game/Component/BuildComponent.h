@@ -39,8 +39,10 @@
 //         ModelComponent's type id 0x1401c7a50)
 //   +0x68 Collection::Array<InternalPtr<PickingComponent>>: data +0x68, count
 //         +0x70, capacity +0x74 (the same, PickingComponent's type id)
-//   The two arrays are declared as their raw members (B.4 H5: the tree's dtor
-//   frees them by hand, as retail's does; an Array member would free twice).
+//   Both are Collection::Array members over kSpec_PtrZero (the 0x1400032e0 /
+//   0x140003110 row: stride 8, align 8, new tail zeroed, no element destroy); the dtor
+//   body is empty and reverse declaration order frees +0x68, then +0x58, then
+//   restamps the +0x28 controller, retail's order (0x140108f55..0x140108f8b).
 // ============================================================================
 
 #include <cstdint>
@@ -48,10 +50,12 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (the two component lists)
 
 struct BuildCtrlTag { using Owner = class BuildComponent; };   // the handlers' receiver (controller_state_table.h)
 class ModelComponent;     // Component/ModelComponent.h
 class PickingComponent;   // Component/PickingComponent.h
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Entity/EntityList.h)
 
 class BuildComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(BuildComponent)
@@ -98,12 +102,12 @@ public:
     int32_t         costMultiplier;  // +0x4c cost multiplier (retail ctor: 1)
     bool            buildFlag;       // +0x50 (serialized bool)
     uint8_t         _pad51[7];       // +0x51
-    Object::InternalPtr<ModelComponent>*   modelComponents;        // +0x58 Array data
-    int32_t                                modelComponentCount;    // +0x60 Array count
-    int32_t                                modelComponentCapacity; // +0x64 Array capacity
-    Object::InternalPtr<PickingComponent>* pickingComponents;      // +0x68 Array data
-    int32_t                                pickingComponentCount;    // +0x70 Array count
-    int32_t                                pickingComponentCapacity; // +0x74 Array capacity
+    using ModelList   = Collection::Array<Object::InternalPtr<ModelComponent>, Collection::DefaultAllocator,
+                                          Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    using PickingList = Collection::Array<Object::InternalPtr<PickingComponent>, Collection::DefaultAllocator,
+                                          Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    ModelList   modelComponents;     // +0x58 (count +0x60, capacity +0x64)
+    PickingList pickingComponents;   // +0x68 (count +0x70, capacity +0x74)
 };
 
 static_assert(sizeof(BuildComponent) == 0x78, "BuildComponent is 0x78 (create 0x14002f2b0)");
@@ -117,11 +121,11 @@ static_assert(offsetof(BuildComponent, costMultiplier) == 0x4c, "BuildComponent:
 static_assert(offsetof(BuildComponent, buildFlag) == 0x50, "BuildComponent::buildFlag @ +0x50 (Serialize bool&)");
 static_assert(offsetof(BuildComponent, _pad51) == 0x51, "BuildComponent +0x51 padding");
 static_assert(offsetof(BuildComponent, modelComponents) == 0x58, "BuildComponent model array data @ +0x58");
-static_assert(offsetof(BuildComponent, modelComponentCount) == 0x60, "BuildComponent model array count @ +0x60");
-static_assert(offsetof(BuildComponent, modelComponentCapacity) == 0x64, "BuildComponent model array capacity @ +0x64");
+static_assert(offsetof(BuildComponent, modelComponents) + offsetof(BuildComponent::ModelList, _size) == 0x60, "BuildComponent model array count @ +0x60");
+static_assert(offsetof(BuildComponent, modelComponents) + offsetof(BuildComponent::ModelList, _capacity) == 0x64, "BuildComponent model array capacity @ +0x64");
 static_assert(offsetof(BuildComponent, pickingComponents) == 0x68, "BuildComponent picking array data @ +0x68");
-static_assert(offsetof(BuildComponent, pickingComponentCount) == 0x70, "BuildComponent picking array count @ +0x70");
-static_assert(offsetof(BuildComponent, pickingComponentCapacity) == 0x74, "BuildComponent picking array capacity @ +0x74");
+static_assert(offsetof(BuildComponent, pickingComponents) + offsetof(BuildComponent::PickingList, _size) == 0x70, "BuildComponent picking array count @ +0x70");
+static_assert(offsetof(BuildComponent, pickingComponents) + offsetof(BuildComponent::PickingList, _capacity) == 0x74, "BuildComponent picking array capacity @ +0x74");
 
 // The standalone's construction gate (no retail address): a BuildComponent whose
 // model is already at its final sub-mesh and that never ran State1Enter is a
