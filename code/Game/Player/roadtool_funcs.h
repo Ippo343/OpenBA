@@ -18,4 +18,4 @@ extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDesc
 extern "C" void  RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* decal); // 0x1400acd90
 extern "C" void  RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
                                                  uint8_t roadType, uint64_t endCell,
-                                                 uint32_t mapDescVal, uint64_t roadDescExtra);
+                                                 uint32_t mapDescVal, ComponentDescription* roadDescExtra);

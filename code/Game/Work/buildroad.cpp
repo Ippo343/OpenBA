@@ -73,11 +73,11 @@ BuildRoad::BuildRoad()
 // the pointer, so the caller's copy is untouched either way.
 // ============================================================
 BuildRoad::BuildRoad(ComponentEntity* const* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
-                     uint64_t roadDescExtra, uint32_t roadTypeExisting,
+                     ComponentDescription* roadDescExtra, uint32_t roadTypeExisting,
                      uint32_t roadState, uint32_t terrainType)
     : Work(ownerIbp),
       field_48(nullptr),
-      field_50(reinterpret_cast<ComponentDescription*>(roadDescExtra)),  // LEFT: SIG BuildRoad::BuildRoad takes the road description as uint64_t: its by-address door BuildRoad_CtorParams_Impl is called from Player/roadtool_calcpath.cpp (X6-GAME-B) with the description as uint64_t
+      field_50(roadDescExtra),
       field_58(static_cast<int32_t>(cellIdx)),
       field_5c(mapDescVal),
       field_60(static_cast<int32_t>(roadTypeExisting)),
@@ -89,7 +89,7 @@ BuildRoad::BuildRoad(ComponentEntity* const* ownerIbp, uint32_t cellIdx, uint32_
 // The by-address door RoadTool's commit path calls (roadtool_calcpath.cpp resolves
 // 0x1400e4b50): the real ctor on the caller's memory (B8-5 — the same bytes).
 BuildRoad* BuildRoad_CtorParams_Impl(BuildRoad* self, ComponentEntity* const* ownerIbp, uint32_t cellIdx,
-                                     uint32_t mapDescVal, uint64_t roadDescExtra,
+                                     uint32_t mapDescVal, ComponentDescription* roadDescExtra,
                                      uint32_t roadTypeExisting, uint32_t roadState,
                                      uint32_t terrainType) {
     if (!self) return nullptr;

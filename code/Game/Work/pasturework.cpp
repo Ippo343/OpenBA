@@ -697,7 +697,7 @@ PastureWork::PastureWork() : AutoPickupWork() {
 // (The entity slot is void*, the caller's ABI: LEFT.)
 // ============================================================
 PastureWork::PastureWork(ComponentEntity* const* entityIBP) : AutoPickupWork() {
-    field_10 = *(ComponentEntity**)entityIBP;   // LEFT: the ctor's entity slot is void* (its callers' ABI)
+    field_10 = *entityIBP;
     if (field_10 != nullptr &&
         GameUpdateLoop::_singleton != nullptr) {
         MapComponent* a = field_10->FindComponent<MapComponent>();

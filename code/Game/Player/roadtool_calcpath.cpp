@@ -149,7 +149,7 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, void* d
 // ============================================================================
 extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
                                                 uint8_t roadType, uint64_t /*endCell*/,
-                                                uint32_t mapDescVal, uint64_t roadDescExtra) {
+                                                uint32_t mapDescVal, ComponentDescription* roadDescExtra) {
     if (!mapGrid) return;
 
     if (!mapGrid->cells) return;
@@ -283,7 +283,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     uint32_t mapDescVal = mapDesc->_cellType;
     // +0x20 is the bool CreateRoadDescription serializes; retail reads its byte (0 or 1).
     const uint8_t roadType       = static_cast<uint8_t>(roadDesc->_b20);
-    const uint64_t roadDescExtra = reinterpret_cast<uint64_t>(roadDesc->_created);  // LEFT: SIG BuildRoad::BuildRoad (BuildRoad.h, outside this set) takes the road description as uint64_t
+    ComponentDescription* const roadDescExtra = roadDesc->_created;
 
     WorldGeometry* decalMgr = gameWorld->m_worldGeometry;
     RoadTool_DecalStore_acd90(decalMgr, (int)roadType, decal);
