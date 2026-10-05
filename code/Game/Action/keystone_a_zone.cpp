@@ -28,6 +28,7 @@
 #include "Action/PathSearch.h"         // PathCommand, PathCommandArgs, PathResult, PathTicket
 #include "Game/Map.h"                  // Map, MapCell
 #include "Game/PathfinderThread.h"     // PathfinderThread
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // Match the action_pf_*.cpp decompile token aliases.
 typedef unsigned int  uint;

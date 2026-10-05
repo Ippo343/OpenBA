@@ -286,6 +286,7 @@ static_assert(offsetof(Event, userData) == 0x28, "Event::userData @ +0x28");
 
 #include "../object/Internal.h"   // B4 Y RT-UI: Object::InternalPtr<T> (IsDialogOpen reads it by name)
 #include "../video/Context.h"     // B4 S4 RTUI: Video::Viewport (_captureViewport, by value)
+#include "DialogInstance.h"       // B4 S4 RT2: IsDialogOpen's InternalPtr<DialogInstance>::Get() downcast needs the class complete
 
 namespace Object {
 template <class T> class ExternalPtr;

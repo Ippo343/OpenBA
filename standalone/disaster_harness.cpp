@@ -122,6 +122,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
 
 namespace {
 

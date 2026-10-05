@@ -38,6 +38,8 @@
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CB3: CitizenComponent::TypeId()
 #include "Component/CitizenDescription.h"
 #include "Component/Description.h"
+#include "Component/CharacterComponent.h"   // B4 S4 RT2: InternalPtr<CharacterComponent>::Get() needs the class complete
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // Helpers, called by name (B3R)

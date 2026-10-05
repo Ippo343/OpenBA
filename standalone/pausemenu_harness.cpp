@@ -45,6 +45,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // code/Game/Dialog/mod_dialog_vtables.cpp -- BANISHED_PAUSEMENU_CLICKS targets
 extern "C" ModDialog*        ModDialog_LastOpened();

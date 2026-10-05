@@ -93,6 +93,7 @@
 #include "system/Value.h"               // RtSystem_Time_Ctor (import slot 0x140152b00)
 #include "Component/exe_bodies.h"       // 0x14012ec60 / 0x140002cc0
 #include "Entity/componententity_funcs.h"   // 0x1400c3720 / 0x1400c48a0
+#include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
 
 // TradeCtrlTag lives in TradeComponent.h (the member type needs it).
 using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;

@@ -89,6 +89,7 @@
 #include "Player/exe_bodies.h"          // Avl38Retrace (0x140025920)
 #include "system/MemoryAllocator.h"    // B3R: slot 0x140152b68 = System::MemoryAllocator::MemFree
 #include <cstdint>
+#include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
 
 namespace {
 

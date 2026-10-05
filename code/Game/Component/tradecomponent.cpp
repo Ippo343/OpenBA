@@ -30,6 +30,7 @@
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"   // WorkBase_TreeNodeFree_e320
 #include "system/MemoryAllocator.h"
+#include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
 
 // ============================================================
 // Helpers

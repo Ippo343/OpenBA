@@ -53,6 +53,7 @@
 #include <intrin.h>
 #define PSAPI_VERSION 2
 #include <psapi.h>
+#include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
 
 // gameupdateloop.cpp — SIMPROF phase accumulators reserved for this harness.
 extern "C" int         GameUpdateLoop_SimProfTake(double* outMs, int maxN);

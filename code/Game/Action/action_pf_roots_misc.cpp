@@ -36,6 +36,7 @@
 #include "Entity/EntityList.h"
 #include "Game/Map.h"
 #include "Action/PathSearch.h"   // CharacterGridWalker
+#include "Component/PopulationComponent.h"   // B4 S4 RT2: InternalPtr<PopulationComponent>::Get() needs the class complete
 
 namespace {
 

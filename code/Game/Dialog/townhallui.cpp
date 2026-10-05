@@ -83,6 +83,7 @@
 #include "Work/exe_bodies.h"   // B3R: WorkBase_TreeNodeFree_14c30
 #include "Game/Calendar.h"     // GameUpdateLoop::m_dayCounter (year, yearTime)
 #include "Game/PlayerToolManager.h"   // CenterOnEntity 0x140103040
+#include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
 
 // ============================================================
 // Helpers

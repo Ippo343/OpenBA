@@ -46,6 +46,7 @@
 #include "Component/CitizenComponent.h"
 #include "Component/CitizenDescription.h"
 #include "runtime/types/ui/TableElement.h"
+#include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once

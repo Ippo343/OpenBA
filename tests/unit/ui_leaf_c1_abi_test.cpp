@@ -50,6 +50,7 @@
 #include "runtime/types/ui/BorderElement.h"
 #include "runtime/types/ui/ClipRegionDescription.h"
 #include "runtime/types/ui/ClipRegionElement.h"
+#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

@@ -19,6 +19,7 @@
 #include "Player/RotationSetting.h"
 #include "Component/CreateFencedDescription.h"
 #include "Game/Map.h"
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // FUN_1400a0280 — EntityAtCell: get the entity occupying a world cell.

@@ -50,6 +50,7 @@
 #include "Component/PopulationComponent.h"
 #include "Component/CharacterDescription.h"   // CharacterDescription::TypeId() (moved ctor)
 #include "system/Value.h"      // System::Random (moved ctor)
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // Helpers, called by name (B3R)

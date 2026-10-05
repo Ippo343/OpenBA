@@ -83,6 +83,7 @@
 #include "graphics/Mesh.h"               // ENDGAME B.3.9 SS2: MeshInstance::_rootOnlyUpdates
 #include "graphics/ParticleInstance.h"   // ENDGAME B.3.9 SS2: ParticleInstance::_frameIndex
 #include "io/FileSystem.h"               // ENDGAME B.3.9 SS2: IO::FileSystem::_singleton
+#include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
 
 // (EventNotifyDialog_Ctor_Standalone / AutoSaveDialog_Ctor_Standalone: Dialog/exe_bodies.h.)
 extern "C" void BuildingGoal_Probe(const char* templateName);  // code/Game/Goal/buildinggoal.cpp

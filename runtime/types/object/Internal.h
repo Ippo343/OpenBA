@@ -343,16 +343,17 @@ class InternalPtr : public InternalBasePtr {
 public:
     InternalPtr() : InternalBasePtr() {}
     explicit InternalPtr(NoStore n) : InternalBasePtr(n) {}   // see InternalBasePtr(NoStore)
-    InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<Internal*>(p)) {}   // LEFT: audit DEFERRED:every InternalPtr<T> instantiation over an Object::Internal subclass (RtObject::I; ERASED InternalPtr<T> is instantiated over T that are not Object::Internal subclasses (RtObject::Internal in the tests, Work records), so the upcast cannot be a static_cast for every T
+    InternalPtr(T* p) : InternalBasePtr(static_cast<Internal*>(p)) {}
 
     InternalPtr(const InternalPtr&) = default;
     InternalPtr& operator=(const InternalPtr&) = default;
     ~InternalPtr() = default;
 
-    // TRANSITIONAL CAST, same reason as ExternalPtr<T>::Serialize: `T` is not a
-    // class deriving from `Object::Internal` in this tree yet, so the downcast
-    // cannot be spelled `static_cast` here. It becomes one in B.3 step 3.
-    T* Get() const        { return reinterpret_cast<T*>(InternalBasePtr::Get()); }   // LEFT: audit DEFERRED:every InternalPtr<T> instantiation over an Object::Internal subclass (RtObject::I; ERASED the downcast from Object::Internal* to a T that is not a subclass for every instantiation (the ctor's reason)
+    // The downcast from `Object::Internal*` (B10). Every T derives from
+    // `Object::Internal` at offset 0; T must be COMPLETE where Get() / the T*
+    // ctor is instantiated (members of a class template are instantiated only
+    // when used), not where `InternalPtr<T> x;` is declared.
+    T* Get() const        { return static_cast<T*>(InternalBasePtr::Get()); }
     T* operator->() const { return Get(); }
     T& operator*()  const { return *Get(); }
 

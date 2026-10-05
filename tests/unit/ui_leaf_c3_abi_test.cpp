@@ -44,6 +44,7 @@
 #include "runtime/types/ui/EditElement.h"
 #include "runtime/types/ui/NumberEditElement.h"
 #include "runtime/types/ui/NumberElement.h"
+#include "runtime/types/ui/DialogInstance.h"   // B4 S4 RT2: InternalPtr<DialogInstance>::Get() needs the class complete
 
 #include <cstddef>
 #include <cstdint>

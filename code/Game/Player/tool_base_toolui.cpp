@@ -26,6 +26,7 @@
 #include "ui/Dialog.h"          // UI::Dialog::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include <new>
 #include "Player/exe_bodies.h"
+#include "Entity/ComponentEntity.h"   // B4 S4 RT2: InternalPtr<ComponentEntity>::Get() needs the class complete
 
 // ============================================================
 // The ToolUI child dialog is a plain UI::DialogInstance (exe table 0x14015f5a0)
