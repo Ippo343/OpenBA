@@ -98,11 +98,6 @@ static WorkIdNode* FindTaskNode(const WorkScheduler* sched, int taskIdx) {
     return nullptr;
 }
 
-// LEFT: 0x14001ca60 / 0x14001a6e0's C declarations (Work/exe_bodies.h, WORK-a's header)
-// take the tree header as uintptr_t*.
-static uintptr_t* TreeHeader(WorkSchedulerTree* tree) {
-    return reinterpret_cast<uintptr_t*>(tree);  // LEFT: FLOOR? the scheduler's WorkSchedulerTree {root, count} handed to the one erased WorkCellBST core (ICF over five node / header types)
-}
 } // namespace
 
 // Reimpl of CompleteTask_helper_8760 — try-complete a task: walk to the matching node,
@@ -178,7 +173,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
             } else if (k < taskIdx) {
                 n = n->right;
             } else {
-                WorkCellBST_Remove_ca60(TreeHeader(list), n);   // 0x14001ca60
+                WorkCellBST_Remove_ca60(list, n);   // 0x14001ca60
                 break;
             }
         }
@@ -236,7 +231,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
                 } else if (k < taskIdx) {
                     e = e->right;
                 } else {
-                    WorkCellBST_Remove_ca60(TreeHeader(&node->bucket.entries), e);   // 0x14001ca60
+                    WorkCellBST_Remove_ca60(&node->bucket.entries, e);   // 0x14001ca60
                     break;
                 }
             }
@@ -247,7 +242,7 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
     task->work->Validate();   // slot 9, RCX only
     task->work->Cleanup();    // slot 8
     task->work.DeletePtr();
-    WorkCellBST_Remove_ca60(TreeHeader(&sched->trees[0]), task);   // 0x14001ca60
+    WorkCellBST_Remove_ca60(&sched->trees[0], task);   // 0x14001ca60
 }
 
 // ============================================================

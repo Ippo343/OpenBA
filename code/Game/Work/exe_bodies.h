@@ -161,6 +161,15 @@ template <class Node>
 inline void WorkCellBST_Remove_ca60(AvlTreeHead<Node>* head, Node* node) {
     WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(head), node);  // CAST-OK: elem_stride
 }
+// The work scheduler's {root, count} trees (Game/WorkScheduler.h: the id map at
+// scheduler +0x30 and every bucket's entries) are handed to the same two cores.
+struct WorkSchedulerTree;   // Game/WorkScheduler.h
+inline void* WorkCellBST_Insert_9a40(WorkSchedulerTree* tree, void* outResult, void* keyRec) {
+    return WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(tree), outResult, keyRec);  // LEFT: elem_stride (the typed wrapper's one hand-off into the erased core; audit WORK row: marker for the coordinator)
+}
+inline void WorkCellBST_Remove_ca60(WorkSchedulerTree* tree, void* node) {
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: elem_stride (the typed wrapper's one hand-off into the erased core; audit WORK row: marker for the coordinator)
+}
 template <class T>
 inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* ser) {
     static_assert(sizeof(T) == 0x10, "the cell core's element is 0x10 bytes");
