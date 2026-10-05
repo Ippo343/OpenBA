@@ -91,7 +91,6 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
 #include "../../types/system/WideString.h"
 #include "../../types/io/Modification.h"   // RtColl_ArrayFilenameDtor_1800098d0
 #include "../collection/avl_trees.h"      // rtavl::SubtreeFree

@@ -167,12 +167,12 @@ void Dtor_MemoryAllocator(rt::system::MemoryAllocator* self) {
 IO::Modification* Ctor_Modification(IO::Modification* self) {
     self->_dirty          = 1;
     self->_savingSettings = 1;
-    self->_mods.data           = nullptr;
-    self->_mods.size          = 0;
-    self->_mods.capacity       = 0;
-    self->_savedMods.data      = nullptr;
-    self->_savedMods.size     = 0;
-    self->_savedMods.capacity  = 0;
+    self->_mods._data          = nullptr;
+    self->_mods._size          = 0;
+    self->_mods._capacity      = 0;
+    self->_savedMods._data     = nullptr;
+    self->_savedMods._size     = 0;
+    self->_savedMods._capacity = 0;
     IO::Modification::_singleton = self;
     return self;
 }

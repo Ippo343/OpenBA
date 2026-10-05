@@ -36,7 +36,6 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "string.h"
-#include "pod_bridge.h"
 #include "setupdir_helpers.h"
 
 namespace RtSystem {

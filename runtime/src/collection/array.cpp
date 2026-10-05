@@ -1485,7 +1485,7 @@ const ArraySpec kSpec_StringRef = {               // 0x180034860
 // MemAlloc's align argument is 8 (`MOV EDX,8` at 0x1800617d9).
 static void MaterialConstantAssign(RtGraphics::MaterialConstant* d,
                                    const RtGraphics::MaterialConstant* s) {
-    StringAssign(&d->name.data, &s->name.data);           // +0x00: String* ref
+    StringAssign(&d->name._data, &s->name._data);         // +0x00: String* ref
     std::memcpy(d->value, s->value, sizeof d->value);     // +0x08..+0x17: raw copy
 }
 void AssignStringPlus16(uint8_t* d, const uint8_t* s) {

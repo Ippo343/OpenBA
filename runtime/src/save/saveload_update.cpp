@@ -438,8 +438,8 @@ namespace {
 // through it would be a normalisation, and it would also nest lane MOD's own
 // RT_DIFF shadow site inside this file's predictive round.
 // ----------------------------------------------------------------------------
-// B3R RT-IO: RtIO::RtIo_Mod_CopyCtor_1800101e0 / RtIo_Mod_Assign_180026ef0 /
-// RtIo_Mod_Dtor_180011460 (modification.cpp), called by name.
+// B.4 acceptance MOD: the three are RtIO::Mod's copy ctor, operator= and
+// destructor (Modification.h / modification.cpp).
 
 // ============================================================================
 // Save::SaveLoad::UpdateLoad()          retail 0x1800c2690   ordinal 4520
@@ -672,8 +672,8 @@ void Save::SaveLoad::UpdateLoad() {
             // Nothing in the loop can change either, so hoisting would be
             // equivalent — and would still be a claim about the callee-free
             // loop that the next reader has to re-derive. Transcribed.
-            for (int32_t i = 0; i < mods->_mods.size; ++i) {
-                mods->_mods.data[i].enabled = 0;
+            for (int32_t i = 0; i < mods->_mods._size; ++i) {
+                mods->_mods._data[i].enabled = 0;
             }
         }
         mods->_dirty = 1;
@@ -723,8 +723,8 @@ void Save::SaveLoad::UpdateLoad() {
                 // counting as length 0 rather than faulting), then _stricmp.
                 // Same re-read pair as the clear loop above (0x1800c27d0 /
                 // 0x1800c280f).
-                for (int32_t j = 0; j < mods->_mods.size; ++j) {
-                    const char* entryName = mods->_mods.data[j].file.data;
+                for (int32_t j = 0; j < mods->_mods._size; ++j) {
+                    const char* entryName = mods->_mods._data[j].file._data;
                     const int lenEntry = entryName ? RtSystem::StringLength(entryName) : 0;
                     const int lenWork  = work.GetLength();
                     if (lenEntry == lenWork && _stricmp(entryName, work._data) == 0) {
@@ -737,7 +737,7 @@ void Save::SaveLoad::UpdateLoad() {
             if (found < 0) continue;
 
             mods->_dirty = 1;
-            mods->_mods.data[found].enabled = 1;
+            mods->_mods._data[found].enabled = 1;
 
             // Bubble `found` down to index 0. Retail's inner test is
             // `if (k != k-1)`, which is never false; it is the inlined remains
@@ -746,17 +746,16 @@ void Save::SaveLoad::UpdateLoad() {
             for (int32_t k = found; k >= 1; --k) {
                 mods->_dirty = 1;
 
-                RtIO::Mod* a = &mods->_mods.data[k];
-                RtIO::Mod* b = &mods->_mods.data[k - 1];
+                RtIO::Mod* a = &mods->_mods._data[k];
+                RtIO::Mod* b = &mods->_mods._data[k - 1];
 
                 // The four-call dance (copy-construct, assign, assign,
                 // destroy) through a stack temporary: 0x1800101e0 /
-                // 0x180026ef0 / 0x180011460, in retail's order.
-                RtIO::Mod tmp;
-                RtIO::RtIo_Mod_CopyCtor_1800101e0(&tmp, a);
-                RtIO::RtIo_Mod_Assign_180026ef0(a, b);
-                RtIO::RtIo_Mod_Assign_180026ef0(b, &tmp);
-                RtIO::RtIo_Mod_Dtor_180011460(&tmp);
+                // 0x180026ef0 / 0x180011460, in retail's order -- Mod's copy
+                // ctor, its operator= twice, and ~tmp at the end of the block.
+                RtIO::Mod tmp(*a);
+                *a = *b;
+                *b = tmp;
             }
         }
 

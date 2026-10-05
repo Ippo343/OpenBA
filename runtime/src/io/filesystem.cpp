@@ -50,7 +50,6 @@
 #include "../../types/io/Modification.h"
 #include "../../types/io/PackageFile.h"   // the packfile array's element
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
 
 namespace RtIO {
 
@@ -305,8 +304,8 @@ int Modification::Find(const System::Filename& path) const {
     const char* pathData = path._data;
     const int pathLen = pathData ? RtIO::StringLength(pathData) : 0;
 
-    for (int i = 0; i < _mods.size; ++i) {
-        const char* modData = _mods.data[i].file.data;
+    for (int i = 0; i < _mods._size; ++i) {
+        const char* modData = _mods._data[i].file._data;
         const int modLen = modData ? RtIO::StringLength(modData) : 0;
         if (modLen == pathLen && RtIO::StriCmpAscii(modData, pathData) == 0) {
             ours = i;

@@ -355,9 +355,10 @@ namespace {
 // tools/gfxmat24_probe that does not exist.
 //
 // 0x1800c9930, `System::String::Serialize`: each element's leading String.
-// LEFT: `MaterialTexture::name` / `MaterialConstant::_head` stay raw (a
-// `System::String` member would make the element non-trivial and change its
-// array's lifecycle rows), so the String is viewed at the field.
+// LEFT: `MaterialTexture::name` stays raw (a `System::String` member would
+// make the element non-trivial and change its array's lifecycle rows), so the
+// String is viewed at the field. (B.4 acceptance MOD: `MaterialConstant::name`
+// is the real String and serializes by name.)
 inline void SerString(void* field, IO::Serializer& ser) {
     static_cast<System::String*>(field)->Serialize(ser);   // LEFT: audit WORK, not executed this pass (CLASS unit Graphics::MaterialInstance (doable-with:MaterialTexture::name,Ma); blocker; H5 the caller's field is raw storage of a System::String (MaterialTexture::name / MaterialConstant::_head: a String member changes the element array's lifecycle rows)
 }
@@ -451,7 +452,7 @@ bool MaterialInstance::Serialize(IO::Stream& streamv) {
     {
         RtGraphics::MaterialConstant* p = _constants._data;
         for (int32_t i = n; i > 0; --i) {
-            SerString(&p->name, ser);
+            p->name.Serialize(ser);                         // 0x1800c9930
             rw->SerializeFloatArray(4, p->value, nullptr);  // +0x28, (enc, 4, p+8, 0)
             ++p;
             ++g_matSerConstants;

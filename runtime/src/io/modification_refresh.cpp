@@ -186,7 +186,6 @@
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 closing pass
 #include "../../types/system/MemoryAllocator.h"
-#include "../system/pod_bridge.h"
 #include "../../funcs/rt_libm.h"        // rtcrt::StrICmp
 #include "../../types/system/Configuration.h"   // RtSystem_ConfigMap_Find
 
@@ -196,22 +195,17 @@ namespace RtIO {
 // forward-declare here (CtorCopy 0x1800067d0, AdjustDelimiters 0x1800c6970)
 // are gone from this translation unit -- every use was one of Filename.h's
 // documented idioms and is now spelled as the class itself (see the sites
-// below). `m->file`, `pattern`, `packDir`, and the loop's Filename temporaries
-// are promoted to `System::Filename`; `found`'s array elements and `Mod::file`
-// stay `RtSystem::Filename` POD because they are members of not-yet-converted
-// structs / externally-populated raw arrays (B31_RULES.md), reached through
-// the `Sys()` bridge.
+// below). `pattern`, `packDir`, the loop's Filename temporaries, `found`'s
+// elements and (B.4 acceptance MOD) `Mod::file` are `System::Filename`.
 
 // ---------------------------------------------------------------------------
 // Borrowed from modification.cpp (same lane, same kill switch). Declared rather
 // than re-implemented: two copies of a refcount idiom is how one of them
 // drifts — the near-miss modification.cpp §4 records about RtString_AdoptInline.
 // ---------------------------------------------------------------------------
-void  AssignShared(char** dst, char* src);
-void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv);    // 0x180011110
-void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv);     // 0x180011220
-// (The Mod copy ctor 0x1800101e0 and dtor 0x180011460 are declared, typed, by
-// Modification.h.)
+// (0x180011110 / 0x180011220, the two Array operator= bodies RefreshList
+// calls, are declared by Modification.h; Mod's copy ctor 0x1800101e0 and its
+// dtor 0x180011460 are Mod's own members there.)
 
 // The String header's refcount word (String.h's accessor).
 static inline int32_t& RefCount(char* s) {
@@ -417,43 +411,17 @@ namespace detail {
 // were deleted in B.4 P2 R-IO: no caller was left; the two rotations are
 // reached only from the retrace above.
 
-// `System::Filename`'s null state. Only a POINTER-shaped key has one, and the
-// descent treats it asymmetrically — a null NODE key skips the left test, a
-// null SEARCH key descends left and then reports EQUAL. That is retail's, read
-// off 0x1800afd50 / 0x1800afd81, and it is exactly the shape
-// `InsertCorePattern` already carries for `char*`.
-template <> struct KeyTraits<System::Filename> {
-    static bool IsNull(const System::Filename& k) { return k._data == nullptr; }
-};
+// (B.4 acceptance MOD: `KeyTraits<System::Filename>` -- the Filename null
+// state the descent tests -- moved to Modification.h, beside the set type.)
 
 }  // namespace detail
 }  // namespace Collection
 
 namespace RtIO {
 
-// The `Compare` policy of the mod path set: retail's `_stricmp`, not
-// `AVLCompare`'s signed `strcmp`.
-struct FilenameICompare {
-    static bool Less(const System::Filename& a, const System::Filename& b) {
-        return ModStrICmp(a._data, b._data) < 0;
-    }
-};
-
-// The set itself. `Key == T` is retail's rule (Collection.h's Set banner: both
-// mangled names that spell the parameters out have it), the element IS the key,
-// and `align8(sizeof(System::Filename)) == 8` selects `AvlOps<Node, 0x8>` — the
-// three bodies above.
-using ModFilenameSet = Collection::Set<System::Filename, FilenameICompare>;
-
-static_assert(sizeof(ModFilenameSet) == sizeof(ModSet),
-              "Set<Filename> is ModSet's 0x10 bytes");
-static_assert(sizeof(ModFilenameSet::Node) == sizeof(ModSetNode),
-              "Set<Filename>::Node is ModSetNode's 0x28 bytes");
-static_assert(offsetof(ModFilenameSet::Node, parent) == offsetof(ModSetNode, parent), "parent");
-static_assert(offsetof(ModFilenameSet::Node, left)   == offsetof(ModSetNode, left),   "left");
-static_assert(offsetof(ModFilenameSet::Node, right)  == offsetof(ModSetNode, right),  "right");
-static_assert(offsetof(ModFilenameSet::Node, balance) == offsetof(ModSetNode, balance), "balance @ +0x20");
-static_assert(offsetof(ModFilenameSet::Node, height)  == offsetof(ModSetNode, height),  "height @ +0x22");
+// (B.4 acceptance MOD: `FilenameICompare` and `ModFilenameSet` -- the
+// `Collection::Set<System::Filename, FilenameICompare>` that IS Mod+0x60 -- are
+// declared in Modification.h, with the node-layout asserts.)
 
 // ===========================================================================
 // PART 2 — 0x180028610, Collection::Array<Mod>::SetSize(int n, const Mod& fill)
@@ -479,42 +447,13 @@ static_assert(offsetof(ModFilenameSet::Node, height)  == offsetof(ModSetNode, he
 // The `ADD RCX,RDI ; JZ` at 0x180028695 tests the ELEMENT address, not the
 // buffer, and is retail's only protection against a failed MemAlloc.
 // Transcribed, not hoisted — modification.cpp §4.
-extern "C" void RtColl_ArrayModSetSizeFill_180028610(ModArrayOf<Mod>* a, int n, const Mod* fill) {
-
-    const int32_t oldSize = a->size;                    // MOV ESI,[RCX+8]
-    if (n == oldSize) return;                           // CMP R14D,ESI ; JZ
-
-    Mod* const oldData = a->data;                       // MOV RBP,[RCX]
-    a->size = n;
-    if (n > a->capacity) {
-        a->capacity = n;
-        if (n == oldSize + 1 && oldSize != 0)
-            a->capacity = n + n * 2;                    // LEA EAX,[R14+R14*2]
-        a->data = static_cast<Mod*>(::System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(static_cast<int64_t>(a->capacity)) << 7, 8));
-    }
-
-    Mod* const newData = a->data;
-    int32_t i = (oldData == newData) ? oldSize : 0;
-    for (; i < n; ++i) {
-        Mod* const dst = newData + i;                   // the 0x80 stride
-        if (dst == nullptr) continue;                   // ADD RCX,RDI ; JZ
-        const Mod* const src = (i < oldSize)
-            ? oldData + i
-            : fill;                                     // CMP EBX,ESI ; JL ; MOV RDX,R12
-        RtIo_Mod_CopyCtor_1800101e0(dst, src);          // CALL 0x1800101e0
-    }
-
-    if (oldData != newData) {                           // CMP RBP,[R15] ; JZ
-        for (int32_t k = 0; k < oldSize; ++k)           // TEST ESI,ESI ; JLE
-            RtIo_Mod_Dtor_180011460(oldData + k);
-        ::System::MemoryAllocator::MemFree(oldData);                            // retail's TEST RBP,RBP is inside
-    } else if (oldSize > n) {                           // CMP ESI,R14D ; JLE
-        const int32_t drop = oldSize - n;
-        for (int32_t k = 0; k < drop; ++k)
-            RtIo_Mod_Dtor_180011460(newData + (static_cast<size_t>(n) + k));
-    }
-}
+//
+// B.4 acceptance MOD: that is `rtcoll::SetSizeCore` driven by `kSpec_Mod`
+// (modification.cpp) -- the same grow rule, the same `realloced ? 0 : oldSize`
+// start, the same computed-address test, assign = Mod's copy ctor from the old
+// element or the fill, then ~Mod over the old buffer and its free, or over the
+// truncated tail -- so the append below is `ModList::SetSize(n, fill)` and the
+// hand-transcribed body that stood here is gone.
 
 // ===========================================================================
 // PART 3 — 0x180025530 GetIconData / 0x180025580 GetPreviewData
@@ -597,20 +536,21 @@ void Modification::RefreshList() {
     // inside a member the injected-class-name wins outright, so a collision
     // would be a compile error and never a silent rebind.
     using namespace RtIO;
+    using PathNode = ModFilenameSet::Node;   // the path set's node (Mod+0x60)
 
     // `this + 8` is the Array<Mod> header {mods, count, capacity}. Retail holds
     // it in RDI for the whole body and spills it at [RBP+0x208].
-    ModArrayOf<Mod>* const arr = &_mods;
+    ModList* const arr = &_mods;
 
     // 0x1800af62c — UNCONDITIONAL. This is what makes the function idempotent
     // and therefore diffable; see the banner.
-    RtColl_ArrayModDtor_180010b80(arr);
+    arr->DestroyAndFree();                                   // 0x180010b80
 
     // 0x1800af631: `CMP byte ptr [RBX+1],0 ; JNZ main`. With saving disabled the
     // list is restored from the backup EnableSavingSettings(false) made and the
     // function returns — no disk scan, no registry read.
     if (_savingSettings == 0) {
-        RtColl_ArrayModAssign_180010110(arr, &_savedMods);   // 0x180010110
+        *arr = _savedMods;                                   // 0x180010110
         return;
     }
 
@@ -648,23 +588,15 @@ void Modification::RefreshList() {
     // -----------------------------------------------------------------------
     System::Filename* const foundData = found.data;
     for (int32_t i = 0; i < found.size; ++i) {
-        // The stack Mod, zeroed member by member at 0x1800af790..0x1800af7d7.
-        // NOTE what is NOT zeroed: +0x24/+0x28/+0x2c (icon width, icon height,
-        // crc) and the padding at +0x51..+0x57. Retail leaves them, because
-        // every path that APPENDS the record writes all three first and the two
-        // early-out paths destroy it without reading them. Raw storage rather
-        // than `Mod m{}` so this port leaves exactly what retail leaves.
-        Mod mod;                 // a POD: uninitialised stack, as retail's
+        // The stack Mod, zeroed member by member at 0x1800af790..0x1800af7d7:
+        // Mod's default ctor, which leaves +0x24/+0x28/+0x2c (icon width, icon
+        // height, crc) and the padding at +0x51..+0x57 unwritten, as retail
+        // does (every path that APPENDS the record writes all three first and
+        // the two early-out paths destroy it without reading them). Its
+        // destructor (0x180011460) runs at the end of each iteration, the
+        // `continue`s included -- retail's three ~Mod sites.
+        Mod mod;
         Mod* const m = &mod;
-        m->name = nullptr; m->author = nullptr; m->description = nullptr;
-        m->i18 = 0; m->i1c = 0;                       // one qword store
-        m->order = 0;
-        m->ints.data = nullptr;  m->ints.size = 0;  m->ints.capacity = 0;
-        m->bytes.data = nullptr; m->bytes.size = 0; m->bytes.capacity = 0;
-        m->enabled = 0;
-        m->file.data = nullptr;
-        m->set.root = nullptr; m->set.count = 0;
-        m->files.data = nullptr; m->files.size = 0; m->files.capacity = 0;
 
         // 0x1800af7df — m.file = found[i], by reference, then normalised. A
         // single AdjustDelimiters after a shared-assign on an object that
@@ -672,9 +604,7 @@ void Modification::RefreshList() {
         // (Filename.h's DELIMITERS note; `m->file` was just zeroed above, and
         // the exemplar treats a freshly-zeroed member the same way --
         // filesystem_setupdirs_win.cpp's `sourceDirectory`/`dataDirectory`).
-        // Both sides are `RtSystem::Filename` (Mod member / found[] element,
-        // neither yet converted), reached through the bridge.
-        RtSystem::Sys(m->file) = foundData[i];
+        m->file = foundData[i];
 
         // 0x1800af830..0x1800af8e6 — the inlined PackageFile constructor:
         // ENDGAME B.3.9 IO, the class's real constructor on the same stack
@@ -688,14 +618,12 @@ void Modification::RefreshList() {
         // ReadPackfile-failed path does NOT close: there the file never opened.
         if (!read) {
             pkgObj->IO::PackageFile::~PackageFile();           // 0x1800b4540
-            RtIo_Mod_Dtor_180011460(m);                          // 0x180011460
-            continue;
+            continue;                                            // ~mod: 0x180011460
         }
         if (pkgObj->_platform != 0) {                            // +0x74
             fs->CloseFile(pkgObj->_file);                        // 0x1800accc0, +0xC0
             pkgObj->IO::PackageFile::~PackageFile();
-            RtIo_Mod_Dtor_180011460(m);
-            continue;
+            continue;                                            // ~mod
         }
 
         // 0x1800af941 — the three String accessors. Each fills a temporary the
@@ -707,17 +635,17 @@ void Modification::RefreshList() {
             // ctor left, exactly as the door that stood here did.
             System::Filename tmp;
             ::new (&tmp.AsString()) System::String(pkgObj->IO::PackageFile::GetName());       // 0x180025310
-            AssignShared(&m->name, tmp._data);
+            m->name = tmp.AsString();   // String::operator= (release, adopt)
         }  // ~tmp releases here, retail's release after the assign
         {
             System::Filename tmp;
             ::new (&tmp.AsString()) System::String(pkgObj->IO::PackageFile::GetAuthor());     // 0x180025350
-            AssignShared(&m->author, tmp._data);
+            m->author = tmp.AsString();   // String::operator= (release, adopt)
         }  // ~tmp releases here
         {
             System::Filename tmp;
             ::new (&tmp.AsString()) System::String(pkgObj->IO::PackageFile::GetDescription());  // 0x180025390
-            AssignShared(&m->description, tmp._data);
+            m->description = tmp.AsString();   // String::operator= (release, adopt)
         }
 
         // 0x1800afaba — the four ints that come straight off the header.
@@ -731,14 +659,16 @@ void Modification::RefreshList() {
         {
             ModArrayOf<uint32_t> tmp;
             pkgObj->IO::PackageFile::GetIconData(&tmp);          // 0x180025530
-            if (&m->ints != &tmp) RtColl_ArrayI32Assign_180011110(&m->ints, &tmp);
+            const void* const slot = &tmp;
+            if (&m->ints != slot) RtColl_ArrayI32Assign_180011110(&m->ints, &tmp);
             ::System::MemoryAllocator::MemFree(tmp.data);
             tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
         }
         {
             ModArrayOf<uint8_t> tmp;
             pkgObj->IO::PackageFile::GetPreviewData(&tmp);       // 0x180025580
-            if (&m->bytes != &tmp) RtColl_ArrayU8Assign_180011220(&m->bytes, &tmp);
+            const void* const slot = &tmp;
+            if (&m->bytes != slot) RtColl_ArrayU8Assign_180011220(&m->bytes, &tmp);
             ::System::MemoryAllocator::MemFree(tmp.data);
             tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
         }
@@ -782,7 +712,7 @@ void Modification::RefreshList() {
             //   * the retrace starts at the PARENT of the new node and takes a
             //     SLOT, re-read after every rotation.
             //   * a duplicate key returns the existing node and does not count.
-            reinterpret_cast<ModFilenameSet&>(m->set).Insert(key);  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::set is the ModSet POD, not a Collection::Set<Filename> member
+            m->set.Insert(key);
             // ~key releases here, retail's 0x1800afeb5 release -- the last
             // statement of the loop body, exactly where retail's release sat.
         }
@@ -796,7 +726,7 @@ void Modification::RefreshList() {
         // close run retail's release of the temporary.
         char* nameRef;
         {
-            System::Filename pathTmp(Sys(m->file).GetPathFilename(true));   // 0x1800c6740
+            System::Filename pathTmp(m->file.GetPathFilename(true));   // 0x1800c6740
             nameRef = pathTmp._data;
             if (nameRef != nullptr) ++RefCount(nameRef);         // take the ref FIRST
         }  // ~pathTmp releases here, retail's 0x1800aff.. release ("then drop the temp")
@@ -842,11 +772,11 @@ void Modification::RefreshList() {
         }  // ~keyStr releases here
 
         // 0x1800b00f9 — append. The only writer of the array in the whole body.
-        RtColl_ArrayModSetSizeFill_180028610(arr, arr->size + 1, m);
+        arr->SetSize(arr->_size + 1, *m);                        // 0x180028610
 
         ReleaseInto(&nameRef);                                   // 0x1800b0113
         pkgObj->IO::PackageFile::~PackageFile();                // 0x1800b0172 ~PackageFile
-        RtIo_Mod_Dtor_180011460(m);                              // 0x1800b017c
+        // ~mod at the end of the iteration: 0x1800b017c
     }
 
     // -----------------------------------------------------------------------
@@ -863,35 +793,35 @@ void Modification::RefreshList() {
     // leftmost node, then take the successor repeatedly (leftmost of the right
     // subtree, else climb while we are a right child).
     // -----------------------------------------------------------------------
-    for (int32_t i = 0; i < _mods.size; ++i) {
-        for (int32_t j = 0; j < _mods.size; ++j) {
+    for (int32_t i = 0; i < _mods._size; ++i) {
+        for (int32_t j = 0; j < _mods._size; ++j) {
             if (i == j) continue;                                // CMP R13,R15 ; JZ
-            Mod* const mods = arr->data;                         // re-read, as retail does
-            AvlNode* node = mods[i].set.root;
+            Mod* const mods = arr->_data;                        // re-read, as retail does
+            PathNode* node = mods[i].set._root;
             if (node == nullptr) continue;
             while (node->left != nullptr) node = node->left;     // 0x1800b0210
             while (node != nullptr) {
-                AvlNode* probe = mods[j].set.root;
+                PathNode* probe = mods[j].set._root;
                 bool hit = false;
                 while (probe != nullptr) {
                     // 0x1800b0234 — go LEFT while probe->key is non-null and
                     // node->key sorts before it (a null node->key sorts first).
                     bool goLeft;
-                    if (probe->key._data == nullptr)     goLeft = false;
-                    else if (node->key._data == nullptr) goLeft = true;
-                    else goLeft = (ModStrICmp(node->key._data, probe->key._data) < 0);
+                    if (probe->element._data == nullptr)     goLeft = false;
+                    else if (node->element._data == nullptr) goLeft = true;
+                    else goLeft = (ModStrICmp(node->element._data, probe->element._data) < 0);
                     if (goLeft) { probe = probe->left; continue; }
                     // 0x1800b0258 — a null node->key here is a MATCH, and so is
                     // any probe->key that does not sort before it.
-                    if (node->key._data == nullptr) { hit = true; break; }
-                    if (probe->key._data == nullptr) { probe = probe->right; continue; }
-                    if (ModStrICmp(probe->key._data, node->key._data) < 0) { probe = probe->right; continue; }
+                    if (node->element._data == nullptr) { hit = true; break; }
+                    if (probe->element._data == nullptr) { probe = probe->right; continue; }
+                    if (ModStrICmp(probe->element._data, node->element._data) < 0) { probe = probe->right; continue; }
                     hit = true;
                     break;
                 }
                 if (hit) {
                     // 0x1800b02d2 — append mods[j].file to mods[i].files.
-                    RtColl_ArraySetSizeFill_180026880(&mods[i].files, mods[i].files.size + 1,
+                    RtColl_ArraySetSizeFill_180026880(&mods[i].files, mods[i].files._size + 1,
                                 &mods[j].file);                  // 0x180026880
                     break;                                       // next j
                 }
@@ -900,7 +830,7 @@ void Modification::RefreshList() {
                     node = node->right;
                     while (node->left != nullptr) node = node->left;
                 } else {
-                    AvlNode* up = node->parent;
+                    PathNode* up = node->parent;
                     if (up == nullptr)         node = node->parent;   // null
                     else if (up->left == node) node = up;
                     else {
@@ -918,10 +848,10 @@ void Modification::RefreshList() {
     // 0x1800b0338 — the sort. PORTED (BATCH 8b,
     // runtime/src/io/modification_sort.cpp), called by name. The third
     // argument is a stack slot the callee never reads.
-    if (arr->size > 1) {
+    if (arr->_size > 1) {
         void* scratch = nullptr;
-        RtIo_Modification_SortMods(arr->data,
-                                   arr->size, &scratch);
+        RtIo_Modification_SortMods(arr->_data,
+                                   arr->_size, &scratch);
     }
 
     // 0x1800b0350 — release every found Filename, then the array itself.

@@ -876,7 +876,7 @@ void SaveLoadDialog::DoLoad() {
         printf("[SaveLoadDialog::DoLoad] installed mod count=%d\n", installed);
         for (int mi = 0; mi < installed; mi++) {
             const RtIO::Mod& m = modSgl->GetModification(mi);
-            const char* path = m.file.data;
+            const char* path = m.file._data;
             printf("[SaveLoadDialog::DoLoad]   installed[%d] path=\"%s\"\n", mi, path ? path : "(null)");
         }
         fflush(stdout);
