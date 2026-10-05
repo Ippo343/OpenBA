@@ -430,7 +430,7 @@ public:
     // leaves +0x30 (_dataSource), +0x4c, +0x64, +0x99..+0x9f and +0xb0..+0xb7
     // unwritten, as retail does. `_timers` / `_controllers` are zeroed by their
     // own Array ctors — the six zero stores retail makes at +0x68..+0x80.
-    DialogInstance() {
+    DialogInstance() : _root(Object::InternalBasePtr::NoStore()) {
         _ui = nullptr;                                  // +0x10
         _dialog = nullptr;                              // +0x18
         _flags = 0;                                     // +0x20 } one QWORD store
@@ -458,7 +458,8 @@ public:
     // reference and the callee owns the copy).
     DialogInstance(UserInterface* ui, const Dialog* dialog,
                    Object::InternalPtr<DialogInstance> parent,
-                   Object::Base* dataSource, void* userData, int32_t userFlags) {
+                   Object::Base* dataSource, void* userData, int32_t userFlags)
+        : _root(Object::InternalBasePtr::NoStore()) {   // built in CreateInstance's return slot (InitFields)
         InitFields(ui, dialog, &parent, dataSource, userData, userFlags);
     }
 
@@ -497,7 +498,10 @@ public:
     Object::InternalPtr<DialogInstance> _parent;                  // +0x28
     Object::Base*  _dataSource;    // +0x30  ctor param 4
     Collection::LinkedList<Object::InternalPtr<DialogInstance> > _children;  // +0x38..+0x4f
-    Element*       _root;          // +0x50  InternalPtr<UI::Element> (B4 H4: typed)
+    // Retail's ctors never zero it before building it (every ctor names it
+    // with InternalPtr's NoStore ctor; trivially destructible: ReleaseFields
+    // deletes the Element explicitly, first, as retail's dtor does).
+    Object::InternalPtr<Element> _root;   // +0x50
     SpriteSheet*   _spriteSheet;   // +0x58  (B4 H4: typed)
     int32_t        _spriteIndex;   // +0x60
     int32_t        _hole64;        // +0x64  NOT written by the ctor

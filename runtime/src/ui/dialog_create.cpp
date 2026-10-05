@@ -311,10 +311,9 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
     // 0x1801148e7: `_dialog->_rootDescription`'s vtable slot 8, with the hidden
     // return slot pointed AT THE OBJECT'S OWN `_root` FIELD and the Dialog as
     // the second argument — the same slot the 6-arg AddController calls.
-    // LEFT: `_root` is an InternalPtr<Element> in retail, held as Element*.
-    dlg->_rootDescription->CreateInstance(
-        reinterpret_cast<Object::InternalPtr<UI::Element>*>(&_root),   // B.3.x bridge  // LEFT: retail builds _root in CreateInstance's return slot with NO prior store (0x1801148f1 LEA RDX,[RSI+0x50]); an InternalPtr<Element> member's zeroing default ctor adds a store at +0x50 (B11 -O2: MessageDialog ctor stores +0x50 0->1), so _root stays Element* until InternalBasePtr has a non-zeroing ctor
-        dialogArg);
+    // `_root` is retail's InternalPtr<Element>, built here with NO prior store
+    // (0x1801148f1 LEA RDX,[RSI+0x50]): the ctors name it with NoStore.
+    dlg->_rootDescription->CreateInstance(&_root, dialogArg);
 
     _spriteSheet = dlg->_spriteSheet;             // +0x58
     // 0x180114900: -1 when the sheet is null, otherwise the sheet's lookup of
@@ -470,7 +469,7 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
     Element* createdElement = nullptr;   // RDI
 
     if (desc) {
-        Element* insertion = _root;      // RDI starts at this->_root (0x1801134b4)
+        Element* insertion = _root.Get();     // RDI starts at this->_root (0x1801134b4)
 
         // ---- phase 1a: does the ROOT's own name match? --------------------
         const char* const want = name._data;

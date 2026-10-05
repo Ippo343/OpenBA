@@ -642,7 +642,7 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
         // Dump the dialog's element tree (its root) so we see exactly what content
         // was built (names, types) and whether the minimap is there.
         {
-            UI::Element* root = dialog->_root;
+            UI::Element* root = dialog->_root.Get();
             printf("[HarnessDrive] dialog[%d] root elem=%p — tree:\n", idx, static_cast<void*>(root));
             int counter = 0;
             HarnessDumpElemTree(root, 0, &counter);
@@ -1306,7 +1306,7 @@ void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, in
 
                 // Position the sub-dialog relative to toolbar
                 // Root element of the sub-dialog (GetRoot inlined)
-                UI::Element* subRoot = subDialog.Get()->_root;
+                UI::Element* subRoot = subDialog.Get()->_root.Get();
 
                 // Get padded size of sub-dialog
                 int subWidth, subHeight;

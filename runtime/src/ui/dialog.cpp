@@ -818,7 +818,7 @@ void DialogInstance::ReleaseFields() {
     // --- the root Element, through its scalar deleting destructor ------------
     // Retail calls slot 0 with EDX = 1: destruct AND free.
     if (_root) {
-        delete _root;
+        delete _root.Get();
         _root = nullptr;
     }
 
@@ -846,7 +846,7 @@ void DialogInstance::ReleaseFields() {
 
 // ---- accessors -------------------------------------------------------------
 Object::InternalPtr<Element> DialogInstance::GetRoot() {       // 0x180045580
-    return Object::InternalPtr<Element>(_root);
+    return _root;
 }
 
 // THE PARAMETER IS A TYPE ID, NOT AN INDEX (see the door). No null check on
@@ -939,7 +939,7 @@ void DialogInstance::OnElementEvent(Object::InternalPtr<Element>* element,
 // them). Element vtable slots: 4 ComputeSize, 5 ComputeLayout, 7 Update,
 // 9 Contains.
 bool DialogInstance::Contains(int32_t x, int32_t y) const {    // 0x180114820
-    const Element* const root = _root;
+    const Element* const root = _root.Get();
     if ((_flags >> 2) & 1) return false;
     if ((_flags >> 3) & 1)
         return root->Contains(x, y, _ui);                      // Element slot 9
@@ -967,7 +967,7 @@ int32_t DialogInstance::GetMouseCursorIndex(Object::InternalPtr<Element> element
 void DialogInstance::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {  // 0x180113d90
     OnUpdateLayout();                                          // own slot 6 — VIRTUAL
 
-    Element* const root = _root;
+    Element* const root = _root.Get();
     auto ComputeSize = [&]() {
         root->ComputeSize();                                   // Element slot 4
     };
@@ -1118,7 +1118,7 @@ void DialogInstance::Update(const System::Time& time, UserInterface* ui,
         }
 
         // ---- root Element::Update (slot 7, five arguments) -----------------
-        Element* const root = _root;
+        Element* const root = _root.Get();
         // Slot 7 takes the InternalPtr<DialogInstance> by the ADDRESS of the
         // caller's 8-byte handle and the UpdateState by reference (Element.h's
         // banner).
@@ -1175,7 +1175,7 @@ void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180
         y = static_cast<int32_t>(static_cast<float>(y) * scale);
     }
 
-    Element* const root = _root;
+    Element* const root = _root.Get();
 
     // Element vtable slot 4 — ComputeSize. Pure virtual on the base.
     root->ComputeSize();
@@ -1213,7 +1213,7 @@ void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180
     const int32_t dy = y - _upperLeftY;
 
     if (dx != 0 || dy != 0) {
-        Element* const r = _root;
+        Element* const r = _root.Get();
         r->_layoutLeft   += dx;
         r->_layoutRight  += dx;
         r->_layoutTop    += dy;
