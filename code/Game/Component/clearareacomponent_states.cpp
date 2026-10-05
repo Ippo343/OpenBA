@@ -354,8 +354,8 @@ char ClearAreaComponent::State0Enter(StateMachine* sm) {
     void* mem = ::System::MemoryAllocator::MemAlloc(0x78, 8);
     if (!mem) return 1;
     ComponentDescription* target = desc ? desc->_target : nullptr;
-    uint8_t f0 = desc ? desc->_clearTrees : 1, f1 = desc ? desc->_clearGround : 0;
-    uint8_t f2 = desc ? desc->_clearBuildings : 1;
+    bool f0 = desc ? desc->_clearTrees : true, f1 = desc ? desc->_clearGround : false;
+    bool f2 = desc ? desc->_clearBuildings : true;
     uint8_t f3 = desc ? desc->_priority : 0;
     ComponentEntity* ownerIBP = _entity;   // retail: local_res10 = *param_2 (the entity IBP)
     ClearArea* work = ::new (mem) ClearArea(&ownerIBP, target, f0, f1, f2);
@@ -541,8 +541,8 @@ extern "C" bool ClearAreaCtrl_IsDone(ClearAreaComponent* comp) {
 }
 
 extern "C" ClearArea* ClearAreaCtrl_BuildWork(void* work, ComponentEntity* ownerEnt, ComponentDescription* desc,
-                                              uint8_t clearTrees, uint8_t clearGround,
-                                              uint8_t clearBuildings) {
+                                              bool clearTrees, bool clearGround,
+                                              bool clearBuildings) {
     ComponentEntity* ownerIBP = ownerEnt;   // retail: local_res10 = *param_2 (the entity IBP)
     return ::new (work) ClearArea(&ownerIBP, desc, clearTrees, clearGround, clearBuildings);
 }

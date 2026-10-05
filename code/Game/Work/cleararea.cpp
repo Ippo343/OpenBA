@@ -78,8 +78,8 @@ ClearArea::ClearArea()
 // Retail: local = *param_2; Work_Ctor25(this, &local); the ClearArea stamp (the
 // compiler's); +0x48 = 0, +0x50 = 0, +0x58 = 0, +0x60 = 0, +0x68 = param_3 (a
 // raw InternalBasePtr copy), +0x70/+0x71/+0x72 = the three flag bytes.
-ClearArea::ClearArea(ComponentEntity* const* pEntityIBP, ComponentDescription* descRef, uint8_t clearTrees,
-                     uint8_t clearGround, uint8_t clearBuildings)
+ClearArea::ClearArea(ComponentEntity* const* pEntityIBP, ComponentDescription* descRef, bool clearTrees,
+                     bool clearGround, bool clearBuildings)
     : Work(pEntityIBP),
       field_68(descRef),
       field_70(clearTrees),
@@ -115,7 +115,7 @@ void ClearArea::Persist(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_StringTable(&field_68, &serializer);
 
     // Serialize clearTrees bool at +0x70 (the field is uint8_t storage)
-    serializer.Serialize(*reinterpret_cast<bool*>(&field_70), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it
+    serializer.Serialize(field_70, nullptr);
 
     // Version >= 1: serialize additional fields
     int version = serializer.GetVersion();
@@ -124,10 +124,10 @@ void ClearArea::Persist(IO::Stream& stream) {
         WorkCellBST_Serialize_9de0(&_cells, &serializer);
 
         // Serialize clearGround bool at +0x71
-        serializer.Serialize(*reinterpret_cast<bool*>(&field_71), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it
+        serializer.Serialize(field_71, nullptr);
 
         // Serialize clearBuildings bool at +0x72
-        serializer.Serialize(*reinterpret_cast<bool*>(&field_72), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e6960); a bool field would normalise it
+        serializer.Serialize(field_72, nullptr);
     }
 }
 

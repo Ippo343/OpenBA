@@ -93,9 +93,9 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 namespace Graphics { class MaterialInstance; }
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
-             uint8_t param_9, uint32_t param_10, uint32_t param_11,
+             bool param_9, uint32_t param_10, uint32_t param_11,
              uint32_t param_12, uint32_t param_13, uint32_t param_14,
-             char param_15, int param_16, int param_17, uint8_t param_19);  // 0x1400b0d80 (a WorldGeometry member in retail; param_18 is dead)
+             char param_15, int param_16, int param_17, bool param_19);  // 0x1400b0d80 (a WorldGeometry member in retail; param_18 is dead)
 int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  // 0x140055430
 
 // ---- tool_base_highlight_tess.cpp

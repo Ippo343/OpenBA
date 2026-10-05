@@ -12,5 +12,5 @@ void ClearArea_Finalize8270(ClearAreaComponent* comp);
 class ClearArea; class ComponentEntity; class ComponentDescription;
 extern "C" bool ClearAreaCtrl_IsDone(ClearAreaComponent* comp);   // keeps the tree's null test (true)
 extern "C" ClearArea* ClearAreaCtrl_BuildWork(void* work, ComponentEntity* ownerEnt, ComponentDescription* desc,
-                                              uint8_t clearTrees, uint8_t clearGround,
-                                              uint8_t clearBuildings);
+                                              bool clearTrees, bool clearGround,
+                                              bool clearBuildings);

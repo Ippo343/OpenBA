@@ -36,8 +36,8 @@ public:
     ClearArea();                                                    // 0x1400e68d0
     // 0x1400e6960: `Work(pEntityIBP)` (retail's CALL Work_Ctor25 on a copy of
     // *pEntityIBP), then +0x48..+0x60 = 0, +0x68 = descRef (raw), +0x70..+0x72.
-    ClearArea(ComponentEntity* const* pEntityIBP, ComponentDescription* descRef, uint8_t clearTrees,
-              uint8_t clearGround, uint8_t clearBuildings);
+    ClearArea(ComponentEntity* const* pEntityIBP, ComponentDescription* descRef, bool clearTrees,
+              bool clearGround, bool clearBuildings);
 
     // 0x1400e6810: frees both BSTs
     ~ClearArea() override;                                          // [0]  0x140029870
@@ -64,9 +64,9 @@ public:
     CellSet   _cells;            // +0x58
     ComponentDescription* field_68; // +0x68: ExternalPtr<ComponentDescription> filter (Persist 0x1400e6740
                                     //        serializes it by the ExternalPtr body; Execute compares entity +0x28)
-    uint8_t  field_70;           // +0x70: bool — clear trees/resources
-    uint8_t  field_71;           // +0x71: bool — clear ground (version >= 1)
-    uint8_t  field_72;           // +0x72: bool — clear buildings (version >= 1)
+    bool     field_70;           // +0x70: bool — clear trees/resources
+    bool     field_71;           // +0x71: bool — clear ground (version >= 1)
+    bool     field_72;           // +0x72: bool — clear buildings (version >= 1)
     uint8_t  _pad73[5];          // +0x73: padding
 };
 

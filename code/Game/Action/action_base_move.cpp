@@ -166,9 +166,9 @@ void ActMv_ExternalPtrSerialize_22970(CharacterDescription** pSlot, IO::Serializ
         }
     } else {
         // Reference mode off: bool "present" flag then the path String.
-        uint8_t present = (*pSlot != nullptr) ? 1 : 0;
-        ser->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // LEFT: H8 the byte is read back raw (`!= 0`), a bool local would normalise it
-        if (present != 0) {
+        bool present = (*pSlot != nullptr);
+        ser->Serialize(present, nullptr);
+        if (present) {
             if (*pSlot != nullptr) {
                 System::Filename pathBuf = (*pSlot)->GetPath();
                 fnLocal = pathBuf;
