@@ -729,7 +729,7 @@ void CitizenBehavior::CountResources() {
         StorageComponent* storage = static_cast<StorageComponent*>(storageComp);
 
         // Read item count from storage (+0x30)
-        int32_t itemCount = storage->slotCount;
+        int32_t itemCount = storage->storageSlots._size;
         if (itemCount <= 0) continue;
 
         bool hadNormalResources = false;
@@ -805,7 +805,7 @@ void CitizenBehavior::CountResources() {
         StorageComponent* storage = static_cast<StorageComponent*>(storageComp);
 
         // Read item count from storage (+0x30)
-        int32_t itemCount = storage->slotCount;
+        int32_t itemCount = storage->storageSlots._size;
         if (itemCount <= 0) continue;
 
         // Iterate storage items

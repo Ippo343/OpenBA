@@ -296,7 +296,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
         // find best material from storage on the citizen's entity
         StorageComponent* storage = nullptr;
         fn_FindComponent_Storage(citizen->_entity, &storage);
-        if (storage->slotCount < 1) return;
+        if (storage->storageSlots._size < 1) return;
 
         // pick the item with the highest count
         ComponentDescription* bestItem = nullptr;
@@ -310,7 +310,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
                 bestCount = c;
             }
             idx++;
-        } while (idx < storage->slotCount);
+        } while (idx < storage->storageSlots._size);
 
         if (bestItem == nullptr) return;
         ComponentDescription* item = bestItem;

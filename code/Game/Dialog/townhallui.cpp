@@ -1578,10 +1578,10 @@ void TownHallUI::UpdateAll() {
 
         // Iterate StorageComponent resource entries
         if (storage == nullptr) continue;
-        int resourceCount = storage->slotCount;
+        int resourceCount = storage->storageSlots._size;
 
         for (int r = 0; r < resourceCount; r++) {
-            StorageComponent::Item* items = storage->storageSlots;
+            StorageComponent::Item* items = storage->storageSlots._data;
             ComponentDescription* resourceEntity = items[r]._resource;
             int resourceQty = items[r]._count;
 

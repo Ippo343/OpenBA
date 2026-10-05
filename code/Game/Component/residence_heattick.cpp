@@ -108,8 +108,8 @@ char ResidenceComponent::HeatTick(const System::Time* dt) {
     StorageComponent* store = _entity->FindComponent<StorageComponent>();   // 0x140006270
     if (!store) return 1;
 
-    int slotCount = store->slotCount;
-    StorageComponent::Item* slots = store->storageSlots;
+    int slotCount = store->storageSlots._size;
+    StorageComponent::Item* slots = store->storageSlots._data;
     bool burned = false;
     for (int i = 0; i < slotCount; ++i) {
         StorageComponent::Item* slot = &slots[i];

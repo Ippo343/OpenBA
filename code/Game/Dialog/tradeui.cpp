@@ -407,9 +407,9 @@ void TradeUI::RefreshSellTable()
 
             // Search the storage items for the matching resource to get the stock
             int orderQty = 0;
-            int smOrderCount = storage->slotCount;
+            int smOrderCount = storage->storageSlots._size;
             if (smOrderCount > 0) {
-                StorageComponent::Item* orderArr = storage->storageSlots;
+                StorageComponent::Item* orderArr = storage->storageSlots._data;
                 for (int j = 0; j < smOrderCount; j++) {
                     if (orderArr[j]._resource == sellData.resource) {
                         if (j >= 0) {
@@ -1733,8 +1733,8 @@ void TradeUI::RefreshOrderQuantityDisplay() {
 
             // Search StorageComponent's item list for this resource entity
             // List entries: pairs [resource_entity_ptr, qty] each 0x10 bytes (2 x 8-byte)
-            int listCount = storageComp->slotCount;
-            StorageComponent::Item* itemList = storageComp->storageSlots;
+            int listCount = storageComp->storageSlots._size;
+            StorageComponent::Item* itemList = storageComp->storageSlots._data;
 
             int foundQty = 0;
             for (int64_t j = 0; j < listCount; j++) {
@@ -1793,8 +1793,8 @@ void TradeUI::RefreshSellSpinnerValues() {
             int available = TradeUI_GetResourcePrice_a520(trade, resourceEntity);
 
             // Search StorageComponent's item list for current stored qty
-            int listCount = storageComp->slotCount;
-            StorageComponent::Item* itemList = storageComp->storageSlots;
+            int listCount = storageComp->storageSlots._size;
+            StorageComponent::Item* itemList = storageComp->storageSlots._data;
             int storedQty = 0;
             for (int64_t j = 0; j < listCount; j++) {
                 if (itemList[j]._resource == resourceEntity) {
@@ -2035,8 +2035,8 @@ void TradeUI::RefreshDisplay() {
         // Each item is 0x10 bytes: {key(uint64), countA(int32), countB(int32)}
         // Result = countA - countB (available = total - committed)
         int invCount = 0;
-        int scItemCount = storage->slotCount;
-        StorageComponent::Item* scItems = storage->storageSlots;
+        int scItemCount = storage->storageSlots._size;
+        StorageComponent::Item* scItems = storage->storageSlots._data;
         for (int j = 0; j < scItemCount; j++) {
             StorageComponent::Item* itemAddr = scItems + j;
             if (itemAddr->_resource == entry.resource) {

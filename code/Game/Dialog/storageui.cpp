@@ -190,7 +190,7 @@ void StorageUI::OnUpdateLayout() {
     int itemCount = 0;
     int itemCapacity = 0;
 
-    int smEntryCount = storageComp ? storageComp->slotCount : 0;
+    int smEntryCount = storageComp ? storageComp->storageSlots._size : 0;
     if (smEntryCount > 0) {
         itemCount = 0;
 

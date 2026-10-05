@@ -221,9 +221,9 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // storage available in the building storage comp (its items).
         int storageAvail = 0;
-        if (bldgStor && bldgStor->slotCount > 0) {
-            StorageComponent::Item* items = bldgStor->storageSlots;
-            int pn = bldgStor->slotCount;
+        if (bldgStor && bldgStor->storageSlots._size > 0) {
+            StorageComponent::Item* items = bldgStor->storageSlots._data;
+            int pn = bldgStor->storageSlots._size;
             for (int k = 0; k < pn; k++) {
                 if (items[k]._resource == resType) {
                     storageAvail = items[k]._count - items[k]._reserve;
@@ -282,9 +282,9 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         // building storage comp -> its items, find resType:
         StorageComponent* bldgStorComp = TW_StorageOf(field_10.Get());   // -> local_e8
         // The null arm is the tree's guard.
-        if (!bldgStorComp || bldgStorComp->slotCount <= 0) continue;
-        StorageComponent::Item* items = bldgStorComp->storageSlots;
-        int pn = bldgStorComp->slotCount;
+        if (!bldgStorComp || bldgStorComp->storageSlots._size <= 0) continue;
+        StorageComponent::Item* items = bldgStorComp->storageSlots._data;
+        int pn = bldgStorComp->storageSlots._size;
         int matchK = -1;
         for (int k = 0; k < pn; k++) {
             if (items[k]._resource == resType) { matchK = k; break; }
@@ -357,9 +357,9 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         ComponentEntity* srcEntity = srcStorage;
         StorageComponent* a8 = TW_StorageOf(srcEntity);
         int qtyMove = qty;
-        if (a8 && a8->slotCount > 0) {
-            StorageComponent::Item* items = a8->storageSlots;
-            int pn = a8->slotCount;
+        if (a8 && a8->storageSlots._size > 0) {
+            StorageComponent::Item* items = a8->storageSlots._data;
+            int pn = a8->storageSlots._size;
             int matchK = -1;
             for (int k = 0; k < pn; k++) {
                 if (items[k]._resource == resType) { matchK = k; break; }

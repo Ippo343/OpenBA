@@ -405,11 +405,11 @@ void BuildUI::OnUpdateLayout() {
             ComponentDescription* resEntry = resBase[i].material;
 
             // Search the storage items for the matching resource entry
-            int smCount = storage ? storage->slotCount : 0;
+            int smCount = storage ? storage->storageSlots._size : 0;
             uint64_t delivered = 0;
             if (smCount > 0) {
                 // StorageComponent's items {resource, _count, _reserve}.
-                const StorageComponent::Item* smArray = storage->storageSlots;
+                const StorageComponent::Item* smArray = storage->storageSlots._data;
                 for (int j = 0; j < smCount; j++) {
                     const ComponentDescription* smEntry = smArray[j]._resource;
                     if (smEntry == resEntry) {

@@ -853,7 +853,7 @@ uint32_t StatGoal::SumStorageAmounts(const Object::External* ext) const {
             if (owner != entity->_description) continue;
         }
         StorageComponent* storage = entity->FindComponent<StorageComponent>();
-        int childN = storage->slotCount;
+        int childN = storage->storageSlots._size;
         for (int ci = 0; ci < childN; ci++) {
             const StorageComponent::Item& slot = storage->storageSlots[ci];
             RawMaterialDescription* prof = FindSubDescription<RawMaterialDescription>(slot._resource);

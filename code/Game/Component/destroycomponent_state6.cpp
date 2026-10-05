@@ -72,7 +72,6 @@
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
@@ -377,7 +376,7 @@ char DestroyComponent::State6Enter() {
         if (storage) {
             // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
             // StorageComponent's item array is raw storage (H5, COMP-e's header).
-            GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&storage->storageSlots).SetSize(0);
+            storage->storageSlots.SetSize(0);
         }
         if (Milestone()) {
             std::fprintf(stderr, "[Collapse] state-6 enter comp=%p — storage emptied, "

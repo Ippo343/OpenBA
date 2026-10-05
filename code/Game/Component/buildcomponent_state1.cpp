@@ -30,7 +30,6 @@
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/BuildDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
-#include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -301,7 +300,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
 
         if (storage != nullptr) {
             // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
-            GameColl::AsArray<GameColl::Bytes<0x10, 8>>(&storage->storageSlots).SetSize(0);
+            storage->storageSlots.SetSize(0);
 
             uint32_t acceptMask = 0;
             int totalQty = 0;

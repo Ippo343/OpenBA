@@ -123,8 +123,8 @@ static Description* FindDescOnTemplate(const ComponentDescription* tmpl, uint32_
 // StorageComponent::QueryCount (0x14012cf10) — volume-weighted total.
 static int QueryCount(StorageComponent* sc, uint32_t tidRawMat) {
     int total = 0;
-    const int slots = sc->slotCount;                             // +0x30
-    const StorageComponent::Item* arr = sc->storageSlots;        // +0x28 (stride 0x10)
+    const int slots = sc->storageSlots._size;                             // +0x30
+    const StorageComponent::Item* arr = sc->storageSlots._data;        // +0x28 (stride 0x10)
     for (int i = 0; i < slots; ++i) {
         const StorageComponent::Item& slot = arr[i];
         // Found by IsDerivedFrom(RawMaterialDescription).
@@ -140,8 +140,8 @@ static int QueryCount(StorageComponent* sc, uint32_t tidRawMat) {
 // sum of unitSize * (slot total - slot reserved) over the market's own slots.
 static int InMarketVolumeForMask(StorageComponent* sc, uint32_t mask, uint32_t tidRawMat) {
     int total = 0;
-    const int slots = sc->slotCount;                             // +0x30
-    const StorageComponent::Item* arr = sc->storageSlots;        // +0x28 (stride 0x10)
+    const int slots = sc->storageSlots._size;                             // +0x30
+    const StorageComponent::Item* arr = sc->storageSlots._data;        // +0x28 (stride 0x10)
     for (int i = 0; i < slots; ++i) {
         const StorageComponent::Item& slot = arr[i];
         // Found by IsDerivedFrom(RawMaterialDescription).

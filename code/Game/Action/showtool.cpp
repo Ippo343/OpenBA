@@ -132,7 +132,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     StorageComponent* storageComp = nullptr;
     fn_FindComponent_Storage(citizen->_entity, &storageComp);
     if (!storageComp) return;
-    int itemCount = storageComp->slotCount;
+    int itemCount = storageComp->storageSlots._size;
 
     if (itemCount < 1) return;
     ComponentDescription* bestItem = nullptr;

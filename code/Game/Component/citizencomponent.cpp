@@ -1839,7 +1839,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     if (store == nullptr) { *param_2 = nullptr; return param_2; }
 
     uint32_t chosen = 0xffffffff;
-    int64_t taskCount = store->slotCount;
+    int64_t taskCount = store->storageSlots._size;
     if (taskCount <= 0) { *param_2 = nullptr; return param_2; }
 
     // Find the RawMaterialDescription on a task entity, returning its derived ptr (or null).
@@ -1861,7 +1861,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     // Pass 1: count eligible slots; remember the last eligible index in `chosen`.
     uint32_t eligible = 0;
     for (int64_t row = 0; row < taskCount; row++) {
-        StorageComponent::Item* listBase = store->storageSlots;
+        StorageComponent::Item* listBase = store->storageSlots._data;
         ComponentDescription* entry = listBase[row]._resource;
         RawMaterialDescription* mat = findMat(entry);
         bool bitSet = mat && shift >= 0 &&
@@ -1882,7 +1882,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     // Pass 2: walk again, returning the chosen eligible slot's IBP.
     uint32_t cur = 0;
     for (int64_t row = 0; row < taskCount; row++) {
-        StorageComponent::Item* entryP = store->storageSlots + row;
+        StorageComponent::Item* entryP = store->storageSlots._data + row;
         RawMaterialDescription* mat = findMat(entryP->_resource);
         bool bitSet = mat && shift >= 0 &&
             ((mat->_flags >> shift) & 1);

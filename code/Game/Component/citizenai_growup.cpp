@@ -309,10 +309,10 @@ void CitizenComponent::LongTermPlan() {
 
     // iterate the citizen-storage rows (slotCount, storageSlots: StorageComponent::Item,
     // 0x10 bytes: _resource, _count).
-    int rowCount = (citStor != nullptr) ? citStor->slotCount : 0;
+    int rowCount = (citStor != nullptr) ? citStor->storageSlots._size : 0;
     bool committed = false;        // matched cd80 → break to commit
     for (int row = 0; row < rowCount; ++row) {
-        const StorageComponent::Item* rowBase = citStor->storageSlots + row;
+        const StorageComponent::Item* rowBase = citStor->storageSlots._data + row;
         int occ = rowBase->_count;
         if (occ == 0) {
             // empty row: nothing to add here; advance.
@@ -504,10 +504,10 @@ uint64_t CitizenAIComponent::State_GrowUp() {
     // scan the source storage's occupant rows for an eatable RawMaterialDescription item
     // that still has stock (count[+8] - reserved[+0xc] > 0 and the RawMaterialDescription's
     // +0x5c bit13 "edible" flag is set), picking one (random if multiple, biased by +0x58).
-    int rowCount = tStorNode->slotCount;
+    int rowCount = tStorNode->storageSlots._size;
     int eligible = 0;          // (uint)local_res18
     int preferred = -1;        // uVar21 (the +0x58-flagged candidate index, or random)
-    const StorageComponent::Item* rowArrBase = tStorNode->storageSlots;   // local_b8+0x28
+    const StorageComponent::Item* rowArrBase = tStorNode->storageSlots._data;   // local_b8+0x28
     for (int row = 0; row < rowCount; ++row) {
         const ComponentDescription* rowEnt = rowArrBase[row]._resource;
         // storage ROW node: the item's ComponentDescription, sub-descriptions +0x28 / count

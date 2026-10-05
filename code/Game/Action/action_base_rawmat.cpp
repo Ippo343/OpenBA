@@ -72,30 +72,30 @@
 // Walk the items to the material, subtract count; if the item's count reaches 0, compact
 // the array down one and decrement the count. Pure array ops — leaf.
 void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count) {
-    int n = storage->slotCount;
+    int n = storage->storageSlots._size;
     if (n <= 0) return;
-    const StorageComponent::Item* p = storage->storageSlots;
+    const StorageComponent::Item* p = storage->storageSlots._data;
     int idx = 0;
     while (p->_resource != material) {
         idx++;
         p += 1;
-        if (storage->slotCount <= idx) return;
+        if (storage->storageSlots._size <= idx) return;
     }
-    StorageComponent::Item* items = storage->storageSlots;
+    StorageComponent::Item* items = storage->storageSlots._data;
     items[idx]._count -= count;
     if (items[idx]._count == 0) {
         int i = idx;
         int at = idx;
-        if (i < storage->slotCount) {
+        if (i < storage->storageSlots._size) {
             do {
                 i++;
-                if (i < storage->slotCount) {
+                if (i < storage->storageSlots._size) {
                     storage->storageSlots[at] = storage->storageSlots[at + 1];   // [idx] = [idx+1]
                 }
                 at += 1;
-            } while (i < storage->slotCount);
+            } while (i < storage->storageSlots._size);
         }
-        storage->slotCount -= 1;
+        storage->storageSlots._size -= 1;
     }
 }
 
@@ -118,13 +118,13 @@ void StorageAdd(StorageComponent* storage, ComponentDescription* material, int c
         std::fprintf(stderr, "[StorageAdd] ZERO/NEG COUNT: storage=%p resType=%p count=%d "
                      "stacks(+0x30)=%d capacity(+0x38)=%d — this entry will hang the spill loop\n",
                      static_cast<const void*>(storage), static_cast<const void*>(material), count,
-                     storage->slotCount, storage->capacity);
+                     storage->storageSlots._size, storage->capacity);
         std::fflush(stderr);
     }
     int idx = 0;
-    int n = storage->slotCount;
+    int n = storage->storageSlots._size;
     if (n > 0) {
-        const StorageComponent::Item* p = storage->storageSlots;
+        const StorageComponent::Item* p = storage->storageSlots._data;
         do {
             if (p->_resource == material) {
                 storage->storageSlots[idx]._count = storage->storageSlots[idx]._count + count;
@@ -132,24 +132,24 @@ void StorageAdd(StorageComponent* storage, ComponentDescription* material, int c
             }
             idx++;
             p += 1;
-        } while (idx < storage->slotCount);
+        } while (idx < storage->storageSlots._size);
     }
 
-    int oldN = storage->slotCount;
+    int oldN = storage->storageSlots._size;
     int newN = oldN + 1;
     if (newN == oldN) return;  // never, but mirror the guard
 
-    StorageComponent::Item* oldBuf = storage->storageSlots;
-    storage->slotCount = newN;
-    if (storage->slotCapacity < newN) {
-        storage->slotCapacity = newN;
-        if (oldN != 0) storage->slotCapacity = newN * 3;
-        storage->storageSlots = static_cast<StorageComponent::Item*>(System::MemoryAllocator::MemAlloc(
-                          static_cast<uint64_t>(storage->slotCapacity) << 4, 8));
+    StorageComponent::Item* oldBuf = storage->storageSlots._data;
+    storage->storageSlots._size = newN;
+    if (storage->storageSlots._capacity < newN) {
+        storage->storageSlots._capacity = newN;
+        if (oldN != 0) storage->storageSlots._capacity = newN * 3;
+        storage->storageSlots._data = static_cast<StorageComponent::Item*>(System::MemoryAllocator::MemAlloc(
+                          static_cast<uint64_t>(storage->storageSlots._capacity) << 4, 8));
     }
-    int srcIdx = (oldBuf == storage->storageSlots) ? oldN : 0;
+    int srcIdx = (oldBuf == storage->storageSlots._data) ? oldN : 0;
     for (int i = srcIdx; i < newN; i++) {
-        StorageComponent::Item* dst = storage->storageSlots + i;
+        StorageComponent::Item* dst = storage->storageSlots._data + i;
         if (!dst) continue;
         if (i < oldN) {
             *dst = oldBuf[i];
@@ -159,7 +159,7 @@ void StorageAdd(StorageComponent* storage, ComponentDescription* material, int c
             dst->_reserve = 0;
         }
     }
-    if (oldBuf != storage->storageSlots)
+    if (oldBuf != storage->storageSlots._data)
         System::MemoryAllocator::MemFree(oldBuf);
 }
 

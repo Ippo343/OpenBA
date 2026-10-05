@@ -298,8 +298,8 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
 
             if (srcStorage && dstStorage) {
                 std::vector<std::pair<ComponentDescription*, int>> toSubtract;
-                int itemCount = srcStorage->slotCount;
-                const StorageComponent::Item* items = srcStorage->storageSlots;
+                int itemCount = srcStorage->storageSlots._size;
+                const StorageComponent::Item* items = srcStorage->storageSlots._data;
                 for (int k = 0; k < itemCount; ++k) {
                     const StorageComponent::Item& entry = items[k];
                     ComponentDescription* descriptor = entry._resource;
