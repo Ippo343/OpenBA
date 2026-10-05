@@ -46,7 +46,8 @@ extern "C" int WorkComponent_CalcMaxWorkers(const WorkComponent* workComp);  // 
 class Tutorial;
 namespace IO { class Serializer; }
 void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer);  // 0x1400262b0 (B4 X7-GAME-A: typed; its two callers hold Tutorial*)
-extern "C" void TutWave_SerializeDialogRef(void* field, void* serializer);  // 0x140028650
+namespace UI { class Dialog; }
+void TutWave_SerializeDialogRef(UI::Dialog** field, IO::Serializer* serializer);  // 0x140028650 (ExternalPtr<UI::Dialog>::Serialize)
 class PlayerToolManager;
 class ComponentDescription;
 // A PlayerToolManager member in retail (GAME-b's class): kept free.
