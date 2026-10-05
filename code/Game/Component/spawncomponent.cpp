@@ -108,8 +108,8 @@ void SpawnComponent::InitialSpawn() {
     if (!baseObj) return;
     SpawnDescription* spawnDesc = static_cast<SpawnDescription*>(baseObj);
 
-    const int entryCount = spawnDesc->_entryCount;
-    const SpawnDescription::Entry* entries = spawnDesc->_entries;
+    const int entryCount = spawnDesc->_entries._size;
+    const SpawnDescription::Entry* entries = spawnDesc->_entries._data;
     if (entryCount <= 0 || !entries) return;
 
     for (int i = 0; i < entryCount; ++i) {
@@ -337,7 +337,7 @@ SpawnComponent::SpawnComponent() : timers(nullptr), timerCount(0), timerCapacity
 //               the same stride-8 resizer (0x140001bb0,
 //               GameColl::AsArray<GameColl::Ptr8>::SetSize) used by Startup.
 //   On load only, retail then reconciles the restored count against the LIVE
-//   SpawnDescription's entry count (desc->_entryCount, desc validated by
+//   SpawnDescription's entry count (desc->_entries._size, desc validated by
 //   IsDerivedFrom(desc, SpawnDescription typeid) — DAT_1401c4918): if they
 //   differ, resize again to match the description currently in effect.
 void SpawnComponent::Persist(IO::Stream& stream) {
@@ -363,7 +363,7 @@ void SpawnComponent::Persist(IO::Stream& stream) {
         SpawnDescription* validated = nullptr;
         if (desc && desc->IsDerivedFrom(SpawnDescription::TypeId()))
             validated = static_cast<SpawnDescription*>(desc);
-        int descCount = validated ? validated->_entryCount : 0;
+        int descCount = validated ? validated->_entries._size : 0;
         if (timerCount != descCount)
             GameColl::AsArray<GameColl::Ptr8>(&timers).SetSize(descCount);
     }
@@ -383,7 +383,7 @@ void SpawnComponent::Startup() {
     Description* desc = _description;
     if (!desc) return;                                     // not yet wired to a description
 
-    int entryCount = static_cast<SpawnDescription*>(desc)->_entryCount;
+    int entryCount = static_cast<SpawnDescription*>(desc)->_entries._size;
     if (entryCount <= 0) return;
 
     // Resize the timer array. Zero-initialised entries.
@@ -431,12 +431,12 @@ void SpawnComponent::Update(const System::Time* timeV) {
     float currentGrowth = natRes->resourceScale;
 
 
-    int entryCount = resourceData->_entryCount;
+    int entryCount = resourceData->_entries._size;
     if (entryCount <= 0) {
         return;
     }
 
-    const SpawnDescription::Entry* entries = resourceData->_entries;
+    const SpawnDescription::Entry* entries = resourceData->_entries._data;
 
     for (int i = 0; i < entryCount; i++) {
         const SpawnDescription::Entry& entry = entries[i];

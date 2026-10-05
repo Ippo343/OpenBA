@@ -132,13 +132,6 @@ void DecalComponent_Serialize(DecalComponent* self) {
 // bucket the decal's owner via the draw flag so the tree walk's +0x40 slot drives the
 // build-once, then un-bucket once placed.
 
-// The float parameters AddDecal (0x1400b0d80) takes through its uint32_t slots.
-static uint32_t FloatBits(float f) {
-    uint32_t u;
-    std::memcpy(&u, &f, sizeof(u));
-    return u;
-}
-
 // ============================================================================
 // ENDGAME B.3.8 VIS — DecalComponent as a REAL class (DecalComponent.h).
 //
@@ -299,7 +292,7 @@ void DecalComponent::OnAdded() {
 
     bool     tiledFlag = decalDesc->_tiled;
     bool     p19       = decalDesc->_flagB;
-    uint32_t p10       = FloatBits(decalDesc->_sizeB);
+    float    p10       = decalDesc->_sizeB;
     int alpha = static_cast<int>(decalScale * 255.0f);   // DAT_14017222c = 255.0f
 
     // AddDecal 0x1400b0d80 (was its TradeWork_impl_0d80 forwarder; its dead param_18 is gone).
@@ -309,7 +302,7 @@ void DecalComponent::OnAdded() {
         static_cast<uint8_t>(alpha), rotation,
         material,
         tiledFlag, p10,
-        FloatBits(uv.u0), FloatBits(uv.v0), FloatBits(uv.u1), FloatBits(uv.v1),
+        uv.u0, uv.v0, uv.u1, uv.v1,
         '\0', 0, 0, p19);
     decalId = id;
 }

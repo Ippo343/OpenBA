@@ -222,10 +222,11 @@ void GeometryBatch_Resize(RawArray<GeometryBatch>& hdr, unsigned int newCount) {
 // ============================================================
 // The C entry points: action_pf_pools.cpp / action_pf_road.cpp call them.
 // ============================================================
-// LEFT: Resize keeps its void* header: action_pf_road.cpp (X-G1-3, running) passes it.
-extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount) {
+// Both callers (WorldGeometry::RebuildRoadMesh: _roadBatches and its local) hold a
+// RawArray<GeometryBatch>.
+extern "C" void Reimpl_Struct60B_Resize(RawArray<GeometryBatch>* arrayHeader, unsigned int newCount) {
     if (!arrayHeader) return;
-    GeometryBatch_Resize(*reinterpret_cast<RawArray<GeometryBatch>*>(arrayHeader), newCount);   // LEFT: audit WORK (SIG; blocked by action_pf_road.cpp's raw header: type that holder first, not reached in B4 Z SWEEP): Resize keeps its void* header: action_pf_road.cpp (not this agent's) passes it
+    GeometryBatch_Resize(*arrayHeader, newCount);
 }
 
 extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const GeometryBatch* src) {

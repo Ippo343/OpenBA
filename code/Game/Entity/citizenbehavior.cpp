@@ -75,11 +75,11 @@ extern "C" void BuilderPool_Tick();
 //   6. If notifyTimer < 0: clear notifyFlags, reset timer to 0
 //
 // Original: Entity_impl_c2b0
-void CitizenBehavior::Update(int64_t* deltaTime) {
+void CitizenBehavior::Update(const System::Time* deltaTime) {
     // Advance timers
-    field_0x190._ticks += *deltaTime;       // pathAccumTimer
-    field_0x198._ticks -= *deltaTime;       // statsTimer
-    field_0x1A0._ticks -= *deltaTime;       // notifyTimer
+    field_0x190._ticks += deltaTime->_ticks;       // pathAccumTimer
+    field_0x198._ticks -= deltaTime->_ticks;       // statsTimer
+    field_0x1A0._ticks -= deltaTime->_ticks;       // notifyTimer
 
     // CountResources â€” Entity_helper_9ed0(self)
     CountResources();
@@ -861,7 +861,7 @@ void CitizenBehavior::CountResources() {
 //           reset timer to 120 seconds
 //
 // Original: Entity_helper_c100
-void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
+void CitizenBehavior::CheckThresholds(const System::Time* deltaTime) {
     float notifyInterval = 120.0f; // DAT_140172210 = 120.0f seconds
     // GameUpdateLoop +0x138 is the event notifier (still void* in GameUpdateLoop.h)
     EventLog* notifMgr = GameUpdateLoop::_singleton->m_eventNotifier;
@@ -871,7 +871,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
         int64_t* timer = &professionResources._data[i].timer._ticks;
 
         // Decrement timer
-        *timer -= *deltaTime;
+        *timer -= deltaTime->_ticks;
 
         if (*timer < 1 && static_cast<uint32_t>(i) < 6) {
             // Reset timer to zero (will be set to interval if notification fires)
@@ -919,7 +919,7 @@ void CitizenBehavior::CheckThresholds(int64_t* deltaTime) {
         int64_t* timer = &notifyBase[i].timer._ticks;
 
         // Decrement timer
-        *timer -= *deltaTime;
+        *timer -= deltaTime->_ticks;
 
         if (*timer < 1) {
             *timer = 0;
