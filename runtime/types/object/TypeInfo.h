@@ -517,8 +517,8 @@ public:
                                       //        compared by pointer
     const char*   parentName;         // +0x10  namespace-stripped
     const char*   fileExtension;      // +0x18  NOT an "abstract" flag
-    void*         factoryFn;          // +0x20  FactoryFn
-    void*         inPlaceFactoryFn;   // +0x28  InPlaceFn
+    FactoryFn     factoryFn;          // +0x20
+    InPlaceFn     inPlaceFactoryFn;   // +0x28
     BaseTypeInfo* next;               // +0x30  intrusive chain
 };
 static_assert(sizeof(BaseTypeInfo) == 0x38, "sizeof(Object::BaseTypeInfo)");

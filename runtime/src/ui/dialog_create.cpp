@@ -442,11 +442,9 @@ void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
     // 0x1801133f7 `MOV RCX,[RAX+0x10]` with RAX possibly zero. FAITHFUL.
     RtObject::BaseTypeInfo* const info = found->value.info;
 
-    // info+0x20 (`factoryFn`), RCX left holding `info`.
-    // LEFT: RtObject::BaseTypeInfo::factoryFn is an untyped void* (TypeInfo.h,
-    // block R-IO).
-    Object::Base* const created =
-        reinterpret_cast<Object::Base* (*)(void*)>(info->factoryFn)(info);   // LEFT: FIELD RtObject::BaseTypeInfo::factoryFn is void* (TypeInfo.h, R-OBJ)
+    // info+0x20 (`factoryFn`, `Base* (*)()`). Retail's RCX still holds `info`
+    // at the call; the callee takes no argument and does not read it.
+    Object::Base* const created = info->factoryFn();
 
     const bool isController = created->IsDerivedFrom(UI::DialogController::TypeId());
 

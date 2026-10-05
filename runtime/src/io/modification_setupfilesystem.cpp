@@ -492,7 +492,7 @@ void Modification::SetupFileSystem() {
         }
         RtObject::BaseTypeInfo* const info = found->value.info;   // 0x1800af330
         // IN-PLACE factory, +0x28 — not the allocating one at +0x20.
-        reinterpret_cast<void* (*)(void*)>(info->inPlaceFactoryFn)(ext);  // LEFT: the RtObject::External / Factory / BaseTypeInfo PODs beside the real classes (object/, R-OBJ)
+        info->inPlaceFactoryFn(ext);   // the returned Base* is not read
 
         // re-point `External::_path` (+0x08) at the queued filename. A single
         // AdjustDelimiters after release-then-adopt on an object that already
