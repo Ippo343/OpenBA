@@ -144,7 +144,6 @@ extern "C" void ProfessionList_Startup_Impl(ProfessionList* profList);  // 0x140
 class PlayerController;
 extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0
-extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);  // 0x14001bf10
 // 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
 namespace IO { class Serializer; }
@@ -203,11 +202,9 @@ extern "C" void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount); 
 extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  // 0x1400021d0
 extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0x14000a590
 
-// ---- serialize_struct60b.cpp
+// ---- serialize_struct60b.cpp: GeometryBatch's members and GeometryBatch_Resize
+// (0x14001f250 / 0x14001f5e0) are declared in Game/WorldGeometryElements.h.
 template <class T> struct RawArray;   // Action/PathSearch.h
-struct GeometryBatch;   // Game/WorldGeometryElements.h
-extern "C" void Reimpl_Struct60B_Resize(RawArray<GeometryBatch>* arrayHeader, unsigned int newCount);  // 0x14001f250
-extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const GeometryBatch* src);  // 0x14001f5e0
 
 // ---- town_storage_seed.cpp
 class Component; class MapGenerator;
