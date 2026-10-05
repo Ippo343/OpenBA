@@ -186,16 +186,16 @@ void MusicPlayer::Update() {
     float    moodA = 0.0f, moodB = 0.0f;
     if (citizens) {
         int                count = citizens->citizens._size;
-        CitizenComponent** arr   = citizens->citizens._data;
+        Object::InternalPtr<CitizenComponent>* arr   = citizens->citizens._data;
         if (count > 0 && arr) {
             for (int i = 0; i < count; ++i) {
-                CitizenComponent* c = arr[i];
+                CitizenComponent* c = arr[i].Get();
                 moodA += c->health;
                 moodB += c->happiness;
             }
             // Retail re-reads count and citizen[0] twice (once per normaliser);
             // both reads are identical, so hoist the description lookup.
-            CitizenComponent* c0 = arr[0];
+            CitizenComponent* c0 = arr[0].Get();
             Description* descObj = c0->_description;
             uint32_t tid = CitizenDescriptionTypeId();
             CitizenDescription* desc = static_cast<CitizenDescription*>(descObj);

@@ -253,7 +253,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
         int citizenCount = worldData->citizens._size;
         int matched = 0;
         for (int i = 0; i < citizenCount; i++) {
-            const CitizenComponent* citizen = worldData->citizens._data[i];
+            const CitizenComponent* citizen = worldData->citizens._data[i].Get();
             if (!citizen) continue;
 
             float age = citizen->age;
@@ -354,7 +354,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
             ProfessionBucket* node = BSTFind(worldData->field_0x100._root, curProfType);
             if (!node) continue;
 
-            ComponentEntity* entity = node->element.entities._data[i];
+            ComponentEntity* entity = node->element.entities._data[i].Get();
 
             // Find WorkPlaceComponent (FUN_140002e10, type 0x1401c80e0)
             WorkPlaceComponent* workplace = FindOnEntity<WorkPlaceComponent>(entity);
@@ -378,11 +378,11 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
         int entityCount = worldData->field_0x30._size;
-        ComponentEntity** entityArray = worldData->field_0x30._data;
+        Object::InternalPtr<ComponentEntity>* entityArray = worldData->field_0x30._data;
         int total = 0;
 
         for (int i = 0; i < entityCount; i++) {
-            ComponentEntity* entity = entityArray[i];
+            ComponentEntity* entity = entityArray[i].Get();
 
             // Find TradeComponent (FUN_140015140, the tree's fn_FindComponent_Building)
             TradeComponent* building = FindOnEntity<TradeComponent>(entity);
@@ -417,11 +417,11 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
         if (!worldData) break;
         int entityCount = worldData->field_0x30._size;
-        ComponentEntity** entityArray = worldData->field_0x30._data;
+        Object::InternalPtr<ComponentEntity>* entityArray = worldData->field_0x30._data;
         int total = 0;
 
         for (int i = 0; i < entityCount; i++) {
-            ComponentEntity* entity = entityArray[i];
+            ComponentEntity* entity = entityArray[i].Get();
 
             // Find StorageComponent
             StorageComponent* storage = FindOnEntity<StorageComponent>(entity);
@@ -487,7 +487,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
 
             ComponentEntity* entity = nullptr;
             if (node) {
-                entity = node->element.entities._data[i];
+                entity = node->element.entities._data[i].Get();
             }
 
             StateMachineComponent* buildState = FindOnEntity<StateMachineComponent>(entity);

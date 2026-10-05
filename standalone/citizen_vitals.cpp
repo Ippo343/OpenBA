@@ -44,7 +44,7 @@ void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
     CitizenBehavior* town = gameWorld->m_citizenList;   // +0xF0
     if (!Readable(town)) return;
 
-    CitizenComponent** arr = town->citizens._data;            // +0xA0
+    Object::InternalPtr<CitizenComponent>* arr = town->citizens._data;            // +0xA0
     const int  n = town->citizens._size;                  // +0xA8
     if (!arr || n <= 0 || n > 100000) return;
 
@@ -66,7 +66,7 @@ void CitizenVitals_Tick(GameUpdateLoop* gameWorld) {
     float maxAgeOf0 = 0;
 
     for (int i = 0; i < n; ++i) {
-        CitizenComponent* c = arr[i];
+        CitizenComponent* c = arr[i].Get();
         if (!Readable(c)) continue;
         const float age    = c->age;        // +0x3C
         const float maxAge = c->maxAge;     // +0x40

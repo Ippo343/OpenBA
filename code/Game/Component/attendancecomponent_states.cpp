@@ -99,12 +99,12 @@ char AttendanceComponent::AllFull() {
     CitizenBehavior* const town = AC_TownObject();
     if (!town) return 1;
 
-    AttendanceComponent* const* base = town->attendanceComponents._data;
+    const Object::InternalPtr<AttendanceComponent>* base = town->attendanceComponents._data;
     const int       count = town->attendanceComponents._size;
     const Description* myDesc = _description;
 
     for (int i = 0; i < count && base; ++i) {
-        AttendanceComponent* entry = base[i];
+        AttendanceComponent* entry = base[i].Get();
         if (!entry) continue;
         if (entry->_description != myDesc) continue;
 

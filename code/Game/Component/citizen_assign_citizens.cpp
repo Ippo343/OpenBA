@@ -162,8 +162,8 @@ int ComputeCost(Map* map, int fromCell, int toCell) {
 
 
 // Read a citizen out of the townMgr citizen array, resolving the lazy IBP.
-inline CitizenComponent* CitizenAt(CitizenComponent** citArray, int i) {
-    CitizenComponent* c = citArray[i];
+inline CitizenComponent* CitizenAt(Object::InternalPtr<CitizenComponent>* citArray, int i) {
+    CitizenComponent* c = citArray[i].Get();
     return c;
 }
 
@@ -220,7 +220,7 @@ void NormalizeMismatched(CitizenComponent* c, ProfessionList* reg) {
 
 // Walk the town workplace map (townMgr+0x100), keyed by profession id.
 // Returns {listPtr, count} for `key`, or {0,0} if absent.
-struct WorkplaceList { ComponentEntity** list; int count; };
+struct WorkplaceList { Object::InternalPtr<ComponentEntity>* list; int count; };
 WorkplaceList LookupWorkplaces(ProfessionBucket* mapRoot, Profession* key) {
     ProfessionBucket* node = mapRoot;
     while (node) {
@@ -304,7 +304,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     Map*             pathData = gw->m_game;             // +0xf8
     if (!reg || !townMgr || !pathData) return;
 
-    CitizenComponent** citArray = townMgr->citizens._data;      // +0xa0
+    Object::InternalPtr<CitizenComponent>* citArray = townMgr->citizens._data;      // +0xa0
     int                citCount = townMgr->citizens._size;  // +0xa8
     ProfessionBucket*  mapRoot  = townMgr->field_0x100._root;   // +0x100
     float     uvScale  = kRdata_14017214c;   // g_fUVScale 0x14017214c
@@ -330,7 +330,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
         Profession* key = profArray[p];
         WorkplaceList wl = LookupWorkplaces(mapRoot, key);
         for (int j = 0; j < wl.count; ++j) {
-            ComponentEntity* entity = wl.list[j];
+            ComponentEntity* entity = wl.list[j].Get();
             WorkPlaceComponent* wpComp = FindWorkplaceComp(entity);
             if (!wpComp) continue;
             // +0x60 = LIVE WORKER COUNT (capacity is WorkComponent+0x30, never read

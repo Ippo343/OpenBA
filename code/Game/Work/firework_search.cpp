@@ -132,7 +132,7 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
                         *bestCost = iVar2;
                         *bestId = id;
                         // The well itself for a negative id; an empty ref for a water pair.
-                        *bestWell = (id < 0) ? wells._data[-1 - id] : nullptr;
+                        *bestWell = (id < 0) ? wells._data[-1 - id].Get() : nullptr;
                     }
                 }
             }

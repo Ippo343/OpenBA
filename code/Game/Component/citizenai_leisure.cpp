@@ -233,13 +233,13 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
     Map* mapGrid = MapGrid();
     uint32_t outCap = 0;          // (local_50 high dword)
     int matchCount = 0;           // pvVar18 / pvVar19 (entries written)
-    HappinessComponent** curArr = nullptr;   // pvVar21 / pvVar6 (current array ptr)
+    Object::InternalPtr<HappinessComponent>* curArr = nullptr;   // pvVar21 / pvVar6 (current array ptr)
 
     int listCount = param_1->happinessComponents._size;
     if (listCount > 0) {
         int idx = 0;
         do {
-            HappinessComponent* const* slot = &param_1->happinessComponents._data[idx];
+            const Object::InternalPtr<HappinessComponent>* slot = &param_1->happinessComponents._data[idx];
             ComponentEntity* entObj = (*slot)->_entity.Get();
 
             // find the entity's InteractComponent (scan its component array @ entObj+0x30)
@@ -269,26 +269,26 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
             }
 
             if (cost < param_4 * 2 && (static_cast<char>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, destCell)) != '\0')) {
-                HappinessComponent* node = param_1->happinessComponents._data[idx];
+                HappinessComponent* node = param_1->happinessComponents._data[idx].Get();
                 Description* prim = node->_description;
                 HappinessDescription* narrowed = Object::IsDerivedFromNullSafe(prim, s_tid_HappinessDescription)
                     ? static_cast<HappinessDescription*>(prim) : nullptr;
                 if ((narrowed == nullptr || narrowed->_happinessType != 5)
                     && node->registered) {
-                    HappinessComponent** listBase = param_1->happinessComponents._data;
+                    Object::InternalPtr<HappinessComponent>* listBase = param_1->happinessComponents._data;
                     uint32_t oldN = static_cast<uint32_t>(matchCount);
                     uint32_t newN = oldN + 1;
                     // grow array geometrically when needed
                     if (static_cast<int>(outCap) < static_cast<int>(newN)) {
                         uint32_t grow = (oldN != 0) ? newN * 3 : newN;
                         outCap = grow;
-                        HappinessComponent** fresh = static_cast<HappinessComponent**>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(static_cast<int>(grow)) << 3), 8));
+                        Object::InternalPtr<HappinessComponent>* fresh = static_cast<Object::InternalPtr<HappinessComponent>*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(static_cast<int>(grow)) << 3), 8));
                         // copy existing entries into the fresh array
                         if (fresh) {
                             int copy = (curArr == fresh) ? matchCount : 0;
                             for (int k = copy; k < static_cast<int>(newN); ++k) {
-                                HappinessComponent** dst = fresh + k;
-                                HappinessComponent** src = (k < static_cast<int>(oldN)) ? curArr + k : listBase + idx;
+                                Object::InternalPtr<HappinessComponent>* dst = fresh + k;
+                                Object::InternalPtr<HappinessComponent>* src = (k < static_cast<int>(oldN)) ? curArr + k : listBase + idx;
                                 if (dst) { *dst = nullptr; *dst = *src; }
                             }
                         }
@@ -296,8 +296,8 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
                         curArr = fresh;
                     } else {
                         // in-place append of the current entity into curArr[oldN]
-                        HappinessComponent** dst = curArr + static_cast<int>(oldN);
-                        HappinessComponent** srcList = listBase + idx;
+                        Object::InternalPtr<HappinessComponent>* dst = curArr + static_cast<int>(oldN);
+                        Object::InternalPtr<HappinessComponent>* srcList = listBase + idx;
                         if (dst) { *dst = nullptr; *dst = *srcList; }
                     }
                     matchCount = static_cast<int>(newN);
@@ -309,7 +309,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
 
         if (matchCount != 0) {
             uint32_t pick = Rng()->Rand(static_cast<uint32_t>(matchCount));
-            HappinessComponent* node = curArr[pick];
+            HappinessComponent* node = curArr[pick].Get();
             *param_2 = nullptr;
             *param_2 = node->_entity.Get();
             if (curArr) System::MemoryAllocator::MemFree(curArr);

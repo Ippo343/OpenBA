@@ -29,8 +29,8 @@
 // reverse-declaration-order destruction is retail's dtor 0x1400907b0 (which frees
 // the arrays INTERLEAVED with the trees); the class has retail's ctor and dtor
 // and Load constructs it with a placement new. Element types are the
-// serializer's validated cells; an InternalPtr<T> element is the bare `T*` it
-// holds.
+// serializer's validated cells; an InternalPtr<T> element is an InternalPtr<T>
+// (B4 S4 IBP), an ExternalPtr<T> element the bare `T*`.
 //
 // The engine/types/CitizenBehavior.h header forwards here and still carries the
 // `CitizenBehaviorRaw` accessor mirror its bodies use (H10: it goes with its last
@@ -42,6 +42,7 @@
 #include "collection/Collection.h"   // Collection::Array<int32_t> (the +0x140 buckets)
 #include "system/Value.h"            // System::Time (the five clocks)
 #include "Action/PathAvl.h"          // AvlNode30 / AvlTreeHead (the PathGraph distance cache)
+#include "object/Internal.h"         // Object::InternalPtr<T> (the +0x00..+0xF0 list elements)
 
 class ComponentEntity;
 class CemeteryComponent;
@@ -60,7 +61,6 @@ class ComponentDescription;
 class Profession;
 class Map;
 namespace IO { class Stream; }
-namespace Object { template <class T> class InternalPtr; }
 
 // ============================================================
 // ProfessionResourceEntry — one element of the +0x170 array (stride 0x20).
@@ -171,16 +171,25 @@ namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (run
 // ~Array (MemFree, then the data qword and the size + capacity qword zeroed:
 // 0x1400907e9 ...). That row is kSpec_PtrZero (the row the tree's AsArray<Ptr8>
 // bridge reached; Entity/EntityList.h's IBPArray is the same instantiation).
-// An InternalPtr<T> / ExternalPtr<T> element is held as the bare T* (retail's
-// dtor runs no element destroy over either: 0x1400907b0).
+// An ExternalPtr<T> element (+0x110 / +0x120) is held as the bare T*; an
+// InternalPtr<T> element is the InternalPtr (CitizenIbpList below). Retail's dtor
+// runs no element destroy over either (0x1400907b0).
 template <class T>
 using CitizenPtrList = Collection::Array<T*, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+// The InternalPtr lists (the sixteen +0x00..+0xF0 members and each bucket's entity
+// list): retail's Array<InternalPtr<T>>, whose element the serializer hands to
+// InternalBasePtr::Serialize (0x140152aa0, 0x14008f7f8) by address. Same row
+// (kSpec_PtrZero), same 8-byte element; the spec runs no element ctor / dtor, so
+// the class's ctor 0x140090a30 and dtor 0x1400907b0 are unchanged by the element type.
+template <class T>
+using CitizenIbpList = Collection::Array<Object::InternalPtr<T>, Collection::DefaultAllocator,
                                          Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
 
 template <class Key>
 struct CitizenBucket {
     Key*                            key;       // +0x00 compared by address (unsigned)
-    CitizenPtrList<ComponentEntity> entities;  // +0x08 Array<InternalPtr<ComponentEntity>>
+    CitizenIbpList<ComponentEntity> entities;  // +0x08 Array<InternalPtr<ComponentEntity>>
 };
 template <class Key>
 using CitizenBucketSet  = Collection::Set<CitizenBucket<Key>, Collection::AVLCompare,
@@ -312,22 +321,22 @@ class CitizenBehavior {
 public:
     // +0x00..+0xFF: sixteen Collection::Array<InternalPtr<T>> (0x10 each), T = the
     // cell the serializer validates each element against.
-    CitizenPtrList<ComponentEntity>     field_0x00;           // +0x00 (cell 0x1401c5d70 ComponentEntity)
-    CitizenPtrList<ComponentEntity>     field_0x10;           // +0x10 (cell 0x1401c5d70)
-    CitizenPtrList<ComponentEntity>     field_0x20;           // +0x20 (cell 0x1401c5d70)
-    CitizenPtrList<ComponentEntity>     field_0x30;           // +0x30 (cell 0x1401c5d70)
-    CitizenPtrList<CemeteryComponent>   cemeteries;           // +0x40 (cell 0x1401c4090)
-    CitizenPtrList<HappinessComponent>  happinessComponents;  // +0x50 (cell 0x1401c42c0)
-    CitizenPtrList<AttendanceComponent> attendanceComponents; // +0x60 (cell 0x1401c3f40)
-    CitizenPtrList<HealerComponent>     healers;              // +0x70 (cell 0x1401c4330)
-    CitizenPtrList<LivestockComponent>  livestock;            // +0x80 (cell 0x1401c7970)
-    CitizenPtrList<PastureComponent>    pastures;             // +0x90 (cell 0x1401c7ba0)
-    CitizenPtrList<CitizenComponent>    citizens;             // +0xA0 (cell 0x1401c7158)
-    CitizenPtrList<HerdComponent>       herds;                // +0xB0 (cell 0x1401c7820)
-    CitizenPtrList<PopulationComponent> populations;          // +0xC0 (cell 0x1401c4790)
-    CitizenPtrList<BuildComponent>      buildComponents;      // +0xD0 (cell 0x1401c7008)
-    CitizenPtrList<WellComponent>       wells;                // +0xE0 (cell 0x1401c4c28)
-    CitizenPtrList<DiseaseComponent>    diseases;             // +0xF0 (cell 0x1401c4170; serialized at version > 0)
+    CitizenIbpList<ComponentEntity>     field_0x00;           // +0x00 (cell 0x1401c5d70 ComponentEntity)
+    CitizenIbpList<ComponentEntity>     field_0x10;           // +0x10 (cell 0x1401c5d70)
+    CitizenIbpList<ComponentEntity>     field_0x20;           // +0x20 (cell 0x1401c5d70)
+    CitizenIbpList<ComponentEntity>     field_0x30;           // +0x30 (cell 0x1401c5d70)
+    CitizenIbpList<CemeteryComponent>   cemeteries;           // +0x40 (cell 0x1401c4090)
+    CitizenIbpList<HappinessComponent>  happinessComponents;  // +0x50 (cell 0x1401c42c0)
+    CitizenIbpList<AttendanceComponent> attendanceComponents; // +0x60 (cell 0x1401c3f40)
+    CitizenIbpList<HealerComponent>     healers;              // +0x70 (cell 0x1401c4330)
+    CitizenIbpList<LivestockComponent>  livestock;            // +0x80 (cell 0x1401c7970)
+    CitizenIbpList<PastureComponent>    pastures;             // +0x90 (cell 0x1401c7ba0)
+    CitizenIbpList<CitizenComponent>    citizens;             // +0xA0 (cell 0x1401c7158)
+    CitizenIbpList<HerdComponent>       herds;                // +0xB0 (cell 0x1401c7820)
+    CitizenIbpList<PopulationComponent> populations;          // +0xC0 (cell 0x1401c4790)
+    CitizenIbpList<BuildComponent>      buildComponents;      // +0xD0 (cell 0x1401c7008)
+    CitizenIbpList<WellComponent>       wells;                // +0xE0 (cell 0x1401c4c28)
+    CitizenIbpList<DiseaseComponent>    diseases;             // +0xF0 (cell 0x1401c4170; serialized at version > 0)
 
     CitizenBucketSet<Profession> field_0x100;      // +0x100 tree {root, dword count} (0x38-byte nodes; the
                                                    //        key is an ExternalPtr<Profession>, serialized by

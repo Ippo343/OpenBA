@@ -295,7 +295,7 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
     // Pass 1: idle (no-workplace) adult worker of this profession.
     int cnt = town->citizens._size;
     for (int i = 0; i < cnt; i++) {
-        CitizenComponent* cz = town->citizens._data[i];
+        CitizenComponent* cz = town->citizens._data[i].Get();
         if (IsWorkingAge(cz) && cz->profession == profession && cz->workplace == nullptr) {
             DemoteToLaborer(cz, laborer);
             return;
@@ -317,7 +317,7 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
         ComponentEntity* bestEntity = nullptr;
         int bestWorkers = 0;
         for (int i = 0; i < wpCount; i++) {
-            ComponentEntity* ent = found->element.entities._data[i];
+            ComponentEntity* ent = found->element.entities._data[i].Get();
             WorkPlaceComponent* comp = FindWorkPlaceComp(ent);
             if (!comp) continue;
             int workers = comp->workers._size;
@@ -335,7 +335,7 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
     // Pass 3: any adult, non-student citizen of the profession.
     cnt = town->citizens._size;
     for (int i = 0; i < cnt; i++) {
-        CitizenComponent* cz = town->citizens._data[i];
+        CitizenComponent* cz = town->citizens._data[i].Get();
         if (IsWorkingAge(cz) && cz->profession == profession) {
             DemoteToLaborer(cz, laborer);
             return;

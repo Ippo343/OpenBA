@@ -335,7 +335,7 @@ static uint32_t Helper_a410() {
     int n = cb->citizens._size;
     int count = 0;
     for (int i = 0; i < n; i++) {
-        const CitizenComponent* c = cb->citizens._data[i];
+        const CitizenComponent* c = cb->citizens._data[i].Get();
         if (IsAdultNotInSchool(c)) {
             int minAge = c->description->maxEducation;
             if (minAge <= c->education) count++;
@@ -354,7 +354,7 @@ static uint32_t Helper_a2a0(const Object::External* ext) {
     RawMaterialDescription* prof = container ? FindSubDescription<RawMaterialDescription>(container) : nullptr;
     int count = 0;
     for (int i = 0; i < n; i++) {
-        const CitizenComponent* c = cb->citizens._data[i];
+        const CitizenComponent* c = cb->citizens._data[i].Get();
         if (IsAdultNotInSchool(c)) {
             int homeId = c->field_0xA8;
             int wantId = prof ? prof->_i54 : 0;
@@ -374,7 +374,7 @@ static uint32_t Helper_a150(const Object::External* ext) {
     int count = 0;
     uint32_t flag = prof ? prof->_flags : 0;
     for (int i = 0; i < n; i++) {
-        const CitizenComponent* c = cb->citizens._data[i];
+        const CitizenComponent* c = cb->citizens._data[i].Get();
         int state = c->field_0x1E0;
         bool hi = (flag & 0x8000) != 0;
         if ((((state - 2U) & 0xfffffffd) == 0 && hi) ||
@@ -413,7 +413,7 @@ static uint32_t Helper_9f20() {
     int n = cb->citizens._size;
     int count = 0;
     for (int i = 0; i < n; i++) {
-        if (IsAdultNotInSchool(cb->citizens._data[i])) count++;
+        if (IsAdultNotInSchool(cb->citizens._data[i].Get())) count++;
     }
     return (uint32_t)count;
 }
@@ -436,7 +436,7 @@ static uint32_t Helper_9dc0() {
     int n = cb->citizens._size;
     int count = 0;
     for (int i = 0; i < n; i++) {
-        const CitizenComponent* c = cb->citizens._data[i];
+        const CitizenComponent* c = cb->citizens._data[i].Get();
         if ((c->age < c->description->adultAge || c->school != nullptr)) {
             if (c->school == nullptr) count++;
         }
@@ -451,7 +451,7 @@ static uint32_t Helper_9cd0(const Object::External* ext) {
     const Profession* prof = AsType<Profession>(ext);
     int count = 0;
     for (int i = 0; i < n; i++) {
-        const CitizenComponent* c = cb->citizens._data[i];
+        const CitizenComponent* c = cb->citizens._data[i].Get();
         if (IsAdultNotInSchool(c)) {
             if (c->profession == prof) count++;
         }
@@ -479,7 +479,7 @@ static uint32_t Helper_9b80() {
     int n = cb->cemeteries._size;
     int total = 0;
     for (int i = 0; i < n; i++) {
-        total += Cemetery_CountBurials_6dd0(cb->cemeteries._data[i]);
+        total += Cemetery_CountBurials_6dd0(cb->cemeteries._data[i].Get());
     }
     return (uint32_t)total;
 }
@@ -510,7 +510,7 @@ static uint32_t Helper_92d0(const Object::External* ext) {
     int n = cb->pastures._size;
     int total = 0;
     for (int i = 0; i < n; i++) {
-        const PastureComponent* e = cb->pastures._data[i];
+        const PastureComponent* e = cb->pastures._data[i].Get();
         if (e->livestockType == ext) {
             total += e->animals._size;
         }
@@ -550,7 +550,7 @@ uint32_t StatGoal::CountDistinctTracked(const Object::External* ext) const {
                 else { match = node; if (regionKey <= node->element.key) break; node = node->right; }
             }
             if (!match) continue;
-            ComponentEntity* entityRef = match->element.entities._data[bi];
+            ComponentEntity* entityRef = match->element.entities._data[bi].Get();
             TrackerComponent* tracker = entityRef->FindComponent<TrackerComponent>();
             if (tracker == nullptr) continue;
             // optional owner filter: the entity's template == ext.
@@ -634,7 +634,7 @@ uint32_t StatGoal::SumTrackedForProfession(const Object::External* ext) const {
             if (key < node->element.key) node = node->left;
             else { if (key <= node->element.key) break; node = node->right; }
         }
-        ComponentEntity* entityRef = node ? node->element.entities._data[bi] : nullptr;
+        ComponentEntity* entityRef = node ? node->element.entities._data[bi].Get() : nullptr;
         if (ext != nullptr) {
             if (entityRef->_description != ext) continue;
         }
@@ -681,7 +681,7 @@ static uint32_t Helper_86e0(const Object::External* ext) {
             if (key < node->element.key) node = node->left;
             else { if (key <= node->element.key) break; node = node->right; }
         }
-        ComponentEntity* entityRef = node ? node->element.entities._data[bi] : nullptr;
+        ComponentEntity* entityRef = node ? node->element.entities._data[bi].Get() : nullptr;
         WorkPlaceComponent* comp = entityRef->FindComponent<WorkPlaceComponent>();
         total += comp->workers._size;
     }
@@ -764,7 +764,7 @@ static uint32_t Helper_81b0(const Object::External* ext) {
         ComponentEntity* entRef = nullptr;
         while (node) {
             if (keyObj < node->element.key) node = node->left;
-            else if (keyObj <= node->element.key) { entRef = node->element.entities._data[bi]; break; }
+            else if (keyObj <= node->element.key) { entRef = node->element.entities._data[bi].Get(); break; }
             else node = node->right;
         }
 
@@ -797,7 +797,7 @@ static uint32_t Helper_7cf0(const Object::External* ext) {
         ComponentEntity* entRef = nullptr;
         while (node) {
             if (keyObj < node->element.key) node = node->left;
-            else if (keyObj <= node->element.key) { entRef = node->element.entities._data[bi]; break; }
+            else if (keyObj <= node->element.key) { entRef = node->element.entities._data[bi].Get(); break; }
             else node = node->right;
         }
 
@@ -839,11 +839,11 @@ uint32_t StatGoal::SumStorageAmounts(const Object::External* ext) const {
     int gi = 0;
     if (gathered) {
         int c0 = cb->field_0x00._size;
-        for (int i = 0; i < c0; i++) gathered[gi++] = cb->field_0x00._data[i];
+        for (int i = 0; i < c0; i++) gathered[gi++] = cb->field_0x00._data[i].Get();
         int c1 = cb->field_0x10._size;
-        for (int i = 0; i < c1; i++) gathered[gi++] = cb->field_0x10._data[i];
+        for (int i = 0; i < c1; i++) gathered[gi++] = cb->field_0x10._data[i].Get();
         int c2 = cb->field_0x30._size;
-        for (int i = 0; i < c2; i++) gathered[gi++] = cb->field_0x30._data[i];
+        for (int i = 0; i < c2; i++) gathered[gi++] = cb->field_0x30._data[i].Get();
     }
 
     int result = 0;

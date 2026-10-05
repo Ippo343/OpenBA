@@ -1610,8 +1610,8 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
     CitizenBehavior* gs = GameUpdateLoop::_singleton->m_citizenList;
     if (!gs) { fprintf(stderr, "[PasturePanel] no entity-list singleton\n"); return; }
     int n = gs->pastures._size;
-    PastureComponent** list = gs->pastures._data;
-    PastureComponent* pastureComp = (n > 0 && list) ? *list : nullptr;
+    Object::InternalPtr<PastureComponent>* list = gs->pastures._data;
+    PastureComponent* pastureComp = (n > 0 && list) ? list->Get() : nullptr;
 
     // The gs+0x90 registry holds only pastures that have REGISTERED — i.e. finished
     // construction. A pasture the FencedTool just committed is still a building site,

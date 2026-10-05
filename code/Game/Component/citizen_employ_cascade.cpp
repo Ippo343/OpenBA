@@ -118,8 +118,8 @@ void Shuffle896a0(CitizenBehavior* townMgr) {
     for (int64_t i = 0; (int64_t)i < (int)n; ++i) {
         uint32_t j = rng->Rand(static_cast<uint32_t>(n));
         if ((uint32_t)i != j) {
-            ComponentEntity** base = townMgr->field_0x20._data;
-            ComponentEntity* tmp = base[i];
+            Object::InternalPtr<ComponentEntity>* base = townMgr->field_0x20._data;
+            ComponentEntity* tmp = base[i].Get();
             base[i] = base[(int)j];
             base[(int)j] = tmp;
         }
@@ -133,7 +133,7 @@ CitizenComponent** Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out,
                               ComponentEntity** availPtr, Profession* profKey) {
     int cnt = townMgr->citizens._size;
     for (int i = 0; i < cnt; ++i) {
-        CitizenComponent* cz = townMgr->citizens._data[i];
+        CitizenComponent* cz = townMgr->citizens._data[i].Get();
         if (AdultIdle(cz)) {
             if (cz->profession == LaborerKey()) {
                 SeatWorker(cz, *availPtr, profKey);
@@ -159,7 +159,7 @@ CitizenComponent** Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
     CitizenComponent* best = nullptr;
     int cnt = townMgr->citizens._size;
     for (int i = 0; i < cnt; ++i) {
-        CitizenComponent* cz = townMgr->citizens._data[i];
+        CitizenComponent* cz = townMgr->citizens._data[i].Get();
         if (AdultIdle(cz)) {
             if (cz->profession == LaborerKey()) {
                 if (cz->home != nullptr) {
@@ -200,7 +200,7 @@ CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
 
     int cnt = townMgr->citizens._size;
     for (int i = 0; i < cnt; ++i) {       // local_60 = i * 8
-        CitizenComponent* cz = townMgr->citizens._data[i];   // local_80
+        CitizenComponent* cz = townMgr->citizens._data[i].Get();   // local_80
         if (!AdultIdle(cz)) continue;
         if (cz->profession != profKey) continue;
 
@@ -299,7 +299,7 @@ CitizenComponent** Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out,
 
     int houseCnt = townMgr->field_0x20._size;
     for (int h = 0; h < houseCnt; ++h) {   // local_50[0] = h * 8
-        ComponentEntity* house = townMgr->field_0x20._data[h];   // local_60
+        ComponentEntity* house = townMgr->field_0x20._data[h].Get();   // local_60
         ResidenceComponent* c7cf0 = FindResidenceComp(house);   // local_70
         int recCount = c7cf0->residentSlots._size;
         for (int r = 0; r < recCount; ++r) {

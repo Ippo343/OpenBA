@@ -896,8 +896,8 @@ static ComponentEntity* GetJobEntity(const CitizenBehavior* registry, const Prof
             node = node->right;
         } else {
             // Found — read array[index]
-            ComponentEntity** arr = node->element.entities._data;
-            return arr[index];
+            Object::InternalPtr<ComponentEntity>* arr = node->element.entities._data;
+            return arr[index].Get();
         }
     }
     return nullptr;
@@ -1137,7 +1137,7 @@ CitizenComponent* CitizenComponent::FindSpouse() {
     CitizenBehavior* list = gw->m_citizenList;
     int64_t n = list->citizens._size;
     for (int64_t i = 0; i < n; i++) {
-        CitizenComponent* cand = list->citizens._data[i];
+        CitizenComponent* cand = list->citizens._data[i].Get();
         if (cand->gender != gender) {
             if (cand->spouse == nullptr) {
                 float* minAge = &description->marriageAge;
@@ -1201,7 +1201,7 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
     for (int64_t i = 0; i < outerCount; i++) {
         ProfessionBucket* node = findNode(key);
         if (!node) break;
-        ComponentEntity* entry = node->element.entities._data[i];
+        ComponentEntity* entry = node->element.entities._data[i].Get();
 
         // the entry's WorkPlaceComponent (DAT_1401c80e0)
         WorkPlaceComponent* wp = entry->FindComponent<WorkPlaceComponent>();
@@ -1268,7 +1268,7 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
     for (int64_t i = 0; i < outerCount; i++) {
         ProfessionBucket* node = findNode(key);
         if (!node) break;
-        ComponentEntity* entry = node->element.entities._data[i];
+        ComponentEntity* entry = node->element.entities._data[i].Get();
 
         WorkPlaceComponent* wp = entry->FindComponent<WorkPlaceComponent>();
         int curWorkers = wp->workers._size;
@@ -1398,7 +1398,7 @@ void CitizenComponent::GiveBirth() {
     int eligible = 0, mature = 0;
     int total = list->citizens._size;
     for (int i = 0; i < total; i++) {
-        CitizenComponent* cand = list->citizens._data[i];
+        CitizenComponent* cand = list->citizens._data[i].Get();
         if (cand->spouse == nullptr) {
             float maxAge = description->_f4c;
             float candAge = cand->age;
@@ -1673,7 +1673,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
         ResidenceComponent* ownStore = home->FindComponent<ResidenceComponent>();
         int citCount = townMgr->citizens._size;
         for (int64_t i = 0; i < citCount; i++) {
-            CitizenComponent* other = townMgr->citizens._data[i];
+            CitizenComponent* other = townMgr->citizens._data[i].Get();
             if (other == this) continue;
             if (other->description->adultAge <= other->age
                 && other->school == nullptr) {
@@ -1712,7 +1712,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
         int64_t homeCellIdx = static_cast<int64_t>(homeY * mapW + homeX);
 
         for (int64_t entryIdx = 0; entryIdx < count; entryIdx++) {
-            ComponentEntity* entry = townMgr->field_0x20._data[entryIdx];  // local_98
+            ComponentEntity* entry = townMgr->field_0x20._data[entryIdx].Get();  // local_98
 
             Component* resComp = FindEntityComp(entry, ResidenceComponent::TypeId());   // 0x1401c7cf0
             if (!resComp) continue;   // registered entries always carry one; guard.
@@ -2124,7 +2124,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
     }
 
     for (int i = 0; i < count; i++) {
-        AttendanceComponent* cand = list->attendanceComponents._data[i];
+        AttendanceComponent* cand = list->attendanceComponents._data[i].Get();
         if (cand == exclude) continue;
 
         // the WorkplaceComponent (DAT_1401c80e0) on the candidate's entity

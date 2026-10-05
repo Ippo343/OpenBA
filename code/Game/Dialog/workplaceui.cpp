@@ -167,7 +167,7 @@ void PopulateCounts(WorkPlaceUI* self) {
             : nullptr;
         if (town) {
             for (int i = 0; i < town->citizens._size && town->citizens._data; ++i) {
-                CitizenComponent* citizen = town->citizens._data[i];
+                CitizenComponent* citizen = town->citizens._data[i].Get();
                 if (!citizen) continue;
                 // CONTAINMENT, not a fix. CheckPtr is an EMPTY function in the shipping
                 // Runtime (see internal_factory_audit.h): a stale weak ref in the town's
@@ -406,7 +406,7 @@ void WorkPlaceUI::OnUpdateLayout() {
 
     int citizenCount = town->citizens._size;
     for (int i = 0; i < citizenCount; i++) {
-        CitizenComponent* citizen = town->citizens._data[i];
+        CitizenComponent* citizen = town->citizens._data[i].Get();
 
         // Retail 0x1400873d2: COMISS XMM0,[RCX+0x44] / JC — CF is set only when
         // XMM0 is strictly BELOW, so the skip is `<`, not `<=`. A citizen sitting

@@ -228,14 +228,14 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return;
     int               resCount = townMgr->field_0x20._size;
-    ComponentEntity** resArray = townMgr->field_0x20._data;
+    Object::InternalPtr<ComponentEntity>* resArray = townMgr->field_0x20._data;
 
     std::set<ResidenceComponent*> empties;   // retail local_b8: available (occupant==0) residences
     std::set<CostRes, CostCmp>    occupied;  // retail local_98: keyed by relocation cost
 
     // ---------- Phase 1: bucket every residence with fewer than two households ----------
     for (int r = 0; r < resCount; ++r) {
-        ComponentEntity* resEntity = resArray[r];
+        ComponentEntity* resEntity = resArray[r].Get();
         ResidenceComponent* resComp = FindComponentDerived<ResidenceComponent>(resEntity, s_tidResidence);
         if (!resComp) continue;                       // retail assumes present; guard for safety
 

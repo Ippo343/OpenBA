@@ -363,7 +363,7 @@ static void Game_SpawnItemsInStorage_Impl() {
     if (storageCount <= 0) return;
 
     for (int i = 0; i < storageCount; i++) {
-        PastureComponent* storage = town->pastures._data[i];
+        PastureComponent* storage = town->pastures._data[i].Get();
 
         // Check if storage has items to spawn (component+0x28 != 0)
         if (storage->livestockType == nullptr) continue;
@@ -404,7 +404,7 @@ static void Game_SpawnCitizens_Impl() {
         if (buildingCount > 0) {
             do {
                 // The building (the array is re-read per pass)
-                ComponentEntity* building = town->field_0x00._data[buildIdx];
+                ComponentEntity* building = town->field_0x00._data[buildIdx].Get();
 
                 if (building != nullptr) {
 
@@ -566,7 +566,7 @@ void DebugUI::TriggerDisasterOnBuilding() {
     if (!diseaseDesc) return;
 
     // Get building entity from building array
-    CitizenComponent* building = town->citizens._data[(int)randIdx];
+    CitizenComponent* building = town->citizens._data[(int)randIdx].Get();
     if (!building) return;
 
     // Apply disease to building
@@ -588,7 +588,7 @@ static void Game_StartRandomFire_Impl() {
     uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(buildingCount));
 
     // Get random building entity
-    ComponentEntity* building = town->field_0x20._data[randIdx];
+    ComponentEntity* building = town->field_0x20._data[randIdx].Get();
 
     // Find FireComponent on the building (FindComponent<FireComponent>, cell 0x1401c41e0)
     FireComponent* fireComp = building->FindComponent<FireComponent>();
@@ -649,9 +649,9 @@ static void Game_InfectRandomCitizen_Impl() {
     uint32_t randIdx = game->m_random->Rand(static_cast<uint32_t>(citizenCount));
 
     // Get random citizen
-    DiseaseComponent** citizenArray = town->diseases._data;
+    Object::InternalPtr<DiseaseComponent>* citizenArray = town->diseases._data;
     if (!citizenArray) return;
-    DiseaseComponent* citizen = citizenArray[randIdx];
+    DiseaseComponent* citizen = citizenArray[randIdx].Get();
     if (!citizen) return;
 
     // Infect citizen's disease component
@@ -1081,7 +1081,7 @@ void DebugUI::OnCreated() {
             int drawCount = town ? town->populations._size : 0; // +0xC8
             int selectedIndex = 0;
             for (int i = 0; i < drawCount; i++) {
-                Component* entry = town->populations._data[i];   // +0xC0
+                Component* entry = town->populations._data[i].Get();   // +0xC0
                 Description* inner = entry->_description;
                 bool isDrawable = ::Object::IsDerivedFromNullSafe(inner, PopulationDescription::TypeId());
                 PopulationDescription* drawableDesc = isDrawable ? static_cast<PopulationDescription*>(inner) : nullptr;

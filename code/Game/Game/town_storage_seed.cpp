@@ -333,7 +333,7 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
             int locCount = townMgr->field_0x00._size;   // +0x08 (retail: the low dword of the qword)
             if (locCount < 1) break;
             for (int i = 0; i < locCount; i++) {
-                ComponentEntity* entityRef = townMgr->field_0x00._data[i];
+                ComponentEntity* entityRef = townMgr->field_0x00._data[i].Get();
                 StorageComponent* storage = FindStorageOnEntity(entityRef);
                 // Original wraps the found component in an IBP before use.
                 ::Object::InternalPtr<StorageComponent> compIBP(storage);

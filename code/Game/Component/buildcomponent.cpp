@@ -76,12 +76,12 @@ extern "C" void* g_pConstructionDemoSite;
 // InternalPtr to match. Returns the index of the slot whose pointer equals *param_2, or -1.
 // The compare is the two pointer words (InternalPtr::Get is a reinterpretation, no
 // base adjustment).
-int BuildComponent_FindInQueue(const CitizenPtrList<BuildComponent>* list,
+int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list,
                                const Object::InternalPtr<BuildComponent>* key) {
     int count = list->_size;
     for (int i = 0; i < count; i++) {
-        BuildComponent* const* base = list->_data;
-        if (base[i] == key->Get()) {
+        const Object::InternalPtr<BuildComponent>* base = list->_data;
+        if (base[i].Get() == key->Get()) {
             return i;
         }
     }
@@ -457,7 +457,7 @@ void BuildComponent::OnRemove() {
             do {
                 int nextIdx = idx + 1;
                 if (nextIdx < count) {
-                    BuildComponent** pSlot = worldData->buildComponents._data + offset;
+                    Object::InternalPtr<BuildComponent>* pSlot = worldData->buildComponents._data + offset;
                     if (pSlot != nullptr) {
                         *pSlot = nullptr;
                         *pSlot = pSlot[1];

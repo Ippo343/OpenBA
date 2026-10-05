@@ -585,11 +585,11 @@ void FollowUp(int frameNum) {
         if (tm) {
             const Profession* keyP = w->profession;                         // +0x48
             const uint64_t key = reinterpret_cast<uint64_t>(keyP);  // printed as the key  // CAST-OK: ptr_int
-            CitizenComponent** czArr = tm->citizens._data;                        // +0xa0
+            Object::InternalPtr<CitizenComponent>* czArr = tm->citizens._data;                        // +0xa0
             const int czN = tm->citizens._size;                               // +0xa8
             int total = 0, noRec = 0, k30 = 0, k28 = 0, linked228 = 0, linked230 = 0;
             for (int i = 0; i < czN && czArr; ++i) {
-                CitizenComponent* cz = czArr[i];
+                CitizenComponent* cz = czArr[i].Get();
                 if (!cz) continue;
                 ++total;
                 CitizenDescription* rec = cz->description;                  // +0x288
@@ -631,11 +631,11 @@ void FollowUp(int frameNum) {
             // student" pair — if neither resolves to this building, the mismatch is the
             // whole story and the owning building tells us which key is which.
             {
-                AttendanceComponent** bArr = tm->attendanceComponents._data;     // +0x60
+                Object::InternalPtr<AttendanceComponent>* bArr = tm->attendanceComponents._data;     // +0x60
                 const int bN = tm->attendanceComponents._size;                // +0x68
                 const Profession* want[2] = {nullptr, nullptr};
                 if (czArr && czN > 0) {
-                    if (CitizenComponent* cz0 = czArr[0]) {
+                    if (CitizenComponent* cz0 = czArr[0].Get()) {
                         if (CitizenDescription* r0 = cz0->description) {    // +0x288
                             want[0] = r0->_professions[1];                  // +0x28
                             want[1] = r0->_professions[2];                  // +0x30
@@ -654,7 +654,7 @@ void FollowUp(int frameNum) {
                 bool selfListed = false;
                 const Component* seatComp = s_seatComp;
                 for (int i = 0; i < bN && bArr; ++i) {
-                    AttendanceComponent* b = bArr[i];
+                    AttendanceComponent* b = bArr[i].Get();
                     if (!b) continue;
                     ComponentEntity* sub = b->_entity.Get();                      // +0x10
                     // Found by exact type id: a WorkPlaceComponent.
@@ -678,7 +678,7 @@ void FollowUp(int frameNum) {
                     if (!want[k]) continue;
                     const char* owner = "NO BUILDING IN TOWN REQUIRES THIS KEY";
                     for (int i = 0; i < bN && bArr; ++i) {
-                        AttendanceComponent* b = bArr[i];
+                        AttendanceComponent* b = bArr[i].Get();
                         if (!b) continue;
                         ComponentEntity* sub = b->_entity.Get();                  // +0x10
                         WorkPlaceComponent* c = static_cast<WorkPlaceComponent*>(FindCompOnEntity(sub, tidWpc));
@@ -702,7 +702,7 @@ void FollowUp(int frameNum) {
                 if (czArr && czN > 0) {
                     int minors = 0, students = 0;
                     for (int i = 0; i < czN; ++i) {
-                        CitizenComponent* cz = czArr[i];
+                        CitizenComponent* cz = czArr[i].Get();
                         if (!cz) continue;
                         CitizenDescription* rec = cz->description;          // +0x288
                         if (rec && cz->age < rec->adultAge) ++minors;       // +0x3c < rec+0x44
@@ -723,7 +723,7 @@ void FollowUp(int frameNum) {
                     if (minors > 0 && students == 0) {
                         CitizenComponent* victim = nullptr;
                         for (int i = 0; i < czN && !victim; ++i) {
-                            CitizenComponent* cz = czArr[i];
+                            CitizenComponent* cz = czArr[i].Get();
                             if (!cz) continue;
                             CitizenDescription* rec = cz->description;      // +0x288
                             if (rec && cz->age < rec->adultAge)             // +0x3c < rec+0x44
