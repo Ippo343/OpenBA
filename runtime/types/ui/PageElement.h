@@ -122,6 +122,7 @@ public:
 
 static_assert(sizeof(PageElement) == 0xc8,
               "UI::PageElement is 0xc8 bytes (MOV EDX,0xc8 in 0x180047540)");
+static_assert(offsetof(PageElement, _padC4) == 0xC4, "PageElement::_padC4");
 static_assert(alignof(PageElement) == 8, "UI::PageElement aligns to 8");
 static_assert(std::has_virtual_destructor<PageElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<PageElement>::value, "B39 D1: concrete");

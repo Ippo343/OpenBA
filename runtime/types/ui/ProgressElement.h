@@ -126,6 +126,11 @@ public:
 
 static_assert(sizeof(ProgressElement) == 0x130,
               "UI::ProgressElement is 0x130 (MOV EDX,0x130 in 0x180078150)");
+static_assert(offsetof(ProgressElement, _fillMiddle) == 0xD0, "ProgressElement::_fillMiddle");
+static_assert(offsetof(ProgressElement, _fillRight) == 0xE0, "ProgressElement::_fillRight");
+static_assert(offsetof(ProgressElement, _trackLeft) == 0xF0, "ProgressElement::_trackLeft");
+static_assert(offsetof(ProgressElement, _trackMiddle) == 0x100, "ProgressElement::_trackMiddle");
+static_assert(offsetof(ProgressElement, _pad12c) == 0x12C, "ProgressElement::_pad12c");
 static_assert(alignof(ProgressElement) == 8, "UI::ProgressElement aligns to 8");
 static_assert(offsetof(ProgressElement, _fillLeft) == sizeof(Element), "");
 // The class and the POD describe the same bytes.

@@ -289,6 +289,7 @@ public:
 
     void* _owner;           // +0x08  Video::Device*
 };
+static_assert(offsetof(DeviceData, _owner) == 0x8, "DeviceData::_owner");
 
 // ---- 20 slots -------------------------------------------------------------
 class ContextData {
@@ -343,6 +344,7 @@ public:
 
     void* _owner;           // +0x08  Video::Context*
 };
+static_assert(offsetof(ContextData, _owner) == 0x8, "ContextData::_owner");
 
 // ---- 7 slots --------------------------------------------------------------
 class ImageBufferData {
@@ -396,6 +398,7 @@ public:
 
     void* _owner;           // +0x08  Video::ImageBuffer*
 };
+static_assert(offsetof(ImageBufferData, _owner) == 0x8, "ImageBufferData::_owner");
 
 // ---- 7 slots --------------------------------------------------------------
 class IndexBufferData {
@@ -447,6 +450,7 @@ public:
 
     void* _owner;           // +0x08  Video::IndexBuffer*
 };
+static_assert(offsetof(IndexBufferData, _owner) == 0x8, "IndexBufferData::_owner");
 
 // ---- 7 slots --------------------------------------------------------------
 class VertexBufferData {
@@ -486,6 +490,7 @@ public:
 
     void* _owner;           // +0x08  Video::VertexBuffer*
 };
+static_assert(offsetof(VertexBufferData, _owner) == 0x8, "VertexBufferData::_owner");
 
 // ---- 4 slots --------------------------------------------------------------
 class ConstantBufferData {
@@ -539,6 +544,7 @@ public:
 
     void* _owner;           // +0x08  Video::ConstantBuffer*
 };
+static_assert(offsetof(ConstantBufferData, _owner) == 0x8, "ConstantBufferData::_owner");
 
 // ---- 4 slots --------------------------------------------------------------
 class RenderBufferData {
@@ -571,6 +577,7 @@ public:
 
     void* _owner;           // +0x08  Video::RenderBuffer*
 };
+static_assert(offsetof(RenderBufferData, _owner) == 0x8, "RenderBufferData::_owner");
 
 // ---- 3 slots --------------------------------------------------------------
 class VertexLayoutData {
@@ -604,6 +611,7 @@ public:
 
     void* _owner;           // +0x08  Video::VertexLayout*
 };
+static_assert(offsetof(VertexLayoutData, _owner) == 0x8, "VertexLayoutData::_owner");
 
 // ---- 3 slots --------------------------------------------------------------
 class VertexProgramData {
@@ -635,6 +643,7 @@ public:
 
     void* _owner;           // +0x08  Video::VertexProgram*
 };
+static_assert(offsetof(VertexProgramData, _owner) == 0x8, "VertexProgramData::_owner");
 
 // ---- 3 slots --------------------------------------------------------------
 class PixelProgramData {
@@ -666,6 +675,7 @@ public:
 
     void* _owner;           // +0x08  Video::PixelProgram*
 };
+static_assert(offsetof(PixelProgramData, _owner) == 0x8, "PixelProgramData::_owner");
 
 // ---- 3 slots --------------------------------------------------------------
 class RenderStateData {
@@ -701,6 +711,7 @@ public:
 
     void* _owner;           // +0x08  Video::RenderState*
 };
+static_assert(offsetof(RenderStateData, _owner) == 0x8, "RenderStateData::_owner");
 
 // ---- 3 slots --------------------------------------------------------------
 class VideoProgramData {
@@ -747,6 +758,7 @@ public:
 
     void* _owner;           // +0x08  Video::VideoProgram*
 };
+static_assert(offsetof(VideoProgramData, _owner) == 0x8, "VideoProgramData::_owner");
 
 // The two offsets, once per class, as the two things every one of the twelve
 // really claims: the vptr is the first qword and `owner` is the second. A

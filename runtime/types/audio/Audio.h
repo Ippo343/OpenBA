@@ -259,6 +259,8 @@ public:
 };
 
 static_assert(sizeof(Scene::Channel) == 0x70, "Audio::Scene::Channel must be 0x70 bytes");
+static_assert(offsetof(Scene::Channel, _pad0c) == 0xC, "Channel::_pad0c");
+static_assert(offsetof(Scene::Channel, _pad6d) == 0x6D, "Channel::_pad6d");
 static_assert(offsetof(Scene::Channel, soundEffectRef)  == 0x00, "Channel::soundEffectRef @ +0x00");
 static_assert(offsetof(Scene::Channel, soundType)       == 0x08, "Channel::soundType @ +0x08");
 static_assert(offsetof(Scene::Channel, startTime)       == 0x10, "Channel::startTime @ +0x10");
@@ -279,6 +281,7 @@ static_assert(offsetof(Scene::EmitterInstance, position) == 0x00, "0x180051e5a M
 static_assert(offsetof(Scene::EmitterInstance, volume)   == 0x0c, "0x180051e6b LEA RDX,[RBX+0xc]");
 
 static_assert(sizeof(Scene::AttenutedEffect) == 0x40, "Audio::Scene::AttenutedEffect must be 0x40 bytes");
+static_assert(offsetof(Scene::AttenutedEffect, _pad2c) == 0x2C, "AttenutedEffect::_pad2c");
 static_assert(offsetof(Scene::AttenutedEffect, pos)            == 0x00, "pos @ +0x00");
 static_assert(offsetof(Scene::AttenutedEffect, soundType)      == 0x0c, "soundType @ +0x0c");
 static_assert(offsetof(Scene::AttenutedEffect, soundEffectRef) == 0x10, "soundEffectRef @ +0x10");
@@ -290,6 +293,8 @@ static_assert(offsetof(Scene::AttenutedEffect, positions)      == 0x30, "positio
 
 static_assert(sizeof(Scene::SoundType) == 4, "`W4SoundType` is a 4-byte enum in a register");
 static_assert(sizeof(Scene) == 0x38, "Audio::Scene must be 0x38 bytes (exe MemAlloc(0x38,8) 0x14009706a)");
+static_assert(offsetof(Scene, _pad0c) == 0xC, "Scene::_pad0c");
+static_assert(offsetof(Scene, _pad35) == 0x35, "Scene::_pad35");
 static_assert(alignof(Scene) == 8, "Audio::Scene aligns to 8");
 static_assert(!std::is_polymorphic<Scene>::value, "Audio::Scene has no vtable");
 static_assert(!std::is_trivially_copyable<Scene>::value, "B7-8: retail's copy ctor is deep");

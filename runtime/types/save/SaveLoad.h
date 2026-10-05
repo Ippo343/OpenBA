@@ -141,6 +141,7 @@ public:
 static_assert(offsetof(SavedState, _size) == 0x04, "SavedState._size @ 0x04");
 static_assert(offsetof(SavedState, _data) == 0x08, "SavedState._data @ 0x08");
 static_assert(sizeof(SavedState)  == 0x10, "sizeof(Save::SavedState) == 0x10");
+static_assert(offsetof(SavedState, _id) == 0x0, "SavedState::_id");
 static_assert(alignof(SavedState) == 8,    "Save::SavedState aligns to 8 (the buffer pointer)");
 static_assert(!std::is_polymorphic<SavedState>::value, "no vtable: the ctor's first store is _id");
 
@@ -512,6 +513,10 @@ static_assert(offsetof(SaveLoad, _captureWidth)     == 0x80, "SaveLoad._captureW
 static_assert(offsetof(SaveLoad, _captureHeight)    == 0x84, "SaveLoad._captureHeight @ 0x84");
 static_assert(offsetof(SaveLoad, _capturePixels)    == 0x88, "SaveLoad._capturePixels @ 0x88");
 static_assert(sizeof(SaveLoad)  == 0x90, "sizeof(Save::SaveLoad) == 0x90");
+static_assert(offsetof(SaveLoad, pad04) == 0x4, "SaveLoad::pad04");
+static_assert(offsetof(SaveLoad, pad1c) == 0x1C, "SaveLoad::pad1c");
+static_assert(offsetof(SaveLoad, pad3c) == 0x3C, "SaveLoad::pad3c");
+static_assert(offsetof(SaveLoad, pad4c) == 0x4C, "SaveLoad::pad4c");
 static_assert(alignof(SaveLoad) == 8,    "Save::SaveLoad aligns to 8 (pointer members)");
 static_assert(!std::is_polymorphic<SaveLoad>::value, "no vtable: the ctor's first store is _operation");
 static_assert(!std::is_trivially_copyable<SaveLoad>::value,

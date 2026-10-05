@@ -94,6 +94,7 @@ public:
 
 static_assert(sizeof(SpinnerDescription) == 0x88,
               "UI::SpinnerDescription is 0x88 (MOV EDX,0x88 in 0x18004b050)");
+static_assert(offsetof(SpinnerDescription, _pad84) == 0x84, "SpinnerDescription::_pad84");
 static_assert(alignof(SpinnerDescription) == 8, "UI::SpinnerDescription aligns to 8");
 static_assert(offsetof(SpinnerDescription, _editDescription) == sizeof(ElementDescription), "");
 static_assert(offsetof(SpinnerDescription, _editDescription) == 0x68, "");

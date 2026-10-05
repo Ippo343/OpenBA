@@ -458,10 +458,29 @@ public:
 
 // ---- sizes, alignment, shape ------------------------------------------------
 static_assert(sizeof(UpdateLoop) == 0x28, "Engine::UpdateLoop is 0x28 (slot 0 MOV EDX,0x28)");
+static_assert(offsetof(UpdateLoop, _resourceList) == 0x8, "UpdateLoop::_resourceList");
+static_assert(offsetof(UpdateLoop, _internalListA) == 0x10, "UpdateLoop::_internalListA");
+static_assert(offsetof(UpdateLoop, _internalListB) == 0x18, "UpdateLoop::_internalListB");
+static_assert(offsetof(UpdateLoop, _loadBit) == 0x20, "UpdateLoop::_loadBit");
+static_assert(offsetof(UpdateLoop, _loadProgress) == 0x24, "UpdateLoop::_loadProgress");
 static_assert(sizeof(Loader) == 0x38, "Engine::Loader is 0x38 (ctor's last store +0x30)");
+static_assert(offsetof(Loader, _loop) == 0x30, "Loader::_loop");
 static_assert(sizeof(LoaderLoop) == 0x48, "Engine::LoaderLoop is 0x48 (slot 0 MOV EDX,0x48)");
+static_assert(offsetof(LoaderLoop, _nextLoop) == 0x28, "LoaderLoop::_nextLoop");
+static_assert(offsetof(LoaderLoop, _elapsedTicks) == 0x30, "LoaderLoop::_elapsedTicks");
+static_assert(offsetof(LoaderLoop, _delayTicks) == 0x38, "LoaderLoop::_delayTicks");
+static_assert(offsetof(LoaderLoop, _autoAdvance) == 0x40, "LoaderLoop::_autoAdvance");
+static_assert(offsetof(LoaderLoop, _pad41) == 0x41, "LoaderLoop::_pad41");
 static_assert(sizeof(DialogLoopT) == 0x168, "Engine::DialogLoopT is 0x168 (slot 0 MOV EDX,0x168)");
+static_assert(offsetof(DialogLoopT, _dialogFilename) == 0x28, "DialogLoopT::_dialogFilename");
+static_assert(offsetof(DialogLoopT, _dialogExternal) == 0x30, "DialogLoopT::_dialogExternal");
+static_assert(offsetof(DialogLoopT, _dialogInstance) == 0x38, "DialogLoopT::_dialogInstance");
+static_assert(offsetof(DialogLoopT, _ui) == 0x40, "DialogLoopT::_ui");
 static_assert(sizeof(DialogLoaderLoopT) == 0x188, "Engine::DialogLoaderLoopT is 0x188 (slot 0 MOV EDX,0x188)");
+static_assert(offsetof(DialogLoaderLoopT, _dialogFilename) == 0x48, "DialogLoaderLoopT::_dialogFilename");
+static_assert(offsetof(DialogLoaderLoopT, _dialogExternal) == 0x50, "DialogLoaderLoopT::_dialogExternal");
+static_assert(offsetof(DialogLoaderLoopT, _dialogInstance) == 0x58, "DialogLoaderLoopT::_dialogInstance");
+static_assert(offsetof(DialogLoaderLoopT, _ui) == 0x60, "DialogLoaderLoopT::_ui");
 static_assert(alignof(UpdateLoop) == 8 && alignof(Loader) == 8 && alignof(LoaderLoop) == 8 &&
               alignof(DialogLoopT) == 8 && alignof(DialogLoaderLoopT) == 8,
               "qword-aligned (the vptr)");

@@ -148,6 +148,7 @@ public:
 
 static_assert(sizeof(TextDescription) == 0x90,
               "UI::TextDescription is 0x90 (MOV EDX,0x90 in 0x180041e30)");
+static_assert(offsetof(TextDescription, _pad86) == 0x86, "TextDescription::_pad86");
 static_assert(alignof(TextDescription) == 8, "UI::TextDescription aligns to 8");
 static_assert(std::has_virtual_destructor<TextDescription>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<TextDescription>::value, "B39 D1: concrete");

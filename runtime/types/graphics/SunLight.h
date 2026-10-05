@@ -176,6 +176,11 @@ public:
 static_assert(sizeof(SunLight) == 0x108,
               "Graphics::SunLight is 0x108 bytes (both exe call sites MemAlloc "
               "exactly 0x108, and the deleting dtor 0x180064620 agrees)");
+static_assert(offsetof(SunLight, _dirY) == 0xC4, "SunLight::_dirY");
+static_assert(offsetof(SunLight, _sunG) == 0xD0, "SunLight::_sunG");
+static_assert(offsetof(SunLight, _sunB) == 0xD4, "SunLight::_sunB");
+static_assert(offsetof(SunLight, _ambientG) == 0xE0, "SunLight::_ambientG");
+static_assert(offsetof(SunLight, _ambientB) == 0xE4, "SunLight::_ambientB");
 static_assert(alignof(SunLight) == 8, "qword aligned (the vptr)");
 
 

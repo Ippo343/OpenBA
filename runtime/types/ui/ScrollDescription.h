@@ -113,6 +113,7 @@ public:
 static_assert(sizeof(ScrollDescription) == 0xc8,
               "UI::ScrollDescription is 0xc8 bytes (MOV EDX,0xc8 in its slot-0 "
               "vector deleting destructor 0x18003a790)");
+static_assert(offsetof(ScrollDescription, _padb9) == 0xB9, "ScrollDescription::_padb9");
 static_assert(alignof(ScrollDescription) == 8, "UI::ScrollDescription aligns to 8");
 static_assert(offsetof(ScrollDescription, _spriteSheet) == sizeof(ElementDescription), "");
 static_assert(offsetof(ScrollDescription, _spriteSheet) == 0x68, "");

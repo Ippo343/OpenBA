@@ -211,6 +211,7 @@ struct SpriteDraw {
     uint8_t  _pad25[3];     // +0x25  never written by the default-init arm
 };
 static_assert(sizeof(SpriteDraw) == 0x28, "SpriteDraw stride is 0x28");
+static_assert(offsetof(SpriteDraw, _pad25) == 0x25, "SpriteDraw::_pad25");
 static_assert(offsetof(SpriteDraw, sheet)       == 0x00, "sheet at +0x00");
 static_assert(offsetof(SpriteDraw, spriteIndex) == 0x08, "spriteIndex at +0x08");
 static_assert(offsetof(SpriteDraw, x1)          == 0x0c, "x1 at +0x0c");
@@ -353,6 +354,8 @@ public:
 static_assert(sizeof(SpriteContext) == 0x88,
               "UI::SpriteContext is 0x88 bytes (the copy ctor 0x1800321c0's last "
               "member store is the qword at +0x80; B36_RULES section 13 item 2)");
+static_assert(offsetof(SpriteContext, _pad04) == 0x4, "SpriteContext::_pad04");
+static_assert(offsetof(SpriteContext, _pad39) == 0x39, "SpriteContext::_pad39");
 static_assert(alignof(SpriteContext) == 8, "UI::SpriteContext aligns to 8");
 static_assert(!std::is_polymorphic<SpriteContext>::value,
               "no vtable: Begin's first store to +0x00 is a MOVSS (0x18011d393)");

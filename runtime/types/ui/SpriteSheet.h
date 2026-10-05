@@ -147,6 +147,7 @@ struct SpriteInfo {
 inline constexpr size_t kSpriteInfoWrittenBytes = 0x34;
 
 static_assert(sizeof(SpriteInfo) == 0x38, "SpriteInfo must be 0x38 bytes");
+static_assert(offsetof(SpriteInfo, _pad34) == 0x34, "SpriteInfo::_pad34");
 static_assert(offsetof(SpriteInfo, name) == 0x00, "name at +0x00");
 static_assert(offsetof(SpriteInfo, group) == 0x08, "group at +0x08");
 static_assert(offsetof(SpriteInfo, x) == 0x10, "x at +0x10");
@@ -284,6 +285,7 @@ public:
 
 static_assert(sizeof(SpriteSheet) == 0x58,
               "UI::SpriteSheet is 0x58 bytes (MOV EDX,0x58 in slot 0, 0x1800037b0)");
+static_assert(offsetof(SpriteSheet, _pad51) == 0x51, "SpriteSheet::_pad51");
 static_assert(alignof(SpriteSheet) == 8, "UI::SpriteSheet aligns to 8 (the vptr)");
 static_assert(offsetof(SpriteSheet, m_sprites) == 0x20, "m_sprites at +0x20");
 static_assert(offsetof(SpriteSheet, m_sprites) + 0x08 == 0x28, "the sprite count at +0x28");

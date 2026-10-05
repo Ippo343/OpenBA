@@ -429,9 +429,21 @@ public:
 static_assert(sizeof(Element) == 0xC0,
               "UI::Element is 0xC0 bytes (MOV EDX,0xc0 in its slot-0 vector "
               "deleting destructor 0x180035c10)");
+static_assert(offsetof(Element, _pad7c) == 0x7C, "Element::_pad7c");
+static_assert(offsetof(Element, _pad8c) == 0x8C, "Element::_pad8c");
 static_assert(alignof(Element) == 8, "UI::Element aligns to 8 (the vptr)");
 static_assert(sizeof(Element::UpdateState) == 0x30,
               "UpdateState is 0x30 (operator= 0x180035880 copies six qwords)");
+static_assert(offsetof(Element::UpdateState, dragActive) == 0x0, "UpdateState::dragActive");
+static_assert(offsetof(Element::UpdateState, buttonPressed) == 0x1, "UpdateState::buttonPressed");
+static_assert(offsetof(Element::UpdateState, b02) == 0x2, "UpdateState::b02");
+static_assert(offsetof(Element::UpdateState, b03) == 0x3, "UpdateState::b03");
+static_assert(offsetof(Element::UpdateState, b04) == 0x4, "UpdateState::b04");
+static_assert(offsetof(Element::UpdateState, b05) == 0x5, "UpdateState::b05");
+static_assert(offsetof(Element::UpdateState, b06) == 0x6, "UpdateState::b06");
+static_assert(offsetof(Element::UpdateState, b09) == 0x9, "UpdateState::b09");
+static_assert(offsetof(Element::UpdateState, pad0a) == 0xA, "UpdateState::pad0a");
+static_assert(offsetof(Element::UpdateState, pad21) == 0x21, "UpdateState::pad21");
 static_assert(alignof(Element::UpdateState) == 8, "UpdateState aligns to 8");
 static_assert(std::is_trivially_copyable<Element::UpdateState>::value,
               "operator= 0x180035880 is a plain six-qword copy");

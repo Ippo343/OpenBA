@@ -567,6 +567,7 @@ public:
 static_assert(sizeof(GraphicsMesh) == 0x98,
               "Graphics::GraphicsMesh is 0x98 bytes (the MOV EDX,0x98 in its own "
               "slot-0 vector deleting destructor 0x180012bd0)");
+static_assert(offsetof(GraphicsMesh, _pad4c) == 0x4C, "GraphicsMesh::_pad4c");
 static_assert(alignof(GraphicsMesh) == 8, "Graphics::GraphicsMesh aligns to 8 (the vptr)");
 
 static_assert(offsetof(GraphicsMesh, _name)            == 0x20, "GraphicsMesh::_name @ +0x20 (GetMeshName 0x180012730)");
@@ -606,6 +607,12 @@ static_assert(sizeof(GraphicsMesh::TriangleList) == 0x18,
               "GraphicsMesh::TriangleList is 0x18 bytes (six dwords; "
               "?Serialize@TriangleList@ 0x1800ff300 emits +0x00..+0x14, and the "
               "array helper 0x180014850 strides 0x18)");
+static_assert(offsetof(GraphicsMesh::TriangleList, _f00) == 0x0, "TriangleList::_f00");
+static_assert(offsetof(GraphicsMesh::TriangleList, _f04) == 0x4, "TriangleList::_f04");
+static_assert(offsetof(GraphicsMesh::TriangleList, _f08) == 0x8, "TriangleList::_f08");
+static_assert(offsetof(GraphicsMesh::TriangleList, _f0c) == 0xC, "TriangleList::_f0c");
+static_assert(offsetof(GraphicsMesh::TriangleList, _f10) == 0x10, "TriangleList::_f10");
+static_assert(offsetof(GraphicsMesh::TriangleList, _f14) == 0x14, "TriangleList::_f14");
 static_assert(alignof(GraphicsMesh::TriangleList) == 4, "six dwords, dword aligned");
 
 static_assert(sizeof(GraphicsMesh::Node) == 0x48,

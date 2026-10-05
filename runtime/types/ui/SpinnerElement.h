@@ -126,6 +126,7 @@ public:
 
 static_assert(sizeof(SpinnerElement) == 0xc8,
               "UI::SpinnerElement is 0xc8 (MOV EDX,0xc8 in 0x18004b3b0)");
+static_assert(offsetof(SpinnerElement, _padC4) == 0xC4, "SpinnerElement::_padC4");
 static_assert(alignof(SpinnerElement) == 8, "UI::SpinnerElement aligns to 8");
 static_assert(offsetof(SpinnerElement, _increment) == sizeof(Element), "");
 

@@ -208,6 +208,9 @@ struct DialogTimer {
     int32_t _pad14;       // +0x14  never read or written by either method
 };
 static_assert(sizeof(DialogTimer) == 0x18, "DialogInstance timer stride is 0x18");
+static_assert(offsetof(DialogTimer, _duration) == 0x0, "DialogTimer::_duration");
+static_assert(offsetof(DialogTimer, _remaining) == 0x8, "DialogTimer::_remaining");
+static_assert(offsetof(DialogTimer, _pad14) == 0x14, "DialogTimer::_pad14");
 static_assert(offsetof(DialogTimer, _id) == 0x10, "DialogTimer::_id @ +0x10 (StopTimer's compare)");
 
 // ============================================================
@@ -516,6 +519,28 @@ public:
 static_assert(sizeof(DialogInstance) == 0xb8,
               "UI::DialogInstance is 0xb8 bytes (MOV EDX,0xb8 in 0x1800458c0; "
               "20 exe subclasses start at +0xb8)");
+static_assert(offsetof(DialogInstance, _dialog) == 0x18, "DialogInstance::_dialog");
+static_assert(offsetof(DialogInstance, _flags) == 0x20, "DialogInstance::_flags");
+static_assert(offsetof(DialogInstance, _result) == 0x24, "DialogInstance::_result");
+static_assert(offsetof(DialogInstance, _parent) == 0x28, "DialogInstance::_parent");
+static_assert(offsetof(DialogInstance, _dataSource) == 0x30, "DialogInstance::_dataSource");
+static_assert(offsetof(DialogInstance, _children) == 0x38, "DialogInstance::_children");
+static_assert(offsetof(DialogInstance, _root) == 0x50, "DialogInstance::_root");
+static_assert(offsetof(DialogInstance, _spriteSheet) == 0x58, "DialogInstance::_spriteSheet");
+static_assert(offsetof(DialogInstance, _spriteIndex) == 0x60, "DialogInstance::_spriteIndex");
+static_assert(offsetof(DialogInstance, _hole64) == 0x64, "DialogInstance::_hole64");
+static_assert(offsetof(DialogInstance, _timers) == 0x68, "DialogInstance::_timers");
+static_assert(offsetof(DialogInstance, _controllers) == 0x78, "DialogInstance::_controllers");
+static_assert(offsetof(DialogInstance, _upperLeftX) == 0x88, "DialogInstance::_upperLeftX");
+static_assert(offsetof(DialogInstance, _upperLeftY) == 0x8C, "DialogInstance::_upperLeftY");
+static_assert(offsetof(DialogInstance, _hoverMouseX) == 0x90, "DialogInstance::_hoverMouseX");
+static_assert(offsetof(DialogInstance, _hoverMouseY) == 0x94, "DialogInstance::_hoverMouseY");
+static_assert(offsetof(DialogInstance, _hovering) == 0x98, "DialogInstance::_hovering");
+static_assert(offsetof(DialogInstance, _hole99) == 0x99, "DialogInstance::_hole99");
+static_assert(offsetof(DialogInstance, _hoverTime) == 0xA0, "DialogInstance::_hoverTime");
+static_assert(offsetof(DialogInstance, _userData) == 0xA8, "DialogInstance::_userData");
+static_assert(offsetof(DialogInstance, _userFlags) == 0xB0, "DialogInstance::_userFlags");
+static_assert(offsetof(DialogInstance, _holeB4) == 0xB4, "DialogInstance::_holeB4");
 static_assert(alignof(DialogInstance) == 8, "qword-aligned (the vptr)");
 static_assert(offsetof(DialogInstance, _ui) == sizeof(Object::Internal),
               "DialogInstance's own fields begin at the end of the Internal base");

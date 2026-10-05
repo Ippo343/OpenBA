@@ -107,6 +107,7 @@ static_assert(offsetof(TypeRecord, children)      == 0x18, "TypeRecord::children
 static_assert(offsetof(TypeRecord, childCount)    == 0x20, "TypeRecord::childCount");
 static_assert(offsetof(TypeRecord, childCapacity) == 0x24, "TypeRecord::childCapacity");
 static_assert(sizeof(TypeRecord)                  == 0x28, "sizeof(TypeRecord)");
+static_assert(offsetof(TypeRecord, _pad04) == 0x4, "TypeRecord::_pad04");
 
 // ============================================================
 // A node of Factory's AVL tree: Set<Pair<uint32_t, TypeRecord>, …>::Node.
@@ -168,6 +169,7 @@ static_assert(offsetof(TypeNode, balance) == 0x48, "TypeNode::balance (0x1800305
 static_assert(offsetof(TypeNode, height)  == 0x4a, "TypeNode::height (0x1800305a5)");
 static_assert(offsetof(TypeNode, _pad4c)  == 0x4c, "TypeNode tail");
 static_assert(sizeof(TypeNode)            == 0x50, "TypeNode is 0x50 (0x180008440)");
+static_assert(offsetof(TypeNode, _pad04) == 0x4, "TypeNode::_pad04");
 
 // ============================================================
 // Object::Factory — the tree root (the class is below; this note is its
@@ -360,6 +362,7 @@ struct TypeEntry {
     TypeRecord record;    // +0x08 .. +0x2f
 };
 static_assert(sizeof(TypeEntry) == 0x30, "the 0x30-byte Pair 0x180030140 builds");
+static_assert(offsetof(TypeEntry, _pad04) == 0x4, "TypeEntry::_pad04");
 static_assert(offsetof(TypeEntry, typeId) == 0x00, "TypeEntry::typeId is the key");
 static_assert(offsetof(TypeEntry, record) == 0x08, "TypeEntry::record @ +0x08");
 
@@ -458,6 +461,14 @@ public:
     BaseTypeInfo* next;               // +0x30  intrusive chain
 };
 static_assert(sizeof(BaseTypeInfo) == 0x38, "sizeof(Object::BaseTypeInfo)");
+static_assert(offsetof(BaseTypeInfo, typeId) == 0x0, "BaseTypeInfo::typeId");
+static_assert(offsetof(BaseTypeInfo, _pad04) == 0x4, "BaseTypeInfo::_pad04");
+static_assert(offsetof(BaseTypeInfo, name) == 0x8, "BaseTypeInfo::name");
+static_assert(offsetof(BaseTypeInfo, parentName) == 0x10, "BaseTypeInfo::parentName");
+static_assert(offsetof(BaseTypeInfo, fileExtension) == 0x18, "BaseTypeInfo::fileExtension");
+static_assert(offsetof(BaseTypeInfo, factoryFn) == 0x20, "BaseTypeInfo::factoryFn");
+static_assert(offsetof(BaseTypeInfo, inPlaceFactoryFn) == 0x28, "BaseTypeInfo::inPlaceFactoryFn");
+static_assert(offsetof(BaseTypeInfo, next) == 0x30, "BaseTypeInfo::next");
 
 inline uint32_t Base::TypeId() { return _typeInfo.typeId; }            // 0x18007e010
 inline const BaseTypeInfo& Base::GetTypeInfo() { return _typeInfo; }

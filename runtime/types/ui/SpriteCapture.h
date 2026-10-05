@@ -125,6 +125,7 @@ struct CaptureEntry {
     uint32_t color;       // +0x24
 };
 static_assert(sizeof(CaptureEntry) == 0x28, "CaptureEntry must be 0x28 bytes");
+static_assert(offsetof(CaptureEntry, pad04) == 0x4, "CaptureEntry::pad04");
 static_assert(offsetof(CaptureEntry, sheetIndex) == 0x00, "");
 static_assert(offsetof(CaptureEntry, name)       == 0x08, "");
 static_assert(offsetof(CaptureEntry, x1)         == 0x10, "");

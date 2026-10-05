@@ -66,6 +66,8 @@ struct ParticleRecord {
     float         _sizePrev;    // +0x54
 };
 static_assert(sizeof(ParticleRecord) == 0x58, "the live-particle stride is 0x58");
+static_assert(offsetof(ParticleRecord, _lifetime) == 0x0, "ParticleRecord::_lifetime");
+static_assert(offsetof(ParticleRecord, _age) == 0x8, "ParticleRecord::_age");
 static_assert(offsetof(ParticleRecord, _pos)       == 0x10, "ParticleRecord::_pos @ +0x10");
 static_assert(offsetof(ParticleRecord, _posPrev)   == 0x1c, "ParticleRecord::_posPrev @ +0x1c");
 static_assert(offsetof(ParticleRecord, _color)     == 0x28, "ParticleRecord::_color @ +0x28");
@@ -91,6 +93,7 @@ struct ParticleBoundsRecord {
     int64_t  _totalTicks;                         // +0x38  ticks (Update)
 };
 static_assert(sizeof(ParticleBoundsRecord) == 0x40, "both allocation sites ask for 0x40");
+static_assert(offsetof(ParticleBoundsRecord, _bounds) == 0x0, "ParticleBoundsRecord::_bounds");
 static_assert(offsetof(ParticleBoundsRecord, _records)    == 0x18, "ParticleBoundsRecord::_records @ +0x18");
 static_assert(offsetof(ParticleBoundsRecord, _liveCount)  == 0x28, "ParticleBoundsRecord::_liveCount @ +0x28");
 static_assert(offsetof(ParticleBoundsRecord, frameTag)    == 0x2c, "ParticleBoundsRecord::frameTag @ +0x2c");
@@ -253,6 +256,7 @@ public:
 static_assert(sizeof(ParticleInstance) == 0xd8,
               "Graphics::ParticleInstance is 0xd8 bytes (MOV EDX,0xd8 in its own "
               "slot-0 vector deleting destructor 0x180020310)");
+static_assert(offsetof(ParticleInstance, _pad_d4) == 0xD4, "ParticleInstance::_pad_d4");
 static_assert(alignof(ParticleInstance) == 8, "qword aligned (the vptr)");
 static_assert(offsetof(ParticleInstance, _resource)  == 0xc0, "ParticleInstance::_resource @ +0xc0 (??0 0x180104130)");
 static_assert(offsetof(ParticleInstance, _boundsPtr) == 0xc8, "ParticleInstance::_boundsPtr @ +0xc8 (Update 0x180104180)");

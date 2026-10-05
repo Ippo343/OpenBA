@@ -218,6 +218,7 @@ public:
 
 static_assert(sizeof(TextElement) == 0x100,
               "UI::TextElement is 0x100 (MOV EDX,0x100 at 0x18004230f)");
+static_assert(offsetof(TextElement, _padEA) == 0xEA, "TextElement::_padEA");
 static_assert(alignof(TextElement) == 8, "UI::TextElement aligns to 8");
 static_assert(std::has_virtual_destructor<TextElement>::value, "B3X W1: the normal-virtual cutover");
 static_assert(!std::is_abstract<TextElement>::value, "B39 D1: concrete");

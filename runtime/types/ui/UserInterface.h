@@ -162,6 +162,10 @@ struct ClipRegion {
     int32_t bottom;  // +0x0c
 };
 static_assert(sizeof(ClipRegion) == 0x10, "ClipRegion is 4 ints");
+static_assert(offsetof(ClipRegion, left) == 0x0, "ClipRegion::left");
+static_assert(offsetof(ClipRegion, top) == 0x4, "ClipRegion::top");
+static_assert(offsetof(ClipRegion, right) == 0x8, "ClipRegion::right");
+static_assert(offsetof(ClipRegion, bottom) == 0xC, "ClipRegion::bottom");
 
 class Element;
 

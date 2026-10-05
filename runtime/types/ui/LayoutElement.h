@@ -119,6 +119,12 @@ public:
 };
 
 static_assert(sizeof(LayoutElement::ChildRecord) == 0x44, "IMUL R10,R10,0x44 (0x1800d2dc0)");
+static_assert(offsetof(LayoutElement::ChildRecord, alignX) == 0x0, "ChildRecord::alignX");
+static_assert(offsetof(LayoutElement::ChildRecord, alignY) == 0x4, "ChildRecord::alignY");
+static_assert(offsetof(LayoutElement::ChildRecord, refY) == 0xC, "ChildRecord::refY");
+static_assert(offsetof(LayoutElement::ChildRecord, offsetY) == 0x14, "ChildRecord::offsetY");
+static_assert(offsetof(LayoutElement::ChildRecord, _pad19) == 0x19, "ChildRecord::_pad19");
+static_assert(offsetof(LayoutElement::ChildRecord, sizeY) == 0x20, "ChildRecord::sizeY");
 static_assert(offsetof(LayoutElement::ChildRecord, refX)    == 0x08, "");
 static_assert(offsetof(LayoutElement::ChildRecord, offsetX) == 0x10, "");
 static_assert(offsetof(LayoutElement::ChildRecord, force)   == 0x18, "");

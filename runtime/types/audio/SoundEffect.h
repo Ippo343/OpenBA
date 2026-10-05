@@ -145,9 +145,14 @@ public:
 };
 
 static_assert(sizeof(SoundEffect::Variant) == 0x18, "SoundEffect variant stride 0x18");
+static_assert(offsetof(SoundEffect::Variant, buffer) == 0x0, "Variant::buffer");
+static_assert(offsetof(SoundEffect::Variant, pitchLow) == 0x8, "Variant::pitchLow");
+static_assert(offsetof(SoundEffect::Variant, pitchHigh) == 0xC, "Variant::pitchHigh");
 static_assert(offsetof(SoundEffect::Variant, volume)   == 0x10, "variant +0x10 volume");
 static_assert(offsetof(SoundEffect::Variant, unused14) == 0x14, "variant +0x14");
 static_assert(sizeof(SoundEffect::Sample) == 0x18, "SoundEffect sample stride 0x18");
+static_assert(offsetof(SoundEffect::Sample, startSeconds) == 0x0, "Sample::startSeconds");
+static_assert(offsetof(SoundEffect::Sample, _pad04) == 0x4, "Sample::_pad04");
 static_assert(offsetof(SoundEffect::Sample, variants) == 0x08, "sample +0x08 variant table");
 static_assert(offsetof(SoundEffect::Sample, variants) + offsetof(Collection::Array<SoundEffect::Variant>, _size) == 0x10,
               "sample +0x10 variant count");

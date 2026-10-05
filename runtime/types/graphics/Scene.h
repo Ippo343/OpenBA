@@ -205,6 +205,9 @@ public:
     int32_t   _pad14;     // +0x14  DON'T CARE — retail stores uninitialised stack
 };
 static_assert(sizeof(SceneNode) == 0x18, "Graphics::Scene::Node is 0x18 bytes");
+static_assert(offsetof(SceneNode, _object) == 0x0, "SceneNode::_object");
+static_assert(offsetof(SceneNode, _prev) == 0xC, "SceneNode::_prev");
+static_assert(offsetof(SceneNode, _pad14) == 0x14, "SceneNode::_pad14");
 static_assert(alignof(SceneNode) == 8, "the Geometry* at +0x00");
 static_assert(offsetof(SceneNode, _next)  == 0x08, "SceneNode::_next @ +0x08 (FUN_18005f090)");
 static_assert(offsetof(SceneNode, _cell)  == 0x10, "SceneNode::_cell @ +0x10 (Scene::Clean 0x1801023f0)");
@@ -281,6 +284,9 @@ public:
 };
 
 static_assert(sizeof(Scene) == 0x78, "Graphics::Scene is 0x78 bytes");
+static_assert(offsetof(Scene, _cellSize) == 0x0, "Scene::_cellSize");
+static_assert(offsetof(Scene, _halfCellX) == 0x4, "Scene::_halfCellX");
+static_assert(offsetof(Scene, _halfCellY) == 0x8, "Scene::_halfCellY");
 static_assert(alignof(Scene) == 8, "Scene's widest members are pointers");
 // Nothing holds a Scene by value (§13 item 5, closed above), but the Arrays and
 // the LinkedList still own heap, so the destructor must NOT be trivial — that is

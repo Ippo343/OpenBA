@@ -302,6 +302,7 @@ public:
 
 static_assert(sizeof(RenderState) == 0x80,
               "Video::RenderState is 0x80 (MOV EDX,0x80 at 0x18004ba02)");
+static_assert(offsetof(RenderState, _pad71) == 0x71, "RenderState::_pad71");
 static_assert(alignof(RenderState) == 8, "Video::RenderState is qword-aligned");
 static_assert(offsetof(RenderState, _alphaBlend) == 0x20, "RenderState::_alphaBlend @ +0x20");
 static_assert(offsetof(RenderState, _depth)      == 0x34, "RenderState::_depth @ +0x34");
@@ -313,10 +314,30 @@ static_assert(offsetof(RenderState, _data)       == 0x78, "RenderState::_data @ 
 
 static_assert(sizeof(RenderState::AlphaBlend) == 0x14,
               "RenderState::AlphaBlend is 0x14 (5 dwords copied by Initialize)");
+static_assert(offsetof(RenderState::AlphaBlend, enabled) == 0x0, "AlphaBlend::enabled");
+static_assert(offsetof(RenderState::AlphaBlend, _pad01) == 0x1, "AlphaBlend::_pad01");
+static_assert(offsetof(RenderState::AlphaBlend, srcBlend) == 0x4, "AlphaBlend::srcBlend");
+static_assert(offsetof(RenderState::AlphaBlend, dstBlend) == 0x8, "AlphaBlend::dstBlend");
+static_assert(offsetof(RenderState::AlphaBlend, blendOp) == 0xC, "AlphaBlend::blendOp");
 static_assert(sizeof(RenderState::Depth) == 0x10,
               "RenderState::Depth is 0x10 (4 dwords copied by Initialize)");
+static_assert(offsetof(RenderState::Depth, test) == 0x0, "Depth::test");
+static_assert(offsetof(RenderState::Depth, write) == 0x1, "Depth::write");
+static_assert(offsetof(RenderState::Depth, _pad02) == 0x2, "Depth::_pad02");
+static_assert(offsetof(RenderState::Depth, bias) == 0x8, "Depth::bias");
+static_assert(offsetof(RenderState::Depth, slopeBias) == 0xC, "Depth::slopeBias");
 static_assert(sizeof(RenderState::Stencil) == 0x24,
               "RenderState::Stencil is 0x24 (9 dwords copied by Initialize)");
+static_assert(offsetof(RenderState::Stencil, enabled) == 0x0, "Stencil::enabled");
+static_assert(offsetof(RenderState::Stencil, twoSided) == 0x1, "Stencil::twoSided");
+static_assert(offsetof(RenderState::Stencil, _pad02) == 0x2, "Stencil::_pad02");
+static_assert(offsetof(RenderState::Stencil, readMask) == 0x4, "Stencil::readMask");
+static_assert(offsetof(RenderState::Stencil, _pad09) == 0x9, "Stencil::_pad09");
+static_assert(offsetof(RenderState::Stencil, func) == 0xC, "Stencil::func");
+static_assert(offsetof(RenderState::Stencil, failOp) == 0x10, "Stencil::failOp");
+static_assert(offsetof(RenderState::Stencil, depthFailOp) == 0x14, "Stencil::depthFailOp");
+static_assert(offsetof(RenderState::Stencil, passOp) == 0x18, "Stencil::passOp");
+static_assert(offsetof(RenderState::Stencil, backFunc) == 0x1C, "Stencil::backFunc");
 static_assert(alignof(RenderState::AlphaBlend) == 4, "AlphaBlend is dword-aligned");
 static_assert(alignof(RenderState::Depth) == 4, "Depth is dword-aligned");
 static_assert(alignof(RenderState::Stencil) == 4, "Stencil is dword-aligned");

@@ -111,6 +111,10 @@ public:
 
 static_assert(sizeof(SliderDescription) == 0xb8,
               "UI::SliderDescription is 0xb8 (MOV EDX,0xb8 in 0x180049c60)");
+static_assert(offsetof(SliderDescription, _trackMiddleName) == 0x80, "SliderDescription::_trackMiddleName");
+static_assert(offsetof(SliderDescription, _trackEndName) == 0x88, "SliderDescription::_trackEndName");
+static_assert(offsetof(SliderDescription, _thumbName) == 0x90, "SliderDescription::_thumbName");
+static_assert(offsetof(SliderDescription, _padB4) == 0xB4, "SliderDescription::_padB4");
 static_assert(alignof(SliderDescription) == 8, "UI::SliderDescription aligns to 8");
 static_assert(offsetof(SliderDescription, _childDescription) == sizeof(ElementDescription), "");
 static_assert(offsetof(SliderDescription, _childDescription) == 0x68, "");

@@ -134,6 +134,8 @@ public:
 static_assert(sizeof(ScrollElement) == 0x178,
               "UI::ScrollElement is 0x178 bytes (MOV EDX,0x178 in its slot-0 "
               "vector deleting destructor 0x18003adc0)");
+static_assert(offsetof(ScrollElement, _pad151) == 0x151, "ScrollElement::_pad151");
+static_assert(offsetof(ScrollElement, _pad174) == 0x174, "ScrollElement::_pad174");
 static_assert(alignof(ScrollElement) == 8, "UI::ScrollElement aligns to 8");
 static_assert(offsetof(ScrollElement, _trackStart) == sizeof(Element), "");
 static_assert(offsetof(ScrollElement, _trackStart)     == 0xc0,  "");

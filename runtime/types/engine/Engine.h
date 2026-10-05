@@ -270,6 +270,7 @@ public:
 };
 
 static_assert(sizeof(Engine) == 0x6f8, "Engine is 0x6f8 bytes (??4Engine@0@ 0x18000c7d0 copies 0x6f8)");
+static_assert(offsetof(Engine, _pad6f2) == 0x6F2, "Engine::_pad6f2");
 static_assert(alignof(Engine) == 8, "qword-aligned");
 static_assert(!std::is_polymorphic<Engine>::value,
               "Engine::Engine has no vtable: +0x000 is the MemoryAllocator");

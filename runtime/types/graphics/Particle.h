@@ -136,6 +136,9 @@ struct ParticleExtra {
     float _sizeRate;             // +0x10
 };
 static_assert(sizeof(ParticleExtra) == 0x14, "the extra-record stride is 0x14 (kSpec_Rec14)");
+static_assert(offsetof(ParticleExtra, _velX) == 0x0, "ParticleExtra::_velX");
+static_assert(offsetof(ParticleExtra, _velY) == 0x4, "ParticleExtra::_velY");
+static_assert(offsetof(ParticleExtra, _velZ) == 0x8, "ParticleExtra::_velZ");
 static_assert(offsetof(ParticleExtra, _rotRate)  == 0x0c, "ParticleExtra::_rotRate @ +0x0c");
 static_assert(offsetof(ParticleExtra, _sizeRate) == 0x10, "ParticleExtra::_sizeRate @ +0x10");
 
@@ -144,6 +147,7 @@ struct ParticleEmitter {
     float _rate;                               // +0x10  the spawn-rate accumulator
 };
 static_assert(sizeof(ParticleEmitter) == 0x18, "MemAlloc(0x18, 8) at both build sites");
+static_assert(offsetof(ParticleEmitter, _extra) == 0x0, "ParticleEmitter::_extra");
 static_assert(offsetof(ParticleEmitter, _rate) == 0x10, "ParticleEmitter::_rate @ +0x10");
 
 // ============================================================================
@@ -165,6 +169,8 @@ struct ParticleResource {
     uint8_t                 _pad21[0x17];
     ParticleBoundsRecord**  _boxes;    // +0x38
 };
+static_assert(offsetof(ParticleResource, _pad0) == 0x0, "ParticleResource::_pad0");
+static_assert(offsetof(ParticleResource, _pad21) == 0x21, "ParticleResource::_pad21");
 static_assert(offsetof(ParticleResource, _active) == 0x20, "ParticleResource::_active @ +0x20");
 static_assert(offsetof(ParticleResource, _boxes) == 0x38, "ParticleResource::_boxes @ +0x38");
 
@@ -486,6 +492,8 @@ public:
 static_assert(sizeof(Particle) == 0x48,
               "Graphics::Particle is 0x48 bytes (the MOV EDX,0x48 in its own "
               "slot-0 vector deleting destructor 0x180020160)");
+static_assert(offsetof(Particle, _pad21) == 0x21, "Particle::_pad21");
+static_assert(offsetof(Particle, _pad2c) == 0x2C, "Particle::_pad2c");
 static_assert(alignof(Particle) == 8, "qword aligned (the vptr)");
 static_assert(offsetof(Particle, _active)      == 0x20, "Particle::_active @ +0x20 (ctor 0x180103e80)");
 static_assert(offsetof(Particle, _recordCount) == 0x24, "Particle::_recordCount @ +0x24");
@@ -664,6 +672,31 @@ public:
 static_assert(sizeof(ParticleSystem) == 0x108,
               "Graphics::ParticleSystem is 0x108 bytes (the MOV EDX,0x108 in its "
               "own slot-0 vector deleting destructor 0x180020a70)");
+static_assert(offsetof(ParticleSystem, _pad54) == 0x54, "ParticleSystem::_pad54");
+static_assert(offsetof(ParticleSystem, _emitDirY) == 0x64, "ParticleSystem::_emitDirY");
+static_assert(offsetof(ParticleSystem, _emitDirZ) == 0x68, "ParticleSystem::_emitDirZ");
+static_assert(offsetof(ParticleSystem, _spreadY) == 0x70, "ParticleSystem::_spreadY");
+static_assert(offsetof(ParticleSystem, _spreadZ) == 0x74, "ParticleSystem::_spreadZ");
+static_assert(offsetof(ParticleSystem, _angleARange) == 0x80, "ParticleSystem::_angleARange");
+static_assert(offsetof(ParticleSystem, _speedBase) == 0x84, "ParticleSystem::_speedBase");
+static_assert(offsetof(ParticleSystem, _speedRange) == 0x88, "ParticleSystem::_speedRange");
+static_assert(offsetof(ParticleSystem, _accelScale) == 0x8C, "ParticleSystem::_accelScale");
+static_assert(offsetof(ParticleSystem, _damping) == 0x90, "ParticleSystem::_damping");
+static_assert(offsetof(ParticleSystem, _rotBase) == 0x94, "ParticleSystem::_rotBase");
+static_assert(offsetof(ParticleSystem, _rotRange) == 0x98, "ParticleSystem::_rotRange");
+static_assert(offsetof(ParticleSystem, _spinBase) == 0x9C, "ParticleSystem::_spinBase");
+static_assert(offsetof(ParticleSystem, _spinRange) == 0xA0, "ParticleSystem::_spinRange");
+static_assert(offsetof(ParticleSystem, _spinAccel) == 0xA4, "ParticleSystem::_spinAccel");
+static_assert(offsetof(ParticleSystem, _spinDamp) == 0xA8, "ParticleSystem::_spinDamp");
+static_assert(offsetof(ParticleSystem, _lifeBase) == 0xAC, "ParticleSystem::_lifeBase");
+static_assert(offsetof(ParticleSystem, _lifeRange) == 0xB0, "ParticleSystem::_lifeRange");
+static_assert(offsetof(ParticleSystem, _gravY) == 0xBC, "ParticleSystem::_gravY");
+static_assert(offsetof(ParticleSystem, _gravZ) == 0xC0, "ParticleSystem::_gravZ");
+static_assert(offsetof(ParticleSystem, _sizeRange) == 0xC8, "ParticleSystem::_sizeRange");
+static_assert(offsetof(ParticleSystem, _sizeAccel) == 0xCC, "ParticleSystem::_sizeAccel");
+static_assert(offsetof(ParticleSystem, _sizeDamp) == 0xD0, "ParticleSystem::_sizeDamp");
+static_assert(offsetof(ParticleSystem, _colorT1) == 0xD8, "ParticleSystem::_colorT1");
+static_assert(offsetof(ParticleSystem, _pad_e4) == 0xE4, "ParticleSystem::_pad_e4");
 static_assert(alignof(ParticleSystem) == 8, "qword aligned (the vptr)");
 static_assert(offsetof(ParticleSystem, _f48) == sizeof(Particle),
               "ParticleSystem's own fields begin at the end of the Particle base: "
