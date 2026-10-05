@@ -286,10 +286,7 @@ void UI::UserInterface::Draw(Video::Context& context) {
     // ---- 0x180121d0e: Begin ------------------------------------------------
     // ENDGAME B.3.6: `SpriteContext::Begin` / `Flush` / `AddSpriteDraw` are
     // members of the real class (block D).
-    // B.4 LEFT: `_captureViewport` stays bytes (a `Video::Viewport` member
-    // would pull video/Context.h into every exe includer of this header).
-    sc->Begin(_uiScale, _spriteCapture,
-              reinterpret_cast<Video::Viewport*>(_captureViewport));   // +0x118  // LEFT: _captureViewport is raw bytes: typing it embeds Video::Viewport, a complete type from video/Context.h that UserInterface.h (included by the exe) does not pull in
+    sc->Begin(_uiScale, _spriteCapture, &_captureViewport);   // +0x118
 
     // A local lambda for retail's repeated "switch the batch key" preamble,
     // which appears FIVE times verbatim (0x180121e96, 0x180121f79, 0x180122084,

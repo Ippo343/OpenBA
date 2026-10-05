@@ -355,7 +355,7 @@ static void CtorBody(UserInterface* self) {
     self->_clipRegion.right  = 0;                       // +0x104 } one QWORD
     self->_clipRegion.bottom = 0;                       // +0x108 }
     self->_spriteCapture = nullptr;                     // +0x110
-    std::memset(self->_captureViewport, 0, sizeof self->_captureViewport);  // +0x118, two QWORDs
+    std::memset(&self->_captureViewport, 0, sizeof self->_captureViewport);  // +0x118, two QWORDs
 }
 
 extern "C" UserInterface* RtUi_UserInterface_Ctor(UserInterface* self) {

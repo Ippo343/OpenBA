@@ -285,6 +285,7 @@ static_assert(offsetof(Event, userData) == 0x28, "Event::userData @ +0x28");
 #include <type_traits>
 
 #include "../object/Internal.h"   // B4 Y RT-UI: Object::InternalPtr<T> (IsDialogOpen reads it by name)
+#include "../video/Context.h"     // B4 S4 RTUI: Video::Viewport (_captureViewport, by value)
 
 namespace Object {
 template <class T> class ExternalPtr;
@@ -489,10 +490,10 @@ public:
     uint32_t   _pad10c;                                          // +0x10c never written
 
     SpriteCapture* _spriteCapture;                               // +0x110
-    // Video::Viewport, 0x10 bytes; handed to SpriteContext::Begin by Draw and
-    // written dword by dword by BeginSpriteCapture. Kept as bytes so this
-    // header does not pull Video/Context.h into the exe tree's includers.
-    uint8_t _captureViewport[0x10];                              // +0x118
+    // Handed to SpriteContext::Begin by Draw and written dword by dword by
+    // BeginSpriteCapture (0x18011f4c0). A trivially copyable POD: the ctor's
+    // two-qword zeroing is unchanged.
+    Video::Viewport _captureViewport;                            // +0x118
 };
 
 static_assert(sizeof(UserInterface) == 0x128,
