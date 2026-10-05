@@ -102,7 +102,7 @@ UNIT_TEST(mia_component_member_offsets) {
     CHECK_EQ(offsetof(BuildComponent, modelComponents),    (size_t)0x58);
     CHECK_EQ(offsetof(BuildComponent, pickingComponentCount),(size_t)0x70);
     CHECK_EQ(offsetof(CemeteryComponent, plots),           (size_t)0x48);
-    CHECK_EQ(offsetof(CemeteryComponent, plotCapacity),    (size_t)0x54);
+    CHECK_EQ(offsetof(CemeteryComponent, plots) + offsetof(Collection::Array<int32_t>, _capacity), (size_t)0x54);
     CHECK_EQ(offsetof(ClearAreaComponent, clearState),     (size_t)0x48);
     CHECK_EQ(offsetof(DestroyComponent, burning),          (size_t)0x50);
     CHECK_EQ(offsetof(DestroyComponent, progress),         (size_t)0x54);

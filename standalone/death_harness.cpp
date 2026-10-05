@@ -29,7 +29,7 @@
 #include "Component/CitizenDescription.h"     // B4: the description thresholds
 #include "Component/ResidenceComponent.h"     // B4: IsFamilyFull
 #include "Component/ResidenceDescription.h"   // B4: _maxResidentsPerFamily
-#include "Component/CemeteryComponent.h"      // B4: plotCount
+#include "Component/CemeteryComponent.h"      // B4: plots._size
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -616,7 +616,7 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
                 for (int i = 0; i < cemN && arr; ++i) {
                     CemeteryComponent* comp = arr[i];
                     if (!comp) continue;
-                    const int plots = comp->plotCount;           // +0x50
+                    const int plots = comp->plots._size;          // +0x50
                     if (plots > readyPlots) readyPlots = plots;
                 }
             }
