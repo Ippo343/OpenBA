@@ -241,7 +241,7 @@ static CullStack* RtGraphics_Scene_CullStackInit(CullStack* self, const Scene* s
     }
 
     self->scene = scene;
-    const float h = scene->_cellSize * kHalf;
+    const float h = scene->_grid._cellSize * kHalf;
     self->top += 1;                              // 0
 
     CullRecord& r = self->rec[self->top];
@@ -265,7 +265,7 @@ static void RtGraphics_Scene_CullStackPushChildren(CullStack* self, uint32_t mas
     self->top = t - 1;                                   // pop first, always
 
     const int32_t depth = self->rec[t].depth + 1;
-    if (depth >= self->scene->_levelCount) return;       // leaf: stays popped
+    if (depth >= self->scene->_grid._levelCount) return;       // leaf: stays popped
 
     const float   x    = self->rec[t].x;
     const float   y    = self->rec[t].y;
@@ -375,7 +375,7 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
         const int32_t t    = st.top;
         const int32_t cell = st.rec[t].node;
 
-        if (self->_cellCounts._data[cell] < 1) {           // empty cell: just pop
+        if (self->_grid._cellCounts._data[cell] < 1) {           // empty cell: just pop
             st.top -= 1;
             continue;
         }
@@ -398,11 +398,11 @@ void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
             }
         }
 
-        const int32_t head = self->_cellHeads._data[cell];
+        const int32_t head = self->_grid._cellHeads._data[cell];
         if (head >= 0) {
             int32_t cur = head;
             do {
-                const SceneNode& node = self->_nodes._data[cur];
+                const SceneNode& node = self->_grid._nodes._data[cur];
                 Geometry* const  geo  = node._object;
 
                 if ((geo->_materialTypeFlags & passMask) != 0 &&

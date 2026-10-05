@@ -783,11 +783,11 @@ Graphics::Geometry::~Geometry() {
 // constructed a handful of times in a session (the game world's and the
 // minimap's), not per frame.
 // ============================================================================
-// B.4 final RT: a real constructor. The grid base is retail's CALL 0x18005e4a0
+// B.4 final RT: a real constructor. The `_grid` member is retail's CALL 0x18005e4a0
 // with 2048.0f; `_globals` (LinkedList, no constructor) gets the three stores
 // retail makes itself.
 namespace Graphics {
-Scene::Scene() : SceneGrid(kSceneCellSize) {
+Scene::Scene() : _grid(kSceneCellSize) {
     _globals._head  = nullptr;
     _globals._tail  = nullptr;
     _globals._count = 0;
@@ -829,7 +829,7 @@ extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
 // destructor, Collection.h); the five Arrays are members, destroyed after it
 // in reverse declaration order: +0x50, +0x40, +0x30, +0x20 (0x18001c750 each),
 // then +0x10 (the tail JMP 0x18005fc20) -- retail's six calls in its order
-// (the five Arrays are the SceneGrid base's members since B.4 final RT).
+// (the five Arrays are the `_grid` member's since B.4 final RT).
 // The door stays for the exe's raw-storage holders.
 namespace Graphics {
 Scene::~Scene() {
@@ -1349,7 +1349,7 @@ Scene::ObjectId Scene::AddObject(Geometry* geometry) {
 // and leaves the other half alone.
 // ---------------------------------------------------------------------------
 void Scene::RemoveObject(ObjectId id) {
-    SceneNode* node = &_nodes[static_cast<int32_t>(id)];
+    SceneNode* node = &_grid._nodes[static_cast<int32_t>(id)];
     const ObjectId local = id;
 
     RtSceneGridUnthread(this, static_cast<int32_t>(id));
@@ -1360,7 +1360,7 @@ void Scene::RemoveObject(ObjectId id) {
     node->_cell   = -1;
 
     // retail 0x180023830 — SetSize(size + 1, &fill), the stride-4 append.
-    _freeIds.SetSize(_freeIds.GetSize() + 1, local);
+    _grid._freeIds.SetSize(_grid._freeIds.GetSize() + 1, local);
 }
 
 // ---------------------------------------------------------------------------
@@ -1422,21 +1422,21 @@ void Scene::RemoveGlobalObject(Geometry* geometry) {
 void Scene::Clean() {
     using List = Collection::LinkedList<Geometry*>;
 
-    int32_t count = _nodes.GetSize();
+    int32_t count = _grid._nodes.GetSize();
     int32_t i = 0;
     if (count > 0) {
-        while (i < count && _nodes[i]._cell < 0) ++i;
+        while (i < count && _grid._nodes[i]._cell < 0) ++i;
     }
     if (i < count) {
         do {
-            Geometry* geo = _nodes[i]._object;
+            Geometry* geo = _grid._nodes[i]._object;
             if (geo->_dirtyFlags != 0 && geo->Clean())          // VIRTUAL, slot 8
                 RtSceneGridReindex(this, i);
 
-            count = _nodes.GetSize();
+            count = _grid._nodes.GetSize();
             ++i;
             if (count <= i) break;
-            while (i < count && _nodes[i]._cell < 0) ++i;
+            while (i < count && _grid._nodes[i]._cell < 0) ++i;
         } while (i < count);
     }
 

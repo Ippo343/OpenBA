@@ -221,9 +221,8 @@ static_assert(offsetof(SceneNode, _cell)  == 0x10, "SceneNode::_cell @ +0x10 (Sc
 // The grid, +0x00..+0x5f — 0x60 bytes. Retail's 0x18005e4a0 (unexported) is its
 // constructor: it zeroes the half-cell qword and the ten qwords of the five
 // Array headers (+0x10..+0x5f), then seeds them; Scene::Scene (0x180102730)
-// calls it with 2048.0f and then zeroes the +0x60 list itself. A base
-// sub-object at offset 0 (non-polymorphic), so every `scene->_nodes` reader is
-// unchanged. Its implicit destructor is the five Arrays' in reverse
+// calls it with 2048.0f and then zeroes the +0x60 list itself. A
+// member at offset 0 (`Scene::_grid`). Its implicit destructor is the five Arrays' in reverse
 // declaration order: +0x50, +0x40, +0x30, +0x20 (0x18001c750 each), then +0x10
 // (0x18005fc20) -- the tail of ??1Scene@ 0x1801026c0.
 // ============================================================
@@ -254,7 +253,7 @@ static_assert(offsetof(SceneGrid, _cellHeads) == 0x30, "SceneGrid::_cellHeads");
 static_assert(offsetof(SceneGrid, _levelOffsets) == 0x40, "SceneGrid::_levelOffsets");
 static_assert(offsetof(SceneGrid, _cellCounts) == 0x50, "SceneGrid::_cellCounts");
 
-class Scene : public SceneGrid {
+class Scene {
 public:
     // Retail's nested name for the grid record.
     using Node     = SceneNode;
@@ -300,14 +299,12 @@ public:
     void AddGlobalDrawItems(Renderer& renderer) const;       // 0x180102330  wave29_lane_gfxbody.cpp
 
 public:
-    // +0x00..+0x5f: the SceneGrid base.
+    SceneGrid                         _grid;          // +0x00..+0x5f  ctor 0x18005e4a0
     Collection::LinkedList<Geometry*> _globals;       // +0x60  head/tail/count
 };
 
 static_assert(sizeof(Scene) == 0x78, "Graphics::Scene is 0x78 bytes");
-static_assert(offsetof(Scene, _cellSize) == 0x0, "Scene::_cellSize");
-static_assert(offsetof(Scene, _halfCellX) == 0x4, "Scene::_halfCellX");
-static_assert(offsetof(Scene, _halfCellY) == 0x8, "Scene::_halfCellY");
+static_assert(offsetof(Scene, _grid) == 0x0, "Scene::_grid");
 static_assert(alignof(Scene) == 8, "Scene's widest members are pointers");
 // Nothing holds a Scene by value (§13 item 5, closed above), but the Arrays and
 // the LinkedList still own heap, so the destructor must NOT be trivial — that is
@@ -316,12 +313,12 @@ static_assert(!std::is_trivially_destructible_v<Scene>,
               "the five Arrays and the global list are what ??1Scene@ frees");
 
 // And against the retail bodies directly, so a POD edit cannot move both.
-static_assert(offsetof(Scene, _levelCount)   == 0x0c, "Scene::_levelCount @ +0x0c (FUN_18005ee30)");
-static_assert(offsetof(Scene, _nodes)        == 0x10, "Scene::_nodes @ +0x10 (Scene::Clean 0x1801023f0)");
-static_assert(offsetof(Scene, _freeIds)      == 0x20, "Scene::_freeIds @ +0x20 (RemoveObject 0x180102600)");
-static_assert(offsetof(Scene, _cellHeads)    == 0x30, "Scene::_cellHeads @ +0x30 (FUN_18005f090)");
-static_assert(offsetof(Scene, _levelOffsets) == 0x40, "Scene::_levelOffsets @ +0x40");
-static_assert(offsetof(Scene, _cellCounts)   == 0x50, "Scene::_cellCounts @ +0x50");
+static_assert(offsetof(Scene, _grid._levelCount) == 0x0c, "Scene::_levelCount @ +0x0c (FUN_18005ee30)");
+static_assert(offsetof(Scene, _grid._nodes) == 0x10, "Scene::_nodes @ +0x10 (Scene::Clean 0x1801023f0)");
+static_assert(offsetof(Scene, _grid._freeIds) == 0x20, "Scene::_freeIds @ +0x20 (RemoveObject 0x180102600)");
+static_assert(offsetof(Scene, _grid._cellHeads) == 0x30, "Scene::_cellHeads @ +0x30 (FUN_18005f090)");
+static_assert(offsetof(Scene, _grid._levelOffsets) == 0x40, "Scene::_levelOffsets @ +0x40");
+static_assert(offsetof(Scene, _grid._cellCounts) == 0x50, "Scene::_cellCounts @ +0x50");
 static_assert(offsetof(Scene, _globals)      == 0x60, "Scene::_globals @ +0x60 (AddGlobalObject 0x180102540)");
 
 }  // namespace Graphics

@@ -252,15 +252,15 @@ namespace rtgfxgrid {
 // ============================================================================
 uint32_t GridAdd(Scene* self, Geometry* const* geo) {
 
-    const int32_t freeCount = self->_freeIds.GetSize();  // 18005e5f2  MOVSXD
+    const int32_t freeCount = self->_grid._freeIds.GetSize();  // 18005e5f2  MOVSXD
     int32_t id;
 
     if (freeCount > 0) {
         // ---- reuse arm ----------------------------------------------- 5fd
-        id = static_cast<int32_t>(self->_freeIds[freeCount - 1]);        // 605
-        self->_freeIds.SetSize(freeCount - 1);                           // 60c  retail 0x18002fea0
+        id = static_cast<int32_t>(self->_grid._freeIds[freeCount - 1]);        // 605
+        self->_grid._freeIds.SetSize(freeCount - 1);                           // 60c  retail 0x18002fea0
 
-        SceneNode* const nodes = self->_nodes.GetData();                 // 627
+        SceneNode* const nodes = self->_grid._nodes.GetData();                 // 627
         nodes[id]._object = *geo;                                        // 62b
         nodes[id]._next   = 0;                                           // 634, one
         nodes[id]._prev   = 0;                                           //      qword
@@ -268,7 +268,7 @@ uint32_t GridAdd(Scene* self, Geometry* const* geo) {
         /* nodes[id]._pad14 deliberately untouched — see the banner */   //      dword
     } else {
         // ---- append arm ---------------------------------------------- 645
-        id = self->_nodes.GetSize();                                     // 645
+        id = self->_grid._nodes.GetSize();                                     // 645
         SceneNode tmp;                                                   // [RSP+0x20]
         tmp._object = *geo;                                              // 660
         tmp._next   = 0;                                                 // 657, one
@@ -279,7 +279,7 @@ uint32_t GridAdd(Scene* self, Geometry* const* geo) {
         // retail 0x18005fb00, kSpec_Node18 — trait-equivalent: SceneNode is a
         // plain POD (Scene.h), so SpecFor<SceneNode>() has the same {assign =
         // 3-qword copy, init = null (no else arm), destroy = null} shape.
-        self->_nodes.SetSize(self->_nodes.GetSize() + 1, tmp);           // 66d
+        self->_grid._nodes.SetSize(self->_grid._nodes.GetSize() + 1, tmp);           // 66d
     }
 
     GridReindex(self, id);                                               // 677
@@ -319,8 +319,8 @@ uint32_t GridAdd(Scene* self, Geometry* const* geo) {
 // ============================================================================
 void GridUnthread(Scene* self, int32_t id) {
 
-    SceneNode* nodes    = self->_nodes._data;                    // 18005f099
-    int32_t*   heads    = self->_cellHeads._data;                // 18005f095
+    SceneNode* nodes    = self->_grid._nodes._data;                    // 18005f099
+    int32_t*   heads    = self->_grid._cellHeads._data;                // 18005f095
     int32_t*   headSlot = &heads[nodes[id]._cell];               // 18005f0af..b4
 
     const int32_t head = *headSlot;                              // 18005f0b8
@@ -328,29 +328,29 @@ void GridUnthread(Scene* self, int32_t id) {
     if (wasHead)                                                 // 18005f0bd
         *headSlot = nodes[head]._next;                           // 18005f0c3..c8
 
-    nodes = self->_nodes._data;                                  // 18005f0cb
+    nodes = self->_grid._nodes._data;                                  // 18005f0cb
     nodes[nodes[id]._prev]._next = nodes[id]._next;              // 18005f0cf..dd
-    nodes = self->_nodes._data;                                  // 18005f0e1
+    nodes = self->_grid._nodes._data;                                  // 18005f0e1
     nodes[nodes[id]._next]._prev = nodes[id]._prev;              // 18005f0e5..f3
 
-    nodes = self->_nodes._data;                                  // 18005f0f7
+    nodes = self->_grid._nodes._data;                                  // 18005f0f7
     nodes[id]._prev = -1;                                        // 18005f0fb
-    nodes = self->_nodes._data;                                  // 18005f104
+    nodes = self->_grid._nodes._data;                                  // 18005f104
     nodes[id]._next = -1;                                        // 18005f108
 
-    nodes = self->_nodes._data;                                  // 18005f111
+    nodes = self->_grid._nodes._data;                                  // 18005f111
     int32_t cell = nodes[id]._cell;                              // 18005f115
-    heads = self->_cellHeads._data;                              // 18005f11a
+    heads = self->_grid._cellHeads._data;                              // 18005f11a
     const bool emptied = (heads[cell] == id);
     if (emptied)                                                 // 18005f11e
         heads[cell] = -1;                                        // 18005f123
 
-    nodes = self->_nodes._data;                                  // 18005f12a
+    nodes = self->_grid._nodes._data;                                  // 18005f12a
     cell  = nodes[id]._cell;                                     // 18005f132
-    --self->_cellCounts._data[cell];                             // 18005f137
+    --self->_grid._cellCounts._data[cell];                             // 18005f137
     while (cell != 0) {                                          // 18005f13a
         cell = (cell - 1) >> 2;                                  // 18005f144..46
-        --self->_cellCounts._data[cell];                         // 18005f14c
+        --self->_grid._cellCounts._data[cell];                         // 18005f14c
     }
 
     // Branch coverage, INSIDE the function rather than a proxy outside it
@@ -385,34 +385,34 @@ void GridUnthread(Scene* self, int32_t id) {
 // ============================================================================
 void GridThread(Scene* self, int32_t id) {
 
-    SceneNode* nodes = self->_nodes._data;                       // 18005f4b5
-    int32_t*   heads = self->_cellHeads._data;                   // 18005f4b9
+    SceneNode* nodes = self->_grid._nodes._data;                       // 18005f4b5
+    int32_t*   heads = self->_grid._cellHeads._data;                   // 18005f4b9
     const int32_t cell = nodes[id]._cell;                        // 18005f4cf
     const int32_t head = heads[cell];                            // 18005f4d4
 
     const bool empty = (head < 0);
     if (!empty) {                                                // 18005f4de
         nodes[id]._prev = nodes[head]._prev;                     // 18005f4e4..e8
-        nodes = self->_nodes._data;                              // 18005f4ed
+        nodes = self->_grid._nodes._data;                              // 18005f4ed
         nodes[id]._next = head;                                  // 18005f4f1
-        nodes = self->_nodes._data;                              // 18005f4f6
+        nodes = self->_grid._nodes._data;                              // 18005f4f6
         nodes[nodes[id]._prev]._next = id;                       // 18005f4fa..503
-        nodes = self->_nodes._data;                              // 18005f508
+        nodes = self->_grid._nodes._data;                              // 18005f508
         nodes[nodes[id]._next]._prev = id;                       // 18005f50c..515
     } else {
         heads[cell] = id;                                        // 18005f51c
-        nodes = self->_nodes._data;                              // 18005f51f
+        nodes = self->_grid._nodes._data;                              // 18005f51f
         nodes[id]._next = id;                                    // 18005f523
-        nodes = self->_nodes._data;                              // 18005f528
+        nodes = self->_grid._nodes._data;                              // 18005f528
         nodes[id]._prev = id;                                    // 18005f52c
     }
 
-    nodes = self->_nodes._data;                                  // 18005f531
+    nodes = self->_grid._nodes._data;                                  // 18005f531
     int32_t c = nodes[id]._cell;                                 // 18005f539
-    ++self->_cellCounts._data[c];                                // 18005f53e
+    ++self->_grid._cellCounts._data[c];                                // 18005f53e
     while (c != 0) {                                             // 18005f541
         c = (c - 1) >> 2;                                        // 18005f554..56
-        ++self->_cellCounts._data[c];                            // 18005f55c
+        ++self->_grid._cellCounts._data[c];                            // 18005f55c
     }
 
 }
@@ -453,7 +453,7 @@ void GridThread(Scene* self, int32_t id) {
 // ============================================================================
 void GridReindex(Scene* self, int32_t id) {
 
-    SceneNode* const nodes = self->_nodes._data;                 // 18005ee4b  R15
+    SceneNode* const nodes = self->_grid._nodes._data;                 // 18005ee4b  R15
     const Geometry* const geo = nodes[id]._object;               // 18005ee5e
 
     // The geometry's world box (+0x4c): min.x/min.y and max.x/max.y.
@@ -472,17 +472,17 @@ void GridReindex(Scene* self, int32_t id) {
     // is what `JA` does and what this spelling does.
     float half = (hx > hy) ? hx : hy;                            // 18005eefa..eff
 
-    const float x = cx + self->_halfCellX;                       // 18005ef10
-    const float y = cy + self->_halfCellY;                       // 18005ef1d
+    const float x = cx + self->_grid._halfCellX;                       // 18005ef10
+    const float y = cy + self->_grid._halfCellY;                       // 18005ef1d
     half += kEpsilon;                                            // 18005ef15
-    const float ratio = self->_cellSize / half;                  // 18005ef3a  DIVSS
+    const float ratio = self->_grid._cellSize / half;                  // 18005ef3a  DIVSS
 
     int32_t level = static_cast<int32_t>(ToBits(ratio) >> 23) - 0x7f;  // ef43..4b
-    if (level >= self->_levelCount) level = self->_levelCount - 1;     // ef4f..54
+    if (level >= self->_grid._levelCount) level = self->_grid._levelCount - 1;     // ef4f..54
     if (level < 0) level = 0;                                          // ef63..6a
 
     const int32_t dim = static_cast<int32_t>(1u << level);       // 18005ef72
-    const float levelCell = self->_cellSize / static_cast<float>(dim);  // ef78..7b
+    const float levelCell = self->_grid._cellSize / static_cast<float>(dim);  // ef78..7b
     const float inv = kOneF / levelCell;                         // 18005ef7f
     const float fx = inv * x;                                    // 18005ef8b
     const float fy = inv * y;                                    // 18005ef86
@@ -506,7 +506,7 @@ void GridReindex(Scene* self, int32_t id) {
     const uint32_t a  = ((y3 << 1) | y3) << 1;                   // f01c..02b
     const uint32_t cell =
         ((((a ^ x3) & 0x55555555u) ^ a) | ((x3 & 0x2aaaaaaau) << 1))  // f02d..043
-        + static_cast<uint32_t>(self->_levelOffsets._data[level]);    // f03f/f045
+        + static_cast<uint32_t>(self->_grid._levelOffsets._data[level]);    // f03f/f045
 
     const int32_t was = nodes[id]._cell;                         // 18005f048
     const bool moved  = (was != static_cast<int32_t>(cell));
