@@ -264,11 +264,11 @@ haveSlot:
     entry->field_0x44 = param_9;   // the bool parameter's byte, stored as is
     // LEFT: +0x48..+0x58 are floats; retail stores the caller's raw 32-bit words
     // (the callers pass the bits in integer registers / stack slots).
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;  // CAST-OK: float_bits
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[1]) = param_11;  // CAST-OK: float_bits
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[2]) = param_12;  // CAST-OK: float_bits
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[3]) = param_13;  // CAST-OK: float_bits
-    *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;  // CAST-OK: float_bits
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[1]) = param_11;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[2]) = param_12;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[3]) = param_13;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
+    *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;  // LEFT: Ghidra typed retail's float parameter as uint32_t (audit part C: not float_bits; B6: type param_10..14 float and the store needs no cast)
     entry->field_0x5C = true;
     entry->alternateKey = param_19;
     TradeWork_impl_ace40(geom, iVar3, param_15, param_16, param_17);

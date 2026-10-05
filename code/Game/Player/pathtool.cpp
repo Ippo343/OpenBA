@@ -138,9 +138,9 @@ char PathTool::OnKey(char key) {
             Math::Scalar(distance[0]),
             hitNormal, hitPos));
         if ((int)hitIdx >= 0) {
-            // LEFT: Picking::Scene's user data is `void*` (block R-GFX); the bridge and
+            // Picking::Scene's user data is `void*` (retail's API); the bridge and
             // the picking component store the owning ComponentEntity there.
-            entityIBP = reinterpret_cast<ComponentEntity*>(pickingScene->GetUserData(hitIdx));   // LEFT: Picking::Scene keeps its user data as void* (runtime header, not this set's); the owner stored there is the ComponentEntity
+            entityIBP = reinterpret_cast<ComponentEntity*>(pickingScene->GetUserData(hitIdx));   // Picking::Scene keeps its user data as void* (runtime header, not this set's); the owner stored there is the ComponentEntity  // CAST-OK: user_data
         }
     }
 

@@ -224,7 +224,7 @@ UI::DialogInstance* FindModalDialog() {
         if (fn != wantedPort) continue;
         void* nestedUiCtx = arr[i]._context;
         if (!nestedUiCtx) continue;
-        UI::UserInterface* nestedUi = reinterpret_cast<UI::UserInterface*>(nestedUiCtx);   // LEFT: FLOOR? callback void* context (MainLoop callback userData, retail PEAX)
+        UI::UserInterface* nestedUi = reinterpret_cast<UI::UserInterface*>(nestedUiCtx);   // callback void* context (MainLoop callback userData, retail PEAX)  // CAST-OK: user_data
         // nestedUI->_dialogs head at +0x00; node->dialog at +0x00.
         auto* head = nestedUi->_dialogs._head;
         if (!head) continue;

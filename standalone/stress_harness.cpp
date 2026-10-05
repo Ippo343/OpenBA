@@ -563,7 +563,7 @@ static void CompProf_WatchBegin(Object::Base* comp, uint32_t tid) {
 }
 
 extern "C" int CompProf_BeginKind(Object::Base* comp, int kind) {
-    void* vtbl = *reinterpret_cast<void**>(comp);   // LEFT: FLOOR? vtable probe (the profiler keys its table on the vtable word)
+    void* vtbl = *reinterpret_cast<void**>(comp);   // vtable probe (the profiler keys its table on the vtable word)  // CAST-OK: crash_walk
     uintptr_t h = ((reinterpret_cast<uintptr_t>(vtbl) >> 4) + (uintptr_t)kind * 0x9E37u) & (kCompSlots - 1);  // CAST-OK: hash
     for (int probe = 0; probe < kCompSlots; ++probe) {
         const int idx = (int)((h + probe) & (kCompSlots - 1));

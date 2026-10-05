@@ -150,9 +150,9 @@ static Node* AllocNode_1b40(const uint64_t* key, Node* parent) {
 // function returns outResult. Most callers typedef it `void fn(root, outResult, key)`
 // (ignoring the return); some as `void* fn(treeRoot, outResult, keyData)`.
 void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
-    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
-    Node** pOut = reinterpret_cast<Node**>(outResult);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
+    KeySet* set = reinterpret_cast<KeySet*>(root);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
+    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
+    Node** pOut = reinterpret_cast<Node**>(outResult);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
     if (set->_root == nullptr) {
         Node* node = AllocNode_1b40(key, nullptr);
         set->_root = node;
@@ -199,8 +199,8 @@ void* WorkBST_RegisterWork_1a30(uintptr_t* root, void* outResult, void* keyIBP) 
 // whose in-order predecessor is spliced in; right child but no left child), then
 // retraces from the splice point. Caller: void fn(void* bstRoot, void* node).
 void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
-    Node* node = reinterpret_cast<Node*>(nodeArg);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
+    KeySet* set = reinterpret_cast<KeySet*>(root);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
+    Node* node = reinterpret_cast<Node*>(nodeArg);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
     Node* local_res8 = node->parent;
     set->_count -= 1;   // count--
     Node* lVar5 = node->right;
@@ -272,8 +272,8 @@ void WorkBST_BSTRemove_a6e0(uintptr_t* root, void* nodeArg) {
 // Reimpl of CitizenAI_impl_5520 (FUN_140025520) — find a node by key (uint64 at IBP+0)
 // and remove it. Caller: void fn(void* bstRoot, void* keyIBP).
 void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
-    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
+    KeySet* set = reinterpret_cast<KeySet*>(root);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
+    const uint64_t* key = reinterpret_cast<const uint64_t*>(keyIBP);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
     Node* node = set->_root;
     if (node == nullptr) return;
     do {
@@ -296,7 +296,7 @@ void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
 // IBP (at node+0). Serializer read/write mode = *(int*)(*serializer + 8) == 0 (read).
 // Caller: void fn(void* bstRoot, void* serializer).
 void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* ser) {
-    KeySet* set = reinterpret_cast<KeySet*>(root);   // LEFT: ERASED one body over every caller's 8-byte-key set (banner)
+    KeySet* set = reinterpret_cast<KeySet*>(root);   // one body over every caller's 8-byte-key set (banner)  // CAST-OK: elem_stride
     int count = set->_count;
     ser->Serialize(count, nullptr);
     bool loading = (static_cast<int>(ser->GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
@@ -325,9 +325,9 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, IO::Serializer* ser) {
 joined:
     while ((pIVar6 = pIVar3) != nullptr) {
         // The key is an InternalPtr retail serializes through InternalBasePtr::Serialize.
-        reinterpret_cast<Object::InternalBasePtr*>(&pIVar6->element)->Serialize(*ser);   // LEFT: ERASED the core's Set<uint64_t> element is the InternalPtr retail serializes (banner)
+        reinterpret_cast<Object::InternalBasePtr*>(&pIVar6->element)->Serialize(*ser);   // the core's Set<uint64_t> element is the InternalPtr retail serializes (banner)  // CAST-OK: elem_stride
         if (pIVar6->element != 0 && citTid &&
-            !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(pIVar6->element), citTid))   // LEFT: ERASED the core's Set<uint64_t> element is the InternalPtr<CitizenComponent> retail type-checks after loading it
+            !Object::IsDerivedFromNullSafe(reinterpret_cast<void*>(pIVar6->element), citTid))   // the core's Set<uint64_t> element is the InternalPtr<CitizenComponent> retail type-checks after loading it  // CAST-OK: elem_stride
             pIVar6->element = 0;
         pIVar1 = pIVar6->right;   // right child
         if (pIVar1 == nullptr) {

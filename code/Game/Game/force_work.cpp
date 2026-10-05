@@ -96,12 +96,12 @@ uint32_t SafeGetTypeId(void* obj) {
     if (!Readable(obj, 8)) return 0;
     // Probe the vptr's table entry for Type() -- the slot is taken from the
     // member, never a literal (B3X_RULES X3) -- then call it by name.
-    uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);   // CAST-OK: vslot
+    uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);   // CAST-OK: crash_walk
     const long typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
     if (typeSlot < 0) return 0;
-    if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;   // CAST-OK: vslot
+    if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;   // CAST-OK: crash_walk
     if (!Executable(::Object::SlotAddressOf(obj, &::Object::Base::Type))) return 0;
-    return reinterpret_cast< ::Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)   // CAST-OK: vslot
+    return reinterpret_cast< ::Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)   // CAST-OK: crash_walk
 }
 
 Component* FindComp(ComponentEntity* entity, uint32_t tid) {

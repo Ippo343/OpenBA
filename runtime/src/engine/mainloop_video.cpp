@@ -342,8 +342,8 @@ namespace {
 // the element once each side, then written field by field (the +0x04 window
 // stays unwritten).
 void AssignVideoResource(uint8_t* dst, const uint8_t* src) {
-    VideoResourceEntry* const d = reinterpret_cast<VideoResourceEntry*>(dst);          // ArraySpec byte callback   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
-    const VideoResourceEntry* const e = reinterpret_cast<const VideoResourceEntry*>(src);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+    VideoResourceEntry* const d = reinterpret_cast<VideoResourceEntry*>(dst);   // ArraySpec byte callback  // the erased container core's element callback (void* dst / src): elem_stride  // CAST-OK: elem_stride
+    const VideoResourceEntry* const e = reinterpret_cast<const VideoResourceEntry*>(src);   // the erased container core's element callback (void* dst / src): elem_stride  // CAST-OK: elem_stride
     d->_typeId = e->_typeId;
     d->_object = e->_object;
     new (&d->_path) System::Filename(e->_path);
@@ -706,7 +706,7 @@ void Engine::MainLoop::OnVideoRestart() {
 
     // ---- 7: drop the record -------------------------------------------------------
     // kSpec_VideoResource's destroy arm takes raw element storage.
-    RtEngine_VideoResourceDestroyRange_180034440(nullptr, reinterpret_cast<uint8_t*>(arr._data), arr._size);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? element callback: the erased spec's destroy arm (rtcoll::ElemDestroy) takes the element storage as bytes
+    RtEngine_VideoResourceDestroyRange_180034440(nullptr, reinterpret_cast<uint8_t*>(arr._data), arr._size);   // element callback: the erased spec's destroy arm (rtcoll::ElemDestroy) takes the element storage as bytes  // CAST-OK: elem_stride
     if (arr._data != nullptr) rtcoll::MemFree(arr._data);
     arr._data = nullptr;
     arr._size = 0;

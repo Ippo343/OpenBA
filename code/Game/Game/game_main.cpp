@@ -565,7 +565,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         MenuDialogLoopT* menuLoop = ::new (menuMem) MenuDialogLoopT(menuStr);
                         StallDebug::Mark("MenuDialogLoopT_Ctor");
                         printf("[GameMain] MenuDLT ctor done, vtable=%p\n",
-                               *reinterpret_cast<void**>(menuLoop));   // CAST-OK: vslot
+                               *reinterpret_cast<void**>(menuLoop));   // CAST-OK: crash_walk
 
                         // Helper: build a splash GameLoadDialogLoopT (0xb60
                         // bytes, vtable 0x140158800) wrapping `next`. Mirrors
@@ -593,7 +593,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p, "
                                    "delay=%.2fs\n",
-                                   tag, *reinterpret_cast<void**>(dlt), (void*)next, delaySec);   // CAST-OK: vslot
+                                   tag, *reinterpret_cast<void**>(dlt), (void*)next, delaySec);   // CAST-OK: crash_walk
                             return dlt;
                         };
 
@@ -677,7 +677,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                                 ? static_cast<Engine::LoaderLoop*>(::new (mem) InnerLoaderLoop(next, delay))
                                 : static_cast<Engine::LoaderLoop*>(::new (mem) GameLoaderLoop(next, delay));
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p\n",
-                                   tag, *reinterpret_cast<void**>(ll), (void*)next);   // CAST-OK: vslot
+                                   tag, *reinterpret_cast<void**>(ll), (void*)next);   // CAST-OK: crash_walk
                             return ll;
                         };
 

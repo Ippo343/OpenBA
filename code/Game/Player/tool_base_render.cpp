@@ -634,13 +634,13 @@ void ReportBadSelectionRef(int64_t block, int64_t ref) {
     static int budget = 8;
     if (budget <= 0) return;
     --budget;
-    void** vt = *reinterpret_cast<void***>(block);   // LEFT: FLOOR? vtable probe (the tripwire reads a possibly-recycled block's vptr)
+    void** vt = *reinterpret_cast<void***>(block);   // vtable probe (the tripwire reads a possibly-recycled block's vptr)  // CAST-OK: crash_walk
     // Print the raw facts FIRST: if `block` is a freed/recycled block, the virtual
     // GetTypeId below can itself fault, and a dump that never printed proves nothing.
     std::fprintf(stderr, "[HighlightClear] BAD selection ref: tool=%p vtbl=%p self+0x30=0x%llx\n",
                  reinterpret_cast<void*>(block), reinterpret_cast<void*>(vt),
                  static_cast<unsigned long long>(ref));
-    const uint64_t* w = reinterpret_cast<const uint64_t*>(block);   // LEFT: FLOOR? crash_walk raw dump of the tool block (audit: crash_walk once the integer is named `block`)
+    const uint64_t* w = reinterpret_cast<const uint64_t*>(block);   // crash_walk raw dump of the tool block  // CAST-OK: crash_walk
     std::fprintf(stderr, "[HighlightClear]   tool[0x00..0x38] = %016llx %016llx %016llx "
                  "%016llx %016llx %016llx %016llx %016llx\n",
                  (unsigned long long)w[0], (unsigned long long)w[1], (unsigned long long)w[2],
@@ -656,11 +656,11 @@ void ReportBadSelectionRef(int64_t block, int64_t ref) {
     // Only now the virtual probe (a live EditTool answers; a recycled block may not).
     // (Tripwire probe of possibly-recycled memory: a null vptr, or a null Type()
     // entry in the table it names, skips the call; the slot comes from the member.)
-    // LEFT: `block` stays an integer: as an EditTool* (a final class) GCC devirtualises
+    // `block` stays an integer: as an EditTool* (a final class) GCC devirtualises
     // Type() to EditTool's own id, and this tripwire exists to ask a possibly-recycled
     // block's REAL table (B11, X-G1-3b).
-    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(block), &::Object::Base::Type)) {   // LEFT: FLOOR? vtable probe: `block` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)
-        uint32_t tid = reinterpret_cast< ::Object::Base*>(block)->Type();   // B.3.x bridge (slot 2)   // LEFT: FLOOR? vtable probe: `block` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)
+    if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(block), &::Object::Base::Type)) {   // vtable probe: `block` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)  // CAST-OK: crash_walk
+        uint32_t tid = reinterpret_cast< ::Object::Base*>(block)->Type();   // B.3.x bridge (slot 2)  // vtable probe: `block` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)  // CAST-OK: crash_walk
         const char* n = ::Object::GetTypeNameById(tid);
         std::fprintf(stderr, "[HighlightClear]   tool typeId=%u ('%s')\n", tid, n ? n : "?");
         std::fflush(stderr);

@@ -1084,7 +1084,7 @@ static ::Object::Base* TownHall_FindComponentByTypeId(const ComponentDescription
             continue;
         }
         // vtable slot 2 (+0x10) = GetTypeId()
-        void** vtable = *(void***)comp;   // LEFT: STANDALONE vtable-null guard  // CAST-OK: crash_walk
+        void** vtable = *(void***)comp;   // LEFT: STANDALONE vtable-null guard; audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
         if (!vtable) {
             continue;
         }

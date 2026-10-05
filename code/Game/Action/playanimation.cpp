@@ -80,7 +80,7 @@ static bool PlayAnim_TargetLooksLive(const ComponentEntity* target) {
     }
     // Readable: capture the vtable + factory index/gen so the object type can be
     // identified offline (match vtable vs registered vtables / nm reimpl-x64.exe).
-    void* vt = *reinterpret_cast<void* const*>(target);  // CAST-OK: crash_walk
+    void* vt = *reinterpret_cast<void* const*>(target);  // LEFT: audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
     if (!ForceWork::Readable(vt, 0x18)) {
         static int n = 0;
         if (n < 16) { ++n;

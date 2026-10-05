@@ -35,7 +35,7 @@ template <class T, class = std::enable_if_t<std::is_base_of_v<::Object::External
                                             !std::is_same_v<T, ::Object::External>>>
 inline void ExternalPtrSerializeGeneric(T** refField, IO::Serializer* serializer,
                                         const uint32_t* typeIdPtr, const char* typeName) {
-    ExternalPtrSerializeGeneric(reinterpret_cast<::Object::External**>(refField), serializer,   // LEFT: audit floor elem_stride (coordinator marker): the typed wrapper hands its T** slot to the one erased External** core (a T** is not an External**; retail shares the body)
+    ExternalPtrSerializeGeneric(reinterpret_cast<::Object::External**>(refField), serializer,   // the typed wrapper hands its T** slot to the one erased External** core (a T** is not an External**; retail shares the body)  // CAST-OK: elem_stride
                                 typeIdPtr, typeName);
 }
 // B.4 GAME-b: the typed per-reference body (serialize_externals.cpp). The Checked

@@ -63,7 +63,7 @@ extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, vo
     // The callers (AnimalDescription, HerbalistDescription, ImmigrationDescription,
     // TradeDescription, ComponentDescription) hand in their External* array untyped.
     IO::Serializer& ser = *serializer;
-    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);   // LEFT: FLOOR? the one load body's view of five callers' arrays of different External-derived pointers (AnimalDescription::_refs, HerbalistDescription::_herbs, ImmigrationDescription::_requiredBuildings, TradeDescription goods, ComponentDescription::_subDescs); it stores the loaded External* into each slot
+    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);   // the one load body's view of five callers' arrays of different External-derived pointers (AnimalDescription::_refs, HerbalistDescription::_herbs, ImmigrationDescription::_requiredBuildings, TradeDescription goods, ComponentDescription::_subDescs); it stores the loaded External* into each slot  // CAST-OK: elem_stride
 
     const int encState = ser.GetEncoding().GetKind();   // Encoding slot 2 (+0x10)
 

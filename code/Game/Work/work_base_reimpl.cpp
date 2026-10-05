@@ -117,7 +117,7 @@ static_assert(offsetof(FreeNodeLinks18, left) == 0x18 && offsetof(FreeNodeLinks1
 // Reimpl of FUN_140014c30 (TreeNodeCleanup) — children at +0x10 and +0x18.
 void WorkBase_TreeNodeFree_14c30(void* root, void* node) {
     if (node) {
-        const FreeNodeLinks10* links = reinterpret_cast<const FreeNodeLinks10*>(node);   // LEFT: FLOOR? the one recursive free body 0x140014c30 (ICF) over every node type whose links sit at +0x10 / +0x18 (21 call sites, a dozen node types): the erased core's view of the node it frees
+        const FreeNodeLinks10* links = reinterpret_cast<const FreeNodeLinks10*>(node);   // the one recursive free body 0x140014c30 (ICF) over every node type whose links sit at +0x10 / +0x18 (21 call sites, a dozen node types): the erased core's view of the node it frees  // CAST-OK: elem_stride
         WorkBase_TreeNodeFree_14c30(root, links->left);
         WorkBase_TreeNodeFree_14c30(root, links->right);
         System::MemoryAllocator::MemFree(node);
@@ -127,7 +127,7 @@ void WorkBase_TreeNodeFree_14c30(void* root, void* node) {
 // Reimpl of FUN_14000e320 (TreeNodeFree) — children at +0x18 and +0x20.
 void WorkBase_TreeNodeFree_e320(void* root, void* node) {
     if (node) {
-        const FreeNodeLinks18* links = reinterpret_cast<const FreeNodeLinks18*>(node);   // LEFT: FLOOR? the one recursive free body 0x14000e320 (ICF) over every node type whose links sit at +0x18 / +0x20 (PathCostNode, the scheduler / trade / goals trees): the erased core's view of the node it frees
+        const FreeNodeLinks18* links = reinterpret_cast<const FreeNodeLinks18*>(node);   // the one recursive free body 0x14000e320 (ICF) over every node type whose links sit at +0x18 / +0x20 (PathCostNode, the scheduler / trade / goals trees): the erased core's view of the node it frees  // CAST-OK: elem_stride
         WorkBase_TreeNodeFree_e320(root, links->left);
         WorkBase_TreeNodeFree_e320(root, links->right);
         System::MemoryAllocator::MemFree(node);

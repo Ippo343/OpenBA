@@ -580,9 +580,9 @@ char EditTool::OnKey(char param2) {
             Math::Scalar(maxDist), hitPoint, hitNormal);
         if (hitId >= 0) {
             // Get the entity associated with this picking hit.
-            // LEFT: Picking::Scene's user data is `void*` (block R-GFX); the picking
+            // Picking::Scene's user data is `void*` (retail's API); the picking
             // component stores the owning ComponentEntity there.
-            foundEntity = reinterpret_cast<ComponentEntity*>(   // LEFT: FLOOR? callback context: Picking::Scene::GetUserData returns retail's void* (?GetUserData@Scene@Picking@@QEBAPEAXI@Z); the picking component stores the owning ComponentEntity there
+            foundEntity = reinterpret_cast<ComponentEntity*>(   // callback context: Picking::Scene::GetUserData returns retail's void* (?GetUserData@Scene@Picking@@QEBAPEAXI@Z); the picking component stores the owning ComponentEntity there  // CAST-OK: user_data
                 pickingScene->GetUserData(static_cast<uint32_t>(hitId)));
         }
         if (SelDiagOn())
@@ -755,8 +755,8 @@ extern "C" int EditTool_HarnessSelectCitizen(EditTool* editTool) {
         void* userData = scene->GetUserData(static_cast<uint32_t>(id));
         if (!userData) continue;
         printf("[EditSel] citizen pick-id %d -> entity=%p; selecting...\n", id, userData);
-        // LEFT: Picking::Scene's user data is `void*` (block R-GFX).
-        Object::InternalPtr<ComponentEntity> entityParam(reinterpret_cast<ComponentEntity*>(userData));   // LEFT: FLOOR? callback context: Picking::Scene::GetUserData returns retail's void* (?GetUserData@Scene@Picking@@QEBAPEAXI@Z); the picking component stores the owning ComponentEntity there
+        // Picking::Scene's user data is `void*` (retail's API).
+        Object::InternalPtr<ComponentEntity> entityParam(reinterpret_cast<ComponentEntity*>(userData));   // callback context: Picking::Scene::GetUserData returns retail's void* (?GetUserData@Scene@Picking@@QEBAPEAXI@Z); the picking component stores the owning ComponentEntity there  // CAST-OK: user_data
         tool->SelectEntity(&entityParam);   // 0x1400fd3b0
         void* dlg = tool->entityRef;
         printf("[EditSel] citizen select entity=%p -> dialog=%p (%s)\n",

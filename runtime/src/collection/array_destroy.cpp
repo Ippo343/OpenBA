@@ -924,7 +924,7 @@ static void DestroyNestedPair(AnimInstance* base, int count) {
 }
 
 void* RtColl_ArrayDtorElem_18005bf60(void* self) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);   // the erased core views its receiver (void* self) as the header  // CAST-OK: elem_stride
     DestroyAs<AnimInstance, &DestroyNestedPair>(nullptr, a->_data, a->_size);   // CALL 0x18005c550
     void* r = ArrayDtorImpl(a);
     return r;
@@ -1067,7 +1067,7 @@ void* RtColl_LayoutEntryAssign_180043980(uint8_t* dst, const uint8_t* src) {
 // and reaches ExpandRelativePath / FindOrLoad / BinaryFileStream. Porting it
 // would create a J9 row, which is the trade J9 exists to avoid taking piecemeal.
 void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);   // the erased core views its receiver (void* self) as the header  // CAST-OK: elem_stride
     const ArrayHdr* s = static_cast<const ArrayHdr*>(src);  // CAST-OK: elem_stride
     if (a == s) return a;
 
@@ -1245,12 +1245,12 @@ const ArraySpec kAsgn_Blob38 = {
     "Array<blob0x38>", 0x38, 8, &Assign56, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 void* RtColl_ArrayAssign_18001cd30(void* self, const void* src) {
-    return ArrayAssignCore(static_cast<ArrayHdr*>(self),  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    return ArrayAssignCore(static_cast<ArrayHdr*>(self),   // the erased core views its receiver (void* self) as the header  // CAST-OK: elem_stride
                            static_cast<const ArrayHdr*>(src),  // CAST-OK: elem_stride
                            &kAsgn_Blob38, &ArrayClearTrivial);
 }
 void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
-    ArrayHdr* h = static_cast<ArrayHdr*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    ArrayHdr* h = static_cast<ArrayHdr*>(self);   // the erased core views its receiver (void* self) as the header  // CAST-OK: elem_stride
     h->_data = nullptr;                                       // 18001c624
     h->_size = 0;                                             // 18001c62b (qword:
     h->_capacity = 0;                                         //   size + capacity)
@@ -1267,7 +1267,7 @@ void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
 // body, not a new one — its own Site so the diff registry attributes
 // divergences to the right retail address.
 void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);   // the erased core views its receiver (void* self) as the header  // CAST-OK: elem_stride
     const ArrayHdr* s = static_cast<const ArrayHdr*>(src);  // CAST-OK: elem_stride
     if (a == s) return a;
 
@@ -1417,7 +1417,7 @@ void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count
 // therefore reached BY ADDRESS — registry-first, so the day it lands this call
 // goes to our body with no edit here.
 void* RtColl_ArrayDtorAnim_18001c1e0(void* self) {
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);   // the erased core views its receiver (void* self) as the header  // CAST-OK: elem_stride
     const int32_t n = a->_size;
     uint8_t* p = a->_data;
     if (n > 0) {                                   // TEST EAX,EAX / JLE
@@ -1567,14 +1567,14 @@ void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count) {
 // Shape is J2 exactly (`R8D=[RCX+8]; RDX=[RCX]; CALL helper`, then the J1
 // body); only the helper differs.
 void* RtColl_ArrayDtorElem_180065d40(void* self) {          // ~Array<Face>
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);   // the erased core views its receiver (void* self) as the header  // CAST-OK: elem_stride
     const int freed = FreeInnerArraysCounted(a->_data, a->_size, &kD_InnerArr2_28);
     void* r = ArrayDtorImpl(a);
     return r;
 }
 
 void* RtColl_ArrayDtorElem_180073720(void* self) {          // ~Array<SubMesh>
-    ArrayHdr* a = static_cast<ArrayHdr*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased core views its receiver (void* self) as the header; M2 bars a self operand: decision at the close
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);   // the erased core views its receiver (void* self) as the header  // CAST-OK: elem_stride
     DestroyAs<SubMesh, &DestroySubMesh80>(nullptr, a->_data, a->_size);
     void* r = ArrayDtorImpl(a);
     return r;

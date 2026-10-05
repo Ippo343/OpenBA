@@ -212,7 +212,7 @@ constexpr uint64_t kDead = 0x44454144ull;   // 'DEAD'
 
 void* AllocateListNode(uint64_t bytes, int align) {
     (void)align;                     // malloc is already 16-aligned on x64
-    uint8_t* base = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(bytes) + 16));  // CAST-OK: alloc_header
+    uint8_t* base = static_cast<uint8_t*>(std::malloc(static_cast<size_t>(bytes) + 16));
     if (!base) { return nullptr; }
     *reinterpret_cast<uint64_t*>(base) = kLive;  // CAST-OK: alloc_header
     ++g_listNodeAllocs;
