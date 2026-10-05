@@ -20,6 +20,20 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.4 SECOND PASS — 2026-10-05: 8,950 -> 1,051 (811 outside `dx11/`), NOT closed; wave Y (the
+  re-inventory by class) started and was interrupted by machine instability; the user closed the
+  session there.** 77 gated merges this session (`b4_session/GATE_TABLE.md` rows 45-121), one problem
+  (row 119, a new warning, fixed); invariants unchanged (new game 5683 / 0, tutorial 5773 / 12,
+  typetable `b983f144`, resave 5/5, unit 918 / 0); quiet `sa-stress` exit 0, update 1.70-1.77 ms/frame.
+  The pass: waves S / L / R (45 file-owning blocks, `PASS2_BRIEF.md`), wave X (declaration families,
+  then rounds by partition, `PASS2X_BRIEF.md`), then the re-inventory `data/pass2y/out/`: 812 casts
+  in 306 units — 408 doable (197 units, CLASS units as one `behaviour:` commit each), 223 ruling-only
+  (one coordinator ruling per class at the close), about 130 blocked with a finding, about 50 erased
+  cores that stay. About 60 classes became real classes this session (CitizenBehavior, EntityList, the
+  14 Work leaves, Persistence, PackageFile, FileSystem, PlayerController's camera ...), several ending
+  leaks retail does not have; about 150 forwarders and the by-retail-address launcher lookup were
+  deleted. Kept unmerged and unverified: branches `b4y1-CW`, `b4y1-GAMEA`, `b4y1-GAMEB`. What is next:
+  `endgame_b/NEXT_SESSION.md`.
 - **B.4 (THE CAST METRIC) IN PROGRESS — FIRST PASS DONE 2026-10-02, stopped there by the user.** Scope
   set by the user: the dangerous casts go completely (any spelling of a read by offset or of a `void*` /
   integer receiver reinterpreted as a class), only safe casts stay; the differences from retail found on

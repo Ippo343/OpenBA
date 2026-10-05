@@ -470,3 +470,37 @@ One line per ask: **owner block** <- asking block: what, where. A block's prompt
 - Vtable-word probes (tripwires, profiler keys) are tagged `// LEFT: FLOOR? vtable probe`: the audit decides
   whether FLOOR.md gets a `vptr_probe` category; `ReportBadSelectionRef` must keep its integer receiver (typed
   as the final class, GCC devirtualises the probe).
+
+## Wave X rounds 2-7 and wave Y: state at the close of the session (2026-10-05)
+### Facts (typed on main; older tags and ledger lines above that say otherwise are stale)
+- Real classes now, each by a `behaviour:` commit against retail's ctor / dtor (addresses in GATE_TABLE rows
+  88-121): CitizenBehavior, EntityList, the fourteen Work leaves' sets (and Gather / BuildStructure /
+  ClearStorage arrays), `CitizenComponent::name`, Toolbar, TerrainGenerator, MapGenerator's pools,
+  WeatherSimulation, `PlayerController::camera`, `PlayerToolManager::cameraViews`, AchievementDialog,
+  BuildRequirementUI, TrackerComponent, both Ambient classes, three tutorial classes, `Tutorial::steps`,
+  `HighlightComponent::transform`; runtime: Persistence (with its worker and settings map), PackageFile,
+  FileSystem, FileStream, `External::_path`, Font, CharacterSet, NumberElement, TextElement, EditElement,
+  SpriteCapture, SpriteSheet, Dialog, ImageBuffer, PickingMesh, `MeshInstance::_mesh`.
+- Typed tree-wide: the virtual-slot parameters (`StateMachine*`, `const System::Time*`, `ActionStack*`), every
+  `Serialize` (`IO::Serializer&`), the mesh / material / animation / particle handles (`ExternalPtr<T>`),
+  `InternalBasePtr::_ptr` (`Object::Internal*`), `ResourceEntry::external`, the `System::Time` fields,
+  `Work::field_10` / `field_18` and about thirty other `InternalPtr` members, `CharacterComponent::actionStack`,
+  WorldGeometry's nine arrays, the settings map (declared once), the component finders.
+- Deleted: about 150 forwarders, the `RtIo::Persistence` mirror, `String::Serialize(void*)`, the Camera door,
+  the by-retail-address launcher lookup in engine_platform_win.cpp.
+### What the re-inventory overturned
+- "Order reversed" (MenuDialogLoopT, TutorialStep, Map, MenuScene): true only for the arrays typed alone.
+- `HighlightComponent::edgeMeshInstance` (row 573): one inventory read dtor 0x14004c8c0 and says doable with
+  `fieldF8`; settle from retail. `CitizenComponent::meshInstance` (row 650): decided — a real member built and
+  destroyed where retail does it (0x140114808 / 0x140114717).
+- SpriteSheet "no matching array entry": wrong, `kSpec_Sprite38` was the row. PackageFile's icon / preview
+  arrays were NOT typed when a brief said they were (done since, row 119).
+### Open at the close
+- Branches with UNVERIFIED partial work (verify first or redo): `b4y1-CW` (scratch slots as typed locals),
+  `b4y1-GAMEA` (`behaviour:` TutorialStep), `b4y1-GAMEB` (WIP, never built: HighlightComponent).
+- Three `B4 FORWARD` overloads in `runtime/src/graphics/mesh.cpp` (`SetMesh` x2, `PlayAnimation`): one has no
+  caller left (EdgeMeshInstance), the others wait on `gameupdateloop_load.cpp`, `action_base_complete.cpp`,
+  `buildcomponent_state8.cpp`, `action_base_movedeps.cpp` (they hold `void*` from `FindOrLoad`).
+- An unrecorded retail difference found by the CW inventory: `citizencomponent.cpp:2414` skips retail's
+  `IsDerivedFrom` check — give it a row (705).
+- For the audit: see NEXT_SESSION.md section 5.

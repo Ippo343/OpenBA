@@ -374,3 +374,12 @@ Metric at `07d3aa4a`: **1,142** to remove (of which `dx11/` 240). Wave X round 6
 Metric at `23956761`: **1,052** to remove (of which `dx11/` 240). Wave X round 7 done: 76 gated merges this pass (rows 45-120), one problem (row 119, fixed).
 
 `sa-stress` at `23956761` (end of round 7; Ghidra and four read-only inventory agents running, no builds): exit 0, update 1.77 ms/frame, p95 2.51, draw 1.29 (base 1.92 / 2.40 / 1.38). Recorded, not chased (p95 +4.5% on a machine running Ghidra).
+
+### Wave Y (the re-inventory by class, `data/pass2y/`; round 1 interrupted)
+
+| 121 | Y1-RT prerequisites | `91709c75` | `Audio::Scene` has a real `Scene()` (retail 0x1800e0160) and `Picking::Scene` a real `Scene()` delegating to `Scene(float)` (0x1801258e0 / 0x18007aef0); the two doors forward through placement new (the machine went down during this gate: re-run complete as `y1_RTpre2`) | exit 0 · 918 / 0 · 0 | ok | 5/5 | — | 0 |
+
+Metric at `91709c75`: **1,051** to remove (of which `dx11/` 240). **Session closed here by the user (2026-10-05).**
+77 gated merges this session (rows 45-121); one problem (row 119). The per-merge evidence (`gate_*.out`, the
+merge / premerge logs, `runs/<label>/`) was deleted at the close on the user's request; `runs/baseline` and the
+warning baselines are kept (the gate compares against them). This table is the record.
