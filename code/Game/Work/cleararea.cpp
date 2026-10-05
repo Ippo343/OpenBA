@@ -558,10 +558,8 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 // A null entity InternalBasePtr
                 ComponentEntity* nullIBP = nullptr;
 
-                // Zero-init clear info
-                struct { int64_t a; int32_t b; } clearInfo;
-                clearInfo.a = 0;
-                clearInfo.b = 0;
+                // Zero-init clear info: the 12-byte position the PerformWork ctor copies
+                float clearInfo[3] = {0.0f, 0.0f, 0.0f};
 
                 // Compute world position
                 int gridSz = map->size;
@@ -581,7 +579,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 WorkAct_PerformWorkCtor_bffd0(&citizenRef, workId, walkPos,
                                      static_cast<int>(tileIdx),   // the door passed (uint64_t)tileIdx; the body reads R9D
                                      2, 0, tileIdx, nullptr, 0,
-                                     reinterpret_cast<float*>(&clearInfo), &nullIBP);   // LEFT: the zeroed 12-byte position is built as {int64, int32} (two integer stores); a Math::Vector3 local would store three floats (B11)
+                                     clearInfo, &nullIBP);
 
                 // Post-work setup on citizen
                 int workIdSaved = field_20;
