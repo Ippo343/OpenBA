@@ -89,7 +89,6 @@
 #include "../../types/io/Stream.h"       // IO::Stream: _encoding / _direction, the Serializer ctor
 #include "../../types/object/External.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../../funcs/rt_libm.h"      // B3R: rtcrt::StrICmp (0x18007eefc)
 
 // ENDGAME B.3.1 step 2: `String::Serialize` (0x1800c9930, which takes the

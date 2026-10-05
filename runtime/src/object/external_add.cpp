@@ -91,7 +91,6 @@
 // `System::Filename` copy constructor — so the declaration is gone with its one
 // call site.
 
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtObject {
 

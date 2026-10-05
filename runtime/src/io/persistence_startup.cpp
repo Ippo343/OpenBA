@@ -81,7 +81,6 @@
 #include "../../types/io/Persistence.h"
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 IO: the class static
 #include "../../types/system/String.h"
-#include "../system/pod_bridge.h"
 #include "../../types/system/Filename.h"
 #include <new>
 

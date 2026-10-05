@@ -47,7 +47,6 @@
                                      // entry point still takes. External.h only
                                      // forward-declares the class on purpose.
 #include "../system/string.h"       // RtSystem::RtMemFree (~ExternalList)
-#include "../system/pod_bridge.h"
 #include "external_compiled.h"
 #include "external_path_stack.h"
 

@@ -306,7 +306,6 @@
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"
 #include "../../src/system/string.h"
-#include "../../src/system/pod_bridge.h"
 #include "../../src/collection/avl_trees.h"   // rtavl::FilenameSetInsert
 
 #include <new>        // placement new into the retail hidden return slot

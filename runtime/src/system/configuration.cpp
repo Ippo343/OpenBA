@@ -118,7 +118,6 @@
 // library's <string.h> for anything included after it.
 #include "./string.h"
 #include <new>                 // placement new into the retail hidden return slot
-#include "./pod_bridge.h"      // the ONE transitional POD<->class bridge
 #include "../collection/avl_trees.h"            // B3R: rtavl::StringMapInsert
 #include "../../types/collection/Collection.h"  // B3R: rtsetclear::Clear, rtcoll::RtColl_ArrayDtorElem_180010ab0
 

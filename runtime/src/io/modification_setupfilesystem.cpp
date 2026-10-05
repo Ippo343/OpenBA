@@ -174,7 +174,6 @@
 #include "../../types/system/Filename.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/WideString.h"
 #include "../../types/collection/Collection.h"   // rtpathid::Insert / SubtreeFree, RtColl_ArraySetSizeFill_180028cd0
@@ -384,8 +383,8 @@ void Modification::SetupFileSystem() {
     {
 
         // BACKWARDS, and `order` is stamped on every mod — see the banner.
-        for (int32_t i = _mods.size - 1; i >= 0; --i) {       // 0x1800aed49
-            Mod* const m = &_mods.data[i];
+        for (int32_t i = _mods._size - 1; i >= 0; --i) {      // 0x1800aed49
+            Mod* const m = &_mods._data[i];
             m->order = i;                                      // 0x1800aed64
             if (m->enabled != 0)                               // 0x1800aed68
                 RtIO::RtColl_ArraySetSizeFill_180026880(&fsObj->_userPackFilenames,   // 0x180026880

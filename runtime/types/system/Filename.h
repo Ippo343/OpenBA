@@ -50,24 +50,16 @@
 #include <cstdint>
 #include "String.h"
 
-namespace RtSystem {
-
-struct Filename {
-    char* data;   // +0x00 — identical to String::data
-};
-static_assert(sizeof(Filename) == 8, "System::Filename must be 8 bytes");
-static_assert(sizeof(Filename) == sizeof(String),
-              "Filename and String must be layout-identical: retail casts between them");
-
-}  // namespace RtSystem
+// (B.4 acceptance MOD: the `RtSystem::Filename` POD mirror is gone with its
+// last user, `IO::Modification::Mod::file`; System::Filename below is the one
+// layout.)
 
 // ============================================================================
 // ENDGAME B.3.1 step 1 — the real class, `System::Filename`
 // ============================================================================
 //
-// The POD above stays trivially destructible until its last user is converted,
-// for the reason String.h gives. The class below is the same eight bytes under
-// retail's name, carrying the bodies runtime/src/system/filename.cpp already
+// The class below is the eight bytes under retail's name, carrying the bodies
+// runtime/src/system/filename.cpp already
 // had (plus GetPathDirectory, moved out of runtime/src/system/setupdir_helpers.cpp).
 //
 // Retail passes a `Filename*` straight into String's members (the three pins

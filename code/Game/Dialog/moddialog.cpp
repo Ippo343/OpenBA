@@ -11,10 +11,9 @@
 //   ShowDetails 0x14006e490, Apply 0x14006ea70 (CloseAndReload 0x14006e9b0 is in
 //   mod_dialog_vtables.cpp)
 //
-// LEFT (B.4 W1 DLG-b): the RtIO::Mod POD (runtime/types/io/Modification.h, R-IO)
-// holds its three Strings as `char*` and its files Array as `void*`; the reads
-// that view them as System::String / Filename stay casts until that POD is the
-// real class. SpriteSheet::m_field30 is `uint64_t` (R-UI) and
+// (B.4 acceptance MOD: RtIO::Mod is the real class -- String / Filename / Array
+// members -- so its readers below take them by name.)
+// SpriteSheet::m_field30 is `uint64_t` (R-UI) and
 // MaterialInstance::AddTexture takes the RtSystem::String POD (R-GFX).
 
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
@@ -92,8 +91,8 @@
 // Filename equality check — compares two System::Filename/String objects
 // by their underlying string data. Both are 8-byte COW pointers.
 // ============================================================
-static bool Filename_Equals(const RtSystem::Filename& filenameA, const System::Filename& filenameB) {
-    const char* a = filenameA.data;
+static bool Filename_Equals(const System::Filename& filenameA, const System::Filename& filenameB) {
+    const char* a = filenameA._data;
     const char* b = filenameB._data;
     if (a == b) return true;
     if (!a || !b) return false;
@@ -135,10 +134,10 @@ void ModDialog::RefreshDisplay() {
                 if (otherEnabled == 0) continue;
 
                 // Check if this mod's filename appears in the other mod's dependency list
-                int depCount = mod.files.size;
+                int depCount = mod.files._size;
                 if (depCount <= 0) continue;
 
-                const System::Filename* depArray = mod.files.data;   // Mod +0x70 Array<Filename>
+                const System::Filename* depArray = mod.files._data;   // Mod +0x70 Array<Filename>
                 for (int k = 0; k < depCount; k++) {
                     // Compare other mod's filename with this mod's dependency[k]
                     if (Filename_Equals(otherMod.file, depArray[k])) {
@@ -151,11 +150,11 @@ void ModDialog::RefreshDisplay() {
 conflict_done:
 
         // Set text parameters: name, author, description.
-        static_cast<UI::TextElement*>(entry.textModName.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.name));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
+        static_cast<UI::TextElement*>(entry.textModName.Get())->SetParameter(0, mod.name);
 
-        static_cast<UI::TextElement*>(entry.textModAuthor.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.author));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
+        static_cast<UI::TextElement*>(entry.textModAuthor.Get())->SetParameter(0, mod.author);
 
-        static_cast<UI::TextElement*>(entry.textModDescription.Get())->SetParameter(0, *reinterpret_cast<const System::String*>(&mod.description));   // LEFT: H5 RtIO::Mod's name / author / description are char* String bodies (runtime/types/io/Modification.h, RT); SetParameter takes const System::String&, and a String built from the char* would copy
+        static_cast<UI::TextElement*>(entry.textModDescription.Get())->SetParameter(0, mod.description);
 
         // Format version string: "versionMinor (versionString)"
         {
@@ -199,7 +198,7 @@ conflict_done:
             if (videoDevice) {
                 videoDevice->Lock();
                 // mod.ints: the thumbnail pixels (Array<int32> data)
-                entry.imageBuffer->CopyToTexture(mod.ints.data, 0x30, 0x30);
+                entry.imageBuffer->CopyToTexture(mod.ints._data, 0x30, 0x30);
                 videoDevice->Unlock();
             }
         }

@@ -66,7 +66,6 @@
 #include "../../types/io/FileSystem.h"   // ENDGAME B.3.9 SS1: FileSystem::_singleton
 #include "../system/string.h"
 #include "../system/setupdir_helpers.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtObject {
 

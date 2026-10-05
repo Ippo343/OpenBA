@@ -239,7 +239,7 @@
 // merely bookkeeping.
 //
 // `0x180010b80` (`Collection::Array<Mod>::~Array`) is ALREADY PORTED —
-// `RtColl_ArrayModDtor_180010b80` (modification.cpp) — and is called by name
+// `RtIO::ModList::DestroyAndFree` (row kSpec_Mod, modification.cpp) — and is called by name
 // (B3R RT-IO; it was reached through the address door before).
 // ============================================================================
 
@@ -291,8 +291,8 @@ extern "C" void RtIo_Modification_Dtor(IO::Modification* self) {
     // Publish into the DLL's exported slot; see header §5.
     ::IO::Modification::_singleton = nullptr;                   // 1800b0486  (B.3.9 IO: the class static)
 
-    RtIO::RtColl_ArrayModDtor_180010b80(&self->_savedMods);     // 1800b0495  +0x18
-    RtIO::RtColl_ArrayModDtor_180010b80(&self->_mods);          // 1800b04a4  +0x08  TAIL
+    self->_savedMods.DestroyAndFree();     // 1800b0495  +0x18  ~Array<Mod> 0x180010b80
+    self->_mods.DestroyAndFree();          // 1800b04a4  +0x08  TAIL
 }
 
 }  // namespace RtIo

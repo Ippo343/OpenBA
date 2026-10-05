@@ -48,15 +48,8 @@
 
 namespace RtSystem {
 
-// The transitional bridge between the POD the tree still uses and the class.
-// One reinterpret_cast, in one place, over two types that ARE the same bytes
-// (both are `{ char* }`, both static_asserted at 8). It goes with the PODs.
-static inline System::String*       AsSys(String* s) {
-    return reinterpret_cast<System::String*>(s);  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
-}
-static inline const System::String* AsSys(const String* s) {
-    return reinterpret_cast<const System::String*>(s);  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
-}
+// (B.4 acceptance MOD: the `AsSys(RtSystem::String*)` bridge is gone with the
+// POD.)
 
 // ============================================================
 // The DLL's allocator
@@ -1157,16 +1150,14 @@ String String::RemoveAt(int index) const {
 namespace RtSystem {
 
 // ---- the primitives declared in runtime/src/system/string.h ----------------
-void RtString_SetLength(String* self, int len) {
-    System::StringPrivateAccess::SetLength(*AsSys(self), len);
-}
-void RtString_ReleaseInline(String* self) {
-    System::StringPrivateAccess::Release(*AsSys(self));
+// (B.4 acceptance MOD: `RtString_SetLength` and `RtString_GetLength` had no
+// caller left and are gone with the POD they took.)
+void RtString_ReleaseInline(System::String* self) {
+    System::StringPrivateAccess::Release(*self);
 }
 int RtString_StrCompare(const char* a, const char* b) {
     return System::String::StrCompare(a, b);
 }
-int RtString_GetLength(const String* self) { return AsSys(self)->GetLength(); }
 
 }  // namespace RtSystem
 

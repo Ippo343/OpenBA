@@ -81,19 +81,17 @@ namespace {
 // null test, and the names with String::StrCompare.
 bool ModLess(const Mod& a, const Mod& b) {
     if (a.order != b.order) return a.order < b.order;    // CMP EAX,ECX / JL
-    if (b.name == nullptr) return false;                 // TEST RDX,RDX / JE
-    if (a.name == nullptr) return true;                  // TEST RCX,RCX / JE
-    return RtSystem::RtString_StrCompare(a.name, b.name) < 0;   // JNS -> not less
+    if (b.name._data == nullptr) return false;           // TEST RDX,RDX / JE
+    if (a.name._data == nullptr) return true;            // TEST RCX,RCX / JE
+    return RtSystem::RtString_StrCompare(a.name._data, b.name._data) < 0;   // JNS -> not less
 }
 
 // 0x1800287f4 — tmp from the FIRST argument, as retail writes it.
 void ModSwap(Mod* a, Mod* b) {
-    Mod tmp;   // a POD: uninitialised stack, as retail's
-    RtIo_Mod_CopyCtor_1800101e0(&tmp, a);
-    RtIo_Mod_Assign_180026ef0(a, b);
-    RtIo_Mod_Assign_180026ef0(b, &tmp);
-    RtIo_Mod_Dtor_180011460(&tmp);
-}
+    Mod tmp(*a);   // 0x1800101e0
+    *a = *b;       // 0x180026ef0
+    *b = tmp;      // 0x180026ef0
+}   // ~tmp: 0x180011460
 
 }  // namespace
 

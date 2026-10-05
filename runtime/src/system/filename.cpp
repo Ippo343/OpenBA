@@ -38,18 +38,8 @@
 #include "../../types/system/Filename.h"
 #include "string.h"
 
-namespace RtSystem {
-
-// The transitional bridge from the POD the tree still uses to the class; one
-// cast, over two types that ARE the same bytes. It goes with the POD.
-static inline System::Filename*       AsSys(Filename* f) {
-    return reinterpret_cast<System::Filename*>(f);  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
-}
-static inline const System::Filename* AsSys(const Filename* f) {
-    return reinterpret_cast<const System::Filename*>(f);  // LEFT: audit DEFERRED:RtSystem::String (50 files) / RtSystem::Filename (36 files) still named; POD String / Filename bridge (H10)
-}
-
-}  // namespace RtSystem
+// (B.4 acceptance MOD: the `AsSys(RtSystem::Filename*)` bridge is gone with
+// the POD.)
 
 // ############################################################################
 // System::Filename — the class (ENDGAME B.3.1 step 1)
