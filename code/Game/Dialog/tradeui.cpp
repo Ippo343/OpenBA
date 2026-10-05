@@ -711,9 +711,9 @@ void TradeUI::RefreshBuyTable()
 
             // Check if this purchase entity is in the current order's selection list
             TradeMerchantOrder* orderData = trade->merchantOrders._data + trade->tradeId;
-            int selCount = orderData->goodsCount;
+            int selCount = orderData->goods._size;
             if (selCount > 0) {
-                ComponentDescription** selList = orderData->goods;
+                ComponentDescription** selList = orderData->goods._data;
                 for (int si = 0; si < selCount; si++) {
                     if (selList[si] == _purchaseItems[pi].resource) {
                         _purchaseRows[pi].check->_checked = 1;

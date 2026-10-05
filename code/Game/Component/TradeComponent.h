@@ -49,21 +49,27 @@ class ComponentEntity;        // Entity/ComponentEntity.h
 // +0x30 element (0x20): one per merchant of the TradeDescription. 0x14000ef10 frees
 // `goods` then runs ~String on +0x00; Persist serializes String, the goods count,
 // the goods (ExternalPtr<ComponentDescription> array 0x1400049c0), then +0x08.
+// `goods` grows through retail's stride-8 row (Persist's 0x140001bb0 SetSize(n): stride 8,
+// align 8, the new tail ZEROED, no element destroy): kSpec_PtrZero (Entity/EntityList.h).
+// The element's lifetime stays the +0x30 row's (kSpec_TradeMerchantOrder below:
+// 0x14000e760's two construct arms and 0x14000ef10's destroy), unchanged.
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 struct TradeMerchantOrder {
+    using GoodsList = Collection::Array<ComponentDescription*, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+
     System::String         merchantName;   // +0x00 NameDB pick (Setup 0x14005c220)
     int32_t                orderKind;      // +0x08 0 none, 1 once, 2 standing (0x14005b580)
     uint8_t                _pad0C[4];      // +0x0c
-    ComponentDescription** goods;          // +0x10 Array<ExternalPtr<ComponentDescription>> data
-    int32_t                goodsCount;     // +0x18
-    int32_t                goodsCap;       // +0x1c
+    GoodsList              goods;          // +0x10 Array<ExternalPtr<ComponentDescription>> (count +0x18, cap +0x1c)
 };
 static_assert(sizeof(TradeMerchantOrder) == 0x20, "TradeMerchantOrder stride 0x20 (0x14000e760)");
 static_assert(offsetof(TradeMerchantOrder, merchantName) == 0x0, "TradeMerchantOrder::merchantName");
 static_assert(offsetof(TradeMerchantOrder, _pad0C) == 0xC, "TradeMerchantOrder::_pad0C");
 static_assert(offsetof(TradeMerchantOrder, orderKind) == 0x08, "TradeMerchantOrder +0x08");
 static_assert(offsetof(TradeMerchantOrder, goods) == 0x10, "TradeMerchantOrder +0x10");
-static_assert(offsetof(TradeMerchantOrder, goodsCount) == 0x18, "TradeMerchantOrder +0x18");
-static_assert(offsetof(TradeMerchantOrder, goodsCap) == 0x1c, "TradeMerchantOrder +0x1c");
+static_assert(offsetof(TradeMerchantOrder, goods) + offsetof(TradeMerchantOrder::GoodsList, _size) == 0x18, "TradeMerchantOrder +0x18");
+static_assert(offsetof(TradeMerchantOrder, goods) + offsetof(TradeMerchantOrder::GoodsList, _capacity) == 0x1c, "TradeMerchantOrder +0x1c");
 
 // +0x40 element (0xc): the standing buy orders, one per TradeDescription goods
 // category. Persist writes +0x00 through the uint door, then +0x08, then +0x04.

@@ -75,7 +75,6 @@
 
 #include "Component/tradecomponent_funcs.h"
 #include "Entity/ComponentEntity.h"
-#include "Component/coll_bridge.h"
 #include "object/TypeInfo.h"
 #include "system/String.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -379,13 +378,13 @@ void TradeComponent::Persist(IO::Stream& stream) {
         TradeMerchantOrder* elem = merchantOrders._data;
         for (int32_t i = 0; i < nameCount && elem; ++i, ++elem) {
             elem->merchantName.Serialize(ser);
-            int32_t innerCount = elem->goodsCount;
+            int32_t innerCount = elem->goods._size;
             ser.Serialize(innerCount, nullptr);
-            // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
-            // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
+            // retail 0x140001bb0 IS Collection::Array<T>::SetSize(n): stride 8 align 8,
+            // new tail zeroed (kSpec_PtrZero).
             if (Loading(ser))
-                GameColl::AsArray<GameColl::Ptr8>(&elem->goods).SetSize(innerCount);
-            Reimpl_ExternalPtrArray_Serialize(&ser, innerCount, elem->goods, nullptr);   // 0x1400049c0
+                elem->goods.SetSize(innerCount);
+            Reimpl_ExternalPtrArray_Serialize(&ser, innerCount, elem->goods._data, nullptr);   // 0x1400049c0
             ser.Serialize(elem->orderKind, nullptr);
         }
     }
