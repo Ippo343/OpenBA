@@ -556,13 +556,13 @@ uint64_t CitizenAIComponent::State_GrowUp() {
                 if (bestWp[0] != nullptr) {
                     // Ctor11 holder = the CitizenComponent wrapped
                     // (disasm: local_res8 := param_1; then local_res8 := *(local_res8+0x38)).
-                    CitizenComponent* holderCitizen = citizen;
+                    CitizenComponent* holderCitizen = citizen.Get();
                     ComponentEntity* srcIBP = found;       // local_res18 = lVar4 = local_b0 (food source entity)
                     ComponentEntity* dstIBP = bestWp[0];   // local_res10 (workplace entity from f230)
                     CitizenAI_PerformWorkCtor11_bc790(&holderCitizen, resCountObj, &srcIBP, destA, &dstIBP, destB);
 
                     // success epilogue: flag triplet on the citizen.
-                    CitizenComponent* cz = citizen;
+                    CitizenComponent* cz = citizen.Get();
                     cz->statusFlags |= 4;
                     cz->field_0x30 = -1;
                     cz->field_0xB0 = 0;

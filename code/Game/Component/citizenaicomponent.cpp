@@ -122,7 +122,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     }
 
     // --- Phase 5: hunger ---
-    CitizenComponent* citizenData = citizen;
+    CitizenComponent* citizenData = citizen.Get();
     if (!citizenData) return;  // citizen entity gone, bail out
     float health = citizenData->hunger;
     float* pHungerThresh = &citizenData->description->_fcc;
@@ -132,7 +132,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
         timers[14]._ticks > 0) {
         // Not hungry enough to transition, or in special state
         if (hungerFlag != 0) {
-            citizenData = citizen;
+            citizenData = citizen.Get();
             health = citizenData->hunger;
             pHungerThresh = &citizenData->description->_fcc;
 
@@ -152,7 +152,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
         }
 
         // Re-check hunger after eating
-        citizenData = citizen;
+        citizenData = citizen.Get();
         health = citizenData->hunger;
         pHungerThresh = &citizenData->description->_fcc;
 
@@ -163,7 +163,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     }
 
     // --- Phase 6: coldness ---
-    citizenData = citizen;
+    citizenData = citizen.Get();
     float hydration = citizenData->coldness;
     float* pThirstThresh = &citizenData->description->_fec;
 
@@ -178,7 +178,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
         timers[15]._ticks > 0) {
         // Not cold enough or in special state
         if (thirstFlag != 0) {
-            citizenData = citizen;
+            citizenData = citizen.Get();
             hydration = citizenData->coldness;
             pThirstThresh = &citizenData->description->_fec;
 
@@ -448,7 +448,7 @@ void CitizenAIComponent::CheckEducation() {
 // description's adultAge and whether it attends a school.
 void CitizenAIComponent::CheckAge() {
     EnsureCallees();
-    CitizenComponent* d = citizen;
+    CitizenComponent* d = citizen.Get();
     float ageThresh = d->description->adultAge;
     float age = d->age;
     if (ageThresh <= age && d->school == nullptr) {
@@ -620,7 +620,7 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
                 *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;   // LEFT: the force-work harness plants the ComponentEntity* in the Disease* slot (a harness pun, kept)
                 if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
                     fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p housed+0x68=%p\n",
-                            (void*)citizen, g_pForceWorkBuilding, g_pForceWorkBuilding);
+                            (void*)citizen.Get(), g_pForceWorkBuilding, g_pForceWorkBuilding);
                     fflush(stderr);
                 }
             }
@@ -642,8 +642,8 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
     // inert building ResourceProduceComponent controller. When it owns the citizen, skip
     // the competing AI state machine (Leisure/Wander would otherwise claim the idle stack
     // first) so ForesterWork::Execute keeps driving the real harvest/production chain.
-    if (StartTown_ForcePushForesterWork(citizen)) return;
-    if (StartTown_ForcePushConstructionWork(citizen)) return;
+    if (StartTown_ForcePushForesterWork(citizen.Get())) return;
+    if (StartTown_ForcePushConstructionWork(citizen.Get())) return;
 
     Decide(time);
 }

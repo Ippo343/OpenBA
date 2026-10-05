@@ -705,7 +705,7 @@ LAB_14010ae8a:
             else entIBP = local_res20;
             ComponentEntity* local_res18 = entIBP;
 
-            CitizenComponent* local_a8h = citizen;   // holder citizen (PlayAnimation self IBP)
+            CitizenComponent* local_a8h = citizen.Get();   // holder citizen (PlayAnimation self IBP)
             float fVar39t = pRVar6->RandFloatTol();
             CitizenAI_PlayAnimationCtor4_ba6b0(&local_a8h, &local_res18, dest,
                                        fVar39t * kAgeMult + kAnimTimeBase,

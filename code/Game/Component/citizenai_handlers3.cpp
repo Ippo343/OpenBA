@@ -134,7 +134,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
     if (desc != nullptr && desc->_fec <= age && age != desc->_fec) {
         Map* mg = MapGrid();
         CitizenBehavior* listEnt = GameUpdateLoop::_singleton->m_citizenList;
-        const ModelComponent* model = CitizenModel(citizen);
+        const ModelComponent* model = CitizenModel(citizen.Get());
         uint32_t cell = ModelCell(model, mg);
         Entity_impl_ec70(listEnt, &found, cell, dest);   // find nearest valid residence
         if (found != nullptr) { holderEntity = found; doPush = true; }
@@ -156,9 +156,9 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
     }
 
     if (doPush) {
-        CitizenComponent* holderCitizen = citizen;
+        CitizenComponent* holderCitizen = citizen.Get();
         CitizenAI_PerformWorkCtor8_bd790(&holderCitizen, &holderEntity, dest);
-        return Pushed(citizen);
+        return Pushed(citizen.Get());
     }
 
     // cooldown stamp -> timers[1] & timers[15]
@@ -194,7 +194,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             int cnt = CitizenComp_Storage_GetResourceCount(stor);
             if (cnt > 0) {
                 found = citizen->home;  // the home
-                const ModelComponent* model = CitizenModel(citizen);
+                const ModelComponent* model = CitizenModel(citizen.Get());
                 dest[0] = model->transform.translation.x;
                 dest[1] = model->transform.translation.y;
                 dest[2] = model->transform.translation.z;
@@ -203,7 +203,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
         if (found == nullptr) {
             Map* mg = MapGrid();
             CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
-            const ModelComponent* model = CitizenModel(citizen);
+            const ModelComponent* model = CitizenModel(citizen.Get());
             uint32_t cell = ModelCell(model, mg);
             ComponentEntity* e370arg = citizen->home;   // param_7 (home preferred candidate)
             ComponentDescription* outComp = nullptr;   // local_res20
@@ -225,7 +225,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
                 if (cnt > 0) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
                     InteractNodePosition(pp, dest, 0, 0, nullptr);
-                    holderCitizen = citizen;
+                    holderCitizen = citizen.Get();
                     flag = 1;
                     holderEntity = holderCitizen->home;
                     ctorDirect = true;
@@ -241,7 +241,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             uint32_t bGoal;
             if (citizen->home == nullptr) bGoal = 0xffffffff;
             else { ComponentEntity* wpIBP = citizen->home; bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr); }
-            const ModelComponent* model = CitizenModel(citizen);
+            const ModelComponent* model = CitizenModel(citizen.Get());
             uint32_t cell = ModelCell(model, mg);
             ComponentDescription* outComp = nullptr;  // local_res18
             CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, dest, 0);
@@ -268,11 +268,11 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             flag = (storComp2 && ResidenceCheck_2ac30(storComp2)) ? 1 : 0;
         }
         holderEntity = found;
-        holderCitizen = citizen;
+        holderCitizen = citizen.Get();
     }
 
     CitizenAI_PerformWorkCtor6_bd420(&holderCitizen, &holderEntity, dest, flag);
-    return Pushed(citizen);
+    return Pushed(citizen.Get());
 }
 
 // ============================================================
@@ -298,10 +298,10 @@ uint64_t CitizenAIComponent::State_Work() {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             float navDest[4] = {0, 0, 0, 0};
             InteractNodePosition(pp, navDest, 0, 0, nullptr);
-            CitizenComponent* holderCitizen = citizen;
+            CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home;
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
-            return Pushed(citizen);
+            return Pushed(citizen.Get());
         }
         return valid & 0xffffffffffffff00ULL;  // db20 false -> return 0
     }
@@ -311,7 +311,7 @@ uint64_t CitizenAIComponent::State_Work() {
 
     float walkOut[4] = {0, 0, 0, 0};    // local_70 (out walkable pos)
     // citizen model pos -> pos vec (local_80/local_7c/local_78)
-    const ModelComponent* model = CitizenModel(citizen);
+    const ModelComponent* model = CitizenModel(citizen.Get());
     float pos[4];
     pos[0] = model->transform.translation.x;
     pos[1] = model->transform.translation.y;
@@ -338,15 +338,15 @@ uint64_t CitizenAIComponent::State_Work() {
 
     if (any == 0) {
         // no walkable pos: release the attendance link, then NavigateTo the home
-        AttendanceComponent_ReleaseLink59b0(citizen);
+        AttendanceComponent_ReleaseLink59b0(citizen.Get());
         if (citizen->home != nullptr) {
             InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
             float navDest[4] = {0, 0, 0, 0};
             InteractNodePosition(pp, navDest, 0, 0, nullptr);
-            CitizenComponent* holderCitizen = citizen;
+            CitizenComponent* holderCitizen = citizen.Get();
             ComponentEntity* holderEntity = holderCitizen->home;
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
-            return Pushed(citizen);
+            return Pushed(citizen.Get());
         }
     }
 
@@ -354,7 +354,7 @@ uint64_t CitizenAIComponent::State_Work() {
     Description* cdesc = citizen->_description;
     const CitizenDescription* citDesc = (cdesc && Object::IsDerivedFromNullSafe(cdesc, s_tid_CitizenDescription))
                                         ? static_cast<const CitizenDescription*>(cdesc) : nullptr;
-    CitizenComponent* holderCitizen = citizen;
+    CitizenComponent* holderCitizen = citizen.Get();
     // [STANDALONE GUARD] the citDesc null-check is ours; the original derefs +0x124
     // unconditionally (would fault if the description type-check failed).
     float walkTime = citDesc ? citDesc->_f124 : 0.0f;

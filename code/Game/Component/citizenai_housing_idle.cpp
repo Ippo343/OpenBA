@@ -752,9 +752,9 @@ static uint64_t HandlerEpilogue(CitizenComponent* citizen) {
 // ============================================================
 uint64_t CitizenAIComponent::State_FindHousing() {
     WorkScheduler* treeBase = GameUpdateLoop::_singleton->m_tutorial;
-    CitizenComponent* holder = citizen;   // local_res8[0]
+    CitizenComponent* holder = citizen.Get();   // local_res8[0]
     Helper_7550(treeBase, &holder);
-    return HandlerEpilogue(citizen);
+    return HandlerEpilogue(citizen.Get());
 }
 
 // ============================================================
@@ -762,9 +762,9 @@ uint64_t CitizenAIComponent::State_FindHousing() {
 // ============================================================
 uint64_t CitizenAIComponent::State_Idle() {
     WorkScheduler* treeBase = GameUpdateLoop::_singleton->m_tutorial;
-    CitizenComponent* holder = citizen;   // local_res8[0]
+    CitizenComponent* holder = citizen.Get();   // local_res8[0]
     Helper_7830(treeBase, &holder);
-    return HandlerEpilogue(citizen);
+    return HandlerEpilogue(citizen.Get());
 }
 
 // ============================================================

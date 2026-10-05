@@ -208,7 +208,7 @@ bool CitizenAIComponent::State_Wander() {
     float worldPos[3] = { 0.0f, 0.0f, 0.0f };
     Reimpl_MapGetTerrainPos(grid, worldPos, inVec, '\0', nullptr);
 
-    CitizenComponent* citizenIBP = citizen;   // the CitizenComponent in a stack IBP holder
+    CitizenComponent* citizenIBP = citizen.Get();   // the CitizenComponent in a stack IBP holder
     float r = rng ? rng->RandFloat() : 0.0f;
     float animTime = r * kRdata_1401721a0 + kRdata_140172180;
     CitizenAI_PlayAnimationActionCtor5(&citizenIBP, worldPos, animTime);
