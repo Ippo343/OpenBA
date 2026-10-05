@@ -278,18 +278,15 @@ void MeshInstance::Update(const System::Time& timeRef) {
     // it (the block brief's "a file-local cache whose last caller you converted
     // goes with its guard").
     //
-    // `_animation` (+0xd8) is the 0x18-byte `MeshAnimationState` -- retail's
-    // whole `Graphics::AnimationState` (0x18 bytes: ctor 0x1800fdaf0), which
-    // the tree's 0x48-byte `AnimationState` begins with (`offsetof(_rootOffset)
-    // == 0x18` pins the boundary). LEFT: that prefix view is one cast.
+    // `_animation` (+0xd8) is retail's whole 0x18-byte `Graphics::AnimationState`
+    // (ctor 0x1800fdaf0).
 
     // r8 = mesh + 0x60 is `const Array<Node>&` — the ADDRESS of the embedded
     // array, not a loaded pointer. Mesh.h's own banner records that confusing
     // the embedded +0x60 with the pointer-to-array +0x70 cost Wave 6 an
     // integration run, and is silent whenever the garbage count reads 0.
     const bool ok =
-        reinterpret_cast<::Graphics::AnimationState*>(&_animation)  // LEFT: audit DEFERRED:the tree Graphics::AnimationState is 0x48, retail embeds a 0x18 AnimationState at; H5 MeshInstance::_animation raw storage
-            ->::Graphics::AnimationState::Update(
+        _animation.Update(
                 timeRef,
                 GetMesh()->GetNodes(),                 // &mesh->_nodes (+0x60)
                 base,

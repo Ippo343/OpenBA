@@ -732,7 +732,7 @@ void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
     {   // ---- seed from the LAST layer --------------------------------------
         const Layer* const L = &_layers._data[_layers._size - 1];
         const Animation& clip = rtgfxbody28::LayerClip(L);
-        _needsUniqueCopy = false;                     // MOV BYTE PTR [RDI],0x0
+        _instanced = false;                           // MOV BYTE PTR [RDI],0x0
 
         if (L->_handle >= 0) {                        // TEST EAX,EAX / JS
             accum.rotation.x = 0.0f; accum.rotation.y = 0.0f;   // XORPS XMM6,XMM6

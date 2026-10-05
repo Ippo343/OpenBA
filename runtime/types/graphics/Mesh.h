@@ -151,6 +151,8 @@ struct MeshAnimationState {
 };
 static_assert(sizeof(MeshAnimationState) == 0x18, "Graphics::AnimationState (as embedded) must be 0x18 bytes");
 static_assert(offsetof(MeshAnimationState, _layers) == 0x08, "AnimationState::_layers @ +0x08");
+static_assert(sizeof(MeshAnimationState) == sizeof(Graphics::AnimationState),
+              "the POD view and the class describe the same 0x18 bytes");
 
 // One entry of AnimationState's layer array. Only the pool id is read by lane E
 // (GetNodeToWorld / RootAnimationOffset / AddDrawItems all read
@@ -511,10 +513,11 @@ public:
     // `??1MeshInstance@Graphics@@UEAA@XZ` @ 0x180017060, `UEAA` because retail's
     // is virtual — the non-virtual `QEAA` spelling is a name the DLL does not
     // contain (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). NON-VIRTUAL
-    // here (ENDGAME decision 2). The body (mesh.cpp: the three retail `~Array`
-    // calls, nodes / layers / materials) zeroes each header, so the compiler's
-    // implicit member ~Arrays after it are no-ops, and then ~Geometry runs —
-    // retail's order. (ENDGAME B.3.9 GFX: its door is retired.)
+    // here (ENDGAME decision 2). The body is empty (B.4 Z MIRROR2 GFX): the
+    // implicit member dtors run in reverse declaration order -- ~_nodes
+    // (0x18001c550), ~_animation (0x1800fe380 inlined: 0x18001c480),
+    // ~_materials (0x180014d00) -- and then ~Geometry, retail's order.
+    // (ENDGAME B.3.9 GFX: its door is retired.)
     //
     // PUBLIC since ENDGAME B.3.9 block GFX (coordinator ruling 4): retail's is
     // public (`U` = public virtual) and the exe calls it DIRECTLY on MeshInstance
@@ -622,7 +625,11 @@ public:
     // trivially destructible pointer (External.h), so the implicit member dtor
     // is the same Clear-then-J1 and the element bytes are the same.
     Collection::Array<Object::ExternalPtr<MaterialInstance> > _materials;  // +0xc8
-    RtGraphics::MeshAnimationState                 _animation;    // +0xd8 .. +0xef
+    // B.4 Z MIRROR2 GFX: retail's 0x18-byte `Graphics::AnimationState`, a real
+    // member: ??0 0x1800fffc0 inlines its ctor 0x1800fdaf0 (the BYTE store at
+    // 0x180100009, then +0xe0 / +0xe8), ??1 0x180017060 inlines its dtor
+    // 0x1800fe380 (CALL 0x18001c480 on +0xe0) between ~_nodes and ~_materials.
+    AnimationState                                 _animation;    // +0xd8 .. +0xef
     // B.4: the element is `Graphics::InterpolatedState<Math::Transform>` (the
     // type `?GetInstanceTransforms@` / UpdateHierarchy name); trivially
     // destructible, so the member dtor is unchanged.

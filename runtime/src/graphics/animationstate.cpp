@@ -165,15 +165,16 @@ extern "C" void* RtGraphics_MeshNode_CopyCtor(void* dstv, const void* srcv) {
 // the two named dwords, H7), then assigned. The `void*` pair is the element-op
 // signature of the collection block's spec row (LEFT).
 extern "C" void* RtGraphics_AnimState_CopyCtor(void* dstv, const void* srcv) {
-    AnimationState* d = static_cast<AnimationState*>(dstv);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
-    const AnimationState* s = static_cast<const AnimationState*>(srcv);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+    Graphics::InstancedAnimationState* d = static_cast<Graphics::InstancedAnimationState*>(dstv);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
+    const Graphics::InstancedAnimationState* s = static_cast<const Graphics::InstancedAnimationState*>(srcv);   // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); FLOOR? the erased container core's element callback (void* dst / src): elem_stride, for the audit
 
-    d->_needsUniqueCopy = s->_needsUniqueCopy;
+    // AnimationState's copy ctor 0x1800168d0, inlined by retail.
+    d->_state._instanced = s->_state._instanced;
 
-    d->_layers._data     = nullptr;
-    d->_layers._size     = 0;
-    d->_layers._capacity = 0;
-    rtcoll::Rt_ArrayAssign_18001b700(&d->_layers, &s->_layers);    // CALL 0x18001b700
+    d->_state._layers._data     = nullptr;
+    d->_state._layers._size     = 0;
+    d->_state._layers._capacity = 0;
+    rtcoll::Rt_ArrayAssign_18001b700(&d->_state._layers, &s->_state._layers);    // CALL 0x18001b700
 
     d->_rootOffset.x = s->_rootOffset.x;                           // three dwords
     d->_rootOffset.y = s->_rootOffset.y;
@@ -312,16 +313,18 @@ static void RtGraphics_SerializeAnimLayers(IO::Serializer& ser, int count,
 // Visits the layer array, the bool, the node array, the root offset and the
 // pose array, in that order. The bool at +0x00 lands BETWEEN the two arrays,
 // which is why it is not hoisted to the top.
-static void RtGraphics_SerializeAnimStates(IO::Serializer& ser, int count, AnimationState* p) {
+static void RtGraphics_SerializeAnimStates(IO::Serializer& ser, int count,
+                                           Graphics::InstancedAnimationState* p) {
     if (count <= 0) return;
     IO::ReaderWriter* rw = ser._readerWriter;
     for (int i = 0; i < count; ++i, ++p) {
-        int32_t n = p->_layers._size;
+        // AnimationState::Serialize (0x1800fe250), inlined by retail.
+        int32_t n = p->_state._layers._size;
         rw->SerializeInt(n, nullptr);
-        if (IsReading(ser)) rtcoll::Rt_SetSize_18005c8a0(&p->_layers, n);            // CALL 0x18005c8a0
-        RtGraphics_SerializeAnimLayers(ser, n, p->_layers._data);
+        if (IsReading(ser)) rtcoll::Rt_SetSize_18005c8a0(&p->_state._layers, n);            // CALL 0x18005c8a0
+        RtGraphics_SerializeAnimLayers(ser, n, p->_state._layers._data);
 
-        rw->SerializeBool(p->_needsUniqueCopy, nullptr);
+        rw->SerializeBool(p->_state._instanced, nullptr);
 
         n = p->_nodes._size;
         rw->SerializeInt(n, nullptr);
@@ -423,7 +426,7 @@ void AnimationState::Serialize(IO::Serializer& s) {
     rw->SerializeInt(n, nullptr);
     if (IsReading(s)) rtcoll::Rt_SetSize_18005c8a0(&_layers, n);
     RtGraphics_SerializeAnimLayers(s, n, _layers._data);
-    rw->SerializeBool(_needsUniqueCopy, nullptr);
+    rw->SerializeBool(_instanced, nullptr);
 }
 
 // ============================================================================

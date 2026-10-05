@@ -125,13 +125,14 @@ static void MeshNodeInit(Graphics::GraphicsMesh::Node* n) {
 }
 void InitMeshNode(uint8_t* p) { InitAs<Graphics::GraphicsMesh::Node, &MeshNodeInit>(p); }
 
-// 0x18005b1e0. A zeroed AnimationState: the bool, then the three Array headers
-// and the Vector3 between them, all zero. +0x01..+0x07 not written.
-static void AnimStateInit(Graphics::AnimationState* a) {
-    a->_needsUniqueCopy     = false;  // the bool; +0x01..+0x07 not written
-    a->_layers._data        = nullptr;
-    a->_layers._size        = 0;      // one qword (H7)
-    a->_layers._capacity    = 0;
+// 0x18005b1e0. A zeroed InstancedAnimationState: the AnimationState's bool and
+// Array header, then the Vector3 and the two other Array headers, all zero.
+// +0x01..+0x07 not written.
+static void AnimStateInit(Graphics::InstancedAnimationState* a) {
+    a->_state._instanced        = false;  // the bool; +0x01..+0x07 not written
+    a->_state._layers._data     = nullptr;
+    a->_state._layers._size     = 0;      // one qword (H7)
+    a->_state._layers._capacity = 0;
     a->_rootOffset.x        = 0.0f;   // one qword (H7)
     a->_rootOffset.y        = 0.0f;
     a->_rootOffset.z        = 0.0f;   // dword
@@ -142,7 +143,7 @@ static void AnimStateInit(Graphics::AnimationState* a) {
     a->_nodes._size         = 0;
     a->_nodes._capacity     = 0;
 }
-void InitAnimState(uint8_t* p) { InitAs<Graphics::AnimationState, &AnimStateInit>(p); }
+void InitAnimState(uint8_t* p) { InitAs<Graphics::InstancedAnimationState, &AnimStateInit>(p); }
 
 // 0x18005c8a0. The -1 is ONE qword covering BOTH ints at +0x08 and +0x0c, i.e.
 // clipIndex = -1 and handle = -1. +0x10 (speed) and +0x31..+0x37 not written.
