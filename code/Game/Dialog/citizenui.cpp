@@ -435,7 +435,7 @@ void CitizenUI::OnUpdateLayout() {
     // --- Action text ---
     // The citizen's entity (Component::_entity), then its CitizenAIComponent
     // (FUN_140011050 at 0x140064fc2).
-    ComponentEntity* entityFromAI = ai->_entity;
+    ComponentEntity* entityFromAI = ai->_entity.Get();
     // Guard the entity backref (component-list walk dereferences its component array);
     // a partially-initialized standalone citizen can leave it as garbage.
     if (CitUI_OkPtr(entityFromAI)) {
@@ -505,7 +505,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
             AttendanceComponent* school = ai->school.Get();
             targetRef = school;
             // and its entity (Component::_entity)
-            dialogRef = school->_entity;
+            dialogRef = school->_entity.Get();
         } else {
             if (ai->workplace == nullptr) return;
             // Has a workplace (+0x248): navigate there

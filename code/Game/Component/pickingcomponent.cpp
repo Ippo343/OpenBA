@@ -48,7 +48,7 @@ void PickingComponent::RefreshMesh() {
     if (GameUpdateLoop::_singleton == nullptr) return;
 
     // --- Startup (0x140128c30): userData = owner.
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
     // Retail SPLITS what this function fuses: Startup seats userData = owner, and OnAdded
     // (which runs much later, from EntityList::RegisterEntity) passes whatever userData

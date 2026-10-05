@@ -399,7 +399,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
     } else {
         // The citizen's entity (+0x10) storage, through the guarded finder
         StorageComponent* storageComp = nullptr;
-        fn_FindComponent_Storage((*entityIBP)->_entity, &storageComp);
+        fn_FindComponent_Storage((*entityIBP)->_entity.Get(), &storageComp);
 
         int available = StorageComponent_QueryAvailable(storageComp, field_50);   // the forwarder holds the tree's null test
 

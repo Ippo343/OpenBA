@@ -230,7 +230,7 @@ bool DropOffRawMaterial::GetTarget(ComponentEntity** param) {
         return true;
     }
 
-    return _field30->_entity == target;
+    return _field30->_entity.Get() == target;
 }
 
 // ============================================================

@@ -198,7 +198,7 @@ static void MapComponent_ApplyOccupancy_41b0(MapComponent* mc) {
     Map* grid = GameUpdateLoop::_singleton->m_game;   // +0xF8
     if (!grid) return;
 
-    ComponentEntity* owner = mc->_entity;
+    ComponentEntity* owner = mc->_entity.Get();
     MapComponent_overlay_dc20(grid, &owner, (uint8_t)desc->_cellType,
                               (int)static_cast<int16_t>(mc->tileX0), (int)static_cast<int16_t>(mc->tileY0),
                               (int)static_cast<int16_t>(mc->tileX1), (int)static_cast<int16_t>(mc->tileY1),
@@ -247,7 +247,7 @@ void MapComponent::RemoveFromMap() {
 
     // Owner entity (comp+0x10) — dee0 compares it against cell+0x00 for
     // the buildable(2) override.
-    ComponentEntity* ownerEntity = self->_entity;
+    ComponentEntity* ownerEntity = self->_entity.Get();
 
     // MapDescription shape (desc+0x28 String buffer). The original IsDerivedFrom
     // guard rejects valid descriptions in standalone's partial factory tree (the

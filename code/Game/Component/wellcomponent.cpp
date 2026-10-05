@@ -107,7 +107,7 @@ void CitizenBehavior::UnregisterWell(Object::InternalPtr<WellComponent>* well) {
     do {
         if (wells._data[idx] == well->Get()) {
             if (idx < 0) return;
-            ComponentEntity* entry = wells._data[idx]->_entity;
+            ComponentEntity* entry = wells._data[idx]->_entity.Get();
             MapComponent* resData = entry->FindComponent<MapComponent>();   // 0x140004680
             int rx = (int)static_cast<int16_t>(resData->tileX0);
             int ry = (int)static_cast<int16_t>(resData->tileY0);
@@ -213,7 +213,7 @@ void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
         wells.SetSizeFill(index + 1, well);
     }
 
-    ComponentEntity* entity = well->Get()->_entity;
+    ComponentEntity* entity = well->Get()->_entity.Get();
 
     // The tile-position component (ti cell 0x1401c79e0, MapComponent; the int16 x/y at
     // +0x28/+0x2a this reads are MapComponent's, as FUN_140004680 agrees). The

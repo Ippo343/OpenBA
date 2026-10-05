@@ -559,7 +559,7 @@ void CitizenAIComponent::Startup() {
     seekingWarmth = false;
 
     // Startup (0x14010f920): find sibling CitizenComponent -> +0x38.
-    ComponentEntity* owner = _entity;
+    ComponentEntity* owner = _entity.Get();
     citizen = owner ? CitizenAI_FindSiblingCitizen(owner) : nullptr;
 }
 
@@ -593,7 +593,7 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
     CitizenDescription* czDesc = nullptr;
     CharacterComponent* czChar = nullptr;
     if (citizen) {
-        czEntity = citizen->_entity;
+        czEntity = citizen->_entity.Get();
         czDesc   = citizen->description;
         czChar   = citizen->character.Get();  // CharacterComponent (alive flag)
     }

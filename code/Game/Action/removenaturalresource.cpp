@@ -156,9 +156,9 @@ void RemoveNaturalResource::CheckEntity() {
     nrComp->_flags = flagsNew;
 
     if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
-        ComponentEntity* parent = nrComp->_entity;
+        ComponentEntity* parent = nrComp->_entity.Get();
         if (parent != nullptr) {
-            NotifyEntityChanged(nrComp->_entity);   // 0x1400c3470
+            NotifyEntityChanged(nrComp->_entity.Get());   // 0x1400c3470
         }
     }
 }
@@ -175,7 +175,7 @@ bool RemoveNaturalResource::GetTarget(ComponentEntity** param) {
         return true;
     }
 
-    return _field20->_entity == target;
+    return _field20->_entity.Get() == target;
 }
 
 // ============================================================

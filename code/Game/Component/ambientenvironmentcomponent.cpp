@@ -83,7 +83,7 @@ inline float saturate(float x, float hi) { return x < 0.0f ? 0.0f : (x > hi ? hi
 // Find the entity's AmbientEmitterComponent by scanning its component list.
 // The tree's null and bad-id guards are its own; kept, not extended.
 AmbientEmitterComponent* FindSiblingEmitter(AmbientEnvironmentComponent* self) {
-    ComponentEntity* owner = self->_entity;
+    ComponentEntity* owner = self->_entity.Get();
     if (!owner) return nullptr;
     int count = owner->_componentCount;
     if (!owner->_components || !s_tidEmitterComp) return nullptr;

@@ -231,7 +231,7 @@ char HerdComponent::CheckMigrationDone() {
     (void)::Object::IsDerivedFromNullSafe(_description, HerdDescription::TypeId());
 
     for (int i = 0; i < memberCount; i++) {
-        ComponentEntity* entity = members[i]->_entity;
+        ComponentEntity* entity = members[i]->_entity.Get();
         AnimalComponent* animal = entity->FindComponent<AnimalComponent>();
         if (!animal->IsInWanderBox()) return 0;   // 0x140106b10
     }

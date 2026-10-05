@@ -396,7 +396,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                                 if (s_tidStorageComp == 0)
                                     s_tidStorageComp = StorageComponent::TypeId();
                                 s = static_cast<StorageComponent*>(
-                                    ScanCompList1(storC->_entity, s_tidStorageComp));
+                                    ScanCompList1(storC->_entity.Get(), s_tidStorageComp));
                             }
                             mask = s ? s->rawMaterialFlags : 0;
                         }

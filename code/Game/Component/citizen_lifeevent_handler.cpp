@@ -150,7 +150,7 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
         CemeteryComponent** slot = &listMgr->cemeteries._data[i];      // +0x40
         CemeteryComponent* comp = *slot;
         if (!comp) continue;   // [STANDALONE GUARD]
-        ComponentEntity* entity = comp->_entity;                 // +0x10
+        ComponentEntity* entity = comp->_entity.Get();                 // +0x10
         // The cemetery's map position = its InteractComponent's resolved position.
         Component* ic = FindComponentByTypeId(entity, tidInteract);
         InteractComponent* icIBP = static_cast<InteractComponent*>(ic);   // IsDerivedFrom-checked above
@@ -200,7 +200,7 @@ extern "C" void Entity_PlaceAtCell_7b20(TombstoneComponent* self, int cell, floa
     if (!world || !self) return;
     Map* map = world->m_game;                                    // +0xf8
     int size = map->size;
-    ComponentEntity* entity = self->_entity;                     // +0x10
+    ComponentEntity* entity = self->_entity.Get();                     // +0x10
     MapComponent* posIBP = entity->FindComponent<MapComponent>();        // 0x140004680
     ModelComponent* modelIBP = entity->FindComponent<ModelComponent>();  // 0x140003f60
     if (!posIBP || !modelIBP) return;   // [STANDALONE GUARD] retail derefs unguarded
@@ -376,7 +376,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
 
     // --- Queue the citizen entity for removal (the EntityList's removal list at
     //     +0xd0) ---
-    ComponentEntity* entIBP = _entity;
+    ComponentEntity* entIBP = _entity.Get();
     EntityList* loop = world->m_entityList;
     if (entIBP != nullptr && loop) {
         if ((entIBP->_entityFlags >> 10 & 1) == 0) {

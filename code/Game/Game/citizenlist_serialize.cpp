@@ -706,7 +706,7 @@ void CitizenBehavior::PostLoad() {
         int slot = -1;
         for (; idx < entCount; ++idx, --slot) {
             WellComponent* entIBP = entArr[idx];
-            ComponentEntity* comp = entIBP->_entity;
+            ComponentEntity* comp = entIBP->_entity.Get();
 
             MapComponent* chosen = nullptr;
             int32_t compCount = comp->_componentCount;

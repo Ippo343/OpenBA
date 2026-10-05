@@ -132,7 +132,7 @@ void TombstoneComponent::Update(const System::Time* timeV) {
 
 
     if (lifetime._ticks < 1) {
-        ComponentEntity* entityPtr = _entity;
+        ComponentEntity* entityPtr = _entity.Get();
         if (GameUpdateLoop::_singleton == nullptr) return;
         EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
 
@@ -148,7 +148,7 @@ void TombstoneComponent::Update(const System::Time* timeV) {
                 if (entityList) {
                     int count = entityList->removalList._size;
                     entityList->removalList
-                        .SetSize(count + 1, _entity);
+                        .SetSize(count + 1, _entity.Get());
                 }
             }
         }

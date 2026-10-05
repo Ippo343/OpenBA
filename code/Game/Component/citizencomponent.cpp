@@ -936,7 +936,7 @@ static Work* LookupRegionByID(const WorkScheduler* areaMap, int32_t regionId) {
 static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceComp) {
     int roster = workplaceComp->workerCount;
     WorkComponent* sl = nullptr;   // the InternalPtr fn_FindComponent_Work writes
-    fn_FindComponent_Work(workplaceComp->_entity, &sl);
+    fn_FindComponent_Work(workplaceComp->_entity.Get(), &sl);
     if (sl == nullptr) return false;
     if (sl->workState == 0) {
         int cap = sl->CalcMaxWorkers();
@@ -2145,7 +2145,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
         }
         ++g_sub1930_accepted;
 
-        ComponentEntity* candSubIBP = cand->_entity;
+        ComponentEntity* candSubIBP = cand->_entity.Get();
         uint32_t dstRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&candSubIBP, nullptr));
         int cost = 1;
         if ((int)srcRegion >= 0) {
@@ -2396,7 +2396,7 @@ void CitizenComponent::Startup() {
     // ctor scalars moved to CitizenComponent_CtorScalars — see the note there.
 
 
-    ComponentEntity* owner = _entity;
+    ComponentEntity* owner = _entity.Get();
     if (!owner) return;   // not yet wired into an entity
 
     // +0x278 = CharacterComponent IBP ("Family" finder; CitizenAI reads its +0x60

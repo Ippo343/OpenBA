@@ -232,7 +232,7 @@ static void PlagueHospitalCensus(GameUpdateLoop* gw, Profession* healerProf) {
     for (int i = 0; i < attendance && arr && tidWpc; i++) {
         AttendanceComponent* comp = arr[i];
         if (!comp) continue;
-        ComponentEntity* entity = comp->_entity;
+        ComponentEntity* entity = comp->_entity.Get();
         if (!entity) continue;
         int n = entity->_componentCount;
         Object::InternalPtr<Component>* comps = entity->_components;
@@ -399,7 +399,7 @@ extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, fl
                 bool accept = true;
                 if (typeId != 0) {
                     accept = false;
-                    ComponentEntity* entity = linkIBP->_entity;
+                    ComponentEntity* entity = linkIBP->_entity.Get();
                     int compCount = entity->_componentCount;
                     Object::InternalPtr<Component>* comps = entity->_components;
                     for (int c = 0; c < compCount; c++) {
@@ -659,8 +659,8 @@ void CitizenComponent::SpreadDisease() {
                           (int)typeId, &found);
 
     for (int i = 0; i < found.size; i++) {
-        ComponentEntity* entity = found.data[i]->_entity;
-        if (entity == _entity) continue;   // skip self
+        ComponentEntity* entity = found.data[i]->_entity.Get();
+        if (entity == _entity.Get()) continue;   // skip self
 
         CitizenComponent* citizenIBP = nullptr;
         Entity_FindComponentByExeTypeId(entity, &citizenIBP, &typeId);

@@ -625,7 +625,7 @@ void ForceInfest(int frameNum, int want) {
         DiseaseComponent* comp = arr[i];
         if (!comp) continue;
         // comp+0x10 = owner entity IBP.
-        ComponentEntity* owner = comp->_entity;
+        ComponentEntity* owner = comp->_entity.Get();
         if (!owner) { ++ownerless; continue; }
         if (!ComponentByName(owner, "CropFieldComponent")) { ++notCropField; continue; }
         // Nothing growing on it yet -> Infect would cure it in the same call. Count it

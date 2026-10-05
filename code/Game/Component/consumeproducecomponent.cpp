@@ -159,7 +159,7 @@ void       ConsumeProduceComponent::Persist(IO::Stream& stream) {
     }
 }
 void       ConsumeProduceComponent::Startup() {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     // Walk the entity DESCRIPTION's child list, not the component array.

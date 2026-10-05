@@ -171,7 +171,7 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,
     // --- target cell from param_3's owner-entity position ---
     // The InteractComponent find (0x140002ed0) and the node position (0x140122e20) are
     // called by their members; the find's InternalPtr slot was always non-null.
-    ComponentEntity* ownerEntity = (*param_3)->_entity;
+    ComponentEntity* ownerEntity = (*param_3)->_entity.Get();
     InteractComponent* posComp = ownerEntity->FindComponent<InteractComponent>();
     float pos[4] = {0.0f, 0.0f, 0.0f, 0.0f};   // pos[0]=x (local_48), pos[1]=y (local_44)
     InteractNodePosition(posComp, pos, 0, 0, nullptr);
@@ -285,15 +285,15 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
                 const ResidenceComponent::Family* occList = srcRes->residentSlots._data;
                 if (!(j < occList->_size)) break;
                 CitizenComponent* worker = occList->_data[j].Get();
-                ComponentEntity* targetOwner = bestDest->_entity;
+                ComponentEntity* targetOwner = bestDest->_entity.Get();
                 worker->SetHome(targetOwner, 0);   // 0x1401163d0 (tree: "AssignWorkplace")
                 ++j;
             }
 
             // --- migrate stored goods: srcRes owner storage -> bestDest owner storage ---
-            ComponentEntity*  srcOwner   = srcRes->_entity;
+            ComponentEntity*  srcOwner   = srcRes->_entity.Get();
             StorageComponent* srcStorage = FindComponentDerived<StorageComponent>(srcOwner, s_tidStorage);
-            ComponentEntity*  dstOwner   = bestDest->_entity;
+            ComponentEntity*  dstOwner   = bestDest->_entity.Get();
             StorageComponent* dstStorage = FindComponentDerived<StorageComponent>(dstOwner, s_tidStorage);
 
             if (srcStorage && dstStorage) {

@@ -259,7 +259,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                                 Reimpl_MapGetTerrainPos(map, pathPos, &targetPos.x, 0, nullptr);
 
                                 // The orchard component's entity (+0x10)
-                                ComponentEntity* entityRef = orchard->_entity;
+                                ComponentEntity* entityRef = orchard->_entity.Get();
 
                                 // Create orchard harvest action
                                 CitizenComponent* actionBuf[2] = { *citizenIBP, nullptr };

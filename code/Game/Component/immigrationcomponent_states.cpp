@@ -238,7 +238,7 @@ int ImmigrationComponent::FindSpawnCell(int x, int y, int hallCell) {
 // (+0x30), meeting position (+0x3c), gender (+0x50); place the model at the spawn
 // point with a random yaw, pick the mesh variant and material for the gender.
 // ============================================================
-void NomadComponent::Init(ComponentEntity* const* hallEntity, const Math::Vector3* spawn,
+void NomadComponent::Init(const Object::InternalPtr<ComponentEntity>* hallEntity, const Math::Vector3* spawn,
                           const Math::Vector3* meet) {
     GameUpdateLoop* gw = GW();
     if (!gw) return;

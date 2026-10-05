@@ -115,7 +115,7 @@ void ShowTool::Persist(IO::Stream& stream) {
 // ============================================================
 static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     // Skip if the entity is flagged for destruction (bit 10 of its +0x40 flags).
-    ComponentEntity* inner = citizen->_entity;
+    ComponentEntity* inner = citizen->_entity.Get();
     if (!inner) return;
     if ((inner->_entityFlags >> 10) & 1) return;
 
@@ -130,7 +130,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
 
     // --- Storage scan: pick the highest-count item in the citizen's storage. ---
     StorageComponent* storageComp = nullptr;
-    fn_FindComponent_Storage(citizen->_entity, &storageComp);
+    fn_FindComponent_Storage(citizen->_entity.Get(), &storageComp);
     if (!storageComp) return;
     int itemCount = storageComp->storageSlots._size;
 
@@ -250,7 +250,7 @@ void ShowTool::CheckEntity() {
 bool ShowTool::GetTarget(ComponentEntity** param) {
     CitizenComponent* entity = _field20.Get();
     if (!entity) return false;  // entity gone, no match
-    return entity->_entity == *param;
+    return entity->_entity.Get() == *param;
 }
 
 // ============================================================

@@ -270,7 +270,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // clamp qty to the citizen's carry-storage free space:
         CitizenComponent* citizen = *citizenRef;
-        StorageComponent* carryStor = TW_StorageOf(citizen->_entity);   // pvVar18
+        StorageComponent* carryStor = TW_StorageOf(citizen->_entity.Get());   // pvVar18
         // The matDesc / weight arm is the tree's guard; retail divides unguarded.
         if (matDesc && matDesc->_weight != 0) {
             int freeSpace = carryStor->capacity;
@@ -374,7 +374,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // clamp by the destination (citizen building) storage free space for resType:
         CitizenComponent* citizen = *citizenRef;
-        StorageComponent* b8 = TW_StorageOf(citizen->_entity);   // local_b8
+        StorageComponent* b8 = TW_StorageOf(citizen->_entity.Get());   // local_b8
         if (matDesc && matDesc->_weight != 0) {   // the tree's guard, as in pass 2
             int cap  = b8->capacity;
             int cur  = CitizenComp_StorageComponent_QueryCount(b8);

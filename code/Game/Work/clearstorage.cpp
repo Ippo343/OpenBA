@@ -152,7 +152,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         if (freeSpace < resourceSize * availCount) {
             // Not enough room in dest, check citizen's building storage
             StorageComponent* altStorage = nullptr;
-            fn_FindComponent_Storage((*citizenAI)->_entity, &altStorage);
+            fn_FindComponent_Storage((*citizenAI)->_entity.Get(), &altStorage);
 
             int altMax = altStorage->capacity;
 

@@ -135,7 +135,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     if (Object::IsDerivedFromNullSafe(targetComp, NaturalResourceDescription::TypeId()))
         derivedTarget = static_cast<NaturalResourceDescription*>(targetComp);
 
-    ComponentEntity* targetInner = (*targetRef)->_entity;
+    ComponentEntity* targetInner = (*targetRef)->_entity.Get();
 
     // heading = Entity_impl_29a0(worldPos, &{target inner}) (XMM0 float)
     ComponentEntity* headingArg = targetInner;
@@ -157,7 +157,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;
@@ -270,7 +270,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
             case 0xffffffff: pathType = 1; break;                                 // Slow
             default: pwParam = 1; break;                                          // resKind>=8: pathType stays 1
         }
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;
         mv = new (obj) MoveTo(&family, pathType, 0, worldPos, 0xe1f, 0, speed);
@@ -297,7 +297,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     targetObj->_flags = newFlags;
     if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0 &&
         targetObj->_entity != nullptr) {
-        ComponentEntity* detach = targetObj->_entity;
+        ComponentEntity* detach = targetObj->_entity.Get();
         NotifyEntityChanged(detach);
     }
 }
@@ -388,7 +388,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ::Object::InternalPtr<Action> ibpSm;
@@ -471,7 +471,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     Action* mv = nullptr;
     if (obj) {
         int carried = WA_CitizenCarryCount(citizenRef);
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         int pathType = (carried > 0) ? 4 : 1;
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         int mask = static_cast<int>((1u << (cellFlag & 0x1f)) | 0xe1fu);
@@ -516,7 +516,7 @@ void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibp30 = sm;
@@ -542,7 +542,7 @@ void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32
         // System::Time::Time(&t, DAT_140172100)
         System::Time timeVal = {0};
         RtSystem_Time_Ctor(&timeVal, kRdata_140172100);
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         // The real ctor (Action(), fields zeroed; +0x28 animation = 0), then the stores.
         PlayAnimation* a = new (inlineObj) PlayAnimation();
         a->_field20 = entityInner;
@@ -584,7 +584,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibp30 = sm;
@@ -651,7 +651,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
     obj = System::MemoryAllocator::MemAlloc(0x480, 8);
     Action* mv = nullptr;
     if (obj) {
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;
         mv = new (obj) MoveTo(&family, 3 /*Fastest*/, 0, targetPos, 0xe1f, 0, speed);
@@ -705,7 +705,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibp40 = sm;
@@ -777,7 +777,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
     obj = System::MemoryAllocator::MemAlloc(0x480, 8);
     Action* mv = nullptr;
     if (obj) {
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;
         mv = new (obj) MoveTo(&family, 3 /*Fastest*/, 0, position, 0xe1f, 0, speed);

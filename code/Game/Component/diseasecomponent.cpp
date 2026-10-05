@@ -233,8 +233,8 @@ bool Map::HasIdentityInRect(int x, int y, int w, int h,
 // slot) from an InternalPtr<ComponentEntity> (RDX): it reads no DiseaseComponent
 // field, so it stays a free function (B1).
 extern "C" ComponentDescription** DiseaseComp_GrownIdentity(ComponentDescription** out,
-                                                           ComponentEntity* const* entitySlot) {
-    ComponentEntity* entity = *entitySlot;
+                                                           const Object::InternalPtr<ComponentEntity>* entitySlot) {
+    ComponentEntity* entity = entitySlot->Get();
     if (entity == nullptr) { *out = nullptr; return out; }
 
     PastureComponent* pasture = entity->FindComponent<PastureComponent>();   // 0x140004fe0
@@ -589,7 +589,7 @@ void DiseaseComponent::KillOneAnimal() {
         AnimalComponent* animal = member->_entity->FindComponent<AnimalComponent>();
 
         if (((animal->_flags >> 0x14) & 1) == 0) {
-            ComponentEntity* victim = member->_entity;
+            ComponentEntity* victim = member->_entity.Get();
             if (victim == nullptr) break;
             if (((victim->_entityFlags >> 10) & 1) != 0) break;
             MarkEntityForRemoval(victim);
@@ -727,12 +727,12 @@ void DiseaseComponent::ActiveDisease(const System::Time* deltaTime) {
 
         const MapCell* cell = &map->cells.GetData()[(uintptr_t)(width * ty + tx)];
 
-        ComponentEntity* target = nullptr;
+        Object::InternalPtr<ComponentEntity> target;   // retail's InternalPtr local
         if (cell->blocker != nullptr)       target = cell->blocker;    // +0x00 wins
         else if (cell->occupant != nullptr) target = cell->occupant;   // else +0x08
 
         const char* outcome = "empty-cell";
-        if (target != _entity && target != nullptr) {
+        if (target.Get() != _entity.Get() && target != nullptr) {
             if (target->FindComponent<DiseaseComponent>() != nullptr) {   // 0x1400050a0
                 ComponentDescription* theirId = nullptr;
                 ComponentDescription* myId = nullptr;

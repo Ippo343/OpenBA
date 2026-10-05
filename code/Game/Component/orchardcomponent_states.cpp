@@ -272,7 +272,7 @@ char OrchardComponent::EnterPlanting() {
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
-            ComponentEntity* entityLocal = _entity;
+            ComponentEntity* entityLocal = _entity.Get();
             work = PlantOrchard_CtorFromEntity(mem, &entityLocal, treeType);
         }
     }
@@ -290,7 +290,7 @@ char OrchardComponent::EnterPlanting() {
             std::fprintf(stderr,
                 "[Orchard9] step6 values: entity=%p targetIBP=%p work=%p workIBP=%p "
                 "PostWork=%p\n",
-                static_cast<void*>(_entity), static_cast<void*>(target),
+                static_cast<void*>(_entity.Get()), static_cast<void*>(target),
                 static_cast<void*>(work), static_cast<void*>(workIBP.Get()), (void*)&CitizenAI_WorkScheduler_Post);
             std::fflush(stderr);
         }
@@ -510,7 +510,7 @@ char OrchardComponent::EnterTending(StateMachine* sm) {
         OrchardRequestState(sm, 12);
         return 1;
     }
-    OrchardPostTendArea(_entity);
+    OrchardPostTendArea(_entity.Get());
     return 1;
 }
 
@@ -519,7 +519,7 @@ char OrchardComponent::EnterTending(StateMachine* sm) {
 // Find the work component; if it is holding a work slot, release it. `sm` unused.
 // ============================================================
 char OrchardComponent::UpdateTending() {
-    if (OrchardHasWork(_entity)) {
+    if (OrchardHasWork(_entity.Get())) {
         WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
         wc->CancelWork();   // 0x14012eb50
     }
@@ -547,7 +547,7 @@ char OrchardComponent::TickTending(StateMachine* sm) {
     const int m = OrchardCurrentMonth();
     const bool inSeason = (static_cast<unsigned>(m - 1) < 11u) &&
                           !(static_cast<unsigned>(m - 9) < 3u);
-    const bool hasWork = OrchardHasWork(_entity);
+    const bool hasWork = OrchardHasWork(_entity.Get());
 
     {   // This handler runs every frame and its four branch combinations look identical
         // from outside. Report the deciding inputs a few times, then periodically.
@@ -566,7 +566,7 @@ char OrchardComponent::TickTending(StateMachine* sm) {
         WorkComponent* wc = _entity->FindComponent<WorkComponent>();   // 0x140003050
         wc->CancelWork();   // 0x14012eb50
     } else if (!hasWork && inSeason) {
-        OrchardPostTendArea(_entity);
+        OrchardPostTendArea(_entity.Get());
     }
     return 1;
 }
@@ -588,7 +588,7 @@ char OrchardComponent::EnterReplanting() {
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x70, 8);
         if (mem) {
-            ComponentEntity* entityLocal = _entity;
+            ComponentEntity* entityLocal = _entity.Get();
             work = PlantOrchard_CtorFromEntity(mem, &entityLocal, treeType);
         }
     }
@@ -642,7 +642,7 @@ char OrchardComponent::EnterHarvesting() {
     {
         void* mem = System::MemoryAllocator::MemAlloc(0x68, 8);
         if (mem) {
-            ComponentEntity* entityLocal = _entity;
+            ComponentEntity* entityLocal = _entity.Get();
             work = HarvestOrchard_CtorFromEntity(mem, &entityLocal);
         }
     }
@@ -769,7 +769,7 @@ char OrchardComponent::EnterClearing() {
         wc->CancelWork();   // 0x14012eb50
     }
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     ClearAreaDescription* caDesc = FindClearAreaDescription(entity);
 
     ClearArea* work = nullptr;

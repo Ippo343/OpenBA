@@ -240,7 +240,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
         int idx = 0;
         do {
             HappinessComponent* const* slot = &param_1->happinessComponents._data[idx];
-            ComponentEntity* entObj = (*slot)->_entity;
+            ComponentEntity* entObj = (*slot)->_entity.Get();
 
             // find the entity's InteractComponent (scan its component array @ entObj+0x30)
             Component* interact = nullptr;
@@ -311,7 +311,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
             uint32_t pick = Rng()->Rand(static_cast<uint32_t>(matchCount));
             HappinessComponent* node = curArr[pick];
             *param_2 = nullptr;
-            *param_2 = node->_entity;
+            *param_2 = node->_entity.Get();
             if (curArr) System::MemoryAllocator::MemFree(curArr);
             return param_2;
         }

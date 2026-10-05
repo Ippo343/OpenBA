@@ -1646,7 +1646,7 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
                "BANISHED_BUILD_DEMO_PASTURE or use BANISHED_TOOL_HARNESS=pasturefull\n");
         return;
     }
-    ComponentEntity* entRef = pastureComp->_entity;
+    ComponentEntity* entRef = pastureComp->_entity.Get();
     if (!entRef) { fprintf(stderr, "[PasturePanel] pasture[0] has no entity backref\n"); return; }
 
     int opened = EditTool_HarnessSelectEntity(tool, entRef);

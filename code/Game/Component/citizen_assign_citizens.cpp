@@ -392,7 +392,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
         CitizenComponent* citizen = e.candidates.begin()->citizen;   // nearest available laborer
         WorkPlaceComponent* wp = e.workplaceComp;
         Profession*      reqProf  = wp->profession;   // +0x48
-        ComponentEntity* wpEntity = wp->_entity;      // +0x10 owner entity IBP value
+        ComponentEntity* wpEntity = wp->_entity.Get();      // +0x10 owner entity IBP value
 
         CitizenComponent* c = citizen;
         if (c->profession != reqProf ||

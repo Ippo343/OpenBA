@@ -66,7 +66,7 @@ static bool DestroyComponent_CanReclaim_Impl(DestroyComponent* destroyComp)
     if (!destroyComp) return false;
 
     // Find the StateMachineComponent on the owning entity (Component::_entity)
-    StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
+    StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity.Get());
     if (!buildState) return false;
 
     int8_t stateByte = DestroyUI_StateByte(buildState);
@@ -100,7 +100,7 @@ static bool DestroyComponent_CanRebuild_Impl(DestroyComponent* destroyComp)
     void* upgradeRef = destroyComp->upgradeTarget;   // COMP-c named +0x60 (merge fix)
 
     // Get entity
-    ComponentEntity* entity = destroyComp->_entity;
+    ComponentEntity* entity = destroyComp->_entity.Get();
 
     // Return: upgradeRef != the entity's description AND != the replacement
     if (upgradeRef == entity->_description) {
@@ -135,7 +135,7 @@ static void DestroyComponent_Reclaim_Impl(DestroyComponent* destroyComp)
 {
     if (!destroyComp) return;
     // Find the StateMachineComponent on the entity (param_1[2] = Component::_entity)
-    StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
+    StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity.Get());
 
     int8_t stateFrom = buildState->stateMachine.activeState;
     ControllerComponent::Controller* node = buildState->stateMachine.current;
@@ -148,7 +148,7 @@ static void DestroyComponent_Reclaim_Impl(DestroyComponent* destroyComp)
 static void DestroyComponent_Rebuild_Impl(DestroyComponent* destroyComp)
 {
     if (!destroyComp) return;
-    StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
+    StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity.Get());
 
     int8_t stateFrom = buildState->stateMachine.activeState;
     ControllerComponent::Controller* node = buildState->stateMachine.current;
@@ -158,7 +158,7 @@ static void DestroyComponent_Rebuild_Impl(DestroyComponent* destroyComp)
 static void DestroyComponent_Destroy_Impl(DestroyComponent* destroyComp)
 {
     if (!destroyComp) return;
-    StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity);
+    StateMachineComponent* buildState = DestroyUI_FindStateMachine(destroyComp->_entity.Get());
 
     int8_t stateFrom = buildState->stateMachine.activeState;
     ControllerComponent::Controller* node = buildState->stateMachine.current;
@@ -380,7 +380,7 @@ void DestroyUI::OnUpdateLayout() {
         // --- Building can be reclaimed: show rebuild/destroy buttons ---
 
         // FUN_140003ea0 finds the StateMachineComponent on the entity
-        ComponentEntity* compEntity = destroyComp->_entity;
+        ComponentEntity* compEntity = destroyComp->_entity.Get();
         StateMachineComponent* buildState = DestroyUI_FindStateMachine(compEntity);
 
         // Read state byte: prefer +0x52, fall back to +0x50 if negative

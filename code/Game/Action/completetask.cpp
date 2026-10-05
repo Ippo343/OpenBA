@@ -142,7 +142,7 @@ bool CompleteTask::GetTarget(ComponentEntity** param) {
     }
 
     // Check the work citizen's owning entity (Component +0x10)
-    return workEntity->_entity == paramVal;
+    return workEntity->_entity.Get() == paramVal;
 }
 
 // ============================================================

@@ -518,14 +518,14 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
             if ((statusBits & bitMask) != 0 || checked >= citizenCount) {
                 // Found a match (or exhausted all citizens): retail finds the
                 // component again and bails when the bit is not set
-                ComponentEntity* navEntity = citizens[self->statusCitizenIndex]->_entity;
+                ComponentEntity* navEntity = citizens[self->statusCitizenIndex]->_entity.Get();
                 const StatusIconComponent* navIcons = navEntity->FindComponent<StatusIconComponent>();
                 if (navIcons) {
                     if ((navIcons->_geometry.activeMask & bitMask) == 0) return;
                 }
 
                 // Navigate to the citizen entity (0x140103040)
-                ComponentEntity* entityRef = citizens[self->statusCitizenIndex]->_entity;
+                ComponentEntity* entityRef = citizens[self->statusCitizenIndex]->_entity.Get();
                 UI::DialogInstance* dialogRef = self->_dialog;
                 game->m_toolManager->CenterOnEntity(&dialogRef, &entityRef);
                 return;

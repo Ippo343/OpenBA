@@ -232,7 +232,7 @@ void CitizenComponent::OnRemove() {
         }
 
         // ---- 7. trade-work list + any dialog bound to our entity ---------------
-        ComponentEntity* ownerIBP = _entity;
+        ComponentEntity* ownerIBP = _entity.Get();
         gw->m_toolManager->OnEntityRemoved(&ownerIBP);   // 0x140103480
 
         // ---- 8. the town citizen list (townMgr+0xa0) — the whole point ---------

@@ -62,7 +62,7 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
 
     // Check if accumulated time exceeds threshold
     if (thresholdTime._ticks < self->age._ticks) {
-        ComponentEntity* entity = self->_entity;
+        ComponentEntity* entity = self->_entity.Get();
 
         if (GameUpdateLoop::_singleton == nullptr) return;
         EntityList* worldMgr = GameUpdateLoop::_singleton->m_entityList;
@@ -79,7 +79,7 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
                 {
                     int currentCount = worldMgr->removalList._size;
                     worldMgr->removalList
-                        .SetSize(currentCount + 1, self->_entity);
+                        .SetSize(currentCount + 1, self->_entity.Get());
                 }
             }
         }
@@ -250,7 +250,7 @@ void RawMaterialComponent::Startup() {
 //  10. CitizenAI_impl_ec60 (0x14012ec60) — POST the work to the scheduler
 
 void RawMaterialComponent::OnAdded() {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // The entity's WorkComponent (0x140003050)
     WorkComponent* workComp = entity->FindComponent<WorkComponent>();

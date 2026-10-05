@@ -140,7 +140,7 @@ static Graphics::GraphicsMesh* BC8_MeshFramePtr(ModelComponent* meshElem, ModelD
 }
 // Re-add a model's draw children (its entity's components, each one's slot 12).
 static void BC8_ReaddDrawChildren(ModelComponent* meshElem) {
-    ComponentEntity* host = meshElem->_entity;
+    ComponentEntity* host = meshElem->_entity.Get();
     if (!host) return;
     int hc = host->_componentCount;
     for (int k = 0; k < hc; ++k) {
@@ -279,7 +279,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
             // and returns 1 (never assigns labor) — this is the 2c-B fix.
             BuildStructure* bsWork = nullptr;
             if (mem) {
-                ComponentEntity* siteEnt = _entity;   // *(BuildComponent+0x10)
+                ComponentEntity* siteEnt = _entity.Get();   // *(BuildComponent+0x10)
                 bsWork = BuildStructure_CreateInPlaceFull(mem, &siteEnt, 0);
             }
             if (bsWork) {
@@ -484,7 +484,7 @@ void BuildComponent::State8Finalize() {
     // the 8->2 completion and ramps the footprint from _initialAlpha (the translucent
     // under-construction look) to fully opaque. Our DecalComponent is inert, so drive it
     // here. Unconditional and idempotent — it no-ops once the decal is already at 1.0.
-    DecalComponent_MarkOwnerBuilt(_entity);
+    DecalComponent_MarkOwnerBuilt(_entity.Get());
 
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();
     if (storage == nullptr) return;
@@ -522,7 +522,7 @@ void BuildComponent::State8Finalize() {
     int mult = 1;
     if (desc->_flagA) {
         // sized output: scan storage entity for a MapComponent -> footprint.
-        ComponentEntity* ent = storage->_entity;
+        ComponentEntity* ent = storage->_entity.Get();
         uint32_t tidMap = MapComponent::TypeId();
         MapComponent* mapc = nullptr;
         if (ent && tidMap) {

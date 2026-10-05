@@ -188,7 +188,7 @@ void PostEventToDestination(BoatComponent* boat, int eventId) {
 // (0x140045272.. and 0x140044c52..): mark the boat's own entity for removal and push it
 // onto the entity list's removal array at gw+0xE8 -> +0xd0/+0xd8.
 void DeleteBoatEntity(BoatComponent* boat) {
-    ComponentEntity* entIBP = boat->_entity;
+    ComponentEntity* entIBP = boat->_entity.Get();
     if (!entIBP) return;
     if (!GameUpdateLoop::_singleton) return;
     EntityList* const entityList = GameUpdateLoop::_singleton->m_entityList;

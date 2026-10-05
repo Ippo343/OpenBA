@@ -88,7 +88,7 @@ static char StorageLoc_State3Enter(StorageLocationComponent* data, StateMachine*
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
     StorageLocationComponent* self = data;   // the dispatcher's [node+0x18]
-    ComponentEntity* entityRef = self->_entity;
+    ComponentEntity* entityRef = self->_entity.Get();
     CemeteryListErase_Reimpl(&townMgr->field_0x00._data, &entityRef);
     return 0;
 }

@@ -160,7 +160,7 @@ void SetGrowthProgress(GrowthComponent* self, float progress) {
     uint32_t flagsNew = flagsOld & 0xffffffef;
     self->_flags = flagsNew;
     if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
-        NotifyEntityChanged(self->_entity);   // 0x1400c3470
+        NotifyEntityChanged(self->_entity.Get());   // 0x1400c3470
     }
 }
 
@@ -239,7 +239,7 @@ void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animId
         uint32_t flagsNew = flagsOld | 4;
         self->_flags = flagsNew;
         if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
-            NotifyEntityChanged(self->_entity);   // 0x1400c3470
+            NotifyEntityChanged(self->_entity.Get());   // 0x1400c3470
         }
     }
 }
@@ -303,7 +303,7 @@ uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellInde
 // ============================================================
 void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    ComponentEntity* parent = self->_entity;
+    ComponentEntity* parent = self->_entity.Get();
     EntityList* entityList = gameWorld->m_entityList;
 
     // Mark the entity for removal unless already marked (bit 10 of its flags).

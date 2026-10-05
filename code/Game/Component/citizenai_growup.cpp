@@ -240,7 +240,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
     int n = param_1->healers._size;
     HealerComponent* const* arr = param_1->healers._data;
     for (int idx = 0; idx < n; ++idx) {
-        ComponentEntity* entity = arr[idx]->_entity;   // *plVar11 + 0x10
+        ComponentEntity* entity = arr[idx]->_entity.Get();   // *plVar11 + 0x10
         // scan entity's components for a WorkPlaceComponent (_componentCount, _components)
         int64_t compArrCount = entity->_componentCount;
         const Object::InternalPtr<Component>* compArr = entity->_components;
@@ -272,7 +272,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
                 int cost = WorkBase_CalcDistance_8830(mapGrid, param_3, cell);
                 if (cost < bestCost) {
                     bestX = wpos[0]; bestY = wpos[1]; bestZ = wpos[2];
-                    bestEntity = arr[idx]->_entity;
+                    bestEntity = arr[idx]->_entity.Get();
                     bestCost = cost;
                 }
             }

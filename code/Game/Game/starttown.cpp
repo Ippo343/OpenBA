@@ -867,7 +867,7 @@ static void StartTown_RunOnCreatePass(ComponentEntity* ent) {
             // value the original registration uses) for the founding-housing pass. We keep
             // the house IBPs here and pair them to families directly; that pairing is
             // independent of townMgr+0x20 and stays correct in both flag states.
-            g_foundingHouseIBPs.push_back(comp->_entity);
+            g_foundingHouseIBPs.push_back(comp->_entity.Get());
             fprintf(stderr, "[startTown::residence] ResidenceComponent::OnCreate fired "
                             "(house #%zu captured, ownerIBP=%p)\n",
                             g_foundingHouseIBPs.size() - 1,
@@ -3356,7 +3356,7 @@ int DL_CollectAnimals(const CharacterGrid* grid, int wantType, std::vector<DL_An
         ++(*outLive);
         const ModelComponent* model = charComp->modelComponent.Get();
         if (!model) continue;
-        const ComponentEntity* owner = charComp->_entity;
+        const ComponentEntity* owner = charComp->_entity.Get();
         if (!owner || wantType == 0) continue;
         const int cnt = owner->_componentCount;
         const Object::InternalPtr<Component>* comps = owner->_components;

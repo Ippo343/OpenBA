@@ -86,7 +86,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     if (mem) {
         ComponentEntity* destIBP = nullptr;
         uint32_t msgId[2] = { kCitizenAIMessageTargetTypeId, 0u };  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityIBP = citizen->_entity;
+        ComponentEntity* entityIBP = citizen->_entity.Get();
         msgAction = ::new (mem) SendComponentMessage(&entityIBP, msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
     Action* msgIBP = msgAction;   // the InternalPtr's ctor is a plain store
@@ -102,7 +102,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
         if (pmem) {
             System::Time timeStore{};
             RtSystem_Time_Ctor(&timeStore, animTime);
-            ComponentEntity* entityIBP = citizen->_entity;
+            ComponentEntity* entityIBP = citizen->_entity.Get();
             // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
             // two stamps); then retail's inlined leaf stores.
             PlayAnimation* a = ::new (pmem) PlayAnimation();
@@ -120,7 +120,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
     Action* moveAction = nullptr;
     void* mmem = System::MemoryAllocator::MemAlloc(0x480, 8);
     if (mmem) {
-        CharacterComponent* familyOut = FindCharacterComponent(citizen->_entity);   // 0x1400012d0 (the InternalPtr the finder writes)
+        CharacterComponent* familyOut = FindCharacterComponent(citizen->_entity.Get());   // 0x1400012d0 (the InternalPtr the finder writes)
         if (familyOut == nullptr) {
             // Standalone: the CharacterComponent type-id global (DAT_1401c7078) read by
             // Entity_FindComponent_Family is unfilled, so the list-scan returns null. The

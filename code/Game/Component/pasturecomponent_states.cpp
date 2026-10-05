@@ -196,7 +196,7 @@ void PastureComponent::AdoptWanderers() {
     for (int i = 0; i < freeCount && nCand < kMaxCandidates && nCand < needed; ++i) {
         LivestockComponent* comp = freeList[i];
         if (!comp) continue;
-        ComponentEntity* owner = comp->_entity;
+        ComponentEntity* owner = comp->_entity.Get();
         if (!owner) continue;
         if (owner->_description != wanted) continue;
         candidates[nCand++] = comp;
@@ -227,7 +227,7 @@ void PastureComponent::Reproduce() {
         if (!arr) return;
         LivestockComponent* livestock = arr[i].Get();
         if (!livestock) continue;
-        ComponentEntity* owner = livestock->_entity;
+        ComponentEntity* owner = livestock->_entity.Get();
         AnimalComponent* animal = owner ? owner->FindComponent<AnimalComponent>() : nullptr;
         if (!animal) continue;
 
@@ -325,7 +325,7 @@ void PastureComponent::ReleaseAllAnimals() {
 
         LivestockComponent* ref = animal;
         CemeteryListErase_Reimpl(&cur->animals, &ref);
-        ComponentEntity* owner = animal->_entity;
+        ComponentEntity* owner = animal->_entity.Get();
         AnimalComponent* animalComp = owner ? owner->FindComponent<AnimalComponent>() : nullptr;
         if (animalComp) animalComp->ReleaseToWander();   // 0x140105ed0
 
@@ -513,7 +513,7 @@ void PastureProduce(PastureComponent* self) {
         // ProductionUI's panel reads, so without it the production page is blank even
         // when piles are appearing. Same three-call shape as the already-ported
         // ActRm_RegisterRawMaterial_88ef0 (0x140088ef0), which is a useful cross-check.
-        ComponentEntity* pastureEntity = self->_entity;
+        ComponentEntity* pastureEntity = self->_entity.Get();
         if (pastureEntity) {
             TrackerComponent* tracker = pastureEntity->FindComponent<TrackerComponent>();   // 0x140013320
             if (tracker) {
@@ -697,7 +697,7 @@ void PastureComponent::Command(int cmd) {
             wc->CancelWork();   // 0x14012eb50
             wpc->SetAccepting(false);
         } else {
-            ComponentEntity* entRef = _entity;
+            ComponentEntity* entRef = _entity.Get();
             Work* work = PastureWork_CreateForEntity(&entRef);
             Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
             CitizenAI_WorkScheduler_Post(wc, 1, 1, &workIBP);

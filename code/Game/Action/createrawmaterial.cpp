@@ -314,7 +314,7 @@ bool CreateRawMaterial::GetTarget(ComponentEntity** param) {
     void* target = *param;
 
     // The citizen's owning entity (Component +0x10)
-    if (target == sourceBuilding->_entity) {
+    if (target == sourceBuilding->_entity.Get()) {
         return 1;
     }
 

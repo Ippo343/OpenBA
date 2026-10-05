@@ -219,7 +219,7 @@ void BuildComponent::FillModelLists() {
         ModelComponent* node = modelComponents[i].Get();
         int16_t mark = node->meshIndex;
         if (mark == -1) {
-            ComponentEntity* host = node->_entity;
+            ComponentEntity* host = node->_entity.Get();
             int hc = host->_componentCount;
             for (int k = 0; k < hc; k++) {
                 // Retail passes EDX = 0 here too (0x140108a2e XOR EDX,EDX before
@@ -231,7 +231,7 @@ void BuildComponent::FillModelLists() {
                 node->OnRemove();   // slot 7
             }
             node->meshIndex = (int16_t)0xffff;
-            ComponentEntity* host = node->_entity;
+            ComponentEntity* host = node->_entity.Get();
             int hc = host->_componentCount;
             for (int k = 0; k < hc; k++) {
                 host->_components[k].Get()->OnEvent(0);   // slot 12
@@ -244,10 +244,10 @@ void BuildComponent::FillModelLists() {
 
     // --- Stage 4: multiplier = 1; then the MultiObjectComponent's +0x58.
     costMultiplier = 1;
-    Component* wp = BC_FindComponentByType(_entity, s_tid_MultiObj);
+    Component* wp = BC_FindComponentByType(_entity.Get(), s_tid_MultiObj);
     if (wp != nullptr) {
         MultiObjectComponent* wp2 = static_cast<MultiObjectComponent*>(
-            BC_FindComponentByType(_entity, s_tid_MultiObj));
+            BC_FindComponentByType(_entity.Get(), s_tid_MultiObj));
         // Retail: bc+0x4c = MultiObjectComponent+0x58 (the build-effort multiplier). In the
         // standalone exe the lifecycle is inert, so +0x58 can stay 0 — which
         // would clobber the default 1 set above and collapse the build target

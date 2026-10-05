@@ -147,7 +147,7 @@ void AnimalComponent::ReleaseToWander() {
 void LivestockComponent::PenInPasture() {
     if (pasture == nullptr) return;
 
-    ComponentEntity* link = pasture->_entity;
+    ComponentEntity* link = pasture->_entity.Get();
     MapComponent* mapComp = link->FindComponent<MapComponent>();   // 0x140004680
     int16_t r0 = mapComp->tileX0;
     int16_t r1 = mapComp->tileY0;

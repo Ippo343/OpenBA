@@ -549,7 +549,7 @@ void MoveTo::CheckEntity() {
 // entity (Component +0x10).
 // ============================================================
 bool MoveTo::GetTarget(ComponentEntity** param) {
-    return character->_entity == *param;
+    return character->_entity.Get() == *param;
 }
 
 // ============================================================

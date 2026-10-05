@@ -271,7 +271,7 @@ void AnimalComponent::UpdateBehavior() {
     float scale = (age / adultAge) * ScaleGain() + ScaleBase();
     if (scale > ScaleMax()) scale = ScaleMax();
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
@@ -302,7 +302,7 @@ void AnimalComponent::UpdateBehavior() {
 // Reproduced as-is (the second pass is a no-op on an already-unit 2D vector).
 // ============================================================
 void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
@@ -420,7 +420,7 @@ void AnimalComponent::OnAdded() {
     const uint32_t flags = _flags;
     if (((flags >> 0x16) & 1) == 0) return;
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0
@@ -466,7 +466,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
     const float death = deathAge;
     if (newAge >= death && newAge != death) {
-        ComponentEntity* entity = _entity;
+        ComponentEntity* entity = _entity.Get();
         EntityList* const corpseOwner = GameUpdateLoop::_singleton
                                         ? GameUpdateLoop::_singleton->m_entityList : nullptr;
         if (entity == nullptr) return;
@@ -547,7 +547,7 @@ void AnimalComponent::Update(const System::Time* time) {
     UpdateBehavior();
 
     // ---- 4. busy / timer gates -------------------------------------------
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return;
 
     CharacterComponent* character = entity->FindComponent<CharacterComponent>();   // 0x1400012d0

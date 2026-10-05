@@ -182,7 +182,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm1 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ::Object::InternalPtr<Action> ibpSm1;
@@ -342,7 +342,7 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
                 default:                                        pathType = 1; break;  // case 0 -> Slow
             }
         }
-        ComponentEntity* entityInner = (*citizenRef)->_entity;  // *(*param_1+0x10)
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();  // *(*param_1+0x10)
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         float speed = kRdata_140172280;          // [0x140172280]==-1.0f
         mv = new (obj) MoveTo(&family, pathType, 0, param_4, 0xe1f, 0, speed);   // 0x1400c9170

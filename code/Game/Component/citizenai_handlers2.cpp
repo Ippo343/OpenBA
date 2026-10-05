@@ -244,7 +244,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
 
         StatusIconComponent* mi = citizen->_entity->FindComponent<StatusIconComponent>();
         if (mi) {
-            ComponentEntity* inner = mi->_entity;
+            ComponentEntity* inner = mi->_entity.Get();
             // gated by ((inner->_entityFlags >> 10) & 1) == 0  (disasm: SHR 0xa; TEST CL,1).
             // inner is just-CheckPtr'd by the original (never 0 with valid data); guard
             // it to stay crash-safe (skip rather than fault, matching nothing-to-do).
@@ -282,7 +282,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
                     changed = after ^ before;
                 }
                 if ((changed & 0xffff) != 0 && mi->_entity != nullptr) {
-                    NotifyEntityChanged(mi->_entity);
+                    NotifyEntityChanged(mi->_entity.Get());
                 }
             }
         }

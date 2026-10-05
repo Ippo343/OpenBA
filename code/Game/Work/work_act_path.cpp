@@ -123,7 +123,7 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
     if (obj) {
         ibpInner = nullptr;
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &ibpInner, 0);
     }
     ibpA = sm;                                            // (0xbf86a)
@@ -143,7 +143,7 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
         if (obj) {
             ComponentEntity* innerSlot = srcRef ? *srcRef : nullptr;     // local_res8 = *srcLoc (0xbf8b0)
             uint32_t msgId = CitizenComponent::TypeId(); // DWORD_1401c7158 (0xbf8b8)
-            ComponentEntity* entityInner = (*citizenRef)->_entity;
+            ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
             sm2 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerSlot, 0);
         }
         ibpC = sm2;                                       // (0xbf907)
@@ -246,7 +246,7 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
     obj = WAP2_Alloc(0x480, 8);
     Action* mv1 = nullptr;
     if (obj) {
-        ComponentEntity* entityInner = (*citizenRef)->_entity;             // *((*entity)+0x10) (0xbfbcc-0xbfbd7)
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();             // *((*entity)+0x10) (0xbfbcc-0xbfbd7)
         int pathT = 4 + (param_14 != 0 ? 1 : 0);                       // LEA R8D,[RBX+4], RBX=SETNZ (0xbfbe7-0xbfc1b)
         CharacterComponent* family = FindCharacterComponent(entityInner); // 0x1400012d0 (0xbfbf5)
         mv1 = new (obj) MoveTo(&family, pathT, 0, srcPos, 0xe1f, 0, kSpeed); // (0xbfc22)
@@ -335,7 +335,7 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
     obj = WAP2_Alloc(0x480, 8);
     Action* mv2 = nullptr;
     if (obj) {
-        ComponentEntity* entityInner = (*citizenRef)->_entity;             // *((*entity)+0x10) (0xbfecb-0xbfed6)
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();             // *((*entity)+0x10) (0xbfecb-0xbfed6)
         int pathT = (param_14 != 0) ? 5 : 1;                           // MOV EBX,1; MOV EAX,5; CMOVNZ (0xbfee4-0xbfef1)
         CharacterComponent* family = FindCharacterComponent(entityInner); // 0x1400012d0 (0xbfefc)
         mv2 = new (obj) MoveTo(&family, pathT, 0, dstPos, 0xe1f, 0, kSpeed); // (0xbff28)

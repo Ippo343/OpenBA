@@ -270,7 +270,7 @@ void NomadComponent::Persist(IO::Stream& stream) {
 //     MOV RCX,[RCX+0x120]; MOV [RSP+0x30],RAX; CALL 0x140103480
 // Unguarded, as retail. The notify is NomadComp_FUN_140103480, called by name.
 void NomadComponent::OnRemove() {
-    ComponentEntity* entityIBP = _entity;
+    ComponentEntity* entityIBP = _entity.Get();
     GameUpdateLoop::_singleton->m_toolManager->OnEntityRemoved(&entityIBP);   // 0x140103480
 }
 

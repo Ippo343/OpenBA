@@ -178,7 +178,7 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(c
 
     StatusIconComponent* mi = citizen->home->FindComponent<StatusIconComponent>();
     if (mi == nullptr) return;
-    ComponentEntity* inner = mi->_entity;
+    ComponentEntity* inner = mi->_entity.Get();
     // gated: ((inner->_entityFlags >> 10) & 1) == 0
     if (inner == nullptr || (inner->_entityFlags >> 10 & 1) != 0) return;
 
@@ -215,7 +215,7 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(c
         changed = after ^ before;
     }
     if ((changed & 0xffff) != 0 && mi->_entity != nullptr) {
-        NotifyEntityChanged(mi->_entity);
+        NotifyEntityChanged(mi->_entity.Get());
     }
 }
 

@@ -143,7 +143,7 @@ bool PickupRawMaterial::GetTarget(ComponentEntity** param) {
         return true;
     }
 
-    return _field20->_entity == paramVal;
+    return _field20->_entity.Get() == paramVal;
 }
 
 // ============================================================

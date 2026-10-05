@@ -356,7 +356,7 @@ void AttendanceComponent::Update(const System::Time* /*time*/) {
     if (count == 0)
         return;
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
 
     // Get the WorkPlaceComponent from the entity (0x140002e10)
     WorkPlaceComponent* building = entity->FindComponent<WorkPlaceComponent>();

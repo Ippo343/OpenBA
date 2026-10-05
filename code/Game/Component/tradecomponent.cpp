@@ -359,7 +359,7 @@ void TradeComponent::OnAdded() {
     if (GameUpdateLoop::_singleton == nullptr)
         return;
 
-    ComponentEntity* entityPtr = _entity;
+    ComponentEntity* entityPtr = _entity.Get();
 
     // The town manager (GameUpdateLoop::m_citizenList).
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
@@ -390,7 +390,7 @@ void TradeComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr)
         return;
 
-    ComponentEntity* entityPtr = _entity;
+    ComponentEntity* entityPtr = _entity.Get();
 
     // The town manager (GameUpdateLoop::m_citizenList).
     CitizenBehavior* worldMgr = GameUpdateLoop::_singleton->m_citizenList;
@@ -436,7 +436,7 @@ void TradeComponent::Command(int /*command*/) {
         // Work_Ctor25's body (0x1400f72e0). No more read-back of 0x140161a10.
         void* mem = System::MemoryAllocator::MemAlloc(0x58, 8);
         if (mem) {
-            ComponentEntity* entityIBP = _entity;
+            ComponentEntity* entityIBP = _entity.Get();
             work = new (mem) TradeWork();
             work->InitFromEntity(&entityIBP);
         }

@@ -263,7 +263,7 @@ void WorkPlaceUI::CycleWorkplace() {
         workplaceIndex = 0;
 
     CitizenComponent* worker = workPlace->workers[workplaceIndex].Get();
-    ComponentEntity* workerEntity = worker->_entity;
+    ComponentEntity* workerEntity = worker->_entity.Get();
 
     UI::DialogInstance* dialogInst = _dialog;
     GameUpdateLoop::_singleton->m_toolManager->CenterOnEntity(&dialogInst, &workerEntity);   // 0x140103040

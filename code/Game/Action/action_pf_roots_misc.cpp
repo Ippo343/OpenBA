@@ -395,7 +395,7 @@ void HerdStartMigration(HerdComponent* herd) {
     if (iVar4 < 0) {
         if (0 < herd->memberCount) {
             do {
-                ComponentEntity* local_res8 = herd->members[0]->_entity;
+                ComponentEntity* local_res8 = herd->members[0]->_entity.Get();
                 EntityList* list = GameUpdateLoop::_singleton->m_entityList;
                 if (local_res8 != nullptr) {
                     if ((local_res8->_entityFlags >> 10 & 1) == 0) {
@@ -431,7 +431,7 @@ void HerdStartMigration(HerdComponent* herd) {
     if (0 < herd->memberCount) {
         uint32_t memberIdx = 0;
         do {
-            ComponentEntity* local_58 = herd->members[memberIdx]->_entity;
+            ComponentEntity* local_58 = herd->members[memberIdx]->_entity.Get();
             AnimalComponent* foundComp = local_58->FindComponent<AnimalComponent>();
             // DEVIATION (guard): retail writes unconditionally — it can, because a
             // dead member is erased from the herd list by WildAnimalComponent's

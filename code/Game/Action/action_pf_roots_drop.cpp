@@ -240,7 +240,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         if (mem != nullptr) {
             ComponentEntity* nullIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-            ComponentEntity* entity = citizen->_entity;
+            ComponentEntity* entity = citizen->_entity.Get();
             message = new (mem) SendComponentMessage(&entity, &msgId, 0, &nullIBP, 0);   // 0x1400cb1d0
         }
         if (character->actionStack.field_0x10 != nullptr) {
@@ -251,7 +251,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         void* mem2 = MemAlloc(0x38, 8);
         Action* complete = nullptr;
         if (mem2 != nullptr) {
-            ComponentEntity* animalEntity = (*animal)->_entity;
+            ComponentEntity* animalEntity = (*animal)->_entity.Get();
             CitizenComponent* self = *citizenIBP;
             complete = new (mem2) CompleteTask(task, &self, &animalEntity, 0);   // 0x1400c5da0
         }
@@ -306,7 +306,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
         RemoveAnimal* remove = static_cast<RemoveAnimal*>(MemAlloc(0x28, 8));
         if (remove != nullptr) {
             // ENDGAME B.3.8 ACT: the real ctor (RemoveAnimal.h) — retail inlines it here.
-            new (remove) RemoveAnimal((*animal)->_entity);
+            new (remove) RemoveAnimal((*animal)->_entity.Get());
         }
         ::Object::InternalPtr<Action> pushed(remove);
         ActionStackPush(stack, &pushed);   // 0x1400c54e0

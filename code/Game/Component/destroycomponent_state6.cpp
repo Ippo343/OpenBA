@@ -269,7 +269,7 @@ void ModelComponent::SetMaterialSet(int materialSetIdx) {
 // Steps the model down one damage stage and refreshes everything hanging off the
 // mesh. Called from all three state-6 handlers.
 void DestroyComponent::RubbleStep() {
-    ModelComponent* modelComp = FindOn<ModelComponent>(_entity);
+    ModelComponent* modelComp = FindOn<ModelComponent>(_entity.Get());
     if (!modelComp) return;                   // retail: no ModelComponent, nothing to do
 
     DestroyDescription* dd = AsType<DestroyDescription>(_description);
@@ -331,21 +331,21 @@ void DestroyComponent::RubbleStep() {
     }
 
     // Tell the owner entity its model changed (the MultiObjectComponent child forwarder).
-    ComponentEntity* modelOwner = modelComp->_entity;
+    ComponentEntity* modelOwner = modelComp->_entity.Get();
     if (modelOwner) modelOwner->SendEvent(0);
 
     // Burnt materials on whatever mesh is now showing.
     modelComp->SetMaterialSet(rubbleMaterialSet);
 
     // Pick-mesh rebuild.
-    PickingComponent* picking = FindOn<PickingComponent>(_entity);   // 0x140026a30
+    PickingComponent* picking = FindOn<PickingComponent>(_entity.Get());   // 0x140026a30
     if (picking) {
         PickingComponent_RegisterMesh(picking);
     }
 
     // Scorch decal: swap the DecalComponent's state, and if a decal is currently
     // placed (+0x2c decalId >= 0) release and re-place it so the new state shows.
-    DecalComponent* decal = FindOn<DecalComponent>(_entity);   // 0x14000b630
+    DecalComponent* decal = FindOn<DecalComponent>(_entity.Get());   // 0x14000b630
     if (decal) {
         if (static_cast<uint32_t>(rubbleDecalState) != decal->decalState) {
             decal->decalState = static_cast<uint32_t>(rubbleDecalState);
@@ -366,13 +366,13 @@ void DestroyComponent::RubbleStep() {
 char DestroyComponent::State6Enter() {
     // Building has storage -> cancel everything the town was doing with it, then
     // empty the storage outright (the goods burn; state 4's haul-away never runs).
-    if (FindOn<StorageComponent>(_entity) != nullptr) {
+    if (FindOn<StorageComponent>(_entity.Get()) != nullptr) {
         if (GameUpdateLoop::_singleton != nullptr) {
             CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
-            ComponentEntity* entityCopy = _entity;
+            ComponentEntity* entityCopy = _entity.Get();
             if (townMgr) TownMgr_AbortCitizenActionsFor_89e30(townMgr, &entityCopy);
         }
-        StorageComponent* storage = FindOn<StorageComponent>(_entity);
+        StorageComponent* storage = FindOn<StorageComponent>(_entity.Get());
         if (storage) {
             // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
             // StorageComponent's item array is raw storage (H5, COMP-e's header).
@@ -402,7 +402,7 @@ char DestroyComponent::State6Enter() {
 
     // Countdown still running: keep the current mesh but stamp the burnt material set
     // on it right away, so the building starts looking wrong the moment it catches.
-    ModelComponent* modelComp = FindOn<ModelComponent>(_entity);
+    ModelComponent* modelComp = FindOn<ModelComponent>(_entity.Get());
     if (modelComp && dd)
         modelComp->SetMaterialSet(dd->_damagedSkin);
     if (Milestone()) {
@@ -420,7 +420,7 @@ char DestroyComponent::State6Enter() {
 // rubble step while the countdown is still running, and then a SECOND one on a
 // coin flip — so both can fire in the same call. Kept as-is.
 char DestroyComponent::State6Update() {
-    if (FindOn<ModelComponent>(_entity) == nullptr) return 1;
+    if (FindOn<ModelComponent>(_entity.Get()) == nullptr) return 1;
 
     // Retail calls IsDerivedFrom(comp+0x18, DestroyDescription) here and DISCARDS the
     // result — no branch reads it. Not replicated: it has no side effect.

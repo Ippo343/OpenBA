@@ -301,11 +301,11 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
 bool HuntAnimal::GetTarget(ComponentEntity** param) {
     void* target = *param;
 
-    if (_field28->_entity == target) {
+    if (_field28->_entity.Get() == target) {
         return true;
     }
 
-    if (_field20->_entity == target) {
+    if (_field20->_entity.Get() == target) {
         return true;
     }
 

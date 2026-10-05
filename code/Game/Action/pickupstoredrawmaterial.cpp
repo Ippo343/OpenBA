@@ -280,7 +280,7 @@ bool PickupStoredRawMaterial::GetTarget(ComponentEntity** param) {
         return true;
     }
 
-    return _field20->_entity == target;
+    return _field20->_entity.Get() == target;
 }
 
 // ============================================================

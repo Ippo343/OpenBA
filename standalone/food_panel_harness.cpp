@@ -656,7 +656,7 @@ void FollowUp(int frameNum) {
                 for (int i = 0; i < bN && bArr; ++i) {
                     AttendanceComponent* b = bArr[i];
                     if (!b) continue;
-                    ComponentEntity* sub = b->_entity;                      // +0x10
+                    ComponentEntity* sub = b->_entity.Get();                      // +0x10
                     // Found by exact type id: a WorkPlaceComponent.
                     WorkPlaceComponent* c = static_cast<WorkPlaceComponent*>(FindCompOnEntity(sub, tidWpc));
                     const uint64_t k48 = c ? reinterpret_cast<uint64_t>(c->profession) : 0;  // +0x48  // CAST-OK: ptr_int
@@ -680,7 +680,7 @@ void FollowUp(int frameNum) {
                     for (int i = 0; i < bN && bArr; ++i) {
                         AttendanceComponent* b = bArr[i];
                         if (!b) continue;
-                        ComponentEntity* sub = b->_entity;                  // +0x10
+                        ComponentEntity* sub = b->_entity.Get();                  // +0x10
                         WorkPlaceComponent* c = static_cast<WorkPlaceComponent*>(FindCompOnEntity(sub, tidWpc));
                         if (!c) continue;
                         if (c->profession != want[k])                       // +0x48

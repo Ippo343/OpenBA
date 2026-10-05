@@ -104,7 +104,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
     float posX = 0.0f, posY = 0.0f;
     CharacterComponent* parentCharacter = nullptr;
     if (parent && *parent != nullptr) {
-        ComponentEntity* parentOwner = (*parent)->_entity;
+        ComponentEntity* parentOwner = (*parent)->_entity.Get();
         parentCharacter = parentOwner->FindComponent<CharacterComponent>();   // 0x1400012d0
     }
 

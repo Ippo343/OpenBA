@@ -534,7 +534,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
 
         for (int i = 0; i < found.size; i++) {
             CharacterComponent** slot = &found.data[i];
-            ComponentEntity* ownerEntity = (*slot)->_entity;
+            ComponentEntity* ownerEntity = (*slot)->_entity.Get();
             Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: WORK (audit dead-argument row) not executable: pointer here and at :502, integer (off * 6) at :561; no one declared type lets all three pass without a cast
                                  &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
                                  &hitAnimal, &hitCitizen);
@@ -827,7 +827,7 @@ void TornadoComponent::Tick(const System::Time* time) {
 
     if (!particleAlive) {
         // --- the funnel is gone: queue the tornado entity for destruction ---
-        ComponentEntity* entity = _entity;
+        ComponentEntity* entity = _entity.Get();
         EntityList* entityMgr = gw->m_entityList;
         if (entity != nullptr) {
             const uint32_t f = entity->_entityFlags;

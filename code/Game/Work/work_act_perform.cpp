@@ -133,7 +133,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
     ibpA = sm;
@@ -221,7 +221,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
     obj = WAP_Alloc(0x480, 8); // 0x1400badc8: ECX=0x480
     Action* mv1 = nullptr;
     if (obj) {
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0 // 0x1400012d0
         // 0x1400bae37: LEA R8D,[R9+4] (R9=0) → pathType=4 (Faster); [RSP+0x28]=0xe1f; [RSP+0x30]=0; XMM=speed
         mv1 = new (obj) MoveTo(&family, 4, 0, pos5, 0xe1f, 0, speed);
@@ -267,7 +267,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
     obj = WAP_Alloc(0x480, 8); // 0x1400bafda: ECX=0x480
     Action* mv2 = nullptr;
     if (obj) {
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         // 0x1400bb041: LEA R8D,[R9+1] (R9=0) → pathType=1 (Slow); dest=pos3 ([RBP+0x67]); XMM6=speed
         mv2 = new (obj) MoveTo(&family, 1, 0, pos3, 0xe1f, 0, speed);
@@ -317,7 +317,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
     if (obj) {
         ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0); // 0x1400cb1d0
     }
     ibpA = sm;
@@ -370,7 +370,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
                                   // bffd0+0x3ff, 2026-07-26.)
         Action* crm = nullptr;
         if (obj) {
-            ComponentEntity* entityInner = (*citizenRef)->_entity; // 0x1400c01ed
+            ComponentEntity* entityInner = (*citizenRef)->_entity.Get(); // 0x1400c01ed
             // 0x1400c01f8: byte[RSP+0x20]=0 (p5, the FIFTH argument) ; R8=[RBP+0x6f]=param_8 (p3) ;
             // RDX=&entityInner ; R9 not written (p4, unused by the body).
             crm = new (obj) ConsumeRawMaterial(&entityInner, consumeMaterial, 0); // 0x1400c63b0
@@ -404,7 +404,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
     obj = WAP_Alloc(0x480, 8); // 0x1400c02b0: ECX=0x480
     Action* mv1 = nullptr;
     if (obj) {
-        ComponentEntity* entityInner = (*citizenRef)->_entity;
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
         CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
         // 0x1400c031d: LEA R8D,[R9+2] (R9=0) → pathType=2 (Fast); dest=param_3 (R13 at entry); XMM8=speed
         mv1 = new (obj) MoveTo(&family, 2, 0, destination, 0xe1f, 0, speed);
@@ -481,7 +481,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
             count = CitizenComp_StorageComponent_QueryCount(storage); // 0x14012cf10
             bool countPositive = (count > 0); // 0x1400c05d0: TEST EAX,EAX; SETG BL
 
-            ComponentEntity* entityInner = (*citizenRef)->_entity;
+            ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
             int pathType = 1; // R13D = Slow (default); 0x1400c05fc: CMOVNZ R13D, 4 if BL
             if (countPositive) pathType = 4; // Faster
             CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0

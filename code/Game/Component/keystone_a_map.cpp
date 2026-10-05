@@ -364,7 +364,7 @@ void MapComponent::AddToMap() {
     }
 
     if (!pvVar5->_noOccupancy) {
-        ComponentEntity* local_res8 = _entity;
+        ComponentEntity* local_res8 = _entity.Get();
         MapComponent_overlay_dc20(
             piVar2, &local_res8,
             (uint8_t)pvVar5->_cellType,
@@ -400,7 +400,7 @@ void CreateNaturalResource_impl_4750(MapComponent* self) {
     Map* piVar2 = GameUpdateLoop::_singleton->m_game;   // +0xF8
     uint32_t typeId = MapDescription::TypeId();   // cell 0x1401c7a18; TypeId_AreaDescription is misnamed (D5)
     bool bVar3 = typeId ? ::Object::IsDerivedFromNullSafe(obj, typeId) : false;
-    ComponentEntity* local_res8 = self->_entity;
+    ComponentEntity* local_res8 = self->_entity.Get();
     MapDescription* pvVar5 = bVar3 ? static_cast<MapDescription*>(obj) : nullptr;
 
     CreateNaturalResource_impl_dee0(

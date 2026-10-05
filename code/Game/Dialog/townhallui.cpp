@@ -1429,7 +1429,7 @@ void TownHallUI::UpdateInventory() {
                 WorkPlaceComponent* workplaceComp2 = entity->FindComponent<WorkPlaceComponent>();
 
                 // Get parent entity (workplace+0x10)
-                ComponentEntity* parentEntity = workplaceComp2->_entity;
+                ComponentEntity* parentEntity = workplaceComp2->_entity.Get();
 
                 // Find the WorkComponent (DAT_1401c8070)
                 WorkComponent* workComp = parentEntity->FindComponent<WorkComponent>();

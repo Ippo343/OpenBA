@@ -134,7 +134,7 @@ void RemoveAnimal::CheckEntity() {
 
         if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
             if (animal->_entity != nullptr) {
-                NotifyEntityChanged(animal->_entity);   // 0x1400c3470
+                NotifyEntityChanged(animal->_entity.Get());   // 0x1400c3470
             }
         }
     }

@@ -118,7 +118,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
         if (mem) {
             ComponentEntity* outIBP = nullptr;
             uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-            ComponentEntity* targetEntity = citizen->_entity;
+            ComponentEntity* targetEntity = citizen->_entity.Get();
             act = ::new (mem) SendComponentMessage(&targetEntity, &msgId, 0, &outIBP, 0);   // 0x1400cb1d0
         }
         if (character->actionStack.field_0x10 != nullptr)

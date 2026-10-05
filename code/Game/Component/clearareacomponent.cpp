@@ -52,7 +52,7 @@ int ClearAreaComponent::FootprintSweep() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return 0;
 
-    ComponentEntity* entity = _entity;
+    ComponentEntity* entity = _entity.Get();
     if (!entity) return 0;
 
     // The MapComponent holds the footprint rect (retail MOVSX: the fields are signed).
@@ -81,7 +81,7 @@ int ClearAreaComponent::FootprintSweep() {
             ComponentEntity* occ = tileArray[static_cast<uintptr_t>(cell)].occupant;
 
             // Skip empty cells and the building's own entity.
-            if (occ == nullptr || occ == _entity) continue;
+            if (occ == nullptr || occ == _entity.Get()) continue;
             if (occ->_entityFlags & 0x400) continue;   // already marked for removal
 
             // Mark + push (the proven backend).
@@ -180,7 +180,7 @@ extern "C" int ClearAreaComponent_HarnessSweepComp(ClearAreaComponent* realComp)
 // Read a live component's +0x10 owner field (to confirm it's wired to its entity).
 extern "C" ComponentEntity* ClearAreaComponent_HarnessOwner(ClearAreaComponent* realComp) {
     if (!realComp) return nullptr;
-    return realComp->_entity;
+    return realComp->_entity.Get();
 }
 
 // Harness entry: run the footprint sweep for a given building entity. Builds a

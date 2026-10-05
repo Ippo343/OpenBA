@@ -201,7 +201,7 @@ void CharacterComponent::Startup() {
     actionStack.current = -1;
 
     // Startup (0x140109a30): find sibling components + adopt the description.
-    ComponentEntity* owner = _entity;
+    ComponentEntity* owner = _entity.Get();
     if (!owner) return;
 
     // +0x68 = ModelComponent (geometry; +0x158 = world position).

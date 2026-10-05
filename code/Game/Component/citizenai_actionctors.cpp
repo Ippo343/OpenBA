@@ -156,7 +156,7 @@ static void InstallLeadMessage(CitizenComponent* const* citizenRef, CharacterCom
     if (mem) {
         ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityIBP = (*citizenRef)->_entity;
+        ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
         act = new (mem) SendComponentMessage(&entityIBP, &msgId, 0, &destIBP, 0);   // 0x1400cb1d0
     }
     if (ch->actionStack.field_0x10 != nullptr) {
@@ -178,7 +178,7 @@ static void PushMoveTo(CitizenComponent* const* citizenRef, ActionStack* stack, 
     void* mem = MemA(0x480);
     Action* act = nullptr;
     if (mem) {
-        CharacterComponent* fam = FindCharacterComponent((*citizenRef)->_entity);   // 0x1400012d0
+        CharacterComponent* fam = FindCharacterComponent((*citizenRef)->_entity.Get());   // 0x1400012d0
         float speed = kRdata_140172280;
         act = new (mem) MoveTo(&fam, pathType, 0, dest, static_cast<uint32_t>(mask), 0, speed);   // 0x1400c9170
     }
@@ -350,7 +350,7 @@ void CitizenAI_PerformWorkCtor5_bd070(CitizenComponent* const* citizenRef, Compo
         if (mem) {
             ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = MsgId7158();
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             uint32_t a6 = static_cast<uint32_t>(limit->_i54);
             act = new (mem) SendComponentMessage(&entityIBP, &msgId, 1, &destIBP, a6);   // 0x1400cb1d0
         }
@@ -408,7 +408,7 @@ void CitizenAI_PerformWorkCtor6_bd420(CitizenComponent* const* citizenRef, Compo
         if (mem) {
             ComponentEntity* destIBP = *targetRef;  // local_res8 = *param_2
             uint32_t msgId = MsgId7158();
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             act = new (mem) SendComponentMessage(&entityIBP, &msgId, a4, &destIBP, 0);   // 0x1400cb1d0
         }
         Push(stack, act);
@@ -450,7 +450,7 @@ void CitizenAI_PerformWorkCtor8_bd790(CitizenComponent* const* citizenRef, Compo
         if (mem) {
             ComponentEntity* destIBP = *targetRef;
             uint32_t msgId = MsgId7158();
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             act = new (mem) SendComponentMessage(&entityIBP, &msgId, 0, &destIBP, 0);   // 0x1400cb1d0
         }
         Push(stack, act);
@@ -501,7 +501,7 @@ void CitizenAI_PerformWorkCtor10_bccb0(CitizenComponent* const* citizenRef, Comp
         if (mem) {
             ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = MsgId7158();
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             act = new (mem) SendComponentMessage(&entityIBP, &msgId, a4, &destIBP, 0);   // 0x1400cb1d0
         }
         Push(stack, act);
@@ -566,7 +566,7 @@ void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, Comp
         if (mem) {
             ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = MsgId7158();
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             act = new (mem) SendComponentMessage(&entityIBP, &msgId, 3, &destIBP, 0);   // 0x1400cb1d0
         }
         Push(stack, act);
@@ -576,7 +576,7 @@ void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, Comp
         void* mem = MemA(0x40);
         Action* act = nullptr;
         if (mem) {
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             act = new (mem) ConsumeRawMaterial(&entityIBP, material, 0);   // 0x1400c63b0 (R9 = 3 unused)
         }
         Push(stack, act);
@@ -651,7 +651,7 @@ void CitizenAI_Pathfinding_NavigateTo_bda50(CitizenComponent* const* citizenRef,
         if (mem) {
             ComponentEntity* destIBP = *targetRef;
             uint32_t msgId = MsgId7158();
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             act = new (mem) SendComponentMessage(&entityIBP, &msgId, 0, &destIBP, 0);   // 0x1400cb1d0
         }
         Push(stack, act);
@@ -687,7 +687,7 @@ void CitizenAI_Pathfinding_WalkTowards_bb490(CitizenComponent* const* citizenRef
             if (mem) {
                 ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
                 uint32_t msgId = MsgId7158();
-                ComponentEntity* entityIBP = (*citizenRef)->_entity;
+                ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
                 act = new (mem) SendComponentMessage(&entityIBP, &msgId, param_4, &destIBP, 0);   // 0x1400cb1d0
             }
         }
@@ -729,7 +729,7 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, Com
         if (mem) {
             ComponentEntity* destIBP = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
             uint32_t msgId = MsgId7158();
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             act = new (mem) SendComponentMessage(&entityIBP, &msgId, 8, &destIBP, 0);   // 0x1400cb1d0
         }
         Push(stack, act);
@@ -752,7 +752,7 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, Com
         Action* act = nullptr;
         if (mem) {
             System::Time t = {}; RtSystem_Time_Ctor(&t, param_4);
-            ComponentEntity* entityIBP = (*citizenRef)->_entity;
+            ComponentEntity* entityIBP = (*citizenRef)->_entity.Get();
             // ENDGAME B.3.9 EXA: the real class (was the `??0Internal` door and
             // two stamps); then retail's inlined leaf stores.
             PlayAnimation* a = ::new (mem) PlayAnimation();

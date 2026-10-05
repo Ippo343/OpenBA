@@ -113,7 +113,7 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
     if (obj) {
         ComponentEntity* innerIbp = nullptr;            // [RBP-0x29]   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity; // [RBP-0x21]
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get(); // [RBP-0x21]
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;              // [RBP-0x19]
@@ -185,7 +185,7 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
     obj = WAR_Alloc(0x480, 8);
     Action* mv = nullptr;
     if (obj) {
-        ComponentEntity* entInner = (*citizenRef)->_entity; // [RBP+0x47]
+        ComponentEntity* entInner = (*citizenRef)->_entity.Get(); // [RBP+0x47]
         CharacterComponent* family = FindCharacterComponent(entInner);   // 0x1400012d0            // [RBP-0x21]
         float speed = kRdata_140172280;          // [0x140172280] = -1.0f
         // disasm: R8D=1 (Slow), R9D=0, [RSP+0x20]=param_4, [RSP+0x28]=0xe1f, [RSP+0x30]=0, [RSP+0x38]=speed
@@ -229,7 +229,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
     if (obj) {
         ComponentEntity* innerIbp = nullptr;          // [RBP+0x50]   // retail: InternalBasePtr(nullptr) in a stack slot
         uint32_t msgId = kCitizenAIMessageTargetTypeId;  // PORT GAP: CitizenAIComponent::OnMessage (see CitizenAIComponent.h)
-        ComponentEntity* entityInner = (*citizenRef)->_entity; // [RBP-0x20]
+        ComponentEntity* entityInner = (*citizenRef)->_entity.Get(); // [RBP-0x20]
         sm = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, 0);
     }
     ibpA = sm;              // [RBP-0x18]
@@ -321,7 +321,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
     obj = WAR_Alloc(0x480, 8);
     Action* mv = nullptr;
     if (obj) {
-        ComponentEntity* entInner = (*citizenRef)->_entity; // [RBP+0x40]
+        ComponentEntity* entInner = (*citizenRef)->_entity.Get(); // [RBP+0x40]
         CharacterComponent* family = FindCharacterComponent(entInner);   // 0x1400012d0            // [RBP-0x18]
         float speed = kRdata_140172280;          // [0x140172280] = -1.0f
         // disasm: R8D = 2 (Fast; LEA R8D,[R9+2]), R9D=0, [RSP+0x20]=R13(=param_4),

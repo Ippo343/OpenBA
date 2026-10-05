@@ -222,7 +222,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                     // Check if not flagged for removal (bit 20 of the component flags)
                     if (((natResIBP->_flags >> 0x14) & 1) == 0) {
                         // The animal entity's CharacterComponent (the guarded finder 0x1400012d0)
-                        CharacterComponent* familyComp = FindCharacterComponent(natResIBP->_entity);
+                        CharacterComponent* familyComp = FindCharacterComponent(natResIBP->_entity.Get());
                         const Math::Vector3& animalPos = familyComp->modelComponent->transform.translation;
 
                         // Get animal position as cell index
@@ -487,7 +487,7 @@ int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, i
         natResObj->_flags = newFlags;
 
         // If the component has an entity (+0x10), update it
-        ComponentEntity* parentEntity = natResObj->_entity;
+        ComponentEntity* parentEntity = natResObj->_entity.Get();
         if (parentEntity != nullptr) {
             NotifyEntityChanged(parentEntity);
         }
