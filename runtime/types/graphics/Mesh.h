@@ -915,14 +915,13 @@ public:
     // "four identical groups of six" reading is wrong by construction and only
     // happens to work because every slot is an int or a pointer.
     //
-    // `TriangleList` has no C++ type here on purpose: the arrays it fills are
-    // `Collection::Array<uint8_t>` walked at a 0x18 stride (see `_triangleLists`
-    // below), so the parameter stays `const void*` exactly as the door had it.
+    // B.4 wave Y: the two list parameters are retail's
+    // `PEBUTriangleList@GraphicsMesh@2@` (the arrays they fill are typed).
     // `engine/funcs/engine_funcs.h` carried a SECOND transcription of these same
     // 25 slots in a symmetric "four groups of five" shape; it is ABI-identical
     // and it retires with its last caller.
-    bool Set(int triCount, const void* triLists,
-             int edgeCount, const void* edgeLists,
+    bool Set(int triCount, const GraphicsMesh::TriangleList* triLists,
+             int edgeCount, const GraphicsMesh::TriangleList* edgeLists,
              int i0, uint16_t* ib0, int v0s, void* vb0, int v0n, int v0x,
              uint16_t* ib1, int v1s, void* vb1, int v1n, int v1x,
              uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,

@@ -2468,8 +2468,8 @@ int32_t GraphicsMesh::GetNodeIndexFromName(const char* name) const {
 // +0x88), (+0xe8, +0xc8), (+0x128, +0x108) -- the INDEX buffer of each pair is
 // uploaded FIRST.
 // ----------------------------------------------------------------------------
-bool EdgeMesh::Set(int triCount, const void* triLists,
-                   int edgeCount, const void* edgeLists,
+bool EdgeMesh::Set(int triCount, const GraphicsMesh::TriangleList* triLists,
+                   int edgeCount, const GraphicsMesh::TriangleList* edgeLists,
                    int i0, uint16_t* ib0, int v0s, void* vb0, int v0n, int v0x,
                    uint16_t* ib1, int v1s, void* vb1, int v1n, int v1x,
                    uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
@@ -2477,13 +2477,8 @@ bool EdgeMesh::Set(int triCount, const void* triLists,
                    const ::Box& box) {
     _aabb = box;
 
-    // LEFT: the two list parameters are `const void*` in the declaration its
-    // code/Game caller (tool_base_render.cpp) holds; retail's are
-    // `const GraphicsMesh::TriangleList*`.
-    const GraphicsMesh::TriangleList* const tris =
-        static_cast<const GraphicsMesh::TriangleList*>(triLists);   // LEFT: SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)
-    const GraphicsMesh::TriangleList* const edges =
-        static_cast<const GraphicsMesh::TriangleList*>(edgeLists);   // LEFT: SIG EdgeMesh::Set takes the lists as const void* (its caller tool_base_render.cpp passes byte buffers)
+    const GraphicsMesh::TriangleList* const tris  = triLists;
+    const GraphicsMesh::TriangleList* const edges = edgeLists;
 
     rtcoll::RtColl_ArraySetSize_1800136f0(&_triangleLists, triCount);
     for (int i = 0; i < _triangleLists._size; ++i)

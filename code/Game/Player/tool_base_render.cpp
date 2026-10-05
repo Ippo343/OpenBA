@@ -391,8 +391,8 @@ void Impl_b930(HighlightComponent* hc) {
     hc->fieldF8 = mesh;
 
     // Two GraphicsMesh::TriangleList descriptors { pad, vtxCount@+4, pad, idxCount@+0xc, pad, pad }.
-    uint32_t triList0[6] = {0, (uint32_t)fillVtx._size, 0, (uint32_t)fillIdx._size, 0, 0};
-    uint32_t triList1[6] = {0, (uint32_t)edgeVtx._size, 0, (uint32_t)edgeIdx._size, 0, 0};
+    Graphics::GraphicsMesh::TriangleList triList0 = {0, fillVtx._size, 0, fillIdx._size, 0, 0};
+    Graphics::GraphicsMesh::TriangleList triList1 = {0, edgeVtx._size, 0, edgeIdx._size, 0, 0};
 
     // B.3.5 bridge -- ?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@
     // H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z (0x1800a23e0). The member was
@@ -408,8 +408,8 @@ void Impl_b930(HighlightComponent* hc) {
     // term came out.
     if (mesh) {
         mesh->Set(
-            1, triList0,
-            1, triList1,
+            1, &triList0,
+            1, &triList1,
             // fill stream: short indices + 8-byte TriangleVertex, stride 8
             fillIdx._size, fillIdx._data,
             fillVtx._size, fillVtx._data, 8,
