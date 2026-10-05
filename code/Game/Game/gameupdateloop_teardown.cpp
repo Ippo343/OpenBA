@@ -62,7 +62,7 @@
 // tool registry's count, are named fields now).
 namespace {
 
-inline void MemFree(void* p) { if (p) System::MemoryAllocator::MemFree(p); }
+inline void MemFree(void* p) { if (p) System::MemoryAllocator::MemFree(p); }   // LEFT: void* is a raw heap block (System::MemoryAllocator::MemFree takes void*); kept as a wrapper for its null test
 
 // MSVC's __ehvec_dtor_iter: destroy the elements of an embedded array in
 // REVERSE order. Retail reaches these through the CRT helper at 0x14003ad30;
@@ -145,7 +145,7 @@ extern "C" void NodeSubTree_Clear_2cf30(WorkSchedulerBucketNode* node) {
 // 0x14002ce60 — recursive node free (children +0x20/+0x28), each node owning a
 // sub-tree cleared by NodeSubTree_Clear_2cf30
 // ============================================================
-extern "C" void TreeNodeFree_2ce60(void* hdrV, WorkSchedulerBucketNode* node) {
+extern "C" void TreeNodeFree_2ce60(WorkSchedulerBucketNode** hdrV, WorkSchedulerBucketNode* node) {
     if (!node) return;
     TreeNodeFree_2ce60(hdrV, node->left);
     TreeNodeFree_2ce60(hdrV, node->right);
@@ -157,7 +157,7 @@ extern "C" void TreeNodeFree_2ce60(void* hdrV, WorkSchedulerBucketNode* node) {
 // 0x14002df90 — recursive node free (children +0x20/+0x28), IBP payload at +0x10
 // ============================================================
 // (PlayerToolManager +0x10's tool registry: the node is Dialog/ToolRegistryNode.h.)
-extern "C" void TreeNodeFree_2df90(void* hdrV, ToolRegistryNode* node) {
+extern "C" void TreeNodeFree_2df90(AvlTreeHead<ToolRegistryNode>* hdrV, ToolRegistryNode* node) {
     if (!node) return;
     TreeNodeFree_2df90(hdrV, node->left);
     TreeNodeFree_2df90(hdrV, node->right);

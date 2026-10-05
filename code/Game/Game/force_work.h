@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstddef>
 
+namespace Object { class Base; }   // object/Base.h
 class ComponentEntity;   // Entity/ComponentEntity.h
 class Component;         // Component/Component.h
 class CitizenComponent;  // Component/CitizenComponent.h
@@ -42,8 +43,8 @@ constexpr int kCharCompOff  = 0x278;
 constexpr int kActionTopOff = 0x60;
 
 // ---- crash-safe memory probes (VirtualQuery-backed) -------------------------
-bool Readable(const void* p, size_t n);
-bool Executable(const void* p);
+bool Readable(const void* p, size_t n);   // LEFT: void* is a raw address (diagnostic probe), not an object: VirtualQuery readable-range check
+bool Executable(const void* p);   // LEFT: void* is a raw address (diagnostic probe), not an object: VirtualQuery executable check
 
 // Drop Readable()'s cached readable regions. Call once at the start of a pass that
 // probes many objects; entries stay valid only until the next reset, so the cache
@@ -51,7 +52,7 @@ bool Executable(const void* p);
 void ResetReadableCache();
 
 // GetTypeId via vtable[+0x10], fully probe-guarded (0 on any bad pointer).
-uint32_t SafeGetTypeId(void* obj);
+uint32_t SafeGetTypeId(::Object::Base* obj);
 
 // Find a component by exe type-id on an entity's IBP component list (crash-safe, null on miss).
 Component* FindComp(ComponentEntity* entity, uint32_t tid);

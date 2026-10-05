@@ -94,9 +94,3 @@ static_assert(offsetof(ScenarioDialog, _padB9) == 0xB9, "ScenarioDialog::_padB9"
 static_assert(offsetof(ScenarioDialog, _padCC) == 0xCC, "ScenarioDialog::_padCC");
 static_assert(alignof(ScenarioDialog) == 8, "ScenarioDialog is qword-aligned");
 
-// B4 FORWARD: 1 outside caller file (mainmenudialog.cpp, two calls) -> the
-// ScenarioDialog ctor (retail 0x1400786b0).
-ScenarioDialog* ScenarioDialog_Ctor(void* self, UI::UserInterface* ui, const UI::Dialog* extRes,
-                                    const Object::InternalPtr<UI::DialogInstance>* parentIBP,
-                                    const Object::InternalPtr<MainMenuDialog>* parentMenuIBP,
-                                    uint8_t difficulty);

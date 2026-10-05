@@ -81,6 +81,9 @@ public:                                                                         
     static uint32_t TypeId() { return _typeInfo.typeId; }                        \
     static const ::Object::BaseTypeInfo& GetTypeInfo() { return _typeInfo; }     \
     static ::Object::Base* CreateNewObject();                                     \
+    /* LEFT: void* is raw placement storage, not an object: the signature is  */ \
+    /* runtime's BaseTypeInfo::InPlaceFn (object/TypeInfo.h), the record's    */ \
+    /* in-place factory entry for every class of the macro.                   */ \
     static ::Object::Base* CreateInPlaceObject(void* storage);                    \
     static const void* Vtable();                                                  \
 private:                                                                          \

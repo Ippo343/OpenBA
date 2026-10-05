@@ -233,7 +233,7 @@ static bool RepoDiag() {
 }
 #define REPO_DIAG(...) do { if (RepoDiag()) { printf(__VA_ARGS__); fflush(stdout); } } while (0)
 
-void EditTool::Update(void*, char) {
+void EditTool::Update(const System::Time*, char) {
     // Re-sync the selection outline to the (possibly moving) selected entity every
     // frame BEFORE the dialog-positioning early-outs below — the follow reads the
     // selected-entity ref at +0x30 and is independent of the info dialog at +0x28.

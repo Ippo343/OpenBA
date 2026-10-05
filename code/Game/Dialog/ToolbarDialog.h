@@ -81,8 +81,3 @@ static_assert(offsetof(ToolbarDialog, speedValues) == 0xF8, "ToolbarDialog +0xf8
 static_assert(sizeof(ToolbarDialog) == 0x108, "ToolbarDialog is 0x108 (create 0x140021710)");
 static_assert(alignof(ToolbarDialog) == 8, "ToolbarDialog is qword-aligned");
 
-// B4 FORWARD: 1 outside caller(s) (Game/gameupdateloop.cpp). The ctor door at
-// 0x1400b9910: placement-news the class; parentPtr is the InternalPtr the ctor copies.
-ToolbarDialog* ToolbarDialog_Ctor_Impl(void* self, UI::UserInterface* userInterface, const UI::Dialog* dialog,
-                                       const Object::InternalPtr<UI::DialogInstance>* parentPtr,
-                                       const Toolbar* toolbarData);

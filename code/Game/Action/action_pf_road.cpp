@@ -47,7 +47,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (M-D scoped finder fallback)
-#include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "Component/ModelComponent.h"   // ENDGAME B.3.8 CB3: ModelComponent::TypeId()
 #include "Component/InteractDescription.h"
@@ -102,7 +101,7 @@ static_assert(std::is_trivially_default_constructible<GeometryBatchVertex>::valu
 //   9f3e0 Reimpl_MapGetTerrainPos (f3e0, grid -> world)
 // 021d0 (int-array SetSize), c890 (uint16 SetSize) and 1f8d0/ee40 (0x14-byte-element
 // SetSize/SetSizeFill) are the exe-side Collection::Array<T> monomorphisations --
-// ENDGAME B.3.2 step 2 converted their call sites below to GameColl::AsArray<T>
+// ENDGAME B.3.2 step 2 converted their call sites below to Collection::Array<T>
 // member calls, so the resolved-pointer stand-ins for them are gone.
 // B.3.1: Math::Quaternion::Rotate [0x1401525f0] (3-arg — R8 = input vec; Ghidra dropped it),
 // Math::Vector3::Heading [0x1401512d8], Math::Transform::operator*(Vector3) [0x140151470]

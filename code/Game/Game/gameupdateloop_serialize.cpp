@@ -62,7 +62,6 @@
 #include "options.h"
 #include "system/String.h"
 #include "collection/Collection.h"
-#include "Component/coll_bridge.h"
 #include <new>
 #include <cstdint>
 #include <cstdio>

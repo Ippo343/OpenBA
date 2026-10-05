@@ -56,7 +56,7 @@ public:
     void Startup() override;                                               // [4]  0x1400dcd50
     void Shutdown() override;                                              // [5]  0x1400dccc0
     char OnKey(char active) override;                                      // [6]  0x1400dcbe0
-    void Update(void* time, char active) override;                         // [7]  0x1400dcad0
+    void Update(const System::Time* time, char active) override;       // [7]  0x1400dcad0
     void Draw(Video::Context* context, char active) override;                        // [8]  0x1400dc440
     char OnCancel() override;                                              // [9]  0x1400dcd10
     Object::Type* GetSettingType(Object::Type* ret) const override;        // [11] 0x140026920

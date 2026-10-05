@@ -103,16 +103,13 @@ void AssignBatch(uint8_t* d, const uint8_t* s) {
 void InitBatch(uint8_t* d) {
     rtcoll::InitAs<GeometryBatch, &ConstructBatch>(d);
 }
-void DestroyBatchRange(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<GeometryBatch, &DestroyBatches>(ignoredThis, base, count);
-}
 
 }  // namespace
 
 namespace GeometryBatchRows {
 const rtcoll::ArraySpec kSpec_GeometryBatch = {          // exe 0x14001f250 / 0x14001fa80
     "Array<GeometryBatch>", 0x60, 8,
-    &AssignBatch, &InitBatch, &DestroyBatchRange, false,
+    &AssignBatch, &InitBatch, &rtcoll::DestroyAs<GeometryBatch, &DestroyBatches>, false,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };

@@ -91,7 +91,7 @@
 //
 // The redundant `node+0x00 = 0` immediately followed by `node+0x00 = key` is the inlined
 // InternalBasePtr default-ctor followed by the copy-assign; kept verbatim.
-extern "C" MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim* src,
+extern "C" MarketWork::ClaimNode* MarketBst_ae50(MarketWork::ClaimTree* unused, MarketWork::Claim* src,
                                                  MarketWork::ClaimNode* parent) {
     (void)unused;   // homed at [RSP+8] by retail and never loaded — genuinely dead.
 
@@ -188,7 +188,7 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimTree* tree,
         if (srcKey < curKey) {                             // abb0 JC — UNSIGNED
             MarketWork::ClaimNode* left = cur->left;       // abd6
             if (left == nullptr) {
-                newNode = MarketBst_ae50(cur, src, cur);
+                newNode = MarketBst_ae50(tree, src, cur);
                 cur->left = newNode;                       // ac0a
                 break;
             }
@@ -208,7 +208,7 @@ extern "C" MarketWork::ClaimNode** MarketBst_ab60(MarketWork::ClaimTree* tree,
 
         MarketWork::ClaimNode* right = cur->right;         // abc3
         if (right == nullptr) {
-            newNode = MarketBst_ae50(cur, src, cur);
+            newNode = MarketBst_ae50(tree, src, cur);
             cur->right = newNode;                          // abf4
             break;
         }

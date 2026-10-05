@@ -191,7 +191,7 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName) {
     return typeId;
 }
 
-bool IsDerivedFromOrTrust(const void* obj, uint32_t typeId) {
+bool IsDerivedFromOrTrust(const Base* obj, uint32_t typeId) {
     (void)typeId;
     return obj != nullptr;
 }

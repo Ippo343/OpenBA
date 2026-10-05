@@ -91,7 +91,6 @@
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
 #include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
-extern void* Debug_Sprite_DefaultCtor(void* retval);
 extern bool Debug_Sprite_IsValid(const UI::Sprite* sprite);
 extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData);
 #endif
@@ -1136,20 +1135,6 @@ found_speed:
     // --- Cleanup ---
     System::MemoryAllocator::MemFree(shortcutIds);
     System::MemoryAllocator::MemFree(itemList);
-}
-
-// B4 FORWARD: 1 outside caller (Game/gameupdateloop.cpp). The door at 0x1400b9910
-// (fn_ToolbarDialog_Ctor in GameUpdateLoop::Startup): placement-news the class.
-// parentPtr is an InternalPtr* the ctor copies, as retail does.
-ToolbarDialog* ToolbarDialog_Ctor_Impl(void* self, UI::UserInterface* userInterface, const UI::Dialog* dialog,
-                                       const Object::InternalPtr<UI::DialogInstance>* parentPtr,
-                                       const Toolbar* toolbarData) {
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentPtr)
-        parent = *parentPtr;
-    return ::new (self) ToolbarDialog(userInterface,
-                                      dialog, parent,
-                                      toolbarData);
 }
 
 // ============================================================

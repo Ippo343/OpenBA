@@ -42,7 +42,7 @@ public:
     ~DragPlacementTool() override = default;                               // [0]  0x14002d900
     void Startup() override;                                               // [4]  0x1400fc3e0
     void Shutdown() override {}                                            // [5]  0x1400fc3d0 RET
-    void Update(void*, char) override {}                                   // [7]  0x1400fc3c0 RET
+    void Update(const System::Time*, char) override {}                   // [7]  0x1400fc3c0 RET
     void Draw(Video::Context* context, char active) override;                        // [8]  0x1400fbe40
     bool CalcPath(int startCell, int endCell) override;                    // [13] 0x1400fb900
     int  CalcCost(int startCell, int endCell, uint32_t* outValid,

@@ -59,7 +59,7 @@
 // CitizenComponent in standalone can have a garbage description cache (+0x288) or an
 // unset name String; the raw derefs the faithful retail port does would fault (MinGW
 // has no __try/__except to catch it). Same idea as CitUI_OkPtr in citizenui.cpp.
-static inline bool RUI_OkPtr(const void* ptr) {
+static inline bool RUI_OkPtr(const void* ptr) {   // LEFT: void* is a raw address (diagnostic probe), not an object: checks it lies in [0x10000, 0x7FFFFFFFFFFF] (description cache / name String pointers)
     uintptr_t p = reinterpret_cast<uintptr_t>(ptr);  // CAST-OK: ptr_int
     return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
 }

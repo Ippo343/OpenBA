@@ -43,7 +43,6 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "math/Math.h"
 #include "collection/Collection.h"
-#include "Component/coll_bridge.h"
 #include "object/Internal.h"     // Object::detail::InternalMemFree
 #include "Object/exe_type.h"     // DEFINE_EXE_VTABLE
 #include <new>
@@ -407,19 +406,10 @@ extern "C" void WeatherEffect_SetEnabled(WeatherSimulation* sim, int slot, int e
 // zero init for the tail, old block freed only when it moved, no destroy.
 // Every arm matched; only the `if (dst)` out-of-memory guard is gone.
 // ============================================================
-namespace {
-// ENDGAME B.3.2 closing pass: as for the particle row above, the hand-derived
-// row said exactly what `SpecFor<Bytes<0x10,8>>()` derives — whole-stride byte
-// copy, whole-stride zero tail, no destroy, no untouched extent.
-using WeatherEntryElem = GameColl::Bytes<0x10, 8>;   // exe 0x1400198a0
-static_assert(sizeof(WeatherEntryElem)  == 0x10, "WeatherEntryElem stride");
-static_assert(alignof(WeatherEntryElem) == 8,    "WeatherEntryElem align");
-}  // namespace
-
 extern "C" void Reimpl_WeatherArray_Resize(Collection::Array<EnvironmentDescription::WeatherChoice>* hdr, int newCount) {
-    // EnvironmentDescription +0x28, typed: the zero-initialised WeatherChoice's trait row is
-    // WeatherEntryElem's (stride 0x10, align 8, byte copy, zeroed tail, no destroy).
+    // EnvironmentDescription +0x28, typed: the zero-initialised WeatherChoice's trait row
+    // (stride 0x10, align 8, byte copy, zeroed tail, no destroy) is 0x1400198a0's.
     hdr->SetSize(newCount);
 }
-static_assert(sizeof(EnvironmentDescription::WeatherChoice) == sizeof(WeatherEntryElem), "0x1400198a0 stride");
-static_assert(alignof(EnvironmentDescription::WeatherChoice) == alignof(WeatherEntryElem), "0x1400198a0 align");
+static_assert(sizeof(EnvironmentDescription::WeatherChoice) == 0x10, "0x1400198a0 stride");
+static_assert(alignof(EnvironmentDescription::WeatherChoice) == 8, "0x1400198a0 align");

@@ -97,7 +97,7 @@ public:
     void Startup() override {}                                             // [4]  0x1400de940 RET
     void Shutdown() override;                                              // [5]  0x1400de930
     char OnKey(char active) override;                                      // [6]  0x1400de6b0
-    void Update(void*, char) override {}                                   // [7]  0x1400dd700 RET
+    void Update(const System::Time*, char) override {}                   // [7]  0x1400dd700 RET
     void Draw(Video::Context* context, char active) override;                        // [8]  0x1400dd3b0
     char OnCancel() override { return 0; }                                 // [9]  0x1400de920
     bool IsSelected(ComponentEntity* const* ref) override;                 // [10] 0x1400de8d0

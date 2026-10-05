@@ -130,7 +130,7 @@ void DestroyNodeBody(ClaimNode* node) {
 //
 // The null test is RETAIL's, not a defensive addition -- 0x14002ac40 only ever reaches
 // this with a value it has already proven non-null, so retail is being generous, not us.
-extern "C" void MarketBst_aee0(void* /*unusedRcx*/, MarketWork::ClaimNode* node) {
+extern "C" void MarketBst_aee0(MarketWork::ClaimTree* /*unusedTree*/, MarketWork::ClaimNode* node) {
     if (node == nullptr) return;
     DestroyNodeBody(node);
 }
@@ -194,7 +194,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimTree* tree, MarketWork::ClaimNod
             if (r != nullptr) r->parent = z->parent;         // ad2c
             // ad30: CALL 0x14002aee0 with RCX still holding `right` -- a dead argument,
             // passed here only to keep the call ABI-identical.
-            MarketBst_aee0(right, z);
+            MarketBst_aee0(tree, z);
             useB = (r != nullptr);                           // ad35: TEST RBX,RBX
         } else {
             // ---- Case 3: two children ---------------------------------------------
@@ -241,7 +241,7 @@ extern "C" void MarketBst_ac40(MarketWork::ClaimTree* tree, MarketWork::ClaimNod
             // ae1f: CALL 0x14002aee0 with RCX = s (dead argument again).
             // NOTE: s keeps its OWN balance/height here -- retail does not copy z's.
             // The retrace is what re-derives them.
-            MarketBst_aee0(s, z);
+            MarketBst_aee0(tree, z);
             useB = (detachParent == nullptr);                      // ae2e/ae31: TEST/CMOVZ
         }
     }

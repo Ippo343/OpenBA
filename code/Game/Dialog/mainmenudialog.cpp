@@ -34,7 +34,7 @@
 #include "runtime/types/ui/DialogInstance.h"
 #include "Game/game.h"   // B3R STORAGE: g_gameContainer
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Dialog/ScenarioDialog.h"      // B3R: ScenarioDialog_Ctor
+#include "Dialog/ScenarioDialog.h"      // ScenarioDialog (placement-constructed)
 #include "Dialog/SaveLoadDialog.h"      // SaveLoadDialog_Ctor_8270's result (a DialogInstance)
 #include "Dialog/OptionsDialog.h"       // OptionsDialog_Ctor_Standalone's result (a DialogInstance)
 #include "system/Configuration.h"      // B3R: System::Configuration, RtSystem_Configuration_CurrentBuildId
@@ -304,10 +304,9 @@ void MainMenuDialog::OpenScenario() {
     if (dlgMem) {
         Object::InternalPtr<MainMenuDialog> parentIBP(this);
         Object::InternalPtr<UI::DialogInstance> nullIBP;
-        dlgObj = ScenarioDialog_Ctor(dlgMem,   // 0x1400786b0
-                                     _ui, extRes, &nullIBP,
-                                     &parentIBP,
-                                     0);  // difficulty (main menu = 0)
+        dlgObj = ::new (dlgMem) ScenarioDialog(_ui, extRes, nullIBP,   // 0x1400786b0
+                                               parentIBP.Get(),
+                                               0);  // difficulty (main menu = 0)
     }
     AddDialogToUI(this, dlgObj);
 }
@@ -351,10 +350,9 @@ void MainMenuDialog::OpenTutorial() {
     if (dlgMem) {
         Object::InternalPtr<MainMenuDialog> parentIBP(this);
         Object::InternalPtr<UI::DialogInstance> nullIBP;
-        dlgObj = ScenarioDialog_Ctor(dlgMem,   // 0x1400786b0
-                                     _ui, extRes, &nullIBP,
-                                     &parentIBP,
-                                     1);  // difficulty: 1 = tutorial mode
+        dlgObj = ::new (dlgMem) ScenarioDialog(_ui, extRes, nullIBP,   // 0x1400786b0
+                                               parentIBP.Get(),
+                                               1);  // difficulty: 1 = tutorial mode
         printf("[MainMenuDialog] OpenTutorial: dlgObj=%p after ctor\n", dlgObj);
     }
     {

@@ -80,7 +80,7 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName);
 // after a typed FindOrLoad. Also used in path-export (encState==3) for
 // side-effect calls that the original exe makes; those become no-ops in
 // standalone.
-bool IsDerivedFromOrTrust(const void* obj, uint32_t typeId);
+bool IsDerivedFromOrTrust(const Base* obj, uint32_t typeId);
 
 // Type-derivation test over the Factory tree (Factory::IsDerivedFrom's parent
 // links, which Startup's second pass built): true when the type `typeId` is

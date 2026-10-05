@@ -426,7 +426,7 @@ LegacyKeyIntNode* LegacyTreeSucc(LegacyKeyIntNode* n) {
     }
     return parent;
 }
-void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
+void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {   // LEFT: void* is the +0x160 root slot, which holds two node types (the typed bucket set's and this legacy 0x30-byte tree's): the one cast below is that FLOOR ruling's
     // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
     // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
     LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: FLOOR? (B4 H5-P2: +0x160 IS typed now, CitizenBucketSet<ComponentDescription>): the version < 2 arm (never reached at save version 6) reads that Set's root slot as a second node type, the 0x30-byte LegacyKeyIntNode; one slot, two node types, so no typed member names it; whether retail's version < 2 arm uses this node type is not read (retail-difference task)

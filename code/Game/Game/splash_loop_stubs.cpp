@@ -54,7 +54,7 @@
 
 // Defined in code/Game/Game/gameupdateloop_load.cpp. Returns true once the
 // new-game world build for `loop` (a GameUpdateLoop) has fully completed.
-extern "C" bool GameUpdateLoop_IsWorldBuilt(void* loop);
+extern "C" bool GameUpdateLoop_IsWorldBuilt(const Engine::UpdateLoop* loop);
 
 namespace {
 

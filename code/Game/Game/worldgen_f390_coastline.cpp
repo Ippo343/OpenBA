@@ -147,7 +147,7 @@ static inline float fnegate(float v) {
 // unobservable" is not a licence to change world generation inside a refactor
 // whose contract is no behaviour change (B32_RULES / B31_RULES step 2). So each
 // site keeps ITS OWN arm: `kSpec_WgPathPointNoInit` here, and for ranges the
-// zeroing element `Collection::Array<GameColl::Bytes<0x1C,4>>` it now spells
+// zeroing element `Collection::Array<Bytes<0x1C,4>>` (the old bridge element) it now spells
 // itself (ENDGAME B.3.2 closing pass — that arm's row was a whole-stride byte
 // copy plus a whole-stride zero tail with no destroy and no untouched extent,
 // i.e. exactly what `SpecFor<Bytes<0x1C,4>>()` derives, so the shared row object

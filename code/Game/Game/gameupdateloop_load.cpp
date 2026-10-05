@@ -703,7 +703,7 @@ static void BuildSkyMesh_Step28(GameUpdateLoop* self) {
 // s_loadingLoop *ownership* guard below (which is set at build START).
 static std::atomic<void*> s_worldBuiltLoop{nullptr};
 
-extern "C" bool GameUpdateLoop_IsWorldBuilt(void* loop) {
+extern "C" bool GameUpdateLoop_IsWorldBuilt(const Engine::UpdateLoop* loop) {
     return loop != nullptr &&
            s_worldBuiltLoop.load(std::memory_order_acquire) == loop;
 }

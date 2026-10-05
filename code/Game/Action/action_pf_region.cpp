@@ -41,7 +41,6 @@ namespace {
 static inline void* MemAlloc(int64_t size, int align) {
     return System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(size), align);
 }
-static inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // The walkable terrain types the flood fills spread over (retail's 0xe1f mask).
 inline bool Walkable(uint8_t terrainType) {
@@ -91,7 +90,7 @@ void RegionGraph::FreeRegion(int region) {
             }
         }
         if (pvVar3 != freeRegions._data) {
-            MemFree(pvVar3);
+            System::MemoryAllocator::MemFree(pvVar3);
         }
     }
 }
@@ -157,7 +156,7 @@ void RegionGraph::MarkAdjacencyDirty(int block) {
                 }
             }
             if (pvVar3 != dirtyAdjacency._data) {
-                MemFree(pvVar3);
+                System::MemoryAllocator::MemFree(pvVar3);
             }
         }
     }
@@ -227,7 +226,7 @@ void RegionGraph::RebuildAdjacency(int block) {
                                 }
                             }
                             if (pvVar2 != lVar11->neighbours._data) {
-                                MemFree(pvVar2);
+                                System::MemoryAllocator::MemFree(pvVar2);
                             }
                         }
                     }
@@ -349,7 +348,7 @@ void RegionGraph::AddBorderCells(int region, int param_3, int param_4, int param
                         }
                     }
                     if (pvVar4 != lVar12->borderCells._data) {
-                        MemFree(pvVar4);
+                        System::MemoryAllocator::MemFree(pvVar4);
                     }
                 }
             }
@@ -680,7 +679,7 @@ void RegionGraph::RebuildBlock(uint32_t block) {
                     }
                 }
                 if (pvVar3 != lVar8->regions._data) {
-                    MemFree(pvVar3);
+                    System::MemoryAllocator::MemFree(pvVar3);
                 }
                 uVar13 = static_cast<uint64_t>(block);
             }

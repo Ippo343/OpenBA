@@ -98,9 +98,6 @@ extern "C" void GameSettings_Save(GameSettings* settings);  // 0x140098970
 // g_pNewGameSettings. Null outside RunGameMain's settings lifetime.
 extern GameSettings* g_gameSettings;
 
-// ---- gameupdateloop.cpp
-extern "C" float CalcWindFactor_Reg(void* time);  // 0x1401027c0
-
 // ---- gameupdateloop_load.cpp
 
 // ---- gameupdateloop_serialize.cpp

@@ -356,7 +356,7 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
 // walked unguarded by every WorkBase_FindComponent_* call site in the tree, so guarding one
 // of them defends nothing systemically — if that corruption returns it will fault
 // elsewhere first, and the fix belongs in the removal lifecycle, not here.
-static inline bool SI_Plausible(const void* p) {
+static inline bool SI_Plausible(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: in [0x10000, 0x7fffffffffff) and 8-aligned
     uintptr_t v = reinterpret_cast<uintptr_t>(p);  // CAST-OK: ptr_int
     return v >= 0x10000 && v < 0x00007fffffffffffull && (v & 7) == 0;
 }

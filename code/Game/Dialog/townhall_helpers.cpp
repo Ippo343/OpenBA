@@ -144,9 +144,6 @@ void ProfRows_Destroy(ProfRow* rows, int count) {
 void AssignProfRow(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<ProfRow, &ProfRow_Copy>(d, s);
 }
-void DestroyProfRow(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<ProfRow, &ProfRows_Destroy>(ignoredThis, base, count);
-}
 
 } // namespace
 
@@ -154,7 +151,7 @@ namespace TownHallRows {
 // init null: the array only ever grows through the fill form (InitProfessions).
 const rtcoll::ArraySpec kSpec_ProfessionRow = {          // exe 0x140015800
     "Array<TownHallUI::ProfessionRow>", 0x40, 8,
-    &AssignProfRow, nullptr, &DestroyProfRow, false,
+    &AssignProfRow, nullptr, &rtcoll::DestroyAs<ProfRow, &ProfRows_Destroy>, false,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };

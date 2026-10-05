@@ -90,18 +90,14 @@ static inline void  WAP_Append(ActionStack* list, const ::Object::InternalPtr<Ac
     ActionStackPush(list, ibp);
 }
 
-// Build an inline PerformWork action object into 'o' (0x48 alloc, already non-null).
+// The inline PerformWork actions below are built with the real ctor 0x1400c9720 (useTool = 0,
+// +0x44 = -1) placed in their 0x48-byte MemAlloc block (already non-null).
 // Mirrors the repeated inline block at 0x1400babb1.. / 0x1400c0408.. etc.
 //   entityInner  -> [o+0x20]    (citizen inner)
 //   heading      -> [o+0x28]    (float)
 //   actionType   -> [o+0x2c]    (int, 0x6 or 0x7)
 //   timeVal      -> [o+0x30]    (int64 from System::Time::Time)
 //   [o+0x44]     = 0xffffffff
-static PerformWork* WAP_BuildInlinePerformWork(void* o, CitizenComponent* entityInner, float heading,
-                                               int actionType, int64_t timeVal) {
-    // The inlined PerformWork ctor 0x1400c9720 with useTool = 0, +0x44 = -1: the real ctor.
-    return new (o) PerformWork(&entityInner, heading, static_cast<uint32_t>(actionType), timeVal, 0, -1);
-}
 
 // ============================================================
 // PerformWork_Action_CopyCtor (0x1400ba9f0) -> WorkAct_PerformWorkCopyCtor_ba9f0
@@ -165,7 +161,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
         CitizenComponent* entityInner = *citizenRef; // 0x1400bab6c: [R14]
         System::Time timeVal = {0};
         { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
-        pw1 = WAP_BuildInlinePerformWork(obj, entityInner, headingA, 0x7, timeVal._ticks); // 0x2c=7
+        pw1 = new (obj) PerformWork(&entityInner, headingA, 0x7, timeVal._ticks, 0, -1); // 0x2c=7
     }
     ibpA = pw1;
     WAP_Append(list, &ibpA);
@@ -210,7 +206,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
         CitizenComponent* entityInner = *citizenRef;
         System::Time timeVal = {0};
         { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
-        pw2 = WAP_BuildInlinePerformWork(obj, entityInner, headingA, 0x6, timeVal._ticks); // 0x1400bad7d: 0x2c=6
+        pw2 = new (obj) PerformWork(&entityInner, headingA, 0x6, timeVal._ticks, 0, -1); // 0x1400bad7d: 0x2c=6
     }
     ibpA = pw2;
     WAP_Append(list, &ibpA);
@@ -236,7 +232,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
         CitizenComponent* entityInner = *citizenRef;
         System::Time timeVal = {0};
         { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
-        pw3 = WAP_BuildInlinePerformWork(obj, entityInner, headingB, 0x7, timeVal._ticks); // 0x1400baebc: 0x2c=7, XMM8
+        pw3 = new (obj) PerformWork(&entityInner, headingB, 0x7, timeVal._ticks, 0, -1); // 0x1400baebc: 0x2c=7, XMM8
     }
     ibpA = pw3;
     WAP_Append(list, &ibpA);
@@ -258,7 +254,7 @@ void WorkAct_PerformWorkCopyCtor_ba9f0(CitizenComponent* const* citizenRef, uint
         CitizenComponent* entityInner = *citizenRef;
         System::Time timeVal = {0};
         { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
-        pw4 = WAP_BuildInlinePerformWork(obj, entityInner, headingB, 0x6, timeVal._ticks); // 0x1400baf9d: 0x2c=6, XMM8
+        pw4 = new (obj) PerformWork(&entityInner, headingB, 0x6, timeVal._ticks, 0, -1); // 0x1400baf9d: 0x2c=6, XMM8
     }
     ibpA = pw4;
     WAP_Append(list, &ibpA);
@@ -439,7 +435,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
             CitizenComponent* entityInner = *citizenRef;
             System::Time timeVal = {0};
             { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
-            pwA = WAP_BuildInlinePerformWork(obj, entityInner, headingP, 0x7, timeVal._ticks); // 0x1400c0430: 0x2c=7
+            pwA = new (obj) PerformWork(&entityInner, headingP, 0x7, timeVal._ticks, 0, -1); // 0x1400c0430: 0x2c=7
         }
         ibpA = pwA;
         WAP_Append(list, &ibpA);
@@ -464,7 +460,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
             CitizenComponent* entityInner = *citizenRef;
             System::Time timeVal = {0};
             { System::Time* t = RtSystem_Time_Ctor(&timeVal, timeC); if (t) timeVal = *t; }
-            pwB = WAP_BuildInlinePerformWork(obj, entityInner, headingP, 0x6, timeVal._ticks); // 0x1400c053f: 0x2c=6
+            pwB = new (obj) PerformWork(&entityInner, headingP, 0x6, timeVal._ticks, 0, -1); // 0x1400c053f: 0x2c=6
         }
         ibpA = pwB;
         WAP_Append(list, &ibpA);

@@ -75,7 +75,7 @@
 static inline bool CitUI_OkAddr(uintptr_t p) {
     return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
 }
-static inline bool CitUI_OkPtr(const void* p) {
+static inline bool CitUI_OkPtr(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: checks it lies in [0x10000, 0x7FFFFFFFFFFF] before a citizen-dialog deref
     return CitUI_OkAddr((uintptr_t)p);  // CAST-OK: ptr_int
 }
 

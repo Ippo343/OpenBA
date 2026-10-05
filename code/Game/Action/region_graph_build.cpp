@@ -32,7 +32,6 @@ namespace {
 static inline void* MemAlloc(int64_t size, int align) {
     return System::MemoryAllocator::MemAlloc(size, align);
 }
-static inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 } // namespace
 
@@ -47,7 +46,7 @@ static void RegionBlocksFreeTail(RegionBlock* first, int count) {
         int64_t remaining = (int64_t)count;
         RegionBlock* block = first;
         do {
-            MemFree(block->regions._data);
+            System::MemoryAllocator::MemFree(block->regions._data);
             block->regions._data = nullptr;
             block->regions._size = 0;        // H7: retail clears size and capacity with one qword
             block->regions._capacity = 0;
@@ -121,7 +120,7 @@ static void RegionBlocksResize(RawArray<RegionBlock>* blocks, int newCount) {
             if (0 < oldCount) {
                 RegionBlock* block = oldData;
                 do {
-                    MemFree(block->regions._data);
+                    System::MemoryAllocator::MemFree(block->regions._data);
                     block->regions._data = nullptr;
                     block->regions._size = 0;        // H7: one qword store in retail
                     block->regions._capacity = 0;
@@ -129,7 +128,7 @@ static void RegionBlocksResize(RawArray<RegionBlock>* blocks, int newCount) {
                     lVar10 = lVar10 + -1;
                 } while (lVar10 != 0);
             }
-            MemFree(oldData);
+            System::MemoryAllocator::MemFree(oldData);
         }
     }
 }
@@ -232,7 +231,7 @@ void RegionGraph::Init(Map* mapArg, uint32_t blocksWideArg, int blocksHighArg) {
                             }
                         }
                         if (oldData != dirtyRebuild._data) {
-                            MemFree(oldData);
+                            System::MemoryAllocator::MemFree(oldData);
                         }
                     }
 
@@ -260,7 +259,7 @@ void RegionGraph::Init(Map* mapArg, uint32_t blocksWideArg, int blocksHighArg) {
                             }
                         }
                         if (oldData != dirtyAdjacency._data) {
-                            MemFree(oldData);
+                            System::MemoryAllocator::MemFree(oldData);
                         }
                     }
                     iVar9 = iVar9 + 1;
@@ -296,7 +295,7 @@ void RegionGraph::Init(Map* mapArg, uint32_t blocksWideArg, int blocksHighArg) {
             }
         }
         if (oldData != labels._data) {
-            MemFree(oldData);
+            System::MemoryAllocator::MemFree(oldData);
         }
     }
 }

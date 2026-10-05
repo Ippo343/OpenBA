@@ -22,7 +22,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/entitylist_funcs.h"
-#include "Component/coll_bridge.h"
 #include "ui/UserInterface.h"
 #include "options.h"
 #include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk
@@ -193,7 +192,7 @@ static const bool g_treeGuards = [] {
     const char* e = Opt().treeGuards;
     return !(e && e[0] == '0');
 }();
-static inline bool PtrCorrupt(const void* pv) {
+static inline bool PtrCorrupt(const void* pv) {   // LEFT: void* is a raw address (diagnostic probe), not an object: misaligned or half-written tree links (Opt().treeGuards)
     if (!g_treeGuards) return false;
     const uintptr_t p = reinterpret_cast<uintptr_t>(pv);  // CAST-OK: ptr_int
     if (p == 0) return false;                 // null = legitimate terminator / cleared slot

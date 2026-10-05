@@ -53,7 +53,7 @@ void ResetReadableCache() {
     g_readCacheNext = 0;
 }
 
-bool Readable(const void* p, size_t n) {
+bool Readable(const void* p, size_t n) {   // LEFT: void* is a raw address (diagnostic probe), not an object: VirtualQuery says [p, p+n) is committed readable memory
     if (!p) return false;
     const uintptr_t a = reinterpret_cast<uintptr_t>(p);   // CAST-OK: ptr_int
     for (int i = 0; i < kReadCacheSize; i++) {
@@ -80,7 +80,7 @@ bool Readable(const void* p, size_t n) {
     return (a + n) <= end;
 }
 
-bool Executable(const void* p) {
+bool Executable(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: VirtualQuery says p is committed executable memory
     if (!p) return false;
     MEMORY_BASIC_INFORMATION mbi;
     if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
@@ -92,7 +92,7 @@ bool Executable(const void* p) {
     return (prot & ex) != 0;
 }
 
-uint32_t SafeGetTypeId(void* obj) {
+uint32_t SafeGetTypeId(::Object::Base* obj) {
     if (!Readable(obj, 8)) return 0;
     // Probe the vptr's table entry for Type() -- the slot is taken from the
     // member, never a literal (B3X_RULES X3) -- then call it by name.
@@ -101,7 +101,7 @@ uint32_t SafeGetTypeId(void* obj) {
     if (typeSlot < 0) return 0;
     if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;   // CAST-OK: crash_walk
     if (!Executable(::Object::SlotAddressOf(obj, &::Object::Base::Type))) return 0;
-    return reinterpret_cast< ::Object::Base*>(obj)->Type();   // B.3.x bridge (slot 2)   // CAST-OK: crash_walk
+    return obj->Type();   // slot 2, called by name once the probes above pass
 }
 
 Component* FindComp(ComponentEntity* entity, uint32_t tid) {

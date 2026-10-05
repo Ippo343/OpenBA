@@ -682,19 +682,13 @@ static const bool s_wpcStateTableBuilt = (WorkPlaceComponent_PopulateStateTable(
 // inserts into an entity's component array.
 //
 // Recording every construction makes that claim FALSIFIABLE at runtime instead of
-// only by reading code: WorkPlaceComponent_WasFactoryBuilt() answers per object.
+// only by reading code. (The per-object query WorkPlaceComponent_WasFactoryBuilt had no caller and went at B4 final VOID.)
 static const int kWpcCensusCap = 256;
 static void* s_wpcCensus[kWpcCensusCap];
 static int   s_wpcCensusCount = 0;
 
 extern "C" int WorkPlaceComponent_CensusCount() { return s_wpcCensusCount; }
-extern "C" bool WorkPlaceComponent_WasFactoryBuilt(const void* p) {
-    if (!p) return false;
-    for (int i = 0; i < s_wpcCensusCount && i < kWpcCensusCap; ++i)
-        if (s_wpcCensus[i] == p) return true;
-    return false;
-}
-// True while the census is complete enough to answer WasFactoryBuilt negatively.
+// True while the census is complete enough to answer a per-object lookup negatively.
 // Past the cap a "no" only means "not among the first kWpcCensusCap".
 extern "C" bool WorkPlaceComponent_CensusComplete() {
     return s_wpcCensusCount <= kWpcCensusCap;

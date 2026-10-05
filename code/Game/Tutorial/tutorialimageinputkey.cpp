@@ -33,7 +33,7 @@
 #include "ui/String.h"
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
-namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
+namespace Game { void Hotkey_BuildKeyName(UI::String* retval, int device, int keyIndex); }
 
 // ============================================================
 // Exe helper, resolved PER CALL (ENDGAME B.3.8, B6-5). The External ctor
