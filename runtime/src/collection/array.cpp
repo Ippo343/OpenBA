@@ -716,7 +716,7 @@ void DestroyStringExt(void* ignoredThis, uint8_t* base, int count) {
 // window is 0/0 rather than +0x08..+0x10.
 static void NamedTemplateAssign(RtUI::DialogNamedTemplate* d, const RtUI::DialogNamedTemplate* s) {
     d->_description = s->_description;      // verbatim, and first
-    AdoptString(d->_name, s->_name);
+    AdoptString(d->_name._data, s->_name._data);
 }
 void AssignExtStringAt08(uint8_t* d, const uint8_t* s) {
     AssignAs<RtUI::DialogNamedTemplate, &NamedTemplateAssign>(d, s);
@@ -768,7 +768,7 @@ static void CfgEntryAssign(RtUI::DialogControllerConfigEntry* d,
     /* +0x04..+0x07 deliberately not copied */
     d->_elementDesc = s->_elementDesc;      // +0x08
     d->_config      = s->_config;           // +0x10
-    AdoptString(d->_name, s->_name);        // +0x18 zeroed first
+    AdoptString(d->_name._data, s->_name._data);  // +0x18 zeroed first
 }
 void AssignCfgEntry20(uint8_t* d, const uint8_t* s) {
     AssignAs<RtUI::DialogControllerConfigEntry, &CfgEntryAssign>(d, s);
@@ -778,7 +778,7 @@ static void CfgEntryInit(RtUI::DialogControllerConfigEntry* d) {
     /* +0x04..+0x07 deliberately untouched */
     d->_elementDesc = nullptr;
     d->_config      = nullptr;
-    d->_name        = nullptr;
+    d->_name._data  = nullptr;
 }
 void InitCfgEntry20(uint8_t* d) { InitAs<RtUI::DialogControllerConfigEntry, &CfgEntryInit>(d); }
 // CALL 0x180039580 — Body B with kD_Str_20at18, ported and registered by
@@ -831,8 +831,8 @@ void DestroyCfgEntry20(void* ignoredThis, uint8_t* base, int count) {
 // +0x08, the destroy (0x180005570) walks +0x08 then +0x00. Each was read from
 // its own body; neither was inferred from the other.
 static void TextEntryAssign(UI::StringTable::TextEntry* d, const UI::StringTable::TextEntry* s) {
-    AdoptString(d->name, s->name);          // 180078d33
-    AdoptString(d->text, s->text);          // 180078d44
+    AdoptString(d->name._data, s->name._data);  // 180078d33
+    AdoptString(d->text._data, s->text._data);  // 180078d44
 }
 void AssignStringPair10(uint8_t* d, const uint8_t* s) {
     AssignAs<UI::StringTable::TextEntry, &TextEntryAssign>(d, s);
@@ -3080,7 +3080,7 @@ const ArraySpec kSpec_DocItem24 = {               // 0x18003df80, 0x18003d1c0
 // +0x11..+0x17 is written by NEITHER arm.
 static void DocLinkAssign(UI::DocumentTextElement::Link* d,
                           const UI::DocumentTextElement::Link* s) {
-    AdoptString(d->text, s->text);          // +0x00, zero-then-adopt
+    AdoptString(d->text._data, s->text._data);  // +0x00, zero-then-adopt
     d->firstItem = s->firstItem;
     d->lastItem  = s->lastItem;
     d->armed     = s->armed;
@@ -3089,7 +3089,7 @@ void AssignLink18(uint8_t* d, const uint8_t* s) {
     AssignAs<UI::DocumentTextElement::Link, &DocLinkAssign>(d, s);
 }
 static void DocLinkInit(UI::DocumentTextElement::Link* d) {
-    d->text      = nullptr;
+    d->text._data = nullptr;
     d->firstItem = -1;                      // ONE qword of -1 in retail (H7)
     d->lastItem  = -1;
     d->armed     = 0;

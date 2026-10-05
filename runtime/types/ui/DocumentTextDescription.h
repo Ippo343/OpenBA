@@ -63,21 +63,15 @@ public:
     // three link colours, tab width 4, wrap width 300, +0xb0..+0xe7 zero.
     // +0xac is written by nothing.
     DocumentTextDescription() : ElementDescription() {
+        // B4 Y RT-UI: +0x70 / +0x80 (String()) and the four Array headers
+        // (+0x88, +0xb0, +0xc0, +0xd0) are zeroed by the members' own ctors.
         _documentStringTable = nullptr;
-        _documentTextName    = nullptr;
         _spriteSheet         = nullptr;
-        _underlineSpriteName = nullptr;
-        _frameNamesData      = nullptr;
-        _frameNamesCount     = 0;
-        _frameNamesCapacity  = 0;
         _linkColor           = 0xffeeee00u;
         _linkHoverColor      = 0xffffff00u;
         _linkPressedColor    = 0xffcccc00u;
         _tabWidth            = 4;
         _wrapWidth           = 0x12c;
-        _fontsData = nullptr;  _fontsCount = 0;  _fontsCapacity = 0;
-        _sheetsData = nullptr; _sheetsCount = 0; _sheetsCapacity = 0;
-        _colorsData = nullptr; _colorsCount = 0; _colorsCapacity = 0;
         _resourceList        = nullptr;
     }
 
@@ -114,13 +108,15 @@ public:
     // (named apart from ElementDescription's own _stringTable/_textName at
     // +0x58/+0x60, which they would otherwise hide)
     StringTable* _documentStringTable; // +0x68 (B4 H4: typed)  ExternalPtr<UI::StringTable> -> element text's table
-    char*    _documentTextName;     // +0x70  System::String -> the text's string-table index
+    // B4 Y RT-UI: the two Strings and the four arrays are real members. Retail
+    // ~DocumentTextDescription 0x1800cfb30: ~Array +0xd0 (0x18003db40), +0xc0
+    // (0x18003da00), +0xb0 (0x18003d8c0), +0x88 (0x180010ab0, Array<String>),
+    // then the +0x80 and +0x70 String releases: reverse declaration order.
+    System::String _documentTextName; // +0x70  -> the text's string-table index
     SpriteSheet* _spriteSheet;      // +0x78 (B4 H4: typed)  ExternalPtr<UI::SpriteSheet> -> element +0xd0
-    char*    _underlineSpriteName;  // +0x80  System::String -> element _underlineSprite
+    System::String _underlineSpriteName; // +0x80  -> element _underlineSprite
     // +0x88 Array<System::String>: one sprite name per frame-table slot (^li).
-    char**   _frameNamesData;       // +0x88 (B4 H4: Array<System::String>, each a char*)
-    int32_t  _frameNamesCount;      // +0x90
-    int32_t  _frameNamesCapacity;   // +0x94
+    Collection::Array<System::String> _frameNames;   // +0x88 (SetSize 0x180029a80, ~Array 0x180010ab0)
     uint32_t _linkColor;            // +0x98  kScalarUInt -> element +0xf8
     uint32_t _linkHoverColor;       // +0x9c  kScalarUInt -> +0xfc
     uint32_t _linkPressedColor;     // +0xa0  kScalarUInt -> +0x100
@@ -129,15 +125,9 @@ public:
     int32_t  _padAC;                // +0xac
     // Three arrays and a container the applier hands on whole (0x18003ce30,
     // 0x18003cf20, the open-coded Array<int> copy, and a qword copy).
-    Font**   _fontsData;            // +0xb0 (B4 H4: typed)  -> element _fonts (+0x110)
-    int32_t  _fontsCount;           // +0xb8
-    int32_t  _fontsCapacity;        // +0xbc
-    SpriteSheet** _sheetsData;      // +0xc0 (B4 H4: typed)  -> element _sheets (+0x120)
-    int32_t  _sheetsCount;          // +0xc8
-    int32_t  _sheetsCapacity;       // +0xcc
-    uint32_t* _colorsData;          // +0xd0  Array<uint32> (B4: SerializeUInt, retail's type), serialized inline -> element _colors (+0x130)
-    int32_t  _colorsCount;          // +0xd8
-    int32_t  _colorsCapacity;       // +0xdc
+    Collection::Array<Font*> _fonts;          // +0xb0  -> element _fonts (+0x110)
+    Collection::Array<SpriteSheet*> _sheets;  // +0xc0  -> element _sheets (+0x120)
+    Collection::Array<uint32_t> _colors;      // +0xd0  (SerializeUInt, retail's type), serialized inline -> element _colors (+0x130)
     Object::ExternalList* _resourceList; // +0xe0 (B4 H4: typed)  0x18003dc90 -> element _resourceList (+0x140)
 };
 
@@ -151,19 +141,15 @@ static_assert(offsetof(DocumentTextDescription, _documentStringTable) == 0x68, "
 static_assert(offsetof(DocumentTextDescription, _documentTextName)    == 0x70, "");
 static_assert(offsetof(DocumentTextDescription, _spriteSheet)         == 0x78, "");
 static_assert(offsetof(DocumentTextDescription, _underlineSpriteName) == 0x80, "");
-static_assert(offsetof(DocumentTextDescription, _frameNamesData)      == 0x88, "");
-static_assert(offsetof(DocumentTextDescription, _frameNamesCount)     == 0x90, "");
+static_assert(offsetof(DocumentTextDescription, _frameNames)          == 0x88, "");
 static_assert(offsetof(DocumentTextDescription, _linkColor)           == 0x98, "");
 static_assert(offsetof(DocumentTextDescription, _linkHoverColor)      == 0x9c, "");
 static_assert(offsetof(DocumentTextDescription, _linkPressedColor)    == 0xa0, "");
 static_assert(offsetof(DocumentTextDescription, _tabWidth)            == 0xa4, "");
 static_assert(offsetof(DocumentTextDescription, _wrapWidth)           == 0xa8, "");
-static_assert(offsetof(DocumentTextDescription, _fontsData)           == 0xb0, "");
-static_assert(offsetof(DocumentTextDescription, _fontsCount)          == 0xb8, "");
-static_assert(offsetof(DocumentTextDescription, _sheetsData)          == 0xc0, "");
-static_assert(offsetof(DocumentTextDescription, _sheetsCount)         == 0xc8, "");
-static_assert(offsetof(DocumentTextDescription, _colorsData)          == 0xd0, "");
-static_assert(offsetof(DocumentTextDescription, _colorsCount)         == 0xd8, "");
+static_assert(offsetof(DocumentTextDescription, _fonts)               == 0xb0, "");
+static_assert(offsetof(DocumentTextDescription, _sheets)              == 0xc0, "");
+static_assert(offsetof(DocumentTextDescription, _colors)              == 0xd0, "");
 static_assert(offsetof(DocumentTextDescription, _resourceList)        == 0xe0, "");
 
 }  // namespace UI

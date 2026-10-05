@@ -99,12 +99,12 @@ bool EditDescription::Serialize(IO::Stream& streamv) {
     IO::ReaderWriter* rw = ser._readerWriter;
 
     Object::SerializeExternal<UI::Font>(ser, _ptr68);       // 1800d1168
-    StringSerialize(&_string70, &ser);    // 1800d1176
+    _string70.Serialize(ser);             // 1800d1176
 
     rw->SerializeInt(_word78, nullptr);                      // 1800d118a
     rw->SerializeBool(_flag7c, nullptr);                     // 1800d119f
 
-    StringSerialize(&_string80, &ser);    // 1800d11ae
+    _string80.Serialize(ser);             // 1800d11ae
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                  // 1800d11c6
     return true;
@@ -136,9 +136,9 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
         &slot);
 
     elem->_font = _ptr68;                                    // 1800d1023 QWORD
-    AssignStringField(elem->_text._data, _string70);               // 1800d102a
+    AssignStringField(elem->_text._data, _string70._data);               // 1800d102a
     elem->_maxLength = _word78;                              // 1800d107c DWORD
-    AssignStringField(elem->_filter._data, _string80);             // 1800d1082
+    AssignStringField(elem->_filter._data, _string80._data);             // 1800d1082
     elem->_password = _flag7c;                               // 1800d10d7 BYTE
 
     *ret = Object::InternalPtr<Element>(elem);                   // 1800d10e1
@@ -156,9 +156,10 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
 // ~External (retail's tail JMP at 0x1800d12ac). The +0x68 external is NOT
 // released.
 namespace UI {
+// B4 Y RT-UI: the two releases (1800d1210 +0x80, 1800d1246 +0x70) are the
+// String members' destructors, run after this empty body in reverse
+// declaration order: retail's order.
 EditDescription::~EditDescription() {
-    ReleaseStringField(_string80);                           // 1800d1210  +0x80
-    ReleaseStringField(_string70);                           // 1800d1246  +0x70
 }
 
 // ?CreateNewObject@EditDescription@UI@@SAPEAVBase@Object@@XZ  0x18003f7c0

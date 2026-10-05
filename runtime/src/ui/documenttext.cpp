@@ -214,7 +214,7 @@ int32_t DocumentTextElement::FindNextWhiteSpace() {
     const int32_t len = _textLength;             // 1800cefd7
     if (pos >= len) return pos;                                // 1800cefe4
 
-    const char* text = _sourceText;                            // 1800cefe6
+    const char* text = _sourceText._data;                            // 1800cefe6
     for (;;) {
         const uint8_t c = static_cast<uint8_t>(text[pos]);     // 1800cf000
         if (IsWhitespace(c)) break;                            // 1800cf005..1800cf00f
@@ -243,11 +243,11 @@ void DocumentTextElement::EndLink() {
     const int32_t first = _openLink.firstItem;        // 1800cde12
     if (first < 0) return;                                     // 1800cde1a
 
-    const int32_t items = _itemsCount;            // 1800cde1c
+    const int32_t items = _items._size;            // 1800cde1c
     _openLink.lastItem = items;                       // 1800cde22
     if (first < items) {                                       // 1800cde28
         rtcoll::RtColl_ArraySetSizeFill_18003e1a0(
-            &_linksData, _linksCount + 1, &_openLink); // 1800cde3f
+            &_links, _links._size + 1, &_openLink); // 1800cde3f
     }
 
     // The empty Link: {char* = 0, int = -1, int = -1, bool = false}. Retail
@@ -255,13 +255,14 @@ void DocumentTextElement::EndLink() {
     // zero byte, which is why the two indices cannot be initialised separately
     // here without changing the store widths for no gain.
     Link empty;
-    empty.text = nullptr;                                      // 1800cde44
+    // 1800cde44 (text = 0): the member String()'s store.
     Store64(&empty.firstItem, -1);                             // 1800cde4d  ONE QWORD
     empty.armed = 0;                                           // 1800cde56
 
     _openLink = empty;                                         // 1800cde67  Link::operator= (was by address)
 
-    ReleaseString(&empty.text);                                // 1800cde6d..1800cde95
+    // 1800cde6d..1800cde95: `empty`'s ~Link (its String's release) at the end
+    // of the scope (B4 Y RT-UI: Link::text is a System::String).
 }
 
 // ============================================================================
@@ -278,9 +279,9 @@ void DocumentTextElement::BeginLink(const System::String& target) {
 
     EndLink();                    // 1800cdec0
 
-    AssignString(&_openLink.text, name);              // 1800cdec5..1800cdf0f
+    AssignString(&_openLink.text._data, name);              // 1800cdec5..1800cdf0f
 
-    const int32_t items = _itemsCount;            // 1800cdf12
+    const int32_t items = _items._size;            // 1800cdf12
     _openLink.lastItem  = -1;                         // 1800cdf18
     _openLink.firstItem = items;                      // 1800cdf22
 }
@@ -313,14 +314,14 @@ int32_t DocumentTextElement::LayoutRow() {
     int32_t rowWidth  = 0;                                     // 1800cdbd1
     int32_t rowHeight = 0;                                     // 1800cdbd7
 
-    if (i == _itemsCount) {                       // 1800cdbda
-        const Font* font = _fontsData[_fontIndex];
+    if (i == _items._size) {                       // 1800cdbda
+        const Font* font = _fonts._data[_fontIndex];
         rowHeight = font->_lineHeight;                         // 1800cdbf4
     }
 
     {
-        const int32_t count = _itemsCount;        // 1800cdbf8
-        DocumentItem* items = _itemsData;
+        const int32_t count = _items._size;        // 1800cdbf8
+        DocumentItem* items = _items._data;
         for (int32_t k = i; k < count; ++k) {                  // 1800cdbff / 1800cdc32
             rowWidth += items[k].width;                        // 1800cdc20
             if (items[k].height > rowHeight)                   // 1800cdc24
@@ -340,27 +341,27 @@ int32_t DocumentTextElement::LayoutRow() {
              - rowWidth / 2;                                   // 1800cdc56..1800cdc71
     }
 
-    while (i < _itemsCount) {                     // 1800cdc73 / 1800cdd85
-        DocumentItem* item = &_itemsData[i];
+    while (i < _items._size) {                     // 1800cdc73 / 1800cdd85
+        DocumentItem* item = &_items[i];
         item->x = penX;                                        // 1800cdc97
 
         // The array pointer is loaded a SECOND time here (0x1800cdc9b) before
         // the width is read. Same value today; transcribed, not folded.
-        item = &_itemsData[i];
+        item = &_items[i];
         penX += item->width;                                   // 1800cdca9
 
         const int32_t vAlign = _vAlign;          // 1800cdca2
         const int32_t penY   = _penY;
         if (vAlign == 2) {                                     // 1800cdcae  baseline
             if (item->kind == 0) {                             // 1800cdcb3
-                const Font* font = _fontsData[item->index];
+                const Font* font = _fonts._data[item->index];
                 item->y = penY - font->_baseLine + rowHeight;  // 1800cdcd8
             } else {
                 item->y = penY - item->height + rowHeight;     // 1800cdcf1
             }
         } else if (vAlign == 0) {                              // 1800cdcfb  top
             if (item->kind == 0) {                             // 1800cdcff
-                const Font* font = _fontsData[item->index];
+                const Font* font = _fonts._data[item->index];
                 item->y = font->_lineHeight
                         - font->_baseLine + penY;              // 1800cdd25
             } else {
@@ -369,7 +370,7 @@ int32_t DocumentTextElement::LayoutRow() {
         } else {                                               // centre
             int32_t dy;
             if (item->kind == 0) {                             // 1800cdd3a
-                const Font* font = _fontsData[item->index];
+                const Font* font = _fonts._data[item->index];
                 // BARE arithmetic shift, not a division — see the banner.
                 dy = (font->_lineHeight
                       - 2 * font->_baseLine + rowHeight) >> 1;  // 1800cdd61
@@ -394,7 +395,7 @@ int32_t DocumentTextElement::LayoutRow() {
 namespace {
 void FlushRow(DocumentTextElement* self) {
     self->_penY += self->LayoutRow();
-    self->_rowFirstItem = self->_itemsCount;
+    self->_rowFirstItem = self->_items._size;
     self->_penX += self->_hangIndent;
     self->_hangIndent = 0;
     self->_rowPenX = self->_penX;
@@ -409,7 +410,7 @@ void FlushRow(DocumentTextElement* self) {
 // parsing, which is what the `continue`s below are.
 bool DocumentTextElement::GetNextItem(DocumentItem& item) {
     DocumentItem* const out = &item;
-    char** const textSlot = &_sourceText;
+    char** const textSlot = &_sourceText._data;
 
     int32_t len = _textLength;                   // 1800cdf60
 
@@ -457,7 +458,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
             new (static_cast<void*>(&measured)) System::String(Str(&word) + " ");   // 1800ceeb7
             ReleaseString(&word);                              // 1800ceebd..1800ceeea
 
-            const Font* font = _fontsData[_fontIndex];         // 1800ceeea
+            const Font* font = _fonts._data[_fontIndex];         // 1800ceeea
 
             Store64(&out->width, 0);                           // 1800cef02  ONE QWORD
 
@@ -467,7 +468,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
             out->height = font->_lineHeight;                   // 1800cef40
             out->first  = _textPos;              // 1800cef46
             out->last   = end - 1;                             // 1800cef4f
-            out->color  = _colorsData[_colorIndex];            // 1800cef63
+            out->color  = _colors._data[_colorIndex];            // 1800cef63
             out->index  = _fontIndex;            // 1800cef6f
             Store16(&out->kind, 0);                            // 1800cef72  ONE WORD
 
@@ -525,7 +526,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 ++pos;
                 _textPos = pos;                  // 1800ce167
                 if (pos == len) return false;                  // 1800ce16d
-                if (_rowFirstItem != _itemsCount)
+                if (_rowFirstItem != _items._size)
                     FlushRow(this);                            // 1800ce187..1800ce1b6
                 text = *textSlot;                              // 1800ce1bc  re-read
                 pos  = _textPos;
@@ -544,7 +545,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 ++pos;
                 _textPos = pos;                  // 1800ce2bb
                 if (pos == len) return false;                  // 1800ce2c1
-                if (_rowFirstItem != _itemsCount)
+                if (_rowFirstItem != _items._size)
                     FlushRow(this);                            // 1800ce2db..1800ce30a
                 text = *textSlot;                              // 1800ce310  re-read
                 pos  = _textPos;
@@ -599,7 +600,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 const char m = text[pos];                      // 1800ce505
 
                 if (m == 'b' || m == 'e') {                    // indent / outdent
-                    if (_rowFirstItem != _itemsCount)
+                    if (_rowFirstItem != _items._size)
                         FlushRow(this);                        // 1800ce51c..1800ce54b
                     const int32_t step = _tabWidth;
                     if (m == 'b') _penX += step; // 1800ce557
@@ -610,11 +611,11 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     // for the CURRENT FONT SLOT. It is emitted as a HANGING
                     // item: its width is recorded as the hang indent and
                     // SUBTRACTED from the pen, so it sits left of the margin.
-                    if (_rowFirstItem != _itemsCount)
+                    if (_rowFirstItem != _items._size)
                         FlushRow(this);                        // 1800cec49..1800cec78
                     ++_textPos;                  // 1800cec7e
 
-                    const UI::Sprite& entry = _frameTableData[_fontIndex];   // 1800cec84
+                    const UI::Sprite& entry = _frameTable._data[_fontIndex];   // 1800cec84
                     const int32_t sprite = entry.spriteIndex;
 
                     int32_t w = 0, h = 0;
@@ -627,14 +628,14 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     _hangIndent = w;             // 1800cecd4
                     _penX -= w;                  // 1800cecdb
 
-                    out->color  = _colorsData[_colorIndex];    // 1800cecf7
+                    out->color  = _colors._data[_colorIndex];    // 1800cecf7
                     out->height = h;                           // 1800cecfb
                     out->width  = w;                           // 1800cecff
                     out->index  = 0;                           // 1800ced03
                     out->kind   = 1;                           // 1800ced07
                     // The sprite index is re-read from the table rather than
                     // reused from `sprite` above (0x1800ced0c).
-                    out->first  = _frameTableData[_fontIndex].spriteIndex;
+                    out->first  = _frameTable._data[_fontIndex].spriteIndex;
                     return true;                               // 1800ced25
                 } else if (m == 'o') {
                     // ========================================================
@@ -645,10 +646,10 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     // the open link string, because the nested parse may
                     // legitimately open and close links of its own.
                     // ========================================================
-                    if (_rowFirstItem != _itemsCount)
+                    if (_rowFirstItem != _items._size)
                         FlushRow(this);                        // 1800ce5f0..1800ce61f
 
-                    const Font* font = _fontsData[_fontIndex];
+                    const Font* font = _fonts._data[_fontIndex];
                     // A QUARTER of the line height, truncating toward zero:
                     // `CDQ ; AND EDX,3 ; ADD ; SAR 2`, which is C's `/ 4`.
                     _penY += font->_lineHeight / 4;              // 1800ce643
@@ -664,8 +665,8 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     const int32_t savedRow   = _rowFirstItem;
 
                     char* savedLink = nullptr;                                 // 1800ce694
-                    if (_openLink.text != nullptr) {                  // 1800ce69f
-                        savedLink = _openLink.text;
+                    if (_openLink.text._data != nullptr) {                  // 1800ce69f
+                        savedLink = _openLink.text._data;
                         ++RefCount(savedLink);                                 // 1800ce6ab
                     }
                     const int32_t savedLinkFirst = _openLink.firstItem;
@@ -689,7 +690,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     _rowPenX       = savedRowX;
                     _penY          = savedY;
                     _rowFirstItem  = savedRow;
-                    AssignString(&_openLink.text, savedLink);         // 1800ce757
+                    AssignString(&_openLink.text._data, savedLink);         // 1800ce757
                     _openLink.firstItem = savedLinkFirst;             // 1800ce7a5
                     _openLink.lastItem  = savedLinkLast;
                     _openLink.armed   = savedLinkByte;
@@ -800,7 +801,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 }
 
                 if (match) {                                    // 1800cea9c (index >= 0 always)
-                    out->color  = _colorsData[_colorIndex];          // 1800ced3f
+                    out->color  = _colors._data[_colorIndex];          // 1800ced3f
                     out->height = found->_height;                    // 1800ced49
                     out->width  = found->_width;                     // 1800ced4f
                     out->index  = index;                             // 1800ced52
@@ -832,14 +833,14 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 SubString(textSlot, &name, first, ws - 1);      // 1800ceb4c
                 _textPos = ws;                    // 1800ceb55
 
-                const SpriteSheet* sheet = _sheetsData[slot];
+                const SpriteSheet* sheet = _sheets._data[slot];
                 int32_t sprite = -1;
                 if (sheet != nullptr) {                         // 1800ceb69
                     sprite = sheet->GetSpriteIndexFromName(Str(&name));
                 }
                 if (sheet != nullptr && sprite >= 0) {          // 1800ceb80
                     const SpriteInfo& s = sheet->m_sprites._data[sprite];   // 1800cedb6
-                    out->color  = _colorsData[_colorIndex];     // 1800cedab
+                    out->color  = _colors._data[_colorIndex];     // 1800cedab
                     out->height = s.height;                     // 1800cedbe
                     out->width  = s.width;                      // 1800cedca
                     out->index  = slot;                         // 1800cedce
@@ -892,12 +893,12 @@ void DocumentTextElement::GenerateItems() {
         char* resolved = nullptr;
         new (static_cast<void*>(&resolved)) System::String(      // 0x180035020, retslot
             _text.operator System::String());
-        AssignString(&_sourceText, resolved);  // 1800cf0a4..1800cf0f7
+        AssignString(&_sourceText._data, resolved);  // 1800cf0a4..1800cf0f7
         ReleaseString(&resolved);                               // 1800cf0fa..1800cf133
     }
 
     {
-        const char* s = _sourceText;           // 1800cf133
+        const char* s = _sourceText._data;           // 1800cf133
         _textLength = s ? Length(s) : 0;          // 1800cf13f / 1800cf147
     }
     // ONE QWORD each: kTextPos+kPenX, kRowPenX+kPenY, kFontIndex+kColorIndex,
@@ -919,18 +920,18 @@ void DocumentTextElement::GenerateItems() {
         _rowPenX += w;                            // 1800cf1f0
 
         rtcoll::RtColl_ArraySetSizeFill_18003df80(
-            &_itemsData, _itemsCount + 1, &item);  // 1800cf20a
+            &_items, _items._size + 1, &item);  // 1800cf20a
 
         if (item.kind == 0) {                                   // 1800cf20f
             char* dead = nullptr;
-            SubString(&_sourceText, &dead, item.first, item.last);
+            SubString(&_sourceText._data, &dead, item.first, item.last);
             ReleaseString(&dead);                               // 1800cf238..1800cf2a7
         }
     }
 
     _penY += LayoutRow();   // 1800cf2c4
     const int32_t height = _penY;                 // 1800cf2ca
-    _rowFirstItem = _itemsCount;     // 1800cf2d6
+    _rowFirstItem = _items._size;     // 1800cf2d6
     _penX += _hangIndent;           // 1800cf2e2
     _hangIndent = 0;                              // 1800cf2e8
     _rowPenX = _penX;               // 1800cf2f5
@@ -958,7 +959,7 @@ void DocumentTextElement::GenerateItems() {
 // The String half is `AssignString` verbatim (test, release, adopt), which is
 // why it is called rather than re-inlined: the two must not drift.
 DocumentTextElement::Link& DocumentTextElement::Link::operator=(const Link& src) {
-    AssignString(&text, src.text);                             // 18003c76a..18003c7a8
+    AssignString(&text._data, src.text._data);                             // 18003c76a..18003c7a8
     firstItem = src.firstItem;                                 // 18003c7a9
     lastItem  = src.lastItem;                                  // 18003c7af
     armed     = src.armed;                                     // 18003c7b5

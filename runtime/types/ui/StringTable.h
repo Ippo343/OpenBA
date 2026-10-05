@@ -63,8 +63,12 @@ public:
     // One row of the table, stride 0x10 (see the banner). Retail's nested
     // record; its name is not exported, so it is named for what it holds.
     struct TextEntry {
-        char* name;   // +0x00  System::String data ptr (refcounted key, NULL = empty)
-        char* text;   // +0x08  System::String data ptr (refcounted value, NULL = empty)
+        // B4 Y RT-UI: typed. An entry is only ever built, copied and destroyed
+        // by kSpec_StringPair10's arms (assign 0x180078d33 / 0x180078d44, destroy
+        // 0x180005570), which store `_data` raw: no C++ entry object is
+        // constructed or destroyed, so each String is released once.
+        System::String name;   // +0x00  the key (NULL = empty)
+        System::String text;   // +0x08  the value (NULL = empty)
     };
 
     // ??0StringTable@UI@@QEAA@XZ 0x18011d890 — the REAL constructor: External()

@@ -258,7 +258,7 @@ public:
     // the virtual destructor, B3X W1) (`MOV EDX,0x68`).
     // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). VIRTUAL (B3X W1); the
     // compiler restamps on entry and chains ~External (retail's tail JMP).
-    ~ElementDescription() override { ReleaseFields(); }
+    ~ElementDescription() override {}   // +0x60: the member `_textName`'s ~String
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
     // class's own record (DEFINE_TYPE in the class's TU), no longer minted.
     // retail: TypeName 0x1800350f0, Type 0x1800350d0, TypeId 0x1800350e0, _TypeName 0x1800350b0
@@ -297,7 +297,6 @@ protected:
 
 private:
     void InitFields();      // +0x20..+0x67 stores of 0x180115a40 (dialog.cpp)
-    void ReleaseFields();   // the +0x60 String release of 0x180116100 (dialog.cpp)
 
 
 public:
@@ -326,7 +325,10 @@ public:
     // copies it to Element::_toolTipDialog (+0x40).
     Dialog*  _toolTipDialog;           // +0x50
     StringTable* _stringTable;         // +0x58  ExternalPtr<UI::StringTable> (B4 H4)
-    char*    _textName;                // +0x60  System::String (refcounted char*; H5 raw)
+    // B4 Y RT-UI: a real member. Retail ctor 0x180115a40 zeroes +0x60 (its
+    // String()); ~ElementDescription 0x180116100's one release is its ~String,
+    // run after the (empty) body and before ~External.
+    System::String _textName;          // +0x60
 };
 
 static_assert(sizeof(ElementDescription) == 0x68,

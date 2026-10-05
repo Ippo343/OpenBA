@@ -158,6 +158,8 @@ constexpr int kCaptureHeight   = 0x54;
 #include <cstddef>
 #include "Sprite.h"
 
+namespace rtcoll { extern const ArraySpec kSpec_Link18; }  // 0x18003e1a0 (array.cpp)
+
 namespace UI {
 
 class Font;
@@ -185,7 +187,10 @@ public:
     // One clickable span. Its compiler-generated operator= (0x18003c760,
     // unexported) is ported in documenttext.cpp.
     struct Link {
-        char*   text;       // +0x00  System::String, the target
+        // B4 Y RT-UI: typed. Array elements are built / copied / destroyed
+        // only by kSpec_Link18's arms (raw `text._data`); `_openLink` and
+        // EndLink's local are the C++ objects whose ~String runs.
+        System::String text; // +0x00  the target
         int32_t firstItem;  // +0x08  < 0 means "no link open"
         int32_t lastItem;   // +0x0c  one past the last item
         uint8_t armed;      // +0x10  pressed on this link
@@ -199,22 +204,15 @@ public:
     // +0x170..+0x197 or +0x1b0..+0x1c7 (GenerateItems resets those).
     DocumentTextElement() : Element() {
         _spriteSheet        = nullptr;
-        _frameTableData     = nullptr;
-        _frameTableCount    = 0;
-        _frameTableCapacity = 0;
         _linkColor          = 0xffeeee00u;
         _linkHoverColor     = 0xffffff00u;
         _linkPressedColor   = 0xffcccc00u;
         _tabWidth           = 4;
         _wrapWidth          = 0x12c;
-        _fontsData = nullptr;  _fontsCount = 0;  _fontsCapacity = 0;
-        _sheetsData = nullptr; _sheetsCount = 0; _sheetsCapacity = 0;
-        _colorsData = nullptr; _colorsCount = 0; _colorsCapacity = 0;
+        // B4 Y RT-UI: the six Array headers (+0xe8, +0x110, +0x120, +0x130,
+        // +0x148, +0x158), `_sourceText` (+0x168) and `_openLink.text`
+        // (+0x198) are zeroed by their own Array() / String() as members.
         _resourceList       = nullptr;
-        _itemsData = nullptr;  _itemsCount = 0;  _itemsCapacity = 0;
-        _linksData = nullptr;  _linksCount = 0;  _linksCapacity = 0;
-        _sourceText         = nullptr;
-        _openLink.text      = nullptr;
         _openLink.firstItem = -1;                // one QWORD -1 store with lastItem
         _openLink.lastItem  = -1;
         _openLink.armed     = 0;
@@ -275,32 +273,27 @@ public:
     // +0xe8 Array<UI::Sprite>, one per font slot (^li's bullet). Raw header:
     // copy/destroy/resize are addressed helpers (0x180037020 / 0x180037310 /
     // 0x1800370c0), like every array below.
-    ::Sprite* _frameTableData;    // +0xe8   (B4 H4: typed)
-    int32_t  _frameTableCount;    // +0xf0
-    int32_t  _frameTableCapacity; // +0xf4
+    // B4 Y RT-UI: the six arrays and the two Strings are real members. Retail
+    // ~DocumentTextElement 0x1800cf320 releases +0x198, +0x168, then ~Array
+    // 0x18003e310 (+0x158), 0x18003e0c0 (+0x148), 0x18003db40 (+0x130),
+    // 0x18003da00 (+0x120), 0x18003d8c0 (+0x110), 0x180037310 (+0xe8): exact
+    // reverse declaration order, so the compiler's member destructors are it.
+    Collection::Array<::Sprite> _frameTable; // +0xe8
     uint32_t _linkColor;          // +0xf8   ctor 0xffeeee00
     uint32_t _linkHoverColor;     // +0xfc   ctor 0xffffff00
     uint32_t _linkPressedColor;   // +0x100  ctor 0xffcccc00
     int32_t  _tabWidth;           // +0x104  ctor 4; ^t advance, ^lb/^le indent step
     int32_t  _wrapWidth;          // +0x108  ctor 300; the default right edge
     uint32_t _pad10c;             // +0x10c  written by nothing
-    Font**   _fontsData;          // +0x110  (B4 H4: typed)  Array<UI::Font*>; Font +0x50 line height, +0x54 baseline
-    int32_t  _fontsCount;         // +0x118
-    int32_t  _fontsCapacity;      // +0x11c
-    SpriteSheet** _sheetsData;    // +0x120  (B4 H4: typed)  Array<UI::SpriteSheet*> (^i<digit>, sprite items)
-    int32_t  _sheetsCount;        // +0x128
-    int32_t  _sheetsCapacity;     // +0x12c
-    int32_t* _colorsData;         // +0x130  (B4 H4: typed)  Array<int32> (^c<digit>)
-    int32_t  _colorsCount;        // +0x138
-    int32_t  _colorsCapacity;     // +0x13c
+    Collection::Array<Font*> _fonts;         // +0x110  Font +0x50 line height, +0x54 baseline
+    Collection::Array<SpriteSheet*> _sheets; // +0x120  (^i<digit>, sprite items)
+    Collection::Array<int32_t> _colors;      // +0x130  (^c<digit>)
     Object::ExternalList* _resourceList; // +0x140 ExternalPtr<Object::ExternalList> (B4 H4)  object whose +0x20/+0x28 array ^d searches
-    DocumentItem* _itemsData;     // +0x148  (B4 H4: typed)  Array<DocumentItem>, stride 0x24
-    int32_t  _itemsCount;         // +0x150
-    int32_t  _itemsCapacity;      // +0x154
-    Link*    _linksData;          // +0x158  (B4 H4: typed)  Array<Link>, stride 0x18
-    int32_t  _linksCount;         // +0x160
-    int32_t  _linksCapacity;      // +0x164
-    char*    _sourceText;         // +0x168  System::String, the flat text parsed
+    Collection::Array<DocumentItem> _items;  // +0x148  stride 0x24
+    // +0x158 retail's own row (SetSize 0x18003e1a0 / 0x18003d430, ~Array 0x18003e310).
+    Collection::Array<Link, Collection::DefaultAllocator,
+                      Collection::ExplicitSpec<&rtcoll::kSpec_Link18>> _links;
+    System::String _sourceText;              // +0x168  the flat text parsed
     // ---- the parse state (GenerateItems resets it; the ctor does not) ----
     int32_t  _textLength;         // +0x170  cached length of _sourceText
     int32_t  _textPos;            // +0x174
@@ -346,20 +339,20 @@ using C = DocumentTextElement;
 static_assert(offsetof(C, _text)            == kUiStringValue, "");
 static_assert(offsetof(C, _spriteSheet)     == kSpriteSheet, "");
 static_assert(offsetof(C, _underlineSprite) == kCaptureRefSheet, "");
-static_assert(offsetof(C, _frameTableData)  == kFrameTable, "");
+static_assert(offsetof(C, _frameTable)      == kFrameTable, "");
 static_assert(offsetof(C, _linkColor)       == kInt0F8, "");
 static_assert(offsetof(C, _linkHoverColor)  == kInt0FC, "");
 static_assert(offsetof(C, _linkPressedColor)== kInt100, "");
 static_assert(offsetof(C, _tabWidth)        == kTabWidth, "");
 static_assert(offsetof(C, _wrapWidth)       == kWrapWidth, "");
-static_assert(offsetof(C, _fontsData)       == kFontArray, "");
-static_assert(offsetof(C, _sheetsData)      == kSheetArray, "");
-static_assert(offsetof(C, _colorsData)      == kColorArray, "");
+static_assert(offsetof(C, _fonts)           == kFontArray, "");
+static_assert(offsetof(C, _sheets)          == kSheetArray, "");
+static_assert(offsetof(C, _colors)          == kColorArray, "");
 static_assert(offsetof(C, _resourceList)    == kResourceList, "");
-static_assert(offsetof(C, _itemsData)       == kItemArrayData, "");
-static_assert(offsetof(C, _itemsCount)      == kItemCount, "");
-static_assert(offsetof(C, _itemsCapacity)   == kItemCapacity, "");
-static_assert(offsetof(C, _linksData)       == kLinkArrayData, "");
+static_assert(offsetof(C, _items)           == kItemArrayData, "");
+static_assert(offsetof(C, _items) + offsetof(Collection::Array<DocumentItem>, _size) == kItemCount, "");
+static_assert(offsetof(C, _items) + offsetof(Collection::Array<DocumentItem>, _capacity) == kItemCapacity, "");
+static_assert(offsetof(C, _links)           == kLinkArrayData, "");
 static_assert(offsetof(C, _sourceText)      == kContentString, "");
 static_assert(offsetof(C, _textLength)      == kTextLength, "");
 static_assert(offsetof(C, _textPos)         == kTextPos, "");

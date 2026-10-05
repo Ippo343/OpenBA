@@ -333,9 +333,7 @@ using rt::io::Stream;
 // element-walk bodies of runtime/types/object/External.h (0x180038f90
 // ElementDescription, 0x180004590 SpriteSheet, 0x1800756d0
 // DialogControllerConfig, 0x1800493d0 / 0x18002f170 the two array walks).
-void StringSerialize(void* field, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(*ser);              // B.3.x bridge  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-}
+// (B4 Y RT-UI: the raw-slot StringSerialize bridge had no caller left.)
 
 // ENDGAME B.3.2 step 2 — the four by-address SetSize forwarders that used to
 // sit here are GONE. All four target fields are the {pointer, count,
@@ -344,7 +342,7 @@ void StringSerialize(void* field, IO::Serializer* ser) {
 // them as three named members instead of one `Array<T>` member, the same
 // situation `dialog_ctor_dtor.cpp`'s dtor conversion bridges. None of the four
 // rows is trait-equivalent, so each call site below bridges through its own
-// hand-derived row with `rtcoll::AsArray<&SPEC>`:
+// hand-derived row (B4 Y RT-UI: now each typed member's own spec):
 //
 //   0x180075d20  kSpec_ExtStr10at08  {0x10,8,assign,init,destroy,byteCopy=false}
 //                NON-TRIVIAL — Array<DialogNamedTemplate>
@@ -400,62 +398,58 @@ bool Dialog::Serialize(IO::Stream& streamv) {                        // [5] 0x18
     rw->SerializeUInt(_defaultFlags, nullptr);                               // +0x40
     Object::SerializeExternal<UI::ElementDescription>(ser, _rootDescription);        // +0x38
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);            // +0x20
-    StringSerialize(&_spriteName, &ser);                     // +0x28
+    _spriteName.Serialize(ser);                              // +0x28
     rw->SerializeUInt(_backgroundColor, nullptr);                            // +0x30
 
     const bool reading = (streamv._direction == 0);              // rt::io::kDirectionReading
 
     // -- array 1: _namedTemplates (+0x58), count +0x60, stride 0x10 ---------
     {
-        int32_t count = _namedTemplateCount;   // a STACK COPY, per 0x18011315e
+        int32_t count = _namedTemplates._size;   // a STACK COPY, per 0x18011315e
         rw->SerializeInt(count, nullptr);
         if (reading)
-            rtcoll::AsArray<&rtcoll::kSpec_ExtStr10at08>(&_namedTemplates)
-                ->SetSize(count);          // retail 0x180075d20
+            _namedTemplates.SetSize(count);   // retail 0x180075d20 (kSpec_ExtStr10at08)
         // RE-READ after SetSize: it reallocates.
-        RtUI::DialogNamedTemplate* e = _namedTemplates;                 // stride 0x10
+        RtUI::DialogNamedTemplate* e = _namedTemplates._data;           // stride 0x10
         for (int32_t i = 0; i < count; ++i, ++e) {
             Object::SerializeExternal<UI::ElementDescription>(ser, e->_description);   // entry+0x00
-            StringSerialize(&e->_name, &ser);             // entry+0x08
+            e->_name.Serialize(ser);                      // entry+0x08
         }
     }
 
     // -- array 2: _templates (+0x68), count +0x70, stride 0x08 --------------
     {
-        int32_t count = _templateCount;
+        int32_t count = _templates._size;
         rw->SerializeInt(count, nullptr);
         if (reading)
-            rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_templates)
-                ->SetSize(count);          // retail 0x1800492d0
+            _templates.SetSize(count);        // retail 0x1800492d0 (kSpec_U64Zero)
         Object::SerializeExternalArray<UI::ElementDescription>(          // 0x1800493d0
-            ser, count, _templates);
+            ser, count, _templates._data);
     }
 
     // -- array 3: _controllerConfigs (+0x48), count +0x50, stride 0x20 ------
     {
-        int32_t count = _controllerCount;
+        int32_t count = _controllerConfigs._size;
         rw->SerializeInt(count, nullptr);
         if (reading)
-            rtcoll::AsArray<&rtcoll::kSpec_CfgEntry20>(&_controllerConfigs)
-                ->SetSize(count);          // retail 0x180075b20
-        ElementController* e = _controllerConfigs;                      // stride 0x20
+            _controllerConfigs.SetSize(count);   // retail 0x180075b20 (kSpec_CfgEntry20)
+        ElementController* e = _controllerConfigs._data;                // stride 0x20
         for (int32_t i = 0; i < count; ++i, ++e) {
             rw->SerializeUInt(e->_typeId, nullptr);                     // entry+0x00 _typeId
             Object::SerializeExternal<UI::ElementDescription>(ser, e->_elementDesc);   // entry+0x08 _elementDesc
             Object::SerializeExternal<UI::DialogControllerConfig>(ser, e->_config);    // entry+0x10 _config
-            StringSerialize(&e->_name, &ser);             // entry+0x18 _name
+            e->_name.Serialize(ser);                      // entry+0x18 _name
         }
     }
 
     // -- array 4: _references (+0x78), count +0x80, stride 0x08 -------------
     {
-        int32_t count = _referenceCount;
+        int32_t count = _references._size;
         rw->SerializeInt(count, nullptr);
         if (reading)
-            rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_references)
-                ->SetSize(count);          // retail 0x18002f070
+            _references.SetSize(count);       // retail 0x18002f070 (kSpec_U64Zero)
         Object::SerializeExternalArray<Object::External>(                    // 0x18002f170
-            ser, count, _references);
+            ser, count, _references._data);
     }
 
     rw->SerializeInt(_drawLevel, nullptr);    // +0x34 — the FIELD, not a copy. LAST.

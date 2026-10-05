@@ -109,18 +109,18 @@ bool DocumentTextDescription::Serialize(IO::Stream& streamArg) {
 
 
     Object::SerializeExternal<UI::StringTable>(ser, _documentStringTable);   // 1800cf8ff ExternalPtr<StringTable>
-    StringSerialize(&_documentTextName, &ser);      // 1800cf90c System::String
+    _documentTextName.Serialize(ser);             // 1800cf90c System::String
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);           // 1800cf919 ExternalPtr<SpriteSheet>
 
     int32_t n;                                              // [RBP+0x10], the scratch
 
-    n = _frameNamesCount;                                   // 1800cf91e
+    n = _frameNames._size;                                   // 1800cf91e
     rw->SerializeInt(n, nullptr);                           // 1800cf935
     if (ser._stream->_direction == 0)                              // 1800cf93b re-read
-        rtcoll::RtColl_ArraySetSize_180029a80(&_frameNamesData, n);        // 1800cf94f
-    RtIo_SerializeStringArray(&ser, n, _frameNamesData, nullptr);   // 0x180029bb0 (4th: unused)
+        rtcoll::RtColl_ArraySetSize_180029a80(&_frameNames, n);        // 1800cf94f
+    RtIo_SerializeStringArray(&ser, n, _frameNames._data, nullptr);   // 0x180029bb0 (4th: unused)
 
-    StringSerialize(&_underlineSpriteName, &ser);   // 1800cf972 System::String
+    _underlineSpriteName.Serialize(ser);          // 1800cf972 System::String
 
     rw->SerializeUInt(_linkColor, nullptr);                 // 1800cf988
     rw->SerializeUInt(_linkHoverColor, nullptr);            // 1800cf99f
@@ -128,26 +128,26 @@ bool DocumentTextDescription::Serialize(IO::Stream& streamArg) {
     rw->SerializeInt(_tabWidth, nullptr);                   // 1800cf9cd
     rw->SerializeInt(_wrapWidth, nullptr);                  // 1800cf9e4
 
-    n = _fontsCount;                                        // 1800cf9ea
+    n = _fonts._size;                                        // 1800cf9ea
     rw->SerializeInt(n, nullptr);                           // 1800cfa01
     if (ser._stream->_direction == 0)                              // 1800cfa07
-        rtcoll::RtColl_ArraySetSize_18003e600(&_fontsData, n);  // 1800cfa1b
-    Object::SerializeExternalArray<UI::Font>(ser, n, _fontsData);
+        rtcoll::RtColl_ArraySetSize_18003e600(&_fonts, n);  // 1800cfa1b
+    Object::SerializeExternalArray<UI::Font>(ser, n, _fonts._data);
 
-    n = _sheetsCount;                                       // 1800cfa33
+    n = _sheets._size;                                       // 1800cfa33
     rw->SerializeInt(n, nullptr);                           // 1800cfa4a
     if (ser._stream->_direction == 0)                              // 1800cfa50
-        rtcoll::RtColl_ArraySetSize_18003ea50(&_sheetsData, n); // 1800cfa64
-    Object::SerializeExternalArray<UI::SpriteSheet>(ser, n, _sheetsData);
+        rtcoll::RtColl_ArraySetSize_18003ea50(&_sheets, n); // 1800cfa64
+    Object::SerializeExternalArray<UI::SpriteSheet>(ser, n, _sheets._data);
 
-    n = _colorsCount;                                       // 1800cfa7c
+    n = _colors._size;                                       // 1800cfa7c
     rw->SerializeInt(n, nullptr);                           // 1800cfa93
     if (ser._stream->_direction == 0)                              // 1800cfa99
-        rtcoll::RtColl_ArraySetSize_18003eea0(&_colorsData, n); // 1800cfaad
+        rtcoll::RtColl_ArraySetSize_18003eea0(&_colors, n); // 1800cfaad
     {
         // The hand-rolled int loop, walking the array's data pointer read
         // AFTER the SetSize call (`MOV RBX,[RSI+0xd0]` at 0x1800cfab2).
-        uint32_t* q = _colorsData;                             // 1800cfab2
+        uint32_t* q = _colors._data;                             // 1800cfab2
         for (int32_t k = n; k > 0; --k) {                      // 1800cfabc / 1800cfadc
             rw->SerializeUInt(*q, nullptr);                    // 1800cfacf (+0x98)
             ++q;                                               // 1800cfad5
@@ -172,7 +172,7 @@ bool DocumentTextDescription::Serialize(IO::Stream& streamArg) {
 //   idx   = table ? 0x180002470(table, &_documentTextName) : -1
 //   e->_text = { table, idx }                            <- QWORD from a DWORD slot
 //   e->_spriteSheet = _spriteSheet
-//   Array::SetSize(&e->_frameTable, _frameNamesCount)    0x1800370c0
+//   Array::SetSize(&e->_frameTable, _frameNames._size)    0x1800370c0
 //   for i in 0.._frameNamesCount-1:
 //       sheet = _spriteSheet                             (RE-READ every iteration)
 //       idx   = sheet ? GetSpriteIndexFromName(sheet, &_frameNames[i]) : -1
@@ -216,7 +216,7 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
         text.table = table;
         text.index = (table != nullptr)                     // 1800cf559
             ? table->GetIndexFromName(                      // 1800cf56a
-                  *reinterpret_cast<const System::String*>(&_documentTextName))   // LEFT (H5)   // LEFT: H5 _documentTextName is a String held as raw storage (DocumentTextDescription.h, not this agent's)
+                  _documentTextName)
             : -1;                                           // 1800cf570
         DocumentTextElement* e = element->Get();            // 1800cf578
         e->_text = text;                                    // 1800cf57b / 1800cf587
@@ -225,20 +225,20 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
     element->Get()->_spriteSheet = _spriteSheet;            // 1800cf58e / 1800cf595
     {
         rtcoll::RtColl_ArraySetSize_1800370c0(
-            &element->Get()->_frameTableData, _frameNamesCount);        // 1800cf59c / 1800cf5ac
+            &element->Get()->_frameTable, _frameNames._size);        // 1800cf59c / 1800cf5ac
     }
 
-    // The bound is RE-READ from _frameNamesCount at the bottom of every
+    // The bound is RE-READ from _frameNames._size at the bottom of every
     // iteration (0x1800cf60b), not hoisted. Transcribed that way.
-    for (int32_t i = 0; i < _frameNamesCount; ++i) {        // 1800cf5b5 / 1800cf60b
+    for (int32_t i = 0; i < _frameNames._size; ++i) {        // 1800cf5b5 / 1800cf60b
         // 1800cf5ce sheet, 1800cf5da the index slot, 1800cf5ed the row
         // (re-read), 1800cf5f7 / 1800cf600 the sheet and a QWORD slot store.
-        const UI::Sprite s = SpriteFromName(_spriteSheet, &_frameNamesData[i]);
-        element->Get()->_frameTableData[i] = s;
+        const UI::Sprite s = SpriteFromName(_spriteSheet, _frameNames._data[i]);
+        element->Get()->_frameTable._data[i] = s;
     }
 
     // 1800cf613..1800cf648, the same shape.
-    element->Get()->_underlineSprite = SpriteFromName(_spriteSheet, &_underlineSpriteName);
+    element->Get()->_underlineSprite = SpriteFromName(_spriteSheet, _underlineSpriteName);
 
     element->Get()->_linkColor        = _linkColor;         // 1800cf64f .. 1800cf694
     element->Get()->_linkHoverColor   = _linkHoverColor;
@@ -247,31 +247,31 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
     element->Get()->_wrapWidth        = _wrapWidth;
 
     {
-        rtcoll::RtColl_ArrayAssign_18003ce30(&element->Get()->_fontsData, &_fontsData);    // 1800cf69a / 1800cf6ab
-        rtcoll::RtColl_ArrayAssign_18003cf20(&element->Get()->_sheetsData, &_sheetsData);  // 1800cf6b0 / 1800cf6c1
+        rtcoll::RtColl_ArrayAssign_18003ce30(&element->Get()->_fonts, &_fonts);    // 1800cf69a / 1800cf6ab
+        rtcoll::RtColl_ArrayAssign_18003cf20(&element->Get()->_sheets, &_sheets);  // 1800cf6b0 / 1800cf6c1
     }
 
     // ---- the open-coded Array<int> copy -------------------------------------
     {
         DocumentTextElement* e = element->Get();            // 1800cf6c6
-        if (static_cast<const void*>(&e->_colorsData) !=
-            static_cast<const void*>(&_colorsData)) {       // 1800cf6d7
-            if (e->_colorsData != nullptr) MemFree(e->_colorsData);     // 1800cf70f (locked Free)
+        if (static_cast<const void*>(&e->_colors) !=
+            static_cast<const void*>(&_colors)) {       // 1800cf6d7
+            if (e->_colors._data != nullptr) MemFree(e->_colors._data);     // 1800cf70f (locked Free)
 
-            e->_colorsData     = nullptr;                   // 1800cf71e
-            e->_colorsCount    = 0;                         // 1800cf721  size+capacity, one qword
-            e->_colorsCapacity = 0;
-            const int32_t n = _colorsCount;                 // 1800cf725
-            e->_colorsCount = n;                            // 1800cf72a
+            e->_colors._data     = nullptr;                   // 1800cf71e
+            e->_colors._size    = 0;                         // 1800cf721  size+capacity, one qword
+            e->_colors._capacity = 0;
+            const int32_t n = _colors._size;                 // 1800cf725
+            e->_colors._size = n;                            // 1800cf72a
             if (n > 0) {                                    // 1800cf730
-                e->_colorsCapacity = n;                     // 1800cf732 capacity
-                e->_colorsData = static_cast<int32_t*>(MemAlloc(static_cast<uint64_t>(n) * 4, 4));   // 1800cf76a
+                e->_colors._capacity = n;                     // 1800cf732 capacity
+                e->_colors._data = static_cast<int32_t*>(MemAlloc(static_cast<uint64_t>(n) * 4, 4));   // 1800cf76a
             }
-            if (e->_colorsCount > 0) {                      // 1800cf77e
-                for (int32_t i = 0; i < e->_colorsCount; ++i) {
-                    int32_t* out = e->_colorsData + i;          // 1800cf788
+            if (e->_colors._size > 0) {                      // 1800cf77e
+                for (int32_t i = 0; i < e->_colors._size; ++i) {
+                    int32_t* out = e->_colors._data + i;          // 1800cf788
                     if (out != nullptr)                     // 1800cf78e
-                        *out = _colorsData[i];              // 1800cf797
+                        *out = _colors._data[i];              // 1800cf797
                 }
             }
         }
@@ -313,12 +313,10 @@ namespace UI {
 // ExternalPtr<SpriteSheet> are NOT released — the same asymmetry
 // ~ImageDescription has.
 DocumentTextDescription::~DocumentTextDescription() {
-    rtcoll::RtColl_ArrayDtor_18003db40(&_colorsData);      // 1800cfb57  +0xd0
-    rtcoll::RtColl_ArrayDtor_18003da00(&_sheetsData);      // 1800cfb64  +0xc0
-    rtcoll::RtColl_ArrayDtor_18003d8c0(&_fontsData);       // 1800cfb71  +0xb0
-    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_frameNamesData);  // 1800cfb7e  +0x88, element-destroying
-    ReleaseStringField(_underlineSpriteName);              // 1800cfb84  +0x80
-    ReleaseStringField(_documentTextName);                 // 1800cfbba  +0x70
+    // B4 Y RT-UI: empty. 1800cfb57 / 1800cfb64 / 1800cfb71 / 1800cfb7e (the
+    // four ~Array, +0xd0 down to +0x88) and 1800cfb84 / 1800cfbba (the +0x80 and
+    // +0x70 String releases) are the member destructors, run after this body
+    // in reverse declaration order: retail's order.
 }
 
 // ?CreateNewObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@XZ 0x18003b9f0 --
