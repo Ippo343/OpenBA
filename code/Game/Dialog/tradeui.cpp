@@ -553,11 +553,11 @@ void TradeUI::RefreshBuyTable()
     }
 
     // Phase 3: Build buy entries from trade orders
-    int tradeOrderCount = trade->manifestCount;
+    int tradeOrderCount = trade->manifest._size;
     if (tradeOrderCount > 0) {
         for (int oi = 0; oi < tradeOrderCount; oi++) {
             // Get trade order entry
-            ComponentDescription* orderEntry = trade->manifest[oi].good;
+            ComponentDescription* orderEntry = trade->manifest._data[oi].good;
 
             // Find ValueDescription in order entry's description
             ValueDescription* valDesc = static_cast<ValueDescription*>(
@@ -569,7 +569,7 @@ void TradeUI::RefreshBuyTable()
     }
 
     // Phase 4: Populate buy table UI cells
-    int buyCount = trade->manifestCount;
+    int buyCount = trade->manifest._size;
     uint64_t buyCountU = (uint64_t)buyCount;
 
     if (buyCount > 0) {
@@ -577,7 +577,7 @@ void TradeUI::RefreshBuyTable()
         for (int i = 0; i < buyCount; i++) {
             BuyRow& buyUI = _buyRows[i];
 
-            TradeManifestLine* buyOrder = trade->manifest + buyDataIndex;
+            TradeManifestLine* buyOrder = trade->manifest._data + buyDataIndex;
             ComponentDescription* orderDesc = buyOrder->good;
 
             // Find ValueDescription
@@ -663,7 +663,7 @@ void TradeUI::RefreshBuyTable()
     // Phase 7: Set order combo current item and enabled state
     int comboIdx = 0;
     if (trade->tradeId >= 0) {
-        comboIdx = trade->merchantOrders[trade->tradeId].orderKind;
+        comboIdx = trade->merchantOrders._data[trade->tradeId].orderKind;
     }
     _comboOrder->SetCurrentItem(comboIdx);
 
@@ -710,7 +710,7 @@ void TradeUI::RefreshBuyTable()
             _purchaseRows[pi].check->Enable(true);
 
             // Check if this purchase entity is in the current order's selection list
-            TradeMerchantOrder* orderData = trade->merchantOrders + trade->tradeId;
+            TradeMerchantOrder* orderData = trade->merchantOrders._data + trade->tradeId;
             int selCount = orderData->goodsCount;
             if (selCount > 0) {
                 ComponentDescription** selList = orderData->goods;
@@ -1236,7 +1236,7 @@ void TradeUI::OnUpdate(const System::Time& /*time*/) {
 
     // Check if order count changed
     int selfOrderCount = _buyItems._size;
-    int buildingOrderCount = trade->manifestCount;
+    int buildingOrderCount = trade->manifest._size;
 
     if (selfOrderCount != buildingOrderCount) {
         // Order count changed — refresh sell, buy, and order tables
@@ -1438,7 +1438,7 @@ void TradeUI::UpdateBuyTotals() {
     int total = 0;
     int buyCount = _buyItems._size;
 
-    TradeManifestLine* resourceTypeBase = trade->manifest;
+    TradeManifestLine* resourceTypeBase = trade->manifest._data;
     for (int i = 0; i < buyCount; i++) {
         int qty = _buyItems[i].quantity;
         if (qty != 0) {
@@ -1548,7 +1548,7 @@ void TradeUI::OnComboOrder() {
 
     // Store to the post's current order slot +8
     int curSlot = trade->tradeId;
-    TradeMerchantOrder* ordersBase = trade->merchantOrders;
+    TradeMerchantOrder* ordersBase = trade->merchantOrders._data;
     ordersBase[static_cast<uint32_t>(curSlot)].orderKind = comboIdx;   // the index is zero-extended (as the tree's)
 }
 
@@ -1568,7 +1568,7 @@ void TradeUI::OnOrderAmountSpinner(int idx) {
     int val = _orderRows[idx].spinner->GetValue();
 
     // Store to the post's order amount table: trade.ordersAmt (+0x40) + idx*0xc + 8
-    TradeBuyOrder* ordersAmt = trade->buyOrders;
+    TradeBuyOrder* ordersAmt = trade->buyOrders._data;
     ordersAmt[idx].amount = val;
 }
 
@@ -1584,7 +1584,7 @@ void TradeUI::OnOrderSpinner(int idx, int idx2) {
         ? static_cast<ComponentEntity*>(source) : nullptr;
     TradeComponent* trade = entity->FindComponent<TradeComponent>();
 
-    TradeBuyOrder* ordersBase = trade->buyOrders;
+    TradeBuyOrder* ordersBase = trade->buyOrders._data;
 
     // Swap 12-byte entries at idx and idx2 (stride 0xc)
     TradeBuyOrder* a = ordersBase + idx;
@@ -1851,7 +1851,7 @@ void TradeUI::RefreshOrderDisplay() {
 
     int iVar7 = 0;
 
-    int orderCount = trade->buyOrderCount;
+    int orderCount = trade->buyOrders._size;
     if (orderCount <= 0) return;
 
     for (int64_t idx = 0; idx < orderCount; idx++) {
@@ -1859,14 +1859,14 @@ void TradeUI::RefreshOrderDisplay() {
         OrderRow& uiEntry = _orderRows[(int)idx];
 
         // Read order amount from the post's orders array (stride 0xc)
-        TradeBuyOrder* ordersBase = trade->buyOrders;
+        TradeBuyOrder* ordersBase = trade->buyOrders._data;
         int amount = ordersBase[idx].amount;
 
         // Set spinner value (uiEntry[3] = offset +0x18)
         uiEntry.spinner->SetValue(amount);
 
         // Get the description and typeIdx for sprite/string lookups
-        TradeBuyOrder* ordersBase2 = trade->buyOrders;
+        TradeBuyOrder* ordersBase2 = trade->buyOrders._data;
         int typeIdx = ordersBase2[idx].categoryIndex;
 
         // IsDerivedFrom check for TradeDescription — original does this each iteration
@@ -1886,7 +1886,7 @@ void TradeUI::RefreshOrderDisplay() {
         uiEntry.label->SetSprite(&spriteLocal);
 
         // Get the description and typeIdx AGAIN for string lookup (original re-reads)
-        TradeBuyOrder* ordersBase3 = trade->buyOrders;
+        TradeBuyOrder* ordersBase3 = trade->buyOrders._data;
         typeIdx = ordersBase3[idx].categoryIndex;
 
         description = trade->_description;
@@ -1910,7 +1910,7 @@ void TradeUI::RefreshOrderDisplay() {
         if (idx == 0) {
             uiEntry.upButton->Enable(false);
         } else {
-            if (iVar7 == trade->buyOrderCount - 1) {
+            if (iVar7 == trade->buyOrders._size - 1) {
                 uiEntry.downButton->Enable(false);
             }
         }

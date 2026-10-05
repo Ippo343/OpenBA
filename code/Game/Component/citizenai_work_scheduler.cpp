@@ -298,7 +298,7 @@ extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* ws, Object::Interna
     //     &{id, pad, work} (the mapped value; ec60 later reads node+0x08 = the work). ---
     struct { int id; int pad; Object::InternalPtr<Work> work; } mapVal;
     mapVal.id = id; mapVal.pad = 0; mapVal.work = *workRef;
-    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&ws->trees[0]), &keyNode, &mapVal);  // LEFT: SIG WorkCellBST_Insert_9a40: one body over the cell Set and the scheduler's WorkSchedulerTree / bucket entries (ICF); no shared header type
+    WorkCellBST_Insert_9a40(&ws->trees[0], &keyNode, &mapVal);
 
     // --- 14 category sub-trees at sched+0x40 (trees[1..14]), driven by `code` bits ---
     const Object::InternalPtr<Work> workPtr = *workRef;
@@ -606,7 +606,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId
     }
 
     // 4. Unfile it (ca60 frees the node and decrements bucket+0x10).
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(&oldBucket->bucket.entries), item);   // 0x14001ca60 LEFT: SIG WorkCellBST_Remove_ca60  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF); the bucket entries are not the cell Set
+    WorkCellBST_Remove_ca60(&oldBucket->bucket.entries, item);   // 0x14001ca60
 
     // 5. The NEW profession's bucket, created if this is its first item.
     WorkSchedulerBucketNode* newBucket = nullptr;
@@ -639,5 +639,5 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId
     pair.pad     = 0;
     pair.payload = idNode->work;
     void* outSlot = nullptr;
-    WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(&newBucket->bucket.entries), &outSlot, &pair);  // LEFT: SIG WorkCellBST_Insert_9a40: one body over the cell Set and the scheduler's WorkSchedulerTree / bucket entries (ICF); no shared header type
+    WorkCellBST_Insert_9a40(&newBucket->bucket.entries, &outSlot, &pair);
 }

@@ -35,6 +35,7 @@
 #include "system/String.h"
 #include "system/Value.h"      // System::Time
 #include "Action/PathAvl.h"      // AvlTreeHead<Node> (the +0x60 stock tree header)
+#include "collection/Collection.h" // Collection::Array (the +0x30 / +0x40 / +0x50 arrays)
 
 struct TradeCtrlTag { using Owner = class TradeComponent; };   // the handlers' receiver (controller_state_table.h)
 class ComponentDescription;   // Component/ComponentDescription.h
@@ -105,6 +106,20 @@ static_assert(offsetof(TradeResourceNode, right) == 0x20, "TradeResourceNode +0x
 static_assert(offsetof(TradeResourceNode, balance) == 0x28, "TradeResourceNode +0x28");
 static_assert(offsetof(TradeResourceNode, height) == 0x2a, "TradeResourceNode +0x2a");
 
+// The +0x60 stock tree: the header plus the release retail's dtor 0x14005c340 does
+// at 0x14005c380..0x14005c3b7 (both subtrees through 0x14000e320, then the root;
+// +0x60 = 0 qword, +0x68 = 0 dword). Defined in tradecomponent.cpp.
+struct TradeStockTree : AvlTreeHead<TradeResourceNode> {
+    ~TradeStockTree();
+};
+static_assert(sizeof(TradeStockTree) == 0x10, "TradeStockTree is the 0x10 Set header");
+
+// The element rows of the +0x30 and +0x50 arrays (defined in tradecomponent.cpp /
+// storagecomponent.cpp). +0x30's destroy is 0x14000ef10; +0x50's is 0x14000f090's
+// row (copy two qwords, zero the new tail, no element destroy).
+namespace CitizenBehaviorRows { extern const rtcoll::ArraySpec kSpec_Pod16; }
+extern const rtcoll::ArraySpec kSpec_TradeMerchantOrder;
+
 class TradeComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(TradeComponent)
 
@@ -113,7 +128,8 @@ public:
 
     TradeComponent();                                                    // 0x14005c430
 
-    // 0x14005c340
+    // 0x14005c340: the body is empty; ~_controller (the +0x88 restamp), then the four
+    // members below (+0x60, +0x50, +0x40, +0x30), then ~ControllerComponent.
     ~TradeComponent() override;                                         // [0]  0x14000dc80
     void          Persist(IO::Stream& stream) override;                       // [3]  0x14005bd50
     void          OnAdded() override;                                   // [6]  0x14005c1d0
@@ -144,16 +160,16 @@ public:
     // PUBLIC while unconverted readers (TradeUI, the trade harness) read them.
     int32_t  tradeState;        // +0x28 auto-trade mode: 1 on arrival, 2 on departure (Persist int&)
     int32_t  tradeId;           // +0x2c the docked merchant's index, -1 = none
-    TradeMerchantOrder* merchantOrders;    // +0x30 Array data (freed by the dtor through 0x14000ef10)
-    int32_t  merchantOrderCount;           // +0x38
-    int32_t  merchantOrderCap;             // +0x3c
-    TradeBuyOrder* buyOrders;              // +0x40 Array data
-    int32_t  buyOrderCount;                // +0x48
-    int32_t  buyOrderCap;                  // +0x4c
-    TradeManifestLine* manifest;           // +0x50 Array data
-    int32_t  manifestCount;                // +0x58
-    int32_t  manifestCap;                  // +0x5c
-    AvlTreeHead<TradeResourceNode> stock;  // +0x60 the stock tree (TradeUI's sell rows): root +0x60, node count
+    using MerchantOrderArray = Collection::Array<TradeMerchantOrder, Collection::DefaultAllocator,
+                                                 Collection::ExplicitSpec<&kSpec_TradeMerchantOrder>>;
+    using ManifestArray = Collection::Array<TradeManifestLine, Collection::DefaultAllocator,
+                                            Collection::ExplicitSpec<&CitizenBehaviorRows::kSpec_Pod16>>;
+    // The dtor's body is empty: these four are released in reverse declaration order
+    // (+0x60, +0x50, +0x40, +0x30), exactly the order of retail's 0x14005c340.
+    MerchantOrderArray merchantOrders;     // +0x30 (count +0x38, cap +0x3c; elements freed through 0x14000ef10)
+    Collection::Array<TradeBuyOrder> buyOrders;   // +0x40 (count +0x48, cap +0x4c)
+    ManifestArray manifest;                // +0x50 (count +0x58, cap +0x5c; SetSize 0x14000f090)
+    TradeStockTree stock;                  // +0x60 the stock tree (TradeUI's sell rows): root +0x60, node count
                                            // +0x68; +0x6c (_pad0C) never written by retail's ctor
     bool     workEnabled;       // +0x70 Command's cached toggle (Persist bool&; not in the ctor)
     bool     tradeFlag;         // +0x71 the trade panel is open: the stay timer waits (Persist bool&)
@@ -169,14 +185,14 @@ static_assert(alignof(TradeComponent) == 8, "TradeComponent alignment");
 static_assert(offsetof(TradeComponent, tradeState) == 0x28, "TradeComponent +0x28");
 static_assert(offsetof(TradeComponent, tradeId) == 0x2c, "TradeComponent +0x2c (ctor 0x14005c46a)");
 static_assert(offsetof(TradeComponent, merchantOrders) == 0x30, "TradeComponent +0x30");
-static_assert(offsetof(TradeComponent, merchantOrderCount) == 0x38, "TradeComponent +0x38");
-static_assert(offsetof(TradeComponent, merchantOrderCap) == 0x3c, "TradeComponent +0x3c");
+static_assert(offsetof(TradeComponent, merchantOrders) + offsetof(TradeComponent::MerchantOrderArray, _size) == 0x38, "TradeComponent +0x38");
+static_assert(offsetof(TradeComponent, merchantOrders) + offsetof(TradeComponent::MerchantOrderArray, _capacity) == 0x3c, "TradeComponent +0x3c");
 static_assert(offsetof(TradeComponent, buyOrders) == 0x40, "TradeComponent +0x40");
-static_assert(offsetof(TradeComponent, buyOrderCount) == 0x48, "TradeComponent +0x48");
-static_assert(offsetof(TradeComponent, buyOrderCap) == 0x4c, "TradeComponent +0x4c");
+static_assert(offsetof(TradeComponent, buyOrders) + offsetof(Collection::Array<TradeBuyOrder>, _size) == 0x48, "TradeComponent +0x48");
+static_assert(offsetof(TradeComponent, buyOrders) + offsetof(Collection::Array<TradeBuyOrder>, _capacity) == 0x4c, "TradeComponent +0x4c");
 static_assert(offsetof(TradeComponent, manifest) == 0x50, "TradeComponent +0x50");
-static_assert(offsetof(TradeComponent, manifestCount) == 0x58, "TradeComponent +0x58");
-static_assert(offsetof(TradeComponent, manifestCap) == 0x5c, "TradeComponent +0x5c");
+static_assert(offsetof(TradeComponent, manifest) + offsetof(TradeComponent::ManifestArray, _size) == 0x58, "TradeComponent +0x58");
+static_assert(offsetof(TradeComponent, manifest) + offsetof(TradeComponent::ManifestArray, _capacity) == 0x5c, "TradeComponent +0x5c");
 static_assert(offsetof(TradeComponent, stock) + offsetof(AvlTreeHead<TradeResourceNode>, root) == 0x60, "TradeComponent +0x60 (ctor 0x14005c492)");
 static_assert(offsetof(TradeComponent, stock) + offsetof(AvlTreeHead<TradeResourceNode>, count) == 0x68, "TradeComponent +0x68 (ctor 0x14005c495)");
 static_assert(offsetof(TradeComponent, workEnabled) == 0x70, "TradeComponent +0x70");

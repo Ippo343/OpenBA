@@ -122,7 +122,7 @@ using EventArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // `arrBase` is the log's {entries, entryCount, entryCapacity} header.
 static void EventArray_Grow(EventLogEntry** arrBase, int newCount, const EventLogEntry* newEntry) {
     // B.3.2 bridge: EventLog +0x18 is declared as the Array's three fields.
-    reinterpret_cast<EventArray*>(arrBase)->SetSizeFill(newCount, newEntry);   // LEFT: H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (this one, grow 0x140019b70; gameupdateloop_serialize.cpp's, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
+    reinterpret_cast<EventArray*>(arrBase)->SetSizeFill(newCount, newEntry);   // LEFT: audit DEFERRED (two specs + memset; B4 Z CODEA: the two rows ARE one element, assign and destroy identical, the resize row adds init: the unit is one typed member + Load's memset replaced by retail's inline stores + ~12 reader lines in Dialog/ and Component/, not done): H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (this one, grow 0x140019b70; gameupdateloop_serialize.cpp's, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
 }
 
 // The matching destructor, FUN_14000a8a0 (retail's EventNotifier cleanup): ~String
@@ -130,7 +130,7 @@ static void EventArray_Grow(EventLogEntry** arrBase, int newCount, const EventLo
 // game_leaf_helpers.cpp's Game_EventNotifierCleanup so the element row lives in
 // exactly one place. Called by name from GameUpdateLoop::Shutdown (the forwarder is gone).
 extern "C" void EventLog_EventArray_Destroy(EventLogEntry** arrBase) {
-    reinterpret_cast<EventArray*>(arrBase)->~Array();   // LEFT: H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (this one, grow 0x140019b70; gameupdateloop_serialize.cpp's, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
+    reinterpret_cast<EventArray*>(arrBase)->~Array();   // LEFT: audit DEFERRED (as the grow line above): H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (this one, grow 0x140019b70; gameupdateloop_serialize.cpp's, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
 }
 
 // ============================================================
@@ -299,7 +299,7 @@ void EventLog::AddEventCore(int eventType, int severity, const ::Object::Interna
     // stack entry is.
     alignas(8) uint8_t entryBuf[sizeof(EventLogEntry)];
     // LEFT: the entry is raw stack storage (H5: EventLogEntry holds a String).
-    EventLogEntry* entry = reinterpret_cast<EventLogEntry*>(entryBuf);   // LEFT: H5 raw stack entry (a real EventLogEntry local would run String's ctor / dtor)
+    EventLogEntry* entry = reinterpret_cast<EventLogEntry*>(entryBuf);   // LEFT: audit DEFERRED (H5 stack image): H5 raw stack entry (a real EventLogEntry local would run String's ctor / dtor)
 
     entry->color = color;
     new (&entry->text) System::String(formatted);

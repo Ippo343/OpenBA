@@ -218,9 +218,9 @@ DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, con
 // ============================================================
 int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
-             uint8_t param_9, uint32_t param_10, uint32_t param_11,
+             bool param_9, uint32_t param_10, uint32_t param_11,
              uint32_t param_12, uint32_t param_13, uint32_t param_14,
-             char param_15, int param_16, int param_17, uint8_t param_19) {
+             char param_15, int param_16, int param_17, bool param_19) {
     if (material == nullptr) return -1;
 
     RawArray<GeometryBatch>& decals = geom->_decals;
@@ -261,9 +261,7 @@ haveSlot:
     entry->maxY = param_5 + iVar2;
     entry->field_0x3C = param_6;
     entry->field_0x40 = static_cast<int32_t>(param_7);
-    // LEFT: +0x44 / +0x5D are `bool` fields (GAME-b's WorldGeometryElements.h);
-    // retail stores the caller's raw byte, which a bool store would normalise (H8).
-    *reinterpret_cast<uint8_t*>(&entry->field_0x44) = param_9;   // LEFT: OTHER H8 +0x44 is a bool field (WorldGeometryElements.h); retail stores the caller's raw byte, which a bool store would normalise
+    entry->field_0x44 = param_9;   // the bool parameter's byte, stored as is
     // LEFT: +0x48..+0x58 are floats; retail stores the caller's raw 32-bit words
     // (the callers pass the bits in integer registers / stack slots).
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[0]) = param_10;  // CAST-OK: float_bits
@@ -272,7 +270,7 @@ haveSlot:
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[3]) = param_13;  // CAST-OK: float_bits
     *reinterpret_cast<uint32_t*>(&entry->field_0x48[4]) = param_14;  // CAST-OK: float_bits
     entry->field_0x5C = true;
-    *reinterpret_cast<uint8_t*>(&entry->alternateKey) = param_19;   // LEFT: OTHER H8 alternateKey is a bool field (WorldGeometryElements.h); retail stores the caller's raw byte, which a bool store would normalise
+    entry->alternateKey = param_19;
     TradeWork_impl_ace40(geom, iVar3, param_15, param_16, param_17);
     return iVar3;
 }
@@ -303,7 +301,7 @@ int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2) {
 
     return AddDecal(highlightMgr,                                   // 0x1400b0d80
                     col - r, row - r, r + col, r + row,
-                    0xff, 0, target, 0,
+                    0xff, 0, target, false,
                     uv, 0, 0, uv, uv,
-                    1, r - 2, r + 2, 1);
+                    1, r - 2, r + 2, true);
 }

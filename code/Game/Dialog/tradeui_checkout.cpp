@@ -150,8 +150,8 @@ extern "C" void TradeComponent_RemoveBuyOrder(TradeComponent* tradeComp,
                                               const ComponentDescription* resourceEntity, int qty) {
     if (!tradeComp) return;
 
-    for (int i = 0; i < tradeComp->manifestCount; ++i) {
-        TradeManifestLine* base  = tradeComp->manifest;
+    for (int i = 0; i < tradeComp->manifest._size; ++i) {
+        TradeManifestLine* base  = tradeComp->manifest._data;
         TradeManifestLine* entry = base + i;
         if (entry->good != resourceEntity) continue;
 
@@ -160,12 +160,12 @@ extern "C" void TradeComponent_RemoveBuyOrder(TradeComponent* tradeComp,
         if (*entryQty != 0) continue;
 
         // Erase: shift every later entry down one slot, then shrink the count.
-        int count = tradeComp->manifestCount;
+        int count = tradeComp->manifest._size;
         for (int j = i; j + 1 < count; ++j) {
             TradeManifestLine* dst = base + j;
             dst[0] = dst[1];
         }
-        tradeComp->manifestCount = count - 1;
+        tradeComp->manifest._size = count - 1;
         --i;  // re-test this index: a different entry now occupies it
     }
 }

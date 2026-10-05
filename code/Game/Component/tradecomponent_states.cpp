@@ -442,10 +442,10 @@ char TradeComponent::Teardown() {
         BoatComponent* boatComp = merchant->FindComponent<BoatComponent>();   // 0x14000eb20
         if (boatComp) boatComp->SetDestination(&nullDest);   // the tree's null test
 
-        System::MemoryAllocator::MemFree(manifest);
-        manifest = nullptr;
-        manifestCount = 0;
-        manifestCap = 0;
+        System::MemoryAllocator::MemFree(manifest._data);
+        manifest._data = nullptr;
+        manifest._size = 0;
+        manifest._capacity = 0;
         tradeId = -1;      // no merchant docked
 
         merchant = nullptr;

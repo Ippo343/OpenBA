@@ -83,10 +83,10 @@ void RebalanceBucketTree(WorkSchedulerBucketNode** root, WorkSchedulerBucketNode
     Avl38Retrace(root, &from);
 }
 void EraseIdNode(WorkSchedulerTree* tree, WorkSchedulerIdNode* node) {               // 0x14001ca60
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF)
+    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: audit DEFERRED (Work leaves ledger): SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF)
 }
 void EraseCountNode(WorkSchedulerCountNode** root, WorkSchedulerCountNode* node) {    // 0x14001a6e0
-    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(root), node);  // LEFT: SIG WorkBST_BSTRemove_a6e0 takes the root slot as uintptr_t* (Work/exe_bodies.h, WORK)
+    WorkBST_BSTRemove_a6e0(reinterpret_cast<uintptr_t*>(root), node);  // LEFT: audit WORK (SIG), owner Work/ (z-CODEB): SIG WorkBST_BSTRemove_a6e0 takes the root slot as uintptr_t* (Work/exe_bodies.h, WORK)
 }
 
 // ============================================================

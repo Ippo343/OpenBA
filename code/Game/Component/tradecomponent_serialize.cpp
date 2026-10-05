@@ -11,9 +11,8 @@
 //                elem+0x00 ComponentRef (ExternalPtr<ComponentDescription>,
 //                          Reimpl_ExternalPtr_Serialize_StringTable / retail 0x140002340)
 //                elem+0x08 int   elem+0x0c int
-//                resize (load only) via StorageComponent_DynArrayResize (retail 0x14000f090,
-//                already registered elsewhere as StorageComponent_DynArrayResize —
-//                same generic 0x10-stride array-resize body, reused as-is).
+//                resize (load only) through the member's SetSize (retail 0x14000f090,
+//                the generic 0x10-stride Array<{u64,u64}>::SetSize).
 //   +0x2c        int — selected-merchant index (-1 = none; see the ctor note
 //                in tradecomponent.cpp).
 //   +0x60        AVL tree {root@+0x00, count@+0x08} keyed by ComponentRef,
@@ -85,7 +84,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "system/MemoryAllocator.h"
-#include "Component/exe_bodies.h"   // StorageComponent_DynArrayResize (0x14000f090)
+#include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"        // Reimpl_ExternalPtr_Serialize_StringTable, Reimpl_ExternalPtrArray_Serialize
 
 namespace {
@@ -352,12 +351,12 @@ void TradeComponent::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // +0x50/+0x58: the manifest, stride 0x10 {ComponentRef, int, int}.
-    int32_t refCount = manifestCount;
+    int32_t refCount = manifest._size;
     ser.Serialize(refCount, nullptr);
     if (Loading(ser))
-        StorageComponent_DynArrayResize(&manifest, refCount);
+        manifest.SetSize(refCount);
     {
-        TradeManifestLine* elem = manifest;
+        TradeManifestLine* elem = manifest._data;
         for (int32_t i = 0; i < refCount && elem; ++i, ++elem) {
             Reimpl_ExternalPtr_Serialize_StringTable(&elem->good, &ser);
             ser.Serialize(elem->price, nullptr);
@@ -372,12 +371,12 @@ void TradeComponent::Persist(IO::Stream& stream) {
     TradeComp_BstSerialize(*this, ser);
 
     // +0x30/+0x38: the merchant orders, stride 0x20.
-    int32_t nameCount = merchantOrderCount;
+    int32_t nameCount = merchantOrders._size;
     ser.Serialize(nameCount, nullptr);
     if (Loading(ser))
         TradeMerchantOrders_SetSize(*this, nameCount);
     {
-        TradeMerchantOrder* elem = merchantOrders;
+        TradeMerchantOrder* elem = merchantOrders._data;
         for (int32_t i = 0; i < nameCount && elem; ++i, ++elem) {
             elem->merchantName.Serialize(ser);
             int32_t innerCount = elem->goodsCount;
@@ -392,12 +391,12 @@ void TradeComponent::Persist(IO::Stream& stream) {
     }
 
     // +0x40/+0x48: the buy orders, stride 0xc {flags(enum), index, amount}.
-    int32_t itemCount = buyOrderCount;
+    int32_t itemCount = buyOrders._size;
     ser.Serialize(itemCount, nullptr);
     if (Loading(ser))
         TradeBuyOrders_SetSize(*this, itemCount);
     {
-        TradeBuyOrder* elem = buyOrders;
+        TradeBuyOrder* elem = buyOrders._data;
         for (int32_t i = 0; i < itemCount && elem; ++i, ++elem) {
             // The enum through the UINT door (vtable +0x98), as storagedescription.cpp's
             // SerializeEnum. Retail's own field order: +0x08 before +0x04.

@@ -33,7 +33,7 @@ class BuildStructure final : public Work {
 
 public:
     BuildStructure();                                               // 0x1400e5a90
-    BuildStructure(ComponentEntity* const* entityIBP, uint8_t altAnim);               // 0x1400e59c0
+    BuildStructure(ComponentEntity* const* entityIBP, bool altAnim);               // 0x1400e59c0
 
     // 0x1400e5920: the compiler's chain over the two members (set, then +0x50)
     ~BuildStructure() override;                                     // [0]  0x140029680
@@ -48,7 +48,7 @@ public:
 
     // --- BuildStructure fields (+0x48) ---
     // Note: ctor doesn't init +0x48/+0x4C (set by Serialize or caller)
-    uint8_t  field_48;           // +0x48: bool — serialized flag (has initial setup?)
+    bool     field_48;           // +0x48: bool — serialized flag (has initial setup?)
     uint8_t  _pad49[3];          // +0x49: padding
     int32_t  field_4c;           // +0x4C: current slot index (round-robin for assignment)
     // +0x50: Collection::Array<uint8_t> {data, count +0x58, capacity +0x5C}: slot

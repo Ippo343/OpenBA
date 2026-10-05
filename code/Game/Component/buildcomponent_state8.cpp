@@ -129,7 +129,7 @@ static int BC8_MeshFrameCount(ModelComponent* meshElem, ModelDescription* modelD
     return groupBase[variant].meshCount;
 }
 // Frame mesh pointer: modelDesc+0x20 group[variant].framePtrs(+8)[frame].
-static void* BC8_MeshFramePtr(ModelComponent* meshElem, ModelDescription* modelDesc, int frame) {
+static Graphics::GraphicsMesh* BC8_MeshFramePtr(ModelComponent* meshElem, ModelDescription* modelDesc, int frame) {
     if (!modelDesc || frame < 0) return nullptr;
     int16_t variant = meshElem->meshGroup;
     ModelMeshGroup* groupBase = modelDesc->_meshGroups;
@@ -159,9 +159,9 @@ static void BC8_SetMeshFrame(ModelComponent* model, int frame) {
     model->meshIndex = (int16_t)frame;
     if (frame >= 0) {
         ModelDescription* modelDesc = BC8_MeshModelDesc(model);
-        void* framePtr = BC8_MeshFramePtr(model, modelDesc, frame);
+        Graphics::GraphicsMesh* framePtr = BC8_MeshFramePtr(model, modelDesc, frame);
         model->meshInstance
-            .SetMesh(Graphics::ExternalPtrHandle{framePtr});   // B.3.5 bridge
+            .SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(framePtr));   // 0x1800ffea0
         model->OnAdded();    // slot 6
     }
 }

@@ -1811,7 +1811,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                 WorkPlaceComponent* wpcBuilt =
                     FindComponentOnEntity<WorkPlaceComponent>(entity, WorkPlaceComponent::TypeId());
                 if (wpcBuilt) {
-                    uint32_t wpMult = *(uint32_t*)((uintptr_t)wpcBuilt + 0x58);   // LEFT: the low dword of WorkPlaceComponent::workers (+0x58, a pointer) read as a count — a tree defect (known_port_issues 14); dead while StartTown_InstantBuildPath() is true
+                    uint32_t wpMult = *(uint32_t*)((uintptr_t)wpcBuilt + 0x58);   // LEFT: audit DEFERRED (retail-difference task, row 95): the low dword of WorkPlaceComponent::workers (+0x58, a pointer) read as a count — a tree defect (known_port_issues 14); dead while StartTown_InstantBuildPath() is true
                     if ((int32_t)wpMult > 0) mult = wpMult;
                 }
                 bc->costMultiplier = (int32_t)mult;

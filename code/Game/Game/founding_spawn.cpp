@@ -318,7 +318,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
         ProfessionList* profList = GameUpdateLoop::_singleton->m_professionList;
         if (profList) {
             laborer = profList->field_0x30;
-            laborerProf = reinterpret_cast<int64_t>(laborer);   // LEFT: the [FoundingSpawn] trace prints the profession key as "0x%llx" (an integer; changing it to %p changes the log text)
+            laborerProf = reinterpret_cast<int64_t>(laborer);   // LEFT: audit floor ptr_int (coordinator marker): the [FoundingSpawn] trace prints the profession key as "0x%llx" (an integer; changing it to %p changes the log text)
         }
     }
 

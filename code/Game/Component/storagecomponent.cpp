@@ -91,16 +91,14 @@ int StorageComponent_QueryAvailable(StorageComponent* storageComp, const Compone
 }
 
 // ============================================================
-// Reimpl of FUN_14000f090 (StorageComponent dynamic-array resize:
-//   grow/shrink an array of 0x10-byte slot entries, plain memcpy of survivors)
+// 0x14000f090's row: Array<{u64,u64}>::SetSize is, step for step, the erased core
+// `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp): exact-equal early return,
+// `_size` first, cap = n (n * 3 when growing by one from non-empty), MemAlloc(cap << 4, 8),
+// copy the prefix (two qwords) only when the block moved else start at the old count, zero
+// the new tail (two qwords), the computed-address null test, no element destroy,
+// MemFree(old) only when the block moved. Its arrays (StorageComponent::storageSlots,
+// TradeComponent::manifest, CitizenBehavior +0x180) are Collection::Array members over it.
 // ============================================================
-// B4 X-G1-3: retail 0x14000f090 is Array<{u64,u64}>::SetSize, step for step the erased core
-// `rtcoll::SetSizeCore` (runtime/src/collection/array.cpp): exact-equal early return, `_size`
-// first, cap = n (n * 3 when growing by one from non-empty), MemAlloc(cap << 4, 8), copy the
-// prefix (two qwords) only when the block moved else start at the old count, zero the new tail
-// (two qwords), the computed-address null test, no element destroy, MemFree(old) only when the
-// block moved (null test inside MemFree). The hand copy is replaced by that core through the
-// row below (the same row gameupdateloop_load.cpp carries file-locally as kSpec_Pod16).
 namespace {
 void ZeroStoragePod16(uint64_t* w) {
     w[0] = 0;
@@ -122,19 +120,6 @@ const rtcoll::ArraySpec kSpec_Pod16 = {                  // exe 0x14000f090
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };
 }  // namespace CitizenBehaviorRows
-namespace {
-using StoragePod16Array = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                            Collection::ExplicitSpec<&CitizenBehaviorRows::kSpec_Pod16>>;
-}  // namespace
-
-void StorageComponent_DynArrayResize(void* arrayBase, int newCount) {
-    // LEFT: its one caller's array (TradeComponent::manifest, tradecomponent_serialize.cpp) is a
-    // raw {data, count, capacity} triple whose typing moves TradeComponent's dtor order (the +0x30
-    // / +0x40 / +0x50 arrays and the +0x60 tree are freed in one body): the erased core is reached
-    // through the header view (the body's original C-style entry cast).
-    ((StoragePod16Array*)arrayBase)->SetSize(newCount);   // LEFT: its one caller's array is TradeComponent::manifest, a raw {data, count, capacity} triple (H5: typing it alone breaks the dtor 0x14005c340's release order of +0x60 / +0x50 / +0x40 / +0x30)
-}
-
 // ============================================================================
 // ENDGAME B.3.8 VIS — StorageComponent as a REAL class (StorageComponent.h).
 //

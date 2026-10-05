@@ -326,7 +326,7 @@ namespace {
 // The resize of each pool: 0x14001b270 (stride 8), 0x14001b340 (0x18) and
 // 0x14001b4e0 (0x30), the three retail bodies, each the core through its row.
 void MG_Resize(MapGenerator::DynArrayHeader<InitialFamily>& pool, int newCount) {
-    reinterpret_cast<MGFamilyArray*>(&pool)->SetSize(newCount);   // LEFT: MapGenerator::families stays a DynArrayHeader: its dtor keeps the tree's `if (data)` before MemFree (retail 0x14001af4b has none; known_port_issues 14d), which ~Array would drop
+    reinterpret_cast<MGFamilyArray*>(&pool)->SetSize(newCount);   // LEFT: audit DEFERRED (retail-difference task, row 470): MapGenerator::families stays a DynArrayHeader: its dtor keeps the tree's `if (data)` before MemFree (retail 0x14001af4b has none; known_port_issues 14d), which ~Array would drop
 }
 void MG_Resize(MapGenerator::ExternalRefArray& pool, int newCount) { pool.SetSize(newCount); }
 void MG_Resize(MapGenerator::InitialStructureArray& pool, int newCount) { pool.SetSize(newCount); }

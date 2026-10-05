@@ -825,7 +825,7 @@ bool GameUpdateLoop::Update(const System::Time& timeRef) {
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", m_citizenList);
                 { PhaseTimer pt(kPhCitizenList);
-                m_citizenList->Update(const_cast<int64_t*>(&time->_ticks));   // 0x14008c2b0  // LEFT: SIG CitizenBehavior::Update(int64_t* deltaTime) (Entity/CitizenBehavior.h, X6-CW's partition): retail passes the slot's const Time*
+                m_citizenList->Update(const_cast<int64_t*>(&time->_ticks));   // 0x14008c2b0  // LEFT: audit WORK (SIG), owner Entity/ (z-CODEB): SIG CitizenBehavior::Update(int64_t* deltaTime) (Entity/CitizenBehavior.h, X6-CW's partition): retail passes the slot's const Time*
                 }
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
@@ -1417,7 +1417,7 @@ void GameUpdateLoop::Draw(float alpha) {
                 if (s_forceSnow) params.x = s_snowVal;
                 videoCtx->_unknown03b8 = params;                  // ctx+0x3b8
                 // ctx+0x288: Context::PixelConstantStaging::pixel[4] (Video/Context.h).
-                *reinterpret_cast<Math::Vector4*>(videoCtx->_pixelConstantStaging.pixel[4]) = params;   // ctx+0x288  // LEFT: the row is float[4] (Context.h: a Math::Vector4 member would run its zeroing ctor in Context's ctor); the Vector4 store keeps the one 16-byte MOVUPS a memcpy splits into two qword stores at -O2
+                *reinterpret_cast<Math::Vector4*>(videoCtx->_pixelConstantStaging.pixel[4]) = params;   // ctx+0x288  // LEFT: audit DEFERRED (zeroing ctor): the row is float[4] (Context.h: a Math::Vector4 member would run its zeroing ctor in Context's ctor); the Vector4 store keeps the one 16-byte MOVUPS a memcpy splits into two qword stores at -O2
                 videoCtx->_dirty |= 0x10800;                      // ctx+0x10
             }
         }

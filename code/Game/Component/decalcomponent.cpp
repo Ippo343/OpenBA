@@ -297,8 +297,8 @@ void DecalComponent::OnAdded() {
     }
     Graphics::MaterialInstance* material = decalDesc->_materials[decalState];
 
-    uint8_t  tiledFlag = decalDesc->_tiled;
-    uint8_t  p19       = decalDesc->_flagB;
+    bool     tiledFlag = decalDesc->_tiled;
+    bool     p19       = decalDesc->_flagB;
     uint32_t p10       = FloatBits(decalDesc->_sizeB);
     int alpha = static_cast<int>(decalScale * 255.0f);   // DAT_14017222c = 255.0f
 

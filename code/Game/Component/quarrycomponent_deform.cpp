@@ -164,7 +164,7 @@ void QuarryComponent::ApplyDepth(float depth) {
     const Picking::PickingMesh* mesh = desc->_floorMesh;
     if (!mesh) { QuarryBail("ApplyDepth", "desc+0x20 _floorMesh is null"); return; }
 
-    int16_t* heightArray = terrain->_arrayD8;   // +0xD8 the height array
+    int16_t* heightArray = terrain->_heights.data;   // +0xD8 the height array
     const int       stride      = terrain->_fieldD0;
     const float     half        = static_cast<float>(terrain->_gridSize >> 1);
     if (!heightArray) { QuarryBail("ApplyDepth", "terrainGrid+0xD8 heightmap null"); return; }
