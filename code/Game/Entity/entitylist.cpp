@@ -606,10 +606,10 @@ void EntityList::Update(const System::Time* time) {
         if ((int32_t)toProcess > 0) {
             do {
                 // Re-read bucket data pointer each iteration (may be reallocated)
-                ComponentEntity** arrBase = bkt->_data;
+                Object::InternalPtr<ComponentEntity>* arrBase = bkt->_data;
 
                 // Read entity IBP and CheckPtr
-                ComponentEntity* entIBP = arrBase[idx];
+                ComponentEntity* entIBP = arrBase[idx].Get();
                 if (prof) ++g_elProfBucketVisits;
 
                 // Check not deleted (bit 10)
@@ -1084,11 +1084,11 @@ void EntityList::RemoveEntity(ComponentEntity** entityIBP) {
 
         if (lastIdx != entityBucketIdx) {
             // Swap last element into removed element's slot
-            ComponentEntity** bucketData = bucket->_data;
+            Object::InternalPtr<ComponentEntity>* bucketData = bucket->_data;
             bucketData[entityBucketIdx] = bucketData[lastIdx];
 
             // Update swapped entity's bucket index field
-            ComponentEntity* swappedEntity = bucket->_data[entityBucketIdx];
+            ComponentEntity* swappedEntity = bucket->_data[entityBucketIdx].Get();
 
             // Update low 24 bits of +0x1C with new index
             swappedEntity->_handle = swappedEntity->_handle ^ ((swappedEntity->_handle ^ entityBucketIdx) & 0xFFFFFF);

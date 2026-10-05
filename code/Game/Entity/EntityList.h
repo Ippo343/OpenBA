@@ -31,6 +31,7 @@
 #include <cstddef>
 #include "system/Value.h"   // System::Time (8 bytes, trivial)
 #include "collection/Collection.h"   // Collection::Array, Collection::Set
+#include "object/Internal.h"         // Object::InternalPtr (the bucket element)
 
 class ComponentEntity;
 namespace Object { template <class T> class InternalPtr; }
@@ -80,7 +81,13 @@ static_assert(offsetof(EntityTreeNode, _padTail) == 0x24, "EntityTreeNode::_padT
 // entity IBPs (retail constructs the five with the vector-ctor iterator
 // 0x14003accc: element 0x10, count 5, ctor 0x140008080 = the two zero qwords of
 // Array's ctor, dtor 0x140001740 = ~Array).
-using UpdateBucket = IBPArray;
+// B.4 H5-P2: the element is retail's InternalPtr<ComponentEntity> (the bucket
+// serializer 0x140021ba0 calls InternalBasePtr::Serialize on each slot; Update
+// 0x1400c38e0 CheckPtr's a slot, then reads the bare pointer); the row is the
+// same kSpec_PtrZero (stride 8, align 8, qword copy, zeroed tail).
+using UpdateBucket = Collection::Array<Object::InternalPtr<ComponentEntity>, Collection::DefaultAllocator,
+                                       Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+static_assert(sizeof(UpdateBucket) == 0x10, "UpdateBucket must be 0x10 bytes");
 
 // EntityList — main entity management structure
 // Size: 0xE8 bytes (GameUpdateLoop::Load 0x140096b00: MemAlloc(0xe8, 4) + ctor 0x1400c3f90)
