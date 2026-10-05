@@ -706,7 +706,7 @@ void MainMenuDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*
                (void*)::Application::Application::_singleton);
         if (::Application::Application::_singleton) {
             printf("[MainMenuDialog::OnCommand] -> App::Quit\n");
-            ::Application::Application::_singleton->Quit();  // B.3.7 bridge
+            ::Application::Application::_singleton->Quit();
         } else {
             printf("[MainMenuDialog::OnCommand] WARN: App::Quit not resolved — falling back to PostQuitMessage\n");
             // Last resort — close the window so the user isn't stuck

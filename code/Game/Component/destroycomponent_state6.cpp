@@ -374,8 +374,6 @@ char DestroyComponent::State6Enter() {
         }
         StorageComponent* storage = FindOn<StorageComponent>(_entity.Get());
         if (storage) {
-            // B.3.2 bridge: exe 0x14000f090 IS Collection::Array<Bytes<0x10,8>>::SetSize(n).
-            // StorageComponent's item array is raw storage (H5, COMP-e's header).
             storage->storageSlots.SetSize(0);
         }
         if (Milestone()) {

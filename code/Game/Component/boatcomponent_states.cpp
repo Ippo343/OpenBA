@@ -393,7 +393,7 @@ char BoatComponent::State0Enter() {
             Math::Transform* modelTransform = &m->transform;
             *modelTransform = xform;
             m->yaw = yaw;
-            m->meshInstance.SetTransform(*modelTransform);   // B.3.5 bridge
+            m->meshInstance.SetTransform(*modelTransform);
         }
     }
 

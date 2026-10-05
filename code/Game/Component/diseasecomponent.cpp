@@ -428,7 +428,7 @@ void DiseaseComponent::Infect() {
             // in an unzeroed stack slot (CALL [0x140151300] 0x140048434) and never
             // destroys it. (The tree's raw buffer was zeroed first: a stack-only store.)
             UI::String uiStr(
-                Object::ExternalPtr<UI::StringTable>(found->_stringTable),   // B.3.6 bridge
+                Object::ExternalPtr<UI::StringTable>(found->_stringTable),
                 found->_str2);
             ::new (&cropName) System::String(uiStr.operator System::String());
             haveName = true;
@@ -839,7 +839,6 @@ void DiseaseComponent::OnAdded() {
 
     ::Object::InternalPtr<DiseaseComponent> ibp(this);
     int count = town->diseases._size;
-    // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
     town->diseases.SetSizeFill(count + 1, &ibp);
 
     if (CDTrace()) {

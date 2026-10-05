@@ -98,7 +98,6 @@ void EntityList::QueueDestroy(ComponentEntity* const* entity) {
     if (*entity == nullptr) return;
     if (((*entity)->_entityFlags >> 10) & 1) return;
     MarkEntityForRemoval(*entity);   // 0x1400c2ea0
-    // B.3.2 bridge: FUN_140003110 is Collection::Array<void*>::SetSize(n, fill)
     removalList.SetSize(removalList._size + 1, *entity);
 }
 

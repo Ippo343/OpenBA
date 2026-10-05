@@ -85,7 +85,7 @@ bool WorkComponent::IsWorkPosted() const {
     }
     // not found: construct an empty IBP and report non-null (matches original)
     int64_t ibp[1] = {0};
-    new (ibp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (ibp) ::Object::InternalBasePtr(nullptr);
     return ibp[0] != 0;
 }
 
@@ -113,7 +113,7 @@ void WorkComponent::CancelWork() {
         }
     }
     if (!found) {
-        new (&value) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (&value) ::Object::InternalBasePtr(nullptr);
     }
 
     workFlags = value->field_24;   // the work's +0x24 (the queue-order key)

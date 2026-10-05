@@ -316,7 +316,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
             return param_2;
         }
     }
-    new (param_2) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (param_2) ::Object::InternalBasePtr(nullptr);
     if (curArr) System::MemoryAllocator::MemFree(curArr);
     return param_2;
 }
@@ -366,7 +366,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         float fVar39 = pRVar6->RandFloat();
         if (fVar39 < kRandThresh) {
             ComponentEntity* nullIBP = nullptr;
-            new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+            new (&nullIBP) ::Object::InternalBasePtr(nullptr);
             local_res20 = nullIBP;
         }
     }
@@ -447,7 +447,7 @@ LAB_14010a846:
                     ComponentEntity* cand = nullptr;     // local_res18
                     if (plVar20->blocker == nullptr) {
                         if (plVar20->occupant == nullptr) { new (&cand) ::Object::InternalBasePtr(
-                            nullptr); }   // B.3.3 bridge
+                            nullptr); }
                         else cand = plVar20->occupant.Get();
                     } else cand = plVar20->blocker.Get();
                     if (cand != nullptr) {
@@ -701,7 +701,7 @@ LAB_14010ae8a:
             char cVar12 = happinessMode ? 1 : 0;
             ComponentEntity* entIBP;
             if (cVar12 == '\0') { entIBP = nullptr; new (&entIBP) ::Object::InternalBasePtr(
-                nullptr); }   // B.3.3 bridge
+                nullptr); }
             else entIBP = local_res20;
             ComponentEntity* local_res18 = entIBP;
 

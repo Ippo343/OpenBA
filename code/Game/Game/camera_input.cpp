@@ -128,10 +128,10 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
 
     // ── yaw: keyboard rotate (ids 9/10) + middle-mouse drag (id 7 + mouseDeltaX id 2) ──
     float yaw = pc->yaw;
-    if (keyMap->GetValue(0, 9))  yaw -= dt * kRotSpeed;   // RotateLeft  // B.3.7 bridge
-    if (keyMap->GetValue(0, 10)) yaw += dt * kRotSpeed;   // RotateRight  // B.3.7 bridge
-    if (keyMap->GetValue(0, 7)) {                          // MouseMiddle drag  // B.3.7 bridge
-        short ddx = keyMap->GetValue(0, 2);  // B.3.7 bridge
+    if (keyMap->GetValue(0, 9))  yaw -= dt * kRotSpeed;   // RotateLeft
+    if (keyMap->GetValue(0, 10)) yaw += dt * kRotSpeed;   // RotateRight
+    if (keyMap->GetValue(0, 7)) {                          // MouseMiddle drag
+        short ddx = keyMap->GetValue(0, 2);
         yaw -= (float)ddx * kMidDragScale;
     }
 
@@ -141,37 +141,37 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
     // Game-settings byte +0x14 (DAT_1401c3de0 -> settings base): edge-scroll enabled.
     if (g_gameSettings != nullptr && g_gameSettings->edgeScroll != 0) {
         int sw, sh; ScreenSize(sw, sh);
-        unsigned mx = (unsigned)(uint16_t)keyMap->GetValue(0, 0);  // B.3.7 bridge
-        unsigned my = (unsigned)(uint16_t)keyMap->GetValue(0, 1);  // B.3.7 bridge
+        unsigned mx = (unsigned)(uint16_t)keyMap->GetValue(0, 0);
+        unsigned my = (unsigned)(uint16_t)keyMap->GetValue(0, 1);
         if (mx < 4)                               panX = -1.0f;
         if ((int)mx > sw - 5 && (int)mx < sw)     panX =  1.0f;
         if (my < 4)                               panY = -1.0f;
         if ((int)my > sh - 5 && (int)my < sh)     panY =  1.0f;
     }
-    if (keyMap->GetValue(0, 0xd)) panX = -1.0f; // Left  // B.3.7 bridge
-    if (keyMap->GetValue(0, 0xe)) panX =  1.0f; // Right  // B.3.7 bridge
-    if (keyMap->GetValue(0, 0xb)) panY = -1.0f; // Forward  // B.3.7 bridge
-    if (keyMap->GetValue(0, 0xc)) panY =  1.0f; // Back  // B.3.7 bridge
+    if (keyMap->GetValue(0, 0xd)) panX = -1.0f; // Left
+    if (keyMap->GetValue(0, 0xe)) panX =  1.0f; // Right
+    if (keyMap->GetValue(0, 0xb)) panY = -1.0f; // Forward
+    if (keyMap->GetValue(0, 0xc)) panY =  1.0f; // Back
 
     // ── zoom target (+0x3c) init + wheel/key input ──
     if (field_0x3C == 0.0f)
         field_0x3C = pc->distance; // seed from current distance
 
-    short wheel = keyMap->GetValue(0, 4);  // B.3.7 bridge
+    short wheel = keyMap->GetValue(0, 4);
     if (inputFlag == 0 && !field_0x38) wheel = 0; // no wheel zoom if UI focused (+0x38)
     int zoomDir;
-    if (keyMap->Pressed(0, 0xf)) {          // ZoomIn  // B.3.7 bridge
+    if (keyMap->Pressed(0, 0xf)) {          // ZoomIn
         zoomDir = 1;
-    } else if (keyMap->Pressed(0, 0x10)) {  // ZoomOut  // B.3.7 bridge
+    } else if (keyMap->Pressed(0, 0x10)) {  // ZoomOut
         zoomDir = -1;
     } else {
         zoomDir = wheel;
     }
 
     // ── manual pitch accumulator +0x44 (0..1) from PitchUp/PitchDown (ids 0x11/0x12) ──
-    if (keyMap->Pressed(0, 0x11))  // B.3.7 bridge
+    if (keyMap->Pressed(0, 0x11))
         field_0x44 += kPitchStep;
-    else if (keyMap->Pressed(0, 0x12))  // B.3.7 bridge
+    else if (keyMap->Pressed(0, 0x12))
         field_0x44 -= kPitchStep;
     field_0x44 = clampf(field_0x44, 0.0f, 1.0f);
 
@@ -338,7 +338,7 @@ void PlayerToolManager::UpdateHotkeys(int /*inputFlag*/, int64_t /*timeTicks*/) 
     if (!keyMap) return;
 
     // TogglePause (id 0x17) — unless the pause is locked (GameWorld+0xd0 bit 10).
-    if (keyMap->Pressed(0, 0x17)) {  // B.3.7 bridge
+    if (keyMap->Pressed(0, 0x17)) {
         uint32_t worldFlags = GameUpdateLoop::_singleton->m_gameFlags;
         if (((worldFlags >> 10) & 1) == 0)
             paused = !paused;
@@ -347,7 +347,7 @@ void PlayerToolManager::UpdateHotkeys(int /*inputFlag*/, int64_t /*timeTicks*/) 
     // Camera presets 0..4 (ids 0x2d..0x31). The original gates these on the active
     // tool allowing camera control; in standalone no tool is wired, so allow them.
     for (int i = 0; i < 5; ++i) {
-        if (keyMap->Pressed(0, i + 0x2d))  // B.3.7 bridge
+        if (keyMap->Pressed(0, i + 0x2d))
             ApplyCameraView(i);
     }
 }

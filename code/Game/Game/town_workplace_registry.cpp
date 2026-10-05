@@ -235,7 +235,7 @@ extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, cons
 
     // Key absent -> empty result.
     if (found == nullptr) {
-        new (out) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        new (out) ::Object::InternalBasePtr(nullptr);
         return out;
     }
 
@@ -295,6 +295,6 @@ extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, cons
     }
 
     // No qualifying building -> empty result.
-    new (out) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    new (out) ::Object::InternalBasePtr(nullptr);
     return out;
 }

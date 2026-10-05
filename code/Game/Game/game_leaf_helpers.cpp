@@ -119,7 +119,7 @@ void Game_WeatherDtor(WeatherSimulation* self) {
             Graphics::Geometry* geom = arr[i];
             if (geom) {
                 if (scene)
-                    scene->RemoveGlobalObject(geom);   // B.3.5 bridge
+                    scene->RemoveGlobalObject(geom);
                 // Retail: (**(code **)*puVar2)(puVar2, 1) — object -> vtable ->
                 // slot 0. Same one-deref-short bug as Game_ImageCaptureDtor above.
                 delete geom;   // slot 0, free
@@ -162,7 +162,7 @@ void Game_TerrainResolveMaterial(MapGenerator::ExternalRef* ref) {
     if (ref->factoryGen == factoryGen) return;
 
     System::Filename fnameBuf(ref->strPtr);  // String @ +0
-    ::Object::External* obj = efactory->FindAs<::Object::External>(fnameBuf);  // B.3.3 bridge
+    ::Object::External* obj = efactory->FindAs<::Object::External>(fnameBuf);
 
     ::Object::External* result = nullptr;
     if (obj) {

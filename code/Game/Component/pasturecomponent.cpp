@@ -262,7 +262,6 @@ void PastureComponent::Persist(IO::Stream& stream) {
     // — not from serializer+8 (that's the version int, 0 here, which made the
     // old check pass on save too; benign only because resize-to-same-count is
     // a no-op).
-    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
     if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
         animals.SetSize(countBuf);
     }

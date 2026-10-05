@@ -684,10 +684,6 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     if (::Achievement::AchievementManager::_singleton) {
         ::Achievement::AchievementManager::_singleton->Persist(stream);
     }
-    // B.3.5 bridge — ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z.
-    // The `s_fn_AnimMgr_Serialize` cache, its typedef, its resolver and the
-    // `anim=%p` it fed the [GUL::Serialize] fprintf all went in the closing pass:
-    // a diagnostic that prints the address of a door nobody calls reports nothing.
     m_animationManager->Serialize(ser);
     m_audioScene->Serialize(ser);
 

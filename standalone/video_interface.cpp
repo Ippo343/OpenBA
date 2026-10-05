@@ -114,7 +114,7 @@ void VideoInterfaceFillDx11Slot(void* device) { FillDx11Slot(device); }
 // machine. Called by the ported InitializeInterfaces after its LoadLibraryW of
 // VideoDX9-x64.dll failed, and only with the Runtime DLL absent.
 void VideoInterfaceFillDx9Placeholder(void* device) {
-    Video::Device::InterfaceSlot& slot =                              // B.3.5 bridge
+    Video::Device::InterfaceSlot& slot =
         reinterpret_cast<Video::Device*>(device)->dllSlots[kInterfaceDX9];  // CAST-OK: dx11_seam
     slot.module           = reinterpret_cast<void*>(SentinelModule());  // CAST-OK: dx11_seam
     slot.getDeviceName    = &VideoDX11::Dx9Placeholder_GetDeviceName;
@@ -126,7 +126,7 @@ void VideoInterfaceFillDx9Placeholder(void* device) {
 namespace {
 
 void FillDx11Slot(void* device) {
-    Video::Device::InterfaceSlot& slot =                              // B.3.5 bridge
+    Video::Device::InterfaceSlot& slot =
         reinterpret_cast<Video::Device*>(device)->dllSlots[kInterfaceDX11];  // CAST-OK: dx11_seam
     slot.module           = reinterpret_cast<void*>(SentinelModule());  // CAST-OK: dx11_seam
     slot.getDeviceName    = &VideoDX11::Dx11_GetDeviceName;

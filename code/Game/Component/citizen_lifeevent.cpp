@@ -69,7 +69,7 @@ void CitizenComponent::PostLifeEvent(int eventType, int severity, const char* st
         UI::String uiStr(
             Object::ExternalPtr<UI::StringTable>(titleSrc->stringTable),
             titleSrc->stringName);   // +0x30
-        ::new (&titleStr) System::String(uiStr.operator System::String());  // B.3.6 bridge
+        ::new (&titleStr) System::String(uiStr.operator System::String());
     } else {
         titleStr.Set("");   // == String("") (ctor is default + Set)
     }
