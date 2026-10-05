@@ -221,7 +221,7 @@ public:
     // PUBLIC for the same reason `IO::Stream`'s three are: the unconverted tree
     // reads them through a cast to the POD, and `offsetof` has to be well
     // formed.
-    int32_t  _index;     // +0x000
+    uint32_t _index;     // +0x000  unsigned: Rand 0x1800c7fa3 MOV EDX,[RBX] zero-extends it into the _mt index
     uint32_t _mt[624];   // +0x004
 };
 
