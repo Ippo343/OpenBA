@@ -210,7 +210,7 @@ static_assert(offsetof(NamedDescriptionRef, resolved) == 0x10, "NamedDescription
 
 // B4 FORWARD: founding_spawn.cpp, starttown.cpp hand the reference in untyped.
 void ResolveExternalByName_Impl(void* nameString) {
-    NamedDescriptionRef* ref = reinterpret_cast<NamedDescriptionRef*>(nameString);   // LEFT: SIG ResolveExternalByName_Impl takes void* (B4 Z LAST CODE: ownership no longer blocks): its callers hold three record types with different member names (NamedDescriptionRef, Goal's NamedExternalRef, MapGenerator::ExternalRef) whose +0x10 is a mutable External* while ExternalFactory::Find returns const External*: one erased core needs that store, i.e. a CONST ruling (const_cast at the store or a const +0x10) first
+    NamedDescriptionRef* ref = reinterpret_cast<NamedDescriptionRef*>(nameString);   // LEFT: SIG ResolveExternalByName_Impl takes void*: retail has ONE record type here (every call of 0x14001b1d0, from MapGenerator, BuildingGoal, the tutorials and ComponentEntity, hand the same 0x18 {String, int generation, External*} ExternalPtr-by-name), the tree three (this NamedDescriptionRef, Goal's NamedExternalRef with a default / copy ctor and a deleted operator=, MapGenerator::ExternalRef, a ctor-less member and Array element). The const is not the blocker (FindAs<External> returns External*): unifying them moves MapGenerator's gen / resolved stores from its ctor body (0x1400a3030) into member construction, a behaviour: commit on retail's ctor order
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
     if (!factory) return;
 

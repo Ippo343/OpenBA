@@ -192,7 +192,7 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
     ModelComponent* modelIBP = _entity->FindComponent<ModelComponent>();
     if (modelIBP) {
         ModelSelectMesh(modelIBP, static_cast<uint16_t>(gender == 0), 0);   // 0x1401253d0
-        modelIBP->SetTransformFromYaw(reinterpret_cast<const Math::Vector3*>(pos), 0.0f);   // 0x140003870  // LEFT: Initialize's const float* pos (B4 Z LAST CODE): debugui.cpp's caller hands the float[4] that InteractNodePosition (Action/exe_bodies.h, float* out, 46 callers) fills; typing pos as const Math::Vector3* needs that out-parameter typed first
+        modelIBP->SetTransformFromYaw(reinterpret_cast<const Math::Vector3*>(pos), 0.0f);   // 0x140003870  // LEFT: Initialize's const float* pos waits on InteractNodePosition's float* out (Action/exe_bodies.h; retail 0x140122e20 returns a Vector3 through RDX). Measured (B4 S4 SIG): of its 44 call sites 18 hold a zeroed float[3] (a Math::Vector3 local is codegen-identical, -O0 and -O2), 13 a zeroed float[4] (12 bytes zeroed in place of 16) and 12 an uninitialised float[3] (Vector3() adds three stores); 10 of the locals go on into further float* signatures (CitizenAI_PerformWorkCtor8_bd790 / _6_bd420, _Pathfinding_NavigateTo_bda50, _FindBestTarget_dd30, the gather / market / trade / consume finders), each with its own callers
     }
 
     // 4. gender
