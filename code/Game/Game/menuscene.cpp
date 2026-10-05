@@ -268,7 +268,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
     int count38 = meshes.GetSize();
     outer.Serialize(count38, nullptr);
     if (count38 > 0) {
-        Reimpl_Array_Resize_Stride20(&meshes, count38);
+        meshes.SetSize(count38);   // 0x14001baf0: Array<MenuSceneMesh>::SetSize (zero tail: MenuSceneMesh() value-initialises)
     }
     if (count38 > 0) {
         Reimpl_Array_Serialize_Stride20(&outer, static_cast<uint32_t>(count38),
