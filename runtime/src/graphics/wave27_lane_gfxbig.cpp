@@ -582,7 +582,7 @@ inline double SecondsPerTick() {
 // animationstate_transforms.cpp) holds typed pointers, so the door takes them.
 extern "C" bool RtGraphics_AnimationState_Update(
         Graphics::AnimationState* self, const System::Time* time,
-        const Collection::Array<Graphics::GraphicsMesh::Node>* nodes,
+        const Graphics::GraphicsMesh::NodeArray* nodes,
         const Math::Transform* baseTransform,
         Graphics::InterpolatedState<Math::Transform>* interp, Math::Transform* pose,
         Math::Vector3* outVec3, bool rootOnly, bool applyEvents) {
@@ -765,7 +765,7 @@ void MaterialInstance::BuildParameters() {
 // call site below.
 // ---------------------------------------------------------------------------
 bool AnimationState::Update(const System::Time& timeRef,
-                            const Collection::Array<GraphicsMesh::Node>& nodes,
+                            const GraphicsMesh::NodeArray& nodes,
                             const Math::Transform& root,
                             InterpolatedState<Math::Transform>* interp,
                             Math::Transform* pose,

@@ -162,7 +162,7 @@ namespace Graphics {
 // ---------------------------------------------------------------------------
 void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHandle,
                                    int animIndex,
-                                   const Collection::Array<GraphicsMesh::Node>& nodes,
+                                   const GraphicsMesh::NodeArray& nodes,
                                    const System::Time& startTime,
                                    const System::Time& /*fadeTime, unread*/,
                                    float /*speed, unread*/, bool instanced) {
@@ -286,7 +286,7 @@ void AnimationState::PlayAnimation(Object::ExternalPtr<AnimationGroup> groupHand
 // Quaternion::operator*); nodes 1..n-1 inline the rotate with the schedule
 // below and call only operator*.
 // ---------------------------------------------------------------------------
-void AnimationState::CopyInstancedToUnique(const Collection::Array<GraphicsMesh::Node>& nodes,
+void AnimationState::CopyInstancedToUnique(const GraphicsMesh::NodeArray& nodes,
                                            const Math::Transform& root,
                                            InterpolatedState<Math::Transform>* interp,
                                            int handle) const {
@@ -418,7 +418,7 @@ void AnimationState::CopyInstancedToUnique(const Collection::Array<GraphicsMesh:
 // RE-READ at every use exactly as retail reloads them.
 // ---------------------------------------------------------------------------
 void AnimationState::UpdateNodes(float speed,
-                                 const Collection::Array<GraphicsMesh::Node>& nodes,
+                                 const GraphicsMesh::NodeArray& nodes,
                                  const Math::Transform& root,
                                  InterpolatedState<Math::Transform>* interp,
                                  Math::Transform* pose,
@@ -701,7 +701,7 @@ void AnimationState::UpdateNodes(float speed,
 int MeshInstance::GetBones(float t, const Math::Transform& rootRef,
                            Math::Matrix* out) const {
     const GraphicsMesh* mesh = _mesh.Get();
-    const Collection::Array<GraphicsMesh::Node>& meshNodes = mesh->GetNodes();
+    const GraphicsMesh::NodeArray& meshNodes = mesh->GetNodes();
     const int32_t boneCount = meshNodes._size;
 
     // The body writes only the caller's matrix buffer and returns the bone count;
@@ -923,7 +923,7 @@ int MeshInstance::GetBones(float t, const Math::Transform& rootRef,
 // ---------------------------------------------------------------------------
 int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> groupHandle,
                                         int animIndex,
-                                        const Collection::Array<GraphicsMesh::Node>& nodes) {
+                                        const GraphicsMesh::NodeArray& nodes) {
     AnimationGroup* const group = groupHandle.Get();
 
     int32_t freeSlot = -1;

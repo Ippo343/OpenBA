@@ -426,12 +426,12 @@ public:
     // THE 5th AND 6th PARAMETERS ARE NEVER READ (the fade comes from the group's
     // own table, the speed is the literal 1.0f). Kept for retail's arity.
     //
-    // `nodes` is retail's `const Collection::Array<GraphicsMesh::Node>&`, stride
+    // `nodes` is retail's `const Collection::Array<GraphicsMesh::Node>&` (`NodeArray`), stride
     // 0x48. `GraphicsMesh` is block G's class and is deliberately NOT named here
     // (the H1 brief: forward-declare, do not convert), so the parameter is the
     // raw 16-byte Array header every ported body in this cluster already uses.
     void PlayAnimation(Object::ExternalPtr<AnimationGroup> group, int animIndex,
-                       const Collection::Array<GraphicsMesh::Node>& nodes,
+                       const GraphicsMesh::NodeArray& nodes,
                        const System::Time& startTime, const System::Time& fadeTime,
                        float speed, bool instanced);
 
@@ -442,7 +442,7 @@ public:
     //   `UpdateNodes` are QUALIFIED member calls now, not three resolver hits.
     // B.4: retail's parameter types (the mangled name's `PEAV?$InterpolatedState@
     // VTransform@Math@@@2@PEAV78@`): the node transforms, then the pose buffer.
-    bool Update(const System::Time& dt, const Collection::Array<GraphicsMesh::Node>& nodes,
+    bool Update(const System::Time& dt, const GraphicsMesh::NodeArray& nodes,
                 const Math::Transform& root, InterpolatedState<Math::Transform>* interp,
                 Math::Transform* pose, Math::Vector3& rootOffsetOut, bool rootOnly,
                 bool flag8);
@@ -489,12 +489,12 @@ public:
     //
     // ?CopyInstancedToUnique@ 0x1800fd4c0 — `this` IS NEVER READ (RCX is
     //   overwritten four instructions in); the parameter stays for the ABI.
-    void CopyInstancedToUnique(const Collection::Array<GraphicsMesh::Node>& nodes,
+    void CopyInstancedToUnique(const GraphicsMesh::NodeArray& nodes,
                                const Math::Transform& root,
                                InterpolatedState<Math::Transform>* interp,
                                int handle) const;
     // ?UpdateNodes@    0x1800fcc20
-    void UpdateNodes(float speed, const Collection::Array<GraphicsMesh::Node>& nodes,
+    void UpdateNodes(float speed, const GraphicsMesh::NodeArray& nodes,
                      const Math::Transform& root,
                      InterpolatedState<Math::Transform>* interp, Math::Transform* pose,
                      Math::Vector3& rootOffsetOut);
@@ -583,15 +583,16 @@ void RtGraphics_SerializeTransformArray(Collection::Array<Math::Transform>* a,
 namespace rtcoll {
 void* Rt_ArrayDtor_18001c480(void* a);  // 0x18001c480 ~Array<AnimationState::Layer>
 void* Rt_ArrayDtor_18001c550(void* a);  // 0x18001c550 ~Array<InterpolatedState<Transform>>
-void* Rt_ArrayDtor_180014090(void* a);  // 0x180014090 ~Array<GraphicsMesh::Node>
+void* Rt_ArrayDtor_180014090(Graphics::GraphicsMesh::NodeArray* a);  // 0x180014090 ~Array<GraphicsMesh::Node>
 void* Rt_ArrayDtor_18005bbb0(void* a);  // 0x18005bbb0 ~Array<AnimationState>
-void Rt_SetSize_18005aa30(void* a, int n);  // 0x18005aa30 Array<GraphicsMesh::Node>
+void Rt_SetSize_18005aa30(Graphics::GraphicsMesh::NodeArray* a, int n);  // 0x18005aa30 Array<GraphicsMesh::Node>
 void Rt_SetSize_18005b1e0(void* a, int n);  // 0x18005b1e0 Array<AnimationState>
 void Rt_SetSize_18005c8a0(void* a, int n);  // 0x18005c8a0 Array<AnimationState::Layer>
 void Rt_SetSize_18005ac50(void* a, int n);  // 0x18005ac50 Array<InterpolatedState<Transform>>
 void Rt_SetSize_18005c3d0(void* a, int n);  // 0x18005c3d0 Array<Instance>
 void Rt_SetSize_18005be30(void* a, int n, const void* fill);  // 0x18005be30 Array<Instance>, fill
-void* Rt_ArrayAssign_180013960(void* d, const void* s);  // 0x180013960 Array<GraphicsMesh::Node>
+Graphics::GraphicsMesh::NodeArray* Rt_ArrayAssign_180013960(Graphics::GraphicsMesh::NodeArray* d,
+                                                            const Graphics::GraphicsMesh::NodeArray* s);  // 0x180013960 Array<GraphicsMesh::Node>
 void* Rt_ArrayAssign_18005b130(void* d, const void* s);  // 0x18005b130 Array<AnimationState>
 void* Rt_ArrayAssign_18001b700(void* d, const void* s);  // 0x18001b700 Array<AnimationState::Layer>
 void* Rt_ArrayAssign_18001b810(void* d, const void* s);  // 0x18001b810 Array<InterpolatedState<Transform>>
@@ -600,7 +601,7 @@ void* Rt_ArrayAssign_18001b810(void* d, const void* s);  // 0x18001b810 Array<In
 // for the [GFXBIG27] line, then calls Graphics::AnimationState::Update)
 extern "C" bool RtGraphics_AnimationState_Update(
         Graphics::AnimationState* self, const System::Time* time,
-        const Collection::Array<Graphics::GraphicsMesh::Node>* nodes,
+        const Graphics::GraphicsMesh::NodeArray* nodes,
         const Math::Transform* baseTransform,
         Graphics::InterpolatedState<Math::Transform>* interp, Math::Transform* pose,
         Math::Vector3* outVec3, bool rootOnly, bool applyEvents);  // 0x1800fdb20

@@ -257,7 +257,7 @@ public:
                                                    //        copied as a RAW qword
         int32_t _animIndex;                        // +0x08  -1 on a blanked slot
         int32_t _refCount;                         // +0x0c
-        Collection::Array<GraphicsMesh::Node> _nodes;  // +0x10  stride 0x48
+        GraphicsMesh::NodeArray _nodes;                // +0x10  Array<Node>, stride 0x48
         Collection::Array<AnimationState> _states;     // +0x20  stride 0x48
     };
 
@@ -337,7 +337,7 @@ public:
     //   `nodes` is retail's `const Array<GraphicsMesh::Node>&`, stride 0x48.
     //   `GraphicsMesh` is block G's class and is deliberately not named here.
     int32_t GetInstanceId(Object::ExternalPtr<AnimationGroup> group, int animIndex,
-                          const Collection::Array<GraphicsMesh::Node>& nodes);
+                          const GraphicsMesh::NodeArray& nodes);
 
     // ?FreeInstanceId@AnimationManager@Graphics@@QEAAXH@Z 0x1800fb970 NOT PORTED
     void FreeInstanceId(int handle);

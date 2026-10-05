@@ -165,6 +165,15 @@
 namespace Video { class ImageBuffer; class IndexBuffer; class VertexBuffer; }
 namespace IO    { class Serializer; }
 
+// B.4 Y RT: the hand-derived row of `Array<GraphicsMesh::Node>`
+// (runtime/src/collection/array_graphics_anim.cpp): SetSize 0x18005aa30's
+// identity-Transform init, the copy ctor 0x1800127f0, and the element destroy
+// 0x180014a40 that ~Array 0x180014090 runs (it releases each node's name).
+// Declared here so `GraphicsMesh::NodeArray` can name it.
+namespace rtcoll { namespace gfxanim {
+extern const ArraySpec kSpec_MeshNode;
+} }
+
 namespace Graphics {
 
 class MaterialInstance;   // runtime/types/graphics/Material.h
@@ -243,11 +252,12 @@ public:
     // reason +0x0c is the one called `_local`.
     // ========================================================================
     struct Node {
-        // A `System::String`. The POD spelling, trivially destructible, for the
-        // `Object::External::_path` reason — `?Serialize@Node@` calls
-        // `System::String::Serialize` (0x1800c9930) on it by hand and a real
-        // `System::String` member would release the block a second time.
-        RtSystem::String _name;       // +0x00  strcmp'd directly by GetNodeIndexFromName
+        // B.4 Y RT (`behaviour:`): the real `System::String`. Nothing destroys a
+        // Node through C++ but `Array<Node>`'s own row (`NodeArray` below:
+        // ReleaseStringsCore over each name, retail 0x180014a40), and ??1Node
+        // 0x1800127b0 (the String release) stays undefined, so the name is
+        // released once.
+        System::String _name;         // +0x00  strcmp'd directly by GetNodeIndexFromName
         // *** LEFT UNINITIALISED BY ??0Node@ (0x180012550). *** The ctor writes
         // the qword at +0x00 and then the qword at +0x0c, so +0x08..+0x0b keeps
         // whatever the allocator returned. `?Serialize@Node@` emits it as a
@@ -270,14 +280,20 @@ public:
         // ??1Node@GraphicsMesh@Graphics@@QEAA@XZ            0x1800127b0 — not ported
         //
         // B.4: the default ctor stays UNDECLARED -- the unit test pins
-        // `!is_default_constructible<Node>` -- and so no `Array<Node>` can carry
-        // its element type (the trait-derived element init names `Node()`).
-        // Every `Array<Node>` stays a raw header; `GetNodes` is the one view.
+        // `!is_default_constructible<Node>` -- so `Array<Node>` cannot take the
+        // trait-derived row (its element init names `Node()`); it takes
+        // retail's hand-derived row instead (`NodeArray` below).
         Node(const Node& src);
         Node& operator=(const Node& src);
         ~Node();
         void Serialize(IO::Serializer& serializer);
     };
+
+    // `Collection::Array<GraphicsMesh::Node>` with retail's element lifecycle:
+    // SetSize 0x18005aa30, operator= 0x180013960, ~Array 0x180014090 are the
+    // `kSpec_MeshNode` row (B.4 Y RT).
+    using NodeArray = Collection::Array<Node, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_MeshNode>>;
 
     // ========================================================================
     // GraphicsMesh::DetailLevel — the 0xb0-byte element of `_detailLevels`.
@@ -309,7 +325,11 @@ public:
     // +0x98, a different struct; the collection file's names are the misnomer.
     // ========================================================================
     struct DetailLevel {
-        RtSystem::String _name;          // +0x00  ?GetSubMeshName@ reads level 0's
+        // B.4 Y RT (`behaviour:`): the real `System::String`. A DetailLevel is
+        // built, copied and destroyed only by `Array<DetailLevel>`'s registered
+        // row (array_graphics_mesh.cpp: 0x1800fefc0 / 0x180013c50 / 0x180014910,
+        // the last releasing this name), never through a C++ ctor / dtor.
+        System::String _name;            // +0x00  ?GetSubMeshName@ reads level 0's
         Object::ExternalPtr<Video::ImageBuffer> _image;  // +0x08  ?GetImage@
         float    _distance;              // +0x10  ?GetDetailLevelDistance@
         uint32_t _pad14;                 // +0x14  no body read touches it
@@ -361,8 +381,9 @@ public:
     // 1.0f; +0x48 10000.0f (0x461c4000); the three Array headers zero (their own
     // ctors); +0x80 (1e8 x3, 0x4cbebc20) and +0x8c (-1e8 x3). +0x4c is written by
     // nothing. Every float is exact, so the decimal spellings carry retail's bits.
-    GraphicsMesh() : CompiledExternal() {
-        _name.data = nullptr;
+    // B.4 Y RT: `_name`'s null store is its own ctor, first, as retail's
+    // 0x1800ff1bf is the first store after the stamps.
+    GraphicsMesh() : CompiledExternal(), _name() {
         _vector28.x = 1.0f;  _vector28.y = 1.0f;  _vector28.z = 1.0f;
         _vector34.x = -1.0f; _vector34.y = -1.0f; _vector34.z = -1.0f;
         _field40          = 1;
@@ -380,7 +401,7 @@ public:
     // W1). ENDGAME B.3.9 GFX: the retired door's body (graphicsmesh_vtable.cpp)
     // -- the three arrays in retail's REVERSE order through their own
     // out-of-line `~Array`s (each zeroes its header, so the members' implicit
-    // ~Array is a no-op), `_name` with the asymmetric `str-8` idiom; the
+    // ~Array is a no-op), then `_name`'s own ~String (B.4 Y RT); the
     // restamps and ~CompiledExternal are the compiler's chain.
     ~GraphicsMesh() override;
 
@@ -433,11 +454,8 @@ public:
     const Collection::Array<TriangleList>& GetTriangleLists(int32_t level) const; // 0x180012640
     float   GetDetailLevelDistance(int32_t level) const;   // 0x180012660
     // 0x180012690 `LEA RAX,[RCX+0x60]; RET`, retail's `const Array<Node>&`.
-    // B.4: PORTED, inline. LEFT: `_nodes` stays the raw header (see `Node`),
-    // so this is the one view of it as its element type.
-    const Collection::Array<Node>& GetNodes() const {
-        return *reinterpret_cast<const Collection::Array<Node>*>(&_nodes);   // LEFT: H5 _nodes is Array<uint8_t> raw storage of Array<Node> (see `Node`)
-    }
+    // B.4: PORTED, inline.
+    const NodeArray& GetNodes() const { return _nodes; }
     float   GetMaxDepthDistance() const;                   // 0x180012680
     int32_t GetSkinCount() const;                          // 0x1800126a0
     const Collection::Array<Object::ExternalPtr<MaterialInstance> >&
@@ -492,12 +510,13 @@ public:
     // PUBLIC for the reason `Object::External`'s are: unconverted bodies reach
     // them at these offsets through a cast.
     //
-    // `_name` is the POD `RtSystem::Filename` — eight bytes, one `char* data`,
-    // layout-identical to `System::String` (Filename.h asserts it) and TRIVIALLY
-    // DESTRUCTIBLE, which is the point: the real `System::String` would make the
-    // compiler release the block a SECOND time after the destructor door's
-    // transcribed `str-8` release. Same choice `Object::External::_path` makes.
-    RtSystem::String _name;           // +0x20  ?GetMeshName@ 0x180012730
+    // B.4 Y RT (`behaviour:`): `_name` is the real `System::String`. Retail's
+    // ctor 0x1800ff170 stores it null first (0x1800ff1bf) and its dtor
+    // 0x1800ff270 releases it (0x1800ff2ae..0x1800ff2d0, the `str-8` arm) after
+    // the three ~Arrays and before ~CompiledExternal: the member's own ~String
+    // (the same `Release`) after the dtor body, the arrays' implicit ~Arrays
+    // being no-ops on the headers the body's explicit calls zeroed.
+    System::String _name;             // +0x20  ?GetMeshName@ 0x180012730
     ::Vector3 _vector28;               // +0x28  ctor ( 1, 1, 1) — role not established
     ::Vector3 _vector34;               // +0x34  ctor (-1,-1,-1) — role not established
     int32_t  _field40;                // +0x40  ctor 1; Serialize emits it as a dword
@@ -532,11 +551,12 @@ public:
     //    0x1800fefc0 and copy 0x180013c50). Never call the members' own
     //    `SetSize` / `operator=`: those take the trait-derived row, which is not
     //    retail's element lifecycle.
-    // `_nodes` STAYS raw (LEFT): `Node` has no default ctor (the unit test pins
-    // it), so the trait-derived row cannot be instantiated.
+    // B.4 Y RT: `_nodes` is `NodeArray`, the Node array under retail's own row
+    // (`Node` has no default ctor, so not the trait-derived one); the body's
+    // explicit 0x180014090 zeroes it first, so its implicit ~Array is a no-op.
     Collection::Array<DetailLevel> _detailLevels;   // +0x50  stride 0xb0,
                                                     //        SetSize 0x18005d840, ~Array 0x180013fb0
-    Collection::Array<uint8_t> _nodes;          // +0x60  Array<Node>, stride 0x48,
+    NodeArray _nodes;                           // +0x60  Array<Node>, stride 0x48,
                                                 //        SetSize 0x18005aa30, ~Array 0x180014090
     Collection::Array<Collection::Array<Object::ExternalPtr<MaterialInstance> > >
         _skinMaterials;                         // +0x70  stride 0x10,

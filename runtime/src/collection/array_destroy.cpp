@@ -914,7 +914,7 @@ static void DestroyNestedPair(AnimInstance* base, int count) {
         states._size = 0;                         // one qword (H7)
         states._capacity = 0;
 
-        Collection::Array<Graphics::GraphicsMesh::Node>& nodes = e->_nodes; // +0x10
+        Graphics::GraphicsMesh::NodeArray& nodes = e->_nodes; // +0x10
         ReleaseStringsCore(reinterpret_cast<uint8_t*>(nodes._data), nodes._size, &kD_Str_48);  // CAST-OK: elem_stride
         if (nodes._data) MemFree(nodes._data);
         nodes._data = nullptr;

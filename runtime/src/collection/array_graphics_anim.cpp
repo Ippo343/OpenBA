@@ -117,7 +117,7 @@ static void IdentityTransform(Math::Transform& t) {
     t.translation.z = 0.0f;
 }
 static void MeshNodeInit(Graphics::GraphicsMesh::Node* n) {
-    n->_name.data = nullptr;          // +0x00
+    n->_name._data = nullptr;         // +0x00
     // +0x08 (the parent index) NOT written
     IdentityTransform(n->_local);     // +0x0c .. +0x27
     IdentityTransform(n->_bind);      // +0x28 .. +0x43
@@ -219,7 +219,7 @@ static void InstanceDestroy(Graphics::AnimationManager::Instance* base, int coun
         if (states._data) MemFree(states._data);
         states._data = nullptr; states._size = 0; states._capacity = 0;
 
-        Collection::Array<Graphics::GraphicsMesh::Node>& nodes = e->_nodes;
+        Graphics::GraphicsMesh::NodeArray& nodes = e->_nodes;
         ReleaseStringsCore(reinterpret_cast<uint8_t*>(nodes._data), nodes._size, &kD_Str_48);  // CAST-OK: elem_stride
         if (nodes._data) MemFree(nodes._data);
         nodes._data = nullptr; nodes._size = 0; nodes._capacity = 0;
@@ -354,11 +354,6 @@ void* ArrayAssignCore(ArrayHdr* dst, const ArrayHdr* src,
 void Clear_18001c480(ArrayHdr* a) { ArrayDtorImpl(a); }           // Array<Layer>
 void Clear_18001c550(ArrayHdr* a) { ArrayDtorImpl(a); }           // Array<InterpolatedState>
 
-void Clear_180014090(ArrayHdr* a) {                                // Array<Node>
-    ReleaseStringsCore(a->_data, a->_size, &kD_Str_48);            // CALL 0x180014a40
-    ArrayDtorImpl(a);
-}
-
 void Clear_18005bbb0(ArrayHdr* a) {                                // Array<AnimationState>
     FreeInnerArraysCore(a->_data, a->_size, &kD_InnerArr3_48);     // CALL 0x18005bce0
     ArrayDtorImpl(a);
@@ -380,7 +375,10 @@ using namespace rtcoll::gfxanim;
 // ---- J1 / J2: ~Array ------------------------------------------------------
 void* Rt_ArrayDtor_18001c480(void* a) { rtcoll::AsArray<&kSpec_AnimLayer>(a)->~Array(); return nullptr; }
 void* Rt_ArrayDtor_18001c550(void* a) { rtcoll::AsArray<&kSpec_InterpTransform>(a)->~Array(); return nullptr; }
-void* Rt_ArrayDtor_180014090(void* a) { Clear_180014090(static_cast<ArrayHdr*>(a)); return nullptr; }  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
+// B.4 Y RT: typed. `NodeArray`'s ~Array IS 0x180014090: kSpec_MeshNode's
+// destroy (ReleaseStringsCore over kD_Str_48, CALL 0x180014a40) when the size
+// is positive, then the J1 free-and-zero.
+void* Rt_ArrayDtor_180014090(Graphics::GraphicsMesh::NodeArray* a) { a->~Array(); return nullptr; }
 void* Rt_ArrayDtor_18005bbb0(void* a) { Clear_18005bbb0(static_cast<ArrayHdr*>(a)); return nullptr; }  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
 
 // ---- the three per-element destroy helpers --------------------------------
@@ -388,8 +386,8 @@ void* Rt_ArrayDtor_18005bbb0(void* a) { Clear_18005bbb0(static_cast<ArrayHdr*>(a
 // space and never reads (array_destroy.cpp's "ignoredThis" note applies).
 
 // ---- J3: SetSize ----------------------------------------------------------
-void Rt_SetSize_18005aa30(void* a, int n) {   // Array<GraphicsMesh::Node>
-    rtcoll::AsArray<&kSpec_MeshNode>(a)->SetSize(n);
+void Rt_SetSize_18005aa30(Graphics::GraphicsMesh::NodeArray* a, int n) {   // Array<GraphicsMesh::Node>
+    a->SetSize(n);                                 // kSpec_MeshNode
 }
 void Rt_SetSize_18005b1e0(void* a, int n) {   // Array<AnimationState>
     rtcoll::AsArray<&kSpec_AnimState>(a)->SetSize(n);
@@ -411,9 +409,14 @@ void Rt_SetSize_18005be30(void* a, int n, const void* fill) {
 }
 
 // ---- J4: operator= --------------------------------------------------------
-void* Rt_ArrayAssign_180013960(void* d, const void* s) {   // Array<GraphicsMesh::Node>
-    return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
-                           0x48, 8, &Clear_180014090, &AssignMeshNode);
+// B.4 Y RT: typed. `NodeArray::Assign` is the same J4 body (array_destroy.cpp's
+// ArrayAssignCore: self-test, clear = the ~Array above, grow, then
+// kSpec_MeshNode's assign = the copy ctor 0x1800127f0 per element) with the
+// row's stride 0x48 and alignment 8.
+Graphics::GraphicsMesh::NodeArray* Rt_ArrayAssign_180013960(Graphics::GraphicsMesh::NodeArray* d,
+                                                            const Graphics::GraphicsMesh::NodeArray* s) {
+    d->Assign(*s);
+    return d;
 }
 void* Rt_ArrayAssign_18005b130(void* d, const void* s) {   // Array<AnimationState>
     return ArrayAssignCore(static_cast<ArrayHdr*>(d), static_cast<const ArrayHdr*>(s),  // LEFT: void* door (the graphics readers hold void*; AnimationState.h declarations)
