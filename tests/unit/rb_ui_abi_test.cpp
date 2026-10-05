@@ -135,11 +135,9 @@ void ElementDescription::InitFields() {
     _id = -1;
     _elementType = 3;
 }
-void ElementDescription::ReleaseFields() {
-    if (g_ed.releaseCalls < 4) g_ed.releaseSelf[g_ed.releaseCalls] = this;
-    ++g_ed.releaseCalls;
-    g_ed.releaseVptr = VptrOf(this);
-}
+// B4 Y RT-UI: ~ElementDescription's one release (+0x60) is the member
+// `_textName`'s ~String; there is no ReleaseFields hook left to stand in for.
+// The tests below watch that String's reference count instead.
 }  // namespace UI
 
 namespace {
@@ -163,6 +161,14 @@ struct RbConfig final : UI::DialogControllerConfig {
 struct RbElement final : UI::Element {
     void ComputeSize() override {}
 };
+// A shared (refcount 2) String buffer: ~ElementDescription's member ~String
+// takes the SHARING arm (decrement, null the field), so one run leaves 1.
+struct SharedName {
+    alignas(8) unsigned char block[16] = {};
+    char* data() { return reinterpret_cast<char*>(block + 8); }   // the String's data pointer
+    SharedName() { RtSystem::StringRefCount(data()) = 2; }
+};
+
 struct RbElementDesc final : UI::ElementDescription {
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
@@ -248,9 +254,11 @@ UNIT_TEST(rb_elementdescription_ctor_dtor_run_shared_bodies_under_base_table) {
     CHECK_EQ(Q(d, 0x08), (uint64_t)0);
     CHECK_EQ(Q(d, 0x10), (uint64_t)0);
     CHECK_EQ(Q(d, 0x18), (uint64_t)0);
+    SharedName name;
+    d->_textName._data = name.data();
     d->~RbElementDesc();
-    CHECK_EQ(g_ed.releaseCalls, 1);
-    CHECK(g_ed.releaseVptr == EdVt());
+    CHECK_EQ(RtSystem::StringRefCount(name.data()), 1);   // released exactly once
+    CHECK(d->_textName._data == nullptr);                  // the sharing arm
 }
 
 // ===========================================================================
@@ -267,6 +275,12 @@ struct B39ElProbe final : UI::Element {
     void ComputeSize() override {}
 };
 struct B39EdProbe final : UI::ElementDescription {
+    // B4 Y RT-UI: the destructor log the vector arm checks (the base's own
+    // body is empty now; its member ~String is checked by the scalar arm).
+    ~B39EdProbe() override {
+        if (g_ed.releaseCalls < 4) g_ed.releaseSelf[g_ed.releaseCalls] = this;
+        ++g_ed.releaseCalls;
+    }
     Object::External* Reconstruct() override { return this; }
     void Destruct() override {}
     Object::InternalPtr<UI::Element>* CreateInstance(
@@ -297,13 +311,14 @@ UNIT_TEST(b39_uid_elementdescription_slot0_both_arms) {
     alignas(8) unsigned char one[sizeof(B39EdProbe)];
     B39EdProbe* d = ::new (static_cast<void*>(one)) B39EdProbe();
     g_ed = Seen{};
+    SharedName name;
+    d->_textName._data = name.data();
     d->UI::ElementDescription::~ElementDescription();
-    CHECK_EQ(g_ed.releaseCalls, 1);
-    CHECK(g_ed.releaseVptr == EdVt());
+    CHECK_EQ(RtSystem::StringRefCount(name.data()), 1);
+    CHECK(d->_textName._data == nullptr);
 
     g_ed = Seen{};
     CHECK_ARRAY_DELETE(B39EdProbe, g_ed.releaseCalls, g_ed.releaseSelf);
-    CHECK(g_ed.releaseVptr == EdVt());
 }
 
 // ===========================================================================
