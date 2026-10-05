@@ -304,7 +304,7 @@ namespace RtIO {
 // ---- io/modification_sort.cpp
 extern "C" void RtIo_Modification_SortMods(Mod* data, int32_t count, void*);  // 0x180028760
 // ---- io/modification.cpp
-void* RtColl_ArrayFilenameDtor_1800098d0(void* av);  // 0x1800098d0
+void* RtColl_ArrayFilenameDtor_1800098d0(ModArrayOf<System::Filename>* a);  // 0x1800098d0
 ModArrayOf<Mod>* RtColl_ArrayModAssign_180010110(ModArrayOf<Mod>* dst, const ModArrayOf<Mod>* src);  // 0x180010110
 void* RtColl_ArrayModDtor_180010b80(ModArrayOf<Mod>* a);  // 0x180010b80
 void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv);  // 0x180011220

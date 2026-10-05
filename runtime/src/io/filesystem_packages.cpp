@@ -761,12 +761,12 @@ void FileSystem::LoadPackages() {
     // Same allocation and append as loop 1; the only difference is the source
     // (this->userPackFilenames[i], +0x30, bounded by +0x38) and that there is
     // NO sort afterwards — mods keep the order they were mounted in.
-    for (int32_t i = 0; i < _userPackFilenameCount; ++i) {
+    for (int32_t i = 0; i < _userPackFilenames.size; ++i) {
         void* block = RtIO::RtMemAlloc(0xF0u, 8);
         PackageFile* pkg = nullptr;
         if (block != nullptr)
             pkg = ::new (block) IO::PackageFile();   // B.3.9 IO: the real ctor
-        pkg->IO::PackageFile::ReadPackfile(_userPackFilenames[i]);
+        pkg->IO::PackageFile::ReadPackfile(_userPackFilenames.data[i]);
         RtIO::AppendPackfile(this, pkg);
     }
 

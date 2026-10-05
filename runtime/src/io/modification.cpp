@@ -253,9 +253,9 @@ void DestroyFilenameArray(void* ignoredThis, uint8_t* base, int count);
 
 // 0x1800098d0 — Collection::Array<Filename>::~Array. Releases every element
 // through 0x180009af0 first, then frees the buffer.
-void* RtColl_ArrayFilenameDtor_1800098d0(void* av) {
-    ModArray* a = static_cast<ModArray*>(av);   // LEFT: SIG RtColl_ArrayFilenameDtor_1800098d0 (void* core entry: callers hand Collection::Array<Filename>)
-    DestroyFilenameArray(a, static_cast<uint8_t*>(a->data), a->size);   // CAST-OK: elem_stride
+void* RtColl_ArrayFilenameDtor_1800098d0(ModArrayOf<System::Filename>* a) {
+    void* const elems = a->data;
+    DestroyFilenameArray(a, static_cast<uint8_t*>(elems), a->size);   // CAST-OK: elem_stride
     return ArrayFreeBuffer(a);
 }
 

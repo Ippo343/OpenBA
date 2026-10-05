@@ -28,6 +28,7 @@
 #include "../system/Filename.h"   // B.3.4: IO::FileSystem returns System::Filename by value
 #include "../system/Value.h"      // System::DateTime (GetFileTimeStamp)
 #include "../collection/Collection.h" // B.4 Y RT: _packfiles is Collection::Array<PackageFile*>
+#include "Modification.h"             // B.4 Z RT2: RtIO::ModArrayOf, the _userPackFilenames header
 
 namespace RtIO {
 
@@ -625,9 +626,10 @@ public:
     // member's own ~Array, after the body and before the Filenames declared
     // above it. PackageFile* is trivially destructible: no element step.
     Collection::Array<PackageFile*> _packfiles; // +0x20  size +0x28, capacity +0x2c
-    System::Filename*  _userPackFilenames;     // +0x30  Collection::Array<Filename>::_data (H4: a pointer, no ctor / dtor)
-    int32_t            _userPackFilenameCount; // +0x38
-    int32_t            _unknown3C;             // +0x3C
+    // B.4 Z RT2: the Array<Filename> as the typed 16-byte header (POD: no ctor /
+    // dtor; the ctor 0x1800ac7c0 zeroes its three fields by name, the dtor
+    // releases it through ~Array<Filename> 0x1800098d0).
+    RtIO::ModArrayOf<System::Filename> _userPackFilenames;   // +0x30 {data, size +0x38, capacity +0x3c}
     RtIO::PackfileIndexNode* _packfileIndexRoot; // +0x40
     int32_t            _packfileIndexCount;    // +0x48
 };
@@ -649,7 +651,6 @@ static_assert(offsetof(FileSystem, _packfiles) + offsetof(Collection::Array<Pack
 static_assert(offsetof(FileSystem, _packfiles) + offsetof(Collection::Array<PackageFile*>, _capacity) == 0x2c,
               "LoadPackages 0x1800ab5d4/5f0");
 static_assert(offsetof(FileSystem, _userPackFilenames)    == 0x30, "the user pack filenames");
-static_assert(offsetof(FileSystem, _userPackFilenameCount) == 0x38, "AreUserPackFilesEnabled 0x1800acfc0");
 static_assert(offsetof(FileSystem, _packfileIndexRoot)    == 0x40, "GetPackfileId's `*(this+0x40)`");
 static_assert(offsetof(FileSystem, _packfileIndexCount)   == 0x48, "ClosePackages 0x1800abbf0");
 

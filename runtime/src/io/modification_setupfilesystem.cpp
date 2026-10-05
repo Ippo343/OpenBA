@@ -393,7 +393,7 @@ void Modification::SetupFileSystem() {
             m->order = i;                                      // 0x1800aed64
             if (m->enabled != 0)                               // 0x1800aed68
                 RtIO::RtColl_ArraySetSizeFill_180026880(&fsObj->_userPackFilenames,   // 0x180026880
-                       fsObj->_userPackFilenameCount + 1, &m->file);
+                       fsObj->_userPackFilenames.size + 1, &m->file);
         }
     }
 
