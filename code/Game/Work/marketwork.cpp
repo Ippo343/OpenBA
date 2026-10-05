@@ -951,7 +951,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             InteractDescription* icDesc = Object::IsDerivedFromNullSafe(icDescRaw, InteractDescription::TypeId())
                 ? static_cast<InteractDescription*>(icDescRaw) : nullptr;
             uint32_t weight = static_cast<uint32_t>(icDesc->_useNodes.count);
-            const int icChildren = interact->useLocationCount;
+            const int icChildren = interact->useLocations._size;
             for (int k = 0; k < icChildren; ++k) {
                 weight += InteractNodeCount(interact->useLocations[k].Get(), 0);   // 0x140123070
             }
@@ -1200,7 +1200,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
         InteractDescription* micDesc = Object::IsDerivedFromNullSafe(micDescRaw, InteractDescription::TypeId())
             ? static_cast<InteractDescription*>(micDescRaw) : nullptr;
         uint32_t weight = static_cast<uint32_t>(micDesc->_useNodes.count);
-        const int micChildren = mic->useLocationCount;
+        const int micChildren = mic->useLocations._size;
         for (int k = 0; k < micChildren; ++k) {
             weight += InteractNodeCount(mic->useLocations[k].Get(), 0);   // 0x140123070
         }

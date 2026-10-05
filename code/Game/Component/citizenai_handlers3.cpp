@@ -325,8 +325,8 @@ uint64_t CitizenAIComponent::State_Work() {
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
     uint8_t any = WorkImpl_WalkablePos_122be0(posComp, &transformSub->_useNodes, pos, walkOut, &bestCost);
     if (posComp != nullptr) {
-        // the use locations: InteractComponent::useLocations, useLocationCount
-        int count = posComp->useLocationCount;
+        // the use locations: InteractComponent::useLocations (data, _size)
+        int count = posComp->useLocations._size;
         int i = 0;
         while (i < count) {
             InteractComponent* child = posComp->useLocations[i].Get();

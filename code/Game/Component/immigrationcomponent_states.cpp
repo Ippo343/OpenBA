@@ -345,7 +345,7 @@ void ImmigrationComponent::Spawn() {
         InteractDescription* id = (idesc && ::Object::IsDerivedFromNullSafe(idesc, TidInteractDesc()))
                                       ? static_cast<InteractDescription*>(idesc) : nullptr;
         uint32_t nPts = id ? static_cast<uint32_t>(id->_createNodes.count) : 0;
-        int nChildren = pc->useLocationCount;
+        int nChildren = pc->useLocations._size;
         for (int ci = 0; ci < nChildren; ++ci) {
             nPts += static_cast<uint32_t>(InteractNodeCount(
                 pc->useLocations[ci].Get(), 2));   // 0x140123070

@@ -137,7 +137,7 @@ int InteractNodeCount(const InteractComponent* self, int kind) {
     // null+0x30 (the counter simply contributes 0). Surfaced via the BANISHED_FORCE_WORK
     // harness (Leisure/Work anchor a citizen on an inert workplace building's position comp).
     int total = interact ? (&interact->_useNodes)[kind].count : 0;
-    for (int i = 0; i < self->useLocationCount; ++i) {
+    for (int i = 0; i < self->useLocations._size; ++i) {
         total = total + InteractNodeCount(self->useLocations[i].Get(), kind);
     }
     return total;

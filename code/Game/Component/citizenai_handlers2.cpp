@@ -336,8 +336,8 @@ uint64_t CitizenAIComponent::State_FindWork() {
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
     found = WorkImpl_WalkablePos_122be0(posComp, &transform->_useNodes, pos, outVec, &bestCost);
 
-    // walk each use location (InteractComponent::useLocations, useLocationCount)
-    int childCount = posComp->useLocationCount;
+    // walk each use location (InteractComponent::useLocations (data, _size))
+    int childCount = posComp->useLocations._size;
     if (0 < childCount) {
         int i = 0;
         do {
@@ -345,7 +345,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
             uint8_t r = WorkImpl_WalkablePosRecursive_122b00(child, 0, pos, outVec, &bestCost);
             found |= r;
             i++;
-        } while (i < posComp->useLocationCount);
+        } while (i < posComp->useLocations._size);
     }
 
     if (found != 0) {

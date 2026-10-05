@@ -323,7 +323,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(posComp,
                     &posDesc->_buildNodes, searchPos, targetPos, &bestDist) : 0;
 
-                if (posComp->useLocationCount > 0) {
+                if (posComp->useLocations._size > 0) {
                     int childCount = 0;
                     do {
                         uint8_t childFound = WorkImpl_WalkablePosRecursive_122b00(
@@ -331,7 +331,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                             searchPos, targetPos, &bestDist);
                         childCount++;
                         found |= childFound;
-                    } while (childCount < posComp->useLocationCount);
+                    } while (childCount < posComp->useLocations._size);
                 }
 
                 if (found == 0) {
