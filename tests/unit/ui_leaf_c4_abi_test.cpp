@@ -333,7 +333,7 @@ UNIT_TEST(b39_uib_c4_layout_list_ctor_stores) {
     CHECK(lsd->_partDescs[0] == nullptr);
     CHECK(lsd->_partDescs[1] == nullptr);
     CHECK(lsd->_spriteSheet == nullptr);
-    CHECK(lsd->_spriteName == nullptr);
+    CHECK(lsd->_spriteName._data == nullptr);
     CHECK_EQ(lsd->_hoverColor, 0xff808080u);
     CHECK_EQ(lsd->_selectColor, 0xffffffffu);
     lsd->~ListDescription();
