@@ -50,7 +50,8 @@
 #include "Player/RemovalTool.h"
 #include "Player/Tool.h"
 #include "Player/exe_bodies.h"            // UpdateCreateBar (0x1400ffc60)
-#include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, ActHunt_DynArraySetCount_3110
+#include "Action/exe_bodies.h"            // ActHunt_MarkEntityRemoval_c2ea0, QwordArraySetSize
+static void (*const kArrayPush)(RawArray<void*>*, int, void* const*) = &QwordArraySetSize;   // 0x140003110, printed by the MarkRemoval traces
 #include "Dialog/exe_bodies.h"
 #include "graphics/Geometry.h"            // Graphics::Geometry::GetTransform
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc / _singleton
@@ -1035,7 +1036,7 @@ void FireMarkRemoval() {
     // ActHunt_DynArraySetCount_3110 (0x140003110).
     fprintf(stderr, "[MarkRemoval] MarkForRemoval(c2ea0)=%p ArrayPush(3110)=%p\n",
             reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
-            reinterpret_cast<void*>(static_cast<void (*)(RawArray<void*>*, int, void* const*)>(&QwordArraySetSize)));
+            reinterpret_cast<void*>(kArrayPush));
 
     // Scan a rectangle near map centre for the first markable entity (either cell slot).
     const int lo = 110, hi = 146;
@@ -1161,7 +1162,7 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     if (!local || !entityList) {
         fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
                local, reinterpret_cast<void*>(&ActHunt_MarkEntityRemoval_c2ea0),
-               reinterpret_cast<void*>(static_cast<void (*)(RawArray<void*>*, int, void* const*)>(&QwordArraySetSize)), entityList);
+               reinterpret_cast<void*>(kArrayPush), entityList);
         return;
     }
     ActHunt_MarkEntityRemoval_c2ea0(local);                                   // 0x1400c2ea0

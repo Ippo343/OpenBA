@@ -48,7 +48,7 @@ template <class T> struct RawArray;   // Action/PathSearch.h
 bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
 void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110
 // The typed entry points of the one erased core 0x140003110: every 8-byte-element
-// Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) and RawArray<T*> is handed to it.
+// Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) is handed to it.
 template <class T, class A, class S>
 inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, T* const* fill) {
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
@@ -56,10 +56,6 @@ inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, T*
 namespace Object { template <class T> class InternalPtr; }
 template <class T, class A, class S>
 inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, const Object::InternalPtr<T>* fill) {
-    QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
-}
-template <class T>
-inline void QwordArraySetSize(RawArray<T*>* arr, int newCount, T* const* fill) {
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
 void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
