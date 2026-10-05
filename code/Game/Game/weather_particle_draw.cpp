@@ -331,12 +331,11 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
                 videoCtx._dynamicVertexCursor += vtxBytes;
 
                 // Copy the shared particle index buffer into the dynamic index cursor.
-                // LEFT: Context +0x20f0 (the index cursor) is `uint64_t _unknown20f0`
-                // in R-VIDEO's header.
-                void*& idxCur = *reinterpret_cast<void**>(&videoCtx._unknown20f0);   // LEFT: Video::Context::_unknown20f0 (R-VIDEO)
+                // Context +0x20f0, the dynamic index cursor (16-bit indices).
+                uint16_t*& idxCur = videoCtx._dynamicIndexCursor;
                 size_t idxBytes = static_cast<size_t>(indexCount) * 2;
                 std::memcpy(idxCur, _indices.data, idxBytes);   // +0xD0
-                idxCur = reinterpret_cast<uint8_t*>(idxCur) + idxBytes;   // LEFT: Video::Context::_unknown20f0 (R-VIDEO)
+                idxCur += static_cast<size_t>(indexCount);   // idxBytes / 2
 
                 videoCtx.EndInstancedIndexedVertices(0);
             }

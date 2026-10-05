@@ -449,7 +449,7 @@ void PlayerToolManager::SelectTool(ComponentDescription* group) {
 // template (`description`, the toolbar item's +0x58).
 //
 // The template has a UIDescription among its sub-descriptions, whose +0x28 is
-// the dialog resource. The +0x50 set (TrackedEntityNode, keyed by the
+// the dialog resource. The +0x50 set (PinnedToolNode, keyed by the
 // template's address) keeps each utility dialog's position and open flag.
 //
 // Flow:
@@ -475,7 +475,7 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
         userInterface->CloseDialog(&closeRef);
 
         // Clear the set node's open flag
-        TrackedEntityNode* node = field_0x50;
+        PinnedToolNode* node = field_0x50.root;
         while (node != nullptr) {
             const void* nodeKey = node->key;
             if (key < nodeKey) {
@@ -537,8 +537,8 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
     }
 
     // Step 4: Look up the position node in the +0x50 set
-    TrackedEntityNode* bstNode = nullptr;
-    TrackedEntityNode* current = field_0x50;
+    PinnedToolNode* bstNode = nullptr;
+    PinnedToolNode* current = field_0x50.root;
     while (current != nullptr) {
         const void* nodeKey = current->key;
         if (key < nodeKey) {
@@ -553,16 +553,15 @@ UI::DialogInstance* PlayerToolManager::ToggleUtilityDialog(ComponentDescription*
 
     if (bstNode == nullptr) {
         // Not in the set — insert a new node (0x140014890): key, x = y = 0, flags 0.
-        // LEFT: 0x140014890 is a Collection::Set insert shared by three other
-        // trees; its declaration takes the root holder and the record raw.
-        uint64_t insertBuf[3];
-        insertBuf[0] = reinterpret_cast<uint64_t>(key);   // CAST-OK: ptr_int
-        insertBuf[1] = 0;                                  // x=0, y=0
-        insertBuf[2] = 0;                                  // flags=0
+        // Every byte of the record is written (three qword stores in retail).
+        PinnedToolEntry rec;
+        rec.key = description;                             // the set's key (`key` above)
+        rec.x = 0;                                         // x=0, y=0 (one qword, H7)
+        rec.y = 0;
+        rec.active = 0;                                    // flags=0 (one qword with the pad)
+        for (int i = 0; i < 7; ++i) rec._pad11[i] = 0;
 
-        void* retNode = nullptr;
-        ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&field_0x50), &retNode, insertBuf);   // 0x140014890   // LEFT: SIG ToolbarUtility_BstInsert_4890 (int64_t* root holder, void** out)
-        bstNode = reinterpret_cast<TrackedEntityNode*>(retNode);   // LEFT: SIG ToolbarUtility_BstInsert_4890 (void** out)
+        bstNode = Avl38SetInsert(&field_0x50, rec);        // 0x140014890
     }
 
     // Set the open flag

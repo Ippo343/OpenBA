@@ -63,7 +63,8 @@ public:
     // +0xc0/+0xc4. +0xb9..+0xbb are written by nothing.
     ScrollDescription() : ElementDescription() {
         _spriteSheet = nullptr;
-        for (int i = 0; i < 9; ++i) _spriteNames[i] = nullptr;
+        // +0x70..+0xb0 `_spriteNames[9]`: each String() (the zero store) runs
+        // as a member, [0] first.
         _vertical  = true;
         _inset     = 1;
         _barColor  = 0xffffffffu;
@@ -101,7 +102,7 @@ public:
     SpriteSheet*    _spriteSheet;        // +0x68  ExternalPtr<UI::SpriteSheet>
     // System::String x9, in ScrollElement's sprite order: track start/middle/
     // end, thumb start/middle/end, hot start/middle/end (-> +0xc0 .. +0x140).
-    char*    _spriteNames[9];     // +0x70 .. +0xb0
+    System::String _spriteNames[9];  // +0x70 .. +0xb0; dtor 0x18011a5d0 releases [8]..[0]
     bool     _vertical;           // +0xb8  ctor 1; -> ScrollElement::_vertical (+0x150)
     uint8_t  _padb9[3];           // +0xb9  written by nothing
     int32_t  _inset;              // +0xbc  ctor 1; -> ScrollElement::_inset (+0x15c)

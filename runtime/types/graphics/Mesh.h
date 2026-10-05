@@ -722,8 +722,6 @@ public:
 
     // PORTED, body in `mesh.cpp`. `MeshInstance*` is the outline's back-pointer.
     void SetMesh(Object::ExternalPtr<EdgeMesh> mesh, MeshInstance* followed);  // 0x1800a3a20
-    // B4 FORWARD: tool_base_render.cpp:607 still calls this (its mesh is a void*)
-    void SetMesh(ExternalPtrHandle mesh, MeshInstance* followed);
 
     // Exported, NOT PORTED, no caller: declared, deliberately undefined.
     Object::ExternalPtr<EdgeMesh> GetMesh() const;                        // 0x1800174c0
@@ -986,7 +984,10 @@ public:
     // `PlatformDestruct` are the explicit calls ~EdgeMesh and EdgeMesh() make),
     // the types the eight getters return; the POD's `VideoBufferHeader` is the
     // same 0x20 bytes.
-    void* _reserved20;                                    // +0x20  ctor 0; no body reads it
+    // An ExternalPtr<GraphicsMesh> slot: Serialize hands it to the
+    // GraphicsMesh ExternalPtr serializer (0x180014230). Held as the raw
+    // pointer: ~EdgeMesh 0x1800a2780 does not release it.
+    GraphicsMesh* _reserved20;                            // +0x20  ctor 0
     Object::ExternalPtr<MaterialInstance> _maskMaterial;      // +0x28  ?GetMaskMaterial@
     Object::ExternalPtr<MaterialInstance> _skinMaskMaterial;  // +0x30  ?GetSkinMaskMaterial@
     Object::ExternalPtr<MaterialInstance> _edgeMaterial;      // +0x38  ?GetEdgeMaterial@

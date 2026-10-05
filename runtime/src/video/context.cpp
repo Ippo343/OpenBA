@@ -327,12 +327,12 @@ void Context::SetViewport(const Viewport& vp) {
 // ---- ?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z  0x180019ed0 -
 // `1 << (slot & 0x1f)` is retail's own masking; with 16 slots it never wraps,
 // but the AND is in the shipped code and is kept.
-void Context::SetImageBuffer(const void* image, int32_t slot) {
+void Context::SetImageBuffer(const ImageBuffer* image, int32_t slot) {
 
     if (image != _imageBuffers[slot]) {
         _dirty |= RtVideo::kDirtyImageBuffers;
         _imageBufferDirty |= 1u << (static_cast<unsigned>(slot) & 0x1fu);
-        _imageBuffers[slot] = const_cast<void*>(image);  // dx11/src/contextdata.cpp hands the setters void*  // CAST-OK: dx11_seam
+        _imageBuffers[slot] = image;
     }
 
 }
@@ -341,11 +341,11 @@ void Context::SetImageBuffer(const void* image, int32_t slot) {
 // B.4 (R-VIDEO): MOVED to context_bind.cpp, beside BindResources, its consumer.
 
 // ---- ?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z  0x1800f2100
-void Context::SetRenderBuffer(const void* rb) {
+void Context::SetRenderBuffer(const RenderBuffer* rb) {
 
     if (_renderBuffer != rb) {
         _dirty |= RtVideo::kDirtyRenderBuffer;
-        _renderBuffer = const_cast<void*>(rb);  // dx11/src/contextdata.cpp hands the setters void*  // CAST-OK: dx11_seam
+        _renderBuffer = rb;
     }
 
 }

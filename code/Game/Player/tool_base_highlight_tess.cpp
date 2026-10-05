@@ -30,6 +30,7 @@
 #include "Action/exe_bodies.h"
 #include "collection/Collection.h"
 #include <cstdint>
+#include <cstring>   // std::memcpy (the 8 + 8 + 4 vertex copy)
 #include <cstdio>
 #include <cstdlib>
 #include "Player/exe_bodies.h"
@@ -365,12 +366,15 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
     // finalize: copy pooled vertices into the slot's vertex buffer.
     Pf_VectorResize14_ee40(&batch->vertices, pool.size);
     int     total   = pool.size;
-    int64_t vbBase  = reinterpret_cast<int64_t>(batch->vertices.data);   // LEFT: the 8 + 8 + 4 vertex copy below (see srcBase)
-    int64_t srcBase = reinterpret_cast<int64_t>(pool.data);   // LEFT: the record copy below moves each 0x14-byte vertex as 8 + 8 + 4 bytes; a GeometryBatchVertex assignment compiles to one 16-byte + one 4-byte move (B11 -O2), a store-width change
-    for (int64_t off = 0, i = 0; i < total; ++i, off += 0x14) {
-        *reinterpret_cast<int64_t*>(off + vbBase)        = *reinterpret_cast<int64_t*>(off + srcBase);   // LEFT: 8-byte move of the 8 + 8 + 4 vertex copy (see srcBase above)
-        *reinterpret_cast<int64_t*>(off + 8 + vbBase)    = *reinterpret_cast<int64_t*>(off + 8 + srcBase);   // LEFT: 8-byte move of the 8 + 8 + 4 vertex copy (see srcBase above)
-        *reinterpret_cast<int32_t*>(off + 0x10 + vbBase) = *reinterpret_cast<int32_t*>(off + 0x10 + srcBase);   // LEFT: 4-byte move of the 8 + 8 + 4 vertex copy (see srcBase above)
+    // Each 0x14-byte vertex moves as 8 + 8 + 4 bytes, member by member (a
+    // GeometryBatchVertex assignment would compile to one 16-byte + one 4-byte
+    // move at -O2, a store-width change).
+    GeometryBatchVertex*       vb  = batch->vertices.data;
+    const GeometryBatchVertex* src = pool.data;
+    for (int64_t i = 0; i < total; ++i) {
+        std::memcpy(vb[i].position, src[i].position, sizeof vb[i].position);   // +0x00, 8 bytes
+        std::memcpy(vb[i].uv, src[i].uv, sizeof vb[i].uv);                     // +0x08, 8 bytes
+        std::memcpy(vb[i].normal, src[i].normal, sizeof vb[i].normal);         // +0x10, 4 bytes
     }
 
     // free the BST + vertex pool.

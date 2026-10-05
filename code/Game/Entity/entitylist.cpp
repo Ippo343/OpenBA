@@ -1275,9 +1275,9 @@ void EntityList::Serialize(IO::Stream& stream) {
             ComponentEntity* ent = masterArray._data[entityIdx];
             ent->_handle = ent->_handle ^ ((static_cast<uint32_t>(bucketIdxField) ^ ent->_handle) & 0xFFFFFF);
 
-            // The category byte +0x1F: retail stores the BYTE. ComponentEntity.h declares
-            // +0x1C..+0x1F as one uint32 `_handle`: LEFT for the header's owner.
-            reinterpret_cast<int8_t*>(&masterArray._data[entityIdx]->_handle)[3] = (int8_t)bucketId;   // LEFT: _handle's byte store vs its 32-bit sites
+            // The category byte +0x1F: retail stores the BYTE, the
+            // +0x1C dword's byte [3] (ComponentEntity::_handleBytes).
+            masterArray._data[entityIdx]->_handleBytes[3] = (int8_t)bucketId;
 
             entityIdx++;
         } while (entityIdx < masterArray._size);

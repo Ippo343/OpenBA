@@ -964,7 +964,7 @@ UNIT_TEST(b39_uia_borderdescription_ctor_makes_retails_stores) {
     UI::BorderDescription* d = ::new (buf) UI::BorderDescription();
     CHECK_EQ(d->_id, -1);                          // ElementDescription() ran (marker)
     CHECK(d->_spriteSheet == nullptr);
-    for (int i = 0; i < 9; ++i) CHECK(d->_spriteName[i] == nullptr);
+    for (int i = 0; i < 9; ++i) CHECK(d->_spriteName[i]._data == nullptr);
     BorderDescriptionProbe probe;
     CHECK(VTableOf(d) != VTableOf(&probe));
     g_b39DtorCount = 0;

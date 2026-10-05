@@ -345,8 +345,8 @@ static int ToolUI_MouseY(const Input::KeyMap* keyMap, const UI::DialogInstance* 
 
 // The node of the tool manager's +0x50 set keyed by `key` (the ToolUI's
 // description; the set also holds entity keys: the compare is by address).
-static TrackedEntityNode* ToolUI_FindTracked(const void* key) {
-    TrackedEntityNode* node = GameUpdateLoop::_singleton->m_toolManager->field_0x50;
+static PinnedToolNode* ToolUI_FindTracked(const void* key) {
+    PinnedToolNode* node = GameUpdateLoop::_singleton->m_toolManager->field_0x50.root;
     while (node != nullptr) {
         const void* nodeKey = node->key;
         if (key < nodeKey) {
@@ -440,7 +440,7 @@ void ToolUI::OnUpdate(const System::Time& /*time*/) {
         _dialog->SetUpperLeft(newX, newY, false);
 
         // Update the tracked position keyed by this panel's description
-        TrackedEntityNode* node = ToolUI_FindTracked(description);
+        PinnedToolNode* node = ToolUI_FindTracked(description);
         if (node != nullptr) {
             node->x = newX;
             node->y = newY;
@@ -573,7 +573,7 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
         _dialog->_ui->CloseDialog(&dialogRef);
 
         // Clear the tracked entry's active flag
-        TrackedEntityNode* node = ToolUI_FindTracked(description);
+        PinnedToolNode* node = ToolUI_FindTracked(description);
         if (node != nullptr) {
             node->active = 0;
             return;

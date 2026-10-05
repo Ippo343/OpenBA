@@ -350,7 +350,7 @@ public:
     Video::ImageBuffer*  _shadowMap;     // +0x148  owned
     Video::ImageBuffer*  _shadowDepth;   // +0x150  owned
     Video::RenderBuffer* _shadowTarget;  // +0x158  owned; NOT zeroed by the ctor
-    void*           _boundImage;     // +0x160
+    Video::ImageBuffer*  _boundImage;    // +0x160  bound into Context image slot 4
 };
 
 static_assert(sizeof(SpotLight) == 0x168,

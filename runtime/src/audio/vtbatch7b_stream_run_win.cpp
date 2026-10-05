@@ -317,7 +317,7 @@ void Stream::Run() {
                                static_cast<LONG>(byteOffset), nullptr, FILE_BEGIN);
 
             // `slotIndex * 0x8ba0` (1800a11c0): the Block of the ring.
-            Block* const block = &_buffers[slotIndex];
+            Block* const block = &_buffers._data[slotIndex];
             fsys->ReadFile(st._file, byteCount, block->packets);        // 1800a11e7, 0x1800ace00
 
             // Rebase this chunk's cumulative-byte entries onto the chunk, and
@@ -326,7 +326,7 @@ void Stream::Run() {
                 (curSeg32 == 0) ? 0u : segTable[curSeg64 - 1];          // 1800a11f2/f9
             if (nPackets64 > 0) {                                       // 1800a1201
                 for (int64_t k = 0; k < nPackets64; ++k) {              // 1800a1230
-                    _buffers[slotIndex64].cumulativeBytes[k] = segTable[curSeg64 + k] - base;
+                    _buffers._data[slotIndex64].cumulativeBytes[k] = segTable[curSeg64 + k] - base;
                 }
             }
 

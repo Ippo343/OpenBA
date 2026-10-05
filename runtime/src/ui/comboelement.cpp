@@ -137,9 +137,7 @@ void ComboElement::Update(const System::Time& time, UserInterface* ui,
 
             if (item->_params._size > 0) {
                 rtuielem::SetNeedsSizeCalc(item);
-                // LEFT (H5): ComboElement's string array holds raw char* storage.
-                item->_params._data[0] =                                        // 0x1800c9810
-                    *reinterpret_cast<const System::String*>(&_strings._data[i]);   // LEFT: H5 ComboElement::_strings holds System::Strings as raw char* storage (ComboElement not converted this pass)
+                item->_params._data[0] = _strings._data[i];                    // 0x1800c9810
                 item->CacheText();                                    // 0x18011ec10
             }
 
@@ -211,7 +209,9 @@ ComboElement::~ComboElement() {
     }
     rtcoll::RtColl_ArrayDtor_180024aa0(&_userData);
     rtcoll::RtColl_ArrayDtor_180037310(&_sprites);
-    rtcoll::RtColl_ArrayDtorElem_180010ab0(&_strings);
+    // +0xe8 `_strings` (retail's third call, 0x180010ab0): the member
+    // ~Array<System::String> runs it after this body, last of the three as
+    // retail's order (+0x108, +0xf8, +0xe8) has it.
 }
 }  // namespace UI
 

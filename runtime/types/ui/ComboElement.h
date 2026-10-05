@@ -156,7 +156,7 @@ public:
                                         //        Update calls its slot 8.
     ElementDescription* _itemDesc;      // +0xE0 (B4 H4: typed)  ExternalPtr<UI::ElementDescription>: one
                                         //        popup ITEM (desc +0xa8, 0x180112b26).
-    Collection::Array<void*> _strings;  // +0xE8  element = System::String (see above)
+    Collection::Array<System::String> _strings;  // +0xE8  (B4 Y: element typed; ~Array<String> = 0x180010ab0)
     Collection::Array<UI::Sprite> _sprites;  // +0xF8  (B4 H4: element typed)
     Collection::Array<void*> _userData; // +0x108 element = void*
     int32_t  _currentItem;              // +0x118 ctor -1 (dword); ?GetCurrentItem@

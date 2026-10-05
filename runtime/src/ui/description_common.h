@@ -140,5 +140,12 @@ inline UI::Sprite SpriteFromName(UI::SpriteSheet* sheet, char* const* name) {
     s.spriteIndex = (sheet != nullptr) ? GetSpriteIndexFromName(sheet, name) : -1;
     return s;
 }
+// The same, for a description whose name member is a typed System::String.
+inline UI::Sprite SpriteFromName(UI::SpriteSheet* sheet, const System::String& name) {
+    UI::Sprite s;
+    s.spriteSheet = sheet;
+    s.spriteIndex = (sheet != nullptr) ? sheet->GetSpriteIndexFromName(name) : -1;
+    return s;
+}
 
 }  // namespace rtdesc

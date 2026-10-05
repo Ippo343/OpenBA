@@ -21,6 +21,7 @@
 #include "Component/Description.h"
 #include "Object/exe_type.h"
 #include "system/String.h"
+#include "collection/Collection.h"   // Collection::Array (+0x50)
 namespace UI { class SpriteSheet; class StringTable; }
 
 class ToolbarDescription final : public Description {
@@ -29,7 +30,7 @@ class ToolbarDescription final : public Description {
 public:
     ToolbarDescription();
 
-    ~ToolbarDescription() override;                                        // [0] 0x140039500
+    ~ToolbarDescription() override;                                        // [0] 0x140039500 -> 0x14012db70
     int32_t           GetFileVersion() const override { return 4; }    // [3] 0x14012db60
     bool              Serialize(IO::Stream& stream) override;                    // [5] 0x14012da30
     Object::External* Reconstruct() override;                              // [6] 0x1400394e0
@@ -44,10 +45,10 @@ public:
     System::String _str1;                       // +0x38 String
     System::String _str2;                       // +0x40 String
     System::String _str3;                       // +0x48 String
-    System::String* _entries;                   // +0x50 Array<System::String> data (H5: the raw triple)
-    int32_t _entryCount;                        // +0x58
-    int32_t _entryCap;                          // +0x5c
-    int32_t _val0;                              // +0x60
+    Collection::Array<System::String> _entries; // +0x50 {data, count +0x58, capacity +0x5c}; the dtor
+                                                //       0x14012db70 destroys it first (~String per
+                                                //       element, MemFree, zero +0x50 / +0x58)
+    int32_t _val0;                             // +0x60
     int32_t _val1;                              // +0x64
 };
 
@@ -60,7 +61,6 @@ static_assert(offsetof(ToolbarDescription, _str1) == 0x38, "ToolbarDescription::
 static_assert(offsetof(ToolbarDescription, _str2) == 0x40, "ToolbarDescription::_str2 @ +0x40");
 static_assert(offsetof(ToolbarDescription, _str3) == 0x48, "ToolbarDescription::_str3 @ +0x48");
 static_assert(offsetof(ToolbarDescription, _entries) == 0x50, "ToolbarDescription::_entries @ +0x50");
-static_assert(offsetof(ToolbarDescription, _entryCount) == 0x58, "ToolbarDescription::_entryCount @ +0x58");
-static_assert(offsetof(ToolbarDescription, _entryCap) == 0x5c, "ToolbarDescription::_entryCap @ +0x5c");
+static_assert(sizeof(Collection::Array<System::String>) == 0x10, "+0x50 Array is {data, count +0x58, capacity +0x5c}");
 static_assert(offsetof(ToolbarDescription, _val0) == 0x60, "ToolbarDescription::_val0 @ +0x60");
 static_assert(offsetof(ToolbarDescription, _val1) == 0x64, "ToolbarDescription::_val1 @ +0x64");

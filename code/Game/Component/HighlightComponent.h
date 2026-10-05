@@ -21,24 +21,22 @@
 //     every other slot = Component's
 //
 // TREE DIVERGENCES kept (behaviour of the tree's table, not retail's):
-//   * the embedded EdgeMeshInstance is NOT constructed here: the tree
-//     zero-fills +0x28..+0xf7 and the tool side (Entity_impl_c4a0,
-//     tool_base_render.cpp) constructs the outline lazily; a null +0x28 vptr is
-//     the "never outlined" tell OnRemove tests. The members stay byte arrays.
 //   * flags are 0x82, not 0x80: bit 1 enrols the component in the
 //     MarkForRemoval (0x1400c2ea0) +0x38 broadcast, and
 //   * slot 7 (Component's `RET` in retail) removes a live outline from the
 //     Scene at mark time — required because the standalone EditTool notices a
 //     dead selection only after the entity is freed (live crash 2026-07-20).
+// The embedded EdgeMeshInstance is a real member since B.4 wave Y (behaviour:
+// commit): the ctor constructs it as 0x14004c930 does, the dtor deletes +0xf8
+// and member destruction runs ~EdgeMeshInstance as 0x14004c8c0 does.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 #include "Component/Component.h"
 #include "Object/exe_type.h"
+#include "graphics/Mesh.h"   // Graphics::EdgeMeshInstance (embedded, +0x28), Graphics::EdgeMesh
 #include "math/Math.h"   // Math::Transform (+0x100)
-
-namespace Graphics { class EdgeMesh; }
 
 class HighlightComponent final : public Component {
     DECLARE_EXE_TYPE(HighlightComponent)
@@ -46,17 +44,16 @@ class HighlightComponent final : public Component {
 public:
     HighlightComponent();                                         // 0x14004c930
 
-    // PORT GAP (retail 0x14004c8c0) — B38 D2: the retail dtor deletes the
-    // +0xf8 object and destroys the embedded EdgeMeshInstance; the tree never
-    // did (Inert_ScalarDtor) and never constructs it here. Kept as the tree's.
-    ~HighlightComponent() override = default;                     // [0]  0x140007040
+    // 0x14004c8c0: the body deletes +0xf8 through its slot 0 and zeroes it;
+    // ~EdgeMeshInstance(+0x28) is then the compiler's member destruction.
+    ~HighlightComponent() override;                               // [0]  0x140007040 (body 0x14004c8c0)
     void Persist(IO::Stream& stream) override;                          // [3]  0x14004c880
     void OnRemove() override;                                     // [7]  = Component's in retail; TREE DIVERGENCE
     void Tick(const System::Time* time) override;                               // [8]  0x14004c850 PORT GAP
     void OnEvent(int eventId) override;                           // [12] 0x14004c870 PORT GAP
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
-    uint8_t  edgeMeshInstance[0xD0]; // +0x28 Graphics::EdgeMeshInstance (built lazily by the tool side)
+    Graphics::EdgeMeshInstance edgeMeshInstance; // +0x28 (ctor 0x14004c930: CALL [0x140151358] ??0EdgeMeshInstance; dtor 0x14004c8c0: CALL [0x1401513b0] ??1)
     Graphics::EdgeMesh* fieldF8;     // +0xF8 the built outline mesh (ctor 0; Impl_b930 0x14004b930 MemAlloc(0x180) + EdgeMesh ctor; dtor 0x14004c8c0 deletes it)
     Math::Transform transform;       // +0x100 (ctor 0x14004c930: ??0Transform at +0x100 = identity; trivially destroyed, 0x14004c8c0 never touches it)
     uint8_t  highlightFlag;          // +0x11C (ctor 0)

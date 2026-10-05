@@ -35,7 +35,7 @@
 #include "Component/BuildDescription.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Player/EditTool.h"   // X::TypeId() (ENDGAME B.3.9)
 #include "Dialog/exe_bodies.h"
-#include "Player/exe_bodies.h"   // B3R: PlayerTrade_BSTRemove_25740, Avl38Retrace
+#include "Player/exe_bodies.h"   // B3R: Avl38SetRemove (0x140025740), Avl38Retrace
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "ui/CheckElement.h"          // B4 DLG-a: EntityUI::checkPin
 #include "Component/StateMachineComponent.h"
@@ -52,17 +52,22 @@
 // ============================================================
 // BST remove: walks the tree to the node whose key == *key, then deletes it
 // (0x140025740).
-static void EntityTrackingSet_Remove_Impl(TrackedEntityNode** root, ComponentEntity* const* key)
+// (A template over the set's node since B.4 Y GAMEB: OnElementEvent below hands
+// it the +0x50 pinned-dialog set, whose keys are descriptions; the compare is by
+// address, as 0x14002c690's.)
+template <class Node>
+static void EntityTrackingSet_Remove_Impl(AvlTreeHead<Node>* set, ComponentEntity* const* key)
 {
-    TrackedEntityNode* node = *root;
+    Node* node = set->root;
+    const void* const keyAddr = *key;
 
     while (node != nullptr) {
-        if (*key < node->key) {
+        const void* const nodeKey = node->key;
+        if (keyAddr < nodeKey) {
             node = node->left;
-        } else if (*key <= node->key) {
+        } else if (keyAddr <= nodeKey) {
             // Found the node — delete it
-            // LEFT: the shared AVL helper takes the root as int64_t* (PLAYER's declaration).
-            PlayerTrade_BSTRemove_25740(reinterpret_cast<int64_t*>(root), node);   // 0x140025740   // LEFT: SIG PlayerTrade_BSTRemove_25740 (B4 FORWARD; Work/tradework.cpp still calls it)
+            Avl38SetRemove(set, node);   // 0x140025740
             return;
         } else {
             node = node->right;
@@ -213,7 +218,7 @@ void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEn
 {
     PlayerToolManager* manager = playerController;
     ComponentEntity* entityKey = *entityPtr;
-    TrackedEntityNode** rootPtr = &manager->field_0x60;
+    TrackedEntityNode** rootPtr = &manager->field_0x60.root;
 
     // Search the tree for an existing node with this key
     TrackedEntityNode* node = *rootPtr;
@@ -271,7 +276,7 @@ void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEn
     }
 
     // One more tracked entity (+0x68)
-    manager->field_0x68 = manager->field_0x68 + 1;
+    manager->field_0x60.count = manager->field_0x60.count + 1;
 }
 
 // ============================================================

@@ -283,8 +283,8 @@ AudioStreamSummary g_summary;
 // unchanged. MAIN THREAD (Ctor_AudioDevice), once.
 Audio::Stream::Stream() : System::Thread(kStreamStackSize) {
     ++g_ctorEntries;
-    _buffers = nullptr;                                  // 0x1800a0e67 (qword)
-    _buffersSize = 0; _buffersCapacity = 0;              // 0x1800a0e6b (ONE qword store at +0x38)
+    // +0x30 `_buffers`: Array<Block>() is retail's 0x1800a0e67 / 0x1800a0e6b
+    // zero stores (the member, before this body).
     InitializeCriticalSection(                           // 0x1800a0e73
         reinterpret_cast<CRITICAL_SECTION*>(_lock));  // CAST-OK: win32
     SetCriticalSectionSpinCount(                         // 0x1800a0e82
@@ -318,8 +318,8 @@ Audio::Stream::~Stream() {
     DeleteCriticalSection(                                // 0x1800a0dc9
         reinterpret_cast<CRITICAL_SECTION*>(_lock));  // CAST-OK: win32
     // 0x1800a0dd4 CALL 0x18000c4a0 — the +0x30 `Array<Block>::~Array`, a J1
-    // body (free the buffer, zero the header; no element destroy).
-    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(&_buffers));   // LEFT: H5 Audio::Stream::_buffers is the raw Array<Block> triple (Stream.h, +0x30/+0x38/+0x3c), viewed as the erased core's header for its J1 destroy (retail 0x18000c4a0)
+    // body (free the buffer, zero the header; no element destroy): the member
+    // `_buffers`' destructor, after this body and before ~Thread.
 }
 
 // ENDGAME B.3.9 ENG W2: the `??0Stream` / `??1Stream` DOORS and their name +

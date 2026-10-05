@@ -504,7 +504,7 @@ static void Game_SpawnCitizens_Impl() {
                             Profession* profList = GameUpdateLoop::_singleton->m_professionList->field_0x30;
 
                             // Null parent InternalBasePtr
-                            int64_t parentIBP = 0;
+                            CitizenComponent* parentIBP = nullptr;
 
                             // Read age range from CitizenDescription (+0x50 / +0x54)
                             float minAge = citDesc->minPregnancyAge;
@@ -512,11 +512,10 @@ static void Game_SpawnCitizens_Impl() {
                             float maxAge = citDesc->maxPregnancyAge;
                             float age = randAge * (maxAge - minAge) + minAge;
 
-                            // LEFT: the body takes int64_t for its receiver and key (COMP-b's declaration).
                             CitizenComp_DeferredInit_117080(citizen, spawnPos,
                                                       genderFlag, '\0',
                                                       age, '\x01', &parentIBP,
-                                                      reinterpret_cast<int64_t>(profList));   // 0x140117080   // LEFT: SIG CitizenComp_DeferredInit_117080 (int64_t spawn key)
+                                                      profList);   // 0x140117080
 
                             // Register entity with entity manager
                             // Use the new entity (the InternalBasePtr value) as the entity ref

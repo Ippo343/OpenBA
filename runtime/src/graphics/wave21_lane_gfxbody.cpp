@@ -308,7 +308,7 @@ void MaterialInstance::Setup(Video::Context& context, int32_t shader) const {
     // ---- phase 2: textures ------------------------------------------------
     for (int32_t i = 0; i < set->textures._size; ++i) {
         const RtGraphics::MaterialBinding& b = set->textures._data[i];
-        void* image = _textures._data[b.sourceIndex].image;
+        const Video::ImageBuffer* image = _textures._data[b.sourceIndex].image;
         int32_t slot = b.shaderSlot;
         if (context._imageBuffers[slot] != image) {
             context._dirty            |= kDirtyImageBuffersBit;

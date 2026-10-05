@@ -322,10 +322,8 @@ void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
     _spriteSheet = dlg->_spriteSheet;             // +0x58
     // 0x180114900: -1 when the sheet is null, otherwise the sheet's lookup of
     // `&_dialog->_spriteName` — the String OBJECT's address, not the char*.
-    // LEFT (H5): _spriteName is a System::String held as raw char* storage.
     _spriteIndex = _spriteSheet
-        ? _spriteSheet->GetSpriteIndexFromName(
-              *reinterpret_cast<const System::String*>(&dlg->_spriteName))   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+        ? _spriteSheet->GetSpriteIndexFromName(dlg->_spriteName)
         : -1;                                     // +0x60   (+0x64 left alone)
 
     _timers._data      = nullptr;                 // +0x68

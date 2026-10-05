@@ -103,8 +103,13 @@ public:
     // offsets) ----
     EntityList*           _entityList;      // +0x10 owning EntityList (set by RegisterEntity)
     int32_t               _entityId;        // +0x18 -1 sentinel
-    uint32_t              _handle;          // +0x1C low 24 bits: category-bucket index
+    union {
+        uint32_t          _handle;          // +0x1C low 24 bits: category-bucket index
                                             //       (0xFFFFFF = none); +0x1F: category byte
+        int8_t            _handleBytes[4];  // the same dword by byte: [3] (+0x1F) is the
+                                            //       category byte retail stores alone
+                                            //       (RegisterEntity, the bucket rebuild)
+    };
     System::Time          _lastUpdateTime;  // +0x20 the EntityList's accumulated time at the
                                             //       entity's last bucket tick: RegisterEntity
                                             //       stamps it with EntityList +0x00, Update
@@ -127,6 +132,7 @@ static_assert(alignof(ComponentEntity) == 8, "ComponentEntity alignment");
 static_assert(offsetof(ComponentEntity, _entityList)     == 0x10, "ComponentEntity::_entityList @ +0x10");
 static_assert(offsetof(ComponentEntity, _entityId)       == 0x18, "ComponentEntity::_entityId @ +0x18");
 static_assert(offsetof(ComponentEntity, _handle)         == 0x1C, "ComponentEntity::_handle @ +0x1C");
+static_assert(offsetof(ComponentEntity, _handleBytes)    == 0x1C, "ComponentEntity::_handleBytes @ +0x1C (category byte +0x1F)");
 static_assert(offsetof(ComponentEntity, _lastUpdateTime) == 0x20, "ComponentEntity::_lastUpdateTime @ +0x20");
 static_assert(sizeof(System::Time) == 8, "+0x20 is one 8-byte System::Time");
 static_assert(offsetof(ComponentEntity, _description)    == 0x28, "ComponentEntity::_description @ +0x28");

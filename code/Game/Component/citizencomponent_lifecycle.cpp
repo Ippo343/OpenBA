@@ -258,15 +258,15 @@ void CitizenComponent::Initialize(const float* pos, uint32_t gender, char isElde
               kRdata_14017214c, 0.0f);
 }
 
-// B4 FORWARD: 3 outside caller(s) (Component/immigrationcomponent_states.cpp,
-// Dialog/debugui.cpp, Game/founding_spawn.cpp).
+// B4 FORWARD (not pure: it dereferences the parent slot behind a null test):
+// 2 outside callers (Dialog/debugui.cpp, Game/founding_spawn.cpp).
 void CitizenComp_DeferredInit_117080(CitizenComponent* self, const float* pos, uint32_t gender,
                                      char isElder, float age, char forceEmploy,
-                                     int64_t* parentIBP, int64_t spawnKey) {
+                                     CitizenComponent* const* parentIBP, Profession* spawnKey) {
     self->Initialize(
         pos, gender, isElder, age, forceEmploy,
-        parentIBP ? reinterpret_cast<CitizenComponent*>(*parentIBP) : nullptr,   // LEFT: SIG CitizenComp_DeferredInit_117080: debugui.cpp:507 / founding_spawn.cpp:326 hold the parent InternalBasePtr as int64_t (X3-GAME's files)
-        reinterpret_cast<Profession*>(spawnKey));   // LEFT: SIG CitizenComp_DeferredInit_117080: founding_spawn.cpp:318 holds the profession key as int64_t (X3-GAME's file)
+        parentIBP ? *parentIBP : nullptr,
+        spawnKey);
 }
 
 // [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,

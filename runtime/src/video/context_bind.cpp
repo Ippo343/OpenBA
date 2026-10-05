@@ -248,11 +248,10 @@ void Video::Context::BindTextures() {
     for (int32_t i = 0; i < 16; ++i, mask = (mask << 1) | (mask >> 31)) {
         if ((_imageBufferDirty & mask) == 0) continue;
 
-        void* img = _imageBuffers[i];
+        const ImageBuffer* img = _imageBuffers[i];
         if (img) {
             // 0x1800ef358: RCX = img->+0x60, RDX = ctx, R8D = i, vt[+0x20].
-            // LEFT: `_imageBuffers` is `void*` in Context.h (see the banner).
-            static_cast<const ImageBuffer*>(img)->_data->Bind(this, static_cast<unsigned>(i));  // LEFT: FIELD Context::_imageBuffers is void* (X-RL left it: its readers outside this set index it raw)
+            img->_data->Bind(this, static_cast<unsigned>(i));
         } else {
             // 0x1800ef372: companion->BindTextureNone(i).
             _contextData->BindTextureNone(i);

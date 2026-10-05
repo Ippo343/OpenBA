@@ -81,10 +81,10 @@ void BorderDescription::Destruct() { this->~BorderDescription(); }
 // Each release is System::String's own (?Release@String@System@@ 0x1800c9870,
 // the idiom inlined here), with retail's asymmetry: the freeing branch leaves
 // the field at `data - 8`, the sharing branch nulls it.
+// B4 Y: the nine releases (18010fb45 .. 18010fcca, [8] down to [0]) are the
+// member array's ~String calls, run after this (empty) body in reverse
+// element order, before ~ElementDescription.
 BorderDescription::~BorderDescription() {
-    for (int i = 8; i >= 0; --i)                              // 18010fb45 .. 18010fcca
-        System::StringPrivateAccess::Release(
-            *reinterpret_cast<System::String*>(&_spriteName[i]));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
 }
 
 // ?CreateNewObject@BorderDescription@UI@@SAPEAVBase@Object@@XZ  0x180040ad0
@@ -125,7 +125,7 @@ bool BorderDescription::Serialize(IO::Stream& streamv) {
 
     Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet); // 18010fe78
     for (int i = 0; i < 9; ++i)                             // 18010fe7d .. 18010ff0b
-        StringSerialize(&_spriteName[i], &ser);             // 0x1800c9930
+        _spriteName[i].Serialize(ser);                      // 0x1800c9930
 
     // ~Serializer (0x1800b99b0) inlined here: rw's scalar deleting dtor                 // 18010ff23
     return true;                                            // MOV AL,1
@@ -176,7 +176,7 @@ Object::InternalPtr<Element>* BorderDescription::CreateInstance(
         &elem->_left, &elem->_centre, &elem->_right,
         &elem->_bottomLeft, &elem->_bottom, &elem->_bottomRight };
     for (int i = 0; i < 9; ++i)                            // 18010ffc7 .. 1801101a0
-        *sprites[i] = SpriteFromName(_spriteSheet, &_spriteName[i]);
+        *sprites[i] = SpriteFromName(_spriteSheet, _spriteName[i]);
 
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1801101a7
     return ret;                                            // MOV RAX,R14

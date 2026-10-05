@@ -318,7 +318,8 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
                 int priority = field_20;  // +0x20
                 CitizenComponent* ce = *citizenIBP;
 
-                Profession* actionVal = *GetTarget((Profession**)&entityRef);   // LEFT: slot 10 writes into this reused entity slot (scratch shared with the action ctor)
+                Profession* targetBuf;   // retail: slot 10 writes into the reused entityRef stack slot
+                Profession* actionVal = *GetTarget(&targetBuf);
 
                 ce->statusFlags |= 4;
                 ce->field_0x30 = priority;
@@ -343,7 +344,8 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
                 int priority = field_20;
                 CitizenComponent* ce = *citizenIBP;
 
-                Profession* actionVal = *GetTarget((Profession**)&citizenRef2);   // LEFT: slot 10 writes into this reused entity slot (scratch shared with the action ctor)
+                Profession* targetBuf;   // retail: slot 10 writes into the reused citizenRef2 stack slot
+                Profession* actionVal = *GetTarget(&targetBuf);
 
                 ce->statusFlags |= 4;
                 ce->field_0x30 = priority;

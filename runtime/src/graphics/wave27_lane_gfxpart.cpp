@@ -815,9 +815,8 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
         }
 
         // Six 16-bit indices, and every arithmetic step is 16-bit. The index
-        // cursor is Context+0x20f0 (Context.h's `_unknown20f0`, not named yet:
-        // LEFT, the one view of that qword as the uint16 cursor it is).
-        uint16_t* ip = reinterpret_cast<uint16_t*>(context._unknown20f0);   // LEFT: Context::_unknown20f0 is uint64_t: code/ readers step it by bytes (geometry_draw.cpp) and as short / void* (statusicon_geometry.cpp, weather_particle_draw.cpp): typing it is a cross-file decision
+        // cursor is Context+0x20f0 (`_dynamicIndexCursor`).
+        uint16_t* ip = context._dynamicIndexCursor;
         const uint16_t b = base;
         const uint16_t idx[6] = { static_cast<uint16_t>(b - 2), b,
                                   static_cast<uint16_t>(b - 1),
@@ -826,7 +825,7 @@ void ParticleInstance::Draw(Video::Context& context, const Camera& camera,
         for (int k = 0; k < 6; ++k) {
             *ip = idx[k];
             ++ip;
-            context._unknown20f0 = reinterpret_cast<uint64_t>(ip);  // LEFT: Context::_unknown20f0 stays uint64_t (outside readers step it as bytes and as uint16)
+            context._dynamicIndexCursor = ip;
         }
         base = static_cast<uint16_t>(base + 4);   // retail: ADD R14W,4 — wraps
 

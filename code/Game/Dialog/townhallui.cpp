@@ -22,7 +22,7 @@
 //   ComponentDescription::_subDescs (COMP-c: void**).
 //   UI::Element::_description (R-UI-a: void*).
 //   The exe helpers' untyped parameters (the
-//   CitizenEmploy strategies, ToolbarUtility_BstInsert_4890: other blocks).
+//   CitizenEmploy strategies, Avl38SetInsert 0x140014890: toolbar_utility_helpers.cpp).
 
 #include "ui/Panels.h"
 #include "Dialog/TownHallUI.h"
@@ -1147,7 +1147,7 @@ void TownHallUI::UpdateProduction() {
     // `_pad = 0`), so the spec's init arm is never reached.
     Collection::Array<ProdEntry> entryArr;
 
-    InventoryNode* bstRoot = invBST;
+    InventoryNode* bstRoot = invBST.root;
     if (bstRoot) {
         // Start at leftmost node
         InventoryNode* node = bstRoot;
@@ -1529,7 +1529,7 @@ void TownHallUI::UpdateAll() {
         ComponentDescription* entityPtr = town->field_0x110._data[i];
 
         // Look up in invBST
-        InventoryNode* bstNode = InvBST_Find(invBST, entityPtr);
+        InventoryNode* bstNode = InvBST_Find(invBST.root, entityPtr);
         if (bstNode) {
             // Zero the counters (retail's qword store over the first two, H7)
             bstNode->counts[0] = 0;
@@ -1537,13 +1537,13 @@ void TownHallUI::UpdateAll() {
             bstNode->counts[2] = 0;
         } else {
             // Insert new node with zeroed counters
-            struct { ComponentDescription* key; uint64_t val1; uint32_t val2; } entry;
+            // (+0x14 is left as the stack had it, as before.)
+            InventoryEntry entry;
             entry.key = entityPtr;
-            entry.val1 = 0;
-            entry.val2 = 0;
-            void* retNode = nullptr;
-            ToolbarUtility_BstInsert_4890(reinterpret_cast<int64_t*>(&invBST), &retNode,   // LEFT: SIG ToolbarUtility_BstInsert_4890 (Dialog/exe_bodies.h) takes the tree root as int64_t* and the record as uint64_t*
-                                          reinterpret_cast<uint64_t*>(&entry));   // 0x140014890; LEFT: SIG ToolbarUtility_BstInsert_4890 (untyped)
+            entry.counts[0] = 0;   // +0x08 / +0x0C: one qword store (H7: two stores)
+            entry.counts[1] = 0;
+            entry.counts[2] = 0;
+            Avl38SetInsert(&invBST, entry);   // 0x140014890
         }
     }
 
@@ -1598,7 +1598,7 @@ void TownHallUI::UpdateAll() {
             int resourceQty = items[r]._count;
 
             // Look up resource entity in invBST
-            InventoryNode* bstNode = InvBST_Find(invBST, resourceEntity);
+            InventoryNode* bstNode = InvBST_Find(invBST.root, resourceEntity);
             if (bstNode) {
                 // Increment the appropriate counter
                 bstNode->counts[counterIndex] += resourceQty;
@@ -1978,8 +1978,8 @@ TownHallUI::~TownHallUI() {
         agriBST = nullptr; agriBSTCount = 0;
         System::MemoryAllocator::MemFree(agriLabels);
         agriLabels = nullptr; agriLabelCount = 0; agriLabelCap = 0;
-        townhallui_sa::FreeInventoryTree(invBST);
-        invBST = nullptr; invBSTCount = 0;
+        townhallui_sa::FreeInventoryTree(invBST.root);
+        invBST.root = nullptr; invBST.count = 0;
         System::MemoryAllocator::MemFree(invTable);
         invTable = nullptr; invTableCount = 0; invTableCap = 0;
         System::MemoryAllocator::MemFree(prodLimits);

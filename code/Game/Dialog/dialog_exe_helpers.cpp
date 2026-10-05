@@ -31,12 +31,9 @@
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 
 
-// ============================================================
-// AutoSaveDialog autosave handler (FUN_14005dec0)
-// ============================================================
-// The body is AutoSaveDialog::Autosave (autosavedialog.cpp).
-// B4 FORWARD: 1 outside caller (standalone/saveload_harness.cpp)
-void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) { reinterpret_cast<AutoSaveDialog*>(self)->Autosave(); }   // LEFT: SIG Dialog_AutoSaveHandler: its one caller (standalone/saveload_harness.cpp) hands a stack fake holding only the UserInterface* at +0x10, not an AutoSaveDialog
+// (FUN_14005dec0, the autosave handler, is AutoSaveDialog::Autosave in
+// autosavedialog.cpp; its B4 FORWARD Dialog_AutoSaveHandler had one caller,
+// standalone/saveload_harness.cpp, which now calls the member: deleted.)
 
 // ============================================================
 // GameContainer_EnsureLists — standalone stand-in for GameContainer_Init (0x140099db0)

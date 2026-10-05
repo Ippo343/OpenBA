@@ -79,7 +79,7 @@ public:
     TextDescription() : ElementDescription() {
         _font         = nullptr;
         _stringTable2 = nullptr;
-        _name         = nullptr;
+        // +0x78 `_name`: its own String() (the zero store) runs as a member.
         _u80 = 0;
         _b84 = false;
         _b85 = false;
@@ -137,7 +137,7 @@ public:
     // in element_bodies_b5.cpp read them) ------------------------------------
     Font*        _font;          // +0x68  ExternalPtr<UI::Font>
     StringTable* _stringTable2;  // +0x70  ExternalPtr<UI::StringTable> (the base's +0x58 is another)
-    char*        _name;          // +0x78  System::String (refcounted char*)
+    System::String _name;        // +0x78  ctor 0x18011ea20 zero store, dtor 0x18011eae0 release
     uint32_t     _u80;           // +0x80  kScalarUInt
     bool         _b84;           // +0x84  kScalarBool
     bool         _b85;           // +0x85  kScalarBool

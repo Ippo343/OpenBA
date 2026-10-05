@@ -221,7 +221,7 @@ char CemeteryComponent::EnterBuilt() {
         // Free plot: stamp the zone byte, notify, and null the entity slot.
         const uint8_t zone = cell->terrainType;   // +0x29
         const bool walkableZone = ((1u << zone) & 0x1e0u) != 0;
-        *reinterpret_cast<uint8_t*>(&world->field_0xA2) |= walkableZone ? 1 : 0;   // LEFT: Map.h (DLG-1) field_0xA2 is bool, retail ORs the byte (row 311)
+        world->field_0xA2 |= walkableZone ? 1 : 0;   // retail ORs the byte (row 311)
         cell->terrainType = 2;
         PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
 
