@@ -3138,13 +3138,14 @@ const ArraySpec kSpec_StringRefZ_PP = {           // 0x1800547e0
 //   assign        0x180054ac4..0x180054aef
 //   init          ONE qword zero at +0x00 (0x180054b00) — +0x08..+0x0f stays
 //   destroy       0x180054ba0 (Body B, `kD_Str_10`), both arms
-void AssignPpSampler10(uint8_t* d, const uint8_t* s) {
-    AssignStringRef(d, s);                                   // +0x00
-    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);  // LEFT: Video::PixelProgram::Sampler (0x10: String +0x00, int32 +0x08) is declared in no header, and this spec-row element op takes uint8_t* (the erased core): a typed element would still be one elem_stride view, a coordinator ruling
-    d[0x0c] = s[0x0c];
-    d[0x0d] = s[0x0d];
-    d[0x0e] = s[0x0e];
+static void PpSamplerAssign(Video::PixelProgram::Sampler* d, const Video::PixelProgram::Sampler* s) {
+    StringAssign(&d->name._data, &s->name._data);            // +0x00
+    d->unit  = s->unit;                                      // +0x08
+    d->flagA = s->flagA;                                     // +0x0c
+    d->flagB = s->flagB;                                     // +0x0d
+    d->flagC = s->flagC;                                     // +0x0e
 }
+void AssignPpSampler10(uint8_t* d, const uint8_t* s) { AssignAs<Video::PixelProgram::Sampler, &PpSamplerAssign>(d, s); }
 void DestroyStringRange_180054ba0(void* ignoredThis, uint8_t* base, int count) {
     RtColl_DestroyStrings_180054ba0(ignoredThis, base, count);
 }

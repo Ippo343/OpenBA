@@ -82,15 +82,7 @@ using Video::PixelProgram;
 // vertexprogram.cpp for why they are not `Collection::Array<T>`.
 struct StringArray { System::String* data; int32_t size; int32_t capacity; };
 
-struct V0Sampler {                 // stride 0x10
-    System::String name;           // +0x00
-    int32_t        unit;           // +0x08
-    bool           flagA;          // +0x0c
-    bool           flagB;          // +0x0d
-    bool           flagC;          // +0x0e
-};
-static_assert(sizeof(V0Sampler) == 0x10, "v0 sampler is 0x10 bytes");
-static_assert(offsetof(V0Sampler, flagC) == 0x0e, "v0 sampler flags @ 0x0c..0x0e");
+using V0Sampler = Video::PixelProgram::Sampler;   // stride 0x10 (ShaderProgram.h)
 struct V0SamplerArray { V0Sampler* data; int32_t size; int32_t capacity; };
 
 using System::MemoryAllocator;   // MemFree 0x1800c7ad0

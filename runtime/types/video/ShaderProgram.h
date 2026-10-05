@@ -428,9 +428,30 @@ public:
     // -> "ShaderProgram": DECLARE_TYPE's.
     static const char* _FileExtension();   // 0x18004e890 -> "srsl"
 
+    // The element of `Collection::Array<Video::PixelProgram::Sampler>`
+    // (SetSize 0x180054a20, retail's own label string): stride 0x10, align 8.
+    // The version-0 serializer (0x1800f3a90's legacy block) reads it as
+    // String / SerializeInt / three SerializeBool; the array's assign arm
+    // (0x180054ac4..0x180054aef) copies +0x00 (String ref), +0x08 (dword),
+    // +0x0c / +0x0d / +0x0e (bytes); +0x0f is written by neither arm.
+    struct Sampler {
+        System::String name;    // +0x00
+        int32_t        unit;    // +0x08
+        bool           flagA;   // +0x0c
+        bool           flagB;   // +0x0d
+        bool           flagC;   // +0x0e
+    };
+
 public:
     PixelProgramData* _data;    // +0x50  from DeviceData slot 16 (+0x80); B.4 R-VIDEO, H4
 };
+
+static_assert(sizeof(PixelProgram::Sampler) == 0x10, "PixelProgram::Sampler is 0x10 (SHL RCX,0x4 at 0x180054a71)");
+static_assert(offsetof(PixelProgram::Sampler, name)  == 0x00, "PixelProgram::Sampler::name @ +0x00");
+static_assert(offsetof(PixelProgram::Sampler, unit)  == 0x08, "PixelProgram::Sampler::unit @ +0x08");
+static_assert(offsetof(PixelProgram::Sampler, flagA) == 0x0c, "PixelProgram::Sampler::flagA @ +0x0c");
+static_assert(offsetof(PixelProgram::Sampler, flagB) == 0x0d, "PixelProgram::Sampler::flagB @ +0x0d");
+static_assert(offsetof(PixelProgram::Sampler, flagC) == 0x0e, "PixelProgram::Sampler::flagC @ +0x0e");
 
 static_assert(sizeof(PixelProgram) == 0x58,
               "Video::PixelProgram is 0x58 (MOV EDX,0x58 at 0x18004ebaf)");

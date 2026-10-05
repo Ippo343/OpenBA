@@ -1197,7 +1197,7 @@ bool Geometry::Clean() {
         const Math::Transform xf = _transform._current;
         float box[6];
         const float* world = rtpickgrid::BoxTransform(box, &xf,
-                                                      reinterpret_cast<const float*>(&_localBounds));  // LEFT: audit WORK, left: rtpickgrid::BoxTransform's scene_grid caller hands a float[6] copy; a typed Box local would add Vector3's zeroing ctor stores
+                                                      reinterpret_cast<const float*>(&_localBounds));  // LEFT: SIG rtpickgrid::BoxTransform (runtime/src/picking/scene_grid.h, outside GFX): its input is const float* inBox; typed as const ::Box& (retail 0x18001f470 reads the Box) this cast goes, and scene_grid.cpp:438 MeshBoundsXY passes nodes[i]._aabb instead of its float[6] copy (a codegen change there: read retail first)
         _prevWorldBounds = _worldBounds;
         _worldBounds.min.x = world[0];
         _worldBounds.min.y = world[1];
