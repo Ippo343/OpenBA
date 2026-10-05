@@ -511,7 +511,7 @@ static void Game_SpawnCitizens_Impl() {
                             float maxAge = citDesc->maxPregnancyAge;
                             float age = randAge * (maxAge - minAge) + minAge;
 
-                            CitizenComp_DeferredInit_117080(citizen, &spawnPos.v.x,
+                            CitizenComp_DeferredInit_117080(citizen, &spawnPos.v,
                                                       genderFlag, '\0',
                                                       age, '\x01', &parentIBP,
                                                       profList);   // 0x140117080

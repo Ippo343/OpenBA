@@ -1457,12 +1457,12 @@ void CitizenComponent::GiveBirth() {
     // the +0x148 transform's translation)
     CharacterComponent* mc = character.Get();
     ModelComponent* geom = mc->modelComponent.Get();
-    float pos[3];
-    pos[0] = geom->transform.translation.x;
-    pos[1] = geom->transform.translation.y;
-    pos[2] = geom->transform.translation.z;
+    Vector3Slot pos;
+    pos.v.x = geom->transform.translation.x;
+    pos.v.y = geom->transform.translation.y;
+    pos.v.z = geom->transform.translation.z;
 
-    newborn->Initialize(pos, gender, '\x01', 0, '\0', this, spawnArg);
+    newborn->Initialize(&pos.v, gender, '\x01', 0, '\0', this, spawnArg);
 
     Object::InternalPtr<ComponentEntity> addArg = child;
     {

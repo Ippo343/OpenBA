@@ -436,7 +436,7 @@ CitizenComponent* NomadComponent::ConvertToCitizen(CitizenComponent** out, Citiz
     uint32_t r = rng->Rand(1u);
     char flag = (r == 0 || isChild != 0) ? 0 : 1;
     Profession* key = gw->m_professionList->field_0x30;
-    cit->Initialize(&pos.x, static_cast<uint32_t>(genderArg), isChild, age, flag,
+    cit->Initialize(&pos, static_cast<uint32_t>(genderArg), isChild, age, flag,
                     parent ? *parent : nullptr, key);   // 0x140117080
 
     Object::InternalPtr<ComponentEntity> regIBP = ent;
