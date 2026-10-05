@@ -109,31 +109,6 @@ static_assert(offsetof(MaterialConstant, name)  == 0x00, "MaterialConstant::name
 // decide whether to call MaterialInstance::RenderTextures — so +0x25 is "this
 // material samples something that must be rendered first".
 // ============================================================
-struct MaterialInstance {
-    void*    vptr;                 // +0x00
-    void*    external_08;          // +0x08  Object::External members; lane F does
-    void*    external_10;          // +0x10  not port External, so these keep the
-    void*    external_18;          // +0x18  names their owner (Wave 3) gave them
-    uint32_t shaderClass;          // +0x20  copied from Material+0x20 by BuildParameters;
-                                   //        AddDrawItem uses it as a bit index into
-                                   //        the draw group's pass mask AND as the
-                                   //        0..2 item-list index
-    uint8_t  hasRenderTexture;     // +0x24  any bound texture with kind == 4
-    uint8_t  hasRenderedTexture;   // +0x25  any bound texture with kind == 5
-    uint8_t  _pad_26[2];           // +0x26
-    void*    material;             // +0x28  Object::ExternalPtr<Material>, by value
-    Collection::Array<MaterialParameterSet> parameters;  // +0x30..+0x3f
-    Collection::Array<MaterialConstant>     constants;   // +0x40..+0x4f
-    Collection::Array<MaterialTexture>      textures;    // +0x50..+0x5f
-};
-static_assert(sizeof(MaterialInstance) == 0x60, "Graphics::MaterialInstance must be 0x60 bytes");
-static_assert(offsetof(MaterialInstance, shaderClass)        == 0x20, "MaterialInstance::shaderClass @ +0x20");
-static_assert(offsetof(MaterialInstance, hasRenderTexture)   == 0x24, "MaterialInstance::hasRenderTexture @ +0x24");
-static_assert(offsetof(MaterialInstance, hasRenderedTexture) == 0x25, "MaterialInstance::hasRenderedTexture @ +0x25");
-static_assert(offsetof(MaterialInstance, material)           == 0x28, "MaterialInstance::material @ +0x28");
-static_assert(offsetof(MaterialInstance, parameters)         == 0x30, "MaterialInstance::parameters @ +0x30");
-static_assert(offsetof(MaterialInstance, constants)          == 0x40, "MaterialInstance::constants @ +0x40");
-static_assert(offsetof(MaterialInstance, textures)           == 0x50, "MaterialInstance::textures @ +0x50");
 
 }  // namespace RtGraphics
 
@@ -443,8 +418,8 @@ public:
     // by-value returns here. THE DOOR DECIDES THE OVERLOAD (B5-14): the two
     // `GetTexture`s differ only in their argument, and retail exports both.
     Object::ExternalPtr<Video::ImageBuffer> GetTexture(int32_t index) const;      // 0x180103100
-    Object::ExternalPtr<Video::ImageBuffer> GetTexture(const RtSystem::String& name) const; // 0x180103120
-    void SetTexture(const RtSystem::String& name,
+    Object::ExternalPtr<Video::ImageBuffer> GetTexture(const System::String& name) const; // 0x180103120
+    void SetTexture(const System::String& name,
                     Object::ExternalPtr<Video::ImageBuffer> image);   // 0x180103180
     // `AddTexture` (0x180103350) and `SetMaterial` (0x180103340) were listed here
     // as unported; they are NOT — both have registered, ported doors in
@@ -493,15 +468,6 @@ static_assert(sizeof(MaterialInstance) == 0x60,
               "Graphics::MaterialInstance is 0x60 bytes (the ctor 0x180103980's "
               "last store ends at +0x5f)");
 static_assert(alignof(MaterialInstance) == 8, "MaterialInstance aligns to 8 (the vptr)");
-static_assert(sizeof(MaterialInstance) == sizeof(RtGraphics::MaterialInstance),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(MaterialInstance, _shaderClass) == offsetof(RtGraphics::MaterialInstance, shaderClass), "alias shaderClass");
-static_assert(offsetof(MaterialInstance, _hasRenderTexture) == offsetof(RtGraphics::MaterialInstance, hasRenderTexture), "alias hasRenderTexture");
-static_assert(offsetof(MaterialInstance, _hasRenderedTexture) == offsetof(RtGraphics::MaterialInstance, hasRenderedTexture), "alias hasRenderedTexture");
-static_assert(offsetof(MaterialInstance, _material)   == offsetof(RtGraphics::MaterialInstance, material),   "alias material");
-static_assert(offsetof(MaterialInstance, _parameters) == offsetof(RtGraphics::MaterialInstance, parameters), "alias parameters");
-static_assert(offsetof(MaterialInstance, _constants)  == offsetof(RtGraphics::MaterialInstance, constants),  "alias constants");
-static_assert(offsetof(MaterialInstance, _textures)   == offsetof(RtGraphics::MaterialInstance, textures),   "alias textures");
 
 static_assert(offsetof(MaterialInstance, _shaderClass)        == 0x20, "MaterialInstance::_shaderClass @ +0x20 (GetType 0x180002b60)");
 static_assert(offsetof(MaterialInstance, _hasRenderTexture)   == 0x24, "MaterialInstance::_hasRenderTexture @ +0x24 (0x180002b80)");

@@ -85,11 +85,6 @@ void InnerArrayCopyCtor(void* dst, const void* src) {
 //                   ends at 0xbc; the trailing dword is left holding whatever
 //                   the caller's storage held. Recorded, not zeroed.
 // ============================================================================
-static_assert(sizeof(RtGraphics::Geometry) == 0xC0,
-              "the copy ctor's last store is at +0xb8; a different sizeof means "
-              "this transcription has the wrong tail");
-static_assert(offsetof(RtGraphics::Geometry, _attached) == 0x18,
-              "the nested Array<Geometry*> the copy ctor zeroes and assigns");
 
 // ENDGAME B.3.9 GFX: this is the MEMBER now. The vptr store (retail's
 // `LEA RAX,[0x180154e60]`) is the compiler's; the ??0 copy door

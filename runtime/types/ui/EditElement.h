@@ -60,32 +60,9 @@
 #include "Element.h"
 #include "../object/Internal.h"   // Object::detail::InternalMemFree
 
-namespace RtUI {
 
-struct EditElement {
-    RtUI::Element base;           // +0x00 .. +0xBF
-    void*    _font;               // +0xC0  ExternalPtr<UI::Font>
-    char*    _text;               // +0xC8
-    int32_t  _maxLength;          // +0xD0
-    uint8_t  _password;           // +0xD4
-    uint8_t  _padD5[3];           // +0xD5  never written
-    char*    _filter;             // +0xD8
-    uint8_t  _flagE0;             // +0xE0  (the class's `_active`)
-    uint8_t  _padE1[3];           // +0xE1  never written
-    int32_t  _caret;              // +0xE4
-    uint8_t  _blinkOn;            // +0xE8
-    uint8_t  _padE9[7];           // +0xE9  never written
-    int64_t  _blinkAccumulator;   // +0xF0
-};
 
-static_assert(offsetof(EditElement, base)    == 0x00, "EditElement::base @ +0x00");
-static_assert(offsetof(EditElement, _text)   == 0xC8, "EditElement::_text @ +0xC8");
-static_assert(offsetof(EditElement, _flagE0) == 0xE0, "EditElement::_flagE0 @ +0xE0");
-static_assert(offsetof(EditElement, _blinkAccumulator) == 0xF0, "EditElement @ +0xF0");
-static_assert(sizeof(EditElement) == 0xF8,
-              "EditElement is 0xF8 (MOV EDX,0xf8 in its deleting dtor 0x18003fed0)");
 
-}  // namespace RtUI
 
 // ############################################################################
 // ENDGAME B.3 step 6 (block C3) — `UI::EditElement`, the REAL C++ class
@@ -205,11 +182,5 @@ static_assert(offsetof(EditElement, _caret)            == 0xe4, "");
 static_assert(offsetof(EditElement, _blinkOn)          == 0xe8, "");
 static_assert(offsetof(EditElement, _blinkAccumulator) == 0xf0, "");
 // The class and the RtUI POD describe the same bytes.
-static_assert(sizeof(EditElement) == sizeof(RtUI::EditElement), "");
-static_assert(offsetof(EditElement, _text)    == offsetof(RtUI::EditElement, _text), "");
-static_assert(offsetof(EditElement, _active)  == offsetof(RtUI::EditElement, _flagE0), "");
-static_assert(offsetof(EditElement, _caret)   == offsetof(RtUI::EditElement, _caret), "");
-static_assert(offsetof(EditElement, _blinkAccumulator)
-              == offsetof(RtUI::EditElement, _blinkAccumulator), "");
 
 }  // namespace UI

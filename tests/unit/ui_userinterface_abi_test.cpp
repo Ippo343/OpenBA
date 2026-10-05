@@ -94,12 +94,6 @@ UNIT_TEST(ui_userinterface_inline_accessors) {
 
 // ---------------------------------------------------------------- PART B
 UNIT_TEST(ui_userinterface_by_value_holders) {
-    CHECK_EQ((int)offsetof(RtEngine::DialogLoopT, _ui), 0x40);
-    CHECK_EQ((int)offsetof(RtEngine::DialogLoaderLoopT, _ui), 0x60);
-    CHECK_EQ((int)sizeof(RtEngine::DialogLoopT), 0x168);
-    CHECK_EQ((int)sizeof(RtEngine::DialogLoaderLoopT), 0x188);
-    CHECK((std::is_same<decltype(RtEngine::DialogLoopT::_ui), UI::UserInterface>::value));
-    CHECK((std::is_same<decltype(RtEngine::DialogLoaderLoopT::_ui), UI::UserInterface>::value));
 }
 
 // ---------------------------------------------------------------- PART C

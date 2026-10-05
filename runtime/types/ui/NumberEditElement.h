@@ -29,22 +29,6 @@
 #include "EditElement.h"
 #include "../object/Internal.h"   // Object::detail::InternalMemFree
 
-namespace RtUI {
-
-struct NumberEditElement {
-    EditElement base;          // +0x00 .. +0xF7  (RtUI::EditElement)
-    int32_t     _min;          // +0xF8
-    int32_t     _max;          // +0xFC
-};
-
-static_assert(sizeof(EditElement) == 0xF8, "EditElement is 0xF8 (retail, EditElement.h)");
-static_assert(offsetof(NumberEditElement, base) == 0x00, "NumberEditElement::base @ +0x00");
-static_assert(offsetof(NumberEditElement, _min) == 0xF8, "NumberEditElement::_min @ +0xF8");
-static_assert(offsetof(NumberEditElement, _max) == 0xFC, "NumberEditElement::_max @ +0xFC");
-static_assert(sizeof(NumberEditElement) == 0x100, "NumberEditElement is 0x100");
-
-}  // namespace RtUI
-
 // ############################################################################
 // ENDGAME B.3 step 6 (block C3) — `UI::NumberEditElement`, the REAL C++ class
 // ############################################################################
@@ -116,8 +100,5 @@ static_assert(offsetof(NumberEditElement, _min) == sizeof(EditElement),
               "_min begins exactly at the end of the 0xf8-byte EditElement");
 static_assert(offsetof(NumberEditElement, _min) == 0xf8, "");
 static_assert(offsetof(NumberEditElement, _max) == 0xfc, "");
-static_assert(sizeof(NumberEditElement) == sizeof(RtUI::NumberEditElement), "");
-static_assert(offsetof(NumberEditElement, _min) == offsetof(RtUI::NumberEditElement, _min), "");
-static_assert(offsetof(NumberEditElement, _max) == offsetof(RtUI::NumberEditElement, _max), "");
 
 }  // namespace UI

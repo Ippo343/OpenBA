@@ -47,7 +47,6 @@
 #include "../../types/object/TypeInfo.h"
 #include "../../funcs/rt_libm.h"   // B3R: rtcrt::StrICmp (0x18007eefc), called by name
 
-using RtObject::Factory;
 using RtObject::TypeNode;
 
 // ============================================================================

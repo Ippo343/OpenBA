@@ -291,8 +291,8 @@ namespace {
 //   * `Object::Factory` is 0x10 bytes, not 8. `??0Factory@Object@@QEAA@XZ`
 //     (0x1800c09d0) writes `[RCX]=0` and a DWORD `[RCX+8]=0`, and the insert
 //     core INCs that dword at 0x1800303ac / 0x18003043c — it is the Set's
-//     element count. `RtObject::Factory`'s `{ TypeNode* root; }` above stays a
-//     correct VIEW that must never be used as STORAGE.
+//     element count. (The 8-byte `RtObject::Factory { TypeNode* root; }` view
+//     is gone, B.4: the AVL core takes the root slot itself.)
 //   * `TypeNode` is 0x50 bytes and its +0x48 is TWO 16-BIT FIELDS, not one
 //     int32 (0x180030540 `CMP word [RDX+0x48],-1` and
 //     `MOVZX ...,word [RAX+0x4a]`; 0x1800087c0 zeroes both in one dword store,

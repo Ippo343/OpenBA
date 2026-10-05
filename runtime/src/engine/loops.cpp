@@ -128,11 +128,6 @@
 // (runtime/types/system/Thread.h), so Loader::Load calls the base's `Start`
 // member and the three waits call `WaitForFinish` directly.
 
-using RtEngine::UpdateLoop;
-using RtEngine::LoaderLoop;
-using RtEngine::DialogLoopT;
-using RtEngine::DialogLoaderLoopT;
-using RtEngine::Loader;
 
 namespace {
 

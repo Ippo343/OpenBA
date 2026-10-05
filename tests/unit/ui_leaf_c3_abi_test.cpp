@@ -351,8 +351,6 @@ UNIT_TEST(ui_c3_field_offsets_and_pod_agreement) {
     CHECK_EQ(offsetof(UI::EditElement, _blinkAccumulator), (size_t)0xf0);
     CHECK_EQ(offsetof(UI::NumberEditElement, _min), sizeof(UI::EditElement));
     CHECK_EQ(offsetof(UI::NumberEditElement, _max), (size_t)0xfc);
-    CHECK_EQ(sizeof(RtUI::EditElement), (size_t)0xf8);
-    CHECK_EQ(offsetof(RtUI::NumberEditElement, _min), (size_t)0xf8);
 
     // TextElement (ctor 0x18011eb80), under TextElement's names.
     CHECK_EQ(offsetof(UI::TextElement, _font),        (size_t)0xc0);
@@ -369,7 +367,6 @@ UNIT_TEST(ui_c3_field_offsets_and_pod_agreement) {
     CHECK_EQ(offsetof(UI::LabelElement, _mode),       (size_t)0x114);
     CHECK_EQ(offsetof(UI::LabelElement, _iconColor),  (size_t)0x128);
     CHECK_EQ(offsetof(UI::LabelElement, _textWidth),  (size_t)0x12c);
-    CHECK_EQ(sizeof(UI::LabelElement), sizeof(RtUI::LabelElement));
 
     CHECK_EQ(offsetof(UI::NumberElement, _cachedText), (size_t)0xd0);
     CHECK_EQ(offsetof(UI::NumberElement, _showSign),   (size_t)0xe0);

@@ -102,101 +102,19 @@ namespace IO { class Serializer; }
 // the fourth namespace spelling B35_FILEMAP (d) records for this header.
 // ############################################################################
 
-namespace RtVideo {
 
 // ============================================================
 // RtVideo::ImageBuffer (0x68 bytes) — the POD view
 // ============================================================
-struct ImageBuffer {
-    // --- CompiledExternal base (0x20 bytes) ---
-    void*       vtable;             // +0x00  vtable pointer (set through Base->External->CompiledExternal->ImageBuffer chain)
-    uint64_t    externalData08;     // +0x08  External base field (zeroed in ctor) — External::_path
-    uint64_t    externalData10;     // +0x10  External base field (zeroed in ctor) — External::_refs
-    uint64_t    externalData18;     // +0x18  External base field (zeroed in ctor)
 
-    // --- ImageBuffer subclass fields ---
-    int32_t     width;              // +0x20  image width in pixels (raw field; use Width() for the accessor)
-    int32_t     height;             // +0x24  image height in pixels (raw field; use Height() for the accessor)
-    int32_t     dimension;          // +0x28  0 = 2D, non-zero (1) = cube map (zeroed in ctor)
-    int32_t     kind;               // +0x2C  bind-flag selector: 0/4/5 render target, 1 depth, 2 default/none, 3 dynamic (init 2 in ctor)
-    uint32_t    format;             // +0x30  pixel format: index into an 8-entry DXGI table, < 3 = block-compressed
-    uint32_t    flags;              // +0x34  bit0 mipmapped, bit4/5 device-reset-tracked (set by DX11 color/depth attach),
-                                     //        bit6 comparison sampler + downsample-shift enable, bit8 = device width/height,
-                                     //        bit9 = half device width/height (bits 8/9 read only by Width()/Height())
-    int32_t     addressU;           // +0x38  address mode index (0=WRAP, 1=CLAMP), zeroed in ctor
-    int32_t     addressV;           // +0x3C  address mode index, zeroed in ctor
-    int32_t     addressW;           // +0x40  address mode index, zeroed in ctor
-    int32_t     filter;             // +0x44  filter mode index (0=POINT,1=LINEAR,2=ANISOTROPIC), init 1 in ctor
-    // +0x48 — NAME CORRECTION, Wave 18 lane VDATA. This field is a
-    // **System::String**, not a pixel buffer. `?Serialize@ImageBuffer@Video@@`
-    // (0x1800f280d) hands `this+0x48` straight to
-    // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`, which only
-    // accepts a String. The two descriptions cover the same eight bytes — a
-    // System::String IS one pointer to a refcounted payload whose count sits at
-    // -4, which is why the destructor in buffers.cpp is correct as written and
-    // needs no change — but the NAME sends a reader looking for pixels in what
-    // is really the source path/name. Left spelled `pixelData` HERE so no other
-    // block's file has to move; the real class below calls it `_sourceName`.
-    void*       pixelData;          // +0x48  System::String (refcount at ptr-4, frees at 0)
-    uint64_t    field50;            // +0x50  unknown (copied in copy ctor; not touched by any Lane C export)
-    uint64_t    field58;            // +0x58  unknown (copied in copy ctor; not touched by any Lane C export)
-    void*       platformData;       // +0x60  Video::ImageBufferData* (platform-specific, set by PlatformConstruct)
 
-    // --- Inline accessors matching the real (non-trivial) originals ---
-    bool IsCompressed()   const { return format < 3; }
-    bool HasMipMaps()     const { return (flags & 1u) != 0; }
-    bool IsDepthBuffer()  const { return kind == 1; }
-    bool IsDynamic()      const { return kind == 3; }
-    bool IsGenerated()    const { return kind == 4; }
-    bool IsRendered()     const { return kind == 5; }
-    // kind & ~0b101 == 0  <=>  kind in {0,1,4,5}
-    bool IsRenderBuffer() const { return (static_cast<uint32_t>(kind) & 0xfffffffau) == 0; }
-
-    int GetLevelCount() const {
-        int count = 1;
-        if (HasMipMaps()) {
-            int w = width;
-            int h = height;
-            while (w > 1 || h > 1) {
-                h >>= 1; if (h == 0) h = 1;
-                w >>= 1; if (w == 0) w = 1;
-                count++;
-            }
-        }
-        return count;
-    }
-};
-
-static_assert(sizeof(ImageBuffer) == 0x68, "ImageBuffer must be 0x68 bytes");
-static_assert(offsetof(ImageBuffer, vtable) == 0x00, "vtable at +0x00");
-static_assert(offsetof(ImageBuffer, externalData08) == 0x08, "externalData08 at +0x08");
-static_assert(offsetof(ImageBuffer, externalData10) == 0x10, "externalData10 at +0x10");
-static_assert(offsetof(ImageBuffer, externalData18) == 0x18, "externalData18 at +0x18");
-static_assert(offsetof(ImageBuffer, width) == 0x20, "width at +0x20");
-static_assert(offsetof(ImageBuffer, height) == 0x24, "height at +0x24");
-static_assert(offsetof(ImageBuffer, dimension) == 0x28, "dimension at +0x28");
-static_assert(offsetof(ImageBuffer, kind) == 0x2C, "kind at +0x2C");
-static_assert(offsetof(ImageBuffer, format) == 0x30, "format at +0x30");
-static_assert(offsetof(ImageBuffer, flags) == 0x34, "flags at +0x34");
-static_assert(offsetof(ImageBuffer, addressU) == 0x38, "addressU at +0x38");
-static_assert(offsetof(ImageBuffer, addressV) == 0x3C, "addressV at +0x3C");
-static_assert(offsetof(ImageBuffer, addressW) == 0x40, "addressW at +0x40");
-static_assert(offsetof(ImageBuffer, filter) == 0x44, "filter at +0x44");
-static_assert(offsetof(ImageBuffer, pixelData) == 0x48, "pixelData at +0x48");
-static_assert(offsetof(ImageBuffer, field50) == 0x50, "field50 at +0x50");
-static_assert(offsetof(ImageBuffer, field58) == 0x58, "field58 at +0x58");
-static_assert(offsetof(ImageBuffer, platformData) == 0x60, "platformData at +0x60");
-
-}  // namespace RtVideo
 
 // The global spelling the five unconverted consumers use. See the banner above.
-using RtVideo::ImageBuffer;
 // And `Video::ImageBufferData`'s POD, whose global alias ENDGAME B.3.5 block A
 // left here when it moved the declaration into `CompanionData.h`:
 // `runtime/src/video/buffers.cpp` writes `pd->vtable` by hand in three
 // trampolines and in the ported `??1ImageBufferData` door. Block D2's when
 // `buffers.cpp` converts.
-using RtVideo::ImageBufferData;
 
 // ############################################################################
 // THE REAL CLASS.
@@ -514,15 +432,10 @@ static_assert(sizeof(ImageBuffer) == 0x68,
               "Video::ImageBuffer is 0x68 bytes (MOV EDX,0x68 in the slot-0 "
               "vector deleting dtor at 0x18001ed20)");
 static_assert(alignof(ImageBuffer) == 8, "Video::ImageBuffer is qword-aligned");
-static_assert(sizeof(ImageBuffer) == sizeof(RtVideo::ImageBuffer),
-              "the real class and the POD describe the same bytes");
 
 #define RT_VIDEO_IMAGEBUFFER_PIN(MEMBER, POD_MEMBER, OFFSET)                   \
     static_assert(offsetof(ImageBuffer, MEMBER) == (OFFSET),                   \
-                  "Video::ImageBuffer::" #MEMBER " @ +" #OFFSET);              \
-    static_assert(offsetof(ImageBuffer, MEMBER)                                \
-                      == offsetof(RtVideo::ImageBuffer, POD_MEMBER),           \
-                  "alias " #MEMBER)
+                  "Video::ImageBuffer::" #MEMBER " @ +" #OFFSET)
 
 RT_VIDEO_IMAGEBUFFER_PIN(_width,      width,        0x20);
 RT_VIDEO_IMAGEBUFFER_PIN(_height,     height,       0x24);

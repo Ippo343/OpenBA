@@ -415,19 +415,13 @@ UNIT_TEST(ui_dialog_family_layout) {
 
     // The engine aliases (engine/types/ui/{DialogInstance,DialogController}.h)
     // name the PODs, which must describe the same bytes as the classes.
-    CHECK_EQ((int)sizeof(RtUI::DialogInstance), (int)sizeof(UI::DialogInstance));
-    CHECK_EQ((int)sizeof(RtUI::DialogController), (int)sizeof(UI::DialogController));
-    CHECK_EQ((int)sizeof(RtUI::ComboDialog), (int)sizeof(UI::ComboDialog));
-    CHECK_EQ((int)sizeof(RtUI::Dialog), (int)sizeof(UI::Dialog));
 
     // A write through the class lands where the POD readers look.
     DialogInstanceProbe probe;
     probe._result = 3;
     probe._userFlags = 0x40;
-    const RtUI::DialogInstance* pod = reinterpret_cast<const RtUI::DialogInstance*>(
-        static_cast<UI::DialogInstance*>(&probe));
-    CHECK_EQ(pod->_result, 3);
-    CHECK_EQ(pod->_userFlags, 0x40);
+    CHECK_EQ(static_cast<UI::DialogInstance&>(probe)._result, 3);
+    CHECK_EQ(static_cast<UI::DialogInstance&>(probe)._userFlags, 0x40);
 }
 
 // ===========================================================================

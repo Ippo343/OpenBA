@@ -123,39 +123,7 @@ static_assert(sizeof(ExternalPtr) == 8, "Object::ExternalPtr must be 8 bytes");
 //                          lerps from it towards +0x84.
 //   +0xbc  NOT PINNED, NOT INITIALISED — the ctor's last store is at +0xb8.
 // ============================================================
-struct Geometry {
-    void*                     _vtable;            // +0x00
-    Geometry*                 _attachParent;      // +0x08
-    int32_t                   _attachNode;        // +0x10
-    int32_t                   _pad14;             // +0x14  uninitialised, unused
-    Collection::Array<Geometry*> _attached;       // +0x18 {data, size@0x20, cap@0x24}
-    int32_t                   _detailId;          // +0x28
-    uint32_t                  _dirtyFlags;        // +0x2c
-    uint32_t                  _materialTypeFlags; // +0x30
-    Box                       _localBounds;       // +0x34
-    Box                       _worldBounds;       // +0x4c
-    Box                       _prevWorldBounds;   // +0x64
-    float                     _opacity;           // +0x7c
-    float                     _opacityPrev;       // +0x80
-    Transform                 _transform;         // +0x84
-    Transform                 _prevTransform;     // +0xa0
-    uint32_t                  _padBC;             // +0xbc  uninitialised, unused
-};
 
-static_assert(sizeof(Geometry) == 0xC0, "Graphics::Geometry must be 0xC0 bytes");
-static_assert(offsetof(Geometry, _attachParent)      == 0x08, "Geometry::_attachParent @ +0x08");
-static_assert(offsetof(Geometry, _attachNode)        == 0x10, "Geometry::_attachNode @ +0x10");
-static_assert(offsetof(Geometry, _attached)          == 0x18, "Geometry::_attached @ +0x18");
-static_assert(offsetof(Geometry, _detailId)          == 0x28, "Geometry::_detailId @ +0x28");
-static_assert(offsetof(Geometry, _dirtyFlags)        == 0x2c, "Geometry::_dirtyFlags @ +0x2c");
-static_assert(offsetof(Geometry, _materialTypeFlags) == 0x30, "Geometry::_materialTypeFlags @ +0x30");
-static_assert(offsetof(Geometry, _localBounds)       == 0x34, "Geometry::_localBounds @ +0x34");
-static_assert(offsetof(Geometry, _worldBounds)       == 0x4c, "Geometry::_worldBounds @ +0x4c");
-static_assert(offsetof(Geometry, _prevWorldBounds)   == 0x64, "Geometry::_prevWorldBounds @ +0x64");
-static_assert(offsetof(Geometry, _opacity)           == 0x7c, "Geometry::_opacity @ +0x7c");
-static_assert(offsetof(Geometry, _opacityPrev)       == 0x80, "Geometry::_opacityPrev @ +0x80");
-static_assert(offsetof(Geometry, _transform)         == 0x84, "Geometry::_transform @ +0x84");
-static_assert(offsetof(Geometry, _prevTransform)     == 0xa0, "Geometry::_prevTransform @ +0xa0");
 
 // ============================================================
 // Geometry::_dirtyFlags bit meanings.
@@ -506,23 +474,8 @@ static_assert(sizeof(Geometry) == 0xC0,
               "Graphics::Geometry is 0xC0 bytes (MOV EDX,0xc0 in its own slot-0 "
               "vector deleting destructor, 0x180015e90)");
 static_assert(alignof(Geometry) == 8, "Graphics::Geometry is qword aligned (the vptr)");
-static_assert(sizeof(Geometry) == sizeof(RtGraphics::Geometry),
-              "the real class and the POD describe the same bytes");
 
 // Cross-asserts against the POD: every field at the same offset in both.
-static_assert(offsetof(Geometry, _attachParent)      == offsetof(RtGraphics::Geometry, _attachParent),      "alias _attachParent");
-static_assert(offsetof(Geometry, _attachNode)        == offsetof(RtGraphics::Geometry, _attachNode),        "alias _attachNode");
-static_assert(offsetof(Geometry, _attached)          == offsetof(RtGraphics::Geometry, _attached),          "alias _attached");
-static_assert(offsetof(Geometry, _detailId)          == offsetof(RtGraphics::Geometry, _detailId),          "alias _detailId");
-static_assert(offsetof(Geometry, _dirtyFlags)        == offsetof(RtGraphics::Geometry, _dirtyFlags),        "alias _dirtyFlags");
-static_assert(offsetof(Geometry, _materialTypeFlags) == offsetof(RtGraphics::Geometry, _materialTypeFlags), "alias _materialTypeFlags");
-static_assert(offsetof(Geometry, _localBounds)       == offsetof(RtGraphics::Geometry, _localBounds),       "alias _localBounds");
-static_assert(offsetof(Geometry, _worldBounds)       == offsetof(RtGraphics::Geometry, _worldBounds),       "alias _worldBounds");
-static_assert(offsetof(Geometry, _prevWorldBounds)   == offsetof(RtGraphics::Geometry, _prevWorldBounds),   "alias _prevWorldBounds");
-static_assert(offsetof(Geometry, _opacity)           == offsetof(RtGraphics::Geometry, _opacity),           "alias _opacity");
-static_assert(offsetof(Geometry, _opacityPrev)       == offsetof(RtGraphics::Geometry, _opacityPrev),       "alias _opacityPrev");
-static_assert(offsetof(Geometry, _transform)         == offsetof(RtGraphics::Geometry, _transform),         "alias _transform");
-static_assert(offsetof(Geometry, _prevTransform)     == offsetof(RtGraphics::Geometry, _prevTransform),     "alias _prevTransform");
 
 // And against the retail bodies directly, so a POD edit cannot move both.
 static_assert(offsetof(Geometry, _attachParent)      == 0x08, "Geometry::_attachParent @ +0x08 (Attach 0x1800a3fa0)");

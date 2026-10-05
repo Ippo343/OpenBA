@@ -409,14 +409,14 @@ int PathStrICmp(const char* a, const char* b) {
 
 PackfileIndexNode* IndexFind(PackfileIndexNode* node, const char* key) {
     while (node != nullptr) {
-        if (node->key != nullptr) {
+        if (node->element.key._data != nullptr) {
             if (key == nullptr)                     { node = node->left; continue; }
-            if (PathStrICmp(key, node->key) < 0)    { node = node->left; continue; }
+            if (PathStrICmp(key, node->element.key._data) < 0)    { node = node->left; continue; }
         }
         // rightTest — 0x1800ab8e6
         if (key == nullptr)
             return node;
-        if (node->key != nullptr && PathStrICmp(node->key, key) >= 0)
+        if (node->element.key._data != nullptr && PathStrICmp(node->element.key._data, key) >= 0)
             return node;
         node = node->right;
     }
@@ -527,44 +527,6 @@ PackfileIndexNode* IndexFind(PackfileIndexNode* node, const char* key) {
 // ORACLE: none, and it is not close. It frees everything it touches; running it
 // twice is a double free, and there is no scratch stand-in because the objects
 // it destroys are the process's real packages.
-namespace {
-// ENDGAME B.3.2 step 2 — the element `Collection::Set<T>` needs to reach
-// `packfileIndexRoot`/`packfileIndexCount` (FileSystem.h +0x40/+0x48) as a
-// real `Collection::Set<...>::Node` tree: {System::Filename key; uint64_t
-// value;}, 0x10 bytes, matching `PackfileIndexNode`'s leading 16 bytes
-// (`key`@0x00, `packIndex`@0x08, `fileIndex`@0x0C read together as one packed
-// qword — see FilenameSetInsert's "the value is copied RAW" note in
-// avl_trees.cpp). `System::Filename` is layout-identical to the raw
-// `const char*` `PackfileIndexNode::key` declares (Filename.h: "Filename IS a
-// String, layout-identically: one pointer"), so `PackfileIndexPair`'s implicit
-// destructor releasing `key` runs exactly retail's `StringReleaseInline` on
-// that same field, and `Collection::Set<PackfileIndexPair>::Node` is
-// byte-for-byte `PackfileIndexNode` (both static_assert below).
-//
-// Only `DestroySubtree` (site 625) is taken from this instantiation — it is
-// `static` and needs no `Set` object, just a `Node*` — because `Insert`
-// (site 816, `FilenameSetInsert`) is NOT expressible on it without changing
-// behaviour: see that call site's comment for why.
-struct PackfileIndexPair {
-    System::Filename key;
-    uint64_t         value;
-};
-static_assert(sizeof(PackfileIndexPair) == 0x10,
-              "packed {Filename key, u64 value} element, matching FilenameSetInsert");
-using PackfileIndexSet = Collection::Set<PackfileIndexPair>;
-static_assert(sizeof(PackfileIndexSet::Node) == sizeof(PackfileIndexNode),
-              "Collection::Set<PackfileIndexPair>::Node must mirror PackfileIndexNode");
-static_assert(offsetof(PackfileIndexSet::Node, parent) == offsetof(PackfileIndexNode, parent),
-              "Node::parent must line up with PackfileIndexNode::parent");
-static_assert(offsetof(PackfileIndexSet::Node, left) == offsetof(PackfileIndexNode, left),
-              "Node::left must line up with PackfileIndexNode::left");
-static_assert(offsetof(PackfileIndexSet::Node, right) == offsetof(PackfileIndexNode, right),
-              "Node::right must line up with PackfileIndexNode::right");
-static_assert(offsetof(PackfileIndexSet::Node, balance) == offsetof(PackfileIndexNode, balance),
-              "Node::balance must line up with PackfileIndexNode::balance");
-static_assert(offsetof(PackfileIndexSet::Node, height) == offsetof(PackfileIndexNode, height),
-              "Node::height must line up with PackfileIndexNode::height");
-}  // namespace
 
 }  // namespace RtIO
 
@@ -596,7 +558,7 @@ System::Filename FileSystem::GetPackDirectory() const {
 
 void FileSystem::ClosePackages() {
     const int32_t hadPackfiles = _packfiles._size;
-    const bool    hadIndex     = _packfileIndexRoot != nullptr;
+    const bool    hadIndex     = _packfileIndex.root != nullptr;
 
     for (int32_t i = 0; i < _packfiles._size; ++i) {
         // Retail RELOADS the array base on every iteration and indexes it twice
@@ -629,7 +591,7 @@ void FileSystem::ClosePackages() {
     _packfiles._size    = 0;
     _packfiles._capacity = 0;
 
-    RtIO::PackfileIndexNode* const root = _packfileIndexRoot;
+    RtIO::PackfileIndexNode* const root = _packfileIndex.root;
     if (root != nullptr) {
         // ENDGAME B.3.2 step 2 — FUN_180008340, the recursive subtree free, IS
         // `Collection::Set<PackfileIndexPair>::DestroySubtree` (Collection.h):
@@ -646,12 +608,11 @@ void FileSystem::ClosePackages() {
         // under one call instead of the caller doing the root's half by hand.
         // The 0x180008340 row itself is UNCHANGED and stays registered in
         // avl_trees.cpp: `code/` still reaches it by address.
-        RtIO::PackfileIndexSet::DestroySubtree(
-            reinterpret_cast<RtIO::PackfileIndexSet::Node*>(root));  // LEFT: audit WORK, not executed this pass (a typed element / node accessor over the erased set (one hand-off, elem_str); blocker; the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
+        RtIO::PackfileIndexSet::DestroySubtree(root);
     }
     // Zeroed unconditionally, even when root was already null.
-    _packfileIndexCount = 0;
-    _packfileIndexRoot  = nullptr;
+    _packfileIndex.count = 0;
+    _packfileIndex.root  = nullptr;
 
 }
 
@@ -781,16 +742,16 @@ void FileSystem::LoadPackages() {
             System::Filename key(owner->IO::PackageFile::GetFileName(fi));
 
             RtIO::PackfileIndexNode* node =
-                RtIO::IndexFind(_packfileIndexRoot, key._data);
+                RtIO::IndexFind(_packfileIndex.root, key._data);
             if (node != nullptr) {
                 // The incumbent's OWN +0xAC decides, not the newcomer's: retail
                 // indexes packfiles[] with the FOUND NODE's packIndex
                 // (`MOV ECX,[RBX+0x8]`) and tests that object's byte.
-                PackageFile* incumbent = _packfiles[node->packIndex];
+                PackageFile* incumbent = _packfiles[node->element.value.packIndex];
                 if (incumbent->_overridable != 0) {
-                    // Retail merges these into ONE qword store at [RBX+8].
-                    node->packIndex = static_cast<uint32_t>(pi);
-                    node->fileIndex = static_cast<uint32_t>(fi);
+                    // Retail writes the pair as ONE qword store at [RBX+8].
+                    node->element.value = RtIO::PackfileIndexValue{
+                        static_cast<uint32_t>(pi), static_cast<uint32_t>(fi) };
                     ++overridden;
                 } else {
                     ++kept;
@@ -823,12 +784,10 @@ void FileSystem::LoadPackages() {
                 // `FilenameSetInsert` does) — not present on `Collection::Set`
                 // today, and not added here (no new members on Collection.h
                 // per B32_RULES). B3R RT-IO: calls rtavl::FilenameSetInsert by name.
-                const uint64_t value = (static_cast<uint64_t>(static_cast<uint32_t>(fi)) << 32) |
-                                        static_cast<uint32_t>(pi);
+                const RtIO::PackfileIndexValue value{ static_cast<uint32_t>(pi),
+                                                      static_cast<uint32_t>(fi) };
                 RtIO::PackfileIndexNode* out = nullptr;
-                rtavl::FilenameSetInsert(                                   // B.3.x bridge
-                    reinterpret_cast<rtsetavl::Set*>(&_packfileIndexRoot),  // LEFT: audit WORK, not executed this pass (SIG unit rtavl::FilenameSetInsert (doable)); blocker; SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
-                    reinterpret_cast<rtsetavl::Node**>(&out), &key, &value);  // LEFT: audit WORK, not executed this pass (SIG unit rtavl::FilenameSetInsert (doable)); blocker; SIG rtavl::FilenameSetInsert — FilenamePairNode (avl_trees.h, RtSystem::Filename key) and RtIO::PackfileIndexNode (FileSystem.h) are two declarations of one node: unify them
+                rtavl::FilenameSetInsert(&_packfileIndex, &out, &key, &value);
                 ++inserted;
             }
 

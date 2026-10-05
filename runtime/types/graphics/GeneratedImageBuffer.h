@@ -35,7 +35,6 @@
 namespace Video { class RenderBuffer; }   // B.4: ReflectionImageBuffer::_target (Device.h)
 namespace Graphics { class Renderer; class Scene; class Camera; }   // slot [11] Render's references
 
-namespace RtGraphics {
 
 // ---------------------------------------------------------------------------
 // Graphics::GeneratedImageBuffer — 0x70
@@ -47,15 +46,7 @@ namespace RtGraphics {
 // ~ImageBuffer. `_pad6c` is NEVER WRITTEN by either body; it is the four bytes
 // MSVC leaves before the 8-aligned tail of the derived classes. Recorded, not
 // zeroed (FrameCopyImageBuffer.h says the same of its own +0x6c).
-struct GeneratedImageBuffer {
-    ::ImageBuffer base;             // +0x00 .. +0x67
-    int32_t  _generation;           // +0x68
-    uint32_t _pad6c;                // +0x6c  never written
-};
 
-static_assert(sizeof(GeneratedImageBuffer) == 0x70,
-              "GeneratedImageBuffer must be 0x70 (0x18001eee0's MOV EDX,0x70)");
-static_assert(offsetof(GeneratedImageBuffer, _generation) == 0x68, "_generation @ +0x68");
 
 // ---------------------------------------------------------------------------
 // Graphics::ReflectionImageBuffer — 0x90
@@ -87,32 +78,11 @@ static_assert(offsetof(GeneratedImageBuffer, _generation) == 0x68, "_generation 
 //          in ONE instruction. Two qwords, four floats — the field widths
 //          below are what `Render` reads, and the store widths are what the
 //          ctor writes; both readings describe the same sixteen bytes.
-struct ReflectionImageBuffer {
-    ::ImageBuffer base;             // +0x00 .. +0x67
-    int32_t  _generation;           // +0x68  the GeneratedImageBuffer latch
-    uint32_t _pad6c;                // +0x6c  never written
-    void*    _depth;                // +0x70  Video::ImageBuffer*  (owned, usage=1)
-    void*    _target;               // +0x78  Video::RenderBuffer* (owned, colour = this)
-    float    _planeX;               // +0x80  ctor: 0 (lower half of one qword store)
-    float    _planeY;               // +0x84  ctor: 0 (upper half of it)
-    float    _planeZ;               // +0x88  ctor: 1.0f
-    float    _planeD;               // +0x8c  ctor: 0.0f
-};
 
-static_assert(sizeof(ReflectionImageBuffer) == 0x90,
-              "ReflectionImageBuffer must be 0x90 (0x180022600's MOV EDX,0x90)");
-static_assert(offsetof(ReflectionImageBuffer, _generation) == 0x68, "_generation @ +0x68");
-static_assert(offsetof(ReflectionImageBuffer, _depth)  == 0x70, "_depth @ +0x70");
-static_assert(offsetof(ReflectionImageBuffer, _target) == 0x78, "_target @ +0x78");
-static_assert(offsetof(ReflectionImageBuffer, _planeX) == 0x80, "_planeX @ +0x80");
-static_assert(offsetof(ReflectionImageBuffer, _planeY) == 0x84, "_planeY @ +0x84");
-static_assert(offsetof(ReflectionImageBuffer, _planeZ) == 0x88, "_planeZ @ +0x88");
-static_assert(offsetof(ReflectionImageBuffer, _planeD) == 0x8c, "_planeD @ +0x8c");
 
 // ENDGAME B.3.9 block GFX: `kVtReflectionImageBuffer` (0x180155190) is gone
 // with the minted table it named; the real class's ctor stamps the compiler's.
 
-}  // namespace RtGraphics
 
 // ############################################################################
 // THE REAL CLASSES — `Graphics::GeneratedImageBuffer` and
@@ -227,11 +197,7 @@ public:
 static_assert(sizeof(GeneratedImageBuffer) == 0x70,
               "Graphics::GeneratedImageBuffer is 0x70 (0x18001eee0's MOV EDX,0x70)");
 static_assert(alignof(GeneratedImageBuffer) == 8, "qword-aligned");
-static_assert(sizeof(GeneratedImageBuffer) == sizeof(RtGraphics::GeneratedImageBuffer),
-              "the real class and the POD describe the same bytes");
 static_assert(offsetof(GeneratedImageBuffer, _generation) == 0x68, "_generation @ +0x68");
-static_assert(offsetof(GeneratedImageBuffer, _generation)
-                  == offsetof(RtGraphics::GeneratedImageBuffer, _generation), "alias");
 
 // ============================================================
 // Graphics::ReflectionImageBuffer — 0x90 bytes, TWELVE slots
@@ -321,17 +287,11 @@ public:
 static_assert(sizeof(ReflectionImageBuffer) == 0x90,
               "Graphics::ReflectionImageBuffer is 0x90 (0x180022600's MOV EDX,0x90)");
 static_assert(alignof(ReflectionImageBuffer) == 8, "qword-aligned");
-static_assert(sizeof(ReflectionImageBuffer) == sizeof(RtGraphics::ReflectionImageBuffer),
-              "the real class and the POD describe the same bytes");
 static_assert(offsetof(ReflectionImageBuffer, _depth)  == 0x70, "_depth @ +0x70");
 static_assert(offsetof(ReflectionImageBuffer, _target) == 0x78, "_target @ +0x78");
 static_assert(offsetof(ReflectionImageBuffer, _planeX) == 0x80, "_planeX @ +0x80");
 static_assert(offsetof(ReflectionImageBuffer, _planeY) == 0x84, "_planeY @ +0x84");
 static_assert(offsetof(ReflectionImageBuffer, _planeZ) == 0x88, "_planeZ @ +0x88");
 static_assert(offsetof(ReflectionImageBuffer, _planeD) == 0x8c, "_planeD @ +0x8c");
-static_assert(offsetof(ReflectionImageBuffer, _depth)
-                  == offsetof(RtGraphics::ReflectionImageBuffer, _depth), "alias");
-static_assert(offsetof(ReflectionImageBuffer, _planeD)
-                  == offsetof(RtGraphics::ReflectionImageBuffer, _planeD), "alias");
 
 }  // namespace Graphics

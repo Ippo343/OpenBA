@@ -40,17 +40,9 @@
 #include <cstddef>
 #include "Element.h"
 
-namespace RtUI {
 
-struct SpinnerElement {
-    RtUI::Element base;          // +0x00 .. +0xBF
-    int32_t _increment;    // +0xC0
-};
 
-static_assert(offsetof(SpinnerElement, base)       == 0x00, "SpinnerElement::base @ +0x00");
-static_assert(offsetof(SpinnerElement, _increment) == 0xC0, "SpinnerElement::_increment @ +0xC0");
 
-} // namespace RtUI
 
 // ############################################################################
 // ENDGAME B.3 step 6 (block C5) — `UI::SpinnerElement`, the REAL C++ class
@@ -136,7 +128,5 @@ static_assert(sizeof(SpinnerElement) == 0xc8,
               "UI::SpinnerElement is 0xc8 (MOV EDX,0xc8 in 0x18004b3b0)");
 static_assert(alignof(SpinnerElement) == 8, "UI::SpinnerElement aligns to 8");
 static_assert(offsetof(SpinnerElement, _increment) == sizeof(Element), "");
-static_assert(offsetof(SpinnerElement, _increment) == offsetof(RtUI::SpinnerElement, _increment),
-              "the class and the POD agree");
 
 } // namespace UI

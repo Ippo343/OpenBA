@@ -357,7 +357,7 @@ RtIO::FileInfo FileSystem::OpenFile(const System::Filename& name) {
         // The BST walk. Same tree and same comparator as lane PKG's IndexFind,
         // and the same null asymmetries: a null on EITHER side stops the descent
         // rather than comparing.
-        RtIO::PackfileIndexNode* node = _packfileIndexRoot;  // 1800ac938
+        RtIO::PackfileIndexNode* node = _packfileIndex.root;  // 1800ac938
         {
             // Set-then-AdjustDelimiters IS the Filename const char* ctor,
             // ??0Filename@System@@QEAA@PEBD@Z (0x180026cf0); the inner scope is
@@ -365,7 +365,7 @@ RtIO::FileInfo FileSystem::OpenFile(const System::Filename& name) {
             System::Filename key(name._data + dirLen);       // 1800ac91a..932
 
             while (node != nullptr) {                        // 1800ac98c
-                const char* const nk = node->key;            // 1800ac945
+                const char* const nk = node->element.key._data;            // 1800ac945
                 if (nk != nullptr && key._data != nullptr &&
                     RtIO::PathStrICmp(key._data, nk) < 0) {  // 1800ac955  JNS skips
                     node = node->left;                       // 1800ac962  +0x18
@@ -382,9 +382,9 @@ RtIO::FileInfo FileSystem::OpenFile(const System::Filename& name) {
 
         if (node != nullptr && _existsInPackfileGate != 0) {  // 1800ac9bf
             lf.handle = static_cast<int32_t>(
-                (node->packIndex << 24) | node->fileIndex);  // 1800ac9c5..d1
-            const PackageFile* const pkg = _packfiles[node->packIndex];
-            const RtIO::PackageFileEntry* const e = &pkg->_entries._data[node->fileIndex];
+                (node->element.value.packIndex << 24) | node->element.value.fileIndex);  // 1800ac9c5..d1
+            const PackageFile* const pkg = _packfiles[node->element.value.packIndex];
+            const RtIO::PackageFileEntry* const e = &pkg->_entries._data[node->element.value.fileIndex];
             lf.size       = static_cast<int32_t>(e->size);   // 1800ac9ee  +0xc
             lf.baseOffset = static_cast<int32_t>(e->offset); // 1800aca0c  +0x8
             lf.cursor     = 0;                               // 1800aca13

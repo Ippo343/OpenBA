@@ -468,8 +468,8 @@ public:
     int32_t GetMaxInstances(int32_t level) const;          // 0x180012700
     float   GetScale() const;                              // 0x180012720
     // RETSLOT in retail (`System::String` by value, refcount bumped at data-4).
-    RtSystem::String GetMeshName() const;                  // 0x180012730
-    RtSystem::String GetSubMeshName() const;               // 0x180012770
+    System::String GetMeshName() const;                  // 0x180012730
+    System::String GetSubMeshName() const;               // 0x180012770
     void    PlatformVersion();                             // 0x1800a4cd0
 
     // The two PRIVATE (`AEAA`) builders. This DLL exports its private members
