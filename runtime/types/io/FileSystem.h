@@ -37,41 +37,55 @@ namespace RtIO {
 // (0x1800ab180) and LoadPackages (0x1800ab460) — all three do `node = node[3]`
 // / `node = node[4]` for the children and read `*(uint*)(node + 1)` for the
 // packed pack/file index. Only GetPackfileId's walk is ported here.
-struct PackfileIndexNode {
-    const char*        key;        // +0x00 — dataDir-relative path, case-insensitive
-    uint32_t           packIndex;  // +0x08 — low dword of the packed pair
-    uint32_t           fileIndex;  // +0x0C — high dword; unread by GetPackfileId
-    // +0x10 CORRECTED 2026-09-08 (Wave 9 lane COLL). It is the AVL PARENT
-    //       pointer, not an unused field: 0x180008840 writes it
-    //       (`MOV [RSI+0x10],RDI` with RDI == the parent) and the retrace
-    //       0x180025e10 reads it (`MOV RSI,[RAX+0x10]`) to walk to the root.
-    //       "Touched by none of the three walks" was true of the three READ
-    //       walks lane PKG had, and false of the tree — the mirror of
-    //       reference_never_written_needs_by_whom.md: a field is untouched BY
-    //       SOMEBODY, never in general.
-    PackfileIndexNode* parent;     // +0x10
-    PackfileIndexNode* left;       // +0x18
-    PackfileIndexNode* right;      // +0x20
-    // +0x28/+0x2a MEASURED 2026-09-08. The node is a full AVL node, not a plain
-    //       BST node: 0x180025e10 writes a SIGNED 16-bit balance at +0x28 and a
-    //       16-bit height at +0x2a, and 0x180008840 zeroes both with one dword
-    //       store. sizeof is 0x30 (0x180008520: `MOV EDX,0x30 / LEA
-    //       R8D,[RDX-0x28]` -> Allocate(0x30, align 8)) — the same node
-    //       header runtime/src/collection/set_avl.h describes.
-    int16_t            balance;    // +0x28
-    int16_t            height;     // +0x2a
-    uint32_t           _pad2c;     // +0x2c
+// B.4 acceptance (ruling a): ONE declaration of the node. The element is the
+// Filename key and the {packIndex, fileIndex} pair: 0x180008840 copies the pair
+// as one qword (`MOV RAX,[RDX+8] / MOV [RCX+8],RAX`), LoadPackages' override
+// writes it as one qword store at [RBX+8], and the readers (GetPackfileId
+// 0x1800ab050 `MOV ECX,[RBX+0x8]`, CreateFile's handle) read the two dwords.
+// The node is `Collection::Set<PackfileIndexPair>::Node`: +0x10 parent (written
+// by 0x180008840 `MOV [RSI+0x10],RDI`, read by the retrace 0x180025e10),
+// +0x18 / +0x20 the children GetPackfileId descends (`node[3]` / `node[4]`),
+// +0x28 a signed 16-bit balance and +0x2a a 16-bit height (0x180025e10;
+// 0x180008840 zeroes both with one dword store); 0x30 bytes, align 8
+// (0x180008520: `MOV EDX,0x30 / LEA R8D,[RDX-0x28]`).
+struct PackfileIndexValue {
+    uint32_t packIndex;   // +0x00 — index into FileSystem::_packfiles
+    uint32_t fileIndex;   // +0x04 — entry index inside that PackageFile
 };
+static_assert(sizeof(PackfileIndexValue) == 8, "the packed qword 0x180008840 moves");
+static_assert(offsetof(PackfileIndexValue, packIndex) == 0, "low dword");
+static_assert(offsetof(PackfileIndexValue, fileIndex) == 4, "high dword");
+
+struct PackfileIndexPair {
+    System::Filename   key;     // +0x00 — dataDir-relative path, case-insensitive
+    PackfileIndexValue value;   // +0x08
+};
+static_assert(sizeof(PackfileIndexPair) == 0x10, "the element of the 0x30-byte node");
+static_assert(offsetof(PackfileIndexPair, value) == 0x08, "GetPackfileId reads +0x08 of the node");
+
+using PackfileIndexSet  = Collection::Set<PackfileIndexPair>;
+using PackfileIndexNode = PackfileIndexSet::Node;
 static_assert(sizeof(PackfileIndexNode) == 0x30,
               "0x180008520 allocates 0x30 bytes, align 8");
 static_assert(offsetof(PackfileIndexNode, parent) == 0x10,
               "0x180008840 MOV [RSI+0x10],RDI");
-static_assert(offsetof(PackfileIndexNode, packIndex) == 0x08,
-              "GetPackfileId 0x1800ab050: `*(uint*)(puVar5 + 1)` on the found node");
 static_assert(offsetof(PackfileIndexNode, left)  == 0x18,
               "GetPackfileId 0x1800ab050: `puVar5 = puVar5[3]` (left descent)");
 static_assert(offsetof(PackfileIndexNode, right) == 0x20,
               "GetPackfileId 0x1800ab050: `puVar5 = puVar5[4]` (right descent)");
+static_assert(offsetof(PackfileIndexNode, balance) == 0x28, "0x180025e10 balance");
+static_assert(offsetof(PackfileIndexNode, height)  == 0x2a, "0x180025e10 height");
+
+// The {root, count} header at FileSystem+0x40 (the insert 0x180025a80 takes
+// `this+0x40`; ClosePackages 0x1800abbf0 zeroes +0x48). Raw storage: the
+// FileSystem ctor zeroes both words by name and ClosePackages frees the tree.
+struct PackfileIndexTree {
+    PackfileIndexNode* root;    // +0x00
+    int32_t            count;   // +0x08
+    int32_t            _pad0c;  // +0x0c — never written
+};
+static_assert(sizeof(PackfileIndexTree) == 0x10, "the {root, count} header");
+static_assert(offsetof(PackfileIndexTree, count) == 0x08, "count @ +0x08");
 
 // ---- PackageFile — only the field GetPackfileId returns -------------------
 // Wave 4 lane D modelled only +0xA8. Wave 9 lane PKG adds the four fields
@@ -543,8 +557,7 @@ public:
     // dtor; the ctor 0x1800ac7c0 zeroes its three fields by name, the dtor
     // releases it through ~Array<Filename> 0x1800098d0).
     RtIO::ModArrayOf<System::Filename> _userPackFilenames;   // +0x30 {data, size +0x38, capacity +0x3c}
-    RtIO::PackfileIndexNode* _packfileIndexRoot; // +0x40
-    int32_t            _packfileIndexCount;    // +0x48
+    RtIO::PackfileIndexTree _packfileIndex;     // +0x40 root, +0x48 count
 };
 
 // The POD carries no `sizeof` assert because its tail is opaque padding and
@@ -562,8 +575,8 @@ static_assert(offsetof(FileSystem, _packfiles) + offsetof(Collection::Array<Pack
 static_assert(offsetof(FileSystem, _packfiles) + offsetof(Collection::Array<PackageFile*>, _capacity) == 0x2c,
               "LoadPackages 0x1800ab5d4/5f0");
 static_assert(offsetof(FileSystem, _userPackFilenames)    == 0x30, "the user pack filenames");
-static_assert(offsetof(FileSystem, _packfileIndexRoot)    == 0x40, "GetPackfileId's `*(this+0x40)`");
-static_assert(offsetof(FileSystem, _packfileIndexCount)   == 0x48, "ClosePackages 0x1800abbf0");
+static_assert(offsetof(FileSystem, _packfileIndex) + offsetof(RtIO::PackfileIndexTree, root) == 0x40, "GetPackfileId's `*(this+0x40)`");
+static_assert(offsetof(FileSystem, _packfileIndex) + offsetof(RtIO::PackfileIndexTree, count) == 0x48, "ClosePackages 0x1800abbf0");
 
 
 static_assert(!std::is_polymorphic<FileSystem>::value,

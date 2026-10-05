@@ -14,7 +14,7 @@
 
 #include <cstdint>
 
-#include "../../types/system/Filename.h"   // RtSystem::Filename (FilenamePair's key)
+#include "../../types/io/FileSystem.h"    // RtIO::PackfileIndexPair / Node / Tree (group D)
 #include "../../types/io/Persistence.h"    // RtIo::SettingsMapNode / SettingsMap (group B)
 
 namespace RtObject { struct TypeNode; struct TypeRecord; }
@@ -96,37 +96,14 @@ struct StringPair {
 // family builds and walks: nothing here runs a String ctor or dtor.
 using StringPairNode = RtIo::SettingsMapNode;
 
-// Group D's element: the Filename key and the packed {packIndex, fileIndex}
-// qword (0x180008840: Filename copy ctor at +0x00, a raw qword move at +0x08).
-// B.4 Z MIRROR2: `key` is the real class. Nodes are raw MemAlloc storage
+// Group D is the packfile index: its element, node and {root, count} header are
+// declared ONCE, in runtime/types/io/FileSystem.h (RtIO::PackfileIndexPair /
+// PackfileIndexNode / PackfileIndexTree). Nodes are raw MemAlloc storage
 // (0x180008520) built by placement copy (0x180008840) and released by the
-// subtree free; the one stack FilenamePair (FilenameSetInsert 0x180025a80) is
-// built by the copy ctor and released at its scope exit, as retail's is.
-struct FilenamePair {
-    System::Filename   key;     // +0x00
-    uint64_t           value;   // +0x08
-};
-
-// The node 0x180008520 allocates (0x30, align 8) and 0x180008840 builds; the
-// link stores are 0x18000fb00's, offset for offset.
-struct FilenamePairNode {
-    FilenamePair      element;   // +0x00
-    FilenamePairNode* parent;    // +0x10
-    FilenamePairNode* left;      // +0x18
-    FilenamePairNode* right;     // +0x20
-    int16_t           balance;   // +0x28
-    int16_t           height;    // +0x2a
-    uint32_t          pad2c;     // +0x2c  never written by the ctor
-};
-
-// The {root, count} container header both families' insert cores take
-// (set_avl.h's `Set`, with the family's node).
-template <class NodeT>
-struct KeyedSet {
-    NodeT*  root;    // +0x00
-    int32_t count;   // +0x08
-    int32_t pad0c;   // +0x0c
-};
+// subtree free; the one stack pair (FilenameSetInsert 0x180025a80) is built by
+// the copy ctor and released at its scope exit, as retail's is.
+using FilenamePair     = RtIO::PackfileIndexPair;
+using FilenamePairNode = RtIO::PackfileIndexNode;
 
 // ---- group B: Map<String,String>, 0x30-byte node --------------------------
 StringPairNode*  StringPairCtor  (StringPairNode* node, const StringPair* src,
@@ -143,13 +120,14 @@ FilenamePairNode*  FilenamePairCtor  (FilenamePairNode* node, const FilenamePair
                                       FilenamePairNode* parent);        // 0x180008840
 FilenamePairNode*  FilenameNodeAlloc (void* ignored, const FilenamePair* pair,
                                       FilenamePairNode* parent);        // 0x180008520
-FilenamePairNode** FilenameInsertCore(KeyedSet<FilenamePairNode>*, FilenamePairNode**,
+FilenamePairNode** FilenameInsertCore(RtIO::PackfileIndexTree*, FilenamePairNode**,
                                       const FilenamePair* pair);        // 0x180025c70
-rtsetavl::Node**   FilenameSetInsert (rtsetavl::Set*, rtsetavl::Node**,
-                                      const void* key, const uint64_t* value);  // 0x180025a80
+FilenamePairNode** FilenameSetInsert (RtIO::PackfileIndexTree*, FilenamePairNode**,
+                                      const System::Filename* key,
+                                      const RtIO::PackfileIndexValue* value);  // 0x180025a80
 
 // ---- the recursive subtree free ------------------------------------------
-void SubtreeFree(void* ignoredThis, rtsetavl::Node* node);             // 0x180008340
+void SubtreeFree(void* ignoredThis, FilenamePairNode* node);             // 0x180008340
 
 }  // namespace rtavl
 

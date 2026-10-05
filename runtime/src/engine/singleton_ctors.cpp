@@ -296,8 +296,8 @@ IO::FileSystem* Ctor_FileSystem(IO::FileSystem* self) {
     self->_userPackFilenames.data     = nullptr;
     self->_userPackFilenames.size     = 0;
     self->_userPackFilenames.capacity = 0;
-    self->_packfileIndexRoot       = nullptr;
-    self->_packfileIndexCount      = 0;
+    self->_packfileIndex.root       = nullptr;
+    self->_packfileIndex.count      = 0;
     IO::FileSystem::_singleton = self;
     return self;
 }

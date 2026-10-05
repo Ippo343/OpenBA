@@ -258,10 +258,10 @@ uint32_t FileSystem::GetPackfileId(const System::Filename& path) const {
         System::Filename relPath(pathData + dataDirLen);
 
         const char* str1 = relPath._data;
-        RtIO::PackfileIndexNode* node = _packfileIndexRoot;
+        RtIO::PackfileIndexNode* node = _packfileIndex.root;
         RtIO::PackfileIndexNode* found = nullptr;
         while (node) {
-            const char* key = node->key;
+            const char* key = node->element.key._data;
             bool condA;
             if (!key) condA = true;
             else if (!str1) condA = false;
@@ -281,7 +281,7 @@ uint32_t FileSystem::GetPackfileId(const System::Filename& path) const {
         }
 
         if (found)
-            ours = _packfiles[found->packIndex]->_crc;          // +0xA8, the packfile id
+            ours = _packfiles[found->element.value.packIndex]->_crc;          // +0xA8, the packfile id
 
         // (relPath's release is ~Filename now — retail's own 0x1800ab0f2.)
     }
