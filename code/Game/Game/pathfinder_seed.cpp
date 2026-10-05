@@ -118,11 +118,8 @@ static void GridCtor(GridPathSearch& g, int dim) {
 } // namespace
 
 // Build + link the pathfinder. gameObj = the Map (GameUpdateLoop::m_game); dim = map width.
-extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
-    if (!gameObjV || dim <= 0) return;
-    // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*`
-    // map and holds it as `void*` at one of its two calls.
-    Map* game = reinterpret_cast<Map*>(gameObjV);   // LEFT: gameupdateloop_load.cpp (GAME-a) declares this locally with a `void*` map and holds it as `void*` at one of its two calls.
+extern "C" void Pathfinder_Seed(Map* game, int dim) {
+    if (!game || dim <= 0) return;
     if (game->pathfinder != nullptr) return;   // already seeded
 
     void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);
