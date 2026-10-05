@@ -355,7 +355,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
     if (citizen->home == nullptr) {
         uVar14 = 0xffffffff;
     } else {
-        ComponentEntity* homeIBP = citizen->home;
+        ComponentEntity* homeIBP = citizen->home.Get();
         uVar14 = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
     }
 
@@ -471,9 +471,9 @@ LAB_14010a846:
         uVar37 = static_cast<uint32_t>(w0 * rowC + colC);   // uVar37 = (uint)local_res10 = srcCell
         iVar27 = 6;
         if (citizen->home != nullptr) {
-            char ok = citizen->CanReach(citizen->home);   // local_res10 = home
+            char ok = citizen->CanReach(citizen->home.Get());   // local_res10 = home
             if (ok != '\0') {
-                ComponentEntity* key = citizen->home;
+                ComponentEntity* key = citizen->home.Get();
                 if (local_d8 == nullptr) {
                     LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
                     if (nd) { nd->element = key; nd->parent = nullptr; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }

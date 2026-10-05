@@ -223,7 +223,7 @@ bool Work::ValidateTask(void* /*unusedRdx*/, CitizenComponent** citizen, Complet
     // DWORD_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell).
     if (!(*citizen)->IsA(CitizenComponent::TypeId())) return false;
 
-    CharacterComponent* character = (*citizen)->character;
+    CharacterComponent* character = (*citizen)->character.Get();
     // 0x1401c5e50 (CompleteTask's own cell) is UNREGISTERED -- the old raw-.rdata read
     // always failed and fell through to this same CompleteTask::TypeId() call, so
     // calling it directly is not a behaviour change (ENDGAME B.3.9 D5 note).

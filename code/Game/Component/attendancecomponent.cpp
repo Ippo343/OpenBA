@@ -94,11 +94,11 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
 // This is a CitizenComponent member in retail (0x140115a50); CitizenComponent.h is not
 // this block's, so the body stays free, on a typed receiver.
 void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll) {
-    AttendanceComponent*& slot = self->school;
+    Object::InternalPtr<AttendanceComponent>& slot = self->school;
     if (slot == nullptr) return;
 
     Object::InternalPtr<CitizenComponent> selfIbp(self);
-    AttendanceComponent* linked = slot;
+    AttendanceComponent* linked = slot.Get();
     CemeteryListErase_Reimpl(&linked->queue, &selfIbp);
 
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found
@@ -124,11 +124,11 @@ void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll)
 // worker from the building's waiting queue (FUN_140002cc0), reset that building's
 // status icon flag 2 to off (FUN_14012c3f0), then null the slot.
 // LEFT: CitizenComponent members in retail; the class is COMP-b's.
-static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, AttendanceComponent*& slot) {
+static void AttendanceComponent_ReleaseLinkSlot(CitizenComponent* self, Object::InternalPtr<AttendanceComponent>& slot) {
     if (slot == nullptr) return;
 
     Object::InternalPtr<CitizenComponent> selfIbp(self);
-    AttendanceComponent* linked = slot;
+    AttendanceComponent* linked = slot.Get();
     CemeteryListErase_Reimpl(&linked->queue, &selfIbp);
 
     // Retail's finder returns its out-slot, never null: 12c3f0 is called on the found

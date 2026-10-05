@@ -209,26 +209,26 @@ public:
     Profession* profession;        // +0x1F0 ExternalPtr<Profession> (0x140018020); Update reads its +0x4C
     Profession* pendingProfession; // +0x1F8 ExternalPtr<Profession>; != 0 -> HandleLifeEvent(7, its name)
     System::Time field_0x200;      // +0x200 += dt (Update), not serialized
-    AttendanceComponent* school;   // +0x208 InternalPtr (cell 0x1401c3f40); != 0: schoolTime += dt
+    Object::InternalPtr<AttendanceComponent> school;   // +0x208 InternalPtr (cell 0x1401c3f40); != 0: schoolTime += dt
     int32_t  education;            // +0x210 raised to desc->maxEducation (Update)
     uint8_t  _pad214[4];           // +0x214
     System::Time schoolTime;       // +0x218 += dt while school != 0 (version > 2)
     bool     field_0x220;          // +0x220 bool; 0 at adulthood -> TryEnrolInSchool 0x140111840
     uint8_t  _pad221[7];           // +0x221
-    AttendanceComponent* careBuilding; // +0x228 InternalPtr (cell 0x1401c3f40); FindCareBuilding 0x140111590
-    AttendanceComponent* field_0x230;  // +0x230 InternalPtr (cell 0x1401c3f40); found through desc+0x28
+    Object::InternalPtr<AttendanceComponent> careBuilding; // +0x228 InternalPtr (cell 0x1401c3f40); FindCareBuilding 0x140111590
+    Object::InternalPtr<AttendanceComponent> field_0x230;  // +0x230 InternalPtr (cell 0x1401c3f40); found through desc+0x28
                                        //        by 0x1401116f0; != 0 scores happiness
-    ComponentEntity* home;         // +0x238 InternalPtr<ComponentEntity> (cell 0x1401c5d70): the residence
+    Object::InternalPtr<ComponentEntity> home;         // +0x238 InternalPtr<ComponentEntity> (cell 0x1401c5d70): the residence
     int32_t  homeSlot;             // +0x240 int, NOT written by the ctor; the household slot in the residence
     uint8_t  _pad244[4];           // +0x244
-    ComponentEntity* workplace;    // +0x248 InternalPtr<ComponentEntity> (cell 0x1401c5d70)
-    CitizenComponent* spouse;      // +0x250 InternalPtr (cell 0x1401c7158); set pairwise by the marriage scan
-    CitizenComponent* _parent;     // +0x258 InternalPtr (profile assert `child->_parent.IsPtrNull()`)
-    CitizenComponent* _firstChild; // +0x260 InternalPtr: head of the children ring (RemoveChild 0x140112040)
-    CitizenComponent* _nextSibling; // +0x268 InternalPtr (profile assert)
-    CitizenComponent* _prevSibling; // +0x270 InternalPtr (profile assert)
-    CharacterComponent* character; // +0x278 InternalPtr (cell 0x1401c7078); Update reads its +0x60
-    StatusIconComponent* statusIcon; // +0x280 InternalPtr (cell 0x1401c7e08); SetFlag 0x14012c3f0
+    Object::InternalPtr<ComponentEntity> workplace;    // +0x248 InternalPtr<ComponentEntity> (cell 0x1401c5d70)
+    Object::InternalPtr<CitizenComponent> spouse;      // +0x250 InternalPtr (cell 0x1401c7158); set pairwise by the marriage scan
+    Object::InternalPtr<CitizenComponent> _parent;     // +0x258 InternalPtr (profile assert `child->_parent.IsPtrNull()`)
+    Object::InternalPtr<CitizenComponent> _firstChild; // +0x260 InternalPtr: head of the children ring (RemoveChild 0x140112040)
+    Object::InternalPtr<CitizenComponent> _nextSibling; // +0x268 InternalPtr (profile assert)
+    Object::InternalPtr<CitizenComponent> _prevSibling; // +0x270 InternalPtr (profile assert)
+    Object::InternalPtr<CharacterComponent> character; // +0x278 InternalPtr (cell 0x1401c7078); Update reads its +0x60
+    Object::InternalPtr<StatusIconComponent> statusIcon; // +0x280 InternalPtr (cell 0x1401c7e08); SetFlag 0x14012c3f0
     CitizenDescription* description; // +0x288 ExternalPtr<CitizenDescription> (0x140030990)
 };
 

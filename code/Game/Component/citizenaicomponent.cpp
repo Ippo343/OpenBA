@@ -147,7 +147,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
             int resourceCount = CitizenComp_Storage_GetResourceCount(homeStorage);
 
             if (resourceCount > 0) {
-                citizen->EatFrom(citizen->home);
+                citizen->EatFrom(citizen->home.Get());
             }
         }
 
@@ -272,7 +272,7 @@ static constexpr float kScaleElder = 0.66f;  // child / small render
 
 static void CitizenComp_SetupAgeMesh(CitizenComponent* citizen, float scale) {
     int idx = citizen->field_0x34;
-    CharacterComponent* meshIBP = citizen->character;
+    CharacterComponent* meshIBP = citizen->character.Get();
     if (meshIBP == nullptr) return;                            // no CharacterComponent
     // The ModelComponent's MeshInstance colour (+0x28 + 0x10c = +0x134..+0x140).
     ModelComponent* model = meshIBP->modelComponent.Get();
@@ -288,7 +288,7 @@ static void CitizenComp_SetupAgeMesh(CitizenComponent* citizen, float scale) {
         CitizenDescription* desc = citizen->description;
         float thresh = desc ? desc->adultAge : -1.0f;
         float age = citizen->age;
-        AttendanceComponent* state208 = citizen->school;
+        AttendanceComponent* state208 = citizen->school.Get();
         fprintf(stderr, "[SetupAgeMesh] citizen=%p scale=%.2f colour=%d age=%.2f "
                 "thresh=%.2f state208=%p\n",
                 (void*)citizen, scale, idx, age, thresh, (void*)state208);
@@ -595,7 +595,7 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
     if (citizen) {
         czEntity = citizen->_entity;
         czDesc   = citizen->description;
-        czChar   = citizen->character;  // CharacterComponent (alive flag)
+        czChar   = citizen->character.Get();  // CharacterComponent (alive flag)
     }
 
     // --- FORCE-WORK HARNESS (env BANISHED_FORCE_WORK, default off) -------------

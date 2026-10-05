@@ -740,7 +740,7 @@ void FollowUp(int frameNum) {
                             AttendanceComponent* seed = nullptr;   // the null InternalPtr<AttendanceComponent>
                             // 0x140111840 (the enroller).
                             const char ok = victim->TryEnrolInSchool(seed);
-                            AttendanceComponent* att = victim->school;      // +0x208
+                            AttendanceComponent* att = victim->school.Get();      // +0x208
                             std::fprintf(stderr, "[FoodPanel]       enrol probe on minor %p: "
                                          "returned %d, +0x208=%p, that component's queue(+0x30)=%d   %s\n",
                                          static_cast<void*>(victim), (int)ok, static_cast<void*>(att),

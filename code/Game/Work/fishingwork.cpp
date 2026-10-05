@@ -775,7 +775,7 @@ int FishingWork::Cleanup() {
     do {
         if (citizenRefs[i] != nullptr) {
             // CheckPtr on citizen IBP; its CharacterComponent (+0x278)
-            CharacterComponent* character = citizenRefs[i]->character;
+            CharacterComponent* character = citizenRefs[i]->character.Get();
 
             // Cancel pending actions on the character's action list (+0x48)
             WorkBase_TaskListCleanup_c5400(&character->actionStack);

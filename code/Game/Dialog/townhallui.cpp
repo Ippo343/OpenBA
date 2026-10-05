@@ -851,7 +851,7 @@ void TownHallUI::UpdateGeneral() {
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
-        AttendanceComponent* school = citizen->school;
+        AttendanceComponent* school = citizen->school.Get();
 
         if (age < adultAge || school != nullptr) {
             if (school == nullptr) { children++; }
@@ -861,7 +861,7 @@ void TownHallUI::UpdateGeneral() {
             if (citizen->description->maxEducation <= citizen->education) {
                 clothedSum += 1.0f;
             }
-            CitizenComponent* spouse = citizen->spouse;
+            CitizenComponent* spouse = citizen->spouse.Get();
             if (spouse == nullptr) {
                 if (citizen->spouse == nullptr) {
                     familyCount++;
@@ -1463,7 +1463,7 @@ void TownHallUI::UpdateInventory() {
 
         float age = citizen->age;
         float adultAge = citizen->description->adultAge;
-        AttendanceComponent* school = citizen->school;
+        AttendanceComponent* school = citizen->school.Get();
 
         if (age >= adultAge && school == nullptr) {
             // Adult citizen — look up profession in profBST (+0x50)

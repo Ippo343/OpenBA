@@ -75,7 +75,7 @@ namespace {
 // ============================================================
 static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1, float* dest, float animTime) {
     CitizenComponent* citizen = *param_1;
-    CharacterComponent* character = citizen->character;
+    CharacterComponent* character = citizen->character.Get();
     ActionStack* stack = &character->actionStack;
 
     WorkBase_TaskListCleanup_c5400(stack);
@@ -158,7 +158,7 @@ static void CitizenAI_PlayAnimationActionCtor5(CitizenComponent* const* param_1,
 // by the position math — reproduced here as `halfMapF`.
 // ============================================================
 bool CitizenAIComponent::State_Wander() {
-    CitizenComponent* target = citizen->_parent;
+    CitizenComponent* target = citizen->_parent.Get();
     if (target == nullptr) return false;
 
     System::Random* rng = (GameUpdateLoop::_singleton != nullptr)
@@ -167,7 +167,7 @@ bool CitizenAIComponent::State_Wander() {
 
     if (target->spouse != nullptr &&
         rng && rng->Rand(1u) == 0) {
-        target = target->spouse;
+        target = target->spouse.Get();
     }
 
     Map* grid = (GameUpdateLoop::_singleton != nullptr)

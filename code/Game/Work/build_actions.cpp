@@ -98,7 +98,7 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
 
     CitizenComponent* citizen = *citizenRef;
     if (!citizen) return;
-    CharacterComponent* character = citizen->character;
+    CharacterComponent* character = citizen->character.Get();
     if (!character) return;
     // The action stack (base +0x48, top +0x60), as the stack ops take it.
     ActionStack* stack = &character->actionStack;

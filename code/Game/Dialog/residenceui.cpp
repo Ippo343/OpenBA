@@ -335,7 +335,7 @@ void ResidenceUI::OnUpdateLayout() {
                     UI::TextElement* textProfession = row.textProfession;
 
                     float age = citizen->age;
-                    AttendanceComponent* jobEntity = citizen->school;
+                    AttendanceComponent* jobEntity = citizen->school.Get();
 
                     // Child-age threshold from the citizen description (+0x288 cache;
                     // fall back to the component's own description at +0x18 when the

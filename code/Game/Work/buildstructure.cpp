@@ -554,7 +554,7 @@ static bool CheckCitizenHasTask(BuildStructure* self, CitizenComponent** citizen
     if (!isEntity) return false;
 
     // The citizen's CharacterComponent (+0x278)
-    CharacterComponent* character = (*citizenIBP)->character;
+    CharacterComponent* character = (*citizenIBP)->character.Get();
 
     // Iterate action stack: +0x48 = array, +0x60 = the running index
     int actionCount = character->actionStack.current + 1;  // original: 0x60 field + 1

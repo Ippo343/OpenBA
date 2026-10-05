@@ -1937,7 +1937,7 @@ void GameUpdateLoop::Shutdown() {
             // loses its workplace.
             float age = citizen->age;
             float maxAge = citizen->description->adultAge;
-            AttendanceComponent* school = citizen->school;
+            AttendanceComponent* school = citizen->school.Get();
 
             if (age >= maxAge && school == nullptr) {
                 // The profession list's +0x30 profession
@@ -1945,7 +1945,7 @@ void GameUpdateLoop::Shutdown() {
 
                 // Current profession (+0x1f0) and workplace (+0x248)
                 Profession* citProfession = citizen->profession;
-                ComponentEntity* citWorkplace = citizen->workplace;
+                ComponentEntity* citWorkplace = citizen->workplace.Get();
 
                 ComponentEntity* nullRef = nullptr;   // the null InternalPtr<ComponentEntity> retail passes
 

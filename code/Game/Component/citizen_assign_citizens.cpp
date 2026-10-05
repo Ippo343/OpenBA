@@ -195,7 +195,7 @@ inline int CellOfEntity(ComponentEntity* entity) {
 // Phase-1/3 normalization: an idle citizen whose current workplace requires a
 // profession different from its own is unassigned back to the default laborer key.
 void NormalizeMismatched(CitizenComponent* c, ProfessionList* reg) {
-    ComponentEntity* assigned = c->workplace;   // +0x248
+    ComponentEntity* assigned = c->workplace.Get();   // +0x248
     if (!assigned) return;
     WorkPlaceComponent* wpComp = FindWorkplaceComp(assigned);
     if (!wpComp) return;                                // no workplace comp -> nothing to sync
@@ -362,7 +362,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
         NormalizeMismatched(c, reg);    // embedded normalization (mirrors LAB_1400d4e57)
 
         // source cell = the citizen's residence (+0x238) grid cell, or -1
-        ComponentEntity* residence = c->home;   // +0x238
+        ComponentEntity* residence = c->home.Get();   // +0x238
         int srcCell = residence ? CellOfEntity(residence) : -1;
 
         for (auto& e : needs) {

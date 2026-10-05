@@ -937,7 +937,7 @@ int ConsumeProduce::Cleanup() {
         if (ibpArray[i] == nullptr) continue;
 
         // CheckPtr on the citizen IBP; its CharacterComponent (+0x278)
-        CharacterComponent* character = ibpArray[i]->character;
+        CharacterComponent* character = ibpArray[i]->character.Get();
 
         // Call task list cleanup on the character's action list (+0x48)
         WorkBase_TaskListCleanup_c5400(&character->actionStack);

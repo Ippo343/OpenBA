@@ -362,7 +362,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     // --- Compute reference tile index for distance sorting ---
     {
         // CheckPtr on the citizen slot; CharacterComponent (+0x278) -> ModelComponent (+0x68)
-        CharacterComponent* charComp = (*citizenIBP)->character;
+        CharacterComponent* charComp = (*citizenIBP)->character.Get();
 
         // ModelComponent's transform translation (+0x148 + 0x10)
         const Math::Vector3& pos = charComp->modelComponent->transform.translation;

@@ -228,7 +228,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
                          uint32_t createFlag, Component* const* animal,
                          const AnimalDescription* description, uint32_t gate) {
     CitizenComponent* citizen = *citizenIBP;
-    CharacterComponent* character = citizen->character;
+    CharacterComponent* character = citizen->character.Get();
     // CharacterComponent's +0x48..+0x67 action list (Action/Action.h ActionStack).
     ActionStack* stack = &character->actionStack;
 
@@ -283,9 +283,9 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
                 //   arg6 = <unwritten by caller — uninitialized, ctor never reads it>
                 //   arg7 = capacity (R12D), arg8 = createFlag (R13D), arg9 = 1
                 //   arg10 = &workplace (a 2nd copy), arg11 = 0xc
-                ComponentEntity* workplace2 = citizen->workplace;
+                ComponentEntity* workplace2 = citizen->workplace.Get();
                 CitizenComponent* self = citizen;
-                ComponentEntity* workplace = citizen->workplace;
+                ComponentEntity* workplace = citizen->workplace.Get();
                 create = new (mem) CreateRawMaterial(   // 0x1400c71a0
                     templates[i],
                     fVar6,   // float arg3 -> XMM2 (ctor MOVSS to +0x4c); pass the value, not its bits

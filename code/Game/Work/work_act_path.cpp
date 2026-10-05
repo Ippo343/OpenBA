@@ -104,7 +104,7 @@ extern "C" ::Object::InternalPtr<Action>* WorkAct_GatherRawMatCtor_bf790(
         int flags, uint8_t param_14) {
 
     // --- the action stack = character + 0x48 ; cleanup pending actions (0xbf7cf-0xbf7f3) ---
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 

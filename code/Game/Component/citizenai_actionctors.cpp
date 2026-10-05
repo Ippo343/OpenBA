@@ -141,7 +141,7 @@ static PerformWork* InitPerformWork(void* mem, CitizenComponent* citizen, float 
 // build flag).
 static ActionStack* PrologueResolveStack(CitizenComponent* const* citizenRef, CharacterComponent** outChar,
                                          bool doCleanup = true) {
-    CharacterComponent* ch = (*citizenRef)->character;
+    CharacterComponent* ch = (*citizenRef)->character.Get();
     *outChar = ch;
     ActionStack* stack = &ch->actionStack;
     if (doCleanup) WorkBase_TaskListCleanup_c5400(stack);

@@ -140,16 +140,15 @@ void ResizeCitizenExternalArray(ComponentDescription**& data, int32_t& count,
         System::MemoryAllocator::MemFree(oldPtr);
 }
 
-// One InternalPtr<T> member: the header declares these as the bare pointer they hold
-// (CitizenComponent.h), so the slot is handed to InternalBasePtr::Serialize as the
-// InternalBasePtr it is in retail.
-void SerializeValidatedIBP(void* ibp, IO::Serializer& ser, uint32_t tid) {
-    reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(ser);   // B.3.4 bridge  // LEFT: InternalPtr members held as bare pointers (CitizenComponent.h H5: Object::InternalPtr<T>)
-    void* obj = *reinterpret_cast<void**>(ibp);   // LEFT: InternalPtr members held as bare pointers (CitizenComponent.h H5)
+// One InternalPtr<T> member (CitizenComponent.h): InternalBasePtr::Serialize, then
+// the loaded object is nulled when it is not a `tid`.
+void SerializeValidatedIBP(Object::InternalBasePtr* ibp, IO::Serializer& ser, uint32_t tid) {
+    ibp->Serialize(ser);
+    void* obj = ibp->Get();
     const bool checked = (obj && tid);
     const bool derived = checked ? Object::IsDerivedFromNullSafe(obj, tid) : true;
     if (checked && !derived)
-        *reinterpret_cast<uint64_t*>(ibp) = 0;   // LEFT: InternalPtr members held as bare pointers (CitizenComponent.h H5)
+        *ibp = Object::InternalBasePtr();
 
 }
 

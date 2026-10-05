@@ -204,7 +204,7 @@ extern "C" void TownMgr_AbortCitizenActionsFor_89e30(CitizenBehavior* townMgr, C
         ComponentEntity* entityCopy = *pEntityIbp;
         CitizenComponent* citizen = base[i];
         if (!citizen) continue;
-        CharacterComponent* ai = citizen->character;
+        CharacterComponent* ai = citizen->character.Get();
         if (!ai) continue;
         // CharacterComponent +0x48..+0x67 is retail's ActionStack sub-object (actionStack).
         ActionStack_AbortForEntity_c52c0(&ai->actionStack, &entityCopy);

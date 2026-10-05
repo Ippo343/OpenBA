@@ -164,7 +164,7 @@ uint64_t CitizenAIComponent::State_Education() {
     if (citizen->home == nullptr) {
         bGoal = 0xffffffff;
     } else {
-        ComponentEntity* wpIBP = citizen->home;
+        ComponentEntity* wpIBP = citizen->home.Get();
         bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
     }
 
@@ -228,7 +228,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
     if (citizen->home == nullptr) {
         bGoal = 0xffffffff;
     } else {
-        ComponentEntity* wpIBP = citizen->home;
+        ComponentEntity* wpIBP = citizen->home.Get();
         bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
     }
 
@@ -314,7 +314,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
 uint64_t CitizenAIComponent::State_FindWork() {
     EnsureInit();
 
-    AttendanceComponent* anchor = citizen->school;
+    AttendanceComponent* anchor = citizen->school.Get();
     InteractComponent* posComp = anchor->_entity->FindComponent<InteractComponent>();
 
     float outVec[3] = { 0.0f, 0.0f, 0.0f };   // local_58 (target out)

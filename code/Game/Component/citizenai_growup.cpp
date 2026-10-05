@@ -428,7 +428,7 @@ void CitizenComponent::LongTermPlan() {
 
         System::Time timeStamp{};
         RtSystem_Time_Ctor(&timeStamp, 0.0f);
-        CharacterComponent* ch = character;
+        CharacterComponent* ch = character.Get();
         if (-1 < ch->actionStack.current) {
             CitizenAI_ActionExecutor_c4c50(&ch->actionStack, &timeStamp);
         }
@@ -477,7 +477,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
     RtSystem_Time_Ctor(&cd, s_walkScale);
     timers[4] = cd;
 
-    ComponentEntity* resEntity = citizen->home;
+    ComponentEntity* resEntity = citizen->home.Get();
     uint32_t bGoal;
     if (resEntity == nullptr) {
         bGoal = 0xffffffff;

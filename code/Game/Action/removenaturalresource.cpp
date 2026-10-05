@@ -135,7 +135,7 @@ int  RemoveNaturalResource::AbstractImpl(ActionStack* actionStack) {
     nrComp->mature = (threshold <= growthValue);
 
     // The citizen's workplace (+0x248)
-    ComponentEntity* workEntityIBP = _field20->workplace;
+    ComponentEntity* workEntityIBP = _field20->workplace.Get();
 
     // Call the removal helper
     RemoveNaturalResourceCore(nrComp, &workEntityIBP, _field30);   // 0x1401260f0

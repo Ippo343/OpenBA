@@ -111,7 +111,7 @@ int  PerformWork::AbstractImpl(ActionStack* actionStack) {
     uint32_t animId = static_cast<uint32_t>(animationId);
 
     // The citizen's CharacterComponent (+0x278): play the work animation
-    SetAnimation(workTarget->character, animId, kRdata_14017214c, 0.0f);   // 0x14010a1f0
+    SetAnimation(workTarget->character.Get(), animId, kRdata_14017214c, 0.0f);   // 0x14010a1f0
 
     // If yaw is in valid range [-180, 180], set facing direction
     float yaw = facingYaw;
@@ -172,7 +172,7 @@ int  PerformWork::Execute(ActionStack* actionStack, const System::Time* time) {
 // ============================================================
 void PerformWork::Exit(ActionStack* actionStack) {
     (void)actionStack;
-    SetAnimation(workTarget->character, 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    SetAnimation(workTarget->character.Get(), 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================
@@ -180,7 +180,7 @@ void PerformWork::Exit(ActionStack* actionStack) {
 // Identical to Exit: resets character animation to idle.
 // ============================================================
 void PerformWork::CheckEntity() {
-    SetAnimation(workTarget->character, 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
+    SetAnimation(workTarget->character.Get(), 0, kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
 }
 
 // ============================================================

@@ -158,7 +158,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
     if (derived) local_60 = static_cast<NaturalResourceDescription*>(targetComp);
 
     // --- the action stack = character + 0x48 ; cleanup (0x1400c15ba..0x1400c15e2) ---
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* plVar15 = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(plVar15);
 

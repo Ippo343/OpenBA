@@ -137,7 +137,7 @@ static void EnsureInit() {
 
 // the citizen's ModelComponent (CharacterComponent +0x68).
 static ModelComponent* CitizenModel(CitizenComponent* citizen) {
-    CharacterComponent* ch = citizen->character;
+    CharacterComponent* ch = citizen->character.Get();
     if (ch == nullptr) return nullptr;
     return ch->modelComponent.Get();
 }
@@ -378,7 +378,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
     bool haveWorkplace = (citizen->home != nullptr);
     char valid = 0;
     if (haveWorkplace) {
-        valid = citizen->CanReach(citizen->home);
+        valid = citizen->CanReach(citizen->home.Get());
     }
 
     if (haveWorkplace && valid != 0) {
@@ -405,7 +405,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         if (citizen->home == nullptr) {
             bGoal = 0xffffffff;
         } else {
-            ComponentEntity* wp = citizen->home;
+            ComponentEntity* wp = citizen->home.Get();
             bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
         }
 
@@ -439,7 +439,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
         InteractNodePosition(pp, destPos, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen.Get();                         // local_88
-        ComponentEntity* destEntityIBP = citizenVal->home;              // local_res18
+        ComponentEntity* destEntityIBP = citizenVal->home.Get();              // local_res18
         ::Object::InternalPtr<Action> pathResult;                        // local_res20
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
                        &destEntityIBP, destPos, &found,
@@ -476,7 +476,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
     bool haveWorkplace = (citizen->home != nullptr);
     char valid = 0;
     if (haveWorkplace) {
-        valid = citizen->CanReach(citizen->home);
+        valid = citizen->CanReach(citizen->home.Get());
     }
 
     if (haveWorkplace && valid != 0) {
@@ -503,7 +503,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         if (citizen->home == nullptr) {
             bGoal = 0xffffffff;
         } else {
-            ComponentEntity* wp = citizen->home;
+            ComponentEntity* wp = citizen->home.Get();
             bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
         }
 
@@ -535,7 +535,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
         InteractNodePosition(pp, destPos, 0, 0, nullptr);
 
         CitizenComponent* citizenVal = citizen.Get();                         // local_res20
-        ComponentEntity* destEntityIBP = citizenVal->home;              // local_res18
+        ComponentEntity* destEntityIBP = citizenVal->home.Get();              // local_res18
         ::Object::InternalPtr<Action> pathResult;                        // local_78
         WorkAct_GatherRawMatCtor_bf790(&pathResult, &citizenVal, -1,
                        &destEntityIBP, destPos, &found,

@@ -148,7 +148,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
                 if (ok) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
                     InteractNodePosition(pp, dest, 0, 0, nullptr);
-                    holderEntity = citizen->home;
+                    holderEntity = citizen->home.Get();
                     doPush = true;
                 }
             }
@@ -193,7 +193,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
             int cnt = CitizenComp_Storage_GetResourceCount(stor);
             if (cnt > 0) {
-                found = citizen->home;  // the home
+                found = citizen->home.Get();  // the home
                 const ModelComponent* model = CitizenModel(citizen.Get());
                 dest[0] = model->transform.translation.x;
                 dest[1] = model->transform.translation.y;
@@ -205,7 +205,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             CitizenBehavior* listpair = GameUpdateLoop::_singleton->m_citizenList;
             const ModelComponent* model = CitizenModel(citizen.Get());
             uint32_t cell = ModelCell(model, mg);
-            ComponentEntity* e370arg = citizen->home;   // param_7 (home preferred candidate)
+            ComponentEntity* e370arg = citizen->home.Get();   // param_7 (home preferred candidate)
             ComponentDescription* outComp = nullptr;   // local_res20
             ComponentEntity* outBest = nullptr;        // local_res18
             CitizenAI_helper_e370(listpair, &outBest, cell, &outComp, dest, 0, &e370arg);
@@ -218,7 +218,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
         // LAB_14010d03c: prefer the reachable home when it has food
         bool handled = false;
         if (citizen->home != nullptr) {
-            char ok = citizen->CanReach(citizen->home);
+            char ok = citizen->CanReach(citizen->home.Get());
             if (ok != 0) {
                 ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
                 int cnt = CitizenComp_Storage_GetResourceCount(stor);
@@ -227,7 +227,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
                     InteractNodePosition(pp, dest, 0, 0, nullptr);
                     holderCitizen = citizen.Get();
                     flag = 1;
-                    holderEntity = holderCitizen->home;
+                    holderEntity = holderCitizen->home.Get();
                     ctorDirect = true;
                     handled = true;
                 }
@@ -240,7 +240,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             Map* mg = MapGrid();
             uint32_t bGoal;
             if (citizen->home == nullptr) bGoal = 0xffffffff;
-            else { ComponentEntity* wpIBP = citizen->home; bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr); }
+            else { ComponentEntity* wpIBP = citizen->home.Get(); bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr); }
             const ModelComponent* model = CitizenModel(citizen.Get());
             uint32_t cell = ModelCell(model, mg);
             ComponentDescription* outComp = nullptr;  // local_res18
@@ -289,7 +289,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
 // ============================================================
 uint64_t CitizenAIComponent::State_Work() {
     EnsureInit();
-    AttendanceComponent* active = citizen->careBuilding;
+    AttendanceComponent* active = citizen->careBuilding.Get();
 
     if (active == nullptr) {
         uint64_t valid = CanReachHome();
@@ -299,7 +299,7 @@ uint64_t CitizenAIComponent::State_Work() {
             float navDest[4] = {0, 0, 0, 0};
             InteractNodePosition(pp, navDest, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
-            ComponentEntity* holderEntity = holderCitizen->home;
+            ComponentEntity* holderEntity = holderCitizen->home.Get();
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
             return Pushed(citizen.Get());
         }
@@ -344,7 +344,7 @@ uint64_t CitizenAIComponent::State_Work() {
             float navDest[4] = {0, 0, 0, 0};
             InteractNodePosition(pp, navDest, 0, 0, nullptr);
             CitizenComponent* holderCitizen = citizen.Get();
-            ComponentEntity* holderEntity = holderCitizen->home;
+            ComponentEntity* holderEntity = holderCitizen->home.Get();
             CitizenAI_Pathfinding_NavigateTo_bda50(&holderCitizen, &holderEntity, navDest, 0);
             return Pushed(citizen.Get());
         }

@@ -484,7 +484,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
                 bool reserved6 = false;
                 cz = citizen.Get();
                 if (cz->spouse != nullptr) {
-                    CitizenComponent* resv = citizen->spouse;
+                    CitizenComponent* resv = citizen->spouse.Get();
                     if (resv->field_0xB0 == 1) reserved6 = true;  // skip to LAB_14010e8e7
                 }
                 if (!reserved6) {
@@ -502,7 +502,7 @@ void CitizenAIComponent::BuildCandidateStateList(StateCandidateList* outList, ch
                 bool reserved7 = false;
                 cz = citizen.Get();
                 if (cz->spouse != nullptr) {
-                    CitizenComponent* resv = citizen->spouse;
+                    CitizenComponent* resv = citizen->spouse.Get();
                     if (resv->field_0xB0 == 2) reserved7 = true;  // skip to LAB_14010ea39
                 }
                 if (!reserved7) {

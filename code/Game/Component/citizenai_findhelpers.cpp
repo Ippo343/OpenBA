@@ -179,7 +179,7 @@ uint64_t CitizenAIComponent::CanReachHome() {
         return 0;
     }
     // The caller reads the low byte (the body's char).
-    return static_cast<uint8_t>(citizen->CanReach(citizen->home));   // 0x1401158d0
+    return static_cast<uint8_t>(citizen->CanReach(citizen->home.Get()));   // 0x1401158d0
 }
 
 // ============================================================

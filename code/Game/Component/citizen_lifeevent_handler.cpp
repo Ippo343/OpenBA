@@ -93,16 +93,16 @@ static Component* FindComponentByTypeId(ComponentEntity* entity, uint32_t tid) {
 // CitizenComponent::OrFamilyFlags: walk the circular children ring (+0x260 head,
 // +0x268 next) OR-ing the life-event flag into each child's +0x88 status word.
 void CitizenComponent::OrFamilyFlags(uint32_t flags) {
-    CitizenComponent** head = &_firstChild;
-    CitizenComponent* cur = *head;
+    Object::InternalPtr<CitizenComponent>* head = &_firstChild;
+    CitizenComponent* cur = head->Get();
     if (!cur) return;
     do {
         cur->happinessFlags |= flags;
-        cur = cur->_nextSibling;
+        cur = cur->_nextSibling.Get();
         // [STANDALONE GUARD] retail rings are always circular; a half-built ring
         // would spin *(0+0x88) here, so bail instead.
         if (!cur) return;
-    } while (cur != *head);
+    } while (cur != head->Get());
 }
 
 // ---------------------------------------------------------------- 0x140046c60
@@ -289,7 +289,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
     // citizen's own model (+0x278 -> +0x68, raw transform storage) ---
     float pos[3] = {0.0f, 0.0f, 0.0f};
     if (home == nullptr) {
-        CharacterComponent* ch = character;
+        CharacterComponent* ch = character.Get();
         if (ch) {   // [STANDALONE GUARD] retail derefs unguarded
             ModelComponent* homeEnt = ch->modelComponent.Get();
             if (homeEnt) {

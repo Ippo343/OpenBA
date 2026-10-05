@@ -274,10 +274,10 @@ int RosterCompare_9e20(const void* pa, const void* pb) {
     const CitizenComponent* ea = *reinterpret_cast<CitizenComponent* const*>(pa);   // CAST-OK: crt
     const CitizenComponent* eb = *reinterpret_cast<CitizenComponent* const*>(pb);   // CAST-OK: crt
 
-    const CitizenComponent* a258 = ea->_parent;   // +0x258 parent
+    const CitizenComponent* a258 = ea->_parent.Get();   // +0x258 parent
     int a38 = ea->gender;                         // +0x38 gender
 
-    const CitizenComponent* b258 = eb->_parent;
+    const CitizenComponent* b258 = eb->_parent.Get();
     int b38 = eb->gender;
 
     uint32_t ub = (b38 == 1) ? 0x100u : 0u;

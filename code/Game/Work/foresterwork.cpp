@@ -531,7 +531,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                                     nrc->harvestable = true;   // +0x2d
                                     nrc->mature = true;        // +0x2c
                                     CitizenComponent* czEnt = *citizenIBP;
-                                    ComponentEntity* residence = czEnt ? czEnt->workplace : nullptr;
+                                    ComponentEntity* residence = czEnt ? czEnt->workplace.Get() : nullptr;
                                     ComponentEntity* workIBPbuf[2] = { residence, nullptr };
                                     fprintf(stderr, "[FORCE-HARVEST] #%d invoking produce on tree natResComp=%p "
                                             "(mirrors RemoveNaturalResource::Main; bypasses MoveTo arrival)\n",

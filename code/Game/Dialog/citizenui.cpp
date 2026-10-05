@@ -502,14 +502,14 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         void* dialogRef;
         if (ai->school != nullptr) {
             // At school: navigate to the school component
-            AttendanceComponent* school = ai->school;
+            AttendanceComponent* school = ai->school.Get();
             targetRef = school;
             // and its entity (Component::_entity)
             dialogRef = school->_entity;
         } else {
             if (ai->workplace == nullptr) return;
             // Has a workplace (+0x248): navigate there
-            targetRef = ai->workplace;
+            targetRef = ai->workplace.Get();
             dialogRef = _dialog;
         }
 
@@ -520,7 +520,7 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         // --- buttonHome: go to home building ---
         CitizenComponent* ai = CitizenUI_FindCitizen(_dataSource);
 
-        ComponentEntity* homeEntity = ai->home;
+        ComponentEntity* homeEntity = ai->home.Get();
         if (homeEntity == nullptr) return;
 
         ComponentEntity* targetRef = homeEntity;

@@ -3945,8 +3945,8 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<Compon
             // citizen-panel Profession button (id 0x227, reads +0x248) correctly greys out.
             ComponentEntity* houseIBPLocal = houseIBP;
             citComp->SetHome(houseIBPLocal, 0);   // (0x1401163d0; was its CitizenComponent_AssignWorkplace forwarder)
-            const ComponentEntity* home = citComp->home;
-            const ComponentEntity* work = citComp->workplace;
+            const ComponentEntity* home = citComp->home.Get();
+            const ComponentEntity* work = citComp->workplace.Get();
             if (home != nullptr) ++housed;
             if (work != nullptr) ++misfiled;   // expected 0 for an unemployed founding laborer
         }

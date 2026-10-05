@@ -143,7 +143,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     heading = HeadingToward(worldPos, &headingArg);
 
     // the action stack = character + 0x48
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
@@ -354,7 +354,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
                                     float* worldPos, int cellIdx, uint8_t cancelFirst) {
 
     // the action stack = character + 0x48
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
     if (cancelFirst != 0) WorkBase_TaskListCleanup_c5400(list);
 
@@ -503,7 +503,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
 // PlayAnimation action, appending the latter two to the action stack.
 void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32_t priority, uint32_t citizenIndex) {
 
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
@@ -570,7 +570,7 @@ void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t
                                    uint32_t /*unused4*/, float* targetPos, float* srcPos,
                                    uint32_t typeId, uint32_t flag8, uint32_t cellIdx9) {
 
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 
@@ -692,7 +692,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
                                  uint32_t completeParam7, ComponentEntity* const* parentRef,
                                  uint32_t* msgIdPtr9, uint64_t /*unused10*/, uint32_t smParam11) {
 
-    CharacterComponent* character = (*citizenRef)->character;
+    CharacterComponent* character = (*citizenRef)->character.Get();
     ActionStack* list = &character->actionStack;
     WorkBase_TaskListCleanup_c5400(list);
 

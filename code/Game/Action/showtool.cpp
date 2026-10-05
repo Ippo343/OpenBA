@@ -123,7 +123,7 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
     if (citizen->toolSceneId >= 0) HideCitizenTool(citizen);   // 0x1401176e0
 
     // Character mesh holder = CharacterComponent (+0x278) -> its ModelComponent (+0x68).
-    CharacterComponent* smComp = citizen->character;
+    CharacterComponent* smComp = citizen->character.Get();
     if (!smComp) return;
     ModelComponent* charMeshHolder = smComp->modelComponent.Get();
     if (!charMeshHolder) return;

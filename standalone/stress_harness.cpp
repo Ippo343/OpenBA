@@ -177,7 +177,7 @@ Census TakeCensus(GameUpdateLoop* gw) {
         hunger += cz->hunger;                          // +0x44
         if (cz->home) ++c.home238;                     // +0x238
         if (cz->workplace) ++c.work248;                // +0x248
-        CharacterComponent* ch = cz->character;        // +0x278
+        CharacterComponent* ch = cz->character.Get();        // +0x278
         if (Readable(ch) && ch->actionStack.current >= 0)    // +0x60
             ++c.busy;
     }
@@ -223,7 +223,7 @@ std::vector<std::pair<CitizenComponent*, ComponentEntity*>> s_homeShadow;   // (
 
 void LogHomeLoss(CitizenComponent* cz, const char* where) {
     if (++s_homeLossLogged > 400) return;
-    CharacterComponent* ch = cz->character;                                // +0x278
+    CharacterComponent* ch = cz->character.Get();                                // +0x278
     const int depth = Readable(ch) ? ch->actionStack.current : -99;              // +0x60
     CitizenDescription* desc = cz->description;                            // +0x288
     const float adultAge = Readable(desc) ? desc->adultAge : 0.f;          // +0x44
@@ -238,9 +238,9 @@ void LogHomeLoss(CitizenComponent* cz, const char* where) {
                  (int32_t)cz->field_0xB0, cz->statusFlags,
                  cz->happinessFlags,
                  prof,
-                 (void*)cz->workplace, (void*)cz->spouse,
-                 (void*)cz->_parent, (void*)cz->_firstChild,
-                 (void*)cz->school, (void*)cz->careBuilding, depth);
+                 (void*)cz->workplace.Get(), (void*)cz->spouse.Get(),
+                 (void*)cz->_parent.Get(), (void*)cz->_firstChild.Get(),
+                 (void*)cz->school.Get(), (void*)cz->careBuilding.Get(), depth);
     std::fflush(stderr);
 }
 
@@ -259,7 +259,7 @@ void HomeShadowScan(GameUpdateLoop* gw) {
     for (int i = 0; i < n; ++i) {
         CitizenComponent* cz = arr[i];
         if (!Readable(cz)) continue;
-        ComponentEntity* const home = cz->home;           // +0x238
+        ComponentEntity* const home = cz->home.Get();           // +0x238
         now.emplace_back(cz, home);
         if (home) continue;
         for (const auto& pr : s_homeShadow)
@@ -555,10 +555,10 @@ static void CompProf_WatchBegin(Object::Base* comp, uint32_t tid) {
     // The type id just matched names the class (B10 downcast).
     CitizenComponent* cz = nullptr;
     if (tid == s_tidCitizen) cz = static_cast<CitizenComponent*>(comp);
-    else if (tid == s_tidCitizenAI) cz = static_cast<CitizenAIComponent*>(comp)->citizen;   // +0x38
+    else if (tid == s_tidCitizenAI) cz = static_cast<CitizenAIComponent*>(comp)->citizen.Get();   // +0x38
     if (cz && Readable(cz)) {
         s_curCitizen = cz;
-        s_curHome = cz->home;                                            // +0x238
+        s_curHome = cz->home.Get();                                            // +0x238
     }
 }
 
