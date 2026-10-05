@@ -40,7 +40,6 @@
 #include "Object/factory_registration.h"
 #include "object/External.h"
 #include "object/TypeInfo.h"
-#include "Component/coll_bridge.h"
 #include <cstring>
 #include <cstdint>
 #include <new>
@@ -116,24 +115,16 @@ CitizenDescription::CitizenDescription()
       _f124(FloatBits(0x40a00000)),
       _f128(FloatBits(0x40000000)),
       _f12c(FloatBits(0x3c23d70a)),
-      _f130(FloatBits(0x42700000)),
-      _refs(nullptr),
-      _refCount(0),
-      _refCap(0) {
+      _f130(FloatBits(0x42700000)) {
     _professions[0] = _professions[1] = _professions[2] = nullptr;
     coldRate[0] = coldRate[1] = coldRate[2] = FloatBits(0x41200000);
 }
 
 // dtor (slot 0 0x1400301f0 minus the stamps): the tree's slot 0 skipped ~External; the compiler chain now runs it (B38 D2 — this commit's behaviour change)
 // The compiler then chains ~Description -> ~External.
+// The body is empty: ~_refs frees the mesh table unconditionally and zeroes +0x138 /
+// +0x140 (0x140030217..0x14003022d; the entries are non-owning, no element release).
 CitizenDescription::~CitizenDescription() {
-    // Free the dynamic External* array buffer (entries are non-owning ptrs).
-    if (_refs) {
-        System::MemoryAllocator::MemFree(_refs);
-        _refs = nullptr;
-        _refCount = 0;
-        _refCap = 0;
-    }
 }
 
 // [5] 0x140114900: stream order as retail.
@@ -175,16 +166,16 @@ bool CitizenDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_i110, nullptr);
     {
         // dynamic External* array (count at +0x140, data at +0x138)
-        int32_t count = _refCount;
+        int32_t count = _refs._size;
         ser.Serialize(count, nullptr);   // local temp, as retail
         if (static_cast<int>(ser.GetDirection()) == 0) {   // loading
-            // B.3.2 bridge: exe 0x140001bb0 IS Collection::Array<void*>::SetSize(n).
-            GameColl::AsArray<GameColl::Ptr8>(&_refs).SetSize(count);
+            // exe 0x140001bb0 IS Collection::Array<void*>::SetSize(n) (kSpec_PtrZero).
+            _refs.SetSize(count);
         }
         // 0x14001bcc0 takes three arguments: its prologue spills R9 to the home slot
         // [RBP+0x58], which the body only reuses as a local after writing it, so the
         // old door's 4th nullptr was never read.
-        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, count, _refs);
+        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, count, _refs._data);
     }
     ser.Serialize(_f114, nullptr);
     ser.Serialize(maxEducation, nullptr);
