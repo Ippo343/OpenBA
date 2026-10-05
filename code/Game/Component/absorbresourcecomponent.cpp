@@ -91,7 +91,7 @@ char AbsorbResourceComponent::State0Tick() {
             if (cellEntity == nullptr) continue;
 
             RawMaterialComponent* rawMaterial = nullptr;
-            for (int i = 0; i < cellEntity->_componentCount; ++i) {
+            for (int i = 0; i < cellEntity->_components._size; ++i) {
                 ::Component* c = cellEntity->_components[i].Get();
                 if (c->Type() != tidRawMaterial) continue;
                 if (::Object::IsDerivedFromNullSafe(c, tidRawMaterial))

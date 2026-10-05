@@ -155,8 +155,8 @@ static auto ScanArrAt(const E* arr, int count, uint32_t wantTid) -> decltype(Ele
 // InteractComponent / Happiness / Map scans.
 static Component* ScanArr(const ComponentEntity* node, uint32_t wantTid) {
     if (node == nullptr) return nullptr;
-    int count = node->_componentCount;
-    return ScanArrAt(node->_components, count, wantTid);
+    int count = node->_components._size;
+    return ScanArrAt(node->_components._data, count, wantTid);
 }
 // The entity description's sub-description array (+0x28, count +0x30)
 // (LAB_14010abbc validated-target radius lookup).
@@ -199,8 +199,8 @@ static char CitizenAI_helper_a720(HappinessComponent* param_1) {
 static HappinessComponent** CitizenAI_State_Leisure_sub_fd50(ComponentEntity* param_1,
                                                             HappinessComponent** param_2) {
     HappinessComponent* result = nullptr;
-    int count = param_1->_componentCount;
-    const Object::InternalPtr<Component>* arrBase = param_1->_components;
+    int count = param_1->_components._size;
+    const Object::InternalPtr<Component>* arrBase = param_1->_components._data;
     int idx = 0;
     while (idx < count) {
         if (VGetTypeId(arrBase[idx].Get()) == s_tid_HappinessComponent) {

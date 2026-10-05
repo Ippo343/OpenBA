@@ -146,7 +146,7 @@ static RawMaterialDescription* FindRawMatDescOnTemplate(const ComponentDescripti
 static StorageComponent* FindStorageOnEntity(const ComponentEntity* entity) {
     if (!entity) return nullptr;
     const uint32_t tid = TidStorageComponent();
-    int count = entity->_componentCount;
+    int count = entity->_components._size;
     for (int i = 0; i < count; i++) {
         Component* comp = entity->_components[i].Get();
         if (!comp) continue;
@@ -265,7 +265,7 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
         // Find the MapComponent (typeid 0x1401c79e0) on the entity.
         MapComponent* mapComp = nullptr;
         const uint32_t tidMap = TidMapComponent();
-        int compCount = ent2 ? ent2->_componentCount : 0;
+        int compCount = ent2 ? ent2->_components._size : 0;
         for (int i = 0; i < compCount; i++) {
             Component* comp = ent2->_components[i].Get();
             if (comp && GetTypeIdOf(comp) == tidMap) {

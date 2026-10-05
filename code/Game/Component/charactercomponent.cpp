@@ -101,7 +101,7 @@ void Character_UpdateAnimation_Reimpl(ActionStack* arrayBase, Action** ptrRef, c
 static Component* CharComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, uint32_t want) {
     if (!ownerEntity) return nullptr;
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;
-    int count = ownerEntity->_componentCount;
+    int count = ownerEntity->_components._size;
     for (int i = 0; i < count; i++) {
         Component* comp = ownerEntity->_components[i].Get();
         if (!comp) continue;

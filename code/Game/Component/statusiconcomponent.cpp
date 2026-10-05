@@ -377,8 +377,8 @@ static bool SI_LogOnce(int* budget) {
 static bool SI_ComponentArray(const ComponentEntity* entity, int* outCount,
                               Object::InternalPtr<Component>** outArr) {
     if (!SI_Plausible(entity)) return false;
-    int count = entity->_componentCount;
-    Object::InternalPtr<Component>* arr = entity->_components;
+    int count = entity->_components._size;
+    Object::InternalPtr<Component>* arr = entity->_components._data;
     if (count < 0 || count > 4096) return false;
     if (count > 0 && !SI_Plausible(arr)) return false;
     if (outCount) *outCount = count;

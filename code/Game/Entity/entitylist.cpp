@@ -82,7 +82,7 @@ void ComponentEntity::TickComponents(const System::Time* time) {
     if ((entityFlags & 0x4) == 0) return;
     if ((entityFlags >> 10) & 1) return;
 
-    int32_t compCount = _componentCount;
+    int32_t compCount = _components._size;
     int64_t ci = 0;
 
     if (compCount <= 0) return;
@@ -142,7 +142,7 @@ void ComponentEntity::PostUpdateComponents() {
     if ((entityFlags & 0x10) == 0) return;
     if ((entityFlags >> 10) & 1) return;
 
-    int32_t compCount = _componentCount;
+    int32_t compCount = _components._size;
     int64_t ci = 0;
 
     if (compCount <= 0) return;
@@ -436,13 +436,13 @@ static bool WalkUpdateTreeSnapshot(EntityList* self, const System::Time* time, b
         // pulled in, so no prefetch ever waits on a miss.
         if (i + 3 < n) __builtin_prefetch(&arr[i + 3]->_components);
         if (i + 2 < n) {
-            const Object::InternalPtr<Component>* comps = arr[i + 2]->_components;
+            const Object::InternalPtr<Component>* comps = arr[i + 2]->_components._data;
             if (comps) __builtin_prefetch(comps);
         }
         if (i + 1 < n) {
             const ComponentEntity* pe1 = arr[i + 1];
-            const Object::InternalPtr<Component>* comps = pe1->_components;
-            int cc = pe1->_componentCount;
+            const Object::InternalPtr<Component>* comps = pe1->_components._data;
+            int cc = pe1->_components._size;
             if (comps && cc > 0) {
                 if (cc > 6) cc = 6;
                 for (int k = 0; k < cc; ++k) {
@@ -565,7 +565,7 @@ void EntityList::Update(const System::Time* time) {
                 if (pf && !PtrCorrupt(pf->element)) {
                     const ComponentEntity* pe = pf->element;
                     __builtin_prefetch(&pe->_components);
-                    const Object::InternalPtr<Component>* comps = pe->_components;
+                    const Object::InternalPtr<Component>* comps = pe->_components._data;
                     if (comps) __builtin_prefetch(comps);
                 }
             }
@@ -628,7 +628,7 @@ void EntityList::Update(const System::Time* time) {
                         if ((ent->_entityFlags & 0x8) != 0 &&
                             (ent->_entityFlags & 0x400) == 0) {
 
-                            int32_t compCount = ent->_componentCount;
+                            int32_t compCount = ent->_components._size;
                             System::Time deltaTime = { delta };
 
                             for (int64_t ci = 0; ci < compCount; ci++) {
@@ -837,8 +837,8 @@ static void AuditDyingEntity(ComponentEntity* entity) {
 
 
     int models = 0, live = 0;
-    int   n   = entity->_componentCount;
-    Object::InternalPtr<Component>* arr = entity->_components;
+    int   n   = entity->_components._size;
+    Object::InternalPtr<Component>* arr = entity->_components._data;
     if (s_tidModel && s_tidModel != 0xFFFFFFFFu) {
         for (int i = 0; i < n && arr; ++i) {
             Component* c = arr[i].Get();

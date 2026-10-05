@@ -158,8 +158,8 @@ extern "C" ClearAreaComponent* ClearAreaComponent_HarnessFind(ComponentEntity* e
     if (!entity) return nullptr;
     uint32_t wantTid = ClearAreaComponent::TypeId();
     if (!wantTid) return nullptr;
-    if (!entity->_components) return nullptr;
-    for (int i = 0; i < entity->_componentCount; ++i) {
+    if (!entity->_components._data) return nullptr;
+    for (int i = 0; i < entity->_components._size; ++i) {
         Component* c = entity->_components[i].Get();
         if (!c) continue;
         if (c->Type() == wantTid) {

@@ -97,7 +97,7 @@ static int OverstockPeriod() {
 // Component scan over a LIVE entity (+0x30 IBP array / +0x38 count).
 static Component* FindComponent(ComponentEntity* entity, uint32_t tid) {
     if (!entity || !tid) return nullptr;
-    const int count = entity->_componentCount;                   // +0x38
+    const int count = entity->_components._size;                   // +0x38
     for (int i = 0; i < count; ++i) {
         Component* comp = entity->_components[i].Get();          // +0x30
         if (!comp) continue;

@@ -728,8 +728,8 @@ void Impl_cb40(EditTool* self) {
             // take, since the finder faults on entity+0x30 (component array) rather
             // than on the entity pointer. Screen the two fields the finder reads.
             const ComponentEntity* e = self->lastEntityRef;
-            const uint64_t arr = reinterpret_cast<uint64_t>(e->_components);   // CAST-OK: ptr_int
-            const int32_t  cnt = e->_componentCount;
+            const uint64_t arr = reinterpret_cast<uint64_t>(e->_components._data);   // CAST-OK: ptr_int
+            const int32_t  cnt = e->_components._size;
             const bool badArr = (cnt != 0) && (arr < 0x10000 || arr > 0x00007FFFFFFFFFFFULL);
             if (badArr || cnt < 0 || cnt > 64) ReportDeadSelectedEntity(self, e, arr, cnt);
         }

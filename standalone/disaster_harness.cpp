@@ -255,8 +255,8 @@ Component* ComponentByName(ComponentEntity* entity, const char* typeName) {
         return nullptr;
     }
 
-    const int count = entity->_componentCount;                   // +0x38
-    Object::InternalPtr<Component>* arr = entity->_components;   // +0x30
+    const int count = entity->_components._size;                   // +0x38
+    Object::InternalPtr<Component>* arr = entity->_components._data;   // +0x30
     if (!arr || count <= 0) return nullptr;
 
     for (int i = 0; i < count; ++i) {

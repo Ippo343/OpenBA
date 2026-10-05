@@ -331,8 +331,8 @@ void GrowthComponent::Startup() {
     if (res30 == nullptr) {
         const uint32_t s_tidModel = ModelComponent::TypeId();   // B.3.8: was a lazy by-name cache (B6-5)
         if (s_tidModel) {
-            int n = owner->_componentCount;
-            Object::InternalPtr<Component>* arr = owner->_components;
+            int n = owner->_components._size;
+            Object::InternalPtr<Component>* arr = owner->_components._data;
             for (int i = 0; i < n && arr; ++i) {
                 Component* c = arr[i].Get();
                 if (!c) continue;

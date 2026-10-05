@@ -628,7 +628,7 @@ void CitizenBehavior::CountResources() {
     // Returns the found component, or nullptr. The null tests are the tree's.
     auto findComponent = [](ComponentEntity* entity, uint32_t targetId) -> Component* {
         if (!entity) return nullptr;
-        int compCount = entity->_componentCount;
+        int compCount = entity->_components._size;
         for (int i = 0; i < compCount; i++) {
             Component* comp = entity->_components[i].Get();
             if (!comp) continue;

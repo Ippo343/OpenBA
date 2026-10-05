@@ -141,8 +141,8 @@ void DumpTownStorage(int frameNum, ComponentEntity** arr, int n) {
     for (int i = 0; i < n; ++i) {
         ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        const int cN = ent->_componentCount;                     // +0x38
-        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        const int cN = ent->_components._size;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components._data;   // +0x30
         for (int c = 0; c < cN && cA; ++c) {
             Component* comp = cA[c].Get();
             if (!comp) continue;
@@ -202,8 +202,8 @@ void DumpOrchards(int frameNum) {
         ComponentEntity* ent = arr[i];
         if (!ent) continue;
 
-        int       cN = ent->_componentCount;                     // +0x38
-        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        int       cN = ent->_components._size;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components._data;   // +0x30
         OrchardComponent* orchComp = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
             Component* comp = cA[c].Get();
@@ -248,8 +248,8 @@ void DumpOrchards(int frameNum) {
         WorkPlaceComponent* wpc = nullptr;
         StateMachineComponent* smc = nullptr;
         if (owner && (tidWorkPlaceComp || tidStateMachineComp)) {
-            int wN = owner->_componentCount;                       // +0x38
-            Object::InternalPtr<Component>* wA = owner->_components;   // +0x30
+            int wN = owner->_components._size;                       // +0x38
+            Object::InternalPtr<Component>* wA = owner->_components._data;   // +0x30
             for (int c = 0; c < wN && wA; ++c) {
                 Component* wc = wA[c].Get();
                 if (!wc) continue;

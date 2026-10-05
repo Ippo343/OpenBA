@@ -168,8 +168,8 @@ uint64_t ToolTile_FootprintValidity_d580(
 static ModelComponent* ToolTile_FindModelComponentScoped(const ComponentEntity* entity) {
     const uint32_t s_tidModel = ModelComponent::TypeId();
     if (!entity || !s_tidModel) return nullptr;
-    int n = entity->_componentCount;
-    Object::InternalPtr<Component>* arr = entity->_components;
+    int n = entity->_components._size;
+    Object::InternalPtr<Component>* arr = entity->_components._data;
     for (int k = 0; k < n && arr; ++k) {
         Component* c = arr[k].Get();
         if (!c) continue;

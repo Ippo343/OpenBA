@@ -126,8 +126,8 @@ void Fire(int frameNum) {
         ComponentEntity* ent = arr[i];
         if (!ent) continue;
 
-        const int cN = ent->_componentCount;                     // +0x38
-        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        const int cN = ent->_components._size;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components._data;   // +0x30
         Component*  foodComp = nullptr;
         const char* foodName = nullptr;
         for (int c = 0; c < cN && cA && !foodComp; ++c) {

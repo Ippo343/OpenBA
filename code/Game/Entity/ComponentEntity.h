@@ -31,6 +31,9 @@
 #include "system/Value.h"      // System::Time (+0x20; trivial, 8 bytes)
 #include "Object/exe_type.h"
 #include "Component/Component.h"   // FindComponent<T>: Array<InternalPtr<Component>>
+#include "collection/Collection.h"   // Collection::Array (_components)
+
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Entity/EntityList.h)
 
 class ComponentDescription;
 struct EntityList;   // Entity/EntityList.h
@@ -62,7 +65,7 @@ public:
     // Every instance has one shape (read 2026-09-28 at 0x140003f60 ModelComponent,
     // 0x14000c460 GrowthComponent, 0x140006270 StorageComponent, 0x140004740
     // MultiObjectComponent, 0x14000b6f0 ConsumeProduceComponent and 20 more):
-    //   for (i = 0; i < _componentCount; ++i) {          // count re-read per pass
+    //   for (i = 0; i < _components._size; ++i) {          // count re-read per pass
     //       CheckPtr(&_components[i]);                   // IAT 0x140152ab0, a bare RET
     //       if (_components[i]->Type() == T's cell)      // slot 2, [vtbl+0x10]
     //           return IsDerivedFrom(c, T's cell) ? c : 0;   // IAT 0x140152a98
@@ -77,7 +80,7 @@ public:
     // IsDerivedFrom; it is not this template.)
     template <class T>
     T* FindComponent() const {
-        for (int32_t i = 0; i < _componentCount; ++i) {
+        for (int32_t i = 0; i < _components._size; ++i) {
             Component* c = _components[i].Get();
             if (c->Type() == T::TypeId())
                 return c->IsDerivedFrom(T::TypeId()) ? static_cast<T*>(c) : nullptr;
@@ -91,7 +94,7 @@ public:
     // (`mov [r14],0; mov [r14],rax`), a miss through the InternalBasePtr ctor
     // with null. No null checks.
     Component* FindComponentByTypeId(uint32_t typeId) const {
-        for (int32_t i = 0; i < _componentCount; ++i) {
+        for (int32_t i = 0; i < _components._size; ++i) {
             Component* c = _components[i].Get();
             if (c->Type() == typeId)
                 return c;
@@ -117,10 +120,16 @@ public:
                                             //       Serialize 0x1400c44a0 writes it through
                                             //       System::Time::Serialize (was `void* _externals`)
     ComponentDescription* _description;     // +0x28 ExternalPtr<ComponentDescription>
-    Object::InternalPtr<Component>* _components;  // +0x30 Array<InternalPtr<Component>> data (stride 8;
-                                            //       every FindComponent instance CheckPtr's &_components[i])
-    int32_t               _componentCount;  // +0x38
-    int32_t               _componentCap;    // +0x3C
+    // +0x30 Array<InternalPtr<Component>>: data +0x30, count +0x38, capacity +0x3C.
+    // Both ctors zero the three (0x1400c3666 / 0x1400c366a, 0x1400c377b / 0x1400c377f:
+    // the inlined Array ctor); it grows through 0x1400032e0 (stride 8, align 8, the
+    // new tail ZEROED, no element destroy: kSpec_PtrZero); the dtor body 0x1400c3550
+    // DeletePtr's every slot, then the inlined ~Array MemFrees +0x30 and zeroes +0x30
+    // and the +0x38 qword (0x1400c35f2..0x1400c3600) before ~Internal. Every
+    // FindComponent instance CheckPtr's &_components[i].
+    using ComponentArray = Collection::Array<Object::InternalPtr<Component>, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    ComponentArray        _components;      // +0x30 (count +0x38, capacity +0x3C)
     uint32_t              _entityFlags;     // +0x40 OR of every component's +0x20 flags:
                                             //       bit 0 OnAdded, 2 update, 4 draw,
                                             //       7 Startup, 8 Shutdown
@@ -138,6 +147,6 @@ static_assert(offsetof(ComponentEntity, _lastUpdateTime) == 0x20, "ComponentEnti
 static_assert(sizeof(System::Time) == 8, "+0x20 is one 8-byte System::Time");
 static_assert(offsetof(ComponentEntity, _description)    == 0x28, "ComponentEntity::_description @ +0x28");
 static_assert(offsetof(ComponentEntity, _components)     == 0x30, "ComponentEntity::_components @ +0x30");
-static_assert(offsetof(ComponentEntity, _componentCount) == 0x38, "ComponentEntity::_componentCount @ +0x38");
-static_assert(offsetof(ComponentEntity, _componentCap)   == 0x3C, "ComponentEntity::_componentCap @ +0x3C");
+static_assert(offsetof(ComponentEntity, _components) + offsetof(ComponentEntity::ComponentArray, _size) == 0x38, "ComponentEntity component count @ +0x38");
+static_assert(offsetof(ComponentEntity, _components) + offsetof(ComponentEntity::ComponentArray, _capacity) == 0x3C, "ComponentEntity component capacity @ +0x3C");
 static_assert(offsetof(ComponentEntity, _entityFlags)    == 0x40, "ComponentEntity::_entityFlags @ +0x40");

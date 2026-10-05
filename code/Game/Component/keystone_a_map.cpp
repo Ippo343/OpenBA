@@ -183,8 +183,8 @@ void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint
                                         // If none do, the broadcast is a no-op and the scene
                                         // geometry dangles just the same. Measure that arm too;
                                         // the entity-level counter above cannot see it.
-                                        int n = local_68->_componentCount;
-                                        Object::InternalPtr<Component>* arr = local_68->_components;
+                                        int n = local_68->_components._size;
+                                        Object::InternalPtr<Component>* arr = local_68->_components._data;
                                         int participating = 0;
                                         for (int ci = 0; ci < n && arr; ++ci) {
                                             Component* c = arr[ci].Get();

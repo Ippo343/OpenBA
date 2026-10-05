@@ -173,7 +173,7 @@ static inline Description* ElemObj(Description* e) { return e; }
 // InternalBasePtrs, and a stale one is exactly what a raw deref turns into a crash.
 //
 // B.4 P2: the two pairs are the two node classes: ComponentEntity::_components /
-// _componentCount (+0x30 / +0x38) and ComponentDescription::_subDescs / _subDescCount
+// _components._size (+0x30 / +0x38) and ComponentDescription::_subDescs / _subDescCount
 // (+0x28 / +0x30). The array and the count are read once, the array first.
 template <class E>
 static auto ScanArray(const E* base, int count, uint32_t typeId) -> decltype(ElemObj(*base)) {
@@ -194,7 +194,7 @@ static auto ScanArray(const E* base, int count, uint32_t typeId) -> decltype(Ele
 }
 static Component* ScanForType(const ComponentEntity* node, uint32_t typeId) {
     if (node == nullptr) return nullptr;
-    return ScanArray(node->_components, node->_componentCount, typeId);
+    return ScanArray(node->_components._data, node->_components._size, typeId);
 }
 static Description* ScanForType(const ComponentDescription* node, uint32_t typeId) {
     if (node == nullptr) return nullptr;
@@ -241,9 +241,9 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
     HealerComponent* const* arr = param_1->healers._data;
     for (int idx = 0; idx < n; ++idx) {
         ComponentEntity* entity = arr[idx]->_entity.Get();   // *plVar11 + 0x10
-        // scan entity's components for a WorkPlaceComponent (_componentCount, _components)
-        int64_t compArrCount = entity->_componentCount;
-        const Object::InternalPtr<Component>* compArr = entity->_components;
+        // scan entity's components for a WorkPlaceComponent (_components._size, _components)
+        int64_t compArrCount = entity->_components._size;
+        const Object::InternalPtr<Component>* compArr = entity->_components._data;
         WorkPlaceComponent* wp = nullptr;
         for (int64_t j = 0; j < compArrCount; ++j) {
             Component* obj = compArr[j].Get();

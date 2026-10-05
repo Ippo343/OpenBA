@@ -123,7 +123,7 @@ void PickingComponent::RefreshMesh() {
         int fx = -1, fy = -1, fw = -1, fh = -1;
         {   // owner's MapComponent, for the footprint rect (log only; type match, no IsDerivedFrom)
             const uint32_t s_tidMapPC = MapComponent::TypeId();
-            for (int i = 0; i < entity->_componentCount; ++i) {
+            for (int i = 0; i < entity->_components._size; ++i) {
                 Component* c = entity->_components[i].Get();
                 if (!c) continue;
                 if (c->Type() == s_tidMapPC) {

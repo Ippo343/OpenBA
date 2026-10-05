@@ -476,8 +476,8 @@ void FireRoadTool(PlayerToolManager* entityUI) {
         for (int i = 0; i < houses && tidMap; ++i) {
             ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
-            const int cc = e->_componentCount;
-            Object::InternalPtr<Component>* ca = e->_components;
+            const int cc = e->_components._size;
+            Object::InternalPtr<Component>* ca = e->_components._data;
             for (int k = 0; k < cc && ca; ++k) {
                 Component* comp = ca[k].Get();
                 if (!comp) continue;
@@ -666,8 +666,8 @@ void FirePastureTool(PlayerToolManager* entityUI) {
         for (int i = 0; i < houses && tidMap; ++i) {
             ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
-            const int cc = e->_componentCount;
-            Object::InternalPtr<Component>* ca = e->_components;
+            const int cc = e->_components._size;
+            Object::InternalPtr<Component>* ca = e->_components._data;
             for (int k = 0; k < cc && ca; ++k) {
                 Component* comp = ca[k].Get();
                 if (!comp) continue;
@@ -1008,8 +1008,8 @@ inline GameUpdateLoop* GetGW() { return GameUpdateLoop::_singleton; }
 
 // Read component[0]'s type-id (best-effort, for identifying what we marked).
 uint32_t Comp0TypeId(const ComponentEntity* entity) {
-    int cnt = entity->_componentCount;
-    Object::InternalPtr<Component>* arr = entity->_components;
+    int cnt = entity->_components._size;
+    Object::InternalPtr<Component>* arr = entity->_components._data;
     if (cnt <= 0 || !arr || !arr[0].Get()) return 0;
     Component* comp = arr[0].Get();
     if (!comp) return 0;
@@ -1058,7 +1058,7 @@ void FireMarkRemoval() {
                 uint32_t flags = local->_entityFlags;
                 if (flags & 0x400) continue;             // already marked
                 uint32_t tid = Comp0TypeId(local);
-                int compCnt = local->_componentCount;
+                int compCnt = local->_components._size;
                 fprintf(stderr, "[MarkRemoval] target found: cell=(%d,%d) idx=%d slot=+0x%02x entity=%p "
                        "flags(+0x40)=0x%08x comps(+0x38)=%d comp0.typeId=0x%08x\n",
                        row, col, cell, slot, local, flags, compCnt, tid);
@@ -1260,7 +1260,7 @@ static void DlgSettings_InstallBuffer(ComponentEntity* entity, int idx) {
     const uint32_t tidUIComp = UIComponent::TypeId();
     UIComponent* uiComp = nullptr;
     if (tidUIComp) {
-        const int count = entity->_componentCount;
+        const int count = entity->_components._size;
         for (int i = 0; i < count; ++i) {
             Component* comp = entity->_components[static_cast<int64_t>(i)].Get();
             if (!comp) continue;
@@ -1276,7 +1276,7 @@ static void DlgSettings_InstallBuffer(ComponentEntity* entity, int idx) {
         // populated with real names and none is UIComponent, the finding is the
         // entity's; if the list is empty or every name is null, the finding is
         // the instrument's.
-        const int count = tidUIComp ? entity->_componentCount : -1;
+        const int count = tidUIComp ? entity->_components._size : -1;
         fprintf(stderr, "[DlgSettings:route] house[%d] NO UIComponent. searched tid=0x%08x "
                 "components=%d:", idx, tidUIComp, count);
         for (int i = 0; i < count; ++i) {
@@ -1422,8 +1422,8 @@ static void FireUIComponentCensus() {
         if (!ent) continue;
         ++entities;
 
-        const int       cN = ent->_componentCount;
-        Object::InternalPtr<Component>* const cA = ent->_components;
+        const int       cN = ent->_components._size;
+        Object::InternalPtr<Component>* const cA = ent->_components._data;
         UIComponent* uiComp = nullptr;
         const char* firstName = nullptr;
         for (int c = 0; c < cN && cA; ++c) {
@@ -1515,8 +1515,8 @@ static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
     for (int i = 0; i < en && arr && !A; ++i) {
         ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
         if (!ent) continue;
-        const int       cN = ent->_componentCount;
-        Object::InternalPtr<Component>* const cA = ent->_components;
+        const int       cN = ent->_components._size;
+        Object::InternalPtr<Component>* const cA = ent->_components._data;
         for (int c = 0; c < cN && cA; ++c) {
             Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
@@ -1570,8 +1570,8 @@ static void FireDlgSettingsRoute(PlayerToolManager* entityUI) {
     {
         const uint32_t tid2 = tidUIComp;
         (void)tid2;
-        const int       cN = A->_componentCount;
-        Object::InternalPtr<Component>* const cA = A->_components;
+        const int       cN = A->_components._size;
+        Object::InternalPtr<Component>* const cA = A->_components._data;
         for (int c = 0; c < cN && cA; ++c) {
             Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
@@ -1628,8 +1628,8 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
         for (int i = 0; i < en && arr && !pastureComp; ++i) {
             ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
             if (!ent) continue;
-            int       cN = ent->_componentCount;
-            Object::InternalPtr<Component>* cA = ent->_components;
+            int       cN = ent->_components._size;
+            Object::InternalPtr<Component>* cA = ent->_components._data;
             for (int c = 0; c < cN && cA; ++c) {
                 Component* comp = cA[static_cast<uintptr_t>(c)].Get();
                 if (!comp) continue;
@@ -1755,8 +1755,8 @@ void FireOrchardPanel(PlayerToolManager* entityUI) {
     for (int i = 0; i < n && !orchEnt; ++i) {
         ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
         if (!ent) continue;
-        int       cN = ent->_componentCount;
-        Object::InternalPtr<Component>* cA = ent->_components;
+        int       cN = ent->_components._size;
+        Object::InternalPtr<Component>* cA = ent->_components._data;
         for (int c = 0; c < cN && cA; ++c) {
             Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
@@ -1862,8 +1862,8 @@ void FireTradePanel(PlayerToolManager* entityUI) {
     for (int i = 0; i < n && !postEnt; ++i) {
         ComponentEntity* ent = arr[static_cast<uintptr_t>(i)];
         if (!ent) continue;
-        int       cN = ent->_componentCount;
-        Object::InternalPtr<Component>* cA = ent->_components;
+        int       cN = ent->_components._size;
+        Object::InternalPtr<Component>* cA = ent->_components._data;
         for (int c = 0; c < cN && cA; ++c) {
             Component* comp = cA[static_cast<uintptr_t>(c)].Get();
             if (!comp) continue;
@@ -2527,8 +2527,8 @@ void BridgeDumpEntity(const char* what, ComponentEntity* ent) {
     const uint32_t tidPicking = PickingComponent::TypeId();
 
     ComponentEntity* e = ent;
-    const int count = e->_componentCount;
-    Object::InternalPtr<Component>* arr = e->_components;
+    const int count = e->_components._size;
+    Object::InternalPtr<Component>* arr = e->_components._data;
     fprintf(stderr, "[Bridge] %s=%p components=%d:", what, ent, count);
     for (int i = 0; i < count && arr; ++i) {
         Component* comp = arr[static_cast<uintptr_t>(i)].Get();
@@ -2609,8 +2609,8 @@ void FireBridgeTool(PlayerToolManager* entityUI) {
         for (int i = 0; i < houses && tidMap; ++i) {
             ComponentEntity* e = StartTown_GetFoundingHouseEntity(i);
             if (!e) continue;
-            const int cc = e->_componentCount;
-            Object::InternalPtr<Component>* ca = e->_components;
+            const int cc = e->_components._size;
+            Object::InternalPtr<Component>* ca = e->_components._data;
             for (int k = 0; k < cc && ca; ++k) {
                 Component* comp = ca[k].Get();
                 if (!comp) continue;

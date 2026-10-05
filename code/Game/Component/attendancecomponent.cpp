@@ -52,8 +52,8 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
             static_cast<void*>(self), queueCount, static_cast<void*>(e));
     if (e) {
         const uint32_t flags = e->_entityFlags;
-        const int32_t  n     = e->_componentCount;
-        Object::InternalPtr<Component>* comps = e->_components;
+        const int32_t  n     = e->_components._size;
+        Object::InternalPtr<Component>* comps = e->_components._data;
         fprintf(stderr, "[AttendanceComponent::Update]   entity flags=0x%x components=%d:", flags, n);
         for (int i = 0; comps && i < n && i < 32; ++i) {
             Component* c = comps[i].Get();

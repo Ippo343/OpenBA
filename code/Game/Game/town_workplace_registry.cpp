@@ -59,7 +59,7 @@ namespace {
 // the tree skips a null slot; known_port_issues 14d.)
 Component* FindComponentByTypeId(const ComponentEntity* entity, uint32_t typeId) {
     int i = 0;
-    while (i < entity->_componentCount) {                          // count re-read (faithful)
+    while (i < entity->_components._size) {                          // count re-read (faithful)
         Component* comp = entity->_components[i].Get();
         if (comp == nullptr) { ++i; continue; }
         // Slot 2 on an entity component-array element.

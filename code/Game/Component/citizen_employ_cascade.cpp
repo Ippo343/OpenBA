@@ -80,8 +80,8 @@ inline bool AdultIdle(CitizenComponent* cz) {
 // (stop at first GetTypeId match; return it only if IsDerivedFrom too, else null).
 ResidenceComponent* FindResidenceComp(ComponentEntity* entity) {
     int i = 0;
-    Object::InternalPtr<Component>* arr = entity->_components;   // +0x30
-    int cnt = entity->_componentCount;                            // +0x38
+    Object::InternalPtr<Component>* arr = entity->_components._data;   // +0x30
+    int cnt = entity->_components._size;                            // +0x38
     while (i < cnt) {
         Component* comp = arr[i].Get();
         uint32_t tid = comp->Type();   // slot 2
@@ -91,7 +91,7 @@ ResidenceComponent* FindResidenceComp(ComponentEntity* entity) {
                        ? static_cast<ResidenceComponent*>(compVal) : nullptr;
         }
         ++i;
-        cnt = entity->_componentCount;   // faithful re-read
+        cnt = entity->_components._size;   // faithful re-read
     }
     return nullptr;
 }

@@ -127,8 +127,8 @@ void EnsureResolved() {
 template <class T>
 T* FindComponentDerived(ComponentEntity* entity, uint32_t typeId) {
     if (!entity || typeId == 0) return nullptr;
-    int count = entity->_componentCount;
-    Object::InternalPtr<Component>* arr = entity->_components;
+    int count = entity->_components._size;
+    Object::InternalPtr<Component>* arr = entity->_components._data;
     for (int i = 0; i < count; ++i) {
         Component* comp = arr[i].Get();
         if (!comp) continue;

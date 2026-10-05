@@ -484,7 +484,7 @@ static void EntityList_PostLoad_c4730(EntityList* el, IO::Stream* stream) {
         ComponentEntity** entSlot = &el->masterArray._data[i];
         ComponentEntity* ent = *entSlot;
 
-        int compCount = ent->_componentCount;
+        int compCount = ent->_components._size;
         for (int j = 0; j < compCount; j++) {
             Component* comp = ent->_components[j].Get();
             // Caller batch CB6: slot 11 (vtable +0x58) of an entity component-array

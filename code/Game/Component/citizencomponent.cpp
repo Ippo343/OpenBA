@@ -1043,8 +1043,8 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
             ComponentEntity* entity = GetJobEntity(registry, profKey, i);
 
             // Find WorkplaceComponent on this entity
-            int compCount = entity->_componentCount;
-            Object::InternalPtr<Component>* compArray = entity->_components;
+            int compCount = entity->_components._size;
+            Object::InternalPtr<Component>* compArray = entity->_components._data;
 
             // Scan for WorkplaceComponent by type ID
             WorkPlaceComponent* wpComp = nullptr;
@@ -1492,8 +1492,8 @@ static StorageComponent* StandaloneFindStorageComp(ComponentEntity* entity) {
     if (!entity) return nullptr;
     uint32_t tidStorage = StorageComponent::TypeId();
     if (tidStorage == 0) return nullptr;
-    int cnt = entity->_componentCount;
-    Object::InternalPtr<Component>* arr = entity->_components;
+    int cnt = entity->_components._size;
+    Object::InternalPtr<Component>* arr = entity->_components._data;
     for (int i = 0; i < cnt && arr; ++i) {
         Component* comp = arr[i].Get();
         if (!comp) continue;
@@ -1650,8 +1650,8 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
     // GetTypeId via vtable+0x10, then IsDerivedFrom). Matches Entity_FindComponent_*.
     auto FindEntityComp = [](ComponentEntity* entity, uint32_t tid) -> Component* {
         if (tid == 0) return nullptr;
-        int cnt = entity->_componentCount;
-        Object::InternalPtr<Component>* arr = entity->_components;
+        int cnt = entity->_components._size;
+        Object::InternalPtr<Component>* arr = entity->_components._data;
         for (int i = 0; i < cnt; i++) {
             Component* comp = arr[i].Get();
             if (comp == nullptr) continue;
@@ -2324,8 +2324,8 @@ char CitizenComponent::TryEnrolInSchool(AttendanceComponent* exclude) {
 static Component* CitizenComp_FindSiblingByTypeId(ComponentEntity* ownerEntity, uint32_t want) {
     if (!ownerEntity) return nullptr;
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;
-    int count = ownerEntity->_componentCount;
-    Object::InternalPtr<Component>* arr = ownerEntity->_components;
+    int count = ownerEntity->_components._size;
+    Object::InternalPtr<Component>* arr = ownerEntity->_components._data;
     for (int i = 0; i < count; i++) {
         Component* comp = arr[i].Get();
         if (!comp) continue;

@@ -72,8 +72,8 @@ struct ClassRow {
 // Find a component of type `tid` on an entity (the +0x30 array / +0x38 count pair).
 Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = ent->_componentCount;                          // +0x38
-    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
+    const int n = ent->_components._size;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components._data;        // +0x30
     for (int i = 0; i < n && a; ++i) {
         Component* c = a[i].Get();
         if (!c) continue;
@@ -97,8 +97,8 @@ void DumpStorage(int frame, ComponentEntity** arr, int n) {
     for (int i = 0; i < n; ++i) {
         ComponentEntity* ent = arr[i];
         if (!ent) continue;
-        const int cN = ent->_componentCount;                     // +0x38
-        Object::InternalPtr<Component>* cA = ent->_components;   // +0x30
+        const int cN = ent->_components._size;                     // +0x38
+        Object::InternalPtr<Component>* cA = ent->_components._data;   // +0x30
         for (int c = 0; c < cN && cA; ++c) {
             Component* comp = cA[c].Get();
             if (!comp) continue;

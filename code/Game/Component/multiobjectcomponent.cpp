@@ -233,8 +233,8 @@ void MultiObjectComponent::OnEvent(int eventId) {
         ComponentEntity* child = list[i].Get();
         if (!child) continue;
 
-        const int compCount = child->_componentCount;
-        Object::InternalPtr<Component>* comps = child->_components;
+        const int compCount = child->_components._size;
+        Object::InternalPtr<Component>* comps = child->_components._data;
         for (int k = 0; k < compCount && comps; ++k) {
             Component* comp = comps[k].Get();
             if (!comp) continue;

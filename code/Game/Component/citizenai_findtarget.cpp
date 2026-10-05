@@ -110,7 +110,7 @@ static inline uint32_t CompTypeId(const Object::Base* comp) {
     EnsureInit();
     MarketLocationComponent* ptr = nullptr;
     uint32_t tid = s_tid_MarketLocationComp;
-    int count = param_1->_componentCount;
+    int count = param_1->_components._size;
     if (0 < count) {
         int i = 0;
         do {
@@ -300,7 +300,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                     ComponentEntity* lVar16 = local_a0;
                     Component* pvVar14 = nullptr;
                     {
-                        int n = local_a0->_componentCount;
+                        int n = local_a0->_components._size;
                         int idx = 0; int64_t off = 0;
                         while (idx < n) {
                             Component* comp = lVar16->_components[off].Get();
@@ -334,8 +334,8 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                                     s_tidStorageComp = StorageComponent::TypeId();
                                 ComponentEntity* ownEnt = lVarComp->_entity.Get();
                                 if (ownEnt && s_tidStorageComp) {
-                                    int n2 = ownEnt->_componentCount;
-                                    Object::InternalPtr<Component>* arr2 = ownEnt->_components;
+                                    int n2 = ownEnt->_components._size;
+                                    Object::InternalPtr<Component>* arr2 = ownEnt->_components._data;
                                     for (int k = 0; k < n2 && arr2; ++k) {
                                         Component* c2 = arr2[k].Get();
                                         if (c2 && CompTypeId(c2) == s_tidStorageComp) { stor = static_cast<StorageComponent*>(c2); break; }
@@ -354,7 +354,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                             ComponentEntity* lVar16b = local_a0;
                             Component* pvVar12b = nullptr;
                             {
-                                int n = local_a0->_componentCount;
+                                int n = local_a0->_components._size;
                                 int idx = 0; int64_t off = 0;
                                 while (idx < n) {
                                     Component* comp = lVar16b->_components[off].Get();

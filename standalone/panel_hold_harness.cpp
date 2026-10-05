@@ -144,8 +144,8 @@ uint32_t Tid(const char* n) { return ::Object::GetTypeIdByName(n); }
 
 Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = ent->_componentCount;                           // +0x38
-    Object::InternalPtr<Component>* arr = ent->_components;       // +0x30
+    const int n = ent->_components._size;                           // +0x38
+    Object::InternalPtr<Component>* arr = ent->_components._data;       // +0x30
     if (!arr || n <= 0 || n > 4096) return nullptr;
     for (int i = 0; i < n; ++i) {
         Component* c = arr[i].Get();

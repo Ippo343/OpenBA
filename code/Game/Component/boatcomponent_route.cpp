@@ -141,7 +141,7 @@ extern "C" bool BoatRoute_FindAttachPoint(InteractComponent* comp, const System:
     ComponentEntity* const entity = comp->_entity.Get();
     const uint32_t wantedTid = ModelComponent::TypeId();
     ModelComponent* model = nullptr;
-    const int compCount = entity ? entity->_componentCount : 0;
+    const int compCount = entity ? entity->_components._size : 0;
     for (int i = 0; i < compCount; ++i) {
         Object::InternalPtr<Component>* const slot = &entity->_components[i];
         Component* const obj = slot->Get();

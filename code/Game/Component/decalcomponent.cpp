@@ -358,8 +358,8 @@ extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity) {
     if (!entity) return;
     uint32_t tid = DecalComponent::TypeId();
     if (!tid) return;
-    if (!entity->_components) return;
-    for (int i = 0; i < entity->_componentCount; ++i) {
+    if (!entity->_components._data) return;
+    for (int i = 0; i < entity->_components._size; ++i) {
         Component* comp = entity->_components[i].Get();
         if (!comp) continue;
         if (comp->Type() != tid) continue;

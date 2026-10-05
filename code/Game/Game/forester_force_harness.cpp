@@ -95,8 +95,8 @@ static ForesterComponent* VerifyLodgeForester(ComponentEntity* lodge, bool dump)
     const uint32_t tidForesterDesc = ForesterDescription::TypeId();
 
     if (dump) {
-        int count = Readable(lodge, 0x40) ? lodge->_componentCount : 0;                        // +0x38
-        const Object::InternalPtr<Component>* arr = Readable(lodge, 0x40) ? lodge->_components : nullptr;   // +0x30
+        int count = Readable(lodge, 0x40) ? lodge->_components._size : 0;                        // +0x38
+        const Object::InternalPtr<Component>* arr = Readable(lodge, 0x40) ? lodge->_components._data : nullptr;   // +0x30
         fprintf(stderr, "[ForceForester] lodge=%p compCount=%d tid(ForesterComponent)=%u tid(ForesterDescription)=%u\n",
                 lodge, count, tidForesterComp, tidForesterDesc);
         if (count > 0 && count <= 512 && Readable(arr, (size_t)count * 8)) {

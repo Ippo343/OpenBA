@@ -411,8 +411,8 @@ char ClearAreaComponent::State0Update() {
 // ============================================================
 static void ClearArea_BroadcastEvent(ComponentEntity* ownerEntity, int ev) {
     if (!ownerEntity) return;
-    if (!ownerEntity->_components) return;
-    for (int i = 0; i < ownerEntity->_componentCount; ++i) {
+    if (!ownerEntity->_components._data) return;
+    for (int i = 0; i < ownerEntity->_components._size; ++i) {
         Component* comp = ownerEntity->_components[i].Get();
         if (!comp) continue;
         comp->OnEvent(ev);

@@ -431,7 +431,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
 
             // Check for WorkComponent (DAT_1401c8070) on cell entity
             ComponentEntity* cellEnt = cellEntity;
-            int compCount = cellEnt->_componentCount;
+            int compCount = cellEnt->_components._size;
             WorkComponent* workplaceComp = cellEnt->FindComponent<WorkComponent>();
 
             // ── GUARD FOR ONE OF OUR OWN DEVIATIONS (READ of 0x28) ───────────────────

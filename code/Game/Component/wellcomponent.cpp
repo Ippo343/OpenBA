@@ -219,8 +219,8 @@ void CitizenBehavior::RegisterWell(Object::InternalPtr<WellComponent>* well) {
     // FindComponent<T> shape, inline; the null-slot test is the tree's.
     const uint32_t tidMap = MapComponent::TypeId();
     MapComponent* mapComp = nullptr;
-    const int compCount = entity->_componentCount;
-    Object::InternalPtr<Component>* comps = entity->_components;
+    const int compCount = entity->_components._size;
+    Object::InternalPtr<Component>* comps = entity->_components._data;
     for (int i = 0; i < compCount; ++i) {
         Component* comp = comps[i].Get();
         if (!comp) continue;

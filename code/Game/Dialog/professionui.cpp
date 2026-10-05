@@ -705,8 +705,8 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
             if (!entityBP) continue;
 
             // Find WorkplaceComponent on entity
-            int compCount = entityBP->_componentCount;
-            Object::InternalPtr<Component>* compArray = entityBP->_components;
+            int compCount = entityBP->_components._size;
+            Object::InternalPtr<Component>* compArray = entityBP->_components._data;
             WorkPlaceComponent* workplaceComp = nullptr;
 
             for (int c = 0; c < compCount; c++) {
@@ -731,8 +731,8 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                     // Find StorageLocationComponent on parent entity via +0x10
                     ComponentEntity* parentEntity = workplaceComp->_entity.Get();
                     if (!parentEntity) continue;
-                    int pCompCount = parentEntity->_componentCount;
-                    Object::InternalPtr<Component>* pCompArray = parentEntity->_components;
+                    int pCompCount = parentEntity->_components._size;
+                    Object::InternalPtr<Component>* pCompArray = parentEntity->_components._data;
                     WorkComponent* storageLocComp = nullptr;
 
                     for (int c = 0; c < pCompCount; c++) {

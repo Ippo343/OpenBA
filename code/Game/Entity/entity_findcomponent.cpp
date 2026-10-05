@@ -61,9 +61,9 @@ Component* Entity_FindComponentByExeTypeId(ComponentEntity* e, const uint32_t* t
 
     uint32_t targetTypeId = *typeIdPtr;
 
-    // Component array ComponentEntity::_components (+0x30), count _componentCount (+0x38)
-    Object::InternalPtr<Component>* compArray = e->_components;
-    int compCount = e->_componentCount;
+    // Component array ComponentEntity::_components (+0x30), count _components._size (+0x38)
+    Object::InternalPtr<Component>* compArray = e->_components._data;
+    int compCount = e->_components._size;
 
     Component* found = nullptr;
     for (int i = 0; i < compCount; i++) {

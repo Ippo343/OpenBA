@@ -709,7 +709,7 @@ void CitizenBehavior::PostLoad() {
             ComponentEntity* comp = entIBP->_entity.Get();
 
             MapComponent* chosen = nullptr;
-            int32_t compCount = comp->_componentCount;
+            int32_t compCount = comp->_components._size;
             for (int32_t j = 0; j < compCount; ++j) {
                 Object::InternalPtr<Component>* slotPtr = &comp->_components[j];
                 Component* cand = slotPtr->Get();

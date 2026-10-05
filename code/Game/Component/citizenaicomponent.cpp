@@ -508,7 +508,7 @@ static CitizenComponent* CitizenAI_FindSiblingCitizen(ComponentEntity* ownerEnti
     // B.3.8 CIT (B6-5): the class's own record, no lazy first-use cache.
     uint32_t want = CitizenComponent::TypeId();
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;  // type id not yet assigned
-    for (int i = 0; i < ownerEntity->_componentCount; i++) {
+    for (int i = 0; i < ownerEntity->_components._size; i++) {
         Component* comp = ownerEntity->_components[i].Get();
         if (!comp) continue;
         if (comp->Type() == want) {

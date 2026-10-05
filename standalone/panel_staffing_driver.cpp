@@ -128,8 +128,8 @@ int IconMask(ComponentEntity* ent) {
 
 Component* FindComp(ComponentEntity* ent, uint32_t tid) {
     if (!ent || !tid) return nullptr;
-    const int n = ent->_componentCount;                          // +0x38
-    Object::InternalPtr<Component>* a = ent->_components;        // +0x30
+    const int n = ent->_components._size;                          // +0x38
+    Object::InternalPtr<Component>* a = ent->_components._data;        // +0x30
     for (int i = 0; i < n && a; ++i) {
         Component* c = a[i].Get();
         if (!c) continue;

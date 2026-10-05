@@ -256,7 +256,7 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
                     // Citizen component array is IBP entries at citizen+0x30, count at citizen+0x38
                     StorageComponent* storageComp = nullptr;
                     int cCompIdx = 0;
-                    if (citizen->_componentCount > 0) {
+                    if (citizen->_components._size > 0) {
                         do {
                             // Each component entry is an InternalBasePtr — CheckPtr before reading
                             const Object::InternalPtr<Component>* compIBP = &citizen->_components[cCompIdx];
@@ -275,7 +275,7 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
                                 goto phase2_found;
                             }
                             cCompIdx++;
-                        } while (cCompIdx < citizen->_componentCount);
+                        } while (cCompIdx < citizen->_components._size);
                     }
                     storageComp = nullptr;
 
