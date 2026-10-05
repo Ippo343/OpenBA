@@ -55,6 +55,12 @@ extern "C" void* RtGraphics_DrawGroup_CopyCtor(void*, const void*) { UnlinkedBod
 extern "C" void* RtGraphics_Animation_CopyCtor(void*, const void*) { UnlinkedBody("RtGraphics_Animation_CopyCtor"); }
 extern "C" void  RtGraphics_Animation_Dtor(void*) { UnlinkedBody("RtGraphics_Animation_Dtor"); }
 Save::SaveLoad::SaveInfo::~SaveInfo() { UnlinkedBody("Save::SaveLoad::SaveInfo::~SaveInfo"); }
+// B.4 S4 GFX: kSpec_MetaData58's element op names the copy ctor directly now
+// (the RtSave_MetaData_CopyCtor door is gone); the ctor's member set names
+// ModInfo's copy ctor and dtor in turn.
+Save::SaveLoad::SaveInfo::SaveInfo(const SaveInfo&) { UnlinkedBody("Save::SaveLoad::SaveInfo::SaveInfo(const SaveInfo&)"); }
+Save::SaveLoad::ModInfo::ModInfo(const ModInfo&) { UnlinkedBody("Save::SaveLoad::ModInfo::ModInfo(const ModInfo&)"); }
+Save::SaveLoad::ModInfo::~ModInfo() { UnlinkedBody("Save::SaveLoad::ModInfo::~ModInfo"); }
 
 // B.4 Y RT: `Graphics::GraphicsMesh::_nodes` is `NodeArray`, whose ~Array names
 // the hand-derived row `rtcoll::gfxanim::kSpec_MeshNode`
