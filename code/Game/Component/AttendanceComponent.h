@@ -33,9 +33,16 @@
 #include "Component/ControllerComponent.h"
 #include "Component/controller_state_table.h"
 #include "Object/exe_type.h"
+#include "collection/Collection.h"   // Collection::Array (queue)
 
 struct AttendanceCtrlTag { using Owner = class AttendanceComponent; };   // the handlers' receiver (controller_state_table.h)
 class CitizenComponent;   // Component/CitizenComponent.h
+
+// The queue grows through retail's stride-8 rows (0x1400032e0 SetSize(n) / 0x140003110
+// SetSize(n, fill): stride 8, align 8, the new tail ZEROED, no element destroy) and is freed
+// by the inlined ~Array (dtor 0x140044543: MemFree, then +0x28 = +0x30 = 0):
+// kSpec_PtrZero (Entity/EntityList.h).
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60
 
 class AttendanceComponent final : public ControllerComponent {
     DECLARE_EXE_TYPE(AttendanceComponent)
@@ -66,9 +73,9 @@ public:
     // PUBLIC while the ported bodies read them (B38 decision 1). Persist
     // 0x140044410: the count, then per entry an InternalBasePtr nulled unless
     // IsDerivedFrom CitizenComponent (0x1401c7158).
-    Object::InternalPtr<CitizenComponent>* queue;   // +0x28 the waiting citizens (Array data, freed by the dtor)
-    int32_t            queueCount;     // +0x30
-    int32_t            queueCapacity;  // +0x34
+    using QueueList = Collection::Array<Object::InternalPtr<CitizenComponent>, Collection::DefaultAllocator,
+                                        Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    QueueList          queue;          // +0x28 the waiting citizens (count +0x30, capacity +0x34)
     StateController _controller;   // +0x38 the embedded controller (D6)
 };
 
@@ -79,5 +86,5 @@ static_assert(offsetof(AttendanceComponent, _controller) == 0x38,
 static_assert(offsetof(AttendanceComponent, _controller) + offsetof(ControllerComponent::Controller, _owner) == 0x50,
               "controller back-pointer at +0x50 (ctor 0x140044580)");
 static_assert(offsetof(AttendanceComponent, queue) == 0x28, "AttendanceComponent +0x28 queue");
-static_assert(offsetof(AttendanceComponent, queueCount) == 0x30, "AttendanceComponent +0x30 queue count");
-static_assert(offsetof(AttendanceComponent, queueCapacity) == 0x34, "AttendanceComponent +0x34 queue capacity");
+static_assert(offsetof(AttendanceComponent, queue) + offsetof(AttendanceComponent::QueueList, _size) == 0x30, "AttendanceComponent +0x30 queue count");
+static_assert(offsetof(AttendanceComponent, queue) + offsetof(AttendanceComponent::QueueList, _capacity) == 0x34, "AttendanceComponent +0x34 queue capacity");

@@ -92,7 +92,7 @@ UNIT_TEST(mia_controller_member_at_retail_offset) {
 
 UNIT_TEST(mia_component_member_offsets) {
     CHECK_EQ(offsetof(AttendanceComponent, queue),         (size_t)0x28);   // waiting queue
-    CHECK_EQ(offsetof(AttendanceComponent, queueCount),    (size_t)0x30);
+    CHECK_EQ(offsetof(AttendanceComponent, queue) + offsetof(AttendanceComponent::QueueList, _size), (size_t)0x30);
     CHECK_EQ(offsetof(BoatComponent, destination),         (size_t)0x28);
     CHECK_EQ(offsetof(BoatComponent, route),               (size_t)0x60);   // route array
     CHECK_EQ(offsetof(BoatComponent, routeIndex),          (size_t)0x70);

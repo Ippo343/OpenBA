@@ -19,7 +19,6 @@
 #include "Component/StorageComponent.h"   // B.3.8 CB1a (TypeId)
 #include "graphics/Mesh.h"
 #include "Component/citizencomponent_funcs.h"
-#include "Component/coll_bridge.h"
 #include "Component/InteractComponent.h"       // ENDGAME B.3.9 C1: 0x1401c7900 cell class
 #include "Component/ResidenceComponent.h"      // ENDGAME B.3.9 C1: 0x1401c7cf0 cell class
 #include "Component/ResidenceDescription.h"    // ENDGAME B.3.9 C1: 0x1401c7d28 cell class
@@ -2061,8 +2060,8 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
     int cap = res ? res->_i20 : 0;
     g_sub40f0_attTid = (int)attTid;
     g_sub40f0_cap    = cap;
-    g_sub40f0_count  = att->queueCount;
-    if (att->queueCount >= cap) { g_sub40f0_exit = 1; return false; }
+    g_sub40f0_count  = att->queue._size;
+    if (att->queue._size >= cap) { g_sub40f0_exit = 1; return false; }
 
     WorkPlaceComponent* bldg = att->_entity->FindComponent<WorkPlaceComponent>();
     if (bldg->workerCount == 0) { g_sub40f0_exit = 2; return false; }
@@ -2198,9 +2197,8 @@ char CitizenComponent::FindCareBuilding() {
     if (found != nullptr) {
         CitizenComponent* keyIBP = this;
         if (CitizenComp_sub_40f0(found, this)) {
-            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&found->queue)
-                .SetSizeFill(found->queueCount + 1, &keyIBP);
+            // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
+            found->queue.SetSizeFill(found->queue._size + 1, &keyIBP);
             careBuilding = found;
             // [Plague] outcome: linked. Only reached for a sick citizen (the two call
             // sites both gate on +0x68 != 0), so this is inherently low volume.
@@ -2248,9 +2246,8 @@ void CitizenComponent::FindStorage() {
     if (found != nullptr) {
         CitizenComponent* keyIBP = this;
         if (CitizenComp_sub_40f0(found, this)) {
-            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&found->queue)
-                .SetSizeFill(found->queueCount + 1, &keyIBP);
+            // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
+            found->queue.SetSizeFill(found->queue._size + 1, &keyIBP);
             field_0x230 = found;
         }
     }
@@ -2286,9 +2283,8 @@ char CitizenComponent::TryEnrolInSchool(AttendanceComponent* exclude) {
     if (found != nullptr) {
         CitizenComponent* keyIBP = this;
         if (CitizenComp_sub_40f0(found, this)) {
-            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
-            GameColl::AsArray<GameColl::Ptr8>(&found->queue)
-                .SetSizeFill(found->queueCount + 1, &keyIBP);
+            // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill) (kSpec_PtrZero).
+            found->queue.SetSizeFill(found->queue._size + 1, &keyIBP);
             school = found;
             field_0x220 = true;
             return 1;
