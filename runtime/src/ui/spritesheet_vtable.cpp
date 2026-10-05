@@ -275,13 +275,6 @@ Object::Base* SpriteSheet::CreateInPlaceObject(void* place) {
 
 namespace {
 
-// ?Serialize@String@System@@ (0x1800c9930), called by name. The two String
-// members are spelt `char*` (H5: a System::String member would run a ctor/dtor
-// the retail class does not), so each is viewed as the String it is.
-void StringSerialize(char** field, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(*ser);   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-}
-
 // ExternalPtr<MaterialInstance>::Serialize (0x180014520), by name. `m_field30`
 // is spelt uint64_t (saveload_draw.cpp stores it as an integer), and the body
 // takes the rt::io POD view of the Serializer (cursor.cpp does the same).
@@ -375,8 +368,8 @@ extern "C" void RtUi_SpriteSheet_SerializeEntries(IO::Serializer* ser,
 
     SpriteInfo* e = entries;
     do {
-        StringSerialize(&e->name,  ser);  // +0x00  CALL 0x1800c9930
-        StringSerialize(&e->group, ser);  // +0x08  CALL 0x1800c9930
+        e->name.Serialize(*ser);          // +0x00  CALL 0x1800c9930
+        e->group.Serialize(*ser);         // +0x08  CALL 0x1800c9930
 
         ser->Serialize(e->x, nullptr);            // +0x10
         ser->Serialize(e->y, nullptr);            // +0x14

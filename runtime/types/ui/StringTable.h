@@ -53,8 +53,15 @@
 
 #include "../object/External.h"
 #include "../object/Internal.h"   // Object::detail::InternalMemFree
+#include "../collection/Collection.h"   // B4 Y RT-UI: the entry array member
+#include "../system/String.h"           // TextEntry's two Strings
 
-namespace System { class String; }
+// B4 Y RT-UI: the hand-derived row StringTable's entry array is built and
+// destroyed through (runtime/src/collection/array.cpp, retail SetSize
+// 0x180078c90), named here so the typed member can carry it as its spec.
+namespace rtcoll {
+extern const ArraySpec kSpec_StringPair10;   // 0x180078c90  Array<StringTable::TextEntry>
+}  // namespace rtcoll
 
 namespace UI {
 
@@ -73,14 +80,14 @@ public:
 
     // ??0StringTable@UI@@QEAA@XZ 0x18011d890 — the REAL constructor: External()
     // (+0x08..+0x18), then +0x20 = 0 and ONE 8-byte store covering _size and
-    // _capacity (18011d8d5 / 18011d8d9).
-    StringTable() : Object::External() { _data = nullptr; _size = 0; _capacity = 0; }
+    // _capacity (18011d8d5 / 18011d8d9): `_entries`' own Array() (B4 Y RT-UI).
+    StringTable() : Object::External() {}
 
     // [0] 0x180002740 — MSVC's VECTOR deleting destructor (`MOV EDX,0x30`, the
     // element size; the scalar arm is ??1 inlined, then ??3StringTable — one
     // body with the global MemFree, stringtable_lifecycle.cpp's banner).
-    // 0x18011d8f0 — ~Array<TextEntry> (stringtable_factory.cpp), then the
-    // compiler chains ~External.
+    // 0x18011d8f0 — an empty body: `_entries`' ~Array (0x180004a90), then
+    // ~External, both compiler-chained (stringtable_factory.cpp).
     ~StringTable() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
@@ -118,12 +125,14 @@ public:
 
 public:
     // ---- the 0x10 bytes StringTable adds: Collection::Array<TextEntry> -----
-    // Spelled as the three raw words: `kSpec_StringPair10` (0x180078c90, the
-    // array's SetSize) is a NON-TRIVIAL hand-derived row, so the one resize
-    // bridges through it rather than through a trait-derived Array<TextEntry>.
-    TextEntry* _data;       // +0x20  Collection::Array._data
-    int32_t    _size;       // +0x28  Collection::Array._size   (GetCount)
-    int32_t    _capacity;   // +0x2C  Collection::Array._capacity
+    // B4 Y RT-UI: a real member on retail's own row, `kSpec_StringPair10`
+    // (0x180078c90, the array's SetSize). Its ~Array is the row's destroy
+    // (0x180005570: per entry +0x08 then +0x00) over the live range, then the
+    // J1 free and the header zeroed: retail's 0x180004a90, which ~StringTable
+    // 0x18011d8f0 calls before the tail JMP to ~External.
+    using EntryArray = Collection::Array<TextEntry, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_StringPair10>>;
+    EntryArray _entries;    // +0x20  data, +0x28 size (GetCount), +0x2C capacity
 };
 
 static_assert(sizeof(StringTable::TextEntry) == 0x10, "StringTable entry stride 0x10");
@@ -132,10 +141,10 @@ static_assert(offsetof(StringTable::TextEntry, text) == 0x08, "entry text at +0x
 static_assert(sizeof(StringTable) == 0x30,
               "UI::StringTable is 0x30 bytes (CreateNewObject 0x1800022b1 allocates 0x30)");
 static_assert(alignof(StringTable) == 8, "UI::StringTable aligns to 8 (the vptr)");
-static_assert(offsetof(StringTable, _data)     == 0x20, "GetText 0x180002550 reads *(this+0x20)");
-static_assert(offsetof(StringTable, _size)     == 0x28, "GetCount 0x180002610 reads +0x28");
-static_assert(offsetof(StringTable, _capacity) == 0x2C, "Array capacity at +0x2C");
-static_assert(offsetof(StringTable, _data) == sizeof(Object::External),
+static_assert(offsetof(StringTable, _entries) == 0x20, "GetText 0x180002550 reads *(this+0x20)");
+static_assert(offsetof(StringTable, _entries) + 0x08 == 0x28, "GetCount 0x180002610 reads +0x28");
+static_assert(offsetof(StringTable, _entries) + 0x0c == 0x2C, "Array capacity at +0x2C");
+static_assert(offsetof(StringTable, _entries) == sizeof(Object::External),
               "StringTable's own bytes begin right after Object::External");
 
 }  // namespace UI

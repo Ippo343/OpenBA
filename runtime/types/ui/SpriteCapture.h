@@ -110,7 +110,13 @@ class SpriteSheet;
 struct CaptureEntry {
     int32_t sheetIndex;   // +0x00  index into _sheets, or -1/-2 for a scissor
     int32_t pad04;        // +0x04  never written by either body
-    char*   name;         // +0x08  System::String — see THE DANGLING NAME above
+    // B4 Y RT-UI: System::String. In `_entries` an entry is only built /
+    // copied / destroyed by kSpec_CaptureEntry / kSpec_CaptureEntryZ's raw
+    // arms (destroy 0x18003f070), which name `_data`. The two C++ objects are
+    // AddScissor's / AddSprite's stack locals, whose name retail zeroes first
+    // and releases as the last act of the body (0x1800d8fc2, AddSprite's
+    // tail): this member's ctor and dtor.
+    System::String name;  // +0x08  see THE DANGLING NAME above
     int32_t x1;           // +0x10
     int32_t y1;           // +0x14
     int32_t x2;           // +0x18

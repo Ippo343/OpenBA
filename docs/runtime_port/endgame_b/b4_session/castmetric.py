@@ -69,7 +69,9 @@ COLS = COUNTED + ('total', 'tier_i', 'cast_ok', 'bridge')
 # Tier R (B4_RULES.md M2): the categories a `// CAST-OK: <category>` marker may name.
 CATEGORIES = ('alloc_header', 'ptr_int', 'crash_walk', 'win32', 'float_bits', 'string_header',
               'pe_walk', 'byte_io', 'elem_stride', 'gpu_map', 'com_iid', 'crt', 'hash', 'vslot',
-              'dx11_seam')
+              'dx11_seam',
+              # added at the B.4 close by the audit's rulings (AUDIT.md part A, FLOOR.md section 1)
+              'const_api', 'user_data', 'null_receiver', 'static_init')
 # Tier I (M3), shape print_arg: the callees whose arguments are printf-style (a format string
 # and `...`). Read from the tree: the CRT family, the variadic loggers
 # (redzone_alloc.cpp RZOut / RZBoth, main.cpp CrashLogf, boot_state_watchdog.cpp HangLogf,
@@ -83,7 +85,8 @@ PRINTF_FAMILY = frozenset((
     'TRACE', 'DLOG', 'MO_LOG', 'REPO_DIAG', 'CEM_TRACE', 'TORNADO_TRACE'))
 _RE_MARKER = re.compile(r'CAST-OK:\s*([A-Za-z0-9_]+)')
 _RE_ALLOC_CALL = re.compile(r'^(?:::)?(?:[A-Za-z_]\w*\s*(?:\(\s*\))?\s*(?:::|->|\.)\s*)*'
-                            r'(MemAlloc\w*|Allocate\w*)\s*\(')
+                            r'((?:Rt)?MemAlloc\w*|Allocate\w*|InternalMemAlloc|TypeChildAlloc|\w*OperatorNew'
+                            r'|operator\s+new|malloc|realloc|calloc)\s*\(')
 _RE_BAD_OPND = re.compile(r'\+\s*0[xX][0-9a-fA-F]')
 
 
@@ -835,8 +838,10 @@ def tier_i_shape(code, pos, end, target, spelling, opnd):
     return None
 
 
-def bad_operand(col, opnd):
-    """Why a cast on a CAST-OK line is not tier R (M2), or ''."""
+def bad_operand(col, opnd, cat='', line=''):
+    """Why a cast on a CAST-OK line is not tier R (M2), or ''.
+    B.4 close (AUDIT.md part A): for `elem_stride` ONLY, a `this` / `self` operand is allowed where
+    the line views the container's own header as the erased core's header type (`ArrayHdr`)."""
     if col == 'accessor':
         return 'offset accessor call'
     if _RE_BAD_OPND.search(opnd or ''):
@@ -845,6 +850,8 @@ def bad_operand(col, opnd):
     while o.startswith('(') and match_paren(o, 0) == len(o) - 1:
         o = o[1:-1].strip()
     if o in ('self', 'this'):
+        if cat == 'elem_stride' and 'ArrayHdr' in line:
+            return ''
         return 'operand is ' + o
     return ''
 
@@ -1183,6 +1190,7 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
             if len(args) >= 2 and any(re.match(r'^-?(0[xX][0-9a-fA-F]+|\d+)[uUlL]*$', x) for x in args[1:]):
                 hit('accessor', m.start(1))
     # ---- CAST-OK lines: tier R, or a BAD MARKER whose casts stay in the total
+    _srclines = src.split('\n')
     for ln in sorted(markers):
         cat = markers[ln]
         lst = marked.get(ln)
@@ -1191,7 +1199,7 @@ def scan(idx, rel, src, want_detail=False, all_cstyle=False, code=None):
             continue
         why = '' if cat in CATEGORIES else 'unknown category ' + cat
         for col, pos, opnd in lst:
-            why = why or bad_operand(col, opnd)
+            why = why or bad_operand(col, opnd, cat, _srclines[ln - 1] if 0 < ln <= len(_srclines) else '')
         for col, pos, opnd in sorted(lst, key=lambda x: x[1]):
             if why:
                 counts[col] += 1

@@ -272,37 +272,16 @@ void UI::UserInterface::Draw(Video::Context& context) {
     }
 
     // ---- 0x180121cad: the SpriteContext, built on the stack ---------------
-    // 0xa0 rather than sizeof(SpriteContext) (0x88): the header states 0x88 as
-    // a LOWER BOUND proven by Begin's store at +0x80, not as a measured sizeof.
-    // DELIBERATELY UNINITIALISED as a whole — retail writes each field, and
-    // +0x50 it never writes at all.
-    // B.4 LEFT: a `UI::SpriteContext` object would run its members' ctors and
-    // its dtor, which retail's inlined builder does not (B4_RULES H5); the
-    // storage stays raw until that is a `behaviour:` commit of its own.
-    alignas(16) uint8_t scStorage[0xa0];
-    SpriteContext* const sc = reinterpret_cast<SpriteContext*>(scStorage);   // LEFT: H5 UserInterface's SpriteContext is raw stack storage (its ctor / dtor would start to run)
-
-    sc->_scale        = 1.0f;                       // 0x180121cad, as 0x3f800000
-    sc->_currentSheet = nullptr;
-    sc->_draws._data     = nullptr;                 // 0x180121cb8
-    sc->_draws._size     = 0;                       // 0x180121cbc, one qword with
-    sc->_draws._capacity = 0;                       //              _capacity
-    sc->_scissorX = 0; sc->_scissorY = 0;           // 0x180121cc3, one MOVDQA
-    sc->_scissorW = 0; sc->_scissorH = 0;
-    sc->_context     = &context;                    // 0x180121cc8
-    sc->_deferring   = 0;                           // 0x180121ccc
-    sc->_deferred._data     = nullptr;              // 0x180121cd0
-    sc->_deferred._size     = 0;                    // 0x180121cd4
-    sc->_deferred._capacity = 0;
-    // +0x50 (RBP-0x30): retail takes its ADDRESS at 0x180121cd8 and never
-    // writes the qword. Left uninitialised on purpose. +0x58..+0x77 are four
-    // qwords (0x180121ce3..0x180121cef): the Layout's two arrays.
-    sc->_layout._entries._data        = nullptr;    // +0x58
-    sc->_layout._entries._size        = 0;          // +0x60 } one QWORD
-    sc->_layout._entries._capacity    = 0;          // +0x64 }
-    sc->_layout._lineWidths._data     = nullptr;    // +0x68
-    sc->_layout._lineWidths._size     = 0;          // +0x70 } one QWORD
-    sc->_layout._lineWidths._capacity = 0;          // +0x74 }
+    // B4 Y RT-UI: a real `UI::SpriteContext`. Retail inlines
+    // ??0SpriteContext(Context&) (0x18011d1e0) here store for store
+    // (0x180121cad..0x180121cef: +0x00 1.0f, +0x08, the _draws header, the
+    // scissor as one MOVDQA, +0x30 &context, BYTE +0x38, the _deferred
+    // header, +0x58..+0x77 the Layout's two arrays; +0x50 never written --
+    // only its address is taken at 0x180121cd8). Its ~SpriteContext, inlined
+    // at the end of the body (0x1801222e0..), is the implicit member-wise
+    // destructor at the closing brace: +0x68, +0x58, +0x40, +0x10.
+    SpriteContext scObj(context);
+    SpriteContext* const sc = &scObj;
 
     // ---- 0x180121d0e: Begin ------------------------------------------------
     // ENDGAME B.3.6: `SpriteContext::Begin` / `Flush` / `AddSpriteDraw` are
@@ -594,36 +573,9 @@ void UI::UserInterface::Draw(Video::Context& context) {
     }
 
     // ---- 0x180122242: free the four buffers the SpriteContext owns ---------
-    // Retail inlines EnterCriticalSection / Free / LeaveCriticalSection around
-    // the allocator singleton; that sequence IS the body of the exported
-    // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`, so calling the export
-    // reproduces the lock discipline with no <windows.h> in a runtime/src file
-    // (WAVE10_LANE_UI1.md §1b). Retail's own `if (p)` is OUTSIDE the call here,
-    // so the guard is reproduced outside too.
-    //
-    // The order is retail's: +0x68, +0x58, +0x40, +0x10.
-    if (void* const p = sc->_layout._lineWidths._data) {                // +0x68
-        System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
-    }
-    sc->_layout._lineWidths._data     = nullptr;
-    sc->_layout._lineWidths._size     = 0;                                  // } one QWORD
-    sc->_layout._lineWidths._capacity = 0;                                  // }
-    if (void* const p = sc->_layout._entries._data) {                // +0x58
-        System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
-    }
-    sc->_layout._entries._data     = nullptr;
-    sc->_layout._entries._size     = 0;                                  // } one QWORD
-    sc->_layout._entries._capacity = 0;                                  // }
-    if (void* const p = sc->_deferred._data) {                // +0x40
-        System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
-    }
-    sc->_deferred._data     = nullptr;
-    sc->_deferred._size     = 0;                                  // } one QWORD
-    sc->_deferred._capacity = 0;                                  // }
-    if (void* const p = sc->_draws._data) {                // +0x10
-        System::MemoryAllocator::MemFree(p);                // 0x1800c7ad0
-    }
-    sc->_draws._data     = nullptr;
-    sc->_draws._size     = 0;                                  // } one QWORD
-    sc->_draws._capacity = 0;                                  // }
+    // `scObj`'s ~SpriteContext at the closing brace (B4 Y RT-UI): reverse
+    // declaration order runs `_layout._lineWidths` (+0x68), `_layout._entries`
+    // (+0x58), `_deferred` (+0x40), `_draws` (+0x10), each a trivial-element
+    // ~Array -- the J1 body: `if (data)` free under the allocator's lock, then
+    // the header zeroed. Retail's order and retail's four frees.
 }

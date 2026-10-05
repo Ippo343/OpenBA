@@ -156,21 +156,17 @@ bool StringTable::Serialize(IO::Stream& streamV) {
     // the stream's encoding, version 0.
     IO::Serializer ser(*stream, 0);
 
-    int32_t count = _size;                                   // 18011d987
+    int32_t count = _entries._size;                          // 18011d987
     ser.Serialize(count, nullptr);                           // 18011d99e, +0xa0
 
     // The direction is RE-READ from the stream here, not cached from above:
     // 18011d9a4 reloads [RSP+0x28] and 18011d9a9 tests [RAX+0x8] again.
     if (stream->_direction == 0) {                           // 18011d9a9
-        // ENDGAME B.3.2 step 2 — `_data`/`_size`/`_capacity` are the
-        // {data,size,capacity} triple `Collection::Array<TextEntry>` would use,
-        // contiguous and asserted at StringTable.h's offsets, and
-        // `kSpec_StringPair10` is NON-TRIVIAL, so the call bridges through it.
-        rtcoll::AsArray<&rtcoll::kSpec_StringPair10>(&_data)
-            ->SetSize(count);                                 // 18011d9b7, retail 0x180078c90
+        // `_entries` is on retail's own row, kSpec_StringPair10 (B4 Y RT-UI).
+        _entries.SetSize(count);                             // 18011d9b7, retail 0x180078c90
     }
 
-    TextEntry* e = _data;                                    // 18011d9bc
+    TextEntry* e = _entries._data;                           // 18011d9bc
     // System::String::Serialize (0x1800c9930), by name. The two Strings are
     // spelt `char*` in TextEntry (H5), so each is viewed as the String it is.
     for (int32_t i = 0; i < count; ++i, ++e) {               // bound is the LOCAL
@@ -190,13 +186,11 @@ bool StringTable::Serialize(IO::Stream& streamV) {
 //     18011d906  re-stamp OUR vptr                 (the compiler's now)
 //     18011d910  ADD RCX,0x20 ; CALL 0x180004a90   ~Array<TextEntry>
 //     18011d91a  JMP 0x1800bc950                   ~External (the compiler's)
-// 0x180004a90 releases both refcounted strings of every entry, frees the block
-// and zeroes the header; it is ported (array_destroy.cpp J2, spec kD_Str2_10)
-// and called by name. `_data/_size/_capacity` are raw words (the NON-TRIVIAL
-// kSpec_StringPair10 row), so it stays a free-function call rather than a
-// member ~Array.
+// 0x180004a90 releases both refcounted strings of every entry (0x180005570),
+// frees the block and zeroes the header. B4 Y RT-UI: that is `_entries`' own
+// ~Array (the kSpec_StringPair10 row's destroy, then the J1 free), run by the
+// compiler after this now-empty body and before ~External: retail's order.
 StringTable::~StringTable() {
-    rtcoll::RtColl_ArrayDtorElem_180004a90(&_data);          // 18011d914
 }
 
 }  // namespace UI

@@ -240,9 +240,18 @@ public:
     // the storage held, which is what retail's ctor does too.
     SpriteContext() = default;
 
-    // ??0SpriteContext@UI@@QEAA@AEAVContext@Video@@@Z  0x18011d1e0 — NOT PORTED
-    // (no caller in the tree: both builders inline it). Declared, left undefined.
-    explicit SpriteContext(Video::Context& context);
+    // ??0SpriteContext@UI@@QEAA@AEAVContext@Video@@@Z  0x18011d1e0 — retail's
+    // stores, in address order: +0x00 = 1.0f; +0x08 = 0; +0x10 / +0x18 (the
+    // _draws Array()); +0x20 / +0x28 (the four scissor ints); +0x30 =
+    // &context; BYTE +0x38 = 0; +0x40 / +0x48 (_deferred); +0x58..+0x77 (the
+    // two Array()s of _layout). +0x04, +0x39..+0x3f, +0x50 (_layout's
+    // _width / _height: FontLayout has no constructor of its own), +0x78 and
+    // +0x80 are NOT written. UserInterface::Draw (0x180121cad..0x180121cef)
+    // inlines exactly these stores (B4 Y RT-UI).
+    explicit SpriteContext(Video::Context& context)
+        : _scale(1.0f), _currentSheet(nullptr), _draws(),
+          _scissorX(0), _scissorY(0), _scissorW(0), _scissorH(0),
+          _context(&context), _deferring(0), _deferred() {}
     // ??0SpriteContext@UI@@QEAA@AEBV01@@Z  0x1800321c0 — the deep member-wise
     // copy that pins sizeof (banner). NOT PORTED, no caller; declared only, so
     // no C++ caller can reach Collection::Array's SHALLOW defaulted copy.

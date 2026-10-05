@@ -464,7 +464,7 @@ void InitIdentityTransform(uint8_t* d) { InitAs<Math::Transform, &IdentityTransf
 static void CaptureEntryAssign(UI::CaptureEntry* d, const UI::CaptureEntry* s) {
     d->sheetIndex = s->sheetIndex;          // +0x00
     // +0x04 pad -- neither instantiation writes it.
-    AdoptString(d->name, s->name);          // +0x08, INC [str-4]
+    AdoptString(d->name._data, s->name._data);  // +0x08, INC [str-4]
     d->x1       = s->x1;
     d->y1       = s->y1;
     d->x2       = s->x2;
@@ -480,7 +480,7 @@ void AssignCaptureEntry(uint8_t* d, const uint8_t* s) {
 // and +0x04 (pad) are NEVER written by this arm -- a real gap, not an omission
 // here: the disassembly's else-branch starts at `lVar5+8`, never `lVar5`.
 static void CaptureEntryInitTail(UI::CaptureEntry* d) {
-    d->name     = nullptr;                  // +0x08 qword
+    d->name._data = nullptr;                // +0x08 qword
     d->x1       = 0;                        // +0x10 qword (x1, y1)
     d->y1       = 0;
     d->x2       = 0;                        // +0x18 qword (x2, y2)
@@ -587,8 +587,8 @@ void Assign38Call(uint8_t* d, const uint8_t* s) {
 // 0x180078950's `else` (init) arm — see kSpec_Sprite38Z for the transcription
 // and for why this arm exists here and not on kSpec_Sprite38.
 static void SpriteInfoInit(UI::SpriteInfo* d) {
-    d->name        = nullptr;   // +0x00
-    d->group       = nullptr;   // +0x08
+    d->name._data  = nullptr;   // +0x00
+    d->group._data = nullptr;   // +0x08
     d->x           = 0;         // +0x10 qword (x, y)
     d->y           = 0;
     d->_reserved18 = 0;         // +0x18 qword (_reserved18, width)
@@ -1706,9 +1706,9 @@ void AssignLayoutEntry(uint8_t* d, const uint8_t* s) {
 // +0x31..+0x37 are NEVER WRITTEN.
 static void LayoutEntryInit(UI::LayoutDescription::Entry* d) {
     d->desc        = nullptr;
-    d->name        = nullptr;
-    d->relativeToX = nullptr;
-    d->relativeToY = nullptr;
+    d->name._data        = nullptr;
+    d->relativeToX._data = nullptr;
+    d->relativeToY._data = nullptr;
     d->horizontal  = UI::LayoutDescription::LayoutHorizontal{2};   // DWORD
     d->vertical    = UI::LayoutDescription::LayoutVertical{1};     // UNALIGNED QWORD of 1:
     d->offsetX     = 0;                                            //   vertical = 1, offsetX = 0

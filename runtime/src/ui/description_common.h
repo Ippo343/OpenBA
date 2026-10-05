@@ -79,11 +79,10 @@ inline void* MemAlloc(uint64_t bytes, int align) {
 // ---- the direct field-serializer calls ---------------------------------------
 // `Object::ExternalPtr<T>::Serialize` is `Object::SerializeExternal<T>(ser, field)`
 // over the typed field and the real `IO::Serializer` (External.h, B.4 P2 wave X).
-// `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930) on a
-// System::String field held as raw char* storage (H5).
-inline void StringSerialize(char** field, IO::Serializer* ser) {
-    reinterpret_cast<System::String*>(field)->Serialize(*ser);             // B.3.x bridge (H5)  // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
-}
+// `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930) is
+// called by name on every description's typed System::String member (B4 Y
+// RT-UI: the char** bridge had no caller left once LayoutDescription::Entry
+// was typed, and is deleted).
 
 // ---- fragment 3: the refcounted System::String release ---------------------
 // See the banner: the asymmetry is retail's and is kept.
@@ -121,8 +120,10 @@ inline void AttachAndPushChild(UI::Element* parent, Object::InternalPtr<UI::Elem
 // by rel32 from every one of these appliers. Fragment pass F2: block D's
 // member (sprite.cpp), called directly instead of by address.
 inline int32_t GetSpriteIndexFromName(const UI::SpriteSheet* sheet, char* const* name) {
-    // LEFT (H5): the name is a System::String held as raw char* storage.
-    return sheet->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(name));   // LEFT: H5 a System::String held as raw char* storage (class not converted this pass)
+    // Its one caller left is SpriteFromName(char* const*) for
+    // AnimatedImageDescription::_frameNames (an Array<char*> over
+    // System::String elements, AnimatedImageDescription.h).
+    return sheet->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(name));   // LEFT: H5 AnimatedImageDescription::_frameNames is Array<char*> holding System::String elements (its ctor / dtor / RtIo_SerializeStringArray caller not converted)
 }
 
 // *** THE SPRITE INDEX IS STORED AS A QWORD READ FROM A SLOT ONLY A DWORD WAS
