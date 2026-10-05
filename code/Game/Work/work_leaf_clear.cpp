@@ -143,8 +143,10 @@ static WorkEntitySetNode* WorkLeaf_BstNewNode_9b40(const WorkEntityAssignment* p
 // 0x140013480. The count is incremented on every insert that adds a node.
 // ABI: undefined8* fn(longlong* treeRootSlot, undefined8* outNode, InternalBasePtr* ins)
 // Closure: 0x140029b40 (inlined) + 0x140013480 (reg) + MemAlloc/CheckPtr (engine). SAFE.
-void* WorkLeaf_BstInsertByIBP_29920(EntitySet* set, void* outNode, const WorkEntityAssignment* ins) {
-    WorkEntitySetNode** out = reinterpret_cast<WorkEntitySetNode**>(outNode);  // LEFT: the out slot is the caller's reused scratch (ClearArea::Execute's Profession* local, retail's one stack slot)
+WorkEntitySetNode** WorkLeaf_BstInsertByIBP_29920(EntitySet* set, WorkEntitySetNode** outNode, const WorkEntityAssignment* ins) {
+    // Retail's ClearArea::Execute hands its reused Profession* stack slot here; the
+    // tree's caller holds a typed node local.
+    WorkEntitySetNode** out = outNode;
     WorkEntitySetNode* node = set->_root;
     WorkEntitySetNode* result;
 

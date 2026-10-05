@@ -507,7 +507,8 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 WorkEntityAssignment insertPair;
                 insertPair.entity = treeEntity;
                 insertPair.citizen = *citizenIBP;
-                WorkLeaf_BstInsertByIBP_29920(&_entities, &workIBP, &insertPair);
+                WorkEntitySetNode* insertedNode;   // retail: the reused workIBP stack slot
+                WorkLeaf_BstInsertByIBP_29920(&_entities, &insertedNode, &insertPair);
 
                 result = 2;
                 goto cleanup;
