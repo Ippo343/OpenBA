@@ -71,9 +71,9 @@ void  DestroyEntryTransforms(void* ignored, Entry* base, int count);
 Entry* EntryCopyConstruct(Entry* dst, const Entry* src);
 // 0x18007b590  Entry::operator=
 Entry* EntryAssign(Entry* dst, const Entry* src);
-// 0x18001f470  Volume::Box transformed by a Math::Transform -> AABB; both
-// boxes are the six floats {min.xyz, max.xyz}
-float* BoxTransform(float* outBox, const Math::Transform* transform, const float* inBox);
+// 0x18001f470  Volume::Box transformed by a Math::Transform -> AABB; the out
+// box is the six floats {min.xyz, max.xyz}, the in box a ::Box (B.4 S4 GFX2)
+float* BoxTransform(float* outBox, const Math::Transform* transform, const ::Box* inBox);
 // 0x180125bc0  project a mesh's node AABBs through their transforms, XY only:
 // a file-local template over the two {_mesh, _transforms} holders (AddDesc and
 // Entry), scene_grid.cpp

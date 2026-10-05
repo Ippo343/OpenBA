@@ -1196,8 +1196,7 @@ bool Geometry::Clean() {
         // the box helper; kept so the helper never sees the live object.
         const Math::Transform xf = _transform._current;
         float box[6];
-        const float* world = rtpickgrid::BoxTransform(box, &xf,
-                                                      reinterpret_cast<const float*>(&_localBounds));  // LEFT: SIG rtpickgrid::BoxTransform (runtime/src/picking/scene_grid.h, outside GFX): its input is const float* inBox; typed as const ::Box& (retail 0x18001f470 reads the Box) this cast goes, and scene_grid.cpp:438 MeshBoundsXY passes nodes[i]._aabb instead of its float[6] copy (a codegen change there: read retail first)
+        const float* world = rtpickgrid::BoxTransform(box, &xf, &_localBounds);
         _prevWorldBounds = _worldBounds;
         _worldBounds.min.x = world[0];
         _worldBounds.min.y = world[1];
