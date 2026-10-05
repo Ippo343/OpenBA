@@ -125,7 +125,7 @@ inline bool HasText(const System::String& s) {
 // serialize skipped its Dialog ExternalPtr, which does not merely lose the
 // field — it mis-advances the stream cursor for everything that follows
 // ([[reference-unresolved-rdata-const-deletes-guarded-test]] family).
-// LEFT: ExternalPtrSerializeGeneric (Game/serialize_externals.h) takes void**.
+// Both go through ExternalPtrSerializeGeneric's typed T** wrapper (Game/serialize_externals.h).
 // ===========================================================================
 void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) {
     ExternalPtrSerializeGeneric(field, serializer, nullptr, "Tutorial");

@@ -660,7 +660,7 @@ void ReportBadSelectionRef(int64_t block, int64_t ref) {
     // Type() to EditTool's own id, and this tripwire exists to ask a possibly-recycled
     // block's REAL table (B11, X-G1-3b).
     if (vt && ::Object::SlotAddressOf(reinterpret_cast<void*>(block), &::Object::Base::Type)) {   // vtable probe: `block` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)  // CAST-OK: crash_walk
-        uint32_t tid = reinterpret_cast< ::Object::Base*>(block)->Type();   // B.3.x bridge (slot 2)  // vtable probe: `block` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)  // CAST-OK: crash_walk
+        uint32_t tid = reinterpret_cast< ::Object::Base*>(block)->Type();   // slot 2  // vtable probe: `block` stays an integer, which keeps GCC from devirtualising Type() (as an EditTool*, a final class, it would)  // CAST-OK: crash_walk
         const char* n = ::Object::GetTypeNameById(tid);
         std::fprintf(stderr, "[HighlightClear]   tool typeId=%u ('%s')\n", tid, n ? n : "?");
         std::fflush(stderr);

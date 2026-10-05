@@ -497,7 +497,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
             NaturalResourceComponent* probe = cellEntity->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
             if (probe != nullptr) {
                 ComponentEntity* ibp = cellEntity;
-                Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(cellEntity), &ibp, &hitTree, &hitTreeNoKnock,   // LEFT: WORK (audit dead-argument row) not executable: the dead first parameter is fed a pointer here and at :538 and an integer (off * 6) at :561, so no one declared type lets all three pass without a cast
+                Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(cellEntity), &ibp, &hitTree, &hitTreeNoKnock,   // LEFT: B6 register retail leaves unset: none of retail's three calls of 0x1400583c0 loads RCX (0x140058220 / 0x140058291 / 0x14005834f set only RDX); the leftover is the entity then clobbered by 0x1400052c0 here, the slot pointer (RBX, 0x140058275, CheckPtr is a bare RET) at :536, the cell index * 6 (0x14005832f..0x140058333) at :559, so no one declared type carries all three without a cast
                                      &hitBuilding, &hitBuildingNoFire, &hitAnimal, &hitCitizen);
             }
         }
@@ -533,7 +533,7 @@ void TornadoComponent::DamageTick(const System::Time* dt) {
         for (int i = 0; i < found.size; i++) {
             CharacterComponent** slot = &found.data[i];
             ComponentEntity* ownerEntity = (*slot)->_entity.Get();
-            Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: WORK (audit dead-argument row) not executable: pointer here and at :502, integer (off * 6) at :561; no one declared type lets all three pass without a cast
+            Tornado_StrikeEntityCounted(reinterpret_cast<int64_t>(slot), &ownerEntity,   // LEFT: B6 register retail leaves unset (0x140058291 loads only RDX; RCX is the slot pointer left by 0x140058275): pointer here and at :500, integer (off * 6) at :559; no one declared type lets all three pass without a cast
                                  &hitTree, &hitTreeNoKnock, &hitBuilding, &hitBuildingNoFire,
                                  &hitAnimal, &hitCitizen);
         }

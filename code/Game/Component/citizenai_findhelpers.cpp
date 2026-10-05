@@ -476,7 +476,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                         if (proceed) {
                             ComponentEntity* entHolder[2] = {cand, nullptr};
                             ComponentDescription* outSlot = nullptr;
-                            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);   // LEFT: WORK (audit dead-argument row) not executable: ef40 (exe_bodies.h:144) ignores param_1, and its nine other callers pass pointers through the const void* parameter; a uint64_t parameter would move the cast to them
+                            CitizenComp_Entity_impl_ef40(reinterpret_cast<void*>(static_cast<uintptr_t>(flags)), &outSlot, entHolder, 0);   // LEFT: B6 register retail leaves unset: at this site (0x14008eb7a in 0x14008e370) retail loads RDX / R8 / R9D and never RCX (its low word still holds the zone compared at 0x14008eb5e); ef40 (exe_bodies.h:144) ignores param_1 and its nine other callers pass pointers through the const void*, so the tree's integer here has no declared type that fits all ten without a cast or a changed value
                             if ((outSlot != nullptr) && (-1 < cost)) {
                                 *found = cand;
                                 param_5[0] = vec[0];
