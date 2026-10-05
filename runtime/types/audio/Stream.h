@@ -52,37 +52,12 @@
 #include "../system/Thread.h"
 #include "../collection/Collection.h"   // Collection::Array<Block> _buffers
 
-namespace RtAudio {
 
 // ----------------------------------------------------------------------------
 // RtAudio::Stream — the POD (B4b-3), cross-asserted field for field against
 // the class. No product code names it (tests/unit/audio_abi_test.cpp does).
 // ----------------------------------------------------------------------------
-struct Stream {
-    RtSystem::Thread _thread;           // +0x00 .. +0x2f (vtable, runFlags, 4 HANDLEs)
-    void*    _buffers;                  // +0x30  Array<0x8ba0-byte block>::_data
-    int32_t  _buffersSize;              // +0x38
-    int32_t  _buffersCapacity;          // +0x3c
-    void*    _wakeEvent;                // +0x40  HANDLE, created SECOND by the ctor
-    void*    _bufferEvent;              // +0x48  HANDLE, created FIRST by the ctor
-    alignas(8) uint8_t _lock[0x28];     // +0x50  raw Win32 CRITICAL_SECTION
-    int32_t  _bytePosition;             // +0x78  Play's 2nd argument
-    int32_t  _channel;                  // +0x7c  Play's 1st argument
-    uint8_t  _stopping;                 // +0x80  Play's "drop the current pass" flag
-    uint8_t  _pad81[7];                 // +0x81  never written
-};
-static_assert(sizeof(Stream) == 0x88, "Audio::Stream is 0x88 bytes (Device+0xa00 .. +0xa88)");
-static_assert(offsetof(Stream, _buffers)      == 0x30, "0x1800a0e67 MOV [RDI+0x30],RSI");
-static_assert(offsetof(Stream, _wakeEvent)    == 0x40, "0x1800a0eb8 MOV [RDI+0x40],RAX");
-static_assert(offsetof(Stream, _bufferEvent)  == 0x48, "0x1800a0ea4 MOV [RDI+0x48],RAX");
-static_assert(offsetof(Stream, _lock)         == 0x50, "0x1800a0e73 LEA RCX,[RDI+0x50]");
-static_assert(offsetof(Stream, _bytePosition) == 0x78, "0x1800a0e89 MOV [RDI+0x78],RSI (qword)");
-static_assert(offsetof(Stream, _channel)      == 0x7c, "Play 0x1800a0d5f MOV [RBX+0x7c],ESI");
-static_assert(offsetof(Stream, _stopping)     == 0x80, "0x1800a0e8d MOV byte [RDI+0x80],SIL");
-static_assert(std::is_trivially_destructible<Stream>::value,
-              "B4b-1: the POD never acquires a destructor");
 
-}  // namespace RtAudio
 
 namespace Audio {
 
@@ -154,15 +129,5 @@ static_assert(sizeof(Stream) == 0x88, "Audio::Stream is 0x88 bytes");
 static_assert(alignof(Stream) == 8, "Audio::Stream aligns to 8 (the vptr)");
 static_assert(std::is_polymorphic<Stream>::value && !std::is_abstract<Stream>::value,
               "Stream overrides Thread's pure slot 0 (Run)");
-static_assert(sizeof(Stream) == sizeof(RtAudio::Stream), "Stream class == POD");
-static_assert(offsetof(Stream, _runFlags)      == offsetof(RtSystem::Thread, runFlags), "alias runFlags");
-static_assert(offsetof(Stream, _buffers)       == offsetof(RtAudio::Stream, _buffers),       "alias +0x30");
-static_assert(offsetof(Stream, _buffers) + 0x08 == offsetof(RtAudio::Stream, _buffersSize),  "alias +0x38");
-static_assert(offsetof(Stream, _wakeEvent)     == offsetof(RtAudio::Stream, _wakeEvent),     "alias +0x40");
-static_assert(offsetof(Stream, _bufferEvent)   == offsetof(RtAudio::Stream, _bufferEvent),   "alias +0x48");
-static_assert(offsetof(Stream, _lock)          == offsetof(RtAudio::Stream, _lock),          "alias +0x50");
-static_assert(offsetof(Stream, _bytePosition)  == offsetof(RtAudio::Stream, _bytePosition),  "alias +0x78");
-static_assert(offsetof(Stream, _channel)       == offsetof(RtAudio::Stream, _channel),       "alias +0x7c");
-static_assert(offsetof(Stream, _stopping)      == offsetof(RtAudio::Stream, _stopping),      "alias +0x80");
 
 }  // namespace Audio

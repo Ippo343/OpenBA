@@ -98,119 +98,10 @@ struct UserInterface;      // block E (a struct in the tree today)
 // `pod->_children[i]` are `UI::Element*` and no caller needs a bridge to walk
 // the tree from a POD. The POD dies with the last of those four.
 // ############################################################################
-namespace RtUI {
 
-struct Element {
-    // --- Object::Base / Object::Internal (0x00 .. 0x0F) --------------------
-    void*   _vtable;            // +0x00  ??_7Element@UI@@6B@ == 0x180156160.
-                                //        ctor 0x180115e50: LEA RAX,[0x180156160]
-                                //                          MOV [RBX],RAX
-    int32_t _handleIndex;       // +0x08  Object::Internal ctor 0x1800bfd10:
-                                //        MOV EAX,[InternalFactory+0x08]
-                                //        (Object::Internal::_factoryIndex)
-    int32_t _handleId;          // +0x0c  same ctor, return of 0x1800c7f90
-                                //        (Object::Internal::_generation)
 
-    // --- UI::Element -------------------------------------------------------
-    // System::String: a pointer to the character body. The refcount is the
-    // dword at [-4] and the allocation base is [-8] — that is exactly what
-    // ~Element (0x1801161a0) and SetName (0x1801154f0) do:
-    //   DEC [p-4]; if now 0 { p -= 8; MemFree(p) } else field = 0
-    void*   _name;              // +0x10  ?SetName@   0x1801154f0
 
-    int32_t _leftPad;           // +0x18  ?GetLeftPad@    0x1800355e0
-    int32_t _rightPad;          // +0x1c  ?GetRightPad@   0x180035600
-    int32_t _topPad;            // +0x20  ?GetTopPad@     0x1800355f0
-    int32_t _bottomPad;         // +0x24  ?GetBottomPad@  0x180035610
-    // *** NOTE THE ORDER: left, RIGHT, TOP, bottom. ***
-    // `?SetPadding@Element@UI@@QEAAXHHHH@Z` (0x180115480) stores its four
-    // arguments as EDX->+0x18, R8D->+0x1c, R9D->+0x20, [RSP+0x28]->+0x24.
 
-    int32_t _minWidth;          // +0x28  ?SetMinSize@ 0x1801154a0 (arg 1)
-    int32_t _minHeight;         // +0x2c  ?SetMinSize@ 0x1801154a0 (arg 2)
-
-    int32_t _alignment;         // +0x30  ?SetAlignment@ 0x180115750
-                                //        ElementDescription::Alignment enum;
-                                //        Element::Element defaults it to 3
-    uint32_t _flags;            // +0x34  ?GetElementFlags@ 0x1800354d0
-                                //        Element::Element defaults 0x08000000
-    uint32_t _color;            // +0x38  ?SetColor@ 0x180035620 (vtable slot 10)
-                                //        Element::Element defaults 0xFFFFFFFF
-    int32_t _mouseCursorIndex;  // +0x3c  ?GetMouseCursorIndex@ 0x180115740
-
-    void*   _toolTipDialog;     // +0x40  ExternalPtr<UI::Dialog>, 8 bytes.
-                                //        ?GetToolTipDialog@ 0x180035670
-    ::UIString _toolTip;        // +0x48  ?SetToolTip@ 0x180035740 (16 bytes)
-    void*   _toolTipString;     // +0x58  System::String. ?SetToolTipString@ 0x1800356e0
-
-    // The computed size, filled by virtual slot 4 (ComputeSize).
-    // *** NEITHER IS INITIALISED BY Element::Element. ***
-    int32_t _layoutWidth;       // +0x60  ?GetLayoutWidth@   0x1800355c0
-    int32_t _layoutHeight;      // +0x64  ?GetLayoutHeight@  0x1800355d0
-
-    int32_t _layoutLeft;        // +0x68  ?GetLayoutLeft@    0x180035580
-    int32_t _layoutTop;         // +0x6c  ?GetLayoutTop@     0x1800355a0
-    int32_t _layoutRight;       // +0x70  ?GetLayoutRight@   0x180035590
-    int32_t _layoutBottom;      // +0x74  ?GetLayoutBottom@  0x1800355b0
-
-    int32_t _unknown78;         // +0x78  Element::Element sets it to -1 (store at
-                                //        0x180115ebb); no accessor names it.
-    uint32_t _pad7c;            // +0x7c  NEVER written by Element::Element
-
-    void*   _userData;          // +0x80  Object::Base*. ?GetUserData@ 0x180115550
-    int32_t _elementId;         // +0x88  ?GetElementId@ 0x180115830; ctor -1
-    uint32_t _pad8c;            // +0x8c  NEVER written by Element::Element
-
-    void*   _dialogParent;      // +0x90  InternalPtr<UI::DialogInstance>.
-                                //        ?SetDialogParent@ 0x180115630
-    UI::Element* _parent;       // +0x98  ?SetParent@ 0x1801154d0
-
-    // `?ChildCount@` (0x180035530) is `MOV EAX,[RCX+0xa8]` and `?Child@`
-    // (0x180035540) is `MOV RAX,[RCX+0xa0]; MOV RCX,[RAX+idx*8]`.
-    Collection::Array<UI::Element*> _children;   // +0xa0 .. +0xaf
-
-    void*   _border;            // +0xb0  InternalPtr<UI::Element>.
-                                //        ?GetBorder@ 0x180035630 (vtable 11)
-    void*   _description;       // +0xb8  ExternalPtr<UI::ElementDescription>.
-                                //        ?GetDescription@ 0x1800357d0
-};
-
-static_assert(sizeof(Element) == 0xC0, "RtUI::Element is 0xC0 bytes");
-static_assert(alignof(Element) == 8,   "RtUI::Element is 8-aligned");
-
-static_assert(offsetof(Element, _vtable)           == 0x00, "");
-static_assert(offsetof(Element, _handleIndex)      == 0x08, "");
-static_assert(offsetof(Element, _handleId)         == 0x0c, "");
-static_assert(offsetof(Element, _name)             == 0x10, "");
-static_assert(offsetof(Element, _leftPad)          == 0x18, "");
-static_assert(offsetof(Element, _rightPad)         == 0x1c, "");
-static_assert(offsetof(Element, _topPad)           == 0x20, "");
-static_assert(offsetof(Element, _bottomPad)        == 0x24, "");
-static_assert(offsetof(Element, _minWidth)         == 0x28, "");
-static_assert(offsetof(Element, _minHeight)        == 0x2c, "");
-static_assert(offsetof(Element, _alignment)        == 0x30, "");
-static_assert(offsetof(Element, _flags)            == 0x34, "");
-static_assert(offsetof(Element, _color)            == 0x38, "");
-static_assert(offsetof(Element, _mouseCursorIndex) == 0x3c, "");
-static_assert(offsetof(Element, _toolTipDialog)    == 0x40, "");
-static_assert(offsetof(Element, _toolTip)          == 0x48, "");
-static_assert(offsetof(Element, _toolTipString)    == 0x58, "");
-static_assert(offsetof(Element, _layoutWidth)      == 0x60, "");
-static_assert(offsetof(Element, _layoutHeight)     == 0x64, "");
-static_assert(offsetof(Element, _layoutLeft)       == 0x68, "");
-static_assert(offsetof(Element, _layoutTop)        == 0x6c, "");
-static_assert(offsetof(Element, _layoutRight)      == 0x70, "");
-static_assert(offsetof(Element, _layoutBottom)     == 0x74, "");
-static_assert(offsetof(Element, _unknown78)        == 0x78, "");
-static_assert(offsetof(Element, _userData)         == 0x80, "");
-static_assert(offsetof(Element, _elementId)        == 0x88, "");
-static_assert(offsetof(Element, _dialogParent)     == 0x90, "");
-static_assert(offsetof(Element, _parent)           == 0x98, "");
-static_assert(offsetof(Element, _children)         == 0xa0, "");
-static_assert(offsetof(Element, _border)           == 0xb0, "");
-static_assert(offsetof(Element, _description)      == 0xb8, "");
-
-}  // namespace RtUI
 
 namespace UI {
 
@@ -589,17 +480,5 @@ static_assert(offsetof(Element, _name) == sizeof(Object::Internal),
               "Element's own fields begin at the end of the Object::Internal base");
 
 // The class and the POD describe the same bytes.
-static_assert(sizeof(Element) == sizeof(RtUI::Element), "class and POD are one layout");
-static_assert(offsetof(Element, _name)          == offsetof(RtUI::Element, _name), "");
-static_assert(offsetof(Element, _flags)         == offsetof(RtUI::Element, _flags), "");
-static_assert(offsetof(Element, _toolTip)       == offsetof(RtUI::Element, _toolTip), "");
-static_assert(offsetof(Element, _layoutWidth)   == offsetof(RtUI::Element, _layoutWidth), "");
-static_assert(offsetof(Element, _unknown78)     == offsetof(RtUI::Element, _unknown78), "");
-static_assert(offsetof(Element, _userData)      == offsetof(RtUI::Element, _userData), "");
-static_assert(offsetof(Element, _dialogParent)  == offsetof(RtUI::Element, _dialogParent), "");
-static_assert(offsetof(Element, _parent)        == offsetof(RtUI::Element, _parent), "");
-static_assert(offsetof(Element, _children)      == offsetof(RtUI::Element, _children), "");
-static_assert(offsetof(Element, _border)        == offsetof(RtUI::Element, _border), "");
-static_assert(offsetof(Element, _description)   == offsetof(RtUI::Element, _description), "");
 
 } // namespace UI

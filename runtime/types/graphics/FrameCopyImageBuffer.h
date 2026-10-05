@@ -46,23 +46,8 @@
 
 #include "../video/ImageBuffer.h"
 
-namespace RtGraphics {
 
-struct FrameCopyImageBuffer {
-    ::ImageBuffer base;             // +0x00 .. +0x67  (ImageBuffer.h declares it at GLOBAL scope)
-    int32_t  _generation;           // +0x68  latch compared against Generate's argument
-    uint32_t _pad6c;                // +0x6c  never written by any of the four bodies
-    void*    _backBufferImage;      // +0x70  Video::ImageBuffer*   (owned; deleted via vtable slot 0)
-    void*    _sourceTarget;         // +0x78  Video::RenderBuffer*  (owned; colour = _backBufferImage)
-    void*    _destTarget;           // +0x80  Video::RenderBuffer*  (owned; colour = this)
-};
 
-static_assert(sizeof(FrameCopyImageBuffer) == 0x88,
-              "FrameCopyImageBuffer must be 0x88 bytes (saveload_draw.cpp:451 allocates 0x88)");
-static_assert(offsetof(FrameCopyImageBuffer, _generation) == 0x68, "_generation @ +0x68");
-static_assert(offsetof(FrameCopyImageBuffer, _backBufferImage) == 0x70, "_backBufferImage @ +0x70");
-static_assert(offsetof(FrameCopyImageBuffer, _sourceTarget) == 0x78, "_sourceTarget @ +0x78");
-static_assert(offsetof(FrameCopyImageBuffer, _destTarget) == 0x80, "_destTarget @ +0x80");
 
 // ----------------------------------------------------------------------------
 // The two vtables the ctor and dtor stamp, as RETAIL addresses.
@@ -90,7 +75,6 @@ static_assert(offsetof(FrameCopyImageBuffer, _destTarget) == 0x80, "_destTarget 
 // `kVtGeneratedImageBuffer` (0x180154f60) are gone with the minted tables they
 // named; the real classes' ctors stamp the compiler's.
 
-}  // namespace RtGraphics
 
 // ############################################################################
 // THE REAL CLASS — `Graphics::FrameCopyImageBuffer`.
@@ -213,16 +197,8 @@ static_assert(sizeof(FrameCopyImageBuffer) == 0x88,
               "Graphics::FrameCopyImageBuffer is 0x88 bytes (saveload_draw.cpp:451 "
               "allocates 0x88; ctor 0x1800a3d10 writes nothing past +0x80)");
 static_assert(alignof(FrameCopyImageBuffer) == 8, "qword-aligned");
-static_assert(sizeof(FrameCopyImageBuffer) == sizeof(RtGraphics::FrameCopyImageBuffer),
-              "the real class and the POD describe the same bytes");
 static_assert(offsetof(FrameCopyImageBuffer, _backBufferImage) == 0x70, "_backBufferImage @ +0x70");
 static_assert(offsetof(FrameCopyImageBuffer, _sourceTarget)    == 0x78, "_sourceTarget @ +0x78");
 static_assert(offsetof(FrameCopyImageBuffer, _destTarget)      == 0x80, "_destTarget @ +0x80");
-static_assert(offsetof(FrameCopyImageBuffer, _backBufferImage)
-                  == offsetof(RtGraphics::FrameCopyImageBuffer, _backBufferImage), "alias");
-static_assert(offsetof(FrameCopyImageBuffer, _sourceTarget)
-                  == offsetof(RtGraphics::FrameCopyImageBuffer, _sourceTarget), "alias");
-static_assert(offsetof(FrameCopyImageBuffer, _destTarget)
-                  == offsetof(RtGraphics::FrameCopyImageBuffer, _destTarget), "alias");
 
 }  // namespace Graphics

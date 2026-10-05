@@ -167,24 +167,12 @@ UNIT_TEST(engine_dialog_slot12_is_declared_retslot_first) {
 }
 
 // ---------------------------------------------------------------- PART D
-#define PIN(C, f) CHECK_EQ((int)offsetof(Engine::C, f), (int)offsetof(RtEngine::C, f))
 UNIT_TEST(engine_loop_class_pod_cross_asserts) {
-    CHECK_EQ((int)sizeof(Engine::UpdateLoop), (int)sizeof(RtEngine::UpdateLoop));
-    PIN(UpdateLoop, _resourceList);  PIN(UpdateLoop, _loadBit);  PIN(UpdateLoop, _loadProgress);
-    CHECK_EQ((int)sizeof(Engine::LoaderLoop), (int)sizeof(RtEngine::LoaderLoop));
-    PIN(LoaderLoop, _nextLoop);  PIN(LoaderLoop, _elapsedTicks);  PIN(LoaderLoop, _delayTicks);
-    PIN(LoaderLoop, _autoAdvance);
-    CHECK_EQ((int)sizeof(Engine::DialogLoopT), (int)sizeof(RtEngine::DialogLoopT));
-    PIN(DialogLoopT, _dialogFilename);  PIN(DialogLoopT, _dialogInstance);  PIN(DialogLoopT, _ui);
-    CHECK_EQ((int)sizeof(Engine::DialogLoaderLoopT), (int)sizeof(RtEngine::DialogLoaderLoopT));
-    PIN(DialogLoaderLoopT, _dialogExternal);  PIN(DialogLoaderLoopT, _ui);
-    CHECK_EQ((int)sizeof(Engine::Loader), (int)sizeof(RtEngine::Loader));
-    PIN(Loader, _loop);
-    // The two non-polymorphic PODs ARE the classes now.
+    // The two non-polymorphic PODs ARE the classes now; the five loop PODs
+    // are gone (B.4), their offsets pinned on the classes in UpdateLoop.h.
     CHECK((std::is_same<RtEngine::MainLoop, Engine::MainLoop>::value));
     CHECK((std::is_same<RtEngine::Engine, Engine::Engine>::value));
 }
-#undef PIN
 
 // The exe-side names (engine/types) ARE the classes since ENDGAME B.3.8 block
 // LOOP: the POD mirrors were retired with their last users and the headers

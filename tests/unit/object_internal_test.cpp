@@ -135,18 +135,11 @@ void* const* VtableOf(const void* p) { return *reinterpret_cast<void* const* con
 
 UNIT_TEST(internal_layout_matches_the_alias_pod) {
     static_assert(sizeof(::Object::Internal) == 0x10, "Object::Internal is 16 bytes");
-    static_assert(sizeof(::Object::Internal) == sizeof(RtObject::Internal), "alias size");
     static_assert(offsetof(::Object::Internal, _factoryIndex) == 0x08, "+0x08");
     static_assert(offsetof(::Object::Internal, _generation)   == 0x0c, "+0x0c");
-    static_assert(offsetof(::Object::Internal, _factoryIndex) ==
-                      offsetof(RtObject::Internal, factoryIndex), "alias index");
-    static_assert(offsetof(::Object::Internal, _generation) ==
-                      offsetof(RtObject::Internal, generation), "alias generation");
 
     // The POD must stay trivially destructible — it is destroyed BY HAND out of
     // a vtable slot, so a destructor on it is a double free (B31_RULES).
-    static_assert(std::is_trivially_destructible<RtObject::Internal>::value,
-                  "the alias POD must stay trivially destructible");
 
     // B3X W1: a virtual destructor on every level of the chain. GCC spends two
     // slots on it and shifts Type/TypeName/Persist by one — RetailSlot<T>
@@ -161,8 +154,6 @@ UNIT_TEST(internal_layout_matches_the_alias_pod) {
 
 UNIT_TEST(internalfactory_layout_matches_the_alias_pod) {
     static_assert(sizeof(::Object::InternalFactory) == 0x9e8, "0x9e4 fields, alignof 8");
-    static_assert(sizeof(::Object::InternalFactory) == sizeof(RtObject::InternalFactory),
-                  "alias size");
     static_assert(offsetof(::Object::InternalFactory, _objects)    == 0x00, "");
     static_assert(offsetof(::Object::InternalFactory, _persistIds) == 0x10, "");
     static_assert(offsetof(::Object::InternalFactory, _random)     == 0x20, "");

@@ -77,11 +77,7 @@
 #include "../../types/volume/Volume.h"           // RtVolume_Frustum_Projection
 #include "../../types/system/MemoryAllocator.h"
 
-using RtGraphics::Camera;
-using RtGraphics::MaterialInstance;
 using RtGraphics::MaterialTexture;
-using RtGraphics::Renderer;
-using RtGraphics::RendererDrawGroup;
 
 namespace {
 

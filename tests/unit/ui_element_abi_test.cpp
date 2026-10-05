@@ -258,10 +258,6 @@ UNIT_TEST(ui_element_field_offsets_and_pod_agreement) {
     CHECK_EQ(offsetof(UI::Element, _border),           (size_t)0xb0);
     CHECK_EQ(offsetof(UI::Element, _description),      (size_t)0xb8);
 
-    CHECK_EQ(sizeof(UI::Element), sizeof(RtUI::Element));
-    CHECK_EQ(offsetof(UI::Element, _flags),    offsetof(RtUI::Element, _flags));
-    CHECK_EQ(offsetof(UI::Element, _children), offsetof(RtUI::Element, _children));
-    CHECK_EQ(offsetof(UI::Element, _border),   offsetof(RtUI::Element, _border));
 
     CHECK_EQ(offsetof(UI::ElementDescription, _id),          (size_t)0x3c);
     CHECK_EQ(offsetof(UI::ElementDescription, _elementType), (size_t)0x40);

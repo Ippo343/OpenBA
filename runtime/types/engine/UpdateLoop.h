@@ -57,8 +57,6 @@
 // engine/types/common.h's.)
 #include "../system/Value.h"
 
-namespace RtEngine {
-
 // ============================================================================
 // Engine::UpdateLoop — 0x28 bytes
 // ============================================================================
@@ -74,22 +72,6 @@ namespace RtEngine {
 // hands the index back by writing it into ExternalFactory::_cleanBitIndex
 // (+0x00), calling ExternalFactory::Clean(), and clearing the bit again. So an
 // UpdateLoop owns one of 32 resource-lifetime slots for as long as it lives.
-struct UpdateLoop {
-    void*    _vtable;         // +0x00  ??_7UpdateLoop@Engine@@6B@ (0x180155ba0)
-    void*    _resourceList;   // +0x08  Object::External* — the ExternalList
-                              //        LoadResources (0x1800dd7d0) stores here
-    void*    _internalListA;  // +0x10  \ the pair ~UpdateLoop tail-calls
-    void*    _internalListB;  // +0x18  / 0x180010ab0 on (this + 0x10)
-    int32_t  _loadBit;        // +0x20  ?GetLoadBit@ 0x1800317c0
-    int32_t  _loadProgress;   // +0x24  ?GetLoadProgress@ 0x1800317b0
-};
-static_assert(sizeof(UpdateLoop) == 0x28, "Engine::UpdateLoop is 0x28 bytes");
-static_assert(offsetof(UpdateLoop, _vtable)        == 0x00, "UpdateLoop::_vtable @ +0x00");
-static_assert(offsetof(UpdateLoop, _resourceList)  == 0x08, "UpdateLoop::_resourceList @ +0x08");
-static_assert(offsetof(UpdateLoop, _internalListA) == 0x10, "UpdateLoop::_internalListA @ +0x10");
-static_assert(offsetof(UpdateLoop, _internalListB) == 0x18, "UpdateLoop::_internalListB @ +0x18");
-static_assert(offsetof(UpdateLoop, _loadBit)       == 0x20, "UpdateLoop::_loadBit @ +0x20");
-static_assert(offsetof(UpdateLoop, _loadProgress)  == 0x24, "UpdateLoop::_loadProgress @ +0x24");
 
 // ---- the 12 base virtual slots ---------------------------------------------
 // Read out of ??_7UpdateLoop@Engine@@6B@ (0x180155ba0) and confirmed against
@@ -120,20 +102,6 @@ static_assert(offsetof(UpdateLoop, _loadProgress)  == 0x24, "UpdateLoop::_loadPr
 // ?Run@Loader@Engine@@UEAAXXZ (0x1800dbfc0) is the worker body: it runs
 // UpdateLoop::LoadResources(_loop) and then _loop->vtable[6] (Load) with
 // ExternalFactory::_loadEnabled held true across both.
-// ENDGAME B.3.4b (rule B4b-1 / B4b-3): the member is the POD `RtSystem::Thread`,
-// not the real `System::Thread` class. `RtEngine::Loader` is itself a POD mirror
-// of a retail class, and B34_BRIEFS §A.3/§A.4's "a class held BY VALUE must be
-// concrete" is about a REAL CLASS holding a REAL CLASS — a POD mirror holding
-// the POD is not that case. `System::Thread` is ABSTRACT (retail's slot 0 is
-// `_purecall`, and no base body exists to delegate to), so spelling this member
-// as the class would be ill-formed. ENDGAME B.3.9 ENG W2: the live object is
-// the real class `Engine::LoaderLoop::_loader` (below); this POD only pins it.
-struct Loader {
-    RtSystem::Thread _thread; // +0x00 .. +0x2f  (vtable, runFlags, 4 HANDLEs)
-    void*            _loop;   // +0x30  UpdateLoop* — the loop being loaded
-};
-static_assert(sizeof(Loader) == 0x38, "Engine::Loader is 0x38 bytes");
-static_assert(offsetof(Loader, _loop) == 0x30, "Loader::_loop @ +0x30");
 
 // ============================================================================
 // Engine::LoaderLoop — 0x48 bytes
@@ -158,19 +126,6 @@ static_assert(offsetof(Loader, _loop) == 0x30, "Loader::_loop @ +0x30");
 // signal Update actually tests is bit 0 of Loader::_loader's Thread::runFlags.
 // So this byte gates whether the loop auto-advances at all, and a caller that
 // wanted "has the load finished?" wants IsFinished, not this field.
-struct LoaderLoop {
-    UpdateLoop _base;           // +0x00 .. +0x27
-    void*      _nextLoop;       // +0x28  UpdateLoop* handed to MainLoop when done
-    int64_t    _elapsedTicks;   // +0x30  ctor: Timer::SecondsToTicks(0.0f)
-    int64_t    _delayTicks;     // +0x38  ctor: the `Time const&` argument's ticks
-    uint8_t    _autoAdvance;    // +0x40  ctor: 1
-    uint8_t    _pad41[7];       // +0x41  NEVER WRITTEN by the ctor
-};
-static_assert(sizeof(LoaderLoop) == 0x48, "Engine::LoaderLoop is 0x48 bytes");
-static_assert(offsetof(LoaderLoop, _nextLoop)     == 0x28, "LoaderLoop::_nextLoop @ +0x28");
-static_assert(offsetof(LoaderLoop, _elapsedTicks) == 0x30, "LoaderLoop::_elapsedTicks @ +0x30");
-static_assert(offsetof(LoaderLoop, _delayTicks)   == 0x38, "LoaderLoop::_delayTicks @ +0x38");
-static_assert(offsetof(LoaderLoop, _autoAdvance)  == 0x40, "LoaderLoop::_autoAdvance @ +0x40");
 
 // ============================================================================
 // Engine::DialogLoopT — 0x168 bytes
@@ -184,18 +139,6 @@ static_assert(offsetof(LoaderLoop, _autoAdvance)  == 0x40, "LoaderLoop::_autoAdv
 //       0x18004d7c0:  LEA RAX,[RCX+0x40] ; RET
 //
 // which is as strong as evidence gets: the UI is AT +0x40, by name.
-struct DialogLoopT {
-    UpdateLoop         _base;             // +0x000 .. +0x027
-    System::String     _dialogFilename;   // +0x028  ctor arg, refcount acquired (the class's own type; this twin is never built)
-    void*              _dialogExternal;   // +0x030  Object::External* (Load)
-    void*              _dialogInstance;   // +0x038  UI::DialogInstance* (Startup)
-    UI::UserInterface  _ui;               // +0x040, 0x128 bytes
-};
-static_assert(sizeof(DialogLoopT) == 0x168, "Engine::DialogLoopT is 0x168 bytes");
-static_assert(offsetof(DialogLoopT, _dialogFilename) == 0x28, "DialogLoopT::_dialogFilename @ +0x28");
-static_assert(offsetof(DialogLoopT, _dialogExternal) == 0x30, "DialogLoopT::_dialogExternal @ +0x30");
-static_assert(offsetof(DialogLoopT, _dialogInstance) == 0x38, "DialogLoopT::_dialogInstance @ +0x38");
-static_assert(offsetof(DialogLoopT, _ui)             == 0x40, "DialogLoopT::_ui @ +0x40 (GetUserInterface 0x18004d7c0)");
 
 // ============================================================================
 // Engine::DialogLoaderLoopT — 0x188 bytes
@@ -207,38 +150,14 @@ static_assert(offsetof(DialogLoopT, _ui)             == 0x40, "DialogLoopT::_ui 
 // ?Startup@ (0x1800db000: writes +0x58, then pushes onto the UI's _addDialogs
 // array at this+0x88 — which is +0x60 + 0x28, the UI's own _addDialogs offset,
 // an independent confirmation that the UI sits at +0x60).
-struct DialogLoaderLoopT {
-    LoaderLoop         _base;             // +0x000 .. +0x047
-    System::String     _dialogFilename;   // +0x048
-    void*              _dialogExternal;   // +0x050
-    void*              _dialogInstance;   // +0x058
-    UI::UserInterface  _ui;               // +0x060, 0x128 bytes
-};
-static_assert(sizeof(DialogLoaderLoopT) == 0x188, "Engine::DialogLoaderLoopT is 0x188 bytes");
-static_assert(offsetof(DialogLoaderLoopT, _dialogFilename) == 0x48, "DialogLoaderLoopT::_dialogFilename @ +0x48");
-static_assert(offsetof(DialogLoaderLoopT, _dialogExternal) == 0x50, "DialogLoaderLoopT::_dialogExternal @ +0x50");
-static_assert(offsetof(DialogLoaderLoopT, _dialogInstance) == 0x58, "DialogLoaderLoopT::_dialogInstance @ +0x58");
-static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoaderLoopT::_ui @ +0x60");
-
-}  // namespace RtEngine
 
 // ############################################################################
 // THE REAL CLASSES (ENDGAME B.3 step 7, block B1)
 // ############################################################################
 //
 // `Engine::UpdateLoop`, `Engine::LoaderLoop`, `Engine::DialogLoopT`,
-// `Engine::DialogLoaderLoopT` and `Engine::Loader` under retail's names. The
-// `RtEngine::` PODs above STAY, field-identical and cross-asserted below
-// (B37_RULES B7-6): `UI::UserInterface` names the two dialog PODs as friends,
-// `tests/unit/ui_userinterface_abi_test.cpp` pins them, and loops.cpp's remaining
-// name doors take them as `self` (the ctor / dtor doors that stamped vtables
-// through them are gone since ENDGAME B.3.9 ENG W2). An abstract class
-// cannot be the alias target of a POD that is embedded or stamped (B36_RULES
-// section 10 correction). ENDGAME B.3.8 (block LOOP, B38_RULES D8): the exe-side
-// mirrors are gone — engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT}.h are
-// forwarders to these classes and the five exe loops are real subclasses
-// (code/Game/Game/*Loop*.h) — but the PODs themselves STAY on the runtime side
-// for the three readers above; they retire at the END of B.3.
+// `Engine::DialogLoaderLoopT` and `Engine::Loader` under retail's names (the
+// layout notes above are theirs; the `RtEngine::` POD twins are gone, B.4).
 //
 // THE FOUR LOOPS ARE THEIR OWN ROOT (RULE B7-1). No `Object::Base`: slot 1 is
 // `Startup`, not `TypeName`; there is no `_typeInfo`, no type-name literal and
@@ -554,32 +473,24 @@ static_assert(std::is_abstract<DialogLoopT>::value && std::is_abstract<DialogLoa
 static_assert(!std::is_abstract<Loader>::value && std::is_polymorphic<Loader>::value,
               "Loader overrides Thread's one pure slot (Run)");
 
-// ---- the class/POD cross-asserts (B7-6). The vptr (+0x00) has none: the POD
-// spells it as a field, the class lets the compiler own it.
+// ---- the field offsets. The vptr (+0x00) has none: the class lets the
+// compiler own it.
 #define B37_LOOP_PIN(C, f, off)                                                        \
-    static_assert(offsetof(C, f) == off, "Engine::" #C "::" #f " @ " #off);           \
-    static_assert(offsetof(C, f) == offsetof(RtEngine::C, f), "alias " #C "::" #f);
-static_assert(sizeof(UpdateLoop) == sizeof(RtEngine::UpdateLoop), "UpdateLoop class == POD");
+    static_assert(offsetof(C, f) == off, "Engine::" #C "::" #f " @ " #off);
 B37_LOOP_PIN(UpdateLoop, _resourceList,  0x08)
 B37_LOOP_PIN(UpdateLoop, _internalListA, 0x10)
 B37_LOOP_PIN(UpdateLoop, _internalListB, 0x18)
 B37_LOOP_PIN(UpdateLoop, _loadBit,       0x20)
 B37_LOOP_PIN(UpdateLoop, _loadProgress,  0x24)
-static_assert(sizeof(Loader) == sizeof(RtEngine::Loader), "Loader class == POD");
 B37_LOOP_PIN(Loader, _loop, 0x30)
-static_assert(offsetof(Loader, _runFlags) == offsetof(RtSystem::Thread, runFlags),
-              "Loader's Thread base is the POD's _thread member");
-static_assert(sizeof(LoaderLoop) == sizeof(RtEngine::LoaderLoop), "LoaderLoop class == POD");
 B37_LOOP_PIN(LoaderLoop, _nextLoop,     0x28)
 B37_LOOP_PIN(LoaderLoop, _elapsedTicks, 0x30)
 B37_LOOP_PIN(LoaderLoop, _delayTicks,   0x38)
 B37_LOOP_PIN(LoaderLoop, _autoAdvance,  0x40)
-static_assert(sizeof(DialogLoopT) == sizeof(RtEngine::DialogLoopT), "DialogLoopT class == POD");
 B37_LOOP_PIN(DialogLoopT, _dialogFilename, 0x28)
 B37_LOOP_PIN(DialogLoopT, _dialogExternal, 0x30)
 B37_LOOP_PIN(DialogLoopT, _dialogInstance, 0x38)
 B37_LOOP_PIN(DialogLoopT, _ui,             0x40)
-static_assert(sizeof(DialogLoaderLoopT) == sizeof(RtEngine::DialogLoaderLoopT), "DialogLoaderLoopT class == POD");
 B37_LOOP_PIN(DialogLoaderLoopT, _dialogFilename, 0x48)
 B37_LOOP_PIN(DialogLoaderLoopT, _dialogExternal, 0x50)
 B37_LOOP_PIN(DialogLoaderLoopT, _dialogInstance, 0x58)

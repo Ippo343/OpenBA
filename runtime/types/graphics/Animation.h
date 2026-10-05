@@ -32,7 +32,6 @@ namespace System { class String; class Time; }
 namespace Math { class Transform; }
 namespace IO { class Serializer; }
 
-namespace RtGraphics {
 
 // ============================================================================
 // Graphics::AnimationEvent — 0x20 bytes (the base class only; subclasses such
@@ -52,14 +51,6 @@ namespace RtGraphics {
 // non-inlined call into an unexported internal this lane does not own the
 // layout of, so it is invoked at its retail address rather than reproduced.
 // ============================================================================
-struct AnimationEvent {
-    void*    vtable;   // +0x00  retail final value 0x180154bf0 (AnimationEvent::_vftable_)
-    uint64_t _f08;     // +0x08  Object::External field, zeroed by the ctor
-    uint64_t _f10;     // +0x10  Object::External field, zeroed by the ctor
-    uint64_t _f18;     // +0x18  Object::External field, zeroed by the ctor
-};
-static_assert(sizeof(AnimationEvent) == 0x20, "Graphics::AnimationEvent base must be 0x20 bytes");
-static_assert(offsetof(AnimationEvent, _f18) == 0x18, "AnimationEvent::_f18 @ +0x18");
 
 // ============================================================================
 // Graphics::AnimationManager — 0x9d8 bytes (AllocSub(0x9d8, 8) at
@@ -139,22 +130,7 @@ static_assert(offsetof(AnimationEvent, _f18) == 0x18, "AnimationEvent::_f18 @ +0
 // VERDICT is unchanged: +0x10 stays UNVERIFIED, and the body that was named as
 // its answer is not its answer. Do not re-open it on the same guess.
 // ============================================================================
-struct AnimationManager {
-    void*    _groupData;       // +0x00  Collection::Array<AnimationGroup>::_data (stride 0x30)
-    int32_t  _groupCount;      // +0x08  ::_size      -- Update's outer loop bound
-    int32_t  _groupCapacity;   // +0x0c  ::_capacity
-    uint32_t _f10;             // +0x10  UNVERIFIED -- no reader in ctor/dtor/Update
-    uint32_t _rngState[624];   // +0x14  Mersenne-Twister state, time64-seeded
-    uint32_t _pad9d4;          // +0x9d4 alignment pad to the 0x9d8 allocation size
-};
-static_assert(sizeof(AnimationManager) == 0x9d8,
-              "Graphics::AnimationManager must match AllocSub(0x9d8, 8)");
-static_assert(offsetof(AnimationManager, _rngState) == 0x14, "AnimationManager::_rngState @ +0x14");
-static_assert(offsetof(AnimationManager, _groupData) == 0x00, "AnimationManager::_groupData @ +0x00");
-static_assert(offsetof(AnimationManager, _groupCount) == 0x08, "AnimationManager::_groupCount @ +0x08");
-static_assert(offsetof(AnimationManager, _groupCapacity) == 0x0c, "AnimationManager::_groupCapacity @ +0x0c");
 
-}  // namespace RtGraphics
 
 // ############################################################################
 // ENDGAME B.3.5 step 5, block H1 — the REAL `Graphics::AnimationEvent` and
@@ -289,8 +265,6 @@ static_assert(sizeof(AnimationEvent) == 0x20,
               "Graphics::AnimationEvent is 0x20 bytes -- the MOV EDX,0x20 in its "
               "own vector deleting destructor at 0x180011800");
 static_assert(alignof(AnimationEvent) == 8, "Graphics::AnimationEvent aligns to 8");
-static_assert(sizeof(AnimationEvent) == sizeof(RtGraphics::AnimationEvent),
-              "the real class and the POD describe the same bytes");
 
 // ============================================================================
 // Graphics::Animation — NON-POLYMORPHIC, 0x70 bytes. One baked animation clip.

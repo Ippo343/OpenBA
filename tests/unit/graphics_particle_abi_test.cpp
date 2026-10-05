@@ -157,13 +157,6 @@ UNIT_TEST(graphics_particle_field_offsets) {
     // The class and the POD must describe the same bytes: the POD still has live
     // users (`animation.cpp`'s three constructor doors and their oracles), so a
     // drift between the two is the failure this pins.
-    CHECK_EQ(sizeof(Graphics::Particle), sizeof(RtGraphics::Particle));
-    CHECK_EQ(offsetof(Graphics::Particle, _active),
-             offsetof(RtGraphics::Particle, _active));
-    CHECK_EQ(offsetof(Graphics::Particle, _recordCount),
-             offsetof(RtGraphics::Particle, _f24));
-    CHECK_EQ(offsetof(Graphics::Particle, _subCount),
-             offsetof(RtGraphics::Particle, _f28));
 }
 
 UNIT_TEST(graphics_particlesystem_field_offsets_authored_from_retail) {
@@ -533,7 +526,6 @@ UNIT_TEST(graphics_particle_branch_is_abstract) {
     // And no real constructor on either (B4b-2): the ctor doors at 0x180103e80
     // and 0x1800a5320 stay, because both are called on memory that already wears
     // the minted table.
-    CHECK(std::is_trivially_default_constructible<RtGraphics::Particle>::value);
 }
 
 UNIT_TEST(graphics_particlesystem_createsystem_returns_a_particleinstance) {

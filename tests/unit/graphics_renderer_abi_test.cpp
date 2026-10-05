@@ -145,31 +145,9 @@ UNIT_TEST(graphics_renderer_family_matches_the_rt_pods) {
     // eight files outside block F's set. These are the asserts that stop the two
     // descriptions drifting; the headers carry them too, and a TEST failure is
     // harder to "fix" past than a build failure.
-    CHECK_EQ(sizeof(Graphics::Camera),             sizeof(RtGraphics::Camera));
-    CHECK_EQ(sizeof(Graphics::Renderer),           sizeof(RtGraphics::Renderer));
-    CHECK_EQ(sizeof(Graphics::RendererDrawable),   sizeof(RtGraphics::RendererDrawable));
-    CHECK_EQ(sizeof(Graphics::RendererDrawItem),   sizeof(RtGraphics::RendererDrawItem));
-    CHECK_EQ(sizeof(Graphics::RendererDrawGroup),  sizeof(RtGraphics::RendererDrawGroup));
-    CHECK_EQ(sizeof(Graphics::RendererSceneEntry), sizeof(RtGraphics::RendererSceneEntry));
     CHECK_EQ(sizeof(Graphics::Scene),              (size_t)0x78);
     CHECK_EQ(sizeof(Graphics::SceneNode),          (size_t)0x18);
 
-    CHECK_EQ(offsetof(Graphics::Camera, _cameraToWorld),
-             offsetof(RtGraphics::Camera, cameraToWorld));
-    CHECK_EQ(offsetof(Graphics::Camera, _projection),
-             offsetof(RtGraphics::Camera, projection));
-    CHECK_EQ(offsetof(Graphics::Camera, _zUp),
-             offsetof(RtGraphics::Camera, swapZUpToYUp));
-    CHECK_EQ(offsetof(Graphics::Renderer, _drawGroupsUsed),
-             offsetof(RtGraphics::Renderer, field_38));
-    CHECK_EQ(offsetof(Graphics::Renderer, _shaderDetail),
-             offsetof(RtGraphics::Renderer, field_3c));
-    CHECK_EQ(offsetof(Graphics::Renderer, _frameIndex),
-             offsetof(RtGraphics::Renderer, contextSerial));
-    CHECK_EQ(offsetof(Graphics::Renderer, _detailId),
-             offsetof(RtGraphics::Renderer, field_48));
-    CHECK_EQ(offsetof(Graphics::RendererDrawGroup, _materialTypeFlags),
-             offsetof(RtGraphics::RendererDrawGroup, passMask));
     CHECK_EQ(offsetof(Graphics::Scene, _globals), (size_t)0x60);
 }
 

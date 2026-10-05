@@ -421,7 +421,6 @@ DEFINE_TYPE(TestLeaf, "TestMiddle", "leaf")
 
 UNIT_TEST(base_is_one_vptr_with_three_slots_and_no_virtual_dtor) {
     static_assert(sizeof(::Object::Base) == 8, "Base is one vtable pointer");
-    static_assert(sizeof(::Object::Base) == sizeof(RtObject::Base), "alias");
     // B3X W1: Base has a virtual destructor — retail slot 0 is the compiler's
     // pair (D1 at 0, D0 at 1) and retail slots 1, 2 sit at 2, 3. (Test name
     // kept from the retired one-slot rule.)
@@ -539,16 +538,6 @@ UNIT_TEST(the_old_pods_still_describe_the_new_classes_bytes) {
     ChainScope scope;
 
     ::Object::BaseTypeInfo real = Make("Aliased", "Object::Base", "ali");
-
-    // An unconverted C body reads the same record through the POD, at the same
-    // offsets, with no conversion beyond the cast the B.3.3 bridge uses.
-    const RtObject::BaseTypeInfo* pod =
-        reinterpret_cast<const RtObject::BaseTypeInfo*>(&real);
-    CHECK_EQ(pod->typeId, 0xFFFFFFFFu);
-    CHECK_STREQ(pod->name, "Aliased");
-    CHECK_STREQ(pod->parentName, "Base");
-    CHECK_STREQ(pod->fileExtension, "ali");
-    CHECK(pod->next == nullptr);
 
     // And the node the Set builds is the POD's TypeNode.
     static_assert(sizeof(::Object::Factory::TypeSet::Node) == sizeof(RtObject::TypeNode),

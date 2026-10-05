@@ -526,10 +526,10 @@ bool FileSystem::ExistsInPackfile(const System::Filename& pathRef) const {
         System::Filename relPath(pathData + dataDirLen);
 
         const char* str1 = relPath._data;
-        RtIO::PackfileIndexNode* node = _packfileIndexRoot;
+        RtIO::PackfileIndexNode* node = _packfileIndex.root;
         RtIO::PackfileIndexNode* found = nullptr;
         while (node) {
-            const char* key = node->key;
+            const char* key = node->element.key._data;
             // condA == "relPath >= key" in retail's null-extended ordering.
             bool condA;
             if (!key)       condA = true;

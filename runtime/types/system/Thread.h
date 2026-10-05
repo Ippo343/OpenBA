@@ -36,7 +36,6 @@
 #include <cstddef>
 #include <type_traits>   // B.3.4b: the "CriticalSection has no vptr" pin
 
-namespace RtSystem {
 
 // ----------------------------------------------------------------------------
 // RtSystem::CriticalSection — the POD
@@ -50,11 +49,6 @@ namespace RtSystem {
 // LockSemaphore, SpinCount — all 8-byte-aligned). A _posix twin would replace
 // this storage with e.g. a pthread_mutex_t of matching size/alignment; the
 // class has no vtable, so there is no ABI concern beyond size and alignment.
-struct CriticalSection {
-    alignas(8) uint8_t _storage[0x28];   // opaque Win32 CRITICAL_SECTION
-};
-static_assert(sizeof(CriticalSection) == 0x28,
-              "CriticalSection must be exactly sizeof(CRITICAL_SECTION) on x64");
 
 // ----------------------------------------------------------------------------
 // RtSystem::Thread — the POD
@@ -92,28 +86,7 @@ static_assert(sizeof(CriticalSection) == 0x28,
 // THE POD KEEPS AN EXPLICIT `vtable` FIELD; THE CLASS DOES NOT. On the class
 // the compiler's own vptr occupies +0x00, which is why that one member is the
 // only field in this file with no cross-assert — see the class below.
-struct Thread {
-    void*    vtable;      // +0x00
-    uint32_t runFlags;    // +0x08
-    uint32_t _pad0c;      // +0x0c
-    void*    hThread;     // +0x10  HANDLE
-    void*    hStart;      // +0x18  HANDLE
-    void*    hStop;       // +0x20  HANDLE
-    void*    hFinished;   // +0x28  HANDLE
-};
-static_assert(offsetof(Thread, vtable)    == 0x00, "Thread::vtable offset");
-static_assert(offsetof(Thread, runFlags)  == 0x08, "Thread::runFlags offset");
-static_assert(offsetof(Thread, hThread)   == 0x10, "Thread::hThread offset");
-static_assert(offsetof(Thread, hStart)    == 0x18, "Thread::hStart offset");
-static_assert(offsetof(Thread, hStop)     == 0x20, "Thread::hStop offset");
-static_assert(offsetof(Thread, hFinished) == 0x28, "Thread::hFinished offset");
-static_assert(sizeof(Thread) == 0x30, "Thread base size");
-static_assert(std::is_trivially_destructible<Thread>::value,
-              "B34_RULES 1.5 rule 3: the POD stays trivially destructible");
-static_assert(std::is_trivially_destructible<CriticalSection>::value,
-              "B34_RULES 1.5 rule 3: the POD stays trivially destructible");
 
-}  // namespace RtSystem
 
 // ============================================================================
 // ENDGAME B.3.4b — the REAL `System::CriticalSection` and `System::Thread`.
@@ -212,13 +185,6 @@ public:
 
 static_assert(sizeof(CriticalSection) == 0x28,
               "System::CriticalSection is sizeof(CRITICAL_SECTION) on x64");
-static_assert(sizeof(CriticalSection) == sizeof(RtSystem::CriticalSection),
-              "the class and the POD stay interchangeable");
-static_assert(offsetof(CriticalSection, _storage)
-                  == offsetof(RtSystem::CriticalSection, _storage),
-              "alias _storage");
-static_assert(alignof(CriticalSection) == alignof(RtSystem::CriticalSection),
-              "alias alignment -- a CRITICAL_SECTION must stay 8-aligned");
 // Stated as assertions so a future `virtual` fails the build rather than the
 // boot: a vptr would make this 0x30 bytes and push the storage eight bytes
 // down, under doors that are registered BY NAME.
@@ -324,8 +290,6 @@ private:
 };
 
 static_assert(sizeof(Thread) == 0x30, "System::Thread is 0x30 bytes");
-static_assert(sizeof(Thread) == sizeof(RtSystem::Thread),
-              "the class and the POD stay interchangeable");
 static_assert(std::is_polymorphic<Thread>::value,
               "System::Thread MUST be polymorphic: +0x00 is the vptr the four "
               "constructing sites stamp");
@@ -344,12 +308,6 @@ static_assert(offsetof(Thread, _hStop)     == 0x20, "Thread::hStop @ +0x20");
 static_assert(offsetof(Thread, _hFinished) == 0x28, "Thread::hFinished @ +0x28");
 // The cross-asserts. `vtable` has none on purpose: the POD spells +0x00 as a
 // field, the class lets the compiler own it.
-static_assert(offsetof(Thread, _runFlags)  == offsetof(RtSystem::Thread, runFlags),  "alias runFlags");
-static_assert(offsetof(Thread, _pad0c)     == offsetof(RtSystem::Thread, _pad0c),    "alias pad0c");
-static_assert(offsetof(Thread, _hThread)   == offsetof(RtSystem::Thread, hThread),   "alias hThread");
-static_assert(offsetof(Thread, _hStart)    == offsetof(RtSystem::Thread, hStart),    "alias hStart");
-static_assert(offsetof(Thread, _hStop)     == offsetof(RtSystem::Thread, hStop),     "alias hStop");
-static_assert(offsetof(Thread, _hFinished) == offsetof(RtSystem::Thread, hFinished), "alias hFinished");
 
 }  // namespace System
 

@@ -38,31 +38,9 @@
 #include "Element.h"
 #include "Sprite.h"
 
-namespace RtUI {
 
-struct ProgressElement {
-    RtUI::Element  base;              // +0x00 .. +0xBF
-    ::Sprite _fillLeft;         // +0xC0
-    ::Sprite _fillMiddle;       // +0xD0
-    ::Sprite _fillRight;        // +0xE0
-    ::Sprite _trackLeft;        // +0xF0
-    ::Sprite _trackMiddle;      // +0x100
-    ::Sprite _trackRight;       // +0x110
-    uint32_t _backgroundColor;  // +0x120
-    float    _maxValue;         // +0x124
-    float    _currentValue;     // +0x128
-    uint32_t _pad12c;           // +0x12C  tail padding to 0x130
-};
 
-static_assert(sizeof(ProgressElement) == 0x130, "deleting dtor 0x180078182 strides 0x130");
-static_assert(offsetof(ProgressElement, _fillLeft)        == 0xC0,  "");
-static_assert(offsetof(ProgressElement, _trackLeft)       == 0xF0,  "");
-static_assert(offsetof(ProgressElement, _backgroundColor) == 0x120, "");
-static_assert(offsetof(ProgressElement, base)         == 0x00,  "ProgressElement::base @ +0x00");
-static_assert(offsetof(ProgressElement, _maxValue)    == 0x124, "ProgressElement::_maxValue @ +0x124");
-static_assert(offsetof(ProgressElement, _currentValue)== 0x128, "ProgressElement::_currentValue @ +0x128");
 
-} // namespace RtUI
 
 // ############################################################################
 // ENDGAME B.3 step 6 (block C5) — `UI::ProgressElement`, the REAL C++ class
@@ -151,15 +129,5 @@ static_assert(sizeof(ProgressElement) == 0x130,
 static_assert(alignof(ProgressElement) == 8, "UI::ProgressElement aligns to 8");
 static_assert(offsetof(ProgressElement, _fillLeft) == sizeof(Element), "");
 // The class and the POD describe the same bytes.
-static_assert(sizeof(ProgressElement) == sizeof(RtUI::ProgressElement), "");
-static_assert(offsetof(ProgressElement, _fillLeft)        == offsetof(RtUI::ProgressElement, _fillLeft), "");
-static_assert(offsetof(ProgressElement, _fillMiddle)      == offsetof(RtUI::ProgressElement, _fillMiddle), "");
-static_assert(offsetof(ProgressElement, _fillRight)       == offsetof(RtUI::ProgressElement, _fillRight), "");
-static_assert(offsetof(ProgressElement, _trackLeft)       == offsetof(RtUI::ProgressElement, _trackLeft), "");
-static_assert(offsetof(ProgressElement, _trackMiddle)     == offsetof(RtUI::ProgressElement, _trackMiddle), "");
-static_assert(offsetof(ProgressElement, _trackRight)      == offsetof(RtUI::ProgressElement, _trackRight), "");
-static_assert(offsetof(ProgressElement, _backgroundColor) == offsetof(RtUI::ProgressElement, _backgroundColor), "");
-static_assert(offsetof(ProgressElement, _maxValue)        == offsetof(RtUI::ProgressElement, _maxValue), "");
-static_assert(offsetof(ProgressElement, _currentValue)    == offsetof(RtUI::ProgressElement, _currentValue), "");
 
 } // namespace UI

@@ -517,12 +517,10 @@ FileSystem::~FileSystem() {
 
     // Step 1. The tree object is (root, count) at +0x40/+0x48; retail passes
     // its ADDRESS as `this` and the root as the node.
-    void* tree = &_packfileIndexRoot;
-    rtavl::SubtreeFree(tree,                          // 1800ac6ff
-        reinterpret_cast<rtsetavl::Node*>(_packfileIndexRoot));  // LEFT: audit WORK, not executed this pass (a typed element / node accessor over the erased set (one hand-off, elem_str); blocker; the erased AVL core (rtsetavl / rtpathid / rtavl) takes its own node / set types (collection/, R-COLL)
+    rtavl::SubtreeFree(&_packfileIndex, _packfileIndex.root);   // 1800ac6ff
 
-    _packfileIndexRoot  = nullptr;                    // 1800ac706
-    _packfileIndexCount = 0;                          // 1800ac709
+    _packfileIndex.root  = nullptr;                    // 1800ac706
+    _packfileIndex.count = 0;                          // 1800ac709
 
     // Step 3 — Array<Filename>, ported by modification.cpp and registered.
     RtIO::RtColl_ArrayFilenameDtor_1800098d0(&_userPackFilenames);   // 1800ac710

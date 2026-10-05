@@ -326,9 +326,9 @@ static inline void Recompute(TypeNode* n) {
 // REUSED for the parent at 0x1800307bc, destroying it. Faithful; the set
 // pointer is not needed again.
 // ---------------------------------------------------------------------------
-TypeNode* RotateLeft50(RtObject::Factory* set, TypeNode* n) {
+TypeNode* RotateLeft50(TypeNode** root, TypeNode* n) {
     ++g_pc.rot50L;
-    if (n == set->root) set->root = n->right;
+    if (n == *root) *root = n->right;
 
     TypeNode* p = n->parent;
     if (p) {
@@ -354,9 +354,9 @@ TypeNode* RotateLeft50(RtObject::Factory* set, TypeNode* n) {
 // 0x1800308e0 and then diffed against RotateLeft50: the two disassemblies
 // differ in exactly the six link offsets (+0x38 <-> +0x40) and nowhere else.
 // ---------------------------------------------------------------------------
-TypeNode* RotateRight50(RtObject::Factory* set, TypeNode* n) {
+TypeNode* RotateRight50(TypeNode** root, TypeNode* n) {
     ++g_pc.rot50R;
-    if (n == set->root) set->root = n->left;
+    if (n == *root) *root = n->left;
 
     TypeNode* p = n->parent;
     if (p) {
@@ -411,7 +411,7 @@ TypeNode* RotateRight50(RtObject::Factory* set, TypeNode* n) {
 // loop advances by storing it back into the slot. That ordering is why a
 // rotation at the current level cannot redirect the walk.
 // ---------------------------------------------------------------------------
-void Retrace50(RtObject::Factory* set, TypeNode** slot) {
+void Retrace50(TypeNode** root, TypeNode** slot) {
     if (*slot == nullptr) return;
 
     for (;;) {
@@ -432,10 +432,10 @@ void Retrace50(RtObject::Factory* set, TypeNode** slot) {
             if (r) {
                 if (Balance50(r) < 0) {
                     ++g_pc.preRot50R;
-                    RotateRight50(set, r);
+                    RotateRight50(root, r);
                     cur = *slot;        // 0x1800305d2
                 }
-                RotateLeft50(set, cur);
+                RotateLeft50(root, cur);
             }
         }
 
@@ -445,10 +445,10 @@ void Retrace50(RtObject::Factory* set, TypeNode** slot) {
             if (l) {
                 if (Balance50(l) > 0) {
                     ++g_pc.preRot50L;
-                    RotateLeft50(set, l);
+                    RotateLeft50(root, l);
                     cur = *slot;        // 0x180030606
                 }
-                RotateRight50(set, cur);
+                RotateRight50(root, cur);
             }
         }
 
@@ -546,21 +546,12 @@ static_assert(offsetof(StringPairNode, right)   == offsetof(Node, right),   "Str
 static_assert(offsetof(StringPairNode, balance) == offsetof(Node, balance), "StringPairNode::balance @ +0x28");
 static_assert(offsetof(StringPairNode, height)  == offsetof(Node, height),  "StringPairNode::height @ +0x2a");
 static_assert(offsetof(StringPairNode, pad2c)   == 0x2c, "StringPairNode::pad2c @ +0x2c");
-static_assert(sizeof(FilenamePair) == 0x10, "the element of a 0x30-byte node");
-static_assert(offsetof(FilenamePair, key)   == 0x00, "FilenamePair::key @ +0x00");
-static_assert(offsetof(FilenamePair, value) == 0x08, "FilenamePair::value @ +0x08");
-static_assert(sizeof(FilenamePairNode) == 0x30, "0x180008520 allocates 0x30");
-static_assert(offsetof(FilenamePairNode, element) == 0x00, "FilenamePairNode::element @ +0x00");
-static_assert(offsetof(FilenamePairNode, parent)  == offsetof(Node, parent),  "FilenamePairNode::parent @ +0x10");
-static_assert(offsetof(FilenamePairNode, left)    == offsetof(Node, left),    "FilenamePairNode::left @ +0x18");
-static_assert(offsetof(FilenamePairNode, right)   == offsetof(Node, right),   "FilenamePairNode::right @ +0x20");
-static_assert(offsetof(FilenamePairNode, balance) == offsetof(Node, balance), "FilenamePairNode::balance @ +0x28");
-static_assert(offsetof(FilenamePairNode, height)  == offsetof(Node, height),  "FilenamePairNode::height @ +0x2a");
-static_assert(offsetof(FilenamePairNode, pad2c)   == 0x2c, "FilenamePairNode::pad2c @ +0x2c");
 static_assert(sizeof(RtIo::SettingsMap) == sizeof(Set), "the {root, count} header");
 static_assert(offsetof(RtIo::SettingsMap, count) == offsetof(Set, count), "SettingsMap::count @ +0x08");
-static_assert(sizeof(KeyedSet<FilenamePairNode>) == sizeof(Set), "the {root, count} header");
-static_assert(offsetof(KeyedSet<FilenamePairNode>, count) == offsetof(Set, count), "KeyedSet::count @ +0x08");
+static_assert(offsetof(FilenamePairNode, parent)  == offsetof(Node, parent),  "FilenamePairNode::parent @ +0x10");
+static_assert(offsetof(FilenamePairNode, balance) == offsetof(Node, balance), "FilenamePairNode::balance @ +0x28");
+static_assert(sizeof(RtIO::PackfileIndexTree) == sizeof(Set), "the {root, count} header");
+static_assert(offsetof(RtIO::PackfileIndexTree, count) == offsetof(Set, count), "PackfileIndexTree::count @ +0x08");
 
 // ---------------------------------------------------------------------------
 // The inline strcmp of 0x18002a1c4 / 0x18002a223. See the banner.
@@ -748,7 +739,7 @@ FilenamePairNode* FilenamePairCtor(FilenamePairNode* node, const FilenamePair* s
                                    FilenamePairNode* parent) {
     new (&node->element.key) System::Filename(src->key);   // 0x1800067d0 (the node is raw MemAlloc storage)
 
-    node->element.value = src->value;
+    node->element.value = src->value;   // the {packIndex, fileIndex} pair: one qword move
     node->parent  = parent;
     node->left    = nullptr;
     node->right   = nullptr;
@@ -775,8 +766,8 @@ namespace {
 // (filesystem_openfile_win.cpp:185) — the node allocator, and the retrace door.
 struct FilenamePolicy : Collection::detail::NoCounters {
     using Node    = FilenamePairNode;
-    using SetT    = KeyedSet<FilenamePairNode>;
-    using Element = FilenamePair;         // {Filename key @+0x00, u64 @+0x08}
+    using SetT    = RtIO::PackfileIndexTree;
+    using Element = FilenamePair;         // {Filename key @+0x00, {packIndex, fileIndex} @+0x08}
 
     static Node*&   Root(SetT* s)  { return s->root; }
     static int32_t& Count(SetT* s) { return s->count; }
@@ -806,7 +797,7 @@ struct FilenamePolicy : Collection::detail::NoCounters {
 };
 }  // namespace
 
-FilenamePairNode** FilenameInsertCore(KeyedSet<FilenamePairNode>* set, FilenamePairNode** outSlot,
+FilenamePairNode** FilenameInsertCore(RtIO::PackfileIndexTree* set, FilenamePairNode** outSlot,
                                       const FilenamePair* pair) {
     return Collection::detail::InsertCorePattern<FilenamePolicy>(set, outSlot, pair);
 }
@@ -819,19 +810,18 @@ FilenamePairNode** FilenameInsertCore(KeyedSet<FilenamePairNode>* set, FilenameP
 // The value is copied RAW (`MOV RAX,[RBX] / MOV [RSP+0x30],RAX`) — the caller
 // passes a POINTER to the qword, not the qword.
 // ---------------------------------------------------------------------------
-Node** FilenameSetInsert(Set* set, Node** outSlot,
-                         const void* key, const uint64_t* value) {
+FilenamePairNode** FilenameSetInsert(RtIO::PackfileIndexTree* set, FilenamePairNode** outSlot,
+                                     const System::Filename* key,
+                                     const RtIO::PackfileIndexValue* value) {
     // The probe ALLOCATES, so it cannot run from a *PortInit (WAVE9.md, lane
     // PKG2). It self-schedules here instead: this moment is provably safe
     // because the caller is itself about to allocate a node.
     // B.4 Z MIRROR2: the stack pair is a real FilenamePair: the Filename copy
     // ctor 0x1800067d0 on +0x00, the raw value qword on +0x08, the insert,
     // then ~FilenamePair (the key's release) at scope exit, retail's order.
-    FilenamePair temp{
-        *static_cast<const System::Filename*>(key),  // LEFT: SIG rtavl::FilenameSetInsert — `key` is a const void* until FilenamePairNode and RtIO::PackfileIndexNode are one node (see the insert below)
-        *value };
+    FilenamePair temp{ *key, *value };
 
-    FilenameInsertCore(reinterpret_cast<KeyedSet<FilenamePairNode>*>(set), reinterpret_cast<FilenamePairNode**>(outSlot), &temp);  // LEFT: audit WORK, left: FilenamePairNode (RtSystem::Filename key mirror, DEFERRED) and RtIO::PackfileIndexNode are two declarations of one 0x30 node; the insert's +0x08 qword copy vs the readers' two dwords needs the node unified first
+    FilenameInsertCore(set, outSlot, &temp);
 
     return outSlot;   // ~temp: the key's release
 }
@@ -872,16 +862,15 @@ Node** FilenameSetInsert(Set* set, Node** outSlot,
 // the allocator's own accounting as the check that every node came back. That
 // is stated as a weaker claim than the other three rather than dressed up.
 // ============================================================================
-void SubtreeFree(void* ignoredThis, Node* node) {
+void SubtreeFree(void* ignoredThis, FilenamePairNode* node) {
     if (node == nullptr) return;
 
     ++g_pc.freeNodes;
     SubtreeFree(ignoredThis, node->left);
     SubtreeFree(ignoredThis, node->right);
 
-    FilenamePairNode* n = reinterpret_cast<FilenamePairNode*>(node);  // LEFT: audit WORK, left: SubtreeFree's outside caller (filesystem_createfile_win.cpp) holds the erased rtsetavl::Node; same FilenamePairNode / PackfileIndexNode unification as the insert
-    if (n->element.key._data != nullptr) ++g_pc.freeStringsReleased;
-    StringReleaseInline(&n->element.key._data);
+    if (node->element.key._data != nullptr) ++g_pc.freeStringsReleased;
+    StringReleaseInline(&node->element.key._data);
 
     rtsetavl::SetNodeFree(ignoredThis, node);
 }
