@@ -667,10 +667,16 @@ void ContextData_Finish(ContextData* self) {
 
     dd->d3dDevice = nullptr;
 
-    void** ddVtable = static_cast<void**>(dd->vptr);
-    reinterpret_cast<void (*)(DeviceData*)>(ddVtable[kSlot_Shutdown])(dd);
-    const bool created =
-        reinterpret_cast<bool (*)(DeviceData*)>(ddVtable[kSlot_CreateDevice])(dd);
+    // B5 W0: the ONLY place dx11 read its own hand table by INDEX. Retail
+    // (0x18000184f / 0x18000185c) dispatches slots 3 and 2 of the DeviceData;
+    // the abstract base `Video::DeviceData` declares those slots by name in
+    // retail order, so the by-name call reaches the same entries on the hand
+    // table today and the compiler's table once DeviceData is a real subclass
+    // (where a literal index 3 would have been `Slot4`: GCC spends two slots on
+    // `virtual ~DeviceData()`). The bridge cast is the CTX block's to remove.
+    ::Video::DeviceData* const ddBase = reinterpret_cast< ::Video::DeviceData*>(dd);   // B5 W0 bridge
+    ddBase->Shutdown();                           // retail slot 3
+    const bool created = ddBase->CreateDevice();  // retail slot 2
 
     if (!created) {
         // Same five strings, same fallback, same order of tests as
