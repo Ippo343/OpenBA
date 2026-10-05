@@ -420,5 +420,5 @@ using WeatherEntryArray = Collection::Array<WeatherEntryElem>;
 
 extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {
     // B.3.2 bridge: EnvironmentDescription's weather array is still a raw triple.
-    reinterpret_cast<WeatherEntryArray*>(hdr)->SetSize(newCount);   // LEFT: H5 EnvironmentDescription::_weatherArray is the raw triple of an Array<WeatherChoice> (Component/EnvironmentDescription.h, not this agent's)
+    reinterpret_cast<WeatherEntryArray*>(hdr)->SetSize(newCount);   // LEFT: audit WORK (CLASS EnvironmentDescription), owner Component/ (z-CODEB): H5 EnvironmentDescription::_weatherArray is the raw triple of an Array<WeatherChoice> (Component/EnvironmentDescription.h, not this agent's)
 }

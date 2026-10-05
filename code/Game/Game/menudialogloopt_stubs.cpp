@@ -497,7 +497,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // before returning (MainLoop owns it); retail's slot takes it by const&.
     // LEFT: the standalone first-tick clamp writes MainLoop's Time through the
     // const& of retail's slot signature (our divergence, not retail's).
-    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge   // LEFT: the standalone first-tick clamp writes MainLoop's Time through the const& of retail's slot signature (our divergence, not retail's).
+    System::Time* time = const_cast<System::Time*>(&timeRef);   // B.3.8 bridge   // LEFT: audit DEFERRED (retail-difference task): the standalone first-tick clamp writes MainLoop's Time through the const& of retail's slot signature (our divergence, not retail's).
     // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.

@@ -284,7 +284,7 @@ void WorldGeometry::Draw(Video::Context& context, const Graphics::Camera& /*came
     //    with the alpha. LEFT: Graphics::Geometry (R-GFX) holds the pair as two
     //    Transforms, not as the InterpolatedState Lerp is a member of.
     const Math::Transform lerpedTransform =
-        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: Graphics::Geometry (R-GFX) holds the pair as two Transforms, not as the InterpolatedState Lerp is a member of.
+        reinterpret_cast<const Graphics::InterpolatedState<Math::Transform>*>(&_transform)   // LEFT: audit WORK (CLASS Graphics::Geometry), runtime/ (z-RT): Graphics::Geometry (R-GFX) holds the pair as two Transforms, not as the InterpolatedState Lerp is a member of.
             ->Lerp(Math::Scalar(param5));
 
     // 2. Convert to Matrix and SetTransform(0, matrix).

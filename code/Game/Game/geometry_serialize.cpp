@@ -173,7 +173,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         // Retail calls slot 0x1401523f8 (short*); the port's overload is the
         // ushort one (0x140152488): the binary bytes are the same two per
         // element. LEFT (known_port_issues 14, row 61): the overload is the port's.
-        serializer.Serialize(local_count, reinterpret_cast<uint16_t*>(_heights.data), nullptr);   // LEFT: known_port_issues 14, row 61: the overload is the port's.
+        serializer.Serialize(local_count, reinterpret_cast<uint16_t*>(_heights.data), nullptr);   // LEFT: audit DEFERRED (retail-difference task): known_port_issues 14, row 61: the overload is the port's.
     }
 
     RZ_CHECK("geom 04d0 after step3 (+0xD8 uint16 heightmap arr)");

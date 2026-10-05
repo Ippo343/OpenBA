@@ -207,7 +207,7 @@ void SerializeIBPArray(T*** data, int32_t* countField, IO::Serializer* serialize
     for (int32_t i = 0; i < count; ++i) {
         T** elem = &arr[i];
         // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: an InternalBasePtr slot held as T* (the IBP's raw pointer; Internal.h)
+        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: audit WORK (CLASS CitizenBehavior), owner Entity/ (z-CODEB): an InternalBasePtr slot held as T* (the IBP's raw pointer; Internal.h)
         T* val = *elem;
         if (val != nullptr) {
             if (!::Object::IsDerivedFromNullSafe(val, typeId)) {
@@ -230,7 +230,7 @@ void SerializeIBPArray(T*** data, int32_t* countField, IO::Serializer* serialize
 // of CitizenBehavior calls its own SetSize.
 // ------------------------------------------------------------
 void ResizeStride0x10(void* hdr, int n) {
-    reinterpret_cast<CitizenIntAssocArray*>(hdr)->SetSize(n);   // LEFT: the version-5 clamp passes the +0x160 Set header as an Array<Array<int32>> (the tree's defect, dead at version 6)
+    reinterpret_cast<CitizenIntAssocArray*>(hdr)->SetSize(n);   // LEFT: audit DEFERRED (retail-difference task, the version-5 clamp): the version-5 clamp passes the +0x160 Set header as an Array<Array<int32>> (the tree's defect, dead at version 6)
 }
 
 namespace {
@@ -432,7 +432,7 @@ LegacyKeyIntNode* LegacyTreeSucc(LegacyKeyIntNode* n) {
 void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {
     // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
     // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
-    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: +0x160 read as a second node type (legacy path)
+    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: audit WORK (CLASS CitizenBehavior +0x160), owner Entity/ (z-CODEB): +0x160 read as a second node type (legacy path)
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -605,7 +605,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
                 // LEFT (a defect, kept: the stream must stay byte-identical): retail
                 // serializes the entry's Time at +0x18 (0x14008ff9d, Time::Serialize(
                 // piVar7 + 4) with piVar7 = entry + 8); the tree has always used +0x14.
-                reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);   // B.3.4b bridge   // LEFT: CitizenBehavior.h (ENT): entry _field14 is int64_t, retail System::Time
+                reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);   // B.3.4b bridge   // LEFT: audit DEFERRED (retail-difference task, known_port_issues 14): CitizenBehavior.h (ENT): entry _field14 is int64_t, retail System::Time
                 ++entry;
             }
         }

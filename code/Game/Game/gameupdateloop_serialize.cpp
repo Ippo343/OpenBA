@@ -203,7 +203,7 @@ using EventEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 
 extern "C" void EventLog_Resize_199a0(void* hdrVoid, int newCount) {
     // B.3.2 bridge: the event notifier's +0x18 header is still raw bytes.
-    reinterpret_cast<EventEntryArray*>(hdrVoid)->SetSize(newCount);   // LEFT: H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (eventlog.cpp's, grow 0x140019b70; this one, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
+    reinterpret_cast<EventEntryArray*>(hdrVoid)->SetSize(newCount);   // LEFT: audit DEFERRED (two specs + memset; see eventlog.cpp's grow line): H5 EventLog::entries is the raw {data, count, capacity} triple (EventLog.h): the tree sizes it through TWO hand-written specs (eventlog.cpp's, grow 0x140019b70; this one, resize 0x1400199a0), so one typed member cannot carry both; retail constructs it inline (0x140097013 / 0x140097017 zero stores) and frees it with 0x14000a8a0 (0x140097ab0), the tree memsets the log (gameupdateloop_load.cpp Step 17)
 }
 
 // ============================================================
@@ -227,7 +227,7 @@ void EventLog::Serialize(IO::Stream& stream) {
             EventLogEntry& e = entries[i];
             // LEFT: retail serializes the colour through the uint overload
             // (0x1400952c0); the tree's int overload is kept (an H8 question).
-            ser.Serialize(reinterpret_cast<int&>(e.color), nullptr);   // LEFT: retail serializes the colour through the uint overload (0x1400952c0); the tree's int overload is kept (an H8 question).
+            ser.Serialize(reinterpret_cast<int&>(e.color), nullptr);   // LEFT: audit DEFERRED (retail-difference task, known_port_issues 14): retail serializes the colour through the uint overload (0x1400952c0); the tree's int overload is kept (an H8 question).
             e.text.Serialize(ser);
             ser.Serialize(e.eventType, nullptr);
             ser.Serialize(e.severity, nullptr);
@@ -590,7 +590,7 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*u
         ComponentEntity** slot = hdr->_data;
         for (int i = 0; i < count; i++, slot++) {
             // LEFT: an InternalBasePtr slot (the IBP's raw pointer).
-            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: EntityList.h (X6-CW) holds each bucket element as ComponentEntity* (IBPArray) where retail holds an InternalPtr<ComponentEntity>: Serialize writes the slot itself
+            reinterpret_cast<Object::InternalBasePtr*>(slot)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: audit WORK (CLASS TrackedEntityNode / EntityList bucket element), owner Entity/ (z-CODEB): EntityList.h (X6-CW) holds each bucket element as ComponentEntity* (IBPArray) where retail holds an InternalPtr<ComponentEntity>: Serialize writes the slot itself
             if (*slot != nullptr && s_tidCompEnt &&
                 !::Object::IsDerivedFromNullSafe(*slot, s_tidCompEnt)) {
                 *slot = nullptr;

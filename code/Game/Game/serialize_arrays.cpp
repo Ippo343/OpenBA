@@ -284,13 +284,13 @@ using SpawnEntryArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     // B.3.2 bridge: Geometry+0x210 and friends are still raw headers.
-    reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);   // LEFT: H5 Geometry+0x210 and the other callers' headers are raw triples (other owners' headers)
+    reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);   // LEFT: audit WORK (SIG, callers in Component/ Player/ Tutorial/ menuscene hold other element types; needs Ptr8-zero-row typed wrappers per header type): H5 Geometry+0x210 and the other callers' headers are raw triples (other owners' headers)
 }
 
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     // B.3.2 bridge: the Struct60B +0x08 sub-array header is still raw bytes.
-    reinterpret_cast<Pod14A4Array*>(arrayHeader)->SetSize(newCount);   // LEFT: H5 the Struct60B +0x08 sub-array header is a raw triple (other owner's header)
+    reinterpret_cast<Pod14A4Array*>(arrayHeader)->SetSize(newCount);   // LEFT: audit WORK (SIG, as Stride08): H5 the Struct60B +0x08 sub-array header is a raw triple (other owner's header)
 }
 
 // ============================================================
@@ -315,7 +315,7 @@ extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
 extern "C" void Reimpl_Array_Resize_Stride10_Spawn(void* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     // B.3.2 bridge: SpawnDescription+0x20 is still a raw header.
-    reinterpret_cast<SpawnEntryArray*>(arrayHeader)->SetSize(newCount);   // LEFT: H5 SpawnDescription+0x20 is a raw triple (other owner's header)
+    reinterpret_cast<SpawnEntryArray*>(arrayHeader)->SetSize(newCount);   // LEFT: audit WORK (SIG; SpawnDescription is Component/, z-CODEB): H5 SpawnDescription+0x20 is a raw triple (other owner's header)
 }
 
 // ============================================================
@@ -337,7 +337,7 @@ extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer,
         // The port writes the record as eight uint32 words: retail's seven
         // floats and two shorts (FUN_14001bbf0) are the same bytes in the binary
         // encoding. LEFT (known_port_issues 14, row 63): the word view of the record.
-        uint32_t* words = reinterpret_cast<uint32_t*>(&meshes[i]);   // LEFT: known_port_issues 14, row 63: the word view of the record.
+        uint32_t* words = reinterpret_cast<uint32_t*>(&meshes[i]);   // LEFT: audit DEFERRED (retail-difference task, row 63): known_port_issues 14, row 63: the word view of the record.
         for (int off = 0; off < 7; ++off) {
             serializer->Serialize(words[off], nullptr);   // position, color, yaw
         }
@@ -396,7 +396,7 @@ void ArraySerializeExternalGeneric(IO::Serializer* serializer, int count, void* 
 
     // LEFT: the callers hold the reference arrays with their own element types
     // (description / mesh / particle tables) and pass them as void*.
-    ::Object::External** slots = reinterpret_cast<::Object::External**>(arrayBase);   // LEFT: the callers hold the reference arrays with their own element types (description / mesh / particle tables) and pass them as void*.
+    ::Object::External** slots = reinterpret_cast<::Object::External**>(arrayBase);   // LEFT: audit WORK (SIG; callers in Component/ hold T** of External subclasses, a typed form needs a per-slot downcast store): the callers hold the reference arrays with their own element types (description / mesh / particle tables) and pass them as void*.
     for (int i = 0; i < count; ++i)
         SerializeExternalRef(slots[i], *serializer, typeId, typeIdResolved);
 }
