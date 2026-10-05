@@ -587,8 +587,8 @@ void Assign38Call(uint8_t* d, const uint8_t* s) {
 // 0x180078950's `else` (init) arm — see kSpec_Sprite38Z for the transcription
 // and for why this arm exists here and not on kSpec_Sprite38.
 static void SpriteInfoInit(UI::SpriteInfo* d) {
-    d->name        = nullptr;   // +0x00
-    d->group       = nullptr;   // +0x08
+    d->name._data  = nullptr;   // +0x00
+    d->group._data = nullptr;   // +0x08
     d->x           = 0;         // +0x10 qword (x, y)
     d->y           = 0;
     d->_reserved18 = 0;         // +0x18 qword (_reserved18, width)

@@ -97,9 +97,16 @@ namespace UI {
 // param_2/param_3 (width/height) to +0x1C/+0x20, confirming those offsets a
 // second, independent way.
 // ============================================================
+// B4 Y RT-UI: the two names are System::String. In the array an entry is only
+// built, copied and destroyed by kSpec_Sprite38 / kSpec_Sprite38Z's raw arms
+// (init 0x180078950's tail arm, assign 0x180004220, destroy 0x1800059e0:
+// +0x08 then +0x00), which name `_data`. The ONE C++ object is
+// AddSpriteInfo's local (0x180003390), which retail constructs (the 0x34
+// zero bytes), copy-assigns both names into and destroys (+0x08 then +0x00)
+// after the append: exactly this struct's implicit member-wise ctor / dtor.
 struct SpriteInfo {
-    char*       name;           // +0x00  System::String data ptr (refcounted, NULL = empty)
-    char*       group;          // +0x08  System::String data ptr (refcounted, NULL = empty)
+    System::String name;        // +0x00  (NULL = empty)
+    System::String group;       // +0x08  (NULL = empty)
     int32_t     x;              // +0x10  x position in sprite atlas
     int32_t     y;              // +0x14  y position in sprite atlas
     int32_t     _reserved18;    // +0x18  ALWAYS ZERO from AddSpriteInfo; no read site

@@ -974,8 +974,8 @@ void* RtColl_ArrayDtorElem_18005bf60(void* self) {
 // harmless and silently stops comparing bytes that should be compared. The
 // finding is filed in docs/runtime_port/WAVE9_LANE_D2.md as lane Q's to make.
 static void SpriteInfoCopy(UI::SpriteInfo* d, const UI::SpriteInfo* s) {
-    AdoptStringSlot(d->name,  s->name);           // +0x00
-    AdoptStringSlot(d->group, s->group);          // +0x08
+    AdoptStringSlot(d->name._data,  s->name._data);   // +0x00
+    AdoptStringSlot(d->group._data, s->group._data);  // +0x08
     d->x           = s->x;                        // nine dwords, +0x10 .. +0x30
     d->y           = s->y;
     d->_reserved18 = s->_reserved18;
