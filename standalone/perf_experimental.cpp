@@ -127,7 +127,7 @@ void RefreshFrustum(::Graphics::Renderer* renderer) {
     if (reinterpret_cast<intptr_t>(camera) <= 0x10000 ||  // CAST-OK: ptr_int
         reinterpret_cast<uintptr_t>(camera) >= 0x00007fffffff0000ull) return;  // CAST-OK: ptr_int
     alignas(16) uint8_t camFrustum[256] = {0};
-    alignas(16) uint8_t worldFrustum[256] = {0};
+    ::Frustum worldFrustum = {};   // as geometry_draw.cpp's: the body constructs into it
     // B.3.5: the retslot door's body moved to the call site — exactly one
     // construction, into the SAME caller storage the door used to be handed.
     const ::Frustum* camF = ::new (static_cast<void*>(camFrustum)) ::Frustum(camera->GetFrustum());
@@ -137,11 +137,13 @@ void RefreshFrustum(::Graphics::Renderer* renderer) {
                   "Camera::_cameraToWorld @ +0x64 — the offset this read used to spell out");
     Math::Transform3 camXf3 = camera->_cameraToWorld;
     // ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z (0x1800f9310), explicit slot.
-    // LEFT: the result slot is raw caller storage the retslot body constructs into
-    // (Volume.h's RtVolume_Frustum_MulTransform3, R-CORE).
-    RtVolume_Frustum_MulTransform3(camF,
-                                   reinterpret_cast<::Frustum*>(worldFrustum), &camXf3);   // LEFT: OTHER RtVolume_Frustum_MulTransform3 (Volume.h, RT) constructs its result into this raw zeroed caller buffer; a ::Frustum local would run its own ctor first
-    std::memcpy(s_planes, worldFrustum, sizeof(s_planes));
+    RtVolume_Frustum_MulTransform3(camF, &worldFrustum, &camXf3);
+    for (int i = 0; i < 6; ++i) {   // the six planes, {x, y, z, d} each
+        s_planes[i][0] = worldFrustum.planes[i].x;
+        s_planes[i][1] = worldFrustum.planes[i].y;
+        s_planes[i][2] = worldFrustum.planes[i].z;
+        s_planes[i][3] = worldFrustum.planes[i].w;
+    }
     // Sanity: a zero frustum (renderer not yet drawn) must not cull everything.
     float mag = 0.0f;
     for (int i = 0; i < 6; ++i)
