@@ -195,28 +195,19 @@ Dialog::~Dialog() {
     // 180112e56: the re-stamp of the Dialog vtable is the compiler's.
 
     // THE FOUR ARRAYS, DESCENDING: +0x78, +0x68, +0x58, +0x48.
-    // ENDGAME B.3.2 step 2 — the first two (+0x78 `_references`, +0x68
-    // `_templates`) are `array.cpp`'s J1 `~Array` (destroy == null, i.e.
-    // trait-equivalent for a trivially destructible element): `_references`/
-    // `_templates` are `void**` + count + capacity, laid out contiguously
-    // exactly like `Collection::Array<void*>` (data/size/capacity), so the
-    // conversion bridges at the use site with a `reinterpret_cast`.
-    // LEFT: 0x180009460 has no named body; the triple is viewed as the Array.
-    reinterpret_cast<Collection::Array<void*>*>(&_references)->~Array();  // +0x78 retail 0x180009460  // LEFT: H5 Dialog::_references is a raw {ptr,count,cap} triple, not an Array member (its dtor would start to run)
-    rtcoll::RtColl_ArrayDtor_180039440(&_templates);                      // +0x68 retail 0x180039440
-
-    // The last two (+0x58 `_namedTemplates`, +0x48 `_controllerConfigs`) are
-    // `array_destroy.cpp`'s J2 entries (`RtColl_ArrayDtorElem_180039360` /
-    // `_180039280`): they destroy each element's embedded `System::String`
-    // via a `DestroySpec` — a different mechanism from `rtcoll::ArraySpec` —
-    // so they stay free-function calls, by name.
-    rtcoll::RtColl_ArrayDtorElem_180039360(&_namedTemplates);          // 180112e78  +0x58
-    rtcoll::RtColl_ArrayDtorElem_180039280(&_controllerConfigs);       // 180112e82  +0x48
+    // B4 Y RT-UI: 180112e60..180112e87 are the four Array members' own
+    // destructors, which the compiler runs after this (empty) body in reverse
+    // declaration order: `_references` (+0x78, retail 0x180009460, J1),
+    // `_templates` (+0x68, 0x180039440, J1), `_namedTemplates` (+0x58,
+    // 0x180039360: kSpec_ExtStr10at08's destroy 0x180039640, then J1) and
+    // `_controllerConfigs` (+0x48, 0x180039280: kSpec_CfgEntry20's destroy
+    // 0x180039580, then J1). The J2 element walk runs only when the size is
+    // positive in both forms (the helper's own loop guard).
 
     // ---- the System::String release at +0x28, ASYMMETRY AND ALL ------------
     // 180112e88..180112eaa: B4 X-RH — `_spriteName` is a System::String
     // member, so this release is its destructor, which the compiler runs after
-    // this body (after the four arrays) and before ~External: retail's order.
+    // the four arrays and before ~External: retail's order.
 
     // 180112eba: the TAIL-JMP to ~External is the compiler's chain.
 }

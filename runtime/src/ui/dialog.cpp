@@ -1274,20 +1274,20 @@ Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const
 
     const ElementDescription* target = desc;   // the no-match answer: the argument itself
     bool  matched = false;
-    const int32_t count = _namedTemplateCount;
+    const int32_t count = _namedTemplates._size;
     for (int32_t i = 0; i < count; ++i) {
         const RtUI::DialogNamedTemplate& e = _namedTemplates[i];
         const int32_t lenOurs   = name    ? RtSystem::StringLength(name)    : 0;
-        const int32_t lenTheirs = e._name ? RtSystem::StringLength(e._name) : 0;
+        const int32_t lenTheirs = e._name._data ? RtSystem::StringLength(e._name._data) : 0;
         if (lenOurs != lenTheirs) continue;
 
         if (!name)             { matched = true; }            // 0x180112fd5
         else if (lenOurs == 0) { matched = true; }            // 0x180112fdb
-        else if (!e._name)     { matched = false; }           // LEA ECX,[R8+1] -> 1
+        else if (!e._name._data) { matched = false; }           // LEA ECX,[R8+1] -> 1
         else {
             // The inlined strcmp at 0x180112fe8..0x180113021, transcribed.
             const char* a = name;
-            const char* b = e._name;
+            const char* b = e._name._data;
             size_t k = 0;
             unsigned char c = static_cast<unsigned char>(a[0]);
             if (c == static_cast<unsigned char>(b[0])) {

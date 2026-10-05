@@ -78,6 +78,15 @@
 
 namespace UI { class ElementDescription; class DialogControllerConfig; class SpriteSheet; }
 
+// B4 Y RT-UI: the hand-derived rows UI::Dialog's four arrays are built and
+// destroyed through (runtime/src/collection/array.cpp), named here so the
+// typed members can carry them as their spec.
+namespace rtcoll {
+extern const ArraySpec kSpec_U64Zero;       // 0x1800492d0 / 0x18002f070  Array<ExternalPtr<T>>
+extern const ArraySpec kSpec_ExtStr10at08;  // 0x180075d20  Array<DialogNamedTemplate>
+extern const ArraySpec kSpec_CfgEntry20;    // 0x180075b20  Array<DialogControllerConfigEntry>
+}  // namespace rtcoll
+
 namespace RtUI {
 
 // One entry of Dialog::_controllerConfigs. Stride 0x20, pinned by the
@@ -120,7 +129,12 @@ struct DialogControllerConfigEntry {
     uint32_t _pad04;         // +0x04  never read
     UI::ElementDescription*     _elementDesc;   // +0x08  ExternalPtr<ElementDescription>  -> arg 5 (B4 H4)
     UI::DialogControllerConfig* _config;        // +0x10  ExternalPtr<DialogControllerConfig> -> arg 4 (B4 H4)
-    char*    _name;          // +0x18  System::String (refcounted char*)
+    // B4 Y RT-UI: typed. The element is only ever built, copied and
+    // destroyed by kSpec_CfgEntry20's arms (assign 0x180075bc8, init
+    // 0x180075c00, destroy 0x180039580), which store `_name._data` raw; no
+    // C++ construction or destruction of an entry runs, so the name is
+    // released once.
+    System::String _name;    // +0x18
 };
 static_assert(offsetof(DialogControllerConfigEntry, _elementDesc) == 0x08,
               "config entry: the DESCRIPTION is at +0x08 (0x180114a13 -> arg 5)");
@@ -135,7 +149,9 @@ static_assert(sizeof(DialogControllerConfigEntry) == 0x20,
 // on a hit re-indexes `data + i*0x10` to read the ExternalPtr at +0x00.
 struct DialogNamedTemplate {
     UI::ElementDescription* _description;   // +0x00  ExternalPtr<ElementDescription> (B4 H4)
-    char* _name;          // +0x08  System::String
+    // B4 Y RT-UI: typed; built / destroyed only by kSpec_ExtStr10at08's arms
+    // (assign 0x180075dc4, init 0x180075dee, destroy 0x180039640).
+    System::String _name;   // +0x08
 };
 static_assert(sizeof(DialogNamedTemplate) == 0x10,
               "Dialog::_namedTemplates stride is 0x10 (CreateElement 0x180112ed0)");
@@ -312,25 +328,16 @@ public:
         _drawLevel             = 0;                         // 180112e04
         _rootDescription       = nullptr;                   // 180112e07
         _defaultFlags          = 0;                         // 180112e0b  DWORD
-        _controllerConfigs     = nullptr;                   // 180112e0e .. 180112e2a
-        _controllerCount       = 0;
-        _controllerCapacity    = 0;
-        _namedTemplates        = nullptr;
-        _namedTemplateCount    = 0;
-        _namedTemplateCapacity = 0;
-        _templates             = nullptr;
-        _templateCount         = 0;
-        _templateCapacity      = 0;
-        _references            = nullptr;
-        _referenceCount        = 0;
-        _referenceCapacity     = 0;
+        // 180112e0e .. 180112e2a (+0x48 .. +0x84 zero): the four Array
+        // members' own Array() (B4 Y RT-UI), run before this body.
     }
 
     // [0] 0x180038b20 — MSVC's VECTOR deleting destructor, both arms exactly as
     // the retired RT_DELDTOR row ran them (`MOV EDX,0x88`, the element size).
-    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — the four ~Array (dialog_ctor_dtor.cpp),
-    // then the +0x28 String release (the member's destructor, B4 X-RH), then
-    // the compiler chains ~External.
+    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — the four ~Array (+0x78, +0x68,
+    // +0x58, +0x48), then the +0x28 String release, then ~External: every one
+    // of them a member destructor run in reverse declaration order after the
+    // empty body (dialog_ctor_dtor.cpp; B4 X-RH, B4 Y RT-UI).
     ~Dialog() override;
 
     // ENDGAME B.3.9 TI-UI: ONE reflection block (B39 D6); `_typeInfo` is the
@@ -388,18 +395,24 @@ public:
     ElementDescription* _rootDescription; // +0x38  ExternalPtr<ElementDescription> (B4 H4)
     uint32_t _defaultFlags;            // +0x40
     uint32_t _unknown44;               // +0x44  never written by the ctor
-    ElementController* _controllerConfigs;               // +0x48
-    int32_t  _controllerCount;         // +0x50
-    int32_t  _controllerCapacity;      // +0x54
-    RtUI::DialogNamedTemplate* _namedTemplates;          // +0x58
-    int32_t  _namedTemplateCount;      // +0x60
-    int32_t  _namedTemplateCapacity;   // +0x64
-    ElementDescription** _templates;   // +0x68  ExternalPtr<ElementDescription>[] (B4 H4)
-    int32_t  _templateCount;           // +0x70
-    int32_t  _templateCapacity;        // +0x74
-    Object::External** _references;    // +0x78  ExternalPtr<Object::External>[] (B4 H4)
-    int32_t  _referenceCount;          // +0x80
-    int32_t  _referenceCapacity;       // +0x84
+    // B4 Y RT-UI: the four arrays are real members, each on retail's own
+    // hand-derived row (SetSize / ~Array):
+    //   +0x48  0x180075b20 / 0x180039280   +0x58  0x180075d20 / 0x180039360
+    //   +0x68  0x1800492d0 / 0x180039440   +0x78  0x18002f070 / 0x180009460
+    // Declared in address order, so the compiler destroys them +0x78, +0x68,
+    // +0x58, +0x48 -- retail's dtor 0x180112e40 order -- then `_spriteName`.
+    using ControllerArray = Collection::Array<ElementController, Collection::DefaultAllocator,
+                                              Collection::ExplicitSpec<&rtcoll::kSpec_CfgEntry20>>;
+    using NamedTemplateArray = Collection::Array<RtUI::DialogNamedTemplate, Collection::DefaultAllocator,
+                                                 Collection::ExplicitSpec<&rtcoll::kSpec_ExtStr10at08>>;
+    using TemplateArray = Collection::Array<ElementDescription*, Collection::DefaultAllocator,
+                                            Collection::ExplicitSpec<&rtcoll::kSpec_U64Zero>>;
+    using ReferenceArray = Collection::Array<Object::External*, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&rtcoll::kSpec_U64Zero>>;
+    ControllerArray    _controllerConfigs;   // +0x48  count +0x50
+    NamedTemplateArray _namedTemplates;      // +0x58  count +0x60
+    TemplateArray      _templates;           // +0x68  ExternalPtr<ElementDescription>[], count +0x70
+    ReferenceArray     _references;          // +0x78  ExternalPtr<Object::External>[], count +0x80
 };
 
 static_assert(sizeof(Dialog) == 0x88,
@@ -419,13 +432,9 @@ B36_DLG_PIN(_drawLevel,          0x34)
 B36_DLG_PIN(_rootDescription,    0x38)
 B36_DLG_PIN(_defaultFlags,       0x40)
 B36_DLG_PIN(_controllerConfigs,  0x48)
-B36_DLG_PIN(_controllerCount,    0x50)
 B36_DLG_PIN(_namedTemplates,     0x58)
-B36_DLG_PIN(_namedTemplateCount, 0x60)
 B36_DLG_PIN(_templates,          0x68)
-B36_DLG_PIN(_templateCount,      0x70)
 B36_DLG_PIN(_references,         0x78)
-B36_DLG_PIN(_referenceCount,     0x80)
 #undef B36_DLG_PIN
 
 }  // namespace UI

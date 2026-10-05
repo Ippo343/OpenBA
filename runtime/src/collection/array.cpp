@@ -716,7 +716,7 @@ void DestroyStringExt(void* ignoredThis, uint8_t* base, int count) {
 // window is 0/0 rather than +0x08..+0x10.
 static void NamedTemplateAssign(RtUI::DialogNamedTemplate* d, const RtUI::DialogNamedTemplate* s) {
     d->_description = s->_description;      // verbatim, and first
-    AdoptString(d->_name, s->_name);
+    AdoptString(d->_name._data, s->_name._data);
 }
 void AssignExtStringAt08(uint8_t* d, const uint8_t* s) {
     AssignAs<RtUI::DialogNamedTemplate, &NamedTemplateAssign>(d, s);
@@ -768,7 +768,7 @@ static void CfgEntryAssign(RtUI::DialogControllerConfigEntry* d,
     /* +0x04..+0x07 deliberately not copied */
     d->_elementDesc = s->_elementDesc;      // +0x08
     d->_config      = s->_config;           // +0x10
-    AdoptString(d->_name, s->_name);        // +0x18 zeroed first
+    AdoptString(d->_name._data, s->_name._data);  // +0x18 zeroed first
 }
 void AssignCfgEntry20(uint8_t* d, const uint8_t* s) {
     AssignAs<RtUI::DialogControllerConfigEntry, &CfgEntryAssign>(d, s);
@@ -778,7 +778,7 @@ static void CfgEntryInit(RtUI::DialogControllerConfigEntry* d) {
     /* +0x04..+0x07 deliberately untouched */
     d->_elementDesc = nullptr;
     d->_config      = nullptr;
-    d->_name        = nullptr;
+    d->_name._data  = nullptr;
 }
 void InitCfgEntry20(uint8_t* d) { InitAs<RtUI::DialogControllerConfigEntry, &CfgEntryInit>(d); }
 // CALL 0x180039580 — Body B with kD_Str_20at18, ported and registered by
