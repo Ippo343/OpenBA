@@ -71,7 +71,7 @@ BuildStructure::BuildStructure()
 // zeroing every position byte. Without this array Execute's unbuilt-position scan finds
 // nothing (_slots._size == 0 -> unbuiltCount 0) and returns 1 (never assigns labor) — the
 // 2c-B blocker. Faithful offset-for-offset port of the Ghidra decompilation.
-BuildStructure::BuildStructure(ComponentEntity* const* entityIBP, uint8_t altAnim)
+BuildStructure::BuildStructure(ComponentEntity* const* entityIBP, bool altAnim)
     : Work(entityIBP),   // local_res10 = *entityIBP; Work_Ctor25(this, &local_res10)
       field_48(altAnim), field_4c(0) {
     // The +0x50 array and the +0x60 set are members: their ctors zero data, count and
@@ -172,7 +172,7 @@ void BuildStructure::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // Serialize bool at +0x48 (the field is uint8_t storage)
-    ser.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: H8 the ctor stores the caller's raw byte (0x1400e59c0); a bool field would normalise it
+    ser.Serialize(field_48, nullptr);
 
     // Serialize BST at +0x60 (InternalBasePtr tree)
     WorkBST_BST_Serialize_296b0(&_citizens, &ser);
@@ -477,7 +477,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                         &field_10,
                         bestPos,
                         chosenIndex,
-                        (uint8_t)field_48
+                        field_48
                     );
 
                     // Update building entity state
@@ -783,7 +783,7 @@ void* BuildStructure::CreateInPlaceObject(void* storage) {
 // The one entry point other blocks name: the full ctor on caller memory
 // (buildcomponent_state8.cpp / destroycomponent_states.cpp, BuildComponent's state-8
 // enter). B8-5: the real ctor, the same bytes.
-extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, uint8_t altAnim) {
+extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, bool altAnim) {
     return new (mem) BuildStructure(entityIBP, altAnim);
 }
 

@@ -289,13 +289,14 @@ static void SM_RunPhase(StateMachine* sm, const System::Time* timeOutSlot) {
 void DestroyComponent::RunStateMachine() {
     InitTypeIds();
     // Retail reuses ONE 8-byte stack slot as both the Time(0.0) buffer and the 4-byte
-    // outState the transition handlers write. The port previously modeled that slot as
-    // an int32 — and System::Time::Time writes 8 bytes, clobbering whatever the
-    // compiler placed in the adjacent 4 bytes (observed live 2026-07-26, debug build:
-    // SM_RunPhase faulted on the first upgrade-click pump). An explicit 8-byte slot
-    // with the outState aliased to its low dword reproduces the retail frame exactly.
+    // outState the transition lookup writes. The two lifetimes never overlap: phase 1
+    // reads the Time, then the int is seeded and written by FindTransition and read back
+    // as the pending state, and the slot is re-built as Time(0.0) before phase 2 reads
+    // it again. Nothing reads the int as the Time or the Time as the int, so the port
+    // keeps two typed locals (an int32 alone under System::Time::Time's 8-byte store
+    // clobbered its neighbour, observed live 2026-07-26).
     System::Time timeOutSlot = {0};
-    int32_t* outState = reinterpret_cast<int32_t*>(&timeOutSlot);   // LEFT: retail's one slot is the Time and the int out
+    int32_t outState;   // seeded below, before FindTransition writes it
 
     StateMachineComponent* st0 = _entity->FindComponent<StateMachineComponent>();
     if (!st0) {  // SA-guard: no StateMachineComponent on the entity (crashed
@@ -326,7 +327,7 @@ void DestroyComponent::RunStateMachine() {
 
     // ---- main tick path ----
     StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();
-    // Time(0.0) into the shared 8-byte slot (see timeOutSlot note above).
+    // Time(0.0) into the Time slot (see the timeOutSlot note above).
     RtSystem_Time_Ctor(&timeOutSlot, 0.0f);
     StateMachine* sm = &machine->stateMachine;
 
@@ -334,7 +335,7 @@ void DestroyComponent::RunStateMachine() {
     SM_RunPhase(sm, &timeOutSlot);
 
     // ---- between-phase: choose transition + kick Tick ----
-    *outState = 3;  // outState seed
+    outState = 3;  // outState seed
     if (sm->activeState < 0) {
         System::Time timeBuf = {0};
         RtSystem_Time_Ctor(&timeBuf, 0.0f);
@@ -344,10 +345,10 @@ void DestroyComponent::RunStateMachine() {
     }
     {
         ControllerComponent::Controller* head = sm->current;
-        int iVar8 = head->FindTransition(sm->activeState, outState);
+        int iVar8 = head->FindTransition(sm->activeState, &outState);
         if (-1 < iVar8) {
             sm->transitionState = static_cast<int8_t>(iVar8);
-            sm->pendingState = static_cast<int8_t>(*outState);
+            sm->pendingState = static_cast<int8_t>(outState);
         }
     }
     RtSystem_Time_Ctor(&timeOutSlot, 0.0f);

@@ -528,7 +528,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
     }
 
     // Serialize entityFlags at +0x40
-    ser.Serialize(*reinterpret_cast<int*>(&_entityFlags), nullptr);   // LEFT: the int& overload on a uint32_t field (retyping changes the readers' shifts)
+    ser.Serialize(*reinterpret_cast<int*>(&_entityFlags), nullptr);   // LEFT: WORK:H8 signedness kept: retail calls the int& overload; retyping _entityFlags int32_t (tried) changes codegen in 14 reader functions across 12 files (bit-10 tests lose testb $0x4,+0x41) and a uint32_t* reader in Game/starttown.cpp: needs its own B11-read commit
 
     // On load: create missing components from description
     if (encodingMode == 0) {

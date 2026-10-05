@@ -192,7 +192,7 @@ void ConsumeProduce::Persist(IO::Stream& stream) {
     serializer.Serialize(intCount, field_68, nullptr);
 
     // --- Serialize ConsumeProduce fields ---
-    serializer.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // bool at +0x48 (the field is uint8_t storage)  // LEFT: H8 (the byte stays uint8_t; Persist's bool& overload)
+    serializer.Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // LEFT: WORK:H8 kept (B11 -O2): typed bool, Execute's `field_48 == 0` (cmpb $0x0 / jne) becomes cmpb $0x1 / je, which reads a loaded byte > 1 differently; the field stays uint8_t
     serializer.Serialize(field_4c, nullptr);    // int at +0x4C
     RtObject::RtObject_Type_Serialize(&field_50, &serializer);            // Type at +0x50
     serializer.Serialize(field_54, nullptr);    // int at +0x54

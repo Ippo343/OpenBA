@@ -90,7 +90,7 @@ extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::
         new (out) System::String();
         return out;
     }
-    const TradeMerchantOrder* base = tradeState->merchantOrders;
+    const TradeMerchantOrder* base = tradeState->merchantOrders._data;
     if (!base) {      // standalone guard: retail derefs blind
         new (out) System::String();
         return out;
@@ -144,7 +144,7 @@ extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState,
     if (!tradeState) return;                 // standalone-only; retail derefs blind.
     ComponentDescription* const resourceEntity = resource;   // the list holds the pointer
     const int32_t orderIdx = tradeState->tradeId;
-    TradeMerchantOrder* const orderBase = tradeState->merchantOrders;
+    TradeMerchantOrder* const orderBase = tradeState->merchantOrders._data;
     // Retail indexes unconditionally; a negative index (no order selected) would read
     // behind the array. Callers gate on the selection, so this only guards standalone.
     if (orderIdx < 0 || !orderBase) return;

@@ -107,50 +107,68 @@ void TradeMerchantOrders_Destroy(TradeMerchantOrder* base, int count) {
     }
 }
 
+// 0x14000e760's two element arms. The retained arm copy-constructs the name, copies
+// the kind and clones the goods array (0x14000e6b0); the new arm builds an empty name
+// and zeroes the rest.
+static void TradeMerchantOrder_CopyConstruct(TradeMerchantOrder* dstElem, const TradeMerchantOrder* srcElem) {
+    ::new (&dstElem->merchantName) System::String(srcElem->merchantName);   // String at +0x00
+    dstElem->orderKind = srcElem->orderKind;                                // int at +0x08
+    dstElem->goods = nullptr;
+    dstElem->goodsCount = 0;
+    dstElem->goodsCap = 0;
+    if (&dstElem->goods != &srcElem->goods)
+        TradeGoods_Copy(*dstElem, *srcElem);
+}
+static void TradeMerchantOrder_ConstructZero(TradeMerchantOrder* dstElem) {
+    ::new (&dstElem->merchantName) System::String();   // _data = null (0x180006760)
+    dstElem->orderKind = 0;
+    dstElem->_pad0C[0] = dstElem->_pad0C[1] = dstElem->_pad0C[2] = dstElem->_pad0C[3] = 0;
+    dstElem->goods = nullptr;
+    dstElem->goodsCount = 0;
+    dstElem->goodsCap = 0;
+}
+
+// The +0x30 array's row: 0x14000e760's element arms and 0x14000ef10's destroy. Its
+// ~Array is retail's dtor 0x14005c3de..0x14005c3f9: ef10 over the count, MemFree,
+// +0x30 = +0x38 = 0. (The resize stays the hand-written 0x14000e760 below.)
+const rtcoll::ArraySpec kSpec_TradeMerchantOrder = {   // exe 0x14000e760 / 0x14000ef10
+    "Array<TradeMerchantOrder>", 0x20, 8,
+    &rtcoll::AssignAs<TradeMerchantOrder, &TradeMerchantOrder_CopyConstruct>,
+    &rtcoll::InitAs<TradeMerchantOrder, &TradeMerchantOrder_ConstructZero>,
+    &rtcoll::DestroyAs<TradeMerchantOrder, &TradeMerchantOrders_Destroy>, false,
+    /*assign unwritten*/ 0, 0,
+    /*init   unwritten*/ 0, 0,
+    /*seed zero       */ 0, 0 };
+
 // 0x14000e760 — resize the merchant-order array (0x20 stride). On growth past the
 // capacity, allocate cap*0x20 (8-aligned; cap = 3*newCount on a +1 grow from
 // non-empty), then for each retained element copy its String (+0x00) and int (+0x08)
 // and clone its goods array (+0x10); new elements are zeroed. The shrink path destroys
 // the dropped elements (0x14000ef10). Faithful 1:1 port of TradeComponent_impl_e760.
 void TradeMerchantOrders_SetSize(TradeComponent& trade, int count) {
-    int oldCount = trade.merchantOrderCount;
+    int oldCount = trade.merchantOrders._size;
     if (count == oldCount) return;
 
-    TradeMerchantOrder* oldBuf = trade.merchantOrders;
-    trade.merchantOrderCount = count;
+    TradeMerchantOrder* oldBuf = trade.merchantOrders._data;
+    trade.merchantOrders._size = count;
 
-    if (trade.merchantOrderCap < count) {
-        trade.merchantOrderCap = count;
+    if (trade.merchantOrders._capacity < count) {
+        trade.merchantOrders._capacity = count;
         if (count == oldCount + 1 && oldCount != 0)
-            trade.merchantOrderCap = count * 3;
-        trade.merchantOrders = static_cast<TradeMerchantOrder*>(System::MemoryAllocator::MemAlloc(
-            (uint64_t)trade.merchantOrderCap * sizeof(TradeMerchantOrder), 8));
+            trade.merchantOrders._capacity = count * 3;
+        trade.merchantOrders._data = static_cast<TradeMerchantOrder*>(System::MemoryAllocator::MemAlloc(
+            (uint64_t)trade.merchantOrders._capacity * sizeof(TradeMerchantOrder), 8));
     }
 
-    TradeMerchantOrder* newBuf = trade.merchantOrders;
+    TradeMerchantOrder* newBuf = trade.merchantOrders._data;
     int startIdx = (oldBuf == newBuf) ? oldCount : 0;
     for (int64_t i = startIdx; i < count; i++) {
         TradeMerchantOrder* dstElem = newBuf + i;
         if (i < oldCount) {
             TradeMerchantOrder* srcElem = oldBuf + i;
-            if (dstElem) {
-                ::new (&dstElem->merchantName) System::String(srcElem->merchantName);   // String at +0x00
-                dstElem->orderKind = srcElem->orderKind;                                // int at +0x08
-                dstElem->goods = nullptr;
-                dstElem->goodsCount = 0;
-                dstElem->goodsCap = 0;
-                if (&dstElem->goods != &srcElem->goods)
-                    TradeGoods_Copy(*dstElem, *srcElem);
-            }
+            if (dstElem) TradeMerchantOrder_CopyConstruct(dstElem, srcElem);
         } else {
-            if (dstElem) {
-                ::new (&dstElem->merchantName) System::String();   // _data = null (0x180006760)
-                dstElem->orderKind = 0;
-                dstElem->_pad0C[0] = dstElem->_pad0C[1] = dstElem->_pad0C[2] = dstElem->_pad0C[3] = 0;
-                dstElem->goods = nullptr;
-                dstElem->goodsCount = 0;
-                dstElem->goodsCap = 0;
-            }
+            if (dstElem) TradeMerchantOrder_ConstructZero(dstElem);
         }
     }
 
@@ -167,24 +185,24 @@ void TradeMerchantOrders_SetSize(TradeComponent& trade, int count) {
 // allocate cap*0xc (4-aligned), copy the old entries (3 ints each), zero the new
 // entries' third int, free the old buffer. Faithful 1:1 port of TradeComponent_sub_e8d0.
 void TradeBuyOrders_SetSize(TradeComponent& trade, int count) {
-    int oldCount = trade.buyOrderCount;
+    int oldCount = trade.buyOrders._size;
     if (count == oldCount) return;
 
-    TradeBuyOrder* oldBuf = trade.buyOrders;
-    trade.buyOrderCount = count;
+    TradeBuyOrder* oldBuf = trade.buyOrders._data;
+    trade.buyOrders._size = count;
 
-    if (trade.buyOrderCap < count) {
-        trade.buyOrderCap = count;
+    if (trade.buyOrders._capacity < count) {
+        trade.buyOrders._capacity = count;
         if (count == oldCount + 1 && oldCount != 0) {
-            trade.buyOrderCap = count * 3;
+            trade.buyOrders._capacity = count * 3;
         }
-        trade.buyOrders = static_cast<TradeBuyOrder*>(System::MemoryAllocator::MemAlloc(
-            (uint64_t)trade.buyOrderCap * sizeof(TradeBuyOrder), 4));
+        trade.buyOrders._data = static_cast<TradeBuyOrder*>(System::MemoryAllocator::MemAlloc(
+            (uint64_t)trade.buyOrders._capacity * sizeof(TradeBuyOrder), 4));
     }
 
-    int startIdx = (oldBuf == trade.buyOrders) ? oldCount : 0;
+    int startIdx = (oldBuf == trade.buyOrders._data) ? oldCount : 0;
     for (int64_t i = startIdx; i < count; i++) {
-        TradeBuyOrder* dst = trade.buyOrders + i;
+        TradeBuyOrder* dst = trade.buyOrders._data + i;
         if (i < oldCount) {
             if (dst) {
                 dst->rawMaterialFlags = oldBuf[i].rawMaterialFlags;
@@ -196,7 +214,7 @@ void TradeBuyOrders_SetSize(TradeComponent& trade, int count) {
         }
     }
 
-    if (oldBuf != trade.buyOrders) {
+    if (oldBuf != trade.buyOrders._data) {
         System::MemoryAllocator::MemFree(oldBuf);
     }
 }
@@ -222,13 +240,13 @@ void TradeComponent::Setup() {
     TradeMerchantOrders_SetSize(*this, desc->_merchantCount);
 
     // Name each merchant
-    int nameCount = merchantOrderCount;
+    int nameCount = merchantOrders._size;
     System::Random* random = GameUpdateLoop::_singleton->m_random;
     for (int i = 0; i < nameCount; i++) {
         uint32_t r = random->Rand(2u);
         System::String picked;                                 // _data = null, as the zeroed buffer
         NameDB_PickAndGenerate(&picked, random, (char)(r == 0));   // 0x1400a4c60
-        merchantOrders[i].merchantName = picked;               // slot 0x1401514c0
+        merchantOrders._data[i].merchantName = picked;               // slot 0x1401514c0
     }                                                          // ~String: slot 0x140152af0
 
     // Report the OUTCOME, not the call. A populated +0x30 is the whole point of
@@ -236,13 +254,13 @@ void TradeComponent::Setup() {
     // evidence it filled anything: desc null, or a merchant count of 0, both leave the
     // array NULL and read identically from a bare entry trace.
     fprintf(stderr, "[TradeComp] Setup: desc=%p names=%d array=%p\n",
-            static_cast<void*>(desc), nameCount, static_cast<void*>(merchantOrders));
+            static_cast<void*>(desc), nameCount, static_cast<void*>(merchantOrders._data));
     // ...and the names themselves. A populated array is NOT evidence the names are
     // real: while 0x1400a4c60 was unregistered, its door was null, the buffer stayed
     // zeroed, and every slot got an EMPTY string — which reads identically to a
     // healthy array from the line above.
-    for (int i = 0; merchantOrders && i < nameCount; i++) {
-        const char* nm = merchantOrders[i].merchantName._data;
+    for (int i = 0; merchantOrders._data && i < nameCount; i++) {
+        const char* nm = merchantOrders._data[i].merchantName._data;
         fprintf(stderr, "[TradeComp]   name[%d]=\"%s\"\n", i, nm ? nm : "(null)");
     }
 
@@ -250,9 +268,9 @@ void TradeComponent::Setup() {
     TradeBuyOrders_SetSize(*this, desc->_pairCount);
 
     // Copy each category's flags (0x18 stride) into its buy order (0xc stride)
-    int itemCount = buyOrderCount;
+    int itemCount = buyOrders._size;
     TradeGoodsCategory* src = desc->_pairs;
-    TradeBuyOrder* dst = buyOrders;
+    TradeBuyOrder* dst = buyOrders._data;
     for (int i = 0; i < itemCount; i++) {
         dst[i].rawMaterialFlags = src[i].rawMaterialFlags;
         dst[i].categoryIndex = i;
@@ -275,43 +293,32 @@ void TradeComponent::Setup() {
 // (+0xa0); then `_flags |= 3` (0x83).
 TradeComponent::TradeComponent()
     : tradeState(0), tradeId(-1),
-      merchantOrders(nullptr), merchantOrderCount(0), merchantOrderCap(0),
-      buyOrders(nullptr), buyOrderCount(0), buyOrderCap(0),
-      manifest(nullptr), manifestCount(0), manifestCap(0),
-      stock{nullptr, 0, {}}, workEnabled(0),   // the tree's: retail's ctor leaves +0x6c..+0x70 as allocated
+      merchantOrders(), buyOrders(), manifest(),
+      stock{{nullptr, 0, {}}}, workEnabled(0),   // the tree's: retail's ctor leaves +0x6c..+0x70 as allocated
       tradeFlag(0), _pad72{}, merchantTimer{0}, merchant(nullptr),
       _controller(this) {
     OrFlagsInCtor(0x3);
 }
 
-// 0x14005c340: frees the +0x60 stock tree, +0x50, +0x40 and the +0x30 merchant orders,
+// 0x14005c340: the body is empty. ~_controller is the +0x88 restamp (0x14005c376), then
+// the members in reverse declaration order, retail's release order:
+//   +0x60 ~stock (below): the root's two subtrees through 0x14000e320, then the root;
+//         +0x60 = 0 (qword), +0x68 = 0 (dword)                     0x14005c380..0x14005c3b7
+//   +0x50 ~manifest: MemFree, +0x50 = +0x58 = 0 (qwords)           0x14005c3ba..0x14005c3c8
+//   +0x40 ~buyOrders: MemFree, +0x40 = +0x48 = 0                    0x14005c3cc..0x14005c3da
+//   +0x30 ~merchantOrders: 0x14000ef10 over the count (+0x38), MemFree, +0x30 = +0x38 = 0
+//                                                                   0x14005c3de..0x14005c3f9
 // then the restamps and ~Internal (the compiler chain).
-//   +0x60: the root's two subtrees through 0x14000e320 (children at +0x18/+0x20;
-//          ported as WorkBase_TreeNodeFree_e320), then the root; +0x60 = 0, +0x68 = 0
-//   +0x50: MemFree, +0x50 = +0x58 = 0
-//   +0x40: MemFree, +0x40 = +0x48 = 0
-//   +0x30: the elements through 0x14000ef10 (count +0x38), MemFree, +0x30 = +0x38 = 0
-TradeComponent::~TradeComponent() {
-    if (TradeResourceNode* root = stock.root) {
-        WorkBase_TreeNodeFree_e320(&stock.root, root->left);
-        WorkBase_TreeNodeFree_e320(&stock.root, root->right);
-        Object::detail::InternalMemFree(root);
+TradeComponent::~TradeComponent() = default;
+
+TradeStockTree::~TradeStockTree() {
+    if (TradeResourceNode* r = root) {
+        WorkBase_TreeNodeFree_e320(&root, r->left);
+        WorkBase_TreeNodeFree_e320(&root, r->right);
+        Object::detail::InternalMemFree(r);
     }
-    stock.root = nullptr;
-    stock.count = 0;
-    Object::detail::InternalMemFree(manifest);
-    manifest = nullptr;
-    manifestCount = 0;   // retail: one qword 0 over +0x58..+0x5f
-    manifestCap = 0;
-    Object::detail::InternalMemFree(buyOrders);
-    buyOrders = nullptr;
-    buyOrderCount = 0;
-    buyOrderCap = 0;
-    TradeMerchantOrders_Destroy(merchantOrders, merchantOrderCount);
-    Object::detail::InternalMemFree(merchantOrders);
-    merchantOrders = nullptr;
-    merchantOrderCount = 0;
-    merchantOrderCap = 0;
+    root = nullptr;
+    count = 0;
 }
 
 // create 0x14000db60: MemAlloc(0xa8, 8), then the ctor.

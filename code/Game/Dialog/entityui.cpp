@@ -48,35 +48,6 @@
 #include "Game/Map.h"   // GameUpdateLoop::m_game
 
 // ============================================================
-// EntityTrackingSet_Remove (0x14002c690)
-// ============================================================
-// BST remove: walks the tree to the node whose key == *key, then deletes it
-// (0x140025740).
-// (A template over the set's node since B.4 Y GAMEB: OnElementEvent below hands
-// it the +0x50 pinned-dialog set, whose keys are descriptions; the compare is by
-// address, as 0x14002c690's.)
-template <class Node>
-static void EntityTrackingSet_Remove_Impl(AvlTreeHead<Node>* set, ComponentEntity* const* key)
-{
-    Node* node = set->root;
-    const void* const keyAddr = *key;
-
-    while (node != nullptr) {
-        const void* const nodeKey = Avl38KeyOf(node);
-        if (keyAddr < nodeKey) {
-            node = node->left;
-        } else if (keyAddr <= nodeKey) {
-            // Found the node — delete it
-            Avl38SetRemove(set, node);   // 0x140025740
-            return;
-        } else {
-            node = node->right;
-        }
-    }
-    // Not found — nothing to do
-}
-
-// ============================================================
 // GetDescPage (0x140011320)
 // ============================================================
 // Searches the entity's ComponentDescription sub-descriptions (_subDescs /
@@ -363,7 +334,7 @@ void EntityUI::OnClosed() {
     // The tracking set: the tool manager (g_pGameWorldSingleton +0x120) +0x60
     PlayerToolManager* tools = GameUpdateLoop::_singleton->m_toolManager;
 
-    EntityTrackingSet_Remove_Impl(&tools->field_0x60, &entityKey);
+    Avl38SetFindRemove(&tools->field_0x60, &entityKey);   // 0x14002c690
 }
 
 // ============================================================
@@ -669,7 +640,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
         if (checkPin->_checked == 0) {
             ComponentEntity* entityKey = entity;
             PlayerToolManager* worldObj = GameUpdateLoop::_singleton->m_toolManager;
-            EntityTrackingSet_Remove_Impl(&worldObj->field_0x50, &entityKey);
+            Avl38SetFindRemove(&worldObj->field_0x50, &entityKey);   // 0x14002c690
             return;
         }
 

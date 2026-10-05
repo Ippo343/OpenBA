@@ -234,7 +234,6 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, 
 
 // ---- storagecomponent.cpp
 int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
-void StorageComponent_DynArrayResize(void* arrayBase, int newCount);  // 0x14000f090
 
 // ---- toolbardescription.cpp
 #include "collection/Collection.h"   // Collection::Array (the resize's header)

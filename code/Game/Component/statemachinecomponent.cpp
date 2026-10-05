@@ -522,13 +522,12 @@ void StateMachineComponent::Persist(IO::Stream& stream) {
 
     IO::Serializer ser(stream, 0);
 
-    // The four state bytes +0x50..+0x53. Retail calls Serialize(signed char&)
-    // (import 0x140152418); the tree's unsigned char overload is kept here: the
-    // `behaviour:` commit that changes the overload is listed in the hand-in.
-    ser.Serialize(*reinterpret_cast<unsigned char*>(&stateMachine.currentInput), nullptr);   // LEFT: uchar overload (see above)
-    ser.Serialize(*reinterpret_cast<unsigned char*>(&stateMachine.activeState), nullptr);    // LEFT: uchar overload
-    ser.Serialize(*reinterpret_cast<unsigned char*>(&stateMachine.pendingState), nullptr);   // LEFT: uchar overload
-    ser.Serialize(*reinterpret_cast<unsigned char*>(&stateMachine.transitionState), nullptr); // LEFT: uchar overload
+    // The four state bytes +0x50..+0x53 through Serialize(signed char&) (import
+    // 0x140152418, 0x14012b97d..0x14012b9b3), the fields' own type.
+    ser.Serialize(stateMachine.currentInput, nullptr);
+    ser.Serialize(stateMachine.activeState, nullptr);
+    ser.Serialize(stateMachine.pendingState, nullptr);
+    ser.Serialize(stateMachine.transitionState, nullptr);
 }
 // ------------------------------------------------------------------
 // Slot 4 (+0x20) — retail StateMachineComponent::Startup (0x14012b6a0). Retail's

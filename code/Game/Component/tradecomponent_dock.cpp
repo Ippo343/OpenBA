@@ -244,10 +244,10 @@ void StackArrayPush(StackArray<T>& a, T value, int align) {
 //   +0x40 base price  +0x44 stock numerator (divided by tier[+0x10])  +0x48 stock floor
 void TradeComponent::BuildMerchantManifest() {
     // Drop the previous manifest. +0x58 is cleared as one qword: count AND capacity.
-    System::MemoryAllocator::MemFree(manifest);
-    manifest = nullptr;
-    manifestCount = 0;
-    manifestCap = 0;
+    System::MemoryAllocator::MemFree(manifest._data);
+    manifest._data = nullptr;
+    manifest._size = 0;
+    manifest._capacity = 0;
     tradeId = -1;
 
     System::Random* rng = GameUpdateLoop::_singleton->m_random;
@@ -267,7 +267,7 @@ void TradeComponent::BuildMerchantManifest() {
     StackArray<ValueDescription*>     values = {nullptr, 0, 0};   // their ValueDescriptions, index-aligned
 
     // Where the goods list comes from, and whether it is marked up.
-    TradeMerchantOrder& rec = merchantOrders[merchantIdx];
+    TradeMerchantOrder& rec = merchantOrders._data[merchantIdx];
     bool fromOrder = false;
     if (rec.orderKind == 0 || rec.goodsCount < 1) {
         TradeUI_GetBuyEntries_59670(this, &goods);
@@ -348,9 +348,9 @@ void TradeComponent::BuildMerchantManifest() {
 
         // Already on the manifest? Add to its stock and move on.
         bool merged = false;
-        const int lineCount = manifestCount;
+        const int lineCount = manifest._size;
         for (int i = 0; i < lineCount; ++i) {
-            TradeManifestLine& line = manifest[i];
+            TradeManifestLine& line = manifest._data[i];
             if (line.good != good) continue;
             line.stock += stock;
             merged = true;
@@ -364,23 +364,23 @@ void TradeComponent::BuildMerchantManifest() {
         entry.price = price;
         entry.stock = stock;
 
-        const int oldN = manifestCount;
+        const int oldN = manifest._size;
         const int newN = oldN + 1;
-        TradeManifestLine* oldBuf = manifest;
-        manifestCount = newN;
-        if (manifestCap < newN) {
-            manifestCap = (oldN != 0) ? newN * 3 : newN;
-            manifest = static_cast<TradeManifestLine*>(System::MemoryAllocator::MemAlloc(
-                      static_cast<uint64_t>(manifestCap) << 4, 8));
+        TradeManifestLine* oldBuf = manifest._data;
+        manifest._size = newN;
+        if (manifest._capacity < newN) {
+            manifest._capacity = (oldN != 0) ? newN * 3 : newN;
+            manifest._data = static_cast<TradeManifestLine*>(System::MemoryAllocator::MemAlloc(
+                      static_cast<uint64_t>(manifest._capacity) << 4, 8));
         }
-        const int start = (oldBuf == manifest) ? oldN : 0;
+        const int start = (oldBuf == manifest._data) ? oldN : 0;
         for (int i = start; i < newN; ++i) {
-            TradeManifestLine* dst = manifest + i;
+            TradeManifestLine* dst = manifest._data + i;
             if (!dst) continue;
             const TradeManifestLine* src = (i < oldN) ? oldBuf + i : &entry;
             *dst = *src;
         }
-        if (oldBuf != manifest)
+        if (oldBuf != manifest._data)
             System::MemoryAllocator::MemFree(oldBuf);
     }
 
@@ -435,9 +435,9 @@ void TradeComponent::AutoTrade() {
     int volume = CitizenComp_StorageComponent_QueryCount(storage);
     const int volumeCap = storage->capacity;
 
-    const int orderCount = buyOrderCount;
+    const int orderCount = buyOrders._size;
     for (int o = 0; o < orderCount; ++o) {
-        const TradeBuyOrder& order = buyOrders[o];
+        const TradeBuyOrder& order = buyOrders._data[o];
         const int orderAmount = order.amount;
         if (orderAmount == 0) {
             // OUTCOME, not intent: an order row with amount 0 is a category the player
@@ -463,9 +463,9 @@ void TradeComponent::AutoTrade() {
         StackArray<int32_t> candidates = {nullptr, 0, 0};
         int availQty = 0;
         {
-            const int lines = manifestCount;
+            const int lines = manifest._size;
             for (int k = 0; k < lines; ++k) {
-                const TradeManifestLine& line = manifest[k];
+                const TradeManifestLine& line = manifest._data[k];
                 RawMaterialDescription* rawMat =
                     FindSubDescription<RawMaterialDescription>(line.good);   // cell 0x1401c7cb8 (D5)
                 if (!rawMat) continue;
@@ -483,7 +483,7 @@ void TradeComponent::AutoTrade() {
                 if (spent >= sellValue) break;         // out of money
 
                 const int lineIdx = candidates.base[cursor];
-                TradeManifestLine& line = manifest[lineIdx];
+                TradeManifestLine& line = manifest._data[lineIdx];
                 // Every candidate was selected BY having a RawMaterialDescription, so
                 // this second lookup on the same good cannot miss. Retail derefs its
                 // result unguarded for exactly that reason.
@@ -647,10 +647,10 @@ char TradeComponent::LeaveDocked() {
 
     merchant = nullptr;
 
-    System::MemoryAllocator::MemFree(manifest);
-    manifest = nullptr;
-    manifestCount = 0;
-    manifestCap = 0;
+    System::MemoryAllocator::MemFree(manifest._data);
+    manifest._data = nullptr;
+    manifest._size = 0;
+    manifest._capacity = 0;
     tradeId = -1;
     return 1;
 }
