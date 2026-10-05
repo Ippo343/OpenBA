@@ -405,7 +405,7 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
             bool duplicate = false;
             TrackedEntityNode* newNode = nullptr;
             while (!inserted) {
-                ComponentEntity* curKey = cur->key;
+                ComponentEntity* curKey = cur->key.Get();
                 if (key < curKey) {
                     TrackedEntityNode* l = cur->left;
                     if (!l) {
@@ -433,8 +433,8 @@ static void IbpTree_Serialize_e470(TrackedEntityNode** root, int32_t* countField
         if (!cur) return;
         while (cur->left) cur = cur->left;
         while (cur) {
-            reinterpret_cast<Object::InternalBasePtr*>(&cur->key)->Serialize(*serializer);   // B.3.4 bridge   // LEFT: TrackedEntityNode::key (PlayerToolManager.h) is a ComponentEntity* where retail holds an InternalPtr<ComponentEntity>; Serialize stores PersistObject's result back into the node's own slot even when saving, so no local copy can stand in, and typing the key changes its readers in seven X6-GAME-B files
-            if (cur->key && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(cur->key, s_tidCompEnt))
+            cur->key.InternalBasePtr::Serialize(*serializer);   // InternalBasePtr::Serialize (0x14002e470)
+            if (cur->key.Get() && s_tidCompEnt && !::Object::IsDerivedFromNullSafe(cur->key.Get(), s_tidCompEnt))
                 cur->key = nullptr;
             serializer->Serialize(cur->x, nullptr);
             serializer->Serialize(cur->y, nullptr);

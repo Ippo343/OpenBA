@@ -297,8 +297,8 @@ UNIT_TEST(wrk_leaf_tendarea) {
 
 UNIT_TEST(wrk_leaf_tradework) {
     WRK_LEAF_SHAPE(TradeWork, Work, 0x58);
-    CHECK_EQ(offsetof(TradeWork, bstRoot), (size_t)0x48);
-    CHECK_EQ(offsetof(TradeWork, workerCount), (size_t)0x50);
+    CHECK_EQ(offsetof(TradeWork, assignments.root), (size_t)0x48);
+    CHECK_EQ(offsetof(TradeWork, assignments.count), (size_t)0x50);
 }
 
 // ===========================================================================

@@ -62,7 +62,7 @@ static void EntityTrackingSet_Remove_Impl(AvlTreeHead<Node>* set, ComponentEntit
     const void* const keyAddr = *key;
 
     while (node != nullptr) {
-        const void* const nodeKey = node->key;
+        const void* const nodeKey = Avl38KeyOf(node);
         if (keyAddr < nodeKey) {
             node = node->left;
         } else if (keyAddr <= nodeKey) {
@@ -223,10 +223,10 @@ void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEn
     // Search the tree for an existing node with this key
     TrackedEntityNode* node = *rootPtr;
     while (node != nullptr) {
-        if (entityKey < node->key) {
+        if (entityKey < node->key.Get()) {
             node = node->left;
         } else {
-            if (entityKey <= node->key) {
+            if (entityKey <= node->key.Get()) {
                 // Found — update position and active flag
                 node->active = 1;
                 node->x = x;
@@ -248,8 +248,8 @@ void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEn
         while (true) {
             TrackedEntityNode* parent = cur;
 
-            if (cur->key <= entityKey) {
-                if (entityKey <= cur->key) {
+            if (cur->key.Get() <= entityKey) {
+                if (entityKey <= cur->key.Get()) {
                     // Duplicate key — already handled above
                     return;
                 }
