@@ -58,13 +58,9 @@
 #include "../object/External.h"   // Object::ExternalPtr<T>, for GetInstanceId
 #include "AnimationState.h"        // B.4: Array<AnimationState>, Array<GraphicsMesh::Node>
 
-// B.4 Y RT: the hand-derived row of `Array<Graphics::AnimationState>`
-// (runtime/src/collection/array_graphics_anim.cpp): SetSize 0x18005b1e0's
-// zeroing init, the copy ctor 0x18005b660, the element destroy 0x18005bce0 that
-// ~Array 0x18005bbb0 runs. The tree's AnimationState ctor / dtor are declared
-// and undefined (retail's are these rows), so `Instance::_states` names it.
+// (kSpec_AnimState, the row of `Array<Graphics::AnimationState>`, is declared
+// in AnimationState.h with its `AnimationStateArray` alias.)
 namespace rtcoll { namespace gfxanim {
-extern const ArraySpec kSpec_AnimState;
 // B.4 wave Y (RT-GFX): the row of `Array<AnimationManager::Instance>` (SetSize
 // 0x18005c3d0 / 0x18005be30, copy ctor 0x18005b700, element destroy 0x18005c550
 // that ~Array 0x18005bf60 runs), so `AnimationManager::_instances` names it.
@@ -279,9 +275,7 @@ public:
         int32_t _animIndex;                        // +0x08  -1 on a blanked slot
         int32_t _refCount;                         // +0x0c
         GraphicsMesh::NodeArray _nodes;                // +0x10  Array<Node>, stride 0x48
-        Collection::Array<AnimationState, Collection::DefaultAllocator,
-                          Collection::ExplicitSpec<&rtcoll::gfxanim::kSpec_AnimState>>
-                                                   _states;  // +0x20  Array<AnimationState>, stride 0x48
+        AnimationStateArray _states;               // +0x20  Array<AnimationState>, stride 0x48
     };
 
     // ---- the members retail exports -----------------------------------------
