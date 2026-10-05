@@ -2044,17 +2044,6 @@ void MeshInstance::SetMesh(Object::ExternalPtr<GraphicsMesh> mesh) {
     }
 }
 
-// B4 FORWARD: action_base_complete.cpp holds its GraphicsMesh as a void*; action_base_movedeps.cpp its AnimationGroup.
-void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
-    SetMesh(Object::ExternalPtr<GraphicsMesh>(static_cast<GraphicsMesh*>(mesh.p)));  // LEFT: S4 GFX measured: 1 caller left, action_base_complete.cpp:361, whose meshPtr is a void* from CitizenDescription::MeshTable _refs (code/Game/Component header) and from the known_port_issues entry-14 FenceComponent read at :333 -- the overload goes when those code/ sources are typed
-}
-void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
-                                 const System::Time* startTime, const System::Time* blendTime,
-                                 float weight) {
-    PlayAnimation(Object::ExternalPtr<AnimationGroup>(static_cast<AnimationGroup*>(group.p)),  // LEFT: S4 GFX measured: 1 caller left, action_base_movedeps.cpp:121, whose animData is ModelDescription::_meshGroups[i].field_0x00 (Object::External*, "class not settled", code/Game/Component/ModelDescription.h) -- the overload goes when that field is typed AnimationGroup
-                  index, startTime, blendTime, weight);
-}
-
 // ---------------------------------------------------------------------------
 // ?PlayAnimation@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@…HAEBVTime@…1M@Z
 //                                                        retail 0x1800ff840

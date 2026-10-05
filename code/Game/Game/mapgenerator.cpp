@@ -34,61 +34,25 @@
 // ============================================================
 // MapGenerator::MapGenerator (0x1400a3030)
 // ============================================================
-// External() and the 0x14015ed80 stamp are the compiler's; then the defaults.
-MapGenerator::MapGenerator() {
-    // ExternalPtr at +0x20
-    _field20 = nullptr;
-
-    // Strings at +0x28, +0x30: the members' String() (null = empty string)
-
-    // Generation parameters
-    enabled = 1;          // bool, default true
-    subdivisions = 8;     // grid subdivision count
-    scale = 2.0f;         // terrain scale
-
-    // ExternalRef at +0x48 (String + factoryGen + resolvedPtr); the name is the
-    // member's String() (qword 0, retail 0x1400a3080)
-    templateRef.factoryGen = -1;  // 0xFFFFFFFF = unresolved
-    templateRef.resolved = nullptr;
-
-    // The InitialFamily array at +0x60 and the dynamic arrays at +0x70 through
-    // +0xD8: the members' initialisers zero both qwords of each (retail
-    // 0x1400a308e..0x1400a30eb).
-
-    // Scalar generation parameters (+0xE0 through +0x114)
-    paramE0 = 0;
-    paramE4 = 0;
-    paramE8 = 0;
-    paramEC = 0.0f;
-    paramF0 = 0.0f;
-    paramF4 = 0.0f;
-    paramF8 = 0;
-    paramFC = 0;
-    param100 = 0;
-    param104 = 0;
-    param108 = 0;
-    param10C = 0;
-    param110 = 0;
-    param114 = 0;
-
-    // ExternalRef at +0x118 (terrain description)
-    descRef1.factoryGen = -1;
-    descRef1.resolved = nullptr;
-
-    // Terrain amplitude
-    terrainAmplitude = 6.0f;
-
-    // ExternalRef at +0x138 (climate description)
-    descRef2.factoryGen = -1;
-    descRef2.resolved = nullptr;
-
-    // Chunk size
-    chunkSize = 16;
-
-    // ExternalRef at +0x158 (vegetation description)
-    descRef3.factoryGen = -1;
-    descRef3.resolved = nullptr;
-}
+// External() and the 0x14015ed80 stamp are the compiler's; then every member in
+// declaration order, as retail builds them (B4 S4 RESOLVE). The four by-name
+// refs are NamedExternalRef members: String() qword 0, generation -1, resolved
+// 0 (retail 0x1400a3080 / 0x1400a312f / 0x1400a3153 / 0x1400a3177). The Strings
+// +0x28 / +0x30 are String() and the InitialFamily array at +0x60 and the pools
+// +0x70..+0xD8 zero both qwords of each (retail 0x1400a308e..0x1400a30eb).
+// Retail zeroes +0xE0..+0x114 as seven qwords (0x1400a30f2..0x1400a311c); the
+// tree writes the fourteen named fields (H7).
+MapGenerator::MapGenerator()
+    : _field20(nullptr),       // +0x20 ExternalPtr
+      enabled(1),              // +0x38 bool, default true
+      subdivisions(8),         // +0x3C grid subdivision count
+      scale(2.0f),             // +0x40 terrain scale
+      paramE0(0), paramE4(0), paramE8(0),
+      paramEC(0.0f), paramF0(0.0f), paramF4(0.0f),
+      paramF8(0), paramFC(0), param100(0), param104(0),
+      param108(0), param10C(0), param110(0), param114(0),
+      terrainAmplitude(6.0f),  // +0x130, after descRef1
+      chunkSize(16) {}         // +0x150, after descRef2
 
 // ============================================================
 // MapGenerator::~MapGenerator (body 0x14001aea0) / DeletingDtor (slot 0)
@@ -246,18 +210,18 @@ using MGFamilyArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
 // Neither arm writes [0x0c,0x10); the tail seed of -1 is load-bearing (see
 // goal_exe_helpers.cpp).
 void CopyMGRef(ExternalRef* d, const ExternalRef* s) {
-    new (&d->strPtr) System::String(s->strPtr);   // +0x00
-    d->factoryGen = s->factoryGen;                // +0x08 dword
+    new (&d->name) System::String(s->name);   // +0x00
+    d->generation = s->generation;                // +0x08 dword
     d->resolved = s->resolved;                    // +0x10 qword
 }
 void ZeroMGRef(ExternalRef* e) {
-    e->strPtr._data = nullptr;   // +0x00 qword 0 (raw element memory)
-    e->factoryGen = -1;          // +0x08
+    e->name._data = nullptr;   // +0x00 qword 0 (raw element memory)
+    e->generation = -1;          // +0x08
     e->resolved = nullptr;       // +0x10 qword 0
 }
 void DestroyMGRefs(ExternalRef* elems, int count) {
     for (int i = 0; i < count; ++i)
-        elems[i].strPtr.~String();
+        elems[i].name.~String();
 }
 void AssignMGRef(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<ExternalRef, &CopyMGRef>(d, s);
@@ -298,7 +262,7 @@ void ZeroMGStructure(InitialStructure* e) {
 }
 void DestroyMGStructures(InitialStructure* elems, int count) {
     for (int i = 0; i < count; ++i)
-        elems[i].structure.strPtr.~String();
+        elems[i].structure.name.~String();
 }
 void AssignMGStructure(uint8_t* d, const uint8_t* s) {
     rtcoll::AssignAs<InitialStructure, &CopyMGStructure>(d, s);
@@ -341,7 +305,7 @@ void MG_ReadRefPool(IO::Serializer& serializer, MapGenerator::ExternalRefArray& 
     MapGenerator::ExternalRef* e = pool._data;
     if (!e) return;
     for (int i = 0; i < n; ++i) {
-        e[i].strPtr.Serialize(serializer);  // in place
+        e[i].name.Serialize(serializer);  // in place
     }
 }
 } // namespace
@@ -357,7 +321,7 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
     serializer.Serialize(enabled, nullptr);        // +0x38 _exposed
     serializer.Serialize(subdivisions, nullptr);   // +0x3c _startAreaSize (townSize)
     serializer.Serialize(scale, nullptr);          // +0x40 _citizenRadius
-    templateRef.strPtr.Serialize(serializer);       // +0x48 _citizen template ref
+    templateRef.name.Serialize(serializer);       // +0x48 _citizen template ref
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
@@ -378,7 +342,7 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
         const int n = MG_SerializeCount(serializer, refArray2, refArray2._size);
         InitialStructure* e = refArray2._data;
         for (int i = 0; e && i < n; ++i) {   // FUN_14001b6c0, in place
-            e[i].structure.strPtr.Serialize(serializer);   // _structure ref name
+            e[i].structure.name.Serialize(serializer);   // _structure ref name
             serializer.Serialize(e[i].offsetX, nullptr);    // _offsetX
             serializer.Serialize(e[i].offsetY, nullptr);    // _offsetY
             serializer.Serialize(e[i].width, nullptr);      // _width
@@ -411,11 +375,11 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
     serializer.Serialize(param114, nullptr);
 
     // --- env template refs + interleaved scalars (EXACT stream order) ---
-    descRef1.strPtr.Serialize(serializer);       // descRef1 (terrain)
-    descRef2.strPtr.Serialize(serializer);       // descRef2 (climate)
+    descRef1.name.Serialize(serializer);       // descRef1 (terrain)
+    descRef2.name.Serialize(serializer);       // descRef2 (climate)
     serializer.Serialize(terrainAmplitude, nullptr);   // terrainAmplitude
     serializer.Serialize(chunkSize, nullptr);          // chunkSize
-    descRef3.strPtr.Serialize(serializer);       // descRef3 (vegetation)
+    descRef3.name.Serialize(serializer);       // descRef3 (vegetation)
     serializer.Serialize(param170, nullptr);
 
     return true;   // retail returns AL=1

@@ -580,7 +580,7 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
         return nullptr;
     // ENDGAME B.3.3 step 6A: member call on the real Object::ExternalFactory.
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    System::Filename fname(entry->strPtr);  // String -> Filename
+    System::Filename fname(entry->name);  // String -> Filename
     // A pool's template is a ComponentDescription (an Object::External).
     tmpl = efactory->FindOrLoadAs<ComponentDescription>(fname);
     entry->resolved = tmpl;                                  // cache
@@ -4960,7 +4960,7 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
     int spawned = 0;
     for (int e = 0; e < count; ++e) {
         MapGenerator::ExternalRef* entry = &pool[e];
-        const char* ename = entry->strPtr._data ? entry->strPtr._data : "(null)";
+        const char* ename = entry->name._data ? entry->name._data : "(null)";
         fprintf(stderr, "[startTown::res] begin [%d] name=\"%.48s\"\n", e, ename);
         fflush(stderr);
         ComponentDescription* tmpl = StartTown_ResolveTemplate(entry);
@@ -5326,7 +5326,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
     // we can tell a deserialize bug (garbage text) from a missing-resource issue
     // (correct text but Find fails). System::String = ptr to char buffer.
     auto dumpStr = [](MapGenerator::ExternalRef* ref) -> const char* {
-        char* p = ref->strPtr._data;
+        char* p = ref->name._data;
         return p ? p : "(null)";
     };
     // The first entry of each pool (the structure pool's entry starts with its ref).
@@ -5343,7 +5343,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
                if (!base || p.count <= 0) { fprintf(stderr, "[startTown::probe] %s empty\n", p.tag); continue; } }
         ResolveExternalByName_Impl(base);
         fprintf(stderr, "[startTown::probe] %s gen=%d tmpl=%p name=\"%.40s\"\n",
-                p.tag, base->factoryGen, base->resolved, dumpStr(base));
+                p.tag, base->generation, base->resolved, dumpStr(base));
     }
     fflush(stderr);
 

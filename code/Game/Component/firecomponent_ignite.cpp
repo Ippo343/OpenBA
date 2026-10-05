@@ -221,9 +221,9 @@ extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ac, in
             t0, posZero);
         entry.handle = handle;
     }
-    // AmbientEmitterComponent::position is a Math::Vector3; Audio::Scene takes the
-    // engine's POD ::Vector3 (the same 12 bytes): the one bridge is LEFT.
-    scene->AddEmitter(entry.handle, *reinterpret_cast<const Vector3*>(&ac->position), entry.volume);   // LEFT: Audio::Scene takes the engine POD ::Vector3
+    // AmbientEmitterComponent::position is a Math::Vector3, the type Audio::Scene takes
+    // (::Vector3 is engine/types/common.h's alias of Math::Vector3).
+    scene->AddEmitter(entry.handle, ac->position, entry.volume);
 }
 
 // ============================================================

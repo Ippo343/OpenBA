@@ -174,9 +174,10 @@ void GatherRawMaterials::Persist(IO::Stream& stream) {
 // Returns: 0=fail, 1=retry/done, 2=action pushed.
 // ============================================================
 int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* context) {
-    // retail's param3 (R8) is a by-value scratch slot whose address the body takes:
-    // it becomes the out slot of the WorkPlaceComponent find below, and that value
-    // is what 0x1400f6ef0 receives as its fifth argument.
+    // The tree's scratch: it becomes the out slot of the WorkPlaceComponent find below
+    // and is handed to 0x1400f6ef0 as its fifth argument. B4 S4 RESOLVE (re-read): retail's
+    // out slot is the R9 home [RBP+0x7f] (0x1400ebee4), NOT the R8 home that holds
+    // `context`; retail's fifth argument is `context` (known_port_issues row 861).
     void* param3 = context;
 
     // --- Find the InteractComponent on the work entity (self+0x10) (0x140002ed0) ---
@@ -354,11 +355,12 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 int targetCell = tgtCellY * mapSz + tgtCellX;
 
                 // --- Validate work assignment: Work::StepProgress 0x1400f6ef0 (was its
-                // WorkImpl_BuildStructureStep_6ef0 forwarder). The Time slot is the reused
-                // param3 scratch that holds the WorkPlaceComponent ---
+                // WorkImpl_BuildStructureStep_6ef0 forwarder). The tree hands the
+                // WorkPlaceComponent as the Time; retail hands Execute's own `context`
+                // (known_port_issues row 861) ---
                 CitizenComponent* citizenRef = *entityIBP;
                 uint64_t validated = StepProgress(&citizenRef, targetCell, citizenCell,
-                    reinterpret_cast<const System::Time*>(param3));   // LEFT: retail hands the reused param3 slot (it holds the WorkPlaceComponent) as the Time
+                    reinterpret_cast<const System::Time*>(param3));   // LEFT: DEFERRED (retail-difference task, known_port_issues row 861): retail's fifth argument is [RBP+0x77] = the R8 home, Execute's `context` Time* spilled at 0x1400ebe40 and never rewritten (0x1400ec355 / 0x1400ec35c); the WorkPlaceComponent find writes the R9 home [RBP+0x7f] (0x1400ebee4). The fix passes `context` and drops this cast
 
                 if ((char)validated == '\0') {
                     return 0;

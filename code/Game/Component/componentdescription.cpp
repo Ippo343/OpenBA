@@ -32,6 +32,7 @@
 #include <new>
 #include "system/MemoryAllocator.h"
 #include "Component/exe_bodies.h"
+#include "Object/NamedExternalRef.h"   // ResolveExternalByName_Impl's record
 
 
 // ---- internal: retail's `*(int*)(*(serializer) + 8) == 0` is the stream's direction
@@ -197,20 +198,10 @@ DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
 
 // moved from engine_funcs.h (ENDGAME B.3.9 TR): reads X::TypeId() of the cell's class.
 //
-// 0x14001b1d0 resolves a by-name ComponentDescription reference: the template's name,
-// the ExternalFactory generation it was last resolved at, and the cached result.
-struct NamedDescriptionRef {
-    System::String               name;          // +0x00
-    int32_t                      generation;    // +0x08
-    int32_t                      _pad0c;        // +0x0c
-    const ::Object::External*    resolved;      // +0x10
-};
-static_assert(offsetof(NamedDescriptionRef, generation) == 0x08, "NamedDescriptionRef +0x08");
-static_assert(offsetof(NamedDescriptionRef, resolved) == 0x10, "NamedDescriptionRef +0x10");
-
-// B4 FORWARD: founding_spawn.cpp, starttown.cpp hand the reference in untyped.
-void ResolveExternalByName_Impl(void* nameString) {
-    NamedDescriptionRef* ref = reinterpret_cast<NamedDescriptionRef*>(nameString);   // LEFT: SIG ResolveExternalByName_Impl takes void*: retail has ONE record type here (every call of 0x14001b1d0, from MapGenerator, BuildingGoal, the tutorials and ComponentEntity, hand the same 0x18 {String, int generation, External*} ExternalPtr-by-name), the tree three (this NamedDescriptionRef, Goal's NamedExternalRef with a default / copy ctor and a deleted operator=, MapGenerator::ExternalRef, a ctor-less member and Array element). The const is not the blocker (FindAs<External> returns External*): unifying them moves MapGenerator's gen / resolved stores from its ctor body (0x1400a3030) into member construction, a behaviour: commit on retail's ctor order
+// 0x14001b1d0 resolves a by-name ComponentDescription reference (Object/NamedExternalRef.h):
+// the template's name, the ExternalFactory generation it was last resolved at, and the
+// cached result.
+void ResolveExternalByName_Impl(NamedExternalRef* ref) {
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
     if (!factory) return;
 
@@ -221,12 +212,12 @@ void ResolveExternalByName_Impl(void* nameString) {
     // Convert String to Filename, look up in factory.
     // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
     System::Filename filename(ref->name);
-    const ::Object::External* found = factory->Find(filename);
+    ::Object::External* found = factory->FindAs<::Object::External>(filename);
 
     // Validate the found object is a ComponentDescription (cell 0x1401c7318). The
     // null-pointer escape that stood here went with the cell pointer (it was
     // registered, so the escape never ran).
-    const ::Object::External* result = nullptr;
+    ::Object::External* result = nullptr;
     if (found) {
         if (::Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
             result = found;

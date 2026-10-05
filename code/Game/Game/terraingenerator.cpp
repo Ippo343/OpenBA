@@ -142,7 +142,7 @@ static void SerializeFilenameString(MapGenerator::ExternalRef* ref, IO::Serializ
     System::Filename filenameObj;   // retail's scope temp; only ctor + dtor
     (void)filenameObj;
 
-    ref->strPtr.Serialize(*serializer);
+    ref->name.Serialize(*serializer);
 
     if (GetSerializerVersion(serializer) == 0) {
         Game_TerrainResolveMaterial(ref);
@@ -152,26 +152,14 @@ static void SerializeFilenameString(MapGenerator::ExternalRef* ref, IO::Serializ
 // ============================================================
 // TerrainGenerator::TerrainGenerator (0x1400b1810)
 // ============================================================
-// External() and the 0x14015f170 stamp are the compiler's; then the defaults.
-TerrainGenerator::TerrainGenerator() {
-    // The four Strings (+0x28 / +0x38 / +0x50 / +0x68) are members: String()
-    // stores the null data pointer retail's inlined ctor stores.
-    _field20 = nullptr;          // ExternalPtr
-    _field30 = true;             // enabled
-
-    // Noise layer 1: String, sentinel, ptr
-    _field38.factoryGen = -1;
-    _field38.resolved = nullptr;
-    // Noise layer 2
-    _field50.factoryGen = -1;
-    _field50.resolved = nullptr;
-    // Noise layer 3
-    _field68.factoryGen = -1;
-    _field68.resolved = nullptr;
-
-    // Terrain data array at +0x80, count +0x88, capacity +0x8C: the member's
-    // Array() (retail: one qword zero each; H7)
-}
+// External() and the 0x14015f170 stamp are the compiler's; then every member in
+// declaration order, as retail builds them (B4 S4 RESOLVE): +0x20, the String
+// +0x28, +0x30, the three NamedExternalRef noise layers (String() qword 0,
+// generation -1, resolved 0: retail 0x1400b184e / 0x1400b1865 / 0x1400b187c),
+// then the +0x80 size table's Array() (one qword zero each; H7).
+TerrainGenerator::TerrainGenerator()
+    : _field20(nullptr),         // ExternalPtr
+      _field30(true) {}          // enabled
 
 // ============================================================
 // TerrainGenerator::~TerrainGenerator / DeletingDtor (vtable +0x00)

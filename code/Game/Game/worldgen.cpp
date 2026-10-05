@@ -717,9 +717,9 @@ void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t se
     _chunkIndexStride = 33 * 33;       // 1089
 
     // Resolve the 3 ground materials (NULL-safe; untextured if unresolved).
-    _terrainMaterial = wg_ResolveMaterial_fd10(&gen->_field38.strPtr);
-    _waterMaterialA  = wg_ResolveMaterial_fd10(&gen->_field50.strPtr);
-    _waterMaterialB  = wg_ResolveMaterial_fd10(&gen->_field68.strPtr);
+    _terrainMaterial = wg_ResolveMaterial_fd10(&gen->_field38.name);
+    _waterMaterialA  = wg_ResolveMaterial_fd10(&gen->_field50.name);
+    _waterMaterialB  = wg_ResolveMaterial_fd10(&gen->_field68.name);
 
     // Allocate + init the heightfield scratch struct (heap; retail's is b0230's
     // 0xA30-byte stack record; the tree allocates 0x10 bytes of margin past it).

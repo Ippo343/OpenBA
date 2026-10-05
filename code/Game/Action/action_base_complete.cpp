@@ -284,7 +284,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
 
     ModelComponent* model = citizen->character->modelComponent.Get();
 
-    void* meshPtr = nullptr;
+    Graphics::GraphicsMesh* meshPtr = nullptr;
     float uvScale = 0.0f;
 
     if (toolId < 0) {
@@ -330,7 +330,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
         // _meshGroupCap) as a pointer and dereferences it; retail 0x1401173b0 reads
         // _meshGroups[0].meshes[0] (one more dereference). Recorded in known_port_issues
         // entry 14; kept as the tree's (no behaviour change here).
-        meshPtr = **reinterpret_cast<void* const* const*>(&fenceComp->_meshGroupCount);   // LEFT: known_port_issues entry 14 (the tree's read differs from retail 0x1401173b0)
+        meshPtr = **reinterpret_cast<Graphics::GraphicsMesh* const* const*>(&fenceComp->_meshGroupCount);   // LEFT: known_port_issues entry 14 (the tree's read differs from retail 0x1401173b0)
 
         // locate the RawMaterialDescription for the UV scale
         const uint32_t tidRawMat = RawMaterialDescription::TypeId();
@@ -358,7 +358,7 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
     // The citizen's ctor built +0xB8 (0x140114808); retail SetMesh's it straight away.
     Graphics::MeshInstance* tool = &citizen->meshInstance;
 
-    tool->SetMesh(Graphics::ExternalPtrHandle{meshPtr});
+    tool->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(meshPtr));
 
     // write the UV-scale vector (Vector4 broadcast of uvScale) into the tool's _color
     // (+0x1c4..+0x1d0). Retail 0x1401173b0: Math::Vector4::Vector4(local_58, &scalar) then
