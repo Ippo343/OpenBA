@@ -226,7 +226,7 @@ void ResidenceUI::OnUpdateLayout() {
     if (!residenceComp) return;
 
     // Outer loop: iterate room groups (residentSlotCount, +0x58)
-    int groupCount = residenceComp->residentSlotCount;
+    int groupCount = residenceComp->residentSlots._size;
 #ifdef _DEBUG
 #endif
 
@@ -234,8 +234,8 @@ void ResidenceUI::OnUpdateLayout() {
         int64_t groupOffset = 0;   // the family index (retail steps a 0x10 byte offset)
 
         for (int g = 0; g < groupCount; g++) {
-            ResidenceComponent::Family* groupArrayBase = residenceComp->residentSlots;
-            int residentCount = groupArrayBase[groupOffset].count;
+            ResidenceComponent::Family* groupArrayBase = residenceComp->residentSlots._data;
+            int residentCount = groupArrayBase[groupOffset]._size;
 
             if (residentCount > 0) {
                 totalResidents += residentCount;
@@ -285,7 +285,7 @@ void ResidenceUI::OnUpdateLayout() {
                     // Original CheckPtr's the component IBP every iteration
 
                     // Get citizen ptr from resident list + CheckPtr
-                    Object::InternalPtr<CitizenComponent>* residentListPtr = residenceComp->residentSlots[groupOffset].members;
+                    Object::InternalPtr<CitizenComponent>* residentListPtr = residenceComp->residentSlots[groupOffset]._data;
                     CitizenComponent* citizen = residentListPtr[r].Get();
 
 #ifdef _DEBUG

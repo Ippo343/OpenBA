@@ -102,7 +102,7 @@ char ResidenceComponent::HeatTick(const System::Time* dt) {
 
     if (worldTemp >= heatThreshold) return 1;
     if (heatRemaining._ticks >= 0) return 1;
-    if (residentSlotCount <= 0) return 1;
+    if (residentSlots._size <= 0) return 1;
 
     // Find the house StorageComponent.
     StorageComponent* store = _entity->FindComponent<StorageComponent>();   // 0x140006270

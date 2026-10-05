@@ -33,8 +33,10 @@
 #include "Object/exe_type.h"
 #include "system/Value.h"   // System::Time
 #include "object/Internal.h"   // Object::InternalPtr<T>
+#include "collection/Collection.h"   // Collection::Array (the families)
 
 class CitizenComponent;
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Entity/EntityList.h)
 namespace IO { class Serializer; }
 
 struct ResidenceCtrlTag { using Owner = class ResidenceComponent; };   // the handlers' receiver (controller_state_table.h)
@@ -48,13 +50,15 @@ public:
     // One family (household slot): Collection::Array<InternalPtr<CitizenComponent>>,
     // 0x10 bytes (0x140037c50 serializes each element as an InternalBasePtr checked
     // against CitizenComponent's type; 0x140007960 copies it; 0x14012a4f0 compares the
-    // count against ResidenceDescription::_maxResidentsPerFamily). H5: kept as its raw
-    // triple (the retail dtor 0x1400175d0 frees each data buffer by hand).
-    struct Family {
-        Object::InternalPtr<CitizenComponent>* members;   // +0x00 data
-        int32_t            count;     // +0x08
-        int32_t            capacity;  // +0x0C
-    };
+    // count against ResidenceDescription::_maxResidentsPerFamily). Retail's stride-8 row
+    // (kSpec_PtrZero: no element destroy); ~Family is the MemFree + {data, size + capacity}
+    // zero stores 0x1400175d0 runs per element.
+    using Family = Collection::Array<Object::InternalPtr<CitizenComponent>, Collection::DefaultAllocator,
+                                     Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    // Array<Family>: resized by the hand-written SetFamilyCount 0x140037ad0 (CopyFamily
+    // 0x140007960 per element); ~FamilyArray is 0x1400175d0 (each family's ~Array, then
+    // MemFree of the buffer and the header zeroed).
+    using FamilyArray = Collection::Array<Family>;
 
     ResidenceComponent();                                 // 0x14012a2a0
 
@@ -83,9 +87,8 @@ public:
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
     System::Time    heatRemaining; // +0x48 countdown (heat tick 0x140129970; Persist Time::Serialize)
-    Family*         residentSlots; // +0x50 Array<Family> data (H5: the raw triple)
-    int32_t         residentSlotCount;    // +0x58 family count (ResidenceDescription::_maxFamilies)
-    int32_t         residentSlotCapacity; // +0x5c its capacity (SetSize 0x140037ad0; dtor 0x1400175d0 zeroes the qword)
+    FamilyArray     residentSlots; // +0x50 Array<Family> (count +0x58 = ResidenceDescription::_maxFamilies,
+                                   //       capacity +0x5c; SetSize 0x140037ad0; dtor 0x1400175d0)
 
 private:
     void     EvictAndUnregister();   // the body shared by [7] 0x14012a0e0 and 0x140129920
@@ -99,8 +102,8 @@ static_assert(offsetof(ResidenceComponent, _controller) + offsetof(ControllerCom
               "controller back-pointer at +0x40 (ctor 0x14012a2a0)");
 static_assert(offsetof(ResidenceComponent, heatRemaining) == 0x48, "ResidenceComponent +0x48");
 static_assert(offsetof(ResidenceComponent, residentSlots) == 0x50, "ResidenceComponent +0x50");
-static_assert(offsetof(ResidenceComponent, residentSlotCount) == 0x58, "ResidenceComponent +0x58");
-static_assert(offsetof(ResidenceComponent, residentSlotCapacity) == 0x5C, "ResidenceComponent +0x5c (SetSize 0x140037ad0)");
+static_assert(offsetof(ResidenceComponent, residentSlots) + offsetof(ResidenceComponent::FamilyArray, _size) == 0x58, "ResidenceComponent +0x58");
+static_assert(offsetof(ResidenceComponent, residentSlots) + offsetof(ResidenceComponent::FamilyArray, _capacity) == 0x5C, "ResidenceComponent +0x5c (SetSize 0x140037ad0)");
 static_assert(sizeof(ResidenceComponent::Family) == 0x10, "a family is 0x10 bytes (0x140037ad0 stride)");
-static_assert(offsetof(ResidenceComponent::Family, count) == 0x08, "family count +0x08 (0x14012a53c)");
-static_assert(offsetof(ResidenceComponent::Family, capacity) == 0x0C, "family capacity +0x0C (0x140007960)");
+static_assert(offsetof(ResidenceComponent::Family, _size) == 0x08, "family count +0x08 (0x14012a53c)");
+static_assert(offsetof(ResidenceComponent::Family, _capacity) == 0x0C, "family capacity +0x0C (0x140007960)");

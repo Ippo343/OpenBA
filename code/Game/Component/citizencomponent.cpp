@@ -689,7 +689,7 @@ FindWorkLabel:
         // always carries a ResidenceComponent (c7cf0). In standalone a force-assigned /
         // partially-built home can lack it (FindComponent -> null), so guard the null
         // before the read.
-        if (storageVal != nullptr && storageVal->residentSlotCount > 1) {
+        if (storageVal != nullptr && storageVal->residentSlots._size > 1) {
             int32_t slotIdx = -1;
             ComponentEntity* found = FindHome(&slotIdx, false);
             if (found != nullptr) {
@@ -1634,7 +1634,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             char ok = CanReach(spouse->home);
             if (ok != '\0') {
                 ResidenceComponent* st = spouse->home->FindComponent<ResidenceComponent>();
-                if (st->residentSlotCount < 2) {
+                if (st->residentSlots._size < 2) {
                     *param_3 = spouse->homeSlot;
                     return spouse->home;
                 }
@@ -1683,8 +1683,8 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
                 }
                 ComponentEntity* otherWp = other->home;
                 ResidenceComponent* otherStore = otherWp->FindComponent<ResidenceComponent>();   // 0x140008090
-                if (ownStore->residentSlotCount == 1) {
-                    if (1 < otherStore->residentSlotCount) {
+                if (ownStore->residentSlots._size == 1) {
+                    if (1 < otherStore->residentSlots._size) {
                         return nullptr;   // LAB_140111497
                     }
                 }
@@ -1724,7 +1724,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             if (param_4 != '\0') {
                 consider = true;
             } else {
-                consider = (resIBP->residentSlotCount < 2);
+                consider = (resIBP->residentSlots._size < 2);
             }
             if (!consider) continue;
 
@@ -1732,9 +1732,9 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             InteractComponent* interactIBP = static_cast<InteractComponent*>(interactComp);
             if (!interactComp) continue;   // no work-positions -> can't seat a worker.
 
-            int rosterCount = resIBP->residentSlotCount;
+            int rosterCount = resIBP->residentSlots._size;
             for (int slot = 0; slot < rosterCount; slot++) {
-                if (resIBP->residentSlots[slot].count < 1) {  // free slot
+                if (resIBP->residentSlots[slot]._size < 1) {  // free slot
                     float pos[3] = {0.0f, 0.0f, 0.0f};
                     InteractNodePosition(interactIBP, pos, 0, 0, nullptr);
                     int mw = mapInfo->size;
@@ -1756,11 +1756,11 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
                     short wr = wpCellPtr->zone;
                     if ((homeBit & mask) != 0 && (wpBit & mask) != 0 &&
                         ((both & 0x1e0) != 0 || (hr != 0 && wr != 0 && hr == wr))) {
-                        if (resIBP->residentSlotCount == 1) {
+                        if (resIBP->residentSlots._size == 1) {
                             *param_3 = slot;
                             return entry;
                         }
-                        if (bestPartial == nullptr && 1 < resIBP->residentSlotCount) {
+                        if (bestPartial == nullptr && 1 < resIBP->residentSlots._size) {
                             bestPartial = entry;
                             bestSlot = slot;
                         }
@@ -1995,7 +1995,7 @@ void CitizenComponent::UpdateHappiness() {
                       (int)tile->field_0x1C[5];                // +0x21
         if (climate < 0) climate = 0;
         ResidenceComponent* st = home->FindComponent<ResidenceComponent>();
-        if (st->residentSlotCount > 1) climate >>= 2;
+        if (st->residentSlots._size > 1) climate >>= 2;
         fVar5 += (float)climate;
     }
     if (field_0x230 != nullptr) fVar5 += uv;

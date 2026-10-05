@@ -58,8 +58,10 @@ inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, T* 
                   "an 8-byte T* / InternalPtr<T> slot array, filled with a T*");
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
-template <class T, class A, class S>
-inline void QwordArraySetSize(Collection::Array<T*, A, S>* arr, int newCount, const Object::InternalPtr<T>* fill) {
+template <class E, class A, class S, class T>
+inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, const Object::InternalPtr<T>* fill) {
+    static_assert(std::is_same<E, T*>::value || std::is_same<E, Object::InternalPtr<T>>::value,
+                  "an 8-byte T* / InternalPtr<T> slot array, filled with an InternalPtr<T>");
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
 void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
