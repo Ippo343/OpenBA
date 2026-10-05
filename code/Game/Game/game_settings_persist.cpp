@@ -91,7 +91,7 @@ extern "C" void GameSettings_Load(GameSettings* settings) {
         p->Get("Game", k.key, settings->*k.field);
     for (const auto& k : kBoolKeys)
         p->Get(
-            "Game", k.key, *reinterpret_cast<bool*>(&(settings->*k.field)));   // LEFT: H8: the settings flags are uint8_t (retail hands the raw byte to Get(bool&), 0x140098b60)
+            "Game", k.key, *reinterpret_cast<bool*>(&(settings->*k.field)));   // LEFT: H8 -> CAST-OK:byte_io candidate: retail hands the byte to Get(bool&) (0x140098b60), but a bool field adds a != 0 normalisation where OptionsDialog stores UI::CheckElement::_checked (uint8_t, runtime/types/ui/CheckElement.h) into it (optionsdialog.cpp ~781 / ~794-798)
 
     fprintf(stderr, "[GameSettings] Load: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d (UIScale=%d AutosaveInterval=%d)\n",
