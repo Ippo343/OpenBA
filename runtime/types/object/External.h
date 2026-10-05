@@ -282,14 +282,37 @@ static_assert(offsetof(ReferenceSet::Node, right)  == 0x20, "reference node righ
 // So the entry is two Filenames, directory first. The two halves are read by
 // separate accessors, so it is spelled as a struct rather than Filename[2].
 // ============================================================
+//
+// B.4 Z MIRROR: the two halves are the real System::Filename. The constructor
+// is PushPath's stack pair (0x1800bd177: the Filename copy ctor 0x1800067d0 on
+// the directory, then on the filename) and RemoveLast's copy-out (0x18002ccb0,
+// the same two copy ctors in the same order); the implicit destructor releases
+// +0x08 before +0x00, retail's order in PushPath, PopPath (0x1800bd066) and the
+// destroy-range 0x18002e8d0. The array's lifecycle is retail's row
+// `rtcoll::kSpec_PathStack` (SetSize 0x18002e220), named by its type below;
+// ~ExternalFactory's ~Array (0x18002e9e0) zeroes the header, so the member's
+// implicit ~Array that may follow releases nothing.
 struct PathStackEntry {
-    Filename directory;  // +0x00 — GetPathStackDirectory copies this out
-    Filename filename;   // +0x08 — GetPathStackFilename copies this out
+    PathStackEntry(const System::Filename& dir, const System::Filename& file)
+        : directory(dir), filename(file) {}
+
+    System::Filename directory;  // +0x00 — GetPathStackDirectory copies this out
+    System::Filename filename;   // +0x08 — GetPathStackFilename copies this out
 };
 static_assert(sizeof(PathStackEntry) == 0x10,
               "the path-stack stride is 0x10 (SHL RDX,0x4 in both accessors)");
 static_assert(offsetof(PathStackEntry, filename) == 0x08,
               "GetPathStackFilename's extra `ADD RDX,0x8`");
+
+}  // namespace RtObject
+namespace rtcoll {
+// Array<PathStackEntry>'s row (runtime/src/object/external_path_stack.cpp,
+// SetSize 0x18002e220: assign = the two copy ctors, destroy = 0x18002e8d0).
+extern const ArraySpec kSpec_PathStack;
+}
+namespace RtObject {
+using PathStackArray = Collection::Array<PathStackEntry, Collection::DefaultAllocator,
+                                         Collection::ExplicitSpec<&rtcoll::kSpec_PathStack>>;
 
 // B.4 P2 wave X (X-R1): the POD that stood here is RETIRED. It was the same
 // 0x43 bytes as `Object::ExternalFactory` below, field for field and asserted
@@ -767,6 +790,7 @@ static_assert(offsetof(ExternalList, _count)     == 0x28, "ExternalList::_count 
 using ResourceEntry  = RtObject::ResourceEntry;
 using ReferenceEntry = RtObject::ReferenceEntry;
 using PathStackEntry = RtObject::PathStackEntry;
+using PathStackArray = RtObject::PathStackArray;
 using ResourceSet    = RtObject::ResourceSet;
 using ReferenceSet   = RtObject::ReferenceSet;
 
@@ -972,7 +996,7 @@ public:
     int32_t      _pad0c;                 // +0x0c
     ResourceSet  _resources;             // +0x10
     ReferenceSet _references;            // +0x20
-    Collection::Array<PathStackEntry> _pathStack;   // +0x30 data, +0x38 size
+    PathStackArray _pathStack;           // +0x30 data, +0x38 size
     bool         _referenceModeEnabled;  // +0x40
     bool         _loadEnabled;           // +0x41
     bool         _simpleLoadEnabled;     // +0x42
@@ -981,7 +1005,7 @@ static_assert(offsetof(ExternalFactory, _resources)  == 0x10, "_resources @ +0x1
 static_assert(offsetof(ExternalFactory, _references) == 0x20, "_references @ +0x20");
 static_assert(offsetof(ExternalFactory, _pathStack)  == 0x30, "_pathStack @ +0x30");
 static_assert(offsetof(ExternalFactory, _pathStack)
-              + offsetof(Collection::Array<PathStackEntry>, _size) == 0x38,
+              + offsetof(PathStackArray, _size) == 0x38,
               "path-stack SIZE @ +0x38 (GetPathStack*'s `CMP dword [RCX+0x38],0`)");
 static_assert(offsetof(ExternalFactory, _referenceModeEnabled) == 0x40, "_referenceMode @ +0x40");
 static_assert(offsetof(ExternalFactory, _loadEnabled)          == 0x41, "_loadEnabled @ +0x41");

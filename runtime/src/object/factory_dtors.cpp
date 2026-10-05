@@ -330,12 +330,9 @@ void PathStackDestroyRange(void* /*ignoredThis*/, PathStackEntry* p, int n) {
         return;
     for (int i = 0; i < n; ++i, ++p) {
         // ENDGAME B.3.1 step 2: retail's inlined release IS `~Filename`
-        // (0x180006980), asymmetry included. `PathStackEntry` is a
-        // not-yet-converted struct, so its two halves keep the POD type and
-        // come through the one transitional bridge. +0x08 (filename) goes
-        // BEFORE +0x00 (directory), which is retail's order.
-        RtSystem::Sys(p->filename).~Filename();
-        RtSystem::Sys(p->directory).~Filename();
+        // (0x180006980), asymmetry included: ~PathStackEntry runs it on
+        // +0x08 (filename) BEFORE +0x00 (directory), which is retail's order.
+        p->~PathStackEntry();
     }
 }
 
@@ -353,7 +350,7 @@ void PathStackDestroyRange(void* /*ignoredThis*/, PathStackEntry* p, int n) {
 //
 // *** THIS IS THE "DESTROYS ITS ELEMENTS" MEMBER of ~ExternalFactory. ***
 // ============================================================================
-void PathStackArrayDtor(Collection::Array<PathStackEntry>* a) {
+void PathStackArrayDtor(RtObject::PathStackArray* a) {
     PathStackDestroyRange(a, a->_data, a->_size);
     RtSystem::RtMemFree(a->_data);   // retail's `if (p)` lives inside 0x1800c7ad0
     a->_data     = nullptr;
