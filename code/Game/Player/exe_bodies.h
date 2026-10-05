@@ -144,6 +144,9 @@ struct TrackedEntityNode; struct PinnedToolNode; class ComponentEntity;   // Gam
 void Avl38SetRemove(AvlTreeHead<TrackedEntityNode>* set, TrackedEntityNode* node);   // 0x140025740
 void Avl38SetRemove(AvlTreeHead<PinnedToolNode>* set, PinnedToolNode* node);         // 0x140025740
 void Avl38SetFindRemove(AvlTreeHead<TrackedEntityNode>* set, ComponentEntity* const* key);   // 0x14002c690
+// The +0x50 pinned-dialog set is keyed by descriptions; EntityUI::OnElementEvent hands
+// it an entity address (known_port_issues row 661): compared by address, as retail's.
+void Avl38SetFindRemove(AvlTreeHead<PinnedToolNode>* set, ComponentEntity* const* key);      // 0x14002c690
 
 // The two rotations of the 0x38-byte AVL nodes (an 0x18-byte element; parent
 // +0x18, left +0x20, right +0x28, balance +0x30, height +0x32). Retail's one

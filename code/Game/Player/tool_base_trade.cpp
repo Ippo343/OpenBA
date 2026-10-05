@@ -135,23 +135,27 @@ void Avl38Remove(AvlTreeHead<Node>* tree, Node* node) {
 }
 
 // ============================================================
-// 0x14002c690 — find a node by key (the entity) and remove it. 1:1 port of
-// TradeWork_impl_c690. The keys compare as unsigned 64-bit values.
+// 0x14002c690 — find a node by key and remove it (0x140025740). The keys compare
+// as unsigned 64-bit addresses (0x14002c6bc `CMP [key],[node]; JC`, 0x14002c6cd
+// `CMP [node],[key]; JNC`): key below the node's -> left (+0x20), key above ->
+// right (+0x28), equal -> remove. One body for every 0x38-node set (the tool
+// manager's +0x60 / +0x50, NomadComponent +0x60, TradeWork's assignments).
 // ============================================================
 template <class Node, class Key>
 void Avl38FindRemove(AvlTreeHead<Node>* tree, const Key* keyRef) {
     Node* self = tree->root;
     if (self == nullptr) return;
-    Key key = *keyRef;
+    const void* const key = *keyRef;
     do {
-        if (key < Avl38KeyOf(self)) {
-            self = self->right;
+        const void* const nodeKey = Avl38KeyOf(self);
+        if (key < nodeKey) {
+            self = self->left;
         } else {
-            if (key <= Avl38KeyOf(self)) {
+            if (nodeKey >= key) {
                 Avl38Remove(tree, self);
                 return;
             }
-            self = self->left;
+            self = self->right;
         }
     } while (self != nullptr);
 }
@@ -287,6 +291,9 @@ void Avl38SetRemove(AvlTreeHead<PinnedToolNode>* set, PinnedToolNode* node) {
     Avl38Remove(set, node);   // 0x140025740
 }
 void Avl38SetFindRemove(AvlTreeHead<TrackedEntityNode>* set, ComponentEntity* const* key) {
+    Avl38FindRemove(set, key);   // 0x14002c690
+}
+void Avl38SetFindRemove(AvlTreeHead<PinnedToolNode>* set, ComponentEntity* const* key) {
     Avl38FindRemove(set, key);   // 0x14002c690
 }
 void Avl38SetRemove(AvlTreeHead<TradeWork::Node>* set, TradeWork::Node* node) {
