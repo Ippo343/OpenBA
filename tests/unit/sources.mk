@@ -311,6 +311,7 @@ UNIT_TREE_SRCS += runtime/src/graphics/graphics_type_records.cpp
 # a deleting destructor that calls one of these; registry-free, and std::free
 # under -DBANISHED_UNIT_TEST.
 UNIT_TREE_SRCS += runtime/src/object/root_operator_delete.cpp
+UNIT_TREE_SRCS += runtime/src/video/companion_operators.cpp
 # B3R W0-A0: tests/unit/allocator_seat_test.cpp drives the allocator's instrument
 # seat through System::MemoryAllocator::MemAlloc / MemFree, so the allocator's two
 # translation units link here. With a

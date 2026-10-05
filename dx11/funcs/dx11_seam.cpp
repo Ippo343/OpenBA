@@ -143,10 +143,21 @@ bool Dx11RegisterSlot(Vt v, int slot, void* impl, const char* label) {
 bool Dx11SeamInstall() {
     if (s_installed) return true;
 
-    int total = 0, holes = 0;
+    int total = 0, holes = 0, flipped = 0;
 
     for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
         s_ourVt[vi].rtti = nullptr;
+        // ENDGAME B5 (the dx11 seam), W0: a class whose block has already landed is a
+        // real `VideoDX11::XData : Video::XData` subclass wearing the COMPILER's table
+        // and registers nothing here. Zero registrations for a whole table is that
+        // state, not a hole; the table is skipped. This file is deleted at the step's
+        // close, when all twelve have flipped.
+        {
+            int registered = 0;
+            for (int slot = 0; slot < kVtables[vi].slots; ++slot)
+                if (s_slots[vi][slot].impl) ++registered;
+            if (registered == 0) { ++flipped; continue; }
+        }
         for (int slot = 0; slot < kVtables[vi].slots; ++slot) {
             SlotEntry& e = s_slots[vi][slot];
             ++total;
@@ -171,10 +182,11 @@ bool Dx11SeamInstall() {
     }
 
     s_installed = true;
-    printf("[Dx11Seam] %d/%d slots ours, in %d exe-owned vtables. "
+    printf("[Dx11Seam] %d/%d slots ours, in %d exe-owned vtables (%d flipped to compiler tables). "
            "VideoDX11-x64.dll is not required.\n",
-           total, total, static_cast<int>(Vt::kVtCount));
+           total, total, static_cast<int>(Vt::kVtCount) - flipped, flipped);
     for (int vi = 0; vi < static_cast<int>(Vt::kVtCount); ++vi) {
+        if (!s_ourVt[vi].slot[0]) { printf("[Dx11Seam]   %-19s -> compiler table (B5)\n", kVtables[vi].name); continue; }
         printf("[Dx11Seam]   %-19s -> %p (%d slots)\n",
                kVtables[vi].name, static_cast<void*>(s_ourVt[vi].slot),
                kVtables[vi].slots);

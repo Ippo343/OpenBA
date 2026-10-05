@@ -78,9 +78,9 @@
 // ============================================================================
 //
 // ENDGAME B.3.9 block VID (B39_RULES D1, section 5 item 4): the twelve classes
-// are CONCRETE (CompanionData.h). The twelve ctor DOORS stay -- dx11 reaches them
-// through its import struct (devicedata.cpp AllocData, exports.cpp) -- each now
-// the one line `::new (self) XData(owner)` (B9-6). The minted-table accessors,
+// are CONCRETE (CompanionData.h). The twelve ctor DOORS that dx11 reached through
+// its import struct (B9-6) are GONE since B5 W0: B.3R had already moved the
+// construction into dx11's factories, so no caller was left. The minted-table accessors,
 // the hand stores of the MINTED `??_7XData` in the ctors and the dtors, and the
 // ten `??1XData` doors below (their one caller was the RT_DELDTOR row) are GONE
 // with the twelve mint rows. The table above is the retail evidence and stays.
@@ -96,12 +96,11 @@
 #include "../../types/video/Context.h"
 #include "../../types/video/Device.h"
 
-using RtVideo::CompanionData;
 using DisplayMode = Video::Device::DisplayMode;
 
 // ============================================================================
-// The twelve companion-base constructors -- DOORS dx11 calls by its import
-// struct, so they stay (B39_RULES D1.4), each the class's real constructor.
+// The twelve companion-base constructors are INLINE in CompanionData.h (the owner
+// store at +0x08 and the compiler's vptr):
 //
 //   1800f8cd0  LEA RAX,[0x180158c30]      ; ??_7DeviceData@Video@@6B@
 //   1800f8cd7  MOV qword ptr [RCX+0x8],RDX
@@ -109,28 +108,11 @@ using DisplayMode = Video::Device::DisplayMode;
 //   1800f8cde  MOV RAX,RCX
 //   1800f8ce1  RET
 //
-// `::new` into the storage dx11 allocated; the vptr is the compiler's, and dx11
-// overwrites it with its own derived table on the next line (AllocData).
+// B5 (the dx11 seam) W0: the twelve `Video_XData_Ctor` DOORS that used to sit here
+// had no caller left -- B.3R moved the construction into dx11's factories
+// (`::new (p) Video::XData(owner)`), which the B5 subclasses' own constructors now
+// chain to. Deleted.
 // ============================================================================
-#define RT_COMPANION_CTOR(CLASS)                                               \
-    void* Video_##CLASS##_Ctor(CompanionData* self, void* owner) {             \
-        return ::new (static_cast<void*>(self)) Video::CLASS(owner);           \
-    }
-
-RT_COMPANION_CTOR(RenderBufferData)
-RT_COMPANION_CTOR(VideoProgramData)
-RT_COMPANION_CTOR(RenderStateData)
-RT_COMPANION_CTOR(PixelProgramData)
-RT_COMPANION_CTOR(VertexProgramData)
-RT_COMPANION_CTOR(VertexLayoutData)
-RT_COMPANION_CTOR(VertexBufferData)
-RT_COMPANION_CTOR(IndexBufferData)
-RT_COMPANION_CTOR(ConstantBufferData)
-RT_COMPANION_CTOR(ImageBufferData)
-RT_COMPANION_CTOR(ContextData)
-RT_COMPANION_CTOR(DeviceData)
-
-#undef RT_COMPANION_CTOR
 
 // ============================================================================
 // The twelve member bodies -- `Video::XData::~XData()`.

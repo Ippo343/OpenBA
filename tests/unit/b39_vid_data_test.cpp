@@ -33,10 +33,13 @@ void NoteDtor(const void* self) {
     ++g_dtorCount;
 }
 
-void* const kOwner = reinterpret_cast<void*>(uintptr_t(0x0E0E0E0E0ull));
+// B5 W0: the owner is typed per class (`T::Owner`); the test's fake owner is the
+// same bit pattern through that type.
+constexpr uintptr_t kOwnerBits = 0x0E0E0E0E0ull;
 
 template <class T>
 void CheckData() {
+    typename T::Owner* const kOwner = reinterpret_cast<typename T::Owner*>(kOwnerBits);
     CHECK(!std::is_abstract<T>::value);
     CHECK(!std::has_virtual_destructor<T>::value);
     CHECK(std::is_destructible<T>::value);          // PUBLIC: RULE B5-3

@@ -1859,14 +1859,14 @@ const char* Dx9P_NameImpl() { return "DirectX 9"; }
 // factory to `Orig<>(slot)` when an import was missing is gone with the struct.
 // ============================================================
 template <typename T, typename Base>
-T* AllocData(size_t size, void* owner, Vt vt) {
+T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
     T* p = static_cast<T*>(System::MemoryAllocator::MemAlloc(size, 4));
     if (!p) return nullptr;
     ::new (static_cast<void*>(p)) Base(owner);   // retail: CALL [IAT ??0XData@Video@@]
     p->vptr = Dx11VtableAddress(vt);
     return p;
 }
-void* Factory_ContextData(DeviceData* /*self*/, void* owner) {
+void* Factory_ContextData(DeviceData* /*self*/, ::Video::Context* owner) {
     ContextData* p = AllocData<ContextData, ::Video::ContextData>(0x20, owner,
                                             Vt::ContextData);
     if (!p) return nullptr;
@@ -1876,7 +1876,7 @@ void* Factory_ContextData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_ImageBufferData(DeviceData* /*self*/, void* owner) {
+void* Factory_ImageBufferData(DeviceData* /*self*/, ::Video::ImageBuffer* owner) {
     ImageBufferData* p = AllocData<ImageBufferData, ::Video::ImageBufferData>(0x38, owner,
                                                     Vt::ImageBufferData);
     if (!p) return nullptr;
@@ -1888,7 +1888,7 @@ void* Factory_ImageBufferData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_ConstantBufferData(DeviceData* /*self*/, void* owner) {
+void* Factory_ConstantBufferData(DeviceData* /*self*/, ::Video::ConstantBuffer* owner) {
     ConstantBufferData* p = AllocData<ConstantBufferData, ::Video::ConstantBufferData>(0x28,
                                                           owner, Vt::ConstantBufferData);
     if (!p) return nullptr;
@@ -1904,7 +1904,7 @@ void* Factory_ConstantBufferData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_IndexBufferData(DeviceData* /*self*/, void* owner) {
+void* Factory_IndexBufferData(DeviceData* /*self*/, ::Video::IndexBuffer* owner) {
     IndexBufferData* p = AllocData<IndexBufferData, ::Video::IndexBufferData>(0x20, owner,
                                                     Vt::IndexBufferData);
     if (!p) return nullptr;
@@ -1914,7 +1914,7 @@ void* Factory_IndexBufferData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_VertexBufferData(DeviceData* /*self*/, void* owner) {
+void* Factory_VertexBufferData(DeviceData* /*self*/, ::Video::VertexBuffer* owner) {
     VertexBufferData* p = AllocData<VertexBufferData, ::Video::VertexBufferData>(0x20, owner,
                                                       Vt::VertexBufferData);
     if (!p) return nullptr;
@@ -1924,7 +1924,7 @@ void* Factory_VertexBufferData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_VertexLayoutData(DeviceData* /*self*/, void* owner) {
+void* Factory_VertexLayoutData(DeviceData* /*self*/, ::Video::VertexLayout* owner) {
     VertexLayoutData* p = AllocData<VertexLayoutData, ::Video::VertexLayoutData>(0x18, owner,
                                                       Vt::VertexLayoutData);
     if (!p) return nullptr;
@@ -1932,7 +1932,7 @@ void* Factory_VertexLayoutData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_VertexProgramData(DeviceData* /*self*/, void* owner) {
+void* Factory_VertexProgramData(DeviceData* /*self*/, ::Video::VertexProgram* owner) {
     VertexProgramData* p = AllocData<VertexProgramData, ::Video::VertexProgramData>(0x30, owner,
                                                         Vt::VertexProgramData);
     if (!p) return nullptr;
@@ -1940,7 +1940,7 @@ void* Factory_VertexProgramData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_PixelProgramData(DeviceData* /*self*/, void* owner) {
+void* Factory_PixelProgramData(DeviceData* /*self*/, ::Video::PixelProgram* owner) {
     PixelProgramData* p = AllocData<PixelProgramData, ::Video::PixelProgramData>(0x30, owner,
                                                       Vt::PixelProgramData);
     if (!p) return nullptr;
@@ -1948,7 +1948,7 @@ void* Factory_PixelProgramData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_RenderStateData(DeviceData* /*self*/, void* owner) {
+void* Factory_RenderStateData(DeviceData* /*self*/, ::Video::RenderState* owner) {
     RenderStateData* p = AllocData<RenderStateData, ::Video::RenderStateData>(0x28, owner,
                                                     Vt::RenderStateData);
     if (!p) return nullptr;
@@ -1958,12 +1958,12 @@ void* Factory_RenderStateData(DeviceData* /*self*/, void* owner) {
     return p;
 }
 
-void* Factory_VideoProgramData(DeviceData* /*self*/, void* owner) {
+void* Factory_VideoProgramData(DeviceData* /*self*/, ::Video::VideoProgram* owner) {
     return AllocData<VideoProgramData, ::Video::VideoProgramData>(0x10, owner,
                                        Vt::VideoProgramData);
 }
 
-void* Factory_RenderBufferData(DeviceData* /*self*/, void* owner) {
+void* Factory_RenderBufferData(DeviceData* /*self*/, ::Video::RenderBuffer* owner) {
     return AllocData<RenderBufferData, ::Video::RenderBufferData>(0x10, owner,
                                        Vt::RenderBufferData);
 }

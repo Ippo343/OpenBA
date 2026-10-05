@@ -202,6 +202,7 @@ extern "C" void _purecall();   // the CRT's (the exe's standalone/main.cpp logs 
 namespace Video {
 
 // The owners and the companions the factory slots below name (B.4 R-VIDEO, H4).
+class Device;
 class Context;
 class ImageBuffer;
 class IndexBuffer;
@@ -236,7 +237,16 @@ class DeviceData {
 public:
     // ??0DeviceData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit DeviceData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVDevice@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = Device;
+    explicit DeviceData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058b10 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~DeviceData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -287,7 +297,7 @@ public:
 
     ~DeviceData();          // ??1DeviceData@Video@@UEAA@XZ  0x1800f8cf0
 
-    void* _owner;           // +0x08  Video::Device*
+    Owner* _owner;           // +0x08  Video::Device*
 };
 static_assert(offsetof(DeviceData, _owner) == 0x8, "DeviceData::_owner");
 
@@ -296,7 +306,16 @@ class ContextData {
 public:
     // ??0ContextData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit ContextData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVContext@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = Context;
+    explicit ContextData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058a90 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~ContextData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -342,7 +361,7 @@ public:
 
     ~ContextData();         // ??1ContextData@Video@@UEAA@XZ  0x1800f8e30
 
-    void* _owner;           // +0x08  Video::Context*
+    Owner* _owner;           // +0x08  Video::Context*
 };
 static_assert(offsetof(ContextData, _owner) == 0x8, "ContextData::_owner");
 
@@ -351,7 +370,16 @@ class ImageBufferData {
 public:
     // ??0ImageBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit ImageBufferData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVImageBuffer@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = ImageBuffer;
+    explicit ImageBufferData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058a10 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~ImageBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -396,7 +424,7 @@ public:
     // `buffers.cpp`.
     ~ImageBufferData();
 
-    void* _owner;           // +0x08  Video::ImageBuffer*
+    Owner* _owner;           // +0x08  Video::ImageBuffer*
 };
 static_assert(offsetof(ImageBufferData, _owner) == 0x8, "ImageBufferData::_owner");
 
@@ -405,7 +433,16 @@ class IndexBufferData {
 public:
     // ??0IndexBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit IndexBufferData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVIndexBuffer@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = IndexBuffer;
+    explicit IndexBufferData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058910 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~IndexBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -448,7 +485,7 @@ public:
 
     ~IndexBufferData();     // ??1IndexBufferData@Video@@UEAA@XZ  0x1800f8df0
 
-    void* _owner;           // +0x08  Video::IndexBuffer*
+    Owner* _owner;           // +0x08  Video::IndexBuffer*
 };
 static_assert(offsetof(IndexBufferData, _owner) == 0x8, "IndexBufferData::_owner");
 
@@ -457,7 +494,16 @@ class VertexBufferData {
 public:
     // ??0VertexBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit VertexBufferData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVVertexBuffer@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = VertexBuffer;
+    explicit VertexBufferData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058890 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~VertexBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -488,7 +534,7 @@ public:
 
     ~VertexBufferData();    // ??1VertexBufferData@Video@@UEAA@XZ  0x1800f8d50
 
-    void* _owner;           // +0x08  Video::VertexBuffer*
+    Owner* _owner;           // +0x08  Video::VertexBuffer*
 };
 static_assert(offsetof(VertexBufferData, _owner) == 0x8, "VertexBufferData::_owner");
 
@@ -497,7 +543,16 @@ class ConstantBufferData {
 public:
     // ??0ConstantBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit ConstantBufferData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVConstantBuffer@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = ConstantBuffer;
+    explicit ConstantBufferData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058990 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~ConstantBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -542,7 +597,7 @@ public:
 
     ~ConstantBufferData();  // ??1ConstantBufferData@Video@@UEAA@XZ  0x1800f8e50
 
-    void* _owner;           // +0x08  Video::ConstantBuffer*
+    Owner* _owner;           // +0x08  Video::ConstantBuffer*
 };
 static_assert(offsetof(ConstantBufferData, _owner) == 0x8, "ConstantBufferData::_owner");
 
@@ -551,7 +606,16 @@ class RenderBufferData {
 public:
     // ??0RenderBufferData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit RenderBufferData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVRenderBuffer@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = RenderBuffer;
+    explicit RenderBufferData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058590 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~RenderBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -575,7 +639,7 @@ public:
 
     ~RenderBufferData();    // ??1RenderBufferData@Video@@UEAA@XZ  0x1800f8db0
 
-    void* _owner;           // +0x08  Video::RenderBuffer*
+    Owner* _owner;           // +0x08  Video::RenderBuffer*
 };
 static_assert(offsetof(RenderBufferData, _owner) == 0x8, "RenderBufferData::_owner");
 
@@ -584,7 +648,16 @@ class VertexLayoutData {
 public:
     // ??0VertexLayoutData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit VertexLayoutData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVVertexLayout@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = VertexLayout;
+    explicit VertexLayoutData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058810 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~VertexLayoutData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -609,7 +682,7 @@ public:
 
     ~VertexLayoutData();    // ??1VertexLayoutData@Video@@UEAA@XZ  0x1800f8d30
 
-    void* _owner;           // +0x08  Video::VertexLayout*
+    Owner* _owner;           // +0x08  Video::VertexLayout*
 };
 static_assert(offsetof(VertexLayoutData, _owner) == 0x8, "VertexLayoutData::_owner");
 
@@ -618,7 +691,16 @@ class VertexProgramData {
 public:
     // ??0VertexProgramData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit VertexProgramData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVVertexProgram@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = VertexProgram;
+    explicit VertexProgramData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058790 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~VertexProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -641,7 +723,7 @@ public:
 
     ~VertexProgramData();   // ??1VertexProgramData@Video@@UEAA@XZ  0x1800f8d10
 
-    void* _owner;           // +0x08  Video::VertexProgram*
+    Owner* _owner;           // +0x08  Video::VertexProgram*
 };
 static_assert(offsetof(VertexProgramData, _owner) == 0x8, "VertexProgramData::_owner");
 
@@ -650,7 +732,16 @@ class PixelProgramData {
 public:
     // ??0PixelProgramData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit PixelProgramData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVPixelProgram@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = PixelProgram;
+    explicit PixelProgramData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058710 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~PixelProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -673,7 +764,7 @@ public:
 
     ~PixelProgramData();    // ??1PixelProgramData@Video@@UEAA@XZ  0x1800f8dd0
 
-    void* _owner;           // +0x08  Video::PixelProgram*
+    Owner* _owner;           // +0x08  Video::PixelProgram*
 };
 static_assert(offsetof(PixelProgramData, _owner) == 0x8, "PixelProgramData::_owner");
 
@@ -682,7 +773,16 @@ class RenderStateData {
 public:
     // ??0RenderStateData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit RenderStateData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVRenderState@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = RenderState;
+    explicit RenderStateData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058690 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~RenderStateData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -709,7 +809,7 @@ public:
     // `ImageBufferData`'s above.
     ~RenderStateData();
 
-    void* _owner;           // +0x08  Video::RenderState*
+    Owner* _owner;           // +0x08  Video::RenderState*
 };
 static_assert(offsetof(RenderStateData, _owner) == 0x8, "RenderStateData::_owner");
 
@@ -718,7 +818,16 @@ class VideoProgramData {
 public:
     // ??0VideoProgramData(owner) -- the REAL constructor: the owner at +0x08 (retail
     // stores it first, then the vptr; nothing can observe the order).
-    explicit VideoProgramData(void* owner) : _owner(owner) {}
+    // B5 (the dx11 seam) W0: the owner is TYPED -- the eleven `Device::Create*Data`
+    // forwarders' mangled names spell it (`PEAVVideoProgram@2@`); `Owner` is for the
+    // subclass and the tests.
+    using Owner = VideoProgram;
+    explicit VideoProgramData(Owner* owner) : _owner(owner) {}
+    // B5 W0 (B5_RULES D2): each of the twelve bases is its OWN root, so each owns its
+    // allocation -- retail's factory `MemAlloc(size, 4)` and slot 0's `MemFree`
+    // (runtime/src/video/companion_operators.cpp; host arm under BANISHED_UNIT_TEST).
+    static void* operator new(size_t n);
+    static void  operator delete(void* p);
 
     // [0] 0x180058610 -- MSVC's VECTOR deleting destructor (element 0x10, over
     // ~VideoProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
@@ -756,7 +865,7 @@ public:
 
     ~VideoProgramData();    // ??1VideoProgramData@Video@@UEAA@XZ  0x1800f8d90
 
-    void* _owner;           // +0x08  Video::VideoProgram*
+    Owner* _owner;           // +0x08  Video::VideoProgram*
 };
 static_assert(offsetof(VideoProgramData, _owner) == 0x8, "VideoProgramData::_owner");
 

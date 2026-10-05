@@ -56,7 +56,7 @@
 namespace VideoDX11 {
 // dx11/src/exports.cpp — our ports of the two DLL exports.
 struct DeviceData;
-DeviceData* Dx11_CreateDeviceData(void* device);
+DeviceData* Dx11_CreateDeviceData(::Video::Device* device);
 const char* Dx11_GetDeviceName();
 // dx11/src/devicedata.cpp -- the cutover-only DX9 placeholder (see there).
 void*       Dx9Placeholder_CreateDeviceData(void* device);

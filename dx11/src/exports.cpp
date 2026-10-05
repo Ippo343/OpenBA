@@ -61,7 +61,7 @@ namespace VideoDX11 {
 //   * +0x58 is written as a QWORD -1 (MOV qword [RBX+0x58],-1), which sets
 //     BOTH cursorHotspotX and cursorHotspotY to -1 — not just the first.
 // ============================================================
-DeviceData* Dx11_CreateDeviceData(void* device) {
+DeviceData* Dx11_CreateDeviceData(::Video::Device* device) {   // B5 W0: the owner is typed (Device::CreateDeviceDataFn)
     DeviceData* p = static_cast<DeviceData*>(System::MemoryAllocator::MemAlloc(0x70, 4));
     if (!p) return nullptr;
 
