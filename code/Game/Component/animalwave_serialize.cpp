@@ -32,7 +32,6 @@
 //     unregistered typeId storage (ResolveAddr -> null / id 0) we SKIP the
 //     validation rather than null every ref: on the only path that matters
 //     (load), skipping matches retail-with-valid-data behaviour.
-#include "Component/coll_bridge.h"
 #include "Game/serialize_externals.h"          // ExternalPtrSerializeGeneric
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
@@ -124,22 +123,22 @@ extern "C" void PopulationComponent_Serialize_Real(PopulationComponent* self, IO
     ser.Serialize(self->habitatDim, nullptr);
     ser.Serialize(self->herdDim, nullptr);
 
-    int cells = self->cellCount;
+    int cells = self->cells._size;
     ser.Serialize(cells, nullptr);
     if (Loading(ser))
         self->SetCellCount(cells);   // 0x14000b0d0
-    PopulationComponent::Cell* cell = self->cells;
+    PopulationComponent::Cell* cell = self->cells._data;
     for (int i = 0; i < cells && cell; ++i, ++cell) {
         ser.Serialize(cell->density, nullptr);
         ser.Serialize(cell->minimum, nullptr);
         ser.Serialize(cell->smoothed, nullptr);
     }
 
-    int herds = self->herdCount;
+    int herds = self->herds._size;
     ser.Serialize(herds, nullptr);
-    // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
-    if (Loading(ser)) GameColl::AsArray<GameColl::Ptr8>(&self->herds).SetSize(herds);
-    Object::InternalPtr<ComponentEntity>* herd = self->herds;
+    // exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n) (kSpec_PtrZero).
+    if (Loading(ser)) self->herds.SetSize(herds);
+    Object::InternalPtr<ComponentEntity>* herd = self->herds._data;
     for (int i = 0; i < herds && herd; ++i, ++herd)
         SerializeValidatedIBP(herd, ser, ComponentEntity::TypeId());
 

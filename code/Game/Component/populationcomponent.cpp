@@ -57,7 +57,7 @@ void PopulationComponent::SmoothDensity() {
     //          smoothed density, then clamp it down to the density.
     {
         int i = 0;
-        if (0 < cellCount) {
+        if (0 < cells._size) {
             do {
                 Cell& cell = cells[i];
                 cell.smoothed = cell.smoothed + description->_densityGrowth;
@@ -67,13 +67,13 @@ void PopulationComponent::SmoothDensity() {
                     cell2.smoothed = density;
                 }
                 i++;
-            } while (i < cellCount);
+            } while (i < cells._size);
         }
     }
 
     // Allocate temp buffer (one int per cell).
     int* temp = nullptr;
-    int n40 = cellCount;
+    int n40 = cells._size;
     if (n40 != 0) {
         if (0 < n40) {
             temp = static_cast<int*>(
@@ -143,7 +143,7 @@ void PopulationComponent::SmoothDensity() {
     }
 
     // Phase 3: write the smoothed values back into smoothed (+4) and minimum (+8).
-    int n40b = cellCount;
+    int n40b = cells._size;
     if (0 < n40b) {
         int i = 0;
         int* t = temp;
@@ -153,7 +153,7 @@ void PopulationComponent::SmoothDensity() {
             cell.minimum = *t;
             i++;
             t++;
-        } while (i < cellCount);
+        } while (i < cells._size);
     }
 
     System::MemoryAllocator::MemFree(temp);
@@ -210,21 +210,21 @@ void PopulationComponent::ScanHabitability(Map* map, int cellIndex) {
 // zero-fills the tail, frees the old block.
 // ============================================================
 void PopulationComponent::SetCellCount(int newCount) {
-    int oldCount = cellCount;
+    int oldCount = cells._size;
     if (newCount == oldCount) return;
 
-    Cell* oldBuf = cells;
-    cellCount = newCount;
-    if (cellCapacity < newCount) {
-        cellCapacity = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0) cellCapacity = newCount * 3;
-        cells = static_cast<Cell*>(
-            System::MemoryAllocator::MemAlloc((uint64_t)cellCapacity * 0xc, 4));
+    Cell* oldBuf = cells._data;
+    cells._size = newCount;
+    if (cells._capacity < newCount) {
+        cells._capacity = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) cells._capacity = newCount * 3;
+        cells._data = static_cast<Cell*>(
+            System::MemoryAllocator::MemAlloc((uint64_t)cells._capacity * 0xc, 4));
     }
 
-    int start = (oldBuf == cells) ? oldCount : 0;
+    int start = (oldBuf == cells._data) ? oldCount : 0;
     for (int64_t i = start; i < newCount; i++) {
-        Cell* dst = cells + i;
+        Cell* dst = cells._data + i;
         if (!dst) continue;
         if (i < oldCount) {
             const Cell* src = oldBuf + i;
@@ -239,7 +239,7 @@ void PopulationComponent::SetCellCount(int newCount) {
         }
     }
 
-    if (oldBuf != cells) System::MemoryAllocator::MemFree(oldBuf);
+    if (oldBuf != cells._data) System::MemoryAllocator::MemFree(oldBuf);
 }
 
 // ============================================================
@@ -279,8 +279,7 @@ extern "C" void PopulationComponent_Serialize_Real(PopulationComponent* self, IO
 // 0x1400546d0. Component() is the CALL 0x1401188b0; the 0x14015a360 stamp is
 // the compiler's; every field = 0; flags |= 0xcb.
 PopulationComponent::PopulationComponent()
-    : description(nullptr), habitatDim(0), _pad34{}, cells(nullptr), cellCount(0),
-      cellCapacity(0), herdDim(0), _pad4C{}, herds(nullptr), herdCount(0), herdCapacity(0),
+    : description(nullptr), habitatDim(0), _pad34{}, herdDim(0), _pad4C{},
       smoothTimer{0}, scanIndex(0), field_0x6c(0) {
     OrFlagsInCtor(0xcb);
 }
@@ -316,13 +315,13 @@ void PopulationComponent::Startup() {
 
     SetCellCount(habDim * habDim);
 
-    int count = cellCount;
+    int count = cells._size;
     for (int i = 0; i < count; i++) {
         ScanHabitability(map, i);
         Cell& cell = cells[i];
         cell.smoothed = cell.density;
         cell.minimum = cell.density;
-        count = cellCount;
+        count = cells._size;
     }
 
     // Retail vtable slot 11 (0x140054210) is an empty function.
@@ -451,7 +450,7 @@ void PopulationComponent::Update(const System::Time* timeV) {
     // Cell count is the density array's element count at +0x40 (the DynArray at
     // +0x38/+0x40/+0x44), NOT the herd grid dim at +0x48. Retail reads +0x40 for
     // both the per-tick slice size and the round-robin wrap.
-    int totalCells = cellCount;
+    int totalCells = cells._size;
     // Signed division by 16 with rounding toward zero
     int cellsToProcess = (totalCells + ((totalCells >> 31) & 0xF)) >> 4;
     if (cellsToProcess <= 0) return;
@@ -460,7 +459,7 @@ void PopulationComponent::Update(const System::Time* timeV) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     Map* terrainGrid = GameUpdateLoop::_singleton->m_game;
 
-    Cell* gridData = cells;
+    Cell* gridData = cells._data;
 
     for (int i = 0; i < cellsToProcess; i++) {
         int idx = scanIndex;

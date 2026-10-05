@@ -138,7 +138,7 @@ float PopulationComponent::HerdCellFood(int cell) const {
 
     int positive = 0;
     for (int64_t row = 0; row < gridDim; row++) {
-        const Cell* pTile = cells +
+        const Cell* pTile = cells._data +
             (((cell / cellDim) * gridDim + row) * (int64_t)mapStride +
              (int64_t)((cell % cellDim) * gridDim));
         for (int64_t col = gridDim; col != 0; col--) {
