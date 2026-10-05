@@ -513,6 +513,24 @@ static_assert(offsetof(RendererDrawGroup, _cullCamera) - offsetof(RendererDrawGr
 // ============================================================
 class RendererSceneEntry {
 public:
+    // The implicit default constructor, kept (`SpecFor<T>`'s TInit and
+    // imagebuffer_derived.cpp's stack record use it).
+    RendererSceneEntry() = default;
+    // Retail's SceneGroup constructor 0x1800628d0 (unexported; `AddScene`
+    // 0x180105700 inlines it into its stack record, store for store). Stores,
+    // read in the disassembly, in member order: +0x00, +0x08, the Camera copy
+    // ctor 0x180017a70 at +0x10, arg4 -> +0xe8, arg6 -> +0xec, arg7 -> +0xf0,
+    // -1 -> +0xf4, arg5 -> +0xf8, two zero qwords over the Array header at
+    // +0x100 (the Array's three named fields, H7). +0xfc is NOT written:
+    // `_pad_fc` has no initialiser on purpose.
+    RendererSceneEntry(const Scene* scene, const Video::RenderBuffer* renderBuffer,
+                       const Camera& camera, int32_t shaderDetail, int32_t detailId,
+                       int32_t shader, uint32_t materialTypeFlags)
+        : _scene(scene), _renderBuffer(renderBuffer), _camera(camera),
+          _shaderDetail(shaderDetail), _shader(shader),
+          _materialTypeFlags(materialTypeFlags), _drawGroupIndex(-1),
+          _detailId(detailId), _drawableIds() {}
+
     const Scene*               _scene;             // +0x000
     const Video::RenderBuffer* _renderBuffer;      // +0x008
     Camera                     _camera;            // +0x010
