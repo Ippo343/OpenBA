@@ -512,7 +512,7 @@ static uint32_t Helper_92d0(const Object::External* ext) {
     for (int i = 0; i < n; i++) {
         const PastureComponent* e = cb->pastures._data[i];
         if (e->livestockType == ext) {
-            total += e->animalCount;
+            total += e->animals._size;
         }
     }
     return (uint32_t)total;

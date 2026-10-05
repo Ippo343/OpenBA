@@ -330,7 +330,7 @@ bool DiseaseComponent::CheckCure() {
         // Faithful: retail derefs unguarded — isPasture==1 means the finder
         // already located a PastureComponent at Startup. The herd count is
         // PastureComponent::animalCount.
-        if (pasture->animalCount != 0) return false;
+        if (pasture->animals._size != 0) return false;
         return true;
     }
 
@@ -576,12 +576,12 @@ void DiseaseComponent::KillOneAnimal() {
 
     PastureComponent* pasture = _entity->FindComponent<PastureComponent>();   // 0x140004fe0
     // The herd (+0x30 animals, +0x38 animalCount).
-    if (pasture->animalCount == 0) return;
+    if (pasture->animals._size == 0) return;
 
     int attempts = 0;
     bool killed = false;
     do {
-        uint32_t herd = static_cast<uint32_t>(pasture->animalCount);
+        uint32_t herd = static_cast<uint32_t>(pasture->animals._size);
         uint32_t idx = rng->Rand(static_cast<uint32_t>(herd));
         Component* member = pasture->animals[idx].Get();
 

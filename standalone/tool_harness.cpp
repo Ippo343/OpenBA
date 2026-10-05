@@ -1654,7 +1654,7 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
     fprintf(stderr, "[PasturePanel] select pasture ent=%p -> opened=%d dialog=%p "
            "(comp=%p type(+0x28)=%p count(+0x38)=%d max(+0x40)=%d)\n",
            entRef, opened, dialog, pastureComp,
-           pastureComp->livestockType, pastureComp->animalCount, pastureComp->capacity);
+           pastureComp->livestockType, pastureComp->animals._size, pastureComp->capacity);
 
     // BANISHED_PASTUREPANEL_SELECT=<item> — simulate the player picking a
     // livestock type from the combo: exactly the event DialogInstance routes on
