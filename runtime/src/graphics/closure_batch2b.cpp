@@ -243,8 +243,8 @@ namespace Graphics {
 // B.4: the two element pointers (the door's `void*` signature, declared in
 // Scene.h and handed raw element storage by the array row) are each viewed
 // once as the `Graphics::RendererDrawGroup` they are.
-extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src) {
-    Graphics::RendererDrawGroup* const d = static_cast<Graphics::RendererDrawGroup*>(self);  // LEFT: audit ruling floor elem_stride (the marker is the coordinator's); SIG element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)
+extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* dst, const void* src) {
+    Graphics::RendererDrawGroup* const d = static_cast<Graphics::RendererDrawGroup*>(dst);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
     const Graphics::RendererDrawGroup* const s = static_cast<const Graphics::RendererDrawGroup*>(src);   // element op of a collection spec row takes void* (the type-erased collection core: one spec-row signature serves every element type)  // CAST-OK: elem_stride
 
     d->_renderBuffer = s->_renderBuffer;                               // +0x000
@@ -254,7 +254,7 @@ extern "C" void* RtGraphics_DrawGroup_CopyCtor(void* self, const void* src) {
     d->_materialTypeFlags = s->_materialTypeFlags;                     // +0x1bc
     for (int k = 0; k < 3; ++k)                       // ASCENDING
         InnerArrayCopyCtor(&d->_items[k], &s->_items[k]);
-    return self;
+    return dst;
 }
 
 // ============================================================================
