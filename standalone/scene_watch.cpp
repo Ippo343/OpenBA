@@ -21,6 +21,7 @@
 #include "options.h"
 #include "graphics/Geometry.h"   // Graphics::Geometry::AddDrawItems (B3X W0)
 #include "graphics/Mesh.h"       // RtGraphics_MeshInstance_AddDrawItems (B3R W2-RES)
+#include "Component/ModelComponent.h"   // the owner's meshGroup / meshIndex
 #include "graphics/GraphicsMesh.h" // B4: GraphicsMesh::_detailLevels, DetailLevel
 #include "object/VSlot.h"        // Object::SlotAddressOf
 #include "graphics/Scene.h"      // B4: Scene::_nodes, SceneNode
@@ -575,13 +576,14 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera
         // description with exactly that pair, so a mesh reached by more than one pair, or
         // by a pair outside the description's range, is a mis-pick.
         {
-            // LEFT: these are the OWNING ModelComponent's fields (+0x164 / +0x166) read
-            // through its embedded MeshInstance (+0x28), which ModelComponent's header
-            // keeps as raw H5 storage (W0-H2); there is no typed way from the instance
-            // back to its owner.
-            const uintptr_t g = reinterpret_cast<uintptr_t>(obj);   // LEFT: OTHER the owning ModelComponent's variantIdx +0x164 / modelVariant +0x166 read back through its embedded MeshInstance (+0x28): the step from member to owner is a reinterpretation, no typed path exists
-            const int16_t vi = *reinterpret_cast<int16_t*>(g + 0x13c);   // LEFT: OTHER the owning ModelComponent's variantIdx +0x164 / modelVariant +0x166 read back through its embedded MeshInstance (+0x28): the step from member to owner is a reinterpretation, no typed path exists
-            const int16_t mv = *reinterpret_cast<int16_t*>(g + 0x13e);   // LEFT: OTHER the owning ModelComponent's variantIdx +0x164 / modelVariant +0x166 read back through its embedded MeshInstance (+0x28): the step from member to owner is a reinterpretation, no typed path exists
+            // The OWNING ModelComponent's meshGroup / meshIndex (+0x164 / +0x166), reached
+            // from its embedded MeshInstance (+0x28) by the member's offset: a MeshInstance
+            // has no pointer back to its owner (the step is the diagnostic's own; the range
+            // test below rejects an instance that is not a ModelComponent's).
+            const ModelComponent* owner = reinterpret_cast<const ModelComponent*>(   // LEFT: WORK (audit scene_watch row): member-to-owner step of a diagnostic, no typed path from a MeshInstance to its ModelComponent
+                reinterpret_cast<const char*>(mi) - offsetof(ModelComponent, meshInstance));   // LEFT: WORK (audit scene_watch row): the same member-to-owner step
+            const int16_t vi = owner->meshGroup;
+            const int16_t mv = owner->meshIndex;
             if (vi >= -1 && vi < 64 && mv >= -1 && mv < 64) {
                 MeshVariants& mvs = s_variants[mesh];
                 bool seen = false;
