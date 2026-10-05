@@ -333,6 +333,7 @@ static_assert(offsetof(DocumentTextElement, _sheets) == 0x120, "DocumentTextElem
 static_assert(offsetof(DocumentTextElement, _colors) == 0x130, "DocumentTextElement::_colors");
 static_assert(offsetof(DocumentTextElement, _resourceList) == 0x140, "DocumentTextElement::_resourceList");
 static_assert(offsetof(DocumentTextElement, _items) == 0x148, "DocumentTextElement::_items");
+static_assert(offsetof(DocumentTextElement, _links) == 0x158, "DocumentTextElement::_links");
 static_assert(offsetof(DocumentTextElement, _sourceText) == 0x168, "DocumentTextElement::_sourceText");
 static_assert(offsetof(DocumentTextElement, _textLength) == 0x170, "DocumentTextElement::_textLength");
 static_assert(offsetof(DocumentTextElement, _textPos) == 0x174, "DocumentTextElement::_textPos");

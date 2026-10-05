@@ -57,9 +57,8 @@
                      // its IO::Serializer (see the note there)
 
 #include "../../types/object/Internal.h"
-#include "../../types/io/Stream.h"   // B.3.4 STREAMS (6/6): RtIo::MemoryStream,
-                                     // the POD Internal::Clone stack-builds its
-                                     // two streams on. Header-only; no registry.
+#include "../../types/io/Stream.h"   // IO::MemoryStream, Internal::Clone's two
+                                     // stream locals.
 
 #if !defined(BANISHED_UNIT_TEST)
 #include "../../types/system/MemoryAllocator.h"
@@ -93,25 +92,6 @@ namespace detail {
 void* InternalMemAlloc(uint64_t bytes, int /*align*/) { return std::malloc((size_t)bytes); }
 void  InternalMemFree(void* p)                        { std::free(p); }
 
-// B.3.4 STREAMS (6/6) — `Internal::Clone`'s two `IO::MemoryStream` locals.
-// The host has neither the registry nor a MemoryStream, and NOTHING in
-// `make unit` calls `Clone` (it needs a live `Object::Factory` singleton and a
-// real `Persist` override, which is a live-run shape and not a host one). So
-// the host seam ABORTS rather than faking a stream: a silent fake would let a
-// future test "pass" against a MemoryStream that never allocated its Encoding
-// and never stamped a vtable, which is the shape of a test that proves nothing.
-// A test that genuinely wants `Clone` has to decide what a host stream means.
-void* MemoryStreamCtor(void* /*self*/) {
-    std::fprintf(stderr, "[unit] Object::Internal::Clone reached the host "
-                         "MemoryStream seam; see internal_class.cpp.\n");
-    std::abort();
-}
-void MemoryStreamDtor(void* /*self*/) {
-    std::fprintf(stderr, "[unit] Object::Internal::Clone reached the host "
-                         "MemoryStream seam; see internal_class.cpp.\n");
-    std::abort();
-}
-
 // `?Rand@Random@System@@QEAAIXZ` (0x1800c7f90) is ported in
 // runtime/src/system/value_types.cpp, which stands on the registry and is not
 // linked into `make unit`. A test that wants to observe the generation draw
@@ -138,33 +118,6 @@ void InternalMemFree(void* p) {
 // Wave 2 ported this and proved it bit-exact over 16,035,064 calls.
 uint32_t InternalRand(System::Random* random) {
     return random->Rand();   // 0x1800c7f90
-}
-
-// B.3.4 STREAMS (6/6) — `Internal::Clone`'s two `IO::MemoryStream` locals.
-//
-// RETAIL INLINES BOTH THE CONSTRUCTOR AND THE DESTRUCTOR into `Clone`, so the
-// port reproduces them as a stack local plus a call to the ALREADY-PORTED
-// bodies rather than a second transcription:
-//   ??0MemoryStream@IO@@QEAA@XZ  0x1800ae710  compressedstream.cpp (lane W)
-//   ??1MemoryStream@IO@@UEAA@XZ  0x1800ae890  compressedstream.cpp:600
-// Reached BY NAME, exactly as compressedstream.cpp:208/269 reach the same two
-// for `CompressedMemoryStream`'s embedded member, so there is ONE
-// implementation of each and a future change to either is picked up here.
-//
-// THIS IS ALSO WHY `Clone` DOES NOT DECLARE AN `IO::MemoryStream` LOCAL.
-// B34_RULES §4.3: a stream class gets real members in this step, never a C++
-// constructor, and every construction site keeps going through the ported ctor
-// door on a POD local. `IO::MemoryStream`'s default constructor is PROTECTED
-// precisely so that `IO::MemoryStream ms;` is a compile error here.
-
-// ENDGAME B.3.9 IO (W2, foreign site): the real class -- the ??0 / ??1 doors
-// are gone. The destructor is a qualified `T::~T()` call (retail: slot 0, flags 0) (the
-// destructor chain, no free of the stack object).
-void* MemoryStreamCtor(void* self) {
-    return ::new (self) IO::MemoryStream();
-}
-void MemoryStreamDtor(void* self) {
-    static_cast<IO::MemoryStream*>(self)->IO::MemoryStream::~MemoryStream();  // LEFT: audit WORK, left: Clone's two stream locals go through this seam because make unit links no IO::MemoryStream (the host body aborts); a real IO::MemoryStream local needs the unit build to link the stream class first
 }
 
 #endif
@@ -450,6 +403,11 @@ void Internal::Persist(IO::Stream&/*stream*/) {
 //
 // FIELD-STORE ORDER IS RETAIL'S: data, size, cursor, direction, ownsData, for
 // both streams, after the constructor has run and overwriting what it wrote.
+//
+// Not compiled into `make unit`: the host links no IO::MemoryStream bodies
+// (its vtable's slots live in compressedstream.cpp) and nothing there calls
+// `Clone`, which needs a live Object::Factory and a real Persist override.
+#if !defined(BANISHED_UNIT_TEST)
 Internal* Internal::Clone() {
     // 0x1800bfb35 loads the singleton BEFORE the virtual call at 0x1800bfb3f.
     // Order kept — the same order `Base::IsDerivedFrom` preserves and for the
@@ -473,50 +431,46 @@ Internal* Internal::Clone() {
                                                                   : nullptr;
 
     // ---- the WRITE stream: 0x1800bfb8c .. 0x1800bfbfc ----------------------
-    // The POD local is deliberately UNINITIALISED — retail's stack slot is, and
-    // the constructor below writes every field it cares about. A `= {}` here
-    // would be a divergence, not tidiness.
-    RtIo::MemoryStream writeStream;
-    detail::MemoryStreamCtor(&writeStream);               // 0x1800bfb90
+    // Retail inlines ??0MemoryStream@IO@@QEAA@XZ (0x1800ae710) here: the local
+    // is the real class, its constructor runs at 0x1800bfb90, and the five
+    // stores below overwrite what it wrote.
+    IO::MemoryStream writeStream;                         // 0x1800bfb90
     void* const writeBuf = detail::InternalMemAlloc(0x1000, 4);  // 0x1800bfbc4
-    writeStream.data           = writeBuf;                // 0x1800bfbd5  +0x18
-    writeStream.size           = 0x1000;                  // 0x1800bfbd9  +0x28
-    writeStream.cursor         = 0;                       // 0x1800bfbe0  +0x24
-    writeStream.base.direction = 1;                       // 0x1800bfbe7  +0x08
-    writeStream.ownsData       = 1;                       // 0x1800bfbee  +0x20
-    Persist(*reinterpret_cast<IO::Stream*>(&writeStream));   // 0x1800bfbfc slot 3   // LEFT: audit WORK, left: the write stream is the RtIo::MemoryStream POD local of the unit-build seam (see MemoryStreamDtor); a real IO::MemoryStream local needs the stream class linked into make unit
+    writeStream._data      = writeBuf;                    // 0x1800bfbd5  +0x18
+    writeStream._size      = 0x1000;                      // 0x1800bfbd9  +0x28
+    writeStream._cursor    = 0;                           // 0x1800bfbe0  +0x24
+    writeStream._direction = 1;                           // 0x1800bfbe7  +0x08
+    writeStream._ownsData  = 1;                           // 0x1800bfbee  +0x20
+    Persist(writeStream);                                 // 0x1800bfbfc slot 3
 
     // ---- the READ stream: 0x1800bfbff .. 0x1800bfc7f -----------------------
-    RtIo::MemoryStream readStream;
-    detail::MemoryStreamCtor(&readStream);                // 0x1800bfc03
+    IO::MemoryStream readStream;                          // 0x1800bfc03
     void* const readBuf = detail::InternalMemAlloc(0x1000, 4);   // 0x1800bfc37
-    readStream.data           = readBuf;                  // 0x1800bfc48  +0x18
-    readStream.size           = 0x1000;                   // 0x1800bfc4c  +0x28
-    readStream.cursor         = 0;                        // 0x1800bfc53  +0x24
-    readStream.base.direction = 0;                        // 0x1800bfc5a  +0x08
-    readStream.ownsData       = 1;                        // 0x1800bfc61  +0x20
+    readStream._data      = readBuf;                      // 0x1800bfc48  +0x18
+    readStream._size      = 0x1000;                       // 0x1800bfc4c  +0x28
+    readStream._cursor    = 0;                            // 0x1800bfc53  +0x24
+    readStream._direction = 0;                            // 0x1800bfc5a  +0x08
+    readStream._ownsData  = 1;                            // 0x1800bfc61  +0x20
 
     // `size`, not `cursor`; `memmove`, not `memcpy`. See (a) and (b).
-    std::memmove(readBuf, writeBuf, writeStream.size);    // 0x1800bfc70
+    std::memmove(readBuf, writeBuf, writeStream._size);   // 0x1800bfc70
 
     // 0x1800bfc75 `MOV RAX,[R14]` on a possibly-NULL R14, then slot 3. The
     // downcast is well formed whatever the value: `Internal` derives from
     // `Base` non-virtually at offset 0, which every raw slot call in this tree
     // already assumes.
     Internal* const result = static_cast<Internal*>(clone);
-    result->Persist(*reinterpret_cast<IO::Stream*>(&readStream));   // 0x1800bfc7f slot 3   // LEFT: audit WORK, left: as line 487 (the read stream)
+    result->Persist(readStream);                          // 0x1800bfc7f slot 3
 
     // ---- the two inlined destructors, READ FIRST ---------------------------
     // 0x1800bfc83..0x1800bfcbc restamps 0x1801555b0 then 0x1801549a0 and frees
     // `data` (guarded by `ownsData`) and then `encoding`; 0x1800bfcbd..
     // 0x1800bfce7 is the same again for the write stream. That IS
-    // `??1MemoryStream@IO@@UEAA@XZ`, which is ported, so the door is called
-    // rather than the four steps transcribed a second time.
-    detail::MemoryStreamDtor(&readStream);                // 0x1800bfc83
-    detail::MemoryStreamDtor(&writeStream);               // 0x1800bfcbd
-
+    // `??1MemoryStream@IO@@UEAA@XZ` (0x1800ae890) on each local, in reverse
+    // declaration order: the two locals' destructors at the closing brace.
     return result;                                        // 0x1800bfce8 (R14)
 }
+#endif  // !BANISHED_UNIT_TEST
 
 // ============================================================================
 // Object::InternalFactory
@@ -647,23 +601,18 @@ void InternalFactory::ClearPersistState() {
 //     SAME statement position — `~Serializer()` is that call, guard included
 //     (the guard is retail's own `TEST RCX,RCX`, not one we added).
 //
-// It is PLACEMENT-NEW into a raw buffer, not a typed local, which is
-// B34_RULES §7.3's mandated shape and not a stylistic choice: a typed local
-// would put the destruction at scope exit, which is the same place TODAY but
-// stops being so the moment anyone adds an early return — and
+// The Serializer is a LOCAL: retail's inlined destructor (the slot-0 call at
+// 0x1800bfef8) is the last call before the RET at 0x1800bff09, which is where
+// the local's destructor runs. The body has no early return; keep it so --
 // `~IO::Serializer` is NOT idempotent (it reads four more bytes on the read
-// side and back-patches the placeholder on the write side). The explicit call
-// on a raw buffer keeps the position welded to the statement, and a raw buffer
-// has no implicit destructor, so nothing can run twice.
+// side and back-patches the placeholder on the write side).
 void InternalFactory::ResetPersistState(IO::Stream& stream) {
     const int kSerializerVersion = 0;   // retail's XOR R8D,R8D at 0x1800bfe6c
 
-    alignas(8) uint8_t serStorage[sizeof(::IO::Serializer)];
-    ::IO::Serializer* ser = ::new (static_cast<void*>(serStorage))   // B.3.4 bridge
-        ::IO::Serializer(stream, kSerializerVersion);
+    ::IO::Serializer ser(stream, kSerializerVersion);
 
     int count = _objects._size;
-    ser->_readerWriter->SerializeInt(count, nullptr);   // +0xa0 (B3X W0: by name)
+    ser._readerWriter->SerializeInt(count, nullptr);   // +0xa0 (B3X W0: by name)
 
     detail::ArrayIntSetSize(&_persistIds, count);
     detail::ArrayPtrReserve(&_objects, count);
@@ -672,9 +621,7 @@ void InternalFactory::ResetPersistState(IO::Stream& stream) {
     // does; it cannot change, but this family is byte-faithful first.
     for (int i = 0; i < _persistIds._size; ++i)
         _persistIds._data[i] = -1;
-
-    ser->~Serializer();
-}
+}   // ~Serializer: 0x1800bfef8
 
 // ============================================================================
 // ?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z

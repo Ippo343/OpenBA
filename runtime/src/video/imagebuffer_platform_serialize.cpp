@@ -334,7 +334,7 @@ void ImageBuffer::PlatformSerialize(IO::Serializer& ser) {
     // 0x1800f31e2: the field reads for Create happen HERE, after the
     // serialization, and `kind` is RELOADED. Both are faithful.
     RecreateFromFields(this, _kind,
-                       reinterpret_cast<LevelArray*>(&levels));   // B.3.5 bridge  // LEFT: audit WORK, not executed this pass (CLASS unit Video::ImageBuffer (doable-with:the local LevelArray release pos); blocker; H5 ImageBuffer::levels raw header
+                       reinterpret_cast<LevelArray*>(&levels));   // B.3.5 bridge  // LEFT: typing `levels` as LevelArray makes its implicit ~Array<Array<uint8_t>> destroy the elements at scope exit, which FreeInnerArraysCore (kV_LevelBlob) already did: the teardown must move into ~LevelArray (retail 0x1800f3221..0x1800f331d, element loop then free) as one unit
 
     // ---- destroy the temporary --------------------------------------------
     // DESTROYS EVERY ELEMENT and then frees the block, in that order: the

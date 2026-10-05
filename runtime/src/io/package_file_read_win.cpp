@@ -427,8 +427,6 @@ bool PackageFile::ReadPackfile(const System::Filename& name) {
     // forces it to 1 across the OPEN so the file is found on disk rather than
     // through the (still empty) packfile index, then restores the SAVED byte.
     // Retail RE-READS the singleton before restoring; reproduced.
-    // B.4 R-IO: the class, spelled `IO::` in full because the using-directive
-    // above also brings in the `RtIO::FileSystem` POD (B34_RULES section 7.2).
     IO::FileSystem* fs = IO::FileSystem::_singleton;           // 1800b46e8
     const uint8_t savedGate = fs->_platformExistsGate;         // 1800b46ef
     fs->_platformExistsGate = 1;                               // 1800b46f9

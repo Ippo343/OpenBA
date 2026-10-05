@@ -10,27 +10,6 @@
 // can later give this same layout POSIX-native contents. The Win32-specific
 // code that interprets these fields lives in runtime/src/system/thread_win.cpp.
 //
-// ============================================================================
-// ENDGAME B.3.4b — THE PODs MOVED TO `RtSystem`. READ THIS BEFORE EDITING.
-// ============================================================================
-// This file used to declare the two PODs INSIDE `namespace System`, which made
-// them occupy the retail classes' own names. B.3.4b declares the real classes
-// (bottom of this file), so the PODs moved to `namespace RtSystem` — the
-// spelling this directory already uses for `RtSystem::String` (String.h) and
-// `RtSystem::Filename` (Filename.h). That is B34B_RULES.md's rule B4b-1:
-//
-//   * the POD is NOT deleted and does NOT get a destructor (B34_RULES §1.5
-//     rule 3 — giving a POD a destructor runs a second one, the
-//     `RtSystem::String` double-free lesson);
-//   * it stays trivially destructible and keeps every layout pin;
-//   * its users are swept by INCLUDE GRAPH, not by grep — after the rename the
-//     old spelling simply stops resolving, so the compiler finds them all.
-//
-// ⚠ THE GREP HAZARD IS NOW ARMED FOR `System` (B34_RULES §7.2). Inside any
-// `namespace System { ... }` block, a bare `Thread` or `CriticalSection` binds
-// the REAL CLASS, silently. Always spell the POD `RtSystem::Thread` /
-// `RtSystem::CriticalSection`.
-// ============================================================================
 
 #include <cstdint>
 #include <cstddef>

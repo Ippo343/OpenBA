@@ -90,8 +90,6 @@ namespace {
 // DecodeOne (0x1800c9fc0), the rtcoll Array bodies (Collection.h) and
 // MemoryAllocator::MemFree (0x1800c7ad0).
 
-// LEFT (H5): the four Strings are held as RtSystem::String raw storage, so
-// System::String's member is reached through a view of that storage.
 void StringSerialize(System::String& str, IO::Serializer* ser) {
     str.Serialize(*ser);
 }

@@ -249,7 +249,7 @@ void InternalBasePtrSerializeBody(Internal** self,
                                   ::IO::Serializer& ser);
 // Object::Base::IsDerivedFrom's ancestor walk, reached by name from
 // runtime/src/object/type_system.cpp -- the typed half of InternalPtr<T>.
-bool InternalPtrIsDerivedFrom(const void* obj, uint32_t typeId);
+bool InternalPtrIsDerivedFrom(const Internal* obj, uint32_t typeId);
 
 class InternalBasePtr {
 public:
@@ -352,7 +352,7 @@ public:
     // 0x180009a20 / 0x180009fa0 -- the one array body, per element.
     void Serialize(::IO::Serializer& ser, uint32_t typeId) {
         InternalBasePtr::Serialize(ser);
-        void* obj = InternalBasePtr::Get();
+        const Internal* obj = InternalBasePtr::Get();
         if (obj != nullptr && !InternalPtrIsDerivedFrom(obj, typeId))
             _ptr = nullptr;   // retail nulls the element on total mismatch
     }

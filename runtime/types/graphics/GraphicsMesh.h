@@ -142,20 +142,9 @@
 #include "../volume/Volume.h"              // ::Box
 #include "../video/Buffers.h"              // B.4: Video::VertexBuffer / IndexBuffer (DetailLevel)
 
-// *** THIS HEADER DELIBERATELY DOES NOT INCLUDE `Mesh.h`, AND THAT IS A
-// WORKAROUND FOR A LATENT DEFECT IN THE TREE, NOT A PREFERENCE. ***
-//
-// `Mesh.h` and `AnimationState.h` EACH DEFINE `RtGraphics::InterpolatedTransform`,
-// with DIFFERENT MEMBERS — `Mesh.h:75` has `Transform _state[2]` and
-// `AnimationState.h:270` has `float first[7]; float second[7]` — and neither
-// guards against the other. Both are 0x38 bytes and both agree on the offsets, so
-// the two have coexisted only because no translation unit had ever included both.
-// This block's `Graphics::GraphicsMesh::Node` copy constructor lives in
-// `runtime/src/graphics/animationstate.cpp`, which includes `AnimationState.h`;
-// pulling `Mesh.h` in behind this header made GCC report the redefinition
-// immediately (`error: redefinition of 'struct RtGraphics::InterpolatedTransform'`).
-//
-// So this header takes its own value types instead, and the CROSS-ASSERTS against
+// This header does not include `Mesh.h` (it once could not: `Mesh.h` and
+// `AnimationState.h` each defined a POD `InterpolatedTransform`, both gone
+// since B.4 Z MIRROR2). It takes its own value types, and the CROSS-ASSERTS against
 // `RtGraphics::GraphicsMeshView` and `RtGraphics::MeshNode` live in
 // `tests/unit/graphics_material_abi_test.cpp`, which can include both safely.
 // NEITHER `Mesh.h` NOR `AnimationState.h` IS EDITED HERE: `AnimationState.h` is

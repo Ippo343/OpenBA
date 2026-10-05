@@ -3139,7 +3139,7 @@ const ArraySpec kSpec_StringRefZ_PP = {           // 0x1800547e0
 //   destroy       0x180054ba0 (Body B, `kD_Str_10`), both arms
 void AssignPpSampler10(uint8_t* d, const uint8_t* s) {
     AssignStringRef(d, s);                                   // +0x00
-    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);  // LEFT: audit WORK, not executed this pass (CLASS unit Video::PixelProgram::Sampler (doable)); blocker; Video PixelProgram::Sampler has no type in any header (R-VIDEO)
+    *reinterpret_cast<int32_t*>(d + 0x08) = *reinterpret_cast<const int32_t*>(s + 0x08);  // LEFT: Video::PixelProgram::Sampler (0x10: String +0x00, int32 +0x08) is declared in no header, and this spec-row element op takes uint8_t* (the erased core): a typed element would still be one elem_stride view, a coordinator ruling
     d[0x0c] = s[0x0c];
     d[0x0d] = s[0x0d];
     d[0x0e] = s[0x0e];

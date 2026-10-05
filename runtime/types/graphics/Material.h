@@ -48,6 +48,8 @@ struct MaterialTexture {
     Video::ImageBuffer* image;   // +0x08
 };
 static_assert(sizeof(MaterialTexture) == 0x10, "MaterialInstance texture entry is 0x10");
+static_assert(offsetof(MaterialTexture, name) == 0x0, "MaterialTexture::name");
+static_assert(offsetof(MaterialTexture, image) == 0x8, "MaterialTexture::image");
 
 // One resolved shader parameter, stride 0x08. Pinned by
 // ?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z (0x180102c90),
@@ -58,6 +60,8 @@ struct MaterialBinding {
     int32_t shaderSlot;    // +0x04  slot number on Video::Context
 };
 static_assert(sizeof(MaterialBinding) == 0x08, "MaterialInstance binding entry is 0x08");
+static_assert(offsetof(MaterialBinding, sourceIndex) == 0x0, "MaterialBinding::sourceIndex");
+static_assert(offsetof(MaterialBinding, shaderSlot) == 0x4, "MaterialBinding::shaderSlot");
 
 // One per-shader set of bindings, stride 0x20 — two Array triples back to back.
 // Pinned by Setup (0x180102c90): `set = _parameters._data + shader*0x20`, then
@@ -69,6 +73,8 @@ struct MaterialParameterSet {
     Collection::Array<MaterialBinding> constants;   // +0x10..+0x1f
 };
 static_assert(sizeof(MaterialParameterSet) == 0x20, "MaterialInstance parameter set is 0x20");
+static_assert(offsetof(MaterialParameterSet, textures) == 0x0, "MaterialParameterSet::textures");
+static_assert(offsetof(MaterialParameterSet, constants) == 0x10, "MaterialParameterSet::constants");
 
 // One constant value, stride 0x18 with a Vector4 at +0x08. Pinned by Setup,
 // which compares and copies four consecutive floats from `+0x08..+0x17` of
@@ -343,6 +349,7 @@ static_assert(sizeof(Material) == 0x38,
 static_assert(alignof(Material) == 8, "Graphics::Material aligns to 8 (the vptr)");
 static_assert(offsetof(Material, _type)   == 0x20, "Material::_type @ +0x20 (GetType 0x180011bd0)");
 static_assert(offsetof(Material, _passes) == 0x28, "Material::_passes @ +0x28 (IsPassValid 0x180102790)");
+static_assert(offsetof(Material, _pad24) == 0x24, "Material::_pad24");
 static_assert(sizeof(Object::ExternalPtr<Video::VideoProgram>) == 8,
               "Material::_passes has stride 8 (MOV RAX,[RAX+RDX*8] at 0x1801027a0)");
 
@@ -483,6 +490,7 @@ static_assert(offsetof(MaterialInstance, _material)   == 0x28, "MaterialInstance
 static_assert(offsetof(MaterialInstance, _parameters) == 0x30, "MaterialInstance::_parameters @ +0x30 (Setup 0x180102c90)");
 static_assert(offsetof(MaterialInstance, _constants)  == 0x40, "MaterialInstance::_constants @ +0x40 (FindConstant 0x180102f40)");
 static_assert(offsetof(MaterialInstance, _textures)   == 0x50, "MaterialInstance::_textures @ +0x50 (FindTexture 0x180103020, GetTexture 0x180103100)");
+static_assert(offsetof(MaterialInstance, _pad_26) == 0x26, "MaterialInstance::_pad_26");
 
 // The base subobject must start at zero and the derived fields at exactly
 // sizeof(Object::External) — no tail-padding reuse, no vptr duplication.

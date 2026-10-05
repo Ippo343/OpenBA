@@ -227,12 +227,8 @@ Engine::MainLoop* MainLoopSingleton() {
 //   `StringAcquire` (`dst = 0; if (src) { dst = src; ++src[-4]; }`) was the
 //   copy constructor, 0x180006cb0.
 //
-// `_dialogFilename` is a member of `Engine::DialogLoopT` /
-// `Engine::DialogLoaderLoopT`, neither of which is converted, so it keeps its
-// POD type (B31_RULES, "Members of not-yet-converted structs") and its
-// lifetime stays explicit at the two ends retail spells it: a placement
-// copy-construct in the constructor and an explicit `~String` in the
-// destructor. Both go through the one bridge, `RtSystem::Sys`.
+// `_dialogFilename` is a `System::String` member of `Engine::DialogLoopT` /
+// `Engine::DialogLoaderLoopT` (UpdateLoop.h).
 
 // ============================================================================
 // The two Time conversions this family inlines

@@ -127,8 +127,8 @@ void SceneWatch_Check(Graphics::Scene* scene) {
     static bool   s_seen   = false;
     ++s_frame;
 
-    Graphics::SceneNode* nodes = scene->_nodes.GetData();   // +0x10
-    const int count = scene->_nodes.GetSize();              // +0x18
+    Graphics::SceneNode* nodes = scene->_grid._nodes.GetData();   // +0x10
+    const int count = scene->_grid._nodes.GetSize();              // +0x18
     if (!nodes || count <= 0 || count > (1 << 22)) return;
 
     int bad = 0, firstBad = -1;
@@ -222,8 +222,8 @@ void SceneWatch_Census(Graphics::Scene* scene) {
     static long s_frame = 0;
     ++s_frame;
 
-    Graphics::SceneNode* nodes = scene->_nodes.GetData();   // +0x10
-    const int count = scene->_nodes.GetSize();              // +0x18
+    Graphics::SceneNode* nodes = scene->_grid._nodes.GetData();   // +0x10
+    const int count = scene->_grid._nodes.GetSize();              // +0x18
     if (!nodes || count <= 0 || count > (1 << 22)) return;
 
     static std::unordered_map<void*, GeoPos> s_last;
@@ -441,8 +441,8 @@ void SceneWatch_LodCensus(Graphics::Scene* scene, const Graphics::Camera* camera
     static long s_frame = 0;
     ++s_frame;
 
-    Graphics::SceneNode* nodes = scene->_nodes.GetData();   // +0x10
-    const int count = scene->_nodes.GetSize();              // +0x18
+    Graphics::SceneNode* nodes = scene->_grid._nodes.GetData();   // +0x10
+    const int count = scene->_grid._nodes.GetSize();              // +0x18
     if (!nodes || count <= 0 || count > (1 << 22)) return;
 
     // The camera is PlayerController::camera; the eye is Camera::_cameraToWorld's

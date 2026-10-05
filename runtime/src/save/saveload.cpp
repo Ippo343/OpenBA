@@ -103,7 +103,7 @@
 #include "../../types/video/ImageBuffer.h"   // B3X W0: ~SaveInfo deletes one by name
 #include "../../types/system/Value.h"   // System::Time — Update / SetMinOperationTime
 #include <new>                  // placement new into the retail hidden return slot
-#include "../system/string.h"   // RtSystem::String (Wave 2, lane String)
+#include "../system/string.h"   // the String release helpers (Wave 2, lane String)
 #include "saveload_internal.h"
 
 using RtSave::SaveLoad;

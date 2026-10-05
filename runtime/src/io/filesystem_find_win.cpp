@@ -690,8 +690,6 @@ void FileSystem::FindFiles(const System::String& dir,
 
     const int32_t before = out->size;
     (void)before;
-    // The registered signature is retail's, so the two POD parameters come
-    // through the one transitional bridge (pod_bridge.h).
     RtIO::FindFilesImpl(this, &dir, &pattern, recursive, out);
 
 }

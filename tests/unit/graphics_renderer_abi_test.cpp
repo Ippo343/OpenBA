@@ -274,15 +274,15 @@ UNIT_TEST(graphics_scene_field_offsets) {
     RawOf<Graphics::Scene> raw;
     const Graphics::Scene* s = raw.ptr();
 
-    CHECK_EQ(FieldOffset(s, &s->_cellSize),     uintptr_t(0x00));
-    CHECK_EQ(FieldOffset(s, &s->_halfCellX),    uintptr_t(0x04));
-    CHECK_EQ(FieldOffset(s, &s->_halfCellY),    uintptr_t(0x08));
-    CHECK_EQ(FieldOffset(s, &s->_levelCount),   uintptr_t(0x0c));
-    CHECK_EQ(FieldOffset(s, &s->_nodes),        uintptr_t(0x10));
-    CHECK_EQ(FieldOffset(s, &s->_freeIds),      uintptr_t(0x20));
-    CHECK_EQ(FieldOffset(s, &s->_cellHeads),    uintptr_t(0x30));
-    CHECK_EQ(FieldOffset(s, &s->_levelOffsets), uintptr_t(0x40));
-    CHECK_EQ(FieldOffset(s, &s->_cellCounts),   uintptr_t(0x50));
+    CHECK_EQ(FieldOffset(s, &s->_grid._cellSize),     uintptr_t(0x00));
+    CHECK_EQ(FieldOffset(s, &s->_grid._halfCellX),    uintptr_t(0x04));
+    CHECK_EQ(FieldOffset(s, &s->_grid._halfCellY),    uintptr_t(0x08));
+    CHECK_EQ(FieldOffset(s, &s->_grid._levelCount),   uintptr_t(0x0c));
+    CHECK_EQ(FieldOffset(s, &s->_grid._nodes),        uintptr_t(0x10));
+    CHECK_EQ(FieldOffset(s, &s->_grid._freeIds),      uintptr_t(0x20));
+    CHECK_EQ(FieldOffset(s, &s->_grid._cellHeads),    uintptr_t(0x30));
+    CHECK_EQ(FieldOffset(s, &s->_grid._levelOffsets), uintptr_t(0x40));
+    CHECK_EQ(FieldOffset(s, &s->_grid._cellCounts),   uintptr_t(0x50));
     CHECK_EQ(FieldOffset(s, &s->_globals),      uintptr_t(0x60));
     CHECK(std::is_standard_layout_v<Graphics::Scene>);
 
@@ -502,5 +502,5 @@ UNIT_TEST(graphics_renderer_family_has_no_vtable_to_dispatch_through) {
     CHECK_EQ(FieldOffset(r, &r->_sceneGroups._data), uintptr_t(0x00));
     RawOf<Graphics::Scene> rawS;
     const Graphics::Scene* s = rawS.ptr();
-    CHECK_EQ(FieldOffset(s, &s->_cellSize), uintptr_t(0x00));
+    CHECK_EQ(FieldOffset(s, &s->_grid._cellSize), uintptr_t(0x00));
 }

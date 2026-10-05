@@ -131,7 +131,7 @@ static_assert(offsetof(BlockDesc, id) == 0x0, "BlockDesc::id");
 //       void*            workEvent;         // +0x28 — HANDLE, SetEvent  (wake worker)
 //       void*            readyEvent;        // +0x30 — HANDLE, SetEvent  (in the dtor only)
 //       void*            doneEvent;         // +0x38 — HANDLE, ResetEvent(before issue)
-//       RtSystem::String pendingFilename;   // +0x40 — request filename
+//       System::String   pendingFilename;   // +0x40 — request filename
 //       int32_t          status;            // +0x48 — ?GetStatus@ (0x1800b7c40) reads this
 //       int32_t          command;           // +0x4C — 1 load · 2 delete · 3 info · 4 list
 //       int32_t          blockCount;        // +0x50 — int arg of BeginGetSaveGameInfo
@@ -169,7 +169,7 @@ static_assert(offsetof(BlockDesc, id) == 0x0, "BlockDesc::id");
 //       int32_t          saveCount;         // +0x88
 //       uint8_t          _pad8c[0x04];      // +0x8C — NOT pinned (Array capacity)
 //
-//       RtSystem::String savePath;          // +0x90
+//       System::String   savePath;          // +0x90
 
 // ----------------------------------------------------------------------------
 // The settings map's node.

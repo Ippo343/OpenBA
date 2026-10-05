@@ -34,7 +34,7 @@
 // mismatch here would be a link error, not a silent one, but naming it exactly
 // is cheaper than proving that each time.
 namespace RtObject {
-bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId);
+bool RtObject_Base_IsDerivedFrom(const ::Object::Base* self, uint32_t typeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId);
 // ported body the C form called.
 // ---------------------------------------------------------------------------
 namespace Object {
-bool InternalPtrIsDerivedFrom(const void* obj, uint32_t typeId) {
+bool InternalPtrIsDerivedFrom(const Internal* obj, uint32_t typeId) {
     return RtObject::RtObject_Base_IsDerivedFrom(obj, typeId);
 }
 }  // namespace Object

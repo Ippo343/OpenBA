@@ -260,7 +260,7 @@ bool SameText(const char* a, const char* b) {
 // matters: a lone surrogate encodes to ZERO bytes, so a malformed UTF-16
 // buffer loses that character rather than corrupting the output.
 // ENDGAME B.3.4b SYSTEM (4a): THIS DOOR IS A HIDDEN-RETSLOT DOOR. `ret` is the
-// caller's RAW BYTES — an uninitialised `RtSystem::String` local — so the
+// caller's RAW BYTES — uninitialised String-sized storage — so the
 // member's prvalue is placement-CONSTRUCTED into it and never assigned to; an
 // assignment would Release() whatever garbage pointer the caller's stack
 // happened to hold. Same shape as `string.cpp`'s `RtSystem_String_SubString`.
@@ -272,10 +272,7 @@ bool SameText(const char* a, const char* b) {
 // ============================================================================
 // ENDGAME B.3.4b SYSTEM (4a) — the `System::WideString` member BODIES.
 // ============================================================================
-// Defined at GLOBAL scope with qualified names rather than inside a
-// `namespace System { ... }` block: rule B4b-5, because `RtSystem::WideString`
-// and `System::WideString` are layout-identical and a bare `WideString` inside
-// such a block would bind the class silently. Every body below is the one that
+// Defined at GLOBAL scope with qualified names. Every body below is the one that
 // used to sit in the door of the same name above, moved VERBATIM — the only
 // edits are `self->data` becoming `_data`, the two internal calls becoming
 // member calls, and the anonymous-namespace helpers picking up their `RtSystem::`
@@ -581,9 +578,8 @@ int System::WideString::StrLength(const wchar_t* s) {
 // These four could not sit with the others above, because a door that
 // placement-constructs the class has to be written after the class's own
 // constructors are defined for the reader, not for the compiler. Each is a
-// CONSTRUCTOR door: `self` is the caller's RAW BYTES (an uninitialised
-// `RtSystem::WideString` local in platform_startup_win.cpp,
-// application_win.cpp, updateloop_loadresources.cpp and value_types.cpp), so
+// CONSTRUCTOR door: `self` is the caller's RAW BYTES (uninitialised
+// WideString-sized storage), so
 // the class is placement-constructed into it, never assigned — an assignment
 // would first run the destructor over whatever garbage the caller's stack held.
 // The return value is retail's `MOV RAX,RCX`, i.e. `self` itself.

@@ -252,9 +252,9 @@ extern "C" void RtEngine_VideoResourceDestroyRange_180034440(void* ignoredThis,
 
 namespace {
 
-// NOT `using RtSystem::Filename` / `using RtSystem::String`: runtime/types/common.h
-// forward-declares GLOBAL structs of both names, so an unqualified use here is
-// AMBIGUOUS rather than wrong. Everything below is spelled out.
+// No `using System::Filename`: runtime/types/common.h forward-declares a
+// GLOBAL `struct Filename`, so an unqualified use here is AMBIGUOUS rather than
+// wrong. Everything below is spelled out.
 
 // The element is `RtEngine::VideoResourceEntry` (runtime/types/engine/MainLoop.h):
 // +0x00 typeId (External vtable slot 2), +0x04 NEVER WRITTEN (see

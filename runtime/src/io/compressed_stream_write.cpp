@@ -245,7 +245,7 @@ inline uint32_t StoredLength(const Header& h) {
 // returns the right answer (reference_hidden_retslot_wild_write.md), so the
 // slot is SPELLED here as the first parameter rather than left to the compiler:
 // registering this into a vtable means an arbitrary caller supplies RDX, and a
-// C++ `RtSystem::String Get(const void*)` would put the slot where MSVC puts
+// C++ `System::String Get(const void*)` would put the slot where MSVC puts
 // it, which is the same place — but only by agreement, not by construction.
 // Written out, the agreement is checkable.
 // INTEGRATOR, WAVE 19 MERGE: this lane's ?GetSource@Stream@IO@@ body was

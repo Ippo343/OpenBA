@@ -1,7 +1,6 @@
 #pragma once
 // ============================================================================
-// runtime/types/system/WideString.h — RtSystem::WideString (the POD) and the
-//                                     real `System::WideString` class
+// runtime/types/system/WideString.h — the real `System::WideString` class
 // ============================================================================
 //
 // WideString is System::String over wchar_t: ONE pointer, the SAME allocation
@@ -44,27 +43,6 @@
 // four are registered. Nothing is invented; the bodies that were already there
 // move onto members, exactly as `System::String` did at B.3.1 step 1
 // (runtime/types/system/String.h), whose shims this file's doors now mirror.
-//
-// *** THE POD DOES NOT MOVE AND DOES NOT GET A DESTRUCTOR. ***
-// RULE B4b-1 does NOT fire here: the POD is `RtSystem::WideString` and has
-// been since Wave 9 — it never occupied the class's name, so nothing is
-// renamed and no by-value holder changes spelling. The three files that hold
-// one by value and seed it through the ctor door —
-//   runtime/src/application/platform_startup_win.cpp:269,383
-//   runtime/src/application/application_win.cpp:343,360,362
-//   runtime/src/engine/updateloop_loadresources.cpp:158
-// and `value_types.cpp`'s `RtSystem::WideString ws{};` in DateAsString —
-// keep the POD spelling and keep calling the doors. The POD therefore stays
-// TRIVIALLY DESTRUCTIBLE (B34_RULES §1.5 rule 3, the `RtSystem::String`
-// double-free lesson) and is asserted so below; the CLASS's destructor exists
-// and is asserted NON-trivial, which is what says the two are deliberately
-// different and not a drift.
-//
-// ⚠ THE GREP HAZARD (B34_RULES §7.2) IS ARMED FOR THIS NAME FROM THIS COMMIT
-// ON. Inside any `namespace System { ... }` block a bare `WideString` binds the
-// REAL CLASS; inside `namespace RtSystem` it binds the POD. Both are one
-// `wchar_t*`, so the wrong spelling compiles and behaves until the day one of
-// the two gains a member. Spell `RtSystem::WideString` for the POD, always.
 // ============================================================================
 
 #include <cstdint>

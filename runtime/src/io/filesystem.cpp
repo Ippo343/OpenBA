@@ -170,7 +170,7 @@ static int StriCmpAscii(const char* a, const char* b) {
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
-// The body is the member `IO::Modification::Find(const RtSystem::Filename&)`,
+// The body is the member `IO::Modification::Find(const System::Filename&)`,
 // below.
 
 }  // namespace RtIO
