@@ -455,3 +455,23 @@ command for low system memory; the main checkout was reset to `4f8da1d4` and not
 unit at its tip by its own hand-in (62 `void*`-first functions: 27 typed, 15 deleted, 10 tagged probes, 10 left; `coll_bridge.h`
 deleted; metric 389 -> 386). Its first commit `6f1c444e` swept in a stale index and `026a2101` reverses it: merge it SQUASHED
 (`git merge --squash b4fin-VOID`), build, gate with `ui tools`.
+
+### The finishing session (S4, 2026-10-05): recover, `b4fin-VOID`, three rounds of the left work, the rulings
+
+Brief: `S4` agents ran on `WAVEY_BRIEF.md` plus a one-page session brief (start commit, the rules that cost a re-run, hand-in). Every
+gate: clean builds, unit 914 / 0, 0 new warnings, new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`, resave 5/5.
+
+| 159 | S4 base | `b6d3fdf6` | `make clean` + the full gate on main after the recovery (39 merged worktrees and 320 merged branches removed; the memory was VS Code's `cpptools` at 20 GB, not Ghidra); builds `4f8da1d4`'s rename | exit 0 · 914 / 0 · 0 | ok | 5/5 | — | 0 |
+| 160 | FIN-VOID (squashed, `b4s4-VOIDSQ`) | `b012308f` | 27 `void*`-first functions typed, 15 forwarders deleted, 10 raw-address probes tagged, `coll_bridge.h` deleted: 389 -> 386 | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 161 | S4-SIG | `51f4c0c5` | the dead `ExternalPtrSerializeGeneric(void**, void*)` deleted, two stale bridge comments, the H8 / dead-argument tags rewritten with retail's addresses; row 820: -> 384 | exit 0 · 914 / 0 · 0 | ok | 5/5 | — | 0 |
+| 162 | S4-IBP | `70655b8f` | CitizenBehavior's 16 InternalBasePtr lists and the bucket entity list are `CitizenIbpList<T>` (retail dtor 0x1400907b0 frees the arrays only; 49 reader files); row 810: -> 383 | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 163 | S4-GFX | `d04813af` | Geometry's `InterpolatedState<Transform>` member (0x1800a4270 / 0x1800a41c0); `behaviour:` SetLight's Vector3 / Vector4 references and SunLight's members (0x1801081f0); `behaviour:` `ParticleBoundsRecord` ctor (0x180103bf0); MetaData58 and PixelProgram::Sampler element ops typed: -> 371 (one comment conflict with SIG, GFX's side kept) | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok · devlost COMPLETE=219, crash log empty | 0 |
+| 164 | S4-RTUI | `8c56e5f4` | `SortByKey70(IO::PackageFile**)`, `DialogInstance::_root` an InternalPtr built in place through the NoStore ctor (0x1801148f1), the debug Sprite wrappers, `_captureViewport` a `Video::Viewport`: 7 casts | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 165 | S4-POS | `79901164` | `InteractNodePosition` (0x140122e20) takes `Math::Vector3*`, 47 call sites; `behaviour:` 16 zeroed float[4] locals are retail's 12-byte slot; `Vector3Slot` (ruled, FLOOR.md); row 850 | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 166 | S4-RESOLVE | `3e57f2ee` | `behaviour:` one `NamedExternalRef` built in member order by MapGenerator (0x1400a3030) and TerrainGenerator (0x1400b1810); the SetMesh / PlayAnimation `B4 FORWARD` overloads deleted; rows 860-861: -> 359 (a conflict in `mesh.cpp` / `Mesh.h` with GFX's tags: the deletion kept, the merged tree built before the commit) | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok · worldcmp identical (118 lines) | 0 |
+| 167 | S4 rulings + S4-GFX2 | `b32b283f` | the coordinator's floor rulings (`4bf792db`: 13 casts marked, 5 DEFERRED tags, 3 unmarkable); `behaviour:` Camera's copy ctor is retail's partial body (0x180017a70), the SceneGroup ctor (0x1800628d0), `behaviour:` PlatformSerialize's LevelArray teardown (0x1800f3226), TriangleVertex and BoxTransform typed: -> 342 | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok · devlost COMPLETE=207 · worldcmp identical | 0 |
+| 168 | S4-RT2 | `fbb25295` | `IsDerivedFromNullSafe(const Object::Base*)`, `InternalPtr<T>`'s two casts are static_casts (38 include lines), `Array16Assign`'s destination typed; row 880: -> 338 | exit 0 · 914 / 0 · 0 | ok | 5/5 | ui ok · tools ok | 0 |
+| 169 | S4 rulings 2 + S4-LAST | `5dd5f226` | nine open-coded-release lines tagged DEFERRED, `const_api` on `batchc_gfx_leaves.cpp:801`, `leftfree_c.py`, acceptance line 01's closing form; `RtObject_Type_Serialize(uint32_t*)` (0x1400e8d00): -> 336 | exit 0 · 914 / 0 · 0 | ok | 5/5 | — | 0 |
+
+Metric at the S4 end: **336** (`dx11/` 240; **96 outside it**: 63 retail-difference, 23 named prerequisite, 7 dx11 seam, 3 ruled to stay
+listed, 0 work — `LEFT_FREE.md` section C, `leftfree_c.py --check`).
