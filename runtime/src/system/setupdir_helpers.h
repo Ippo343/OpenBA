@@ -8,8 +8,8 @@
 // routing them through RT_EXPORT_ONCE would mean a name lookup per call and,
 // worse, would make the pair's behaviour depend on registration order.
 //
-// All three return a String BY VALUE: the hidden return slot is the argument
-// after `this`.
+// Both return a String BY VALUE (B.4 Z LAST IO: declared so; the hidden return
+// slot is the compiler's).
 // ============================================================================
 
 #include "../../types/system/String.h"
@@ -18,9 +18,9 @@
 namespace RtSystem {
 // ?GetPlatformName@Configuration@System@@QEAA?AVString@2@W4Platform@12@@Z
 //                                                                  0x1800c5210
-String* RtSystem_Configuration_GetPlatformName(void* self, String* ret, int platform);
+System::String RtSystem_Configuration_GetPlatformName(void* self, int platform);
 
 // ?GetBuildName@Configuration@System@@QEAA?AVString@2@W4Build@12@@Z 0x1800c5280
-String* RtSystem_Configuration_GetBuildName(void* self, String* ret, int build);
+System::String RtSystem_Configuration_GetBuildName(void* self, int build);
 
 }  // namespace RtSystem

@@ -231,8 +231,7 @@ namespace RtIO {
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
+using RtSystem::String;          // the POD the metadata readers below still fill (BuildStringFrom)
 using RtSystem::StringRefCount;
 using RtSystem::RtString_ReleaseInline;
 using RtSystem::RtString_SetLength;

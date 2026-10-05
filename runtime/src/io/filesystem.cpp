@@ -54,11 +54,7 @@
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::StringLength;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
-using RtSystem::SysFile;  //   "
 
 // Case-insensitive ASCII compare, sign-preserving (needed by GetPackfileId's
 // tree descent, not just equality). Duplicated rather than shared from
@@ -304,9 +300,9 @@ uint32_t FileSystem::GetPackfileId(const System::Filename& path) const {
 // stored lengths first, then StriCmp only if they match. NO ADDED NULL GUARD
 // on `_mods` — this file's own banner records that Exists, GetPackfileId and
 // Find all deref fields unguarded because retail does.
-int Modification::Find(const RtSystem::Filename& path) const {
+int Modification::Find(const System::Filename& path) const {
     int ours = -1;
-    const char* pathData = path.data;
+    const char* pathData = path._data;
     const int pathLen = pathData ? RtIO::StringLength(pathData) : 0;
 
     for (int i = 0; i < _mods.size; ++i) {

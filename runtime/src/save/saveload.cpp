@@ -113,7 +113,6 @@ using RtSave::SaveInfo;
 using RtSave::ModInfo;
 using RtSave::Operation;
 using RtIo::MemoryStream;
-using RtSystem::String;
 
 namespace {
 
@@ -146,9 +145,6 @@ namespace {
 // ----------------------------------------------------------------------------
 using RtSaveDetail::MemAllocFn;
 using RtSaveDetail::MemFreeFn;
-using RtSaveDetail::GetDataDirectoryFn;
-using RtSaveDetail::ConcatFn;
-using RtSaveDetail::AdjustDelimsFn;
 using RtSaveDetail::SaveLoadVoidFn;
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;

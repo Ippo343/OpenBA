@@ -198,7 +198,7 @@ void ModDetailsDialog::OnOpened() {
     int conflictCount = mod.files.size;
     System::String conflictResult("^jl^f0^c0^lb");
     // The conflicting mods' filenames.
-    const RtSystem::Filename* conflictArray = mod.files.data;   // Mod +0x70 Array<Filename>
+    const System::Filename* conflictArray = mod.files.data;   // Mod +0x70 Array<Filename>
 
     for (int i = 0; i < conflictCount; i++) {
         // Find(const Filename&) takes the ADDRESS of the array element (retail

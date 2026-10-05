@@ -378,10 +378,7 @@
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 
 // Retail's `Collection::Array<Filename>` — {_data, _size, _capacity}, the same
 // 16-byte header every Array in this engine has (runtime/types/collection/

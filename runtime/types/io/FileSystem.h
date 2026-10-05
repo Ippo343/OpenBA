@@ -300,9 +300,11 @@ static_assert(offsetof(FileInfo, _name1)     == 0x28, "OpenFile: MOV [RBP-0x8],0
 // itself) hold the out-parameter as this one type instead of four local
 // spellings cast to it. Still the plain 16-byte header, NOT
 // `Collection::Array<System::Filename>` -- the hand-derived spec rule above
-// stands; `data` is the `RtSystem::Filename` POD element every caller bridges.
+// stands. B.4 Z LAST IO: `data` points at real `System::Filename` elements
+// (the header stays trivial; the elements are built by the row's assign and
+// released by each caller's loop, as retail).
 struct FilenameArray {
-    RtSystem::Filename* data;       // +0x00
+    System::Filename*   data;       // +0x00
     int32_t             size;       // +0x08
     int32_t             capacity;   // +0x0c
 };

@@ -44,14 +44,10 @@ using RtSave::SavedState;
 using RtSave::SaveInfo;
 using RtSave::ModInfo;
 using RtIo::MemoryStream;
-using RtSystem::String;
 
 // ---- function pointer shapes ------------------------------------------------
 using MemAllocFn         = void*   (*)(uint64_t size, int align);
 using MemFreeFn          = void    (*)(void* p);
-using GetDataDirectoryFn = String*  (*)(const void* fs, String* ret);
-using ConcatFn           = String*  (*)(String* ret, const String* lhs, const String* rhs);
-using AdjustDelimsFn     = void     (*)(String* self);
 using MemStreamOpenFn    = bool     (*)(MemoryStream* self, int size);
 using SaveLoadVoidFn     = void     (*)(SaveLoad* self);
 

@@ -90,8 +90,6 @@
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::RtString_ReleaseInline;
 
 // ============================================================================

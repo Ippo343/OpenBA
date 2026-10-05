@@ -314,12 +314,8 @@
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::RtMemAlloc;
 using RtSystem::RtMemFree;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
-using RtSystem::SysFile;  //   "
 
 namespace {
 
@@ -709,7 +705,7 @@ void FileSystem::LoadPackages() {
         // Unguarded on `pkg` — retail calls ReadPackfile with whatever the
         // constructor branch left in R12, including zero on the out-of-memory
         // path (`XOR R12D,R12D` at 0x1800ab5a5). Faithful; not a null check.
-        pkg->IO::PackageFile::ReadPackfile(RtIO::Sys(found.data[i]));
+        pkg->IO::PackageFile::ReadPackfile(found.data[i]);
         RtIO::AppendPackfile(this, pkg);
     }
 
@@ -848,7 +844,7 @@ void FileSystem::LoadPackages() {
     // null test inside.
     const int32_t foundCount = found.size;   // the shadow below runs after the zeroing
     for (int64_t i = 0; i < static_cast<int64_t>(found.size); ++i)
-        RtIO::Sys(found.data[i]).~Filename();
+        found.data[i].~Filename();
     RtIO::RtMemFree(found.data);
     found.data  = nullptr;
     found.size = 0;

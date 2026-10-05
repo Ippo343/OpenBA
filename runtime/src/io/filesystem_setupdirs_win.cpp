@@ -135,14 +135,10 @@
 
 namespace RtIO {
 
-using RtSystem::String;
-using RtSystem::Filename;
 using RtSystem::StringRefCount;
 using RtSystem::RtMemAlloc;
 using RtSystem::RtMemFree;
 using RtSystem::RtString_ReleaseInline;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
-using RtSystem::SysFile;  //   "
 using RtSystem::RtSystem_Configuration_GetPlatformName;
 using RtSystem::RtSystem_Configuration_GetBuildName;
 
@@ -379,14 +375,9 @@ void FileSystem::SetupDirectories() {
     // before Engine::Startup step 3 — giving "Win" and "Data".
     const int platformId = cfg ? cfg->_currentPlatform : 0;                // +0x20
     const int buildId    = cfg ? cfg->_currentBuild : 0;                   // +0x28
-    // Both are hidden-return-slot entry points owned by another file and still
-    // POD-shaped, so the value lands in a POD and is stolen into the class.
-    RtSystem::String platformPod{nullptr};
-    RtIO::RtSystem_Configuration_GetPlatformName(cfg, &platformPod, platformId);
-    System::String platform(std::move(RtIO::Sys(platformPod)));
-    RtSystem::String buildPod{nullptr};
-    RtIO::RtSystem_Configuration_GetBuildName(cfg, &buildPod, buildId);
-    System::String build(std::move(RtIO::Sys(buildPod)));
+    // Both return a String by value: each local IS the hidden return slot.
+    System::String platform = RtIO::RtSystem_Configuration_GetPlatformName(cfg, platformId);
+    System::String build    = RtIO::RtSystem_Configuration_GetBuildName(cfg, buildId);
 
     // --- 0x1800ac08c-0x1800ac0ef: sourceDirectory --------------------------
     // The four `%s` arguments are passed RAW, exactly as retail passes the

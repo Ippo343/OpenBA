@@ -142,7 +142,6 @@ using RtSave::ModInfo;
 using RtSave::SaveLoad;
 using RtSaveDetail::MemAlloc;
 using RtSaveDetail::MemFree;
-using RtSystem::String;
 
 namespace {
 

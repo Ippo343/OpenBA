@@ -291,7 +291,6 @@
 
 namespace RtIO {
 
-using RtSystem::String;
 
 namespace {
 

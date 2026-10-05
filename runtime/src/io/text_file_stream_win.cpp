@@ -79,7 +79,6 @@ namespace RtIO {
 using RtIo::Stream;
 using RtIo::FileStream;
 using RtIo::TextFileStream;
-using RtSystem::Filename;
 
 // `?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z` (0x1800aa8f0) — PORTED
 // and registered by lane FILE (file_stream.cpp:483 and :559). Called DIRECTLY,

@@ -168,9 +168,6 @@
 
 namespace RtIO {
 
-using RtSystem::Filename;
-using RtSystem::String;
-using RtSystem::Sys;      // the transitional POD->class bridge (pod_bridge.h)
 
 // ---------------------------------------------------------------------------
 // The allocator boundary. See the banner: the composed statics, by address,
@@ -325,19 +322,19 @@ void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
 // 0x1800091f0 — Collection::Array<Filename>::operator=. Unlike the two above it
 // carries its own self-assignment early-out (`CMP RCX,RDX; JNZ`), because its
 // callers do not all guard.
-void* RtColl_ArrayFilenameAssign_1800091f0(ModArrayOf<Filename>* dst, const ModArrayOf<Filename>* src) {
+void* RtColl_ArrayFilenameAssign_1800091f0(ModArrayOf<System::Filename>* dst, const ModArrayOf<System::Filename>* src) {
     if (dst == src) return dst;
     // ENDGAME B.3.2 step 2 — retail 0x1800098d0; see the identical conversion's
     // rationale on Mod::~Mod's +0x70 site below (trait-derived, no explicit spec).
     reinterpret_cast<Collection::Array<System::Filename>&>(*dst).~Array();  // LEFT: audit DEFERRED:PASS2_LEDGER wave X round 1 (Mod is an element of erased containers with hand-wri; H5 Mod::files / bytes / ints are ModArrayOf<T> raw storage of Collection::Array<T> (Mod is a POD built and torn down by hand)
     ArrayAssignGrow(dst, src, 8, 8);
     for (int32_t i = 0; i < dst->size; ++i) {
-        Filename* d = dst->data + i;
+        System::Filename* d = dst->data + i;
         if (d == nullptr) continue;
         // CALL 0x1800067d0 — Filename::Filename(Filename const&). `d` is inside
         // the buffer ArrayAssignGrow just (re)allocated: raw, uninitialised
         // bytes, so placement-construct into it.
-        new (&Sys(*d)) System::Filename(Sys(src->data[i]));
+        new (d) System::Filename(src->data[i]);
     }
     return dst;
 }
@@ -457,7 +454,7 @@ void* RtIo_Mod_CopyCtor_1800101e0(Mod* dst, const Mod* src) {
     // CALL 0x1800067d0 — Filename copy ctor (zeroes, adopts, AdjustDelimiters).
     // `dst->file` is raw, uninitialised bytes here (part of the Mod the caller
     // just zeroed member-by-member), so the value is placement-constructed.
-    new (&Sys(dst->file)) System::Filename(Sys(src->file));
+    new (&RtSystem::Sys(dst->file)) System::Filename(RtSystem::Sys(src->file));
 
     dst->set.root = nullptr;
     dst->set.count = 0;
@@ -501,7 +498,7 @@ void* RtIo_Mod_Assign_180026ef0(Mod* dst, const Mod* src) {
     // because the destination already owns a string. That PAIR is
     // `Filename::operator=(const Filename&)`, 0x180006770 (Filename.h
     // DELIMITERS note): self-guard on the buffer, release, adopt, normalise.
-    Sys(dst->file) = Sys(src->file);
+    RtSystem::Sys(dst->file) = RtSystem::Sys(src->file);
 
     if (&src->set != &dst->set) {
         if (dst->set.root != nullptr) {
@@ -538,7 +535,7 @@ void RtIo_Mod_Dtor_180011460(Mod* self) {
     // +0x58 — retail's Filename dtor (0x180006980), which is String::Release()
     // on the same bytes (filename.cpp's ~Filename); byte-identical to the
     // refcount code this replaced.
-    Sys(self->file).~Filename();
+    RtSystem::Sys(self->file).~Filename();
 
     // ENDGAME B.3.2 step 2 — +0x40/+0x30, retail 0x1800112a0 / 0x180011110.
     // `uint8_t`/`int32_t` are trivially destructible, so `SpecFor<T>()` sets
