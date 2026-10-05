@@ -280,8 +280,8 @@ void FreeOutline(Outline& o) {
 // The decompile structure is unusual because the outer "shrink" path walks
 // the OLD buffer, not the new one — we follow that exact pattern.
 //
-// LEFT: worldgen.cpp (GAME-c) passes the header as void*.
-extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount) {
+// Both callers (geometry_serialize.cpp, worldgen.cpp) hand WorldGeometry +0x1E0.
+extern "C" void Reimpl_Array_Resize_ArrayOfArrays(RawArray<RawArray<Math::Vector2>>* arrayHeader, int newCount) {
     if (!arrayHeader) return;
     if (newCount < 0) {
         // Defensive: see GenericArrayResize note. The shrink-path here would
@@ -307,7 +307,7 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
         return;
     }
 
-    RawArray<Outline>& hdr = *reinterpret_cast<RawArray<Outline>*>(arrayHeader);   // LEFT: audit WORK (SIG; blocked by the callers' raw triples (geometry, name database, ...): each holder typed first): the C entry receives each caller's header as void* (other owners' raw triples, H5)
+    RawArray<Outline>& hdr = *arrayHeader;
 
     int oldCount = hdr.size;
     if (newCount == oldCount) return;

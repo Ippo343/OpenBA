@@ -204,8 +204,9 @@ extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  
 extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);  // 0x14000a590
 
 // ---- serialize_struct60b.cpp
-extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);  // 0x14001f250
+template <class T> struct RawArray;   // Action/PathSearch.h
 struct GeometryBatch;   // Game/WorldGeometryElements.h
+extern "C" void Reimpl_Struct60B_Resize(RawArray<GeometryBatch>* arrayHeader, unsigned int newCount);  // 0x14001f250
 extern "C" GeometryBatch* Reimpl_Struct60B_CopyCtor(GeometryBatch* dst, const GeometryBatch* src);  // 0x14001f5e0
 
 // ---- town_storage_seed.cpp
@@ -303,4 +304,5 @@ void ResizeStride0x10(void* hdr, int n);  // 0x140017640
 // serialize_image_upload.cpp
 // serialize_resize_helpers.cpp
 extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount);
-extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount);
+namespace Math { class Vector2; }
+extern "C" void Reimpl_Array_Resize_ArrayOfArrays(RawArray<RawArray<Math::Vector2>>* arrayHeader, int newCount);  // WorldGeometry +0x1E0
