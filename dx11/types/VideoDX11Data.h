@@ -29,6 +29,7 @@ struct DataBase {
     void* owner;   // +0x08  Video::Device* / Video::Context* / Video::ImageBuffer* / ...
 };
 static_assert(sizeof(DataBase) == 0x10, "DataBase size");
+static_assert(offsetof(DataBase, vptr) == 0x0, "DataBase::vptr");
 static_assert(offsetof(DataBase, owner) == 0x08, "DataBase::owner");
 
 // ============================================================
@@ -105,6 +106,11 @@ struct DeviceData {
     int32_t   trackedCapacity;   // +0x6c
 };
 static_assert(sizeof(DeviceData) == 0x70, "DeviceData size (MemAlloc 0x70 @ 0x1800011a0)");
+static_assert(offsetof(DeviceData, vptr) == 0x0, "DeviceData::vptr");
+static_assert(offsetof(DeviceData, device) == 0x8, "DeviceData::device");
+static_assert(offsetof(DeviceData, unk10) == 0x10, "DeviceData::unk10");
+static_assert(offsetof(DeviceData, pad41) == 0x41, "DeviceData::pad41");
+static_assert(offsetof(DeviceData, cursorHotspotY) == 0x5C, "DeviceData::cursorHotspotY");
 static_assert(offsetof(DeviceData, swapChain)       == 0x18, "DeviceData::swapChain");
 static_assert(offsetof(DeviceData, d3dDevice)       == 0x20, "DeviceData::d3dDevice");
 static_assert(offsetof(DeviceData, d3dContext)      == 0x28, "DeviceData::d3dContext");
@@ -199,6 +205,8 @@ struct ContextData {
     void*   d3dContext; // +0x18  ID3D11DeviceContext*, cached by slot 1
 };
 static_assert(sizeof(ContextData) == 0x20, "ContextData size");
+static_assert(offsetof(ContextData, vptr) == 0x0, "ContextData::vptr");
+static_assert(offsetof(ContextData, pad14) == 0x14, "ContextData::pad14");
 static_assert(offsetof(ContextData, context)    == 0x08, "ContextData::context");
 static_assert(offsetof(ContextData, topology)   == 0x10, "ContextData::topology");
 static_assert(offsetof(ContextData, d3dContext) == 0x18, "ContextData::d3dContext");
@@ -271,6 +279,7 @@ struct ImageBufferData {
     void* shaderResourceView; // +0x30  ID3D11ShaderResourceView*
 };
 static_assert(sizeof(ImageBufferData) == 0x38, "ImageBufferData size");
+static_assert(offsetof(ImageBufferData, vptr) == 0x0, "ImageBufferData::vptr");
 static_assert(offsetof(ImageBufferData, imageBuffer)        == 0x08, "ImageBufferData::imageBuffer");
 static_assert(offsetof(ImageBufferData, sampler)            == 0x10, "ImageBufferData::sampler");
 static_assert(offsetof(ImageBufferData, texture)            == 0x18, "ImageBufferData::texture");
@@ -314,6 +323,9 @@ struct ConstantBufferData {
     int32_t bufferCapacity; // +0x24
 };
 static_assert(sizeof(ConstantBufferData) == 0x28, "ConstantBufferData size");
+static_assert(offsetof(ConstantBufferData, vptr) == 0x0, "ConstantBufferData::vptr");
+static_assert(offsetof(ConstantBufferData, constantBuffer) == 0x8, "ConstantBufferData::constantBuffer");
+static_assert(offsetof(ConstantBufferData, pad14) == 0x14, "ConstantBufferData::pad14");
 static_assert(offsetof(ConstantBufferData, activeIndex)    == 0x10, "ConstantBufferData::activeIndex");
 static_assert(offsetof(ConstantBufferData, buffers)        == 0x18, "ConstantBufferData::buffers");
 static_assert(offsetof(ConstantBufferData, bufferCount)    == 0x20, "ConstantBufferData::bufferCount");
@@ -342,6 +354,9 @@ struct IndexBufferData {
     uint8_t pad1d[3];
 };
 static_assert(sizeof(IndexBufferData) == 0x20, "IndexBufferData size");
+static_assert(offsetof(IndexBufferData, vptr) == 0x0, "IndexBufferData::vptr");
+static_assert(offsetof(IndexBufferData, indexBuffer) == 0x8, "IndexBufferData::indexBuffer");
+static_assert(offsetof(IndexBufferData, pad1d) == 0x1D, "IndexBufferData::pad1d");
 static_assert(offsetof(IndexBufferData, buffer)      == 0x10, "IndexBufferData::buffer");
 static_assert(offsetof(IndexBufferData, writeCursor) == 0x18, "IndexBufferData::writeCursor");
 static_assert(offsetof(IndexBufferData, locked)      == 0x1c, "IndexBufferData::locked");
@@ -357,6 +372,9 @@ struct VertexBufferData {
     uint8_t pad1d[3];
 };
 static_assert(sizeof(VertexBufferData) == 0x20, "VertexBufferData size");
+static_assert(offsetof(VertexBufferData, vptr) == 0x0, "VertexBufferData::vptr");
+static_assert(offsetof(VertexBufferData, vertexBuffer) == 0x8, "VertexBufferData::vertexBuffer");
+static_assert(offsetof(VertexBufferData, pad1d) == 0x1D, "VertexBufferData::pad1d");
 static_assert(offsetof(VertexBufferData, buffer)      == 0x10, "VertexBufferData::buffer");
 static_assert(offsetof(VertexBufferData, writeCursor) == 0x18, "VertexBufferData::writeCursor");
 static_assert(offsetof(VertexBufferData, locked)      == 0x1c, "VertexBufferData::locked");
@@ -400,6 +418,7 @@ struct VertexLayoutData {
     void* inputLayout;  // +0x10  ID3D11InputLayout* (built with the "TEXCOORD" semantic string)
 };
 static_assert(sizeof(VertexLayoutData) == 0x18, "VertexLayoutData size");
+static_assert(offsetof(VertexLayoutData, vptr) == 0x0, "VertexLayoutData::vptr");
 static_assert(offsetof(VertexLayoutData, vertexLayout) == 0x08, "VertexLayoutData::vertexLayout");
 static_assert(offsetof(VertexLayoutData, inputLayout) == 0x10, "VertexLayoutData::inputLayout");
 
@@ -430,6 +449,7 @@ struct VertexProgramData {
     void* variants[4];   // +0x10  ID3D11VertexShader*[4]
 };
 static_assert(sizeof(VertexProgramData) == 0x30, "VertexProgramData size");
+static_assert(offsetof(VertexProgramData, vptr) == 0x0, "VertexProgramData::vptr");
 static_assert(offsetof(VertexProgramData, vertexProgram) == 0x08, "VertexProgramData::vertexProgram");
 static_assert(offsetof(VertexProgramData, variants) == 0x10, "VertexProgramData::variants");
 static_assert(sizeof(VertexProgramData::variants) == 0x20, "4 shader permutations");
@@ -451,6 +471,7 @@ struct PixelProgramData {
     void* variants[4];  // +0x10  ID3D11PixelShader*[4]
 };
 static_assert(sizeof(PixelProgramData) == 0x30, "PixelProgramData size");
+static_assert(offsetof(PixelProgramData, vptr) == 0x0, "PixelProgramData::vptr");
 static_assert(offsetof(PixelProgramData, pixelProgram) == 0x08, "PixelProgramData::pixelProgram");
 static_assert(offsetof(PixelProgramData, variants) == 0x10, "PixelProgramData::variants");
 static_assert(sizeof(PixelProgramData::variants) == 0x20, "4 shader permutations");
@@ -482,6 +503,7 @@ struct RenderStateData {
     void* rasterizerState;   // +0x20  ID3D11RasterizerState*
 };
 static_assert(sizeof(RenderStateData) == 0x28, "RenderStateData size");
+static_assert(offsetof(RenderStateData, vptr) == 0x0, "RenderStateData::vptr");
 static_assert(offsetof(RenderStateData, renderState)       == 0x08, "RenderStateData::renderState");
 static_assert(offsetof(RenderStateData, blendState)        == 0x10, "RenderStateData::blendState");
 static_assert(offsetof(RenderStateData, depthStencilState) == 0x18, "RenderStateData::depthStencilState");
@@ -517,6 +539,7 @@ struct VideoProgramData {
     void* videoProgram; // +0x08  Video::VideoProgram*
 };
 static_assert(sizeof(VideoProgramData) == 0x10, "VideoProgramData size");
+static_assert(offsetof(VideoProgramData, vptr) == 0x0, "VideoProgramData::vptr");
 static_assert(offsetof(VideoProgramData, videoProgram) == 0x08, "VideoProgramData::videoProgram");
 
 // 0x10, vtable 0x180018588 (4 slots), factory 0x180005aa0 — no private fields.
@@ -545,6 +568,7 @@ struct RenderBufferData {
     void* renderBuffer; // +0x08  Video::RenderBuffer*
 };
 static_assert(sizeof(RenderBufferData) == 0x10, "RenderBufferData size");
+static_assert(offsetof(RenderBufferData, vptr) == 0x0, "RenderBufferData::vptr");
 static_assert(offsetof(RenderBufferData, renderBuffer) == 0x08, "RenderBufferData::renderBuffer");
 
 // ============================================================

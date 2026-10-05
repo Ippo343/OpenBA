@@ -47,6 +47,8 @@ struct PostCallback {
     void* userData;   // +0x08: user data passed to callback
 };
 static_assert(sizeof(PostCallback) == 0x10, "PostCallback must be 0x10 bytes");
+static_assert(offsetof(PostCallback, funcPtr) == 0x0, "PostCallback::funcPtr");
+static_assert(offsetof(PostCallback, userData) == 0x8, "PostCallback::userData");
 
 // ============================================================
 // Opaque forward declarations — filled in as we decompile.
