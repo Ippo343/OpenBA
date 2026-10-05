@@ -174,7 +174,7 @@ template <void (*Core)(::Object::External*&, IO::Serializer&), class T>
 inline void ExternalPtrSerializeSlot(T* refField, IO::Serializer* serializer) {
     static_assert(sizeof(T) == 8, "an ExternalPtr slot is the eight bytes of an External*");
     if (!refField || !serializer) return;
-    Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // LEFT: audit floor elem_stride (coordinator marker): an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)
+    Core(*reinterpret_cast<::Object::External**>(refField), *serializer);   // an ExternalPtr<T> slot held as T* handed to the one erased External*& core (a T* slot is not an External*; retail shares the body across T by ICF)  // CAST-OK: elem_stride
 }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_GraphicsMesh(T* f, IO::Serializer* s)     { ExternalPtrSerializeSlot<&ExternalPtrSerialize_GraphicsMesh>(f, s); }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_Weather(T* f, IO::Serializer* s)          { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Weather>(f, s); }

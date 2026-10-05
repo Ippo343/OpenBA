@@ -134,7 +134,7 @@ Description* FindComp(const ComponentDescription* entity, uint32_t typeId) {
 } // namespace
 
 extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray) {
-    PtrArray* out = static_cast<PtrArray*>(outArray);   // LEFT: FLOOR? the one body of 0x140059670 serves two 8-byte-stride out arrays (TradeUI::_purchaseItems, an Array<PurchaseItem>; tradecomponent_dock.cpp:273, a StackArray<ComponentDescription*>): the erased core views its out array
+    PtrArray* out = static_cast<PtrArray*>(outArray);   // the one body of 0x140059670 serves two 8-byte-stride out arrays (TradeUI::_purchaseItems, an Array<PurchaseItem>; tradecomponent_dock.cpp:273, a StackArray<ComponentDescription*>): the erased core views its out array  // CAST-OK: elem_stride
     if (!out) return;
 
     // Retail opens with FUN_140001bb0(out, 0) — the stride-8 resize-to-zero. Its only

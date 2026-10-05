@@ -65,7 +65,7 @@ static_assert(offsetof(Node, height)  == 0x2a, "Set::Node::height  @ +0x2a");
 template <class E>
 const E& ElementOf(const Node* n) {
     static_assert(sizeof(E) <= sizeof(n->element), "the element fits the node's 0x10 bytes");
-    return *reinterpret_cast<const E*>(n->element);  // LEFT: audit (new line, elem_stride): the erased set core's one element view (rtsetavl::ElementOf)
+    return *reinterpret_cast<const E*>(n->element);   // the erased set core's one element view (rtsetavl::ElementOf)  // CAST-OK: elem_stride
 }
 
 // ---------------------------------------------------------------------------
