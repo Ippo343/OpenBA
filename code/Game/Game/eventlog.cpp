@@ -104,9 +104,6 @@ void AssignEventEntry(uint8_t* d, const uint8_t* s) {
 void InitEventEntry(uint8_t* dst) {
     rtcoll::InitAs<EventLogEntry, &ZeroEventEntry>(dst);
 }
-void DestroyEventEntry(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<EventLogEntry, &DestroyEventEntries>(ignoredThis, base, count);
-}
 
 }  // namespace
 
@@ -115,7 +112,7 @@ void DestroyEventEntry(void* ignoredThis, uint8_t* base, int count) {
 // combination no C++ element type can express.
 const rtcoll::ArraySpec EventLogRows::kSpec_EventEntry = {   // exe 0x140019b70 (grow),
     "Array<EventLogEntry>", 0x28, 8,                         //     0x1400199a0 (resize),
-    &AssignEventEntry, &InitEventEntry, &DestroyEventEntry, false,   // 0x14000a8a0 (~Array)
+    &AssignEventEntry, &InitEventEntry, &rtcoll::DestroyAs<EventLogEntry, &DestroyEventEntries>, false,   // 0x14000a8a0 (~Array)
     /*assign unwritten*/ 0x24, 0x28,   // plus +0x04..+0x07
     /*init   unwritten*/ 0x24, 0x28,   // plus +0x04..+0x07
     /*seed zero       */ 0,    0 };

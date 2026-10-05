@@ -37,6 +37,7 @@
 #include "object/TypeInfo.h"
 #include "Dialog/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "system/Value.h"   // System::Time: Tool::Update's time argument
 #include "Object/factory_registration.h"
 #include "Player/Tool.h"
 #include "Player/ToolSetting.h"
@@ -344,7 +345,7 @@ extern "C" int EntityUI_ToolTick_SA(PlayerToolManager* entityUI, int activeFlag,
     tool = mgr->currentTool.Get();
     if (!tool) return -1;
     {
-        int64_t timeLocal = time;
+        System::Time timeLocal{time};
         tool->Update(&timeLocal, (char)activeFlag);  // slot 7, +0x38
     }
 

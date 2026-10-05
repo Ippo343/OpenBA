@@ -29,8 +29,9 @@ void MarketBst_aaa0(MarketWork::ClaimTree* tree, CitizenComponent** key);
 void MarketBst_ac40(MarketWork::ClaimTree* tree, MarketWork::ClaimNode* node);
 
 // 0x14002aee0 -- __fastcall void(void* unusedRcx [RCX], void* node [RDX])
-// Destroys one node.  RCX is a genuinely DEAD parameter in retail (homed, never read);
-// it is kept in the signature so the address registry binds an ABI-identical function.
-void MarketBst_aee0(void* unusedRcx, MarketWork::ClaimNode* node);
+// Destroys one node.  RCX is a genuinely DEAD parameter in retail (homed, never read; its
+// two callers in 0x14002ac40 leave a stale node there): typed as the owning tree, which
+// the port passes.
+void MarketBst_aee0(MarketWork::ClaimTree* unusedTree, MarketWork::ClaimNode* node);
 
 } // extern "C"

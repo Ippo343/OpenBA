@@ -81,14 +81,13 @@
 
 namespace {
 
-inline void MemFree(void* p) { System::MemoryAllocator::MemFree(p); }
 
 // The free-and-zero of a RawArray header: retail's inlined trivial-element
 // ~Array (MemFree(data); data = 0; one qword over size + capacity = 0, H7: two
 // named stores).
 template <class T>
 void FreeRawArray(RawArray<T>& a) {
-    MemFree(a.data);
+    System::MemoryAllocator::MemFree(a.data);
     a.data = nullptr;
     a.size = 0;
     a.capacity = 0;
@@ -117,7 +116,7 @@ void PathCellQueue<T>::Release() {
     // Free the chunk chain: head pool.chunks, next = *chunk.
     while (pool.chunks != nullptr) {
         PathPoolLink* nextChunk = pool.chunks->next;
-        MemFree(pool.chunks);
+        System::MemoryAllocator::MemFree(pool.chunks);
         pool.chunks = nextChunk;
     }
 }
@@ -142,7 +141,7 @@ void PathOpenSet::Clear() {
     count = 0;
     while (pool.chunks != nullptr) {
         PathPoolLink* nextChunk = pool.chunks->next;
-        MemFree(pool.chunks);
+        System::MemoryAllocator::MemFree(pool.chunks);
         pool.chunks = nextChunk;
     }
 }
@@ -198,7 +197,7 @@ PathfinderThread::~PathfinderThread() {
     }
     FreeRawArray(results);
 
-    MemFree(grid.cellFlags);              // MemFree [thread + 0x158]
+    System::MemoryAllocator::MemFree(grid.cellFlags);              // MemFree [thread + 0x158]
     grid.search.open.Clear();             // ced0(thread + 0x90)
     FreeRawArray(grid.search.nodes);      // MemFree [thread + 0x80]; [thread + 0x80] = [thread + 0x88] = 0
 
@@ -206,7 +205,7 @@ PathfinderThread::~PathfinderThread() {
     PathCommand* cur = queueTail;
     while (cur != nullptr) {
         PathCommand* next = cur->prev;
-        MemFree(cur);
+        System::MemoryAllocator::MemFree(cur);
         cur = next;
     }
     queueHead = nullptr;                  // [thread + 0x68] = 0
@@ -265,13 +264,13 @@ Map::~Map() {
         pathfinder->DrainQueue();
         if (pathfinder != nullptr) {   // re-read [RBX + 0x68]
             pathfinder->~PathfinderThread();   // 0x1400a6720
-            MemFree(pathfinder);
+            System::MemoryAllocator::MemFree(pathfinder);
         }
     }
 
     if (regionGraph != nullptr) {
         regionGraph->ReleaseStorage();   // 0x1400a8570
-        MemFree(regionGraph);
+        System::MemoryAllocator::MemFree(regionGraph);
     }
 
     if (regionPairCache != nullptr) {
@@ -282,12 +281,12 @@ Map::~Map() {
         if (root != nullptr) {
             WorkBase_TreeNodeFree_e320(&cache->index.root, root->left);    // 0x14000e320
             WorkBase_TreeNodeFree_e320(&cache->index.root, root->right);
-            MemFree(root);
+            System::MemoryAllocator::MemFree(root);
         }
         cache->index.root = nullptr;                            // [+0x28] = 0
         cache->index.count = 0;                                 // [+0x30] = 0
         FreeRawArray(cache->ring);                              // [+0x18]; [+0x18]=[+0x20]=0
-        MemFree(cache);
+        System::MemoryAllocator::MemFree(cache);
     }
 
     // +0xe8 tree: free children @+0x10/+0x18 via 0x140014c30 (which takes
@@ -296,7 +295,7 @@ Map::~Map() {
     if (node != nullptr) {
         WorkBase_TreeNodeFree_14c30(&field_0xE8, node->left);    // 0x140014c30
         WorkBase_TreeNodeFree_14c30(&field_0xE8, node->right);
-        MemFree(node);
+        System::MemoryAllocator::MemFree(node);
     }
     field_0xE8.root = nullptr;                                  // [+0xe8] = 0
     field_0xE8.count = 0;                                       // [+0xf0] = 0

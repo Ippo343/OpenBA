@@ -15,7 +15,7 @@
 //
 // Declared in another header already (not redeclared here):
 //   AutoSaveDialog_Slot4                   0x14005e120  (code/Game/Dialog/AutoSaveDialog.h)
-//   ToolbarDialog_Ctor_Impl                0x1400b9910  (code/Game/Dialog/ToolbarDialog.h)
+//   ToolbarDialog::ToolbarDialog           0x1400b9910  (code/Game/Dialog/ToolbarDialog.h)
 
 #include <cstdint>
 #include "system/Value.h"   // System::Random (fn_GetCurrentProductIndex); was reached through engine_funcs.h

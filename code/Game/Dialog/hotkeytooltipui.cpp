@@ -69,8 +69,7 @@ static const Input::KeyMap* GetActualKeyMap() {
 // +0xD0 is the keyNames StringTable; both tutorial callers pass
 // *g_pKeyMapSingleton, which is exactly the container this function looks up, so
 // the substitution is exact.
-void Hotkey_BuildKeyName(void* retval, int device, int keyIndex);
-void Hotkey_BuildKeyName(void* retval, int device, int keyIndex) {
+void Hotkey_BuildKeyName(UI::String* retval, int device, int keyIndex) {
     GameContainer* container = g_gameContainer;
     if (!container) return;
 

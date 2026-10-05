@@ -34,7 +34,8 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/GraphicsMesh.h"   // ENDGAME B.3.9 TR: GraphicsMesh::TypeId()
 #include "graphics/Particle.h"       // ENDGAME B.3.9 TR: Particle::TypeId()
-#include "Component/coll_bridge.h"
+#include "collection/Collection.h"   // Collection::Array / ExplicitSpec (Ptr8ZeroArray)
+namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Entity/EntityList.h)
 #include "system/Filename.h"
 #include "system/String.h"
 #include "Object/factory_registration.h"
@@ -208,17 +209,17 @@ template <uint32_t N> void ByteAssign(uint8_t* d, const uint8_t* s) { std::memcp
 // nothing a C++ type's traits do not say — whole-stride byte copy, whole-stride
 // zero tail, no destroy, no deliberately-untouched extent — so each is now the
 // trait-derived `Collection::Array<T>` over an element that zeroes itself.
-// `GameColl::Bytes<N,A>` and `GameColl::Ptr8` are exactly those elements
-// (coll_bridge.h: NSDMI-zeroed, trivially copyable, trivially destructible), so
-// `SpecFor<T>()` re-derives the identical row. The retail addresses stay here as
-// the provenance. `kSpec_SpawnEntry` below does NOT collapse and stays explicit.
+// The old bridge header's zeroing elements were exactly those elements, so
+// `SpecFor<T>()` re-derived the identical row; the stride-8 pointer row is now
+// named (kSpec_PtrZero). The retail addresses stay here as the provenance.
+// `kSpec_SpawnEntry` below does NOT collapse and stays explicit.
 
 // FUN_140001bb0 — stride 8, align 8: raw pointer slots, zeroed on every new
 // slot (the heap-corruption note above Reimpl_Array_Resize_Stride08 says why
-// that zero is load-bearing — `GameColl::Ptr8`'s `= nullptr` NSDMI IS that zero).
-static_assert(sizeof(GameColl::Ptr8)  == 8, "Ptr8 stride");   // exe 0x140001bb0
-static_assert(alignof(GameColl::Ptr8) == 8, "Ptr8 align");
-using Ptr8ZeroArray = Collection::Array<GameColl::Ptr8>;
+// that zero is load-bearing): the row is kSpec_PtrZero (stride 8, align 8, qword
+// copy, zeroed tail, no destroy), the one the old Ptr8 element's trait row equalled.
+using Ptr8ZeroArray = Collection::Array<void*, Collection::DefaultAllocator,   // exe 0x140001bb0
+                                        Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
 
 // FUN_14000c520 — SpawnDescription entry {ExternalPtr @0, float minSpawnAge
 // @8, float maxSpawnAge @0xc}, stride 0x10, align 8. Whole-stride copy; the

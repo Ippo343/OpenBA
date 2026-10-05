@@ -107,9 +107,9 @@ namespace resourcelimitui_sa {
     // close the Town Hall". It is kept only so a row whose config somehow did not
     // bind still shows plausible data instead of always reading Log, and it now
     // says so when it fires.
-    static void* g_selves[11];
+    static ResourceLimitUI* g_selves[11];
     static int   g_count = 0;
-    int IdxForFallback(void* self) {
+    int IdxForFallback(ResourceLimitUI* self) {
         for (int i=0;i<g_count;i++) if (g_selves[i]==self) return i;
         if (g_count >= 11) { for (int i=0;i<11;i++) g_selves[i]=nullptr; g_count=0; }
         g_selves[g_count]=self;

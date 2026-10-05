@@ -187,7 +187,7 @@ struct WeldSet {
     int32_t  stride;     // key/element size in bytes
 };
 
-uint32_t WeldHash(const void* key, int stride) {
+uint32_t WeldHash(const void* key, int stride) {   // LEFT: void* is the raw byte record hashed (FNV-1a over `stride` bytes): the one body under WeldAdd<T>'s element types
     const uint8_t* k = (const uint8_t*)key;   // CAST-OK: byte_io
     uint32_t h = 2166136261u;            // FNV-1a
     for (int i = 0; i < stride; ++i) { h ^= k[i]; h *= 16777619u; }

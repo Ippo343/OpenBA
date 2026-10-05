@@ -345,10 +345,10 @@ static int ToolUI_MouseY(const Input::KeyMap* keyMap, const UI::DialogInstance* 
 
 // The node of the tool manager's +0x50 set keyed by `key` (the ToolUI's
 // description; the set also holds entity keys: the compare is by address).
-static PinnedToolNode* ToolUI_FindTracked(const void* key) {
+static PinnedToolNode* ToolUI_FindTracked(const ComponentDescription* key) {
     PinnedToolNode* node = GameUpdateLoop::_singleton->m_toolManager->field_0x50.root;
     while (node != nullptr) {
-        const void* nodeKey = node->key;
+        const ComponentDescription* nodeKey = node->key;
         if (key < nodeKey) {
             node = node->left;
         } else if (key > nodeKey) {

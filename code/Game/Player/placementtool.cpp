@@ -255,7 +255,7 @@ char PlacementTool::OnKey(char param2) {
 //   0x1400ffbf0 = cell change notify (tick sound)
 //
 // Original: 0x1400fdee0
-void PlacementTool::Update(void* /*param2*/, char param3) {
+void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
     Math::Vector3 pos(0.0f, 0.0f, 0.0f);

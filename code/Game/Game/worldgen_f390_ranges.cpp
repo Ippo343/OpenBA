@@ -167,7 +167,7 @@ static void DeepAppendAoA(TerrainPathList* paths, int newCount, const void* srcV
 // `kSpec_WgPathPointZeroInit` row in worldgen_f390_coastline.cpp onto the
 // trait-derived form — the row was a whole-stride byte copy, a whole-stride zero
 // tail, no destroy and no deliberately-untouched extent, which is precisely what
-// `rtcoll::SpecFor<GameColl::Bytes<0x1C,4>>()` derives).
+// `rtcoll::SpecFor<Bytes<0x1C,4>>()` (the old bridge element) derives).
 // Compared arm for arm against rtcoll::SetSizeCore and the retail body
 // 0x140023b70 (re-decompiled 2026-09-13): every structural arm matched.
 //
@@ -184,7 +184,7 @@ static void DeepAppendAoA(TerrainPathList* paths, int newCount, const void* srcV
 // contract; this one is an element type.
 // ============================================================
 // B.4: the element is TerrainPathPoint. Its row is the one
-// `SpecFor<GameColl::Bytes<0x1C,4>>()` derived (whole-stride byte copy, the new
+// `SpecFor<Bytes<0x1C,4>>()` (the old bridge element) derived (whole-stride byte copy, the new
 // tail value-initialised = zeroed, no destroy), spelled for the named record:
 // TerrainPathPoint is trivially default-constructible, so its own trait-derived
 // row would leave the tail untouched (coastline's arm), not this site's.

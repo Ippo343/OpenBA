@@ -200,7 +200,7 @@ struct Dispatcher {
     // compiler table whose slots call the static handlers below.)
 
     // slot 0 (+0x00): Step(node /*ignored*/, input) -> index / -1
-    static int Step(void* /*node*/, int input) {
+    static int Step(::ControllerComponent::Controller* /*node*/, int input) {
         int idx = TableFindIndex(table, input);
         return idx;
     }
@@ -230,7 +230,7 @@ struct Dispatcher {
     // (0x140010103 `MOV dword [R10],-1; OR EAX,-1; RET`) — B38_RULES D9 #9. A hit
     // leaves *pDesired alone. The idx/null bounds rejection is the tree's (retail has
     // none); it returns -1 without touching *pDesired, as before.
-    static int RequestTransition(void* /*node*/, int curIdx, int* pDesired) {
+    static int RequestTransition(::ControllerComponent::Controller* /*node*/, int curIdx, int* pDesired) {
         if (!pDesired || curIdx < 0 || curIdx >= table.count) return -1;
         const StateEntry<Owner>& e = table.entries[curIdx];
         int desired = *pDesired;
@@ -241,7 +241,7 @@ struct Dispatcher {
     }
     // slot 8 (+0x40): retail (Well 0x140010260) `XOR EAX,EAX; CMP [count],EAX;
     // SETNZ AL; RET` — true iff the class's state table has any state (D9 #9).
-    static char HasStates(void* /*node*/) { return table.count != 0 ? 1 : 0; }
+    static char HasStates(::ControllerComponent::Controller* /*node*/) { return table.count != 0 ? 1 : 0; }
     // slot 4 (+0x20): Update — dispatch table[idx].updateHandler(node+0x18, sm)
     // Like Enter, the exe update dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`
     // preserving RDX=sm (bug-class #6), so real update handlers (e.g. sub_81e0/sub_76e0)

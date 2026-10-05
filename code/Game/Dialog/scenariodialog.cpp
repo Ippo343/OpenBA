@@ -471,16 +471,3 @@ ScenarioDialog::ScenarioDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 // replaces (ui_dialog_stub_factories.cpp, B38 D4). Nothing reads 0x14015d2d0
 // back by address any more, so its registration (reg_nullsweep.cpp) is gone.
 
-// B4 FORWARD: mainmenudialog.cpp's two calls, the old signature.
-ScenarioDialog* ScenarioDialog_Ctor(void* self, UI::UserInterface* ui, const UI::Dialog* extRes,
-                                    const Object::InternalPtr<UI::DialogInstance>* parentIBP,
-                                    const Object::InternalPtr<MainMenuDialog>* parentMenuIBP,
-                                    uint8_t difficulty) {
-    if (!self) return nullptr;
-    Object::InternalPtr<UI::DialogInstance> parent;
-    if (parentIBP)
-        parent = *parentIBP;
-    return ::new (self) ScenarioDialog(ui, extRes, parent,
-                                       parentMenuIBP ? parentMenuIBP->Get() : nullptr,
-                                       difficulty);
-}

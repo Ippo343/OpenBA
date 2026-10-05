@@ -158,7 +158,7 @@ struct CostCmp {
 //            are summed; param_3 -> residence supplying the TARGET cell (its owner
 //            entity's position). Returns the summed path distance (0 when none
 //            qualify / unreachable). param_1 is dead (retail keeps it for ABI).
-extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,
+extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT: param_1 is dead in retail (never read) and its two callers hand different things: a ResidenceComponent::Family* and PathGraph_ReassignWorkers' own void* ctx (exe_bodies.h)
                                              ResidenceComponent* const* param_2,
                                              ResidenceComponent* const* param_3) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;

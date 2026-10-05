@@ -154,7 +154,7 @@ char FencedTool::OnCancel() {
 //   3. If invalid: remove mesh from scene
 // When inactive: remove mesh from scene if present.
 // Original: 0x1400dcad0
-void FencedTool::Update(void* /*param2*/, char param3) {
+void FencedTool::Update(const System::Time* /*param2*/, char param3) {
     // Initialize local offset vector to {0, 0, 0}
     float offset[3] = {0.0f, 0.0f, 0.0f};
 

@@ -122,18 +122,13 @@ static inline void*    MemA(uint64_t sz) {
     return System::MemoryAllocator::MemAlloc(sz, 8);
 }
 
-// Build a raw inline PerformWork action at `mem` (0x48 bytes). animIdx is the facing
+// The inline PerformWork actions below are placed at `mem` (0x48 bytes). animIdx is the facing
 // float stored at +0x28 (-1000.0f where the original used the literal 0xc47a0000).
 // time = the System::Time for +0x30, type = +0x2c work type.
 // ENDGAME B.3.9 EXA: the real class — PerformWork's parameterised ctor
 // (0x1400c9720) with useTool = 0 and field44 = -1 writes exactly the stores this
 // helper wrote by hand after the `??0Internal` door and the two stamps (the
 // citizen IBP is copied raw at +0x20, as retail's inlined ctor does).
-static PerformWork* InitPerformWork(void* mem, CitizenComponent* citizen, float animIdx,
-                                    uint32_t type, System::Time time) {
-    return ::new (mem) PerformWork(&citizen, animIdx, type, time._ticks,
-                                   /*useTool=*/false, /*field44=*/-1);
-}
 
 // Resolve the citizen's character (+0x278) and its +0x48 action stack; return the stack
 // and store the character via `outChar`. `doCleanup` runs FUN_1400c5400 cleanup (all
@@ -271,7 +266,7 @@ void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, Compo
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_140172124);
-            act = InitPerformWork(mem, entityVal, animIdx, 7, t);
+            act = ::new (mem) PerformWork(&entityVal, animIdx, 7, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -303,7 +298,7 @@ void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, Compo
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_140172124);
-            act = InitPerformWork(mem, entityVal, animIdx, 6, t);
+            act = ::new (mem) PerformWork(&entityVal, animIdx, 6, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -373,7 +368,7 @@ void CitizenAI_PerformWorkCtor5_bd070(CitizenComponent* const* citizenRef, Compo
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_14017214c);
-            act = InitPerformWork(mem, entityVal, animIdx, 8, t);
+            act = ::new (mem) PerformWork(&entityVal, animIdx, 8, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -424,7 +419,7 @@ void CitizenAI_PerformWorkCtor6_bd420(CitizenComponent* const* citizenRef, Compo
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_140172174);
-            act = InitPerformWork(mem, entityVal, animIdx, 8, t);
+            act = ::new (mem) PerformWork(&entityVal, animIdx, 8, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -462,7 +457,7 @@ void CitizenAI_PerformWorkCtor8_bd790(CitizenComponent* const* citizenRef, Compo
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_140172194);
-            act = InitPerformWork(mem, entityVal, -1000.0f, 8, t);
+            act = ::new (mem) PerformWork(&entityVal, -1000.0f, 8, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -523,7 +518,7 @@ void CitizenAI_PerformWorkCtor10_bccb0(CitizenComponent* const* citizenRef, Comp
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_14017214c);
-            act = InitPerformWork(mem, entityVal, animIdx, 8, t);
+            act = ::new (mem) PerformWork(&entityVal, animIdx, 8, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -588,7 +583,7 @@ void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, Comp
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_140172198);
-            act = InitPerformWork(mem, entityVal, animIdxB, 8, t);
+            act = ::new (mem) PerformWork(&entityVal, animIdxB, 8, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -612,7 +607,7 @@ void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, Comp
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_14017214c);
-            act = InitPerformWork(mem, entityVal, animIdxA, 8, t);
+            act = ::new (mem) PerformWork(&entityVal, animIdxA, 8, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -640,7 +635,7 @@ void CitizenAI_Pathfinding_NavigateTo_bda50(CitizenComponent* const* citizenRef,
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, kRdata_140172198);
-            act = InitPerformWork(mem, entityVal, -1000.0f, 8, t);
+            act = ::new (mem) PerformWork(&entityVal, -1000.0f, 8, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }
@@ -700,7 +695,7 @@ void CitizenAI_Pathfinding_WalkTowards_bb490(CitizenComponent* const* citizenRef
         if (mem) {
             CitizenComponent* entityVal = *citizenRef;
             System::Time t = {}; RtSystem_Time_Ctor(&t, param_5);
-            act = InitPerformWork(mem, entityVal, -1000.0f, 8, t);
+            act = ::new (mem) PerformWork(&entityVal, -1000.0f, 8, t._ticks, /*useTool=*/false, /*field44=*/-1);
         }
         Push(stack, act);
     }

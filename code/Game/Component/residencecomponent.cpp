@@ -268,7 +268,7 @@ inline Audio::Scene* AudioScene() {
 // preferring guardianed adults toward the front. CheckPtr resolves each lazy ptr on a
 // stack copy before the field reads (exactly as the original does).
 // ------------------------------------------------------------
-int RosterCompare_9e20(const void* pa, const void* pb) {
+int RosterCompare_9e20(const void* pa, const void* pb) {   // LEFT: qsort's comparator signature (int (*)(const void*, const void*)); each points at a CitizenComponent* slot
     // qsort's element pointers: each element is a CitizenComponent pointer.
     const CitizenComponent* ea = *reinterpret_cast<CitizenComponent* const*>(pa);   // CAST-OK: crt
     const CitizenComponent* eb = *reinterpret_cast<CitizenComponent* const*>(pb);   // CAST-OK: crt

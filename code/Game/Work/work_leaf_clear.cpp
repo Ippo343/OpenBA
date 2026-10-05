@@ -311,7 +311,7 @@ using GridTileArray = RawArray<GridTile>;
 // ABI: void fn(int* mapGrid, longlong* tileArray, int refCell)
 // Closure: qsort (CRT) + inline comparator. SAFE.
 namespace {
-int WorkLeaf_TileDistCompare(const void* a, const void* b) {
+int WorkLeaf_TileDistCompare(const void* a, const void* b) {   // LEFT: qsort's comparator signature (int (*)(const void*, const void*)); each points at a 0x10-byte tile record
     int da = static_cast<const GridTile*>(a)->distance;   // CAST-OK: crt
     int db = static_cast<const GridTile*>(b)->distance;   // CAST-OK: crt
     return da - db;   // MOV EAX,[RCX+4]; SUB EAX,[RDX+4]; RET

@@ -40,6 +40,10 @@
 #include "Object/factory_registration.h"
 #include "object/TypeInfo.h"   // Object::Base::Type (B3X W0)
 #include "object/VSlot.h"      // Object::CompilerSlotOf
+class ComponentEntity;        // Entity/ComponentEntity.h
+class ComponentDescription;   // Component/ComponentDescription.h
+class Component;              // Component/Component.h
+namespace Object { template <class T> class InternalPtr; }   // object/Internal.h
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -102,7 +106,8 @@ const char* TypeNameOf(const void* obj) {
 
 // Called from ComponentEntity_Serialize on the SAVE leg, before the component
 // IBP loop writes anything. Returns the number of bad slots found.
-extern "C" int EntityCompValidate(void* entity, void* desc, void* ibpArr, int count) {
+extern "C" int EntityCompValidate(const ComponentEntity* entity, const ComponentDescription* desc,
+                                  Object::InternalPtr<Component>* ibpArr, int count) {
     if (!ValidateOn() || !ibpArr || count <= 0) return 0;
 
     // Self-test, once: prove the detector DISCRIMINATES before trusting its

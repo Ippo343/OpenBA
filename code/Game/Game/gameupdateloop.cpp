@@ -113,7 +113,7 @@ extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context
 #include "Action/exe_bodies.h"           // Pf_RegionPairCacheTick_5d10
 #include "Component/exe_bodies.h"        // CitizenComp_AssignHousing
 #include "Dialog/exe_bodies.h"           // ApplyKeyMapToUI_Impl, Toolbar_ShowGroup_Impl
-#include "Dialog/ToolbarDialog.h"        // ToolbarDialog_Ctor_Impl
+#include "Dialog/ToolbarDialog.h"        // ToolbarDialog
 #include "Dialog/AutoSaveDialog.h"       // AutoSaveDialog (a UI::DialogInstance)
 #include "Dialog/EventNotifyDialog.h"    // EventNotifyDialog (a UI::DialogInstance)
 #include "Entity/CitizenBehavior.h"      // m_citizenList's class: CitizenBehavior::Update
@@ -296,6 +296,7 @@ extern "C" void Weather_SunUpdate(GameUpdateLoop* self, Video::Context* ctx);   
 // Returns a FLOAT in XMM0 (it tail-JMPs into the sqrtf at 0x140132010); this typedef
 // used to say uint32_t, which would have read garbage out of EAX. Its Time* param is
 // dead in retail — spilled at entry and never read.
+static float CalcWindFactor(const System::Time* time);   // defined below
 
 // System::Time::Time(this, float seconds) -> Time* (constructor from seconds)
 
@@ -365,29 +366,29 @@ extern "C" int GameUpdateLoop_CurrentFrame() { return s_frameNum; }
 
 // In-game tool-injection harness (standalone/tool_harness.cpp), env-gated by
 // BANISHED_TOOL_HARNESS. No-op unless that env var is set.
-extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
-extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum);  // standalone/pausemenu_harness.cpp
-extern "C" void FoodPanel_Tick(void* entityUI, int frameNum);  // standalone/food_panel_harness.cpp
+extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum);
+extern "C" void PauseMenuHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/pausemenu_harness.cpp
+extern "C" void FoodPanel_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/food_panel_harness.cpp
 extern "C" void FoodPlace_Tick(int frameNum);                  // standalone/food_placement_harness.cpp
 extern "C" void StartTown_DeferredSpawn_Tick(int frameNum);    // code/Game/Game/starttown.cpp
 extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum);   // code/Game/Game/starttown.cpp
 extern "C" void FoodStockCensus_Tick(int frame);                 // standalone/food_stock_census.cpp
 extern "C" void CitizenDeathHarness_Tick(int frameNum);   // standalone/death_harness.cpp
-extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum); // standalone/saveload_harness.cpp
+extern "C" void SaveLoadHarness_Tick(GameUpdateLoop* gul, int frameNum); // standalone/saveload_harness.cpp
 extern "C" void DisasterHarness_Tick(int frameNum);       // standalone/disaster_harness.cpp
 extern "C" void PastureFillHarness_Tick(int frameNum);    // standalone/pasture_harness.cpp
 extern "C" void MarketOverstock_Tick(int frameNum);   // standalone/market_overstock_harness.cpp
-extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum);
-extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
+extern "C" void PanelStaffingDriver_Tick(PlayerToolManager* entityUI, int frameNum);
+extern "C" void PanelHoldHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
 extern "C" void BuilderSeat_Tick(int frameNum);        // standalone/builder_seat_harness.cpp
 extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
 extern "C" void  AchClock_Tick(int frameNum);          // standalone/ach_clock.cpp
-extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum);  // standalone/trade_buy_harness.cpp
+extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/trade_buy_harness.cpp
 extern "C" void FinishBuildsHarness_Tick(int frameNum);   // standalone/finish_builds_harness.cpp
 extern "C" void OrchardDiag_Tick(int frameNum);           // standalone/orchard_diag.cpp
 extern "C" void FoodDiag_Tick(int frameNum);              // standalone/food_production_diag.cpp
 extern "C" void CropFieldForceStart_Tick(int frameNum);   // standalone/cropfield_force_start.cpp
-extern "C" void OrchardForceStart_Tick(void* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
+extern "C" void OrchardForceStart_Tick(PlayerToolManager* entityUI, int frameNum);  // standalone/orchard_force_start.cpp
 extern "C" void OrchardWorkersHarness_Tick(int frameNum);  // standalone/orchard_workers_harness.cpp
 extern "C" void FoodWorkers_Tick(int frameNum);            // standalone/food_workers_harness.cpp
 extern "C" void OrchardGrowthHarness_Tick(int frameNum);   // standalone/orchard_growth_harness.cpp
@@ -1105,7 +1106,7 @@ post_simulation:
             System::Time scaledTime;
             RtSystem_Time_Ctor(&scaledTime,
                                seconds * (float)speedMul * kRdata_14017219c);
-            float windFactor = CalcWindFactor_Reg(&scaledTime);   // 0x1401027c0
+            float windFactor = CalcWindFactor(&scaledTime);   // 0x1401027c0
             // Sanity-check the camera-position sub-offset (playerCtrl+0x34+0x88) once:
             // it was derived from stack arithmetic in the retail disasm, not from a
             // struct definition. CLAUDE.md documents the default camera dist as 40, so
@@ -1733,7 +1734,7 @@ void GameUpdateLoop::Startup() {
         // resolution, which cannot happen now (ENDGAME B.3.9 CB).
         if (mem != nullptr) {
             ::Object::InternalPtr<UI::DialogInstance> nullParent;   // the InternalBasePtr ctor: one store
-            toolbar = ToolbarDialog_Ctor_Impl(mem, m_userInterface, dialogRes, &nullParent, nullptr);   // 0x1400b9910
+            toolbar = ::new (mem) ToolbarDialog(m_userInterface, dialogRes, nullParent, nullptr);   // 0x1400b9910
         }
 
         // Add to UI (only if the dialog was actually constructed).
@@ -2161,7 +2162,7 @@ void GameUpdateLoop::Shutdown() {
 // field, not one the copy ctor could synthesise, so the values are identical — and
 // this avoids taking a dependency on dispatch slot 0x140152940, which nothing else
 // in the tree registers.
-static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
+static float CalcWindFactor(const System::Time* /*time — dead in retail*/) {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (!gw) return 0.0f;
     const PlayerController* playerCtrl = gw->m_playerController;
@@ -2174,8 +2175,6 @@ static float CalcWindFactor_Impl(void* /*time — dead in retail*/) {
     float dz = camPos.z - playerCtrl->target.z;
     return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
-
-extern "C" float CalcWindFactor_Reg(void* time) { return CalcWindFactor_Impl(time); }
 
 // ============================================================
 // GameUpdateLoop::OnScenarioComplete (0x140096830)

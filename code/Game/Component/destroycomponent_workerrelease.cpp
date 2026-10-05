@@ -94,7 +94,7 @@
 // registered icon reads scene id 0 and Graphics::Scene::RemoveObject(scene, 0) spins forever.
 extern bool g_wpcRosterOnly;
 
-static bool Plausible(const void* p) {
+static bool Plausible(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: checks it is >= 0x10000
     return reinterpret_cast<uintptr_t>(p) >= 0x10000;   // CAST-OK: ptr_int
 }
 

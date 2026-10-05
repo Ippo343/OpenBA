@@ -143,7 +143,7 @@ public:
     // +0x60 index) is a CompleteTask whose task index is this work's id (+0x20);
     // that task is written to `out` when `out` is non-null. RDX is spilled and
     // never read (0x1400f7100 stores it, 0x1400f71a4 overwrites the slot).
-    bool ValidateTask(void* unusedRdx, CitizenComponent** citizen, CompleteTask** out);
+    bool ValidateTask(void* unusedRdx, CitizenComponent** citizen, CompleteTask** out);   // LEFT: void* is a dead argument (retail 0x1400f7100 spills RDX and never reads it; all 21 callers pass nullptr), not an object
 
     // 0x1400e3db0: the auto-pickup check the gatherer leaves run first in Execute:
     // when the entity's AutoPickupComponent is enabled, offer the citizen each work id

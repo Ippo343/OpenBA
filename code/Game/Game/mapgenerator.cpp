@@ -265,15 +265,12 @@ void AssignMGRef(uint8_t* d, const uint8_t* s) {
 void MG_InitRef(uint8_t* e) {
     rtcoll::InitAs<ExternalRef, &ZeroMGRef>(e);
 }
-void DestroyMGRef(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<ExternalRef, &DestroyMGRefs>(ignoredThis, base, count);
-}
 // stays explicit: String copy-ctor `assign` (byteCopy=false) plus a real
 // `destroy`, a -1 generation seed, and an unwritten extent at [0x0c,0x10).
 }  // namespace
 const rtcoll::ArraySpec MapGeneratorRows::kSpec_ExternalRef = {   // exe 0x14001b340 / 0x14001b030
     "Array<ExternalRef>", 0x18, 8,
-    &AssignMGRef, &MG_InitRef, &DestroyMGRef, /*byteCopy*/false,
+    &AssignMGRef, &MG_InitRef, &rtcoll::DestroyAs<ExternalRef, &DestroyMGRefs>, /*byteCopy*/false,
     /*assign unwritten*/ 0x0c, 0x10,
     /*init   unwritten*/ 0x0c, 0x10,
     /*seed zero       */ 0, 0 };
@@ -309,15 +306,12 @@ void AssignMGStructure(uint8_t* d, const uint8_t* s) {
 void MG_InitStructure(uint8_t* e) {
     rtcoll::InitAs<InitialStructure, &ZeroMGStructure>(e);
 }
-void DestroyMGStructure(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<InitialStructure, &DestroyMGStructures>(ignoredThis, base, count);
-}
 // stays explicit: same as kSpec_MGRef, plus a -1 seed for _width/_height at
 // +0x20 and a second unwritten extent at [0x2c,0x30).
 }  // namespace
 const rtcoll::ArraySpec MapGeneratorRows::kSpec_InitialStructure = {   // exe 0x14001b4e0 / 0x14001b0a0
     "Array<InitialStructure>", 0x30, 8,
-    &AssignMGStructure, &MG_InitStructure, &DestroyMGStructure, /*byteCopy*/false,
+    &AssignMGStructure, &MG_InitStructure, &rtcoll::DestroyAs<InitialStructure, &DestroyMGStructures>, /*byteCopy*/false,
     /*assign unwritten*/ 0x0c, 0x10,      // (and [0x2c,0x30); one range per row)
     /*init   unwritten*/ 0x0c, 0x10,
     /*seed zero       */ 0, 0 };

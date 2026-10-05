@@ -50,14 +50,13 @@
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
 #include "runtime/src/ui/sprite_debug.h"   // Debug_Sprite_Ctor
-extern void* Debug_Sprite_DefaultCtor(void* retval);
 extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, void* spriteData);
 extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, void* spriteData);
 #endif
 
 // Helper: find a sub-description by type ID in a ComponentDescription's list
 // (_subDescs / _subDescCount).
-static inline bool SaneHeapPtr(const void* p) {
+static inline bool SaneHeapPtr(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: non-null, 8-aligned, below 0x7FFFFFFFFFFF (sub-description array entries)
     uintptr_t v = (uintptr_t)p;  // CAST-OK: ptr_int
     // Non-null, 8-byte aligned, in user address space. Filters garbage/sentinel
     // values so a malformed component array can't fault the scan.

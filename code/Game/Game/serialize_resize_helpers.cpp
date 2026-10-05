@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include "Game/exe_bodies.h"
 #include "Action/PathSearch.h"   // RawArray<T>
+#include "Game/NameDatabase.h"   // Reimpl_Array_Resize_Stride0C's array
 #include "math/Math.h"
 extern "C" { extern thread_local void* g_allocStatsCtx; }   // allocator_lock.cpp
 
@@ -54,11 +55,7 @@ extern "C" { extern thread_local void* g_allocStatsCtx; }   // allocator_lock.cp
 // is where it is read as a byte-element header.
 namespace {
 
-RawArray<uint8_t>& ByteHeader(void* arrayHeader) {
-    return *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): GenericArrayResize serves six C entries (Stride02/16A/16B/04/0C/Byte) over holders of six element types (geometry, NameDatabase, plant area, worldgen); a typed wrapper per holder would carry this same header cast
-}
-
-void GenericArrayResize(void* arrayHeader, int newCount,
+void GenericArrayResize(void* arrayHeader, int newCount,   // LEFT: void* is the erased core's header (the C entries below hand it on; their void* declarations are exe_bodies.h's)
                         size_t stride, int alignment) {
     if (!arrayHeader) return;
     if (newCount < 0) {
@@ -87,7 +84,7 @@ void GenericArrayResize(void* arrayHeader, int newCount,
         return;
     }
 
-    RawArray<uint8_t>& hdr = ByteHeader(arrayHeader);
+    RawArray<uint8_t>& hdr = *reinterpret_cast<RawArray<uint8_t>*>(arrayHeader);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): GenericArrayResize serves six C entries (Stride02/16A/16B/04/0C/Byte) over holders of six element types (geometry, NameDatabase, plant area, worldgen); a typed wrapper per holder would carry this same header cast
 
     int oldCount = hdr.size;
     if (newCount == oldCount) return;
@@ -185,7 +182,7 @@ extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount) {
 //
 // MemAlloc(cap*0xc, 4). Per element: copy 3 dwords (12 bytes). Used by
 // NameDatabase::Serialize for its +0x20 syllable-table array.
-extern "C" void Reimpl_Array_Resize_Stride0C(void* arrayHeader, int newCount) {
+extern "C" void Reimpl_Array_Resize_Stride0C(Collection::Array<NameDatabaseEntry>* arrayHeader, int newCount) {
     GenericArrayResize(arrayHeader, newCount, 0x0C, 4);
 }
 

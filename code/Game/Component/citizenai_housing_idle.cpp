@@ -126,7 +126,7 @@ namespace {
 // rather than dereferencing it. The transient tree is freed immediately after, so a slightly
 // less-balanced tree in that rare corrupt case only means a marginally different candidate pick.
 // NOT RETAIL: 0x14000e360 tests each link for null only (known_port_issues 14d row 210).
-static inline bool ValidNode(const void* p) {
+static inline bool ValidNode(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: a candidate-tree link in [0x10000, 0x800000000000) (NOT RETAIL, known_port_issues row 210)
     uint64_t u = reinterpret_cast<uintptr_t>(p);   // CAST-OK: ptr_int
     return u >= 0x10000ULL && u < 0x0000800000000000ULL;
 }
@@ -146,9 +146,9 @@ long long g_idleBuilderTookWork = 0;
 }
 
 // Forward decls for the helper subtree.
-void          Helper_sub_8000(void* p1, ComponentEntity* const* keyHolder,
+void          Helper_sub_8000(CitizenComponent* p1, ComponentEntity* const* keyHolder,
                               WorkSchedulerIdNode* const* srcRootSlot, WorkCandidateTree* dst);       // 0x1400f8000
-void          Helper_sub_7c90(void* p1, CitizenComponent* const* citizenHolder, ComponentEntity* const* keyHolder,
+void          Helper_sub_7c90(CitizenComponent* p1, CitizenComponent* const* citizenHolder, ComponentEntity* const* keyHolder,
                               WorkSchedulerIdNode* const* srcRootSlot, WorkCandidateTree* dst);       // 0x1400f7c90
 uint8_t       Helper_sub_7b60(WorkScheduler* ctx, CitizenComponent* const* citizenHolder, WorkCandidateTree* dst); // 0x1400f7b60
 uint64_t      Helper_sub_79b0(WorkScheduler* param_1, CitizenComponent* const* param_2,
@@ -175,7 +175,7 @@ void* Helper_3f010(unsigned char* dst, uint64_t byteVal, uint64_t count) {
 //   whose Work +0x10 matches *param_2); param_3 = &srcRoot; param_4 = the dst tree.
 //   Source tree traversed in-order via node +0x10(parent)/+0x18(left)/+0x20(right).
 // ============================================================
-void Helper_sub_8000(void* /*param_1: the citizen, unread*/, ComponentEntity* const* param_2, WorkSchedulerIdNode* const* param_3,
+void Helper_sub_8000(CitizenComponent* /*param_1: the citizen, unread*/, ComponentEntity* const* param_2, WorkSchedulerIdNode* const* param_3,
                      WorkCandidateTree* param_4) {
     if (*param_3 == nullptr) return;
     WorkSchedulerIdNode* cur = *param_3;
@@ -307,7 +307,7 @@ void Helper_sub_8000(void* /*param_1: the citizen, unread*/, ComponentEntity* co
 //   param_2 = &citizen (for the citizen model cell), param_3 = &skipKey, param_4 = &srcRoot,
 //   param_5 = the dst tree.
 // ============================================================
-void Helper_sub_7c90(void* /*param_1: the citizen, unread*/, CitizenComponent* const* param_2,
+void Helper_sub_7c90(CitizenComponent* /*param_1: the citizen, unread*/, CitizenComponent* const* param_2,
                      ComponentEntity* const* param_3, WorkSchedulerIdNode* const* param_4,
                      WorkCandidateTree* param_5) {
     Map* map = GameUpdateLoop::_singleton->m_game;

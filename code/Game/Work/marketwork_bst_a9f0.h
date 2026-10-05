@@ -29,7 +29,7 @@ extern "C" {
 //   src    [RDX]  : {key@+0x00, payloadArray@+0x08} source pair.
 //   parent [R8]   : node stored at +0x18.
 // Returns the new node, or nullptr if MemAlloc failed.
-MarketWork::ClaimNode* MarketBst_ae50(void* unused, MarketWork::Claim* src, MarketWork::ClaimNode* parent);
+MarketWork::ClaimNode* MarketBst_ae50(MarketWork::ClaimTree* unusedTree, MarketWork::Claim* src, MarketWork::ClaimNode* parent);
 
 // 0x14002ab60 — ordered insert-if-absent into the market BST, then AVL retrace.
 //   tree [RCX] : tree header {root@+0x00, count@+0x08(int32)}

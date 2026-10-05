@@ -46,7 +46,7 @@ public:
     ~BridgeTool() override = default;                                      // [0]  0x14002d7f0
     void Startup() override;                                               // [4]  0x1400fb7a0
     void Shutdown() override {}                                            // [5]  0x1400fb790 RET
-    void Update(void*, char) override {}                                   // [7]  0x1400fb2c0 RET
+    void Update(const System::Time*, char) override {}                   // [7]  0x1400fb2c0 RET
     void Draw(Video::Context* context, char active) override;                        // [8]  0x1400fadc0
     bool CalcPath(int startCell, int endCell) override;                    // [13] 0x1400f9cd0
     int  CalcCost(int startCell, int endCell, uint32_t* outValid,

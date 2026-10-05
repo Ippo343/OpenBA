@@ -44,7 +44,6 @@
 // Array resize helpers — the bodies registered at the four exe addresses
 // (address_registry.cpp), called directly. The old lazily-resolved pointers
 // (a non-atomic first-call cache, B6-5) resolved to exactly these.
-extern "C" void Reimpl_Array_Resize_Stride0C(void* arrayHeader, int newCount);  // 0x14001c7c0
 extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890
 extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);      // 0x14000a590
 extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);  // 0x1400021d0

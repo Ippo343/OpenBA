@@ -46,7 +46,7 @@
 // citizenui.cpp CitUI_OkPtr guard so Slot6's profession-text build can't deref a
 // bogus pointer and hardfault (the Follow crash). Byte-faithful when these
 // pointers are valid (as they are in the live game).
-static inline bool FD_OkPtr(const void* ptr) {
+static inline bool FD_OkPtr(const void* ptr) {   // LEFT: void* is a raw address (diagnostic probe), not an object: checks it lies in [0x10000, 0x7FFFFFFFFFF0) before Slot6's profession-text derefs
     const uintptr_t p = reinterpret_cast<uintptr_t>(ptr);   // CAST-OK: ptr_int
     return p >= 0x10000 && p < 0x7FFFFFFFFFF0ULL;
 }

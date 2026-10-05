@@ -45,7 +45,7 @@
 class CitizenBehavior;
 extern "C" void TownMgr_AbortCitizenActionsFor_89e30(CitizenBehavior* townMgr, ComponentEntity** pEntityIbp);
 
-extern "C" int  EntityCompValidate(void*, void*, void*, int);  // standalone/entity_comp_validator.cpp
+extern "C" int  EntityCompValidate(const ComponentEntity*, const ComponentDescription*, Object::InternalPtr<Component>*, int);  // standalone/entity_comp_validator.cpp
 
 namespace {
 // B6-5: the diagnostics' one-shot/limit counters are namespace-scope (were

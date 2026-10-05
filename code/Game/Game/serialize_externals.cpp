@@ -47,7 +47,7 @@
 // and the MaterialInstance array (serialize_struct60b_serialize.cpp); they
 // differed only in their log tags. The C entry points keep `void*` (about 120
 // callers hold the fields with their own types): their two LEFT casts live in
-// ForwardRef alone.
+// ExternalPtrSerializeGeneric(void**, void*) alone.
 void SerializeExternalRefChecked(::Object::External*& ref, IO::Serializer& serializer,
                                  uint32_t typeId, const char* typeName, [[maybe_unused]] const char* tag) {
     if (!::Object::ExternalFactory::_singleton) {
@@ -148,16 +148,6 @@ void SerializeExternalRef(::Object::External*& ref, IO::Serializer& serializer,
     }
 }
 
-namespace {
-// The C entry points' two LEFT casts: the slot and the serializer arrive as void*
-// from callers holding them with their own types.
-void ForwardRef(void* refField, void* serializer, uint32_t typeId, const char* typeName) {
-    SerializeExternalRefChecked(*reinterpret_cast<::Object::External**>(refField),   // LEFT: audit WORK (SIG, ~150 caller lines): SIG ForwardRef serves the void* C entry points (Reimpl_ExternalPtr_Serialize_*, the void** ExternalPtrSerializeGeneric): about 150 call lines in some 90 files, most in X6-CW's partition, hand the slot and the serializer untyped
-                                *reinterpret_cast<IO::Serializer*>(serializer),   // LEFT: audit WORK (SIG, as the line above): SIG ForwardRef serves the void* C entry points (Reimpl_ExternalPtr_Serialize_*, the void** ExternalPtrSerializeGeneric): about 150 call lines in some 90 files, most in X6-CW's partition, hand the slot and the serializer untyped
-                                typeId, typeName, "ExternalPtr::Serialize");
-}
-} // namespace
-
 void ExternalPtrSerializeGeneric(::Object::External** refField, IO::Serializer* serializer,
                                  const uint32_t* typeIdPtr,
                                  const char* typeName) {
@@ -170,7 +160,11 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
                                  const uint32_t* typeIdPtr,
                                  const char* typeName) {
     if (!refField || !serializer) return;
-    ForwardRef(refField, serializer, typeIdPtr ? *typeIdPtr : 0u, typeName);
+    // The two LEFT casts: the slot and the serializer arrive as void* from callers holding
+    // them with their own types (the ForwardRef helper that held them was folded in here).
+    SerializeExternalRefChecked(*reinterpret_cast<::Object::External**>(refField),   // LEFT: audit WORK (SIG, ~150 caller lines): SIG ExternalPtrSerializeGeneric(void**, void*) serves the void* C entry points (Reimpl_ExternalPtr_Serialize_*, the void** ExternalPtrSerializeGeneric): about 150 call lines in some 90 files, most in X6-CW's partition, hand the slot and the serializer untyped
+                                *reinterpret_cast<IO::Serializer*>(serializer),   // LEFT: audit WORK (SIG, as the line above): SIG ExternalPtrSerializeGeneric(void**, void*) serves the void* C entry points (Reimpl_ExternalPtr_Serialize_*, the void** ExternalPtrSerializeGeneric): about 150 call lines in some 90 files, most in X6-CW's partition, hand the slot and the serializer untyped
+                                typeIdPtr ? *typeIdPtr : 0u, typeName, "ExternalPtr::Serialize");
 }
 
 void ExternalPtrSerialize_GraphicsMesh(::Object::External*& ref, IO::Serializer& serializer) {

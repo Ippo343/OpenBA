@@ -1232,9 +1232,6 @@ void AssignIntAssocOuter(uint8_t* d, const uint8_t* s) {
 void InitIntAssocOuter(uint8_t* d) {
     rtcoll::InitAs<Collection::Array<int32_t>, &ZeroIntAssocOuter>(d);
 }
-void DestroyIntAssocOuter(void* ignoredThis, uint8_t* base, int count) {
-    rtcoll::DestroyAs<Collection::Array<int32_t>, &DestroyIntAssocOuters>(ignoredThis, base, count);
-}
 
 // 0x1400177c0 element: ProfessionResourceEntry, stride 0x20, align 8. Copy = the
 // whole stride as four qwords; init = {0, 100, 0, 0} written as u64@0, u64@8,
@@ -1268,7 +1265,7 @@ void InitIntPair(uint8_t* d) { rtcoll::InitAs<uint64_t, &ZeroWord8>(d); }
 namespace CitizenBehaviorRows {
 const rtcoll::ArraySpec kSpec_IntAssocOuter = {          // exe 0x140017640
     "Array<Array<int32>>", 0x10, 8,
-    &AssignIntAssocOuter, &InitIntAssocOuter, &DestroyIntAssocOuter, false,
+    &AssignIntAssocOuter, &InitIntAssocOuter, &rtcoll::DestroyAs<Collection::Array<int32_t>, &DestroyIntAssocOuters>, false,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0, 0 };

@@ -42,7 +42,7 @@ public:
     void Startup() override;                                               // [4]  0x1401056e0
     void Shutdown() override {}                                            // [5]  0x1401056d0 RET
     char OnKey(char active) override;                                      // [6]  0x140105690
-    void Update(void*, char) override {}                                   // [7]  0x140105680 RET
+    void Update(const System::Time*, char) override {}                   // [7]  0x140105680 RET
     void Draw(Video::Context* context, char active) override;                        // [8]  0x140105190
     bool CalcPath(int startCell, int endCell) override;                    // [13] 0x140104d30
     int  CalcCost(int startCell, int endCell, uint32_t* outValid,

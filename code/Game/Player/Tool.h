@@ -50,6 +50,7 @@ class ToolSetting;            // Player/ToolSetting.h
 class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Video { class Context; }
+namespace System { class Time; }
 
 class Tool : public Object::Internal {
     DECLARE_EXE_TYPE(Tool)
@@ -63,7 +64,7 @@ public:
     virtual void  Startup() = 0;                                       // [4]  pure
     virtual void  Shutdown() = 0;                                      // [5]  pure
     virtual char  OnKey(char active) = 0;                              // [6]  pure
-    virtual void  Update(void* time, char active) = 0;                 // [7]  pure
+    virtual void  Update(const System::Time* time, char active) = 0;// [7]  pure
     virtual void  Draw(Video::Context* context, char active) = 0;      // [8]  pure (the frame's Video::Context, GameUpdateLoop::Draw)
     virtual char  OnCancel() = 0;                                      // [9]  pure
     virtual bool  IsSelected(ComponentEntity* const* entityRef);       // [10] 0x1400268a0 false (the entity's InternalPtr slot)
