@@ -907,7 +907,7 @@ static void DestroyNestedPair(AnimInstance* base, int count) {
     for (int64_t i = 0; i < n; ++i) {
         AnimInstance* e = base + i;
 
-        Collection::Array<Graphics::AnimationState>& states = e->_states;   // +0x20
+        auto& states = e->_states;   // +0x20
         FreeInnerArraysCore(reinterpret_cast<uint8_t*>(states._data), states._size, &kD_InnerArr3_48);  // CAST-OK: elem_stride
         if (states._data) MemFree(states._data);
         states._data = nullptr;

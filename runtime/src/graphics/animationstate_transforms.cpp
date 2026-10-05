@@ -952,24 +952,16 @@ int32_t AnimationManager::GetInstanceId(Object::ExternalPtr<AnimationGroup> grou
         // headers null. It is the FILL for the grow arm and the SOURCE of the
         // two empty arrays for the reuse arm.
         //
-        //
-        // LEFT: raw stack storage viewed as an Instance and NEVER constructed or
-        // destroyed by C++ -- its two Arrays are freed below by retail's own two
-        // explicit `~Array` calls (0x18005bbb0 / 0x180014090), as retail does. A
-        // C++-constructed Instance would instantiate `Array<Node>` /
-        // `Array<AnimationState>`'s trait-derived element ops, which the tree
-        // ports as the registered spec rows (array_graphics_anim.cpp) instead.
-        alignas(Instance) uint8_t tmpStorage[sizeof(Instance)];
-        Instance* const tmp = reinterpret_cast<Instance*>(tmpStorage);  // LEFT: H5 AnimationState::tmpStorage, raw stack storage never constructed
+        // B.4 Y RT: a real local. Its implicit ctor is the two Array ctors'
+        // zero triples (retail's header zero stores); its two Arrays are freed
+        // below by retail's own two explicit `~Array` calls (0x18005bbb0 /
+        // 0x180014090), which zero each header, so the implicit member
+        // ~Arrays at scope exit are no-ops (no element destroy, MemFree(null)).
+        Instance tmpInstance;
+        Instance* const tmp = &tmpInstance;
         tmp->_group     = group;
         tmp->_animIndex = animIndex;
         tmp->_refCount  = 0;
-        tmp->_nodes._data      = nullptr;
-        tmp->_nodes._size      = 0;
-        tmp->_nodes._capacity  = 0;
-        tmp->_states._data     = nullptr;
-        tmp->_states._size     = 0;
-        tmp->_states._capacity = 0;
 
         if (count > 0 && freeSlot >= 0) {
             idx = freeSlot;

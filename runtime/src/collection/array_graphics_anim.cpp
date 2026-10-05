@@ -214,7 +214,7 @@ static void InstanceDestroy(Graphics::AnimationManager::Instance* base, int coun
     for (int64_t i = 0; i < n; ++i) {
         Graphics::AnimationManager::Instance* e = base + i;
 
-        Collection::Array<Graphics::AnimationState>& states = e->_states;
+        auto& states = e->_states;
         FreeInnerArraysCore(reinterpret_cast<uint8_t*>(states._data), states._size, &kD_InnerArr3_48);  // CAST-OK: elem_stride
         if (states._data) MemFree(states._data);
         states._data = nullptr; states._size = 0; states._capacity = 0;
