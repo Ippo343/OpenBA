@@ -31,9 +31,9 @@
 // (`rtcoll::ArrayDtorImpl`, byte for byte). Each is now `->~Array()` on the
 // header, spelled `rtcoll::ArrayHdr` (= Array<uint8_t>) where the element type
 // is not pinned in this file and `Array<void*>` where it is a pointer list.
-// `ArrayOfArrays_Clear_175d0` is `Array<ArrayHdr>::~Array`: the trait-derived
-// row destroys each inner header (ascending, as retail's loop does) and then
-// frees the outer block. Trees ({root,count} pairs, 4-byte count store),
+// `ArrayOfArrays_Clear_175d0` is `Array<Array<Vector2>>::~Array` (WorldGeometry
+// +0x1e0's release): each inner header ascending, as retail's loop does, then
+// the outer block. Trees ({root,count} pairs, 4-byte count store),
 // node chains and IBP payloads are NOT arrays and are untouched.
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"          // MarkEntityForRemoval
@@ -49,6 +49,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Player/Tool.h"       // B.3.x W0: ~EntityUI shuts the active tool down by name
 #include "Game/exe_bodies.h"
+#include "Game/WorldGeometry.h"       // ArrayOfArrays_Clear_175d0 (WorldGeometry +0x1e0)
 #include "Entity/EntityList.h"          // EntityList (0xE8), its trees and buckets
 #include "Entity/ComponentEntity.h"     // ComponentEntity::_entityFlags
 #include "Entity/CitizenBehavior.h"     // CitizenBehavior (0x1C0), PathGraph (0x28)
@@ -89,11 +90,13 @@ void VectorDtorIter(T (&elements)[N], Dtor dtor) {
 // ============================================================
 // 0x1400175d0 — array of {ptr,count} sub-arrays: free each, then the array
 // ============================================================
-extern "C" void ArrayOfArrays_Clear_175d0(void* hdrV) {
-    // Array<ArrayHdr>::~Array — the trait-derived row's destroy is ~ArrayHdr on
-    // each of `count` 0x10-byte elements in ascending order (retail's loop),
-    // then ArrayDtorImpl on the outer header.
-    reinterpret_cast<Collection::Array<rtcoll::ArrayHdr>*>(hdrV)->~Array();   // LEFT: its one caller (~WorldGeometry, geometry_draw.cpp) holds _contourOutlines as RawArray<RawArray<Vector2>>; retail's dtor 0x1400aed50 destroys +0x220..+0xd8 as members (the buffers through the imported ~IndexBuffer / ~VertexBuffer, 0x1400aeeaf..0x1400aeed9), so typing it needs Video::IndexBuffer / VertexBuffer destructors (runtime/types/video/Buffers.h, RT) and the +0xe8 tree / +0xd8 array typed in the same commit
+void ArrayOfArrays_Clear_175d0(RawArray<RawArray<Math::Vector2>>& outlines) {
+    // Array<Array<Vector2>>::~Array: each inner header freed and zeroed in
+    // ascending order (retail's loop: MemFree, then the two zero qwords), then
+    // the outer block freed and its fields zeroed.
+    for (int32_t i = 0; i < outlines.size; ++i)
+        RawArrayFree(outlines.data[i]);
+    RawArrayFree(outlines);
 }
 
 // ============================================================

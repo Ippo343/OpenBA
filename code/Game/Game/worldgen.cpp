@@ -516,7 +516,7 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     int N = _fieldD0;     // dim*2+1
 
     // 1. Resize the int16 heightmap to N*N (sub_c890 == Stride02).
-    Reimpl_Array_Resize_Stride02(&_arrayD8, N * N);
+    Reimpl_Array_Resize_Stride02(&_heights, N * N);
 
     // 2. Generate the float heightmap.
     wg_HeightmapPipeline_f390(hf);
@@ -524,7 +524,7 @@ void WorldGeometry::BuildFromHeightfield(TerrainHeightfield* hf) {
     // 3. Quantize float -> int16 (x256 fixed-point) into WorldGeom+0xd8.
     {
         float* fmap = hf->heightmap.data;
-        int16_t* hm16 = _arrayD8;
+        int16_t* hm16 = _heights.data;
         if (fmap && hm16) {
             for (int row = 0; row < N; ++row) {
                 for (int col = 0; col < N; ++col) {
@@ -747,7 +747,7 @@ void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t se
 
     fprintf(stderr, "[worldgen] BuildTerrain EXIT — wg=%p dimX2=%d edge=%d hm16=%p mat1=%p blendTex=%p\n",
             static_cast<void*>(this), _gridSize, _fieldD0,
-            static_cast<void*>(_arrayD8), static_cast<void*>(_terrainMaterial), _heightBytes);
+            static_cast<void*>(_heights.data), static_cast<void*>(_terrainMaterial), _heightBytes);
     // Water diagnostics: the two water materials (+0x150/+0x158), the water vertex
     // buffer's size and the water draw-range counts (+0x1c8/+0x1d8).
     fprintf(stderr, "[worldgen]   waterMatA(+0x150)=%p waterMatB(+0x158)=%p "

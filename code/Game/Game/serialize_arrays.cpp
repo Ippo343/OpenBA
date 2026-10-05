@@ -78,10 +78,10 @@ WorldGeometry::WorldGeometry() {
     _gridSize = 0;  _fieldC4 = 0;       // qword +0xc0
     _chunkSize = 0; _fieldCC = 0;       // qword +0xc8
     _fieldD0 = 0;                       // dword +0xd0 (+0xd4 left as found)
-    _arrayD8 = nullptr;                 // +0xd8
-    _arrayD8Size = 0;                   // +0xe0
-    _dirtyTreeRoot = nullptr;           // +0xe8
-    _dirtyTreeCount = 0;                // dword +0xf0
+    // +0xd8 / +0xe0: two qword stores in retail; three named stores here (H7).
+    _heights.data = nullptr; _heights.size = 0; _heights.capacity = 0;
+    _dirtyChunks.root = nullptr;        // +0xe8
+    _dirtyChunks.count = 0;             // dword +0xf0
     _terrainMaterial = nullptr;         // +0xf8
 
     Video_VertexBuffer_Ctor(&_vertexBuffer);   // +0x100 (ctor body, B4b-2)

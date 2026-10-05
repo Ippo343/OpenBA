@@ -164,16 +164,16 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     // ---- Step 3: the height words at +0xD8 (count = the header's low dword). ----
     // Verified original disasm @ 0x1400b0589..0x1400b05ce: local_count is the
     // ELEMENT count (no shift). Both resize and serialize use it directly.
-    int32_t local_count = static_cast<int32_t>(_arrayD8Size);
+    int32_t local_count = static_cast<int32_t>(_heights.size);
     serializer.Serialize(local_count, nullptr);
     if (IsLoading(serializer)) {
-        Reimpl_Array_Resize_Stride02(&_arrayD8, local_count);
+        Reimpl_Array_Resize_Stride02(&_heights, local_count);
     }
-    if (_arrayD8) {
+    if (_heights.data) {
         // Retail calls slot 0x1401523f8 (short*); the port's overload is the
         // ushort one (0x140152488): the binary bytes are the same two per
         // element. LEFT (known_port_issues 14, row 61): the overload is the port's.
-        serializer.Serialize(local_count, reinterpret_cast<uint16_t*>(_arrayD8), nullptr);   // LEFT: known_port_issues 14, row 61: the overload is the port's.
+        serializer.Serialize(local_count, reinterpret_cast<uint16_t*>(_heights.data), nullptr);   // LEFT: known_port_issues 14, row 61: the overload is the port's.
     }
 
     RZ_CHECK("geom 04d0 after step3 (+0xD8 uint16 heightmap arr)");
