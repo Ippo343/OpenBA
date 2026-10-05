@@ -102,10 +102,10 @@ using RtSystem::Filename;
 // uint32_t. SetSize's one-qword copy of them is written as the two named
 // stores, in address order (H7).
 struct ExternalArrayElement {
-    Filename owned;       // +0x00 — a System::Filename (the RtSystem POD: the
-                          //         array's lifecycle is hand-written): released
-                          //         with the String idiom by FUN_180006ac0, copied
-                          //         (and delimiter-normalised) by 0x1800067d0
+    System::Filename owned;  // +0x00 — released with the String idiom by
+                          //         FUN_180006ac0, copied (and delimiter-
+                          //         normalised) by 0x1800067d0; the array's row
+                          //         kSpec_ExtArrayElem owns the lifecycle
     uint32_t field_0x08;  // +0x08 — SerializeUInt at 0x1800bc7fc; copied by SetSize
     uint32_t field_0x0c;  // +0x0c — SerializeUInt at 0x1800bc811; copied by SetSize
 };
@@ -119,15 +119,19 @@ static_assert(offsetof(ExternalArrayElement, field_0x08) == 0x08,
 static_assert(offsetof(ExternalArrayElement, field_0x0c) == 0x0c,
               "ExternalArrayElement +0x0c (0x1800bc811)");
 
-struct External {
-    void*                              _vftable;   // +0x00
-    Filename                           _path;      // +0x08
-    Collection::Array<ExternalArrayElement> _refs; // +0x10 data, +0x18 size, +0x1c capacity
-};
-static_assert(sizeof(External) == 0x20, "Object::External is 0x20 bytes");
-static_assert(offsetof(External, _vftable) == 0x00, "External vtable @ +0x00");
-static_assert(offsetof(External, _path)    == 0x08, "External::_path @ +0x08 (GetPath 0x180006250)");
-static_assert(offsetof(External, _refs)    == 0x10, "External::_refs @ +0x10 (~External 0x1800bc950)");
+}  // namespace RtObject
+namespace rtcoll {
+// Array<ExternalArrayElement>'s row (runtime/src/collection/array.cpp, SetSize
+// 0x18002c6a0: assign = the Filename copy ctor + one qword, init = zero,
+// destroy = 0x180006ac0, the per-element ~Filename).
+extern const ArraySpec kSpec_ExtArrayElem;
+}
+namespace RtObject {
+using ExternalRefArray = Collection::Array<ExternalArrayElement, Collection::DefaultAllocator,
+                                           Collection::ExplicitSpec<&rtcoll::kSpec_ExtArrayElem>>;
+
+// (B.4 Z MIRROR: the `RtObject::External` POD mirror that stood here had no
+// user left: the one External is `Object::External` below.)
 
 // ============================================================
 // Object::ExternalFactory — the global resource table.
@@ -519,16 +523,16 @@ public:
                //         directly and retail's own layout is one bare pointer.
 };
 
-static_assert(sizeof(ExternalPtr<RtObject::External>) == 8,
+static_assert(sizeof(ExternalPtr<External>) == 8,
               "Object::ExternalPtr<T> is one pointer (ExternalList::Find 0x1800bf700)");
 // ...and for every other T, including one that is only forward-declared, which
 // is what most of the 26 instantiations are in this tree today.
 struct ExternalPtrLayoutProbe;
 static_assert(sizeof(ExternalPtr<ExternalPtrLayoutProbe>) == 8, "...for every T");
-static_assert(std::is_trivially_copyable<ExternalPtr<RtObject::External> >::value,
+static_assert(std::is_trivially_copyable<ExternalPtr<External> >::value,
               "Array<T>::operator= memcpys these; a real copy ctor would be skipped "
               "(runtime/src/collection/array.cpp:983)");
-static_assert(std::is_trivially_destructible<ExternalPtr<RtObject::External> >::value,
+static_assert(std::is_trivially_destructible<ExternalPtr<External> >::value,
               "the array range-destroy never calls one; a real dtor would be skipped");
 
 // ############################################################################
@@ -660,23 +664,16 @@ public:
     //    before `_path`, after ~External's element loop: exactly that order,
     //    with one release (the compiler's; the body no longer releases it).
     //
-    //  * `_refs` keeps `Collection::Array<ExternalArrayElement>`, which DOES
-    //    have a real `~Array`, and that is deliberate: retail's ~External is a
-    //    CALL to FUN_180006b80 -> FUN_180006ac0, i.e. "release each element's
-    //    leading String, then free the buffer and zero the header". The second
-    //    half IS `~Array` for a trivially-destructible element (its
-    //    `spec->destroy` is null, so it runs `ArrayDtorImpl` and nothing
-    //    else). So ~External's body does the FIRST half only and the
-    //    compiler-emitted member destructor does the second — retail's own
-    //    decomposition, with each half run exactly once.
+    //  * `_refs` names its row, kSpec_ExtArrayElem (B.4 Z MIRROR): retail's
+    //    ~External is a CALL to FUN_180006b80, i.e. ~Array<ExternalArrayElement>
+    //    -> FUN_180006ac0 ("release each element's leading Filename") then free
+    //    the buffer and zero the header. That is exactly the member's implicit
+    //    ~Array over the row (spec->destroy, then ArrayDtorImpl), run once,
+    //    after ~External's (empty) body and before `_path`'s.
     System::Filename                                _path;   // +0x08  ctor 0x1800bc9f0, dtor 0x1800bc97a
-    Collection::Array<RtObject::ExternalArrayElement> _refs;  // +0x10
+    RtObject::ExternalRefArray                      _refs;   // +0x10
 };
 static_assert(sizeof(External) == 0x20, "Object::External is 0x20 bytes");
-static_assert(sizeof(External) == sizeof(RtObject::External),
-              "the real class and the POD describe the same bytes");
-static_assert(offsetof(External, _path) == offsetof(RtObject::External, _path), "alias _path");
-static_assert(offsetof(External, _refs) == offsetof(RtObject::External, _refs), "alias _refs");
 static_assert(offsetof(External, _path) == 0x08, "External::_path @ +0x08 (GetPath 0x180006250)");
 static_assert(offsetof(External, _refs) == 0x10, "External::_refs @ +0x10 (~External 0x1800bc950)");
 

@@ -101,7 +101,6 @@
 #include "../../types/object/Internal.h"
 #include "../../types/object/External.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../collection/avl_trees.h"   // B3R: rtavl::PtrArrayDtor (0x1800093e0)
 #include "../../types/system/MemoryAllocator.h"   // B3R: rtalloc::FreeLockedIgnoringSelf (0x180009c30)
 
@@ -110,7 +109,6 @@ namespace RtObjFactoryDtor {
 using RtObject::TypeNode;
 using RtObject::ExternalFactory;
 using RtObject::PathStackEntry;
-using RtSystem::Sys;
 
 // ---------------------------------------------------------------------------
 // Local views. These are deliberately NOT added to the shared type headers:

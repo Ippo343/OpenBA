@@ -78,7 +78,6 @@
 
 namespace {
 
-using RtObject::External;
 using RtSystem::String;
 using rt::io::Encoding;
 using rt::io::ReaderWriter;

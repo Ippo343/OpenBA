@@ -85,9 +85,6 @@ void** VTableOf(const void* o) { return *reinterpret_cast<void** const*>(o); }
 // ---------------------------------------------------------------------------
 UNIT_TEST(object_external_layout_matches_the_alias_pods) {
     CHECK(sizeof(Object::External) == 0x20);
-    CHECK(sizeof(Object::External) == sizeof(RtObject::External));
-    CHECK(offsetof(Object::External, _path) == offsetof(RtObject::External, _path));
-    CHECK(offsetof(Object::External, _refs) == offsetof(RtObject::External, _refs));
     CHECK(offsetof(Object::External, _path) == 0x08);
     CHECK(offsetof(Object::External, _refs) == 0x10);
 

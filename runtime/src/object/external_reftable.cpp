@@ -117,7 +117,6 @@ void ReferenceSubtreeFree(void* set, RtObject::ReferenceSet::Node* node);
 namespace {
 
 using RtObject::ExternalFactory;
-using RtObject::External;
 
 // The vtable call shapes, all pinned by the disassembly: 1800bcbab the
 // Encoding's CreateReader / CreateWriter (inside the inlined Serializer ctor),

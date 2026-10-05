@@ -56,7 +56,6 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../system/setupdir_helpers.h"
 #include "../system/widestring.h"
 #include "../../../standalone/res_load_lock.h"
@@ -93,7 +92,6 @@
 
 namespace RtObject {
 
-using RtSystem::Sys;
 
 PathCounters g_pc = {};
 

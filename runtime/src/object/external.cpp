@@ -68,12 +68,10 @@
 #include "../../types/object/External.h"
 #include "../../types/object/Type.h"     // B.4 P2: ExternalList::Find takes Object::Type
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 
 namespace RtObject {
 
 using RtSystem::StringRefCount;
-using RtSystem::Sys;
 
 // ============================================================
 // Local helpers

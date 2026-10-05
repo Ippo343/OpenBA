@@ -75,7 +75,6 @@
 
 #include "external_set.h"
 #include "../system/string.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../../types/system/MemoryAllocator.h"   // B3R: MemAlloc / MemFree / FreeLockedIgnoringSelf
 
 // `??0Filename@System@@QEAA@AEBV01@@Z` (0x1800067d0) used to be forward-declared

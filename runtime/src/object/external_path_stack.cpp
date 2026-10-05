@@ -68,12 +68,10 @@
 #include "../../types/system/String.h"
 #include "../system/string.h"
 #include "../system/setupdir_helpers.h"
-#include "../system/pod_bridge.h"   // the ONE transitional POD<->class bridge
 #include "../collection/array_internal.h"
 
 namespace RtObject {
 
-using RtSystem::Sys;
 
 namespace {
 
