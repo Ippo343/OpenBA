@@ -751,7 +751,7 @@ UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {
         CHECK_EQ(d->_id, -1);                         // ElementDescription() ran
         CHECK(d->_font == nullptr);
         CHECK(d->_stringTable2 == nullptr);
-        CHECK(d->_name == nullptr);
+        CHECK(d->_name._data == nullptr);
         CHECK_EQ(d->_u80, 0u);
         CHECK_EQ((int)d->_b84, 0);
         CHECK_EQ((int)d->_b85, 0);
@@ -777,7 +777,7 @@ UNIT_TEST(b39_uia_text_label_ctors_make_retails_stores) {
         CHECK_EQ(d->_worda0, -1);
         CHECK_EQ(d->_worda4, -1);
         CHECK(d->_spriteSheet == nullptr);
-        CHECK(d->_spriteName == nullptr);
+        CHECK(d->_spriteName._data == nullptr);
         g_b39DtorCount = 0;
         d->~LabelDescription();                       // retail slot 0, flags 0
         CHECK_EQ(g_b39DtorCount, 2);                  // ~LabelDescription, ~TextDescription
