@@ -39,13 +39,15 @@
 
 #include <windows.h>
 
+namespace Video { class Configuration; }   // runtime/types/video/Device.h
+
 namespace BootWindow {
 
 // Called from VideoDX11 CreateDevice just before step 6. Sets the engine's
 // skipShow flag and records the HWND so ShowNow can reveal it later.
 // Returns true if the deferral was armed; false means the shipped ShowWindow
 // runs as normal (kill-switch set, or no config/hwnd available).
-bool ArmDeferredShow(void* videoConfig, HWND hwnd);
+bool ArmDeferredShow(::Video::Configuration* videoConfig, HWND hwnd);
 
 // Reveal the window. Idempotent, and a no-op when nothing was armed.
 // `reason` is logged so the boot trace shows which path revealed it.

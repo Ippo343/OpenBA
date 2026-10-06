@@ -108,7 +108,7 @@
 // slots this file needs, each of which matches the CALL displacement in the
 // corresponding factory. That is 17 independent confirmations of one constant.
 
-#include "dx11_seam.h"
+#include "VideoDX11Plugin.h"   // Dx11EnumerateDxgiInterfaces (defined here)
 #include "stall_debug.h"
 #include "boot_window.h"
 #include "dx11_backend_access.h"
@@ -128,11 +128,11 @@
 // ENDGAME B.3.5 block D2 / B35_FILEMAP §3f: the real `Video::Device` and its four
 // nested value types, replacing this file's four local name-and-layout mirrors.
 #include "video/Device.h"
-// RULE B5-3: the real `Video::DeviceData` abstract base, whose destructor the
-// scalar deleting dtor calls by qualified name.
+// B5 DEV-A: the `Video::DeviceData` base `VideoDX11::DeviceData` derives from.
 #include "video/CompanionData.h"
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include <new>
+#include <type_traits>
 
 namespace VideoDX11 {
 namespace {
@@ -152,8 +152,8 @@ namespace {
 //   retail IAT   mangled name                                  now
 //   0x1800134c0  ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z System::MemoryAllocator::MemAlloc
 //   0x1800134d0  ?MemFree@MemoryAllocator@System@@SAXPEAX@Z    System::MemoryAllocator::MemFree
-//   0x180013478  ??0ContextData@Video@@…        (and the ten  ::new (p) ::Video::XData(owner)
-//   …            other ??0XData@Video@@ ctors, slot 9..19)    in AllocData below
+//   0x180013478  ??0ContextData@Video@@…        (and the ten  the base ctor of each
+//   …            other ??0XData@Video@@ ctors, slot 9..19)    `new XData(owner)` below
 //   0x180013250  ??0Adapter@Device@Video@@QEAA@XZ              RtVideo_Adapter_Ctor
 //   0x1800132b8  ??0Adapter@Device@Video@@QEAA@AEBU012@@Z      RtVideo_Adapter_CopyCtor
 //   0x1800134c8  ??1Adapter@Device@Video@@QEAA@XZ              RtVideo_Adapter_Dtor
@@ -167,8 +167,8 @@ namespace {
 // because none of those nested value types has a real C++ constructor or
 // destructor yet (B4b-2; Device.h records why per type). The eleven `??0XData`
 // names bound to one-line doors whose whole body is `::new (self) XData(owner)`;
-// AllocData performs that construction itself. The 84-slot seam, its
-// completeness check (RULE B5-8) and the twelve `*Data` classes are untouched.
+// B5: each factory is `new XData(owner)`, whose base constructor is that
+// construction (the twelve `*Data` classes are real subclasses).
 //
 // The earlier removals (the Video::Device members, System::String /
 // WideString, Application, ImageBuffer::CopyFromTexture and the DeviceData
@@ -191,8 +191,16 @@ namespace {
 // makes this work standalone: with VideoDX11 absent, nothing else in the
 // process has pulled d3d11.dll or dxgi.dll in yet, so asking for a handle to an
 // already-loaded module returns null and the renderer never comes up.
+//
+// B5 DEV-A (D4): CreateDXGIFactory1's out-parameter is `void**` in dxgi.h, but
+// both callers here pass IID_IDXGIFactory1 and nothing else, so the resolved
+// pointer is typed as what it returns into: `IDXGIFactory1**`. The pointer is
+// already the product of the GetProcAddress cast below; typing it means the
+// two call sites write straight into their IDXGIFactory1* (DeviceData::unk10 /
+// the walk's local) with no `void**` cast of their own (the `com_iid` floor
+// ceiling is full).
 // ============================================================
-typedef HRESULT (WINAPI *CreateDXGIFactory1_t)(REFIID, void**);
+typedef HRESULT (WINAPI *CreateDXGIFactory1_t)(REFIID, IDXGIFactory1**);
 typedef HRESULT (WINAPI *D3D11CreateDevice_t)(IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
                                               const D3D_FEATURE_LEVEL*, UINT, UINT,
                                               ID3D11Device**, D3D_FEATURE_LEVEL*,
@@ -238,90 +246,63 @@ const GUID kIID_IDXGIFactory1 =
     { 0x770aae78, 0xf26f, 0x4dba, { 0xa8, 0x29, 0x25, 0x3c, 0x83, 0xd1, 0xb3, 0x87 } };
 
 // ============================================================
-// Runtime-side field offsets
+// Runtime-side fields this file reads and writes
 //
-// Raw offsets rather than invented structs: Video::Device is at least 0x108
-// bytes and only ~14 of them are understood, so a struct would be mostly
-// fabricated padding. Each constant carries its proof.
+// B5 DEV-A (B5_RULES D8): the `Dev::` / `Cfg::` byte-offset tables and the
+// `Field<T>` accessor that read them are GONE. Every site names the member of
+// the real `Video::Device` / `Video::Configuration` (runtime/types/video/
+// Device.h, which asserts each offset); the dx11-side proof of each stays here:
+//
+//   Device+0x04/+0x08  backBufferWidth/Height  the swap chain's back-buffer size.
+//                      Written by slot 2 from the display-mode table and then
+//                      again by Video::Device::AdjustDisplay (Runtime 0x1800f7e20)
+//                      from GetClientRect; read by FillSwapChainDesc
+//                      (0x1800045f6 / 0x1800045ff) and by the buffer creators.
+//   Device+0x0c        displayModeIndex        index into the mode table at +0x20;
+//                      0x180004edc scales it by 0x18 (`LEA RCX,[RAX+RAX*2]`, *8).
+//   Device+0x10        refreshRateIndex        index into the current mode's
+//                      refresh-rate array, stride 8 (0x180004609 / 0x18000461c).
+//   Device+0x14/+0x18  dxgiAdapterIndex/       the DXGI adapter and output slot 2
+//                      dxgiOutputIndex         re-enumerates with (0x180004e6f
+//                                              EnumAdapters1, 0x180004eaa EnumOutputs).
+//   Device+0x20        modeData                DisplayMode[], stride 0x18 (0x180004ee4).
+//   Device+0x40/+0x48  interfaceData/Count     the GraphicsInterface array slot 1's
+//                                              tail grows (0x180004dca-0x180004ddc).
+//                                              NOT a bool — see the header note.
+//   Device+0x90        windowHandle            the HWND: DXGI_SWAP_CHAIN_DESC::
+//                                              OutputWindow (0x18000464e), ShowWindow,
+//                                              IsWindowVisible, MakeWindowAssociation.
+//   Device+0x9c        settingsChanged         "swap chain needs a rebuild". Set by
+//                                              the resize helper before it does
+//                                              anything and cleared only on its
+//                                              success path; ContextData::
+//                                              BeginCommands bails to the helper
+//                                              while it is set (L5).
+//   Device+0xa0        monitor                 HMONITOR from DXGI_OUTPUT_DESC::
+//                                              Monitor (0x180004f5d).
+//   Device+0x100       deviceData              the active Video::DeviceData*.
+//   Configuration+0x1c/+0x20 windowWidth/Height  -1 = skip the override
+//   Configuration+0x24 multisample, +0x40 fullscreen,
+//   Configuration+0x42 field42                 not persisted; suppresses the ShowWindow
 // ============================================================
-namespace Dev {
-// +0x04 / +0x08  the swap chain's back-buffer size. Written by slot 2 from the
-// display-mode table and then again by Video::Device::AdjustDisplay
-// (Runtime 0x1800f7e20) from GetClientRect; read by FillSwapChainDesc
-// (0x1800045f6 / 0x1800045ff) and by the buffer creators.
-constexpr size_t kWidth            = 0x004;
-constexpr size_t kHeight           = 0x008;
 
-// +0x0c  index into the mode table at +0x20. 0x180004edc uses it with an
-// effective stride of 0x18 (`LEA RCX,[RAX+RAX*2]` then scale 8).
-constexpr size_t kModeIndex        = 0x00c;
-
-// +0x10  index into the current DisplayMode's refresh-rate array (stride 8).
-// 0x180004609 / 0x18000461c.
-constexpr size_t kRefreshIndex     = 0x010;
-
-// +0x14 / +0x18  the DXGI adapter and output indices slot 2 re-enumerates with
-// (0x180004e6f -> EnumAdapters1, 0x180004eaa -> EnumOutputs).
-constexpr size_t kAdapterIndex     = 0x014;
-constexpr size_t kOutputIndex      = 0x018;
-
-// +0x20  DisplayMode[] for the selected adapter, stride 0x18 (0x180004ee4).
-constexpr size_t kModeTable        = 0x020;
-
-// +0x40 / +0x48 / +0x4c  the Device::GraphicsInterface array {data,count,cap}.
-// Slot 1's tail passes `Device+0x40` and `count+1` to the array grower at
-// 0x180005b00 (0x180004dca-0x180004ddc). NOT a bool — see the header note.
-constexpr size_t kInterfaces       = 0x040;
-constexpr size_t kInterfaceCount   = 0x048;
-
-// +0x90  HWND. Used as DXGI_SWAP_CHAIN_DESC::OutputWindow (0x18000464e) and by
-// ShowWindow / IsWindowVisible / MakeWindowAssociation.
-constexpr size_t kHwnd             = 0x090;
-
-// +0x9c  "swap chain needs a rebuild". Set by the resize helper before it does
-// anything and cleared only on its success path. L5 found the reader:
-// ContextData::BeginCommands bails to the resize helper while it is set.
-constexpr size_t kResetPending     = 0x09c;
-
-// +0xa0  HMONITOR, taken from DXGI_OUTPUT_DESC::Monitor (0x180004f5d).
-constexpr size_t kMonitor          = 0x0a0;
-
-// +0x100  the active Video::DeviceData*.
-constexpr size_t kActiveDeviceData = 0x100;
-}  // namespace Dev
-
-namespace Cfg {
-constexpr size_t kWindowWidth  = 0x1c;  // VideoWindowWidth,  -1 = skip override
-constexpr size_t kWindowHeight = 0x20;  // VideoWindowHeight, -1 = skip override
-constexpr size_t kMultisample  = 0x24;  // VideoMultisample
-constexpr size_t kFullscreen   = 0x40;  // VideoFullscreen
-constexpr size_t kSkipShow     = 0x42;  // not persisted; suppresses the ShowWindow
-}  // namespace Cfg
-
-template <typename T> inline T& Field(void* base, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(base) + off);
-}
-template <typename T> inline T Field(const void* base, size_t off) {
-    return *reinterpret_cast<const T*>(static_cast<const uint8_t*>(base) + off);
+// Device.h keeps the HWND as `void*` (that header is <windows.h>-free); this is
+// the one place it becomes a window handle.
+inline HWND WindowOf(const ::Video::Device* dev) {
+    return static_cast<HWND>(dev->windowHandle);  // CAST-OK: win32
 }
 
-inline void* DeviceOf(DeviceData* self) { return self->device; }
+// ENDGAME B.3.9 VID: Video::Configuration::_singleton and
+// Application::_singleton are the class statics; the import rows that resolved
+// them by name are gone. B5 DEV-A: both typed (the B.3.7 bridge casts at the
+// RegisterMessageCallback / GetInstance sites went with the `void*`).
+inline ::Video::Configuration*     ConfigOf() { return ::Video::Configuration::_singleton; }
+inline ::Application::Application* AppOf()    { return ::Application::Application::_singleton; }
 
-// ENDGAME B.3.5 block J — the two bridge casts every converted call goes through.
-// `DeviceData::device` (+0x08) is a `Video::Device*` and the cursor slot is handed
-// a `Video::ImageBuffer*`, but both arrive on this side of the seam as `void*`
-// (RULE B5-8's declared leave: the concrete `*Data` classes mirror the base's
-// fields rather than deriving in C++). Named once each instead of at ten sites.
-inline ::Video::Device* VDev(void* device) {
-    return reinterpret_cast< ::Video::Device*>(device);            // B.3.5 bridge
-}
-inline ::Video::ImageBuffer* VImg(void* imageBuffer) {
-    return reinterpret_cast< ::Video::ImageBuffer*>(imageBuffer);  // B.3.5 bridge
-}
-// ENDGAME B.3.9 VID: Video::Configuration::_singleton is the class static; the
-// import row that resolved it by name is gone.
-inline void* ConfigOf()    { return ::Video::Configuration::_singleton; }
-inline void* AppOf()       { return ::Application::Application::_singleton; }
+// mingw-w64 builds STRICT: HCURSOR is HICON is `HICON__*`, which is how
+// VideoDX11Data.h types DeviceData::cursor without <windows.h>.
+static_assert(std::is_same<HCURSOR, HICON__*>::value,
+              "DeviceData::cursor is declared HICON__* (STRICT HCURSOR)");
 
 // ============================================================
 // Runtime value types this file constructs on the stack
@@ -342,8 +323,8 @@ inline void* AppOf()       { return ::Application::Application::_singleton; }
 // in the header instead of here: `Adapter+0x2c`/`+0x30`, which Wave 6 lane B
 // could only describe as "ctor = -1, meaning not recovered", are the DXGI
 // enumeration coordinates. `DeviceData_EnumerateInterfaces` below is the WRITER
-// (`EnumAdapters1`'s loop counter and `EnumOutputs`'s), and `Dev::kAdapterIndex`
-// / `Dev::kOutputIndex` (Device+0x14/+0x18, the copies `ValidateConfiguration`
+// (`EnumAdapters1`'s loop counter and `EnumOutputs`'s), and `dev->dxgiAdapterIndex`
+// / `dev->dxgiOutputIndex` (Device+0x14/+0x18, the copies `ValidateConfiguration`
 // makes) are where this file READS them back. Header fields renamed to
 // `dxgiAdapterIndex` / `dxgiOutputIndex` accordingly.
 //
@@ -403,12 +384,8 @@ static_assert(sizeof(DXGI_MODE_DESC) == 0x1c,
 // referenced through RegisterMessageCallback.
 int  DeviceData_Resize(DeviceData* self);
 
-// ============================================================
-// Original slot forwarding
-// ============================================================
-template <typename Fn> Fn Orig(int slot) {
-    return reinterpret_cast<Fn>(Dx11OriginalSlot(Vt::DeviceData, slot));
-}
+// (B5 DEV-A, B5_RULES D9: the `Orig` template, the "run the shipped DLL's
+// slot" forwarder, is gone with its two arms — slots 1 and 2 return false.)
 
 // ============================================================
 // 0x180004510 — ResolveMultisampleMode() -> sampleCount
@@ -428,18 +405,18 @@ template <typename Fn> Fn Orig(int slot) {
 //     touching and not touching the Configuration singleton.
 // ============================================================
 int ResolveMultisampleMode(DeviceData* self) {
-    void* dev = DeviceOf(self);
-    void* cfg = ConfigOf();
+    ::Video::Device* dev = self->_owner;
+    ::Video::Configuration* cfg = ConfigOf();
 
-    int index = Field<int32_t>(cfg, Cfg::kMultisample);
-    if (index >= VDev(dev)->GetMultisampleModeCount())
-        index = VDev(dev)->GetMultisampleModeCount() - 1;
+    int index = cfg->multisample;
+    if (index >= dev->GetMultisampleModeCount())
+        index = dev->GetMultisampleModeCount() - 1;
 
-    while (!VDev(dev)->IsMultisampleModeSupported(index))
+    while (!dev->IsMultisampleModeSupported(index))
         --index;
 
-    if (Field<int32_t>(cfg, Cfg::kMultisample) != index)
-        Field<int32_t>(cfg, Cfg::kMultisample) = index;
+    if (cfg->multisample != index)
+        cfg->multisample = index;
 
     return index + 1;
 }
@@ -471,8 +448,8 @@ int ResolveMultisampleMode(DeviceData* self) {
 // post-AdjustDisplay client size).
 // ============================================================
 void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc) {
-    void* dev = DeviceOf(self);
-    void* cfg = ConfigOf();
+    ::Video::Device* dev = self->_owner;
+    ::Video::Configuration* cfg = ConfigOf();
 
     // ENDGAME B.3.5 block J, RULE B5-12 / CALLER_BATCH_BRIEF "by-value returns":
     // the door body moved to the call site. `Video::Device::GetDisplayMode` returns
@@ -482,17 +459,17 @@ void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc) {
     // and no copy (C++17 guarantees the prvalue is built in place).
     DisplayMode mode;
     ::new (static_cast<void*>(&mode))
-        DisplayMode(VDev(dev)->GetDisplayMode(Field<int32_t>(dev, Dev::kModeIndex)));
+        DisplayMode(dev->GetDisplayMode(dev->displayModeIndex));
 
     std::memset(desc, 0, sizeof(*desc));
 
-    desc->BufferDesc.Width  = static_cast<UINT>(Field<int32_t>(dev, Dev::kWidth));
-    desc->BufferDesc.Height = static_cast<UINT>(Field<int32_t>(dev, Dev::kHeight));
+    desc->BufferDesc.Width  = static_cast<UINT>(dev->backBufferWidth);
+    desc->BufferDesc.Height = static_cast<UINT>(dev->backBufferHeight);
 
     // ENDGAME B.3.5: `mode` is the real `Video::Device::DisplayMode` now, so its
     // refresh array is already typed and the cast is gone.
     const RefreshRate* rates = mode.refreshData;
-    const int rateIndex = Field<int32_t>(dev, Dev::kRefreshIndex);
+    const int rateIndex = dev->refreshRateIndex;
     desc->BufferDesc.RefreshRate.Numerator   = static_cast<UINT>(rates[rateIndex].numerator);
     desc->BufferDesc.RefreshRate.Denominator = static_cast<UINT>(rates[rateIndex].denominator);
 
@@ -505,8 +482,8 @@ void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc) {
 
     desc->BufferUsage  = DXGI_USAGE_RENDER_TARGET_OUTPUT;             // 0x20
     desc->BufferCount  = 2;
-    desc->OutputWindow = Field<HWND>(dev, Dev::kHwnd);
-    desc->Windowed     = (Field<uint8_t>(cfg, Cfg::kFullscreen) == 0) ? TRUE : FALSE;
+    desc->OutputWindow = WindowOf(dev);
+    desc->Windowed     = (cfg->fullscreen == 0) ? TRUE : FALSE;
     desc->SwapEffect   = DXGI_SWAP_EFFECT_DISCARD;
     desc->Flags        = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;      // 2
 
@@ -528,16 +505,16 @@ void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc) {
 // they are MULTISAMPLED while the swap chain is not — that is the whole reason
 // EndCommands does a ResolveSubresource.
 // ============================================================
-bool CreateAttachment(DeviceData* self, void** slot, DXGI_FORMAT format,
+bool CreateAttachment(DeviceData* self, ID3D11Texture2D** slot, DXGI_FORMAT format,
                       UINT bindFlags) {
     Dx11Release(*slot);
     *slot = nullptr;
 
-    void* dev = DeviceOf(self);
+    ::Video::Device* dev = self->_owner;
 
     D3D11_TEXTURE2D_DESC desc;
-    desc.Width              = static_cast<UINT>(Field<int32_t>(dev, Dev::kWidth));
-    desc.Height             = static_cast<UINT>(Field<int32_t>(dev, Dev::kHeight));
+    desc.Width              = static_cast<UINT>(dev->backBufferWidth);
+    desc.Height             = static_cast<UINT>(dev->backBufferHeight);
     desc.MipLevels          = 1;
     desc.ArraySize          = 1;
     desc.Format             = format;
@@ -548,9 +525,8 @@ bool CreateAttachment(DeviceData* self, void** slot, DXGI_FORMAT format,
     desc.CPUAccessFlags     = 0;
     desc.MiscFlags          = 0;
 
-    ID3D11Device* d3d = static_cast<ID3D11Device*>(self->d3dDevice);
-    HRESULT hr = d3d->CreateTexture2D(&desc, nullptr,
-                                      reinterpret_cast<ID3D11Texture2D**>(slot));
+    ID3D11Device* d3d = self->d3dDevice;
+    HRESULT hr = d3d->CreateTexture2D(&desc, nullptr, slot);
     return hr == 0;
 }
 
@@ -637,20 +613,20 @@ inline void RememberGoodSize(int w, int h) {
 // Best available sane size, in descending order of trustworthiness: what we
 // last saw working, then the configured window override, then the display mode
 // (which is always sane because it comes from the adapter's mode table).
-void PickGoodSize(void* cfg, const DisplayMode& mode, int* w, int* h) {
+void PickGoodSize(const ::Video::Configuration* cfg, const DisplayMode& mode, int* w, int* h) {
     if (!DegenerateSize(g_lastGoodW, g_lastGoodH)) {
         *w = g_lastGoodW; *h = g_lastGoodH; return;
     }
-    const int cw = Field<int32_t>(cfg, Cfg::kWindowWidth);
-    const int ch = Field<int32_t>(cfg, Cfg::kWindowHeight);
+    const int cw = cfg->windowWidth;
+    const int ch = cfg->windowHeight;
     if (!DegenerateSize(cw, ch)) { *w = cw; *h = ch; return; }
     *w = mode.width; *h = mode.height;
 }
 
-void TraceGeom(const char* stage, void* dev) {
+void TraceGeom(const char* stage, const ::Video::Device* dev) {
     if (!ResizeTraceOn()) return;
-    HWND hwnd = Field<HWND>(dev, Dev::kHwnd);
-    void* cfg = ConfigOf();
+    HWND hwnd = WindowOf(dev);
+    ::Video::Configuration* cfg = ConfigOf();
     RECT wr{}, cr{};
     GetWindowRect(hwnd, &wr);
     GetClientRect(hwnd, &cr);
@@ -660,9 +636,9 @@ void TraceGeom(const char* stage, void* dev) {
             g_resizeTraceCalls, stage,
             wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top,
             cr.right - cr.left, cr.bottom - cr.top,
-            Field<int32_t>(dev, Dev::kWidth), Field<int32_t>(dev, Dev::kHeight),
-            Field<int32_t>(cfg, Cfg::kWindowWidth),
-            Field<int32_t>(cfg, Cfg::kWindowHeight),
+            dev->backBufferWidth, dev->backBufferHeight,
+            cfg->windowWidth,
+            cfg->windowHeight,
             IsWindowVisible(hwnd) ? 1 : 0, GetCurrentThreadId());
     fflush(stderr);
 }
@@ -733,12 +709,12 @@ void TraceContainingOutput(IDXGISwapChain* sc) {
 // reproduced verbatim — see the quirks list.
 // ============================================================
 int DeviceData_Resize(DeviceData* self) {
-    void* dev = DeviceOf(self);
+    ::Video::Device* dev = self->_owner;
     ++g_resizeTraceCalls;
     TraceGeom("entry", dev);
-    Field<uint8_t>(dev, Dev::kResetPending) = 1;
+    dev->settingsChanged = 1;
 
-    if (!IsWindowVisible(Field<HWND>(dev, Dev::kHwnd)))
+    if (!IsWindowVisible(WindowOf(dev)))
         return 0;
 
     // A minimized window has a 0x0 client rect, and IsWindowVisible() is still
@@ -746,10 +722,10 @@ int DeviceData_Resize(DeviceData* self) {
     // player minimizes. Treat it like the not-visible case: leave
     // kResetPending set and rebuild when the window comes back. Doing this
     // before the guard below also stops us fighting a deliberate minimize.
-    if (IsIconic(Field<HWND>(dev, Dev::kHwnd)))
+    if (IsIconic(WindowOf(dev)))
         return 0;
 
-    ID3D11DeviceContext* ctx = static_cast<ID3D11DeviceContext*>(self->d3dContext);
+    ID3D11DeviceContext* ctx = self->d3dContext;
     ctx->OMSetRenderTargets(0, nullptr, nullptr);
     ctx->ClearState();
 
@@ -761,23 +737,23 @@ int DeviceData_Resize(DeviceData* self) {
     // Dx11InvalidateConstantBufferBindings in buffers.cpp.
     Dx11InvalidateConstantBufferBindings();
 
-    VDev(dev)->ReleaseDynamic();
+    dev->ReleaseDynamic();
 
     Dx11Release(self->depthBuffer);
     Dx11Release(self->colorBuffer);
     self->depthBuffer = nullptr;
     self->colorBuffer = nullptr;
 
-    void* cfg = ConfigOf();
+    ::Video::Configuration* cfg = ConfigOf();
 
     // The same by-value shape as FillSwapChainDesc's — see the note there.
     DisplayMode mode;
     ::new (static_cast<void*>(&mode))
-        DisplayMode(VDev(dev)->GetDisplayMode(Field<int32_t>(dev, Dev::kModeIndex)));
+        DisplayMode(dev->GetDisplayMode(dev->displayModeIndex));
 
-    if (Field<uint8_t>(cfg, Cfg::kFullscreen) != 0 && self->wasFullscreen == 0) {
-        Field<int32_t>(dev, Dev::kWidth)  = mode.width;
-        Field<int32_t>(dev, Dev::kHeight) = mode.height;
+    if (cfg->fullscreen != 0 && self->wasFullscreen == 0) {
+        dev->backBufferWidth  = mode.width;
+        dev->backBufferHeight = mode.height;
     }
 
     // AdjustDisplay's windowed branch re-reads GetClientRect and writes the
@@ -790,8 +766,8 @@ int DeviceData_Resize(DeviceData* self) {
     // runs. Replacing it with a sane size now means AdjustDisplay's SetWindowPos
     // pushes the window back open instead of nailing it shut, and the
     // GetClientRect it latches afterwards is the good value.
-    if (DegenerateSize(Field<int32_t>(dev, Dev::kWidth),
-                       Field<int32_t>(dev, Dev::kHeight))) {
+    if (DegenerateSize(dev->backBufferWidth,
+                       dev->backBufferHeight)) {
         int gw = 0, gh = 0;
         PickGoodSize(cfg, mode, &gw, &gh);
         static bool reported = false;
@@ -800,16 +776,16 @@ int DeviceData_Resize(DeviceData* self) {
             fprintf(stderr, "[WindowGuard] refusing collapsed size %dx%d -> "
                     "restoring %dx%d (an external window manager reshaped the "
                     "window; see the note above DeviceData_Resize)\n",
-                    Field<int32_t>(dev, Dev::kWidth),
-                    Field<int32_t>(dev, Dev::kHeight), gw, gh);
+                    dev->backBufferWidth,
+                    dev->backBufferHeight, gw, gh);
             fflush(stderr);
         }
-        Field<int32_t>(dev, Dev::kWidth)  = gw;
-        Field<int32_t>(dev, Dev::kHeight) = gh;
+        dev->backBufferWidth  = gw;
+        dev->backBufferHeight = gh;
     }
 
     TraceGeom("pre-AdjustDisplay", dev);
-    VDev(dev)->AdjustDisplay();
+    dev->AdjustDisplay();
     TraceGeom("post-AdjustDisplay", dev);
 
     // Guard, second half. If the external actor re-collapsed the window inside
@@ -823,35 +799,35 @@ int DeviceData_Resize(DeviceData* self) {
     {
         int gw = 0, gh = 0;
         PickGoodSize(cfg, mode, &gw, &gh);
-        if (DegenerateSize(Field<int32_t>(dev, Dev::kWidth),
-                           Field<int32_t>(dev, Dev::kHeight))) {
-            Field<int32_t>(dev, Dev::kWidth)  = gw;
-            Field<int32_t>(dev, Dev::kHeight) = gh;
+        if (DegenerateSize(dev->backBufferWidth,
+                           dev->backBufferHeight)) {
+            dev->backBufferWidth  = gw;
+            dev->backBufferHeight = gh;
         }
-        if (DegenerateSize(Field<int32_t>(cfg, Cfg::kWindowWidth),
-                           Field<int32_t>(cfg, Cfg::kWindowHeight))) {
-            Field<int32_t>(cfg, Cfg::kWindowWidth)  = gw;
-            Field<int32_t>(cfg, Cfg::kWindowHeight) = gh;
+        if (DegenerateSize(cfg->windowWidth,
+                           cfg->windowHeight)) {
+            cfg->windowWidth  = gw;
+            cfg->windowHeight = gh;
         }
     }
 
     // Whatever we ended up with, if it is sane it becomes the restore point.
-    RememberGoodSize(Field<int32_t>(dev, Dev::kWidth),
-                     Field<int32_t>(dev, Dev::kHeight));
+    RememberGoodSize(dev->backBufferWidth,
+                     dev->backBufferHeight);
 
     const RefreshRate* rates = mode.refreshData;   // ENDGAME B.3.5: typed, no cast
-    const int rateIndex = Field<int32_t>(dev, Dev::kRefreshIndex);
+    const int rateIndex = dev->refreshRateIndex;
 
     DXGI_MODE_DESC target;
-    target.Width                   = static_cast<UINT>(Field<int32_t>(dev, Dev::kWidth));
-    target.Height                  = static_cast<UINT>(Field<int32_t>(dev, Dev::kHeight));
+    target.Width                   = static_cast<UINT>(dev->backBufferWidth);
+    target.Height                  = static_cast<UINT>(dev->backBufferHeight);
     target.RefreshRate.Numerator   = static_cast<UINT>(rates[rateIndex].numerator);
     target.RefreshRate.Denominator = static_cast<UINT>(rates[rateIndex].denominator);
     target.Format                  = static_cast<DXGI_FORMAT>(28);  // sic — see quirks
     target.ScanlineOrdering        = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
     target.Scaling                 = DXGI_MODE_SCALING_UNSPECIFIED;
 
-    IDXGISwapChain* sc = static_cast<IDXGISwapChain*>(self->swapChain);
+    IDXGISwapChain* sc = self->swapChain;
 
     bool ok = false;
 
@@ -872,16 +848,16 @@ int DeviceData_Resize(DeviceData* self) {
 
     if (hrTarget == 0 &&
         sc->ResizeBuffers(1,
-                          static_cast<UINT>(Field<int32_t>(dev, Dev::kWidth)),
-                          static_cast<UINT>(Field<int32_t>(dev, Dev::kHeight)),
+                          static_cast<UINT>(dev->backBufferWidth),
+                          static_cast<UINT>(dev->backBufferHeight),
                           DXGI_FORMAT_B8G8R8A8_UNORM,
                           DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) == 0 &&
-        sc->SetFullscreenState(Field<uint8_t>(cfg, Cfg::kFullscreen) != 0 ? TRUE : FALSE,
+        sc->SetFullscreenState(cfg->fullscreen != 0 ? TRUE : FALSE,
                                nullptr) == 0 &&
         CreateColorBuffer(self) &&
         CreateDepthBuffer(self)) {
-        VDev(dev)->RecreateDynamic();
-        Field<uint8_t>(dev, Dev::kResetPending) = 0;
+        dev->RecreateDynamic();
+        dev->settingsChanged = 0;
         ok = true;
     }
 
@@ -917,27 +893,29 @@ int DeviceData_Resize(DeviceData* self) {
 //   ?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z
 //     -> void RegisterMessageCallback(unsigned, int (*)(HWND, unsigned,
 //                                                       unsigned __int64, __int64))
+// B5 DEV-A: declared exactly as `Application::MessageCallback` spells it (the
+// HWND is that header's `void*`), so it registers without a cast.
 // The original reads only the low word of wParam (`TEST R8W,R8W`).
 // ============================================================
-int __cdecl DeviceData_OnActivate(HWND /*hwnd*/, unsigned /*msg*/,
-                                  unsigned long long wParam, long long /*lParam*/) {
-    void* cfg = ConfigOf();
-    void* dev = ::Video::Device::_singleton;   // the class static (B.3.9 VID)
-    DeviceData* dd = Field<DeviceData*>(dev, Dev::kActiveDeviceData);
+int DeviceData_OnActivate(void* /*hwnd*/, uint32_t /*msg*/,
+                          uint64_t wParam, int64_t /*lParam*/) {
+    ::Video::Configuration* cfg = ConfigOf();
+    // Video::Device::_singleton->deviceData (+0x100), the class static (B.3.9 VID).
+    DeviceData* dd = Dx11DeviceData();
 
-    if (Field<uint8_t>(cfg, Cfg::kFullscreen) == 0 && dd->wasFullscreen == 0)
+    if (cfg->fullscreen == 0 && dd->wasFullscreen == 0)
         return 1;
 
     if (static_cast<unsigned short>(wParam) == 0) {      // WA_INACTIVE
         dd->wasFullscreen = 1;
-        Field<uint8_t>(cfg, Cfg::kFullscreen) = 0;
+        cfg->fullscreen = 0;
         DeviceData_Resize(dd);
         return 1;
     }
 
     if (dd->wasFullscreen != 0) {
         dd->wasFullscreen = 0;
-        Field<uint8_t>(cfg, Cfg::kFullscreen) = 1;
+        cfg->fullscreen = 1;
         DeviceData_Resize(dd);
     }
     return 1;
@@ -950,15 +928,38 @@ int __cdecl DeviceData_OnActivate(HWND /*hwnd*/, unsigned /*msg*/,
 // it visible. Reads the DeviceData through Video::Device::_singleton rather
 // than capturing it, because a message callback gets no user pointer.
 // ============================================================
-int __cdecl DeviceData_OnSetCursor(HWND /*hwnd*/, unsigned /*msg*/,
-                                   unsigned long long /*w*/, long long /*l*/) {
-    void* dev = ::Video::Device::_singleton;   // the class static (B.3.9 VID)
-    DeviceData* dd = Field<DeviceData*>(dev, Dev::kActiveDeviceData);
+int DeviceData_OnSetCursor(void* /*hwnd*/, uint32_t /*msg*/,
+                           uint64_t /*w*/, int64_t /*l*/) {
+    // Video::Device::_singleton->deviceData (+0x100), the class static (B.3.9 VID).
+    DeviceData* dd = Dx11DeviceData();
 
-    SetCursor(static_cast<HCURSOR>(dd->cursor));
+    SetCursor(dd->cursor);
     ShowCursor(TRUE);
     return 1;
 }
+
+}  // namespace
+
+// ============================================================
+// B5 DEV-A: the constructor — CreateDeviceData's (0x1800011a0) stores after
+// MemAlloc(0x70, 4) + ??0DeviceData(device) + the vptr store, nothing more
+// (B5_RULES section 5: no zeroing braces). The memory is the base's class-scope
+// operator new, i.e. retail's MemAlloc(0x70, 4) (exports.cpp).
+//
+//   +0x10..+0x38  six qwords = 0
+//   +0x40         a single BYTE 0 (`MOV byte [RBX+0x40],AL`): pad41 untouched
+//   +0x48/+0x50   0
+//   +0x58         ONE qword -1 (`MOV qword [RBX+0x58],-1`): both hotspots -1
+//   +0x60..+0x6c  0
+// ============================================================
+DeviceData::DeviceData(::Video::Device* owner)
+    : ::Video::DeviceData(owner),
+      unk10(nullptr), swapChain(nullptr), d3dDevice(nullptr), d3dContext(nullptr),
+      depthBuffer(nullptr), colorBuffer(nullptr),
+      wasFullscreen(0),                 // byte only — pad41 untouched, as shipped
+      cursor(nullptr), cursorImage(nullptr),
+      cursorHotspotX(-1), cursorHotspotY(-1),   // the qword -1 at +0x58 covers both
+      trackedImages(nullptr), trackedCount(0), trackedCapacity(0) {}
 
 // ============================================================
 // Slot 0 — 0x180004270  scalar deleting destructor
@@ -973,37 +974,20 @@ int __cdecl DeviceData_OnSetCursor(HWND /*hwnd*/, unsigned /*msg*/,
 // The count/capacity clear is a SINGLE 8-byte store at +0x68 (0x1800042a7), so
 // it zeroes both halves; writing them separately is equivalent and clearer.
 //
-// The vptr store re-seats `this` on the LIVE vtable — the same array the seam
-// patches — so a partially-ported class stays consistent. Dx11VtableAddress
-// hands back that live address rather than a copy.
+// B5 DEV-A: the vptr re-seat, the base-destructor chain and the conditional
+// MemFree are the compiler's (its D0 + the base's class-scope `operator delete`,
+// runtime/src/video/companion_operators.cpp); the body is the free and the
+// three stores, in retail order.
 //
 // Note what is NOT freed here: the swap chain, device, context and buffers are
 // slot 3's job, and the cursor is destroyed by slot 3 too. Calling slot 0
 // without slot 3 leaks every COM object. That is the shipped contract.
 // ============================================================
-DeviceData* DeviceData_Dtor(DeviceData* self, unsigned flags) {
-    self->vptr = Dx11VtableAddress(Vt::DeviceData);
-
-    System::MemoryAllocator::MemFree(self->trackedImages);
-    self->trackedImages   = nullptr;
-    self->trackedCount    = 0;
-    self->trackedCapacity = 0;
-
-    // ENDGAME B.3.5 block D2, RULE B5-3: `Video::DeviceData` is a real abstract
-    // class (block A), so the base-dtor call is a QUALIFIED NON-VIRTUAL member
-    // call, not a resolved import and never `DeletingDtor(0)` — that would
-    // re-enter this slot. The cast is the bridge the declared leave (RULE B5-8)
-    // requires: this class mirrors the base's two fields rather than deriving.
-    // ENDGAME B.3.5 block J: `Imports::DeviceDataBaseDtor` and its table row are
-    // GONE; ENDGAME B.3R block DX removed the rest of the struct and the
-    // readiness test with it (`MemFree` is a direct call now).
-    reinterpret_cast<Video::DeviceData*>(self)
-        ->Video::DeviceData::~DeviceData();   // B.3.5 bridge
-
-    if (flags & 1)
-        System::MemoryAllocator::MemFree(self);
-
-    return self;
+DeviceData::~DeviceData() {
+    System::MemoryAllocator::MemFree(trackedImages);
+    trackedImages   = nullptr;
+    trackedCount    = 0;
+    trackedCapacity = 0;
 }
 
 // ============================================================
@@ -1037,37 +1021,37 @@ DeviceData* DeviceData_Dtor(DeviceData* self, unsigned flags) {
 //     Slot 8's identity check would then compare against a stale handle. Left
 //     as-is; "fixing" it changes observable behaviour.
 // ============================================================
-void DeviceData_Shutdown(DeviceData* self) {
-    void* app = AppOf();
-    reinterpret_cast< ::Application::Application*>(app)->UnregisterMessageCallback(0x20);  // B.3.7 bridge
-    reinterpret_cast< ::Application::Application*>(app)->UnregisterMessageCallback(6);     // B.3.7 bridge
+void DeviceData::Shutdown() {
+    ::Application::Application* app = AppOf();
+    app->UnregisterMessageCallback(0x20);
+    app->UnregisterMessageCallback(6);
 
-    if (self->cursor)
-        DestroyCursor(static_cast<HCURSOR>(self->cursor));
+    if (cursor)
+        DestroyCursor(cursor);
 
-    void* cfg = ConfigOf();
-    if (self->wasFullscreen != 0)
-        Field<uint8_t>(cfg, Cfg::kFullscreen) = 1;
+    ::Video::Configuration* cfg = ConfigOf();
+    if (wasFullscreen != 0)
+        cfg->fullscreen = 1;
 
-    Dx11Release(self->depthBuffer);
-    self->depthBuffer = nullptr;
+    Dx11Release(depthBuffer);
+    depthBuffer = nullptr;
 
-    Dx11Release(self->colorBuffer);
-    self->colorBuffer = nullptr;
+    Dx11Release(colorBuffer);
+    colorBuffer = nullptr;
 
-    Dx11Release(self->d3dContext);
-    self->d3dContext = nullptr;
+    Dx11Release(d3dContext);
+    d3dContext = nullptr;
 
-    if (self->swapChain) {
-        IDXGISwapChain* sc = static_cast<IDXGISwapChain*>(self->swapChain);
-        if (Field<uint8_t>(cfg, Cfg::kFullscreen) != 0)
+    if (swapChain) {
+        IDXGISwapChain* sc = swapChain;
+        if (cfg->fullscreen != 0)
             sc->SetFullscreenState(FALSE, nullptr);
         sc->Release();
     }
-    self->swapChain = nullptr;
+    swapChain = nullptr;
 
-    Dx11Release(self->d3dDevice);
-    self->d3dDevice = nullptr;
+    Dx11Release(d3dDevice);
+    d3dDevice = nullptr;
 }
 
 // ============================================================
@@ -1120,29 +1104,34 @@ void DeviceData_Shutdown(DeviceData* self) {
 //     failed startup. Reproduced: adding cleanup would change what a
 //     post-failure DumpVideoState() sees.
 // ============================================================
-bool DeviceData_CreateDevice(DeviceData* self) {
+bool DeviceData::CreateDevice() {
     CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
     D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
-    if (!createFactory || !createDevice) return Orig<bool (*)(DeviceData*)>(2)(self);
+    // B5 DEV-A (B5_RULES D9): this arm forwarded to the shipped DLL's slot 2
+    // ("the import failed, run the original"). There is no original: the DLL is
+    // never mapped, so the forward returned null into a call. Failing to resolve
+    // dxgi.dll / d3d11.dll's entry point fails device creation instead, and
+    // Device::PlatformStartup's fallback loop takes it from there.
+    if (!createFactory || !createDevice) return false;
 
-    void* dev = DeviceOf(self);
+    ::Video::Device* dev = _owner;
     StallDebug::Mark("  DX11 CreateDevice: entry");
 
-    if (createFactory(kIID_IDXGIFactory1, &self->unk10) != 0) {
+    if (createFactory(kIID_IDXGIFactory1, &unk10) != 0) {
         System::Error::SetText("VideoDX11: Couldn't create a dxgi factory!", false);   // B.3.4 bridge
         return false;
     }
-    IDXGIFactory1* factory = static_cast<IDXGIFactory1*>(self->unk10);
+    IDXGIFactory1* factory = unk10;
 
     IDXGIAdapter1* adapter = nullptr;
-    if (factory->EnumAdapters1(static_cast<UINT>(Field<int32_t>(dev, Dev::kAdapterIndex)),
+    if (factory->EnumAdapters1(static_cast<UINT>(dev->dxgiAdapterIndex),
                                &adapter) == DXGI_ERROR_NOT_FOUND) {
         System::Error::SetText("VideoDX11: Unable to query adapter for dx11 interface!", false);   // B.3.4 bridge
         return false;
     }
 
     IDXGIOutput* output = nullptr;
-    if (adapter->EnumOutputs(static_cast<UINT>(Field<int32_t>(dev, Dev::kOutputIndex)),
+    if (adapter->EnumOutputs(static_cast<UINT>(dev->dxgiOutputIndex),
                              &output) == DXGI_ERROR_NOT_FOUND) {
         System::Error::SetText("VideoDX11: Unable to query output for dx11 display!", false);   // B.3.4 bridge
         return false;
@@ -1150,21 +1139,20 @@ bool DeviceData_CreateDevice(DeviceData* self) {
 
     StallDebug::Mark("  DX11 DXGI factory + adapter + output enum");
 
-    void* cfg = ConfigOf();
+    ::Video::Configuration* cfg = ConfigOf();
 
     // 4 — start from the selected display mode.
-    const DisplayMode* modeTable =
-        static_cast<const DisplayMode*>(Field<void*>(dev, Dev::kModeTable));
-    const int modeIndex = Field<int32_t>(dev, Dev::kModeIndex);
-    Field<int32_t>(dev, Dev::kWidth)  = modeTable[modeIndex].width;
-    Field<int32_t>(dev, Dev::kHeight) = modeTable[modeIndex].height;
+    const DisplayMode* modeTable = dev->modeData;
+    const int modeIndex = dev->displayModeIndex;
+    dev->backBufferWidth  = modeTable[modeIndex].width;
+    dev->backBufferHeight = modeTable[modeIndex].height;
 
     // 5 — windowed override, skipped for any negative value.
-    if (Field<uint8_t>(cfg, Cfg::kFullscreen) == 0) {
-        const int ww = Field<int32_t>(cfg, Cfg::kWindowWidth);
-        if (ww >= 0) Field<int32_t>(dev, Dev::kWidth) = ww;
-        const int wh = Field<int32_t>(cfg, Cfg::kWindowHeight);
-        if (wh >= 0) Field<int32_t>(dev, Dev::kHeight) = wh;
+    if (cfg->fullscreen == 0) {
+        const int ww = cfg->windowWidth;
+        if (ww >= 0) dev->backBufferWidth = ww;
+        const int wh = cfg->windowHeight;
+        if (wh >= 0) dev->backBufferHeight = wh;
     }
 
     // Arm the deferred reveal BEFORE step 6 reads the flag. This does not
@@ -1175,13 +1163,13 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     // empty for ~450ms every boot; see boot_window.h for the measurements.
     // No-op (and step 6 shows the window inline, as shipped) when
     // BANISHED_DEFER_WINDOW_SHOW=0.
-    BootWindow::ArmDeferredShow(cfg, Field<HWND>(dev, Dev::kHwnd));
+    BootWindow::ArmDeferredShow(cfg, WindowOf(dev));
 
     // 6 — SW_SHOWDEFAULT (10) honours the STARTUPINFO the process was launched
     // with, so the resulting show-state is a property of the launcher, not of
     // this code. See the Task B note in the lane report.
-    if (Field<uint8_t>(cfg, Cfg::kSkipShow) == 0) {
-        ShowWindow(Field<HWND>(dev, Dev::kHwnd), SW_SHOWDEFAULT);
+    if (cfg->field42 == 0) {
+        ShowWindow(WindowOf(dev), SW_SHOWDEFAULT);
         // From here the engine window is ON SCREEN. Everything between this
         // point and the first splash Present is a visible, unpainted window,
         // so this mark is the start of the boot blank-window budget.
@@ -1192,15 +1180,15 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     // to position a fullscreen window.
     DXGI_OUTPUT_DESC od;
     output->GetDesc(&od);
-    Field<HMONITOR>(dev, Dev::kMonitor) = od.Monitor;
+    dev->monitor = od.Monitor;
 
     // 8 — settle the window, which may rewrite Device+0x04/+0x08.
-    VDev(dev)->AdjustDisplay();
+    dev->AdjustDisplay();
     StallDebug::Mark("  DX11 AdjustDisplay (window sized)");
 
     // 9
     DXGI_SWAP_CHAIN_DESC desc;
-    FillSwapChainDesc(self, &desc);
+    FillSwapChainDesc(this, &desc);
 
     // 10
     const D3D_FEATURE_LEVEL levels[3] = {
@@ -1211,8 +1199,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     D3D_FEATURE_LEVEL granted = static_cast<D3D_FEATURE_LEVEL>(0);
     if (createDevice(adapter, static_cast<D3D_DRIVER_TYPE>(0), nullptr, 0,
                      levels, 3, D3D11_SDK_VERSION,
-                     reinterpret_cast<ID3D11Device**>(&self->d3dDevice), &granted,
-                     reinterpret_cast<ID3D11DeviceContext**>(&self->d3dContext)) != 0) {
+                     &d3dDevice, &granted, &d3dContext) != 0) {
         System::Error::SetText("VideoDX11: Could not initialize the DX11 device! "
                          "D3D_FEATURE_LEVEL_10_0 is required!", false);   // B.3.4 bridge
         return false;
@@ -1220,7 +1207,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
 
     StallDebug::Mark("  DX11 D3D11CreateDevice");
 
-    ID3D11Device* d3d = static_cast<ID3D11Device*>(self->d3dDevice);
+    ID3D11Device* d3d = d3dDevice;
 
     // 11
     UINT support = 0;
@@ -1240,12 +1227,11 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     }
 
     // 13
-    factory->MakeWindowAssociation(Field<HWND>(dev, Dev::kHwnd),
+    factory->MakeWindowAssociation(WindowOf(dev),
                                    DXGI_MWA_NO_WINDOW_CHANGES);
 
     // 14
-    if (factory->CreateSwapChain(d3d, &desc,
-                                 reinterpret_cast<IDXGISwapChain**>(&self->swapChain)) != 0) {
+    if (factory->CreateSwapChain(d3d, &desc, &swapChain) != 0) {
         System::Error::SetText("VideoDX11: Could not initialize the swap chain!", false);   // B.3.4 bridge
         return false;
     }
@@ -1257,23 +1243,23 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     factory->Release();
 
     // 16
-    if (!CreateColorBuffer(self)) {
-        int aa = ResolveMultisampleMode(self);
+    if (!CreateColorBuffer(this)) {
+        int aa = ResolveMultisampleMode(this);
         const System::String msg = System::String::Format(
             "VideoDX11: Failed to create color buffer with format "
             "DXGI_FORMAT_B8G8R8A8_UNORM [%ix%i %ixAA]",
-            Field<int32_t>(dev, Dev::kWidth),
-            Field<int32_t>(dev, Dev::kHeight), aa);
+            dev->backBufferWidth,
+            dev->backBufferHeight, aa);
         System::Error::SetText(msg._data, false);   // B.3.4 bridge
         return false;
     }
-    if (!CreateDepthBuffer(self)) {
-        int aa = ResolveMultisampleMode(self);
+    if (!CreateDepthBuffer(this)) {
+        int aa = ResolveMultisampleMode(this);
         const System::String msg = System::String::Format(
             "VideoDX11: Failed to create a valid depth buffer format "
             "DXGI_FORMAT_D24_UNORM_S8_UINT [%ix%i %AA]!",
-            Field<int32_t>(dev, Dev::kWidth),
-            Field<int32_t>(dev, Dev::kHeight), aa);
+            dev->backBufferWidth,
+            dev->backBufferHeight, aa);
         System::Error::SetText(msg._data, false);   // B.3.4 bridge
         return false;
     }
@@ -1281,11 +1267,9 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     StallDebug::Mark("  DX11 swapchain + color/depth buffers");
 
     // 17
-    void* app = AppOf();
-    reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
-        0x20, reinterpret_cast< ::Application::Application::MessageCallback>(&DeviceData_OnSetCursor));
-    reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
-        6, reinterpret_cast< ::Application::Application::MessageCallback>(&DeviceData_OnActivate));
+    ::Application::Application* app = AppOf();
+    app->RegisterMessageCallback(0x20, &DeviceData_OnSetCursor);
+    app->RegisterMessageCallback(6, &DeviceData_OnActivate);
     return true;
 }
 
@@ -1318,21 +1302,28 @@ bool DeviceData_CreateDevice(DeviceData* self) {
 // Note the source read is bracketed by Video::Device::Lock/Unlock, because
 // CopyFromTexture stages through the immediate context.
 // ============================================================
-void DeviceData_SetImageBuffer(DeviceData* self, void* imageBuffer, int hotX, int hotY) {
-    if (imageBuffer == self->cursorImage &&
-        hotX == self->cursorHotspotX &&
-        hotY == self->cursorHotspotY)
+void DeviceData::SetImageBuffer(void* imageBuffer, int hotX, int hotY) {
+    // The base slot declares `void*` because its one caller,
+    // UI::UserInterface::SetCursor, holds the material's texture image as
+    // `void*`; retail's Video::Device::SetCursor passes an
+    // ExternalPtr<ImageBuffer>, so this is the ImageBuffer it always was (the
+    // B.3.5 `VImg` bridge, now one cast at the slot's entry).
+    ::Video::ImageBuffer* const image = static_cast< ::Video::ImageBuffer*>(imageBuffer);
+
+    if (image == cursorImage &&
+        hotX == cursorHotspotX &&
+        hotY == cursorHotspotY)
         return;
 
-    if (self->cursor)
-        DestroyCursor(static_cast<HCURSOR>(self->cursor));
+    if (cursor)
+        DestroyCursor(cursor);
 
-    void* dev = DeviceOf(self);
+    ::Video::Device* dev = _owner;
 
     uint32_t pixels[32 * 32];
-    VDev(dev)->Lock();
-    VImg(imageBuffer)->CopyFromTexture(pixels, 32, 32);
-    VDev(dev)->Unlock();
+    dev->Lock();
+    image->CopyFromTexture(pixels, 32, 32);
+    dev->Unlock();
 
     uint32_t andPlane[32];
     uint32_t xorPlane[32];
@@ -1358,17 +1349,18 @@ void DeviceData_SetImageBuffer(DeviceData* self, void* imageBuffer, int hotX, in
                         ((x << 8) & 0xff0000u) | (x << 24);
     }
 
-    HCURSOR cursor = CreateCursor(
-        static_cast<HINSTANCE>(
-            reinterpret_cast<const ::Application::Application*>(AppOf())->GetInstance()),  // B.3.7 bridge
+    HCURSOR built = CreateCursor(
+        static_cast<HINSTANCE>(AppOf()->GetInstance()),
         hotX, hotY, 32, 32, andPlane, xorPlane);
-    self->cursor = cursor;
-    SetCursor(cursor);
+    cursor = built;
+    SetCursor(built);
 
-    self->cursorImage    = imageBuffer;
-    self->cursorHotspotX = hotX;
-    self->cursorHotspotY = hotY;
+    cursorImage    = image;
+    cursorHotspotX = hotX;
+    cursorHotspotY = hotY;
 }
+
+namespace {
 
 // ============================================================
 // 0x180005b00 — Collection::Array<GraphicsInterface>::SetLength(int)
@@ -1538,11 +1530,12 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
 //     out-pointer for null before calling through it.
 // ============================================================
 // The adapter/output/mode walk, factored out of DeviceData_EnumerateInterfaces
-// so the cutover-only DX9 placeholder below can list the SAME adapters under
+// so the cutover-only DX9 placeholder (dx9_placeholder.cpp, through
+// Dx11EnumerateDxgiInterfaces at the end of this file) can list the SAME adapters under
 // its own name (on a retail machine the DX9 plugin enumerates the same GPUs and
 // modes through d3d9). Byte-for-byte the shipped walk; only `dev` and the
 // interface name are parameters now.
-static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
+static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfaceName,
                                        CreateDXGIFactory1_t createFactory,
                                        D3D11CreateDevice_t  createDevice) {
     GraphicsInterface gi;
@@ -1555,7 +1548,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
     }
 
     IDXGIFactory1* factory = nullptr;
-    if (createFactory(kIID_IDXGIFactory1, reinterpret_cast<void**>(&factory)) != 0) {
+    if (createFactory(kIID_IDXGIFactory1, &factory) != 0) {
         RtVideo_GraphicsInterface_Dtor(&gi);
         return false;
     }
@@ -1736,9 +1729,9 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
 
     const bool any = gi.adapterCount > 0;
     if (any) {
-        void* arrayBase = static_cast<uint8_t*>(dev) + Dev::kInterfaces;
-        GfxInterfaceArraySetLength(arrayBase,
-                                   Field<int32_t>(dev, Dev::kInterfaceCount) + 1,
+        // B5 DEV-A: Device+0x40 by name (`Dev::kInterfaces` is gone).
+        GfxInterfaceArraySetLength(&dev->interfaceData,
+                                   dev->interfaceCount + 1,
                                    &gi);
     }
 
@@ -1746,64 +1739,15 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
     return any;
 }
 
-bool DeviceData_EnumerateInterfaces(DeviceData* self) {
-    CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
-    D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
-    if (!createFactory || !createDevice) return Orig<bool (*)(DeviceData*)>(1)(self);
-
-    return EnumerateDxgiInterfaceInto(DeviceOf(self), "DirectX 11",
-                                      createFactory, createDevice);
-}
-
-// ============================================================
-// The DX9 PLACEHOLDER slot -- cutover only
-//
-// VideoDX9-x64.dll imports Runtime-x64.dll, so with the Runtime DLL absent it
-// cannot load and slot 0 stays empty. Retail then appends nothing for it and
-// the Device's GraphicsInterface array holds ONE entry (ours, DX11) while the
-// configuration's interface index -- a SLOT index, 1 -- stays 1: the Options
-// dialog's PopulateResolutionCombo (retail 0x140073ec0) does
-// GetInterface(cfgIndex) with no bounds check and reads past the array. Retail
-// never meets this because both plugin DLLs always load and each appends one
-// entry, so array index == slot index. This placeholder keeps that invariant:
-// it appends a "DirectX 9" interface listing the SAME adapters and modes the
-// DX11 walk finds (which is what the real plugin reports on a machine that has
-// both). Its Create() returns false, so choosing it in Options leaves the
-// fallback loop in Device::PlatformStartup to step back to DX11. Filled only by
-// VideoInterfaceFillDx9Placeholder (standalone/video_interface.cpp), which the
-// ported InitializeInterfaces calls only when the DLL is absent.
-// ============================================================
-namespace {
-struct Dx9Placeholder { void* vptr; void* device; };
-
-void Dx9P_DeletingDtor(Dx9Placeholder* self, int flag) {   // vtable +0x00
-    if (flag & 1) delete self;
-}
-bool Dx9P_EnumerateInterfaces(Dx9Placeholder* self) {       // vtable +0x08
-    CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
-    D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
-    if (!createFactory || !createDevice) return false;
-    // The same adapters and modes DX11 lists, under the DX9 name: what the
-    // real plugin reports on this machine. A zero-adapter entry was tried
-    // first and selecting it in Options died in UserInterface::Draw.
-    return EnumerateDxgiInterfaceInto(self->device, "DirectX 9",
-                                      createFactory, createDevice);
-}
-bool Dx9P_Create(Dx9Placeholder*)  { return false; }        // vtable +0x10
-void Dx9P_Destroy(Dx9Placeholder*) {}                       // vtable +0x18
-
-void* g_dx9PlaceholderVtable[4] = {
-    reinterpret_cast<void*>(&Dx9P_DeletingDtor),
-    reinterpret_cast<void*>(&Dx9P_EnumerateInterfaces),
-    reinterpret_cast<void*>(&Dx9P_Create),
-    reinterpret_cast<void*>(&Dx9P_Destroy),
-};
 }  // namespace
 
-void*       Dx9P_CreateImpl(void* device) {
-    return new Dx9Placeholder{ g_dx9PlaceholderVtable, device };
+// Slot 1. B5 DEV-A (B5_RULES D9): the arm that forwarded to the shipped DLL's
+// slot 1 when dxgi.dll / d3d11.dll's entry points were missing is `return false`
+// inside Dx11EnumerateDxgiInterfaces (the end of this file): there is no
+// original to run.
+bool DeviceData::EnumerateInterfaces() {
+    return Dx11EnumerateDxgiInterfaces(_owner, "DirectX 11");
 }
-const char* Dx9P_NameImpl() { return "DirectX 9"; }
 
 // ============================================================
 // Slots 9..19 — the eleven resource factories
@@ -1850,23 +1794,23 @@ const char* Dx9P_NameImpl() { return "DirectX 9"; }
 //
 // The `this` argument (RCX) is the DeviceData and is ignored by all eleven.
 //
+// B5 DEV-A: the eleven are `DeviceData` members overriding the base's slots
+// 9..19 with its exact signatures (base-typed returns). A class that is a real
+// subclass is `return new XData(owner);` — the base's class-scope operator new
+// is retail's MemAlloc(size, 4) and the ctor chain is `??0XData` + the vptr
+// store, now the compiler's (retail's `if (!p) return NULL` is not reproduced:
+// B5_RULES D2). Since block RES landed all eleven are real subclasses, so the
+// POD helper (MemAlloc + base ctor + hand-table vptr) and its bridge casts are
+// gone.
+//
 // ENDGAME B.3R block DX: the base-ctor step was a call through the import row
 // `??0XData@Video@@QEAA@PEAVX@1@@Z`, whose body was the Runtime door
-// `Video_XData_Ctor` = `::new (self) Video::XData(owner)`. That construction is
-// now written here, against the real class (runtime/types/video/CompanionData.h):
-// it stores the owner at +0x08 and a vptr the next line overwrites with dx11's
-// hand table, exactly as the door did. The readiness guard that forwarded each
-// factory to `Orig<>(slot)` when an import was missing is gone with the struct.
+// `Video_XData_Ctor` = `::new (self) Video::XData(owner)`; it is now the base
+// constructor of each `new XData(owner)`. The readiness guard that forwarded
+// each factory to the shipped slot when an import was missing is gone with the
+// struct.
 // ============================================================
-template <typename T, typename Base>
-T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
-    T* p = static_cast<T*>(System::MemoryAllocator::MemAlloc(size, 4));
-    if (!p) return nullptr;
-    ::new (static_cast<void*>(p)) Base(owner);   // retail: CALL [IAT ??0XData@Video@@]
-    p->vptr = Dx11VtableAddress(vt);
-    return p;
-}
-void* Factory_ContextData(DeviceData* /*self*/, ::Video::Context* owner) {
+::Video::ContextData* DeviceData::CreateContextData(::Video::Context* owner) {
     // B5 CTX: the base's operator new is retail's MemAlloc(0x20, 4); the ctor chain
     // is retail's `??0ContextData` + the vptr store (now the compiler's table) +
     // the three tail stores (ContextData's constructor). The `if (!p)` arm is
@@ -1874,14 +1818,14 @@ void* Factory_ContextData(DeviceData* /*self*/, ::Video::Context* owner) {
     return new ContextData(owner);
 }
 
-void* Factory_ImageBufferData(DeviceData* /*self*/, ::Video::ImageBuffer* owner) {
+::Video::ImageBufferData* DeviceData::CreateImageBufferData(::Video::ImageBuffer* owner) {
     // B5 RES: the base's operator new is retail's MemAlloc(0x38, 4); the ctor chain
     // is retail's `??0ImageBufferData` + the vptr store (now the compiler's table)
     // + the five null stores.
     return new ImageBufferData(owner);
 }
 
-void* Factory_ConstantBufferData(DeviceData* /*self*/, ::Video::ConstantBuffer* owner) {
+::Video::ConstantBufferData* DeviceData::CreateConstantBufferData(::Video::ConstantBuffer* owner) {
     // B5 BUF: the base's operator new is retail's MemAlloc(0x28, 4); the ctor chain
     // is retail's `??0ConstantBufferData` + the vptr store (now the compiler's
     // table) + the -1 sentinel and the four zeroes, then (ours) the join to the
@@ -1889,67 +1833,76 @@ void* Factory_ConstantBufferData(DeviceData* /*self*/, ::Video::ConstantBuffer* 
     return new ConstantBufferData(owner);
 }
 
-void* Factory_IndexBufferData(DeviceData* /*self*/, ::Video::IndexBuffer* owner) {
+::Video::IndexBufferData* DeviceData::CreateIndexBufferData(::Video::IndexBuffer* owner) {
     // B5 BUF: MemAlloc(0x20, 4) + `??0IndexBufferData` + the vptr store + buffer,
     // writeCursor (dword) and locked (byte); +0x1d..+0x1f untouched.
     return new IndexBufferData(owner);
 }
 
-void* Factory_VertexBufferData(DeviceData* /*self*/, ::Video::VertexBuffer* owner) {
+::Video::VertexBufferData* DeviceData::CreateVertexBufferData(::Video::VertexBuffer* owner) {
     // B5 BUF: MemAlloc(0x20, 4) + `??0VertexBufferData` + the same three stores.
     return new VertexBufferData(owner);
 }
 
-void* Factory_VertexLayoutData(DeviceData* /*self*/, ::Video::VertexLayout* owner) {
+::Video::VertexLayoutData* DeviceData::CreateVertexLayoutData(::Video::VertexLayout* owner) {
     // B5 RES: the base's operator new is retail's MemAlloc(0x18, 4); the ctor chain
     // is retail's `??0VertexLayoutData` + the vptr store (now the compiler's table)
     // + `inputLayout = nullptr`.
     return new VertexLayoutData(owner);
 }
 
-void* Factory_VertexProgramData(DeviceData* /*self*/, ::Video::VertexProgram* owner) {
+::Video::VertexProgramData* DeviceData::CreateVertexProgramData(::Video::VertexProgram* owner) {
     // B5 RES: the base's operator new is retail's MemAlloc(0x30, 4); the ctor chain
     // is retail's `??0VertexProgramData` + the vptr store (now the compiler's table)
     // + the four `variants[i] = nullptr`.
     return new VertexProgramData(owner);
 }
 
-void* Factory_PixelProgramData(DeviceData* /*self*/, ::Video::PixelProgram* owner) {
+::Video::PixelProgramData* DeviceData::CreatePixelProgramData(::Video::PixelProgram* owner) {
     // B5 RES: the base's operator new is retail's MemAlloc(0x30, 4); the ctor chain
     // is retail's `??0PixelProgramData` + the vptr store (now the compiler's table)
     // + the four `variants[i] = nullptr`.
     return new PixelProgramData(owner);
 }
 
-void* Factory_RenderStateData(DeviceData* /*self*/, ::Video::RenderState* owner) {
+::Video::RenderStateData* DeviceData::CreateRenderStateData(::Video::RenderState* owner) {
     // B5 RES: the base's operator new is retail's MemAlloc(0x28, 4); the ctor chain
     // is retail's `??0RenderStateData` + the vptr store (now the compiler's table)
     // + the three null stores.
     return new RenderStateData(owner);
 }
 
-void* Factory_VideoProgramData(DeviceData* /*self*/, ::Video::VideoProgram* owner) {
+::Video::VideoProgramData* DeviceData::CreateVideoProgramData(::Video::VideoProgram* owner) {
     // B5 PILOT: the base's operator new is retail's MemAlloc(0x10, 4); the ctor chain
     // is retail's `??0VideoProgramData` + the vptr store (now the compiler's table).
     return new VideoProgramData(owner);
 }
 
-void* Factory_RenderBufferData(DeviceData* /*self*/, ::Video::RenderBuffer* owner) {
+::Video::RenderBufferData* DeviceData::CreateRenderBufferData(::Video::RenderBuffer* owner) {
     // B5 PILOT: the base's operator new is retail's MemAlloc(0x10, 4); the ctor chain
     // is retail's `??0RenderBufferData` + the vptr store (now the compiler's table).
     return new RenderBufferData(owner);
 }
 
-
-}  // namespace
-
 // The one function in this lane with a caller outside it. 0x180004340 is a near
 // CALL from ContextData::BeginCommands, not a vtable dispatch, so the seam has
 // no way to redirect it — L5 has to name our port directly, and it can only do
-// that through a declaration with external linkage. Everything else here stays
-// in the anonymous namespace.
-int Dx11_DeviceData_Resize(void* deviceData) {
-    return DeviceData_Resize(static_cast<DeviceData*>(deviceData));
+// that through a declaration with external linkage. (B5 DEV-A: the slots are
+// DeviceData members now; the helpers stay in the anonymous namespace.)
+int Dx11_DeviceData_Resize(DeviceData* deviceData) {
+    return DeviceData_Resize(deviceData);
+}
+
+// The slot-1 walk with external linkage (VideoDX11Plugin.h): DeviceData's own
+// EnumerateInterfaces and the DX9 placeholder (dx9_placeholder.cpp) both run
+// it, under their own interface name — one body, never a copy. B5 DEV-A (D9):
+// the two graphics entry points failing to resolve returns false; there is no
+// shipped DLL behind it to forward to.
+bool Dx11EnumerateDxgiInterfaces(::Video::Device* device, const char* interfaceName) {
+    CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
+    D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
+    if (!createFactory || !createDevice) return false;
+    return EnumerateDxgiInterfaceInto(device, interfaceName, createFactory, createDevice);
 }
 
 }  // namespace VideoDX11
@@ -1982,48 +1935,10 @@ int Dx11_DeviceData_Resize(void* deviceData) {
 //     to change.
 //
 // ============================================================
-// Registration — all 16 slots, graduated default-on.
-//
-// Slots 1, 2 and 3 are the three that can end a session with no window. They
-// were verified in-game and RenderDoc-diffed against the shipped DLL before
-// graduating; see dx11/README.md §"Per-draw pipeline-state equality".
+// B5 DEV-A: the sixteen DeviceData slot registrations that stood
+// here (and slots 4-7's four in devicedata_stubs.cpp) are GONE: DeviceData is a
+// real subclass and the compiler builds its table. Slots 1, 2 and 3 are the
+// three that can end a session with no window; they were verified in-game and
+// RenderDoc-diffed against the shipped DLL before graduating (dx11/README.md
+// "Per-draw pipeline-state equality") and their bodies are unchanged here.
 // ============================================================
-
-DX11_REGISTER_SLOT(DeviceData, 0, &::VideoDX11::DeviceData_Dtor,
-                   "DeviceData::~DeviceData (scalar deleting)");
-DX11_REGISTER_SLOT(DeviceData, 1, &::VideoDX11::DeviceData_EnumerateInterfaces,
-                   "DeviceData::EnumerateInterfaces");
-DX11_REGISTER_SLOT(DeviceData, 2, &::VideoDX11::DeviceData_CreateDevice,
-                   "DeviceData::CreateDevice");
-DX11_REGISTER_SLOT(DeviceData, 3, &::VideoDX11::DeviceData_Shutdown, "DeviceData::Shutdown");
-DX11_REGISTER_SLOT(DeviceData, 8, &::VideoDX11::DeviceData_SetImageBuffer,
-                   "DeviceData::SetImageBuffer (HCURSOR)");
-DX11_REGISTER_SLOT(DeviceData, 9, &::VideoDX11::Factory_ContextData,
-                   "DeviceData::CreateContextData");
-DX11_REGISTER_SLOT(DeviceData, 10, &::VideoDX11::Factory_ImageBufferData,
-                   "DeviceData::CreateImageBufferData");
-DX11_REGISTER_SLOT(DeviceData, 11, &::VideoDX11::Factory_ConstantBufferData,
-                   "DeviceData::CreateConstantBufferData");
-DX11_REGISTER_SLOT(DeviceData, 12, &::VideoDX11::Factory_IndexBufferData,
-                   "DeviceData::CreateIndexBufferData");
-DX11_REGISTER_SLOT(DeviceData, 13, &::VideoDX11::Factory_VertexBufferData,
-                   "DeviceData::CreateVertexBufferData");
-DX11_REGISTER_SLOT(DeviceData, 14, &::VideoDX11::Factory_VertexLayoutData,
-                   "DeviceData::CreateVertexLayoutData");
-DX11_REGISTER_SLOT(DeviceData, 15, &::VideoDX11::Factory_VertexProgramData,
-                   "DeviceData::CreateVertexProgramData");
-DX11_REGISTER_SLOT(DeviceData, 16, &::VideoDX11::Factory_PixelProgramData,
-                   "DeviceData::CreatePixelProgramData");
-DX11_REGISTER_SLOT(DeviceData, 17, &::VideoDX11::Factory_RenderStateData,
-                   "DeviceData::CreateRenderStateData");
-DX11_REGISTER_SLOT(DeviceData, 18, &::VideoDX11::Factory_VideoProgramData,
-                   "DeviceData::CreateVideoProgramData");
-DX11_REGISTER_SLOT(DeviceData, 19, &::VideoDX11::Factory_RenderBufferData,
-                   "DeviceData::CreateRenderBufferData");
-
-// The two placeholder entry points, with EXTERNAL linkage (the bodies above sit
-// in this file's unnamed namespace, as every DX11 body does).
-namespace VideoDX11 {
-void*       Dx9Placeholder_CreateDeviceData(void* device) { return Dx9P_CreateImpl(device); }
-const char* Dx9Placeholder_GetDeviceName()                { return Dx9P_NameImpl(); }
-}  // namespace VideoDX11

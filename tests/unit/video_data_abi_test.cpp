@@ -122,7 +122,10 @@ UNIT_TEST(video_companion_data_layout) {
 // claim one slot longer). Slot 0 is `DeletingDtor(unsigned)` and is an ordinary
 // virtual, NOT a destructor — ENDGAME B.1 decision 2. B3X W1 kept this shape
 // for the twelve `Video::*Data` classes on purpose (exempt by decision,
-// B3X_RULES X1: dx11's hand tables are built in retail order).
+// B3X_RULES X1: dx11's hand tables are built in retail order). B5 (the dx11
+// seam) flips them class by class to `virtual ~T()`; the DeviceData mirror below
+// is flipped (B5 DEV-A), the IndexBufferData / VertexLayoutData mirrors follow
+// their blocks.
 //
 // The mirrors give slot 0 a BODY where the real classes declare it `= 0`. That
 // is the one deliberate difference: the real slot-0 bodies are the twelve
@@ -134,9 +137,14 @@ namespace {
 
 // Mirrors `Video::DeviceData`: slot 0 concrete, 1..19 pure. The four unnamed
 // stub slots keep the header's `SlotN` spelling.
+// B5 DEV-A: `Video::DeviceData` FLIPPED (B5_RULES D1) -- retail slot 0 is
+// `virtual ~T()`, D1 + D0 under GCC, with the root's class-scope operator
+// delete (MemFree; a recording one here). The mirror follows it, so every raw
+// offset below is a RETAIL offset that `SlotAt` / `RetailByteOffset` shifts.
 class MirrorDeviceData {
 public:
-    virtual MirrorDeviceData* DeletingDtor(unsigned flags) { Note(this, 0, flags); return this; }
+    virtual ~MirrorDeviceData() { Note(this, 0); }                     // [0] D1 + D0
+    DTOR_CHECK_RECORDING_DELETE
     virtual bool  EnumerateInterfaces() = 0;
     virtual bool  CreateDevice() = 0;
     virtual void  Shutdown() = 0;
@@ -158,8 +166,6 @@ public:
     virtual void* CreateRenderBufferData(void* owner) = 0;
 
     void* _owner;
-protected:
-    ~MirrorDeviceData() = default;
 };
 
 class ProbeDeviceData final : public MirrorDeviceData {
@@ -257,10 +263,25 @@ UNIT_TEST(video_companion_data_slot_order) {
     ProbeDeviceData dev;
     MirrorDeviceData* d = &dev;
 
+    // Retail slot 0 is D1 (raw) / D0 (compiler slot 1), as for VertexLayout in
+    // PART E: D1 runs on a placement-new'd probe never destroyed again, D0 frees
+    // a malloc'd one through the class operator delete.
+    {
+        alignas(ProbeDeviceData) unsigned char buf[sizeof(ProbeDeviceData)];
+        ProbeDeviceData* q = ::new (static_cast<void*>(buf)) ProbeDeviceData();
+        Reset(); dtor_check::ResetFrees();
+        SlotAt<void (*)(void*), MirrorDeviceData>(q, 0x00)(q);
+        CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == q);
+        CHECK_EQ(dtor_check::g_frees, 0);
+        ProbeDeviceData* h = dtor_check::NewOnMalloc<ProbeDeviceData>();
+        Reset(); dtor_check::ResetFrees();
+        dtor_check::CallD0(h);
+        CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == h);
+        CHECK_EQ(dtor_check::g_frees, 1); CHECK(dtor_check::g_lastFree == h);
+    }
+
     // Direction A: a raw `(*(void***)p)[N]` caller lands on slot N's override,
     // `this` unadjusted.
-    Reset(); SlotAt<void* (*)(void*, unsigned), MirrorDeviceData>(d, 0x00)(d, 1);
-    CHECK_EQ(g_lastMark, 0); CHECK(g_lastSelf == d); CHECK_EQ(g_lastArg, 1);
     Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x08)(d);  CHECK_EQ(g_lastMark, 1);
     Reset(); SlotAt<bool (*)(void*), MirrorDeviceData>(d, 0x10)(d);  CHECK_EQ(g_lastMark, 2);
     Reset(); SlotAt<void (*)(void*), MirrorDeviceData>(d, 0x18)(d);  CHECK_EQ(g_lastMark, 3);
@@ -417,7 +438,8 @@ namespace {
 // B3X W1: `Video::VertexLayout` is an Object::Base class and FLIPPED (retail
 // slot 0 = `virtual ~T()`, D1 + D0 under GCC); the mirror follows it, with a
 // recording class-scope operator delete for the root's MemFree one. (The
-// `*Data` mirrors above are EXEMPT by decision, B3X_RULES X1, and keep theirs.)
+// `*Data` mirrors above follow their classes through B5: MirrorDeviceData is
+// flipped the same way.)
 class MirrorCompiledExternal {
 public:
     virtual ~MirrorCompiledExternal() { Note(this, 0); }      // [0] D1 + D0

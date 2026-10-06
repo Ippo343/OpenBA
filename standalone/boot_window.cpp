@@ -35,7 +35,7 @@ bool DeferralEnabled() {
 
 } // namespace
 
-bool ArmDeferredShow(void* videoConfig, HWND hwnd) {
+bool ArmDeferredShow(::Video::Configuration* videoConfig, HWND hwnd) {
     if (!videoConfig || !hwnd) return false;
     if (!DeferralEnabled()) {
         printf("[BootWindow] deferral disabled (BANISHED_DEFER_WINDOW_SHOW=0) — "
@@ -45,8 +45,8 @@ bool ArmDeferredShow(void* videoConfig, HWND hwnd) {
     }
     if (g_armed || g_shown) return g_armed;   // only the first device creation arms
 
-    // LEFT: dx11/src/devicedata.cpp (dx11 seam) hands the configuration as void*.
-    static_cast< ::Video::Configuration*>(videoConfig)->field42 = 1;   // +0x42 (kCfgSkipShow)  // LEFT: dx11 seam (devicedata.cpp hands its cfg as void*)
+    // B5 DEV-A (B5_RULES D7): dx11/src/devicedata.cpp hands the typed configuration.
+    videoConfig->field42 = 1;   // +0x42 (kCfgSkipShow)
 
     g_hwnd      = hwnd;
     g_armed     = true;

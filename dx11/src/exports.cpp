@@ -16,13 +16,8 @@
 // Porting it moves that allocation to us; the object it produces is
 // byte-identical, so the vtable patching is unaffected either way.
 
-#include "dx11_backend_access.h"
-#include "dx11_seam.h"
-#include "video/CompanionData.h"   // ::Video::DeviceData, the base ctor (B.3R DX)
-
-#include <cstdint>
-#include <cstring>
-#include <new>
+#include "VideoDX11Data.h"     // VideoDX11::DeviceData
+#include "VideoDX11Plugin.h"   // the declarations of the two exports
 
 namespace VideoDX11 {
 
@@ -37,9 +32,8 @@ namespace VideoDX11 {
 //   IAT 0x1800134c0  ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
 //                    -> System::MemoryAllocator::MemAlloc
 //   IAT 0x180013220  ??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z
-//                    -> ::new (p) ::Video::DeviceData(device) — the body of the
-//                       Runtime door the name bound (runtime/src/video/
-//                       companion_data.cpp), against the real class
+//                    -> the `Video::DeviceData(owner)` base constructor of
+//                       `new VideoDX11::DeviceData(device)` (B5 DEV-A)
 // ============================================================
 
 // ============================================================
@@ -54,36 +48,23 @@ namespace VideoDX11 {
 //     zero the DX11-private tail
 //     return p
 //
-// Two details the field-by-field assignment below preserves and a memset would
+// Two details the field-by-field initialisation preserves and a memset would
 // not:
 //   * +0x40 is written as a single BYTE (MOV byte [RBX+0x40],AL). +0x41..+0x47
 //     keep whatever the base ctor left there.
 //   * +0x58 is written as a QWORD -1 (MOV qword [RBX+0x58],-1), which sets
 //     BOTH cursorHotspotX and cursorHotspotY to -1 — not just the first.
+//
+// B5 DEV-A (the dx11 seam): `VideoDX11::DeviceData` is a real subclass of
+// `Video::DeviceData`. The base's class-scope operator new is retail's
+// MemAlloc(0x70, 4) (runtime/src/video/companion_operators.cpp), the base ctor
+// and the vptr store are the compiler's, and DeviceData's constructor
+// (devicedata.cpp) writes exactly the stores listed above. Retail's
+// `if (!p) return NULL` is not reproduced (B5_RULES D2). The return is the
+// BASE type, so it is `Video::Device::CreateDeviceDataFn` with no cast.
 // ============================================================
-DeviceData* Dx11_CreateDeviceData(::Video::Device* device) {   // B5 W0: the owner is typed (Device::CreateDeviceDataFn)
-    DeviceData* p = static_cast<DeviceData*>(System::MemoryAllocator::MemAlloc(0x70, 4));
-    if (!p) return nullptr;
-
-    ::new (static_cast<void*>(p)) ::Video::DeviceData(device);   // retail: CALL [IAT 0x180013220]
-    p->vptr = Dx11VtableAddress(Vt::DeviceData);
-
-    p->unk10          = nullptr;
-    p->swapChain      = nullptr;
-    p->d3dDevice      = nullptr;
-    p->d3dContext     = nullptr;
-    p->depthBuffer    = nullptr;
-    p->colorBuffer    = nullptr;
-    p->wasFullscreen  = 0;             // byte only — pad41 untouched, as shipped
-    p->cursor         = nullptr;
-    p->cursorImage    = nullptr;
-    p->cursorHotspotX = -1;            // the qword -1 at +0x58 covers both
-    p->cursorHotspotY = -1;
-    p->trackedImages  = nullptr;
-    p->trackedCount   = 0;
-    p->trackedCapacity = 0;
-
-    return p;
+::Video::DeviceData* Dx11_CreateDeviceData(::Video::Device* device) {
+    return new DeviceData(device);
 }
 
 // ============================================================

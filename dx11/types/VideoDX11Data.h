@@ -68,10 +68,65 @@ static_assert(offsetof(DataBase, owner) == 0x08, "DataBase::owner");
 //   slot 8  cursor    0x180005450  (writes +0x48/+0x50/+0x58/+0x5c)
 //   0x180004340        resize      (releases and rebuilds +0x30/+0x38, reads +0x40)
 //   0x1800042d0        WM_ACTIVATE (the only writer of +0x40)
+//
+// B5 DEV-A (the dx11 seam): a real C++ subclass of `Video::DeviceData`; the
+// compiler builds its vtable (retail slot N >= 1 is compiler slot N + 1, which
+// nothing indexes: Runtime and contextdata.cpp call every slot BY NAME through the
+// base). `_owner` (+0x08, `Video::Device*`) is the base's and replaces the old
+// `device` field; the old `vptr` field is the compiler's. The COM pointers are
+// typed through the forward declarations below (D4), so this header still never
+// includes <windows.h> / <d3d11.h>. The slot names: Runtime's
+// `Video::DeviceData` (runtime/types/video/CompanionData.h), whose comments carry
+// the retail evidence for each; the four `SlotN` stubs have no recoverable name.
 // ============================================================
-struct DeviceData {
-    void*     vptr;              // +0x00
-    void*     device;            // +0x08  Video::Device* owner
+}  // namespace VideoDX11
+
+struct IDXGIFactory1;
+struct IDXGISwapChain;
+struct ID3D11Device;
+struct ID3D11DeviceContext;
+struct ID3D11Texture2D;
+// HCURSOR without <windows.h>: mingw-w64 builds STRICT, where HCURSOR is HICON is
+// `struct HICON__*` (DECLARE_HANDLE). devicedata.cpp asserts the identity, so a
+// NO_STRICT build fails there instead of converting silently.
+struct HICON__;
+
+namespace VideoDX11 {
+
+class DeviceData final : public ::Video::DeviceData {
+public:
+    // CreateDeviceData 0x1800011a0: MemAlloc(0x70, 4) + ??0DeviceData(device) + the
+    // vptr store, then EXACTLY these stores. +0x40 is a single BYTE
+    // (`MOV byte [RBX+0x40],AL`): pad41 keeps what MemAlloc left. +0x58 is ONE
+    // qword -1 (`MOV qword [RBX+0x58],-1`): both hotspots read -1.
+    explicit DeviceData(::Video::Device* owner);
+    ~DeviceData() override;                                      // [ 0] 0x180004270  frees +0x60, chains ??1DeviceData@Video@@UEAA@XZ
+
+    bool  EnumerateInterfaces() override;                        // [ 1] 0x180004690  DXGI adapter/output/mode walk
+    bool  CreateDevice() override;                               // [ 2] 0x180004e10  D3D11 device + swap chain + buffers
+    void  Shutdown() override;                                   // [ 3] 0x1800051c0  unregister, DestroyCursor, release
+    void  Slot4(bool loading) override;                          // [ 4] 0x180001190  `ret` — shared with VideoProgramData[2]
+    float Slot5() override;                                      // [ 5] 0x180005430  `xorps xmm0,xmm0; ret`
+    bool  Slot6() override;                                      // [ 6] 0x180005440  `xor al,al; ret`
+    bool  Slot7() override;                                      // [ 7] 0x180001060  `mov al,1; ret` — shared with RenderBufferData[1], VideoProgramData[1]
+    void  SetImageBuffer(void* imageBuffer, int hotX, int hotY) override;  // [ 8] 0x180005450  HCURSOR from a 32x32 ImageBuffer
+
+    // [9]..[19] The eleven resource factories. The address <-> class pairing was
+    // verified independently of the slot ORDER: each factory's base-ctor CALL
+    // resolves through the VideoDX11 Runtime-import IAT (base 0x180013218) to the
+    // matching ??0<Class>Data@Video@@ mangled name (the table in devicedata.cpp).
+    // Each returns the BASE type, as the slot declares it (not covariant).
+    ::Video::ContextData*        CreateContextData(::Video::Context* owner) override;               // [ 9] 0x180005650  0x20 bytes, vt 0x1800186f0
+    ::Video::ImageBufferData*    CreateImageBufferData(::Video::ImageBuffer* owner) override;       // [10] 0x1800056c0  0x38 bytes, vt 0x180018790
+    ::Video::ConstantBufferData* CreateConstantBufferData(::Video::ConstantBuffer* owner) override; // [11] 0x180005730  0x28 bytes, vt 0x1800185d0
+    ::Video::IndexBufferData*    CreateIndexBufferData(::Video::IndexBuffer* owner) override;       // [12] 0x1800057a0  0x20 bytes, vt 0x1800187c8
+    ::Video::VertexBufferData*   CreateVertexBufferData(::Video::VertexBuffer* owner) override;     // [13] 0x180005810  0x20 bytes, vt 0x180018830
+    ::Video::VertexLayoutData*   CreateVertexLayoutData(::Video::VertexLayout* owner) override;     // [14] 0x180005880  0x18 bytes, vt 0x180018878
+    ::Video::VertexProgramData*  CreateVertexProgramData(::Video::VertexProgram* owner) override;   // [15] 0x1800058f0  0x30 bytes, vt 0x180018890
+    ::Video::PixelProgramData*   CreatePixelProgramData(::Video::PixelProgram* owner) override;     // [16] 0x180005960  0x30 bytes, vt 0x180018800
+    ::Video::RenderStateData*    CreateRenderStateData(::Video::RenderState* owner) override;       // [17] 0x1800059d0  0x28 bytes, vt 0x180018818
+    ::Video::VideoProgramData*   CreateVideoProgramData(::Video::VideoProgram* owner) override;     // [18] 0x180005a40  0x10 bytes, vt 0x1800185a8
+    ::Video::RenderBufferData*   CreateRenderBufferData(::Video::RenderBuffer* owner) override;     // [19] 0x180005aa0  0x10 bytes, vt 0x180018588
 
     // +0x10 IDXGIFactory1* — CONFIRMED (L6), no longer TBD. Created by slot 2's
     // CreateDXGIFactory1(IID at 0x180018b98 = IID_IDXGIFactory1, &this[0x10]),
@@ -83,12 +138,12 @@ struct DeviceData {
     // nulls the field, so this dangles for the rest of the session. Slot 3 does
     // not touch it, which is correct — releasing it again would be a double
     // release.
-    void*     unk10;             // +0x10  IDXGIFactory1*, dangling after slot 2
-    void*     swapChain;         // +0x18  IDXGISwapChain* (SetFullscreenState(FALSE) before release)
-    void*     d3dDevice;         // +0x20  ID3D11Device*        (CreateTexture2D callee in 0x1800052b0)
-    void*     d3dContext;        // +0x28  ID3D11DeviceContext* (every resource Bind reads this)
-    void*     depthBuffer;       // +0x30  ID3D11Texture2D* D24_UNORM_S8_UINT, BIND_DEPTH_STENCIL
-    void*     colorBuffer;       // +0x38  ID3D11Texture2D* B8G8R8A8_UNORM,    BIND_RENDER_TARGET
+    IDXGIFactory1*       unk10;          // +0x10  IDXGIFactory1*, dangling after slot 2
+    IDXGISwapChain*      swapChain;      // +0x18  (SetFullscreenState(FALSE) before release)
+    ID3D11Device*        d3dDevice;      // +0x20  (CreateTexture2D callee in 0x1800052b0)
+    ID3D11DeviceContext* d3dContext;     // +0x28  (every resource Bind reads this)
+    ID3D11Texture2D*     depthBuffer;    // +0x30  D24_UNORM_S8_UINT, BIND_DEPTH_STENCIL
+    ID3D11Texture2D*     colorBuffer;    // +0x38  B8G8R8A8_UNORM,    BIND_RENDER_TARGET
 
     // +0x40 "was fullscreen, restore it when focus returns" — NOT "is
     // fullscreen". The live fullscreen flag is Video::Configuration+0x40; this
@@ -109,10 +164,10 @@ struct DeviceData {
 
     // Slot 3 DestroyCursor()s +0x48 without nulling it, so it dangles after
     // shutdown; slot 8's identity check then compares against a stale handle.
-    void*     cursor;            // +0x48  HCURSOR built by slot 8 from a 32x32 ImageBuffer
-    void*     cursorImage;       // +0x50  Video::ImageBuffer* the cursor was built from
-    int32_t   cursorHotspotX;    // +0x58  CreateCursor xHotSpot
-    int32_t   cursorHotspotY;    // +0x5c  CreateCursor yHotSpot
+    HICON__*              cursor;          // +0x48  HCURSOR built by slot 8 from a 32x32 ImageBuffer
+    ::Video::ImageBuffer* cursorImage;     // +0x50  the ImageBuffer the cursor was built from
+    int32_t               cursorHotspotX;  // +0x58  CreateCursor xHotSpot
+    int32_t               cursorHotspotY;  // +0x5c  CreateCursor yHotSpot
 
     // Registry of the Video::ImageBuffer*s that must be released and recreated
     // across a device / swap-chain reset. Membership test (from ~ImageBufferData):
@@ -122,13 +177,12 @@ struct DeviceData {
     // is preserved and a port must preserve it.
     // NOT the Device::GraphicsInterface array — the older note had that wrong;
     // the stride here is 8, not 0x18.
-    void*     trackedImages;     // +0x60  Video::ImageBuffer*[]
-    int32_t   trackedCount;      // +0x68
-    int32_t   trackedCapacity;   // +0x6c
+    ::Video::ImageBuffer** trackedImages;  // +0x60  Video::ImageBuffer*[]
+    int32_t                trackedCount;   // +0x68
+    int32_t                trackedCapacity;// +0x6c
 };
 static_assert(sizeof(DeviceData) == 0x70, "DeviceData size (MemAlloc 0x70 @ 0x1800011a0)");
-static_assert(offsetof(DeviceData, vptr) == 0x0, "DeviceData::vptr");
-static_assert(offsetof(DeviceData, device) == 0x8, "DeviceData::device");
+static_assert(offsetof(DeviceData, _owner) == 0x8, "DeviceData::_owner (the base's)");
 static_assert(offsetof(DeviceData, unk10) == 0x10, "DeviceData::unk10");
 static_assert(offsetof(DeviceData, pad41) == 0x41, "DeviceData::pad41");
 static_assert(offsetof(DeviceData, cursorHotspotY) == 0x5C, "DeviceData::cursorHotspotY");
@@ -145,46 +199,9 @@ static_assert(offsetof(DeviceData, trackedImages)   == 0x60, "DeviceData::tracke
 static_assert(offsetof(DeviceData, trackedCount)    == 0x68, "DeviceData::trackedCount");
 static_assert(offsetof(DeviceData, trackedCapacity) == 0x6c, "DeviceData::trackedCapacity");
 
-// DeviceData vtable slot indices — see ../README.md status board.
-//
-// Slots 0-3 and 8-19 are named from what the code demonstrably does; the
-// Runtime-side Video::DeviceData interface names are NOT recoverable the way
-// ContextData's were (Video::Device does not tail-jump through its DeviceData*
-// one-method-per-thunk, so there is no name table to read off). Slot 8 is the
-// exception and IS a recovered name: Runtime exports
-// ?SetImageBuffer@Context@Video@@ and the DX11 body takes exactly
-// (ImageBuffer*, int, int).
-enum DeviceDataSlot : int {
-    kSlot_Dtor                    = 0,   // 0x180004270  scalar deleting dtor
-    kSlot_EnumerateInterfaces     = 1,   // 0x180004690  DXGI adapter/output/mode walk
-    kSlot_CreateDevice            = 2,   // 0x180004e10  D3D11 device + swap chain + buffers
-    kSlot_Shutdown                = 3,   // 0x1800051c0  unregister, DestroyCursor, release
-    // Slots 4-7 are one-liner stubs; their *names* are still unknown (they are
-    // pure virtuals on the Runtime-side Video::DeviceData that DX11 declines to
-    // implement), but their bodies are fully decoded.
-    kSlot_Stub4_Void              = 4,   // 0x180001190  `ret`
-    kSlot_Stub5_ZeroFloat         = 5,   // 0x180005430  `xorps xmm0,xmm0; ret`
-    kSlot_Stub6_False             = 6,   // 0x180005440  `xor al,al; ret`
-    kSlot_Stub7_True              = 7,   // 0x180001060  `mov al,1; ret`
-    kSlot_SetImageBuffer          = 8,   // 0x180005450  HCURSOR from a 32x32 ImageBuffer
-    // The eleven resource factories. The address <-> class pairing below was
-    // verified independently of the slot ORDER: each factory's base-ctor CALL
-    // resolves through the VideoDX11 Runtime-import IAT (base 0x180013218) to
-    // the matching ??0<Class>Data@Video@@ mangled name. See the table in
-    // dx11/src/devicedata.cpp.
-    kSlot_CreateContextData       = 9,   // 0x180005650  0x20 bytes, vt 0x1800186f0
-    kSlot_CreateImageBufferData   = 10,  // 0x1800056c0  0x38 bytes, vt 0x180018790
-    kSlot_CreateConstantBufferData= 11,  // 0x180005730  0x28 bytes, vt 0x1800185d0
-    kSlot_CreateIndexBufferData   = 12,  // 0x1800057a0  0x20 bytes, vt 0x1800187c8
-    kSlot_CreateVertexBufferData  = 13,  // 0x180005810  0x20 bytes, vt 0x180018830
-    kSlot_CreateVertexLayoutData  = 14,  // 0x180005880  0x18 bytes, vt 0x180018878
-    kSlot_CreateVertexProgramData = 15,  // 0x1800058f0  0x30 bytes, vt 0x180018890
-    kSlot_CreatePixelProgramData  = 16,  // 0x180005960  0x30 bytes, vt 0x180018800
-    kSlot_CreateRenderStateData   = 17,  // 0x1800059d0  0x28 bytes, vt 0x180018818
-    kSlot_CreateVideoProgramData  = 18,  // 0x180005a40  0x10 bytes, vt 0x1800185a8
-    kSlot_CreateRenderBufferData  = 19,  // 0x180005aa0  0x10 bytes, vt 0x180018588
-    kDeviceDataSlotCount          = 20
-};
+// (B5 DEV-A: the `DeviceDataSlot` index enum that stood here had no reader and
+// its numbers stopped naming compiler slots with the flip; the retail address of
+// every slot is on its override declaration above.)
 
 // ============================================================
 // Resource *Data subclasses.

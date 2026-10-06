@@ -291,11 +291,10 @@ static_assert(offsetof(::Video::Context, _boneAndProjectionStaging) + kBoneDataB
 // takes it too.
 //
 // `Video::Device::deviceData` is typed `Video::DeviceData*`; the object is
-// dx11's DeviceData, which is still a POD with a hand table in this tree (the
-// DEV block's class), so its D3D fields are reached through this one cast. The
-// CLOSE removes it once DeviceData is a real subclass.
+// dx11's DeviceData (B5 DEV-A: a real subclass), reached through the one
+// downcast dx11 makes (Dx11DeviceDataOf, dx11_backend_access.h).
 inline DeviceData* OwnerDeviceData(const ::Video::Context* ctx) {
-    return reinterpret_cast<DeviceData*>(ctx->_device->deviceData);   // B5 W0 bridge
+    return Dx11DeviceDataOf(ctx->_device);
 }
 
 // Video::Viewport — 16 bytes, four int32. Shape proven by Runtime's
@@ -415,7 +414,7 @@ bool ContextData::BeginCommands() {
         // 0x180004340 — DeviceData swap-chain resize/recreate. Lane L6's
         // function; its result is discarded exactly as the original discards
         // it (`XOR AL,AL`).
-        Dx11_DeviceData_Resize(device->deviceData);
+        Dx11_DeviceData_Resize(Dx11DeviceDataOf(device));   // B5 DEV-A: typed
         return false;
     }
 
@@ -429,8 +428,8 @@ bool ContextData::BeginCommands() {
     vp.height = device->backBufferHeight;
     ctx->SetViewport(vp);
 
-    // DeviceData+0x28 is still the DEV block's `void*` (D4 types it there).
-    d3dContext = static_cast<ID3D11DeviceContext*>(OwnerDeviceData(ctx)->d3dContext);
+    // DeviceData+0x28 (typed ID3D11DeviceContext* by B5 DEV-A, D4).
+    d3dContext = OwnerDeviceData(ctx)->d3dContext;
     return true;
 }
 
@@ -459,15 +458,15 @@ bool ContextData::BeginCommands() {
 void ContextData::EndCommands() {
     DeviceData* dd = OwnerDeviceData(_owner);
 
-    IUnknown* color = static_cast<IUnknown*>(dd->colorBuffer);
+    IUnknown* color = dd->colorBuffer;
     color->AddRef();
 
     ID3D11Resource* backBuffer = nullptr;
-    static_cast<IDXGISwapChain*>(dd->swapChain)->GetBuffer(
+    dd->swapChain->GetBuffer(
         0, kIID_ID3D11Texture2D, reinterpret_cast<void**>(&backBuffer));
 
     d3dContext->ResolveSubresource(backBuffer, 0,
-                                   static_cast<ID3D11Resource*>(dd->colorBuffer), 0,
+                                   dd->colorBuffer, 0,
                                    DXGI_FORMAT_B8G8R8A8_UNORM);
 
     color->Release();
@@ -506,7 +505,7 @@ void ContextData::Finish() {
 
     const UINT sync = ::Video::Configuration::_singleton->vsync != 0 ? 1u : 0u;
 
-    HRESULT hr = static_cast<IDXGISwapChain*>(dd->swapChain)->Present(sync, 0);
+    HRESULT hr = dd->swapChain->Present(sync, 0);
     device->Unlock();
 
     // The PLAN 5.5 drive. Substitutes the Present result and nothing else; see
@@ -521,9 +520,9 @@ void ContextData::Finish() {
 
     if (hr == 0) return;
 
-    // DeviceData+0x20, still the DEV block's `void*` (D4 types it there).
-    // Nothing above writes it, so one read serves both queries below.
-    ID3D11Device* const d3dDevice = static_cast<ID3D11Device*>(dd->d3dDevice);
+    // DeviceData+0x20 (typed by B5 DEV-A, D4). Nothing above writes it, so one
+    // read serves both queries below.
+    ID3D11Device* const d3dDevice = dd->d3dDevice;
     if (hr != DXGI_ERROR_DEVICE_REMOVED && hr != DXGI_ERROR_DEVICE_RESET)
         hr = d3dDevice->GetDeviceRemovedReason();
     if (hr == 0) return;
@@ -534,7 +533,8 @@ void ContextData::Finish() {
     // retail order, so the by-name call reaches the same entries on the hand
     // table today and the compiler's table once DeviceData is a real subclass.
     // B5 CTX: `Video::Device::deviceData` is already that typed base pointer,
-    // so the base needs no cast; the one bridge left is OwnerDeviceData's.
+    // so the base needs no cast (B5 DEV-A: and OwnerDeviceData's bridge is the
+    // single dx11 downcast Dx11DeviceDataOf now; DeviceData wears the compiler's table).
     ::Video::DeviceData* const ddBase = device->deviceData;
     ::Video::Device*     const owner  = ddBase->_owner;   // DeviceData+0x08
 

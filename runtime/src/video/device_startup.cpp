@@ -528,12 +528,12 @@ bool Video::Device::CreateVideoInterface(int index) {
 
     // ENDGAME B.3.5: the two hand-inlined vtable dispatches are virtual calls on
     // block A's real `Video::DeviceData` — slot 3 `Shutdown` (+0x18) and slot 0
-    // `DeletingDtor` with the delete flag (+0x00).
+    // (+0x00) with the delete flag, `delete` since B5 DEV-A.
     if (Video::DeviceData* dd = deviceData) {
         dd->Shutdown();
         dd = deviceData;                                     // 0x1800f7980 re-read
         if (dd)
-            (void)dd->DeletingDtor(1);
+            delete dd;   // B5 DEV-A (D10): slot 0, flags 1
         deviceData = nullptr;
     }
 
@@ -603,7 +603,7 @@ bool Video::Device::PlatformStartup() {
         if (Video::Device::CreateVideoInterface(idx)) {
             // ENDGAME B.3.5: three hand-inlined `DeviceData` vtable dispatches
             // became virtual calls on block A's real class — slot 2 `CreateDevice`
-            // (+0x10), slot 3 `Shutdown` (+0x18) and slot 0 `DeletingDtor`.
+            // (+0x10), slot 3 `Shutdown` (+0x18) and slot 0 (`delete`, B5 DEV-A).
             Video::DeviceData* dd = deviceData;
 
             if (dd->CreateDevice()) {
@@ -624,7 +624,7 @@ bool Video::Device::PlatformStartup() {
             // ---- Create failed: tear the companion down and try the next ---
             deviceData->Shutdown();
             if (Video::DeviceData* d2 = deviceData)
-                (void)d2->DeletingDtor(1);
+                delete d2;   // B5 DEV-A (D10): slot 0, flags 1
             deviceData = nullptr;
         }
 
@@ -703,7 +703,7 @@ void Video::Device::PlatformShutdown() {
         dd->Shutdown();
         dd = deviceData;                                       // 0x1800f8476
         if (dd)
-            (void)dd->DeletingDtor(1);
+            delete dd;   // B5 DEV-A (D10): slot 0, flags 1
         deviceData = nullptr;                                  // 0x1800f848c
     }
 }

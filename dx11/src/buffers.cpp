@@ -700,11 +700,11 @@ bool ConstantBufferData::Create() {
 
     const int32_t totalBytes = owner->_registerCount << 4;
 
-    // `Video::Device::deviceData` (+0x100) is the named member now. It is typed
-    // `Video::DeviceData*`, and dx11's `DeviceData` is still the POD (block DEV
-    // flips it), so the step to the dx11 class is one bridge cast until then.
-    DeviceData* dd = reinterpret_cast<DeviceData*>(owner->_device->deviceData);  // B5 BUF bridge (DEV)
-    ID3D11Device* dev = static_cast<ID3D11Device*>(dd->d3dDevice);
+    // `Video::Device::deviceData` (+0x100) is the named member now, typed
+    // `Video::DeviceData*`; B5 DEV-A made dx11's `DeviceData` a real subclass, so
+    // the step to it is the one downcast dx11 makes (Dx11DeviceDataOf).
+    DeviceData* dd = Dx11DeviceDataOf(owner->_device);
+    ID3D11Device* dev = dd->d3dDevice;
     // No device yet -> nothing to build, and the original reports success.
     if (!dev) return true;
 

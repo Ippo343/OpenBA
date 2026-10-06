@@ -258,8 +258,9 @@ void Video_Configuration_Dtor(void* self) {
 //
 // Six steps, in retail's order:
 //
-//   1. dd = this->deviceData (+0x100); if (dd) dd->DeletingDtor(1) — MSVC's
-//      scalar deleting destructor with the delete flag, destroy AND free.
+//   1. dd = this->deviceData (+0x100); if (dd) slot 0 with flags 1 — MSVC's
+//      scalar deleting destructor with the delete flag, destroy AND free
+//      (`delete dd` since B5 DEV-A).
 //   2. this->deviceData = nullptr.
 //   3. if (this->type == 0) `?_singleton@Device@Video@@` = nullptr.
 //      `CMP dword [RBX],ECX / CMOVZ RAX,RCX` — a CMOV, so the singleton slot is
@@ -280,7 +281,9 @@ void Video_Configuration_Dtor(void* self) {
 void Video_Device_Dtor(Device* self) {
     // ---- 1 & 2: the DeviceData companion -----------------------------------
     DeviceData* const dd = self->deviceData;
-    if (dd) (void)dd->DeletingDtor(1);
+    // B5 DEV-A (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+    // virtual destructor, then the base's class-scope operator delete (MemFree).
+    if (dd) delete dd;
     self->deviceData = nullptr;
 
     // ---- 3: the singleton slot (CMOV, so always stored) --------------------
