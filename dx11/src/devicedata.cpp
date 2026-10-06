@@ -1850,39 +1850,22 @@ T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
 }
 
 ::Video::ConstantBufferData* DeviceData::CreateConstantBufferData(::Video::ConstantBuffer* owner) {
-    ConstantBufferData* p = AllocData<ConstantBufferData, ::Video::ConstantBufferData>(0x28,
-                                                          owner, Vt::ConstantBufferData);
-    if (!p) return nullptr;
-    p->activeIndex    = -1;          // sentinel: no rung bound yet
-    p->pad14          = 0;
-    p->buffers        = nullptr;
-    p->bufferCount    = 0;
-    p->bufferCapacity = 0;
-    // Join the reset registry so DeviceData_Resize can drop this object's
-    // "already bound" cache when it calls ClearState(). See the note above
-    // Dx11InvalidateConstantBufferBindings in buffers.cpp.
-    Dx11TrackConstantBuffer(p);
-    return reinterpret_cast< ::Video::ConstantBufferData*>(p);   // B5 DEV-A bridge: dies when block BUF lands
+    // B5 BUF: the base's operator new is retail's MemAlloc(0x28, 4); the ctor chain
+    // is retail's `??0ConstantBufferData` + the vptr store (now the compiler's
+    // table) + the -1 sentinel and the four zeroes, then (ours) the join to the
+    // reset registry Dx11InvalidateConstantBufferBindings walks — buffers.cpp.
+    return new ConstantBufferData(owner);
 }
 
 ::Video::IndexBufferData* DeviceData::CreateIndexBufferData(::Video::IndexBuffer* owner) {
-    IndexBufferData* p = AllocData<IndexBufferData, ::Video::IndexBufferData>(0x20, owner,
-                                                    Vt::IndexBufferData);
-    if (!p) return nullptr;
-    p->buffer      = nullptr;
-    p->writeCursor = 0;
-    p->locked      = 0;
-    return reinterpret_cast< ::Video::IndexBufferData*>(p);   // B5 DEV-A bridge: dies when block BUF lands
+    // B5 BUF: MemAlloc(0x20, 4) + `??0IndexBufferData` + the vptr store + buffer,
+    // writeCursor (dword) and locked (byte); +0x1d..+0x1f untouched.
+    return new IndexBufferData(owner);
 }
 
 ::Video::VertexBufferData* DeviceData::CreateVertexBufferData(::Video::VertexBuffer* owner) {
-    VertexBufferData* p = AllocData<VertexBufferData, ::Video::VertexBufferData>(0x20, owner,
-                                                      Vt::VertexBufferData);
-    if (!p) return nullptr;
-    p->buffer      = nullptr;
-    p->writeCursor = 0;
-    p->locked      = 0;
-    return reinterpret_cast< ::Video::VertexBufferData*>(p);   // B5 DEV-A bridge: dies when block BUF lands
+    // B5 BUF: MemAlloc(0x20, 4) + `??0VertexBufferData` + the same three stores.
+    return new VertexBufferData(owner);
 }
 
 ::Video::VertexLayoutData* DeviceData::CreateVertexLayoutData(::Video::VertexLayout* owner) {

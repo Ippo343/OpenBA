@@ -5,15 +5,27 @@
 //   IndexBufferData     vtable 0x1800187c8, 7 slots
 //   ConstantBufferData  vtable 0x1800185d0, 4 slots
 //
+// B5 BUF (the dx11 seam): all three are real C++ subclasses of their abstract
+// `Video::XData` bases (dx11/types/VideoDX11Data.h); every slot below is a member
+// declared `override`, and the compiler builds all three vtables (retail slot
+// N >= 1 is compiler slot N + 1, which nothing indexes any more). The 18 seam
+// registrations, the three live-vtable re-seats and the three qualified
+// base-destructor calls are gone: the destructors' vptr store, the
+// chain to `??1XData@Video@@` and the conditional MemFree are the compiler's
+// (its D0 + the base's class-scope `operator delete`, B5 W0,
+// runtime/src/video/companion_operators.cpp).
+//
 // Why the three live in ONE translation unit
 // ------------------------------------------
 // Slots 3 and 4 of VertexBufferData and IndexBufferData are *the same two
 // addresses* — 0x180003290 (Lock) and 0x180003340 (Unlock) appear verbatim in
-// both vtables. The original has one copy of the code; so does this file. The
-// two structs are byte-identical in layout (both 0x20, ID3D11Buffer* at +0x10,
-// write cursor at +0x18, locked flag at +0x1c), which is what makes a single
-// implementation legal — VideoDX11Data.h carries static_asserts that pin that
-// equivalence so a future edit to one struct cannot silently break the other.
+// both vtables. The original has one copy of the code; so does this file (one
+// template helper over the three shared fields, called from both classes'
+// members). The two classes are byte-identical in layout (both 0x20,
+// ID3D11Buffer* at +0x10, write cursor at +0x18, locked flag at +0x1c), and
+// VideoDX11Data.h carries static_asserts that pin that equivalence so a future
+// edit to one class cannot silently make the two members diverge from retail's
+// one body.
 //
 // ConstantBufferData rides along because it is the third member of the
 // "buffer upload path" and shares the private array helper at 0x180001550.
@@ -32,6 +44,9 @@
 // which the loader fills with the address of that same Runtime variable — see
 // "The one global" in decomp/videodx11.md. We resolve the Runtime variable
 // directly, which is the same object with one less indirection to get wrong.
+// B5 BUF: through the shared `Dx11Device()` / `Dx11Context()` walk in
+// dx11_backend_access.h (this file's private third copy of it is gone; same
+// chain, same loads, no cache).
 //
 // ConstantBufferData::Create is the one exception: it takes the Video::Device*
 // from its *owner* (Video::ConstantBuffer+0x38) rather than from the singleton.
@@ -68,25 +83,24 @@
 // That is the one deliberate behavioural difference in the file, and it is only
 // observable on a path that cannot occur.
 //
-// Registration
+// Verification
 // ------------
 // All 18 slots are live and unconditional. They were verified in-game and
 // RenderDoc-diffed against the shipped DLL — see dx11/README.md §"Per-draw
 // pipeline-state equality".
 
-#include "dx11_seam.h"
 #include "VideoDX11Data.h"
 #include "dx11_backend_access.h"
-// ENDGAME B.3.5 block D2, RULE B5-3: the three real Runtime abstract bases whose
-// destructors the three scalar deleting dtors below call by qualified name.
+// ENDGAME B.3.5 block D2, RULE B5-3: the three real Runtime abstract bases (B5 BUF:
+// now the C++ bases of the three classes below).
 #include "video/CompanionData.h"
-// RULE B5-2: the real `Video::{Index,Vertex}Buffer`, which `GpuBufferOwner` below
-// is now an alias of rather than a two-field prefix view of both.
+// RULE B5-2: the real `Video::{Index,Vertex}Buffer` (the two owners).
 #include "video/Buffers.h"
 // ENDGAME B.3.5 block VC: `Video::ConstantBuffer` (which replaces this file's fifth
 // view of it) and `IO::Serializer` (which replaces `SerializerStreamMode`'s
 // hand-read offsets — B35_RULES §5.5).
 #include "video/ConstantBuffer.h"
+#include "video/Device.h"
 #include "io/Serializer.h"
 
 #include "system/MemoryAllocator.h"   // B.3R DX: MemAlloc / MemFree, direct
@@ -108,7 +122,7 @@ namespace {
 // guard, reached from both the loader and the render thread) through
 // `Exp<T>(mangled)` = `ResolveExport`, plus the address of
 // Video::Device::_singleton and the three live vtables; every slot forwarded to
-// `Dx11OriginalSlot` when `g_deps.ok` was false. Both names bound to a body in
+// the original DLL's slot when `g_deps.ok` was false. Both names bound to a body in
 // this build, the address of a class static is never null and the seam is
 // installed before any of these slots is reachable, so `ok` was always true:
 // the struct, `Exp<>`, `EnsureDeps()`, its guards and their forwarding arms are
@@ -116,75 +130,29 @@ namespace {
 //   ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z -> System::MemoryAllocator::MemAlloc
 //   ?MemFree@MemoryAllocator@System@@SAXPEAX@Z    -> System::MemoryAllocator::MemFree
 //   Video::Device::_singleton                     -> the class static, read live
-//   the three vtable bases                        -> Dx11LiveVtable(Vt::X), at the store
-// A destructor stores its own class's LIVE vptr before chaining to the base
-// dtor; because the seam patches slots inside that array, storing it is what
-// keeps our overrides installed. The nine rows ENDGAME B.3.5 block J converted
-// (Video::Device::Lock / Unlock, the IO::Serializer members, the three base
-// dtors) are recorded in git history.
+// The three vtable bases went with B5 BUF: the compiler stores them now.
 // ============================================================
 
-// ============================================================
-// Device walk
-// ============================================================
-
-inline DeviceData* ActiveDeviceData() {
-    uint8_t* device = reinterpret_cast<uint8_t*>(::Video::Device::_singleton);
-    return *reinterpret_cast<DeviceData**>(device + 0x100);
-}
-inline ID3D11DeviceContext* ActiveContext() {
-    return reinterpret_cast<ID3D11DeviceContext*>(ActiveDeviceData()->d3dContext);
-}
-inline ID3D11Device* ActiveDevice() {
-    return reinterpret_cast<ID3D11Device*>(ActiveDeviceData()->d3dDevice);
-}
-inline void* VideoDeviceSingleton() { return ::Video::Device::_singleton; }
-
-// ENDGAME B.3.5 block J — the bridge cast the converted `Video::Device::Lock` /
-// `Unlock` calls go through. `Device::_singleton` is read as a `void**` here
-// (RULE B4b-4 keeps the static a by-address read until the end of B.3), so the
-// step to the real class is a reinterpret_cast, named once.
+// ENDGAME B.3.5 block J converted `Video::Device::Lock` / `Unlock` to member
+// calls. B5 BUF: `Device::_singleton` is the typed class static, so the bridge
+// cast this helper used to name is gone.
 inline ::Video::Device* VideoDeviceObject() {
-    return reinterpret_cast< ::Video::Device*>(VideoDeviceSingleton());  // B.3.5 bridge
-}
-
-// The serializer crosses the seam as a `void*` in every registered slot
-// signature; the same one-place cast.
-inline ::IO::Serializer* SerOf(void* serializer) {
-    return reinterpret_cast< ::IO::Serializer*>(serializer);             // B.3.5 bridge
+    return ::Video::Device::_singleton;
 }
 
 // ============================================================
-// Owner-side views (Runtime-x64.dll classes — prefix only)
+// Owner-side classes (Runtime-x64.dll)
 //
-// These are NOT complete class definitions: only the leading fields the DX11
-// side touches are known, so there is no sizeof() assert, only offsetof().
-// Adding a field here requires a decompiled read/write that proves it.
-// ============================================================
-
-// Video::VertexBuffer / Video::IndexBuffer — ENDGAME B.3.5 block D2, RULE B5-2:
-// COLLAPSED. This was a two-field prefix view of two classes at once, with no
-// `sizeof` assert because only the leading fields were known. Both classes are
-// real now (runtime/types/video/Buffers.h, 0x20 bytes each, every field named and
-// asserted), so the view is an ALIAS instead of a fifth description of the layout.
+// Video::VertexBuffer / Video::IndexBuffer — ENDGAME B.3.5 block D2, RULE B5-2
+// collapsed the two-field prefix view `GpuBufferOwner` into an alias of
+// `Video::IndexBuffer` used for BOTH owners (retail's slots 1, 2, 3 and 6 are ONE
+// body each, shared between the two owner classes precisely because the two
+// are field-identical). B5 BUF: `_owner` is typed per class, so the shared
+// bodies below are TEMPLATES over the owner type and each instantiation reads its
+// own class's named `size` / `dynamic` — the alias, and the cross-type cast it
+// needed, are gone. `tests/unit/video_device_abi_test.cpp` still restates the
+// field identity at runtime.
 //
-// IT ALIASES `Video::IndexBuffer` AND IS USED FOR BOTH, which is deliberate and
-// is what the shipped DLL does: retail's `{Index,Vertex}BufferData` slots 1, 2, 3
-// and 6 are ONE body each, shared between the two owner classes precisely because
-// the two are field-identical. The assert below is what makes that sharing a
-// checked fact rather than an assumption — if the two layouts ever diverged, this
-// file stops compiling instead of reading the wrong field for one of them.
-// `tests/unit/video_device_abi_test.cpp` restates the same equality at runtime.
-using GpuBufferOwner = ::Video::IndexBuffer;
-static_assert(sizeof(::Video::IndexBuffer) == sizeof(::Video::VertexBuffer) &&
-              offsetof(::Video::IndexBuffer, size) == offsetof(::Video::VertexBuffer, size) &&
-              offsetof(::Video::IndexBuffer, dynamic) == offsetof(::Video::VertexBuffer, dynamic) &&
-              offsetof(::Video::IndexBuffer, platformData) ==
-                  offsetof(::Video::VertexBuffer, platformData),
-              "one view for both owners is only sound while the two layouts are identical");
-static_assert(offsetof(GpuBufferOwner, size)    == 0x00, "GpuBufferOwner::size");
-static_assert(offsetof(GpuBufferOwner, dynamic) == 0x04, "GpuBufferOwner::dynamic");
-
 // Video::ConstantBuffer — ENDGAME B.3.5 block VC, RULE B5-2's duplicate-view
 // collapse. This was the FIFTH view of this one class: a 0x40-byte prefix with its
 // own eight `offsetof` asserts repeating the Runtime-side ones, and no `sizeof`
@@ -212,9 +180,7 @@ static_assert(offsetof(GpuBufferOwner, dynamic) == 0x04, "GpuBufferOwner::dynami
 // fields. The asserts below keep the facts dx11 depends on checked against the
 // SHARED definition, so if the two sides ever disagreed this file stops compiling
 // instead of reading the wrong field.
-//
-// The 84-slot seam and the concrete `*Data` classes remain the DECLARED LEAVE of
-// RULE B5-8; this commit changes no slot.
+// ============================================================
 using ConstantBufferOwner = ::Video::ConstantBuffer;
 using ConstantEntry       = ::Video::ConstantBuffer::ConstantInfo;
 static_assert(offsetof(ConstantBufferOwner, _uploadIndex)   == 0x14, "ConstantBuffer::_uploadIndex");
@@ -227,6 +193,10 @@ static_assert(offsetof(ConstantBufferOwner, _constantCount) == 0x30, "ConstantBu
 static_assert(offsetof(ConstantBufferOwner, _device)        == 0x38, "ConstantBuffer::_device");
 static_assert(sizeof(ConstantEntry) == 0x18,
               "the entry stride dx11 used to walk by hand as kConstantEntryStride");
+static_assert(offsetof(::Video::IndexBuffer, size)    == 0x00, "IndexBuffer::size");
+static_assert(offsetof(::Video::IndexBuffer, dynamic) == 0x04, "IndexBuffer::dynamic");
+static_assert(offsetof(::Video::VertexBuffer, size)    == 0x00, "VertexBuffer::size");
+static_assert(offsetof(::Video::VertexBuffer, dynamic) == 0x04, "VertexBuffer::dynamic");
 
 // IO::Serializer+0x00 is the IO::Stream* it is attached to; +0x08 on that
 // stream is an int the DLL compares against 0 and 1.
@@ -256,11 +226,11 @@ static_assert(sizeof(ConstantEntry) == 0x18,
 // full value set is NOT PROVEN — the case list above has a third behaviour for
 // "anything else" — and naming only two of an unknown set would assert more than
 // is known.
-inline int32_t SerializerStreamMode(void* serializer) {
-    // B.3.5 bridge — the slot's registered ABI hands the serializer across the
-    // seam as a `void*`.
-    return static_cast<int32_t>(
-        reinterpret_cast< ::IO::Serializer*>(serializer)->GetDirection());
+//
+// B5 BUF: the slot's argument is typed `IO::Serializer*` (CompanionData.h), so
+// the `void*` bridge cast this helper carried is gone.
+inline int32_t SerializerStreamMode(::IO::Serializer* serializer) {
+    return static_cast<int32_t>(serializer->GetDirection());
 }
 
 // ============================================================
@@ -275,56 +245,40 @@ inline int32_t SerializerStreamMode(void* serializer) {
 //     CreateBuffer filling every one of them; if a CreateBuffer fails partway,
 //     the tail of the array holds garbage that the destructor will later
 //     Release(). That is an original-code hazard, faithfully preserved.
+//
+// The array is ConstantBufferData's {buffers, bufferCount, bufferCapacity}
+// triple (+0x18 / +0x20 / +0x24 — the {data, count, capacity} shape retail's
+// helper takes by address). B5 BUF: `buffers` is typed `ID3D11Buffer**`, so the
+// three fields are passed by reference instead of through a `PtrArray` view of
+// the object (the reinterpret_cast that view needed is gone).
 // ============================================================
 
-struct PtrArray {
-    void*   data;      // +0x00
-    int32_t count;     // +0x08
-    int32_t capacity;  // +0x0c
-};
-static_assert(sizeof(PtrArray) == 0x10, "PtrArray size");
-static_assert(offsetof(PtrArray, count)    == 0x08, "PtrArray::count");
-static_assert(offsetof(PtrArray, capacity) == 0x0c, "PtrArray::capacity");
-
-// The {buffers, bufferCount, bufferCapacity} triple of ConstantBufferData IS a
-// PtrArray; these asserts are what makes the reinterpret_cast below legal.
-static_assert(offsetof(ConstantBufferData, bufferCount) -
-              offsetof(ConstantBufferData, buffers) == offsetof(PtrArray, count),
-              "ConstantBufferData::bufferCount is PtrArray::count");
-static_assert(offsetof(ConstantBufferData, bufferCapacity) -
-              offsetof(ConstantBufferData, buffers) == offsetof(PtrArray, capacity),
-              "ConstantBufferData::bufferCapacity is PtrArray::capacity");
-
-inline PtrArray* BufferArray(ConstantBufferData* self) {
-    return reinterpret_cast<PtrArray*>(&self->buffers);
-}
-
-void ArraySetLength(PtrArray* a, int newLen) {
-    const int oldLen = a->count;
+void ArraySetLength(ID3D11Buffer**& data, int32_t& count, int32_t& capacity, int newLen) {
+    const int oldLen = count;
     if (newLen == oldLen) return;
 
-    void* oldData = a->data;
-    a->count = newLen;
+    ID3D11Buffer** oldData = data;
+    count = newLen;
 
-    if (a->capacity < newLen) {
-        a->capacity = newLen;
-        if (newLen == oldLen + 1 && oldLen != 0) a->capacity = newLen * 3;
-        a->data = System::MemoryAllocator::MemAlloc(
-            static_cast<unsigned long long>(static_cast<int64_t>(a->capacity) << 3), 8);
+    if (capacity < newLen) {
+        capacity = newLen;
+        if (newLen == oldLen + 1 && oldLen != 0) capacity = newLen * 3;
+        data = static_cast<ID3D11Buffer**>(System::MemoryAllocator::MemAlloc(
+            static_cast<unsigned long long>(static_cast<int64_t>(capacity) << 3), 8));
     }
 
     // When no reallocation happened this loop is empty by construction
     // (start == oldLen and the body requires i < oldLen).
     // The original also tests `&data[i] != nullptr` here — the address of an
     // array element, so the test is dead. Omitted.
-    int i = (oldData == a->data) ? oldLen : 0;
+    int i = (oldData == data) ? oldLen : 0;
     for (; i < newLen; ++i) {
         if (i < oldLen) {
-            reinterpret_cast<void**>(a->data)[i] = reinterpret_cast<void**>(oldData)[i];
+            data[i] = oldData[i];
         }
     }
 
-    if (oldData != a->data) System::MemoryAllocator::MemFree(oldData);
+    if (oldData != data) System::MemoryAllocator::MemFree(oldData);
 }
 
 // 0x180001520 — free-and-null the same array shape. Reached ONLY from MSVC EH
@@ -336,16 +290,19 @@ void ArraySetLength(PtrArray* a, int newLen) {
 // Shared: VertexBufferData / IndexBufferData slots 3 and 4
 //
 // 0x180003290 and 0x180003340 are the same two functions in BOTH vtables. One
-// implementation, registered four times. Typed on IndexBufferData; the asserts
-// in VideoDX11Data.h prove VertexBufferData has the identical layout.
+// implementation each, a template over the companion class, called from both
+// classes' `Lock` / `Unlock` members below. The asserts in VideoDX11Data.h prove
+// the two classes have the identical layout, which is what retail's single body
+// relies on.
 // ============================================================
 
 // 0x180003290 — Lock(sizeBytes, &outByteOffset) -> mapped pointer, or null.
 //
 // A classic dynamic ring buffer: NO_OVERWRITE while the write cursor still has
 // room, DISCARD (and rewind to 0) once it does not.
-void* BufferData_Lock(IndexBufferData* self, int32_t sizeBytes, int32_t* outByteOffset) {
-    const GpuBufferOwner* owner = reinterpret_cast<const GpuBufferOwner*>(self->indexBuffer);
+template <class Data>
+void* BufferData_Lock(Data* self, int32_t sizeBytes, int32_t* outByteOffset) {
+    const auto* owner = self->_owner;
 
     D3D11_MAP mapType;
     if (self->writeCursor + sizeBytes > owner->size) {
@@ -356,8 +313,7 @@ void* BufferData_Lock(IndexBufferData* self, int32_t sizeBytes, int32_t* outByte
     }
 
     D3D11_MAPPED_SUBRESOURCE mapped;
-    HRESULT hr = ActiveContext()->Map(
-        reinterpret_cast<ID3D11Buffer*>(self->buffer), 0, mapType, 0, &mapped);
+    HRESULT hr = Dx11Context()->Map(self->buffer, 0, mapType, 0, &mapped);
     if (hr != 0) return nullptr;
 
     *outByteOffset = self->writeCursor;
@@ -371,8 +327,9 @@ void* BufferData_Lock(IndexBufferData* self, int32_t sizeBytes, int32_t* outByte
 }
 
 // 0x180003340 — Unlock()
-void BufferData_Unlock(IndexBufferData* self) {
-    ActiveContext()->Unmap(reinterpret_cast<ID3D11Buffer*>(self->buffer), 0);
+template <class Data>
+void BufferData_Unlock(Data* self) {
+    Dx11Context()->Unmap(self->buffer, 0);
     self->locked = 0;
 }
 
@@ -389,13 +346,12 @@ void BufferData_Unlock(IndexBufferData* self) {
 // `dynamic` is deliberately uint8_t, not bool: the original stores the raw
 // incoming byte on the owner and then compares it against 0. Declaring it bool
 // would let the compiler assume 0/1 and test only bit 0.
-bool GpuBuffer_Create(void* selfBase, void* ownerPtr, void** outBuffer,
+template <class Owner>
+bool GpuBuffer_Create(Owner* owner, ID3D11Buffer** outBuffer,
                       uint32_t sizeBytes, uint8_t dynamicByte, const void* initialData,
                       UINT bindFlags) {
-    (void)selfBase;
-    GpuBufferOwner* owner = reinterpret_cast<GpuBufferOwner*>(ownerPtr);
-    owner->size = static_cast<int32_t>(sizeBytes);
-    owner->dynamic   = dynamicByte;
+    owner->size    = static_cast<int32_t>(sizeBytes);
+    owner->dynamic = dynamicByte;
 
     if (owner->size == 0) return true;
 
@@ -421,9 +377,8 @@ bool GpuBuffer_Create(void* selfBase, void* ownerPtr, void** outBuffer,
     init.SysMemPitch      = 0;
     init.SysMemSlicePitch = 0;
 
-    HRESULT hr = ActiveDevice()->CreateBuffer(
-        &desc, initialData ? &init : nullptr,
-        reinterpret_cast<ID3D11Buffer**>(outBuffer));
+    HRESULT hr = Dx11Device()->CreateBuffer(
+        &desc, initialData ? &init : nullptr, outBuffer);
 
     return hr == 0 && *outBuffer != nullptr;
 }
@@ -431,28 +386,25 @@ bool GpuBuffer_Create(void* selfBase, void* ownerPtr, void** outBuffer,
 // ============================================================
 // Shared: the Serialize body behind VertexBufferData slot 6 (0x180003d90) and
 // IndexBufferData slot 6 (0x1800033b0). Identical apart from which Create they
-// call back into on the load path.
+// call back into on the load path (B5 BUF: `self->Create`, the companion's own
+// slot-1 member — the class is `final`, so it is the same direct call the old
+// function pointer made).
 // ============================================================
 
-using RecreateFn = bool (*)(void* self, uint32_t sizeBytes, uint8_t dynamicByte, const void* data);
+template <class Data>
+void GpuBuffer_Serialize(Data* self, ::IO::Serializer* serializer) {
+    // B5 BUF: this was `encoding->vtable[0](encoding)`, called blind as "which
+    // virtual this is has NOT been identified". It has since been:
+    // runtime/types/io/Serializer.h declares `IO::Encoding`'s slot 0 (+0x00) as
+    // `IsBinary() const`, so the same slot is now called by name. The DLL uses it
+    // as an "is this encoding one I can serialize raw bytes through" gate.
+    if (!serializer->GetEncoding().IsBinary()) return;
 
-void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
-                         void* serializer, RecreateFn recreate) {
-    const void* encoding = &SerOf(serializer)->GetEncoding();
-
-    // encoding->vtable[0](encoding) -> bool. Which virtual this is has NOT been
-    // identified; the DLL only ever uses it as an "is this encoding one I can
-    // serialize raw bytes through" gate. Called blind, exactly as the original.
-    typedef bool (*EncodingQuery_t)(const void*);
-    EncodingQuery_t query = *reinterpret_cast<EncodingQuery_t*>(
-        *reinterpret_cast<void* const*>(encoding));
-    if (!query(encoding)) return;
-
-    GpuBufferOwner* owner = reinterpret_cast<GpuBufferOwner*>(ownerPtr);
+    auto* owner = self->_owner;
 
     // Order matters: the dynamic flag first, then the size.
-    SerOf(serializer)->Serialize(reinterpret_cast<bool&>(owner->dynamic), nullptr);
-    SerOf(serializer)->Serialize(owner->size, nullptr);
+    serializer->Serialize(owner->dynamic, nullptr);
+    serializer->Serialize(owner->size, nullptr);
 
     const int32_t sizeBytes = owner->size;
     if (sizeBytes == 0) return;
@@ -460,8 +412,8 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
     if (SerializerStreamMode(serializer) == 0) {
         // Load: read the payload into scratch memory and rebuild the buffer.
         void* scratch = System::MemoryAllocator::MemAlloc(static_cast<unsigned long long>(sizeBytes), 4);
-        SerOf(serializer)->SerializeBytes(owner->size, scratch, nullptr);
-        recreate(self, static_cast<uint32_t>(owner->size), owner->dynamic, scratch);
+        serializer->SerializeBytes(owner->size, scratch, nullptr);
+        self->Create(static_cast<uint32_t>(owner->size), owner->dynamic, scratch);
         System::MemoryAllocator::MemFree(scratch);
         return;
     }
@@ -480,8 +432,8 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
 
     VideoDeviceObject()->Lock();
 
-    ID3D11Device*        dev = ActiveDevice();
-    ID3D11DeviceContext* ctx = ActiveContext();
+    ID3D11Device*        dev = Dx11Device();
+    ID3D11DeviceContext* ctx = Dx11Context();
 
     // The original ignores this HRESULT and then unconditionally maps, unmaps
     // and Releases `staging`. On a failed CreateBuffer that is a null
@@ -490,12 +442,12 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
     dev->CreateBuffer(&desc, nullptr, &staging);
 
     if (SerializerStreamMode(serializer) == 1) {
-        ctx->CopyResource(staging, reinterpret_cast<ID3D11Buffer*>(*bufferSlot));
+        ctx->CopyResource(staging, self->buffer);
     }
 
     D3D11_MAPPED_SUBRESOURCE mapped;
     ctx->Map(staging, 0, D3D11_MAP_READ_WRITE, 0, &mapped);                      // 3
-    SerOf(serializer)->SerializeBytes(owner->size, mapped.pData, nullptr);
+    serializer->SerializeBytes(owner->size, mapped.pData, nullptr);
     ctx->Unmap(staging, 0);
     staging->Release();
 
@@ -517,15 +469,15 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
 //    See the dstSubresource parameter at each call site below.
 // ============================================================
 
-bool GpuBuffer_SetData(void* ownerPtr, void* buffer,
+template <class Owner>
+bool GpuBuffer_SetData(const Owner* owner, ID3D11Buffer* buffer,
                        int32_t sizeBytes, int32_t offsetBytes, const void* src,
                        UINT dstSubresource) {
-    const GpuBufferOwner* owner = reinterpret_cast<const GpuBufferOwner*>(ownerPtr);
     if (owner->size == 0) return true;
 
     VideoDeviceObject()->Lock();
 
-    ID3D11DeviceContext* ctx = ActiveContext();
+    ID3D11DeviceContext* ctx = Dx11Context();
 
     D3D11_BOX box;
     box.left   = static_cast<UINT>(offsetBytes);
@@ -535,50 +487,54 @@ bool GpuBuffer_SetData(void* ownerPtr, void* buffer,
     box.bottom = 1;
     box.back   = 1;
 
-    ctx->UpdateSubresource(reinterpret_cast<ID3D11Buffer*>(buffer), dstSubresource, &box,
+    ctx->UpdateSubresource(buffer, dstSubresource, &box,
                            src, static_cast<UINT>(sizeBytes), 0);
 
     VideoDeviceObject()->Unlock();
     return true;
 }
 
+}  // namespace
+
 // ============================================================
 // VertexBufferData — vtable 0x180018830
 // ============================================================
 
-bool VertexBufferData_Create(void* self, uint32_t sizeBytes, uint8_t dynamicByte, const void* data);
-
 // 0x180003b20 — slot 0: scalar deleting destructor.
-VertexBufferData* VertexBufferData_ScalarDeletingDtor(VertexBufferData* self, unsigned flags) {
-    self->vptr = Dx11LiveVtable(Vt::VertexBufferData);
-    if (self->buffer) reinterpret_cast<ID3D11Buffer*>(self->buffer)->Release();
-    self->buffer      = nullptr;
-    self->writeCursor = 0;
-    self->locked      = 0;
-    // RULE B5-3: a QUALIFIED NON-VIRTUAL call to the real Runtime base's
-    // destructor, never `DeletingDtor(0)` — that would re-enter this slot. The
-    // cast is the bridge the declared leave (RULE B5-8) requires: this class
-    // mirrors the base's two fields rather than deriving from it in C++.
-    reinterpret_cast<Video::VertexBufferData*>(self)
-        ->Video::VertexBufferData::~VertexBufferData();   // B.3.5 bridge
-    if (flags & 1) System::MemoryAllocator::MemFree(self);
-    return self;
+//
+// B5 BUF: the vptr re-seat, the chain to ??1VertexBufferData@Video@@UEAA@XZ and
+// the `flags & 1` MemFree are the compiler's (D0 + the base's operator delete).
+// What is left is the body's own work, in retail order: Release the buffer if
+// there is one, then clear the three fields.
+VertexBufferData::~VertexBufferData() {
+    if (buffer) buffer->Release();
+    buffer      = nullptr;
+    writeCursor = 0;
+    locked      = 0;
 }
 
 // 0x180003b90 — slot 1: Create(sizeBytes, dynamic, initialData) -> bool.
 // BindFlags = D3D11_BIND_VERTEX_BUFFER (1).
-bool VertexBufferData_Create(void* selfV, uint32_t sizeBytes, uint8_t dynamicByte, const void* data) {
-    VertexBufferData* self = reinterpret_cast<VertexBufferData*>(selfV);
-    return GpuBuffer_Create(self, self->vertexBuffer, &self->buffer,
+bool VertexBufferData::Create(uint32_t sizeBytes, uint8_t dynamicByte, const void* data) {
+    return GpuBuffer_Create(_owner, &buffer,
                             sizeBytes, dynamicByte, data, D3D11_BIND_VERTEX_BUFFER);
 }
 
 // 0x180003c60 — slot 2: SetData(sizeBytes, offsetBytes, src) -> bool.
 // DstSubresource is a hard 0 here (contrast IndexBufferData slot 2).
-bool VertexBufferData_SetData(VertexBufferData* self, int32_t sizeBytes,
-                              int32_t offsetBytes, const void* src) {
-    return GpuBuffer_SetData(self->vertexBuffer, self->buffer,
+bool VertexBufferData::SetData(int32_t sizeBytes, int32_t offsetBytes, const void* src) {
+    return GpuBuffer_SetData(_owner, buffer,
                              sizeBytes, offsetBytes, src, /*dstSubresource=*/0);
+}
+
+// 0x180003290 — slot 3, SHARED with IndexBufferData slot 3 (one retail body).
+void* VertexBufferData::Lock(int32_t sizeBytes, int32_t* outByteOffset) {
+    return BufferData_Lock(this, sizeBytes, outByteOffset);
+}
+
+// 0x180003340 — slot 4, SHARED with IndexBufferData slot 4 (one retail body).
+void VertexBufferData::Unlock() {
+    BufferData_Unlock(this);
 }
 
 // 0x180003d30 — slot 5: Bind(?, startSlot, offsetBytes, strideBytes).
@@ -586,49 +542,40 @@ bool VertexBufferData_SetData(VertexBufferData* self, int32_t sizeBytes,
 // The second parameter (RDX) is never read by the original — it is overwritten
 // with the Video::Device pointer three instructions in. Almost certainly the
 // Video::Context* every other Bind in the DLL is handed and ignores.
-void VertexBufferData_Bind(VertexBufferData* self, void* /*context, unused*/,
-                           uint32_t startSlot, uint32_t offsetBytes, uint32_t strideBytes) {
+void VertexBufferData::Bind(void* /*context, unused*/, uint32_t startSlot,
+                            uint32_t offsetBytes, uint32_t strideBytes) {
     // The original passes the addresses of its own R9 home slot (offset) and of
     // stack argument 5 (stride); taking the address of our parameters is the
     // same observable call.
     UINT stride = strideBytes;
     UINT offset = offsetBytes;
-    ActiveContext()->IASetVertexBuffers(
-        startSlot, 1, reinterpret_cast<ID3D11Buffer**>(&self->buffer), &stride, &offset);
+    Dx11Context()->IASetVertexBuffers(startSlot, 1, &buffer, &stride, &offset);
 }
 
 // 0x180003d90 — slot 6: Serialize(IO::Serializer*).
-void VertexBufferData_Serialize(VertexBufferData* self, void* serializer) {
-    GpuBuffer_Serialize(self, self->vertexBuffer, &self->buffer, serializer,
-                        &VertexBufferData_Create);
+void VertexBufferData::Serialize(::IO::Serializer* serializer) {
+    GpuBuffer_Serialize(this, serializer);
 }
 
 // ============================================================
 // IndexBufferData — vtable 0x1800187c8
 // ============================================================
 
-bool IndexBufferData_Create(void* self, uint32_t sizeBytes, uint8_t dynamicByte, const void* data);
-
-// 0x180003080 — slot 0: scalar deleting destructor.
-IndexBufferData* IndexBufferData_ScalarDeletingDtor(IndexBufferData* self, unsigned flags) {
-    self->vptr = Dx11LiveVtable(Vt::IndexBufferData);
-    if (self->buffer) reinterpret_cast<ID3D11Buffer*>(self->buffer)->Release();
-    self->buffer      = nullptr;
-    self->writeCursor = 0;
-    self->locked      = 0;
-    // RULE B5-3, as for VertexBufferData above.
-    reinterpret_cast<Video::IndexBufferData*>(self)
-        ->Video::IndexBufferData::~IndexBufferData();     // B.3.5 bridge
-    if (flags & 1) System::MemoryAllocator::MemFree(self);
-    return self;
+// 0x180003080 — slot 0: scalar deleting destructor. Same shape as
+// VertexBufferData's (B5 BUF: the re-seat, base chain and MemFree are the
+// compiler's).
+IndexBufferData::~IndexBufferData() {
+    if (buffer) buffer->Release();
+    buffer      = nullptr;
+    writeCursor = 0;
+    locked      = 0;
 }
 
 // 0x1800030f0 — slot 1: Create(sizeBytes, dynamic, initialData) -> bool.
 // BindFlags = D3D11_BIND_INDEX_BUFFER (2) — the ONLY difference from the
 // VertexBufferData version.
-bool IndexBufferData_Create(void* selfV, uint32_t sizeBytes, uint8_t dynamicByte, const void* data) {
-    IndexBufferData* self = reinterpret_cast<IndexBufferData*>(selfV);
-    return GpuBuffer_Create(self, self->indexBuffer, &self->buffer,
+bool IndexBufferData::Create(uint32_t sizeBytes, uint8_t dynamicByte, const void* data) {
+    return GpuBuffer_Create(_owner, &buffer,
                             sizeBytes, dynamicByte, data, D3D11_BIND_INDEX_BUFFER);
 }
 
@@ -636,11 +583,20 @@ bool IndexBufferData_Create(void* selfV, uint32_t sizeBytes, uint8_t dynamicByte
 //
 // DstSubresource = offsetBytes. See the warning on GpuBuffer_SetData: this is
 // the shipped DLL's behaviour, bug and all.
-bool IndexBufferData_SetData(IndexBufferData* self, int32_t sizeBytes,
-                             int32_t offsetBytes, const void* src) {
-    return GpuBuffer_SetData(self->indexBuffer, self->buffer,
+bool IndexBufferData::SetData(int32_t sizeBytes, int32_t offsetBytes, const void* src) {
+    return GpuBuffer_SetData(_owner, buffer,
                              sizeBytes, offsetBytes, src,
                              /*dstSubresource=*/static_cast<UINT>(offsetBytes));
+}
+
+// 0x180003290 — slot 3, SHARED with VertexBufferData slot 3 (one retail body).
+void* IndexBufferData::Lock(int32_t sizeBytes, int32_t* outByteOffset) {
+    return BufferData_Lock(this, sizeBytes, outByteOffset);
+}
+
+// 0x180003340 — slot 4, SHARED with VertexBufferData slot 4 (one retail body).
+void IndexBufferData::Unlock() {
+    BufferData_Unlock(this);
 }
 
 // 0x180003380 — slot 5: Bind().
@@ -663,63 +619,57 @@ bool IndexBufferData_SetData(IndexBufferData* self, int32_t sizeBytes,
 // `Video::IndexBufferData::Bind(void*)` in runtime/types/video/CompanionData.h,
 // corrected this pass from a no-argument declaration. Ignoring it is retail's
 // behaviour; not declaring it was this file's.
-void IndexBufferData_Bind(IndexBufferData* self, void* /*context, never read*/) {
-    ActiveContext()->IASetIndexBuffer(
-        reinterpret_cast<ID3D11Buffer*>(self->buffer), DXGI_FORMAT_R16_UINT, 0);
+void IndexBufferData::Bind(void* /*context, never read*/) {
+    Dx11Context()->IASetIndexBuffer(buffer, DXGI_FORMAT_R16_UINT, 0);
 }
 
 // 0x1800033b0 — slot 6: Serialize(IO::Serializer*).
-void IndexBufferData_Serialize(IndexBufferData* self, void* serializer) {
-    GpuBuffer_Serialize(self, self->indexBuffer, &self->buffer, serializer,
-                        &IndexBufferData_Create);
-}
-
-// ============================================================
-// Shared slot 3 / slot 4 entry points
-//
-// Registered for BOTH vtables. Typed on IndexBufferData purely because a type
-// had to be picked; the static_asserts in VideoDX11Data.h make the choice a
-// formality.
-// ============================================================
-
-void* BufferData_Lock_Entry(IndexBufferData* self, int32_t sizeBytes, int32_t* outByteOffset) {
-    return BufferData_Lock(self, sizeBytes, outByteOffset);
-}
-
-void BufferData_Unlock_Entry(IndexBufferData* self) {
-    BufferData_Unlock(self);
+void IndexBufferData::Serialize(::IO::Serializer* serializer) {
+    GpuBuffer_Serialize(this, serializer);
 }
 
 // ============================================================
 // ConstantBufferData — vtable 0x1800185d0
 // ============================================================
 
-// 0x180001270 — ~ConstantBufferData. Not a vtable slot; tail-called by slot 0.
-void ConstantBufferData_Destruct(ConstantBufferData* self) {
-    Dx11UntrackConstantBuffer(self);
-    self->vptr = Dx11LiveVtable(Vt::ConstantBufferData);
-    for (int i = 0; i < self->bufferCount; ++i) {
-        ID3D11Buffer* b = reinterpret_cast<ID3D11Buffer**>(self->buffers)[i];
+// Factory 0x180005730's stores after the base ctor and the vptr: the -1 sentinel
+// ("no rung bound yet", 0x180005758) and four zeroes. Then — NOT retail — the
+// object joins the reset registry so DeviceData_Resize can drop its "already
+// bound" cache when it calls ClearState(); see the note above
+// Dx11InvalidateConstantBufferBindings below.
+ConstantBufferData::ConstantBufferData(::Video::ConstantBuffer* owner)
+    : ::Video::ConstantBufferData(owner) {
+    activeIndex    = -1;          // sentinel: no rung bound yet
+    pad14          = 0;
+    buffers        = nullptr;
+    bufferCount    = 0;
+    bufferCapacity = 0;
+    Dx11TrackConstantBuffer(this);
+}
+
+// 0x180001240 — slot 0: scalar deleting destructor, which calls
+// 0x180001270 — ~ConstantBufferData (not a vtable slot) and then MemFrees on
+// `flags & 1`.
+//
+// B5 BUF: the vptr store, the chain to ??1ConstantBufferData@Video@@UEAA@XZ and
+// the conditional MemFree are the compiler's. The body keeps the rest in its
+// order: untrack from the reset registry (ours, not retail), Release every
+// buffer in [0, count), MemFree the block, clear the triple. The compiler's vptr
+// store now precedes the untrack instead of following it; the untrack makes no
+// virtual call, so nothing can observe the difference.
+ConstantBufferData::~ConstantBufferData() {
+    Dx11UntrackConstantBuffer(this);
+    for (int i = 0; i < bufferCount; ++i) {
+        ID3D11Buffer* b = buffers[i];
         if (b) b->Release();
     }
     // Unconditional — MemFree(nullptr) is the allocator's problem, as in the
     // original, which does not null-check either.
-    System::MemoryAllocator::MemFree(self->buffers);
-    self->buffers = nullptr;
+    System::MemoryAllocator::MemFree(buffers);
+    buffers = nullptr;
     // One qword store clears count and capacity together, exactly as compiled.
-    self->bufferCount    = 0;
-    self->bufferCapacity = 0;
-    // RULE B5-3, as for the other two.
-    reinterpret_cast<Video::ConstantBufferData*>(self)
-        ->Video::ConstantBufferData::~ConstantBufferData();  // B.3.5 bridge
-}
-
-// 0x180001240 — slot 0: scalar deleting destructor.
-ConstantBufferData* ConstantBufferData_ScalarDeletingDtor(ConstantBufferData* self,
-                                                          unsigned flags) {
-    ConstantBufferData_Destruct(self);
-    if (flags & 1) System::MemoryAllocator::MemFree(self);
-    return self;
+    bufferCount    = 0;
+    bufferCapacity = 0;
 }
 
 // 0x180001300 — slot 1: Create() -> bool.
@@ -736,9 +686,8 @@ ConstantBufferData* ConstantBufferData_ScalarDeletingDtor(ConstantBufferData* se
 //
 // Note this slot takes its ID3D11Device from the OWNER (Video::ConstantBuffer
 // +0x38 -> Video::Device -> +0x100 -> +0x20), not from the module singleton.
-bool ConstantBufferData_Create(ConstantBufferData* self) {
-    ConstantBufferOwner* owner =
-        reinterpret_cast<ConstantBufferOwner*>(self->constantBuffer);
+bool ConstantBufferData::Create() {
+    ConstantBufferOwner* owner = _owner;
 
     // 1. offsets. (The original re-loads owner->entries and owner->entryCount
     // on every iteration; neither can change, so the loop is hoisted here.)
@@ -751,15 +700,17 @@ bool ConstantBufferData_Create(ConstantBufferData* self) {
 
     const int32_t totalBytes = owner->_registerCount << 4;
 
-    uint8_t* ownerDevice = reinterpret_cast<uint8_t*>(owner->_device);
-    DeviceData* dd = *reinterpret_cast<DeviceData**>(ownerDevice + 0x100);
-    ID3D11Device* dev = reinterpret_cast<ID3D11Device*>(dd->d3dDevice);
+    // `Video::Device::deviceData` (+0x100) is the named member now. It is typed
+    // `Video::DeviceData*`, and dx11's `DeviceData` is still the POD (block DEV
+    // flips it), so the step to the dx11 class is one bridge cast until then.
+    DeviceData* dd = reinterpret_cast<DeviceData*>(owner->_device->deviceData);  // B5 BUF bridge (DEV)
+    ID3D11Device* dev = static_cast<ID3D11Device*>(dd->d3dDevice);
     // No device yet -> nothing to build, and the original reports success.
     if (!dev) return true;
 
     HRESULT hr;
     if (!owner->_banked) {
-        ArraySetLength(BufferArray(self), 1);
+        ArraySetLength(buffers, bufferCount, bufferCapacity, 1);
 
         D3D11_BUFFER_DESC desc = {};
         desc.ByteWidth           = static_cast<UINT>(totalBytes);
@@ -769,15 +720,14 @@ bool ConstantBufferData_Create(ConstantBufferData* self) {
         desc.MiscFlags           = 0;
         desc.StructureByteStride = 0;
 
-        hr = dev->CreateBuffer(&desc, nullptr,
-                               reinterpret_cast<ID3D11Buffer**>(self->buffers));
+        hr = dev->CreateBuffer(&desc, nullptr, buffers);
     } else {
-        ArraySetLength(BufferArray(self), totalBytes / owner->_bankStride);
+        ArraySetLength(buffers, bufferCount, bufferCapacity, totalBytes / owner->_bankStride);
 
         // Seeded to a failure value so an empty ladder reports false, matching
         // the `or eax, 0xffffffff` before the loop.
         hr = -1;
-        for (int i = 0; i < self->bufferCount; ++i) {
+        for (int i = 0; i < bufferCount; ++i) {
             D3D11_BUFFER_DESC desc = {};
             desc.ByteWidth           = static_cast<UINT>(owner->_bankStride * (i + 1));
             desc.Usage               = D3D11_USAGE_DEFAULT;
@@ -786,8 +736,7 @@ bool ConstantBufferData_Create(ConstantBufferData* self) {
             desc.MiscFlags           = 0;
             desc.StructureByteStride = 0;
 
-            hr = dev->CreateBuffer(&desc, nullptr,
-                                   reinterpret_cast<ID3D11Buffer**>(self->buffers) + i);
+            hr = dev->CreateBuffer(&desc, nullptr, buffers + i);
             if (hr != 0) break;
         }
     }
@@ -808,18 +757,16 @@ bool ConstantBufferData_Create(ConstantBufferData* self) {
 // int, int), and all five dispatches in `?BindResources@Context@Video@@` build it
 // with `XOR R9D,R9D` -- a DWORD zero. `Video::ConstantBufferData::Bind` in
 // CompanionData.h is corrected to match; neither ignored argument is read here.
-void ConstantBufferData_Bind(ConstantBufferData* self, void* /*context, never read*/,
-                             const void* srcData, int32_t /*first, never read*/,
-                             int32_t sizeBytes) {
-    ConstantBufferOwner* owner =
-        reinterpret_cast<ConstantBufferOwner*>(self->constantBuffer);
-    ID3D11DeviceContext* ctx = ActiveContext();
+void ConstantBufferData::Bind(void* /*context, never read*/, const void* srcData,
+                              int32_t /*first, never read*/, int32_t sizeBytes) {
+    ConstantBufferOwner* owner = _owner;
+    ID3D11DeviceContext* ctx = Dx11Context();
 
     const int32_t index = owner->_banked ? (sizeBytes / owner->_bankStride - 1) : 0;
 
-    if (self->activeIndex != index) {
-        self->activeIndex = index;
-        ID3D11Buffer** slot = reinterpret_cast<ID3D11Buffer**>(self->buffers) + index;
+    if (activeIndex != index) {
+        activeIndex = index;
+        ID3D11Buffer** slot = buffers + index;
         if (owner->_bindToVertex == 0) {
             ctx->PSSetConstantBuffers(static_cast<UINT>(owner->_uploadIndex), 1, slot);
         } else {
@@ -827,9 +774,7 @@ void ConstantBufferData_Bind(ConstantBufferData* self, void* /*context, never re
         }
     }
 
-    ctx->UpdateSubresource(
-        reinterpret_cast<ID3D11Buffer**>(self->buffers)[self->activeIndex],
-        0, nullptr, srcData, 0, 0);
+    ctx->UpdateSubresource(buffers[activeIndex], 0, nullptr, srcData, 0, 0);
 }
 
 // 0x180001450 — slot 3: `return owner->_uploadIndex + 1`.
@@ -843,14 +788,9 @@ void ConstantBufferData_Bind(ConstantBufferData* self, void* /*context, never re
 // The Runtime-side name is unknown. Given +0x14 is the StartSlot handed to
 // VS/PSSetConstantBuffers, "index + 1" reads as a required-slot-count query,
 // but that is inference, not evidence.
-int32_t ConstantBufferData_SlotIndexPlusOne(ConstantBufferData* self) {
-    // No Runtime dependency and no D3D11 call, so no fallback path is needed.
-    const ConstantBufferOwner* owner =
-        reinterpret_cast<const ConstantBufferOwner*>(self->constantBuffer);
-    return owner->_uploadIndex + 1;
+int32_t ConstantBufferData::SlotIndexPlusOne() {
+    return _owner->_uploadIndex + 1;
 }
-
-}  // namespace
 
 // ============================================================
 // Constant-buffer binding registry — see dx11_backend_access.h.
@@ -900,49 +840,3 @@ void Dx11InvalidateConstantBufferBindings() {
 }
 
 }  // namespace VideoDX11
-
-// ============================================================
-// Registration — 18 slots, live.
-//
-// Slots 3 and 4 register the SAME two functions against both vtables, which is
-// exactly what the original does by putting the same address in both.
-// ============================================================
-
-DX11_REGISTER_SLOT(VertexBufferData, 0, &::VideoDX11::VertexBufferData_ScalarDeletingDtor,
-                   "VertexBufferData::ScalarDeletingDtor");
-DX11_REGISTER_SLOT(VertexBufferData, 1, &::VideoDX11::VertexBufferData_Create,
-                   "VertexBufferData::Create");
-DX11_REGISTER_SLOT(VertexBufferData, 2, &::VideoDX11::VertexBufferData_SetData,
-                   "VertexBufferData::SetData");
-DX11_REGISTER_SLOT(VertexBufferData, 3, &::VideoDX11::BufferData_Lock_Entry,
-                   "VertexBufferData::Lock (shared)");
-DX11_REGISTER_SLOT(VertexBufferData, 4, &::VideoDX11::BufferData_Unlock_Entry,
-                   "VertexBufferData::Unlock (shared)");
-DX11_REGISTER_SLOT(VertexBufferData, 5, &::VideoDX11::VertexBufferData_Bind,
-                   "VertexBufferData::Bind");
-DX11_REGISTER_SLOT(VertexBufferData, 6, &::VideoDX11::VertexBufferData_Serialize,
-                   "VertexBufferData::Serialize");
-
-DX11_REGISTER_SLOT(IndexBufferData, 0, &::VideoDX11::IndexBufferData_ScalarDeletingDtor,
-                   "IndexBufferData::ScalarDeletingDtor");
-DX11_REGISTER_SLOT(IndexBufferData, 1, &::VideoDX11::IndexBufferData_Create,
-                   "IndexBufferData::Create");
-DX11_REGISTER_SLOT(IndexBufferData, 2, &::VideoDX11::IndexBufferData_SetData,
-                   "IndexBufferData::SetData");
-DX11_REGISTER_SLOT(IndexBufferData, 3, &::VideoDX11::BufferData_Lock_Entry,
-                   "IndexBufferData::Lock (shared)");
-DX11_REGISTER_SLOT(IndexBufferData, 4, &::VideoDX11::BufferData_Unlock_Entry,
-                   "IndexBufferData::Unlock (shared)");
-DX11_REGISTER_SLOT(IndexBufferData, 5, &::VideoDX11::IndexBufferData_Bind,
-                   "IndexBufferData::Bind");
-DX11_REGISTER_SLOT(IndexBufferData, 6, &::VideoDX11::IndexBufferData_Serialize,
-                   "IndexBufferData::Serialize");
-
-DX11_REGISTER_SLOT(ConstantBufferData, 0, &::VideoDX11::ConstantBufferData_ScalarDeletingDtor,
-                   "ConstantBufferData::ScalarDeletingDtor");
-DX11_REGISTER_SLOT(ConstantBufferData, 1, &::VideoDX11::ConstantBufferData_Create,
-                   "ConstantBufferData::Create");
-DX11_REGISTER_SLOT(ConstantBufferData, 2, &::VideoDX11::ConstantBufferData_Bind,
-                   "ConstantBufferData::Bind");
-DX11_REGISTER_SLOT(ConstantBufferData, 3, &::VideoDX11::ConstantBufferData_SlotIndexPlusOne,
-                   "ConstantBufferData::SlotIndex+1");
