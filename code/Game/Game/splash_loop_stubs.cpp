@@ -262,7 +262,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // before returning (MainLoop owns it); retail's slot takes it by const&.
     // LEFT: the standalone first-tick clamp writes MainLoop's Time through the
     // const& of retail's slot signature (our divergence, not retail's).
-    System::Time* dt = const_cast<System::Time*>(&time);   // B.3.8 bridge   // LEFT: audit DEFERRED (retail-difference task): the standalone first-tick clamp writes MainLoop's Time through the const& of retail's slot signature (our divergence, not retail's).
+    System::Time* dt = const_cast<System::Time*>(&time);   // LEFT: audit DEFERRED (retail-difference task): the standalone first-tick clamp writes MainLoop's Time through the const& of retail's slot signature (our divergence, not retail's).
 
     // Pump the embedded UI — flushes the pending-open list (where Startup
     // pushed our LoaderDialog), runs each open dialog's OnUpdate, processes

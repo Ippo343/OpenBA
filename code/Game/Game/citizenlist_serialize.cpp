@@ -601,7 +601,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
                 // LEFT (a defect, kept: the stream must stay byte-identical): retail
                 // serializes the entry's Time at +0x18 (0x14008ff9d, Time::Serialize(
                 // piVar7 + 4) with piVar7 = entry + 8); the tree has always used +0x14.
-                reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);   // B.3.4b bridge   // LEFT: audit DEFERRED (retail-difference task, known_port_issues 14): CitizenBehavior.h (ENT): entry _field14 is int64_t, retail System::Time
+                reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);   // LEFT: audit DEFERRED (retail-difference task, known_port_issues 14): CitizenBehavior.h (ENT): entry _field14 is int64_t, retail System::Time
                 ++entry;
             }
         }

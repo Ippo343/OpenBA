@@ -296,7 +296,7 @@ inline HWND WindowOf(const ::Video::Device* dev) {
 
 // ENDGAME B.3.9 VID: Video::Configuration::_singleton and
 // Application::_singleton are the class statics; the import rows that resolved
-// them by name are gone. B5 DEV-A: both typed (the B.3.7 bridge casts at the
+// them by name are gone. B5 DEV-A: both typed (the B.3.7-era bridge casts at the
 // RegisterMessageCallback / GetInstance sites went with the `void*`).
 inline ::Video::Configuration*     ConfigOf() { return ::Video::Configuration::_singleton; }
 inline ::Application::Application* AppOf()    { return ::Application::Application::_singleton; }
@@ -350,12 +350,6 @@ static_assert(sizeof(GraphicsInterface) == 0x18,
               "GraphicsInterface stride — dx11 at 0x180005b00");
 static_assert(sizeof(DisplayMode) == 0x18, "Video::Device::DisplayMode stride");
 static_assert(sizeof(RefreshRate) == 8, "RefreshRate stride (Device+0x10 scales by 8)");
-
-// System::String is a single pointer to a refcounted char buffer (refcount at
-// [-4], allocation base at [-8] — visible in Video::Configuration::Startup's
-// inlined destructor). We never touch the interior; 8 bytes of storage plus the
-// Runtime ctor/dtor is all this file needs.
-struct WideStringStorage { void* p; };
 
 // The three OS/DXGI structure offsets slot 1 and slot 2 depend on. The original
 // hard-codes them as displacements, so if the SDK headers ever disagreed the
@@ -1120,7 +1114,7 @@ bool DeviceData::CreateDevice() {
     StallDebug::Mark("  DX11 CreateDevice: entry");
 
     if (createFactory(kIID_IDXGIFactory1, &unk10) != 0) {
-        System::Error::SetText("VideoDX11: Couldn't create a dxgi factory!", false);   // B.3.4 bridge
+        System::Error::SetText("VideoDX11: Couldn't create a dxgi factory!", false);
         return false;
     }
     IDXGIFactory1* factory = unk10;
@@ -1128,14 +1122,14 @@ bool DeviceData::CreateDevice() {
     IDXGIAdapter1* adapter = nullptr;
     if (factory->EnumAdapters1(static_cast<UINT>(dev->dxgiAdapterIndex),
                                &adapter) == DXGI_ERROR_NOT_FOUND) {
-        System::Error::SetText("VideoDX11: Unable to query adapter for dx11 interface!", false);   // B.3.4 bridge
+        System::Error::SetText("VideoDX11: Unable to query adapter for dx11 interface!", false);
         return false;
     }
 
     IDXGIOutput* output = nullptr;
     if (adapter->EnumOutputs(static_cast<UINT>(dev->dxgiOutputIndex),
                              &output) == DXGI_ERROR_NOT_FOUND) {
-        System::Error::SetText("VideoDX11: Unable to query output for dx11 display!", false);   // B.3.4 bridge
+        System::Error::SetText("VideoDX11: Unable to query output for dx11 display!", false);
         return false;
     }
 
@@ -1203,7 +1197,7 @@ bool DeviceData::CreateDevice() {
                      levels, 3, D3D11_SDK_VERSION,
                      &d3dDevice, &granted, &d3dContext) != 0) {
         System::Error::SetText("VideoDX11: Could not initialize the DX11 device! "
-                         "D3D_FEATURE_LEVEL_10_0 is required!", false);   // B.3.4 bridge
+                         "D3D_FEATURE_LEVEL_10_0 is required!", false);
         return false;
     }
 
@@ -1216,7 +1210,7 @@ bool DeviceData::CreateDevice() {
     d3d->CheckFormatSupport(DXGI_FORMAT_B8G8R8A8_UNORM, &support);
     if ((support & D3D11_FORMAT_SUPPORT_RENDER_TARGET) == 0) {
         System::Error::SetText("VideoDX11: Graphics hardware doesn't support "
-                         "DXGI_FORMAT_B8G8R8A8_UNORM as a render target format!", false);   // B.3.4 bridge
+                         "DXGI_FORMAT_B8G8R8A8_UNORM as a render target format!", false);
         return false;
     }
 
@@ -1224,7 +1218,7 @@ bool DeviceData::CreateDevice() {
     d3d->CheckFormatSupport(DXGI_FORMAT_D24_UNORM_S8_UINT, &support);
     if ((support & D3D11_FORMAT_SUPPORT_DEPTH_STENCIL) == 0) {
         System::Error::SetText("VideoDX11: Graphics hardware doesn't support "
-                         "DXGI_FORMAT_D24_UNORM_S8_UINT as a depth stencil format!", false);   // B.3.4 bridge
+                         "DXGI_FORMAT_D24_UNORM_S8_UINT as a depth stencil format!", false);
         return false;
     }
 
@@ -1234,7 +1228,7 @@ bool DeviceData::CreateDevice() {
 
     // 14
     if (factory->CreateSwapChain(d3d, &desc, &swapChain) != 0) {
-        System::Error::SetText("VideoDX11: Could not initialize the swap chain!", false);   // B.3.4 bridge
+        System::Error::SetText("VideoDX11: Could not initialize the swap chain!", false);
         return false;
     }
 
@@ -1252,7 +1246,7 @@ bool DeviceData::CreateDevice() {
             "DXGI_FORMAT_B8G8R8A8_UNORM [%ix%i %ixAA]",
             dev->backBufferWidth,
             dev->backBufferHeight, aa);
-        System::Error::SetText(msg._data, false);   // B.3.4 bridge
+        System::Error::SetText(msg._data, false);
         return false;
     }
     if (!CreateDepthBuffer(this)) {
@@ -1262,7 +1256,7 @@ bool DeviceData::CreateDevice() {
             "DXGI_FORMAT_D24_UNORM_S8_UINT [%ix%i %AA]!",
             dev->backBufferWidth,
             dev->backBufferHeight, aa);
-        System::Error::SetText(msg._data, false);   // B.3.4 bridge
+        System::Error::SetText(msg._data, false);
         return false;
     }
 
@@ -1374,11 +1368,13 @@ namespace {
 // copy-constructed from the old block, which is then destroyed and freed. When
 // the block did NOT move, only the tail past the new length is destroyed.
 // ============================================================
-void GfxInterfaceArraySetLength(void* arrayBase, int newCount,
+// B5 CLOSE: the {data, count, capacity} triple is `Video::Device`'s own named
+// `interfaceData` / `interfaceCount` / `interfaceCapacity` (+0x40 / +0x48 / +0x4c).
+void GfxInterfaceArraySetLength(::Video::Device* dev, int newCount,
                                 const GraphicsInterface* proto) {
-    GraphicsInterface** dataP = reinterpret_cast<GraphicsInterface**>(arrayBase);
-    int32_t* countP = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(arrayBase) + 8);
-    int32_t* capP   = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(arrayBase) + 12);
+    GraphicsInterface** dataP = &dev->interfaceData;
+    int32_t* countP = &dev->interfaceCount;
+    int32_t* capP   = &dev->interfaceCapacity;
 
     const int oldCount = *countP;
     if (newCount == oldCount) return;
@@ -1566,8 +1562,9 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
             // two points the shipped code called it.
             Adapter rec;
             {
-                WideStringStorage w;
-                ::new (static_cast<void*>(&w)) System::WideString(adapterDesc.Description);   // B.3.4 bridge
+                // B5 CLOSE: a real `System::WideString` local; its destructor runs at
+                // this scope's end, exactly where the shipped code called it.
+                const System::WideString w(adapterDesc.Description);
                 {
                     // ENDGAME B.3.5 block J: `?AsUTF8@WideString@System@@` is a
                     // real const member returning `System::String` by value, so
@@ -1576,12 +1573,10 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
                     // a retslot, instead of a default construction plus that
                     // write. The inner scope still releases it before the
                     // WideString, which is the shipped order.
-                    const System::String utf8 =
-                        reinterpret_cast<const System::WideString*>(&w)->AsUTF8();  // B.3.4 bridge
+                    const System::String utf8 = w.AsUTF8();
                     rec.name = utf8;
                 }
-                reinterpret_cast<System::WideString*>(&w)->~WideString();   // B.3.4 bridge
-            }
+            }                                   // w
             // ENDGAME B.3.5 block D2: the real class's field names. These three
             // stores are the EVIDENCE that Adapter+0x28/+0x2c/+0x30 are the
             // anisotropy cap and the two DXGI enumeration coordinates; Device.h
@@ -1609,18 +1604,15 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
             {
                 // The nested scopes below reproduce the shipped destruction
                 // order exactly — t3, t2, t1, tailU, tailW, prefix — with each
-                // System::String released by its own destructor. `tailW` is a
-                // System::WideString, which is not a B.3.1 class, so it keeps
-                // its explicit dtor call, placed where the shipped one is.
+                // System::String and WideString released by its own destructor
+                // at the scope end where the shipped one called it.
                 const System::String prefix(" (Display ");
                 {
-                    const int len = System::WideString::StrLength(mi.szDevice);   // B.3.4 bridge
-                    WideStringStorage tailW;
-                    ::new (static_cast<void*>(&tailW)) System::WideString(mi.szDevice + (len - 1));   // B.3.4 bridge
+                    const int len = System::WideString::StrLength(mi.szDevice);
+                    const System::WideString tailW(mi.szDevice + (len - 1));
                     {
                         // Same shape as the adapter description above.
-                        const System::String tailU =
-                            reinterpret_cast<const System::WideString*>(&tailW)->AsUTF8();  // B.3.4 bridge
+                        const System::String tailU = tailW.AsUTF8();
                         {
                             const System::String t1 = prefix + tailU;
                             const System::String t2 = t1 + ")";
@@ -1631,8 +1623,7 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
                             (void)t3;
                         }                       // t3, t2, t1
                     }                           // tailU
-                    reinterpret_cast<System::WideString*>(&tailW)->~WideString();   // B.3.4 bridge
-                }
+                }                               // tailW
                                                 // prefix
             }
 
@@ -1727,9 +1718,7 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
     const bool any = gi.adapterCount > 0;
     if (any) {
         // B5 DEV-A: Device+0x40 by name (`Dev::kInterfaces` is gone).
-        GfxInterfaceArraySetLength(&dev->interfaceData,
-                                   dev->interfaceCount + 1,
-                                   &gi);
+        GfxInterfaceArraySetLength(dev, dev->interfaceCount + 1, &gi);
     }
 
     return any;                                           // ~GraphicsInterface(gi)

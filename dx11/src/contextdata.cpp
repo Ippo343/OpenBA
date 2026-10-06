@@ -568,8 +568,8 @@ void ContextData::Finish() {
         else if (hr == DXGI_ERROR_DEVICE_RESET)           msg = "D3D11 Error: DXGI_ERROR_DEVICE_RESET!";
         else if (hr == DXGI_ERROR_DRIVER_INTERNAL_ERROR)  msg = "D3D11 Error: DXGI_ERROR_DRIVER_INTERNAL_ERROR!";
         else                                              msg = "D3D11 Error: UNKNOWN!";
-        System::Error::SetText(msg, true);   // B.3.4 bridge
-        System::Error::Display();            // B.3.4 bridge
+        System::Error::SetText(msg, true);
+        System::Error::Display();
         return;
     }
 
@@ -759,7 +759,7 @@ void ContextData::BindScissor() {
 //       void ConstantBuffer::Bind(Context& context, void* data, int offset, int size)
 // The `offset` argument is the literal 0 in both calls. The two receivers are
 // the ConstantBuffers EMBEDDED in the Context (`LEA` in retail): named members
-// now (B5 CTX), so the B.3.5 bridge casts are gone.
+// now (B5 CTX), so the B.3.5-era bridge casts are gone.
 // ============================================================
 void ContextData::BindTransforms() {
     ::Video::Context* ctx = _owner;
