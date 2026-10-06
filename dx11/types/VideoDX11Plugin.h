@@ -21,11 +21,10 @@ class DeviceData;
 
 namespace VideoDX11 {
 
-struct DeviceData;
-
 // ---- VideoDX11-x64.dll's two exports (dx11/src/exports.cpp) ---------------
-// 0x1800011a0 — CreateDeviceData(Video::Device*) -> the DX11 DeviceData.
-DeviceData* Dx11_CreateDeviceData(::Video::Device* device);
+// 0x1800011a0 — CreateDeviceData(Video::Device*) -> a new VideoDX11::DeviceData,
+// returned as its base: exactly `Video::Device::CreateDeviceDataFn`.
+::Video::DeviceData* Dx11_CreateDeviceData(::Video::Device* device);
 // 0x180001230 — GetDeviceName() -> "DirectX 11".
 const char* Dx11_GetDeviceName();
 

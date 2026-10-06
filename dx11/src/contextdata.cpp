@@ -654,7 +654,7 @@ void ContextData_Finish(ContextData* self) {
         hr = static_cast<ID3D11Device*>(dd->d3dDevice)->GetDeviceRemovedReason();
     if (hr == 0) return;
 
-    void* owner = dd->device;   // DeviceData+0x08, the Video::Device*
+    void* owner = dd->_owner;   // DeviceData+0x08, the Video::Device* (B5 DEV-A: the base's _owner)
 
     DeviceNotifyFn onLost = Field<DeviceNotifyFn>(owner, Dev::kOnDeviceLost);
     std::fprintf(stderr, "[DeviceLost] hr=0x%08lx onLost=%p -> %s\n",

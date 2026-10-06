@@ -105,8 +105,8 @@ static_assert(sizeof(Video::Device::dllSlots) / sizeof(InterfaceSlot) == kSlotCo
 // ============================================================================
 // ENDGAME B.3.5 block D2. `InitializeInterfaces` is a sibling member now, and the
 // two hand-inlined `DeviceData` vtable dispatches became virtual calls on block
-// A's real `Video::DeviceData` (slot 1 `EnumerateInterfaces`, slot 0
-// `DeletingDtor`). The file's `__try`/`__except` structure and every branch are
+// A's real `Video::DeviceData` (slot 1 `EnumerateInterfaces`, slot 0 the
+// virtual destructor via `delete`, B5 DEV-A). The file's `__try`/`__except` structure and every branch are
 // untouched — B35_RULES §6.1 and §B.1.7 put SEH last, and the unguarded deref at
 // 0x1800f8678 is what that SEH region exists for.
 bool Video::Device::EnumerateVideoModes() {
@@ -134,8 +134,11 @@ bool Video::Device::EnumerateVideoModes() {
         System::Debug::_disableHandler = false;         // 0x1800f8697
 
         if (data != nullptr) {                          // 0x1800f869e — guarded HERE
-            // 0x1800f86ab, the deleting flag.
-            (void)data->DeletingDtor(1);
+            // 0x1800f86ab, the deleting flag. B5 DEV-A (B5_RULES D10, C3): slot 0
+            // with flags 1 is `delete` -- the virtual destructor of whichever
+            // plugin built it (DX11 or the DX9 placeholder), then the base's
+            // class-scope operator delete (MemFree).
+            delete data;
         }
     }
 

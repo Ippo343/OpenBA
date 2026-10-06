@@ -249,21 +249,11 @@ public:
     static void  operator delete(void* p);
 
     // [0] 0x180058b10 -- MSVC's VECTOR deleting destructor (element 0x10, over
-    // ~DeviceData), both arms as the retired RT_DELDTOR row ran them. Reached only on
-    // an object wearing THIS table; a live companion wears dx11's.
-    virtual void* DeletingDtor(unsigned flags) {
-        if (flags & 2u) {
-            void* const block = this;   // element 0 of a vector-new block
-            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
-            for (int32_t i = *cookie; --i >= 0;)
-                this[i].~DeviceData();
-            if (flags & 1u) Object::detail::InternalMemFree(cookie);
-            return cookie;
-        }
-        this->~DeviceData();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ~DeviceData). B5 DEV-A (B5_RULES D1): a real virtual destructor -- the
+    // compiler's D0/D1 pair is slot 0 now, and the base's class-scope `operator
+    // delete` above is retail's MemFree on `flags & 1`. The body (empty) stays in
+    // companion_data.cpp: ??1DeviceData@Video@@UEAA@XZ  0x1800f8cf0.
+    virtual ~DeviceData();
     virtual bool EnumerateInterfaces() { detail::CompanionPureCall(); }                      // [ 1]
     virtual bool CreateDevice() { detail::CompanionPureCall(); }                             // [ 2]
     virtual void Shutdown() { detail::CompanionPureCall(); }                                 // [ 3]
@@ -281,8 +271,9 @@ public:
     // takes the owning Video-side object and returns the new `*Data`; B.4
     // (R-VIDEO) types both, as `Video::Device`'s eleven `Create*Data` forwarders'
     // mangled names spell them (`?CreateImageBufferData@Device@Video@@QEAAPEAVImageBufferData@2@PEAVImageBuffer@2@@Z`
-    // and its ten siblings). Layout-neutral: pointer parameters and returns, and
-    // dx11's table is filled by address (DX11_REGISTER_SLOT), not by signature.
+    // and its ten siblings). Layout-neutral: pointer parameters and returns.
+    // B5 DEV-A: `VideoDX11::DeviceData` overrides all eleven with these exact
+    // signatures (base-typed returns; dx11's table is the compiler's now).
     virtual ContextData*        CreateContextData(Context* owner) { detail::CompanionPureCall(); }                   // [ 9] +0x48
     virtual ImageBufferData*    CreateImageBufferData(ImageBuffer* owner) { detail::CompanionPureCall(); }           // [10] +0x50
     virtual ConstantBufferData* CreateConstantBufferData(ConstantBuffer* owner) { detail::CompanionPureCall(); }     // [11] +0x58
@@ -294,8 +285,6 @@ public:
     virtual RenderStateData*    CreateRenderStateData(RenderState* owner) { detail::CompanionPureCall(); }           // [17] +0x88
     virtual VideoProgramData*   CreateVideoProgramData(VideoProgram* owner) { detail::CompanionPureCall(); }         // [18] +0x90
     virtual RenderBufferData*   CreateRenderBufferData(RenderBuffer* owner) { detail::CompanionPureCall(); }         // [19] +0x98
-
-    ~DeviceData();          // ??1DeviceData@Video@@UEAA@XZ  0x1800f8cf0
 
     Owner* _owner;           // +0x08  Video::Device*
 };
@@ -875,9 +864,8 @@ RT_VIDEO_COMPANION_PINS(VideoProgramData);
 // (dx11_seam.cpp), so these stay on `DeletingDtor(unsigned)` and must never
 // gain a virtual destructor (GCC would spend two slots on it and shift every
 // slot the seam fills). They flip when dx11's types become real subclasses.
-static_assert(!std::has_virtual_destructor<DeviceData>::value,
-              "Video::DeviceData is exempt from the normal-virtual cutover -- the live "
-              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(std::has_virtual_destructor<DeviceData>::value,
+              "B5: the dx11 subclass wears the compiler's table");
 static_assert(!std::has_virtual_destructor<ContextData>::value,
               "Video::ContextData is exempt from the normal-virtual cutover -- the live "
               "object wears dx11's table built in retail slot order (B3X_RULES X1)");

@@ -12,7 +12,9 @@
 //
 // B5 (the dx11 seam): a class whose dx11 subclass is converted moves to
 // CheckDataB5 -- `virtual ~T()`, `delete` instead of `DeletingDtor` (so far:
-// RenderBufferData, VideoProgramData).
+// RenderBufferData, VideoProgramData, DeviceData). The dx11 subclasses cannot
+// link here (D3D11), so the BASE shape is what is tested, plus the shape the
+// DX9 placeholder (dx11/src/dx9_placeholder.cpp) puts on it.
 //
 // The out-of-line destructors live in runtime/src/video/companion_data.cpp
 // (which cannot link into the host test), so they are defined HERE as markers.
@@ -137,7 +139,7 @@ RenderStateData::~RenderStateData()       { NoteDtor(this); }
 VideoProgramData::~VideoProgramData()     { NoteDtor(this); }
 }  // namespace Video
 
-UNIT_TEST(b39_vid_devicedata_concrete)         { CheckData<Video::DeviceData>(); }
+UNIT_TEST(b39_vid_devicedata_concrete)         { CheckDataB5<Video::DeviceData>(); }
 UNIT_TEST(b39_vid_contextdata_concrete)        { CheckData<Video::ContextData>(); }
 UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckData<Video::ImageBufferData>(); }
 UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckData<Video::IndexBufferData>(); }
@@ -160,6 +162,44 @@ UNIT_TEST(b5_vid_flipped_companion_slots_by_pmf) {
     using V = Video::VideoProgramData;
     CHECK_SLOT(V, Slot1, 1);
     CHECK_SLOT(V, Bind,  2);
+}
+
+// B5 DEV-A (B5_RULES D5, C3): the DX9 placeholder's shape -- a `final` subclass
+// of `Video::DeviceData` overriding slots 1-3 and INHERITING the other sixteen
+// -- built through the base's operator new and destroyed through a BASE pointer,
+// as Video::Device::EnumerateVideoModes does (create, EnumerateInterfaces,
+// `delete`). Stand-in: the real one calls dx11's DXGI walk, which cannot link.
+namespace {
+int g_placeholderDtors = 0;
+class PlaceholderShape final : public Video::DeviceData {
+public:
+    explicit PlaceholderShape(Video::Device* owner) : Video::DeviceData(owner) {}
+    ~PlaceholderShape() override { ++g_placeholderDtors; }
+    bool EnumerateInterfaces() override { return true; }
+    bool CreateDevice() override { return false; }
+    void Shutdown() override {}
+};
+}  // namespace
+
+UNIT_TEST(b5_vid_dx9_placeholder_shape) {
+    CHECK_EQ(sizeof(PlaceholderShape), (size_t)0x10);
+    CHECK(std::has_virtual_destructor<PlaceholderShape>::value);
+    // Slots 1-3 are the subclass's; slot 8 and the factories stay the base's
+    // `_purecall` bodies (inherited, so the PMF names the base's slot).
+    CHECK_SLOT(PlaceholderShape, EnumerateInterfaces, 1);
+    CHECK_SLOT(PlaceholderShape, CreateDevice,        2);
+    CHECK_SLOT(PlaceholderShape, Shutdown,            3);
+
+    Video::Device* const owner = reinterpret_cast<Video::Device*>(kOwnerBits);
+    Video::DeviceData* data = new PlaceholderShape(owner);   // the slot's factory
+    CHECK(data->_owner == owner);
+    CHECK(data->EnumerateInterfaces());
+    CHECK(!data->CreateDevice());
+    g_placeholderDtors = 0;
+    g_dtorCount = 0;
+    delete data;                                              // slot 0, flags 1
+    CHECK_EQ(g_placeholderDtors, 1);   // the derived destructor ran ...
+    CHECK_EQ(g_dtorCount, 1);          // ... then the base's
 }
 
 // The slot ORDER of the two 20-slot tables, by PMF: the Device-side callers

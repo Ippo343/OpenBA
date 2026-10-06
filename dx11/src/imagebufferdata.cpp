@@ -226,13 +226,15 @@ const int kFormatBytes[8]  = {    8,   16,   16,    1,    1,    4,    4,    4 };
 // DeviceData lands (see the header comment).
 // ============================================================
 void TrackImageBuffer(DeviceData* dd, void* imageBuffer) {
-    const int   oldCount = dd->trackedCount;
-    void* const oldData  = dd->trackedImages;
+    // B5 DEV-A: DeviceData::trackedImages is typed `Video::ImageBuffer**` now
+    // (VideoDX11Data.h), so the array is walked as what it holds.
+    const int                    oldCount = dd->trackedCount;
+    ::Video::ImageBuffer** const oldData  = dd->trackedImages;
 
     // Linear scan; present -> nothing to do. (The original also has an
     // `if (index > -1)` guard on the hit, which is unconditionally true.)
     if (oldCount > 0) {
-        void** p = static_cast<void**>(oldData);
+        ::Video::ImageBuffer** p = oldData;
         for (int i = 0; i < oldCount; ++i)
             if (p[i] == imageBuffer) return;
     }
@@ -243,16 +245,17 @@ void TrackImageBuffer(DeviceData* dd, void* imageBuffer) {
     if (dd->trackedCapacity < newCount) {
         dd->trackedCapacity = newCount;
         if (oldCount != 0) dd->trackedCapacity = newCount * 3;
-        dd->trackedImages = System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(dd->trackedCapacity) * 8, 8);
+        dd->trackedImages = static_cast< ::Video::ImageBuffer**>(
+            System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(dd->trackedCapacity) * 8, 8));
     }
 
     // If the block was reused, only the tail needs filling; if it moved, the
     // whole range is copied across and the new element lands at the end.
     const int start = (oldData == dd->trackedImages) ? oldCount : 0;
     for (int i = start; i < newCount; ++i) {
-        void** dst = static_cast<void**>(dd->trackedImages) + i;
+        ::Video::ImageBuffer** dst = dd->trackedImages + i;
         if (dst != nullptr)
-            *dst = (i < oldCount) ? static_cast<void**>(oldData)[i] : imageBuffer;
+            *dst = (i < oldCount) ? oldData[i] : static_cast< ::Video::ImageBuffer*>(imageBuffer);
     }
 
     if (oldData != dd->trackedImages) System::MemoryAllocator::MemFree(oldData);
@@ -262,9 +265,9 @@ void TrackImageBuffer(DeviceData* dd, void* imageBuffer) {
 // 0x1800024b2-0x180002505. Removes every occurrence (there is at most one).
 void UntrackImageBuffer(DeviceData* dd, void* imageBuffer) {
     for (int i = 0; i < dd->trackedCount; ++i) {
-        if (static_cast<void**>(dd->trackedImages)[i] != imageBuffer) continue;
+        if (dd->trackedImages[i] != imageBuffer) continue;
         for (int j = i + 1; j < dd->trackedCount; ++j) {
-            void** slot = static_cast<void**>(dd->trackedImages) + (j - 1);
+            ::Video::ImageBuffer** slot = dd->trackedImages + (j - 1);
             if (slot != nullptr) *slot = slot[1];
         }
         dd->trackedCount -= 1;

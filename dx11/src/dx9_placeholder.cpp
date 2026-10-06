@@ -17,7 +17,7 @@
 // ported InitializeInterfaces calls only when the DLL is absent.
 //
 // B5 DEV-A (B5_RULES D5, C3): a real C++ subclass of `Video::DeviceData`. It was
-// a 16-byte POD wearing a four-entry hand table (`g_dx9PlaceholderVtable`), which
+// a 16-byte POD wearing a four-entry hand-built vtable array, which
 // left retail slots 4..19 dangling past the table's end; now those sixteen slots
 // INHERIT the base's `_purecall` bodies, and the three it implements are
 // overrides. Runtime creates one through the slot's factory and destroys it in
