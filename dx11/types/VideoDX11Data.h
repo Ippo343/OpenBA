@@ -24,9 +24,21 @@
 #include "video/CompanionData.h"
 
 // B5 (D4): the COM pointers are typed with FORWARD declarations, so this header
-// stays free of <d3d11.h>.
+// stays free of <d3d11.h> (mingw-w64's `interface` is `struct`, so these name
+// the same types).
 struct ID3D11Buffer;                 // B5 BUF: Constant/Index/VertexBufferData
 struct ID3D11DeviceContext;          // B5 CTX: ContextData
+struct ID3D11InputLayout;            // B5 RES: VertexLayoutData
+struct ID3D11VertexShader;           // B5 RES: VertexProgramData
+struct ID3D11PixelShader;            // B5 RES: PixelProgramData
+struct ID3D11BlendState;             // B5 RES: RenderStateData
+struct ID3D11DepthStencilState;      // B5 RES: RenderStateData
+struct ID3D11RasterizerState;        // B5 RES: RenderStateData
+struct ID3D11SamplerState;           // B5 RES: ImageBufferData
+struct ID3D11Texture2D;              // B5 RES: ImageBufferData
+struct ID3D11RenderTargetView;       // B5 RES: ImageBufferData
+struct ID3D11DepthStencilView;       // B5 RES: ImageBufferData
+struct ID3D11ShaderResourceView;     // B5 RES: ImageBufferData
 
 namespace VideoDX11 {
 
@@ -309,8 +321,8 @@ enum ContextDataSlot : int {
 // 0x38, vtable 0x180018790, factory 0x1800056c0
 //
 // All five COM interfaces identified 2026-07-24 from the seven slots (lane L3).
-// Fields are void* rather than the D3D11 types so this shared header does not
-// force <d3d11.h> on the other lanes; dx11/src/imagebufferdata.cpp casts.
+// B5 RES: the fields are the typed D3D11 interfaces (D4), forward-declared at
+// the top of this file so it still does not force <d3d11.h> on its includers.
 //
 //   +0x10 ID3D11SamplerState*       created by 0x180002720 via CreateSamplerState
 //                                   (ID3D11Device vtable +0xb8 = index 23)
@@ -324,18 +336,41 @@ enum ContextDataSlot : int {
 // The dtor (0x180002430) and slot 3 (0x180002870) both release these in the
 // order +0x28, +0x20, +0x30, +0x10, +0x18 and then null all five. That order is
 // reproduced verbatim in the port — it is not the declaration order.
-struct ImageBufferData {
-    void* vptr;               // +0x00
-    void* imageBuffer;        // +0x08  Video::ImageBuffer*
-    void* sampler;            // +0x10  ID3D11SamplerState*
-    void* texture;            // +0x18  ID3D11Texture2D*
-    void* renderTargetView;   // +0x20  ID3D11RenderTargetView*
-    void* depthStencilView;   // +0x28  ID3D11DepthStencilView*
-    void* shaderResourceView; // +0x30  ID3D11ShaderResourceView*
+//
+// B5 RES: a real C++ subclass of `Video::ImageBufferData`; the compiler builds
+// its vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
+// `_owner` (+0x08, `Video::ImageBuffer*`) is the base's and replaces the old
+// `imageBuffer` field.
+class ImageBufferData final : public ::Video::ImageBufferData {
+public:
+    // Factory 0x1800056c0: MemAlloc(0x38, 4) + ??0ImageBufferData(owner) + the
+    // vptr store + the five null stores. Nothing else is stored.
+    explicit ImageBufferData(::Video::ImageBuffer* owner)
+        : ::Video::ImageBufferData(owner),
+          sampler(nullptr), texture(nullptr), renderTargetView(nullptr),
+          depthStencilView(nullptr), shaderResourceView(nullptr) {}
+    ~ImageBufferData() override;                                     // [0] 0x180002400 -> 0x180002430, chains ??1ImageBufferData@Video@@UEAA@XZ
+    void AttachColorBuffer() override;                               // [1] 0x180002580  alias DeviceData::colorBuffer + RTV
+    void AttachDepthBuffer() override;                               // [2] 0x180002650  alias DeviceData::depthBuffer + DSV
+    bool Create(const Collection::Array<Collection::Array<uint8_t> >* levels) override;  // [3] 0x180002870  texture + SRV + RTV/DSV + sampler
+    void Bind(void* context, unsigned slot) override;                // [4] 0x180002da0  PSSetSamplers + PSSetShaderResources
+    bool Update(void* data, int width, int height) override;         // [5] 0x180002e10  Map/WRITE_DISCARD or UpdateSubresource
+    bool Read(void* dst, int width, int height) override;            // [6] 0x180002ef0  staging copy + Map/READ_WRITE readback
+
+    ID3D11SamplerState*       sampler;            // +0x10
+    ID3D11Texture2D*          texture;            // +0x18
+    ID3D11RenderTargetView*   renderTargetView;   // +0x20
+    ID3D11DepthStencilView*   depthStencilView;   // +0x28
+    ID3D11ShaderResourceView* shaderResourceView; // +0x30
+
+private:
+    // The helpers slot 3 and the destructor share: the five releases inlined at
+    // 0x180002507 / 0x18000292a, and the sampler builder 0x180002720.
+    void ReleaseInterfaces();
+    void CreateSamplerState();
 };
-static_assert(sizeof(ImageBufferData) == 0x38, "ImageBufferData size");
-static_assert(offsetof(ImageBufferData, vptr) == 0x0, "ImageBufferData::vptr");
-static_assert(offsetof(ImageBufferData, imageBuffer)        == 0x08, "ImageBufferData::imageBuffer");
+static_assert(sizeof(ImageBufferData) == 0x38, "MemAlloc 0x38 @ 0x1800056c0");
+static_assert(offsetof(ImageBufferData, _owner) == 0x08, "ImageBufferData::_owner (the base's)");
 static_assert(offsetof(ImageBufferData, sampler)            == 0x10, "ImageBufferData::sampler");
 static_assert(offsetof(ImageBufferData, texture)            == 0x18, "ImageBufferData::texture");
 static_assert(offsetof(ImageBufferData, renderTargetView)   == 0x20, "ImageBufferData::renderTargetView");
@@ -529,14 +564,25 @@ static_assert(offsetof(VertexBufferData, locked) == offsetof(IndexBufferData, lo
 // fields slot 2 reads (element array @ +0x20/+0x28, input signature @
 // +0x38/+0x40) and the 0x20-byte Element layout are pinned with static_asserts
 // in dx11/src/dx11_backend_access.h.
-struct VertexLayoutData {
-    void* vptr;         // +0x00
-    void* vertexLayout; // +0x08  Video::VertexLayout*
-    void* inputLayout;  // +0x10  ID3D11InputLayout* (built with the "TEXCOORD" semantic string)
+//
+// B5 RES: a real C++ subclass of `Video::VertexLayoutData`; the compiler builds
+// its vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
+// `_owner` (+0x08, `Video::VertexLayout*`) is the base's and replaces the old
+// `vertexLayout` field; `inputLayout` is the typed COM pointer (B5_RULES D4).
+class VertexLayoutData final : public ::Video::VertexLayoutData {
+public:
+    // Factory 0x180005880: MemAlloc(0x18, 4) + ??0VertexLayoutData(owner) + the
+    // vptr store + `inputLayout = nullptr`. Nothing else is stored.
+    explicit VertexLayoutData(::Video::VertexLayout* owner)
+        : ::Video::VertexLayoutData(owner), inputLayout(nullptr) {}
+    ~VertexLayoutData() override;                        // [0] 0x180003f60, chains ??1VertexLayoutData@Video@@UEAA@XZ
+    void Bind(void* context) override;                   // [1] 0x180003fc0  IASetInputLayout
+    void PlatformCreate() override;                      // [2] 0x180003ff0  CreateInputLayout
+
+    ID3D11InputLayout* inputLayout;  // +0x10  built with the "TEXCOORD" semantic string
 };
-static_assert(sizeof(VertexLayoutData) == 0x18, "VertexLayoutData size");
-static_assert(offsetof(VertexLayoutData, vptr) == 0x0, "VertexLayoutData::vptr");
-static_assert(offsetof(VertexLayoutData, vertexLayout) == 0x08, "VertexLayoutData::vertexLayout");
+static_assert(sizeof(VertexLayoutData) == 0x18, "MemAlloc 0x18 @ 0x180005880");
+static_assert(offsetof(VertexLayoutData, _owner) == 0x08, "VertexLayoutData::_owner (the base's)");
 static_assert(offsetof(VertexLayoutData, inputLayout) == 0x10, "VertexLayoutData::inputLayout");
 
 // 0x30, vtable 0x180018890 (3 slots), factory 0x1800058f0
@@ -560,14 +606,26 @@ static_assert(offsetof(VertexLayoutData, inputLayout) == 0x10, "VertexLayoutData
 // permutation, pinned with static_asserts in dx11/src/dx11_backend_access.h.
 // Owner type confirmed by the Runtime ctor export
 // ??0VertexProgramData@Video@@QEAA@PEAVVertexProgram@1@@Z.
-struct VertexProgramData {
-    void* vptr;          // +0x00
-    void* vertexProgram; // +0x08  Video::VertexProgram*
-    void* variants[4];   // +0x10  ID3D11VertexShader*[4]
+//
+// B5 RES: a real C++ subclass of `Video::VertexProgramData`; the compiler builds
+// its vtable. `_owner` (+0x08, `Video::VertexProgram*`) is the base's and
+// replaces the old `vertexProgram` field; the variants are typed (D4).
+class VertexProgramData final : public ::Video::VertexProgramData {
+public:
+    // Factory 0x1800058f0: MemAlloc(0x30, 4) + ??0VertexProgramData(owner) + the
+    // vptr store + the four `variants[i] = nullptr`. Nothing else is stored.
+    explicit VertexProgramData(::Video::VertexProgram* owner)
+        : ::Video::VertexProgramData(owner) {
+        for (int i = 0; i < 4; ++i) variants[i] = nullptr;
+    }
+    ~VertexProgramData() override;                       // [0] 0x180004110, chains ??1VertexProgramData@Video@@UEAA@XZ
+    bool PlatformCreate() override;                      // [1] 0x1800041a0  CreateVertexShader x4
+    void Bind(void* context, int permutation) override;  // [2] 0x180004230  VSSetShader
+
+    ID3D11VertexShader* variants[4];  // +0x10  one per shader permutation
 };
-static_assert(sizeof(VertexProgramData) == 0x30, "VertexProgramData size");
-static_assert(offsetof(VertexProgramData, vptr) == 0x0, "VertexProgramData::vptr");
-static_assert(offsetof(VertexProgramData, vertexProgram) == 0x08, "VertexProgramData::vertexProgram");
+static_assert(sizeof(VertexProgramData) == 0x30, "MemAlloc 0x30 @ 0x1800058f0");
+static_assert(offsetof(VertexProgramData, _owner) == 0x08, "VertexProgramData::_owner (the base's)");
 static_assert(offsetof(VertexProgramData, variants) == 0x10, "VertexProgramData::variants");
 static_assert(sizeof(VertexProgramData::variants) == 0x20, "4 shader permutations");
 
@@ -582,14 +640,26 @@ static_assert(sizeof(VertexProgramData::variants) == 0x20, "4 shader permutation
 // equivalents. Owner type confirmed by
 // ??0PixelProgramData@Video@@QEAA@PEAVPixelProgram@1@@Z; it derives from the
 // same Video::ShaderProgram, and slot 1 reads the identical +0x40/+0x48 fields.
-struct PixelProgramData {
-    void* vptr;         // +0x00
-    void* pixelProgram; // +0x08  Video::PixelProgram*
-    void* variants[4];  // +0x10  ID3D11PixelShader*[4]
+//
+// B5 RES: a real C++ subclass of `Video::PixelProgramData`, the mirror of the
+// vertex class above; `_owner` (+0x08, `Video::PixelProgram*`) replaces the old
+// `pixelProgram` field.
+class PixelProgramData final : public ::Video::PixelProgramData {
+public:
+    // Factory 0x180005960: MemAlloc(0x30, 4) + ??0PixelProgramData(owner) + the
+    // vptr store + the four `variants[i] = nullptr`. Nothing else is stored.
+    explicit PixelProgramData(::Video::PixelProgram* owner)
+        : ::Video::PixelProgramData(owner) {
+        for (int i = 0; i < 4; ++i) variants[i] = nullptr;
+    }
+    ~PixelProgramData() override;                        // [0] 0x180003580, chains ??1PixelProgramData@Video@@UEAA@XZ
+    bool PlatformCreate() override;                      // [1] 0x180003610  CreatePixelShader x4
+    void Bind(void* context, int permutation) override;  // [2] 0x1800036a0  PSSetShader
+
+    ID3D11PixelShader* variants[4];   // +0x10  one per shader permutation
 };
-static_assert(sizeof(PixelProgramData) == 0x30, "PixelProgramData size");
-static_assert(offsetof(PixelProgramData, vptr) == 0x0, "PixelProgramData::vptr");
-static_assert(offsetof(PixelProgramData, pixelProgram) == 0x08, "PixelProgramData::pixelProgram");
+static_assert(sizeof(PixelProgramData) == 0x30, "MemAlloc 0x30 @ 0x180005960");
+static_assert(offsetof(PixelProgramData, _owner) == 0x08, "PixelProgramData::_owner (the base's)");
 static_assert(offsetof(PixelProgramData, variants) == 0x10, "PixelProgramData::variants");
 static_assert(sizeof(PixelProgramData::variants) == 0x20, "4 shader permutations");
 
@@ -610,18 +680,30 @@ static_assert(sizeof(PixelProgramData::variants) == 0x20, "4 shader permutations
 // rasterizer — which is deliberately not the creation order.
 //
 // The +0x08 owner is a Video::RenderState; its field map (the source of every
-// state-desc value) is documented in dx11/src/renderstatedata.cpp and in the
+// state-desc value) is the real class's (runtime/types/video/RenderState.h),
+// read by name in dx11/src/renderstatedata.cpp, and is described in the
 // "RenderState -> D3D11 state objects" section of ../../decomp/videodx11.md.
-struct RenderStateData {
-    void* vptr;              // +0x00
-    void* renderState;       // +0x08  Video::RenderState*
-    void* blendState;        // +0x10  ID3D11BlendState*
-    void* depthStencilState; // +0x18  ID3D11DepthStencilState*
-    void* rasterizerState;   // +0x20  ID3D11RasterizerState*
+//
+// B5 RES: a real C++ subclass of `Video::RenderStateData`; the compiler builds
+// its vtable. `_owner` (+0x08, `Video::RenderState*`) is the base's and replaces
+// the old `renderState` field; the three state objects are typed (D4).
+class RenderStateData final : public ::Video::RenderStateData {
+public:
+    // Factory 0x1800059d0: MemAlloc(0x28, 4) + ??0RenderStateData(owner) + the
+    // vptr store + the three null stores. Nothing else is stored.
+    explicit RenderStateData(::Video::RenderState* owner)
+        : ::Video::RenderStateData(owner),
+          blendState(nullptr), depthStencilState(nullptr), rasterizerState(nullptr) {}
+    ~RenderStateData() override;                         // [0] 0x1800036e0, chains ??1RenderStateData@Video@@UEAA@XZ
+    bool Create() override;                              // [1] 0x180003760  the three CreateXxxState
+    void Bind(void* context) override;                   // [2] 0x180003a90  OMSet* / RSSetState
+
+    ID3D11BlendState*        blendState;        // +0x10
+    ID3D11DepthStencilState* depthStencilState; // +0x18
+    ID3D11RasterizerState*   rasterizerState;   // +0x20
 };
-static_assert(sizeof(RenderStateData) == 0x28, "RenderStateData size");
-static_assert(offsetof(RenderStateData, vptr) == 0x0, "RenderStateData::vptr");
-static_assert(offsetof(RenderStateData, renderState)       == 0x08, "RenderStateData::renderState");
+static_assert(sizeof(RenderStateData) == 0x28, "MemAlloc 0x28 @ 0x1800059d0");
+static_assert(offsetof(RenderStateData, _owner) == 0x08, "RenderStateData::_owner (the base's)");
 static_assert(offsetof(RenderStateData, blendState)        == 0x10, "RenderStateData::blendState");
 static_assert(offsetof(RenderStateData, depthStencilState) == 0x18, "RenderStateData::depthStencilState");
 static_assert(offsetof(RenderStateData, rasterizerState)   == 0x20, "RenderStateData::rasterizerState");

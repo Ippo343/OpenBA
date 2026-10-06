@@ -35,12 +35,11 @@
 // (`MOVZX EAX,R10B`), so it wraps at 256. Faithfully reproduced; with a 64-slot
 // element buffer it is unreachable, but it costs nothing to be exact.
 
-#include "dx11_seam.h"
 #include "dx11_backend_access.h"
 
-// ENDGAME B.3.5 block A, RULE B5-3 — the real `Video::VertexLayoutData`
-// abstract base, so this file's destructor can call its base destructor as a
-// qualified non-virtual member call instead of resolving a mangled name.
+// The real `Video::VertexLayoutData` abstract base. B5 RES: `VideoDX11::
+// VertexLayoutData` derives from it in C++ (dx11/types/VideoDX11Data.h), so the
+// compiler chains its destructor and builds its vtable.
 #include "video/CompanionData.h"
 
 #include <cstdio>
@@ -101,28 +100,13 @@ static_assert(sizeof(D3D11_INPUT_ELEMENT_DESC) == 32,
 //     180003f9a  CALL [0x180013328]          ; Video::VertexLayoutData::~VertexLayoutData
 //     180003fa9  CALL [0x1800134d0]          ; MemFree, only when (flags & 1)
 //                returns `this`
-static void* VertexLayoutData_Dtor(VertexLayoutData* self, unsigned flags) {
-    self->vptr = Dx11VtableAddress(Vt::VertexLayoutData);
-
-    Dx11Release(self->inputLayout);
-
-    // ENDGAME B.3.5 block A, RULE B5-3. Was a `Dx11ResolveRuntimeImport
-    // ("??1VertexLayoutData@Video@@UEAA@XZ", 0x180013328)` + indirect call —
-    // spelling 9 of the nine caller bindings (RULE B5-14), one of dx11's 76
-    // mangled-name literals. `Video::VertexLayoutData` is now a real class, so
-    // this is the MSVC derived-destructor idiom written as C++: a QUALIFIED
-    // non-virtual call on the base subobject, reached through the bridge cast
-    // because `VideoDX11::VertexLayoutData` is still the declared leave of RULE
-    // B5-8 and does not inherit in C++.
-    //
-    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this
-    // function. The base destructor is in no slot, which is exactly why the
-    // qualification is safe and the virtual call is not.
-    reinterpret_cast< ::Video::VertexLayoutData*>(self)
-        -> ::Video::VertexLayoutData::~VertexLayoutData();   // B.3.5 bridge
-
-    if (flags & 1) System::MemoryAllocator::MemFree(self);
-    return self;
+//
+// B5 RES: the vptr re-seat, the base-destructor chain and the conditional
+// MemFree are the compiler's (its D0 + the base's class-scope `operator
+// delete`, B5 W0, companion_operators.cpp). The body is the one Release, not
+// followed by a null store (the original makes none).
+VertexLayoutData::~VertexLayoutData() {
+    if (inputLayout) inputLayout->Release();
 }
 
 // 0x180003fc0 — VertexLayout::Bind(Context&).
@@ -140,10 +124,8 @@ static void* VertexLayoutData_Dtor(VertexLayoutData* self, unsigned flags) {
 // resource Bind in this DLL. The layout pointer is passed through unchecked,
 // so binding a VertexLayout whose PlatformCreate never ran sets a null input
 // layout rather than doing nothing. Preserved.
-static void VertexLayoutData_Bind(VertexLayoutData* self,
-                                  void* /*Video::Context& — ignored*/) {
-    Dx11Context()->IASetInputLayout(
-        static_cast<ID3D11InputLayout*>(self->inputLayout));
+void VertexLayoutData::Bind(void* /*Video::Context& — ignored*/) {
+    Dx11Context()->IASetInputLayout(inputLayout);
 }
 
 // 0x180003ff0 — VertexLayout::PlatformCreate().
@@ -182,12 +164,12 @@ static void VertexLayoutData_Bind(VertexLayoutData* self,
 // is unreachable in practice (a D3D11 input layout is limited to 32 input
 // slots and Banished's layouts are single digits), and "reproduce a stack
 // overflow exactly" is not a useful fidelity goal.
-static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
+void VertexLayoutData::PlatformCreate() {
     // ENDGAME B.3.5 block A: was `const VertexLayoutOwner*`, a partial view in
     // dx11_backend_access.h. `Video::VertexLayout` is now a real class
     // (runtime/types/video/VertexLayout.h) and this is the same four offsets.
-    const Video::VertexLayout* owner =
-        static_cast<const Video::VertexLayout*>(self->vertexLayout);
+    // B5 RES: the base's `_owner` is typed `Video::VertexLayout*`.
+    const Video::VertexLayout* owner = _owner;
 
     if (owner->_signature.GetSize() == 0) return;
 
@@ -232,16 +214,7 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
         static_cast<UINT>(count),
         owner->_signature.GetData(),
         static_cast<SIZE_T>(owner->_signature.GetSize()),
-        reinterpret_cast<ID3D11InputLayout**>(&self->inputLayout));
+        &inputLayout);
 }
 
 }  // namespace VideoDX11
-
-// Unproven until run in-game — opt-in, shared with the rest of lane L2.
-
-DX11_REGISTER_SLOT(VertexLayoutData, 0, &::VideoDX11::VertexLayoutData_Dtor,
-                   "VertexLayoutData::~ (scalar deleting)");
-DX11_REGISTER_SLOT(VertexLayoutData, 1, &::VideoDX11::VertexLayoutData_Bind,
-                   "VertexLayoutData::Bind");
-DX11_REGISTER_SLOT(VertexLayoutData, 2, &::VideoDX11::VertexLayoutData_PlatformCreate,
-                   "VertexLayoutData::PlatformCreate");

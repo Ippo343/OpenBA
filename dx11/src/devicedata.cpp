@@ -1875,15 +1875,10 @@ void* Factory_ContextData(DeviceData* /*self*/, ::Video::Context* owner) {
 }
 
 void* Factory_ImageBufferData(DeviceData* /*self*/, ::Video::ImageBuffer* owner) {
-    ImageBufferData* p = AllocData<ImageBufferData, ::Video::ImageBufferData>(0x38, owner,
-                                                    Vt::ImageBufferData);
-    if (!p) return nullptr;
-    p->sampler            = nullptr;
-    p->texture            = nullptr;
-    p->renderTargetView   = nullptr;
-    p->depthStencilView   = nullptr;
-    p->shaderResourceView = nullptr;
-    return p;
+    // B5 RES: the base's operator new is retail's MemAlloc(0x38, 4); the ctor chain
+    // is retail's `??0ImageBufferData` + the vptr store (now the compiler's table)
+    // + the five null stores.
+    return new ImageBufferData(owner);
 }
 
 void* Factory_ConstantBufferData(DeviceData* /*self*/, ::Video::ConstantBuffer* owner) {
@@ -1906,37 +1901,31 @@ void* Factory_VertexBufferData(DeviceData* /*self*/, ::Video::VertexBuffer* owne
 }
 
 void* Factory_VertexLayoutData(DeviceData* /*self*/, ::Video::VertexLayout* owner) {
-    VertexLayoutData* p = AllocData<VertexLayoutData, ::Video::VertexLayoutData>(0x18, owner,
-                                                      Vt::VertexLayoutData);
-    if (!p) return nullptr;
-    p->inputLayout = nullptr;
-    return p;
+    // B5 RES: the base's operator new is retail's MemAlloc(0x18, 4); the ctor chain
+    // is retail's `??0VertexLayoutData` + the vptr store (now the compiler's table)
+    // + `inputLayout = nullptr`.
+    return new VertexLayoutData(owner);
 }
 
 void* Factory_VertexProgramData(DeviceData* /*self*/, ::Video::VertexProgram* owner) {
-    VertexProgramData* p = AllocData<VertexProgramData, ::Video::VertexProgramData>(0x30, owner,
-                                                        Vt::VertexProgramData);
-    if (!p) return nullptr;
-    for (int i = 0; i < 4; ++i) p->variants[i] = nullptr;
-    return p;
+    // B5 RES: the base's operator new is retail's MemAlloc(0x30, 4); the ctor chain
+    // is retail's `??0VertexProgramData` + the vptr store (now the compiler's table)
+    // + the four `variants[i] = nullptr`.
+    return new VertexProgramData(owner);
 }
 
 void* Factory_PixelProgramData(DeviceData* /*self*/, ::Video::PixelProgram* owner) {
-    PixelProgramData* p = AllocData<PixelProgramData, ::Video::PixelProgramData>(0x30, owner,
-                                                      Vt::PixelProgramData);
-    if (!p) return nullptr;
-    for (int i = 0; i < 4; ++i) p->variants[i] = nullptr;
-    return p;
+    // B5 RES: the base's operator new is retail's MemAlloc(0x30, 4); the ctor chain
+    // is retail's `??0PixelProgramData` + the vptr store (now the compiler's table)
+    // + the four `variants[i] = nullptr`.
+    return new PixelProgramData(owner);
 }
 
 void* Factory_RenderStateData(DeviceData* /*self*/, ::Video::RenderState* owner) {
-    RenderStateData* p = AllocData<RenderStateData, ::Video::RenderStateData>(0x28, owner,
-                                                    Vt::RenderStateData);
-    if (!p) return nullptr;
-    p->blendState        = nullptr;
-    p->depthStencilState = nullptr;
-    p->rasterizerState   = nullptr;
-    return p;
+    // B5 RES: the base's operator new is retail's MemAlloc(0x28, 4); the ctor chain
+    // is retail's `??0RenderStateData` + the vptr store (now the compiler's table)
+    // + the three null stores.
+    return new RenderStateData(owner);
 }
 
 void* Factory_VideoProgramData(DeviceData* /*self*/, ::Video::VideoProgram* owner) {

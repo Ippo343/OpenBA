@@ -419,12 +419,15 @@ UNIT_TEST(video_renderstate_layout) {
     CHECK(std::is_trivially_copyable<Video::RenderState::Depth>::value);
     CHECK(std::is_trivially_copyable<Video::RenderState::Stencil>::value);
 
-    // `Stencil::writeMask` is serialized as a UChar among eight UInts
+    // `Stencil::reference` (+0x08) is serialized as a UChar among eight UInts
     // (0x1800f48e0). A UInt there would move the next eight fields by three
-    // bytes in every saved file, so the one-byte width is pinned.
-    CHECK_EQ(sizeof(Video::RenderState::Stencil::writeMask), (size_t)1);
-    CHECK_EQ(offsetof(Video::RenderState::Stencil, writeMask),  (size_t)0x08);
-    CHECK_EQ(offsetof(Video::RenderState::Stencil, reference),  (size_t)0x20);
+    // bytes in every saved file, so the one-byte width is pinned. B5 RES: the
+    // Stencil names are the dx11 consumer's (RenderState.h's Stencil banner);
+    // this byte was `writeMask` and +0x20 `reference` before.
+    CHECK_EQ(sizeof(Video::RenderState::Stencil::reference), (size_t)1);
+    CHECK_EQ(offsetof(Video::RenderState::Stencil, reference),  (size_t)0x08);
+    CHECK_EQ(offsetof(Video::RenderState::Stencil, func),       (size_t)0x04);
+    CHECK_EQ(offsetof(Video::RenderState::Stencil, backPassOp), (size_t)0x20);
     CHECK_EQ(offsetof(Video::RenderState::AlphaBlend, writeMask), (size_t)0x10);
     CHECK_EQ(offsetof(Video::RenderState::Depth, func),           (size_t)0x04);
 

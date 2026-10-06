@@ -1698,9 +1698,10 @@ void Save::SaveLoad::OnVideoError() {
         if (row.saveIndex < 0) continue;
         Video::ImageBufferData* const data = img->_data;
         if (data != nullptr) {
-            // `CALL [RAX]` with EDX=1: slot 0, the (vector) deleting destructor,
-            // by its name.
-            data->DeletingDtor(1u);
+            // `CALL [RAX]` with EDX=1: slot 0, the (vector) deleting destructor.
+            // B5 RES (B5_RULES D10): `delete` -- the virtual destructor, then the
+            // base's class-scope operator delete (MemFree).
+            delete data;
         }
         img->_data = nullptr;
     }

@@ -180,28 +180,46 @@ public:
     //   UInt(+0x20)
     // ??0Stencil@RenderState@Video@@ (0x1800f49d0) zeroes the whole 0x24.
     //
-    // `writeMask` IS SERIALIZED AS A UChar among eight UInts. A UInt there
+    // `reference` IS SERIALIZED AS A UChar among eight UInts. A UInt there
     // would move the next eight fields by three bytes in every saved file, so
     // the asymmetry is pinned by its own assert below and must not be tidied.
+    //
+    // B5 RES, NAMES CORRECTED FROM THE ONE CONSUMER. The serializer shape above
+    // gives widths, not meanings; the earlier names (readMask / writeMask /
+    // func / failOp / depthFailOp / passOp / backFunc / reference at +0x04..
+    // +0x20) were guesses from that order. VideoDX11's RenderStateData::Create
+    // (0x180003760) and ::Bind (0x180003a90) are what READ the fields, and they
+    // say (dx11/src/renderstatedata.cpp; the deleted `VideoRenderState` mirror
+    // there carried the same map):
+    //   +0x04 -> D3D11 StencilFunc of the FRONT face AND, two-sided, the BACK
+    //            face (0x180003a10 re-reads it): the one compare function
+    //   +0x08 -> OMSetDepthStencilState's StencilRef (`MOVZX R8D,byte [+0x4c]`
+    //            in Bind) -- the byte field, hence the UChar
+    //   +0x0c/+0x10/+0x14 -> FrontFace Stencil{Fail,DepthFail,Pass}Op
+    //   +0x18/+0x1c/+0x20 -> BackFace  Stencil{Fail,DepthFail,Pass}Op (two-sided)
+    // The read/write masks are NOT stored here: Create hard-codes both to 0xff
+    // (`MOV word [RSP+0x30],0xffff` @ 0x180003986). Offsets, widths and the
+    // serialize order are unchanged; only the spellings moved.
     // ========================================================
     struct Stencil {
         Stencil()                            // 0x1800f49d0 — zeroes the whole 0x24
-            : enabled(0), twoSided(0), _pad02{}, readMask(0), writeMask(0), _pad09{},
-              func(0), failOp(0), depthFailOp(0), passOp(0), backFunc(0), reference(0) {}
+            : enabled(0), twoSided(0), _pad02{}, func(0), reference(0), _pad09{},
+              failOp(0), depthFailOp(0), passOp(0),
+              backFailOp(0), backDepthFailOp(0), backPassOp(0) {}
         void Serialize(IO::Serializer& ser); // 0x1800f48e0
 
-        bool     enabled;      // +0x00  (B.4 R-VIDEO: bool, H4)
-        bool     twoSided;     // +0x01  (B.4 R-VIDEO: bool, H4)
-        uint8_t  _pad02[2];    // +0x02
-        uint32_t readMask;     // +0x04
-        uint8_t  writeMask;    // +0x08  serialized as UChar, not UInt
-        uint8_t  _pad09[3];    // +0x09
-        uint32_t func;         // +0x0c
-        uint32_t failOp;       // +0x10
-        uint32_t depthFailOp;  // +0x14
-        uint32_t passOp;       // +0x18
-        uint32_t backFunc;     // +0x1c
-        uint32_t reference;    // +0x20
+        bool     enabled;          // +0x00  (B.4 R-VIDEO: bool, H4)
+        bool     twoSided;         // +0x01  (B.4 R-VIDEO: bool, H4)
+        uint8_t  _pad02[2];        // +0x02
+        uint32_t func;             // +0x04  compare function, both faces
+        uint8_t  reference;        // +0x08  stencil ref; serialized as UChar, not UInt
+        uint8_t  _pad09[3];        // +0x09
+        uint32_t failOp;           // +0x0c  front face
+        uint32_t depthFailOp;      // +0x10  front face
+        uint32_t passOp;           // +0x14  front face
+        uint32_t backFailOp;       // +0x18  back face (two-sided only)
+        uint32_t backDepthFailOp;  // +0x1c  back face (two-sided only)
+        uint32_t backPassOp;       // +0x20  back face (two-sided only)
     };
 
     // ??0RenderState@Video@@QEAA@XZ 0x1800f4b60 -- the REAL constructor.
@@ -331,21 +349,24 @@ static_assert(sizeof(RenderState::Stencil) == 0x24,
 static_assert(offsetof(RenderState::Stencil, enabled) == 0x0, "Stencil::enabled");
 static_assert(offsetof(RenderState::Stencil, twoSided) == 0x1, "Stencil::twoSided");
 static_assert(offsetof(RenderState::Stencil, _pad02) == 0x2, "Stencil::_pad02");
-static_assert(offsetof(RenderState::Stencil, readMask) == 0x4, "Stencil::readMask");
+static_assert(offsetof(RenderState::Stencil, func) == 0x4, "Stencil::func");
 static_assert(offsetof(RenderState::Stencil, _pad09) == 0x9, "Stencil::_pad09");
-static_assert(offsetof(RenderState::Stencil, func) == 0xC, "Stencil::func");
-static_assert(offsetof(RenderState::Stencil, failOp) == 0x10, "Stencil::failOp");
-static_assert(offsetof(RenderState::Stencil, depthFailOp) == 0x14, "Stencil::depthFailOp");
-static_assert(offsetof(RenderState::Stencil, passOp) == 0x18, "Stencil::passOp");
-static_assert(offsetof(RenderState::Stencil, backFunc) == 0x1C, "Stencil::backFunc");
+static_assert(offsetof(RenderState::Stencil, failOp) == 0xC, "Stencil::failOp");
+static_assert(offsetof(RenderState::Stencil, depthFailOp) == 0x10, "Stencil::depthFailOp");
+static_assert(offsetof(RenderState::Stencil, passOp) == 0x14, "Stencil::passOp");
+static_assert(offsetof(RenderState::Stencil, backFailOp) == 0x18, "Stencil::backFailOp");
+static_assert(offsetof(RenderState::Stencil, backDepthFailOp) == 0x1C, "Stencil::backDepthFailOp");
 static_assert(alignof(RenderState::AlphaBlend) == 4, "AlphaBlend is dword-aligned");
 static_assert(alignof(RenderState::Depth) == 4, "Depth is dword-aligned");
 static_assert(alignof(RenderState::Stencil) == 4, "Stencil is dword-aligned");
 static_assert(offsetof(RenderState::AlphaBlend, writeMask) == 0x10, "AlphaBlend::writeMask @ +0x10");
 static_assert(offsetof(RenderState::Depth, func) == 0x04, "Depth::func @ +0x04");
-static_assert(offsetof(RenderState::Stencil, writeMask) == 0x08,
-              "Stencil::writeMask @ +0x08 — serialized as UChar (0x1800f48e0)");
-static_assert(offsetof(RenderState::Stencil, reference) == 0x20, "Stencil::reference @ +0x20");
+static_assert(offsetof(RenderState::Stencil, reference) == 0x08,
+              "Stencil::reference @ +0x08 — serialized as UChar (0x1800f48e0)");
+static_assert(sizeof(RenderState::Stencil::reference) == 1,
+              "Stencil::reference is the byte the UChar serializer and dx11's "
+              "MOVZX byte [+0x4c] read");
+static_assert(offsetof(RenderState::Stencil, backPassOp) == 0x20, "Stencil::backPassOp @ +0x20");
 
 // `?Initialize@` copies each sub-struct dword by dword, INCLUDING the padding
 // bytes after `AlphaBlend::enabled` and `Depth::test`/`write`. The member

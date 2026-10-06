@@ -138,23 +138,33 @@
 //     leading pointer is read).
 //
 // See ../README.md for the seam, and ../types/VideoDX11Data.h for the layout.
+//
+// B5 RES (the dx11 seam): `VideoDX11::ImageBufferData` is a real C++ subclass
+// of `Video::ImageBufferData` (../types/VideoDX11Data.h); the seven slots are
+// members declared `override` and the compiler builds the vtable. The field map
+// above is read through the NAMED members of the real `Video::ImageBuffer`
+// (`_owner`, typed) — the `IbI32` / `IbU32` / `IbSet` raw-offset accessors are
+// gone — and the Device / Configuration reads through `Video::Device::
+// backBufferWidth / backBufferHeight / maxAnisotropy` and `Video::Configuration::
+// textureFilter`. The two "not invented" items above are now named by their
+// callers: slot 4's second parameter is the `Video::Context` (CompanionData.h),
+// and slot 3's level descriptors are `Video::ImageBuffer::LevelArray`, a
+// `Collection::Array<Collection::Array<uint8_t>>` (only each element's leading
+// `_data` pointer is read here).
 
-#include "dx11_seam.h"
+#include "dx11_backend_access.h"   // Dx11DeviceData / Dx11Device / Dx11Context, <d3d11.h>
 #include "VideoDX11Data.h"
 #include "system/MemoryAllocator.h"   // B.3R DX: MemAlloc / MemFree, direct
 
-// ENDGAME B.3.5 block C, RULE B5-3 — the real `Video::ImageBufferData` abstract
-// base (block A), so this file's destructor can call its base destructor as a
-// qualified non-virtual member call instead of resolving a mangled name.
-// B35_RULES 1.2: `dx11/` compiles with the shared include set
-// (`-Iruntime/types -Iruntime/funcs`), so no Makefile change is needed. The
-// CONCRETE `*Data` classes and the 84-slot seam remain the declared leave of
-// RULE B5-8; only the Runtime-side base is a class.
+// The real `Video::ImageBufferData` abstract base. B5 RES: `VideoDX11::
+// ImageBufferData` derives from it in C++, so the compiler chains its destructor
+// and builds its vtable.
 #include "video/CompanionData.h"
 // ENDGAME B.3.5 block J, RULE B5-14: the real `Video::ImageBuffer`, whose nine
-// query members replace nine of this file's table-driven Runtime imports.
+// query members replace nine of this file's table-driven Runtime imports, and
+// (B5 RES) whose named fields replace the raw-offset accessors.
 #include "video/ImageBuffer.h"
-#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device / Configuration::_singleton
 
 #include <windows.h>
 #include <d3d11.h>
@@ -176,41 +186,17 @@ namespace {
 // arms are GONE (B3R_RULES R2, R8):
 //   ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z -> System::MemoryAllocator::MemAlloc
 //   ?MemFree@MemoryAllocator@System@@SAXPEAX@Z    -> System::MemoryAllocator::MemFree
-// The nine `Video::ImageBuffer` rows went in ENDGAME B.3.5 block J (RULE B5-14,
-// `ImgOf` below) and the base dtor in block C (RULE B5-3, `Destructor`). The
-// 84-slot seam and `Dx11SeamInstall()`'s completeness check are untouched
-// (RULE B5-8).
+// The nine `Video::ImageBuffer` rows went in ENDGAME B.3.5 block J (RULE B5-14)
+// and the base dtor in block C (RULE B5-3); since B5 RES the base dtor is the
+// compiler's chain.
+//
+// B5 RES: the `IbI32` / `IbU32` / `IbSet` raw-offset accessors, the `ImgOf`
+// bridge cast and the local `VideoDevice` / `ActiveDeviceData` / `D3DDevice` /
+// `D3DContext` walk are GONE. The ImageBuffer is the base's typed `_owner`; the
+// walk is dx11_backend_access.h's `Dx11DeviceData()` / `Dx11Device()` /
+// `Dx11Context()` — the same Device::_singleton -> +0x100 -> +0x20 / +0x28 loads
+// (never cached across calls, as before).
 // ============================================================
-
-// ============================================================
-// Field accessors — raw offsets, no invented struct
-// ============================================================
-inline int32_t  IbI32(void* ib, size_t off) { return *reinterpret_cast<int32_t*> (static_cast<uint8_t*>(ib) + off); }
-inline uint32_t IbU32(void* ib, size_t off) { return *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ib) + off); }
-inline void     IbSet(void* ib, size_t off, int32_t v) { *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ib) + off) = v; }
-
-// ENDGAME B.3.5 block J — the bridge cast the nine converted `Video::ImageBuffer`
-// calls go through. `ImageBufferData::imageBuffer` (+0x08) is a
-// `Video::ImageBuffer*` held as a `void*` on this side of the seam (RULE B5-8's
-// declared leave), so the step across is a reinterpret_cast, named once.
-// The FIELD reads above stay raw offsets: they are not doors.
-inline const ::Video::ImageBuffer* ImgOf(void* imageBuffer) {
-    return reinterpret_cast<const ::Video::ImageBuffer*>(imageBuffer);  // B.3.5 bridge
-}
-
-// Video::Device* (never null once the video interface exists — the shipped code
-// does not check either).
-// ENDGAME B.3.9 VID: Video::Device::_singleton is the class static; the import
-// row that resolved it by name is gone.
-inline void* VideoDevice() { return ::Video::Device::_singleton; }
-
-// Active Video::DeviceData* at Video::Device+0x100.
-inline DeviceData* ActiveDeviceData(void* device) {
-    return *reinterpret_cast<DeviceData**>(static_cast<uint8_t*>(device) + 0x100);
-}
-
-inline ID3D11Device*        D3DDevice (DeviceData* dd) { return static_cast<ID3D11Device*>(dd->d3dDevice); }
-inline ID3D11DeviceContext* D3DContext(DeviceData* dd) { return static_cast<ID3D11DeviceContext*>(dd->d3dContext); }
 
 // Engine format -> DXGI_FORMAT. See the header comment for the derivation.
 const int kFormatToDxgi[8] = { 0x47, 0x4d, 0x4d, 0x41, 0x3d, 0x57, 0x29, 0x2c };
@@ -272,216 +258,6 @@ void UntrackImageBuffer(DeviceData* dd, void* imageBuffer) {
     }
 }
 
-// ============================================================
-// Release the five interfaces in the shipped order and null them.
-// Shared verbatim by ~ImageBufferData (0x180002507) and slot 3 (0x18000292a).
-// The order is +0x28, +0x20, +0x30, +0x10, +0x18 — NOT declaration order.
-// ============================================================
-void ReleaseInterfaces(ImageBufferData* self) {
-    if (self->depthStencilView)   static_cast<IUnknown*>(self->depthStencilView)->Release();
-    if (self->renderTargetView)   static_cast<IUnknown*>(self->renderTargetView)->Release();
-    if (self->shaderResourceView) static_cast<IUnknown*>(self->shaderResourceView)->Release();
-    if (self->sampler)            static_cast<IUnknown*>(self->sampler)->Release();
-    if (self->texture)            static_cast<IUnknown*>(self->texture)->Release();
-
-    self->depthStencilView   = nullptr;
-    self->renderTargetView   = nullptr;
-    self->shaderResourceView = nullptr;
-    self->sampler            = nullptr;
-    self->texture            = nullptr;
-}
-
-// ============================================================
-// 0x180002720 — create the sampler state (private; called by slot 3 only,
-// including on the CreateTexture2D failure path).
-// ============================================================
-void CreateSamplerState(ImageBufferData* self) {
-    void* const ib = self->imageBuffer;
-
-    // Both tables are stack locals in the original and are *patched* before
-    // being indexed, which is why they are locals here too.
-    int addressTable[2] = { D3D11_TEXTURE_ADDRESS_WRAP,       // 1
-                            D3D11_TEXTURE_ADDRESS_CLAMP };    // 3
-    int filterTable[3]  = { D3D11_FILTER_MIN_MAG_MIP_POINT,   // 0x00
-                            D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, // 0x14
-                            D3D11_FILTER_ANISOTROPIC };       // 0x55
-
-    int aniso = *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(::Video::Configuration::_singleton) + 0x28);   // B.3.9 VID: the class static
-    const uint32_t flags = IbU32(ib, 0x34);
-    const bool comparison = ((flags >> 6) & 1) != 0;
-
-    if (comparison) {
-        // Shadow sampler: the LINEAR entry becomes the comparison filter and
-        // anisotropy is forced off. The ANISOTROPIC entry is left at 0x55.
-        filterTable[1] = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR; // 0x95
-        aniso = 0;
-    } else if (aniso == -1) {
-        filterTable[2] = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;      // 0x14
-        aniso = 0;
-    } else if (aniso == 0) {
-        filterTable[2] = D3D11_FILTER_MIN_MAG_MIP_LINEAR;            // 0x15
-        aniso = 0;
-    } else if (aniso < 0) {
-        aniso = 0;                       // aniso < -1: nothing patched, just off
-    }
-    // aniso > 0: table stays ANISOTROPIC and the value is kept.
-
-    void* const device = VideoDevice();
-    const int maxAniso = *reinterpret_cast<int*>(static_cast<uint8_t*>(device) + 0x98);
-    if (aniso > maxAniso) aniso = maxAniso;
-
-    D3D11_SAMPLER_DESC desc;
-    desc.Filter         = static_cast<D3D11_FILTER>(filterTable[IbI32(ib, 0x44)]);
-    desc.AddressU       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[IbI32(ib, 0x38)]);
-    desc.AddressV       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[IbI32(ib, 0x3c)]);
-    desc.AddressW       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[IbI32(ib, 0x40)]);
-    desc.MipLODBias     = 0.0f;
-    desc.MaxAnisotropy  = static_cast<UINT>(aniso);
-    // D3D11_COMPARISON_NEVER (1) normally, D3D11_COMPARISON_LESS (2) for shadow.
-    desc.ComparisonFunc = static_cast<D3D11_COMPARISON_FUNC>((comparison ? 1 : 0) + 1);
-    desc.BorderColor[0] = 0.0f;
-    desc.BorderColor[1] = 0.0f;
-    desc.BorderColor[2] = 0.0f;
-    desc.BorderColor[3] = 0.0f;
-    desc.MinLOD         = 0.0f;
-    // 0x180018c50 = 1.0f (verified: bytes 00 00 80 3f).
-    desc.MaxLOD         = (flags & 1) ? (static_cast<float>(ImgOf(ib)->GetLevelCount()) - 1.0f) : 0.0f;
-
-    D3DDevice(ActiveDeviceData(device))
-        ->CreateSamplerState(&desc, reinterpret_cast<ID3D11SamplerState**>(&self->sampler));
-}
-
-// ============================================================
-// 0x180002430 — ~ImageBufferData (private; tail-called by slot 0)
-// ============================================================
-void Destructor(ImageBufferData* self) {
-    // MSVC's "restore this class's vptr before running the dtor body". The
-    // live vtable, so a later virtual call reaches whichever slots are
-    // installed — our exe-owned array in Standalone mode, the shipped DLL's
-    // patched .rdata in AB mode.
-    self->vptr = Dx11LiveVtable(Vt::ImageBufferData);
-
-    void* const ib = self->imageBuffer;
-
-    // Untrack. Note bits 4|5|6 = 0x70 here, unlike slot 3 which only tests bit 6.
-    if (ImgOf(ib)->IsGenerated() || (IbU32(ib, 0x34) & 0x70) != 0 || ImgOf(ib)->IsRendered())
-        UntrackImageBuffer(ActiveDeviceData(VideoDevice()), ib);
-
-    ReleaseInterfaces(self);
-
-    // ENDGAME B.3.5 block C, RULE B5-3. Was `im->BaseDtor(self)`, an indirect
-    // call through a resolved `??1ImageBufferData@Video@@UEAA@XZ` — a tail call in
-    // the original (JMP [0x1800133e0]). `Video::ImageBufferData` is now a real
-    // class (block A), so this is the MSVC derived-destructor idiom written as
-    // C++: a QUALIFIED non-virtual call on the base subobject, reached through the
-    // bridge cast because `VideoDX11::ImageBufferData` is still the declared leave
-    // of RULE B5-8 and does not inherit in C++.
-    //
-    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. the caller of
-    // this function. The base destructor is in no slot, which is exactly why the
-    // qualification is safe and the virtual call is not.
-    reinterpret_cast< ::Video::ImageBufferData*>(self)
-        -> ::Video::ImageBufferData::~ImageBufferData();   // B.3.5 bridge
-}
-
-// ============================================================
-// slot 0 — 0x180002400 — scalar deleting destructor
-// ============================================================
-void* ImageBufferData_ScalarDeletingDtor(ImageBufferData* self, unsigned int flags) {
-    Destructor(self);
-    if (flags & 1) System::MemoryAllocator::MemFree(self);
-    return self;
-}
-
-// ============================================================
-// slot 1 — 0x180002580 — alias the DeviceData color buffer
-//
-// Re-points the owning Video::ImageBuffer at the swap chain's render target:
-// stamps the ImageBuffer's descriptor from the Video::Device resolution,
-// AddRefs DeviceData::colorBuffer into +0x18, builds a default RTV, and joins
-// the reset registry. No sampler and no SRV are created.
-// ============================================================
-void ImageBufferData_AttachColorBuffer(ImageBufferData* self) {
-    void* const device = VideoDevice();
-    DeviceData* const dd = ActiveDeviceData(device);
-    void* const ib = self->imageBuffer;
-
-    // Field write order copied exactly (0x1800025ab..0x180002600) — note 0x40
-    // before 0x3c before 0x38, and flags (0x34) last.
-    IbSet(ib, 0x20, *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0x04)); // width
-    IbSet(ib, 0x24, *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0x08)); // height
-    IbSet(ib, 0x28, 0);      // dimension: 2D
-    IbSet(ib, 0x2c, 0);      // kind: render target
-    IbSet(ib, 0x30, 5);      // format 5 = DXGI_FORMAT_B8G8R8A8_UNORM (the backbuffer)
-    IbSet(ib, 0x40, 1);      // addressW = CLAMP
-    IbSet(ib, 0x3c, 1);      // addressV = CLAMP
-    IbSet(ib, 0x38, 1);      // addressU = CLAMP
-    IbSet(ib, 0x44, 0);      // filter   = POINT
-    IbSet(ib, 0x34, 0x10);   // flags: bit4 -> tracked for device reset
-
-    ID3D11Device* const dev = D3DDevice(dd);
-    static_cast<IUnknown*>(dd->colorBuffer)->AddRef();
-    self->texture = dd->colorBuffer;
-    dev->CreateRenderTargetView(static_cast<ID3D11Resource*>(self->texture), nullptr,
-                                reinterpret_cast<ID3D11RenderTargetView**>(&self->renderTargetView));
-
-    TrackImageBuffer(dd, ib);   // tail call in the original
-}
-
-// ============================================================
-// slot 2 — 0x180002650 — alias the DeviceData depth buffer
-// Mirror of slot 1 with the depth format, kind 1, flag bit 5, and a DSV.
-// ============================================================
-void ImageBufferData_AttachDepthBuffer(ImageBufferData* self) {
-    void* const device = VideoDevice();
-    DeviceData* const dd = ActiveDeviceData(device);
-    void* const ib = self->imageBuffer;
-
-    IbSet(ib, 0x20, *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0x04));
-    IbSet(ib, 0x24, *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0x08));
-    IbSet(ib, 0x28, 0);      // dimension: 2D
-    IbSet(ib, 0x2c, 1);      // kind: depth buffer
-    IbSet(ib, 0x30, 7);      // format 7 = DXGI_FORMAT_R24G8_TYPELESS (D24S8)
-    IbSet(ib, 0x40, 1);
-    IbSet(ib, 0x3c, 1);
-    IbSet(ib, 0x38, 1);
-    IbSet(ib, 0x44, 0);
-    IbSet(ib, 0x34, 0x20);   // flags: bit5 -> tracked for device reset
-
-    ID3D11Device* const dev = D3DDevice(dd);
-    static_cast<IUnknown*>(dd->depthBuffer)->AddRef();
-    self->texture = dd->depthBuffer;
-    // Null desc: the DSV inherits the resource format. The resource here is the
-    // DeviceData depth buffer, created as D24_UNORM_S8_UINT (typed, not
-    // typeless), so a default view is legal.
-    dev->CreateDepthStencilView(static_cast<ID3D11Resource*>(self->texture), nullptr,
-                                reinterpret_cast<ID3D11DepthStencilView**>(&self->depthStencilView));
-
-    TrackImageBuffer(dd, ib);
-}
-
-// ============================================================
-// slot 3 — 0x180002870 — create the texture and all its views
-// ============================================================
-
-// The level descriptors slot 3 is handed. The array header is the engine's
-// usual {data, count, capacity}; the elements are 0x10 bytes each and ONLY the
-// leading pointer is ever read (0x180002ab4). The other 8 bytes are not touched
-// by this DLL, so their meaning is undetermined and deliberately unnamed.
-struct ImageLevel {
-    void*    bits;    // +0x00  pixel data for this face/mip
-    uint32_t unk08;   // +0x08  never read here
-    uint32_t unk0c;   // +0x0c  never read here
-};
-static_assert(sizeof(ImageLevel) == 0x10, "ImageLevel stride (0x10 from the loop's ADD RCX,0x10)");
-
-struct ImageLevelArray {
-    void*   data;
-    int32_t count;
-    int32_t capacity;
-};
-
 // D3D11_SUBRESOURCE_DATA is the 0x10-byte element the original builds; the
 // growable array it builds them in uses the same Array::SetLength shape.
 static_assert(sizeof(D3D11_SUBRESOURCE_DATA) == 0x10, "D3D11_SUBRESOURCE_DATA stride");
@@ -517,25 +293,208 @@ void PushSubresource(SubresArray* arr, const D3D11_SUBRESOURCE_DATA& value) {
     if (oldData != arr->data) System::MemoryAllocator::MemFree(oldData);
 }
 
-bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels) {
-    void* const ib = self->imageBuffer;
-    const int width  = ImgOf(ib)->Width();
-    const int height = ImgOf(ib)->Height();
+}  // namespace
+
+// ============================================================
+// Release the five interfaces in the shipped order and null them.
+// Shared verbatim by ~ImageBufferData (0x180002507) and slot 3 (0x18000292a).
+// The order is +0x28, +0x20, +0x30, +0x10, +0x18 — NOT declaration order.
+// ============================================================
+void ImageBufferData::ReleaseInterfaces() {
+    if (depthStencilView)   depthStencilView->Release();
+    if (renderTargetView)   renderTargetView->Release();
+    if (shaderResourceView) shaderResourceView->Release();
+    if (sampler)            sampler->Release();
+    if (texture)            texture->Release();
+
+    depthStencilView   = nullptr;
+    renderTargetView   = nullptr;
+    shaderResourceView = nullptr;
+    sampler            = nullptr;
+    texture            = nullptr;
+}
+
+// ============================================================
+// 0x180002720 — create the sampler state (private; called by slot 3 only,
+// including on the CreateTexture2D failure path).
+// ============================================================
+void ImageBufferData::CreateSamplerState() {
+    ::Video::ImageBuffer* const ib = _owner;
+
+    // Both tables are stack locals in the original and are *patched* before
+    // being indexed, which is why they are locals here too.
+    int addressTable[2] = { D3D11_TEXTURE_ADDRESS_WRAP,       // 1
+                            D3D11_TEXTURE_ADDRESS_CLAMP };    // 3
+    int filterTable[3]  = { D3D11_FILTER_MIN_MAG_MIP_POINT,   // 0x00
+                            D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT, // 0x14
+                            D3D11_FILTER_ANISOTROPIC };       // 0x55
+
+    // Configuration+0x28 (B.3.9 VID: the class static; B5 RES: the named member).
+    int aniso = ::Video::Configuration::_singleton->textureFilter;
+    const uint32_t flags = ib->_flags;
+    const bool comparison = ((flags >> 6) & 1) != 0;
+
+    if (comparison) {
+        // Shadow sampler: the LINEAR entry becomes the comparison filter and
+        // anisotropy is forced off. The ANISOTROPIC entry is left at 0x55.
+        filterTable[1] = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR; // 0x95
+        aniso = 0;
+    } else if (aniso == -1) {
+        filterTable[2] = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;      // 0x14
+        aniso = 0;
+    } else if (aniso == 0) {
+        filterTable[2] = D3D11_FILTER_MIN_MAG_MIP_LINEAR;            // 0x15
+        aniso = 0;
+    } else if (aniso < 0) {
+        aniso = 0;                       // aniso < -1: nothing patched, just off
+    }
+    // aniso > 0: table stays ANISOTROPIC and the value is kept.
+
+    ::Video::Device* const device = ::Video::Device::_singleton;
+    const int maxAniso = device->maxAnisotropy;   // Device+0x98
+    if (aniso > maxAniso) aniso = maxAniso;
+
+    D3D11_SAMPLER_DESC desc;
+    desc.Filter         = static_cast<D3D11_FILTER>(filterTable[ib->_filter]);                       // +0x44
+    desc.AddressU       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[ib->_addressU]);      // +0x38
+    desc.AddressV       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[ib->_addressV]);      // +0x3c
+    desc.AddressW       = static_cast<D3D11_TEXTURE_ADDRESS_MODE>(addressTable[ib->_addressW]);      // +0x40
+    desc.MipLODBias     = 0.0f;
+    desc.MaxAnisotropy  = static_cast<UINT>(aniso);
+    // D3D11_COMPARISON_NEVER (1) normally, D3D11_COMPARISON_LESS (2) for shadow.
+    desc.ComparisonFunc = static_cast<D3D11_COMPARISON_FUNC>((comparison ? 1 : 0) + 1);
+    desc.BorderColor[0] = 0.0f;
+    desc.BorderColor[1] = 0.0f;
+    desc.BorderColor[2] = 0.0f;
+    desc.BorderColor[3] = 0.0f;
+    desc.MinLOD         = 0.0f;
+    // 0x180018c50 = 1.0f (verified: bytes 00 00 80 3f).
+    desc.MaxLOD         = (flags & 1) ? (static_cast<float>(ib->GetLevelCount()) - 1.0f) : 0.0f;
+
+    Dx11Device()->CreateSamplerState(&desc, &sampler);
+}
+
+// ============================================================
+// slot 0 — 0x180002400 — scalar deleting destructor
+// 0x180002430 — ~ImageBufferData (tail-called by slot 0)
+//
+// B5 RES: slot 0's `if (flags & 1) MemFree` is the compiler's D0 calling the
+// base's class-scope `operator delete` (B5 W0, companion_operators.cpp); the
+// private destructor's "restore this class's vptr" store and its tail call into
+// `??1ImageBufferData@Video@@UEAA@XZ` (JMP [0x1800133e0]) are the compiler's
+// destructor chain. The body is what is left: the untrack, then the five
+// releases in the shipped order (+0x28, +0x20, +0x30, +0x10, +0x18) and the
+// five null stores.
+// ============================================================
+ImageBufferData::~ImageBufferData() {
+    ::Video::ImageBuffer* const ib = _owner;
+
+    // Untrack. Note bits 4|5|6 = 0x70 here, unlike slot 3 which only tests bit 6.
+    if (ib->IsGenerated() || (ib->_flags & 0x70) != 0 || ib->IsRendered())
+        UntrackImageBuffer(Dx11DeviceData(), ib);
+
+    ReleaseInterfaces();
+}
+
+// ============================================================
+// slot 1 — 0x180002580 — alias the DeviceData color buffer
+//
+// Re-points the owning Video::ImageBuffer at the swap chain's render target:
+// stamps the ImageBuffer's descriptor from the Video::Device resolution,
+// AddRefs DeviceData::colorBuffer into +0x18, builds a default RTV, and joins
+// the reset registry. No sampler and no SRV are created.
+// ============================================================
+void ImageBufferData::AttachColorBuffer() {
+    ::Video::Device* const device = ::Video::Device::_singleton;
+    DeviceData* const dd = Dx11DeviceData();
+    ::Video::ImageBuffer* const ib = _owner;
+
+    // Field write order copied exactly (0x1800025ab..0x180002600) — note 0x40
+    // before 0x3c before 0x38, and flags (0x34) last.
+    ib->_width     = device->backBufferWidth;    // +0x20 <- Device+0x04
+    ib->_height    = device->backBufferHeight;   // +0x24 <- Device+0x08
+    ib->_dimension = 0;      // +0x28 dimension: 2D
+    ib->_kind      = 0;      // +0x2c kind: render target
+    ib->_format    = 5;      // +0x30 format 5 = DXGI_FORMAT_B8G8R8A8_UNORM (the backbuffer)
+    ib->_addressW  = 1;      // +0x40 addressW = CLAMP
+    ib->_addressV  = 1;      // +0x3c addressV = CLAMP
+    ib->_addressU  = 1;      // +0x38 addressU = CLAMP
+    ib->_filter    = 0;      // +0x44 filter   = POINT
+    ib->_flags     = 0x10;   // +0x34 flags: bit4 -> tracked for device reset
+
+    ID3D11Device* const dev = Dx11Device();
+    // DeviceData::colorBuffer is still DEV's `void*` field (an ID3D11Texture2D*).
+    ID3D11Texture2D* const color = static_cast<ID3D11Texture2D*>(dd->colorBuffer);
+    color->AddRef();
+    texture = color;
+    dev->CreateRenderTargetView(texture, nullptr, &renderTargetView);
+
+    TrackImageBuffer(dd, ib);   // tail call in the original
+}
+
+// ============================================================
+// slot 2 — 0x180002650 — alias the DeviceData depth buffer
+// Mirror of slot 1 with the depth format, kind 1, flag bit 5, and a DSV.
+// ============================================================
+void ImageBufferData::AttachDepthBuffer() {
+    ::Video::Device* const device = ::Video::Device::_singleton;
+    DeviceData* const dd = Dx11DeviceData();
+    ::Video::ImageBuffer* const ib = _owner;
+
+    ib->_width     = device->backBufferWidth;
+    ib->_height    = device->backBufferHeight;
+    ib->_dimension = 0;      // dimension: 2D
+    ib->_kind      = 1;      // kind: depth buffer
+    ib->_format    = 7;      // format 7 = DXGI_FORMAT_R24G8_TYPELESS (D24S8)
+    ib->_addressW  = 1;
+    ib->_addressV  = 1;
+    ib->_addressU  = 1;
+    ib->_filter    = 0;
+    ib->_flags     = 0x20;   // flags: bit5 -> tracked for device reset
+
+    ID3D11Device* const dev = Dx11Device();
+    // DeviceData::depthBuffer is still DEV's `void*` field (an ID3D11Texture2D*).
+    ID3D11Texture2D* const depth = static_cast<ID3D11Texture2D*>(dd->depthBuffer);
+    depth->AddRef();
+    texture = depth;
+    // Null desc: the DSV inherits the resource format. The resource here is the
+    // DeviceData depth buffer, created as D24_UNORM_S8_UINT (typed, not
+    // typeless), so a default view is legal.
+    dev->CreateDepthStencilView(texture, nullptr, &depthStencilView);
+
+    TrackImageBuffer(dd, ib);
+}
+
+// ============================================================
+// slot 3 — 0x180002870 — create the texture and all its views
+//
+// The level descriptors: an engine `Collection::Array` of 0x10-byte elements
+// (the loop's `ADD RCX,0x10`), of which ONLY the leading pointer is ever read
+// (0x180002ab4). B5 RES: the callers name the type —
+// `Video::ImageBuffer::LevelArray`, i.e. `Collection::Array<Collection::Array<
+// uint8_t>>` (CompanionData.h, at the slot) — so each element is a byte array
+// and the leading pointer is its `_data`. The former `ImageLevel` /
+// `ImageLevelArray` views of the same bytes are gone.
+// ============================================================
+bool ImageBufferData::Create(const Collection::Array<Collection::Array<uint8_t> >* levels) {
+    ::Video::ImageBuffer* const ib = _owner;
+    const int width  = ib->Width();
+    const int height = ib->Height();
 
     // Degenerate, non-generated, non-rendered buffer: succeed and do nothing.
-    if (!ImgOf(ib)->IsGenerated() && !ImgOf(ib)->IsRendered() && (width == 0 || height == 0))
+    if (!ib->IsGenerated() && !ib->IsRendered() && (width == 0 || height == 0))
         return true;
 
-    DeviceData* const dd = ActiveDeviceData(VideoDevice());
+    DeviceData* const dd = Dx11DeviceData();
 
     // Add to the reset registry. Only bit 6 here (the dtor also honours 4 and 5).
-    if (ImgOf(ib)->IsGenerated() || ImgOf(ib)->IsRendered() || ((IbU32(ib, 0x34) >> 6) & 1) != 0)
+    if (ib->IsGenerated() || ib->IsRendered() || ((ib->_flags >> 6) & 1) != 0)
         TrackImageBuffer(dd, ib);
 
-    ReleaseInterfaces(self);
+    ReleaseInterfaces();
 
     // --- D3D11_TEXTURE2D_DESC ---------------------------------------------
-    const uint32_t kind = IbU32(ib, 0x2c);
+    const uint32_t kind = static_cast<uint32_t>(ib->_kind);   // +0x2c, read unsigned
 
     // 0x180002992-0x1800029b6, reproduced literally. `kind & ~5` selects the
     // {0,1,4,5} group; 1 is then split off as the depth case.
@@ -547,9 +506,9 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
     desc.Width  = static_cast<UINT>(width);
     desc.Height = static_cast<UINT>(height);
     // flags bit0 set (mipmapped) -> 0 = "generate the full chain".
-    desc.MipLevels = static_cast<UINT>((~static_cast<uint8_t>(IbU32(ib, 0x34))) & 1);
-    desc.ArraySize = (IbI32(ib, 0x28) == 0) ? 1 : 6;   // 6 = cube faces
-    desc.Format = static_cast<DXGI_FORMAT>(kFormatToDxgi[IbI32(ib, 0x30)]);
+    desc.MipLevels = static_cast<UINT>((~static_cast<uint8_t>(ib->_flags)) & 1);
+    desc.ArraySize = (ib->_dimension == 0) ? 1 : 6;   // 6 = cube faces
+    desc.Format = static_cast<DXGI_FORMAT>(kFormatToDxgi[ib->_format]);
     desc.SampleDesc.Count   = 1;   // textures are never multisampled here
     desc.SampleDesc.Quality = 0;
     desc.Usage = (kind == 3) ? D3D11_USAGE_DYNAMIC
@@ -557,26 +516,23 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
     bindFlags |= D3D11_BIND_SHADER_RESOURCE;  // 0x8, always
     desc.BindFlags      = bindFlags;
     desc.CPUAccessFlags = (kind == 3) ? D3D11_CPU_ACCESS_WRITE : 0;   // 0x10000
-    desc.MiscFlags      = (IbI32(ib, 0x28) != 0) ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;  // 0x4
+    desc.MiscFlags      = (ib->_dimension != 0) ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;  // 0x4
 
     // --- initial data ------------------------------------------------------
     SubresArray subres = { nullptr, 0, 0 };
     if (levels != nullptr) {
-        int levelWidth = IbI32(ib, 0x20);   // NOT the Width() accessor — the raw field
+        int levelWidth = ib->_width;   // NOT the Width() accessor — the raw field
         int levelIndex = 0;
 
-        for (int i = 0; i < levels->count; ++i) {
-            const ImageLevel* src =
-                reinterpret_cast<const ImageLevel*>(static_cast<uint8_t*>(levels->data) + i * 0x10);
-
+        for (int i = 0; i < levels->GetSize(); ++i) {
             D3D11_SUBRESOURCE_DATA entry;
-            entry.pSysMem = src->bits;
+            entry.pSysMem = levels->GetData()[i].GetData();   // element +0x00, the only read
 
             // Row length in pixels, or in 4x4 blocks for a BC format. The
             // original is `(w + (w<0 ? 3 : 0)) >> 2`, i.e. C truncating /4.
             int rowUnits = levelWidth;
-            if (ImgOf(ib)->IsCompressed()) rowUnits = levelWidth / 4;
-            entry.SysMemPitch      = static_cast<UINT>(kFormatBytes[IbI32(ib, 0x30)] * rowUnits);
+            if (ib->IsCompressed()) rowUnits = levelWidth / 4;
+            entry.SysMemPitch      = static_cast<UINT>(kFormatBytes[ib->_format] * rowUnits);
             entry.SysMemSlicePitch = 0;   // hoisted out of the loop by the original
 
             PushSubresource(&subres, entry);
@@ -585,23 +541,23 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
             // mip chain is exhausted, restart it — that is how the six faces of
             // a cube map are walked with one flat counter.
             levelWidth >>= 1;
-            if (ImgOf(ib)->IsCompressed() && levelWidth < 4) levelWidth = 4;
-            if (++levelIndex == ImgOf(ib)->GetLevelCount()) {
-                levelWidth = IbI32(ib, 0x20);
+            if (ib->IsCompressed() && levelWidth < 4) levelWidth = 4;
+            if (++levelIndex == ib->GetLevelCount()) {
+                levelWidth = ib->_width;
                 levelIndex = 0;
             }
         }
     }
 
-    HRESULT hr = D3DDevice(dd)->CreateTexture2D(
-        &desc, subres.data, reinterpret_cast<ID3D11Texture2D**>(&self->texture));
+    ID3D11Device* const dev = Dx11Device();
+    HRESULT hr = dev->CreateTexture2D(&desc, subres.data, &texture);
 
     if (hr == 0) {
         // --- shader resource view -----------------------------------------
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
         D3D11_SHADER_RESOURCE_VIEW_DESC* srvDescPtr = nullptr;
 
-        if (ImgOf(ib)->IsDepthBuffer()) {
+        if (ib->IsDepthBuffer()) {
             // Hard-coded: a depth texture is always read as R24_UNORM_X8.
             // GAP: format index 6 (R32_TYPELESS) would need R32_FLOAT here, so
             // either index 6 is unused or IsDepthBuffer implies index 7. The
@@ -611,35 +567,29 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
             srvDesc.Texture2D.MostDetailedMip = 0;
             srvDesc.Texture2D.MipLevels       = 1;
             srvDescPtr = &srvDesc;
-        } else if (IbI32(ib, 0x28) == 1) {
-            srvDesc.Format                      = static_cast<DXGI_FORMAT>(kFormatToDxgi[IbI32(ib, 0x30)]);
+        } else if (ib->_dimension == 1) {
+            srvDesc.Format                      = static_cast<DXGI_FORMAT>(kFormatToDxgi[ib->_format]);
             srvDesc.ViewDimension               = D3D11_SRV_DIMENSION_TEXTURECUBE; // 9
-            srvDesc.TextureCube.MipLevels       = static_cast<UINT>(ImgOf(ib)->GetLevelCount());
+            srvDesc.TextureCube.MipLevels       = static_cast<UINT>(ib->GetLevelCount());
             srvDesc.TextureCube.MostDetailedMip = 0;
             srvDescPtr = &srvDesc;
         }
         // else: null desc — the default view over the whole 2D texture.
 
-        hr = D3DDevice(dd)->CreateShaderResourceView(
-            static_cast<ID3D11Resource*>(self->texture), srvDescPtr,
-            reinterpret_cast<ID3D11ShaderResourceView**>(&self->shaderResourceView));
+        hr = dev->CreateShaderResourceView(texture, srvDescPtr, &shaderResourceView);
 
         // --- render-target / depth-stencil view ----------------------------
         // Only for non-cube render buffers.
-        if (hr == 0 && IbI32(ib, 0x28) == 0 && ImgOf(ib)->IsRenderBuffer()) {
-            if (ImgOf(ib)->IsDepthBuffer()) {
+        if (hr == 0 && ib->_dimension == 0 && ib->IsRenderBuffer()) {
+            if (ib->IsDepthBuffer()) {
                 D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
                 dsvDesc.Format             = static_cast<DXGI_FORMAT>(0x2d); // D24_UNORM_S8_UINT
                 dsvDesc.ViewDimension      = D3D11_DSV_DIMENSION_TEXTURE2D;  // 3
                 dsvDesc.Flags              = 0;
                 dsvDesc.Texture2D.MipSlice = 0;
-                hr = D3DDevice(dd)->CreateDepthStencilView(
-                    static_cast<ID3D11Resource*>(self->texture), &dsvDesc,
-                    reinterpret_cast<ID3D11DepthStencilView**>(&self->depthStencilView));
+                hr = dev->CreateDepthStencilView(texture, &dsvDesc, &depthStencilView);
             } else {
-                hr = D3DDevice(dd)->CreateRenderTargetView(
-                    static_cast<ID3D11Resource*>(self->texture), nullptr,
-                    reinterpret_cast<ID3D11RenderTargetView**>(&self->renderTargetView));
+                hr = dev->CreateRenderTargetView(texture, nullptr, &renderTargetView);
             }
         }
     }
@@ -647,7 +597,7 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
     // Reached from every path, including a failed CreateTexture2D: the sampler
     // is created regardless, and the scratch array is always freed (the
     // original calls MemFree even when the pointer is null).
-    CreateSamplerState(self);
+    CreateSamplerState();
     System::MemoryAllocator::MemFree(subres.data);
     return hr == 0;
 }
@@ -655,16 +605,18 @@ bool ImageBufferData_Create(ImageBufferData* self, const ImageLevelArray* levels
 // ============================================================
 // slot 4 — 0x180002da0 — bind to a pixel-shader slot
 //
-// The second parameter (RDX) is never read by the original. Its type is
-// therefore undetermined; it is declared void* so the register is preserved and
-// nothing is invented. Sampler first, then SRV — that order is observable.
+// The second parameter (RDX) is never read by the original. It is the
+// `Video::Context` (CompanionData.h quotes `?BindTextures@Context@Video@@`'s
+// `MOV RDX,RSI` before the call); the body walks to the global context instead,
+// like every other Bind in this DLL. Sampler first, then SRV — that order is
+// observable.
 // ============================================================
-void ImageBufferData_Bind(ImageBufferData* self, void* unknownArg, unsigned int slot) {
-    (void)unknownArg;   // never read by the original either
+void ImageBufferData::Bind(void* context, unsigned slot) {
+    (void)context;   // never read by the original either
 
-    ID3D11DeviceContext* const ctx = D3DContext(ActiveDeviceData(VideoDevice()));
-    ctx->PSSetSamplers(slot, 1, reinterpret_cast<ID3D11SamplerState**>(&self->sampler));
-    ctx->PSSetShaderResources(slot, 1, reinterpret_cast<ID3D11ShaderResourceView**>(&self->shaderResourceView));
+    ID3D11DeviceContext* const ctx = Dx11Context();
+    ctx->PSSetSamplers(slot, 1, &sampler);
+    ctx->PSSetShaderResources(slot, 1, &shaderResourceView);
 }
 
 // ============================================================
@@ -674,18 +626,18 @@ void ImageBufferData_Bind(ImageBufferData* self, void* unknownArg, unsigned int 
 // 4 bytes per pixel and a tightly packed source, so this is the 32-bit upload
 // path only (dynamic UI/terrain textures), not the compressed one.
 // ============================================================
-bool ImageBufferData_Update(ImageBufferData* self, void* data, int width, int height) {
-    ID3D11DeviceContext* const ctx = D3DContext(ActiveDeviceData(VideoDevice()));
+bool ImageBufferData::Update(void* data, int width, int height) {
+    ID3D11DeviceContext* const ctx = Dx11Context();
 
-    if (ImgOf(self->imageBuffer)->IsDynamic()) {
+    if (_owner->IsDynamic()) {
         D3D11_MAPPED_SUBRESOURCE mapped;
-        ctx->Map(static_cast<ID3D11Resource*>(self->texture), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+        ctx->Map(texture, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
         // Note: copies width*height*4 into the mapped block *without* honouring
         // mapped.RowPitch. That is what the shipped code does.
         std::memcpy(mapped.pData, data, static_cast<size_t>(width * height) * 4);
-        ctx->Unmap(static_cast<ID3D11Resource*>(self->texture), 0);
+        ctx->Unmap(texture, 0);
     } else {
-        ctx->UpdateSubresource(static_cast<ID3D11Resource*>(self->texture), 0, nullptr,
+        ctx->UpdateSubresource(texture, 0, nullptr,
                                data, static_cast<UINT>(width * 4), 0);
     }
     return true;
@@ -700,7 +652,7 @@ bool ImageBufferData_Update(ImageBufferData* self, void* data, int width, int he
 // null and CopyResource is called with it. Reproduced rather than "fixed":
 // silently diverging here would hide a real failure during A/B capture.
 // ============================================================
-bool ImageBufferData_Read(ImageBufferData* self, void* dst, int width, int height) {
+bool ImageBufferData::Read(void* dst, int width, int height) {
     D3D11_TEXTURE2D_DESC desc;
     desc.Width              = static_cast<UINT>(width);
     desc.Height             = static_cast<UINT>(height);
@@ -714,13 +666,12 @@ bool ImageBufferData_Read(ImageBufferData* self, void* dst, int width, int heigh
     desc.CPUAccessFlags     = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;  // 0x30000
     desc.MiscFlags          = 0;
 
-    DeviceData* const dd = ActiveDeviceData(VideoDevice());
-    ID3D11DeviceContext* const ctx = D3DContext(dd);
+    ID3D11DeviceContext* const ctx = Dx11Context();
 
     ID3D11Texture2D* staging = nullptr;
-    D3DDevice(dd)->CreateTexture2D(&desc, nullptr, &staging);
+    Dx11Device()->CreateTexture2D(&desc, nullptr, &staging);
 
-    ctx->CopyResource(staging, static_cast<ID3D11Resource*>(self->texture));
+    ctx->CopyResource(staging, texture);
 
     // MapType is 3 = D3D11_MAP_READ_WRITE, not READ (`LEA R9D,[RBX+3]` with
     // RBX zeroed, 0x180002fb0) — which is why the staging texture above asks
@@ -729,13 +680,15 @@ bool ImageBufferData_Read(ImageBufferData* self, void* dst, int width, int heigh
     D3D11_MAPPED_SUBRESOURCE mapped;
     ctx->Map(staging, 0, D3D11_MAP_READ_WRITE, 0, &mapped);
 
+    // The caller's buffer and the mapped rows are plain bytes; name them as such
+    // once (B5 RES: was a cast + offset inside each memcpy argument).
+    uint8_t* const       out = static_cast<uint8_t*>(dst);
+    const uint8_t* const in  = static_cast<const uint8_t*>(mapped.pData);
     const int dstPitch = width * 4;
     int srcOffset = 0;
     int dstOffset = 0;
     for (int y = 0; y < height; ++y) {
-        std::memcpy(static_cast<uint8_t*>(dst) + dstOffset,
-                    static_cast<uint8_t*>(mapped.pData) + srcOffset,
-                    static_cast<size_t>(dstPitch));
+        std::memcpy(out + dstOffset, in + srcOffset, static_cast<size_t>(dstPitch));
         srcOffset += static_cast<int>(mapped.RowPitch);
         dstOffset += dstPitch;
     }
@@ -745,23 +698,7 @@ bool ImageBufferData_Read(ImageBufferData* self, void* dst, int width, int heigh
     return true;
 }
 
-}  // namespace
 }  // namespace VideoDX11
 
 // All seven live. Verified in-game and RenderDoc-diffed against the shipped
 // DLL — see dx11/README.md §"Per-draw pipeline-state equality".
-
-DX11_REGISTER_SLOT(ImageBufferData, 0, &::VideoDX11::ImageBufferData_ScalarDeletingDtor,
-                   "ImageBufferData::~ImageBufferData (deleting)");
-DX11_REGISTER_SLOT(ImageBufferData, 1, &::VideoDX11::ImageBufferData_AttachColorBuffer,
-                   "ImageBufferData::AttachColorBuffer");
-DX11_REGISTER_SLOT(ImageBufferData, 2, &::VideoDX11::ImageBufferData_AttachDepthBuffer,
-                   "ImageBufferData::AttachDepthBuffer");
-DX11_REGISTER_SLOT(ImageBufferData, 3, &::VideoDX11::ImageBufferData_Create,
-                   "ImageBufferData::Create");
-DX11_REGISTER_SLOT(ImageBufferData, 4, &::VideoDX11::ImageBufferData_Bind,
-                   "ImageBufferData::Bind");
-DX11_REGISTER_SLOT(ImageBufferData, 5, &::VideoDX11::ImageBufferData_Update,
-                   "ImageBufferData::Update");
-DX11_REGISTER_SLOT(ImageBufferData, 6, &::VideoDX11::ImageBufferData_Read,
-                   "ImageBufferData::Read");

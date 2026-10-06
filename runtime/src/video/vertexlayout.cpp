@@ -220,10 +220,12 @@ void VertexLayout::PlatformConstruct() {
 void VertexLayout::PlatformCreate() {
     _data->PlatformCreate();
 }
-// ?PlatformDestruct@VertexLayout@Video@@AEAAXXZ (0x1800f5fd0)
+// ?PlatformDestruct@VertexLayout@Video@@AEAAXXZ (0x1800f5fd0): slot 0, flags 1.
+// B5 RES (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+// virtual destructor, then the base's class-scope operator delete (MemFree).
 void VertexLayout::PlatformDestruct() {
     if (_data == nullptr) return;
-    _data->DeletingDtor(1);
+    delete _data;
 }
 
 // slot 5 — ?Serialize@VertexLayout@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f5e70)

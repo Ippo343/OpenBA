@@ -316,9 +316,8 @@ static_assert(sizeof(RenderBufferOwner) == 0x30,
 // real class (runtime/types/video/ImageBuffer.h, included above) whose `_data`
 // member is that same +0x60, asserted against the retail ctor there rather than
 // against this file's one instruction. The three helpers below lose their cast
-// through the view; they keep their `const void*` signatures, because their
-// callers hold the owner as an opaque pointer out of a `*Data` object's
-// `imageBuffer` field.
+// through the view (and, B5 RES, their `const void*` parameter: every caller
+// holds a typed `const Video::ImageBuffer*` out of a `Video::RenderBuffer`).
 //
 // ImageBufferData fields this lane reads. L2 derived these offsets from
 // RenderBufferData slots 2/3 (0x180001070, 0x1800010e0) while L3 derived them
@@ -327,23 +326,23 @@ static_assert(sizeof(RenderBufferOwner) == 0x30,
 // L3 owns the struct and has now named them; these helpers just spell out which
 // view each caller wants.
 //
-// `_data` is a `Video::ImageBufferData*` — Runtime's ABSTRACT base (block A) —
-// and the concrete `VideoDX11::ImageBufferData` does not derive from it in C++
-// (RULE B5-8's declared leave), so the step across is a `reinterpret_cast`.
-inline ImageBufferData* Dx11ImageBackend(const void* imageBuffer) {
-    const Video::ImageBuffer* img = static_cast<const Video::ImageBuffer*>(imageBuffer);
-    return reinterpret_cast<ImageBufferData*>(img->_data);   // B.3.5 bridge
+// `_data` is a `Video::ImageBufferData*` — Runtime's ABSTRACT base (block A).
+// B5 RES: `VideoDX11::ImageBufferData` is a real subclass of it, and every live
+// companion was built by dx11's own factory (`DeviceData` slot 10,
+// `new ImageBufferData(owner)`), so the step down is a `static_cast` — the one
+// downcast dx11 may make (B5_RULES D7: dx11 built the object). The helpers take
+// the typed `Video::ImageBuffer*` their callers already hold.
+inline ImageBufferData* Dx11ImageBackend(const Video::ImageBuffer* img) {
+    return static_cast<ImageBufferData*>(img->_data);
 }
-inline ID3D11Resource* Dx11ImageTexture(const void* imageBuffer) {
-    return static_cast<ID3D11Resource*>(Dx11ImageBackend(imageBuffer)->texture);
+inline ID3D11Resource* Dx11ImageTexture(const Video::ImageBuffer* img) {
+    return Dx11ImageBackend(img)->texture;
 }
-inline ID3D11RenderTargetView* Dx11ImageRtv(const void* imageBuffer) {
-    return static_cast<ID3D11RenderTargetView*>(
-        Dx11ImageBackend(imageBuffer)->renderTargetView);
+inline ID3D11RenderTargetView* Dx11ImageRtv(const Video::ImageBuffer* img) {
+    return Dx11ImageBackend(img)->renderTargetView;
 }
-inline ID3D11DepthStencilView* Dx11ImageDsv(const void* imageBuffer) {
-    return static_cast<ID3D11DepthStencilView*>(
-        Dx11ImageBackend(imageBuffer)->depthStencilView);
+inline ID3D11DepthStencilView* Dx11ImageDsv(const Video::ImageBuffer* img) {
+    return Dx11ImageBackend(img)->depthStencilView;
 }
 
 // ============================================================
