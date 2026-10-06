@@ -341,12 +341,16 @@ extern "C" Video::Context* RtVideo_Context_Ctor(Video::Context* self, Video::Dev
     self->_dynamicVertexStride   = 0;           // +0x20e8 (a dword)
     self->_dynamicIndexCursor    = nullptr;     // +0x20f0
     self->_dynamicVertexBuffer   = nullptr;     // +0x20f8
+    // B5 CTX: +0x2100 / +0x2120 were one qword store each; the two dword
+    // halves are stored separately now (same eight zero bytes).
     self->_unknown2100           = 0;           // +0x2100
-    self->_unknown2108           = 0;           // +0x2108
+    self->_unknown2104           = 0;           // +0x2104
+    self->_unknown2108           = nullptr;     // +0x2108
     self->_instanceCount         = 0;           // +0x2110 (a dword)
     self->_dynamicIndexBuffer    = nullptr;     // +0x2118
     self->_unknown2120           = 0;           // +0x2120
-    self->_unknown2128           = 0;           // +0x2128
+    self->_unknown2124           = 0;           // +0x2124
+    self->_unknown2128           = nullptr;     // +0x2128
     self->_dynamicInstanceBuffer = nullptr;     // +0x2130
     self->_defaultRenderBuffer   = nullptr;     // +0x2138
     self->_defaultColorImage     = nullptr;     // +0x2140

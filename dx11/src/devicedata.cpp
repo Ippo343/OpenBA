@@ -1867,13 +1867,11 @@ T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
     return p;
 }
 void* Factory_ContextData(DeviceData* /*self*/, ::Video::Context* owner) {
-    ContextData* p = AllocData<ContextData, ::Video::ContextData>(0x20, owner,
-                                            Vt::ContextData);
-    if (!p) return nullptr;
-    p->topology   = 0;
-    p->pad14      = 0;
-    p->d3dContext = nullptr;
-    return p;
+    // B5 CTX: the base's operator new is retail's MemAlloc(0x20, 4); the ctor chain
+    // is retail's `??0ContextData` + the vptr store (now the compiler's table) +
+    // the three tail stores (ContextData's constructor). The `if (!p)` arm is
+    // gone (B5_RULES D2: a null from MemAlloc is a crash either way).
+    return new ContextData(owner);
 }
 
 void* Factory_ImageBufferData(DeviceData* /*self*/, ::Video::ImageBuffer* owner) {
