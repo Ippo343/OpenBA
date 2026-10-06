@@ -414,7 +414,7 @@ bool ContextData::BeginCommands() {
         // 0x180004340 — DeviceData swap-chain resize/recreate. Lane L6's
         // function; its result is discarded exactly as the original discards
         // it (`XOR AL,AL`).
-        Dx11_DeviceData_Resize(device->deviceData);
+        Dx11_DeviceData_Resize(Dx11DeviceDataOf(device));   // B5 DEV-A: typed
         return false;
     }
 

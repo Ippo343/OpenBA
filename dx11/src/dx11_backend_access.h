@@ -379,9 +379,9 @@ inline ID3D11DepthStencilView* Dx11ImageDsv(const void* imageBuffer) {
 // Declared here because it is the one cross-lane call in the port: L5's
 // ContextData::BeginCommands reaches it with a near CALL rather than a vtable
 // dispatch, so the seam cannot redirect it and L5 must name our version.
-// `deviceData` is a Video::DeviceData* (void* to keep this declaration free of
-// L6's internal types).
-int Dx11_DeviceData_Resize(void* deviceData);
+// B5 DEV-A: takes the dx11 DeviceData itself (it was `void*` while the class
+// was L6's internal POD); the caller reaches it with Dx11DeviceDataOf.
+int Dx11_DeviceData_Resize(DeviceData* deviceData);
 
 // The DX11 vtable a destructor must re-seat `this` on before running the base
 // destructor (MSVC emits this vptr store in every derived destructor). Handing

@@ -1917,8 +1917,8 @@ T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
 // no way to redirect it — L5 has to name our port directly, and it can only do
 // that through a declaration with external linkage. (B5 DEV-A: the slots are
 // DeviceData members now; the helpers stay in the anonymous namespace.)
-int Dx11_DeviceData_Resize(void* deviceData) {
-    return DeviceData_Resize(static_cast<DeviceData*>(deviceData));
+int Dx11_DeviceData_Resize(DeviceData* deviceData) {
+    return DeviceData_Resize(deviceData);
 }
 
 // The slot-1 walk with external linkage (VideoDX11Plugin.h): DeviceData's own
