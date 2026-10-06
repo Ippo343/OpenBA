@@ -101,7 +101,7 @@ inline ::Video::Device* Dx11VideoDevice() {
     return *Dx11VideoDeviceSingletonSlot();
 }
 
-// The active DeviceData: `Video::Device::deviceData` (+0x100,
+// A Video::Device's DeviceData: `Video::Device::deviceData` (+0x100,
 // decomp/videodx11.md "How Runtime loads it").
 //
 // B5 DEV-A (B5_RULES D7): the ONE downcast dx11 makes. The field is the base
@@ -109,8 +109,15 @@ inline ::Video::Device* Dx11VideoDevice() {
 // exports.cpp), so it is a `VideoDX11::DeviceData`. The DX9 placeholder is the
 // only other producer, and every body that reaches this runs on a device DX11
 // created (the placeholder never creates one). NO NULL CHECKS, as above.
+// ContextData and ConstantBufferData reach it through their own owner's
+// `_device` (as the original does), everything else through the singleton.
+inline DeviceData* Dx11DeviceDataOf(const ::Video::Device* device) {
+    return static_cast<DeviceData*>(device->deviceData);
+}
+
+// The active DeviceData: the singleton's.
 inline DeviceData* Dx11DeviceData() {
-    return static_cast<DeviceData*>(Dx11VideoDevice()->deviceData);
+    return Dx11DeviceDataOf(Dx11VideoDevice());
 }
 
 inline ID3D11Device* Dx11Device() {

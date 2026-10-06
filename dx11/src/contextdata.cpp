@@ -4,6 +4,13 @@
 // class that CACHES the D3D11 immediate context (ContextData+0x18) instead of
 // re-walking Video::Device::_singleton -> [+0x100] -> [+0x28] on every call.
 //
+// B5 CTX (the dx11 seam): `VideoDX11::ContextData` is a real C++ subclass of
+// the abstract `Video::ContextData` (dx11/types/VideoDX11Data.h); every slot
+// below is a member declared `override`, and the compiler builds the vtable
+// (retail slot N >= 1 is compiler slot N + 1, which nothing indexes any more).
+// Every Video::Context / Video::Device / Video::Configuration field is read by
+// its NAMED member (B5_RULES D8); the raw-offset field accessors are gone.
+//
 // ---------------------------------------------------------------------------
 // The slot names are recovered, not invented
 // ---------------------------------------------------------------------------
@@ -53,7 +60,7 @@
 // EndIndexedVertices and EndInstancedIndexedVertices share one body. That is
 // consistent because the instance count is carried on the Context
 // (Context+0x2110), and the non-instanced entry point (slot 16) sets it to 1
-// before locking. Both slots are registered here with the same implementation.
+// before locking. Slot 17 is a one-line member that calls slot 19's body.
 //
 // Three slots are not Ghidra functions at all — they are tails inside a
 // neighbour's body. All three were decoded by hand from `read_memory`:
@@ -90,6 +97,74 @@
 //   ?AddVertex@               0x18001ad40          +0x20e0 write cursor,
 //                                                  +0x20e8 stride
 //   (Context+0x2160 = the ContextData*, from every thunk above.)
+//
+// B5 CTX: the full table, offset -> the `Video::Context` member (Context.h,
+// which asserts every one) -> the proof this file carries:
+//
+//   +0x0000 _device              a Video::Device*, not a vptr: slot 1 loads it
+//                                with `MOV RAX,[RCX+8] / MOV RDI,[RAX]`
+//                                (0x18000168c) and hands it to Device::Lock.
+//   +0x0010 _dirty               dirty-flag word. Bits this DLL touches:
+//                                  0x0001 render buffer (slot 4 -> BindRenderBuffer)
+//                                  0x0002 textures      (slot 5 -> Context::BindTextures)
+//                                  0x0010 index buffer  (set by slot 19)
+//                                  0x0200 viewport      (slot 4 -> BindViewport)
+//                                  0x0400 scissor       (slot 4 -> RSSetScissorRects)
+//                                  0x4000 transforms    (slot 8)
+//                                Slot 4 clears 0x0601 in one AND (0x1800019c6,
+//                                mask 0xfffff9fe).
+//   +0x0020 _transformCount      slot 8: payload size is `[0x20] << 6`
+//                                (0x180001c67, 64-byte matrices).
+//   +0x0024 _unknown0024         slot 8 binds the bone buffer only when > 0.
+//   +0x0028 _renderBuffer        ?GetRenderBuffer@ = `MOV RAX,[RCX+0x28]; RET`.
+//   +0x0030 _imageBuffers[16]    slot 5 walks i in [0,0x10) stride 8 from 0x30
+//                                (0x180001ae4 seeds RDI with 0x30, 0x180001b18
+//                                bounds the loop at 0x10).
+//   +0x01b8 _indexBuffer         last index buffer + byte offset bound through
+//   +0x01c0 _indexOffset         the ordinary path; slot 19 compares and raises
+//                                dirty bit 0x10 (0x1800021d4-0x1800021f0).
+//   +0x01d0 _viewport            ?GetViewport@ copies exactly these four dwords.
+//   +0x01e0 _scissor             same shape, read by slots 4 and 7.
+//   +0x0418 _boneAndProjectionStaging  the bone payload, exactly 0xcc0 bytes
+//                                (slot 8's literal at 0x180001c92); 0x418 + 0xcc0
+//                                == 0x10d8, the transform payload: adjacent.
+//   +0x10d8 _transforms          the transform payload.
+//   +0x2008 _boneConstants       two Video::ConstantBuffer objects EMBEDDED in
+//   +0x2050 _transformConstants  the Context (slot 8 takes their addresses
+//                                with LEA, it does not load a pointer).
+//   +0x20e0 _dynamicVertexCursor moving write pointer (AddVertex memcpy's here)
+//   +0x20e8 _dynamicVertexStride bytes per vertex (AddVertex advances by it)
+//   +0x20f0 _dynamicIndexCursor  moving write pointer
+//   +0x20f8 _dynamicVertexBuffer Video::VertexBuffer*
+//   +0x2100 _unknown2100         int, the byte offset VertexBuffer::Lock returns
+//   +0x2104 _unknown2104         int, the vertex count (Draw's count, slot 15)
+//   +0x2108 _unknown2108         void*, a copy of the vertex Lock result
+//   +0x2110 _instanceCount       int
+//   +0x2118 _dynamicIndexBuffer  Video::IndexBuffer*
+//   +0x2120 _unknown2120         int, the byte offset IndexBuffer::Lock returns
+//   +0x2124 _unknown2124         int, the index count
+//   +0x2128 _unknown2128         void*, a copy of the index Lock result
+//   +0x2138 _defaultRenderBuffer ?GetDefaultRenderBuffer@ = `MOV RAX,[RCX+0x2138]`.
+//   +0x2150.. the four per-frame counters, each named by its one-instruction
+//             Runtime getter (0x18001ae60 / 70 / 80 / 90).
+//
+// Video::Device members read here (Device.h, asserted there):
+//   +0x04 / +0x08  backBufferWidth / backBufferHeight. Slot 1 builds the
+//                  full-screen viewport from them (0x1800016d4 / 0x1800016df);
+//                  the same two fields fill DXGI_SWAP_CHAIN_DESC.BufferDesc in
+//                  0x180004590 (see decomp/videodx11.md), an independent proof.
+//   +0x50 / +0x58  onVideoError / onVideoRestart, two `void(*)()` hooks called by
+//                  slot 3 either side of a device reset (0x18000183c /
+//                  0x18000187d). Both are null-checked by the original.
+//   +0x9c          settingsChanged: when non-zero slot 1 refuses to begin the
+//                  frame and runs the swap-chain recreate helper instead
+//                  (0x180001693). NOT the same field as Device+0x98.
+//   +0x100         deviceData, the active Video::DeviceData*.
+// Video::Configuration+0x41 `vsync` — a byte, used as Present's SyncInterval
+// (`MOVZX EAX,byte [RDX+0x41]` at 0x1800017e7, then `SETNZ DL`). Read through
+// ?_singleton@Configuration@Video@@, which is the OTHER of the two globals
+// Ghidra renders as `_singleton_exref`; conflating it with
+// ?_singleton@Device@Video@@ (0x1800134b8) would read the wrong object.
 //
 // ---------------------------------------------------------------------------
 // COM vtable indices
@@ -132,30 +207,21 @@
 // Slot 1 calls 0x180004340, the DeviceData swap-chain resize/recreate helper.
 // That function belongs to lane L6 and is NOT ported here — it is called
 // through L6's port, Dx11_DeviceData_Resize. It is a near CALL in the original
-// (0x1800016a3), not a vtable dispatch, so the seam cannot redirect it and the
-// binding has to be explicit. ENDGAME B.3.5 block J: it used to be a function
-// POINTER FIELD in this file's import struct, set to `&Dx11_DeviceData_Resize`
-// unconditionally — never a resolved import, so never anything `g_imOk` could
-// fail on. Slot 1 names the function directly now.
+// (0x1800016a3), not a vtable dispatch. ENDGAME B.3.5 block J: it used to be a
+// function POINTER FIELD in this file's import struct, set to
+// `&Dx11_DeviceData_Resize` unconditionally — never a resolved import, so never
+// anything `g_imOk` could fail on. Slot 1 names the function directly now.
 //
-// Slot 3 calls DeviceData vtable slots 3 (shutdown) and 2 (create device). It
-// calls them THROUGH the live vtable, so it picks up whatever the seam has
-// installed there — the original today, L6's port later. No DeviceData slot is
-// registered by this file.
+// Slot 3 calls DeviceData slots 3 (shutdown) and 2 (create device) VIRTUALLY,
+// by name through the abstract `Video::DeviceData`, as the original dispatches.
 
-#include "dx11_seam.h"
 #include "options.h"
 #include "dx11_backend_access.h"
 #include "system/Error.h"   // ENDGAME B.3.4b System callers: System::Error (-Iruntime/types)
-// ENDGAME B.3.5 block VC: `Video::Viewport` (replaces this file's duplicate view)
-// and `Video::ContextData` (RULE B5-3's qualified base-destructor call).
+// ENDGAME B.3.5 block VC: `Video::Viewport` and `Video::Context`.
 #include "video/Context.h"
 #include "video/CompanionData.h"
-#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Configuration::_singleton
-// ENDGAME B.3.5 block J, RULE B5-14: the seventeen table-driven Runtime imports
-// this file used to resolve by mangled name are direct member calls now, so the
-// classes that own those members are named here. `video/Device.h` arrives via
-// dx11_backend_access.h; `video/Buffers.h` is this file's own addition, for
+#include "video/Device.h"   // Video::Device, Video::Configuration::_singleton
 // `Video::{Vertex,Index}Buffer::Lock/Unlock` (block VC's members).
 #include "video/Buffers.h"
 
@@ -176,14 +242,11 @@ namespace {
 // Runtime-x64.dll imports — ENDGAME B.3.5 block J, RULE B5-14 ("spelling 9")
 //
 // SEVENTEEN OF THE EIGHTEEN ROWS ARE GONE. They were mangled Runtime symbol
-// names held as `const char*` in an initialised table and resolved positionally
-// by the loop below — the ninth caller binding, and seventeen of dx11's 76
-// literals. Every class they named is a real C++ class in `runtime/types/video/`
-// now, so each one is a DIRECT MEMBER CALL at its call site, through one marked
-// `// B.3.5 bridge` cast where the receiver is still an untyped pointer this
-// file walks to by offset:
+// names held as `const char*` in an initialised table and resolved positionally.
+// Every class they named is a real C++ class in `runtime/types/video/` now, so
+// each one is a DIRECT MEMBER CALL at its call site:
 //
-//   ??1ContextData@Video@@UEAA@XZ                     -> ~ContextData()          (block VC already)
+//   ??1ContextData@Video@@UEAA@XZ                     -> ~ContextData()  (the compiler's base chain, B5)
 //   ?Lock@Device@Video@@                              -> Video::Device::Lock
 //   ?Unlock@Device@Video@@                            -> Video::Device::Unlock
 //   ?ReleaseDynamic@Device@Video@@                    -> Video::Device::ReleaseDynamic
@@ -205,202 +268,41 @@ namespace {
 //
 // ENDGAME B.3.9 VID: the one binding that was still resolved at run time,
 // `?_singleton@Configuration@Video@@0PEAV12@EA`, is the class static
-// `Video::Configuration::_singleton` now (dx11 is compiled into the exe), so the
-// Imports struct, GetImports() and slot 3's forward-to-original branch went
-// with it. `Dx11SeamInstall()`'s own completeness check is untouched: all 20
-// slots are still registered (RULE B5-8).
+// `Video::Configuration::_singleton` now (dx11 is compiled into the exe).
 
-// ============================================================
-// Video::Context field access
+// Slot 5 walks this many texture slots (0x180001b18 bounds the loop at 0x10).
+constexpr int kTextureSlotCount = 16;
+static_assert(sizeof(::Video::Context::_imageBuffers) ==
+                  kTextureSlotCount * sizeof(const ::Video::ImageBuffer*),
+              "Context::_imageBuffers is the 16 texture slots slot 5 walks");
+
+// Slot 8's bone payload size, the literal 0xcc0 at 0x180001c92 — exactly the
+// staging block, which ends where the transform payload starts.
+constexpr int kBoneDataBytes = 0x0cc0;
+static_assert(sizeof(::Video::Context::_boneAndProjectionStaging) == kBoneDataBytes,
+              "the bone block is 0xcc0 bytes");
+static_assert(offsetof(::Video::Context, _boneAndProjectionStaging) + kBoneDataBytes ==
+                  offsetof(::Video::Context, _transforms),
+              "bone block is adjacent to the transform block");
+
+// The active DeviceData of the Context's own device. ContextData never uses the
+// Video::Device singleton: it walks this->_owner->_device instead. Both routes
+// reach the same object, but the original only ever takes this one, so the port
+// takes it too.
 //
-// Raw byte offsets rather than an invented 0x2168-byte struct: only ~25 of
-// those bytes are actually understood, and a struct would have to fabricate
-// twenty opaque padding runs to express that. Each constant carries its proof.
-// ============================================================
-namespace Ctx {
-// +0x0000  Video::Device* — the Context's device. Slot 1 loads it with
-//          `MOV RAX,[RCX+8] / MOV RDI,[RAX]` (0x18000168c) and hands it
-//          straight to Video::Device::Lock, so Context+0x00 is a Device*, not
-//          a vptr. (Video::Context is therefore non-polymorphic here.)
-constexpr size_t kDevice              = 0x0000;
-
-// +0x0010  dirty-flag word. Bits this DLL touches:
-//            0x0001 render buffer   (slot 4 -> BindRenderBuffer)
-//            0x0002 textures        (slot 5 -> Video::Context::BindTextures)
-//            0x0010 index buffer    (set by slot 19)
-//            0x0200 viewport        (slot 4 -> BindViewport)
-//            0x0400 scissor         (slot 4 -> RSSetScissorRects)
-//            0x4000 transforms      (slot 8)
-//          Slot 4 clears 0x0601 in one AND (0x1800019c6, mask 0xfffff9fe).
-constexpr size_t kDirtyFlags          = 0x0010;
-
-// +0x0020 / +0x0024  element counts for the two embedded constant buffers.
-// Slot 8: transform payload size is `[0x20] << 6` (0x180001c67, i.e. 64-byte
-// matrices) and the second buffer is bound only when `[0x24] > 0`.
-constexpr size_t kTransformCount      = 0x0020;
-constexpr size_t kBoneCount           = 0x0024;
-
-// +0x0028  current Video::RenderBuffer*. Named by Runtime's
-// ?GetRenderBuffer@Context@Video@@ (0x180019ec0 = `MOV RAX,[RCX+0x28]; RET`).
-constexpr size_t kRenderBuffer        = 0x0028;
-
-// +0x0030  16 bound Video::ImageBuffer* texture slots. Slot 5 walks
-// i in [0,0x10) with a stride of 8 starting at 0x30 (0x180001ae4 seeds RDI
-// with 0x30, 0x180001b18 bounds the loop at 0x10).
-constexpr size_t kTextures            = 0x0030;
-constexpr int    kTextureSlotCount    = 16;
-
-// +0x0418  bone matrix payload, exactly 0xcc0 bytes (slot 8 passes the literal
-// 0xcc0 at 0x180001c92) — and 0x0418 + 0xcc0 == 0x10d8, the transform payload,
-// so the two regions are adjacent and the size is corroborated.
-constexpr size_t kBoneData            = 0x0418;
-constexpr int    kBoneDataBytes       = 0x0cc0;
-constexpr size_t kTransformData       = 0x10d8;
-
-// +0x01b8 / +0x01c0  last index buffer + byte offset bound through the normal
-// (non-dynamic) path; slot 19 compares against them and raises dirty bit 0x10
-// when the dynamic index buffer differs (0x1800021d4-0x1800021f0).
-constexpr size_t kBoundIndexBuffer    = 0x01b8;
-constexpr size_t kBoundIndexOffset    = 0x01c0;
-
-// +0x01d0  Viewport {x, y, w, h} as int32. Named and pinned by Runtime's
-// ?GetViewport@Context@Video@@ (0x18001a0c0), which copies exactly these four
-// dwords into the 16-byte return value.
-constexpr size_t kViewport            = 0x01d0;
-
-// +0x01e0  Scissor {x, y, w, h} as int32 — same shape, read by slots 4 and 7
-// to build a D3D11_RECT of {x, y, x+w, y+h}.
-constexpr size_t kScissor             = 0x01e0;
-
-// +0x2008 / +0x2050  two Video::ConstantBuffer objects EMBEDDED in the Context
-// (slot 8 takes their addresses with LEA, it does not load a pointer).
-// +0x2050 carries the transform payload, +0x2008 the bone payload.
-constexpr size_t kBoneConstantBuffer      = 0x2008;
-constexpr size_t kTransformConstantBuffer = 0x2050;
-
-// The dynamic-geometry scratch block. Names come from Runtime's
-// ?AddVertex@Context@Video@@ (0x18001ad40), which memcpy's into [0x20e0] and
-// advances it by [0x20e8].
-constexpr size_t kDynVertexCursor     = 0x20e0;  // void*  moving write pointer
-constexpr size_t kDynVertexStride     = 0x20e8;  // int    bytes per vertex
-constexpr size_t kDynIndexCursor      = 0x20f0;  // void*  moving write pointer
-constexpr size_t kDynVertexBuffer     = 0x20f8;  // Video::VertexBuffer*
-constexpr size_t kDynVertexOffset     = 0x2100;  // int    byte offset from Lock
-constexpr size_t kDynVertexCount      = 0x2104;  // int
-constexpr size_t kDynVertexBase       = 0x2108;  // void*  copy of the Lock result
-constexpr size_t kDynInstanceCount    = 0x2110;  // int
-constexpr size_t kDynIndexBuffer      = 0x2118;  // Video::IndexBuffer*
-constexpr size_t kDynIndexOffset      = 0x2120;  // int    byte offset from Lock
-constexpr size_t kDynIndexCount       = 0x2124;  // int
-constexpr size_t kDynIndexBase        = 0x2128;  // void*  copy of the Lock result
-
-// +0x2138  default Video::RenderBuffer*, named by ?GetDefaultRenderBuffer@
-// (0x18001ae40 = `MOV RAX,[RCX+0x2138]; RET`).
-constexpr size_t kDefaultRenderBuffer = 0x2138;
-
-// The four per-frame counters, each named by its one-instruction Runtime getter.
-constexpr size_t kTrianglesSubmitted  = 0x2150;  // ?GetTrianglesSubmitted@ 0x18001ae60
-constexpr size_t kVerticesSubmitted   = 0x2154;  // ?GetVerticesSubmitted@  0x18001ae70
-constexpr size_t kDrawsSubmitted      = 0x2158;  // ?GetDrawsSubmitted@     0x18001ae80
-constexpr size_t kObjectsSubmitted    = 0x215c;  // ?GetObjectsSubmitted@   0x18001ae90
-}  // namespace Ctx
-
-template <typename T>
-inline T& Field(void* base, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(base) + off);
-}
-template <typename T>
-inline T Field(const void* base, size_t off) {
-    return *reinterpret_cast<const T*>(static_cast<const uint8_t*>(base) + off);
-}
-inline void* FieldPtr(void* base, size_t off) {
-    return static_cast<uint8_t*>(base) + off;
-}
-
-// ============================================================
-// Video::Device fields this file reads
-//
-// Only five, all proven by a VideoDX11 instruction:
-//   +0x04 / +0x08  backbuffer width / height. Slot 1 builds the full-screen
-//                  viewport from them (0x1800016d4 / 0x1800016df); the same two
-//                  fields fill DXGI_SWAP_CHAIN_DESC.BufferDesc in 0x180004590
-//                  (see decomp/videodx11.md), which is an independent proof.
-//   +0x50 / +0x58  two `void(*)()` notification hooks, called by slot 3 either
-//                  side of a device reset (0x18000183c / 0x18000187d). Both are
-//                  null-checked by the original.
-//   +0x9c          a byte flag; when non-zero slot 1 refuses to begin the frame
-//                  and runs the swap-chain recreate helper instead
-//                  (0x180001693). Best read as "the backbuffer no longer
-//                  matches the window". NOT the same field as Device+0x98,
-//                  which decomp/videodx11.md documents as the caps word.
-//   +0x100         the active Video::DeviceData*.
-// ============================================================
-namespace Dev {
-constexpr size_t kWidth            = 0x004;
-constexpr size_t kHeight           = 0x008;
-constexpr size_t kOnDeviceLost     = 0x050;
-constexpr size_t kOnDeviceRestored = 0x058;
-constexpr size_t kResetPending     = 0x09c;
-constexpr size_t kActiveDeviceData = 0x100;
-}  // namespace Dev
-
-// Video::Configuration+0x41 — a byte, used as Present's SyncInterval
-// (`MOVZX EAX,byte [RDX+0x41]` at 0x1800017e7, then `SETNZ DL`). Read through
-// ?_singleton@Configuration@Video@@, which is the OTHER of the two globals
-// Ghidra renders as `_singleton_exref`; conflating it with
-// ?_singleton@Device@Video@@ (0x1800134b8) would read the wrong object.
-constexpr size_t kConfigVSync = 0x41;
-
-typedef void (*DeviceNotifyFn)();
-
-// ContextData never uses the Video::Device singleton: it walks
-// this->context->[0x00] instead. Both routes reach the same object, but the
-// original only ever takes this one, so the port takes it too.
-inline void* OwnerDevice(ContextData* self) {
-    return Field<void*>(self->context, Ctx::kDevice);
-}
-
-// ENDGAME B.3.5 block J — the two bridge casts every converted call goes through.
-// `Video::Context+0x00` is a `Video::Device*` and `VideoDX11::ContextData::context`
-// a `Video::Context*`, but this file reaches both as `void*` (by offset, and
-// through the seam's registered slot signatures), and neither owner object is
-// constructed on this side of the boundary. One helper each, so the cast is named
-// once instead of seventeen times; RULE B5-8's declared leave is why the cast
-// exists at all.
-inline ::Video::Device* DevOf(void* device) {
-    return reinterpret_cast< ::Video::Device*>(device);          // B.3.5 bridge
-}
-inline ::Video::Context* CtxOf(void* context) {
-    return reinterpret_cast< ::Video::Context*>(context);        // B.3.5 bridge
-}
-// The Context's two dynamic-geometry buffers, at +0x20f8 and +0x2118.
-inline ::Video::VertexBuffer* VbOf(void* vb) {
-    return reinterpret_cast< ::Video::VertexBuffer*>(vb);        // B.3.5 bridge
-}
-inline ::Video::IndexBuffer* IbOf(void* ib) {
-    return reinterpret_cast< ::Video::IndexBuffer*>(ib);         // B.3.5 bridge
-}
-inline DeviceData* OwnerDeviceData(ContextData* self) {
-    return Field<DeviceData*>(OwnerDevice(self), Dev::kActiveDeviceData);
-}
-inline ID3D11DeviceContext* Ctx3D(ContextData* self) {
-    return static_cast<ID3D11DeviceContext*>(self->d3dContext);
+// `Video::Device::deviceData` is typed `Video::DeviceData*`; the object is
+// dx11's DeviceData (B5 DEV-A: a real subclass), reached through the one
+// downcast dx11 makes (Dx11DeviceDataOf, dx11_backend_access.h).
+inline DeviceData* OwnerDeviceData(const ::Video::Context* ctx) {
+    return Dx11DeviceDataOf(ctx->_device);
 }
 
 // Video::Viewport — 16 bytes, four int32. Shape proven by Runtime's
 // ?GetViewport@ (0x18001a0c0) copying Context+0x1d0..0x1dc into it, and used
 // here to call ?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z.
 //
-// ENDGAME B.3.5 block VC, RULE B5-2's duplicate-view collapse: the local
-// definition is GONE and this is an ALIAS of the REAL `Video::Viewport`
-// (runtime/types/video/Context.h), which b35-D1 made a real class and whose own
-// banner names this line as one of the two duplicates owed to the closing pass.
-// Field-identical, so the collapse renames two fields (`w`/`h` ->
-// `width`/`height`) and nothing else, and the real header's four `offsetof`
-// asserts plus its `sizeof == 0x10` replace the one assert that was here.
-//
-// The 84-slot seam and the concrete `*Data` classes remain the DECLARED LEAVE of
-// RULE B5-8; this commit changes no slot.
+// ENDGAME B.3.5 block VC, RULE B5-2's duplicate-view collapse: an ALIAS of the
+// REAL `Video::Viewport` (runtime/types/video/Context.h).
 using Viewport = ::Video::Viewport;
 
 // IID_ID3D11Texture2D, transcribed from the 16 bytes at VideoDX11 0x1800186d8
@@ -413,16 +315,54 @@ const GUID kIID_ID3D11Texture2D =
     { 0x6f15aaf2, 0xd208, 0x4e89, { 0x9a, 0xb4, 0x48, 0x95, 0x35, 0xd3, 0x4f, 0x9c } };
 
 // ============================================================
-// Forwarding to the shipped implementation
+// BANISHED_FORCE_DEVICE_LOST=<frame>  -- Wave 9 lane ENGIO
 //
-// Used only when a Runtime import failed to resolve. The seam keeps every
-// original target, so a missing import degrades to "the shipped DLL runs this
-// slot" instead of a null dereference.
+// PLAN 5.5 wants a forced device-lost event exercised before cutover and it had
+// never happened: nothing in the harness can make Present fail, and waiting for
+// a real driver reset is not a test. This injects ONE synthetic
+// DXGI_ERROR_DEVICE_RESET into the Present result on the Nth call to Finish,
+// and then never again.
+//
+// WHY IT IS SOUND AS A DRIVE RATHER THAN A SIMULATION. It substitutes the
+// RETURN VALUE of Present and nothing else, at the exact place a real reset
+// would deliver it, so every line after it -- the two DXGI error comparisons,
+// the onLost notify, ReleaseDynamic, the d3dDevice null, DeviceData slots 3 and
+// 2, RecreateDynamic, the onRestored notify -- runs for real on the real
+// device. In particular the device really IS torn down and recreated; this is
+// not a mock of the recovery, it is the recovery.
+//
+// The one thing it does NOT reproduce is the D3D device being genuinely
+// removed, so `GetDeviceRemovedReason` is never consulted by the recovery --
+// and it cannot be, because DEVICE_RESET is one of the two values that SKIP
+// that query (0x180001820's two comparisons). Stated rather than implied: this
+// drives the NOTIFY-AND-RECREATE half of the path, which is the half PLAN 5.5
+// is about and the half MainLoop::OnVideoError / OnVideoRestart live on.
+//
+// Off unless the env var is set, and `getenv` is process-cached
+// (standalone/options.h), so the read costs nothing per frame.
 // ============================================================
-template <typename Fn>
-inline Fn Orig(int slot) {
-    return reinterpret_cast<Fn>(Dx11OriginalSlot(Vt::ContextData, slot));
+
+// Returns true exactly once, on the Nth ContextData::Finish call.
+bool ForceDeviceLostThisFrame() {
+    static int  wanted = -2;      // -2 = not yet read, -1 = disabled
+    static long frame  = 0;
+    static bool fired  = false;
+    if (wanted == -2) {
+        const char* v = Opt().forceDeviceLost;
+        wanted = (v && *v) ? std::atoi(v) : -1;
+        if (wanted > 0)
+            std::fprintf(stderr,
+                "[DeviceLost] ARMED: a synthetic DXGI_ERROR_DEVICE_RESET will be "
+                "injected on Present #%d (PLAN 5.5 forced device-lost drive)\n",
+                wanted);
+    }
+    ++frame;
+    if (wanted <= 0 || fired || frame < wanted) return false;
+    fired = true;
+    return true;
 }
+
+}  // namespace
 
 // ============================================================
 // Slot 0 — scalar deleting destructor  (0x180001600)
@@ -432,32 +372,16 @@ inline Fn Orig(int slot) {
 //     180001635  CALL [0x1800134d0]   ; MemFree, only when (flags & 1)
 //                returns `this`
 //
+// B5 CTX: those three instructions are the compiler's now — the vptr re-seat
+// and the base-destructor chain are what `~ContextData()` does by itself, and
+// the conditional MemFree is the compiler's D0 calling the base's class-scope
+// `operator delete` (B5 W0, runtime/src/video/companion_operators.cpp).
+//
 // Note what is NOT here: no Release of this->d3dContext. The cached context is
 // borrowed — slot 1 copies it out of the DeviceData without an AddRef, so
 // releasing it here would be an over-release. Preserved by doing nothing.
 // ============================================================
-void* ContextData_Dtor(ContextData* self, unsigned flags) {
-    self->vptr = Dx11VtableAddress(Vt::ContextData);
-
-    // ENDGAME B.3.5 block VC, RULE B5-3 — the derived-destructor idiom written as
-    // C++. This was a `Dx11ResolveRuntimeImport("??1ContextData@Video@@UEAA@XZ",
-    // 0x180013470)` plus an indirect call, i.e. spelling 9 of the nine caller
-    // bindings (RULE B5-14) and one of dx11's 76 mangled-name literals.
-    // `Video::ContextData` is a real abstract class (block A) with a real member
-    // destructor, so this is a QUALIFIED NON-VIRTUAL call on the base subobject,
-    // reached through a bridge cast because `VideoDX11::ContextData` is still the
-    // declared leave of RULE B5-8 and does not inherit in C++.
-    //
-    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this very
-    // function. The base destructor is in no slot, which is exactly why the
-    // qualification is safe and the virtual call is not.
-    //
-    // The pattern is `dx11/src/vertexlayoutdata.cpp`'s, which block A landed.
-    reinterpret_cast< ::Video::ContextData*>(self)
-        -> ::Video::ContextData::~ContextData();                 // B.3.5 bridge
-
-    if (flags & 1) System::MemoryAllocator::MemFree(self);
-    return self;
+ContextData::~ContextData() {
 }
 
 // ============================================================
@@ -475,37 +399,37 @@ void* ContextData_Dtor(ContextData* self, unsigned flags) {
 // (0x180001668, 0x18000166e, ...). Using one local is equivalent: nothing on
 // the path writes ContextData+0x08.
 // ============================================================
-// ENDGAME B.3.5 block J: the `if (!GetImports()) Orig<>(1)` readiness guard is
-// GONE with the four imports this slot used. It tested nothing but the import
-// table's readiness, and the four calls below are member calls the linker
-// resolved at build time — there is nothing left for it to test.
-bool ContextData_BeginCommands(ContextData* self) {
-    void* ctx = self->context;
-    Field<int32_t>(ctx, Ctx::kTrianglesSubmitted) = 0;
-    Field<int32_t>(ctx, Ctx::kVerticesSubmitted)  = 0;
-    Field<int32_t>(ctx, Ctx::kDrawsSubmitted)     = 0;
-    Field<int32_t>(ctx, Ctx::kObjectsSubmitted)   = 0;
+// ENDGAME B.3.5 block J: the `if (!GetImports())` forward-to-original readiness
+// guard is GONE with the four imports this slot used (and B5 D9 deleted the
+// forwarding template itself: it was never instantiated).
+bool ContextData::BeginCommands() {
+    ::Video::Context* const ctx = _owner;
+    ctx->_trianglesSubmitted = 0;
+    ctx->_verticesSubmitted  = 0;
+    ctx->_drawsSubmitted     = 0;
+    ctx->_objectsSubmitted   = 0;
 
-    void* device = Field<void*>(ctx, Ctx::kDevice);
-    if (Field<uint8_t>(device, Dev::kResetPending) != 0) {
+    ::Video::Device* const device = ctx->_device;
+    if (device->settingsChanged != 0) {
         // 0x180004340 — DeviceData swap-chain resize/recreate. Lane L6's
-        // function; called through the shipped code, and its result is
-        // discarded exactly as the original discards it (`XOR AL,AL`).
-        Dx11_DeviceData_Resize(Field<void*>(device, Dev::kActiveDeviceData));
+        // function; its result is discarded exactly as the original discards
+        // it (`XOR AL,AL`).
+        Dx11_DeviceData_Resize(device->deviceData);
         return false;
     }
 
-    DevOf(device)->Lock();
-    CtxOf(ctx)->SetRenderBuffer(Field<void*>(ctx, Ctx::kDefaultRenderBuffer));
+    device->Lock();
+    ctx->SetRenderBuffer(ctx->_defaultRenderBuffer);
 
     Viewport vp;
     vp.x = 0;
     vp.y = 0;
-    vp.width  = Field<int32_t>(device, Dev::kWidth);
-    vp.height = Field<int32_t>(device, Dev::kHeight);
-    CtxOf(ctx)->SetViewport(vp);
+    vp.width  = device->backBufferWidth;
+    vp.height = device->backBufferHeight;
+    ctx->SetViewport(vp);
 
-    self->d3dContext = OwnerDeviceData(self)->d3dContext;
+    // DeviceData+0x28 (typed ID3D11DeviceContext* by B5 DEV-A, D4).
+    d3dContext = OwnerDeviceData(ctx)->d3dContext;
     return true;
 }
 
@@ -531,19 +455,19 @@ bool ContextData_BeginCommands(ContextData* self) {
 // still Releases unconditionally, so a GetBuffer failure faults here just as it
 // faults in the shipped DLL rather than being silently swallowed.
 // ============================================================
-void ContextData_EndCommands(ContextData* self) {
-    DeviceData* dd = OwnerDeviceData(self);
+void ContextData::EndCommands() {
+    DeviceData* dd = OwnerDeviceData(_owner);
 
-    IUnknown* color = static_cast<IUnknown*>(dd->colorBuffer);
+    IUnknown* color = dd->colorBuffer;
     color->AddRef();
 
     ID3D11Resource* backBuffer = nullptr;
-    static_cast<IDXGISwapChain*>(dd->swapChain)->GetBuffer(
+    dd->swapChain->GetBuffer(
         0, kIID_ID3D11Texture2D, reinterpret_cast<void**>(&backBuffer));
 
-    Ctx3D(self)->ResolveSubresource(backBuffer, 0,
-                                    static_cast<ID3D11Resource*>(dd->colorBuffer), 0,
-                                    DXGI_FORMAT_B8G8R8A8_UNORM);
+    d3dContext->ResolveSubresource(backBuffer, 0,
+                                   dd->colorBuffer, 0,
+                                   DXGI_FORMAT_B8G8R8A8_UNORM);
 
     color->Release();
     backBuffer->Release();
@@ -573,73 +497,19 @@ static_assert(static_cast<int>(DXGI_FORMAT_B8G8R8A8_UNORM) == 0x57,
 // (0x180001857), i.e. it deliberately stops the shutdown path from Releasing a
 // device that is already gone. That ordering is load-bearing, not incidental.
 //
-// The DeviceData slots are invoked through the LIVE vtable, so if lane L6 later
-// registers them this code picks up the port automatically — the same thing the
-// original does, because the original also dispatches virtually.
+// The DeviceData slots are invoked VIRTUALLY, as the original dispatches them.
 // ============================================================
-// ============================================================
-// BANISHED_FORCE_DEVICE_LOST=<frame>  -- Wave 9 lane ENGIO
-//
-// PLAN 5.5 wants a forced device-lost event exercised before cutover and it had
-// never happened: nothing in the harness can make Present fail, and waiting for
-// a real driver reset is not a test. This injects ONE synthetic
-// DXGI_ERROR_DEVICE_RESET into the Present result on the Nth call to Finish,
-// and then never again.
-//
-// WHY IT IS SOUND AS A DRIVE RATHER THAN A SIMULATION. It substitutes the
-// RETURN VALUE of Present and nothing else, at the exact place a real reset
-// would deliver it, so every line after it -- the two DXGI error comparisons,
-// the onLost notify, ReleaseDynamic, the d3dDevice null, DeviceData slots 3 and
-// 2, RecreateDynamic, the onRestored notify -- runs for real on the real
-// device. In particular the device really IS torn down and recreated; this is
-// not a mock of the recovery, it is the recovery.
-//
-// The one thing it does NOT reproduce is the D3D device being genuinely
-// removed, so `GetDeviceRemovedReason` is never consulted -- and it cannot be,
-// because DEVICE_RESET is one of the two values that SKIP that query
-// (0x180001820's two comparisons). Stated rather than implied: this drives the
-// NOTIFY-AND-RECREATE half of the path, which is the half PLAN 5.5 is about and
-// the half MainLoop::OnVideoError / OnVideoRestart live on.
-//
-// Off unless the env var is set, and `getenv` is process-cached
-// (standalone/options.h), so the read costs nothing per frame.
-// ============================================================
-namespace {
+void ContextData::Finish() {
+    ::Video::Device*     const device = _owner->_device;
+    DeviceData*          const dd     = OwnerDeviceData(_owner);
 
-// Returns true exactly once, on the Nth ContextData_Finish call.
-bool ForceDeviceLostThisFrame() {
-    static int  wanted = -2;      // -2 = not yet read, -1 = disabled
-    static long frame  = 0;
-    static bool fired  = false;
-    if (wanted == -2) {
-        const char* v = Opt().forceDeviceLost;
-        wanted = (v && *v) ? std::atoi(v) : -1;
-        if (wanted > 0)
-            std::fprintf(stderr,
-                "[DeviceLost] ARMED: a synthetic DXGI_ERROR_DEVICE_RESET will be "
-                "injected on Present #%d (PLAN 5.5 forced device-lost drive)\n",
-                wanted);
-    }
-    ++frame;
-    if (wanted <= 0 || fired || frame < wanted) return false;
-    fired = true;
-    return true;
-}
+    const UINT sync = ::Video::Configuration::_singleton->vsync != 0 ? 1u : 0u;
 
-}  // namespace
-
-void ContextData_Finish(ContextData* self) {
-    void*       device = OwnerDevice(self);
-    DeviceData* dd     = Field<DeviceData*>(device, Dev::kActiveDeviceData);
-
-    const void* config = ::Video::Configuration::_singleton;   // the class static (B.3.9 VID)
-    const UINT  sync   = Field<uint8_t>(config, kConfigVSync) != 0 ? 1u : 0u;
-
-    HRESULT hr = static_cast<IDXGISwapChain*>(dd->swapChain)->Present(sync, 0);
-    DevOf(device)->Unlock();
+    HRESULT hr = dd->swapChain->Present(sync, 0);
+    device->Unlock();
 
     // The PLAN 5.5 drive. Substitutes the Present result and nothing else; see
-    // the block comment above ContextData_Finish.
+    // the block comment above ForceDeviceLostThisFrame.
     if (ForceDeviceLostThisFrame()) {
         std::fprintf(stderr, "[DeviceLost] INJECTING DXGI_ERROR_DEVICE_RESET "
                              "(real Present returned 0x%08lx)\n",
@@ -650,31 +520,39 @@ void ContextData_Finish(ContextData* self) {
 
     if (hr == 0) return;
 
+    // DeviceData+0x20 (typed by B5 DEV-A, D4). Nothing above writes it, so one
+    // read serves both queries below.
+    ID3D11Device* const d3dDevice = dd->d3dDevice;
     if (hr != DXGI_ERROR_DEVICE_REMOVED && hr != DXGI_ERROR_DEVICE_RESET)
-        hr = static_cast<ID3D11Device*>(dd->d3dDevice)->GetDeviceRemovedReason();
+        hr = d3dDevice->GetDeviceRemovedReason();
     if (hr == 0) return;
-
-    void* owner = dd->_owner;   // DeviceData+0x08, the Video::Device* (B5 DEV-A: the base's _owner)
-
-    DeviceNotifyFn onLost = Field<DeviceNotifyFn>(owner, Dev::kOnDeviceLost);
-    std::fprintf(stderr, "[DeviceLost] hr=0x%08lx onLost=%p -> %s\n",
-                 static_cast<unsigned long>(hr), (void*)onLost,
-                 onLost ? "calling" : "*** NULL, notification SKIPPED ***");
-    std::fflush(stderr);
-    if (onLost) onLost();
-
-    DevOf(owner)->ReleaseDynamic();
-
-    dd->d3dDevice = nullptr;
 
     // B5 W0: the ONLY place dx11 read its own hand table by INDEX. Retail
     // (0x18000184f / 0x18000185c) dispatches slots 3 and 2 of the DeviceData;
     // the abstract base `Video::DeviceData` declares those slots by name in
     // retail order, so the by-name call reaches the same entries on the hand
-    // table today and the compiler's table once DeviceData is a real subclass
-    // (where a literal index 3 would have been `Slot4`: GCC spends two slots on
-    // `virtual ~DeviceData()`). The bridge cast is the CTX block's to remove.
-    ::Video::DeviceData* const ddBase = reinterpret_cast< ::Video::DeviceData*>(dd);   // B5 W0 bridge
+    // table today and the compiler's table once DeviceData is a real subclass.
+    // B5 CTX: `Video::Device::deviceData` is already that typed base pointer,
+    // so the base needs no cast (B5 DEV-A: and OwnerDeviceData's bridge is the
+    // single dx11 downcast Dx11DeviceDataOf now; DeviceData wears the compiler's table).
+    ::Video::DeviceData* const ddBase = device->deviceData;
+    ::Video::Device*     const owner  = ddBase->_owner;   // DeviceData+0x08
+
+    void (*const onLost)() = owner->onVideoError;          // Device+0x50
+    std::fprintf(stderr, "[DeviceLost] hr=0x%08lx onLost=%p -> %s\n",
+                 static_cast<unsigned long>(hr), (void*)onLost,
+                 onLost ? "calling" : "*** NULL, notification SKIPPED ***");
+    // B5 CTX (B5_RULES §6 a): diagnostic only — DEVLOST_FINDING noted the
+    // removed reason is never logged. A query, not a state change.
+    std::fprintf(stderr, "[DeviceLost] removed reason=0x%08lx\n",
+                 static_cast<unsigned long>(d3dDevice->GetDeviceRemovedReason()));
+    std::fflush(stderr);
+    if (onLost) onLost();
+
+    owner->ReleaseDynamic();
+
+    dd->d3dDevice = nullptr;
+
     ddBase->Shutdown();                           // retail slot 3
     const bool created = ddBase->CreateDevice();  // retail slot 2
 
@@ -695,9 +573,9 @@ void ContextData_Finish(ContextData* self) {
         return;
     }
 
-    DevOf(owner)->RecreateDynamic();
+    owner->RecreateDynamic();
 
-    DeviceNotifyFn onRestored = Field<DeviceNotifyFn>(owner, Dev::kOnDeviceRestored);
+    void (*const onRestored)() = owner->onVideoRestart;    // Device+0x58
     std::fprintf(stderr, "[DeviceLost] recreate OK; onRestored=%p -> %s\n",
                  (void*)onRestored,
                  onRestored ? "calling" : "*** NULL, notification SKIPPED ***");
@@ -712,26 +590,18 @@ static_assert(static_cast<unsigned>(DXGI_ERROR_INVALID_CALL)   == 0x887a0001u, "
 static_assert(static_cast<unsigned>(DXGI_ERROR_DEVICE_HUNG)    == 0x887a0006u, "hr constant");
 static_assert(static_cast<unsigned>(DXGI_ERROR_DRIVER_INTERNAL_ERROR) == 0x887a0020u, "hr constant");
 
-// Forward declarations: slot 4 calls slots 5 and 6 directly (near CALLs at
-// 0x18000194e and 0x180001963), not through the vtable. The port keeps that —
-// a vtable dispatch would let a half-enabled seam mix ported and un-ported
-// halves of one Clear.
-void ContextData_BindRenderBuffer(ContextData* self);
-void ContextData_BindViewport(ContextData* self);
-
 // Build the D3D11_RECT slots 4 and 7 both use: {x, y, x + w, y + h} from
 // Context+0x1e0..0x1ec. The shipped DLL has two copies of this (inlined into
 // 0x180001920 and standing alone at 0x180001be0); one helper emits the same
 // RSSetScissorRects call from both.
-inline void SetScissorFromContext(ContextData* self, void* ctx) {
+void ContextData::SetScissorFromContext() {
+    const Viewport& s = _owner->_scissor;
     D3D11_RECT r;
-    r.left   = Field<int32_t>(ctx, Ctx::kScissor + 0x0);
-    r.top    = Field<int32_t>(ctx, Ctx::kScissor + 0x4);
-    r.right  = Field<int32_t>(ctx, Ctx::kScissor + 0x8) +
-               Field<int32_t>(ctx, Ctx::kScissor + 0x0);
-    r.bottom = Field<int32_t>(ctx, Ctx::kScissor + 0xc) +
-               Field<int32_t>(ctx, Ctx::kScissor + 0x4);
-    Ctx3D(self)->RSSetScissorRects(1, &r);
+    r.left   = s.x;
+    r.top    = s.y;
+    r.right  = s.width  + s.x;
+    r.bottom = s.height + s.y;
+    d3dContext->RSSetScissorRects(1, &r);
 }
 
 // ============================================================
@@ -750,6 +620,9 @@ inline void SetScissorFromContext(ContextData* self, void* ctx) {
 //     flags & 0x0400 -> RSSetScissorRects(...)
 // then all three dirty bits are cleared in one AND.
 //
+// Slots 5 and 6 are reached by near CALLs (0x18000194e and 0x180001963), not
+// through the vtable; the QUALIFIED calls below are the same non-virtual call.
+//
 // The colour word is 0xAARRGGBB: the four components are extracted as
 // (c>>16)&0xff, (c>>8)&0xff, c&0xff, c>>24 and each is DIVIDED by 255.0f
 // (0x180018c54 = 0x437f0000). Division, not multiplication by a reciprocal —
@@ -760,21 +633,19 @@ inline void SetScissorFromContext(ContextData* self, void* ctx) {
 // onto D3D11_CLEAR_DEPTH / D3D11_CLEAR_STENCIL; ClearDepthStencilView is
 // skipped entirely when neither is asked for.
 // ============================================================
-void ContextData_Clear(ContextData* self, unsigned flags, unsigned color,
-                       float depth, int stencil) {
-    void* ctx = self->context;
+void ContextData::Clear(unsigned flags, unsigned color, float depth, int stencil) {
+    // The original tests bit 0x01 with a BYTE load of the dirty word; the low
+    // byte's bit 0 is the word's bit 0.
+    if (static_cast<uint8_t>(_owner->_dirty) & 0x01)
+        ContextData::BindRenderBuffer();
 
-    if (Field<uint8_t>(ctx, Ctx::kDirtyFlags) & 0x01)
-        ContextData_BindRenderBuffer(self);
+    if (_owner->_dirty & 0x200)
+        ContextData::BindViewport();
 
-    if (Field<uint32_t>(self->context, Ctx::kDirtyFlags) & 0x200)
-        ContextData_BindViewport(self);
+    if (_owner->_dirty & 0x400)
+        SetScissorFromContext();
 
-    ctx = self->context;
-    if (Field<uint32_t>(ctx, Ctx::kDirtyFlags) & 0x400)
-        SetScissorFromContext(self, ctx);
-
-    Field<uint32_t>(self->context, Ctx::kDirtyFlags) &= 0xfffff9feu;
+    _owner->_dirty &= 0xfffff9feu;
 
     if (flags & 1) {
         const float rgba[4] = {
@@ -783,21 +654,17 @@ void ContextData_Clear(ContextData* self, unsigned flags, unsigned color,
             static_cast<float>( color        & 0xff) / 255.0f,
             static_cast<float>( color >> 24)         / 255.0f,
         };
-        const void* rb = Field<void*>(self->context, Ctx::kRenderBuffer);
-        Ctx3D(self)->ClearRenderTargetView(
-            // ENDGAME B.3.5 block D2, RULE B5-2.3: `RenderBufferOwner` is now an
-            // alias of the real `Video::RenderBuffer`, hence its field name.
-            Dx11ImageRtv(static_cast<const RenderBufferOwner*>(rb)->colorBuffer), rgba);
+        const RenderBufferOwner* rb = _owner->_renderBuffer;
+        d3dContext->ClearRenderTargetView(Dx11ImageRtv(rb->colorBuffer), rgba);
     }
 
     UINT clearFlags = (flags & 2) ? D3D11_CLEAR_DEPTH : 0;
     if (flags & 4) clearFlags |= D3D11_CLEAR_STENCIL;
 
     if (clearFlags) {
-        const void* rb = Field<void*>(self->context, Ctx::kRenderBuffer);
-        Ctx3D(self)->ClearDepthStencilView(
-            Dx11ImageDsv(static_cast<const RenderBufferOwner*>(rb)->depthBuffer),
-            clearFlags, depth, static_cast<UINT8>(stencil));
+        const RenderBufferOwner* rb = _owner->_renderBuffer;
+        d3dContext->ClearDepthStencilView(Dx11ImageDsv(rb->depthBuffer),
+                                          clearFlags, depth, static_cast<UINT8>(stencil));
     }
 }
 static_assert(D3D11_CLEAR_DEPTH == 1 && D3D11_CLEAR_STENCIL == 2,
@@ -824,28 +691,22 @@ static_assert(D3D11_CLEAR_DEPTH == 1 && D3D11_CLEAR_STENCIL == 2,
 // This is a near CALL from slot 4 as well as a vtable slot; both paths run the
 // identical body.
 // ============================================================
-// ENDGAME B.3.5 block J: three imports became members and the readiness guard
-// went with them. `RenderBufferOwner` is already the real `Video::RenderBuffer`
-// (block D2), so the last line needs no cast on the receiver at all — only the
-// `Video::Context&` argument does.
-void ContextData_BindRenderBuffer(ContextData* self) {
-    for (int i = 0; i < Ctx::kTextureSlotCount; ++i) {
-        void* ctx = self->context;
-        void* bound = Field<void*>(ctx, Ctx::kTextures + static_cast<size_t>(i) * 8);
-        const RenderBufferOwner* rb =
-            Field<const RenderBufferOwner*>(ctx, Ctx::kRenderBuffer);
+void ContextData::BindRenderBuffer() {
+    for (int i = 0; i < kTextureSlotCount; ++i) {
+        ::Video::Context* const ctx = _owner;
+        const ::Video::ImageBuffer* bound = ctx->_imageBuffers[i];
+        const RenderBufferOwner* rb = ctx->_renderBuffer;
         if (bound == rb->colorBuffer || bound == rb->depthBuffer)
-            CtxOf(ctx)->SetImageBuffer(nullptr, i);
+            ctx->SetImageBuffer(nullptr, i);
     }
 
-    void* ctx = self->context;
-    if (Field<uint8_t>(ctx, Ctx::kDirtyFlags) & 0x02) {
-        CtxOf(ctx)->BindTextures();
-        Field<uint32_t>(self->context, Ctx::kDirtyFlags) &= 0xfffffffdu;
+    // A byte test in the original, as in slot 4.
+    if (static_cast<uint8_t>(_owner->_dirty) & 0x02) {
+        _owner->BindTextures();
+        _owner->_dirty &= 0xfffffffdu;
     }
 
-    ctx = self->context;
-    Field<const RenderBufferOwner*>(ctx, Ctx::kRenderBuffer)->Bind(*CtxOf(ctx));
+    _owner->_renderBuffer->Bind(*_owner);
 }
 
 // ============================================================
@@ -855,25 +716,25 @@ void ContextData_BindRenderBuffer(ContextData* self) {
 // the int32 viewport at Context+0x1d0. MaxDepth comes from the 1.0f constant at
 // 0x180018c50; MinDepth is an `xorps`'d zero.
 // ============================================================
-void ContextData_BindViewport(ContextData* self) {
-    void* ctx = self->context;
+void ContextData::BindViewport() {
+    const Viewport& v = _owner->_viewport;
 
     D3D11_VIEWPORT vp;
-    vp.TopLeftX = static_cast<float>(Field<int32_t>(ctx, Ctx::kViewport + 0x0));
-    vp.TopLeftY = static_cast<float>(Field<int32_t>(ctx, Ctx::kViewport + 0x4));
-    vp.Width    = static_cast<float>(Field<int32_t>(ctx, Ctx::kViewport + 0x8));
-    vp.Height   = static_cast<float>(Field<int32_t>(ctx, Ctx::kViewport + 0xc));
+    vp.TopLeftX = static_cast<float>(v.x);
+    vp.TopLeftY = static_cast<float>(v.y);
+    vp.Width    = static_cast<float>(v.width);
+    vp.Height   = static_cast<float>(v.height);
     vp.MinDepth = 0.0f;
     vp.MaxDepth = 1.0f;
 
-    Ctx3D(self)->RSSetViewports(1, &vp);
+    d3dContext->RSSetViewports(1, &vp);
 }
 
 // ============================================================
 // Slot 7 — void BindScissor()  (0x180001be0)
 // ============================================================
-void ContextData_BindScissor(ContextData* self) {
-    SetScissorFromContext(self, self->context);
+void ContextData::BindScissor() {
+    SetScissorFromContext();
 }
 
 // ============================================================
@@ -895,41 +756,28 @@ void ContextData_BindScissor(ContextData* self) {
 //
 // Signature of the callee (from the import table):
 //     ?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z
-//       void ConstantBuffer::Bind(Context&, void* data, int offset, int size)
-// The `offset` argument is the literal 0 in both calls.
-//
-// ENDGAME B.3.5 block J: that import is `Video::ConstantBuffer::Bind` now
-// (runtime/types/video/ConstantBuffer.h; body in constant_buffer.cpp). The two
-// receivers are the two ConstantBuffers EMBEDDED in the Context at +0x2050 and
-// +0x2008, which retail takes the address of with LEA and this file reaches with
-// `FieldPtr` — so they keep the raw-offset spelling and take the bridge cast. The
-// readiness guard went with the import.
+//       void ConstantBuffer::Bind(Context& context, void* data, int offset, int size)
+// The `offset` argument is the literal 0 in both calls. The two receivers are
+// the ConstantBuffers EMBEDDED in the Context (`LEA` in retail): named members
+// now (B5 CTX), so the B.3.5 bridge casts are gone.
 // ============================================================
-void ContextData_BindTransforms(ContextData* self) {
-    void* ctx = self->context;
-    if (Field<uint32_t>(ctx, Ctx::kDirtyFlags) & 0x4000) {
-        // B.3.5 bridge — an embedded ConstantBuffer reached by offset.
-        reinterpret_cast< ::Video::ConstantBuffer*>(
-            FieldPtr(ctx, Ctx::kTransformConstantBuffer))
-            ->Bind(*CtxOf(ctx),
-                   FieldPtr(ctx, Ctx::kTransformData),
-                   0,
-                   Field<int32_t>(ctx, Ctx::kTransformCount) << 6);
+void ContextData::BindTransforms() {
+    ::Video::Context* ctx = _owner;
+    if (ctx->_dirty & 0x4000) {
+        ctx->_transformConstants.Bind(*ctx,
+                                      ctx->_transforms,
+                                      0,
+                                      ctx->_transformCount << 6);
     }
 
-    ctx = self->context;
-    if (Field<int32_t>(ctx, Ctx::kBoneCount) > 0) {
-        // B.3.5 bridge — the other embedded ConstantBuffer.
-        reinterpret_cast< ::Video::ConstantBuffer*>(
-            FieldPtr(ctx, Ctx::kBoneConstantBuffer))
-            ->Bind(*CtxOf(ctx),
-                   FieldPtr(ctx, Ctx::kBoneData),
-                   0,
-                   Ctx::kBoneDataBytes);
+    ctx = _owner;
+    if (ctx->_unknown0024 > 0) {
+        ctx->_boneConstants.Bind(*ctx,
+                                 ctx->_boneAndProjectionStaging,
+                                 0,
+                                 kBoneDataBytes);
     }
 }
-static_assert(Ctx::kBoneData + Ctx::kBoneDataBytes == Ctx::kTransformData,
-              "bone block is adjacent to the transform block");
 
 // ============================================================
 // Slot 9 — void BindTextureNone(int slot)  (0x180001cb0)
@@ -940,12 +788,12 @@ static_assert(Ctx::kBoneData + Ctx::kBoneDataBytes == Ctx::kTransformData,
 //
 // Pixel stage only — the vertex stage's sampler/SRV slots are never unbound.
 // ============================================================
-void ContextData_BindTextureNone(ContextData* self, int slot) {
+void ContextData::BindTextureNone(int slot) {
     ID3D11SamplerState*       nullSampler = nullptr;
     ID3D11ShaderResourceView* nullSrv     = nullptr;
 
-    Ctx3D(self)->PSSetSamplers(static_cast<UINT>(slot), 1, &nullSampler);
-    Ctx3D(self)->PSSetShaderResources(static_cast<UINT>(slot), 1, &nullSrv);
+    d3dContext->PSSetSamplers(static_cast<UINT>(slot), 1, &nullSampler);
+    d3dContext->PSSetShaderResources(static_cast<UINT>(slot), 1, &nullSrv);
 }
 
 // ============================================================
@@ -959,8 +807,8 @@ void ContextData_BindTextureNone(ContextData* self, int slot) {
 // This slot is the proof that ContextData+0x18 is the cached context: it loads
 // [RCX+0x18] and calls straight through it with no singleton walk at all.
 // ============================================================
-void ContextData_BindIndexNone(ContextData* self) {
-    Ctx3D(self)->IASetIndexBuffer(nullptr, DXGI_FORMAT_R16_UINT, 0);
+void ContextData::BindIndexNone() {
+    d3dContext->IASetIndexBuffer(nullptr, DXGI_FORMAT_R16_UINT, 0);
 }
 static_assert(static_cast<int>(DXGI_FORMAT_R16_UINT) == 0x39,
               "the literal 0x39 encoded at 0x180001d19");
@@ -971,13 +819,13 @@ static_assert(static_cast<int>(DXGI_FORMAT_R16_UINT) == 0x39,
 // IASetVertexBuffers(slot, 1, {NULL}, {0}, {0}). The stride and offset arrays
 // are separate zeroed stack dwords in the original; both are passed by address.
 // ============================================================
-void ContextData_BindVertexNone(ContextData* self, int slot) {
+void ContextData::BindVertexNone(int slot) {
     ID3D11Buffer* nullBuffer = nullptr;
     UINT          stride     = 0;
     UINT          offset     = 0;
 
-    Ctx3D(self)->IASetVertexBuffers(static_cast<UINT>(slot), 1,
-                                    &nullBuffer, &stride, &offset);
+    d3dContext->IASetVertexBuffers(static_cast<UINT>(slot), 1,
+                                   &nullBuffer, &stride, &offset);
 }
 
 // ============================================================
@@ -1007,34 +855,32 @@ void ContextData_BindVertexNone(ContextData* self, int slot) {
 // signed divide-by-3 (magic 0x55555556, `MOV EAX,EDX; SHR EAX,31; ADD EDX,EAX`),
 // which is exactly C's truncating `/ 3`, negatives included.
 // ============================================================
-void ContextData_DrawIndexed(ContextData* self, int primitiveType,
-                             int baseVertex, int vertexCount,
-                             int startIndex, int indexCount, int instanceCount) {
+void ContextData::DrawIndexed(int primitiveType, int baseVertex, int vertexCount,
+                              int startIndex, int indexCount, int instanceCount) {
     (void)primitiveType;   // deliberately unused past this point — see above
 
-    void* ctx = self->context;
-    Field<int32_t>(ctx, Ctx::kTrianglesSubmitted) += (indexCount / 3) * instanceCount;
-    Field<int32_t>(self->context, Ctx::kVerticesSubmitted) += vertexCount * instanceCount;
-    Field<int32_t>(self->context, Ctx::kDrawsSubmitted)    += 1;
-    Field<int32_t>(self->context, Ctx::kObjectsSubmitted)  += instanceCount;
+    _owner->_trianglesSubmitted += (indexCount / 3) * instanceCount;
+    _owner->_verticesSubmitted  += vertexCount * instanceCount;
+    _owner->_drawsSubmitted     += 1;
+    _owner->_objectsSubmitted   += instanceCount;
 
-    CtxOf(self->context)->BindResources();
+    _owner->BindResources();
 
-    if (self->topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) {
-        self->topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-        Ctx3D(self)->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    if (topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) {
+        topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+        d3dContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     }
 
     if (instanceCount == 1) {
-        Ctx3D(self)->DrawIndexed(static_cast<UINT>(indexCount),
-                                 static_cast<UINT>(startIndex),
-                                 baseVertex);
+        d3dContext->DrawIndexed(static_cast<UINT>(indexCount),
+                                static_cast<UINT>(startIndex),
+                                baseVertex);
     } else {
-        Ctx3D(self)->DrawIndexedInstanced(static_cast<UINT>(indexCount),
-                                          static_cast<UINT>(instanceCount),
-                                          static_cast<UINT>(startIndex),
-                                          baseVertex,
-                                          0);
+        d3dContext->DrawIndexedInstanced(static_cast<UINT>(indexCount),
+                                         static_cast<UINT>(instanceCount),
+                                         static_cast<UINT>(startIndex),
+                                         baseVertex,
+                                         0);
     }
 }
 static_assert(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST == 4, "topology literal 4");
@@ -1049,8 +895,7 @@ static_assert(D3D11_PRIMITIVE_TOPOLOGY_LINELIST == 2, "topology literal 2");
 // any other constant here. It is not the bone-block capacity (0xcc0 / 64 = 51)
 // and not the transform-block size. Left as the literal.
 // ============================================================
-int ContextData_GetMaxDynamicInstances(ContextData* /*self*/,
-                                       int /*a*/, int /*b*/, int /*c*/) {
+int ContextData::GetMaxDynamicInstances(int /*a*/, int /*b*/, int /*c*/) {
     return 0x34;
 }
 
@@ -1063,9 +908,8 @@ int ContextData_GetMaxDynamicInstances(ContextData* /*self*/,
 // Context+0x20e0 for Video::Context::AddVertex to fill.
 //
 // The capacity test reads the FIRST DWORD of the Video::VertexBuffer
-// (`MOV ECX,[RAX]`) and is a strict `<`: a request equal to the capacity is
-// rejected. VertexBuffer+0x00 is not otherwise identified by this DLL; the
-// context makes it a byte capacity.
+// (`MOV ECX,[RAX]`, `Video::VertexBuffer::size`) and is a strict `<`: a request
+// equal to the capacity is rejected.
 //
 // Which argument is which is settled by slot 15, which passes Context+0x2104 to
 // ID3D11DeviceContext::Draw as the vertex count, and by Runtime's AddVertex
@@ -1075,25 +919,22 @@ int ContextData_GetMaxDynamicInstances(ContextData* /*self*/,
 // Note the return is `Context+0x20e0 != 0` re-read from memory, not the local
 // the Lock returned. Same value; kept literal.
 // ============================================================
-bool ContextData_BeginVertices(ContextData* self, int vertexCount, int vertexStride) {
-    void* ctx = self->context;
-    void* vb  = Field<void*>(ctx, Ctx::kDynVertexBuffer);
-    if (*static_cast<const int32_t*>(vb) <= vertexCount * vertexStride)
+bool ContextData::BeginVertices(int vertexCount, int vertexStride) {
+    ::Video::Context* ctx = _owner;
+    if (ctx->_dynamicVertexBuffer->size <= vertexCount * vertexStride)
         return false;
 
-    Field<int32_t>(self->context, Ctx::kDynVertexStride) = vertexStride;
-    Field<int32_t>(self->context, Ctx::kDynVertexCount)  = vertexCount;
+    _owner->_dynamicVertexStride = vertexStride;
+    _owner->_unknown2104         = vertexCount;            // +0x2104 vertex count
 
-    ctx = self->context;
-    void* mapped = VbOf(Field<void*>(ctx, Ctx::kDynVertexBuffer))
-        ->Lock(vertexCount * vertexStride,
-               Field<int32_t>(ctx, Ctx::kDynVertexOffset));
+    ctx = _owner;
+    void* mapped = ctx->_dynamicVertexBuffer->Lock(vertexCount * vertexStride,
+                                                   ctx->_unknown2100);   // +0x2100 byte offset
 
-    Field<void*>(self->context, Ctx::kDynVertexCursor) = mapped;
-    Field<void*>(self->context, Ctx::kDynVertexBase) =
-        Field<void*>(self->context, Ctx::kDynVertexCursor);
+    _owner->_dynamicVertexCursor = static_cast<uint8_t*>(mapped);
+    _owner->_unknown2108         = _owner->_dynamicVertexCursor;          // +0x2108 Lock result
 
-    return Field<void*>(self->context, Ctx::kDynVertexCursor) != nullptr;
+    return _owner->_dynamicVertexCursor != nullptr;
 }
 
 // Topology filter shared by slots 15, 17 and 19 (identical code in each). The
@@ -1101,20 +942,20 @@ bool ContextData_BeginVertices(ContextData* self, int vertexCount, int vertexStr
 // value does NOTHING AT ALL — no call, and no update of the cache — so the
 // draw inherits whatever topology was last set. Preserved verbatim: the values
 // 1 and 3 are presumably strips that this backend never implemented.
-inline void ApplyPrimitiveType(ContextData* self, int primitiveType) {
-    int topology;
+void ContextData::ApplyPrimitiveType(int primitiveType) {
+    int newTopology;
     if (primitiveType == 0) {
-        if (self->topology == D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) return;
-        topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+        if (topology == D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) return;
+        newTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
     } else if (primitiveType == 2) {
-        if (self->topology == D3D11_PRIMITIVE_TOPOLOGY_LINELIST) return;
-        topology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+        if (topology == D3D11_PRIMITIVE_TOPOLOGY_LINELIST) return;
+        newTopology = D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
     } else {
         return;
     }
-    self->topology = topology;
-    Ctx3D(self)->IASetPrimitiveTopology(
-        static_cast<D3D11_PRIMITIVE_TOPOLOGY>(topology));
+    topology = newTopology;
+    d3dContext->IASetPrimitiveTopology(
+        static_cast<D3D11_PRIMITIVE_TOPOLOGY>(newTopology));
 }
 
 // ============================================================
@@ -1131,36 +972,29 @@ inline void ApplyPrimitiveType(ContextData* self, int primitiveType) {
 //
 // The final Draw is a tail jump: Draw(Context+0x2104, 0).
 // ============================================================
-void ContextData_EndVertices(ContextData* self, int primitiveType) {
-    Field<void*>(self->context, Ctx::kDynVertexCursor) = nullptr;
-    VbOf(Field<void*>(self->context, Ctx::kDynVertexBuffer))->Unlock();
+void ContextData::EndVertices(int primitiveType) {
+    _owner->_dynamicVertexCursor = nullptr;
+    _owner->_dynamicVertexBuffer->Unlock();
 
-    void* ctx = self->context;
-    CtxOf(ctx)->SetVertexBuffer(Field<void*>(ctx, Ctx::kDynVertexBuffer),
-                                0,
-                                Field<int32_t>(ctx, Ctx::kDynVertexOffset),
-                                Field<int32_t>(ctx, Ctx::kDynVertexStride));
+    ::Video::Context* ctx = _owner;
+    ctx->SetVertexBuffer(ctx->_dynamicVertexBuffer,
+                         0,
+                         ctx->_unknown2100,
+                         ctx->_dynamicVertexStride);
 
-    ctx = self->context;
-    const int vertexCount = Field<int32_t>(ctx, Ctx::kDynVertexCount);
-    Field<int32_t>(ctx, Ctx::kTrianglesSubmitted) += vertexCount / 3;
-    Field<int32_t>(self->context, Ctx::kVerticesSubmitted) +=
-        Field<int32_t>(self->context, Ctx::kDynVertexCount);
-    Field<int32_t>(self->context, Ctx::kDrawsSubmitted)   += 1;
-    Field<int32_t>(self->context, Ctx::kObjectsSubmitted) += 1;
+    ctx = _owner;
+    const int vertexCount = ctx->_unknown2104;
+    ctx->_trianglesSubmitted += vertexCount / 3;
+    _owner->_verticesSubmitted += _owner->_unknown2104;
+    _owner->_drawsSubmitted    += 1;
+    _owner->_objectsSubmitted  += 1;
 
-    CtxOf(self->context)->BindResources();
+    _owner->BindResources();
 
-    ApplyPrimitiveType(self, primitiveType);
+    ApplyPrimitiveType(primitiveType);
 
-    Ctx3D(self)->Draw(
-        static_cast<UINT>(Field<int32_t>(self->context, Ctx::kDynVertexCount)), 0);
+    d3dContext->Draw(static_cast<UINT>(_owner->_unknown2104), 0);
 }
-
-// Forward declaration: slot 16 is a two-instruction shim over slot 18.
-bool ContextData_BeginInstancedIndexedVertices(ContextData* self, int vertexCount,
-                                               int vertexStride, int indexCount,
-                                               int instanceCount);
 
 // ============================================================
 // Slot 16 — bool BeginIndexedVertices(int vertexCount, int vertexStride,
@@ -1169,12 +1003,11 @@ bool ContextData_BeginInstancedIndexedVertices(ContextData* self, int vertexCoun
 //     180002004  MOV dword ptr [RSP+0x20],0x1   ; instanceCount = 1
 //     18000200c  CALL 0x180002030               ; slot 18
 //
-// A literal near CALL, so the port calls the same function directly.
+// A literal near CALL, so the port makes the same NON-virtual call (qualified).
 // ============================================================
-bool ContextData_BeginIndexedVertices(ContextData* self, int vertexCount,
-                                      int vertexStride, int indexCount) {
-    return ContextData_BeginInstancedIndexedVertices(self, vertexCount,
-                                                     vertexStride, indexCount, 1);
+bool ContextData::BeginIndexedVertices(int vertexCount, int vertexStride, int indexCount) {
+    return ContextData::BeginInstancedIndexedVertices(vertexCount, vertexStride,
+                                                      indexCount, 1);
 }
 
 // ============================================================
@@ -1201,49 +1034,55 @@ bool ContextData_BeginIndexedVertices(ContextData* self, int vertexCount,
 // `capacity <= bytes` and the index test rejects `bytes >= capacity`. Those are
 // the same predicate, written differently in the original; no asymmetry.
 // ============================================================
-bool ContextData_BeginInstancedIndexedVertices(ContextData* self, int vertexCount,
-                                               int vertexStride, int indexCount,
-                                               int instanceCount) {
-    void* ctx = self->context;
-    void* vb  = Field<void*>(ctx, Ctx::kDynVertexBuffer);
-    const int32_t vertexCapacity = *static_cast<const int32_t*>(vb);
+bool ContextData::BeginInstancedIndexedVertices(int vertexCount, int vertexStride,
+                                                int indexCount, int instanceCount) {
+    ::Video::Context* ctx = _owner;
+    const int32_t vertexCapacity = ctx->_dynamicVertexBuffer->size;
 
     if (vertexCapacity <= vertexCount * vertexStride) return false;
     if (indexCount * 2 >= vertexCapacity) return false;   // sic — see above
 
-    Field<int32_t>(ctx, Ctx::kDynVertexStride) = vertexStride;
-    Field<int32_t>(self->context, Ctx::kDynVertexCount)    = vertexCount;
-    Field<int32_t>(self->context, Ctx::kDynInstanceCount)  = instanceCount;
+    ctx->_dynamicVertexStride = vertexStride;
+    _owner->_unknown2104      = vertexCount;               // +0x2104 vertex count
+    _owner->_instanceCount    = instanceCount;
 
-    ctx = self->context;
-    void* mappedVertices = VbOf(Field<void*>(ctx, Ctx::kDynVertexBuffer))
-        ->Lock(vertexCount * vertexStride,
-               Field<int32_t>(ctx, Ctx::kDynVertexOffset));
+    ctx = _owner;
+    void* mappedVertices = ctx->_dynamicVertexBuffer->Lock(vertexCount * vertexStride,
+                                                           ctx->_unknown2100);   // +0x2100
 
-    Field<void*>(self->context, Ctx::kDynVertexCursor) = mappedVertices;
-    Field<void*>(self->context, Ctx::kDynVertexBase) =
-        Field<void*>(self->context, Ctx::kDynVertexCursor);
+    _owner->_dynamicVertexCursor = static_cast<uint8_t*>(mappedVertices);
+    _owner->_unknown2108         = _owner->_dynamicVertexCursor;
 
-    if (Field<void*>(self->context, Ctx::kDynVertexCursor) == nullptr) return false;
+    if (_owner->_dynamicVertexCursor == nullptr) return false;
 
-    Field<int32_t>(self->context, Ctx::kDynIndexCount) = indexCount;
+    _owner->_unknown2124 = indexCount;                     // +0x2124 index count
 
-    ctx = self->context;
-    void* mappedIndices = IbOf(Field<void*>(ctx, Ctx::kDynIndexBuffer))
-        ->Lock(indexCount * 2,
-               Field<int32_t>(ctx, Ctx::kDynIndexOffset));
+    ctx = _owner;
+    void* mappedIndices = ctx->_dynamicIndexBuffer->Lock(indexCount * 2,
+                                                         ctx->_unknown2120);     // +0x2120
 
-    Field<void*>(self->context, Ctx::kDynIndexCursor) = mappedIndices;
-    Field<void*>(self->context, Ctx::kDynIndexBase) =
-        Field<void*>(self->context, Ctx::kDynIndexCursor);
+    _owner->_dynamicIndexCursor = static_cast<uint16_t*>(mappedIndices);
+    _owner->_unknown2128        = _owner->_dynamicIndexCursor;                   // +0x2128
 
-    return Field<void*>(self->context, Ctx::kDynIndexCursor) != nullptr;
+    return _owner->_dynamicIndexCursor != nullptr;
 }
 
 // ============================================================
-// Slots 17 and 19 — void EndIndexedVertices(PrimitiveType) /
-//                   void EndInstancedIndexedVertices(PrimitiveType)
-//          (0x180002020 -> 0x180002150; one body, two slots)
+// Slot 17 — void EndIndexedVertices(PrimitiveType)  (0x180002020)
+//
+// Retail's slot 17 is the five bytes `e9 2b 01 00 00` = `jmp 0x180002150`:
+// slot 19's body. One body serves both because the instance count lives on the
+// Context (+0x2110) and the non-instanced Begin (slot 16) stores 1 there, so
+// slot 19's `instanceCount == 1` arm is exactly the non-instanced draw. The
+// qualified call is the jmp's non-virtual target.
+// ============================================================
+void ContextData::EndIndexedVertices(int primitiveType) {
+    ContextData::EndInstancedIndexedVertices(primitiveType);
+}
+
+// ============================================================
+// Slot 19 — void EndInstancedIndexedVertices(PrimitiveType)  (0x180002150;
+//           slot 17 jumps here)
 //
 // Unlock both dynamic buffers, rebind the vertex stream, mark the index binding
 // dirty on the Context if it moved, account, flush, apply the topology and draw.
@@ -1262,112 +1101,54 @@ bool ContextData_BeginInstancedIndexedVertices(ContextData* self, int vertexCoun
 // Statistics use the INSTANCE count as a multiplier on both triangles and
 // vertices, and add the instance count (not 1) to objectsSubmitted.
 // ============================================================
-void ContextData_EndInstancedIndexedVertices(ContextData* self, int primitiveType) {
-    Field<void*>(self->context, Ctx::kDynVertexCursor) = nullptr;
-    VbOf(Field<void*>(self->context, Ctx::kDynVertexBuffer))->Unlock();
+void ContextData::EndInstancedIndexedVertices(int primitiveType) {
+    _owner->_dynamicVertexCursor = nullptr;
+    _owner->_dynamicVertexBuffer->Unlock();
 
-    Field<void*>(self->context, Ctx::kDynIndexCursor) = nullptr;
-    IbOf(Field<void*>(self->context, Ctx::kDynIndexBuffer))->Unlock();
+    _owner->_dynamicIndexCursor = nullptr;
+    _owner->_dynamicIndexBuffer->Unlock();
 
-    void* ctx = self->context;
-    CtxOf(ctx)->SetVertexBuffer(Field<void*>(ctx, Ctx::kDynVertexBuffer),
-                                0,
-                                Field<int32_t>(ctx, Ctx::kDynVertexOffset),
-                                Field<int32_t>(ctx, Ctx::kDynVertexStride));
+    ::Video::Context* ctx = _owner;
+    ctx->SetVertexBuffer(ctx->_dynamicVertexBuffer,
+                         0,
+                         ctx->_unknown2100,
+                         ctx->_dynamicVertexStride);
 
-    ctx = self->context;
-    void* const   dynIb     = Field<void*>(ctx, Ctx::kDynIndexBuffer);
-    const int32_t dynOffset = Field<int32_t>(ctx, Ctx::kDynIndexOffset);
-    if (dynIb     != Field<void*>(ctx, Ctx::kBoundIndexBuffer) ||
-        dynOffset != Field<int32_t>(ctx, Ctx::kBoundIndexOffset)) {
-        Field<uint32_t>(ctx, Ctx::kDirtyFlags) |= 0x10u;
-        Field<void*>(ctx, Ctx::kBoundIndexBuffer) = dynIb;
-        Field<int32_t>(ctx, Ctx::kBoundIndexOffset) = dynOffset;
+    ctx = _owner;
+    ::Video::IndexBuffer* const dynIb     = ctx->_dynamicIndexBuffer;
+    const int32_t               dynOffset = ctx->_unknown2120;
+    if (dynIb     != ctx->_indexBuffer ||
+        dynOffset != ctx->_indexOffset) {
+        ctx->_dirty       |= 0x10u;
+        ctx->_indexBuffer  = dynIb;
+        ctx->_indexOffset  = dynOffset;
     }
 
-    ctx = self->context;
-    const int indexCount    = Field<int32_t>(ctx, Ctx::kDynIndexCount);
-    const int instanceCount = Field<int32_t>(ctx, Ctx::kDynInstanceCount);
-    Field<int32_t>(ctx, Ctx::kTrianglesSubmitted) += (indexCount / 3) * instanceCount;
+    ctx = _owner;
+    const int indexCount    = ctx->_unknown2124;
+    const int instanceCount = ctx->_instanceCount;
+    ctx->_trianglesSubmitted += (indexCount / 3) * instanceCount;
 
-    ctx = self->context;
-    Field<int32_t>(ctx, Ctx::kVerticesSubmitted) +=
-        Field<int32_t>(ctx, Ctx::kDynInstanceCount) *
-        Field<int32_t>(ctx, Ctx::kDynVertexCount);
-    Field<int32_t>(self->context, Ctx::kDrawsSubmitted) += 1;
-    Field<int32_t>(self->context, Ctx::kObjectsSubmitted) +=
-        Field<int32_t>(self->context, Ctx::kDynInstanceCount);
+    ctx = _owner;
+    ctx->_verticesSubmitted += ctx->_instanceCount * ctx->_unknown2104;
+    _owner->_drawsSubmitted   += 1;
+    _owner->_objectsSubmitted += _owner->_instanceCount;
 
-    CtxOf(self->context)->BindResources();
+    _owner->BindResources();
 
-    ApplyPrimitiveType(self, primitiveType);
+    ApplyPrimitiveType(primitiveType);
 
-    ctx = self->context;
+    ctx = _owner;
     const UINT startIndex = static_cast<UINT>(
-        static_cast<uint64_t>(static_cast<int64_t>(
-            Field<int32_t>(ctx, Ctx::kDynIndexOffset))) >> 1);
+        static_cast<uint64_t>(static_cast<int64_t>(ctx->_unknown2120)) >> 1);
 
-    if (Field<int32_t>(ctx, Ctx::kDynInstanceCount) == 1) {
-        Ctx3D(self)->DrawIndexed(
-            static_cast<UINT>(Field<int32_t>(ctx, Ctx::kDynIndexCount)),
-            startIndex, 0);
+    if (ctx->_instanceCount == 1) {
+        d3dContext->DrawIndexed(static_cast<UINT>(ctx->_unknown2124), startIndex, 0);
     } else {
-        Ctx3D(self)->DrawIndexedInstanced(
-            static_cast<UINT>(Field<int32_t>(ctx, Ctx::kDynIndexCount)),
-            static_cast<UINT>(Field<int32_t>(ctx, Ctx::kDynInstanceCount)),
-            startIndex, 0, 0);
+        d3dContext->DrawIndexedInstanced(static_cast<UINT>(ctx->_unknown2124),
+                                         static_cast<UINT>(ctx->_instanceCount),
+                                         startIndex, 0, 0);
     }
 }
 
-}  // namespace
 }  // namespace VideoDX11
-
-// ---------------------------------------------------------------------------
-// Registration
-//
-// All 20 slots are live and unconditional. They were verified in-game and
-// RenderDoc-diffed against the shipped DLL — see dx11/README.md §"Per-draw
-// pipeline-state equality".
-//
-// Slots 17 and 19 share one implementation because 0x180002020 is a `jmp` to
-// 0x180002150 — see the comment on the function.
-// ---------------------------------------------------------------------------
-
-DX11_REGISTER_SLOT(ContextData, 0, &::VideoDX11::ContextData_Dtor,
-                   "ContextData::~ (scalar deleting)");
-DX11_REGISTER_SLOT(ContextData, 1, &::VideoDX11::ContextData_BeginCommands,
-                   "ContextData::BeginCommands");
-DX11_REGISTER_SLOT(ContextData, 2, &::VideoDX11::ContextData_EndCommands,
-                   "ContextData::EndCommands");
-DX11_REGISTER_SLOT(ContextData, 3, &::VideoDX11::ContextData_Finish, "ContextData::Finish");
-DX11_REGISTER_SLOT(ContextData, 4, &::VideoDX11::ContextData_Clear, "ContextData::Clear");
-DX11_REGISTER_SLOT(ContextData, 5, &::VideoDX11::ContextData_BindRenderBuffer,
-                   "ContextData::BindRenderBuffer");
-DX11_REGISTER_SLOT(ContextData, 6, &::VideoDX11::ContextData_BindViewport,
-                   "ContextData::BindViewport");
-DX11_REGISTER_SLOT(ContextData, 7, &::VideoDX11::ContextData_BindScissor,
-                   "ContextData::BindScissor");
-DX11_REGISTER_SLOT(ContextData, 8, &::VideoDX11::ContextData_BindTransforms,
-                   "ContextData::BindTransforms");
-DX11_REGISTER_SLOT(ContextData, 9, &::VideoDX11::ContextData_BindTextureNone,
-                   "ContextData::BindTextureNone");
-DX11_REGISTER_SLOT(ContextData, 10, &::VideoDX11::ContextData_BindIndexNone,
-                   "ContextData::BindIndexNone");
-DX11_REGISTER_SLOT(ContextData, 11, &::VideoDX11::ContextData_BindVertexNone,
-                   "ContextData::BindVertexNone");
-DX11_REGISTER_SLOT(ContextData, 12, &::VideoDX11::ContextData_DrawIndexed,
-                   "ContextData::DrawIndexed");
-DX11_REGISTER_SLOT(ContextData, 13, &::VideoDX11::ContextData_GetMaxDynamicInstances,
-                   "ContextData::GetMaxDynamicInstances (52)");
-DX11_REGISTER_SLOT(ContextData, 14, &::VideoDX11::ContextData_BeginVertices,
-                   "ContextData::BeginVertices");
-DX11_REGISTER_SLOT(ContextData, 15, &::VideoDX11::ContextData_EndVertices,
-                   "ContextData::EndVertices");
-DX11_REGISTER_SLOT(ContextData, 16, &::VideoDX11::ContextData_BeginIndexedVertices,
-                   "ContextData::BeginIndexedVertices");
-DX11_REGISTER_SLOT(ContextData, 17, &::VideoDX11::ContextData_EndInstancedIndexedVertices,
-                   "ContextData::EndIndexedVertices (= slot 19)");
-DX11_REGISTER_SLOT(ContextData, 18, &::VideoDX11::ContextData_BeginInstancedIndexedVertices,
-                   "ContextData::BeginInstancedIndexedVertices");
-DX11_REGISTER_SLOT(ContextData, 19, &::VideoDX11::ContextData_EndInstancedIndexedVertices,
-                   "ContextData::EndInstancedIndexedVertices");

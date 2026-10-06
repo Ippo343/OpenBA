@@ -357,7 +357,8 @@ Video::Device* Ctor_VideoDevice(Video::Device* self, int32_t type) {
     self->interfaceData      = nullptr;
     self->interfaceCount     = 0;
     self->interfaceCapacity  = 0;
-    std::memset(self->gap50, 0, sizeof(self->gap50));   // two qword stores in retail
+    self->onVideoError       = nullptr;   // +0x50 } two qword stores in retail
+    self->onVideoRestart     = nullptr;   // +0x58 }
     RtLaneXPlatformLockInit(self->lock);
     for (int i = 0; i < 3; ++i) {
         self->dllSlots[i].module           = nullptr;

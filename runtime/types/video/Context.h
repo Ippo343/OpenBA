@@ -311,23 +311,12 @@ public:
     void SetFog(float nearZ, float farZ, const Math::Vector4& color);  // 0x18001a360
     void SetViewport(const Viewport& vp);                          // 0x18001a060
     // B.4: SetVertexBuffer / SetRenderBuffer take retail's types
-    // (`PEBVVertexBuffer@2@`, `PEBVRenderBuffer@2@`); dx11's `void*` callers
-    // reach them through the inline B4 FORWARD overloads below.
+    // (`PEBVVertexBuffer@2@`, `PEBVRenderBuffer@2@`). B5 CTX (D8): the two
+    // `const void*` forwarders dx11 used are gone; dx11 calls these typed.
     void SetImageBuffer(const ImageBuffer* image, int32_t slot);   // 0x180019ed0
     void SetVertexBuffer(const VertexBuffer* vb, int32_t slot,
                          int32_t offset, int32_t stride);          // 0x180019f20
-    // B4 FORWARD: dx11/src/contextdata.cpp hands its dynamic vertex buffer as a
-    // `void*` (dx11 is outside wave Y); inline, as SetRenderBuffer's below.
-    void SetVertexBuffer(const void* vb, int32_t slot, int32_t offset, int32_t stride) {
-        SetVertexBuffer(static_cast<const VertexBuffer*>(vb), slot, offset, stride);    // CAST-OK: dx11_seam
-    }
     void SetRenderBuffer(const RenderBuffer* rb);                  // 0x1800f2100
-    // B4 FORWARD: dx11/src/contextdata.cpp:499 hands its default render
-    // buffer as a `void*` (dx11 is outside wave Y); inline, so the dx11 call
-    // site compiles to the typed call.
-    void SetRenderBuffer(const void* rb) {
-        SetRenderBuffer(static_cast<const RenderBuffer*>(rb));    // CAST-OK: dx11_seam
-    }
     void SetDefaultRenderBuffer(RenderBuffer* rb);                 // 0x1800ef3c0
     void SetTransform(int32_t slot, const Math::Matrix& m);        // 0x18001a6b0
     void SetTransformScale(int32_t slot, const Math::Matrix& m,
@@ -581,13 +570,23 @@ public:
     // stores).
     uint16_t* _dynamicIndexCursor;                      // 0x20f0
     VertexBuffer* _dynamicVertexBuffer;                 // 0x20f8
-    uint64_t _unknown2100;                              // 0x2100
-    uint64_t _unknown2108;                              // 0x2108
+    // B5 CTX: 0x2100..0x212f were two qwords per stream; the dx11 backend
+    // (ContextData slots 14-19) reads and writes them as these dword / pointer
+    // halves. Named by offset only -- no retail accessor names them. What the
+    // backend keeps in each:
+    //   0x2100 / 0x2120  int32  byte offset {Vertex,Index}Buffer::Lock writes
+    //                           through its `int&` out-parameter
+    //   0x2104 / 0x2124  int32  vertex count (BeginVertices) / index count
+    //   0x2108 / 0x2128  void*  a copy of the Lock result (the mapped base)
+    int32_t  _unknown2100;                              // 0x2100
+    int32_t  _unknown2104;                              // 0x2104
+    void*    _unknown2108;                              // 0x2108
     int32_t  _instanceCount;                            // 0x2110
     int32_t  _unknown2114;                              // 0x2114
     IndexBuffer* _dynamicIndexBuffer;                   // 0x2118
-    uint64_t _unknown2120;                              // 0x2120
-    uint64_t _unknown2128;                              // 0x2128
+    int32_t  _unknown2120;                              // 0x2120
+    int32_t  _unknown2124;                              // 0x2124
+    void*    _unknown2128;                              // 0x2128
     VertexBuffer* _dynamicInstanceBuffer;               // 0x2130
     RenderBuffer* _defaultRenderBuffer;                 // 0x2138
     ImageBuffer*  _defaultColorImage;                   // 0x2140
@@ -682,9 +681,11 @@ static_assert(offsetof(Context, _unknown01c4) == 0x1C4, "Context::_unknown01c4")
 static_assert(offsetof(Context, _unknown03b8) == 0x3B8, "Context::_unknown03b8");
 static_assert(offsetof(Context, _unknown20ec) == 0x20EC, "Context::_unknown20ec");
 static_assert(offsetof(Context, _unknown2100) == 0x2100, "Context::_unknown2100");
+static_assert(offsetof(Context, _unknown2104) == 0x2104, "Context::_unknown2104");
 static_assert(offsetof(Context, _unknown2108) == 0x2108, "Context::_unknown2108");
 static_assert(offsetof(Context, _unknown2114) == 0x2114, "Context::_unknown2114");
 static_assert(offsetof(Context, _unknown2120) == 0x2120, "Context::_unknown2120");
+static_assert(offsetof(Context, _unknown2124) == 0x2124, "Context::_unknown2124");
 static_assert(offsetof(Context, _unknown2128) == 0x2128, "Context::_unknown2128");
 static_assert(alignof(Context) == 8, "Video::Context is qword-aligned (MemAlloc's align 8)");
 
