@@ -73,11 +73,10 @@ unexported leaves, `Video::ShaderProgram`'s blob-array serializer helper
   bytes as a flat block. `std::is_trivially_copyable` is asserted on
   `Device`, `Configuration`, `RenderBuffer`, `IndexBuffer`, `VertexBuffer`,
   `ConstantBuffer`, `Viewport` and `Context` and is what enforces it.
-- **No virtual destructor.** Slot 0 of every polymorphic class is
-  `DeletingDtor(unsigned)`, the class's own member (ENDGAME B.3.9 deleted the
-  `RT_DELDTOR` table that used to hold its body). `~Class()` is non-virtual and in no
-  slot, so a door calls it as a QUALIFIED non-virtual
-  `p->Video::C::~C()` — never through slot 0, which would re-enter.
+- **Virtual destructors everywhere** since the normal-virtual cutover (B3X) and,
+  for the twelve `*Data` companion bases, since B5 (the dx11 seam): slot 0 is
+  `virtual ~Class()` and deletion is `delete p` through the root's class-scope
+  `operator delete` (companion_operators.cpp for the companions).
 - **The Device lock is byte-faithful** (RULE B5-6): an opaque `uint8_t lock[0x28]`
   at `Device+0x60` with a hand-rolled recursive acquire in `buffers_win.cpp`, and
   the owner-tid / depth words at pinned +0x88 / +0x8c that `dx11/` and the four

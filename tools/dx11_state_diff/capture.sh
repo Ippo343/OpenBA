@@ -96,15 +96,11 @@ fi
 # ── verify the run rendered on the renderer we asked for ────────────────────
 log="$GAME/standalone_debug.log"
 err="$GAME/standalone_error.log"
-mode_line=$(grep -m1 "\[Dx11Seam\] mode:" "$log" 2>/dev/null)
+# (B5, 2026-10-05: the `[Dx11Seam]` mode / slot / fallback lines are gone with the seam;
+# the compiler builds the twelve vtables. The VideoProbe line below is the proof.)
 vtable_line=$(grep -m1 "active vtable lives in:" "$log" 2>/dev/null)
-slots_line=$(grep -m1 "\[Dx11Seam\] \(Installed\|Standalone\):" "$log" 2>/dev/null)
-fallbacks=$(grep -m1 "fallbacks to shipped code:" "$log" "$err" 2>/dev/null | head -1)
 
-echo "  $mode_line"
-echo "  $slots_line"
 echo "  $vtable_line"
-echo "  $fallbacks"
 
 bad=0
 case "$vtable_line" in

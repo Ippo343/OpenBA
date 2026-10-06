@@ -323,7 +323,7 @@ void* BufferData_Lock(Data* self, int32_t sizeBytes, int32_t* outByteOffset) {
     // for the non-negative sizes this is ever called with the two agree.
     self->writeCursor += ((sizeBytes + 1) / 2) * 2;
 
-    return reinterpret_cast<uint8_t*>(mapped.pData) + *outByteOffset;
+    return reinterpret_cast<uint8_t*>(mapped.pData) + *outByteOffset;   // CAST-OK: gpu_map
 }
 
 // 0x180003340 — Unlock()

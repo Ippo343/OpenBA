@@ -211,7 +211,7 @@ const int kFormatBytes[8]  = {    8,   16,   16,    1,    1,    4,    4,    4 };
 // growth. NOTE FOR LANE L6: this belongs to DeviceData; hoist it when
 // DeviceData lands (see the header comment).
 // ============================================================
-void TrackImageBuffer(DeviceData* dd, void* imageBuffer) {
+void TrackImageBuffer(DeviceData* dd, ::Video::ImageBuffer* imageBuffer) {
     // B5 DEV-A: DeviceData::trackedImages is typed `Video::ImageBuffer**` now
     // (VideoDX11Data.h), so the array is walked as what it holds.
     const int                    oldCount = dd->trackedCount;
@@ -249,7 +249,7 @@ void TrackImageBuffer(DeviceData* dd, void* imageBuffer) {
 
 // The matching stable shift-erase, inlined into ~ImageBufferData at
 // 0x1800024b2-0x180002505. Removes every occurrence (there is at most one).
-void UntrackImageBuffer(DeviceData* dd, void* imageBuffer) {
+void UntrackImageBuffer(DeviceData* dd, ::Video::ImageBuffer* imageBuffer) {
     for (int i = 0; i < dd->trackedCount; ++i) {
         if (dd->trackedImages[i] != imageBuffer) continue;
         for (int j = i + 1; j < dd->trackedCount; ++j) {
@@ -685,8 +685,8 @@ bool ImageBufferData::Read(void* dst, int width, int height) {
 
     // The caller's buffer and the mapped rows are plain bytes; name them as such
     // once (B5 RES: was a cast + offset inside each memcpy argument).
-    uint8_t* const       out = static_cast<uint8_t*>(dst);
-    const uint8_t* const in  = static_cast<const uint8_t*>(mapped.pData);
+    uint8_t* const       out = static_cast<uint8_t*>(dst);   // CAST-OK: byte_io (the caller's pixel buffer)
+    const uint8_t* const in  = static_cast<const uint8_t*>(mapped.pData);   // CAST-OK: gpu_map
     const int dstPitch = width * 4;
     int srcOffset = 0;
     int dstOffset = 0;

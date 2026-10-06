@@ -1,20 +1,19 @@
 #pragma once
-// Binary-compatible layouts for the 12 Video::*Data subclasses defined by
-// VideoDX11-x64.dll.
+// The twelve `VideoDX11::*Data` classes: VideoDX11-x64.dll's concrete companions,
+// as real C++ subclasses of the runtime's abstract `Video::*Data` bases
+// (runtime/types/video/CompanionData.h) -- ENDGAME B5, the dx11 seam (2026-10-05).
 //
-// Every one of these derives from a Video::*Data base class that lives in
-// Runtime-x64.dll. The base contributes the first 0x10 bytes:
+// The base contributes the first 0x10 bytes (the compiler's vptr at +0x00 and the
+// typed `_owner` at +0x08); the private tail follows at +0x10, laid out and sized
+// exactly as the shipped plugin's MemAlloc(size, 4) in each DeviceData factory
+// slot (every field and the sizeof are static_asserted). Every slot is an
+// `override` in retail order with the retail address in its trailing comment; the
+// compiler builds the vtable (two destructor slots, so retail slot N >= 1 is
+// compiler slot N + 1 -- nothing indexes these tables). See ../README.md for the
+// status board and ../../decomp/videodx11.md for the derivation.
 //
-//     +0x00  void*  vptr        (overwritten by VideoDX11 after the base ctor)
-//     +0x08  void*  owner       (back-pointer to the Video::* object)
-//
-// Sizes below are exact: each comes from the MemAlloc(size, 4) in the
-// corresponding DeviceData factory slot. See ../README.md for the vtable map
-// and ../../decomp/videodx11.md for the derivation.
-//
-// Fields past the base are named only where a decompiled function proves the
-// meaning; everything else is a raw slot so the layout stays honest. Rename
-// them as functions get ported — do not guess.
+// Fields are named only where a decompiled function proves the meaning;
+// everything else stays a raw slot so the layout stays honest. Do not guess.
 
 #include <cstdint>
 #include <cstddef>
@@ -109,7 +108,7 @@ public:
     float Slot5() override;                                      // [ 5] 0x180005430  `xorps xmm0,xmm0; ret`
     bool  Slot6() override;                                      // [ 6] 0x180005440  `xor al,al; ret`
     bool  Slot7() override;                                      // [ 7] 0x180001060  `mov al,1; ret` — shared with RenderBufferData[1], VideoProgramData[1]
-    void  SetImageBuffer(void* imageBuffer, int hotX, int hotY) override;  // [ 8] 0x180005450  HCURSOR from a 32x32 ImageBuffer
+    void  SetImageBuffer(::Video::ImageBuffer* imageBuffer, int hotX, int hotY) override;  // [ 8] 0x180005450  HCURSOR from a 32x32 ImageBuffer
 
     // [9]..[19] The eleven resource factories. The address <-> class pairing was
     // verified independently of the slot ORDER: each factory's base-ctor CALL
@@ -207,7 +206,7 @@ static_assert(offsetof(DeviceData, trackedCapacity) == 0x6c, "DeviceData::tracke
 // Resource *Data subclasses.
 //
 // All twelve vtables were walked 2026-07-24, so each class's slot count is
-// exact (see kSlots below and the status board in ../README.md). Fields named
+// exact (the override lists below and the status board in ../README.md). Fields named
 // here are proven by a decompiled slot; the rest stay raw. Do not guess.
 //
 // Every resource class except ContextData reaches D3D11 the same way — it does
@@ -306,29 +305,9 @@ static_assert(offsetof(ContextData, d3dContext) == 0x18, "ContextData::d3dContex
 //     Video::Context::GetMaxDynamicInstances  0x1800f21d0  jmp [platform+0x68]
 //     Video::Context::EndInstancedIndexedVertices 0x1800f2110 jmp [platform+0x98]
 // All twenty were checked this way; see dx11/src/contextdata.cpp.
-enum ContextDataSlot : int {
-    kCtx_Dtor                          = 0,   // 0x180001600  scalar deleting dtor
-    kCtx_BeginCommands                 = 1,   // 0x180001650  bool BeginCommands()
-    kCtx_EndCommands                   = 2,   // 0x180001720  void EndCommands()
-    kCtx_Finish                        = 3,   // 0x1800017c0  void Finish()  (Present + device-lost)
-    kCtx_Clear                         = 4,   // 0x180001920  void Clear(uint,uint,float,int)
-    kCtx_BindRenderBuffer              = 5,   // 0x180001ad0  void BindRenderBuffer()
-    kCtx_BindViewport                  = 6,   // 0x180001b60  void BindViewport()
-    kCtx_BindScissor                   = 7,   // 0x180001be0  void BindScissor()
-    kCtx_BindTransforms                = 8,   // 0x180001c40  void BindTransforms()
-    kCtx_BindTextureNone               = 9,   // 0x180001cb0  void BindTextureNone(int)
-    kCtx_BindIndexNone                 = 10,  // 0x180001d10* void BindIndexNone()
-    kCtx_BindVertexNone                = 11,  // 0x180001d30  void BindVertexNone(int)
-    kCtx_DrawIndexed                   = 12,  // 0x180001d80  void DrawIndexed(PrimitiveType,int×5)
-    kCtx_GetMaxDynamicInstances        = 13,  // 0x180001ef0* int  GetMaxDynamicInstances(int,int,int)
-    kCtx_BeginVertices                 = 14,  // 0x180001e60  bool BeginVertices(int,int)
-    kCtx_EndVertices                   = 15,  // 0x180001f00  void EndVertices(PrimitiveType)
-    kCtx_BeginIndexedVertices          = 16,  // 0x180002000  bool BeginIndexedVertices(int,int,int)
-    kCtx_EndIndexedVertices            = 17,  // 0x180002020* void EndIndexedVertices(PrimitiveType)
-    kCtx_BeginInstancedIndexedVertices = 18,  // 0x180002030  bool (int,int,int,int)
-    kCtx_EndInstancedIndexedVertices   = 19,  // 0x180002150  void EndInstancedIndexedVertices(PT)
-    kContextDataSlotCount              = 20
-};
+// (B5: the `ContextDataSlot` index enum is gone -- retail's slot numbers and
+// addresses are on the override declarations above; GCC's table has two
+// destructor slots, so the numbers never named compiler slots after the flip.)
 // * = not a Ghidra function; a tail inside the preceding function's body.
 //     Slot 17 (0x180002020) is `jmp 0x180002150`, i.e. it IS slot 19 — the DX11
 //     backend implements EndIndexedVertices and EndInstancedIndexedVertices
@@ -397,16 +376,7 @@ static_assert(offsetof(ImageBufferData, shaderResourceView) == 0x30, "ImageBuffe
 // ImageBufferData vtable slot indices (0x180018790, 7 slots) — recovered by
 // lane L3. Names describe what the code does; the Runtime-side Video::ImageBufferData
 // interface names are not recoverable from this DLL alone.
-enum ImageBufferDataSlot : int {
-    kImg_Dtor              = 0,  // 0x180002400  scalar deleting dtor -> 0x180002430
-    kImg_AttachColorBuffer = 1,  // 0x180002580  alias DeviceData::colorBuffer + RTV
-    kImg_AttachDepthBuffer = 2,  // 0x180002650  alias DeviceData::depthBuffer + DSV
-    kImg_Create            = 3,  // 0x180002870  CreateTexture2D + SRV + RTV/DSV + sampler
-    kImg_Bind              = 4,  // 0x180002da0  PSSetSamplers + PSSetShaderResources
-    kImg_Update            = 5,  // 0x180002e10  Map/WRITE_DISCARD or UpdateSubresource
-    kImg_Read              = 6,  // 0x180002ef0  staging copy + Map/READ readback
-    kImageBufferDataSlotCount = 7
-};
+// (B5: the `ImageBufferDataSlot` index enum is gone; see the overrides above.)
 
 // 0x28, vtable 0x1800185d0 (4 slots), factory 0x180005730
 //
@@ -730,12 +700,7 @@ static_assert(offsetof(RenderStateData, rasterizerState)   == 0x20, "RenderState
 //   Video::RenderState::PlatformDestruct 0x1800f4e80 -> vtable[0](this, 1)
 //   Video::RenderState::PlatformCreate   0x1800f4ea0 -> vtable[1]()
 //   Video::RenderState::Bind(Context&)   0x1800f4ec0 -> vtable[2]()
-enum RenderStateDataSlot : int {
-    kRS_Dtor   = 0,  // 0x1800036e0  scalar deleting dtor
-    kRS_Create = 1,  // 0x180003760  build the three D3D11 state objects
-    kRS_Bind   = 2,  // 0x180003a90  OMSetBlendState / OMSetDepthStencilState / RSSetState
-    kRenderStateDataSlotCount = 3
-};
+// (B5: the `RenderStateDataSlot` index enum is gone; see the overrides above.)
 
 // 0x10, vtable 0x1800185a8 (3 slots), factory 0x180005a40 — no private fields.
 // Slots 1 and 2 are the shared `return true` / `ret` stubs, so only the dtor is
@@ -801,36 +766,17 @@ public:
     ~RenderBufferData() override;                                      // [0] 0x180001010, chains ??1RenderBufferData@Video@@UEAA@XZ
     bool Slot1() override;                                             // [1] 0x180001060  `mov al,1; ret`
     void Bind(void* context) override;                                 // [2] 0x180001070  OMSetRenderTargets
-    void Resolve(void* context, void* other, bool flag) override;      // [3] 0x1800010e0  ResolveSubresource
+    void Resolve(void* context, ::Video::RenderBuffer* other, bool flag) override;   // [3] 0x1800010e0  ResolveSubresource
 };
 static_assert(sizeof(RenderBufferData) == 0x10, "MemAlloc 0x10 @ 0x180005aa0");
 static_assert(offsetof(RenderBufferData, _owner) == 0x08, "RenderBufferData::_owner (the base's)");
 
-// ============================================================
-// Vtable slot counts, walked from .rdata 0x180018580-0x180018c60 on
-// 2026-07-24. The runtime seam (dx11/funcs/dx11_seam.cpp) re-verifies every
-// one of these 84 slots against the live DLL at install time.
-// ============================================================
-namespace kSlots {
-constexpr int kDeviceData         = 20;
-constexpr int kContextData        = 20;
-constexpr int kImageBufferData    = 7;
-constexpr int kConstantBufferData = 4;
-constexpr int kIndexBufferData    = 7;
-constexpr int kVertexBufferData   = 7;
-constexpr int kVertexLayoutData   = 3;
-constexpr int kVertexProgramData  = 3;
-constexpr int kPixelProgramData   = 3;
-constexpr int kRenderStateData    = 3;
-constexpr int kVideoProgramData   = 3;
-constexpr int kRenderBufferData   = 4;
-constexpr int kTotal = kDeviceData + kContextData + kImageBufferData +
-                       kConstantBufferData + kIndexBufferData +
-                       kVertexBufferData + kVertexLayoutData +
-                       kVertexProgramData + kPixelProgramData +
-                       kRenderStateData + kVideoProgramData +
-                       kRenderBufferData;
-static_assert(kTotal == 84, "84 vtable slots across the 12 classes");
-}  // namespace kSlots
+// Retail's vtable slot counts (walked from .rdata 0x180018580-0x180018c60 on
+// 2026-07-24: DeviceData 20, ContextData 20, ImageBufferData 7, Index / Vertex /
+// BufferData 7, ConstantBufferData 4, RenderBufferData 4, the five others 3; 84
+// in all) are now the number of `override` declarations in each class above plus
+// its destructor; tests/unit/b39_vid_data_test.cpp pins every slot by retail
+// number through slot_check.h. The `kSlots` table and the seam that re-verified
+// it (dx11/funcs/dx11_seam.cpp) went with B5.
 
 } // namespace VideoDX11

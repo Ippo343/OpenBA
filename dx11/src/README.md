@@ -1,15 +1,18 @@
 # dx11/src — clean C++ reimplementations
 
 One file per class or per closely-related group, matching the `*Data` classes in
-`../types/VideoDX11Data.h`. Each file registers its own vtable slots with
-`DX11_REGISTER_SLOT` (see `../funcs/dx11_seam.h`), so a new class needs no edit
-to any shared file. The Makefile globs `dx11/src/*.cpp`, so new files build with
-no Makefile change.
+`../types/VideoDX11Data.h`. Since ENDGAME B5 (the dx11 seam, 2026-10-05) each is a
+real `final` subclass of the runtime's abstract `Video::*Data` base
+(`runtime/types/video/CompanionData.h`) and every slot is an `override`: the
+compiler builds the vtables, `DeviceData`'s eleven factories are `new XData(owner)`
+(the base's `operator new` is retail's `MemAlloc(size, 4)`) and the runtime
+destroys a companion with `delete`. The hand-built tables, `DX11_REGISTER_SLOT`
+and `dx11/funcs/dx11_seam.{h,cpp}` are gone. The Makefile globs `dx11/src/*.cpp`.
 
 ## Landed — all twelve classes, all 84 slots, unconditional
 
-Slot counts are `grep -c DX11_REGISTER_SLOT` per file; the total is 84, which is
-the number `Dx11SeamInstall()`'s completeness check requires (it refuses a hole).
+Slot counts are the `override` declarations per class (plus the destructor); the
+total is 84, pinned by retail number in `tests/unit/b39_vid_data_test.cpp`.
 Nothing here is opt-in any more: the `BANISHED_DX11_SHADERS` gate this table used
 to cite **no longer exists** — it is not in `standalone/options.h` and not in any
 `dx11/` source — and every slot is registered on every boot. That is DIRECTION §2's
@@ -28,28 +31,22 @@ verified per-draw against the shipped DLL in RenderDoc — see `dx11/README.md`
 | `shaderprograms.cpp` | `VertexProgramData` (3) + `PixelProgramData` (3) — dtor, `PlatformCreate` (`Create{Vertex,Pixel}Shader` per permutation), `Bind` (`{VS,PS}SetShader` with the index-0 fallback) | 6 |
 | `vertexlayoutdata.cpp` | `VertexLayoutData` — dtor, `Bind` (`IASetInputLayout`), `PlatformCreate` (`CreateInputLayout`; the DLL's only "TEXCOORD" user) | 3 |
 | `smallclasses.cpp` | `VideoProgramData` (3, inert) + `RenderBufferData` (4 — `OMSetRenderTargets` / `ResolveSubresource`) | 7 |
-| `dx11_backend_access.{h,cpp}` | Shared plumbing: the `Video::Device -> DeviceData -> ID3D11Device/Context` walk and lazy resolution of the Runtime base destructors | — |
-| `exports.cpp` | The plugin entry points, and `Dx11_CreateDeviceData` (the readable example of how dx11 allocates a `*Data` and overwrites the base vptr) | — |
+| `dx9_placeholder.cpp` | The cutover-only DX9 placeholder, a real subclass of `Video::DeviceData` that lists the same adapters under the "DirectX 9" name so the interface array keeps one entry per slot | — |
+| `dx11_backend_access.{h,cpp}` | Shared plumbing: the `Video::Device -> DeviceData -> ID3D11Device/Context` walk (the one downcast dx11 makes: it built the object), `Dx11SwapChain()`, the constant-buffer registry | — |
+| `exports.cpp` | The two plugin entry points (`../types/VideoDX11Plugin.h`): `Dx11_CreateDeviceData` is `new DeviceData(device)` | — |
 
-## What is deliberately NOT here (ENDGAME B.3.5, RULE B5-8)
+## The seam that is gone (ENDGAME B5, 2026-10-05)
 
-The twelve **concrete** `*Data` classes stay C-style structs with a
-`DX11_REGISTER_SLOT` table rather than becoming twelve C++ classes, and the
-84-slot seam stays. `Dx11SeamInstall()`'s completeness check is the only guarantee
-those slots are non-null, and `ContextData_Finish`'s device-lost recovery
-dispatches through `DeviceData`'s slots **by index**; converting them means
-re-deriving that guarantee. Runtime's twelve **abstract** bases did convert
-(`runtime/types/video/CompanionData.h`).
-
-Two consequences a reader should know about:
-
-- A dx11 scalar deleting destructor calls its Runtime base as a **qualified
-  non-virtual** `self->Video::XData::~XData()` through a `// B.3.5 bridge` cast
-  (RULE B5-3) — never `DeletingDtor(0)`, which would re-enter slot 0.
-- The `Imports` / `g_deps` rows for those base destructors **stay** even though
-  nothing calls them any more: the row is what makes `g_imOk` / `EnsureDeps()`
-  false when the Runtime side is absent, and that all-or-nothing test is the
-  seam's only fallback guarantee.
+B.3.5's RULE B5-8 left the twelve concrete classes as C structs behind an 84-slot
+hand-built table because `ContextData_Finish` dispatched the device-lost
+`Shutdown` / `CreateDevice` by INDEX and the seam's completeness check was the
+only proof the slots were non-null. B5 made the by-index call a by-name one first
+(W0b), then flipped the twelve bases to `virtual ~XData()` and the twelve dx11
+structs to real subclasses, one block per hierarchy, each gated with the
+resave gate and a bounded forced device loss (`endgame_b/b5_session/`).
+A destructor no longer re-seats a vptr, calls its base by qualified name or
+frees `this`: the compiler's D0 and the base's class-scope `operator delete` do
+exactly those three retail instructions.
 
 ## The Runtime headers this directory includes
 

@@ -192,13 +192,12 @@ void RenderBufferData::Bind(void* /*Video::Context& — ignored*/) {
 //
 // ID3D11DeviceContext index 57 == byte offset 0x1c8 == ResolveSubresource.
 void RenderBufferData::Resolve(void* /*Video::Context& — ignored*/,
-                               void* other,
+                               ::Video::RenderBuffer* other,
                                bool  /*flag — ignored by this backend*/) {
     const RenderBufferOwner* dst = _owner;
     // The base slot declares `other` as `void*` (CompanionData.h); retail's
     // owner-side mangling says it is a `Video::RenderBuffer*`.
-    const RenderBufferOwner* src =
-        static_cast<const RenderBufferOwner*>(other);
+    const RenderBufferOwner* src = other;
 
     Dx11Context()->ResolveSubresource(Dx11ImageTexture(dst->colorBuffer), 0,
                                       Dx11ImageTexture(src->colorBuffer), 0,

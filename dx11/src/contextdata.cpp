@@ -463,7 +463,7 @@ void ContextData::EndCommands() {
 
     ID3D11Resource* backBuffer = nullptr;
     dd->swapChain->GetBuffer(
-        0, kIID_ID3D11Texture2D, reinterpret_cast<void**>(&backBuffer));
+        0, kIID_ID3D11Texture2D, reinterpret_cast<void**>(&backBuffer));   // CAST-OK: com_iid
 
     d3dContext->ResolveSubresource(backBuffer, 0,
                                    dd->colorBuffer, 0,
@@ -568,8 +568,8 @@ void ContextData::Finish() {
         else if (hr == DXGI_ERROR_DEVICE_RESET)           msg = "D3D11 Error: DXGI_ERROR_DEVICE_RESET!";
         else if (hr == DXGI_ERROR_DRIVER_INTERNAL_ERROR)  msg = "D3D11 Error: DXGI_ERROR_DRIVER_INTERNAL_ERROR!";
         else                                              msg = "D3D11 Error: UNKNOWN!";
-        System::Error::SetText(msg, true);   // B.3.4 bridge
-        System::Error::Display();            // B.3.4 bridge
+        System::Error::SetText(msg, true);
+        System::Error::Display();
         return;
     }
 
@@ -759,7 +759,7 @@ void ContextData::BindScissor() {
 //       void ConstantBuffer::Bind(Context& context, void* data, int offset, int size)
 // The `offset` argument is the literal 0 in both calls. The two receivers are
 // the ConstantBuffers EMBEDDED in the Context (`LEA` in retail): named members
-// now (B5 CTX), so the B.3.5 bridge casts are gone.
+// now (B5 CTX), so the B.3.5-era bridge casts are gone.
 // ============================================================
 void ContextData::BindTransforms() {
     ::Video::Context* ctx = _owner;
@@ -931,7 +931,7 @@ bool ContextData::BeginVertices(int vertexCount, int vertexStride) {
     void* mapped = ctx->_dynamicVertexBuffer->Lock(vertexCount * vertexStride,
                                                    ctx->_unknown2100);   // +0x2100 byte offset
 
-    _owner->_dynamicVertexCursor = static_cast<uint8_t*>(mapped);
+    _owner->_dynamicVertexCursor = static_cast<uint8_t*>(mapped);   // CAST-OK: gpu_map (the Lock result)
     _owner->_unknown2108         = _owner->_dynamicVertexCursor;          // +0x2108 Lock result
 
     return _owner->_dynamicVertexCursor != nullptr;
@@ -1050,7 +1050,7 @@ bool ContextData::BeginInstancedIndexedVertices(int vertexCount, int vertexStrid
     void* mappedVertices = ctx->_dynamicVertexBuffer->Lock(vertexCount * vertexStride,
                                                            ctx->_unknown2100);   // +0x2100
 
-    _owner->_dynamicVertexCursor = static_cast<uint8_t*>(mappedVertices);
+    _owner->_dynamicVertexCursor = static_cast<uint8_t*>(mappedVertices);   // CAST-OK: gpu_map
     _owner->_unknown2108         = _owner->_dynamicVertexCursor;
 
     if (_owner->_dynamicVertexCursor == nullptr) return false;
@@ -1061,7 +1061,7 @@ bool ContextData::BeginInstancedIndexedVertices(int vertexCount, int vertexStrid
     void* mappedIndices = ctx->_dynamicIndexBuffer->Lock(indexCount * 2,
                                                          ctx->_unknown2120);     // +0x2120
 
-    _owner->_dynamicIndexCursor = static_cast<uint16_t*>(mappedIndices);
+    _owner->_dynamicIndexCursor = static_cast<uint16_t*>(mappedIndices);   // CAST-OK: gpu_map
     _owner->_unknown2128        = _owner->_dynamicIndexCursor;                   // +0x2128
 
     return _owner->_dynamicIndexCursor != nullptr;

@@ -48,7 +48,6 @@
 #include "video/Device.h"
 #include "VideoDX11Data.h"
 #include "VideoDX11Plugin.h"   // B5 DEV-A: Dx11SwapChain (D7)
-#include "dx11_seam.h"   // Vt / VtGhidraAddr, used by Dx11VtableAddress
 // ENDGAME B.3R block DX: `System::MemoryAllocator::MemAlloc / MemFree`, the
 // direct replacement for the import rows the files below resolved by name.
 // (`resolve.h` went with `Dx11ResolveRuntimeImport`, its last user here.)
@@ -112,7 +111,8 @@ inline ::Video::Device* Dx11VideoDevice() {
 // ContextData and ConstantBufferData reach it through their own owner's
 // `_device` (as the original does), everything else through the singleton.
 inline DeviceData* Dx11DeviceDataOf(const ::Video::Device* device) {
-    return static_cast<DeviceData*>(device->deviceData);
+    ::Video::DeviceData* const base = device->deviceData;   // the typed base pointer
+    return static_cast<DeviceData*>(base);                  // the downcast dx11 may make: it built the object
 }
 
 // The active DeviceData: the singleton's.
@@ -349,7 +349,8 @@ static_assert(sizeof(RenderBufferOwner) == 0x30,
 // downcast dx11 may make (B5_RULES D7: dx11 built the object). The helpers take
 // the typed `Video::ImageBuffer*` their callers already hold.
 inline ImageBufferData* Dx11ImageBackend(const Video::ImageBuffer* img) {
-    return static_cast<ImageBufferData*>(img->_data);
+    Video::ImageBufferData* const base = img->_data;   // the typed base pointer
+    return static_cast<ImageBufferData*>(base);
 }
 inline ID3D11Resource* Dx11ImageTexture(const Video::ImageBuffer* img) {
     return Dx11ImageBackend(img)->texture;
@@ -382,22 +383,10 @@ inline ID3D11DepthStencilView* Dx11ImageDsv(const Video::ImageBuffer* img) {
 // was L6's internal POD); the caller reaches it with Dx11DeviceDataOf.
 int Dx11_DeviceData_Resize(DeviceData* deviceData);
 
-// The DX11 vtable a destructor must re-seat `this` on before running the base
-// destructor (MSVC emits this vptr store in every derived destructor). Handing
-// back the address of the *live* vtable is what keeps a partially-ported class
-// consistent: the seam patches slots inside that same array.
-inline void* Dx11VtableAddress(Vt v) {
-    // Was the shipped .rdata array at VtGhidraAddr(v). Dx11LiveVtable()
-    // returns our exe-owned array. Do not reintroduce the direct resolve:
-    // VideoDX11-x64.dll is never mapped (ENDGAME.md A.1) and it would yield a
-    // vptr into nothing.
-    return Dx11LiveVtable(v);
-}
-
 // COM Release() through the IUnknown vtable (index 2, byte offset 0x10) —
 // exactly the `MOV RAX,[RCX]; CALL [RAX+0x10]` the destructors emit.
-inline void Dx11Release(void* comObject) {
-    if (comObject) static_cast<IUnknown*>(comObject)->Release();
+inline void Dx11Release(IUnknown* comObject) {
+    if (comObject) comObject->Release();
 }
 
 }  // namespace VideoDX11

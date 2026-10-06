@@ -1,23 +1,15 @@
 // ============================================================================
-// tests/unit/b39_vid_data_test.cpp -- ENDGAME B.3 step 9, block VID
-// (B39_RULES.md D1, rule B9-16): the twelve Video::*Data companion bases made
-// CONCRETE.
+// tests/unit/b39_vid_data_test.cpp -- the twelve Video::*Data companion bases.
 //
-// Per class: not abstract, no virtual destructor, the destructor PUBLIC (the one
-// deliberate difference from the recipe -- RULE B5-3: dx11's derived destructors,
-// which do not inherit in C++, call `self->Video::XData::~XData()`), slot 0 at
-// byte 0 by PMF, the real constructor's one store (the owner at +0x08) and both
-// arms of the inline VECTOR `DeletingDtor` (element 0x10). Slots 1..N are
-// retail's `_purecall` and are never called here.
-//
-// B5 (the dx11 seam): a class whose dx11 subclass is converted moves to
-// CheckDataB5 -- `virtual ~T()`, `delete` instead of `DeletingDtor` (so far:
-// RenderBufferData, VideoProgramData; B5 BUF: IndexBufferData, VertexBufferData,
-// ConstantBufferData; B5 CTX: ContextData; B5 RES: VertexLayoutData,
-// VertexProgramData, PixelProgramData, RenderStateData, ImageBufferData; B5
-// DEV-A: DeviceData). The dx11 subclasses cannot link here (D3D11), so the BASE
+// ENDGAME B.3 step 9, block VID (B39_RULES.md D1, rule B9-16) made them CONCRETE
+// (a real constructor storing the owner at +0x08, `_purecall` bodies in every
+// slot but 0). ENDGAME B5 (the dx11 seam, 2026-10-05, B5_RULES.md D1-D3) gave
+// each `virtual ~T()` and made dx11's twelve `VideoDX11::*Data` real subclasses
+// with compiler vtables; the old `DeletingDtor(unsigned)` slot-0 member and its
+// vector arm are gone. The dx11 subclasses cannot link here (D3D11), so the BASE
 // shape is what is tested, plus the shape the DX9 placeholder
-// (dx11/src/dx9_placeholder.cpp) puts on it.
+// (dx11/src/dx9_placeholder.cpp) puts on it. Slots 1..N are pinned by RETAIL
+// number through slot_check.h (which shifts for the two destructor slots).
 //
 // The out-of-line destructors live in runtime/src/video/companion_data.cpp
 // (which cannot link into the host test), so they are defined HERE as markers.
@@ -45,48 +37,6 @@ void NoteDtor(const void* self) {
 // B5 W0: the owner is typed per class (`T::Owner`); the test's fake owner is the
 // same bit pattern through that type.
 constexpr uintptr_t kOwnerBits = 0x0E0E0E0E0ull;
-
-template <class T>
-void CheckData() {
-    typename T::Owner* const kOwner = reinterpret_cast<typename T::Owner*>(kOwnerBits);
-    CHECK(!std::is_abstract<T>::value);
-    CHECK(!std::has_virtual_destructor<T>::value);
-    CHECK(std::is_destructible<T>::value);          // PUBLIC: RULE B5-3
-    CHECK(!std::is_default_constructible<T>::value); // the owner is required
-    CHECK_DTOR_SLOT(T);
-
-    // The ctor's one data store: owner at +0x08.
-    alignas(8) uint8_t buf[0x10];
-    std::memset(buf, 0xCD, sizeof buf);
-    T* d = ::new (buf) T(kOwner);
-    CHECK(static_cast<void*>(d) == static_cast<void*>(buf));
-    CHECK(d->_owner == kOwner);
-    g_dtorCount = 0;
-    CHECK(static_cast<void*>(d->DeletingDtor(0)) == static_cast<void*>(d));
-    CHECK_EQ(g_dtorCount, 1);
-
-    // flags 1: destroy one and free it.
-    void* m = Object::detail::InternalMemAlloc(0x10, 8);
-    CHECK(m != nullptr);
-    T* p = ::new (m) T(kOwner);
-    g_dtorCount = 0;
-    CHECK(static_cast<void*>(p->DeletingDtor(1)) == static_cast<void*>(p));
-    CHECK_EQ(g_dtorCount, 1);
-
-    // flags 3: the count at this-8, destroyed downward, this-8 freed.
-    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 3 * 0x10, 8));
-    CHECK(block != nullptr);
-    const int64_t cookie = 3;
-    std::memcpy(block, &cookie, sizeof cookie);
-    T* e[3];
-    for (int i = 0; i < 3; ++i) e[i] = ::new (block + 8 + i * 0x10) T(kOwner);
-    g_dtorCount = 0;
-    CHECK(reinterpret_cast<uint8_t*>(e[0]->DeletingDtor(3)) == block);
-    CHECK_EQ(g_dtorCount, 3);
-    CHECK(g_dtorOrder[0] == e[2]);
-    CHECK(g_dtorOrder[1] == e[1]);
-    CHECK(g_dtorOrder[2] == e[0]);
-}
 
 // B5 (the dx11 seam, B5_RULES D1): a base whose dx11 subclass is a real C++
 // subclass declares `virtual ~T()` -- the compiler's D1/D0 pair is retail slot 0

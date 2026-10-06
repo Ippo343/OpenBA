@@ -11,11 +11,20 @@ Reference decompilation status: [../decomp/videodx11.md](../decomp/videodx11.md)
 
 ```
 dx11/
-  README.md      — this file: scope, seam, workflow, status board
-  types/         — binary-compatible structs for the 12 *Data classes + D3D11 COM shapes
-  funcs/         — the renderer seam (dx11_seam.h/.cpp)
-  src/           — clean C++ reimplementations
+  README.md      — this file: scope, the (historical) seam, workflow, status board
+  types/         — the 12 VideoDX11::*Data classes (real subclasses of Video::*Data) + the plugin header
+  src/           — clean C++ reimplementations, one file per class
 ```
+
+**ENDGAME B5 (2026-10-05): the seam is gone.** Everything below that describes
+`dx11/funcs/dx11_seam.{h,cpp}`, `DX11_REGISTER_SLOT`, `Dx11SeamInstall()`, hand-built
+vtables, "AB mode" and slot verification is HISTORY: the twelve `VideoDX11::*Data`
+types are real `final` subclasses of the runtime's abstract `Video::*Data` bases
+(`runtime/types/video/CompanionData.h`, `virtual ~XData()`), every slot is an
+`override`, the compiler builds the tables, `new` / `delete` go through the base's
+class-scope operators (retail's `MemAlloc(size, 4)` / `MemFree`). The status board's
+addresses and slot roles are still the reference; `src/README.md` has the current
+file map. Rule sheet: `docs/runtime_port/endgame_b/B5_RULES.md`.
 
 ---
 

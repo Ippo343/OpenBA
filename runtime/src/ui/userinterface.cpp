@@ -687,7 +687,7 @@ void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
     const SpriteSheet* sheet = cursor->_spriteSheet.Get();
     const Graphics::MaterialInstance* const material =
         sheet->m_field30;
-    void* const image = material->_textures.GetData()[0].image;
+    Video::ImageBuffer* const image = material->_textures.GetData()[0].image;
 
     backend->SetImageBuffer(image, cursor->_hotSpotX, cursor->_hotSpotY);
 

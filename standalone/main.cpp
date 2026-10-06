@@ -15,7 +15,6 @@
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device / Configuration::_singleton
 #include "options.h"
 #include "runtime_init.h"
-#include "dx11_seam.h"
 #include "VideoDX11Plugin.h"   // B5 DEV-A: VideoDX11::Dx11SwapChain (the two swap-chain probes)
 #include "video_interface.h"
 #include "renderdoc_integration.h"
@@ -540,12 +539,6 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     RedzoneAlloc_SetDumpSink(nullptr);
 
     PrintStackTrace(ctx);
-
-    // The DX11 verification evidence, printed here as well as from atexit:
-    // this handler ends in ExitProcess, which skips atexit entirely, and a
-    // session that dies on the way out is exactly the one whose "did any
-    // shipped renderer code run?" answer is worth having.
-    VideoDX11::Dx11SeamReport();
 
     CrashLogf("=== END CRASH ===\n");
     FlushLogsToDisk();
@@ -1237,22 +1230,13 @@ static bool Init() {
     RuntimeInit();
     StallDebug::Mark("RuntimeInit");
 
-    // 4b. Install the renderer seam: verify all 84 vtable slots against the
-    //     map in dx11/README.md and patch in our reimplementations.
-    //
-    //     VideoDX11-x64.dll is never loaded, so the seam's vtables are our own
-    //     exe-owned arrays. This must run before Engine::Startup, so no *Data
-    //     object has been created yet. There is no window inside
-    //     Engine::Startup: Video::Device::InitializeInterfaces and
-    //     CreateVideoInterface both run within that one call, which is why the
-    //     seam is the vtables rather than the Device+0xd0/+0xd8 pointers.
-    VideoDX11::Dx11SeamInstall();
-
-    //     Our twelve vtables live in this exe and VideoDX11-x64.dll is never
-    //     loaded. The DX11 interface slot (Video::Device+0xc8/+0xd0/+0xd8) is
-    //     filled by VideoInterfaceFillDx11Slot, called as the first statement of
-    //     our ported Video::Device::InitializeInterfaces.
-    StallDebug::Mark("dx11 seam");
+    // 4b. The renderer. B5 (the dx11 seam, 2026-10-05): there is nothing to
+    //     install. The twelve VideoDX11::*Data classes are real subclasses of the
+    //     runtime's Video::*Data bases with the compiler's vtables; the DX11
+    //     interface slot (Video::Device::dllSlots[1]) is filled by
+    //     VideoInterfaceFillDx11Slot, the first statement of our ported
+    //     Video::Device::InitializeInterfaces. VideoDX11-x64.dll is never loaded.
+    StallDebug::Mark("dx11 plugin");
 
     // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
     //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB

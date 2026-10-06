@@ -19,7 +19,9 @@ For every file, `(the metric before E0) == total + tier_i + cast_ok`. At E0's ba
 At the B.4 close (branch `b4z-MARKERS`, after the audit's rulings): `castmetric.py code runtime
 standalone dx11 engine --floor` reports **cast_ok 735 (681 lines), tier_i 451, BAD 0, STRAY 0**,
 and the tree metric is **502** (code runtime standalone engine: 262; dx11/ is the next step's
-scope).
+scope). **B5 (the dx11 seam, 2026-10-05):** the `dx11_seam` category (20 lines) is GONE with the seam;
+`gpu_map` 0 -> 5 and `com_iid` 2 -> 3 measured on dx11/, `win32` 85 -> 88; dx11/ carries 11 marked
+casts and no counted one.
 
 ## Changes at the B.4 close
 
@@ -74,18 +76,17 @@ category needs the coordinator (M2).
 | `alloc_header` | 64 | 61 | reads / writes an allocator block's boundary tag, free-list link, footer, canary or range page arithmetic: memory the allocator owns as raw bytes | 65 -> 64: `linkedlist.cpp`'s `malloc` line is tier I (§3) |
 | `ptr_int` | 136 | 126 | a pointer used as an integer: unsigned pointer compares, byte distance between two addresses, pointer bits grafted, a pointer printed / returned as an integer | as measured; +`founding_spawn.cpp`'s log key, +`userinterface_showdialog.cpp`'s defect-2 control (the parent pointer's low dword as the result) |
 | `crash_walk` | 129 | 111 | crash / hang / watchpoint diagnostics: RIP and RSP from a CONTEXT, return addresses as module offsets, raw stack words, readable-memory probes, raw memory dumps, harness / log reads of a vtable word | as measured; -4 tree-only guards (part C), +6 re-filed from `vslot`, +4 `tool_base_render.cpp` tripwire (`block`), +1 `stress_harness.cpp` profiler key |
-| `win32` | 85 | 83 | a Win32 / CRT API's own untyped parameter or result: `LPVOID` thread parameters, `LPARAM` message structs, `BYTE*` registry buffers, `intptr_t` OS handles, a CRITICAL_SECTION kept as opaque bytes because the type header cannot include `<windows.h>` | as measured; `perf_terrain.cpp`'s `malloc` is tier I |
+| `win32` | 88 | 86 | a Win32 / CRT API's own untyped parameter or result: `LPVOID` thread parameters, `LPARAM` message structs, `BYTE*` registry buffers, `intptr_t` OS handles, a CRITICAL_SECTION kept as opaque bytes because the type header cannot include `<windows.h>` | as measured; `perf_terrain.cpp`'s `malloc` is tier I; B5: +2 `GetProcAddress` FARPROC -> `CreateDXGIFactory1_t` / `D3D11CreateDevice_t`, +1 `HINSTANCE` (devicedata.cpp) |
 | `float_bits` | 12 | 10 | a float read or written as its bit pattern | 25 -> 12 measured: `citizencomponent.cpp`'s fabs mask (2) and `tool_base_highlight_tess.cpp`'s by-value Vector2 packing (10, which the audit calls QUESTIONABLE); the five `tool_base_highlight.cpp` stores left it |
 | `string_header` | 37 | 35 | the `System::String` `{length, refCount}` header at `data - 8` | as measured |
 | `pe_walk` | 12 | 11 | walks a loaded module's PE headers and export directory | unchanged |
-| `byte_io` | 41 | 39 | a byte buffer handed to / read from a stream, CRC or file API | as measured |
+| `byte_io` | 42 | 40 | a byte buffer handed to / read from a stream, CRC or file API | as measured |
 | `elem_stride` | 192 | 177 | the ONE ported type-erased container / tree core (definition below) | RE-DEFINED by the audit (A); 110 -> 189 (16 of them the macro lines; +1 the draw-group copy row's element op) |
-| `gpu_map` | 0 | 0 | memory returned by a GPU buffer map | nothing marked (dx11/ is the next step) |
-| `com_iid` | 2 | 2 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID | unchanged |
+| `gpu_map` | 5 | 5 | memory returned by a GPU buffer map (`ID3D11DeviceContext::Map`'s `pData`, the `Lock` result it becomes) | B5: measured on dx11/ (buffers.cpp 1, contextdata.cpp 3, imagebufferdata.cpp 1) |
+| `com_iid` | 3 | 3 | the `void**` out-parameter of a COM `QueryInterface` / `GetBuffer` by IID | B5: +1, the swap chain's `GetBuffer` in contextdata.cpp |
 | `crt` | 11 | 11 | the ported CRT's own `void*` / `char*` parameters (qsort and its comparators' `const void*`, `_stricmp`) | as measured |
 | `hash` | 5 | 5 | a pointer hashed as an integer | unchanged |
 | `vslot` | 2 | 2 | `Object::SlotAddressOf` (`VSlot.h`), the one sanctioned look into a compiler vtable, and `splash_loop_stubs.cpp`'s retail vptr identity compare (GameUpdateLoop has no type id) | 8 -> 2: six log / harness reads re-filed `crash_walk`, `buildrequirementui.cpp`'s guard unmarked |
-| `dx11_seam` | 20 | 20 | deferred: the VideoDX11 seam, removed by plan §4.1 (`CompanionData.h`'s 12 `DeletingDtor` arms, `Context.h`, `video_interface.cpp`) | 39 -> 20 measured: dx11/ itself carries no marker yet |
 | `const_api` | 4 | 4 | NEW: the const a retail Runtime API puts on its result (`PEBV`), dropped ONCE in the typed wrapper that mirrors retail's inlined template (`External.h` `FindAs` / `FindNextAs` / `FindOrLoadAs`); never at a call site | new |
 | `user_data` | 9 | 9 | NEW: a `void*` that a RETAIL engine API (signature `PEAX`) stores for its caller and hands back unchanged, or a message payload whose type the message id selects, cast back to the type the registration stored. Not for a tree-only API, nor for a `void*` a template could carry | new |
 | `null_receiver` | 2 | 2 | NEW: retail's faithful read through a null receiver, spelled as the faulting address (`work_act_consume.cpp`, §5) | new |
@@ -167,15 +168,10 @@ estimate with its measured number in its hand-in.
 | `code/Game/Player/tool_base_path.cpp` | ptr_int 3 | E estimate |
 | `code/Game/Work/plantarea.cpp` | float_bits 1 | E estimate |
 | `code/Game/Work/work_act_hunt.cpp` | ptr_int 1 | E estimate |
-| `dx11/funcs/dx11_seam.h` | dx11_seam 1 | E estimate |
-| `dx11/src/buffers.cpp` | dx11_seam 3, gpu_map 1 | E estimate |
-| `dx11/src/contextdata.cpp` | com_iid 1, dx11_seam 2 | E estimate |
-| `dx11/src/devicedata.cpp` | com_iid 1, dx11_seam 6, win32 1 | E estimate |
-| `dx11/src/imagebufferdata.cpp` | dx11_seam 1 | E estimate |
-| `dx11/src/renderstatedata.cpp` | dx11_seam 3 | E estimate |
-| `dx11/src/shaderprograms.cpp` | dx11_seam 2 | E estimate |
-| `dx11/src/smallclasses.cpp` | dx11_seam 2 | E estimate |
-| `dx11/src/vertexlayoutdata.cpp` | dx11_seam 1 | E estimate |
+| `dx11/src/buffers.cpp` | gpu_map 1 | B5 measured |
+| `dx11/src/contextdata.cpp` | com_iid 1, gpu_map 3 | B5 measured |
+| `dx11/src/devicedata.cpp` | win32 4 | B5 measured (the IID out-param became a typed function pointer) |
+| `dx11/src/imagebufferdata.cpp` | byte_io 1, gpu_map 1 | B5 measured |
 | `runtime/src/application/application_win.cpp` | ptr_int 1 | E estimate |
 | `runtime/src/audio/audio.cpp` | byte_io 4 | E estimate |
 | `runtime/src/audio/audio_device.cpp` | win32 1 | E estimate |
@@ -209,7 +205,6 @@ estimate with its measured number in its hand-in.
 | `standalone/renderdoc_integration.cpp` | win32 1 | E estimate |
 | `standalone/scene_watch.cpp` | ptr_int 1 | E estimate |
 | `standalone/stress_harness.cpp` | ptr_int 1 | E estimate |
-| `standalone/video_interface.cpp` | dx11_seam 6 | E estimate |
 
 ## 3. Tier I: the three shapes (no marker)
 

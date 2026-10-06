@@ -493,18 +493,9 @@ namespace devicedata_vtbl {
     constexpr size_t kCreateRenderStateData   = 0x88;  // CALL [RAX+0x88] @0x1800f4c0d
 }
 
-// The companion's own vtable, shared by all three *Data classes. The typed
-// declaration of these three slots is `Video::{Vertex,Pixel}ProgramData` in
-// runtime/types/video/CompanionData.h (block A); these constants stay because
-// the receivers are still `void*` on the paths that use them.
-//   slot 0 (+0x00) deleting destructor(flags)
-//   slot 1 (+0x08) Create / Rebuild
-//   slot 2 (+0x10) Bind
-namespace programdata_vtbl {
-    constexpr size_t kDeletingDtor = 0x00;
-    constexpr size_t kCreate       = 0x08;
-    constexpr size_t kBind         = 0x10;
-}
+// (B5 CLOSE: the `programdata_vtbl` byte-offset constants that stood here had no
+// reader; the companion's slots are the `Video::{Vertex,Pixel}ProgramData` /
+// `RenderStateData` virtuals in CompanionData.h.)
 
 } // namespace video
 } // namespace rt

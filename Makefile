@@ -77,7 +77,7 @@ SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32 -ldinput8 -ldxguid
 SA_INCLUDES = -I. -Iengine/types -Icode/Game \
               -Iruntime/types -Iruntime/funcs \
-              -Idx11/types -Idx11/funcs -Istandalone
+              -Idx11/types -Istandalone
 
 # Standalone sources: game logic + engine funcs + runtime src + dx11 + standalone entry
 SA_SRCS = $(GAME_SRC_SRCS) \
