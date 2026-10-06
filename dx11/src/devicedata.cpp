@@ -108,7 +108,6 @@
 // slots this file needs, each of which matches the CALL displacement in the
 // corresponding factory. That is 17 independent confirmations of one constant.
 
-#include "dx11_seam.h"
 #include "VideoDX11Plugin.h"   // Dx11EnumerateDxgiInterfaces (defined here)
 #include "stall_debug.h"
 #include "boot_window.h"
@@ -153,8 +152,8 @@ namespace {
 //   retail IAT   mangled name                                  now
 //   0x1800134c0  ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z System::MemoryAllocator::MemAlloc
 //   0x1800134d0  ?MemFree@MemoryAllocator@System@@SAXPEAX@Z    System::MemoryAllocator::MemFree
-//   0x180013478  ??0ContextData@Video@@…        (and the ten  ::new (p) ::Video::XData(owner)
-//   …            other ??0XData@Video@@ ctors, slot 9..19)    in AllocData below
+//   0x180013478  ??0ContextData@Video@@…        (and the ten  the base ctor of each
+//   …            other ??0XData@Video@@ ctors, slot 9..19)    `new XData(owner)` below
 //   0x180013250  ??0Adapter@Device@Video@@QEAA@XZ              RtVideo_Adapter_Ctor
 //   0x1800132b8  ??0Adapter@Device@Video@@QEAA@AEBU012@@Z      RtVideo_Adapter_CopyCtor
 //   0x1800134c8  ??1Adapter@Device@Video@@QEAA@XZ              RtVideo_Adapter_Dtor
@@ -168,8 +167,8 @@ namespace {
 // because none of those nested value types has a real C++ constructor or
 // destructor yet (B4b-2; Device.h records why per type). The eleven `??0XData`
 // names bound to one-line doors whose whole body is `::new (self) XData(owner)`;
-// AllocData performs that construction itself. The 84-slot seam, its
-// completeness check (RULE B5-8) and the twelve `*Data` classes are untouched.
+// B5: each factory is `new XData(owner)`, whose base constructor is that
+// construction (the twelve `*Data` classes are real subclasses).
 //
 // The earlier removals (the Video::Device members, System::String /
 // WideString, Application, ImageBuffer::CopyFromTexture and the DeviceData
@@ -1800,33 +1799,17 @@ bool DeviceData::EnumerateInterfaces() {
 // subclass is `return new XData(owner);` — the base's class-scope operator new
 // is retail's MemAlloc(size, 4) and the ctor chain is `??0XData` + the vptr
 // store, now the compiler's (retail's `if (!p) return NULL` is not reproduced:
-// B5_RULES D2). A class still on its hand table is built by `AllocData` and
-// handed back through ONE marked bridge each, which dies with its block.
+// B5_RULES D2). Since block RES landed all eleven are real subclasses, so the
+// POD helper (MemAlloc + base ctor + hand-table vptr) and its bridge casts are
+// gone.
 //
 // ENDGAME B.3R block DX: the base-ctor step was a call through the import row
 // `??0XData@Video@@QEAA@PEAVX@1@@Z`, whose body was the Runtime door
-// `Video_XData_Ctor` = `::new (self) Video::XData(owner)`. That construction is
-// now written here, against the real class (runtime/types/video/CompanionData.h):
-// it stores the owner at +0x08 and a vptr the next line overwrites with dx11's
-// hand table, exactly as the door did. The readiness guard that forwarded each
-// factory to the shipped slot when an import was missing is gone with the struct.
+// `Video_XData_Ctor` = `::new (self) Video::XData(owner)`; it is now the base
+// constructor of each `new XData(owner)`. The readiness guard that forwarded
+// each factory to the shipped slot when an import was missing is gone with the
+// struct.
 // ============================================================
-namespace {
-
-// B5 DEV-A bridge: dies when block RES lands (the last POD factories).
-// Builds a POD still on its hand table: MemAlloc, the base ctor, then dx11's
-// LIVE vtable (Dx11LiveVtable, the seam's exe-owned array) over the base's.
-template <typename T, typename Base>
-T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
-    T* p = static_cast<T*>(System::MemoryAllocator::MemAlloc(size, 4));
-    if (!p) return nullptr;
-    ::new (static_cast<void*>(p)) Base(owner);   // retail: CALL [IAT ??0XData@Video@@]
-    p->vptr = Dx11LiveVtable(vt);
-    return p;
-}
-
-}  // namespace
-
 ::Video::ContextData* DeviceData::CreateContextData(::Video::Context* owner) {
     // B5 CTX: the base's operator new is retail's MemAlloc(0x20, 4); the ctor chain
     // is retail's `??0ContextData` + the vptr store (now the compiler's table) +
@@ -1836,15 +1819,10 @@ T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
 }
 
 ::Video::ImageBufferData* DeviceData::CreateImageBufferData(::Video::ImageBuffer* owner) {
-    ImageBufferData* p = AllocData<ImageBufferData, ::Video::ImageBufferData>(0x38, owner,
-                                                    Vt::ImageBufferData);
-    if (!p) return nullptr;
-    p->sampler            = nullptr;
-    p->texture            = nullptr;
-    p->renderTargetView   = nullptr;
-    p->depthStencilView   = nullptr;
-    p->shaderResourceView = nullptr;
-    return reinterpret_cast< ::Video::ImageBufferData*>(p);   // B5 DEV-A bridge: dies when block RES lands
+    // B5 RES: the base's operator new is retail's MemAlloc(0x38, 4); the ctor chain
+    // is retail's `??0ImageBufferData` + the vptr store (now the compiler's table)
+    // + the five null stores.
+    return new ImageBufferData(owner);
 }
 
 ::Video::ConstantBufferData* DeviceData::CreateConstantBufferData(::Video::ConstantBuffer* owner) {
@@ -1867,37 +1845,31 @@ T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
 }
 
 ::Video::VertexLayoutData* DeviceData::CreateVertexLayoutData(::Video::VertexLayout* owner) {
-    VertexLayoutData* p = AllocData<VertexLayoutData, ::Video::VertexLayoutData>(0x18, owner,
-                                                      Vt::VertexLayoutData);
-    if (!p) return nullptr;
-    p->inputLayout = nullptr;
-    return reinterpret_cast< ::Video::VertexLayoutData*>(p);   // B5 DEV-A bridge: dies when block RES lands
+    // B5 RES: the base's operator new is retail's MemAlloc(0x18, 4); the ctor chain
+    // is retail's `??0VertexLayoutData` + the vptr store (now the compiler's table)
+    // + `inputLayout = nullptr`.
+    return new VertexLayoutData(owner);
 }
 
 ::Video::VertexProgramData* DeviceData::CreateVertexProgramData(::Video::VertexProgram* owner) {
-    VertexProgramData* p = AllocData<VertexProgramData, ::Video::VertexProgramData>(0x30, owner,
-                                                        Vt::VertexProgramData);
-    if (!p) return nullptr;
-    for (int i = 0; i < 4; ++i) p->variants[i] = nullptr;
-    return reinterpret_cast< ::Video::VertexProgramData*>(p);   // B5 DEV-A bridge: dies when block RES lands
+    // B5 RES: the base's operator new is retail's MemAlloc(0x30, 4); the ctor chain
+    // is retail's `??0VertexProgramData` + the vptr store (now the compiler's table)
+    // + the four `variants[i] = nullptr`.
+    return new VertexProgramData(owner);
 }
 
 ::Video::PixelProgramData* DeviceData::CreatePixelProgramData(::Video::PixelProgram* owner) {
-    PixelProgramData* p = AllocData<PixelProgramData, ::Video::PixelProgramData>(0x30, owner,
-                                                      Vt::PixelProgramData);
-    if (!p) return nullptr;
-    for (int i = 0; i < 4; ++i) p->variants[i] = nullptr;
-    return reinterpret_cast< ::Video::PixelProgramData*>(p);   // B5 DEV-A bridge: dies when block RES lands
+    // B5 RES: the base's operator new is retail's MemAlloc(0x30, 4); the ctor chain
+    // is retail's `??0PixelProgramData` + the vptr store (now the compiler's table)
+    // + the four `variants[i] = nullptr`.
+    return new PixelProgramData(owner);
 }
 
 ::Video::RenderStateData* DeviceData::CreateRenderStateData(::Video::RenderState* owner) {
-    RenderStateData* p = AllocData<RenderStateData, ::Video::RenderStateData>(0x28, owner,
-                                                    Vt::RenderStateData);
-    if (!p) return nullptr;
-    p->blendState        = nullptr;
-    p->depthStencilState = nullptr;
-    p->rasterizerState   = nullptr;
-    return reinterpret_cast< ::Video::RenderStateData*>(p);   // B5 DEV-A bridge: dies when block RES lands
+    // B5 RES: the base's operator new is retail's MemAlloc(0x28, 4); the ctor chain
+    // is retail's `??0RenderStateData` + the vptr store (now the compiler's table)
+    // + the three null stores.
+    return new RenderStateData(owner);
 }
 
 ::Video::VideoProgramData* DeviceData::CreateVideoProgramData(::Video::VideoProgram* owner) {

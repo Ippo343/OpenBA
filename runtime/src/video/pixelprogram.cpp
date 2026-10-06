@@ -220,10 +220,12 @@ void PixelProgram::PlatformConstruct() {
 bool PixelProgram::PlatformCreate() {
     return _data->PlatformCreate();
 }
-// ?PlatformDestruct@PixelProgram@Video@@AEAAXXZ (0x1800f3e90)
+// ?PlatformDestruct@PixelProgram@Video@@AEAAXXZ (0x1800f3e90): slot 0, flags 1.
+// B5 RES (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+// virtual destructor, then the base's class-scope operator delete (MemFree).
 void PixelProgram::PlatformDestruct() {
     if (_data == nullptr) return;
-    _data->DeletingDtor(1);
+    delete _data;
 }
 
 // slot 5 — ?Serialize@PixelProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f3a90)

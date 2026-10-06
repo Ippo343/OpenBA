@@ -83,25 +83,43 @@
 
 #include <d3d11.h>
 
-#include "dx11_seam.h"
+#include "dx11_backend_access.h"   // Dx11DeviceData / Dx11Device / Dx11Context
 #include "VideoDX11Data.h"
-#include "system/MemoryAllocator.h"   // B.3R DX: MemFree, direct
 
-// ENDGAME B.3.5 block C, RULE B5-3 — the real `Video::RenderStateData` abstract
-// base (block A), so this file's destructor can call its base destructor as a
-// qualified non-virtual member call instead of resolving a mangled name.
-// B35_RULES 1.2: `dx11/` compiles with the shared include set
-// (`-Iruntime/types -Iruntime/funcs`), so no Makefile change is needed. The
-// twelve CONCRETE `*Data` classes and the 84-slot seam remain the declared leave
-// of RULE B5-8; only the Runtime-side base is a class.
+// The real `Video::RenderStateData` abstract base. B5 RES: `VideoDX11::
+// RenderStateData` derives from it in C++ (dx11/types/VideoDX11Data.h), so the
+// compiler chains its destructor and builds its vtable.
 #include "video/CompanionData.h"
-#include "video/Device.h"   // ENDGAME B.3.9 VID: Video::Device::_singleton
+#include "video/Device.h"        // ENDGAME B.3.9 VID: Video::Device::_singleton
+// B5 RES: the real `Video::RenderState`, whose named members replace this file's
+// former `VideoRenderState` mirror (B5_RULES D8 in spirit: no second view of a
+// Runtime class).
+#include "video/RenderState.h"
 
 namespace VideoDX11 {
 namespace {
 
 // ============================================================================
 // Video::RenderState — the description object at RenderStateData+0x08
+//
+// B5 RES: THE `VideoRenderState` MIRROR IS GONE. It was a 0x80-byte private
+// copy of `Video::RenderState` (runtime/types/video/RenderState.h), which is a
+// real class with the same offsets. The slots below read the real class's
+// members through the base's typed `_owner`. The mirror's field names were
+// the D3D11-consumer names, and for the Stencil sub-struct they disagreed with
+// the real header's serializer-order guesses; the header now carries the
+// consumer names (its Stencil banner cites the reads below). The map, as
+// the slots read it (offsets on the RenderState):
+//
+//   +0x20 _alphaBlend.enabled    +0x24 .srcBlend   +0x28 .dstBlend
+//   +0x2c _alphaBlend.blendOp    +0x30 .writeMask
+//   +0x34 _depth.test            +0x35 .write      +0x38 .func
+//   +0x3c _depth.bias            +0x40 .slopeBias
+//   +0x44 _stencil.enabled       +0x45 .twoSided   +0x48 .func (both faces)
+//   +0x4c _stencil.reference (byte)
+//   +0x50/+0x54/+0x58 _stencil.failOp / depthFailOp / passOp       (front)
+//   +0x5c/+0x60/+0x64 _stencil.backFailOp / backDepthFailOp / backPassOp
+//   +0x68 _cullMode   +0x6c _fillMode   +0x70 _flag70 (the scissor enable)
 //
 // Layout proven by three independent Runtime functions rather than inferred
 // from the DX11 reads alone:
@@ -116,78 +134,11 @@ namespace {
 //   RenderState::Initialize(const AlphaBlend&, const Depth&, const Stencil&,
 //                           CullMode, FillMode, bool)
 // (mangled name at Runtime 0x1801dfe97), which is exactly the five groups
-// below, in order.
+// above, in order.
 //
 // Serializer virtual used per field tells the width: +0x78 = bool,
 // +0x80 = float, +0x98 = int/enum, +0xb8 = byte.
 // ============================================================================
-struct VideoRenderState {
-    // +0x00..+0x1f  Object::External base: vptr, System::Filename at +0x08,
-    //               an array {ptr,count} at +0x10/+0x18. Not touched here.
-    uint8_t  base[0x20];
-
-    // --- AlphaBlend (RenderState::AlphaBlend) ---
-    uint8_t  blendEnabled;          // +0x20  bool   default false
-    uint8_t  pad21[3];
-    int32_t  srcBlend;              // +0x24  enum   default 1 (One)
-    int32_t  destBlend;             // +0x28  enum   default 0 (Zero)
-    int32_t  blendOp;               // +0x2c  enum   default 0 (Add)
-    int32_t  colorWriteMask;        // +0x30  int    default 0xF (RGBA)
-
-    // --- Depth (RenderState::Depth) ---
-    uint8_t  depthEnabled;          // +0x34  bool   default true
-    uint8_t  depthWriteEnabled;     // +0x35  bool   default true
-    uint8_t  pad36[2];
-    int32_t  depthFunc;             // +0x38  enum   default 4 (LessEqual)
-    float    depthBias;             // +0x3c  float  default 0.0f
-    float    slopeScaledDepthBias;  // +0x40  float  default 0.0f
-
-    // --- Stencil (RenderState::Stencil) ---
-    uint8_t  stencilEnabled;        // +0x44  bool   default false
-    uint8_t  stencilTwoSided;       // +0x45  bool   default false
-    uint8_t  pad46[2];
-    int32_t  stencilFunc;           // +0x48  enum   default 0 — shared by BOTH faces
-    uint8_t  stencilRef;            // +0x4c  byte   default 0
-    uint8_t  pad4d[3];
-    int32_t  frontFailOp;           // +0x50  enum   default 0 (Keep)
-    int32_t  frontDepthFailOp;      // +0x54  enum   default 0 (Keep)
-    int32_t  frontPassOp;           // +0x58  enum   default 0 (Keep)
-    int32_t  backFailOp;            // +0x5c  enum   default 0 (Keep)
-    int32_t  backDepthFailOp;       // +0x60  enum   default 0 (Keep)
-    int32_t  backPassOp;            // +0x64  enum   default 0 (Keep)
-
-    // --- top-level ---
-    int32_t  cullMode;              // +0x68  enum   default 1 (Back)
-    int32_t  fillMode;              // +0x6c  enum   default 0 (Solid)
-    uint8_t  scissorEnabled;        // +0x70  bool   default false
-    uint8_t  pad71[7];
-    void*    platformData;          // +0x78  Video::RenderStateData* (us)
-};
-static_assert(sizeof(VideoRenderState) == 0x80, "VideoRenderState size");
-static_assert(offsetof(VideoRenderState, blendEnabled)         == 0x20, "RenderState::blendEnabled");
-static_assert(offsetof(VideoRenderState, srcBlend)             == 0x24, "RenderState::srcBlend");
-static_assert(offsetof(VideoRenderState, destBlend)            == 0x28, "RenderState::destBlend");
-static_assert(offsetof(VideoRenderState, blendOp)              == 0x2c, "RenderState::blendOp");
-static_assert(offsetof(VideoRenderState, colorWriteMask)       == 0x30, "RenderState::colorWriteMask");
-static_assert(offsetof(VideoRenderState, depthEnabled)         == 0x34, "RenderState::depthEnabled");
-static_assert(offsetof(VideoRenderState, depthWriteEnabled)    == 0x35, "RenderState::depthWriteEnabled");
-static_assert(offsetof(VideoRenderState, depthFunc)            == 0x38, "RenderState::depthFunc");
-static_assert(offsetof(VideoRenderState, depthBias)            == 0x3c, "RenderState::depthBias");
-static_assert(offsetof(VideoRenderState, slopeScaledDepthBias) == 0x40, "RenderState::slopeScaledDepthBias");
-static_assert(offsetof(VideoRenderState, stencilEnabled)       == 0x44, "RenderState::stencilEnabled");
-static_assert(offsetof(VideoRenderState, stencilTwoSided)      == 0x45, "RenderState::stencilTwoSided");
-static_assert(offsetof(VideoRenderState, stencilFunc)          == 0x48, "RenderState::stencilFunc");
-static_assert(offsetof(VideoRenderState, stencilRef)           == 0x4c, "RenderState::stencilRef");
-static_assert(offsetof(VideoRenderState, frontFailOp)          == 0x50, "RenderState::frontFailOp");
-static_assert(offsetof(VideoRenderState, frontDepthFailOp)     == 0x54, "RenderState::frontDepthFailOp");
-static_assert(offsetof(VideoRenderState, frontPassOp)          == 0x58, "RenderState::frontPassOp");
-static_assert(offsetof(VideoRenderState, backFailOp)           == 0x5c, "RenderState::backFailOp");
-static_assert(offsetof(VideoRenderState, backDepthFailOp)      == 0x60, "RenderState::backDepthFailOp");
-static_assert(offsetof(VideoRenderState, backPassOp)           == 0x64, "RenderState::backPassOp");
-static_assert(offsetof(VideoRenderState, cullMode)             == 0x68, "RenderState::cullMode");
-static_assert(offsetof(VideoRenderState, fillMode)             == 0x6c, "RenderState::fillMode");
-static_assert(offsetof(VideoRenderState, scissorEnabled)       == 0x70, "RenderState::scissorEnabled");
-static_assert(offsetof(VideoRenderState, platformData)         == 0x78, "RenderState::platformData");
 
 // ============================================================================
 // The six engine-enum -> D3D11-enum translation tables.
@@ -307,22 +258,21 @@ static_assert(offsetof(D3D11_RASTERIZER_DESC, MultisampleEnable)    == 0x20, "RS
 //
 // ENDGAME B.3.5 block C, RULE B5-3: the second import,
 // `[0x180013348] -> ??1RenderStateData@Video@@UEAA@XZ` (hint 0x295), went
-// earlier; the base dtor is a qualified non-virtual member call (slot 0).
+// earlier; since B5 RES the base dtor is the compiler's chain (slot 0).
 // ============================================================================
 
 // The chain every slot walks. Returns null if the device has not been created
-// yet — the original would fault here, we forward to the original slot instead
-// (which faults identically, but keeps the failure attributable to it).
+// yet — the original would fault here. The two slots below test for that and
+// take a documented early return (B5_RULES D9: the old "forward to the original
+// slot" arm is deleted; with no shipped DLL it returned null into a call).
+// B5 RES: the Device+0x100 read is `Dx11DeviceData()` (dx11_backend_access.h),
+// the same two loads.
 DeviceData* ActiveDeviceData() {
-    void* device = ::Video::Device::_singleton;      // Video::Device*
-    if (!device) return nullptr;
-    return *reinterpret_cast<DeviceData**>(
-        reinterpret_cast<uint8_t*>(device) + 0x100); // Video::Device+0x100
+    if (!::Video::Device::_singleton) return nullptr;   // Video::Device*
+    return Dx11DeviceData();                            // Video::Device+0x100
 }
 
-inline VideoRenderState* OwnerState(RenderStateData* self) {
-    return reinterpret_cast<VideoRenderState*>(self->renderState);
-}
+}  // namespace
 
 // ============================================================================
 // slot 0 — 0x1800036e0
@@ -342,44 +292,21 @@ inline VideoRenderState* OwnerState(RenderStateData* self) {
 // depth-stencil). Reproduced as-is. The fields are *not* nulled afterwards;
 // Runtime always follows this with the object going away.
 //
-// Step 1 writes the *original* DLL's vtable address, not ours. That is
-// deliberate and correct: the seam patches slots inside the shipped vtable, so
-// 0x180018818 is still the live vtable for this class. Writing it is also
-// almost dead code here (nothing dispatches through the object afterwards), but
-// the base dtor at step 5 does overwrite it with the Runtime base vptr, so the
-// store has to happen before the base dtor runs, exactly as it does.
+// B5 RES: steps 1, 5, 6 and 7 are the compiler's -- the vptr store and the
+// base-destructor chain are what `~RenderStateData()` does by itself, and the
+// conditional MemFree is its D0 calling the base's class-scope `operator delete`
+// (B5 W0, runtime/src/video/companion_operators.cpp). The body is steps 2-4.
 // ============================================================================
-RenderStateData* RenderStateData_ScalarDeletingDtor(RenderStateData* self, unsigned int flags) {
-    self->vptr = Dx11LiveVtable(Vt::RenderStateData);
-
-    if (self->blendState) {
-        static_cast<ID3D11BlendState*>(self->blendState)->Release();
+RenderStateData::~RenderStateData() {
+    if (blendState) {
+        blendState->Release();
     }
-    if (self->depthStencilState) {
-        static_cast<ID3D11DepthStencilState*>(self->depthStencilState)->Release();
+    if (depthStencilState) {
+        depthStencilState->Release();
     }
-    if (self->rasterizerState) {
-        static_cast<ID3D11RasterizerState*>(self->rasterizerState)->Release();
+    if (rasterizerState) {
+        rasterizerState->Release();
     }
-
-    // ENDGAME B.3.5 block C, RULE B5-3. Was `d.baseDtor(self)`, an indirect call
-    // through a resolved `??1RenderStateData@Video@@UEAA@XZ`.
-    // `Video::RenderStateData` is now a real class, so this is the MSVC
-    // derived-destructor idiom written as C++: a QUALIFIED non-virtual call on the
-    // base subobject, reached through the bridge cast because
-    // `VideoDX11::RenderStateData` is still the declared leave of RULE B5-8 and
-    // does not inherit in C++.
-    //
-    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this very
-    // function. The base destructor is in no slot, which is exactly why the
-    // qualification is safe and the virtual call is not.
-    reinterpret_cast< ::Video::RenderStateData*>(self)
-        -> ::Video::RenderStateData::~RenderStateData();   // B.3.5 bridge
-
-    if (flags & 1u) {
-        System::MemoryAllocator::MemFree(self);
-    }
-    return self;
 }
 
 // ============================================================================
@@ -391,16 +318,16 @@ RenderStateData* RenderStateData_ScalarDeletingDtor(RenderStateData* self, unsig
 //
 // Call order is fixed and reproduced: Blend, Rasterizer, DepthStencil.
 // ============================================================================
-bool RenderStateData_Create(RenderStateData* self) {
+bool RenderStateData::Create() {
     DeviceData* dd = ActiveDeviceData();
     if (!dd || !dd->d3dDevice) {
-        typedef bool (*orig_t)(RenderStateData*);
-        orig_t orig = reinterpret_cast<orig_t>(
-            Dx11OriginalSlot(Vt::RenderStateData, 1));
-        return orig ? orig(self) : true;
+        // B5_RULES D9: was `Dx11OriginalSlot(Vt::RenderStateData, 1)` called if
+        // non-null, else `true`. There is no shipped DLL, so the lookup was
+        // always null and this arm always returned true: kept as that return.
+        return true;
     }
-    ID3D11Device* dev = static_cast<ID3D11Device*>(dd->d3dDevice);
-    const VideoRenderState* rs = OwnerState(self);
+    ID3D11Device* dev = Dx11Device();   // == dd->d3dDevice, re-walked
+    const ::Video::RenderState* rs = _owner;   // B5 RES: the real class, typed
 
     // ---- D3D11_BLEND_DESC ------------------------------------------------
     // memset 0x108 (@0x180003821), then nine explicit fields. Everything the
@@ -411,37 +338,39 @@ bool RenderStateData_Create(RenderStateData* self) {
     std::memset(&blendDesc, 0, sizeof(blendDesc));
     blendDesc.AlphaToCoverageEnable  = FALSE;                      // [RBP-0x20].lo, 0x180003905
     blendDesc.IndependentBlendEnable = FALSE;                      // [RBP-0x20].hi, 0x180003905
-    blendDesc.RenderTarget[0].BlendEnable    = (rs->blendEnabled != 0);   // RS+0x20, 0x18000390b
-    blendDesc.RenderTarget[0].SrcBlend       = kBlendFactor[rs->srcBlend];  // RS+0x24, 0x180003914
-    blendDesc.RenderTarget[0].DestBlend      = kBlendFactor[rs->destBlend]; // RS+0x28, 0x18000391f
-    blendDesc.RenderTarget[0].BlendOp        = kBlendOp[rs->blendOp];       // RS+0x2c, 0x18000392a
+    blendDesc.RenderTarget[0].BlendEnable    = (rs->_alphaBlend.enabled != 0);             // RS+0x20, 0x18000390b
+    blendDesc.RenderTarget[0].SrcBlend       = kBlendFactor[rs->_alphaBlend.srcBlend];  // RS+0x24, 0x180003914
+    blendDesc.RenderTarget[0].DestBlend      = kBlendFactor[rs->_alphaBlend.dstBlend];  // RS+0x28, 0x18000391f
+    blendDesc.RenderTarget[0].BlendOp        = kBlendOp[rs->_alphaBlend.blendOp];       // RS+0x2c, 0x18000392a
     // Alpha blending is NOT separately configurable: the alpha triplet reads
     // the very same three RenderState fields (0x180003935 / 0x180003940 /
     // 0x18000394b re-load RS+0x24, +0x28, +0x2c).
-    blendDesc.RenderTarget[0].SrcBlendAlpha  = kBlendFactor[rs->srcBlend];
-    blendDesc.RenderTarget[0].DestBlendAlpha = kBlendFactor[rs->destBlend];
-    blendDesc.RenderTarget[0].BlendOpAlpha   = kBlendOp[rs->blendOp];
+    blendDesc.RenderTarget[0].SrcBlendAlpha  = kBlendFactor[rs->_alphaBlend.srcBlend];
+    blendDesc.RenderTarget[0].DestBlendAlpha = kBlendFactor[rs->_alphaBlend.dstBlend];
+    blendDesc.RenderTarget[0].BlendOpAlpha   = kBlendOp[rs->_alphaBlend.blendOp];
     // movzx eax,byte [rdi+0x30]; and al,0xf   @ 0x180003956 — low nibble only,
     // i.e. the four D3D11_COLOR_WRITE_ENABLE_{RED,GREEN,BLUE,ALPHA} bits.
     blendDesc.RenderTarget[0].RenderTargetWriteMask =
-        static_cast<UINT8>(static_cast<uint8_t>(rs->colorWriteMask) & 0x0Fu);
+        static_cast<UINT8>(static_cast<uint8_t>(rs->_alphaBlend.writeMask) & 0x0Fu);
 
     // ---- D3D11_RASTERIZER_DESC -------------------------------------------
     // Fully written, no memset in the original (all ten fields are assigned).
     D3D11_RASTERIZER_DESC rasterDesc;
     std::memset(&rasterDesc, 0, sizeof(rasterDesc));
-    rasterDesc.FillMode              = kFillMode[rs->fillMode];   // RS+0x6c, 0x1800037d3
-    rasterDesc.CullMode              = kCullMode[rs->cullMode];   // RS+0x68, 0x180003801
+    rasterDesc.FillMode              = kFillMode[rs->_fillMode];  // RS+0x6c, 0x1800037d3
+    rasterDesc.CullMode              = kCullMode[rs->_cullMode];  // RS+0x68, 0x180003801
     rasterDesc.FrontCounterClockwise = FALSE;                     // hard 0,   0x180003805
     // cvttss2si of (RS+0x3c * 16777215.0f) — truncation toward zero, matching
     // the C float->int conversion the original compiled to.
     rasterDesc.DepthBias             =
-        static_cast<INT>(rs->depthBias * kDepthBiasScale);        // 0x180003827-0x18000384b
+        static_cast<INT>(rs->_depth.bias * kDepthBiasScale);      // 0x180003827-0x18000384b
     rasterDesc.DepthBiasClamp        = 0.0f;                      // xorps,    0x18000385e
     rasterDesc.SlopeScaledDepthBias  =
-        rs->slopeScaledDepthBias * kSlopeScaledBiasScale;         // 0x180003863-0x180003885
+        rs->_depth.slopeBias * kSlopeScaledBiasScale;             // 0x180003863-0x180003885
     rasterDesc.DepthClipEnable       = TRUE;                      // hard 1,   0x180003868
-    rasterDesc.ScissorEnable         = (rs->scissorEnabled != 0); // RS+0x70,  0x18000388a
+    // RenderState+0x70 is Initialize's trailing `bool` (`_flag70` in the real
+    // header); this read is what makes it the scissor enable.
+    rasterDesc.ScissorEnable         = (rs->_flag70 != 0);        // RS+0x70,  0x18000388a
     // `mov qword [RBP-0x28], 1` @ 0x1800038f8 covers both trailing BOOLs.
     rasterDesc.MultisampleEnable     = TRUE;
     rasterDesc.AntialiasedLineEnable = FALSE;
@@ -449,47 +378,44 @@ bool RenderStateData_Create(RenderStateData* self) {
     // ---- D3D11_DEPTH_STENCIL_DESC ----------------------------------------
     D3D11_DEPTH_STENCIL_DESC dsDesc;
     std::memset(&dsDesc, 0, sizeof(dsDesc));   // see header note re: padding
-    dsDesc.DepthEnable    = (rs->depthEnabled != 0);              // RS+0x34, 0x180003961
+    dsDesc.DepthEnable    = (rs->_depth.test != 0);               // RS+0x34, 0x180003961
     // D3D11_DEPTH_WRITE_MASK_ZERO == 0, _ALL == 1, so the raw bool is the enum.
-    dsDesc.DepthWriteMask = rs->depthWriteEnabled
+    dsDesc.DepthWriteMask = rs->_depth.write
                                 ? D3D11_DEPTH_WRITE_MASK_ALL
                                 : D3D11_DEPTH_WRITE_MASK_ZERO;    // RS+0x35, 0x18000396d
-    dsDesc.DepthFunc      = kCompareFunc[rs->depthFunc];          // RS+0x38, 0x180003977
-    dsDesc.StencilEnable  = (rs->stencilEnabled != 0);            // RS+0x44, 0x180003983
+    dsDesc.DepthFunc      = kCompareFunc[rs->_depth.func];        // RS+0x38, 0x180003977
+    dsDesc.StencilEnable  = (rs->_stencil.enabled != 0);          // RS+0x44, 0x180003983
     // `mov word [RSP+0x30], 0xffff` @ 0x180003986 sets both masks at once.
     dsDesc.StencilReadMask  = 0xFF;
     dsDesc.StencilWriteMask = 0xFF;
 
-    dsDesc.FrontFace.StencilFailOp      = kStencilOp[rs->frontFailOp];      // RS+0x50
-    dsDesc.FrontFace.StencilDepthFailOp = kStencilOp[rs->frontDepthFailOp]; // RS+0x54
-    dsDesc.FrontFace.StencilPassOp      = kStencilOp[rs->frontPassOp];      // RS+0x58
-    dsDesc.FrontFace.StencilFunc        = kCompareFunc[rs->stencilFunc];    // RS+0x48
+    dsDesc.FrontFace.StencilFailOp      = kStencilOp[rs->_stencil.failOp];      // RS+0x50
+    dsDesc.FrontFace.StencilDepthFailOp = kStencilOp[rs->_stencil.depthFailOp]; // RS+0x54
+    dsDesc.FrontFace.StencilPassOp      = kStencilOp[rs->_stencil.passOp];      // RS+0x58
+    dsDesc.FrontFace.StencilFunc        = kCompareFunc[rs->_stencil.func];      // RS+0x48
 
-    if (!rs->stencilTwoSided) {
+    if (!rs->_stencil.twoSided) {
         // RS+0x45 == 0 -> the fixed back face at 0x1800039ca-0x1800039e2.
         dsDesc.BackFace.StencilFailOp      = D3D11_STENCIL_OP_KEEP;   // 1
         dsDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;   // 1
         dsDesc.BackFace.StencilPassOp      = D3D11_STENCIL_OP_KEEP;   // 1
         dsDesc.BackFace.StencilFunc        = D3D11_COMPARISON_ALWAYS; // 8
     } else {
-        dsDesc.BackFace.StencilFailOp      = kStencilOp[rs->backFailOp];      // RS+0x5c
-        dsDesc.BackFace.StencilDepthFailOp = kStencilOp[rs->backDepthFailOp]; // RS+0x60
-        dsDesc.BackFace.StencilPassOp      = kStencilOp[rs->backPassOp];      // RS+0x64
+        dsDesc.BackFace.StencilFailOp      = kStencilOp[rs->_stencil.backFailOp];      // RS+0x5c
+        dsDesc.BackFace.StencilDepthFailOp = kStencilOp[rs->_stencil.backDepthFailOp]; // RS+0x60
+        dsDesc.BackFace.StencilPassOp      = kStencilOp[rs->_stencil.backPassOp];      // RS+0x64
         // NOT a typo and NOT a bug: the back face re-reads RS+0x48
         // (0x180003a10, the same field the front face used). Video::RenderState
         // simply has one stencil compare function — RenderState::Serialize
         // (0x1800f4c90 -> Stencil::Serialize 0x1800f48e0) shows a single int at
         // +0x48 for the whole Stencil sub-struct.
-        dsDesc.BackFace.StencilFunc        = kCompareFunc[rs->stencilFunc];
+        dsDesc.BackFace.StencilFunc        = kCompareFunc[rs->_stencil.func];
     }
 
     // ---- create, in the original's order ---------------------------------
-    dev->CreateBlendState(&blendDesc,
-                          reinterpret_cast<ID3D11BlendState**>(&self->blendState));
-    dev->CreateRasterizerState(&rasterDesc,
-                          reinterpret_cast<ID3D11RasterizerState**>(&self->rasterizerState));
-    dev->CreateDepthStencilState(&dsDesc,
-                          reinterpret_cast<ID3D11DepthStencilState**>(&self->depthStencilState));
+    dev->CreateBlendState(&blendDesc, &blendState);
+    dev->CreateRasterizerState(&rasterDesc, &rasterizerState);
+    dev->CreateDepthStencilState(&dsDesc, &depthStencilState);
     return true;
 }
 
@@ -510,36 +436,25 @@ bool RenderStateData_Create(RenderStateData* self) {
 //
 // The Video::Context& Runtime passes in RDX is never read.
 // ============================================================================
-void RenderStateData_Bind(RenderStateData* self, void* /*videoContext — unused, as in the original*/) {
+void RenderStateData::Bind(void* /*videoContext — unused, as in the original*/) {
     DeviceData* dd = ActiveDeviceData();
     if (!dd || !dd->d3dContext) {
-        typedef void (*orig_t)(RenderStateData*, void*);
-        orig_t orig = reinterpret_cast<orig_t>(
-            Dx11OriginalSlot(Vt::RenderStateData, 2));
-        if (orig) orig(self, nullptr);
+        // B5_RULES D9: was `Dx11OriginalSlot(Vt::RenderStateData, 2)` called if
+        // non-null. There is no shipped DLL, so the lookup was always null and
+        // this arm always returned without binding: kept as that return.
         return;
     }
-    ID3D11DeviceContext* ctx = static_cast<ID3D11DeviceContext*>(dd->d3dContext);
-    const VideoRenderState* rs = OwnerState(self);
+    ID3D11DeviceContext* ctx = Dx11Context();   // == dd->d3dContext, re-walked
+    const ::Video::RenderState* rs = _owner;     // B5 RES: the real class, typed
 
     const FLOAT blendFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    ctx->OMSetBlendState(static_cast<ID3D11BlendState*>(self->blendState),
-                         blendFactor, 0xFFFFFFFFu);
-    ctx->OMSetDepthStencilState(
-        static_cast<ID3D11DepthStencilState*>(self->depthStencilState),
-        static_cast<UINT>(rs->stencilRef));
-    ctx->RSSetState(static_cast<ID3D11RasterizerState*>(self->rasterizerState));
+    ctx->OMSetBlendState(blendState, blendFactor, 0xFFFFFFFFu);
+    ctx->OMSetDepthStencilState(depthStencilState,
+                                static_cast<UINT>(rs->_stencil.reference));   // byte, RS+0x4c
+    ctx->RSSetState(rasterizerState);
 }
 
-}  // namespace
 }  // namespace VideoDX11
 
 // All three live. Verified in-game and RenderDoc-diffed against the shipped
 // DLL — see dx11/README.md §"Per-draw pipeline-state equality".
-
-DX11_REGISTER_SLOT(RenderStateData, 0, &::VideoDX11::RenderStateData_ScalarDeletingDtor,
-                   "RenderStateData::~RenderStateData");
-DX11_REGISTER_SLOT(RenderStateData, 1, &::VideoDX11::RenderStateData_Create,
-                   "RenderStateData::Create");
-DX11_REGISTER_SLOT(RenderStateData, 2, &::VideoDX11::RenderStateData_Bind,
-                   "RenderStateData::Bind");

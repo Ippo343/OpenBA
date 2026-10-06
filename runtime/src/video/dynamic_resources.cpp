@@ -161,13 +161,11 @@ static_assert(offsetof(Video::RenderBuffer, prev) == 0x20, "RenderBuffer walker 
 // The one shape all four ReleaseDynamic walkers share for a single element:
 // destroy the companion through its deleting destructor (vtable slot 0, flag 1)
 // and null the field. Guarded on the companion, exactly as retail is.
-template <class Companion>
-void ReleaseCompanion(Companion*& companionField) {
-    Companion* companion = companionField;
-    if (companion != nullptr)
-        (void)companion->DeletingDtor(1);
-    companionField = nullptr;
-}
+// B5 (the dx11 seam, B5_RULES D10): this was the `ReleaseCompanion<>` template
+// over `DeletingDtor(1)`. Every companion now wears the compiler's table, so
+// slot 0 with flag 1 is `delete`; the four walkers spell the three statements
+// inline (PILOT: RenderBuffer, BUF: Index/VertexBuffer, RES: ImageBuffer — the
+// template's last user) and the template is gone.
 
 // ImageBuffer's per-element guard, from 0x1800f2dd0 and 0x1800f2ec8:
 //
@@ -290,7 +288,13 @@ void Video::ImageBuffer::ReleaseDynamic() {
         Video::ImageBuffer* p = terminator;
         do {
             if (ImageBufferIsDynamicResource(p)) {
-                ReleaseCompanion(p->_data);
+                // B5 RES (B5_RULES D10): ImageBufferData wears the compiler's
+                // table, so its slot-0 call with flags 1 is `delete` (virtual
+                // dtor, then the base's operator delete = MemFree); guarded on
+                // the companion and the field nulled, as ReleaseCompanion does.
+                if (ImageBufferData* companion = p->_data)
+                    delete companion;
+                p->_data = nullptr;
                 terminator = _firstSurface;
             }
             p = p->_field58;

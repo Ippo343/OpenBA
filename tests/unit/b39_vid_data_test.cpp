@@ -13,9 +13,11 @@
 // B5 (the dx11 seam): a class whose dx11 subclass is converted moves to
 // CheckDataB5 -- `virtual ~T()`, `delete` instead of `DeletingDtor` (so far:
 // RenderBufferData, VideoProgramData; B5 BUF: IndexBufferData, VertexBufferData,
-// ConstantBufferData; B5 CTX: ContextData; B5 DEV-A: DeviceData). The dx11
-// subclasses cannot link here (D3D11), so the BASE shape is what is tested, plus
-// the shape the DX9 placeholder (dx11/src/dx9_placeholder.cpp) puts on it.
+// ConstantBufferData; B5 CTX: ContextData; B5 RES: VertexLayoutData,
+// VertexProgramData, PixelProgramData, RenderStateData, ImageBufferData; B5
+// DEV-A: DeviceData). The dx11 subclasses cannot link here (D3D11), so the BASE
+// shape is what is tested, plus the shape the DX9 placeholder
+// (dx11/src/dx9_placeholder.cpp) puts on it.
 //
 // The out-of-line destructors live in runtime/src/video/companion_data.cpp
 // (which cannot link into the host test), so they are defined HERE as markers.
@@ -142,15 +144,15 @@ VideoProgramData::~VideoProgramData()     { NoteDtor(this); }
 
 UNIT_TEST(b39_vid_devicedata_concrete)         { CheckDataB5<Video::DeviceData>(); }
 UNIT_TEST(b39_vid_contextdata_concrete)        { CheckDataB5<Video::ContextData>(); }
-UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckData<Video::ImageBufferData>(); }
+UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckDataB5<Video::ImageBufferData>(); }
 UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckDataB5<Video::IndexBufferData>(); }
 UNIT_TEST(b39_vid_vertexbufferdata_concrete)   { CheckDataB5<Video::VertexBufferData>(); }
 UNIT_TEST(b39_vid_constantbufferdata_concrete) { CheckDataB5<Video::ConstantBufferData>(); }
 UNIT_TEST(b39_vid_renderbufferdata_concrete)   { CheckDataB5<Video::RenderBufferData>(); }
-UNIT_TEST(b39_vid_vertexlayoutdata_concrete)   { CheckData<Video::VertexLayoutData>(); }
-UNIT_TEST(b39_vid_vertexprogramdata_concrete)  { CheckData<Video::VertexProgramData>(); }
-UNIT_TEST(b39_vid_pixelprogramdata_concrete)   { CheckData<Video::PixelProgramData>(); }
-UNIT_TEST(b39_vid_renderstatedata_concrete)    { CheckData<Video::RenderStateData>(); }
+UNIT_TEST(b39_vid_vertexlayoutdata_concrete)   { CheckDataB5<Video::VertexLayoutData>(); }
+UNIT_TEST(b39_vid_vertexprogramdata_concrete)  { CheckDataB5<Video::VertexProgramData>(); }
+UNIT_TEST(b39_vid_pixelprogramdata_concrete)   { CheckDataB5<Video::PixelProgramData>(); }
+UNIT_TEST(b39_vid_renderstatedata_concrete)    { CheckDataB5<Video::RenderStateData>(); }
 UNIT_TEST(b39_vid_videoprogramdata_concrete)   { CheckDataB5<Video::VideoProgramData>(); }
 
 // B5 PILOT: the two flipped classes' slots in RETAIL numbers (slot_check.h
@@ -246,6 +248,33 @@ UNIT_TEST(b5_buf_flipped_companion_slots_by_pmf) {
     CHECK_SLOT(C, Create,           1);
     CHECK_SLOT(C, Bind,             0x10/8);
     CHECK_SLOT(C, SlotIndexPlusOne, 3);
+}
+
+// B5 RES: the block's flipped classes, in RETAIL numbers. `Video::VertexLayout::
+// Serialize` reaches PlatformCreate as retail slot 2 (+0x10).
+UNIT_TEST(b5_res_flipped_companion_slots_by_pmf) {
+    using L = Video::VertexLayoutData;
+    CHECK_SLOT(L, Bind,           1);
+    CHECK_SLOT(L, PlatformCreate, 2);
+    using VP = Video::VertexProgramData;
+    CHECK_SLOT(VP, PlatformCreate, 1);
+    CHECK_SLOT(VP, Bind,           2);
+    using PP = Video::PixelProgramData;
+    CHECK_SLOT(PP, PlatformCreate, 1);
+    CHECK_SLOT(PP, Bind,           2);
+    // Video::RenderState::PlatformCreate 0x1800f4ea0 -> slot 1, ::Bind 0x1800f4ec0 -> slot 2.
+    using RS = Video::RenderStateData;
+    CHECK_SLOT(RS, Create, 1);
+    CHECK_SLOT(RS, Bind,   2);
+    // `?BindTextures@Context@Video@@` 0x1800ef36d calls slot 4 as `[RAX+0x20]`;
+    // `?Create@ImageBuffer@Video@@` reaches slot 3 (+0x18).
+    using IB = Video::ImageBufferData;
+    CHECK_SLOT(IB, AttachColorBuffer, 1);
+    CHECK_SLOT(IB, AttachDepthBuffer, 2);
+    CHECK_SLOT(IB, Create,            3);
+    CHECK_SLOT(IB, Bind,              4);
+    CHECK_SLOT(IB, Update,            5);
+    CHECK_SLOT(IB, Read,              6);
 }
 
 // The slot ORDER of the two 20-slot tables, by PMF: the Device-side callers

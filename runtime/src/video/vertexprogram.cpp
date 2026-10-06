@@ -322,10 +322,12 @@ void VertexProgram::PlatformConstruct() {
 bool VertexProgram::PlatformCreate() {
     return _data->PlatformCreate();
 }
-// ?PlatformDestruct@VertexProgram@Video@@AEAAXXZ (0x1800f6620)
+// ?PlatformDestruct@VertexProgram@Video@@AEAAXXZ (0x1800f6620): slot 0, flags 1.
+// B5 RES (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+// virtual destructor, then the base's class-scope operator delete (MemFree).
 void VertexProgram::PlatformDestruct() {
     if (_data == nullptr) return;
-    _data->DeletingDtor(1);
+    delete _data;
 }
 
 // slot 5 — ?Serialize@VertexProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f6240)

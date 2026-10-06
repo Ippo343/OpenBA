@@ -31,6 +31,10 @@
 // see the alias below.
 #include "ConstantBuffer.h"
 #include "../object/Internal.h"   // Object::detail::InternalMemFree (the slot-0 bodies)
+// B5 RES: `Collection::Array<T>` for `ImageBufferData::Create`'s level array.
+// Three template parameters, two defaulted, so it cannot be forward-declared
+// (ImageBuffer.h's banner says the same); the header includes only std headers.
+#include "../collection/Collection.h"
 
 namespace RtVideo {
 
@@ -361,26 +365,25 @@ public:
     static void  operator delete(void* p);
 
     // [0] 0x180058a10 -- MSVC's VECTOR deleting destructor (element 0x10, over
-    // ~ImageBufferData), both arms as the retired RT_DELDTOR row ran them. Reached only on
-    // an object wearing THIS table; a live companion wears dx11's.
-    virtual void* DeletingDtor(unsigned flags) {
-        if (flags & 2u) {
-            void* const block = this;   // element 0 of a vector-new block
-            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
-            for (int32_t i = *cookie; --i >= 0;)
-                this[i].~ImageBufferData();
-            if (flags & 1u) Object::detail::InternalMemFree(cookie);
-            return cookie;
-        }
-        this->~ImageBufferData();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ~ImageBufferData). B5 RES (B5_RULES D1): a real virtual destructor -- the
+    // compiler's D0/D1 pair is slot 0 now, and the base's class-scope `operator
+    // delete` above is retail's MemFree on `flags & 1`. The body (empty) stays in
+    // companion_data.cpp: ??1ImageBufferData@Video@@UEAA@XZ  0x1800f8e10.
+    virtual ~ImageBufferData();
     virtual void AttachColorBuffer() { detail::CompanionPureCall(); }                        // [1]
     virtual void AttachDepthBuffer() { detail::CompanionPureCall(); }                        // [2]
-    // `levels` is a `Collection::Array<ImageLevel>`-shaped header; dx11 spells
-    // it `ImageLevelArray`.
-    virtual bool Create(const void* levels) { detail::CompanionPureCall(); }                 // [3]
+    // B5 RES, PARAMETER TYPED FROM THE CALLERS (was `const void* levels`). Both
+    // dispatchers pass their own `LevelArray* levels` argument straight through:
+    // `?Create@ImageBuffer@Video@@UEAA_N...` (0x1800f2680, buffers.cpp) and
+    // `Graphics::FrameCopyImageBuffer::Create` (0x1800a3b87.., wave23_lane_gfxbody
+    // .cpp), whose mangled parameter is `PEAV?$Array@V?$Array@E@Collection@@@
+    // Collection@@` -- i.e. `Video::ImageBuffer::LevelArray`, a
+    // `Collection::Array<Collection::Array<uint8_t>>`. VideoDX11 (0x180002870)
+    // reads only `_data` / `_size` of the outer array and the leading `_data` of
+    // each 0x10-byte element, which is exactly that type's layout. `const`: the
+    // slot never writes through it. (A nested typedef cannot be forward-declared,
+    // so the template is spelled out; Collection.h includes only std headers.)
+    virtual bool Create(const Collection::Array<Collection::Array<uint8_t> >* levels) { detail::CompanionPureCall(); }  // [3]
     // ENDGAME B.3.5 block J, SIGNATURE CORRECTED. `unknownArg` was not unknown:
     // it is the `Video::Context*`. Read as DISASSEMBLY this pass from the only
     // caller, `?BindTextures@Context@Video@@` 0x1800ef330 --
@@ -395,13 +398,6 @@ public:
     virtual void Bind(void* context, unsigned slot) { detail::CompanionPureCall(); }         // [4]
     virtual bool Update(void* data, int width, int height) { detail::CompanionPureCall(); }  // [5]
     virtual bool Read(void* dst, int width, int height) { detail::CompanionPureCall(); }     // [6]
-
-    // ??1ImageBufferData@Video@@UEAA@XZ  0x1800f8e10. Its registered DOOR is
-    // `Video_ImageBufferData_Dtor` in `runtime/src/video/buffers.cpp` (Wave 6
-    // lane C), not in companion_data.cpp; the member body lives with the other
-    // eleven and that door converts to a delegation when block C takes
-    // `buffers.cpp`.
-    ~ImageBufferData();
 
     Owner* _owner;           // +0x08  Video::ImageBuffer*
 };
@@ -597,27 +593,15 @@ public:
     static void  operator delete(void* p);
 
     // [0] 0x180058810 -- MSVC's VECTOR deleting destructor (element 0x10, over
-    // ~VertexLayoutData), both arms as the retired RT_DELDTOR row ran them. Reached only on
-    // an object wearing THIS table; a live companion wears dx11's.
-    virtual void* DeletingDtor(unsigned flags) {
-        if (flags & 2u) {
-            void* const block = this;   // element 0 of a vector-new block
-            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
-            for (int32_t i = *cookie; --i >= 0;)
-                this[i].~VertexLayoutData();
-            if (flags & 1u) Object::detail::InternalMemFree(cookie);
-            return cookie;
-        }
-        this->~VertexLayoutData();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ~VertexLayoutData). B5 RES (B5_RULES D1): a real virtual destructor -- the
+    // compiler's D0/D1 pair is slot 0 now, and the base's class-scope `operator
+    // delete` above is retail's MemFree on `flags & 1`. The body (empty) stays in
+    // companion_data.cpp: ??1VertexLayoutData@Video@@UEAA@XZ  0x1800f8d30.
+    virtual ~VertexLayoutData();
     virtual void Bind(void* context) { detail::CompanionPureCall(); }                        // [1]
     // void, unlike VertexProgramData's and PixelProgramData's bool — VideoDX11's
     // 0x180003ff0 falls off its end with no return value set.
     virtual void PlatformCreate() { detail::CompanionPureCall(); }                           // [2] +0x10
-
-    ~VertexLayoutData();    // ??1VertexLayoutData@Video@@UEAA@XZ  0x1800f8d30
 
     Owner* _owner;           // +0x08  Video::VertexLayout*
 };
@@ -640,25 +624,13 @@ public:
     static void  operator delete(void* p);
 
     // [0] 0x180058790 -- MSVC's VECTOR deleting destructor (element 0x10, over
-    // ~VertexProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
-    // an object wearing THIS table; a live companion wears dx11's.
-    virtual void* DeletingDtor(unsigned flags) {
-        if (flags & 2u) {
-            void* const block = this;   // element 0 of a vector-new block
-            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
-            for (int32_t i = *cookie; --i >= 0;)
-                this[i].~VertexProgramData();
-            if (flags & 1u) Object::detail::InternalMemFree(cookie);
-            return cookie;
-        }
-        this->~VertexProgramData();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ~VertexProgramData). B5 RES (B5_RULES D1): a real virtual destructor -- the
+    // compiler's D0/D1 pair is slot 0 now, and the base's class-scope `operator
+    // delete` above is retail's MemFree on `flags & 1`. The body (empty) stays in
+    // companion_data.cpp: ??1VertexProgramData@Video@@UEAA@XZ  0x1800f8d10.
+    virtual ~VertexProgramData();
     virtual bool PlatformCreate() { detail::CompanionPureCall(); }                           // [1]
     virtual void Bind(void* context, int permutation) { detail::CompanionPureCall(); }        // [2]
-
-    ~VertexProgramData();   // ??1VertexProgramData@Video@@UEAA@XZ  0x1800f8d10
 
     Owner* _owner;           // +0x08  Video::VertexProgram*
 };
@@ -681,25 +653,13 @@ public:
     static void  operator delete(void* p);
 
     // [0] 0x180058710 -- MSVC's VECTOR deleting destructor (element 0x10, over
-    // ~PixelProgramData), both arms as the retired RT_DELDTOR row ran them. Reached only on
-    // an object wearing THIS table; a live companion wears dx11's.
-    virtual void* DeletingDtor(unsigned flags) {
-        if (flags & 2u) {
-            void* const block = this;   // element 0 of a vector-new block
-            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
-            for (int32_t i = *cookie; --i >= 0;)
-                this[i].~PixelProgramData();
-            if (flags & 1u) Object::detail::InternalMemFree(cookie);
-            return cookie;
-        }
-        this->~PixelProgramData();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ~PixelProgramData). B5 RES (B5_RULES D1): a real virtual destructor -- the
+    // compiler's D0/D1 pair is slot 0 now, and the base's class-scope `operator
+    // delete` above is retail's MemFree on `flags & 1`. The body (empty) stays in
+    // companion_data.cpp: ??1PixelProgramData@Video@@UEAA@XZ  0x1800f8dd0.
+    virtual ~PixelProgramData();
     virtual bool PlatformCreate() { detail::CompanionPureCall(); }                           // [1]
     virtual void Bind(void* context, int permutation) { detail::CompanionPureCall(); }        // [2]
-
-    ~PixelProgramData();    // ??1PixelProgramData@Video@@UEAA@XZ  0x1800f8dd0
 
     Owner* _owner;           // +0x08  Video::PixelProgram*
 };
@@ -722,29 +682,14 @@ public:
     static void  operator delete(void* p);
 
     // [0] 0x180058690 -- MSVC's VECTOR deleting destructor (element 0x10, over
-    // ~RenderStateData), both arms as the retired RT_DELDTOR row ran them. Reached only on
-    // an object wearing THIS table; a live companion wears dx11's.
-    virtual void* DeletingDtor(unsigned flags) {
-        if (flags & 2u) {
-            void* const block = this;   // element 0 of a vector-new block
-            int32_t* const cookie = static_cast<int32_t*>(block) - 2;  // CAST-OK: dx11_seam
-            for (int32_t i = *cookie; --i >= 0;)
-                this[i].~RenderStateData();
-            if (flags & 1u) Object::detail::InternalMemFree(cookie);
-            return cookie;
-        }
-        this->~RenderStateData();
-        if (flags & 1u) Object::detail::InternalMemFree(this);
-        return this;
-    }
+    // ~RenderStateData). B5 RES (B5_RULES D1): a real virtual destructor -- the
+    // compiler's D0/D1 pair is slot 0 now, and the base's class-scope `operator
+    // delete` above is retail's MemFree on `flags & 1`. The body (empty) stays in
+    // companion_data.cpp: ??1RenderStateData@Video@@UEAA@XZ  0x1800f8d70 (its old
+    // registered door in device.cpp is retired, B.3.9 VID).
+    virtual ~RenderStateData();
     virtual bool Create() { detail::CompanionPureCall(); }                                   // [1]
     virtual void Bind(void* context) { detail::CompanionPureCall(); }                        // [2]
-
-    // ??1RenderStateData@Video@@UEAA@XZ. Its registered DOOR is in
-    // `runtime/src/video/device.cpp` (Wave 6 lane B), not in
-    // companion_data.cpp — see the banner there. Same arrangement as
-    // `ImageBufferData`'s above.
-    ~RenderStateData();
 
     Owner* _owner;           // +0x08  Video::RenderState*
 };
@@ -828,9 +773,8 @@ static_assert(std::has_virtual_destructor<DeviceData>::value,
               "B5: the dx11 subclass wears the compiler's table");
 static_assert(std::has_virtual_destructor<ContextData>::value,
               "B5: the dx11 subclass wears the compiler's table");
-static_assert(!std::has_virtual_destructor<ImageBufferData>::value,
-              "Video::ImageBufferData is exempt from the normal-virtual cutover -- the live "
-              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(std::has_virtual_destructor<ImageBufferData>::value,
+              "B5: the dx11 subclass wears the compiler's table");
 static_assert(std::has_virtual_destructor<IndexBufferData>::value,
               "B5: the dx11 subclass wears the compiler's table");
 static_assert(std::has_virtual_destructor<VertexBufferData>::value,
@@ -839,18 +783,14 @@ static_assert(std::has_virtual_destructor<ConstantBufferData>::value,
               "B5: the dx11 subclass wears the compiler's table");
 static_assert(std::has_virtual_destructor<RenderBufferData>::value,
               "B5: the dx11 subclass wears the compiler's table");
-static_assert(!std::has_virtual_destructor<VertexLayoutData>::value,
-              "Video::VertexLayoutData is exempt from the normal-virtual cutover -- the live "
-              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
-static_assert(!std::has_virtual_destructor<VertexProgramData>::value,
-              "Video::VertexProgramData is exempt from the normal-virtual cutover -- the live "
-              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
-static_assert(!std::has_virtual_destructor<PixelProgramData>::value,
-              "Video::PixelProgramData is exempt from the normal-virtual cutover -- the live "
-              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
-static_assert(!std::has_virtual_destructor<RenderStateData>::value,
-              "Video::RenderStateData is exempt from the normal-virtual cutover -- the live "
-              "object wears dx11's table built in retail slot order (B3X_RULES X1)");
+static_assert(std::has_virtual_destructor<VertexLayoutData>::value,
+              "B5: the dx11 subclass wears the compiler's table");
+static_assert(std::has_virtual_destructor<VertexProgramData>::value,
+              "B5: the dx11 subclass wears the compiler's table");
+static_assert(std::has_virtual_destructor<PixelProgramData>::value,
+              "B5: the dx11 subclass wears the compiler's table");
+static_assert(std::has_virtual_destructor<RenderStateData>::value,
+              "B5: the dx11 subclass wears the compiler's table");
 static_assert(std::has_virtual_destructor<VideoProgramData>::value,
               "B5: the dx11 subclass wears the compiler's table");
 
