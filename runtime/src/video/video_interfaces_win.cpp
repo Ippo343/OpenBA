@@ -68,10 +68,12 @@ using System::String;
 using Video::Device;
 using InterfaceSlot = Video::Device::InterfaceSlot;
 
-// standalone/video_interface.cpp. Declared at FILE scope (it used to be a
-// block-scope `extern` inside the body; inside a `Video::Device` member that
-// would name `Video::VideoInterfaceFillDx9Placeholder` and fail at link).
-void VideoInterfaceFillDx9Placeholder(void* device);
+// standalone/video_interface.cpp's two fills (VideoInterfaceFillDx11Slot,
+// VideoInterfaceFillDx9Placeholder) are declared at FILE scope by
+// video_interface.h above (one used to be a block-scope `extern` inside the
+// body; inside a `Video::Device` member that would name `Video::…` and fail at
+// link). B5 DEV-A: both take the typed `Video::Device*` (`this`), and the
+// duplicate declaration that stood here is gone.
 
 namespace {
 
@@ -265,11 +267,12 @@ void Video::Device::InitializeInterfaces() {
     // Slot 0 is now always empty (nothing loads VideoDX9-x64.dll), which leaves
     // the GraphicsInterface array one entry short of the slot count that the
     // configuration's interface index and the Options dialog's
-    // GetInterface(cfgIndex) assume. Fill slot 0 with the zero-adapter
-    // placeholder (dx11/src/devicedata.cpp explains the invariant).
+    // GetInterface(cfgIndex) assume. Fill slot 0 with the placeholder
+    // (dx11/src/dx9_placeholder.cpp explains the invariant).
     if (dllSlots[0].module == nullptr) {
-        // Declared at file scope, not block scope: inside a `Video::Device`
-        // member a block-scope `extern` would name `Video::…` and link-fail.
+        // Declared at file scope (video_interface.h), not block scope: inside a
+        // `Video::Device` member a block-scope `extern` would name `Video::…`
+        // and link-fail.
         ::VideoInterfaceFillDx9Placeholder(this);
     }
 }

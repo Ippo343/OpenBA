@@ -90,7 +90,7 @@ HMODULE SentinelModule() {
     return h;
 }
 
-void FillDx11Slot(void* device);
+void FillDx11Slot(Video::Device* device);
 
 }  // namespace
 
@@ -101,36 +101,38 @@ void FillDx11Slot(void* device);
 // ports Video::Device::InitializeInterfaces (0x1800F79F0) must call this from
 // the ported body -- that is what turns the pre-fill from a DLL-present hack
 // into the real thing.
-void VideoInterfaceFillDx11Slot(void* device) { FillDx11Slot(device); }
+void VideoInterfaceFillDx11Slot(Video::Device* device) { FillDx11Slot(device); }
 
 // Cutover only: slot 0 (DX9) with the placeholder plugin, so the Device's
 // interface array keeps one entry per slot exactly as it does on a retail
 // machine. Called by the ported InitializeInterfaces after its LoadLibraryW of
 // VideoDX9-x64.dll failed, and only with the Runtime DLL absent.
-void VideoInterfaceFillDx9Placeholder(void* device) {
-    Video::Device::InterfaceSlot& slot =
-        reinterpret_cast<Video::Device*>(device)->dllSlots[kInterfaceDX9];  // CAST-OK: dx11_seam
-    slot.module           = reinterpret_cast<void*>(SentinelModule());  // CAST-OK: dx11_seam
+void VideoInterfaceFillDx9Placeholder(Video::Device* device) {
+    // B5 DEV-A: the Device arrives typed and both entry points already have the
+    // slot's exact types (VideoDX11Plugin.h), so the three dx11_seam casts that
+    // stood here are gone; the HMODULE goes into the header's `void* module`.
+    Video::Device::InterfaceSlot& slot = device->dllSlots[kInterfaceDX9];
+    slot.module           = SentinelModule();
     slot.getDeviceName    = &VideoDX11::Dx9Placeholder_GetDeviceName;
-    slot.createDeviceData = reinterpret_cast<Video::Device::CreateDeviceDataFn>(&VideoDX11::Dx9Placeholder_CreateDeviceData);  // CAST-OK: dx11_seam
+    slot.createDeviceData = &VideoDX11::Dx9Placeholder_CreateDeviceData;
     printf("[VideoInterface] DX9 slot filled with the cutover PLACEHOLDER on Device %p "
-           "(VideoDX9-x64.dll cannot load without Runtime-x64.dll)\n", device);
+           "(VideoDX9-x64.dll cannot load without Runtime-x64.dll)\n", static_cast<void*>(device));
 }
 
 namespace {
 
-void FillDx11Slot(void* device) {
-    Video::Device::InterfaceSlot& slot =
-        reinterpret_cast<Video::Device*>(device)->dllSlots[kInterfaceDX11];  // CAST-OK: dx11_seam
-    slot.module           = reinterpret_cast<void*>(SentinelModule());  // CAST-OK: dx11_seam
+void FillDx11Slot(Video::Device* device) {
+    // B5 DEV-A: as the placeholder fill above -- typed Device, exact types.
+    Video::Device::InterfaceSlot& slot = device->dllSlots[kInterfaceDX11];
+    slot.module           = SentinelModule();
     slot.getDeviceName    = &VideoDX11::Dx11_GetDeviceName;
-    slot.createDeviceData = reinterpret_cast<Video::Device::CreateDeviceDataFn>(&VideoDX11::Dx11_CreateDeviceData);  // CAST-OK: dx11_seam
+    slot.createDeviceData = &VideoDX11::Dx11_CreateDeviceData;
 
     g_filled = true;
     printf("[VideoInterface] DX11 slot pre-filled on Device %p: "
            "module=%p GetDeviceName=%p CreateDeviceData=%p — Runtime will not "
            "LoadLibrary VideoDX11-x64.dll\n",
-           device, (void*)SentinelModule(),
+           static_cast<void*>(device), (void*)SentinelModule(),
            reinterpret_cast<void*>(&VideoDX11::Dx11_GetDeviceName),
            reinterpret_cast<void*>(&VideoDX11::Dx11_CreateDeviceData));
     fflush(stdout);
