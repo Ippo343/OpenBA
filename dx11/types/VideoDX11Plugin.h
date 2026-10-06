@@ -18,6 +18,7 @@ namespace Video {
 class Device;
 class DeviceData;
 }  // namespace Video
+struct IDXGISwapChain;
 
 namespace VideoDX11 {
 
@@ -39,5 +40,13 @@ const char*          Dx9Placeholder_GetDeviceName();
 // when dxgi.dll / d3d11.dll's two entry points cannot be resolved (B5_RULES D9:
 // the "run the original" arm it replaces had no original to run).
 bool Dx11EnumerateDxgiInterfaces(::Video::Device* device, const char* interfaceName);
+
+// ---- B5 DEV-A (B5_RULES D7): the active DeviceData's swap chain ------------
+// `VideoDX11::DeviceData::swapChain` (+0x18) of `Video::Device::_singleton->
+// deviceData`, read by name. Defined in dx11/src/dx11_backend_access.cpp; the
+// same NO-NULL-CHECK contract as Dx11DeviceData() there (the device singleton
+// and its DeviceData must exist). standalone/main.cpp's swap-chain probes call
+// it instead of reading `activeDD + 0x18`.
+IDXGISwapChain* Dx11SwapChain();
 
 }  // namespace VideoDX11

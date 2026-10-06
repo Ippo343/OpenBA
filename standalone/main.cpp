@@ -16,6 +16,7 @@
 #include "options.h"
 #include "runtime_init.h"
 #include "dx11_seam.h"
+#include "VideoDX11Plugin.h"   // B5 DEV-A: VideoDX11::Dx11SwapChain (the two swap-chain probes)
 #include "video_interface.h"
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
@@ -874,9 +875,9 @@ static void DumpSwapChainState(const char* tag) {
         printf("[SwapProbe %s] activeDeviceData NULL (Device+0x100)\n", tag);
         return;
     }
-    // LEFT: the swap chain is a field of the DX11 DeviceData subclass (+0x18), not of
-    // Video::DeviceData: the dx11 seam (FLOOR dx11_seam, plan section 4.1).
-    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: OTHER dx11 seam: the swap chain is a field (+0x18) of the DX11 DeviceData subclass, not of Video::DeviceData (plan section 4.1)
+    // B5 DEV-A (B5_RULES D7): the swap chain is a field of the DX11 DeviceData
+    // subclass (+0x18), not of Video::DeviceData; dx11 hands it out by name.
+    IDXGISwapChain* swapChain = VideoDX11::Dx11SwapChain();
     if (!swapChain) {
         printf("[SwapProbe %s] swapChain NULL (activeDD+0x18)\n", tag);
         return;
@@ -946,9 +947,8 @@ static void CaptureBootFullscreenMode() {
     ::Video::Device* device = ::Video::Device::_singleton;
     ::Video::DeviceData* activeDD = device->deviceData;   // +0x100
     if (!activeDD) return;
-    // LEFT: the swap chain is a field of the DX11 DeviceData subclass (+0x18), not of
-    // Video::DeviceData: the dx11 seam (FLOOR dx11_seam, plan section 4.1).
-    IDXGISwapChain* swapChain = *reinterpret_cast<IDXGISwapChain**>((uintptr_t)activeDD + 0x18);   // LEFT: OTHER dx11 seam: the swap chain is a field (+0x18) of the DX11 DeviceData subclass, not of Video::DeviceData (plan section 4.1)
+    // B5 DEV-A (B5_RULES D7): the DX11 DeviceData's swap chain (+0x18), by name.
+    IDXGISwapChain* swapChain = VideoDX11::Dx11SwapChain();
     if (!swapChain) return;
     DXGI_SWAP_CHAIN_DESC desc{};
     if (swapChain->GetDesc(&desc) == 0) {                              // vtable +0x60

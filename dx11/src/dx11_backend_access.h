@@ -47,6 +47,7 @@
 // (0x30 bytes), which replaces this file's former `RenderBufferOwner` view.
 #include "video/Device.h"
 #include "VideoDX11Data.h"
+#include "VideoDX11Plugin.h"   // B5 DEV-A: Dx11SwapChain (D7)
 #include "dx11_seam.h"   // Vt / VtGhidraAddr, used by Dx11VtableAddress
 // ENDGAME B.3R block DX: `System::MemoryAllocator::MemAlloc / MemFree`, the
 // direct replacement for the import rows the files below resolved by name.
@@ -85,38 +86,46 @@ namespace VideoDX11 {
 // would hide that instead of reporting it, and would be a divergence from the
 // original for no gain.
 
-// Offset of the active Video::DeviceData* on the Video::Device singleton.
-// (decomp/videodx11.md §"How Runtime loads it": Device+0x100.)
-constexpr uintptr_t kVideoDevice_ActiveDeviceData = 0x100;
-
 // Ghidra address of the VideoDX11 IAT slot the original reads it through.
 // Retained as documentation of the shipped import; nothing reads it now.
 constexpr uintptr_t kDx11Iat_VideoDeviceSingleton = 0x1800134b8;
 
 // Runtime's Video::Device::_singleton (0x1801fe7a8) — the class static since
 // ENDGAME B.3.9 VID; dx11 is compiled into the exe, so it is read directly.
-inline void** Dx11VideoDeviceSingletonSlot() {
-    return reinterpret_cast<void**>(&::Video::Device::_singleton);
+inline ::Video::Device** Dx11VideoDeviceSingletonSlot() {
+    return &::Video::Device::_singleton;
 }
 
 // Video::Device* — the live singleton.
-inline void* Dx11VideoDevice() {
+inline ::Video::Device* Dx11VideoDevice() {
     return *Dx11VideoDeviceSingletonSlot();
 }
 
-// The active Video::DeviceData*, i.e. the object whose vtable the seam patches.
+// The active DeviceData: `Video::Device::deviceData` (+0x100,
+// decomp/videodx11.md "How Runtime loads it").
+//
+// B5 DEV-A (B5_RULES D7): the ONE downcast dx11 makes. The field is the base
+// `Video::DeviceData*`; dx11 built the object (Dx11_CreateDeviceData,
+// exports.cpp), so it is a `VideoDX11::DeviceData`. The DX9 placeholder is the
+// only other producer, and every body that reaches this runs on a device DX11
+// created (the placeholder never creates one). NO NULL CHECKS, as above.
 inline DeviceData* Dx11DeviceData() {
-    uint8_t* dev = static_cast<uint8_t*>(Dx11VideoDevice());
-    return *reinterpret_cast<DeviceData**>(dev + kVideoDevice_ActiveDeviceData);
+    return static_cast<DeviceData*>(Dx11VideoDevice()->deviceData);
 }
 
 inline ID3D11Device* Dx11Device() {
-    return static_cast<ID3D11Device*>(Dx11DeviceData()->d3dDevice);
+    return Dx11DeviceData()->d3dDevice;
 }
 
 inline ID3D11DeviceContext* Dx11Context() {
-    return static_cast<ID3D11DeviceContext*>(Dx11DeviceData()->d3dContext);
+    return Dx11DeviceData()->d3dContext;
 }
+
+// D7: `IDXGISwapChain* Dx11SwapChain()` — the swap chain (+0x18) by name, for
+// standalone/main.cpp's two probes, which do not include this header (it pulls
+// <d3d11.h> and the runtime type headers). Declared in VideoDX11Plugin.h
+// (included above), defined in dx11_backend_access.cpp as
+// `Dx11DeviceData()->swapChain`.
 
 // One-time sanity check that ResolveAddr(Module::Runtime, 0x1801fe7a8) really
 // is the same variable the shipped DLL reads through its own IAT. Both are

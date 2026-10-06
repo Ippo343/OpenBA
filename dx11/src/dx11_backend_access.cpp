@@ -16,4 +16,9 @@ bool Dx11VerifyDeviceSingleton() {
     return Dx11VideoDeviceSingletonSlot() != nullptr;
 }
 
+// B5 DEV-A (B5_RULES D7): what standalone/main.cpp read as `activeDD + 0x18`.
+IDXGISwapChain* Dx11SwapChain() {
+    return Dx11DeviceData()->swapChain;
+}
+
 }  // namespace VideoDX11
