@@ -32,6 +32,11 @@ struct ID3D11PixelShader;
 struct ID3D11BlendState;
 struct ID3D11DepthStencilState;
 struct ID3D11RasterizerState;
+struct ID3D11SamplerState;
+struct ID3D11Texture2D;
+struct ID3D11RenderTargetView;
+struct ID3D11DepthStencilView;
+struct ID3D11ShaderResourceView;
 
 namespace VideoDX11 {
 
@@ -268,8 +273,8 @@ enum ContextDataSlot : int {
 // 0x38, vtable 0x180018790, factory 0x1800056c0
 //
 // All five COM interfaces identified 2026-07-24 from the seven slots (lane L3).
-// Fields are void* rather than the D3D11 types so this shared header does not
-// force <d3d11.h> on the other lanes; dx11/src/imagebufferdata.cpp casts.
+// B5 RES: the fields are the typed D3D11 interfaces (D4), forward-declared at
+// the top of this file so it still does not force <d3d11.h> on its includers.
 //
 //   +0x10 ID3D11SamplerState*       created by 0x180002720 via CreateSamplerState
 //                                   (ID3D11Device vtable +0xb8 = index 23)
@@ -283,18 +288,41 @@ enum ContextDataSlot : int {
 // The dtor (0x180002430) and slot 3 (0x180002870) both release these in the
 // order +0x28, +0x20, +0x30, +0x10, +0x18 and then null all five. That order is
 // reproduced verbatim in the port — it is not the declaration order.
-struct ImageBufferData {
-    void* vptr;               // +0x00
-    void* imageBuffer;        // +0x08  Video::ImageBuffer*
-    void* sampler;            // +0x10  ID3D11SamplerState*
-    void* texture;            // +0x18  ID3D11Texture2D*
-    void* renderTargetView;   // +0x20  ID3D11RenderTargetView*
-    void* depthStencilView;   // +0x28  ID3D11DepthStencilView*
-    void* shaderResourceView; // +0x30  ID3D11ShaderResourceView*
+//
+// B5 RES: a real C++ subclass of `Video::ImageBufferData`; the compiler builds
+// its vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
+// `_owner` (+0x08, `Video::ImageBuffer*`) is the base's and replaces the old
+// `imageBuffer` field.
+class ImageBufferData final : public ::Video::ImageBufferData {
+public:
+    // Factory 0x1800056c0: MemAlloc(0x38, 4) + ??0ImageBufferData(owner) + the
+    // vptr store + the five null stores. Nothing else is stored.
+    explicit ImageBufferData(::Video::ImageBuffer* owner)
+        : ::Video::ImageBufferData(owner),
+          sampler(nullptr), texture(nullptr), renderTargetView(nullptr),
+          depthStencilView(nullptr), shaderResourceView(nullptr) {}
+    ~ImageBufferData() override;                                     // [0] 0x180002400 -> 0x180002430, chains ??1ImageBufferData@Video@@UEAA@XZ
+    void AttachColorBuffer() override;                               // [1] 0x180002580  alias DeviceData::colorBuffer + RTV
+    void AttachDepthBuffer() override;                               // [2] 0x180002650  alias DeviceData::depthBuffer + DSV
+    bool Create(const Collection::Array<Collection::Array<uint8_t> >* levels) override;  // [3] 0x180002870  texture + SRV + RTV/DSV + sampler
+    void Bind(void* context, unsigned slot) override;                // [4] 0x180002da0  PSSetSamplers + PSSetShaderResources
+    bool Update(void* data, int width, int height) override;         // [5] 0x180002e10  Map/WRITE_DISCARD or UpdateSubresource
+    bool Read(void* dst, int width, int height) override;            // [6] 0x180002ef0  staging copy + Map/READ_WRITE readback
+
+    ID3D11SamplerState*       sampler;            // +0x10
+    ID3D11Texture2D*          texture;            // +0x18
+    ID3D11RenderTargetView*   renderTargetView;   // +0x20
+    ID3D11DepthStencilView*   depthStencilView;   // +0x28
+    ID3D11ShaderResourceView* shaderResourceView; // +0x30
+
+private:
+    // The helpers slot 3 and the destructor share: the five releases inlined at
+    // 0x180002507 / 0x18000292a, and the sampler builder 0x180002720.
+    void ReleaseInterfaces();
+    void CreateSamplerState();
 };
-static_assert(sizeof(ImageBufferData) == 0x38, "ImageBufferData size");
-static_assert(offsetof(ImageBufferData, vptr) == 0x0, "ImageBufferData::vptr");
-static_assert(offsetof(ImageBufferData, imageBuffer)        == 0x08, "ImageBufferData::imageBuffer");
+static_assert(sizeof(ImageBufferData) == 0x38, "MemAlloc 0x38 @ 0x1800056c0");
+static_assert(offsetof(ImageBufferData, _owner) == 0x08, "ImageBufferData::_owner (the base's)");
 static_assert(offsetof(ImageBufferData, sampler)            == 0x10, "ImageBufferData::sampler");
 static_assert(offsetof(ImageBufferData, texture)            == 0x18, "ImageBufferData::texture");
 static_assert(offsetof(ImageBufferData, renderTargetView)   == 0x20, "ImageBufferData::renderTargetView");

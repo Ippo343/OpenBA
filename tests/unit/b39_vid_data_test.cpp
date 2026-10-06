@@ -13,7 +13,7 @@
 // B5 (the dx11 seam): a class whose dx11 subclass is converted moves to
 // CheckDataB5 -- `virtual ~T()`, `delete` instead of `DeletingDtor` (so far:
 // RenderBufferData, VideoProgramData; block RES: VertexLayoutData,
-// VertexProgramData, PixelProgramData, RenderStateData).
+// VertexProgramData, PixelProgramData, RenderStateData, ImageBufferData).
 //
 // The out-of-line destructors live in runtime/src/video/companion_data.cpp
 // (which cannot link into the host test), so they are defined HERE as markers.
@@ -140,7 +140,7 @@ VideoProgramData::~VideoProgramData()     { NoteDtor(this); }
 
 UNIT_TEST(b39_vid_devicedata_concrete)         { CheckData<Video::DeviceData>(); }
 UNIT_TEST(b39_vid_contextdata_concrete)        { CheckData<Video::ContextData>(); }
-UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckData<Video::ImageBufferData>(); }
+UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckDataB5<Video::ImageBufferData>(); }
 UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckData<Video::IndexBufferData>(); }
 UNIT_TEST(b39_vid_vertexbufferdata_concrete)   { CheckData<Video::VertexBufferData>(); }
 UNIT_TEST(b39_vid_constantbufferdata_concrete) { CheckData<Video::ConstantBufferData>(); }
@@ -179,6 +179,15 @@ UNIT_TEST(b5_res_flipped_companion_slots_by_pmf) {
     using RS = Video::RenderStateData;
     CHECK_SLOT(RS, Create, 1);
     CHECK_SLOT(RS, Bind,   2);
+    // `?BindTextures@Context@Video@@` 0x1800ef36d calls slot 4 as `[RAX+0x20]`;
+    // `?Create@ImageBuffer@Video@@` reaches slot 3 (+0x18).
+    using IB = Video::ImageBufferData;
+    CHECK_SLOT(IB, AttachColorBuffer, 1);
+    CHECK_SLOT(IB, AttachDepthBuffer, 2);
+    CHECK_SLOT(IB, Create,            3);
+    CHECK_SLOT(IB, Bind,              4);
+    CHECK_SLOT(IB, Update,            5);
+    CHECK_SLOT(IB, Read,              6);
 }
 
 // The slot ORDER of the two 20-slot tables, by PMF: the Device-side callers

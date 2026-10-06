@@ -540,7 +540,10 @@ void Engine::MainLoop::OnVideoError() {
             if (entry.saveIndex < 0) continue;
             Video::ImageBufferData* const payload = obj->_data;
             if (payload != nullptr) {
-                payload->DeletingDtor(1u);   // scalar-deleting destructor: (this, 1)
+                // scalar-deleting destructor: (this, 1). B5 RES (B5_RULES D10):
+                // `delete` -- the virtual destructor, then the base's class-scope
+                // operator delete (MemFree).
+                delete payload;
             }
             obj->_data = nullptr;
         }

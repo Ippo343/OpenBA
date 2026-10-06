@@ -290,7 +290,13 @@ void Video::ImageBuffer::ReleaseDynamic() {
         Video::ImageBuffer* p = terminator;
         do {
             if (ImageBufferIsDynamicResource(p)) {
-                ReleaseCompanion(p->_data);
+                // B5 RES (B5_RULES D10): ImageBufferData wears the compiler's
+                // table, so its slot-0 call with flags 1 is `delete` (virtual
+                // dtor, then the base's operator delete = MemFree); guarded on
+                // the companion and the field nulled, as ReleaseCompanion does.
+                if (ImageBufferData* companion = p->_data)
+                    delete companion;
+                p->_data = nullptr;
                 terminator = _firstSurface;
             }
             p = p->_field58;

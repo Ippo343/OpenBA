@@ -1877,15 +1877,10 @@ void* Factory_ContextData(DeviceData* /*self*/, ::Video::Context* owner) {
 }
 
 void* Factory_ImageBufferData(DeviceData* /*self*/, ::Video::ImageBuffer* owner) {
-    ImageBufferData* p = AllocData<ImageBufferData, ::Video::ImageBufferData>(0x38, owner,
-                                                    Vt::ImageBufferData);
-    if (!p) return nullptr;
-    p->sampler            = nullptr;
-    p->texture            = nullptr;
-    p->renderTargetView   = nullptr;
-    p->depthStencilView   = nullptr;
-    p->shaderResourceView = nullptr;
-    return p;
+    // B5 RES: the base's operator new is retail's MemAlloc(0x38, 4); the ctor chain
+    // is retail's `??0ImageBufferData` + the vptr store (now the compiler's table)
+    // + the five null stores.
+    return new ImageBufferData(owner);
 }
 
 void* Factory_ConstantBufferData(DeviceData* /*self*/, ::Video::ConstantBuffer* owner) {

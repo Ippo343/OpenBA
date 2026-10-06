@@ -351,8 +351,10 @@ void ImageBuffer::PlatformConstruct() {
 }
 
 void ImageBuffer::PlatformDestruct() {
+    // B5 RES (B5_RULES D10): retail's slot-0 call with flags 1 is `delete` -- the
+    // virtual destructor, then the base's class-scope operator delete (MemFree).
     if (ImageBufferData* companion = _data)
-        (void)companion->DeletingDtor(1);
+        delete companion;
     RtVideoDeviceLock(&Device::_singleton);
     ListUnlink(this, _firstSurface, &ImageBuffer::_field50, &ImageBuffer::_field58);
     RtVideoDeviceUnlock(&Device::_singleton);
