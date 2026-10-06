@@ -1870,8 +1870,8 @@ bool DeviceData::EnumerateInterfaces() {
 }
 
 // The one function in this lane with a caller outside it. 0x180004340 is a near
-// CALL from ContextData::BeginCommands, not a vtable dispatch, so the seam has
-// no way to redirect it — L5 has to name our port directly, and it can only do
+// CALL from ContextData::BeginCommands, not a vtable slot, so it needs a
+// declaration with external linkage — ContextData names it directly, and it can only do
 // that through a declaration with external linkage. (B5 DEV-A: the slots are
 // DeviceData members now; the helpers stay in the anonymous namespace.)
 int Dx11_DeviceData_Resize(DeviceData* deviceData) {

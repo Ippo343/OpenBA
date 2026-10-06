@@ -632,11 +632,12 @@ void Context::AddVertices(int32_t count, const void* vertices) {
 // twenty. What changes is that the slot INDEX is now checked by the compiler and
 // the argument list by the declaration, instead of by a `using Fn = ...` typedef
 // nobody could diff against the header. Slots 17 and 19 remain two names for one
-// dx11 body; that is the seam's business, not this file's.
+// dx11 body: dx11 declares slot 17 as a forwarder to slot 19.
 //
 // THE SLOT DECIDES, and each index was checked against `Video::ContextData`'s
-// declaration order and against `dx11/src/contextdata.cpp`'s twenty
-// `DX11_REGISTER_SLOT` rows; the nine `static_assert`s above pin the byte offsets.
+// declaration order and against dx11's twenty slots (B.3.5: the
+// `DX11_REGISTER_SLOT` rows; since B5 the `override` declarations in
+// dx11/types/VideoDX11Data.h); the nine `static_assert`s above pin the byte offsets.
 // ============================================================================
 
 void Context::Clear(uint32_t flags, uint32_t color, float depth, int32_t stencil) {

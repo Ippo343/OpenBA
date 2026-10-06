@@ -221,8 +221,9 @@ enum : int32_t {
 
 // THE SLOT DECIDES. Every virtual call below is on the companion class whose
 // slot retail's call site dispatches through; the indexes were checked against
-// the class's declaration order in CompanionData.h AND against the
-// `DX11_REGISTER_SLOT` row that fills it (ENDGAME B.3.5 block J):
+// the class's declaration order in CompanionData.h AND against dx11's slot
+// (B.3.5 block J: the `DX11_REGISTER_SLOT` row; since B5 the `override`
+// declaration in dx11/types/VideoDX11Data.h):
 //   ContextData  BindRenderBuffer 5, BindViewport 6, BindScissor 7,
 //                BindTransforms 8, BindTextureNone 9, BindIndexNone 10,
 //                BindVertexNone 11

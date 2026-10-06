@@ -675,8 +675,7 @@ void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
     _cursor = cursor;
     if (!cursor) {  return; }
 
-    // B.4 LEFT: `Video::Device::deviceData` (+0x100) is `void*` in R-VIDEO's
-    // header and `SpriteSheet::m_field30` (+0x30) is a `uint64_t` another block
+    // B.4 LEFT: `SpriteSheet::m_field30` (+0x30) is a `uint64_t` another block
     // writes as an integer (saveload_draw.cpp). The sheet's MaterialInstance
     // texture 0 (`_textures` +0x50, entry +0x08 the image) goes to
     // `DeviceData` slot 8 (+0x40) `SetImageBuffer(image, hotX, hotY)`

@@ -195,8 +195,8 @@ void RenderBufferData::Resolve(void* /*Video::Context& — ignored*/,
                                ::Video::RenderBuffer* other,
                                bool  /*flag — ignored by this backend*/) {
     const RenderBufferOwner* dst = _owner;
-    // The base slot declares `other` as `void*` (CompanionData.h); retail's
-    // owner-side mangling says it is a `Video::RenderBuffer*`.
+    // `other` is typed `Video::RenderBuffer*` from retail's owner-side mangling
+    // (CompanionData.h, B5 CLOSE).
     const RenderBufferOwner* src = other;
 
     Dx11Context()->ResolveSubresource(Dx11ImageTexture(dst->colorBuffer), 0,

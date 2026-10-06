@@ -426,8 +426,8 @@ void ImageBufferData::AttachColorBuffer() {
     ib->_flags     = 0x10;   // +0x34 flags: bit4 -> tracked for device reset
 
     ID3D11Device* const dev = Dx11Device();
-    // DeviceData::colorBuffer is still DEV's `void*` field (an ID3D11Texture2D*).
-    ID3D11Texture2D* const color = static_cast<ID3D11Texture2D*>(dd->colorBuffer);
+    // DeviceData::colorBuffer is the `ID3D11Texture2D*` at +0x38.
+    ID3D11Texture2D* const color = dd->colorBuffer;
     color->AddRef();
     texture = color;
     dev->CreateRenderTargetView(texture, nullptr, &renderTargetView);
@@ -456,8 +456,8 @@ void ImageBufferData::AttachDepthBuffer() {
     ib->_flags     = 0x20;   // flags: bit5 -> tracked for device reset
 
     ID3D11Device* const dev = Dx11Device();
-    // DeviceData::depthBuffer is still DEV's `void*` field (an ID3D11Texture2D*).
-    ID3D11Texture2D* const depth = static_cast<ID3D11Texture2D*>(dd->depthBuffer);
+    // DeviceData::depthBuffer is the `ID3D11Texture2D*` at +0x30.
+    ID3D11Texture2D* const depth = dd->depthBuffer;
     depth->AddRef();
     texture = depth;
     // Null desc: the DSV inherits the resource format. The resource here is the

@@ -1,124 +1,113 @@
-# Next session plan (written 2026-10-05, end of the B.4 finishing session, "S4")
+# Next session plan (written 2026-10-05, end of B5 — the dx11 seam)
 
-B.4 (the cast metric) is done as far as B.4 can take it: **336** counted casts, 240 of them `dx11/` and the
-96 outside it all filed under a deferred or ruled group with **0 open work** (`b4_session/LEFT_FREE.md`
-section C; `python docs/runtime_port/endgame_b/b4_session/leftfree_c.py --check`). It is CLOSED: the three
-close checks of §1 passed on the final tree. The next step is the **dx11 seam** (§2). Numbers: `b4_session/CLOSE_NUMBERS.md`. The plan this
-session executed: `git show b6d3fdf62:docs/runtime_port/endgame_b/NEXT_SESSION.md`.
+**B5 is CLOSED.** The twelve `VideoDX11::*Data` types are real `final` subclasses of the twelve
+`Video::*Data` bases (`virtual ~XData()`, compiler vtables, `new` / `delete` through the roots' own
+operators); the hand-table seam (`dx11/funcs/dx11_seam.*`, `DX11_REGISTER_SLOT`, `Dx11SeamInstall`) is
+gone; `dx11/` counts **0** casts; the PROD metric is **89** = 63 retail-difference + 23 named prerequisite +
+3 ruled + **0 work**; acceptance has ONE line off (10 = 21, the accepted template-field miscount) and line
+01 is back in the PROD-total form. Eight gated merges, 0 problems, every one with a bounded device-lost
+run. Numbers: `b5_session/CLOSE_NUMBERS.md`; rule sheet `B5_RULES.md`; gate table, inventories, audit and
+the device-lost finding in `b5_session/`. No class in the tree declares `DeletingDtor` any more.
 
 ## 0. Scope, as the user set it (unchanged)
 
-**The DANGEROUS casts go completely; only safe casts stay.** The number is
-`python docs/runtime_port/endgame_b/b4_session/castmetric.py code runtime standalone dx11 engine`.
-The differences from retail are a SEPARATE task (`docs/known_port_issues.md` entries 13 and 14; rows now run
-to 890). A raw-storage member becomes a real member only in a `behaviour:` commit that reproduces retail's
-constructor AND destructor; any other difference found is recorded, not fixed.
+The DANGEROUS casts go completely; only safe casts stay. The number is
+`python docs/runtime_port/endgame_b/b4_session/castmetric.py code runtime standalone dx11 engine` (89).
+The differences from retail are a SEPARATE task (`docs/known_port_issues.md` 13 and 14, rows to 890). A
+raw-storage member becomes a real member only in a `behaviour:` commit that reproduces retail's constructor
+AND destructor; any other difference found is recorded, not fixed. Device-lost stays DEFERRED (§3).
 
-## 1. Where it stands (CLOSED 2026-10-05)
+## 1. Where it stands
 
 | | |
 |---|---|
-| main | the close documents on top of `9903a0f1f` (the last GATED code commit: `stepclose.sh` clean on it) |
-| metric | 389 -> **336** this session; outside `dx11/` 149 -> **96** = 63 retail-difference + 23 named prerequisite + 7 dx11 seam + 3 ruled to stay listed + 0 work |
-| gated merges this session | 11 (`b4_session/GATE_TABLE.md` rows 159-169), 0 problems |
-| invariants | new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`, resave 5/5 on every merge, 0 new warnings, unit 914 / 0 |
-| acceptance | 5 lines off: 04 / 05 / 06 / 07 are `dx11/`'s (07 also counts 6 DEFERRED casts that still carry their marker), 10 is the accepted template-field miscount (21). Line 01 is in its CLOSING FORM (casts outside `dx11/` in no DEFERRED / RULED group = 0) |
+| main | `020a4e3ae` (Merge b5-CLOSE, the last gated code commit) + the close documents |
+| metric | 336 -> **89**: dx11 240 -> 0; code 74, runtime 15, standalone 0, engine 0 |
+| invariants | new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`, resave 5/5 on every merge, 0 new warnings, unit **920 / 0** |
+| acceptance | 1 line off (10 = 21, accepted); 01 = 89 of target 89 (PROD-total form); 02-09, 11, 12 at 0 |
+| floor | `dx11_seam` DELETED; `gpu_map` 5, `com_iid` 3, `win32` 88, `byte_io` 42 (measured; FLOOR.md) |
+| close checks | `worldcmp.sh` vs `oldbase` identical (118 lines); `stepclose.sh` (CLOSE_NUMBERS §6); audit `b5_session/AUDIT.md` |
+| worktrees | only `oldbase` (`b2a5434c`) remains, for the next world comparison |
 
-The close checks, all on the final tree `9903a0f1f`:
-1. The removal tool BY HAND (the user): buildings and resources removed, no issue.
-2. `devlost.sh`, default and the gate's `DLFRAME=40000` form: INJECT=1, 5 round trips COMPLETE (the cap),
-   crash log empty, free memory steady at 20 GB.
-3. `worldcmp.sh` against `b2a5434c`: identical, 118 lines.
-The `b4s4-*` branches and agent worktrees are removed; `oldbase` stays until the dx11 step's own
-world comparison. `b4y1-CW`, `b4y1-GAMEA`, `b4y1-GAMEB`, `defects-open-5` are older unmerged branches.
+## 2. The next step: the retail-difference task (`known_port_issues.md` 13-14)
 
-## 2. The next step: the dx11 seam
+**What it is.** 63 of the 89 remaining casts sit on lines whose tag says "retail-difference task": each is
+a place where the tree does something retail does not (a guard retail lacks, a wrong overload or object,
+a store that normalises, a construction / destruction / leak difference — the §14a-14e lists) and the cast
+is the SYMPTOM. Fixing the difference removes the cast; the fix is a `behaviour:` commit per row with the
+retail evidence (address, the instructions read) in the message, gated with resave x5 (every §14b row
+re-cuts the golden). This is the first step of ENDGAME B that changes what RUNS on purpose, row by row.
 
-What it is: `dx11/` still talks to the runtime's `Video::` classes through reinterpretation. It holds
-**240 counted casts**, **5 offset-accessor definitions and 17 calls** (`Field`, `FieldPtr`, `IbI32`, `IbU32`:
-acceptance 04 / 05), **1 address pun** (06), **51 bridge-marker lines** (07), and the `dx11_seam` floor
-category (20 marked lines: `CompanionData.h`'s 12 `DeletingDtor` arms, `Context.h`'s two inline
-`SetRenderBuffer(const void*)` / `SetVertexBuffer` forwarders, `video_interface.cpp`). In scope with it, the 7
-casts `leftfree_c.py` files under "dx11 seam": `standalone/main.cpp:879 / :951` (the swap chain read at
-`+0x18` of the DX11 DeviceData subclass), `standalone/boot_window.cpp:49`, and
-`code/Game/Dialog/optionsdialog.cpp:492 / :520` (`Device::Adapter::name` / `GraphicsInterface::name` are
-`void*` String storage because `dx11/src/devicedata.cpp:1548-1590` builds and grows those records BY HAND
-through the `RtVideo_*` Ctor / Dtor doors; a String member today would release the name twice).
+**Ready-made rows (NEXT_SESSION of B4 S4, still open):** 861 (`GatherRawMaterials::Execute` hands the
+WorkPlaceComponent as the Time: one line, removes the cast), 820 (`_entityFlags` through the uint
+overload: one line), 860 (the mesh-group type check), 810, 850, 880; the tree-only deviations in
+`b4_session/CLOSE_NUMBERS.md` §5 and the third session's (792, 752, 754, 122's note); 13 (`TradeWork::Validate`
+walks a stale entry).
 
-Decisions already taken (do not re-litigate): the twelve `Video::*Data` classes stayed on `DeletingDtor` BY
-DECISION at the normal-virtual cutover; they flip to `virtual ~T()` here; dx11's companion types become
-SUBCLASSES of `Video::*Data`; `DeletingDtor` and `Dx9Placeholder` leave the tree; the `dx11_seam` category
-ends at 0 and is deleted from `FLOOR.md` / `castmetric.py`; acceptance line 01 goes back to the PROD-total
-form (edit `acceptance.sh`: the S4 comment says where).
+**Shape (the one that worked eight times):**
+1. **Block 0, read-only inventory** (sonnet): one row per retail-difference cast (`leftfree_c.py` lists the
+   63 with their tags; `LEFT_FREE.md` §C) joined to its known_port_issues row: the retail address, what the
+   tree does, what retail does, which §14 bucket, whether a save-format change is involved (14b), and the
+   OTHER rows of 13-14 that have NO cast (they are the same task; count them). Verdict per row: one-line
+   fix / needs a retail re-read / save-format.
+2. **One opus question pass into `B6_RULES.md`:** what a `behaviour:` commit must carry (address, the
+   disassembly lines, the before / after observable), the order (no-save-format rows first; 14b rows last,
+   each alone with a golden re-cut in its own commit — `tools/resave_gate/README.md`), the rule for a guard
+   retail lacks (drop it and let the crash show the upstream null: CLAUDE.md "never fix a faithful crash
+   with a null check"), and which rows are the user's to decide (anything that changes a save).
+3. **Blocks by bucket, not by file** (opus, worktrees, `-j2`, at most four): 14a wrong callee / object /
+   overload; 14c construction / destruction / leaks (one `behaviour:` commit per class, ctor AND dtor);
+   14d guards; 14e stores; then 14b save-format rows serially by the coordinator. Every block hands in the
+   retail evidence per row; the coordinator reads it before the merge (feedback: cast-removal agents change
+   behaviour — here the behaviour change is the point, so the evidence is the gate).
+4. Gate per merge as B5 (`b5_session/mergegate.sh` copied to `b6_session/`; `devlost.sh` only on merges
+   that touch video objects), `worldcmp.sh` vs `oldbase` at the close (several rows may legitimately change
+   the generated world — then `oldbase` moves to the B6 close commit, by decision, recorded).
+5. Acceptance: line 01's target falls with each fixed row (63 -> 0); the 23 named-prerequisite and 3 ruled
+   stay until §4's inline-release pass.
 
-Shape (the one that worked every time):
-1. **Block 0, read-only inventory** (sonnet): every cast / accessor / bridge line of `dx11/` keyed by the
-   `Video::` class it reinterprets; every `Video::*Data` class with its retail ctor / dtor
-   (`program="VideoDX11-x64.dll"` in Ghidra) and vtable slot count; every place `runtime/` or `standalone/`
-   reaches INTO dx11 state by offset.
-2. **One opus question pass** into a rule sheet `endgame_b/B5_RULES.md`: the subclass shape per companion
-   type, the virtual-dtor flip (retail slot N is compiler slot N+1: memory `reference_virtual_dtor_cutover_rules`),
-   who owns `GraphicsInterface` / `Adapter` construction, how COM pointers are typed (`ID3D11X*` forward
-   declarations remove 36 casts by themselves — FLOOR §5), and the device-lost question of §3.
-3. **Blocks by class hierarchy** (whole hierarchies, disjoint files), opus, worktrees; the coordinator alone
-   gates. `devlost.sh` is part of EVERY gate of this step (it rebuilds every video object); rendering is
-   verified with `tools/trace_oracle/` (skill `camera-pin`), never a pixel diff.
-4. Independent audit, acceptance (lines 01, 04-07 reach their targets only now), step close.
+**Before any block:** read `known_port_issues.md` §14g ("commit messages that state something nobody
+verified") — the standard for a `behaviour:` message in this step.
 
-## 3. Read before running `devlost.sh`: the 20 GB finding (known_port_issues row 890)
+## 3. Device-lost (DEFERRED by the user — read before touching it)
 
-After the ONE injected `DXGI_ERROR_DEVICE_RESET`, every later Present reports hr 0x887a0005 and the exe runs
-a complete device-lost round trip PER FRAME, about 100 MB of working set each: 207-219 round trips and
-20.8 GB by the 600 s kill. That — not Ghidra — is what stopped the third session during its last gate and
-stopped the S4 close script (the harness reaps background shells when system memory is critical; the orphaned
-`reimpl-x64.exe` must then be killed BY PID and the game-dir lock released).
-- `devlost.sh` now ends the run after `DLMAX` (default 5) logged round trips; `killed=YES` is then expected.
-  `finishmerge.sh`'s `devlost` arm (`DLFRAME=40000 DLPAUSE=48000`) uses the same script.
-- For the dx11 step this is the FIRST thing to understand, before any block edits video objects: why the
-  recreated device still reports removed (the injection flag never cleared? the swap chain not rebuilt?),
-  and which objects a round trip does not release. It is in the DEFERRED device-lost area, so: find and
-  record; fix only what the seam work itself touches, in a `behaviour:` commit against `VideoDX11-x64.dll`.
-- The other 20 GB process at the start of S4 was VS Code's `cpptools` indexing 40 agent worktrees: remove
-  merged worktrees as you go, and check `Get-Process | sort WS` before blaming a build.
+`b5_session/DEVLOST_FINDING.md` and known_port_issues row 890: the harness injects ONCE; the per-frame
+loop is real repeated removals of a genuinely recreated device (`GetDeviceRemovedReason` = 0x887a0005, no
+sub-cause, printed since B5). Leading hypothesis: the exe-side PORT GAP pair `GameUpdateLoop::OnVideoError /
+OnVideoRestart` (retail 0x140095970 / 0x140095930, `gameupdateloop.cpp:2345-2352`) leaves game-owned
+buffers on the dead device. Porting that pair is the one change that would BOUND the route by being
+correct — it is an exe `behaviour:` commit in the deferred area; do it only when the user lifts the deferral.
+Until then `devlost.sh` keeps `DLMAX=5` and its pass criterion (INJECT=1, COMPLETE>=1, crash 0).
 
 ## 4. After that
 
-- **The retail-difference task** (`known_port_issues.md` 13-14): 63 casts wait on it. New this session:
-  row 861 (`GatherRawMaterials::Execute` hands the WorkPlaceComponent as the Time: a one-line `behaviour:`
-  fix that also removes the cast), row 820 (`_entityFlags` through the uint overload: one line, removes the
-  cast), row 860 (the mesh-group type check), rows 810, 850, 880. Plus the tree-only deviations listed in
-  `CLOSE_NUMBERS.md` §5 and the third session's (rows 792, 752, 754, 122's note).
-- **The inline-release pass** (unblocks 13 of the 23 named-prerequisite casts in one go): make
-  `System::String`'s ctor / copy / release and `ArrayDtorImpl` inlinable so they compile to retail's
-  open-coded form (dec refcount, `MemFree` 0x1800c7ad0, zero), then type `documenttext.cpp:155-159`,
-  `modification.cpp:272-287`, `avl_trees.cpp:268`, `introsort.cpp:355`, `wave24_lane_gfxmat.cpp:363`. It
-  touches every String user's codegen: B11 against retail's shape, not against the tree's.
+- **The inline-release pass** (unblocks 13 of the 23 named-prerequisite casts): make `System::String`'s
+  ctor / copy / release and `ArrayDtorImpl` inlinable so they compile to retail's open-coded form, then
+  type `documenttext.cpp:155-159`, `modification.cpp:272-287`, `avl_trees.cpp:268`, `introsort.cpp:355`,
+  `wave24_lane_gfxmat.cpp:363`. B11 against retail's shape.
 - The other named prerequisites: the ctor doors (`System::Random`, `Engine`, `Renderer` / `Scene` in
-  `minimap_paint.cpp`), the Frustum / Vector4 zeroing-ctor locals, `set_clear.cpp:210` (the SettingsMap
-  member), `goals_serialize.cpp:86`, and the two harness puns (decide: retire `force_work` / the ClearPlace
-  probe, or keep them listed).
-- The quality pass nobody did: 234 free functions that are members of a class in retail (`LEFT_FREE.md` A;
-  sections A / B were not regenerated in S4).
-- ENDGAME B.1 decision 7 (exceptions), the PORT GAPs, and only then device-lost (still DEFERRED).
+  `minimap_paint.cpp`), the Frustum / Vector4 zeroing-ctor locals, `set_clear.cpp:210`, `goals_serialize.cpp:86`,
+  the two harness puns (retire or keep listed).
+- The quality pass: 234 free functions that are members of a class in retail (`LEFT_FREE.md` A).
+- ENDGAME B.1 decision 7 (exceptions), the PORT GAPs (189; the device-lost pair among them), then device-lost.
 
-## 5. Working rules that held (do not relax) and what this session added
+## 5. Working rules that held (do not relax) and what B5 added
 
-- Agents never run the game; builds at `-j2`; at most four building agents; the coordinator alone gates;
-  the gate builds the MERGED tree before the merge commit exists; B11 at -O2 and -O0 with every DIFF read.
-- No null guard added or dropped; a class local with a zeroing ctor ADDS stores (use a ctor-less POD).
-- An agent never kills processes by image name; a fresh worktree is reset to the named base commit first.
-- NEW: `ccache` makes a clean rebuild take about a minute: the "40 minute base build" of older briefs is
-  gone, and a full merge gate is about 12 minutes (25 with `ui tools`).
-- NEW: base every agent on a NAMED commit (`git reset --hard <hash>` in its first step) and merge finished
-  branches while the others run; three rounds of 2-4 agents with merges in between produced two trivial
-  conflicts (a comment both sides touched; a deletion against a tag edit). Resolve by hunk, never
-  `--theirs` on a whole file another branch also edited, and BUILD before `finishmerge.sh`.
-- NEW: a one-page session brief in the scratchpad (start commit, the rules that cost a re-run, hand-in) plus
-  a prompt that lists the agent's lines WITH the previous agent's measured finding got precise hand-ins;
-  "measure only" units (count the void* callers, list the incomplete T's) made the next round's units small.
-- NEW: at -O0, calls to small inline typed accessors with no new store to the object are the accepted
-  effect of typing (ruled for `InternalPtr`); anything else at -O0 is read like an -O2 diff.
-- NEW: a marker proposal is not a marker: `castmetric.py --floor` rejected three (`this` / `self`
-  operands). Run it before raising a ceiling.
-- NEW: write files that contain backslashes with the Write / Edit tool, never a heredoc (it bit again).
+- Agents never run the game; builds `-j2`, at most four building agents; the coordinator alone gates; the
+  gate builds the MERGED tree before the merge commit exists; a fresh worktree is reset to a NAMED commit.
+- No null guard added or dropped; a class local with a zeroing ctor adds stores; retail quirks untouched.
+- NEW: **commit the gate table (and anything else) BEFORE `mergegate.sh`** — it refuses a dirty tree and
+  the refusal is easy to grep away (row 5 was lost once to that).
+- NEW: **a stopped background task does not stop the script it launched**: a long close runs with
+  `nohup bash … &` from a short foreground call; never chain it after a game run in one background task
+  (the 10-minute cap cut one, orphaning an exe and a lock; the orphan was killed BY PID).
+- NEW: when a base slot's parameter is `void*`, the CALLER's declared type or retail's mangling of the
+  owner-side member decides it (`Resolve`'s `PEAV12@` = `RenderBuffer*`; `Serialize`'s `AEAVSerializer@IO@@`);
+  a dx11 body that ignores a parameter still declares it.
+- NEW: a shared body registered in two tables becomes ONE static helper called from two overrides (Lock /
+  Unlock); a retail `jmp` to another slot becomes a one-line override that calls it.
+- NEW: converting a class's callers of `DeletingDtor(1)` to `delete` belongs to the SAME commit as its flip
+  (the base loses the member; the other classes' callers stay until theirs).
+- NEW: the metric mis-resolves a same-named member (`_data`, `deviceData`) through another class: a typed
+  local (`Base* const b = x->_data; return static_cast<Derived*>(b);`) is both honest and counted right.
 - Never `git add` the session directory wholesale: `runs/` and the `gate_*.out` / merge logs are untracked.

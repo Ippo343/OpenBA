@@ -7,14 +7,13 @@
 // process. They are not reachable from any vtable: Runtime's
 // Video::Device::InitializeInterfaces GetProcAddress'es them into
 // Video::Device+0xd8 / +0xd0 and Video::Device::CreateVideoInterface calls
-// through those fields, both inside a single Engine::Startup call. So they are
-// replaced at the function entry instead, by a seam detour — see the
-// "Detours" section of dx11/funcs/dx11_seam.h.
+// through those fields, both inside a single Engine::Startup call. Runtime
+// reaches both through `Video::Device::dllSlots[1]`, which
+// standalone/video_interface.cpp fills from inside the ported
+// InitializeInterfaces (no DLL is loaded, no detour exists).
 //
-// CreateDeviceData in particular ran on EVERY boot, because it is what
-// allocates the DeviceData whose vtable the rest of the seam then patches.
-// Porting it moves that allocation to us; the object it produces is
-// byte-identical, so the vtable patching is unaffected either way.
+// CreateDeviceData runs on EVERY boot: it allocates the `VideoDX11::DeviceData`
+// subclass, which wears the compiler's vtable (B5).
 
 #include "VideoDX11Data.h"     // VideoDX11::DeviceData
 #include "VideoDX11Plugin.h"   // the declarations of the two exports

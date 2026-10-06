@@ -20,6 +20,30 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B5 (THE DX11 SEAM) CLOSED — 2026-10-05: castmetric 336 -> 89 (dx11/ 240 -> 0; the 89 are 63
+  retail-difference + 23 named prerequisite + 3 ruled + 0 work).** The twelve `VideoDX11::*Data` PODs are
+  real `final` subclasses of the twelve `Video::*Data` bases, which flipped from `DeletingDtor(unsigned)` to
+  `virtual ~XData()` (typed `_owner`, class-scope `operator new` = `MemAlloc(n, 4)` / `operator delete` =
+  `MemFree`); every slot is an `override` with its retail address; the 84-slot hand-table seam
+  (`dx11/funcs/dx11_seam.*`, `DX11_REGISTER_SLOT`, `Dx11SeamInstall`), `Dx11VtableAddress`, the `Field<>` /
+  `Ib*` offset accessors, `Context.h`'s `void*` forwarders, the `VideoRenderState` mirror, the
+  `RtVideo_Adapter / GraphicsInterface` doors and the DX9 placeholder's hand table are DELETED. `Adapter` /
+  `GraphicsInterface` are real value types with retail's ctor / copy / dtor and a `System::String name`;
+  `Device::onVideoError / onVideoRestart` and `Context`'s +0x2100 fields are named; 18 runtime
+  `DeletingDtor(1)` sites are `delete`. NO class in the tree declares `DeletingDtor`. Ran as: W0 (typed
+  owners, operators, the by-index device-lost dispatch made by-name FIRST) -> three Block-0 agents (two
+  inventories, the device-lost finding) -> rule sheet `endgame_b/B5_RULES.md` -> PILOT (2 classes) -> four
+  opus blocks by hierarchy (BUF, RES, CTX, DEV-A), then DEV-B, then CLOSE -> independent audit -> step
+  close. 8 gated merges (`b5_session/GATE_TABLE.md`), 0 problems, each with a bounded `devlost.sh`
+  (INJECT=1 COMPLETE=5 crash 0); invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable
+  `b983f144`, resave 5/5, 0 new warnings), unit 914 -> 920. Floor: `dx11_seam` category deleted,
+  `gpu_map` 0 -> 5, `com_iid` 2 -> 3, `win32` 85 -> 88 measured. Acceptance: 1 line off (10 = 21, the
+  accepted miscount); line 01 back in the PROD-total form. Close checks: `worldcmp.sh` vs `oldbase`
+  identical; `stepclose.sh` clean (every route, in-game save, sa-stress exit 0 at 139 fps, true release + clean rebuild + gate 0 problems, stub set 0 / 0, census 16 / 16); audit `b5_session/AUDIT.md`. FOUND: the device-lost loop is
+  not the harness — one injection, then real repeated removals (`GetDeviceRemovedReason` 0x887a0005, now
+  printed), leading hypothesis the exe PORT GAP pair `GameUpdateLoop::OnVideoError / OnVideoRestart`
+  (known_port_issues row 890, DEFERRED). Numbers: `b5_session/CLOSE_NUMBERS.md`. Next: the
+  retail-difference task, `endgame_b/NEXT_SESSION.md` §2.
 - **B.4 FINISHING SESSION (S4) — 2026-10-05: 389 -> 336 (149 -> 96 outside `dx11/`, 0 of them open work);
   B.4 CLOSED.** 11 gated merges (`b4_session/GATE_TABLE.md` rows
   159-169), 0 problems; invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`,

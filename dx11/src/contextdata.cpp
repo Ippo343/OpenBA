@@ -530,8 +530,8 @@ void ContextData::Finish() {
     // B5 W0: the ONLY place dx11 read its own hand table by INDEX. Retail
     // (0x18000184f / 0x18000185c) dispatches slots 3 and 2 of the DeviceData;
     // the abstract base `Video::DeviceData` declares those slots by name in
-    // retail order, so the by-name call reaches the same entries on the hand
-    // table today and the compiler's table once DeviceData is a real subclass.
+    // retail order, so the by-name call reaches retail slots 3 and 2 of the
+    // compiler's DeviceData table (B5 DEV-A: DeviceData is a real subclass).
     // B5 CTX: `Video::Device::deviceData` is already that typed base pointer,
     // so the base needs no cast (B5 DEV-A: and OwnerDeviceData's bridge is the
     // single dx11 downcast Dx11DeviceDataOf now; DeviceData wears the compiler's table).

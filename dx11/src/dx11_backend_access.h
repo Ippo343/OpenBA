@@ -370,15 +370,15 @@ inline ID3D11DepthStencilView* Dx11ImageDsv(const Video::ImageBuffer* img) {
 // in the port registry), the `Dx11BaseDtor_t` / `Dx11MemFree_t` typedefs and
 // the `Dx11MemFree` wrapper with its lazy function-local cache. Every Runtime
 // import dx11 used is now a direct reference to the body its mangled name
-// bound (B3R_RULES R2, R8). The slot-0 destructors call
-// `System::MemoryAllocator::MemFree` (VideoDX11 IAT slot 0x1800134d0,
-// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`) when (flags & 1), and their
-// base destructors by qualified name (RULE B5-3).
+// bound (B3R_RULES R2, R8). Since B5 the destructors are `~XData() override`:
+// the compiler chains to the base destructor, and `delete` frees through the
+// base's class-scope `operator delete` (retail's MemFree, VideoDX11 IAT slot
+// 0x1800134d0; runtime/src/video/companion_operators.cpp).
 
 // L6's port of 0x180004340, the DeviceData swap-chain resize/recreate helper.
 // Declared here because it is the one cross-lane call in the port: L5's
 // ContextData::BeginCommands reaches it with a near CALL rather than a vtable
-// dispatch, so the seam cannot redirect it and L5 must name our version.
+// slot, so it needs a declaration with external linkage.
 // B5 DEV-A: takes the dx11 DeviceData itself (it was `void*` while the class
 // was L6's internal POD); the caller reaches it with Dx11DeviceDataOf.
 int Dx11_DeviceData_Resize(DeviceData* deviceData);

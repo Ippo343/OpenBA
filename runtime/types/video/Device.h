@@ -577,7 +577,8 @@ public:
     // B.4 (X-RL): the two video callbacks the profile build's
     // `Video::Device::SetVideoErrorFuncs` (0x1800fd860, inlined by retail into
     // Engine::MainLoop) stores: [0] error +0x50, [1] restart +0x58. The ctor
-    // zeroes both (singleton_ctors.cpp's memset). B5 CTX (B5_RULES C4): named;
+    // zeroes both (singleton_ctors.cpp: two nullptr stores = retail's two qword
+    // stores). B5 CTX (B5_RULES C4): named;
     // written by Engine (engine.cpp), read by dx11's ContextData::Finish either
     // side of a device reset (0x18000183c / 0x18000187d, both null-checked).
     void            (*onVideoError)();     // +0x50
@@ -914,7 +915,7 @@ static_assert(offsetof(Video::Device, gap9E) == 0x9E, "Device::gap9E");
 static_assert(offsetof(Video::Device, gapFC) == 0xFC, "Device::gapFC");
 static_assert(alignof(Video::Device) == 8, "Device aligns to 8");
 // RULE B5-6 in assert form: no vptr, no user ctor/dtor, so the object our ports
-// and dx11 reach into by raw offset is still exactly retail's bytes.
+// and dx11 read by named member is still exactly retail's bytes.
 static_assert(std::is_standard_layout<Video::Device>::value, "Device stays standard-layout (no vptr)");
 static_assert(std::is_trivially_copyable<Video::Device>::value,
               "Device stays trivially copyable — RULE B5-6 gives it no real ctor/dtor");

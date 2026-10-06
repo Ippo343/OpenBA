@@ -30,8 +30,7 @@
 // ----------------------------------------------------
 // The Device singleton does not exist before Engine::Startup — Runtime
 // 0x1801fe7a8 still reads null when the address registry is being built — and
-// InitializeInterfaces runs inside Startup. There is no window, which is the
-// same reason the DX11 seam is the vtables and not Device+0xd0/+0xd8. So we
+// InitializeInterfaces runs inside Startup. There is no window. So we
 // fill slot 1 from inside InitializeInterfaces itself, which then skips DX11
 // and handles DX9/GL exactly as before. Our ported
 // ?InitializeInterfaces@Device@Video@@QEAAXXZ (0x1800f79f0,

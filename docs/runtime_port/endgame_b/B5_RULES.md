@@ -197,8 +197,9 @@ diagnostic — print `GetDeviceRemovedReason()` before the null at the lost path
 `b4_session/acceptance.sh` lines 01-12 at target with line 01 in the PROD-total form, i.e. the PROD
 total is 63 retail-difference + 23 named prerequisite + 3 ruled = 89 and NOTHING is filed under "dx11
 seam"; lines 04 / 05 / 06 / 07 at 0; `castmetric.py dx11` = the `com_iid` + `win32` + `gpu_map` floor
-lines only; `grep -rn "DeletingDtor\|DX11_REGISTER_SLOT\|Dx11VtableAddress\|dx11_seam" code runtime
-standalone dx11 engine tests` = 0; unit 0 failures; `stepclose.sh` clean; `worldcmp.sh` identical.
+lines only; no `DeletingDtor` call on a `Video::*Data` / `VideoDX11::*` object, and
+`DX11_REGISTER_SLOT\|Dx11VtableAddress\|dx11_seam` = 0 outside historical comments (the KeyMap /
+Application / test roots keep the name: audit F13); unit 0 failures; `stepclose.sh` clean; `worldcmp.sh` identical.
 
 ## 8. Corrections (dated, appended as blocks find them)
 
@@ -225,3 +226,12 @@ standalone dx11 engine tests` = 0; unit 0 failures; `stepclose.sh` clean; `world
   after a reader grep. `tests/unit/sources.mk:144-158` wording: CLOSE.
 - C6. Two seam casts in main.cpp count as four rows (`reinterpret_cast` + `(uintptr_t)` each): the
   "7 dx11 seam" group is 5 lines.
+
+2026-10-05, at the close (from `b5_session/AUDIT.md`: 88 OK, 13 FINDING (all comments / one dead struct,
+applied in the close commit), 2 QUESTION):
+- C7. D7's "the one downcast" is TWO: `Dx11DeviceDataOf` (Device -> DeviceData) and `Dx11ImageBackend`
+  (ImageBuffer::_data -> ImageBufferData); both on objects dx11's own factories built. Rule D7 covers both.
+- C8. `RenderStateData` reads the RenderState enable flags as `bool` (B.4 R-VIDEO typed them) where the
+  old body read `uint8_t != 0`: identical while every writer stores 0 / 1 (they do). ACCEPTED, not a row.
+- C9. §7's literal `DeletingDtor` grep cannot reach 0 (KeyMap / Application / test roots keep the name
+  outside B5): the acceptance is "no such call on a Video companion" (edited in §7).

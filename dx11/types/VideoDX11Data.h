@@ -41,16 +41,8 @@ struct ID3D11ShaderResourceView;     // B5 RES: ImageBufferData
 
 namespace VideoDX11 {
 
-// ============================================================
-// Common Runtime-side base (first 0x10 bytes of every *Data)
-// ============================================================
-struct DataBase {
-    void* vptr;    // +0x00
-    void* owner;   // +0x08  Video::Device* / Video::Context* / Video::ImageBuffer* / ...
-};
-static_assert(sizeof(DataBase) == 0x10, "DataBase size");
-static_assert(offsetof(DataBase, vptr) == 0x0, "DataBase::vptr");
-static_assert(offsetof(DataBase, owner) == 0x08, "DataBase::owner");
+// (The `{vptr, owner}` prefix every class shares is the base `Video::XData` itself;
+// each class below asserts `offsetof(X, _owner) == 0x08`.)
 
 // ============================================================
 // DeviceData — 0x70 bytes, vtable 0x180018bb0 (20 slots)
