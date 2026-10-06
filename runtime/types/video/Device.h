@@ -54,23 +54,22 @@
 //                       separately. A real dtor would be a second opinion about
 //                       a teardown that already happens elsewhere (B34B_RULES
 //                       §1.4's `System::Compression` precedent).
-//   * the four nested value types — their ctors/dtors ARE ported and
-//                       registered, and B4b-2 would permit members, but the
-//                       `Collection::Array<T>` helpers that own every live
-//                       instance destroy their elements through OPEN-CODED
-//                       copies of those bodies, not through the class dtor:
-//                       `RtVideo_ArrayAdapterElemDestroy`
-//                       (`device_enum_types.cpp`) reproduces `~Adapter` inline
-//                       as "spelling B", which differs from the real dtor by one
-//                       instruction. A real dtor would be a second
-//                       implementation of a teardown that already happens. And
-//                       retail exports NO default `DisplayMode` constructor
-//                       (only `@HH@Z` and the copy ctor), while
+//   * `DisplayMode` / `RefreshRate` — retail exports NO default `DisplayMode`
+//                       constructor (only `@HH@Z` and the copy ctor), while
 //                       `video_mode_sort.cpp:169` default-constructs one as a
 //                       swap temporary exactly as retail leaves it
 //                       uninitialised — a declared ctor set would forbid the
-//                       faithful spelling. So the ctor/dtor DOORS stay free
+//                       faithful spelling. So their ctor/dtor DOORS stay free
 //                       functions; every other exported member is a real member.
+//   * `Adapter` / `GraphicsInterface` — ENDGAME B5 DEV-B (B5_RULES D6) gave
+//                       them retail's ctor / copy ctor / dtor as REAL MEMBERS
+//                       and a `System::String name`; see the two classes. The
+//                       Array element-destroy loops that open-code their
+//                       teardown (`RtVideo_ArrayAdapterElemDestroy`,
+//                       `RtVideo_ArrayInterfaceElemDestroy`) release the name
+//                       through the String member's destructor; the one-
+//                       instruction "spelling B" difference is unobservable
+//                       (device_enum_types.cpp says why).
 // The ctor/dtor/operator-new/operator-delete/operator= exports are tabulated
 // per class below with their mangled name, retail address and the door symbol
 // that answers them, so no other block has to go looking.
@@ -103,12 +102,12 @@
 #include <cstddef>
 #include <type_traits>
 
-// Declared, not included. `Device::GetDLLForInterface` returns a
-// `System::String` by value (a hidden-retslot door, B35_RULES §2.5) and
-// `Device::SetCursor` takes an `Object::ExternalPtr<ImageBuffer>` by value; both
-// are declarations only, so an incomplete type is enough and this header does
-// not drag `system/String.h` or `object/External.h` into every includer.
-namespace System { class String; }
+// `System::String` is INCLUDED (ENDGAME B5 DEV-B): `Adapter::name` and
+// `GraphicsInterface::name` are `System::String` members, which needs the
+// complete type. `Device::SetCursor` takes an `Object::ExternalPtr<ImageBuffer>`
+// by value as a declaration only, so that one stays an incomplete type and this
+// header does not drag `object/External.h` into every includer.
+#include "../system/String.h"
 namespace Object { template <class T> class ExternalPtr; }
 
 namespace Video {
@@ -258,15 +257,27 @@ public:
     // clamps its 8th out-parameter against the int at +0x28. The 0x38 stride is
     // ValidateConfiguration's `*param_2 * 0x38`.
     //
-    // DOORS, NOT MEMBERS (see the header banner for why the ported ones stay
-    // doors — the Array<Adapter> helpers open-code this teardown):
-    //   ??0Adapter@Device@Video@@QEAA@XZ                 0x1800f7100  RtVideo_Adapter_Ctor
-    //   ??0Adapter@Device@Video@@QEAA@AEBU012@@Z         0x18000cc70  RtVideo_Adapter_CopyCtor
-    //   ??1Adapter@Device@Video@@QEAA@XZ                 0x18000cc10  RtVideo_Adapter_Dtor
-    //   ??4Adapter@Device@Video@@QEAAAEAU012@AEBU012@@Z  0x18000cd00  UNPORTED
-    //   (all three ported ones in runtime/src/video/device_enum_types.cpp)
+    // LIFECYCLE — REAL MEMBERS since ENDGAME B5 DEV-B (B5_RULES D6); the
+    // bodies are in runtime/src/video/device_enum_types.cpp:
+    //   ??0Adapter@Device@Video@@QEAA@XZ                 0x1800f7100  Adapter()
+    //   ??0Adapter@Device@Video@@QEAA@AEBU012@@Z         0x18000cc70  Adapter(const Adapter&)
+    //   ??1Adapter@Device@Video@@QEAA@XZ                 0x18000cc10  ~Adapter()
+    //   ??4Adapter@Device@Video@@QEAAAEAU012@AEBU012@@Z  0x18000cd00  UNPORTED (= delete)
+    // The `name` member's own ctor / copy / dtor ARE the String share / release
+    // retail inlines into those three bodies (System::String 0x180006760 /
+    // 0x180006cb0 / 0x180006c80, runtime/src/system/string.cpp). Every live
+    // instance sits in raw MemAlloc'd storage (Device+0x40, GraphicsInterface
+    // +0x08) or is one of dx11's enumeration locals; the array growers
+    // placement-new the copy ctor and call `~Adapter()` explicitly.
     // ------------------------------------------------------------------------
     struct Adapter {
+        Adapter();                                      // 0x1800f7100
+        Adapter(const Adapter& other);                  // 0x18000cc70
+        ~Adapter();                                     // 0x18000cc10
+        // ??4Adapter@Device@Video@@QEAAAEAU012@AEBU012@@Z 0x18000cd00 is
+        // UNPORTED: deleted, so nothing gets the implicit memberwise one.
+        Adapter& operator=(const Adapter&) = delete;
+
         // ?FindDisplayMode@Adapter@Device@Video@@QEBAHAEBVDisplayMode@23@@Z
         //                                                0x1800f7310  NOT PORTED
         int  FindDisplayMode(const DisplayMode& mode) const;
@@ -274,7 +285,7 @@ public:
         //                                                0x1800f7020  device_enum_types.cpp
         void FindOrAddMode(const DisplayMode& mode, const RefreshRate& rate);
 
-        void*        name;              // +0x00  System::String (data pointer); ctor zeroes it
+        System::String name;            // +0x00  ctor zeroes it; the adapter's display name
         DisplayMode* modeData;          // +0x08  Array<DisplayMode>::_data       (ValidateConfiguration)
         int32_t      modeCount;         // +0x10  Array<DisplayMode>::_size       (ValidateConfiguration)
         int32_t      modeCapacity;      // +0x14  Array<DisplayMode>::_capacity   (inferred from the Array shape)
@@ -304,19 +315,25 @@ public:
     // ??0GraphicsInterface@Device@Video@@QEAA@XZ (0x18000cd90) zeroes exactly three
     // qwords. GetInterface (0x18000d3c0) strides by 0x18. ValidateConfiguration
     // reads the adapter array at +0x08/+0x10, and
-    // code/Game/Dialog/optionsdialog.cpp:462 does the same by hand
-    // ("GraphicsInterface starts with a System::String (the interface name)").
+    // code/Game/Dialog/optionsdialog.cpp (PopulateVideoComboBoxes) shows `name`.
     //
-    // DOORS, NOT MEMBERS (all three ported ones in device_enum_types.cpp):
-    //   ??0GraphicsInterface@Device@Video@@QEAA@XZ                0x18000cd90  RtVideo_GraphicsInterface_Ctor
-    //   ??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z        0x18000ce10  RtVideo_GraphicsInterface_CopyCtor
-    //   ??1GraphicsInterface@Device@Video@@QEAA@XZ                0x18000cdc0  RtVideo_GraphicsInterface_Dtor
-    //   ??4GraphicsInterface@Device@Video@@QEAAAEAU012@AEBU012@@Z 0x18000ce60  UNPORTED
+    // LIFECYCLE — REAL MEMBERS since ENDGAME B5 DEV-B (bodies in
+    // device_enum_types.cpp; see Adapter above for the String member):
+    //   ??0GraphicsInterface@Device@Video@@QEAA@XZ                0x18000cd90  GraphicsInterface()
+    //   ??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z        0x18000ce10  GraphicsInterface(const GraphicsInterface&)
+    //   ??1GraphicsInterface@Device@Video@@QEAA@XZ                0x18000cdc0  ~GraphicsInterface()
+    //   ??4GraphicsInterface@Device@Video@@QEAAAEAU012@AEBU012@@Z 0x18000ce60  UNPORTED (= delete)
     //
     // It has no other exported member.
     // ------------------------------------------------------------------------
     struct GraphicsInterface {
-        void*    name;            // +0x00  System::String data pointer — the renderer name shown in the combo
+        GraphicsInterface();                                        // 0x18000cd90
+        GraphicsInterface(const GraphicsInterface& other);          // 0x18000ce10
+        ~GraphicsInterface();                                       // 0x18000cdc0
+        // 0x18000ce60 (operator=) is UNPORTED: deleted, as Adapter's.
+        GraphicsInterface& operator=(const GraphicsInterface&) = delete;
+
+        System::String name;      // +0x00  the renderer name shown in the combo
         Adapter* adapterData;     // +0x08  Array<Adapter>::_data
         int32_t  adapterCount;    // +0x10  Array<Adapter>::_size
         int32_t  adapterCapacity; // +0x14  Array<Adapter>::_capacity (inferred from the Array shape)
@@ -865,6 +882,15 @@ static_assert(offsetof(Video::Device::Adapter, maxFilterLevel) == 0x28, "Adapter
 static_assert(offsetof(Video::Device::Adapter, dxgiAdapterIndex) == 0x2C, "Adapter::dxgiAdapterIndex");
 static_assert(offsetof(Video::Device::Adapter, dxgiOutputIndex) == 0x30, "Adapter::dxgiOutputIndex");
 static_assert(offsetof(Video::Device::Adapter, field34) == 0x34, "Adapter::field34");
+// ENDGAME B5 DEV-B: the name is the real one-pointer String, not its data pointer.
+static_assert(std::is_same<decltype(Video::Device::Adapter::name), System::String>::value,
+              "Adapter::name is a System::String member");
+static_assert(!std::is_copy_assignable<Video::Device::Adapter>::value,
+              "Adapter::operator= (0x18000cd00) is UNPORTED and deleted");
+static_assert(std::is_same<decltype(Video::Device::GraphicsInterface::name), System::String>::value,
+              "GraphicsInterface::name is a System::String member");
+static_assert(!std::is_copy_assignable<Video::Device::GraphicsInterface>::value,
+              "GraphicsInterface::operator= (0x18000ce60) is UNPORTED and deleted");
 
 // ---- Video::Device::GraphicsInterface ----
 static_assert(sizeof(Video::Device::GraphicsInterface) == 0x18, "GraphicsInterface is 0x18 bytes (GetInterface stride)");
@@ -1020,19 +1046,11 @@ enum ImageBufferSizeFlag : uint32_t {
 void* Video_DisplayMode_Ctor(Video::Device::DisplayMode* self, int width, int height);  // 0x18000d300
 void Video_DisplayMode_Dtor(Video::Device::DisplayMode* self);  // 0x18000cb80
 // ---- video/device_enum_types.cpp
-// The six lifecycle doors stay C bodies (their class takes no
-// real ctor/dtor, see the banner); dx11/src/devicedata.cpp calls them with
-// typed pointers, so the parameters are typed.
-extern "C" Video::Device::GraphicsInterface* RtVideo_GraphicsInterface_Ctor(
-    Video::Device::GraphicsInterface* self);  // 0x18000cd90
-extern "C" Video::Device::GraphicsInterface* RtVideo_GraphicsInterface_CopyCtor(
-    Video::Device::GraphicsInterface* dst, const Video::Device::GraphicsInterface* src);  // 0x18000ce10
-extern "C" void RtVideo_GraphicsInterface_Dtor(Video::Device::GraphicsInterface* self);  // 0x18000cdc0
-extern "C" Video::Device::Adapter* RtVideo_Adapter_Ctor(Video::Device::Adapter* self);  // 0x1800f7100
-extern "C" Video::Device::Adapter* RtVideo_Adapter_CopyCtor(
-    Video::Device::Adapter* dst, const Video::Device::Adapter* src);  // 0x18000cc70
-extern "C" void RtVideo_Adapter_Dtor(Video::Device::Adapter* self);  // 0x18000cc10
-// ---- video/device_startup.cpp, video/device_enum_types.cpp
+// (ENDGAME B5 DEV-B: the six Adapter / GraphicsInterface lifecycle doors are the
+// classes' constructors, copy constructors and destructors now.)
+// All thirteen `Collection::Array<T>` helpers below live in device_enum_types.cpp
+// (B5 DEV-B moved the seven that were in device_startup.cpp beside the rest, so
+// the Adapter / GraphicsInterface lifecycle links into the host unit tests).
 // The `Collection::Array<T>` instantiations over the unrolled {data, size,
 // capacity} triples above (B.4 R-VIDEO). Each takes its array as the owner's
 // three named fields BY REFERENCE; an `operator=` takes the source's data and

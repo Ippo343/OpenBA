@@ -485,11 +485,10 @@ void OptionsDialog::PopulateAdapterCombo() {
     int adapterCount = gfxIface.adapterCount;
 
     for (int i = 0; i < adapterCount; i++) {
-        // Adapter name is the System::String at the start of each 0x38-byte entry
-        // (LEFT: Adapter::name is declared as the String's data pointer, H5).
+        // Adapter name is the System::String at the start of each 0x38-byte entry.
         UI::Sprite sprite;
         void* itemData = (void*)(intptr_t)i;  // CAST-OK: ptr_int
-        comboAdapter->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.adapterData[i].name), itemData);   // LEFT: dx11 seam: Device::Adapter::name as System::String gives the record an implicit String ctor / dtor, and dx11/src/devicedata.cpp builds these records by hand through the RtVideo_Adapter / RtVideo_GraphicsInterface Ctor / Dtor doors (its `GraphicsInterface gi;` local, :1548-1560, would release the name twice) -- the doors become the structs' C++ ctor / dtor with that dx11 edit
+        comboAdapter->AddItem(sprite, gfxIface.adapterData[i].name, itemData);
     }
 
     comboAdapter->SetCurrentItem(savedAdapter);
@@ -512,12 +511,11 @@ void OptionsDialog::PopulateVideoComboBoxes() {
 
     int ifaceCount = vidDev->GetInterfaceCount();
     for (int i = 0; i < ifaceCount; i++) {
-        // GraphicsInterface starts with a System::String (the interface name)
-        // (LEFT: GraphicsInterface::name is declared as the String's data pointer, H5).
+        // GraphicsInterface starts with a System::String (the interface name).
         const Video::Device::GraphicsInterface& gfxIface = vidDev->GetInterface(i);
         UI::Sprite sprite;
         void* itemData = (void*)(intptr_t)i;  // CAST-OK: ptr_int
-        comboRenderer->AddItem(sprite, *reinterpret_cast<const System::String*>(&gfxIface.name), itemData);   // LEFT: dx11 seam: as the adapter line above (Device::GraphicsInterface::name; dx11/src/devicedata.cpp :1548-1560 builds the record through RtVideo_GraphicsInterface_Ctor / _Dtor)
+        comboRenderer->AddItem(sprite, gfxIface.name, itemData);
     }
 
     comboRenderer->SetCurrentItem(savedRenderer);

@@ -154,18 +154,20 @@ namespace {
 //   0x1800134d0  ?MemFree@MemoryAllocator@System@@SAXPEAX@Z    System::MemoryAllocator::MemFree
 //   0x180013478  ??0ContextData@Video@@…        (and the ten  the base ctor of each
 //   …            other ??0XData@Video@@ ctors, slot 9..19)    `new XData(owner)` below
-//   0x180013250  ??0Adapter@Device@Video@@QEAA@XZ              RtVideo_Adapter_Ctor
-//   0x1800132b8  ??0Adapter@Device@Video@@QEAA@AEBU012@@Z      RtVideo_Adapter_CopyCtor
-//   0x1800134c8  ??1Adapter@Device@Video@@QEAA@XZ              RtVideo_Adapter_Dtor
-//   0x1800132d0  ??0GraphicsInterface@Device@Video@@QEAA@XZ    RtVideo_GraphicsInterface_Ctor
-//   0x1800132b0  ??0GraphicsInterface@…@@QEAA@AEBU012@@Z       RtVideo_GraphicsInterface_CopyCtor
-//   0x1800132c8  ??1GraphicsInterface@Device@Video@@QEAA@XZ    RtVideo_GraphicsInterface_Dtor
+//   0x180013250  ??0Adapter@Device@Video@@QEAA@XZ              Adapter::Adapter()
+//   0x1800132b8  ??0Adapter@Device@Video@@QEAA@AEBU012@@Z      Adapter::Adapter(const Adapter&)
+//   0x1800134c8  ??1Adapter@Device@Video@@QEAA@XZ              Adapter::~Adapter()
+//   0x1800132d0  ??0GraphicsInterface@Device@Video@@QEAA@XZ    GraphicsInterface::GraphicsInterface()
+//   0x1800132b0  ??0GraphicsInterface@…@@QEAA@AEBU012@@Z       GraphicsInterface(const GraphicsInterface&)
+//   0x1800132c8  ??1GraphicsInterface@Device@Video@@QEAA@XZ    GraphicsInterface::~GraphicsInterface()
 //   0x180013308  ??0DisplayMode@Device@Video@@QEAA@HH@Z        Video_DisplayMode_Ctor
 //   0x1800132f8  ??1DisplayMode@Device@Video@@QEAA@XZ          Video_DisplayMode_Dtor
 //
-// The six Adapter / GraphicsInterface / DisplayMode bodies are C functions
-// because none of those nested value types has a real C++ constructor or
-// destructor yet (B4b-2; Device.h records why per type). The eleven `??0XData`
+// B5 DEV-B (B5_RULES D6): Adapter and GraphicsInterface carry retail's ctor /
+// copy ctor / dtor as real members and a `System::String name`, so their four
+// rows are C++ constructions and destructions below (locals, and placement-new
+// plus explicit destructor calls on the growers' raw MemAlloc'd storage). The
+// two DisplayMode rows stay C functions (Device.h records why). The eleven `??0XData`
 // names bound to one-line doors whose whole body is `::new (self) XData(owner)`;
 // B5: each factory is `new XData(owner)`, whose base constructor is that
 // construction (the twelve `*Data` classes are real subclasses).
@@ -1401,16 +1403,18 @@ void GfxInterfaceArraySetLength(void* arrayBase, int newCount,
         GraphicsInterface* dst = base + i;
         if (!dst) continue;
         const GraphicsInterface* src = (i < oldCount) ? (oldBase + i) : proto;
-        RtVideo_GraphicsInterface_CopyCtor(dst, src);
+        ::new (static_cast<void*>(dst)) GraphicsInterface(*src);   // 0x18000ce10
     }
 
+    // The block is raw MemAlloc'd storage, so each element's destructor is
+    // called explicitly (0x18000cdc0), in the shipped order, before the free.
     if (oldBase != base) {
         for (int j = 0; j < oldCount; ++j)
-            RtVideo_GraphicsInterface_Dtor(oldBase + j);
+            (oldBase + j)->~GraphicsInterface();
         System::MemoryAllocator::MemFree(oldBase);
     } else {
         for (int j = newCount; j < oldCount; ++j)
-            RtVideo_GraphicsInterface_Dtor(oldBase + j);
+            (oldBase + j)->~GraphicsInterface();
     }
 }
 
@@ -1442,16 +1446,16 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
         Adapter* dst = base + i;
         if (!dst) continue;
         const Adapter* src = (i < oldCount) ? (oldBase + i) : proto;
-        RtVideo_Adapter_CopyCtor(dst, src);
+        ::new (static_cast<void*>(dst)) Adapter(*src);   // 0x18000cc70
     }
 
     if (oldBase != base) {
         for (int j = 0; j < oldCount; ++j)
-            RtVideo_Adapter_Dtor(oldBase + j);
+            (oldBase + j)->~Adapter();                    // 0x18000cc10
         System::MemoryAllocator::MemFree(oldBase);
     } else {
         for (int j = newCount; j < oldCount; ++j)
-            RtVideo_Adapter_Dtor(oldBase + j);
+            (oldBase + j)->~Adapter();
     }
 }
 
@@ -1534,20 +1538,18 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
 static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfaceName,
                                        CreateDXGIFactory1_t createFactory,
                                        D3D11CreateDevice_t  createDevice) {
+    // B5 DEV-B: `gi` is constructed by ??0GraphicsInterface (0x18000cd90) and
+    // destroyed by ??1GraphicsInterface (0x18000cdc0) at either return — the
+    // two points the shipped code called it.
     GraphicsInterface gi;
-    RtVideo_GraphicsInterface_Ctor(&gi);
     {
-        // B.3.1 bridge: GraphicsInterface::name is a POD slot on a struct this
-        // plugin shares with the engine and that is not converted yet.
         const System::String name(interfaceName);
-        reinterpret_cast<System::String&>(gi) = name;
+        gi.name = name;
     }
 
     IDXGIFactory1* factory = nullptr;
-    if (createFactory(kIID_IDXGIFactory1, &factory) != 0) {
-        RtVideo_GraphicsInterface_Dtor(&gi);
-        return false;
-    }
+    if (createFactory(kIID_IDXGIFactory1, &factory) != 0)
+        return false;                                     // ~GraphicsInterface(gi)
 
     for (UINT adapterIndex = 0; ; ++adapterIndex) {
         IDXGIAdapter1* dxgiAdapter = nullptr;
@@ -1559,8 +1561,10 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
 
         for (UINT outputIndex = 0; ; ++outputIndex) {
             // A fresh record per output, seeded from the adapter description.
+            // B5 DEV-B: ??0Adapter (0x1800f7100) here; ??1Adapter (0x18000cc10)
+            // runs at the `break` below and at the end of each iteration, the
+            // two points the shipped code called it.
             Adapter rec;
-            RtVideo_Adapter_Ctor(&rec);
             {
                 WideStringStorage w;
                 ::new (static_cast<void*>(&w)) System::WideString(adapterDesc.Description);   // B.3.4 bridge
@@ -1574,7 +1578,7 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
                     // WideString, which is the shipped order.
                     const System::String utf8 =
                         reinterpret_cast<const System::WideString*>(&w)->AsUTF8();  // B.3.4 bridge
-                    reinterpret_cast<System::String&>(rec) = utf8;  // B.3.1 bridge
+                    rec.name = utf8;
                 }
                 reinterpret_cast<System::WideString*>(&w)->~WideString();   // B.3.4 bridge
             }
@@ -1587,10 +1591,8 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
             rec.dxgiOutputIndex  = static_cast<int32_t>(outputIndex);
 
             IDXGIOutput* output = nullptr;
-            if (dxgiAdapter->EnumOutputs(outputIndex, &output) == DXGI_ERROR_NOT_FOUND) {
-                RtVideo_Adapter_Dtor(&rec);
-                break;
-            }
+            if (dxgiAdapter->EnumOutputs(outputIndex, &output) == DXGI_ERROR_NOT_FOUND)
+                break;                                    // ~Adapter(rec)
 
             DXGI_OUTPUT_DESC outDesc;
             output->GetDesc(&outDesc);
@@ -1625,7 +1627,7 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
                             // operator+= returns the new value BY VALUE and the
                             // caller discards the copy; that copy is retail's t3.
                             const System::String t3 =
-                                (reinterpret_cast<System::String&>(rec) += t2);
+                                (rec.name += t2);
                             (void)t3;
                         }                       // t3, t2, t1
                     }                           // tailU
@@ -1715,8 +1717,7 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
             }
 
             System::MemoryAllocator::MemFree(modes);
-            RtVideo_Adapter_Dtor(&rec);
-        }
+        }                                                 // ~Adapter(rec)
 
         dxgiAdapter->Release();
     }
@@ -1731,8 +1732,7 @@ static bool EnumerateDxgiInterfaceInto(::Video::Device* dev, const char* interfa
                                    &gi);
     }
 
-    RtVideo_GraphicsInterface_Dtor(&gi);
-    return any;
+    return any;                                           // ~GraphicsInterface(gi)
 }
 
 }  // namespace

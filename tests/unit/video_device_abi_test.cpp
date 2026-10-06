@@ -46,8 +46,12 @@
 
 #include "unit.h"
 
+#include <cstdlib>
+
 #include "video/Device.h"
 #include "video/Buffers.h"
+#include "system/MemoryAllocator.h"
+#include "system/String.h"
 
 namespace {
 
@@ -230,12 +234,16 @@ UNIT_TEST(video_device_gained_no_vptr_and_stays_a_raw_readable_object) {
     CHECK(std::is_standard_layout<VB>::value);
     CHECK(!std::is_trivially_destructible<VB>::value);
 
-    // The five nested value types too — Collection::Array bulk-copies them.
+    // Three nested value types too — Collection::Array bulk-copies them.
     CHECK(std::is_trivially_copyable<Dev::RefreshRate>::value);
     CHECK(std::is_trivially_copyable<Dev::DisplayMode>::value);
-    CHECK(std::is_trivially_copyable<Dev::Adapter>::value);
-    CHECK(std::is_trivially_copyable<Dev::GraphicsInterface>::value);
     CHECK(std::is_trivially_copyable<Dev::InterfaceSlot>::value);
+    // ENDGAME B5 DEV-B: Adapter and GraphicsInterface carry retail's ctor / copy
+    // ctor / dtor as members and a System::String name, so they are NOT trivially
+    // copyable any more — their arrays copy-construct and destroy per element
+    // (PART F below runs the real members).
+    CHECK(!std::is_trivially_copyable<Dev::Adapter>::value);
+    CHECK(!std::is_trivially_copyable<Dev::GraphicsInterface>::value);
 
     alignas(8) uint8_t raw[sizeof(Dev)];
     std::memset(raw, 0, sizeof(raw));
@@ -313,6 +321,9 @@ UNIT_TEST(video_device_pod_spellings_are_the_same_type_not_a_copy) {
     CHECK((std::is_same<RtVideo::Adapter, Video::Device::Adapter>::value));
     CHECK((std::is_same<RtVideo::GraphicsInterface, Video::Device::GraphicsInterface>::value));
     CHECK((std::is_same<RtVideo::InterfaceSlot, Video::Device::InterfaceSlot>::value));
+    // ENDGAME B5 DEV-B: the name is the real String member, not its data pointer.
+    CHECK((std::is_same<decltype(Video::Device::Adapter::name), System::String>::value));
+    CHECK((std::is_same<decltype(Video::Device::GraphicsInterface::name), System::String>::value));
     // Buffers.h's old GLOBAL-scope spelling (B4b-1: it occupied no namespace at
     // all) and the RtVideo one.
     CHECK((std::is_same<::IndexBuffer, Video::IndexBuffer>::value));
@@ -437,4 +448,196 @@ UNIT_TEST(video_device_getdisplaymode_returns_the_nested_class_by_value) {
     // handed back by a bitwise move of {width, height, data, count, capacity} —
     // which transfers ownership of the refresh array, as retail's does.
     CHECK(std::is_trivially_copyable<Dev::DisplayMode>::value);
+}
+
+// ===========================================================================
+// PART F — ENDGAME B5 DEV-B: Adapter and GraphicsInterface's REAL lifecycle.
+//
+// The six bodies (retail 0x1800f7100 / 0x18000cc70 / 0x18000cc10 and
+// 0x18000cd90 / 0x18000ce10 / 0x18000cdc0) are the classes' members now, in
+// runtime/src/video/device_enum_types.cpp, which links here (tests/unit/
+// sources.mk). The String member is the host String (string.cpp, malloc seam);
+// the Array helpers allocate through System::MemoryAllocator, whose instrument
+// seat is armed with a counting malloc / free for the duration of each test and
+// cleared after it (allocator_seat_test.cpp expects it empty).
+//
+// What is checked is what the doors did and the members must still do: the
+// default ctor's exact stores on POISONED storage (zeros, the three -1s, +0x34
+// untouched), the copy ctor's String SHARE (same buffer, refcount + 1) and DEEP
+// array copies (new blocks, equal contents, +0x34 untouched), and the dtor's
+// releases (every MemAlloc matched by a MemFree; the shared-path name slot left
+// null, retail's release asymmetry).
+// ===========================================================================
+
+namespace {
+
+int g_devbAllocs = 0;
+int g_devbFrees  = 0;
+
+void* DevbAlloc(uint64_t size, int /*align*/) {
+    ++g_devbAllocs;
+    return std::malloc(size ? static_cast<size_t>(size) : 1u);
+}
+void DevbFree(void* p) {
+    if (p) ++g_devbFrees;
+    std::free(p);
+}
+
+struct DevbSeat {
+    DevbSeat() {
+        g_devbAllocs = g_devbFrees = 0;
+        System::g_memoryAllocatorInstrument.memAlloc = &DevbAlloc;
+        System::g_memoryAllocatorInstrument.memFree  = &DevbFree;
+    }
+    ~DevbSeat() {
+        System::g_memoryAllocatorInstrument.memAlloc = nullptr;
+        System::g_memoryAllocatorInstrument.memFree  = nullptr;
+    }
+};
+
+int32_t RefCountOf(const System::String& s) { return RtSystem::StringRefCount(s._data); }
+
+// Fills an Adapter the way dx11's enumeration does: a name, one mode with one
+// refresh rate (through the real FindOrAddMode), a 4-entry msaa table and the
+// three ints.
+void FillAdapter(Dev::Adapter& a, const char* name) {
+    a.name = System::String(name);
+    Dev::DisplayMode m;
+    m.width = 1920; m.height = 1080;
+    m.refreshData = nullptr; m.refreshCount = 0; m.refreshCapacity = 0;
+    Dev::RefreshRate r;
+    r.numerator = 60; r.denominator = 1;
+    a.FindOrAddMode(m, r);
+    a.multisampleData  = static_cast<uint8_t*>(System::MemoryAllocator::MemAlloc(4, 1));
+    a.multisampleCount = 4;
+    a.multisampleCap   = 4;
+    a.multisampleData[0] = 1; a.multisampleData[1] = 0;
+    a.multisampleData[2] = 1; a.multisampleData[3] = 0;
+    a.maxFilterLevel   = 16;
+    a.dxgiAdapterIndex = 0;
+    a.dxgiOutputIndex  = 2;
+}
+
+}  // namespace
+
+UNIT_TEST(video_device_adapter_ctor_copy_dtor_are_retails) {
+    DevbSeat seat;
+
+    // ??0Adapter 0x1800f7100 on poisoned storage.
+    alignas(8) uint8_t rawA[sizeof(Dev::Adapter)];
+    std::memset(rawA, 0xCD, sizeof(rawA));
+    Dev::Adapter* a = new (rawA) Dev::Adapter;
+    CHECK_EQ(At<uintptr_t>(rawA, 0x00), 0u);            // name
+    CHECK(a->modeData == nullptr);
+    CHECK_EQ(a->modeCount, 0);
+    CHECK_EQ(a->modeCapacity, 0);
+    CHECK(a->multisampleData == nullptr);
+    CHECK_EQ(a->multisampleCount, 0);
+    CHECK_EQ(a->multisampleCap, 0);
+    CHECK_EQ(a->maxFilterLevel, -1);
+    CHECK_EQ(a->dxgiAdapterIndex, -1);
+    CHECK_EQ(a->dxgiOutputIndex, -1);
+    CHECK_EQ(At<uint32_t>(rawA, 0x34), 0xCDCDCDCDu);    // +0x34 NOT written
+
+    FillAdapter(*a, "Radeon");
+    CHECK_EQ(RefCountOf(a->name), 1);
+
+    // ??0Adapter(const&) 0x18000cc70 on poisoned storage.
+    alignas(8) uint8_t rawB[sizeof(Dev::Adapter)];
+    std::memset(rawB, 0xAB, sizeof(rawB));
+    Dev::Adapter* b = new (rawB) Dev::Adapter(*a);
+    CHECK(b->name._data == a->name._data);              // shared, not copied
+    CHECK_EQ(RefCountOf(a->name), 2);
+    CHECK(b->name == "Radeon");
+    CHECK(b->modeData != nullptr);
+    CHECK(b->modeData != a->modeData);                  // deep
+    CHECK_EQ(b->modeCount, 1);
+    CHECK_EQ(b->modeData[0].width, 1920);
+    CHECK_EQ(b->modeData[0].height, 1080);
+    CHECK(b->modeData[0].refreshData != a->modeData[0].refreshData);   // deep, nested
+    CHECK_EQ(b->modeData[0].refreshCount, 1);
+    CHECK_EQ(b->modeData[0].refreshData[0].numerator, 60);
+    CHECK_EQ(b->modeData[0].refreshData[0].denominator, 1);
+    CHECK(b->multisampleData != a->multisampleData);    // deep
+    CHECK_EQ(b->multisampleCount, 4);
+    CHECK_EQ(std::memcmp(b->multisampleData, a->multisampleData, 4), 0);
+    CHECK_EQ(b->maxFilterLevel, 16);
+    CHECK_EQ(b->dxgiAdapterIndex, 0);
+    CHECK_EQ(b->dxgiOutputIndex, 2);
+    CHECK_EQ(At<uint32_t>(rawB, 0x34), 0xABABABABu);    // +0x34 NOT copied
+
+    // ??1Adapter 0x18000cc10: msaa, modes, then the name. The copy's name is
+    // still shared, so the release takes the NULLING path.
+    b->~Adapter();
+    CHECK_EQ(RefCountOf(a->name), 1);
+    CHECK_EQ(At<uintptr_t>(rawB, 0x00), 0u);
+    CHECK_EQ(At<uintptr_t>(rawB, 0x08), 0u);
+    CHECK_EQ(At<uintptr_t>(rawB, 0x18), 0u);
+
+    a->~Adapter();
+    CHECK(g_devbAllocs > 0);
+    CHECK_EQ(g_devbAllocs, g_devbFrees);                // every block released once
+}
+
+UNIT_TEST(video_device_graphicsinterface_ctor_copy_dtor_are_retails) {
+    DevbSeat seat;
+
+    // ??0GraphicsInterface 0x18000cd90: three zero qwords.
+    alignas(8) uint8_t rawG[sizeof(Dev::GraphicsInterface)];
+    std::memset(rawG, 0xCD, sizeof(rawG));
+    Dev::GraphicsInterface* g = new (rawG) Dev::GraphicsInterface;
+    CHECK_EQ(At<uintptr_t>(rawG, 0x00), 0u);
+    CHECK_EQ(At<uintptr_t>(rawG, 0x08), 0u);
+    CHECK_EQ(At<uint64_t>(rawG, 0x10), 0u);
+
+    g->name = System::String("DirectX 11");
+    {
+        Dev::Adapter proto;
+        FillAdapter(proto, "GeForce");
+        Dev::Adapter* const protoData = &proto;
+        const int32_t one = 1;
+        // Array<Adapter>::operator= 0x18000fe10: copy-constructs each element.
+        RtVideo_ArrayAdapterAssign(g->adapterData, g->adapterCount, g->adapterCapacity,
+                                   protoData, one);
+        CHECK_EQ(g->adapterCount, 1);
+        CHECK(g->adapterData[0].name._data == proto.name._data);
+        CHECK_EQ(RefCountOf(proto.name), 2);
+    }   // ~Adapter(proto)
+    CHECK_EQ(RefCountOf(g->adapterData[0].name), 1);
+
+    // ??0GraphicsInterface(const&) 0x18000ce10.
+    alignas(8) uint8_t rawH[sizeof(Dev::GraphicsInterface)];
+    std::memset(rawH, 0xAB, sizeof(rawH));
+    Dev::GraphicsInterface* h = new (rawH) Dev::GraphicsInterface(*g);
+    CHECK(h->name._data == g->name._data);
+    CHECK_EQ(RefCountOf(g->name), 2);
+    CHECK_EQ(h->adapterCount, 1);
+    CHECK(h->adapterData != g->adapterData);            // deep
+    CHECK(h->adapterData[0].name == "GeForce");
+    CHECK_EQ(RefCountOf(g->adapterData[0].name), 2);    // the adapter's name shared
+    CHECK(h->adapterData[0].modeData != g->adapterData[0].modeData);
+    CHECK_EQ(h->adapterData[0].modeData[0].width, 1920);
+    CHECK_EQ(h->adapterData[0].maxFilterLevel, 16);
+
+    // ??1GraphicsInterface 0x18000cdc0: the adapter array, then the name.
+    h->~GraphicsInterface();
+    CHECK_EQ(RefCountOf(g->name), 1);
+    CHECK_EQ(RefCountOf(g->adapterData[0].name), 1);
+    CHECK_EQ(At<uintptr_t>(rawH, 0x00), 0u);            // shared path: nulled
+    CHECK_EQ(At<uintptr_t>(rawH, 0x08), 0u);
+
+    // The Device-side teardown (~Device's 0x180010f00) over a one-element
+    // block: the open-coded loop releases the same things the dtor does.
+    Dev::GraphicsInterface* block = static_cast<Dev::GraphicsInterface*>(
+        System::MemoryAllocator::MemAlloc(sizeof(Dev::GraphicsInterface), 8));
+    new (block) Dev::GraphicsInterface(*g);
+    CHECK_EQ(RefCountOf(g->name), 2);
+    RtVideo_ArrayInterfaceElemDestroy(block, 1);
+    CHECK_EQ(RefCountOf(g->name), 1);
+    CHECK_EQ(RefCountOf(g->adapterData[0].name), 1);
+    System::MemoryAllocator::MemFree(block);
+
+    g->~GraphicsInterface();
+    CHECK(g_devbAllocs > 0);
+    CHECK_EQ(g_devbAllocs, g_devbFrees);
 }
