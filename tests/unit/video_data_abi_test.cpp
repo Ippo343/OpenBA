@@ -189,19 +189,21 @@ public:
 
 // Mirrors `Video::IndexBufferData` — the 7-slot shape, and the one whose
 // slots 3/4 two Runtime trampolines reach by byte offset (+0x18 / +0x20).
+// B5 BUF: the real class FLIPPED (retail slot 0 = `virtual ~T()`, D1 + D0 under
+// GCC), so the mirror follows it; `SlotAt` / `RetailByteOffset` shift the retail
+// byte offsets past the destructor pair (slot_check.h), so the offsets below stay
+// RETAIL's.
 class MirrorIndexBufferData {
 public:
-    virtual MirrorIndexBufferData* DeletingDtor(unsigned flags) { Note(this, 0, flags); return this; }
+    virtual ~MirrorIndexBufferData() { Note(this, 0); }                         // [0] D1 + D0
     virtual bool  Create(uint32_t sizeBytes, uint8_t dynamic, const void* data) = 0;
     virtual bool  SetData(int32_t sizeBytes, int32_t offsetBytes, const void* src) = 0;
     virtual void* Lock(int32_t sizeBytes, int32_t* outByteOffset) = 0;
     virtual void  Unlock() = 0;
-    virtual void  Bind() = 0;
+    virtual void  Bind(void* context) = 0;
     virtual void  Serialize(void* serializer) = 0;
 
     void* _owner;
-protected:
-    ~MirrorIndexBufferData() = default;
 };
 
 class ProbeIndexBufferData final : public MirrorIndexBufferData {
@@ -211,7 +213,7 @@ public:
     bool  SetData(int32_t n, int32_t, const void*) override        { Note(this, 2, n); return true; }
     void* Lock(int32_t n, int32_t*) override                        { Note(this, 3, n); return this; }
     void  Unlock() override                                         { Note(this, 4); }
-    void  Bind() override                                           { Note(this, 5); }
+    void  Bind(void*) override                                      { Note(this, 5); }
     void  Serialize(void*) override                                 { Note(this, 6); }
     ~ProbeIndexBufferData() = default;
 };
@@ -248,6 +250,9 @@ UNIT_TEST(video_companion_data_slot_order) {
     CHECK_EQ(sizeof(MirrorDeviceData),       sizeof(Video::DeviceData));
     CHECK_EQ(sizeof(MirrorIndexBufferData),  sizeof(Video::IndexBufferData));
     CHECK_EQ(sizeof(MirrorVertexLayoutData), sizeof(Video::VertexLayoutData));
+    // B5 BUF: the mirror's slot-0 shape follows the real class's.
+    CHECK_EQ(std::has_virtual_destructor<MirrorIndexBufferData>::value,
+             std::has_virtual_destructor<Video::IndexBufferData>::value);
 
     ProbeDeviceData dev;
     MirrorDeviceData* d = &dev;
@@ -289,7 +294,7 @@ UNIT_TEST(video_companion_data_slot_order) {
     CHECK_EQ(g_lastMark, 3); CHECK_EQ(g_lastArg, 64);
     Reset(); SlotAt<void (*)(void*), MirrorIndexBufferData>(b, 0x20)(b);
     CHECK_EQ(g_lastMark, 4);
-    Reset(); SlotAt<void (*)(void*), MirrorIndexBufferData>(b, 0x28)(b);  CHECK_EQ(g_lastMark, 5);
+    Reset(); SlotAt<void (*)(void*, void*), MirrorIndexBufferData>(b, 0x28)(b, nullptr); CHECK_EQ(g_lastMark, 5);
     Reset(); SlotAt<void (*)(void*, void*), MirrorIndexBufferData>(b, 0x30)(b, nullptr); CHECK_EQ(g_lastMark, 6);
 
     ProbeVertexLayoutData vl;

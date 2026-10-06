@@ -1867,13 +1867,11 @@ T* AllocData(size_t size, typename Base::Owner* owner, Vt vt) {
     return p;
 }
 void* Factory_ContextData(DeviceData* /*self*/, ::Video::Context* owner) {
-    ContextData* p = AllocData<ContextData, ::Video::ContextData>(0x20, owner,
-                                            Vt::ContextData);
-    if (!p) return nullptr;
-    p->topology   = 0;
-    p->pad14      = 0;
-    p->d3dContext = nullptr;
-    return p;
+    // B5 CTX: the base's operator new is retail's MemAlloc(0x20, 4); the ctor chain
+    // is retail's `??0ContextData` + the vptr store (now the compiler's table) +
+    // the three tail stores (ContextData's constructor). The `if (!p)` arm is
+    // gone (B5_RULES D2: a null from MemAlloc is a crash either way).
+    return new ContextData(owner);
 }
 
 void* Factory_ImageBufferData(DeviceData* /*self*/, ::Video::ImageBuffer* owner) {
@@ -1884,39 +1882,22 @@ void* Factory_ImageBufferData(DeviceData* /*self*/, ::Video::ImageBuffer* owner)
 }
 
 void* Factory_ConstantBufferData(DeviceData* /*self*/, ::Video::ConstantBuffer* owner) {
-    ConstantBufferData* p = AllocData<ConstantBufferData, ::Video::ConstantBufferData>(0x28,
-                                                          owner, Vt::ConstantBufferData);
-    if (!p) return nullptr;
-    p->activeIndex    = -1;          // sentinel: no rung bound yet
-    p->pad14          = 0;
-    p->buffers        = nullptr;
-    p->bufferCount    = 0;
-    p->bufferCapacity = 0;
-    // Join the reset registry so DeviceData_Resize can drop this object's
-    // "already bound" cache when it calls ClearState(). See the note above
-    // Dx11InvalidateConstantBufferBindings in buffers.cpp.
-    Dx11TrackConstantBuffer(p);
-    return p;
+    // B5 BUF: the base's operator new is retail's MemAlloc(0x28, 4); the ctor chain
+    // is retail's `??0ConstantBufferData` + the vptr store (now the compiler's
+    // table) + the -1 sentinel and the four zeroes, then (ours) the join to the
+    // reset registry Dx11InvalidateConstantBufferBindings walks — buffers.cpp.
+    return new ConstantBufferData(owner);
 }
 
 void* Factory_IndexBufferData(DeviceData* /*self*/, ::Video::IndexBuffer* owner) {
-    IndexBufferData* p = AllocData<IndexBufferData, ::Video::IndexBufferData>(0x20, owner,
-                                                    Vt::IndexBufferData);
-    if (!p) return nullptr;
-    p->buffer      = nullptr;
-    p->writeCursor = 0;
-    p->locked      = 0;
-    return p;
+    // B5 BUF: MemAlloc(0x20, 4) + `??0IndexBufferData` + the vptr store + buffer,
+    // writeCursor (dword) and locked (byte); +0x1d..+0x1f untouched.
+    return new IndexBufferData(owner);
 }
 
 void* Factory_VertexBufferData(DeviceData* /*self*/, ::Video::VertexBuffer* owner) {
-    VertexBufferData* p = AllocData<VertexBufferData, ::Video::VertexBufferData>(0x20, owner,
-                                                      Vt::VertexBufferData);
-    if (!p) return nullptr;
-    p->buffer      = nullptr;
-    p->writeCursor = 0;
-    p->locked      = 0;
-    return p;
+    // B5 BUF: MemAlloc(0x20, 4) + `??0VertexBufferData` + the same three stores.
+    return new VertexBufferData(owner);
 }
 
 void* Factory_VertexLayoutData(DeviceData* /*self*/, ::Video::VertexLayout* owner) {

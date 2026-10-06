@@ -161,13 +161,11 @@ static_assert(offsetof(Video::RenderBuffer, prev) == 0x20, "RenderBuffer walker 
 // The one shape all four ReleaseDynamic walkers share for a single element:
 // destroy the companion through its deleting destructor (vtable slot 0, flag 1)
 // and null the field. Guarded on the companion, exactly as retail is.
-template <class Companion>
-void ReleaseCompanion(Companion*& companionField) {
-    Companion* companion = companionField;
-    if (companion != nullptr)
-        (void)companion->DeletingDtor(1);
-    companionField = nullptr;
-}
+// B5 (the dx11 seam, B5_RULES D10): this was the `ReleaseCompanion<>` template
+// over `DeletingDtor(1)`. Every companion now wears the compiler's table, so
+// slot 0 with flag 1 is `delete`; the four walkers spell the three statements
+// inline (PILOT: RenderBuffer, BUF: Index/VertexBuffer, RES: ImageBuffer — the
+// template's last user) and the template is gone.
 
 // ImageBuffer's per-element guard, from 0x1800f2dd0 and 0x1800f2ec8:
 //
@@ -351,7 +349,14 @@ void Video::IndexBuffer::ReleaseDynamic() {
         IndexBuffer* p = terminator;
         do {
             if (p->dynamic) {
-                ReleaseCompanion(p->platformData);
+                // B5 BUF (B5_RULES D10): IndexBufferData wears the compiler's table,
+                // so its slot-0 call with flags 1 is `delete` (virtual dtor, then
+                // the base's operator delete = MemFree); guarded on the companion
+                // and the field nulled, as ReleaseCompanion does (the template
+                // stays as is for the classes still on DeletingDtor).
+                if (IndexBufferData* companion = p->platformData)
+                    delete companion;
+                p->platformData = nullptr;
                 terminator = _firstBuffer;
             }
             p = p->listNext;
@@ -391,7 +396,14 @@ void Video::VertexBuffer::ReleaseDynamic() {
         VertexBuffer* p = terminator;
         do {
             if (p->dynamic) {
-                ReleaseCompanion(p->platformData);
+                // B5 BUF (B5_RULES D10): VertexBufferData wears the compiler's table,
+                // so its slot-0 call with flags 1 is `delete` (virtual dtor, then
+                // the base's operator delete = MemFree); guarded on the companion
+                // and the field nulled, as ReleaseCompanion does (the template
+                // stays as is for the classes still on DeletingDtor).
+                if (VertexBufferData* companion = p->platformData)
+                    delete companion;
+                p->platformData = nullptr;
                 terminator = _firstBuffer;
             }
             p = p->listNext;

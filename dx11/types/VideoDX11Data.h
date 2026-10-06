@@ -23,20 +23,22 @@
 // below derive from.
 #include "video/CompanionData.h"
 
-// B5 (the dx11 seam) D4: the converted classes hold TYPED COM pointers. Forward
-// declarations only, so this header stays free of <d3d11.h> (mingw-w64's
-// `interface` is `struct`, so these name the same types).
-struct ID3D11InputLayout;
-struct ID3D11VertexShader;
-struct ID3D11PixelShader;
-struct ID3D11BlendState;
-struct ID3D11DepthStencilState;
-struct ID3D11RasterizerState;
-struct ID3D11SamplerState;
-struct ID3D11Texture2D;
-struct ID3D11RenderTargetView;
-struct ID3D11DepthStencilView;
-struct ID3D11ShaderResourceView;
+// B5 (D4): the COM pointers are typed with FORWARD declarations, so this header
+// stays free of <d3d11.h> (mingw-w64's `interface` is `struct`, so these name
+// the same types).
+struct ID3D11Buffer;                 // B5 BUF: Constant/Index/VertexBufferData
+struct ID3D11DeviceContext;          // B5 CTX: ContextData
+struct ID3D11InputLayout;            // B5 RES: VertexLayoutData
+struct ID3D11VertexShader;           // B5 RES: VertexProgramData
+struct ID3D11PixelShader;            // B5 RES: PixelProgramData
+struct ID3D11BlendState;             // B5 RES: RenderStateData
+struct ID3D11DepthStencilState;      // B5 RES: RenderStateData
+struct ID3D11RasterizerState;        // B5 RES: RenderStateData
+struct ID3D11SamplerState;           // B5 RES: ImageBufferData
+struct ID3D11Texture2D;              // B5 RES: ImageBufferData
+struct ID3D11RenderTargetView;       // B5 RES: ImageBufferData
+struct ID3D11DepthStencilView;       // B5 RES: ImageBufferData
+struct ID3D11ShaderResourceView;     // B5 RES: ImageBufferData
 
 namespace VideoDX11 {
 
@@ -216,18 +218,64 @@ enum DeviceDataSlot : int {
 // class would set — so the first draw always issues the call. Proven by
 // 0x180001de4 (`CMP [RBX+0x10],4` guarding `[ctxvt+0xc0]` = index 24 =
 // IASetPrimitiveTopology) and by slots 15/19 which do the same for topology 2.
-struct ContextData {
-    void*   vptr;       // +0x00
-    void*   context;    // +0x08  Video::Context*
-    int32_t topology;   // +0x10  last D3D11_PRIMITIVE_TOPOLOGY set; factory writes 0
-    int32_t pad14;
-    void*   d3dContext; // +0x18  ID3D11DeviceContext*, cached by slot 1
+//
+// B5 CTX: a real C++ subclass of `Video::ContextData`; the compiler builds its
+// vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
+// `_owner` (+0x08, `Video::Context*`) is the base's and replaces the old
+// `context` field. Owner type confirmed by
+// ??0ContextData@Video@@QEAA@PEAVContext@1@@Z.
+class ContextData final : public ::Video::ContextData {
+public:
+    // Factory 0x180005650: MemAlloc(0x20, 4) + ??0ContextData(owner) + the vptr
+    // store, then exactly these three: +0x10 and +0x14 as DWORDS (0 =
+    // D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED), +0x18 as a qword. Nothing else.
+    explicit ContextData(::Video::Context* owner)
+        : ::Video::ContextData(owner) {
+        topology   = 0;
+        pad14      = 0;
+        d3dContext = nullptr;
+    }
+    ~ContextData() override;                                                // [ 0] 0x180001600, chains ??1ContextData@Video@@UEAA@XZ
+    bool BeginCommands() override;                                          // [ 1] 0x180001650
+    void EndCommands() override;                                            // [ 2] 0x180001720
+    void Finish() override;                                                 // [ 3] 0x1800017c0  Present + device-lost
+    void Clear(unsigned flags, unsigned color,
+               float depth, int stencil) override;                          // [ 4] 0x180001920
+    void BindRenderBuffer() override;                                       // [ 5] 0x180001ad0
+    void BindViewport() override;                                           // [ 6] 0x180001b60
+    void BindScissor() override;                                            // [ 7] 0x180001be0
+    void BindTransforms() override;                                         // [ 8] 0x180001c40
+    void BindTextureNone(int slot) override;                                // [ 9] 0x180001cb0
+    void BindIndexNone() override;                                          // [10] 0x180001d10  (a tail)
+    void BindVertexNone(int slot) override;                                 // [11] 0x180001d30
+    void DrawIndexed(int primitiveType, int baseVertex, int vertexCount,
+                     int startIndex, int indexCount,
+                     int instanceCount) override;                           // [12] 0x180001d80
+    int  GetMaxDynamicInstances(int a, int b, int c) override;              // [13] 0x180001ef0  (a tail) -> 52
+    bool BeginVertices(int vertexCount, int vertexStride) override;         // [14] 0x180001e60
+    void EndVertices(int primitiveType) override;                           // [15] 0x180001f00
+    bool BeginIndexedVertices(int vertexCount, int vertexStride,
+                              int indexCount) override;                     // [16] 0x180002000
+    void EndIndexedVertices(int primitiveType) override;                    // [17] 0x180002020  `jmp` slot 19
+    bool BeginInstancedIndexedVertices(int vertexCount, int vertexStride,
+                                       int indexCount,
+                                       int instanceCount) override;         // [18] 0x180002030
+    void EndInstancedIndexedVertices(int primitiveType) override;           // [19] 0x180002150
+
+    int32_t              topology;   // +0x10  last D3D11_PRIMITIVE_TOPOLOGY set; factory writes 0
+    int32_t              pad14;      // +0x14  factory writes 0 (a dword)
+    ID3D11DeviceContext* d3dContext; // +0x18  cached by slot 1; BORROWED (never AddRef'd / Released)
+
+private:
+    // Slots 4 and 7 share this (inlined at 0x180001920, standalone at 0x180001be0).
+    void SetScissorFromContext();
+    // Slots 15, 17 and 19's identical topology filter.
+    void ApplyPrimitiveType(int primitiveType);
 };
-static_assert(sizeof(ContextData) == 0x20, "ContextData size");
-static_assert(offsetof(ContextData, vptr) == 0x0, "ContextData::vptr");
-static_assert(offsetof(ContextData, pad14) == 0x14, "ContextData::pad14");
-static_assert(offsetof(ContextData, context)    == 0x08, "ContextData::context");
+static_assert(sizeof(ContextData) == 0x20, "MemAlloc 0x20 @ 0x180005650");
+static_assert(offsetof(ContextData, _owner)     == 0x08, "ContextData::_owner (the base's)");
 static_assert(offsetof(ContextData, topology)   == 0x10, "ContextData::topology");
+static_assert(offsetof(ContextData, pad14)      == 0x14, "ContextData::pad14");
 static_assert(offsetof(ContextData, d3dContext) == 0x18, "ContextData::d3dContext");
 
 // ContextData vtable slot indices (0x1800186f0, 20 slots).
@@ -355,18 +403,34 @@ enum ImageBufferDataSlot : int {
 // can bind the smallest buffer that still holds the payload. +0x10 is the index
 // of the rung currently bound; slot 2 only re-issues VS/PSSetConstantBuffers
 // when it changes. (Proven by 0x180001300 and 0x180001460 — lane L1.)
-struct ConstantBufferData {
-    void*   vptr;           // +0x00
-    void*   constantBuffer; // +0x08  Video::ConstantBuffer*
-    int32_t activeIndex;    // +0x10  index into buffers[] currently bound; factory inits to -1
-    int32_t pad14;
-    void*   buffers;        // +0x18  ID3D11Buffer*[]
-    int32_t bufferCount;    // +0x20
-    int32_t bufferCapacity; // +0x24
+//
+// REIMPLEMENTED — dx11/src/buffers.cpp (all 4 slots).
+//
+// B5 BUF: a real C++ subclass of `Video::ConstantBufferData`; the compiler builds
+// its vtable (retail slot N >= 1 is compiler slot N + 1, which nothing indexes).
+// `_owner` (+0x08, `Video::ConstantBuffer*`) is the base's and replaces the old
+// `constantBuffer` field. Owner type confirmed by
+// ??0ConstantBufferData@Video@@QEAA@PEAVConstantBuffer@1@@Z.
+class ConstantBufferData final : public ::Video::ConstantBufferData {
+public:
+    // Factory 0x180005730: MemAlloc(0x28, 4) + ??0ConstantBufferData(owner) + the
+    // vptr store + activeIndex = -1, pad14 = 0, buffers = null, count = capacity = 0;
+    // then (OURS, not retail) Dx11TrackConstantBuffer(this) — buffers.cpp.
+    explicit ConstantBufferData(::Video::ConstantBuffer* owner);
+    ~ConstantBufferData() override;                      // [0] 0x180001240 -> ~ 0x180001270, chains ??1ConstantBufferData@Video@@UEAA@XZ
+    bool Create() override;                              // [1] 0x180001300  offsets + the ID3D11Buffer ladder
+    void Bind(void* context, const void* srcData, int32_t first,
+              int32_t sizeBytes) override;               // [2] 0x180001460  VS/PSSetConstantBuffers + UpdateSubresource
+    int32_t SlotIndexPlusOne() override;                 // [3] 0x180001450  owner->_uploadIndex + 1
+
+    int32_t        activeIndex;    // +0x10  index into buffers[] currently bound; factory inits to -1
+    int32_t        pad14;
+    ID3D11Buffer** buffers;        // +0x18  ID3D11Buffer*[]
+    int32_t        bufferCount;    // +0x20
+    int32_t        bufferCapacity; // +0x24
 };
-static_assert(sizeof(ConstantBufferData) == 0x28, "ConstantBufferData size");
-static_assert(offsetof(ConstantBufferData, vptr) == 0x0, "ConstantBufferData::vptr");
-static_assert(offsetof(ConstantBufferData, constantBuffer) == 0x8, "ConstantBufferData::constantBuffer");
+static_assert(sizeof(ConstantBufferData) == 0x28, "MemAlloc 0x28 @ 0x180005730");
+static_assert(offsetof(ConstantBufferData, _owner) == 0x8, "ConstantBufferData::_owner (the base's)");
 static_assert(offsetof(ConstantBufferData, pad14) == 0x14, "ConstantBufferData::pad14");
 static_assert(offsetof(ConstantBufferData, activeIndex)    == 0x10, "ConstantBufferData::activeIndex");
 static_assert(offsetof(ConstantBufferData, buffers)        == 0x18, "ConstantBufferData::buffers");
@@ -387,17 +451,40 @@ static_assert(offsetof(ConstantBufferData, bufferCapacity) == 0x24, "ConstantBuf
 //          cursor advances by the request rounded up to an even byte count.
 //   +0x1c  bool, 1 between Lock and Unlock. Nothing in the DLL reads it; it
 //          exists for the Runtime-side base class / debug assertions.
-struct IndexBufferData {
-    void*   vptr;        // +0x00
-    void*   indexBuffer; // +0x08  Video::IndexBuffer*
-    void*   buffer;      // +0x10  ID3D11Buffer*
-    int32_t writeCursor; // +0x18  next Lock offset in bytes
-    uint8_t locked;      // +0x1c  (factory writes a byte here, not a dword)
-    uint8_t pad1d[3];
+//
+// REIMPLEMENTED — dx11/src/buffers.cpp (all 7 slots).
+//
+// B5 BUF: a real C++ subclass of `Video::IndexBufferData`; the compiler builds its
+// vtable. `_owner` (+0x08, `Video::IndexBuffer*`) is the base's and replaces the
+// old `indexBuffer` field. Owner type confirmed by
+// ??0IndexBufferData@Video@@QEAA@PEAVIndexBuffer@1@@Z.
+class IndexBufferData final : public ::Video::IndexBufferData {
+public:
+    // Factory 0x1800057a0: MemAlloc(0x20, 4) + ??0IndexBufferData(owner) + the vptr
+    // store + buffer = null, +0x18 as a DWORD 0, +0x1c as a single BYTE 0.
+    // +0x1d..+0x1f are left as MemAlloc left them, so `pad1d` is deliberately NOT
+    // in the initialiser list.
+    explicit IndexBufferData(::Video::IndexBuffer* owner)
+        : ::Video::IndexBufferData(owner) {
+        buffer      = nullptr;
+        writeCursor = 0;
+        locked      = 0;
+    }
+    ~IndexBufferData() override;                                         // [0] 0x180003080, chains ??1IndexBufferData@Video@@UEAA@XZ
+    bool  Create(uint32_t sizeBytes, uint8_t dynamic, const void* data) override;   // [1] 0x1800030f0
+    bool  SetData(int32_t sizeBytes, int32_t offsetBytes, const void* src) override; // [2] 0x1800031c0
+    void* Lock(int32_t sizeBytes, int32_t* outByteOffset) override;     // [3] 0x180003290  SHARED with VertexBufferData[3]
+    void  Unlock() override;                                             // [4] 0x180003340  SHARED with VertexBufferData[4]
+    void  Bind(void* context) override;                                  // [5] 0x180003380  IASetIndexBuffer(R16_UINT)
+    void  Serialize(::IO::Serializer* serializer) override;              // [6] 0x1800033b0
+
+    ID3D11Buffer* buffer;      // +0x10  ID3D11Buffer*
+    int32_t       writeCursor; // +0x18  next Lock offset in bytes
+    uint8_t       locked;      // +0x1c  (factory writes a byte here, not a dword)
+    uint8_t       pad1d[3];
 };
-static_assert(sizeof(IndexBufferData) == 0x20, "IndexBufferData size");
-static_assert(offsetof(IndexBufferData, vptr) == 0x0, "IndexBufferData::vptr");
-static_assert(offsetof(IndexBufferData, indexBuffer) == 0x8, "IndexBufferData::indexBuffer");
+static_assert(sizeof(IndexBufferData) == 0x20, "MemAlloc 0x20 @ 0x1800057a0");
+static_assert(offsetof(IndexBufferData, _owner) == 0x8, "IndexBufferData::_owner (the base's)");
 static_assert(offsetof(IndexBufferData, pad1d) == 0x1D, "IndexBufferData::pad1d");
 static_assert(offsetof(IndexBufferData, buffer)      == 0x10, "IndexBufferData::buffer");
 static_assert(offsetof(IndexBufferData, writeCursor) == 0x18, "IndexBufferData::writeCursor");
@@ -405,17 +492,39 @@ static_assert(offsetof(IndexBufferData, locked)      == 0x1c, "IndexBufferData::
 
 // 0x20, vtable 0x180018830 (7 slots), factory 0x180005810
 // Same shape as IndexBufferData, and slots 3/4 are literally the same code.
-struct VertexBufferData {
-    void*   vptr;         // +0x00
-    void*   vertexBuffer; // +0x08  Video::VertexBuffer*
-    void*   buffer;       // +0x10  ID3D11Buffer*
-    int32_t writeCursor;  // +0x18  next Lock offset in bytes
-    uint8_t locked;       // +0x1c
-    uint8_t pad1d[3];
+//
+// REIMPLEMENTED — dx11/src/buffers.cpp (all 7 slots).
+//
+// B5 BUF: a real C++ subclass of `Video::VertexBufferData`; the compiler builds
+// its vtable. `_owner` (+0x08, `Video::VertexBuffer*`) is the base's and replaces
+// the old `vertexBuffer` field. Owner type confirmed by
+// ??0VertexBufferData@Video@@QEAA@PEAVVertexBuffer@1@@Z.
+class VertexBufferData final : public ::Video::VertexBufferData {
+public:
+    // Factory 0x180005810: the same stores as IndexBufferData's (0x1800057a0) —
+    // buffer = null, +0x18 DWORD 0, +0x1c BYTE 0, +0x1d..+0x1f untouched.
+    explicit VertexBufferData(::Video::VertexBuffer* owner)
+        : ::Video::VertexBufferData(owner) {
+        buffer      = nullptr;
+        writeCursor = 0;
+        locked      = 0;
+    }
+    ~VertexBufferData() override;                                        // [0] 0x180003b20, chains ??1VertexBufferData@Video@@UEAA@XZ
+    bool  Create(uint32_t sizeBytes, uint8_t dynamic, const void* data) override;   // [1] 0x180003b90
+    bool  SetData(int32_t sizeBytes, int32_t offsetBytes, const void* src) override; // [2] 0x180003c60
+    void* Lock(int32_t sizeBytes, int32_t* outByteOffset) override;     // [3] 0x180003290  SHARED with IndexBufferData[3]
+    void  Unlock() override;                                             // [4] 0x180003340  SHARED with IndexBufferData[4]
+    void  Bind(void* context, uint32_t startSlot, uint32_t offsetBytes,
+               uint32_t strideBytes) override;                           // [5] 0x180003d30  IASetVertexBuffers
+    void  Serialize(::IO::Serializer* serializer) override;              // [6] 0x180003d90
+
+    ID3D11Buffer* buffer;      // +0x10  ID3D11Buffer*
+    int32_t       writeCursor; // +0x18  next Lock offset in bytes
+    uint8_t       locked;      // +0x1c
+    uint8_t       pad1d[3];
 };
-static_assert(sizeof(VertexBufferData) == 0x20, "VertexBufferData size");
-static_assert(offsetof(VertexBufferData, vptr) == 0x0, "VertexBufferData::vptr");
-static_assert(offsetof(VertexBufferData, vertexBuffer) == 0x8, "VertexBufferData::vertexBuffer");
+static_assert(sizeof(VertexBufferData) == 0x20, "MemAlloc 0x20 @ 0x180005810");
+static_assert(offsetof(VertexBufferData, _owner) == 0x8, "VertexBufferData::_owner (the base's)");
 static_assert(offsetof(VertexBufferData, pad1d) == 0x1D, "VertexBufferData::pad1d");
 static_assert(offsetof(VertexBufferData, buffer)      == 0x10, "VertexBufferData::buffer");
 static_assert(offsetof(VertexBufferData, writeCursor) == 0x18, "VertexBufferData::writeCursor");
@@ -424,10 +533,11 @@ static_assert(offsetof(VertexBufferData, locked)      == 0x1c, "VertexBufferData
 // Slots 3 (0x180003290, Lock) and 4 (0x180003340, Unlock) are the SAME two
 // addresses in both vtables — the shipped DLL has exactly one copy of the code
 // and both classes dispatch to it. dx11/src/buffers.cpp likewise has exactly
-// one implementation of each, typed on IndexBufferData and registered for both
-// vtables. These asserts are what makes that legal: if a future edit moves a
-// field in one struct and not the other, the build breaks here instead of
-// corrupting vertex buffers at runtime.
+// one implementation of each — B5 BUF: a template helper over the three shared
+// fields, called from both classes' `Lock` / `Unlock` members (no cast between
+// the two companion types). These asserts are what keeps that one body honest:
+// if a future edit moves a field in one class and not the other, the build
+// breaks here instead of the two members silently diverging from retail's one.
 static_assert(sizeof(VertexBufferData) == sizeof(IndexBufferData),
               "VertexBufferData/IndexBufferData must stay layout-identical (shared slots 3/4)");
 static_assert(offsetof(VertexBufferData, buffer) == offsetof(IndexBufferData, buffer),

@@ -12,7 +12,8 @@
 //
 // B5 (the dx11 seam): a class whose dx11 subclass is converted moves to
 // CheckDataB5 -- `virtual ~T()`, `delete` instead of `DeletingDtor` (so far:
-// RenderBufferData, VideoProgramData; block RES: VertexLayoutData,
+// RenderBufferData, VideoProgramData; B5 BUF: IndexBufferData, VertexBufferData,
+// ConstantBufferData; B5 CTX: ContextData; B5 RES: VertexLayoutData,
 // VertexProgramData, PixelProgramData, RenderStateData, ImageBufferData).
 //
 // The out-of-line destructors live in runtime/src/video/companion_data.cpp
@@ -139,11 +140,11 @@ VideoProgramData::~VideoProgramData()     { NoteDtor(this); }
 }  // namespace Video
 
 UNIT_TEST(b39_vid_devicedata_concrete)         { CheckData<Video::DeviceData>(); }
-UNIT_TEST(b39_vid_contextdata_concrete)        { CheckData<Video::ContextData>(); }
+UNIT_TEST(b39_vid_contextdata_concrete)        { CheckDataB5<Video::ContextData>(); }
 UNIT_TEST(b39_vid_imagebufferdata_concrete)    { CheckDataB5<Video::ImageBufferData>(); }
-UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckData<Video::IndexBufferData>(); }
-UNIT_TEST(b39_vid_vertexbufferdata_concrete)   { CheckData<Video::VertexBufferData>(); }
-UNIT_TEST(b39_vid_constantbufferdata_concrete) { CheckData<Video::ConstantBufferData>(); }
+UNIT_TEST(b39_vid_indexbufferdata_concrete)    { CheckDataB5<Video::IndexBufferData>(); }
+UNIT_TEST(b39_vid_vertexbufferdata_concrete)   { CheckDataB5<Video::VertexBufferData>(); }
+UNIT_TEST(b39_vid_constantbufferdata_concrete) { CheckDataB5<Video::ConstantBufferData>(); }
 UNIT_TEST(b39_vid_renderbufferdata_concrete)   { CheckDataB5<Video::RenderBufferData>(); }
 UNIT_TEST(b39_vid_vertexlayoutdata_concrete)   { CheckDataB5<Video::VertexLayoutData>(); }
 UNIT_TEST(b39_vid_vertexprogramdata_concrete)  { CheckDataB5<Video::VertexProgramData>(); }
@@ -161,6 +162,51 @@ UNIT_TEST(b5_vid_flipped_companion_slots_by_pmf) {
     using V = Video::VideoProgramData;
     CHECK_SLOT(V, Slot1, 1);
     CHECK_SLOT(V, Bind,  2);
+    // B5 CTX: all twenty ContextData slots, retail numbers.
+    using C = Video::ContextData;
+    CHECK_SLOT(C, BeginCommands,                  1);
+    CHECK_SLOT(C, EndCommands,                    2);
+    CHECK_SLOT(C, Finish,                         3);
+    CHECK_SLOT(C, Clear,                          4);
+    CHECK_SLOT(C, BindRenderBuffer,               5);
+    CHECK_SLOT(C, BindViewport,                   6);
+    CHECK_SLOT(C, BindScissor,                    7);
+    CHECK_SLOT(C, BindTransforms,                 8);
+    CHECK_SLOT(C, BindTextureNone,                9);
+    CHECK_SLOT(C, BindIndexNone,                 10);
+    CHECK_SLOT(C, BindVertexNone,                11);
+    CHECK_SLOT(C, DrawIndexed,                   12);
+    CHECK_SLOT(C, GetMaxDynamicInstances,        13);
+    CHECK_SLOT(C, BeginVertices,                 14);
+    CHECK_SLOT(C, EndVertices,                   15);
+    CHECK_SLOT(C, BeginIndexedVertices,          16);
+    CHECK_SLOT(C, EndIndexedVertices,            17);
+    CHECK_SLOT(C, BeginInstancedIndexedVertices, 18);
+    CHECK_SLOT(C, EndInstancedIndexedVertices,   19);
+}
+
+// B5 BUF: the three buffer companions, retail numbers. Slots 3 / 4 of Index and
+// Vertex are the two `Video::{Index,Vertex}Buffer::Lock/Unlock` trampolines'
+// retail byte offsets +0x18 / +0x20; ConstantBufferData's Bind is +0x10.
+UNIT_TEST(b5_buf_flipped_companion_slots_by_pmf) {
+    using I = Video::IndexBufferData;
+    CHECK_SLOT(I, Create,    1);
+    CHECK_SLOT(I, SetData,   2);
+    CHECK_SLOT(I, Lock,      0x18/8);
+    CHECK_SLOT(I, Unlock,    0x20/8);
+    CHECK_SLOT(I, Bind,      5);
+    CHECK_SLOT(I, Serialize, 6);
+    using V = Video::VertexBufferData;
+    CHECK_SLOT(V, Create,    1);
+    CHECK_SLOT(V, SetData,   2);
+    CHECK_SLOT(V, Lock,      0x18/8);
+    CHECK_SLOT(V, Unlock,    0x20/8);
+    CHECK_SLOT(V, Bind,      5);
+    CHECK_SLOT(V, Serialize, 6);
+    using C = Video::ConstantBufferData;
+    CHECK_SLOT(C, Create,           1);
+    CHECK_SLOT(C, Bind,             0x10/8);
+    CHECK_SLOT(C, SlotIndexPlusOne, 3);
 }
 
 // B5 RES: the block's flipped classes, in RETAIL numbers. `Video::VertexLayout::
