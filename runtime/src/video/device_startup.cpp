@@ -1,8 +1,10 @@
 // ============================================================================
 // runtime/src/video/device_startup.cpp — Wave 9 lane VID2
 //   Video::Device::{Startup, PlatformStartup, Shutdown, PlatformShutdown,
-//   ValidateConfiguration, CreateVideoInterface} and the seven unexported
-//   Collection::Array helpers ValidateConfiguration reaches.
+//   ValidateConfiguration, CreateVideoInterface}. (The seven unexported
+//   Collection::Array helpers ValidateConfiguration reaches moved to
+//   device_enum_types.cpp in ENDGAME B5 DEV-B; "PORTED HERE" below on an
+//   Array<> row is historical — the body lives there now.)
 // ============================================================================
 //
 // THE POINT OF THIS FILE
@@ -109,178 +111,14 @@ using InterfaceSlot     = Video::Device::InterfaceSlot;
 using RefreshRate       = Video::Device::RefreshRate;
 
 
-namespace {
-
-// ---------------------------------------------------------------------------
-// THE GROWTH RULE, which is identical in all four `operator=` bodies and is
-// transcribed once here because getting it wrong is invisible until a resize:
-//
-//   n = src->size ; old = dst->size ; dst->size = n
-//   if (n > dst->capacity) {
-//       dst->capacity = n;
-//       if (n == old + 1 && old != 0) dst->capacity = n * 3;   // amortise
-//       dst->data = MemAlloc(capacity * stride, align);
-//   }
-//
-// The `n == old + 1 && old != 0` guard is the whole rule: growth by exactly one
-// from a non-empty array triples, everything else takes the exact size. A
-// "simplification" to always triple, or to always take n, changes the
-// allocation pattern and therefore the heap layout — which this project has
-// already paid for once through a boundary-tag defect.
-//
-// B.4 (R-VIDEO): an array is its owner's three named fields, taken by
-// reference — Device.h unrolls every `Collection::Array<T>` of these classes
-// into `{xData, xCount, xCapacity}` members (see the declarations there).
-// ---------------------------------------------------------------------------
-template <class T>
-inline void GrowFor(T*& data, int32_t& size, int32_t& capacity, int32_t srcSize,
-                    int stride, int align) {
-    const int n   = srcSize;
-    const int old = size;
-    size = n;
-    if (n > capacity) {
-        capacity = n;
-        if (n == old + 1 && old != 0) capacity = n * 3;
-        data = static_cast<T*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(
-                   static_cast<int64_t>(capacity) * stride), align));
-    }
-}
-
-}  // namespace
-
-// ============================================================================
-// 0x180010760 — Collection::Array<Device::RefreshRate>::~Array
-// 0x180009560 — Collection::Array<bool>::~Array
-//
-// Byte-identical bodies (the element types are trivially destructible, so MSVC
-// emitted the same code twice and did NOT fold them). Both:
-//     if (data) MemFree(data);   // the null test is retail's, OUTSIDE the call
-//     data = nullptr; *(uint64*)&size = 0;   // one qword clears size AND capacity
-// The one qword store is written as the two named fields, in address order.
-// ============================================================================
-void RtVideo_ArrayRefreshDtor(RefreshRate*& data, int32_t& size, int32_t& capacity) {
-    if (data) System::MemoryAllocator::MemFree(data);
-    data = nullptr;
-    size = 0;
-    capacity = 0;
-}
-void RtVideo_ArrayBoolDtor(uint8_t*& data, int32_t& size, int32_t& capacity) {
-    if (data) System::MemoryAllocator::MemFree(data);
-    data = nullptr;
-    size = 0;
-    capacity = 0;
-}
-
-// ============================================================================
-// 0x180010cf0 — the per-element destroy for Array<DisplayMode>.
-//
-// Each 0x18-byte DisplayMode carries an Array<RefreshRate> at +0x08. Retail
-// walks with a cursor at element+8 (`LEA RBX,[RDX+8]`) and frees each one
-// inline rather than calling 0x180010760.
-//
-// Retail's first parameter is the array object; the callee spills it at
-// [RSP+8] and NEVER READS IT, so it is not passed here.
-// ============================================================================
-void RtVideo_ArrayModeElemDestroy(DisplayMode* data, int32_t count) {
-    if (count <= 0) return;
-    DisplayMode* e = data;
-    for (int64_t i = count; i != 0; --i) {
-        if (e->refreshData) System::MemoryAllocator::MemFree(e->refreshData);
-        e->refreshData     = nullptr;
-        e->refreshCount    = 0;
-        e->refreshCapacity = 0;
-        ++e;
-    }
-}
-
-// ============================================================================
-// 0x180010830 — Collection::Array<DisplayMode>::~Array
-// ============================================================================
-void RtVideo_ArrayModeDtor(DisplayMode*& data, int32_t& size, int32_t& capacity) {
-    RtVideo_ArrayModeElemDestroy(data, size);
-    if (data) System::MemoryAllocator::MemFree(data);
-    data = nullptr;
-    size = 0;
-    capacity = 0;
-}
-
-// ============================================================================
-// 0x18000fbf0 — Collection::Array<RefreshRate>::operator=   (stride 8, align 4)
-//
-// THE PER-ELEMENT NULL TEST IS ON THE COMPUTED ADDRESS, NOT ON `data`:
-//     MOV R9,[RBX] / ADD R9,RDX / JZ skip
-// the ZF comes from the ADD, so the element is skipped when `data + offset`
-// is zero. With a null `data` and a non-zero size — which the growth rule can
-// produce if MemAlloc fails — that skips element 0 only and copies through null
-// for the rest. Retail's; reproduced rather than "fixed", because a guard here
-// would change which of the two implementations faults first.
-//
-// Retail's self-assignment test compares the two ARRAY objects; an array here
-// is its `data` field and the two after it, so the test compares those fields'
-// addresses.
-// ============================================================================
-void RtVideo_ArrayRefreshAssign(RefreshRate*& data, int32_t& size, int32_t& capacity,
-                                RefreshRate* const& srcData, const int32_t& srcSize) {
-    if (&data == &srcData) return;
-
-    RtVideo_ArrayRefreshDtor(data, size, capacity);
-    GrowFor(data, size, capacity, srcSize, 8, 4);
-
-    for (int32_t i = 0; i < size; ++i) {
-        RefreshRate* d = data + i;
-        if (d == nullptr) continue;
-        *d = srcData[i];
-    }
-}
-
-// ============================================================================
-// 0x180008b00 — Collection::Array<bool>::operator=          (stride 1, align 1)
-// ============================================================================
-void RtVideo_ArrayBoolAssign(uint8_t*& data, int32_t& size, int32_t& capacity,
-                             uint8_t* const& srcData, const int32_t& srcSize) {
-    if (&data == &srcData) return;
-
-    RtVideo_ArrayBoolDtor(data, size, capacity);
-    GrowFor(data, size, capacity, srcSize, 1, 1);
-
-    for (int32_t i = 0; i < size; ++i) {
-        uint8_t* d = data + i;
-        if (d == nullptr) continue;
-        *d = srcData[i];
-    }
-}
-
-// ============================================================================
-// 0x18000fcd0 — Collection::Array<DisplayMode>::operator=  (stride 0x18, align 8)
-//
-// Per element: copy width and height as two DWORDs, ZERO the embedded
-// Array<RefreshRate> (so the assignment below sees an empty destination rather
-// than the freed pointer the dtor left), then run the Array<RefreshRate>
-// assignment. The zeroing is what makes the nested assign safe and it is
-// retail's, at 0x18000fd71/0x18000fd74.
-// ============================================================================
-void RtVideo_ArrayModeAssign(DisplayMode*& data, int32_t& size, int32_t& capacity,
-                             DisplayMode* const& srcData, const int32_t& srcSize) {
-    if (&data == &srcData) return;
-
-    RtVideo_ArrayModeDtor(data, size, capacity);
-    GrowFor(data, size, capacity, srcSize, 0x18, 8);
-
-    for (int32_t i = 0; i < size; ++i) {
-        DisplayMode* d = data + i;
-        if (d == nullptr) continue;
-        const DisplayMode* s = srcData + i;
-
-        d->width  = s->width;
-        d->height = s->height;
-
-        d->refreshData     = nullptr;
-        d->refreshCount    = 0;
-        d->refreshCapacity = 0;
-        RtVideo_ArrayRefreshAssign(d->refreshData, d->refreshCount, d->refreshCapacity,
-                                   s->refreshData, s->refreshCount);
-    }
-}
+// ENDGAME B5 DEV-B: the seven `Collection::Array<T>` helpers ValidateConfiguration
+// reaches (RtVideo_ArrayRefreshDtor / BoolDtor / ModeElemDestroy / ModeDtor /
+// RefreshAssign / BoolAssign / ModeAssign, retail 0x180010760 / 0x180009560 /
+// 0x180010cf0 / 0x180010830 / 0x18000fbf0 / 0x180008b00 / 0x18000fcd0) and their
+// GrowFor rule MOVED, unchanged, to device_enum_types.cpp beside the other six
+// Array helpers: Video::Device::Adapter's copy constructor and destructor call
+// them, and that file links into the host unit tests where this one cannot.
+// They are declared in Device.h and called from here by name.
 
 // ============================================================================
 // ?ValidateConfiguration@Device@Video@@QEAA_NXZ   retail 0x1800f8830, ord 4533

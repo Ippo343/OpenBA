@@ -321,3 +321,9 @@ UNIT_TREE_SRCS += runtime/src/system/allocator.cpp runtime/src/system/allocator_
 # B3R RT-Core: the allocator's out-of-memory path calls System::Error::SetText /
 # Display by name, so the Error translation unit links here too.
 UNIT_TREE_SRCS += runtime/src/system/error.cpp
+# ENDGAME B5 DEV-B: Video::Device::Adapter / GraphicsInterface's REAL ctor / copy
+# ctor / dtor (tests/unit/video_device_abi_test.cpp PART F). device_enum_types.cpp
+# is registry-free: Device.h, the allocator (above) and, through the String
+# member, string.cpp (above). B5 DEV-B moved the seven Array helpers it calls
+# out of device_startup.cpp (which cannot link here) into it.
+UNIT_TREE_SRCS += runtime/src/video/device_enum_types.cpp
