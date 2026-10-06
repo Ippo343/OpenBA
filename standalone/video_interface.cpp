@@ -47,7 +47,6 @@
 // reorder these two blocks.
 #include "video/Device.h"    // Video::Device, Video::Device::InterfaceSlot
 
-#include "dx11_seam.h"
 // B5 DEV-A: the two DLL exports (dx11/src/exports.cpp) and the cutover-only DX9
 // placeholder (dx11/src/dx9_placeholder.cpp), declared by the plugin's header
 // instead of a local extern block.

@@ -206,14 +206,14 @@ typedef HRESULT (WINAPI *D3D11CreateDevice_t)(IDXGIAdapter*, D3D_DRIVER_TYPE, HM
                                               ID3D11Device**, D3D_FEATURE_LEVEL*,
                                               ID3D11DeviceContext**);
 
-void* ResolveGfxImport(uintptr_t iatGhidra, const wchar_t* dll, const char* name) {
+FARPROC ResolveGfxImport(uintptr_t iatGhidra, const wchar_t* dll, const char* name) {
     // Primary: the system DLL, loading it if necessary. Same function either
     // way — the shipped DLL's IAT slot holds exactly what GetProcAddress
     // returns, since that is what the loader wrote into it.
     HMODULE m = GetModuleHandleW(dll);
     if (!m) m = LoadLibraryW(dll);
     if (m) {
-        if (void* fn = reinterpret_cast<void*>(GetProcAddress(m, name)))
+        if (FARPROC fn = GetProcAddress(m, name))
             return fn;
     }
 
@@ -227,13 +227,13 @@ void* ResolveGfxImport(uintptr_t iatGhidra, const wchar_t* dll, const char* name
 }
 
 CreateDXGIFactory1_t GetCreateDXGIFactory1() {
-    static CreateDXGIFactory1_t fn = reinterpret_cast<CreateDXGIFactory1_t>(
-        ResolveGfxImport(0x180013530, L"dxgi.dll", "CreateDXGIFactory1"));
+    static CreateDXGIFactory1_t fn = reinterpret_cast<CreateDXGIFactory1_t>(   // CAST-OK: win32
+        ResolveGfxImport(0x180013530, L"dxgi.dll", "CreateDXGIFactory1"));   // GetProcAddress's FARPROC
     return fn;
 }
 D3D11CreateDevice_t GetD3D11CreateDevice() {
-    static D3D11CreateDevice_t fn = reinterpret_cast<D3D11CreateDevice_t>(
-        ResolveGfxImport(0x180013520, L"d3d11.dll", "D3D11CreateDevice"));
+    static D3D11CreateDevice_t fn = reinterpret_cast<D3D11CreateDevice_t>(   // CAST-OK: win32
+        ResolveGfxImport(0x180013520, L"d3d11.dll", "D3D11CreateDevice"));   // GetProcAddress's FARPROC
     return fn;
 }
 
@@ -1302,13 +1302,9 @@ bool DeviceData::CreateDevice() {
 // Note the source read is bracketed by Video::Device::Lock/Unlock, because
 // CopyFromTexture stages through the immediate context.
 // ============================================================
-void DeviceData::SetImageBuffer(void* imageBuffer, int hotX, int hotY) {
-    // The base slot declares `void*` because its one caller,
-    // UI::UserInterface::SetCursor, holds the material's texture image as
-    // `void*`; retail's Video::Device::SetCursor passes an
-    // ExternalPtr<ImageBuffer>, so this is the ImageBuffer it always was (the
-    // B.3.5 `VImg` bridge, now one cast at the slot's entry).
-    ::Video::ImageBuffer* const image = static_cast< ::Video::ImageBuffer*>(imageBuffer);
+void DeviceData::SetImageBuffer(::Video::ImageBuffer* image, int hotX, int hotY) {
+    // `image` is the ImageBuffer it always was: retail's Video::Device::SetCursor
+    // passes an ExternalPtr<ImageBuffer> and the slot is typed since B5 CLOSE.
 
     if (image == cursorImage &&
         hotX == cursorHotspotX &&
@@ -1350,7 +1346,7 @@ void DeviceData::SetImageBuffer(void* imageBuffer, int hotX, int hotY) {
     }
 
     HCURSOR built = CreateCursor(
-        static_cast<HINSTANCE>(AppOf()->GetInstance()),
+        static_cast<HINSTANCE>(AppOf()->GetInstance()),   // CAST-OK: win32 (Application::GetInstance is the raw HINSTANCE)
         hotX, hotY, 32, 32, andPlane, xorPlane);
     cursor = built;
     SetCursor(built);

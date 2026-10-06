@@ -9,7 +9,7 @@
 #                ceiling; no BAD / STRAY marker
 #   §6.2  04-06  no offset-accessor definition or call; `pun` only on CAST-OK byte_io /
 #                float_bits lines
-#   §6.3  07     bridge markers only on CAST-OK dx11_seam lines
+#   §6.3  07     no bridge-marker line left (B5 removed the dx11_seam carve-out)
 #   §6.4  08-09  exe_bodies.h / *_funcs.h declarations and code/Game `void*`-first-parameter
 #                functions are all named in b4_session/LEFT_FREE.md
 #   §6.5  10-11  every field of a layout-asserted class has its static_assert(offsetof);
@@ -53,17 +53,17 @@ def line(nn, what, value, target, ok=None, note=''):
 
 
 # ---- §6.1
-# S4 closing form (NEXT_SESSION 2.2, ruled 2026-10-05): the PROD total cannot reach 0 inside B.4
-# (dx11/ is the next step's, the retail-difference rows a separate task). Line 01 is the casts
-# outside dx11/ that leftfree_c.py (LEFT_FREE.md section C) files under NO DEFERRED / RULED group.
-# The dx11 seam step restores the PROD-total form when it closes.
+# B5 (the dx11 seam, 2026-10-05) restored the PROD-total form: line 01 is the whole counted total
+# over PROD, dx11/ included, with no carve-out. It cannot be 0 while the retail-difference task
+# (known_port_issues.md 13-14) and the named prerequisites are open, so the TARGET is the sum of
+# leftfree_c.py's DEFERRED / RULED groups (LEFT_FREE.md section C): the line is off exactly when a
+# counted cast sits in no group (the WORK group) -- the condition S4 ruled, now tree-wide.
 import leftfree_c as LC
 _c = LC.collect()
-_dx = sum(c['total'] for rel, c, sc, hits in rows if rel.startswith('dx11/'))
-line('01', 'unmarked casts outside dx11/ in no DEFERRED / RULED group (leftfree_c.py WORK)',
-     len(_c[LC.G_WK]), 0,
-     note=f'PROD total {tot["total"]} = dx11 {_dx} + '
-          + ' + '.join(f'{len(v)} {k.split(" (")[0]}' for k, v in _c.items())
+_accepted = sum(len(v) for k, v in _c.items() if k != LC.G_WK)
+line('01', 'counted casts in PROD (target = leftfree_c.py DEFERRED + RULED groups)',
+     tot['total'], _accepted,
+     note=' + '.join(f'{len(v)} {k.split(" (")[0]}' for k, v in _c.items())
           + f'; tier_i {tot["tier_i"]}, cast_ok {tot["cast_ok"]}')
 ceiling = {}
 fm = os.path.join(HERE, 'FLOOR.md')
@@ -108,9 +108,9 @@ nb = 0
 for rel, (src, code) in CM._CACHE.items():
     if rel.startswith(tuple(p + '/' for p in PROD)):
         for ln in src.split('\n'):
-            if CM._RE_BRIDGE.search(ln) and not re.search(r'CAST-OK:\s*dx11_seam\b', ln):
+            if CM._RE_BRIDGE.search(ln):
                 nb += 1
-line('07', 'bridge-marker lines outside CAST-OK: dx11_seam lines, PROD', nb, 0)
+line('07', 'bridge-marker lines in PROD', nb, 0)
 
 # ---- §6.4
 lf = os.path.join(HERE, 'LEFT_FREE.md')

@@ -125,23 +125,24 @@ using ConstantBuffer = ::Video::ConstantBuffer;
 // 0x180058590..0x180058b10 band) and `_purecall` (0x18007ec28) in EVERY other
 // slot, and the object is `{vptr, owner}`.
 //
-//   class                 ??_7 (Runtime)  slots   dx11 concrete vtable
-//   DeviceData            0x180158c30      20     Vt::DeviceData
-//   ContextData           0x180158b90      20     Vt::ContextData
-//   ImageBufferData       0x180158b50       7     Vt::ImageBufferData
-//   IndexBufferData       0x180158af8       7     Vt::IndexBufferData
-//   VertexBufferData      0x180158ac0       7     Vt::VertexBufferData
-//   ConstantBufferData    0x180158b30       4     Vt::ConstantBufferData
-//   RenderBufferData      0x180158a28       4     Vt::RenderBufferData
-//   VertexLayoutData      0x180158aa8       3     Vt::VertexLayoutData
-//   VertexProgramData     0x180158a90       3     Vt::VertexProgramData
-//   PixelProgramData      0x180158a78       3     Vt::PixelProgramData
-//   RenderStateData       0x180158a60       3     Vt::RenderStateData
-//   VideoProgramData      0x180158a48       3     Vt::VideoProgramData
+//   class                 ??_7 (Runtime)  slots   VideoDX11 ??_7 (the subclass's)
+//   DeviceData            0x180158c30      20     0x180018bb0
+//   ContextData           0x180158b90      20     0x1800186f0
+//   ImageBufferData       0x180158b50       7     0x180018790
+//   IndexBufferData       0x180158af8       7     0x1800187c8
+//   VertexBufferData      0x180158ac0       7     0x180018830
+//   ConstantBufferData    0x180158b30       4     0x1800185d0
+//   RenderBufferData      0x180158a28       4     0x180018588
+//   VertexLayoutData      0x180158aa8       3     0x180018878
+//   VertexProgramData     0x180158a90       3     0x180018890
+//   PixelProgramData      0x180158a78       3     0x180018800
+//   RenderStateData       0x180158a60       3     0x180018818
+//   VideoProgramData      0x180158a48       3     0x1800185a8
 //
 // Two independent instruments agree on all twelve slot counts: the Runtime
-// `.rdata` read (B35_SLOTS.md) and `dx11/funcs/dx11_seam.h`'s 84-slot table,
-// read out of the shipped plugin in an earlier wave.
+// `.rdata` read (B35_SLOTS.md) and the shipped plugin's twelve tables walked
+// 2026-07-24 (dx11/README.md status board); tests/unit/b39_vid_data_test.cpp
+// pins every slot by retail number.
 //
 // NO `sizeof` ASSERT, DELIBERATELY (RULE B5-1.1). 0x10 is a LOWER bound, not a
 // measured total: the ctor writes +0x00 and +0x08 and the DERIVED dx11 object
@@ -153,50 +154,31 @@ using ConstantBuffer = ::Video::ConstantBuffer;
 // is still the two-pointer object.
 //
 // ENDGAME B.3 step 9, block VID (B39_RULES.md D1, section 5 item 4): CONCRETE.
-// Each class has a REAL public constructor (retail's `??0XData(owner)`: the
-// owner at +0x08, the vptr -- now the compiler's), its OWN slot 0 with the
-// VECTOR arms of the retired RT_DELDTOR row (element 0x10, over ~XData), and a
-// body in every other slot that is retail's: `_purecall` (0x18007ec28), spelled
+// Each class has a REAL public constructor (retail's `??0XData(owner)`: the typed
+// owner at +0x08, the vptr -- the compiler's) and a body in every slot but the
+// destructor that is retail's: `_purecall` (0x18007ec28), spelled
 // `detail::CompanionPureCall()`. The twelve minted `??_7XData@Video@@6B@` rows,
-// their RT_DELDTOR rows and the `??1XData` doors are retired
-// (tools/rt_mint_retired/vid.txt).
+// their RT_DELDTOR rows and the `??1XData` doors are retired.
 //
-// NOTHING DISPATCHES ON THESE TABLES. A live companion is built by dx11's
-// factory: `MemAlloc`, the `??0XData` DOOR (companion_data.cpp -- which STAYS,
-// reached through dx11's import struct, B39_RULES D1.4 / B9-6, now one line:
-// `::new (self) XData(owner)`), then dx11 stores ITS OWN derived table
-// (`Dx11LiveVtable`, assembled from DX11_REGISTER_SLOT registrations at
-// `Dx11SeamInstall`, never from a Runtime table). Teardown: dx11's slot 0
-// re-seats its own table, calls `~XData()` (the base table is stored and never
-// read), then frees. So the base table is only ever the vptr between two
-// stores; which table it is changes nothing.
+// ENDGAME B5, THE DX11 SEAM (2026-10-05, B5_RULES.md D1-D3): each class declares
+// `virtual ~XData()` (retail slot 0, the deleting destructor; GCC spends two
+// compiler slots on it, so retail slot N >= 1 is compiler slot N + 1 -- nothing
+// reads these tables by index). `dx11/`'s twelve `VideoDX11::XData` are real
+// `final` SUBCLASSES (dx11/types/VideoDX11Data.h) overriding every slot, built by
+// `new XData(owner)` through the base's class-scope `operator new` (retail's
+// `MemAlloc(size, 4)`) and destroyed by `delete` through its `operator delete`
+// (retail's `MemFree`; runtime/src/video/companion_operators.cpp). The base
+// table is therefore never the vptr of a live object -- the compiler stores the
+// derived table on top of it in the derived constructor, as MSVC did.
 //
 // SLOT NAMES. Retail gives none: every slot but 0 is `_purecall`, and a pure
-// slot's name can only be read off an override. The overrides are ours —
-// `dx11/`'s 84 `DX11_REGISTER_SLOT` registrations, whose labels were recovered
-// from the shipped VideoDX11 vtables lane by lane — so the names below are
-// COPIED from those labels and the signatures from those functions' parameter
-// lists. Where a lane could not recover a name (four `DeviceData` stubs, one
-// `RenderBufferData` and two `VideoProgramData` slots, all of which the shipped
-// plugin implements as a constant return) the slot is spelled `SlotN` rather
-// than given an invented name.
-//
-// NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2). `~XData()` is PUBLIC and
-// non-virtual, which is the one place these classes differ from the B.3.9
-// recipe's protected destructor: RULE B5-3 requires each dx11 derived destructor
-// to call `self->Video::XData::~XData()` as a QUALIFIED non-virtual call, and the
-// dx11 concrete classes are a DECLARED LEAVE (RULE B5-8) that does not actually
-// derive in C++ -- so the call site is not a derived class and a `protected`
-// destructor would be unreachable to it. It must NOT become `DeletingDtor(0)`:
-// that re-enters the derived slot 0.
-//
-// B.4 (R-VIDEO): each slot 0 returns `void*` -- what MSVC's `??_E` returns (the
-// block it freed or `this`) -- and its vector arm reads the element count out of
-// the vector-new cookie in the qword before element 0 through ONE marked cast
-// (marked with the `dx11_seam` category: the arm exists only because these classes keep the
-// hand slot 0 instead of a compiler virtual destructor, and it goes with the
-// seam, plan §4.1). The elements are `this[i]`: `sizeof(XData) == 0x10` is the
-// retail element stride and RT_VIDEO_COMPANION_PINS below asserts it.
+// slot's name can only be read off an override. The overrides are ours -- the
+// bodies recovered from the shipped VideoDX11 vtables lane by lane -- so the
+// names below are those bodies' and the signatures come from the CALLERS
+// (the slot decides, B35_RULES B5-14). Where a lane could not recover a name
+// (four `DeviceData` stubs, one `RenderBufferData` and two `VideoProgramData`
+// slots, all of which the shipped plugin implements as a constant return) the
+// slot is spelled `SlotN` rather than given an invented name.
 
 extern "C" void _purecall();   // the CRT's (the exe's standalone/main.cpp logs it)
 
@@ -272,7 +254,10 @@ public:
     virtual bool  Slot6() { detail::CompanionPureCall(); }                                   // [ 6] dx11: returns false
     virtual bool  Slot7() { detail::CompanionPureCall(); }                                   // [ 7] dx11: returns true
     // HCURSOR-shaped: (imageBuffer, hotspotX, hotspotY).
-    virtual void SetImageBuffer(void* imageBuffer, int hotX, int hotY) { detail::CompanionPureCall(); }  // [ 8]
+    // B5 CLOSE: the image is typed -- retail's `Video::Device::SetCursor` passes an
+    // `ExternalPtr<ImageBuffer>` and the one caller (UI::UserInterface::SetCursor)
+    // reads a `MaterialTexture::image`, itself a `Video::ImageBuffer*`.
+    virtual void SetImageBuffer(ImageBuffer* imageBuffer, int hotX, int hotY) { detail::CompanionPureCall(); }  // [ 8]
     // [ 9]..[19] — the eleven companion factories, in retail slot order. Each
     // takes the owning Video-side object and returns the new `*Data`; B.4
     // (R-VIDEO) types both, as `Video::Device`'s eleven `Create*Data` forwarders'
@@ -570,7 +555,9 @@ public:
     virtual ~RenderBufferData();
     virtual bool Slot1() { detail::CompanionPureCall(); }                                    // [1] dx11: returns true
     virtual void Bind(void* context) { detail::CompanionPureCall(); }                        // [2]
-    virtual void Resolve(void* context, void* other, bool flag) { detail::CompanionPureCall(); }  // [3]
+    // B5 CLOSE: `other` is typed from retail's mangling of the owner-side member,
+    // `?Resolve@RenderBuffer@Video@@QEBAXAEAVContext@2@PEAV12@_N@Z` (RenderBuffer*).
+    virtual void Resolve(void* context, RenderBuffer* other, bool flag) { detail::CompanionPureCall(); }  // [3]
 
     Owner* _owner;           // +0x08  Video::RenderBuffer*
 };
@@ -763,12 +750,11 @@ RT_VIDEO_COMPANION_PINS(VideoProgramData);
 
 #undef RT_VIDEO_COMPANION_PINS
 
-// ENDGAME B3X (the normal-virtual cutover), B3X_RULES X1: the twelve `*Data`
-// classes are EXEMPT BY DECISION. Retail's slot 0 IS a deleting destructor, but
-// every live object wears dx11's hand table built in RETAIL slot order
-// (dx11_seam.cpp), so these stay on `DeletingDtor(unsigned)` and must never
-// gain a virtual destructor (GCC would spend two slots on it and shift every
-// slot the seam fills). They flip when dx11's types become real subclasses.
+// ENDGAME B3X (the normal-virtual cutover) EXEMPTED the twelve `*Data` classes
+// (B3X_RULES X1) while every live companion wore dx11's hand-built table in
+// retail slot order. B5 (the dx11 seam) ended that: the subclasses are real and
+// the compiler builds every table, so the twelve are on `virtual ~XData()` like
+// the 449 classes of the cutover.
 static_assert(std::has_virtual_destructor<DeviceData>::value,
               "B5: the dx11 subclass wears the compiler's table");
 static_assert(std::has_virtual_destructor<ContextData>::value,
