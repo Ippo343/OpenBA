@@ -337,8 +337,11 @@ template <class Tag> StateTable<typename Dispatcher<Tag>::Owner> Dispatcher<Tag>
 // so a plain 0 stands in for retail's Time(0.0) byte-for-byte. If the SM has nothing
 // pending either, the nested Tick is a no-op, +0x09 stays negative, and the slot-8
 // dispatcher bounds-rejects the request exactly as before.
+//
+// Row 922 (B7 RES): no null-machine and no null-node return. The inlined copies read
+// [m+0x9] (0x14005a79d) and [[m]] (0x14005a7cc) with no test; the same at 0x14005a9f1 /
+// 0x14005ab65 / 0x14005b24f.
 inline void RequestStateTransition(::StateMachine* m, int desiredStateId) {
-    if (!m) return;
     if (m->activeState < 0) {
         // Retail's inlined copies (0x14005a7ab-0x14005a7c7, 0x14005a9f7-0x14005aa13): a stack
         // Time(0.0f) through the import 0x140152b00, `LEA RDX,[RSP+..]`, R8D = R9D = 0.
@@ -347,7 +350,6 @@ inline void RequestStateTransition(::StateMachine* m, int desiredStateId) {
         m->Tick(&t0, 0, 0);       // 0x1400a9660
     }
     ::ControllerComponent::Controller* node = m->current;   // re-read after the nested tick
-    if (!node) return;
     int curIdx = m->activeState;  // re-read after the nested tick
     int desired = desiredStateId;
     int idx = node->FindTransition(curIdx, &desired);   // node slot 1 (+0x08)
