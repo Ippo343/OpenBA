@@ -34,7 +34,7 @@
 #include "Action/exe_bodies.h"     // ActHunt_NotifyEntityChanged_c3470 (0x1400c3470)
 #include "Game/exe_bodies.h"       // Reimpl_ExternalPtr_Serialize_StringTable (0x140018020)
 #include "Player/exe_bodies.h"     // 0x140003ea0 / 0x140005780 / 0x14011e710
-#include "Tutorial/exe_bodies.h"   // WorkComponent_CalcMaxWorkers (0x14012e5c0, the registered body)
+#include "Tutorial/exe_bodies.h"   // (WorkComponent_CalcMaxWorkers went in B6: the member is called)
 #include "Work/exe_bodies.h"       // WorkBase_FindComponent_2f90 / _3050
 #include "system/Value.h"          // RtSystem_Time_Ctor
 #include "Entity/ComponentEntity.h"            // ComponentEntity::FindComponent<T>

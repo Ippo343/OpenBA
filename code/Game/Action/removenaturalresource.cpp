@@ -29,7 +29,7 @@
 #include "RemoveNaturalResource.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Action/exe_bodies.h"   // RemoveNaturalResourceCore, NotifyEntityChanged
+#include "Action/exe_bodies.h"   // RemoveNaturalResourceCore
 #include "Component/Description.h"
 #include "Component/CitizenDescription.h"
 #include "Component/NaturalResourceComponent.h"

@@ -151,7 +151,7 @@ WeatherParticleGeometry::~WeatherParticleGeometry() {
     _particles.size = 0;
     _particles.capacity = 0;
     // B6 row 91: the +0xd0 index Array is then freed by its own ~Array, the
-    // member's (retail's second MemFree and two qword zeroes, unguarded).
+    // member's (retail's second MemFree and two qword zeroes; ~Array tests _data first since B6 row 104, as 0x18001c11f).
     // Graphics::Geometry::~Geometry: the compiler's chain.
 }
 

@@ -55,7 +55,7 @@
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 #include "video/Context.h"     // Video::Context's submit counters (+0x2150..+0x215C)
 #include "Component/exe_bodies.h"             // B3R: the bodies called by name
-#include "Action/exe_bodies.h"                // B3R: Pf_RecursiveChildSum_123070, Pf_EntityResolvePos_2e20
+#include "Action/exe_bodies.h"                // B3R: Pf_RecursiveChildSum_123070
 #include "Entity/componententity_funcs.h"     // B3R: ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
 #include "Component/firecomponent_funcs.h"    // B3R: FireComponent_Ignite_610
 #include "Component/diseasecomponent_funcs.h" // B3R: DiseaseComp_Infect

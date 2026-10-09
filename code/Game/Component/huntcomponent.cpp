@@ -15,7 +15,7 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"
-#include "Tutorial/exe_bodies.h"    // WorkComponent_CalcMaxWorkers
+#include "Tutorial/exe_bodies.h"    // (WorkComponent_CalcMaxWorkers went in B6: the member is called)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>

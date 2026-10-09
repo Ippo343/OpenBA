@@ -19,7 +19,7 @@
 #include "options.h"             // Opt().liveSeatShuffle
 #include "Action/exe_bodies.h"    // ActHunt_DynArraySetCount_3110
 #include "Component/exe_bodies.h" // ResidenceComponent_impl_7230, AttendanceComponent_GetJobHostComponent
-#include "Tutorial/exe_bodies.h"  // WorkComponent_CalcMaxWorkers
+#include "Tutorial/exe_bodies.h"  // (WorkComponent_CalcMaxWorkers went in B6: the member is called)
 #include <new>
 #include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton

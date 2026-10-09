@@ -184,3 +184,29 @@ row's status cell ends in FIXED / NOT A DIFFERENCE / LEFT (with the owing row). 
   with a null profession, born under the old tree. Retail never makes one; the live paths all pass
   one; the save was the upstream null (row 990). Fixture and golden re-cut (`tools/resave_gate/README.md`);
   no guard, no load-time fixup. The rule stands: root-cause the null, and the root may be a file.
+
+2026-10-09, at the close (from `b6_session/AUDIT.md`: 104 OK, 4 FINDING, 2 QUESTION on the 110
+`behaviour:` commits audited; F1-F7, Q1-Q7):
+- C6. **D7 ruled for row 452:** retail's `GoToCitizen` 0x1400b56a0 reads +0x50 / +0x58 PAST a 0x40-byte
+  StorageComponent (cell 0x1401c7e78 has one writer; the Type compare is exact). The coordinator ruled
+  (b): the tree reads the ResidenceComponent's family rows by name, marked `STANDALONE DEVIATION`, and
+  `docs/retail_bugs.md` §2 records the over-read. Scope: this one site; every other retail quirk met in
+  B6 is COPIED (rows 44, 49, 961).
+- C7. **A retail RACE is copied** (rows 47 / 48, row 961): the pathfinder's unlocked result copy is retail's
+  three-instruction window; the B4 lock that hid it is gone. If the AV returns on a route it is the
+  FINDING to record, not a reason to re-lock. The `atomic_signal_fence` only keeps GCC from hoisting the
+  two loads; it is the tree's spelling of retail's re-reads, checked on the perf object.
+- C8. **An uninitialised `bool` member is retail's byte** (row 27, `workEnabled`): the ctor leaves +0x70 as
+  allocated, Persist moves the raw byte; no tree reader tests it before Command stores it. Policy: a
+  member retail leaves unwritten stays unwritten; a reader that needs 0 / 1 is a finding at the reader.
+- C9. **`IsDerivedFromNullSafe` IS a guard.** Blocks introduced it in new narrowing code (rows 7, 8, 10,
+  40, 92, two find templates): row 993 owes the member spelling. D4 applies to helpers, not only to
+  `if (p)` lines.
+- C10. **The audit's documentary findings** (F1 820's body address is 0x1400c3140 not 0x1400c3100; F2
+  G39 rides in G40's commit 419bef6d0; F3 the "unconditional MemFree" comments made false by row 104;
+  F4 the QueryCount forwarder (CLOSE-C) and 11 include comments; F6 §10 / §13 headers and row 452's
+  cell; F7 CLOSE-B's message) are corrected in the close commit where a file can be edited; the two
+  messages stand as written (no amend), recorded here and in CLOSE_NUMBERS §7. Rows 991 (104 sites
+  with the retired "partial" reasons and no row), 992 (ProfessionList's refs on the StringTable
+  ExternalPtr), 993, 994 and the rulings owed on 921 / 922 (+ TickIdle's `smV &&`) are the B6 RESIDUE,
+  handed to B7.

@@ -23,7 +23,7 @@
 #include "RemoveAnimal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
-#include "Action/exe_bodies.h"   // MarkEntityForRemoval, NotifyEntityChanged, the 0x140003110 forwarder
+#include "Action/exe_bodies.h"   // MarkEntityForRemoval, the 0x140003110 forwarder
 #include "Component/AnimalComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Entity/EntityList.h"

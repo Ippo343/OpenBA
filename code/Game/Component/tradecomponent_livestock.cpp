@@ -72,7 +72,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
 #include "Entity/componententity_funcs.h"      // 0x1400c3720 / 0x1400c48a0
-#include "Action/exe_bodies.h"                 // Pf_EntityResolvePos_2e20, ActHunt_NotifyEntityChanged_c3470
+#include "Action/exe_bodies.h"                 // (Pf_EntityResolvePos_2e20 / NotifyEntityChanged went in B6: the typed calls)
 #include "Game/exe_constants.h"                // kRdata_140172220 / kRdata_140172114
 #include "system/MemoryAllocator.h"
 

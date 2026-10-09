@@ -21,7 +21,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
-#include "Tutorial/exe_bodies.h"   // WorkComponent_CalcMaxWorkers (0x14012e5c0, the registered body)
+#include "Tutorial/exe_bodies.h"   // (WorkComponent_CalcMaxWorkers went in B6: CalcMaxWorkers is the member below)
 #include "Action/exe_bodies.h"     // ActCt_TaskCleanup_8e30 (0x1400f8e30)
 #include "Work/exe_bodies.h"
 #include "Entity/ComponentEntity.h"            // ComponentEntity::FindComponent<T>

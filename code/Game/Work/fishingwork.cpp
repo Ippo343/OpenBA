@@ -24,7 +24,7 @@
 #include "Game/exe_constants.h"   // kRdata_* (B3R Leftovers: the .rdata constants)
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
-#include "Action/exe_bodies.h"      // B3R: Pf_EntityResolvePos_2e20
+#include "Action/exe_bodies.h"      // B3R (Pf_EntityResolvePos_2e20 went in B6: InteractNodePosition is called typed)
 #include "Component/exe_bodies.h"   // B3R: CitizenComp_FUN_14012c3f0, AttendanceComponent_GetJobHostComponent
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "system/Value.h"      // ENDGAME B.3.4b System callers

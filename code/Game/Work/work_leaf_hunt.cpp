@@ -22,7 +22,7 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include "Player/exe_bodies.h"                 // B3R: PlayerPath_FindComponent_3ea0
-#include "Component/controller_state_table.h"   // B3R: StateMachine_TickReimpl
+#include "Component/controller_state_table.h"   // B3R (StateMachine_TickReimpl went in B6 rows 392 / 510: Tick takes &Time(0))
 #include "system/Value.h"                      // B3R: RtSystem_Time_Ctor
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

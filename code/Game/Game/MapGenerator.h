@@ -76,7 +76,7 @@ public:
         Collection::ExplicitSpec<&MapGeneratorRows::kSpec_InitialStructure>>;
     // The InitialFamily pool (B6 row 470): `Array<T>` over its row; the ctor is the
     // zero stores retail's ctor 0x1400a3030 writes, the dtor retail's inline
-    // 0x14001af47 (unconditional MemFree, then the header zeroed).
+    // 0x14001af47 (MemFree, then the header zeroed; since B6 row 104 ~Array tests _data first, as 0x18001c11f).
     using InitialFamilyArray = Collection::Array<InitialFamily, Collection::DefaultAllocator,
         Collection::ExplicitSpec<&MapGeneratorRows::kSpec_InitialFamily>>;
 

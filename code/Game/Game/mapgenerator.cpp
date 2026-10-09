@@ -70,7 +70,7 @@ MapGenerator::~MapGenerator() {}
 // `~Array` (MapGenerator.h, the rows below); the InitialFamily pool's, which
 // retail inlines at 0x14001af47 (`MOV RCX,[RBX+0x60]; CALL [0x140152b68]`, then
 // both qwords zeroed), is that pool's `~Array` too: the row has no destroy, so
-// ClearCallback is the unconditional MemFree and the three zero stores.
+// ClearCallback is the MemFree (behind ~Array's _data test since B6 row 104, as 0x18001c11f) and the three zero stores.
 
 // ============================================================
 // MapGenerator::Reconstruct (vtable +0x30, Slot6) — Reset to defaults
