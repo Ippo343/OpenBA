@@ -148,6 +148,18 @@ namespace System {
 // ----------------------------------------------------------------------------
 class CriticalSection {
 public:
+    // B6 row 50: the REAL ctor and dtor. Its one holder, the exe's
+    // PathfinderThread (+0x30), constructs and destroys it as a member, as
+    // retail's 0x1400a67f0 / 0x1400a6720 do; IO::Persistence and Audio::Stream
+    // hold their CRITICAL_SECTION as opaque storage and never reach this class.
+    // ??0CriticalSection@System@@QEAA@XZ  retail 0x18000c5c0:
+    //   InitializeCriticalSection(this); SetCriticalSectionSpinCount(this, 5000)
+    CriticalSection();
+    // ??1CriticalSection@System@@QEAA@XZ  retail 0x18000c5b0: DeleteCriticalSection(this)
+    ~CriticalSection();
+    CriticalSection(const CriticalSection&)            = delete;   // retail never copies one
+    CriticalSection& operator=(const CriticalSection&) = delete;
+
     // ?Lock@CriticalSection@System@@QEAAXXZ     retail 0x18000c700
     // ?Unlock@CriticalSection@System@@QEAAXXZ   retail 0x18000c6f0
     // One Win32 call each; bodies in runtime/src/system/thread_win.cpp (`_win`,
@@ -172,9 +184,10 @@ static_assert(!std::is_polymorphic<CriticalSection>::value,
               "System::CriticalSection must never acquire a vtable: retail has none");
 static_assert(std::is_standard_layout<CriticalSection>::value,
               "the ctor/dtor doors reach the storage through a reinterpret_cast");
-static_assert(std::is_trivially_destructible<CriticalSection>::value,
-              "B4b-2: teardown is the registered ??1CriticalSection door, not an "
-              "implicit member destructor -- two would DeleteCriticalSection twice");
+// B6 row 50: the teardown IS the member destructor now (the ??1 door is gone,
+// so there is exactly one DeleteCriticalSection per object).
+static_assert(!std::is_trivially_destructible<CriticalSection>::value,
+              "B6 row 50: ~CriticalSection is retail's 0x18000c5b0");
 
 // ----------------------------------------------------------------------------
 // System::Thread — vtable ??_7Thread@System@@6B@ 0x180155f20, 2 slots, 0x30.
@@ -298,6 +311,5 @@ static_assert(offsetof(Thread, _hFinished) == 0x28, "Thread::hFinished @ +0x28")
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- system/thread_win.cpp
-System::CriticalSection* RtSystem_CriticalSection_Ctor(System::CriticalSection* self);  // 0x18000c5c0
-void RtSystem_CriticalSection_Dtor(System::CriticalSection* self);  // 0x18000c5b0
+
 // ==== end B3R W0-P0c ====

@@ -132,14 +132,16 @@ UNIT_TEST(system_thread_base_is_0x30_so_engine_loader_loop_stays_at_0x30) {
     CHECK_EQ(sizeof(System::Thread),   static_cast<size_t>(0x30));
 }
 
-UNIT_TEST(system_criticalsection_is_a_plain_0x28_byte_blob_with_no_vptr) {
+UNIT_TEST(system_criticalsection_is_0x28_bytes_no_vptr_real_ctor_and_dtor) {
     CHECK_EQ(sizeof(System::CriticalSection), static_cast<size_t>(0x28));
     CHECK(!std::is_polymorphic<System::CriticalSection>::value);
     CHECK(std::is_standard_layout<System::CriticalSection>::value);
-    // B4b-2: teardown is the registered `??1CriticalSection@System@@` door, not
-    // an implicit member destructor. Two of them would DeleteCriticalSection
-    // twice — the `RtSystem::String` double-free in a new costume.
-    CHECK(std::is_trivially_destructible<System::CriticalSection>::value);
+    // B6 row 50: the ??0 / ??1 doors are gone; construction and teardown are
+    // the class's own ctor (0x18000c5c0) and dtor (0x18000c5b0), so its one
+    // holder (PathfinderThread +0x30) runs each exactly once, as a member.
+    CHECK(!std::is_trivially_default_constructible<System::CriticalSection>::value);
+    CHECK(!std::is_trivially_destructible<System::CriticalSection>::value);
+    CHECK(!std::is_copy_constructible<System::CriticalSection>::value);
 }
 
 // ===========================================================================

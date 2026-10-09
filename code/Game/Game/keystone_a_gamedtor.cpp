@@ -25,7 +25,7 @@
 // exe IAT dispatch slots 0x14015252x/253x/255x/256x):
 //   ?YieldToThreads@Application@1@QEAAXXZ             (slot 0x140152560)
 //   ??1CriticalSection@System@@QEAA@XZ               (slot 0x140152530, a6720 inner dtor;
-//                                                     RtSystem_CriticalSection_Dtor)
+//                                                     the +0x30 member's dtor, B6 row 50)
 //   (the a6720 tail-call, ??1Thread@System@@ via slot 0x140152520, is the
 //    compiler's base chain since ENDGAME B.3.9 VS: a6720 is ~PathfinderThread)
 //   ??1Scene@Picking@@QEAA@XZ                         (slot 0x140151fb8, ed60 tail-call;
@@ -62,8 +62,7 @@
 // PathfinderThread::~PathfinderThread (0x1400a6720) / DrainQueue (0x1400a6690),
 // Map::~Map (0x14009ed60); 0x14001a450 / 0x14001dac0 / 0x14001e3a0 are inlined
 // into their one caller each, on the named arrays. Map::pickingScene is a real member
-// (B4 wave Y). LEFT: the PathfinderThread lock is raw storage reached through
-// its door (H5), Map::regionPairCache is int64_t* (gameupdateloop.cpp hands it to
+// (B4 wave Y); so is the PathfinderThread lock (B6 row 50). LEFT: Map::regionPairCache is int64_t* (gameupdateloop.cpp hands it to
 // a body taking int64_t*).
 #include "Game/PathfinderThread.h"
 #include "Game/Map.h"
@@ -212,8 +211,9 @@ PathfinderThread::~PathfinderThread() {
     queueTail = nullptr;                  // [thread + 0x60] = 0
     queueCount = 0;                       // [thread + 0x70] = 0
 
-    RtSystem_CriticalSection_Dtor(&lock);   // 0x18000c5b0 (System::CriticalSection is trivially destructible by design, Thread.h)
-    // tail-call: System::Thread::~Thread() -- the compiler's base chain.
+    // B6 row 50: the +0x30 lock's ~CriticalSection (0x1400a67bc / 0x1400a67c0)
+    // is the member's, run by the compiler right after this body; then the
+    // tail-call System::Thread::~Thread() -- the compiler's base chain.
 }
 
 // ============================================================================

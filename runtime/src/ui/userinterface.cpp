@@ -1175,17 +1175,13 @@ extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
 //     objects we do not own, unchanged by this port either way.
 // ---------------------------------------------------------------------------
 
-namespace {
-
-// `IO::Serializer` — {Stream*, ReaderWriter*}, 0x10 bytes
-// (runtime/types/io/Serializer.h). Built on the stack twice per controller.
-// Retail inlines ??0Serializer here WITH a null test on the encoding, which
-// the class's own constructor does not have, so the pair is spelt out and
-// handed to the encoding's factory as the Serializer it is.
-struct UiSerializer { void* stream; IO::ReaderWriter* rw; };
-static_assert(sizeof(UiSerializer) == sizeof(IO::Serializer), "");
-
-} // namespace
+// B6 row 371: the two `IO::Serializer` records (the outer one, then one per
+// controller) are real `IO::Serializer` locals. Retail inlines ??0Serializer
+// (0x1800b9960) with NO test on the encoding: 0x1801205f6 / 0x18012068c load
+// the encoding's table and call slot +0x20 / +0x18 unguarded, and every
+// ReaderWriter call (0x180120622 +0xa0, 0x180120661 +0x98) is unguarded; only
+// the two deletes test the pointer (0x1801206b8, 0x1801206da: ??1Serializer
+// 0x1800b99b0's shape).
 
 void UI::UserInterface::SaveAllSettings() {
     auto* node = _dialogs._head;
@@ -1201,7 +1197,6 @@ void UI::UserInterface::SaveAllSettings() {
             // on a failed allocation), the dead free of the previous one.
             alignas(IO::MemoryStream) unsigned char stMem[sizeof(IO::MemoryStream)];
             IO::MemoryStream* const st = ::new (static_cast<void*>(stMem)) IO::MemoryStream();
-            IO::Encoding* const enc = st->_encoding;
 
             // ---- 3. point the stream at the dialog's settings buffer ------
             const int32_t size = dlg->_userFlags;   // +0xb0, read here as the byte count
@@ -1215,57 +1210,40 @@ void UI::UserInterface::SaveAllSettings() {
                 st->_cursor += 4;
             }
 
-            // ---- 4. the top-level ReaderWriter ----------------------------
-            UiSerializer ser{ st, nullptr };
-            IO::ReaderWriter* rw = nullptr;
-            if (enc) {
-                // Encoding slot 4 (+0x20) CreateWriter when writing, slot 3
-                // (+0x18) CreateReader when reading; version 0.
-                IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(&ser);   // LEFT: audit DEFERRED:retail-difference task (known_port_issues 14 row 371); the tree guards a null Encoding before CreateWriter, which IO::Serializer's ctor (0x1800b9960) does not: a real Serializer would drop that guard
-                rw = st->_direction != 0 ? enc->CreateWriter(s, 0) : enc->CreateReader(s, 0);
-            }
-            ser.rw = rw;
+            {
+                // ---- 4. the top-level ReaderWriter ----------------------------
+                // ??0Serializer inlined (0x1801205e1..0x180120607): the stream, a
+                // null ReaderWriter, then encoding slot 4 (+0x20) CreateWriter when
+                // writing, slot 3 (+0x18) CreateReader when reading; version 0.
+                IO::Serializer ser(*st, 0);
 
-            // ---- 5. the dialog's own OnSerializeSettings ------------------
-            // DialogInstance vtable slot 9 (+0x48) — VIRTUAL.
-            dlg->OnSerializeSettings(*st);
+                // ---- 5. the dialog's own OnSerializeSettings ------------------
+                // DialogInstance vtable slot 9 (+0x48) — VIRTUAL.
+                dlg->OnSerializeSettings(*st);
 
-            // ---- 6. the controller loop -----------------------------------
-            int32_t count = dlg->_controllers._size;
-            if (rw) {
-                rw->SerializeInt(count, nullptr);                              // +0xa0
-            }
-            for (int32_t i = 0; i < count; ++i) {
-                DialogController* ctl = dlg->_controllers._data[i];
-                // DialogController vtable slot 2 (+0x10) `Type()` — VIRTUAL.
-                uint32_t id  = ctl->Type();
-                if (rw) {
-                    rw->SerializeUInt(id, nullptr);                            // +0x98
+                // ---- 6. the controller loop -----------------------------------
+                int32_t count = dlg->_controllers._size;
+                ser.Serialize(count, nullptr);                                     // +0xa0
+                for (int32_t i = 0; i < count; ++i) {
+                    DialogController* ctl = dlg->_controllers._data[i];
+                    // DialogController vtable slot 2 (+0x10) `Type()` — VIRTUAL.
+                    uint32_t id  = ctl->Type();
+                    ser.Serialize(id, nullptr);                                    // +0x98
+
+                    // The per-controller Serializer (0x180120675..0x18012069d).
+                    IO::Serializer ser2(*st, 0);
+
+                    // RE-READ at 0x1801206a1, not cached across the CreateWriter.
+                    ctl = dlg->_controllers._data[i];
+                    // DialogController vtable slot 10 (+0x50) `OnSerializeSettings`
+                    // (B6-1.2: one slot LATER than DialogInstance's) — VIRTUAL.
+                    ctl->OnSerializeSettings(*st);
+                    // ~Serializer: delete the ReaderWriter (0x1801206b4..0x1801206c5).
                 }
 
-                UiSerializer ser2{ st, nullptr };
-                IO::ReaderWriter* rw2 = nullptr;
-                if (enc) {
-                    IO::Serializer& s2 = *reinterpret_cast<IO::Serializer*>(&ser2);   // LEFT: audit DEFERRED:retail-difference task (known_port_issues 14 row 371); the tree guards a null Encoding before CreateWriter, which IO::Serializer's ctor (0x1800b9960) does not: a real Serializer would drop that guard
-                    rw2 = st->_direction != 0 ? enc->CreateWriter(s2, 0)
-                                              : enc->CreateReader(s2, 0);
-                }
-                ser2.rw = rw2;
-
-                // RE-READ at 0x1801206a1, not cached across the CreateWriter.
-                ctl = dlg->_controllers._data[i];
-                // DialogController vtable slot 10 (+0x50) `OnSerializeSettings`
-                // (B6-1.2: one slot LATER than DialogInstance's) — VIRTUAL.
-                ctl->OnSerializeSettings(*st);
-
-                if (rw2) {
-                    delete rw2;
-                }
-            }
-
-            // ---- 7. teardown ----------------------------------------------
-            if (rw) {
-                delete rw;
+                // ---- 7. teardown ----------------------------------------------
+                // ~Serializer: delete the outer ReaderWriter (0x1801206d6..0x1801206e7),
+                // before the stream's own teardown.
             }
             // ~MemoryStream (dead buffer free: never owns) then ~Stream (the
             // encoding): the class's destructor chain, no free of the storage.

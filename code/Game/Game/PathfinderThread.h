@@ -18,12 +18,15 @@
 //
 // CONSTRUCTION (ENDGAME B.3.9 ENG W2): `::new (p) PathfinderThread(0x10000)`
 // on System::Thread's real ctor (pathfinder_seed.cpp), which then writes every
-// field below by hand, as retail's ctor does. EVERY FIELD IS TRIVIALLY
-// CONSTRUCTIBLE AND DESTRUCTIBLE (asserted at the bottom): the class's own ctor
-// must construct nothing and its dtor (keystone_a_gamedtor.cpp) frees the fields
-// by hand, so a member ctor / dtor would run twice. `lock` is the real
-// `System::CriticalSection`, which has neither (its init / teardown are the
-// explicit `??0` / `??1` calls the ctor and dtor make).
+// field below by hand, as retail's ctor does. B6 row 50: `lock` (+0x30) is a
+// REAL member: retail's ctor runs ??0CriticalSection on it right after the
+// stamp (0x1400a682d) and its dtor runs ??1CriticalSection last, after the
+// results / grid / queue teardown and before ~Thread (0x1400a67c0) -- exactly
+// where the compiler puts the first member's ctor and dtor. Every OTHER field is
+// trivially constructible and destructible (asserted at the bottom): the dtor
+// body (keystone_a_gamedtor.cpp) frees them by hand, in retail's order.
+// `results` stays a RawArray (H5): retail frees it FIRST (0x1400a674e, before
+// the grid and the queue), and a member ~Array would run after the body.
 //
 // FIELDS (the ctor 0x1400a67f0 and the command dispatcher 0x1400a6430):
 //   +0x30 lock           System::CriticalSection (Lock / Unlock around the queue
@@ -118,11 +121,11 @@ static_assert(offsetof(PathfinderThread, stagedPassableTypes) == 0x1F0, "Pathfin
 static_assert(offsetof(PathfinderThread, stagedDiagonal) == 0x1F4, "PathfinderThread::stagedDiagonal @ +0x1F4");
 static_assert(offsetof(PathfinderThread, stagedManhattan) == 0x1F5, "PathfinderThread::stagedManhattan @ +0x1F5");
 static_assert(offsetof(PathfinderThread, stagedRespectBlocked) == 0x1F6, "PathfinderThread::stagedRespectBlocked @ +0x1F6");
-// H5 (the coordinator's condition 1): declaring the fields must start no ctor and
-// no dtor. Every field type is trivially constructible and destructible.
-static_assert(std::is_trivially_default_constructible<System::CriticalSection>::value &&
-              std::is_trivially_destructible<System::CriticalSection>::value,
-              "PathfinderThread::lock: no member ctor / dtor may run");
+// B6 row 50: `lock` is the one member with a ctor and a dtor (retail's).
+static_assert(!std::is_trivially_default_constructible<System::CriticalSection>::value &&
+              !std::is_trivially_destructible<System::CriticalSection>::value,
+              "PathfinderThread::lock: retail constructs and destroys it as a member");
+// H5 (the coordinator's condition 1): every other field starts no ctor and no dtor.
 static_assert(std::is_trivially_default_constructible<GridPathSearch>::value &&
               std::is_trivially_destructible<GridPathSearch>::value,
               "PathfinderThread::grid: no member ctor / dtor may run");

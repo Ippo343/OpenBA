@@ -28,7 +28,7 @@
 #include "runtime/types/ui/EditElement.h"
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3); ~NoiseUI deletes by name
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "utility/PerlinNoise.h"   // B3R: RtUtility_PerlinNoise_Ctor / _Generate
@@ -36,12 +36,16 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 
-// Helper: the named element under the panel's root, as the EditElement it is.
-// Retail (0x1400714c0) keeps it only when IsDerivedFrom(EditElement); the tree
-// never checked (kept, listed: every noise*.rsc slider IS an EditElement).
+// Helper: the named element under the panel's root, if it is an EditElement.
+// B6 row 9: retail (0x1400714c0, five times) CheckPtrs the FindElement result,
+// calls IsDerivedFrom(EditElement's type id) on it with no null test, and
+// stores the element when it answers true, else null (the CMOV over 0).
 static UI::EditElement* NoiseUI_FindEdit(UI::Element* root, const char* name) {
     System::String nameStr(name);
-    return static_cast<UI::EditElement*>(root->FindElement(nameStr).Get());
+    UI::Element* elem = root->FindElement(nameStr).Get();
+    return elem->IsDerivedFrom(UI::EditElement::TypeId())
+               ? static_cast<UI::EditElement*>(elem)
+               : nullptr;
 }
 
 // ============================================================
@@ -302,6 +306,18 @@ void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
 
     // Regenerate noise texture from edit values
     self->GenerateNoise();
+}
+
+// [0] 0x140071bc0 (the body of the scalar-deleting dtor 0x140012da0). Retail
+// stamps 0x14015ca80, then deletes +0x40 (0x140071be0..0x140071bf1), +0x38
+// (0x140071bf3..0x140071c04) and +0x30 (0x140071c06..0x140071c17), each
+// `TEST RCX,RCX; JZ` then `CALL [vptr]` with EDX = 1: C++ `delete` through the
+// virtual dtor, in that order (ModDialog's dtor spells its three the same way),
+// then tail-jumps to ~DialogController ([0x1401515c8]).
+NoiseUI::~NoiseUI() {
+    delete spriteSheet;   // +0x40
+    delete material;      // +0x38
+    delete imageBuffer;   // +0x30
 }
 
 // B4 DLG-d (correction 2): the class's slots 4 and 9 run the ported bodies

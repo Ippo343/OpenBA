@@ -28,11 +28,10 @@ class NoiseUI final : public UI::DialogController {
 public:
     NoiseUI() = default;                                 // 0x140012d30 (ctor inlined in the factory)
 
-    // 0x140012da0 minus the free. The compiler chains ~DialogController (and so
-    // ~Internal: RemoveObject), which the tree's hand-built slot 0 skipped.
-    // PORT GAP (B38 D2): retail (0x140071bc0) destroys the three owned objects at +0x40,
-    // +0x38, +0x30 through their slot 0 with flags 1; not transcribed.
-    ~NoiseUI() override = default;                                // [0] 0x140012da0
+    // 0x140012da0 minus the free: the body 0x140071bc0 deletes the three owned
+    // objects at +0x40, +0x38, +0x30 through their slot 0 (flags 1), then the
+    // compiler chains ~DialogController (and so ~Internal: RemoveObject).
+    ~NoiseUI() override;                                          // [0] 0x140012da0
     void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x140071bb0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400714c0  PORT GAP
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
