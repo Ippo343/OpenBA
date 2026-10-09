@@ -251,13 +251,8 @@ void MemFree(void* p) {
 // 0x18001c100: `MOV RSI,[RCX]; TEST RSI,RSI; JZ zero` before the
 // Enter / Free / Leave triple), so a null buffer never reaches MemFree (and an
 // allocator instrument on MemFree, BANISHED_REDZONE, never sees a null free).
-void* ArrayDtorImpl(ArrayHdr* a) {
-    if (a->_data) MemFree(a->_data);
-    a->_data     = nullptr;
-    a->_size     = 0;
-    a->_capacity = 0;
-    return nullptr;         // retail leaves RAX == 0
-}
+// B7 D4: the body is header-inline in runtime/types/collection/Collection.h
+// (`rtcoll::ArrayDtorImpl`), unchanged, so a typed Array local open-codes it.
 
 // ============================================================================
 // J3 — Collection::Array<T>::SetSize

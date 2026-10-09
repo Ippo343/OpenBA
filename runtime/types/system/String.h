@@ -106,6 +106,12 @@ inline int32_t  StringRefCount(const char* data) {
 // The MemAlloc alignment argument SetLength passes (0x1800c8220).
 constexpr int kStringAllocAlign = 4;
 
+// The one allocator pair (runtime/src/system/string.cpp): MemAlloc 0x1800c7a50 /
+// MemFree 0x1800c7ad0. Declared here because the inline release below calls
+// MemFree, as every retail open-coded release does (CALL 0x1800c7ad0).
+void* RtMemAlloc(uint64_t size, int align);
+void  RtMemFree(void* p);
+
 }  // namespace RtSystem
 
 // ============================================================================
@@ -214,6 +220,57 @@ struct StringPrivateAccess {
     static void Release(String& s)            { s.Release(); }
     static void Adopt(String& s, char* src)   { s.Adopt(src); }
 };
+
+// ---- the inline lifecycle (B7 D4) ------------------------------------------
+// Retail open-codes these at every caller (the release idiom at ~200 sites, the
+// copy ctor's INC [data-4], the default ctor's single zero store), so they are
+// header-defined: a typed String local compiles to retail's open-coded shape
+// instead of an out-of-line call. The bodies are the ones string.cpp had,
+// unchanged: the same reads and stores, MemFree still a call.
+
+// ??0String@System@@QEAA@XZ  retail 0x180006760
+inline String::String() : _data(nullptr) {}
+
+// ??0String@System@@QEAA@AEBV01@@Z  retail 0x180006cb0
+inline String::String(const String& other) : _data(nullptr) {
+    Adopt(other._data);
+}
+
+// Not retail's: the pointer steal (B31_RULES class rule 4). No refcount edit,
+// and the source's destructor becomes a no-op.
+inline String::String(String&& other) noexcept : _data(other._data) {
+    other._data = nullptr;
+}
+
+// ??1String@System@@QEAA@XZ  retail 0x180006c80
+inline String::~String() {
+    Release();
+}
+
+// ?Release@String@System@@AEAAXXZ  retail 0x1800c9870, and the identical
+// sequence inlined in ~String (0x180006c80). The asymmetry is retail's: on the
+// freeing branch the object keeps `data - 8`, on the sharing branch it is
+// nulled. See the banner above: reproduce it, do not tidy it.
+inline void String::Release() {
+    char* d = _data;
+    if (d == nullptr)
+        return;
+    if (--RtSystem::StringRefCount(d) == 0) {
+        _data = d - 8;
+        RtSystem::RtMemFree(_data);
+    } else {
+        _data = nullptr;
+    }
+}
+
+// The AddRef half of the copy ctor (0x180006cb0). `_data` must already have
+// been zeroed or released.
+inline void String::Adopt(char* src) {
+    if (src != nullptr) {
+        _data = src;
+        ++RtSystem::StringRefCount(src);
+    }
+}
 
 // The three free operator+ overloads. Namespace scope in retail too (the
 // mangling `??HSystem@@..` has no class component).
