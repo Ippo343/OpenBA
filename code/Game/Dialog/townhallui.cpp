@@ -1060,41 +1060,17 @@ static TownHallUI::AgricultureNode* AgriBST_Next(TownHallUI::AgricultureNode* no
     return nullptr;
 }
 
-// Find a description's sub-description by type ID (the description's +0x28/+0x30
-// array). The count and pointer-range guards are the tree's (STANDALONE; retail
-// has none).
-static ::Object::Base* TownHall_FindComponentByTypeId(const ComponentDescription* entity, uint32_t typeId) {
-    if (!entity) {
-        return nullptr;
-    }
-    const ComponentDescription* desc = entity;
-    Description** compArray = desc->_subDescs;   // COMP-c typed _subDescs (merge fix)
-    int compCount = desc->_subDescCount;
-
-    if (!compArray) {
-        return nullptr;
-    }
-    if (compCount < 0 || compCount > 200) {
-        return nullptr;
-    }
-
-    for (int i = 0; i < compCount; i++) {
-        Description* comp = compArray[i];
-        if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {   // LEFT: STANDALONE pointer-range guard  // CAST-OK: ptr_int
-            continue;
-        }
-        // vtable slot 2 (+0x10) = GetTypeId()
-        void** vtable = *(void***)comp;   // LEFT: STANDALONE vtable-null guard; audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
-        if (!vtable) {
-            continue;
-        }
-        ::Object::Base* base = comp;
-        int id = base->Type();
-        if ((uint32_t)id == typeId) {
-            bool derived = ::Object::IsDerivedFromNullSafe(comp, typeId);
-            if (derived)
-                return base;
-            break;
+// Find a description's sub-description by type: the find retail inlines in
+// UpdateProduction 0x14007c7f0 (RawMaterialDescription cell 0x1401c7cb8, ValueDescription,
+// and SelectDescription 0x1401c48a8 in the agriculture pass): count re-read per pass,
+// slot 2 ([vtbl+0x10]) against T's cell, IsDerivedFrom on the first match; no test of the
+// description, the array or an element.
+template <class T>
+static T* TownHall_FindDescription(const ComponentDescription* desc) {
+    for (int i = 0; i < desc->_subDescCount; i++) {
+        if (desc->_subDescs[i]->Type() == T::TypeId()) {
+            Description* match = desc->_subDescs[i];
+            return ::Object::IsDerivedFromNullSafe(match, T::TypeId()) ? static_cast<T*>(match) : nullptr;
         }
     }
     return nullptr;
@@ -1140,14 +1116,14 @@ void TownHallUI::UpdateProduction() {
             const ComponentDescription* entityPtr = node->key;
 
             // Find ResourceType component on entity
-            ::Object::Base* resourceComp = TownHall_FindComponentByTypeId(entityPtr, RawMaterialDescription::TypeId());
+            RawMaterialDescription* resourceComp = TownHall_FindDescription<RawMaterialDescription>(entityPtr);
 
             // Read counter value at selected index
             int counterVal = node->counts[invComboIdx];
 
             // Push entry into dynamic array
             entryArr.SetSize(entryArr.GetSize() + 1,
-                             ProdEntry{entityPtr, static_cast<RawMaterialDescription*>(resourceComp), counterVal, 0});
+                             ProdEntry{entityPtr, resourceComp, counterVal, 0});
 
             node = InvBST_Next(node);
         }
@@ -1172,12 +1148,9 @@ void TownHallUI::UpdateProduction() {
         for (int i = 0; i < entryCount; i++) {
             const ComponentDescription* entityPtr = entries[i].entityPtr;
 
-            // Find ValueDescription component on entity
-            ValueDescription* valDesc = static_cast<ValueDescription*>(
-                TownHall_FindComponentByTypeId(entityPtr, ValueDescription::TypeId()));
-            if (!valDesc) {
-                continue;
-            }
+            // Find ValueDescription component on entity (retail reads +0x20..+0x38 of the
+            // result unguarded, 0x14007cac8)
+            ValueDescription* valDesc = TownHall_FindDescription<ValueDescription>(entityPtr);
 
             // Create sprite from ValueDescription+0x20 (spriteSheet) and +0x28 (spriteName)
             UI::Sprite spriteBuf(::Object::ExternalPtr<UI::SpriteSheet>(valDesc->_sprite), valDesc->_name);
@@ -1318,8 +1291,7 @@ next_entity: ;
 
             if (found) {
                 // Find SelectDescription component (DAT_1401c48a8) on entity
-                SelectDescription* selectDesc = static_cast<SelectDescription*>(
-                    TownHall_FindComponentByTypeId(entityPtr, SelectDescription::TypeId()));
+                SelectDescription* selectDesc = TownHall_FindDescription<SelectDescription>(entityPtr);
 
                 // Original always sets sprite/text when found in BST (even if selectDesc is NULL)
                 // Create sprite from SelectDescription+0x20/+0x28
