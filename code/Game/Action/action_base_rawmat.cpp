@@ -240,11 +240,12 @@ int ResourceCategory(const ComponentDescription* material) {
         Description* c = base[idx];
         uint32_t t = c->Type();   // slot 2
         if (t == typeId) {
-            if (::Object::IsDerivedFromNullSafe(c, typeId)) comp = static_cast<const RawMaterialDescription*>(c);
+            if (c->IsDerivedFrom(typeId)) comp = static_cast<const RawMaterialDescription*>(c);
             break;
         }
     }
-    if (!comp) return -1;  // defensive: the original derefs the (always-present) comp directly
+    // B6 (14d G59): 0x140089001 CMOVNZ RDI,RBX over RDI = 0; 0x140089005 MOV ECX,[RDI+0x5c]
+    // with no test (a miss falls through to the same read).
 
     uint32_t f = comp->_flags;
     if ((f >> 10) & 1) return 0;
