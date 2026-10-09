@@ -33,6 +33,7 @@
 #include "Work/exe_bodies.h"          // WorkImpl_Sqrtf_132010
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "system/Thread.h"     // ENDGAME B.3.4b System callers
+#include <atomic>      // std::atomic_signal_fence (ApplyCommand case 5: retail's per-iteration reloads)
 #include <cstdint>
 #include <cstdio>    // [FLOODDIAG] diagnostic reporting
 #include <cstdlib>
@@ -606,17 +607,21 @@ int RegionGraph::Run(int start, int goal, int32_t* path) {
 //   2: grid.cellFlags[arg1] = keep-hi-bit | arg2
 //   3: grid.cellFlags[arg1] = (arg2 ? 0x80 : 0) | keep-lo-7-bits
 //   4: allowDiagonal = arg1 != 0, manhattan = arg2 != 0, respectBlocked = arg3 != 0
-//   5: run the grid A* into a 64KB int buffer, then under the lock copy the path into
-//      result slot arg3 and flag it ready.
+//   5: run the grid A* into a 64KB int buffer, size result slot arg3's path under the
+//      lock, then (unlocked) copy the path in and flag it ready.
 // Retail reads RCX and RDX only (0x1400a6443 / 0x1400a6449).
-// CRITICAL: the 0x10000-byte (16382-int) buffer is preserved verbatim.
 void PathfinderThread::ApplyCommand(const PathCommandArgs& cmd) {
     int iVar1;
     int iVar2;
     uint8_t* pbVar3;
     int64_t lVar4;
     int64_t lVar5;
-    static int32_t auStack_10008[16382];  // 64KB — must NOT shrink (see brief)
+    // B6 row 48: the 0x10000-byte path buffer is a LOCAL, on the stack of whichever
+    // thread applies the command (0x1400a6436 MOV EAX,0x10030; CALL __chkstk;
+    // SUB RSP,RAX: the buffer at RSP+0x30, 0x4000 ints). The worker's stack is
+    // created with a 0x10000 COMMIT, not a reservation (Thread::Start), so the
+    // process default reserve applies and the probe grows it, as in retail.
+    int32_t auStack_10008[0x4000];
 
     switch (cmd.type) {
     case 0:
@@ -642,33 +647,35 @@ void PathfinderThread::ApplyCommand(const PathCommandArgs& cmd) {
         return;
     case 5: {
         iVar2 = grid.Run(cmd.arg1, cmd.arg2, auStack_10008);   // 0x14001ce00
-        // Hold the pathfinder lock across the ENTIRE result commit — the array resize,
-        // the cell write loop, AND the ready-byte store. The original released the lock
-        // after the resize and wrote the cells unlocked; that is safe only if no other
-        // thread touches the result table meanwhile. It is NOT safe here: the main
-        // thread's slot allocator (AllocResult 0x1400a6240) GROWS/reallocates that same
-        // table under the same lock, freeing the old buffer — which the allocator then
-        // hands back out as a 0x28 EntityTreeNode. With the write loop unlocked, this
-        // worker thread wrote path cells into that freed-then-reused node, corrupting
-        // the post-update entity tree (the intermittent TreeSuccessor/PostUpdate AV).
-        // Keeping the lock held for the whole commit makes the worker's write and the
-        // grow mutually exclusive.
+        // B6 row 47: retail's lock covers the resize ONLY: 0x1400a6564 Lock, 0x1400a6582
+        // CALL 0x1400021d0 (Collection::Array<int32>::SetSize, the grown tail left as the
+        // allocation found it), 0x1400a658b Unlock; the cell loop (0x1400a65b0..0x1400a65d3)
+        // and the ready-byte store (0x1400a65e3) run unlocked.
+        //
+        // RETAIL'S RACE, KEPT: the main thread's AllocResult 0x1400a6240 grows this same
+        // results table under the lock (0x14001d940 copies each slot, then frees the old
+        // buffers). A grow landing between the worker's reload of the slot's path pointer
+        // and its store writes into a freed block. Retail's loop RELOADS `results` and the
+        // slot's path pointer on EVERY iteration (0x1400a65b0..0x1400a65c1), so the window
+        // is three instructions; the B4-era tree held the lock over the whole commit
+        // because GCC had hoisted those two loads out of the loop (an int store cannot
+        // alias a pointer field), stretching the window to the whole copy (the
+        // intermittent TreeSuccessor / PostUpdate AV). The signal fence below emits no
+        // instruction; it only stops that hoist, so the loop reloads as retail's does.
         const uint64_t slot = static_cast<uint64_t>(static_cast<uint>(cmd.arg3));
         lock.Lock();
-        // 0x1400021d0 == Collection::Array<int32>::SetSize: the grown tail stays as the
-        // allocation found it (1400a6582). The loop below writes all iVar2 elements
-        // before the ready byte lets any reader touch them.
         results.data[slot].path.SetSize(iVar2);
+        lock.Unlock();
         lVar4 = 0;
         if (0 < static_cast<int64_t>(iVar2)) {
             do {
+                std::atomic_signal_fence(std::memory_order_seq_cst);   // retail's per-iteration reloads
                 lVar5 = lVar4 + 1;
                 results.data[slot].path._data[lVar5 - 1] = auStack_10008[lVar4];
                 lVar4 = lVar5;
             } while (lVar5 < iVar2);
         }
         results.data[slot].ready = 1;
-        lock.Unlock();
         return;
     }
     }
