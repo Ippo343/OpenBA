@@ -205,6 +205,17 @@ docs/runtime_port/endgame_c/FLAGS.md (historical).]`
 
 7. **Exceptions.** ~25 files use setjmp/longjmp or SEH to cross retail frames. With no
    retail frame on the stack they become C++ exceptions or error returns. Last.
+   **DECIDED (2026-10-09, the user, at the B7 close):** ordinary C++ exceptions, because they
+   are the portable mechanism (any compiler / CPU, Linux included); SEH is Windows-only and
+   `longjmp` skips the destructors real classes now have (memory
+   `reference_longjmp_unwind_runs_retail_cleanup`: each old path relied on retail's SEH
+   cleanup). Rule per site: where retail UNWINDS (an error raised deep, caught at a top-level
+   catch site), a `throw` of a small error type caught at retail's catch site, so the right
+   destructors run; where retail's "error" is a STATUS (a failed open, a missing resource), a
+   plain error return. Checks: `-fexceptions` on for every object (runtime, code, standalone,
+   the unit link stubs); no throw crosses a `noexcept` / `extern "C"` boundary without a catch
+   before it. The vectored crash / hang handlers (standalone_crash.log, the watchdog) are
+   diagnostics, not control flow, and stay Windows-only behind `#ifdef`.
 
 8. **The gate.** tools/resave_gate/ (PASS against its golden) plus: `make sa-run` +
    pause-menu quit exit 0 with an empty crash log; `BANISHED_AUTOQUIT`; the Load Game
