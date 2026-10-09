@@ -488,8 +488,8 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
     SerializeIBPArray(healers, ser, HealerComponent::TypeId());
     SerializeIBPArray(citizens, ser, CitizenComponent::TypeId());
 
-    // Unconditional TREE #1 (residence/path-graph style, string-table key).
-    SerializeCompRefTree(field_0x100, ser, &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140018020
+    // Unconditional TREE #1: 0x140017a40, its keys ExternalPtr<Profession> (0x140018020; B7 LX2).
+    SerializeCompRefTree(field_0x100, ser, &Reimpl_ExternalPtr_Serialize_Profession);   // 0x140017a40 -> 0x140018020 (Profession)
 
     SerializeIBPArray(pastures, ser, PastureComponent::TypeId());
     SerializeIBPArray(cemeteries, ser, CemeteryComponent::TypeId());
@@ -566,7 +566,7 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
         legacyCount = 0;
     } else {
         SerializeCompRefTree(field_0x160, ser,
-            &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140002340
+            &Reimpl_ExternalPtr_Serialize_ComponentDescription);   // 0x140017cd0 -> 0x140002340 (ComponentDescription)
     }
     // (B6 row 15: the tree used to clear the +0x160 tree header here at version 5; retail
     // 0x14008f760 has no version-5 step between the +0x160 tree and the wells -- its one
