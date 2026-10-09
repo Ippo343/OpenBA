@@ -106,7 +106,7 @@ bool HighlightDescription::Serialize(IO::Stream& stream) {
             Object::External** r = AllocArray(e->refs, e->refCount, e->refCapacity, refCount);
             for (int j = 0; j < refCount; ++j) r[j] = nullptr;
         }
-        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, e->refs);
+        Reimpl_Array_Serialize_External_EdgeMesh(&ser, refCount, e->refs);   // 0x140007580 (0x14004ca7d)
     }
     Reimpl_ExternalPtr_Serialize_Typed_7140(&_ref0, &ser);
     Reimpl_ExternalPtr_Serialize_Typed_7140(&_ref1, &ser);
