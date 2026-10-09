@@ -51,11 +51,10 @@ HarvestOrchard::HarvestOrchard(ComponentEntity* const* entityIBP) : AutoPickupWo
     // zeroes +0x58 / +0x60 (retail 0x1400ee0ae..0x1400ee0b8, under its EH state).
 
     // The entity's OrchardComponent (0x140005440)
+    // B6 (14d G47): 0x1400ee0df / 0x1400ee0e4 read the orchard's +0x58 with no test; the
+    // loop (0x1400ee100-0x1400ee137) reads +0x50 and the work item's +0x58 each pass with
+    // no test of the orchard, the byte array or the slot array.
     OrchardComponent* orchard = field_10->FindComponent<OrchardComponent>();
-    if (!orchard) return;             // SA: retail derefs unguarded below; a HarvestOrchard
-                                      // is only ever built for an entity that has an
-                                      // orchard, so this can only fire if our caller is
-                                      // wrong. Same guard plantorchard_ctor.cpp carries.
 
     // 0x14000a590 == Collection::Array<bool>::SetSize (no tail write: every slot is
     // written by the loop below).
@@ -64,12 +63,10 @@ HarvestOrchard::HarvestOrchard(ComponentEntity* const* entityIBP) : AutoPickupWo
     // One byte per orchard slot: 1 = there is a tree here to pick, 0 = hole. Retail
     // re-runs CheckPtr on the orchard IBP every iteration and loops on the WORK item's
     // own count (+0x60) — the value the resize just produced — not the component's.
-    const int n = _field58._size;
-    for (int i = 0; i < n; ++i) {
-        bool* base = _field58._data;
-        if (!base) break;
+    for (int i = 0; i < _field58._size; ++i) {
         OrchardSlot* slots = orchard->slots;
-        base[i] = (slots && slots[i].tree != nullptr) ? 1 : 0;
+        bool* base = _field58._data;
+        base[i] = (slots[i].tree != nullptr) ? 1 : 0;
     }
 }
 
