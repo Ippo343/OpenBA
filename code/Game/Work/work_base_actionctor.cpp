@@ -130,9 +130,12 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
                                    float* worldPos, int /*zero*/, uint8_t zeroByte) {
 
     // --- derive the NaturalResourceDescription off the target (param_3) ---
+    // IsDerivedFrom(+0x18, cell 0x1401c7b68), CMOVNZ to 0; every later read through it
+    // (+0x80 at 0x1400c228d / 0x1400c22f6 / 0x1400c23d3, +0x64, +0x68, +0x70) has no test
+    // (B6 14d G23).
     Description* targetComp = (*targetRef)->_description;
     NaturalResourceDescription* derivedTarget = nullptr;
-    if (Object::IsDerivedFromNullSafe(targetComp, NaturalResourceDescription::TypeId()))
+    if (targetComp->IsDerivedFrom(NaturalResourceDescription::TypeId()))
         derivedTarget = static_cast<NaturalResourceDescription*>(targetComp);
 
     ComponentEntity* targetInner = (*targetRef)->_entity.Get();
@@ -207,11 +210,11 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
 
     // --- compute performWork param_5 from the description's +0x80 ---
     int pwParam = 8;
-    if (derivedTarget && derivedTarget->_u80 < 0xb)
+    if (derivedTarget->_u80 < 0xb)
         pwParam = static_cast<int>(derivedTarget->_u80) + 9;
 
     // --- if the description's +0x64 (byte) is set: inline PerformWork + two AnimateNaturalResource ---
-    if (derivedTarget && derivedTarget->_b64) {
+    if (derivedTarget->_b64) {
         void* inlineObj = System::MemoryAllocator::MemAlloc(0x48, 8);
         Action* pw = nullptr;
         if (inlineObj) {
@@ -247,10 +250,9 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
 
     // --- PerformWork_Ctor7: heading(XMM2)=heading, actionType(R9)=pwParam,
     //     time=description+0x68, p6=1, p7=description+0x80 (resKind) ---
-    // (the derivedTarget arms here and below are the tree's guards)
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
     Action* pw7 = nullptr;
-    if (obj && derivedTarget) {
+    if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         int resKind  = static_cast<int>(derivedTarget->_u80);
         int64_t time = derivedTarget->_time68._ticks;
@@ -262,7 +264,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     // --- MoveTo (path type from the description's +0x80 switch) ---
     obj = System::MemoryAllocator::MemAlloc(0x480, 8);
     Action* mv = nullptr;
-    if (obj && derivedTarget) {
+    if (obj) {
         int pathType = 1; // Slow default (disasm: EBX=1 at 0x1400c2123)
         switch (derivedTarget->_u80) {
             case 0: case 1: case 4: case 5: case 6: case 7: pathType = 2; break; // Fast
@@ -281,7 +283,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     // --- ShowTool (the description's +0x80 tool type) action ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
     Action* st2 = nullptr;
-    if (obj && derivedTarget) {
+    if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         int toolType = static_cast<int>(derivedTarget->_u80);
         st2 = new (obj) ShowTool(&entityInner, toolType);
