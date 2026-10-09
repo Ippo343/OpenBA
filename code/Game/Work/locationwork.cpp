@@ -35,7 +35,7 @@
 // Sub-functions, called by name (B3R; Work/Action/Component exe_bodies.h)
 // ============================================================
 //   0x140006270 Entity_FindComponent_Storage       ComponentEntity::FindComponent<StorageComponent>
-//   0x14012cf10 StorageComponent_QueryCount        CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10 StorageComponent_QueryCount        StorageComponent::QueryCount (the member)
 //   0x140115e60 CitizenAI_State_LongTermPlan       CitizenComponent::LongTermPlan
 //   0x140002ed0 Entity_FindComponent_Interact      ComponentEntity::FindComponent<InteractComponent>
 //   0x140122be0 FindWalkablePosition               WorkImpl_WalkablePos_122be0
@@ -100,8 +100,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     // Step 2: Check citizen's storage — if carrying items, replan
     StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-    // (0x14012cf10 takes the storage as an integer: LEFT)
-    int itemCount = CitizenComp_StorageComponent_QueryCount(storage);
+    int itemCount = storage->QueryCount();
     if (itemCount > 0) {
         (*citizenIBP)->LongTermPlan();
     }

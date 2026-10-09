@@ -259,8 +259,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
     CitizenComponent* citizen = *citizenRef;
     StorageComponent* storageIBP = citizen->_entity->FindComponent<StorageComponent>();
     int cap = storageIBP->capacity;
-    // (0x14012cf10 takes the storage as an integer: LEFT)
-    int freeCap = cap - static_cast<int>(CitizenComp_StorageComponent_QueryCount(storageIBP));
+    int freeCap = cap - static_cast<int>(storageIBP->QueryCount());
 
     // desc+0x48 = per-unit size, rawMat+0x28 = amount in the pile. (The original
     // dereferences desc unguarded here; kept faithful -- desc is non-null whenever

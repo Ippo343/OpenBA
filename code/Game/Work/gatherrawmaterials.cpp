@@ -69,7 +69,7 @@
 //   0x140002e10 FindComponent_WorkplaceExt                  AttendanceComponent_GetJobHostComponent
 //   0x14008d590 FindStorageForResource                      Pf_PickBestDropTarget_8d590
 //   0x140006270 Entity_FindComponent_Storage                WorkBase_FindComponent_6270
-//   0x14012cf10 StorageComponent_QueryCount                 CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10 StorageComponent_QueryCount                 StorageComponent::QueryCount (the member)
 //   0x140116540 GetRemainingCapacity                        WorkLeaf_FreeStorageCapacity_116540
 //   0x140115e60 CitizenAI_State_LongTermPlan                CitizenAI_State_LongTermPlan
 //   0x140122be0 CalcBestTargetPos                           WorkImpl_WalkablePos_122be0
@@ -261,8 +261,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 StorageComponent* citizenStorage = (*entityIBP)->_entity->FindComponent<StorageComponent>();
 
                 int capacity = citizenStorage->capacity;
-                // (0x14012cf10 takes the storage as an integer: LEFT.)
-                int currentStored = CitizenComp_StorageComponent_QueryCount(citizenStorage);
+                int currentStored = citizenStorage->QueryCount();
 
 
                 int carryWeight = rawMatComp->_weight;

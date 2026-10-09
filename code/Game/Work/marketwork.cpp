@@ -586,10 +586,10 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // *citizenHolder is the CitizenComponent; its +0x10 is the citizen Entity.
     // If that entity's own StorageComponent holds anything, the citizen must go
     // dump it first: push AI state LongTermPlan and report 2 = CLAIMED, which
-    // stops the caller's claim-walk. (0x14012cf10 takes the storage as an integer: LEFT.)
+    // stops the caller's claim-walk.
     CitizenComponent* citizen = *citizenSlot;
     StorageComponent* carriedStorage = citizen->_entity->FindComponent<StorageComponent>();
-    const int carried = CitizenComp_StorageComponent_QueryCount(carriedStorage);
+    const int carried = carriedStorage->QueryCount();
     if (carried > 0) {
         (*citizenSlot)->LongTermPlan();
         return 2;
@@ -636,7 +636,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     // COMISS/JNC: if fill >= MarketDescription::_fillRatio the market does not want
     // any more stock at all -> 1 = examined but declined.
     const float stocked = static_cast<float>(
-        CitizenComp_StorageComponent_QueryCount(marketStorage));
+        marketStorage->QueryCount());
     const float capacity = static_cast<float>(marketStorage->capacity);
     const float fill = stocked / capacity;
     if (marketDesc->_fillRatio <= fill) {

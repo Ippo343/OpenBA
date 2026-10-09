@@ -62,7 +62,7 @@
 //   0x140021a30  WorkBST_RegisterWork_1a30
 //   0x140115e60  CitizenAI_State_LongTermPlan
 //   0x140006270  WorkBase_FindComponent_6270
-//   0x14012cf10  CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10  StorageComponent::QueryCount
 //   0x140172114  kRdata_140172114 (.rdata)
 //
 // Vtable pointers for dtor chain

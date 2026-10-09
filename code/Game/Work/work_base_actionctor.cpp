@@ -40,7 +40,7 @@
 #include "Action/MoveTo.h"
 #include "math/Math.h"
 #include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name
-#include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
+#include "Component/exe_bodies.h"   // B3R: (unused since B6 block D: the QueryCount callers call the member)
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
 #include <cstring>
@@ -77,7 +77,7 @@
 //   0x1400c9170 MoveTo ctor                        Pf_MoveToCtor_9170
 //   0x1400c9b70 PickupRawMaterial copy-ctor        WorkAct_PickupRawMaterialCopyCtor_c9b70 (below)
 //   0x140006270 FindComponent<StorageComponent>
-//   0x14012cf10 StorageComponent::QueryCount       CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10 StorageComponent::QueryCount       (the member)
 //   slot 0x140152b60 MemoryAllocator::MemAlloc     System::MemoryAllocator::MemAlloc
 //   slot 0x140152b00 System::Time::Time(float)     RtSystem_Time_Ctor
 // Math::Vector3 Normalize / Heading are direct Math::Vector3 member calls (B.3.1 step 2).
@@ -110,7 +110,7 @@ static inline float WA_MoveSpeed() { return kRdata_140172280; }
 static int WA_CitizenCarryCount(CitizenComponent* const* citizenRef) {
     CitizenComponent* e = *citizenRef;
     StorageComponent* storage = e->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    return CitizenComp_StorageComponent_QueryCount(storage);
+    return storage->QueryCount();
 }
 
 // ============================================================

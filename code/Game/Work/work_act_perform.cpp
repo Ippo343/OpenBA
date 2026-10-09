@@ -25,7 +25,7 @@
 #include "Action/PerformWork.h"   // ENDGAME B.3.8 CB3
 #include "math/Math.h"
 #include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name
-#include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
+#include "Component/exe_bodies.h"   // B3R: (unused since B6 block D: the QueryCount callers call the member)
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
 #include "object/Internal.h"
@@ -55,7 +55,7 @@
 //   0x1400c54e0 TaskListAppend                        Pf_ActStackPush_54e0
 //   0x1400012d0 Entity_FindComponent_Family           ActMv_FindComponentFamily_12d0
 //   0x140006270 FindComponent<StorageComponent>
-//   0x14012cf10 StorageComponent_QueryCount           CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10 StorageComponent_QueryCount           StorageComponent::QueryCount (the member)
 //   0x1400cb1d0 SendComponentMessage copy-ctor        Pf_SendComponentMessageCopyCtor_b1d0
 //   0x1400c5da0 CompleteTask copy-ctor                Pf_CompleteTaskCopyCtor_5da0
 //   0x140042890 ShowTool ctor (R8D=toolType)          ActChild_ShowToolCtor_42890
@@ -474,7 +474,7 @@ void WorkAct_PerformWorkCtor_bffd0(CitizenComponent* const* citizenRef, uint32_t
             StorageComponent* storage = entObj->_entity->FindComponent<StorageComponent>();   // 0x140006270 (local_78)
             int count = 0;
             // LEFT: 0x14012cf10's C signature (COMP-b) takes the component as an integer.
-            count = CitizenComp_StorageComponent_QueryCount(storage); // 0x14012cf10
+            count = storage->QueryCount(); // 0x14012cf10
             bool countPositive = (count > 0); // 0x1400c05d0: TEST EAX,EAX; SETG BL
 
             ComponentEntity* entityInner = (*citizenRef)->_entity.Get();
