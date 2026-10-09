@@ -136,9 +136,9 @@ static void EnsureInit() {
 }
 
 // the citizen's ModelComponent (CharacterComponent +0x68).
+// Retail CheckPtrs +0x278 and +0x68 and reads through both with no test.
 static ModelComponent* CitizenModel(CitizenComponent* citizen) {
     CharacterComponent* ch = citizen->character.Get();
-    if (ch == nullptr) return nullptr;
     return ch->modelComponent.Get();
 }
 
@@ -153,11 +153,13 @@ static uint32_t ModelCell(const ModelComponent* model, const Map* map) {
 }
 
 // cooldown rate scalar: ( (IsDerivedFrom(citizen->_description, CitizenDescription) ? desc : 0)->_fd8 ) * mult.
-// Original reads *(0+0xd8) when the IsDerivedFrom check fails — guard to 0 to stay crash-safe.
+// Row 251 (B7 RES): retail reads [narrowed+0xd8] with no test (IsDerivedFrom, CMOVNZ over 0,
+// in 0x14010bc90 / 0x14010b3e0's three cooldown tails); the tree's 0.0 fallback is gone.
 static int64_t CooldownStamp(CitizenComponent* citizen, float mult) {
     Description* desc = citizen->_description;
-    bool ok = (desc && Object::IsDerivedFromNullSafe(desc, s_tid_CitizenDescription));
-    float rate = ok ? static_cast<CitizenDescription*>(desc)->_fd8 : 0.0f;
+    CitizenDescription* cd = desc->IsDerivedFrom(s_tid_CitizenDescription)
+                                 ? static_cast<CitizenDescription*>(desc) : nullptr;
+    float rate = cd->_fd8;
     System::Time stamp = {0};
     RtSystem_Time_Ctor(&stamp, rate * mult);
     return stamp._ticks;
@@ -165,7 +167,9 @@ static int64_t CooldownStamp(CitizenComponent* citizen, float mult) {
 
 // The shared StatusIconComponent "show icon" branch (decompile: found==0 + home storage empty).
 // Mirrors citizenai_handlers2.cpp SeekHappiness. flagBit distinguishes Gather (0x40)
-// from Gather2 (0x80) — the OR into the icon mask. Every deref null-guarded.
+// from Gather2 (0x80) — the OR into the icon mask. Row 251 (B7 RES): retail tests only the
+// home pointer and (before RefreshEntityFlags) the icon's entity; the home storage, the
+// StatusIconComponent, its entity's flags and g_gameSettings are read straight.
 // The home storage finder is 0x140008090 (the ResidenceComponent finder) for
 // both callers; `getCount` is the caller's count body, passed by name.
 static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(const Component*),
@@ -173,14 +177,13 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(c
     if (citizen->home == nullptr) return;
 
     ResidenceComponent* storComp = citizen->home->FindComponent<ResidenceComponent>();
-    int cnt = storComp ? getCount(storComp) : 0;
+    int cnt = getCount(storComp);
     if (cnt != 0) return;  // not empty -> nothing to show
 
     StatusIconComponent* mi = citizen->home->FindComponent<StatusIconComponent>();
-    if (mi == nullptr) return;
     ComponentEntity* inner = mi->_entity.Get();
     // gated: ((inner->_entityFlags >> 10) & 1) == 0
-    if (inner == nullptr || (inner->_entityFlags >> 10 & 1) != 0) return;
+    if ((inner->_entityFlags >> 10 & 1) != 0) return;
 
     // OR the icon mask, flagBit
     mi->_geometry.activeMask |= flagBit;
@@ -199,7 +202,7 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(c
     } else {
         // mask non-empty -> ensure in scene + run the slot-8 Tick
         GameSettings* settings = g_gameSettings;
-        if (settings && settings->statusIconEnable != '\0' &&
+        if (settings->statusIconEnable != '\0' &&
             mi->iconId < 0) {
             uint32_t id = GameUpdateLoop::_singleton->m_graphicsScene
                 ->AddObject(&mi->_geometry);
@@ -223,16 +226,15 @@ static void HideRenderWorkplaceMesh(CitizenComponent* citizen, int (*getCount)(c
 // whose vtable+0x10 type id == RawMaterialDescription, IsDerivedFrom-confirmed. Returns the child
 // (or null). Mirrors the inner do/while in the decompile.
 // (B4 P2 CAI-2: the "entity" is a material template, ComponentDescription +0x28 / +0x30.)
+// Row 251 (B7 RES): no null template / null child test (retail calls [[child]+0x10] straight).
 static RawMaterialDescription* FindRawMaterialChild(const ComponentDescription* entity) {
-    if (entity == nullptr) return nullptr;
     int count = entity->_subDescCount;
     Description** slots = entity->_subDescs;
     for (int i = 0; i < count; ++i) {
         Description* child = slots[i];
-        if (child == nullptr) continue;
         uint32_t tid = child->Type();   // slot 2
         if (tid == s_tid_RawMaterialDescription) {
-            if (Object::IsDerivedFromNullSafe(child, s_tid_RawMaterialDescription))
+            if (child->IsDerivedFrom(s_tid_RawMaterialDescription))
                 return static_cast<RawMaterialDescription*>(child);
             return nullptr;
         }
@@ -254,15 +256,14 @@ static RawMaterialDescription* FindRawMaterialChild(const ComponentDescription* 
 extern "C" int Storage_GetResourceCount2(const Component* self) {
     EnsureInit();
     // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
-    StorageComponent* stor = self->_entity->FindComponent<StorageComponent>();
+    StorageComponent* stor = self->_entity->FindComponent<StorageComponent>();   // no test
     int total = 0;
-    if (stor == nullptr) return 0;
     int count = stor->storageSlots._size;
     for (int i = 0; i < count; ++i) {
         StorageComponent::Item* rows = stor->storageSlots._data;
         ComponentDescription* row = rows[i]._resource;
         RawMaterialDescription* rm = FindRawMaterialChild(row);
-        if (rm && (rm->_flags >> 6 & 1) != 0) {
+        if ((rm->_flags >> 6 & 1) != 0) {   // 0x14012aba5: [rm+0x5c], no test
             total += rows[i]._count - rows[i]._reserve;
         }
     }
@@ -281,7 +282,7 @@ static void GatherTransferLoop(CitizenComponent* citizen, ::Object::InternalPtr<
     CitizenComp_Entity_impl_ef40(citizen, &carrierSlot, &entIBP, 0);
     while (carrierSlot != nullptr) {
         RawMaterialDescription* rm = FindRawMaterialChild(carrierSlot);
-        int slotCost = rm ? rm->_weight : 0x7fffffff;
+        int slotCost = rm->_weight;   // [rm+0x48], no test
         if (capLeft < slotCost) break;
         // 0x1400ca230 (was its ActChild_TransferToCarrier_ca230 forwarder): the path
         // result is the PickupStoredRawMaterial 0x1400bf790 built.
@@ -305,10 +306,7 @@ static void SelectAndTransfer(ComponentEntity* found, ::Object::InternalPtr<Acti
 
     for (;;) {
         // Storage(found) -> stor: 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
-        StorageComponent* stor = found->FindComponent<StorageComponent>();
-        if (stor == nullptr) {
-            return;
-        }
+        StorageComponent* stor = found->FindComponent<StorageComponent>();   // no test
 
         int rowCount = stor->storageSlots._size;                         // local_60
         int chosenIdx = -1;                                     // local_res8 low
@@ -320,7 +318,7 @@ static void SelectAndTransfer(ComponentEntity* found, ::Object::InternalPtr<Acti
             rowsBase = stor->storageSlots._data;
             ComponentDescription* child = rowsBase[cur]._resource;
             RawMaterialDescription* rm = FindRawMaterialChild(child);
-            bool flagged = rm && (rm->_flags >> 6 & 1) != 0;
+            bool flagged = (rm->_flags >> 6 & 1) != 0;
             int avail = rowsBase[cur]._count - rowsBase[cur]._reserve;
             if (flagged && avail > 0) {
                 if (rm->_unknown58)
@@ -331,8 +329,8 @@ static void SelectAndTransfer(ComponentEntity* found, ::Object::InternalPtr<Acti
 
         if (matchCount == 0) return;
         if (chosenIdx < 0) {
-            System::Random* rng = GameUpdateLoop::_singleton->m_random;
-            chosenIdx = rng ? (int)rng->Rand((uint32_t)matchCount) : 0;
+            System::Random* rng = GameUpdateLoop::_singleton->m_random;   // [gw+0xd8], no test
+            chosenIdx = (int)rng->Rand((uint32_t)matchCount);
         }
 
         // pass 2: find the chosenIdx-th match
@@ -343,7 +341,7 @@ static void SelectAndTransfer(ComponentEntity* found, ::Object::InternalPtr<Acti
             StorageComponent::Item* rb = stor->storageSlots._data;   // local_88
             ComponentDescription* child = rb[cur]._resource;
             RawMaterialDescription* rm = FindRawMaterialChild(child);
-            bool flagged = rm && (rm->_flags >> 6 & 1) != 0;
+            bool flagged = (rm->_flags >> 6 & 1) != 0;
             int avail = rb[cur]._count - rb[cur]._reserve;
             if (flagged && avail > 0) {
                 if (matchCounter == chosenIdx) { hitChild = child; hitCursor = cur; break; }
@@ -357,7 +355,7 @@ static void SelectAndTransfer(ComponentEntity* found, ::Object::InternalPtr<Acti
 
         // LAB_14010bb8a: resolve the chosen row child's RawMaterial cost, transfer if capLeft allows
         RawMaterialDescription* rm = FindRawMaterialChild(hitChild);
-        int cost = rm ? rm->_weight : 0x7fffffff;
+        int cost = rm->_weight;   // [rm+0x48], no test
         if (capLeft < cost) {
             return;
         }
@@ -384,7 +382,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount: the citizen entity's StorageComponent -> QueryCount
         StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
-        int qc = (own) ? own->QueryCount() : 0;
+        int qc = own->QueryCount();   // CheckPtr'd, no test
         if (qc > 0) {
             // 0x140115e60 LongTermPlan returns nothing; its caller keeps only the low byte
             // (ValidateAndEnterState), so the upper bits of r carry no value.
@@ -482,7 +480,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount
         StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
-        int qc = (own) ? own->QueryCount() : 0;
+        int qc = own->QueryCount();   // CheckPtr'd, no test
         if (qc > 0) {
             // 0x140115e60 LongTermPlan returns nothing; its caller keeps only the low byte
             // (ValidateAndEnterState), so the upper bits of r carry no value.

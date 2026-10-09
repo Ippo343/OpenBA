@@ -276,78 +276,6 @@ static void PickSetXfMember(Picking::Scene* scene, uint32_t id, const Math::Tran
     scene->SetTransform(id, *xform);
 }
 
-// Picking::Scene::AddMesh (Runtime 0x1801252e0) registers a pick mesh and returns its
-// id (stored at PickingComponent+0x28); ABI from Entity_impl_8f50 (exe 0x140128f50):
-// (scene, meshHandle, &transform, ownerIBP, 0, 0, 0). ENDGAME B.3.7: called as a
-// member (RegisterCitizenPickMesh); its file-local cache went with the last reader.
-// IsDerivedFrom is called through the import slot 0x140152a98 = Object::Base's member.
-static uint32_t         s_tidPickingDesc = 0;
-
-// Resolves no door: it only caches the PickingDescription type id.
-static bool s_tailInit = false;
-static void EnsureTailInit() {
-    if (s_tailInit) return;
-    // Picking-registration closure (port of Entity_impl_8f50 = PickingComponent OnAdded).
-    s_tidPickingDesc = PickingDescription::TypeId();
-    s_tailInit = true;
-}
-
-// Register the citizen's mesh in the Picking::Scene so it becomes clickable.
-// Faithful port of Entity_impl_8f50 (PickingComponent::OnAdded, exe 0x140128f50),
-// specialised to the move-tick (we already hold the sibling ModelComponent at
-// self+0x68 and the PickingComponent at self+0x70 — no Entity::FindComponent walk
-// needed). Runs once per citizen when its pick-id (PickingComponent+0x28) is still
-// unregistered (<0). Returns the new pick-id, or -1 if it could not register
-// (description not a PickingDescription / no pick-mesh table — standalone-safe).
-// Emit a one-shot reason string explaining why RegisterCitizenPickMesh bailed, so a
-// live run pinpoints the remaining gap without a debugger. Cheap (first 8 only).
-static void PickRegFail(const char* why) {
-    if (!MoveTickTraceOn()) return;
-    static int n = 0;
-    if (n < 8) { ++n; fprintf(stderr, "[PickReg] FAIL: %s\n", why); fflush(stderr); }
-}
-
-static int RegisterCitizenPickMesh(CharacterComponent* self) {
-    ModelComponent*   model    = self->modelComponent.Get();     // +0x68
-    PickingComponent* pickComp = self->pickingComponent.Get();   // +0x70
-    if (model == nullptr || pickComp == nullptr) { PickRegFail("model/pickComp null"); return -1; }
-
-    int16_t variantIdx   = model->meshGroup;   // sVar1 (+0x164)
-    int16_t modelVariant = model->meshIndex;   // sVar2 (+0x166)
-    if (modelVariant < 0) { PickRegFail("modelVariant<0"); return -1; } // (-1 < sVar2) gate
-
-    // The pick mesh comes from the PickingComponent's description (+0x18), which must
-    // be a PickingDescription. Its pick-mesh table is at desc+0x20, indexed exactly
-    // like the render mesh: *(*(desc+0x20) + variantIdx*0x10) + modelVariant*8.
-    Description* desc = pickComp->_description;
-    if (desc == nullptr || s_tidPickingDesc == 0) {
-        PickRegFail("desc null / tidPickingDesc 0"); return -1;
-    }
-    if (!desc->IsDerivedFrom(s_tidPickingDesc)) {
-        PickRegFail("desc !PickingDescription"); return -1;
-    }
-    PickingDescription::Group* meshTable = static_cast<PickingDescription*>(desc)->_groups;
-    if (meshTable == nullptr) { PickRegFail("meshTable(desc+0x20) null"); return -1; }
-    Picking::PickingMesh** group = meshTable[variantIdx].meshes;
-    if (group == nullptr) { PickRegFail("mesh group null"); return -1; }
-    Picking::PickingMesh* meshHandle = group[modelVariant];
-    if (meshHandle == nullptr) {
-        PickRegFail("meshHandle null"); return -1;
-    }
-
-    // Transform snapshot (0x1C bytes, model+0x148..+0x163) — the move-tick wrote it
-    // this frame; the original copies it into a stack Transform passed by pointer.
-    Math::Transform xform = model->transform;
-
-    Picking::Scene* scene = GameUpdateLoop::_singleton->m_pickingScene;   // +0x70
-    void* owner = pickComp->userData.Get();   // +0x30 entity IBP value
-    uint32_t id = scene->AddMesh(
-        Object::ExternalPtr<Picking::PickingMesh>(meshHandle),
-        xform, owner, 0, 0, nullptr);
-    pickComp->pickingId = static_cast<int32_t>(id);
-    return static_cast<int>(id);
-}
-
 static inline float fabs_f(float v) {
     // matches the disasm's CVTPS2PD; ANDPD abs-mask; CVTPD2PS — plain magnitude.
     return v < 0.0f ? -v : v;
@@ -368,11 +296,11 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
         return;
     }
 
-    // ---- TAIL (DORMANT in standalone: only reached when char-index >= 0) --
-    // Faithful transcription of the ModelComponent transform/animation update. Every
-    // engine slot / exe sub-callee below is null-guarded; the block touches the inert
-    // ModelComponent(+0x68)/MeshInstance/Geometry/Picking rendering layer.
-    EnsureTailInit();
+    // ---- TAIL (only reached when char-index >= 0) --------------------------
+    // Faithful transcription of the ModelComponent transform/animation update. Row 252
+    // (B7 RES): retail 0x1401094c0 tests nothing here but +0x70 (the PickingComponent) and
+    // its pick id (0x14010989b..): the model, the root-motion source and the terrain
+    // query's result are read straight; the tree's `if (model)` / `pf ?` tests are gone.
 
     // Retail reads Graphics::MeshInstance::_rootOnlyUpdates through its import
     // slot 0x140151f30; the class static is that byte (ENDGAME B.3.9 SS2).
@@ -419,11 +347,10 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
     // this = MeshInstance::RootAnimationOffset(model+0x28) (Vector3 by-value into retbuf);
     // speed = sqrt(this.Dot(this)) * self+0x38 — magnitude of the root-motion offset.
     float rootAnimVec[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (model)
-        // Retail retslot door; its body moves to the call site as exactly one
-        // construction into the SAME storage the door wrote (the 4th float stays 0).
-        ::new (static_cast<void*>(rootAnimVec)) Math::Vector3(
-            self->modelComponent->meshInstance.RootAnimationOffset());
+    // Retail retslot door; its body moves to the call site as exactly one
+    // construction into the SAME storage the door wrote (the 4th float stays 0).
+    ::new (static_cast<void*>(rootAnimVec)) Math::Vector3(
+        self->modelComponent->meshInstance.RootAnimationOffset());
     float dotOut = 0.0f;
     InlV3Dot(rootAnimVec, &dotOut, rootAnimVec);   // was s_slot_dot (Runtime call)
     // PERF (2026-09-05): 0x140132010 is our own WorkImpl_Sqrtf_132010 (= sqrtf); the
@@ -467,10 +394,10 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
                 pf = Reimpl_MapGetTerrainPos(gameWorld, triOut, pos, '\0', nullptr);   // 0x14009f3e0
                 // pos.z = Scalar(gridZ).Max(desc+0x44)  — clamp terrain height to the
                 // description's min. Const-member by-value ABI: (this=gridZ, retbuf, other).
-                float maxThis  = pf ? pf[2] : 0.0f;
+                float maxThis  = pf[2];
                 float maxOther = self->characterDescription->_f44;
                 float maxRet   = maxThis;
-                if (pf) { fx = pf[0]; fy = pf[1]; }
+                fx = pf[0]; fy = pf[1];
                 InlScalarMax(&maxThis, &maxRet, &maxOther);   // was s_slot_max (Runtime call)
                 pos[2] = maxRet;
                 pos[0] = fx; pos[1] = fy;
@@ -574,20 +501,11 @@ extern "C" void CharacterComponent_MoveTick_1094c0(CharacterComponent* self, con
         uint8_t localXform[136];
         Math::Transform* localXf = ::new (static_cast<void*>(localXform)) Math::Transform(
             self->modelComponent->transform);   // Transform copy ctor
+        // Row 252 (B7 RES): retail registers no pick mesh here -- the pick id is read and
+        // the transform pushed only when it is already >= 0. The registration is
+        // PickingComponent::OnAdded (0x140128f50) at RegisterEntity; the tree's second
+        // registrar (RegisterCitizenPickMesh, seven early returns) is gone.
         uint32_t pickId = static_cast<uint32_t>(self->pickingComponent->pickingId);
-        // First time through (pick-id still unregistered) register the citizen mesh in
-        // the Picking::Scene so it becomes clickable.
-        if (static_cast<int>(pickId) < 0) {
-            int newId = RegisterCitizenPickMesh(self);
-            pickId = static_cast<uint32_t>(newId);
-            if (MoveTickTraceOn()) {
-                static int s_pickLog = 0;
-                if (s_pickLog < 8) { ++s_pickLog;
-                    fprintf(stderr, "[PickReg] self=%p pickId=%d\n", (void*)self, newId);
-                    fflush(stderr);
-                }
-            }
-        }
         if (-1 < static_cast<int>(pickId)) {
             Picking::Scene* pickScene = GameUpdateLoop::_singleton->m_pickingScene;   // +0x70
             // [PerfX PICK_CULL -- NON-RETAIL] an off-screen citizen cannot be clicked, so

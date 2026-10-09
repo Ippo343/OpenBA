@@ -341,15 +341,19 @@ void WorkPlaceComponent::EvictRoster() {
 void WorkPlaceComponent::SetAccepting(bool accepting) {
     isAccepting = accepting ? 1 : 0;
 
+    // The owner's state machine state is read FIRST, on both paths: 0x14012fc2d-0x14012fc4a
+    // run before the accepting test at 0x14012fc5d. The pending state (+0x52), else the
+    // requested one (+0x50), read unguarded (B6 G4: the tree's "partial-world" null arm is gone).
+    StateMachineComponent* sm = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
+    uint8_t state = static_cast<uint8_t>(sm->stateMachine.pendingState);
+    if (sm->stateMachine.pendingState < 0) state = static_cast<uint8_t>(sm->stateMachine.currentInput);
+
     // Locate the building's StatusIconComponent (the "mesh" the icon toggles hang off).
+    // Retail reads every find's result with no test (0x14012fc9e, 0x14012fdde, 0x14012fe11,
+    // 0x14012fe51 / e84 / eb7, 0x14012ff1f): row 921, the tree's "partial-world" early
+    // return and its `if (mesh)` are gone (B7 RES).
     // LEFT: 0x14012c3f0 takes the icon as int64_t* (COMP-b's declaration).
     StatusIconComponent* mesh = _entity->FindComponent<StatusIconComponent>();   // 0x140002f90
-    if (!mesh) {
-        // Partial-world: no renderable icon. The eviction below is gameplay state, not
-        // visuals, so it must still run on the pause path.
-        if (!accepting) EvictRoster();
-        return;
-    }
 
     if (accepting) {
         // Clear the "closed"/"disabled" indicator bits (1 then 0) — a now-accepting
@@ -358,11 +362,6 @@ void WorkPlaceComponent::SetAccepting(bool accepting) {
         mesh->SetFlag(0, '\0');
     } else {
         // (a) raise the closed indicator, keyed on the owner's state machine state.
-        StateMachineComponent* sm = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
-        // The pending state (+0x52), else the requested one (+0x50), read unguarded
-        // (0x14012fc2d-0x14012fc4a; B6 G4: the tree's "partial-world" null arm is gone).
-        uint8_t state = static_cast<uint8_t>(sm->stateMachine.pendingState);
-        if (sm->stateMachine.pendingState < 0) state = static_cast<uint8_t>(sm->stateMachine.currentInput);
         bool normalState = ((state & 0xf6) == 0) && (state != 9);
         mesh->SetFlag(normalState ? 0 : 1, '\x01');
     }
@@ -376,12 +375,14 @@ void WorkPlaceComponent::SetAccepting(bool accepting) {
     } else if (workers._size == 0) {
         // Raise the "no workers" warning (bit 4) only for an UNSTAFFED workplace still on
         // its designated job (roster empty && profession == desc.profession) — the faithful raise.
+        // Retail 0x14012fee5-0x14012fef1: IsDerivedFrom, CMOVNZ over 0, then [desc+0x20]
+        // with no test (a non-WorkPlaceDescription reads null+0x20).
         WorkPlaceDescription* desc = WPC_Description(this);
-        if (desc && profession == desc->_profession0) {
+        if (profession == desc->_profession0) {
             // Re-find the mesh (mirrors the original's per-call finder) and raise bit 4. The
             // cull-guard + Scene Add + positioning + entity-notify all run inside the toggle.
             mesh = _entity->FindComponent<StatusIconComponent>();
-            if (mesh) mesh->SetFlag(4, '\x01');
+            mesh->SetFlag(4, '\x01');
         }
     }
 

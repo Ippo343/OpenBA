@@ -285,7 +285,7 @@ void AppendRoutePoint(BoatComponent* comp, const float pt[3]) {
         dst->y = src[1];
         dst->z = src[2];
     }
-    if (oldBase != newBase && oldBase) ::System::MemoryAllocator::MemFree(oldBase);
+    if (oldBase != newBase) ::System::MemoryAllocator::MemFree(oldBase);   // no null test (retail)
 }
 
 // (int)(coord + mapSize/2) clamped into [0, mapSize-1] — retail's tile conversion,
@@ -306,8 +306,11 @@ inline bool TileInMap(float x, float y, int mapSize) {
 
 }  // namespace
 
+// Row 350 (B7 RES): 0x1400456e0 tests only the destination (0x1400456ff `lVar20 == 0`);
+// the argument, the release path's StateMachineComponent and owner node, the world, the
+// terrain, the WorldGeometry, its contour record and the route array are read straight.
 void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* destEntityIBP) {
-    ComponentEntity* dest = destEntityIBP ? destEntityIBP->Get() : nullptr;
+    ComponentEntity* dest = destEntityIBP->Get();
     destination = dest;
 
     // ── Null destination: RELEASE the boat ───────────────────────────────────────
@@ -318,10 +321,8 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     // the table is gone with the table read: a compiler vtable slot is never null.
     if (dest == nullptr) {
         StateMachineComponent* state = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
-        if (!state) return;
         StateMachine* ownerSlot = &state->stateMachine;
         ControllerComponent::Controller* owner = ownerSlot->current;
-        if (!owner) return;
         owner->PostEvent(ownerSlot, static_cast<int>(state->stateMachine.activeState), 1);
         return;
     }
@@ -340,34 +341,30 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     Math::Vector3 dockForward = Math::Vector3::FromYawPitch(*destYaw, zeroPitch);
 
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    if (!gw) return;
     // WorldGeometry::_contourOutlines (+0x1E0): its record 0 is the polyline.
     Map* terrain   = gw->m_game;
     WorldGeometry* wgeo = gw->m_worldGeometry;
-    if (!terrain || !wgeo) return;
 
     const RawArray<Math::Vector2>* poly = wgeo->_contourOutlines.data;   // record 0 — retail
-    const int   polyCount = poly ? poly->size : 0; // int32 (140045840)
-    const Math::Vector2* polyPts = poly ? poly->data : nullptr;
+    const int   polyCount = poly->size;   // int32 (140045840), [[wgeo+0x1e0]+8]
+    const Math::Vector2* polyPts = poly->data;
 
     // ── 1. the approach lane: every polyline point before the map ────────────────
     int consumed = 0;      // points examined, including the first in-map one
     int resumeIdx = 0;     // where piece 3 restarts
     float entryX = 0.0f, entryY = 0.0f;
-    if (polyPts) {
-        for (int i = 0; i < polyCount; ++i) {
-            const float px = polyPts[i].x;
-            const float py = polyPts[i].y;
-            ++consumed;
-            entryX = px;
-            entryY = py;
-            if (TileInMap(px, py, terrain->size)) { resumeIdx = i; break; }
-            const float pt[3] = {px, py, 0.0f};
-            AppendRoutePoint(this, pt);
-            entryX = 0.0f;
-            entryY = 0.0f;
-            resumeIdx = 0;
-        }
+    for (int i = 0; i < polyCount; ++i) {
+        const float px = polyPts[i].x;
+        const float py = polyPts[i].y;
+        ++consumed;
+        entryX = px;
+        entryY = py;
+        if (TileInMap(px, py, terrain->size)) { resumeIdx = i; break; }
+        const float pt[3] = {px, py, 0.0f};
+        AppendRoutePoint(this, pt);
+        entryX = 0.0f;
+        entryY = 0.0f;
+        resumeIdx = 0;
     }
 
     // ── 2a. the exit: scan forward for the first point back OUTSIDE the map ──────
@@ -375,15 +372,13 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     // is skipped. That is retail's arithmetic (uVar26 is pre-incremented at 140045c9e
     // before the point is read), not an off-by-one here.
     float exitX = 0.0f, exitY = 0.0f;
-    if (polyPts) {
-        for (int i = consumed; i < polyCount; ++i) {
-            const float px = polyPts[i].x;
-            const float py = polyPts[i].y;
-            resumeIdx = i + 1;
-            if (!TileInMap(px, py, terrain->size)) break;
-            exitX = px;
-            exitY = py;
-        }
+    for (int i = consumed; i < polyCount; ++i) {
+        const float px = polyPts[i].x;
+        const float py = polyPts[i].y;
+        resumeIdx = i + 1;
+        if (!TileInMap(px, py, terrain->size)) break;
+        exitX = px;
+        exitY = py;
     }
 
     // ── 2b. the two A* legs ─────────────────────────────────────────────────────
@@ -439,11 +434,9 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     }
 
     // ── 3. the departure lane: the rest of the polyline ─────────────────────────
-    if (polyPts) {
-        for (int i = resumeIdx; i < polyCount; ++i) {
-            const float pt[3] = {polyPts[i].x, polyPts[i].y, 0.0f};
-            AppendRoutePoint(this, pt);
-        }
+    for (int i = resumeIdx; i < polyCount; ++i) {
+        const float pt[3] = {polyPts[i].x, polyPts[i].y, 0.0f};
+        AppendRoutePoint(this, pt);
     }
 
     // ── the dock approach heading ───────────────────────────────────────────────
@@ -455,8 +448,8 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
     // degenerate (an empty polyline, or both A* legs failed), and the fix belongs upstream
     // at whichever of those produced it, not in a guard that silently yields a wrong yaw.
     const int nearest = BoatRoute_NearestPointIndex(this, destPos);
-    const Math::Vector3* pts = route._data;
-    if (pts) {
+    const Math::Vector3* pts = route._data;   // [this+0x60], no test
+    {
         const Math::Vector3& a = pts[nearest];
         const Math::Vector3& b = pts[nearest - 2];
         const Math::Vector3 dir(a.x - b.x, a.y - b.y, 0.0f);

@@ -60,24 +60,14 @@ namespace {
 // +0x48 member (StateMachineComponent::stateMachine).
 // ---------------------------------------------------------------------------
 void ForceSMState(ComponentEntity* owner, int targetState, const char* /*who*/) {
+    // Row 922 (B7 RES): retail 0x14011e82c-0x14011e871 reads the found component
+    // ([RBX+0x51]) and the active node ([[RBX+0x48]] slot +0x8) with no test; the tree's
+    // null-component and empty-chain returns (the pre-B "inert controller" reason) are gone.
     StateMachineComponent* L =
         owner->FindComponent<StateMachineComponent>();   // 0x140003ea0
-    if (!L) {
-        return;
-    }
 
     StateMachine* sm = &L->stateMachine;          // +0x48
     ControllerComponent::Controller** node = &sm->current;  // sm[0] = the active state node
-
-    // STANDALONE DIVERGENCE (deliberate, same one statemachinecomponent.cpp:558
-    // already carries): retail always has a linked state-node chain here, so it
-    // derefs the node unguarded. In standalone a component whose ControllerComponent
-    // is still inert has an EMPTY chain (sm[0] == 0) and the unguarded deref is a
-    // null crash that says nothing. Report the outcome and leave, rather than
-    // pretending the state was requested.
-    if (*node == nullptr) {
-        return;
-    }
 
     int32_t out = targetState;
 
@@ -116,7 +106,7 @@ void ForceSMState(ComponentEntity* owner, int targetState, const char* /*who*/) 
 bool DestroyComponent::IsBeingDemolished() {
     StateMachineComponent* L =
         _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
-    if (!L) return false;   // standalone: no SMC => not demolishing
+    // 0x14011e6bb-0x14011e6c0: [RCX+0x52] read with no test (B7 RES, with row 922).
     int8_t s = L->stateMachine.pendingState;                  // +0x52
     if (s < 0) s = L->stateMachine.currentInput;             // +0x50
     if (s == 6) return true;
@@ -145,7 +135,7 @@ bool DestroyComponent::BeginBurning(const System::Time* time) {
     }
 
     burning = true;
-    burnTime._ticks = time ? time->_ticks : 0;
+    burnTime._ticks = time->_ticks;   // 0x14011e802: MOV RAX,[RSI], no test (B7 RES)
 
     ForceSMState(_entity.Get(), 3, "begin");
     return true;

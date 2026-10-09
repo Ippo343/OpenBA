@@ -71,22 +71,10 @@
 #include "Game/Map.h"                        // size / cells / pathfinder / regionGraph
 #include "Game/PathfinderThread.h"           // SetCellTerrain (0x1400a6fe0)
 
-// Scan an entity's component array (+0x30 ptr / +0x38 count) for type-id `tid`,
-// IsDerivedFrom-checked — the shared body of 4800/6c60/9740's inner loops.
-// The type id is the component's vtable slot [2] (Type()).
-static Component* FindComponentByTypeId(ComponentEntity* entity, uint32_t tid) {
-    Component* found = nullptr;
-    int n = entity->_components._size;                           // +0x38
-    Object::InternalPtr<Component>* comps = entity->_components._data;   // +0x30
-    for (int i = 0; i < n; i++) {
-        Component* c = comps[i].Get();
-        if (c && c->Type() == tid) {
-            if (Object::IsDerivedFromNullSafe(c, tid)) found = c;
-            break;   // retail breaks on first type-id match, derived or not
-        }
-    }
-    return found;
-}
+// Row 310 G1 (B7 RES): 4800 / 6c60 / 9740's inner component scans are
+// ComponentEntity::FindComponent<T>()'s shape (`[[slot]+0x10]` with no null-slot test,
+// IsDerivedFrom + CMOVNZ on the first type match); the tree's FindComponentByTypeId with
+// its null-slot skip is gone, and so are the bodies' tree-only null returns below.
 
 // ---------------------------------------------------------------- 0x140113a70
 // CitizenComponent::OrFamilyFlags: walk the circular children ring (+0x260 head,
@@ -97,10 +85,7 @@ void CitizenComponent::OrFamilyFlags(uint32_t flags) {
     if (!cur) return;
     do {
         cur->happinessFlags |= flags;
-        cur = cur->_nextSibling.Get();
-        // [STANDALONE GUARD] retail rings are always circular; a half-built ring
-        // would spin *(0+0x88) here, so bail instead.
-        if (!cur) return;
+        cur = cur->_nextSibling.Get();   // 0x140113ab6: [cur+0x268], no test before the compare
     } while (cur != head->Get());
 }
 
@@ -109,20 +94,19 @@ void CitizenComponent::OrFamilyFlags(uint32_t flags) {
 // (+0x48 int cells, +0x50 count) with wrap. A slot is usable if its map cell is
 // empty OR its occupant entity has no TombstoneComponent. Returns slot index or
 // 0xffffffff when every cell already holds a tombstone.
+// Row 310 (B7 RES), 0x140046c60: Rand(count) is drawn FIRST, before the count test (the
+// tree returned on count <= 0 without drawing); no world test.
 extern "C" uint32_t Cemetery_PickFreeSlot_6c60(CemeteryComponent* self) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    if (!world) return 0xffffffffu;
-    int count = self->plots._size;                                 // +0x50
-    if (count <= 0) return 0xffffffffu;
     System::Random* rng = world->m_random;                       // +0xd8
-    int idx = static_cast<int>(rng->Rand(static_cast<uint32_t>(count)));
+    int idx = static_cast<int>(rng->Rand(static_cast<uint32_t>(self->plots._size)));   // +0x50
+    int count = self->plots._size;
     Map* map = world->m_game;                                    // +0xf8
-    uint32_t tid = TombstoneComponent::TypeId();
     for (int tries = 0; tries < count; tries++) {
         int cell = self->plots[idx];                             // +0x48
         ComponentEntity* occupant = map->cells.GetData()[cell].occupant.Get();   // +0x80 -> +0x08, stride 0x30
         if (!occupant) return static_cast<uint32_t>(idx);      // empty cell — free slot
-        Component* ts = FindComponentByTypeId(occupant, tid);
+        Component* ts = occupant->FindComponent<TombstoneComponent>();   // cell 0x1401c4a30
         Component* tsIBP = ts;
         if (!tsIBP) return static_cast<uint32_t>(idx);         // occupant is not a tombstone
         idx = (idx + 1 >= count) ? 0 : idx + 1;
@@ -138,21 +122,18 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(CemeteryComponent* self) {
 extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior* listMgr, CemeteryComponent** out,
                                                                   uint32_t citizenCell) {
     *out = nullptr;
+    // Row 310 (B7 RES), 0x140089740: no world / list / slot test.
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    if (!world || !listMgr) return out;
     Map* map = world->m_game;                                    // +0xf8
     Map* mapGrid = map;
     int best = 0x7fffffff;
     int count = listMgr->cemeteries._size;                          // +0x48
-    uint32_t tidInteract = InteractComponent::TypeId();
     for (int i = 0; i < count; i++) {
         Object::InternalPtr<CemeteryComponent>* slot = &listMgr->cemeteries._data[i];      // +0x40
         CemeteryComponent* comp = slot->Get();
-        if (!comp) continue;   // [STANDALONE GUARD]
         ComponentEntity* entity = comp->_entity.Get();                 // +0x10
         // The cemetery's map position = its InteractComponent's resolved position.
-        Component* ic = FindComponentByTypeId(entity, tidInteract);
-        InteractComponent* icIBP = static_cast<InteractComponent*>(ic);   // IsDerivedFrom-checked above
+        InteractComponent* icIBP = entity->FindComponent<InteractComponent>();   // cell 0x1401c7900
         Math::Vector3 pos;
         InteractNodePosition(icIBP, &pos, 0, 0, nullptr);         // 0x140122e20
         int size = map->size;
@@ -184,8 +165,7 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
 // Wrap the entity's TombstoneComponent (or null) in the out InternalBasePtr.
 extern "C" TombstoneComponent** ComponentEntity_FindTombstoneComp_4800(ComponentEntity* entity,
                                                                        TombstoneComponent** outIBP) {
-    Component* found = FindComponentByTypeId(entity, TombstoneComponent::TypeId());
-    *outIBP = static_cast<TombstoneComponent*>(found);   // IsDerivedFrom-checked; the InternalBasePtr ctor's one store
+    *outIBP = entity->FindComponent<TombstoneComponent>();   // the InternalBasePtr ctor's one store
     return outIBP;
 }
 
@@ -194,15 +174,17 @@ extern "C" TombstoneComponent** ComponentEntity_FindTombstoneComp_4800(Component
 // (x,y at +0x28/+0x2a, extent 0x10001 at +0x2c, yaw degrees normalized to
 // [0,360) at +0x30) and set the model component's transform (+0x148 quat+pos,
 // +0x168 yaw) from Transform::FromYawPitchOffset at terrain height.
+// Row 994 (0x140057b20 part, B7 RES): 0x140057b2e-0x140057ba0 reads [gw+0xf8], the
+// receiver's +0x10 and both finds' results (MOV word [RCX+0x28] at 0x140057ba0) with no
+// test; neither D4(a) nor (b) applies (no harness route, no shared template, no PORT GAP),
+// so the tree's world / receiver / component returns are gone.
 extern "C" void Entity_PlaceAtCell_7b20(TombstoneComponent* self, int cell, float yawDeg) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    if (!world || !self) return;
     Map* map = world->m_game;                                    // +0xf8
     int size = map->size;
     ComponentEntity* entity = self->_entity.Get();                     // +0x10
     MapComponent* posIBP = entity->FindComponent<MapComponent>();        // 0x140004680
     ModelComponent* modelIBP = entity->FindComponent<ModelComponent>();  // 0x140003f60
-    if (!posIBP || !modelIBP) return;   // [STANDALONE GUARD] retail derefs unguarded
     int yaw = static_cast<int>(yawDeg);
     posIBP->tileX0 = static_cast<int16_t>(cell % size);         // +0x28
     posIBP->tileY0 = static_cast<int16_t>(cell / size);         // +0x2a
@@ -274,8 +256,10 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
 // bit-8 state at +0xd0 (loading/shutdown) — retail early-outs with AL=0 there.
 uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) {
     void* selfV = this;
+    // Row 310 (B7 RES), 0x140116dd0: no world test, the character / model read straight,
+    // the second pick's slot used as is, the entity list read straight. Its tests are the
+    // +0xd0 bit 8, the home, the cemetery, parent, spouse and the entity pointer only.
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    if (!world) return 0;   // [STANDALONE GUARD]
     if ((world->m_gameFlags >> 8 & 1) != 0) return 0;
 
     // --- Death position: the home's InteractComponent (+0x238) if housed, else the
@@ -283,14 +267,10 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
     Math::Vector3 pos;
     if (home == nullptr) {
         CharacterComponent* ch = character.Get();
-        if (ch) {   // [STANDALONE GUARD] retail derefs unguarded
-            ModelComponent* homeEnt = ch->modelComponent.Get();
-            if (homeEnt) {
-                pos.x = homeEnt->transform.translation.x;   // +0x158
-                pos.y = homeEnt->transform.translation.y;   // +0x15c
-                pos.z = homeEnt->transform.translation.z;   // +0x160
-            }
-        }
+        ModelComponent* homeEnt = ch->modelComponent.Get();
+        pos.x = homeEnt->transform.translation.x;   // +0x158
+        pos.y = homeEnt->transform.translation.y;   // +0x15c
+        pos.z = homeEnt->transform.translation.z;   // +0x160
     } else {
         InteractNodePosition(home->FindComponent<InteractComponent>(), &pos, 0, 0, nullptr);   // 0x140122e20
     }
@@ -336,20 +316,11 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
         flags = 0x40u;
         const int plotsForTrace = cem->plots._size;   // +0x50
         int slot = static_cast<int>(Cemetery_PickFreeSlot_6c60(cem));
-        if (slot >= 0) {   // [STANDALONE GUARD] retail indexes unguarded (9740 just proved >= 0)
-            int graveCell = cem->plots[slot];       // +0x48
-            Cemetery_SpawnTombstone_6a90(cem, graveCell, cell, world);
-            fprintf(stderr, "[Burial] BURIED: citizen=%p cem=%p townCemeteries=%d "
-                            "plots=%d slot=%d graveCell=%d\n",
-                    selfV, cem, cemCountForTrace, plotsForTrace, slot, graveCell);
-        } else {
-            // The flag still says buried (retail sets 0x40 before picking), but no
-            // tombstone exists -- worth saying out loud, it is not the same outcome.
-            fprintf(stderr, "[Burial] CEMETERY FOUND BUT NO SLOT: citizen=%p cem=%p "
-                            "plots=%d (plots==0 => BuildPlotGrid bailed; see "
-                            "[CemeteryPlots]) flags=0x%x\n",
-                    selfV, cem, plotsForTrace, flags);
-        }
+        int graveCell = cem->plots[slot];       // +0x48, indexed with no test (9740 just found a slot)
+        Cemetery_SpawnTombstone_6a90(cem, graveCell, cell, world);
+        fprintf(stderr, "[Burial] BURIED: citizen=%p cem=%p townCemeteries=%d "
+                        "plots=%d slot=%d graveCell=%d\n",
+                selfV, cem, cemCountForTrace, plotsForTrace, slot, graveCell);
         fflush(stderr);
     }
 
@@ -370,8 +341,8 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
     // --- Queue the citizen entity for removal (the EntityList's removal list at
     //     +0xd0) ---
     ComponentEntity* entIBP = _entity.Get();
-    EntityList* loop = world->m_entityList;
-    if (entIBP != nullptr && loop) {
+    EntityList* loop = world->m_entityList;   // [gw+0xe8], no test
+    if (entIBP != nullptr) {
         if ((entIBP->_entityFlags >> 10 & 1) == 0) {
             MarkEntityForRemoval(entIBP);   // 0x1400c2ea0
             loop->removalList

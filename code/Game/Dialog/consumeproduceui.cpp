@@ -12,6 +12,7 @@
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Dialog/exe_bodies.h"
+#include "Action/exe_bodies.h"   // PickConsumeRecipe (0x140119470)
 #include "Object/factory_registration.h"
 #include "system/String.h"
 #include <cstdint>
@@ -186,7 +187,7 @@ void ConsumeProduceUI::OnCreated() {
         }
 
         // Get current product index and set combo selection
-        uint32_t productIdx = fn_GetCurrentProductIndex(component);
+        uint32_t productIdx = static_cast<uint32_t>(PickConsumeRecipe(component));   // 0x140119470
         int selIdx = (int)productIdx;
         if ((int)productIdx < 0) {
             // Invalid — reset to 0

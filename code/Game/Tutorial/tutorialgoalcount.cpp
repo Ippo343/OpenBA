@@ -180,13 +180,6 @@ Object::External* TutorialGoalCount::Reconstruct() {
 }
 void TutorialGoalCount::Destruct() { this->~TutorialGoalCount(); }
 
-// The tree's finders (Entity/exe_bodies.h's fn_FindComponent_*) answered null
-// for a null entity; retail's FindComponent<T> instances have no such test
-// (known_port_issues 14d row 82). Kept.
-template <class T>
-static T* FindOnEntity(ComponentEntity* entity) {
-    return entity ? entity->FindComponent<T>() : nullptr;
-}
 
 // ============================================================
 // TutorialGoalCount::Check (vtable +0x40, 0x1400df290)
@@ -223,10 +216,11 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     uint32_t mode = countMode;
     int count = 0;
 
-    if (GameUpdateLoop::_singleton == nullptr) {
-        goto compare;
-    }
-
+    // Row 82 (B7 RES): retail 0x1400df290 tests no singleton, no list, no entity and no
+    // found component: every case reads [g_pGameWorldSingleton+0xf0] / +0xf8 and the
+    // FindComponent results (0x140002e10 / 0x140015140 / 0x140006270 / 0x140003ea0)
+    // through CheckPtr only. Its only tests are the two BST finds' results (cases 7 / 10)
+    // and case 9's element / narrowing.
     switch (mode) {
     // --------------------------------------------------------
     // Case 0: Count buildings of a type
@@ -234,9 +228,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     case 0: {
         const ComponentDescription* typePtr = ResolveTypePtr<ComponentDescription>(typeRef);
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (worldData) {
-            count = (int)worldData->CountByTemplate(typePtr);
-        }
+        count = (int)worldData->CountByTemplate(typePtr);
         break;
     }
 
@@ -245,20 +237,17 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     // --------------------------------------------------------
     // Iterates the citizen list (CitizenBehavior +0xA0, count +0xA8). For each
     // adult (age >= the description's adult age) not at school, checks if their
-    // assigned profession matches the target type. The null-citizen and
-    // null-description skips are the tree's.
+    // assigned profession matches the target type. Retail reads [[c+0x288]+0x44] and
+    // [c+0x3c] of each CheckPtr'd citizen with no test.
     case 1: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (!worldData) break;
         int citizenCount = worldData->citizens._size;
         int matched = 0;
         for (int i = 0; i < citizenCount; i++) {
             const CitizenComponent* citizen = worldData->citizens._data[i].Get();
-            if (!citizen) continue;
 
             float age = citizen->age;
             const CitizenDescription* desc = citizen->description;
-            if (!desc) continue;
             if (age < desc->adultAge) continue;
 
             if (citizen->school != nullptr) continue;
@@ -278,9 +267,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     // --------------------------------------------------------
     case 2: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (worldData) {
-            count = worldData->field_0x20._size;
-        }
+        count = worldData->field_0x20._size;
         break;
     }
 
@@ -290,9 +277,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     case 3: {
         const Profession* typePtr = ResolveTypePtr<Profession>(typeRef);
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (worldData) {
-            count = (int)worldData->CountByProfession(typePtr);
-        }
+        count = (int)worldData->CountByProfession(typePtr);
         break;
     }
 
@@ -313,9 +298,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     // stepCutter7 (step 60): count=4 target=3 ge=0, forever.
     case 4: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (worldData) {
-            count = worldData->field_0x00._size;
-        }
+        count = worldData->field_0x00._size;
         break;
     }
 
@@ -324,9 +307,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     // --------------------------------------------------------
     case 5: {
         Map* worldData2 = GameUpdateLoop::_singleton->m_game;
-        if (worldData2) {
-            count = (worldData2->field_0xE8.count > 0) ? 1 : 0;
-        }
+        count = (worldData2->field_0xE8.count > 0) ? 1 : 0;
         break;
     }
 
@@ -340,7 +321,6 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
         // Resolve profession type (re-resolved inside loop to match original)
         const Profession* profType = ResolveTypePtr<Profession>(typeRef);
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (!worldData) break;
 
         int profCount = (int)worldData->CountByProfession(profType);
         int total = 0;
@@ -351,16 +331,16 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
 
             // Re-read worldData each iteration (matches original)
             worldData = GameUpdateLoop::_singleton->m_citizenList;
+            // Retail reads the miss's null node's +0x8 (no test after the find).
             ProfessionBucket* node = BSTFind(worldData->field_0x100._root, curProfType);
-            if (!node) continue;
 
             ComponentEntity* entity = node->element.entities._data[i].Get();
 
             // Find WorkPlaceComponent (FUN_140002e10, type 0x1401c80e0)
-            WorkPlaceComponent* workplace = FindOnEntity<WorkPlaceComponent>(entity);
+            WorkPlaceComponent* workplace = entity->FindComponent<WorkPlaceComponent>();
 
             // Check the workplace is accepting (+0x50)
-            if (workplace && workplace->isAccepting) {
+            if (workplace->isAccepting) {
                 // Get work capacity (available job slots)
                 total += workplace->GetMaxWorkers();   // 0x14012fbb0
             }
@@ -376,7 +356,6 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     // TradeComponent, and sums the stock tree's (+0x60) quantity for the type.
     case 7: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (!worldData) break;
         int entityCount = worldData->field_0x30._size;
         Object::InternalPtr<ComponentEntity>* entityArray = worldData->field_0x30._data;
         int total = 0;
@@ -385,12 +364,10 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
             ComponentEntity* entity = entityArray[i].Get();
 
             // Find TradeComponent (FUN_140015140, the tree's fn_FindComponent_Building)
-            TradeComponent* building = FindOnEntity<TradeComponent>(entity);
+            TradeComponent* building = entity->FindComponent<TradeComponent>();
 
             // Resolve the resource description type
             const ComponentDescription* typePtr = ResolveTypePtr<ComponentDescription>(typeRef);
-
-            if (!building) continue;
 
             // Search the trading post's stock tree at +0x60 for the type
             const TradeResourceNode* storageNode = TradeOrderBSTFind(building->stock.root, typePtr);
@@ -415,7 +392,6 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     // item counts of its slots.
     case 8: {
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (!worldData) break;
         int entityCount = worldData->field_0x30._size;
         Object::InternalPtr<ComponentEntity>* entityArray = worldData->field_0x30._data;
         int total = 0;
@@ -424,8 +400,7 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
             ComponentEntity* entity = entityArray[i].Get();
 
             // Find StorageComponent
-            StorageComponent* storage = FindOnEntity<StorageComponent>(entity);
-            if (!storage) continue;
+            StorageComponent* storage = entity->FindComponent<StorageComponent>();
 
             int itemCount = storage->storageSlots._size;
             for (int j = 0; j < itemCount; j++) {
@@ -474,7 +449,6 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
     case 10: {
         const ComponentDescription* typePtr = ResolveTypePtr<ComponentDescription>(typeRef);
         CitizenBehavior* worldData = GameUpdateLoop::_singleton->m_citizenList;
-        if (!worldData) break;
 
         int buildingCount = (int)worldData->CountByTemplate(typePtr);
         int occupied = 0;
@@ -485,13 +459,13 @@ bool TutorialGoalCount::IsComplete(const System::Time* param2, void* param3) {
             worldData = GameUpdateLoop::_singleton->m_citizenList;
             TemplateBucket* node = BSTFind(worldData->field_0x160._root, curTypePtr);
 
+            // Retail's miss builds InternalBasePtr(null) and finds on it (0x1400df4dc).
             ComponentEntity* entity = nullptr;
             if (node) {
                 entity = node->element.entities._data[i].Get();
             }
 
-            StateMachineComponent* buildState = FindOnEntity<StateMachineComponent>(entity);
-            if (!buildState) continue;
+            StateMachineComponent* buildState = entity->FindComponent<StateMachineComponent>();
 
             // The reported state: +0x52 pending, or +0x50 when nothing is pending.
             int8_t checkFlag = buildState->stateMachine.pendingState;
