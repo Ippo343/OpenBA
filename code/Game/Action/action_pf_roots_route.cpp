@@ -82,28 +82,16 @@
 
 namespace {
 
-// The tree's null-slot guard (retail has none): the scans compare each slot's Type()
-// (slot 2) with the class's id; the exe's slots are never null, but in standalone a
-// partially-built entity can leave one null (crash READ of 0x0 on the vtable load). A null
-// slot matches no type id, so the scan skips it. Otherwise the retail FindComponent<T>
-// shape (ComponentEntity.h): first Type() match, then IsDerivedFrom.
+// The inline sub-description scan retail repeats (0x14008d5fd-0x14008d65b for the
+// RawMaterialDescription, cell 0x1401c7cb8): each entry's Type() through [RCX] with no
+// null test, the first match narrowed with IsDerivedFrom, a miss yields 0 (B6 14d G52:
+// the old null-slot skip is gone; the component scans are ComponentEntity::FindComponent<T>).
 template <class T>
-T* FindComponentSkippingNull(const ComponentEntity* entity) {
-    for (int32_t i = 0; i < entity->_components._size; ++i) {
-        Component* c = entity->_components[i].Get();
-        if (c != nullptr && c->Type() == T::TypeId())
-            return ::Object::IsDerivedFromNullSafe(c, T::TypeId()) ? static_cast<T*>(c) : nullptr;
-    }
-    return nullptr;
-}
-
-// The same scan over a template's sub-descriptions.
-template <class T>
-const T* FindDescriptionSkippingNull(const ComponentDescription* material) {
+const T* FindSubDescription(const ComponentDescription* material) {
     for (int32_t i = 0; i < material->_subDescCount; ++i) {
         Description* d = material->_subDescs[i];
-        if (d != nullptr && d->Type() == T::TypeId())
-            return ::Object::IsDerivedFromNullSafe(d, T::TypeId()) ? static_cast<const T*>(d) : nullptr;
+        if (d->Type() == T::TypeId())
+            return d->IsDerivedFrom(T::TypeId()) ? static_cast<const T*>(d) : nullptr;
     }
     return nullptr;
 }
@@ -166,9 +154,8 @@ bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* materi
         return false;
     }
     const int stored = storage->QueryCount();   // 0x14012cf10
-    const RawMaterialDescription* raw = FindDescriptionSkippingNull<RawMaterialDescription>(material);
-    // The tree's guard: retail reads the weight unconditionally.
-    const int unitWeight = raw ? raw->_weight : 0;
+    const RawMaterialDescription* raw = FindSubDescription<RawMaterialDescription>(material);
+    const int unitWeight = raw->_weight;   // 0x14012cd80 reads +0x48 through the narrowed (or 0) pointer with no test (B6 14d G54)
     const int need = unitWeight * count + stored;
     return need <= storage->capacity;
 }
@@ -336,7 +323,7 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
     float bestPos[3] = {0, 0, 0};
 
     // The drop-source material's RawMaterialDescription.
-    const RawMaterialDescription* source = FindDescriptionSkippingNull<RawMaterialDescription>(material);
+    const RawMaterialDescription* source = FindSubDescription<RawMaterialDescription>(material);
 
     int pass = 0;
     do {
@@ -361,28 +348,25 @@ ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEnti
         for (int i = 0; i < n; ++i) {
             ComponentEntity* entity = snapshot[i];
             if (entity == exclude->Get()) continue;
-            StorageLocationComponent* location = FindComponentSkippingNull<StorageLocationComponent>(entity);
-            MarketLocationComponent* market = FindComponentSkippingNull<MarketLocationComponent>(entity);
-            StorageComponent* storage = FindComponentSkippingNull<StorageComponent>(entity);
+            // B6 (14d G52 / G53): the three inline component scans (cells 0x1401c7ee8,
+            // 0x1401c4560, 0x1401c7e78) have no null-slot skip; the location's description
+            // is narrowed (IsDerivedFrom, cell 0x1401c7f20) and its +0x20 read with no test;
+            // the source's +0x5c is read with no test (the decompile's `pvVar19 + 0x5c`).
+            StorageLocationComponent* location = entity->FindComponent<StorageLocationComponent>();
+            MarketLocationComponent* market = entity->FindComponent<MarketLocationComponent>();
+            StorageComponent* storage = entity->FindComponent<StorageComponent>();
             if (location != nullptr) {
                 Description* desc = location->_description;
-                // Guard: the exe derefs this description unconditionally, but in
-                // standalone the location's description can be null/unresolved, and
-                // Runtime IsDerivedFrom has no null-check (crash READ 0x0).
                 const StorageLocationDescription* locDesc =
-                    (desc && ::Object::IsDerivedFromNullSafe(desc, StorageLocationDescription::TypeId()))
+                    desc->IsDerivedFrom(StorageLocationDescription::TypeId())
                         ? static_cast<const StorageLocationDescription*>(desc) : nullptr;
-                uint32_t accepts = locDesc ? locDesc->_locationType : 0;
+                uint32_t accepts = locDesc->_locationType;
                 if (accepts == 0) {
                     StorageComponent* ownerStorage =
-                        FindComponentSkippingNull<StorageComponent>(location->_entity.Get());
+                        location->_entity->FindComponent<StorageComponent>();
                     accepts = ownerStorage->rawMaterialFlags;
                 }
-                // Guard: the drop-source RawMaterialDescription is non-null in the exe;
-                // standalone can leave it null. No source mask => the candidate can't
-                // accept this material => skip it.
-                uint32_t srcMask = source ? source->_flags : 0;
-                if ((srcMask & accepts) == 0) continue;
+                if ((source->_flags & accepts) == 0) continue;
             }
             bool accepted = false;
             if (param_6 == '\0') {
