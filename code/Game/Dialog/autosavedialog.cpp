@@ -137,14 +137,12 @@ void AutoSaveDialog::Autosave() {
     // Not while the UI pauses the game.
     if (_ui->PausesGame()) { AsBail("UI PausesGame", 1); return; }
 
-    // Not while GameWorld flag bit 10 is set.
-    if (GameUpdateLoop::_singleton == nullptr) { AsBail("no gameWorld", 0); return; }
+    // Not while GameWorld flag bit 10 is set (the world read unguarded).
     uint32_t gwFlags = GameUpdateLoop::_singleton->m_gameFlags;
     if ((gwFlags >> 10) & 1) { AsBail("gameWorld+0xd0 bit10 set", (long)gwFlags); return; }
 
     // Only when no operation is already in progress (Operation::None == 0).
     Save::SaveLoad* saveLoad = ::Save::SaveLoad::_singleton;
-    if (!saveLoad) { AsBail("no SaveLoad singleton", 0); return; }
     { int op = saveLoad->GetOperation();
       if (op != 0) { AsBail("SaveLoad busy, Operation", (long)op); return; } }
 
@@ -153,8 +151,7 @@ void AutoSaveDialog::Autosave() {
     RtSystem_Time_Ctor(&minTime, 1.0f);   // import slot Time::Time(float)
     saveLoad->SetMinOperationTime(minTime);
 
-    // The container's SaveLoadEmpty sprite (+0xB8), by value.
-    if (g_gameContainer == nullptr) return;
+    // The container's SaveLoadEmpty sprite (+0xB8), by value (the container read unguarded).
     UI::Sprite sprite = g_gameContainer->spriteSaveLoadEmpty;
     saveLoad->SetSaveSprite(&sprite);
 
