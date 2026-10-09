@@ -384,7 +384,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount: the citizen entity's StorageComponent -> QueryCount
         StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
-        int qc = (own) ? CitizenComp_StorageComponent_QueryCount(own) : 0;
+        int qc = (own) ? own->QueryCount() : 0;
         if (qc > 0) {
             // 0x140115e60 LongTermPlan returns nothing; its caller keeps only the low byte
             // (ValidateAndEnterState), so the upper bits of r carry no value.
@@ -482,7 +482,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
     if (haveWorkplace && valid != 0) {
         // own-storage QueryCount
         StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
-        int qc = (own) ? CitizenComp_StorageComponent_QueryCount(own) : 0;
+        int qc = (own) ? own->QueryCount() : 0;
         if (qc > 0) {
             // 0x140115e60 LongTermPlan returns nothing; its caller keeps only the low byte
             // (ValidateAndEnterState), so the upper bits of r carry no value.

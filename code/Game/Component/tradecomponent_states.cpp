@@ -107,7 +107,7 @@ namespace {
 // Layer 2 (merchant spawn / teardown) leaves:
 //   0x1400c3720 ComponentEntity_CtorFromDescription  0x1400c48a0 EntityList_RegisterEntity_Impl
 //   0x14000eb20 FindComponent<BoatComponent>         0x1400456e0 BoatComponent::SetDestination
-//   0x1400a9660 StateMachine_TickReimpl              0x140002cc0 CemeteryListErase_Reimpl
+//   0x1400a9660 StateMachine::Tick                   0x140002cc0 CemeteryListErase_Reimpl
 
 // The TradeDescription off +0x18, cast exactly as retail does it.
 // The deref of the result is left UNGUARDED below, as retail leaves it: retail
@@ -321,7 +321,7 @@ char TradeComponent::OnMerchantLost(StateMachine* sm) {
 // ============================================================
 // Retail inlines the whole of StateMachine::Tick after the request, which is why
 // the body is ~90 decompiled lines for what is a two-step handler. Read against
-// our own StateMachine_TickReimpl (statemachinecomponent.cpp:455) the inlined
+// our own StateMachine::Tick (statemachinecomponent.cpp) the inlined
 // loop matches EXACTLY, with time = System::Time(0.0), param3 = 0 (it dispatches
 // node slot +0x30, not +0x38) and param4 = 1 (the `bVar2 = true` that is cleared
 // after one pass). So retail 0x14005b240 is, in full:
@@ -338,10 +338,15 @@ char TradeComponent::OnMerchantLost(StateMachine* sm) {
 // only thing this handler adds over its 0xb sibling is the immediate tick — which
 // is the point: dismissing a merchant has to take effect on the click, not on the
 // next simulation frame. Retail ignores param_1 entirely, so the handler stays free.
+// Read in B6 (0x14005b240-0x14005b416): no test of `sm` (0x14005b24f `CMP [RDX+0x9],0` first);
+// the drain tick hands &Time(0.0f) at [RSP+0x40] (0x14005b263-0x14005b27c); the inlined tail
+// builds Time(0.0f) at [RSP+0x38] (0x14005b2a5) and passes it in R8 to node slot +0x30
+// (0x14005b3cc-0x14005b3d7), run flag SIL = 1 (0x14005b2b4) cleared after one pass.
 static char TradeCtrl_Event0A_Dismissed(TradeComponent* /*self*/, StateMachine* smV) {
-    if (!smV) return 1;
     ::ControllerLive::RequestStateTransition(smV, 2);
-    ::StateMachine_TickReimpl(smV, /*time*/ 0, /*param3*/ 0, /*param4*/ 1);
+    System::Time t0 = {0};
+    RtSystem_Time_Ctor(&t0, 0.0f);
+    smV->Tick(&t0, 0, 1);
     return 1;
 }
 
@@ -409,10 +414,8 @@ char TradeComponent::TickIdle(StateMachine* smV, const System::Time* deltaTime) 
     if (smV && smV->activeState < 0) {   // +0x09, signed
         System::Time zeroTime = {0};
         RtSystem_Time_Ctor(&zeroTime, 0.0f);
-        // The door typed `time` as a pointer and passed &zeroTime; the body takes the
-        // 8-byte Time by value, as retail passes it. With param4 = 0 the body never
-        // reads `time`, so passing the value is the same call.
-        ::StateMachine_TickReimpl(smV, zeroTime._ticks, 0, 0);
+        // 0x14005ab6b-0x14005ab87: `LEA RDX,[RSP+0x60]` -- the ADDRESS of the stack Time(0).
+        smV->Tick(&zeroTime, 0, 0);   // 0x1400a9660
     }
     ::ControllerLive::RequestStateTransition(smV, 0x12);
     return 0;

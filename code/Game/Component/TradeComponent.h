@@ -122,7 +122,10 @@ static_assert(offsetof(TradeResourceNode, height) == 0x2a, "TradeResourceNode +0
 // The +0x60 stock tree: the header plus the release retail's dtor 0x14005c340 does
 // at 0x14005c380..0x14005c3b7 (both subtrees through 0x14000e320, then the root;
 // +0x60 = 0 qword, +0x68 = 0 dword). Defined in tradecomponent.cpp.
+// The ctor is retail's two stores (0x14005c492 qword root = 0, 0x14005c495 dword count = 0);
+// +0x0C is not written (B6 row 27).
 struct TradeStockTree : AvlTreeHead<TradeResourceNode> {
+    TradeStockTree() { root = nullptr; count = 0; }
     ~TradeStockTree();
 };
 static_assert(sizeof(TradeStockTree) == 0x10, "TradeStockTree is the 0x10 Set header");
@@ -184,7 +187,7 @@ public:
     ManifestArray manifest;                // +0x50 (count +0x58, cap +0x5c; SetSize 0x14000f090)
     TradeStockTree stock;                  // +0x60 the stock tree (TradeUI's sell rows): root +0x60, node count
                                            // +0x68; +0x6c (_pad0C) never written by retail's ctor
-    bool     workEnabled;       // +0x70 Command's cached toggle (Persist bool&; not in the ctor)
+    bool     workEnabled;       // +0x70 Command's cached toggle (Persist bool&; NOT written by the ctor)
     bool     tradeFlag;         // +0x71 the trade panel is open: the stay timer waits (Persist bool&)
     uint8_t  _pad72[6];         // +0x72
     System::Time merchantTimer;            // +0x78 countdown to the next merchant / its stay

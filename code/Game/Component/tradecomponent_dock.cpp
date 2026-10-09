@@ -432,7 +432,7 @@ void TradeComponent::AutoTrade() {
     TradeResourceNode* treeRoot = nullptr;   // the purchase tally
     int treeCount = 0;                       // retail keeps it; nothing reads it back
 
-    int volume = CitizenComp_StorageComponent_QueryCount(storage);
+    int volume = storage->QueryCount();   // 0x14012cf10
     const int volumeCap = storage->capacity;
 
     const int orderCount = buyOrders._size;
@@ -629,21 +629,12 @@ char TradeComponent::LeaveDocked() {
 
     StateMachineComponent* smComp = merchant->FindComponent<StateMachineComponent>();   // 0x140003ea0
 
-    // Retail derefs the chain below unguarded because a merchant boat always carries a
-    // StateMachineComponent. The guard is standalone-only and does NOT skip the teardown
-    // that follows: if the boat is missing its machine we still have to release the
-    // manifest, or the post keeps a merchant's stock list forever.
-    ControllerComponent::Controller* node = smComp ? smComp->stateMachine.current : nullptr;
-    if (node) {
-        // Node vtable slot 2 (+0x10) is PostEvent(node, sm, curStateIdx, eventId); the
-        // current index is the machine's activeState (smComp+0x51). Event 0 is "you are
-        // released".
-        node->PostEvent(&smComp->stateMachine, smComp->stateMachine.activeState, 0);
-    } else {
-        std::fprintf(stderr, "[TradeDock] leaving merchant has NO StateMachineComponent — "
-                             "the boat was not told to cast off; releasing the manifest anyway\n");
-        std::fflush(stderr);
-    }
+    // Retail 0x14005a6d0 derefs the chain unguarded (CheckPtr, then `[[sm+0x48]]+0x10`): a
+    // merchant boat always carries a StateMachineComponent (B6 G3: the tree's null arm is
+    // gone). Node vtable slot 2 (+0x10) is PostEvent(node, sm, curStateIdx, eventId); the
+    // current index is the machine's activeState (smComp+0x51). Event 0 is "you are released".
+    ControllerComponent::Controller* node = smComp->stateMachine.current;
+    node->PostEvent(&smComp->stateMachine, smComp->stateMachine.activeState, 0);
 
     merchant = nullptr;
 

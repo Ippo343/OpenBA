@@ -293,11 +293,12 @@ extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self) {
 static std::atomic<int> s_mapSpawnClaimTraceCount{0};
 
 // 0x1401244d0: Component() is the CALL 0x1401188b0; the 0x140163aa0 stamp is
-// the compiler's; flags |= 3 (0x83). PORT GAP (retail 0x1401244d0) — B38 D1:
-// retail writes 0xFFFF into the four rect words; the tree's zero-fill is kept
-// here and transcribing the sentinel is its own titled commit.
+// the compiler's; `OR EAX,0xffffffff` then four word stores of 0xFFFF into the
+// rect (0x1401244fb-0x14012450a, B6 row 28); flags |= 3 (0x83). Retail does not
+// write +0x30 / +0x34: the tree's zero stores there are kept (known_port_issues
+// row 920, a separate difference).
 MapComponent::MapComponent()
-    : tileX0(0), tileY0(0), tileX1(0), tileY1(0), extraField(0), _pad34{} {
+    : tileX0(-1), tileY0(-1), tileX1(-1), tileY1(-1), extraField(0), _pad34{} {
     OrFlagsInCtor(0x3);
 }
 

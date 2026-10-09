@@ -15,7 +15,7 @@
 // ── What the two helpers actually are ────────────────────────────────────────
 // Ghidra renders both as ~90 lines of nested loops. They are NOT bespoke: the
 // whole tail is StateMachine::Tick (0x1400a9660) INLINED. Verified field by field
-// against our own port (StateMachine_TickReimpl, statemachinecomponent.cpp:448)
+// against our own port (StateMachine::Tick, statemachinecomponent.cpp)
 // with `sm = SMC + 0x48`:
 //     Tick sm[0]        == *(void**)(SMC+0x48)   active state node
 //     Tick (char)sm[1]  == *(int8*)(SMC+0x50)    current state
@@ -51,7 +51,7 @@ namespace {
 // Called directly: FUN_140003ea0 finds the entity's StateMachineComponent
 // (PlayerPath_FindComponent_3ea0); FUN_14000d6c0 finds the entity's BuildComponent
 // (Dialog_FindComponent_d6c0 — DAT_1401c7008 is the BuildComponent id);
-// StateMachine::Tick 0x1400a9660 is StateMachine_TickReimpl.
+// StateMachine::Tick 0x1400a9660 is StateMachine::Tick, handed &Time(0.0f).
 
 // ---------------------------------------------------------------------------
 // The shared body of e7b0 and ea10: request state `targetState` on the entity's
@@ -85,7 +85,7 @@ void ForceSMState(ComponentEntity* owner, int targetState, const char* /*who*/) 
     if (sm->activeState < 0) {   // +0x51
         ::System::Time t0 = {0};
         RtSystem_Time_Ctor(&t0, 0.0f);
-        StateMachine_TickReimpl(sm, t0._ticks, 0, 0);
+        sm->Tick(&t0, 0, 0);   // 0x14011e83f-0x14011e85c: LEA RDX,[RSP+0x20]; R8D = R9D = 0
     }
 
     // node slot 1 (FindTransition: the table has no dtor slot) -> transition index (or < 0)
@@ -97,10 +97,11 @@ void ForceSMState(ComponentEntity* owner, int targetState, const char* /*who*/) 
     }
 
 
-    // The inlined tail == StateMachine::Tick(sm, Time(0), useAlt=0, doTransition=1).
+    // The inlined tail (0x14011e883-0x14011e9c7) == StateMachine::Tick(sm, &Time(0), useAlt=0,
+    // doTransition=1): Time(0.0f) at [RSP+0x50], handed to node slot +0x30 in R8.
     ::System::Time tZero = {0};
     RtSystem_Time_Ctor(&tZero, 0.0f);
-    StateMachine_TickReimpl(sm, tZero._ticks, 0, 1);
+    sm->Tick(&tZero, 0, 1);
 }
 
 }  // namespace

@@ -288,6 +288,11 @@ void ComponentEntity::StartupComponents() {
 // Recomputes entityFlags by ORing in Component::+0x20 (ushort) for each
 // component. If update bit (2) or draw bit (4) changed, registers entity
 // in the appropriate EntityList bucket.
+// Read in B6 (row 46), 0x1400c3470-0x1400c3541: the count is read once (0x1400c3486), +0x40 zeroed
+// (0x1400c348d), and every slot is CheckPtr'd and its +0x20 word OR'd in (0x1400c34a0-0x1400c34c1)
+// with no null test; the two appends go through 0x140003110. This member is THE body of
+// 0x1400c3470 (the tree's second copy, NotifyEntityChanged in action_base_hunt.cpp, is to become a
+// call to it).
 void ComponentEntity::RefreshEntityFlags() {
     uint32_t oldFlags = _entityFlags;
 
@@ -297,7 +302,6 @@ void ComponentEntity::RefreshEntityFlags() {
     if (count > 0) {
         for (int i = 0; i < count; i++) {
             Component* compPtr = _components[i].Get();
-            if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
             // Retail reads the low WORD of Component::_flags (+0x20)
             uint16_t compFlags = static_cast<uint16_t>(compPtr->_flags);
             _entityFlags |= (uint32_t)compFlags;
@@ -714,10 +718,11 @@ void EntityList::RegisterEntity(Object::InternalPtr<ComponentEntity>* entityIBP,
 }
 
 // B4 FORWARD: 38 outside caller(s) (code/Game/Action, Component, Game, Work,
-// standalone; componententity_funcs.h). The null guards are the tree's (retail's
-// 0x1400c48a0 has none); kept here, not extended into the member.
+// standalone; componententity_funcs.h). B6 (14d G5): retail 0x1400c48a0's first
+// instruction reads the list (`CMP byte [RCX+0xe0],0`) and 0x1400c48e7 the IBP's
+// target, with no null test; every caller passes &local and the world's +0xe8 list,
+// so the tree's `!entityList || !entityIBP` return is gone.
 void EntityList_RegisterEntity_Impl(EntityList* entityList, Object::InternalPtr<ComponentEntity>* entityIBP, int category) {
-    if (!entityList || !entityIBP) return;
     entityList->RegisterEntity(entityIBP, category);
 }
 

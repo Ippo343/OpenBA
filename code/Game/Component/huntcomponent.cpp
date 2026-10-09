@@ -54,13 +54,10 @@ void HuntComponent::Persist(IO::Stream& stream) {
 // NOTE on slot 9: HuntComponent::Update is implemented above (0x140122740). Hunt is
 // the only ResourceProduceComponent subclass that overrides slot 9, and its ctor
 // (0x1401228e0) ORs capability bit 8 into +0x20 precisely to opt into per-frame
-// update ticking; Fishing and Herbalist do neither. The slot receives the Time by
-// VALUE (an 8-byte tick count in a register): the base declares that register as
-// `void*`, so its bits are the tick count.
+// update ticking; Fishing and Herbalist do neither. The slot receives a `const Time*`:
+// 0x140122753 keeps RDX in RSI and 0x1401227c8 `MOV RCX,RSI; CALL [0x140151318]` hands it to
+// Time::AsSeconds (row 511 fixed in B6: the tree read the pointer's bits as the tick count).
 void HuntComponent::Update(const System::Time* time) {
-    // LEFT: the tree reads the POINTER's bits as the tick count; retail 0x1401227c8 passes RDX
-    // (the Time*) to Time::AsSeconds (known_port_issues 14, row 511).
-    const int64_t deltaTime = static_cast<int64_t>(reinterpret_cast<intptr_t>(time));   // LEFT: the pointer bits read as ticks (row 511)
 
     // The owner's workplace: its worker count is the speed numerator
     WorkPlaceComponent* workplace = _entity->FindComponent<WorkPlaceComponent>();   // 0x140002e10
@@ -76,18 +73,18 @@ void HuntComponent::Update(const System::Time* time) {
         work->workState = capacity;
     }
 
-    // Convert delta time to seconds (inline Time::AsSeconds)
-    float deltaSeconds = static_cast<float>(
-        static_cast<double>(deltaTime) * ::System::Timer::_secondsPerTick);
+    // Delta time in seconds (0x1401227cb Time::AsSeconds)
+    float deltaSeconds = time->AsSeconds();
 
-    // Scale by the staffing ratio and convert back to ticks
+    // Scale by the staffing ratio (0x1401227de-0x1401227e8) and convert back to a Time
+    // through the Time(float) import (0x1401227ef CALL [0x140152b00])
     float scaledSeconds = deltaSeconds * (static_cast<float>(workerCount) /
                                            static_cast<float>(capacity));
-    int64_t scaledTicks = static_cast<int64_t>(
-        static_cast<double>(scaledSeconds) / ::System::Timer::_secondsPerTick);
+    System::Time scaled = {0};
+    RtSystem_Time_Ctor(&scaled, scaledSeconds);
 
-    // Accumulate into the hunt progress
-    huntProgress._ticks += scaledTicks;
+    // Accumulate into the hunt progress (0x1401227ff ADD [RDI+0x50],RAX)
+    huntProgress._ticks += scaled._ticks;
 }
 
 // ============================================================================

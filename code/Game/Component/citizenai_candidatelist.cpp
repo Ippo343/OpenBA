@@ -258,7 +258,7 @@ int CitizenComponent::CarryCount() {
         }
         return 0;
     }
-    return CitizenComp_StorageComponent_QueryCount(carry);
+    return carry->QueryCount();   // 0x14012cf10
 }
 
 // ============================================================

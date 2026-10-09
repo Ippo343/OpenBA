@@ -110,6 +110,7 @@
 #include "Entity/EntityList.h"
 #include "Game/Map.h"
 #include "Game/WorkScheduler.h"
+#include "Game/WorkSchedulerNodes.h"   // WorkSchedulerIdNode (the by-id tree, B6 row 390)
 #include "Game/PlayerToolManager.h"
 
 // ============================================================
@@ -194,23 +195,27 @@ bool DestroyComponent::StorageEmpty() {
 
 // ============================================================
 // DestroyDescription_helper_ea20 (0x14012ea20) — reclaim-job-pending test.
-// Looks up the yard's resource key (+0x28) in the work-manager tree
-// ((gWorld+0x118)+0x30) and calls the found node's vtable+0x58.
-// (RCX is the WorkComponent: a WorkComponent member retail compiled, left free here
-// because the scheduler behind GameUpdateLoop +0x118 is still void*: LEFT.)
+// Read in B6 (rows 390 / 391), 0x14012ea20-0x14012ea8e: 0x14012ea29 `CALL 0x14012ead0`
+// (WorkComponent::IsWorkPosted), 0 when it fails; then the scheduler's by-id tree
+// (GameUpdateLoop +0x118 -> trees[0] at +0x30) walked by the yard's work id (+0x28)
+// (0x14012ea50-0x14012ea67: key < node -> +0x18, node < key -> +0x20); on the hit, CheckPtr
+// the node's +0x08 Work and tail-jump its slot 11 (`JMP [RAX+0x58]`, GetPriority; AL kept).
+// No test of the yard, the singleton, the scheduler or the Work's vptr.
 // ============================================================
 static char Destroy_ReclaimPending_ea20(WorkComponent* yard) {
-    if (!yard) return 0;
-    if (GameUpdateLoop::_singleton == nullptr) return 0;
-    WorkScheduler* mgr = GameUpdateLoop::_singleton->m_tutorial;   // +0x118
-    if (!mgr) return 0;
+    if (!yard->IsWorkPosted()) return 0;   // 0x14012ead0
     int key = yard->workId;
-    Work* node = mgr->FindWorkAtCell(key);   // 0x1400f8d50 (the RemovalCalc_helper_8d50 forwarder's member)
-    if (!node) return 0;
-    if (!*reinterpret_cast<void* const*>(node)) return 0;   // LEFT: the tree's vptr guard (retail has none: known_port_issues row 391); audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
-    // `node` is the gw+0x118 scheduler's work (id map filled by CitizenAI_impl_88a0
-    // 0x1400f88a0 with the posted Work leaves); retail reads AL.
-    return static_cast<char>(node->GetPriority());   // slot 11
+    const WorkSchedulerIdNode* node = GameUpdateLoop::_singleton->m_tutorial->trees[0].root;
+    while (node) {
+        if (key < node->key) {
+            node = node->left;
+        } else if (node->key < key) {
+            node = node->right;
+        } else {
+            return static_cast<char>(node->work->GetPriority());   // slot 11
+        }
+    }
+    return 0;
 }
 
 // ============================================================

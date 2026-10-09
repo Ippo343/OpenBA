@@ -9,7 +9,7 @@
 //   reflected "MapComponent", parent "Component", ti 0x1401c79e0
 //   create 0x140035700: MemAlloc(0x38, 8) + ctor 0x1401244d0
 //   ctor   0x1401244d0: Component ctor, stamp 0x140163aa0, +0x28/+0x2a/+0x2c/
-//                       +0x2e = 0xFFFF (the tree zero-fills: PORT GAP, see the
+//                       +0x2e = 0xFFFF (the tree wrote 0 until B6 row 28; see the
 //                       ctor), flags |= 3 (0x83)
 //   dtor   0x140124490: stamp 0x140163aa0, stamp 0x140162920, ~Internal (no own work)
 //   table  0x140163aa0, 16 slots:
