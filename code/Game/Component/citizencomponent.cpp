@@ -952,9 +952,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
 
     // Read citizen's profession (the profession registry's key)
-    const Profession* profKey = profession;
-    // [STANDALONE GUARD] profession-list null until assigned → no workplace to switch.
-    if (profKey == nullptr) return false;
+    const Profession* profKey = profession;   // read unguarded (0x140110a59 CMP [RAX+0x4c])
 
     // Lookup job count from profession registry
     const CitizenBehavior* registry = gameWorld->m_citizenList;
@@ -976,16 +974,9 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
         // Look up current region in region map BST
         Work* regionDesc = LookupRegionByID(areaMap, regionId);
 
-        // *** FIX: null check for region lookup failure ***
-        int currentPriority;
-        if (regionDesc == nullptr) {
-            // Region not in tree — don't switch, stay at current workplace.
-            // Original game crashes here (null deref). Returning false keeps
-            // citizens working instead of endlessly reshuffling.
-            return false;
-        } else {
-            currentPriority = regionDesc->field_24;
-        }
+        // A miss hands back a null InternalPtr and +0x24 is read from it unguarded
+        // (0x140110ac5-0x140110ae3): no miss arm.
+        int currentPriority = regionDesc->field_24;
 
         // Check if current workplace is valid (reachable)
         char valid = CanReach(workplace.Get());
@@ -1020,10 +1011,7 @@ bool CitizenComponent::ShouldSwitchWorkplace() {
             const WorkScheduler* freshAreaMap = GameUpdateLoop::_singleton->m_tutorial;
             Work* otherRegionDesc = LookupRegionByID(freshAreaMap, otherRegionId);
 
-            // Null check on region lookup (original would crash)
-            if (otherRegionDesc == nullptr)
-                continue;
-
+            // A miss is read unguarded as above (0x140110c2f-0x140110c49 CMP [RAX+0x24],EDI).
             // If other region has lower priority value, switch
             if (otherRegionDesc->field_24 < currentPriority) {
                 // Double-check vacancy
