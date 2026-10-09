@@ -643,14 +643,15 @@ MoveTo::MoveTo(CharacterComponent* const* characterRef, uint32_t moveAnim, int s
     field_0x474 = false;
     Description* obj = character->_description;
     // DAT_1401c70b0 is CharacterDescription's type-id cell (Table 1).
-    uint32_t charDescTid = CharacterDescription::TypeId();
-    bool derived = charDescTid && ::Object::IsDerivedFromNullSafe(obj, charDescTid);
+    // B6 (14d G67): IsDerivedFrom(+0x18, cell 0x1401c70b0) with no zero-id test, and
+    // RandFloatTol on [GameUpdateLoop+0xd8] with no test (0x1400c9170's tail).
+    bool derived = obj->IsDerivedFrom(CharacterDescription::TypeId());
     description = derived ? static_cast<CharacterDescription*>(obj) : nullptr;
     if (0.0f <= speed) {
         speedMultiplier = speed;
     } else {
         System::Random* random = GameUpdateLoop::_singleton->m_random;
-        float r = random ? random->RandFloatTol() : 0.0f;
+        float r = random->RandFloatTol();
         speedMultiplier = r * RdataF(kRdata_1401720e4) + kRdata_14017214c;   // 0x1401720e4 / 0x14017214c
     }
 }
