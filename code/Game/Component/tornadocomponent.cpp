@@ -903,11 +903,10 @@ void TornadoComponent::Tick(const System::Time* time) {
         if (audio)
             audio->MoveTo(position);   // 0x140042960
 
-        // LEFT: the tree reads +0x7c of the emitter ARRAY; retail 0x140057cd0 reads +0x7c of
-        // emitters[0].instance (**(pc+0x38) + 0x7c). The value only feeds the PORT GAP audio
-        // branch below (never taken), so no run can see the difference; listed, not changed.
-        const float volume =
-            *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pc->emitters._data) + 0x7c);   // LEFT: retail DIFFERENCE (known_port_issues row 430): retail reads emitters[0].instance->_opacity
+        // 0x140057f30-0x140057f3f: `MOV RCX,[RAX+0x38]; MOV RAX,[RCX]; MOVSS XMM6,[RAX+0x7c]` --
+        // emitters[0].instance's Geometry opacity (row 430 fixed in B6: the tree read +0x7c of
+        // the emitter array). It only feeds the PORT GAP audio branch below (never taken).
+        const float volume = pc->emitters._data[0].instance->_opacity;
 
         AmbientEmitterComponent* audio2 = nullptr;   // PORT GAP 0x140002280 (see above)
         if (audio2) {
