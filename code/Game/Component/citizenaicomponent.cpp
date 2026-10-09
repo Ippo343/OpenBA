@@ -396,26 +396,19 @@ void CitizenAIComponent::TransitionState(char param) {
 }
 
 // CitizenAIComponent::CheckEducation (0x14010f7a0):
-// raises a capacity toward the citizen's profession value if the storage allows.
-// (Retail 0x14010f7e1 / 0x14010f830 call the StorageComponent finder 0x140006270;
-// the tree calls the residence finder 0x140008090 -- kept, listed in the hand-in.)
+// raises the citizen's StorageComponent capacity to its profession's value if what it
+// carries is below it. Retail: FindComponent<StorageComponent> 0x140006270 at 0x14010f7e1 and
+// 0x14010f830; profession +0x1f0 -> +0x50 read at 0x14010f7f2 / 0x14010f7f9; capacity +0x38
+// compared at 0x14010f80c and stored at 0x14010f85e; QueryCount 0x14012cf10 at 0x14010f845.
+// No null test anywhere (profession and storage are dereferenced unguarded).
 void CitizenAIComponent::CheckEducation() {
     EnsureCallees();
-    ResidenceComponent* res8 = citizen->_entity->FindComponent<ResidenceComponent>();
-    // [STANDALONE BRING-UP GUARDS] the profession (assigned at gameplay,
-    // not in Startup) and res8 = the residence storage (null if the citizen has
-    // no home yet). Both are null for a freshly-spawned standalone citizen; the
-    // original derefs them unconditionally. Bail (no education update) until live.
-    Profession* profList = citizen->profession;
-    if (profList == nullptr || res8 == nullptr) return;
-    int cap = profList->priority;
-    // +0x38 lies inside ResidenceComponent's embedded controller: raw.
-    int* res8Cap = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res8) + 0x38);   // LEFT: wrong object (known_port_issues 14a row 1: retail's is the StorageComponent, +0x38 capacity)
-    if (*res8Cap != cap) {
-        ResidenceComponent* res10b = citizen->_entity->FindComponent<ResidenceComponent>();
-        int cnt = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<const StorageComponent*>(res10b));   // LEFT: wrong object (known_port_issues 14a row 1: retail's is the StorageComponent)
-        if (cnt < cap) {
-            *res8Cap = cap;
+    StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();
+    int cap = citizen->profession->priority;
+    if (storage->capacity != cap) {
+        StorageComponent* storage2 = citizen->_entity->FindComponent<StorageComponent>();
+        if (storage2->QueryCount() < cap) {
+            storage->capacity = cap;
         }
     }
 }
