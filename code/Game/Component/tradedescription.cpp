@@ -53,15 +53,21 @@ inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f
 extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 namespace {
-// The tree's allocation of a loaded array: count elements, zeroed, 8-aligned; the
-// capacity field is not written (retail resizes through 0x14000f370 / 0x14000f6a0 /
-// 0x14000f160 / 0x140001bb0 / 0x1400021d0 and keeps its capacity).
+// A loaded array's resize: retail's SetSize bodies (0x14000f370 merchants, 0x14000f6a0
+// tiers, 0x14000f160 goods categories, 0x140001bb0 / 0x1400021d0 the merchant's inner
+// arrays) on the fresh description's EMPTY array: size 0 -> n with capacity < n stores
+// `capacity = n` (the `* 3` arm needs a non-empty array grown by one), MemAlloc(capacity *
+// stride, 8), and zero-constructs the n new elements (the copy / destroy arms need old
+// elements: a description is loaded once, into an empty array). The size itself is the
+// count the caller just serialized into the field. B6 row 26: the capacity store is
+// retail's; the dtor walks the capacity, so before it the loaded elements were never released.
 template <class T>
-T* TD_AllocArray(T*& base, int n) {
+T* TD_AllocArray(T*& base, int32_t& capacity, int n) {
+    if (capacity < n) capacity = n;   // 0x14000f370: `MOV [RCX+0xc],EDX`
     T* buf = static_cast<T*>(System::MemoryAllocator::MemAlloc(
-        static_cast<uint64_t>(n) * sizeof(T), 8));
+        static_cast<uint64_t>(capacity) * sizeof(T), 8));
     base = buf;
-    if (buf) std::memset(static_cast<void*>(buf), 0, static_cast<size_t>(n) * sizeof(T));   // raw zero fill, as the tree did
+    if (buf) std::memset(static_cast<void*>(buf), 0, static_cast<size_t>(n) * sizeof(T));   // the new elements' zero stores
     return buf;
 }
 }  // namespace
@@ -89,8 +95,8 @@ TradeDescription::TradeDescription()
 // dtor (slot 0 0x14000dc50 minus the stamps): frees the merchant (and its inner arrays/Strings), string-pair and price arrays.
 // The compiler then chains ~Description -> ~External.
 TradeDescription::~TradeDescription() {
-    // merchant array (free its inner arrays + strings first; the tree walks
-    // the CAPACITY field, which the load path never sets)
+    // merchant array (free its inner arrays + strings first; walks the CAPACITY
+    // field, which the load path sets since B6 row 26)
     int merchN = _merchantCap;
     if (TradeMerchant* m = _merchants) {
         for (int i = 0; i < merchN; ++i, ++m) {
@@ -123,7 +129,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
     // merchant array @ +0x48 (count @ +0x50)
     ser.Serialize(_merchantCount, nullptr);
     int merchN = _merchantCount;
-    if (static_cast<int>(ser.GetDirection()) == 0 && merchN > 0) TD_AllocArray(_merchants, merchN);
+    if (static_cast<int>(ser.GetDirection()) == 0 && merchN > 0) TD_AllocArray(_merchants, _merchantCap, merchN);
     if (merchN > 0) {
         TradeMerchant* m = _merchants;
         for (int i = 0; i < merchN && m; ++i, ++m) {
@@ -132,12 +138,12 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
             // goods: ExternalPtr array (count @ +0x28)
             ser.Serialize(m->goodsCount, nullptr);
             int extN = m->goodsCount;
-            if (static_cast<int>(ser.GetDirection()) == 0 && extN > 0) TD_AllocArray(m->goods, extN);
+            if (static_cast<int>(ser.GetDirection()) == 0 && extN > 0) TD_AllocArray(m->goods, m->goodsCap, extN);
             Desc_LoadExternalArray(&ser, extN, m->goods);
             // the enum array @ +0x30 (count @ +0x38) through the uint door
             ser.Serialize(m->field_0x30Count, nullptr);
             int intN = m->field_0x30Count;
-            if (static_cast<int>(ser.GetDirection()) == 0 && intN > 0) TD_AllocArray(m->field_0x30, intN);
+            if (static_cast<int>(ser.GetDirection()) == 0 && intN > 0) TD_AllocArray(m->field_0x30, m->field_0x30Cap, intN);
             uint32_t* ia = m->field_0x30;
             for (int j = 0; j < intN && ia; ++j, ++ia)
                 ser.Serialize(*ia, nullptr);
@@ -151,7 +157,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
     // tier array @ +0x58 (count @ +0x60)
     ser.Serialize(_priceCount, nullptr);
     int priceN = _priceCount;
-    if (static_cast<int>(ser.GetDirection()) == 0 && priceN > 0) TD_AllocArray(_prices, priceN);
+    if (static_cast<int>(ser.GetDirection()) == 0 && priceN > 0) TD_AllocArray(_prices, _priceCap, priceN);
     if (priceN > 0) {
         TradeTier* p = _prices;
         for (int i = 0; i < priceN && p; ++i, ++p) {
@@ -169,7 +175,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
     // goods-category array @ +0x38 (count @ +0x40)
     ser.Serialize(_pairCount, nullptr);
     int spN = _pairCount;
-    if (static_cast<int>(ser.GetDirection()) == 0 && spN > 0) TD_AllocArray(_pairs, spN);
+    if (static_cast<int>(ser.GetDirection()) == 0 && spN > 0) TD_AllocArray(_pairs, _pairCap, spN);
     if (spN > 0) {
         TradeGoodsCategory* sp = _pairs;
         for (int i = 0; i < spN && sp; ++i, ++sp) {

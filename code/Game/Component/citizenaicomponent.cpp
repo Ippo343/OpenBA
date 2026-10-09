@@ -308,37 +308,14 @@ void CitizenComponent::SetupElder() {
 }
 
 
-// Reimpl of StorageComponent_QueryCount (0x14012cf10):
-// O(n*m) inventory scan — sums (RawMaterialDescription.unitVolume * slotCount)
-// across all inventory rows. Reads type via vtable+0x10, filters by DAT_1401c7cb8.
+// CitizenComp_StorageComponent_QueryCount: NOT a retail body. 0x14012cf10 is the member
+// StorageComponent::QueryCount (storagecomponent.cpp), which reads the receiver's +0x30 unguarded
+// (0x14012cf28 `CMP [RCX+0x30],R12D`). This was a second port of it with a `!self` return retail
+// lacks (known_port_issues row 551); the guard is gone and the body is the member. The Component
+// callers call the member; the Work / tradework callers (other B6 blocks' files) still name this
+// forwarder until they move, then it is deleted.
 int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self) {
-    EnsureCallees();
-    if (!self) return 0;   // defensive: callers may pass a null/unfound storage
-    int total = 0;
-    int rowCount = self->storageSlots._size;
-    if (0 < rowCount) {
-        int row = 0;
-        do {
-            const StorageComponent::Item* arr = self->storageSlots._data;
-            const ComponentDescription* inv = arr[row]._resource;
-            const RawMaterialDescription* mat = nullptr;
-            int n = inv->_subDescCount;
-            for (int j = 0; j < n; j++) {
-                Description* sub = inv->_subDescs[j];
-                uint32_t tid = sub->Type();   // slot 2
-                if (tid == *s_TypeId_RawMaterial) {
-                    mat = Object::IsDerivedFromNullSafe(sub, *s_TypeId_RawMaterial)
-                              ? static_cast<const RawMaterialDescription*>(sub) : nullptr;
-                    break;
-                }
-            }
-            int slotCount = arr[row]._count;
-            row++;
-            int unitVol = mat ? mat->_weight : 0;
-            total += unitVol * slotCount;
-        } while (row < self->storageSlots._size);
-    }
-    return total;
+    return self->QueryCount();
 }
 
 // Reimpl of Storage_GetResourceCount (0x14012a9d0):
@@ -419,26 +396,19 @@ void CitizenAIComponent::TransitionState(char param) {
 }
 
 // CitizenAIComponent::CheckEducation (0x14010f7a0):
-// raises a capacity toward the citizen's profession value if the storage allows.
-// (Retail 0x14010f7e1 / 0x14010f830 call the StorageComponent finder 0x140006270;
-// the tree calls the residence finder 0x140008090 -- kept, listed in the hand-in.)
+// raises the citizen's StorageComponent capacity to its profession's value if what it
+// carries is below it. Retail: FindComponent<StorageComponent> 0x140006270 at 0x14010f7e1 and
+// 0x14010f830; profession +0x1f0 -> +0x50 read at 0x14010f7f2 / 0x14010f7f9; capacity +0x38
+// compared at 0x14010f80c and stored at 0x14010f85e; QueryCount 0x14012cf10 at 0x14010f845.
+// No null test anywhere (profession and storage are dereferenced unguarded).
 void CitizenAIComponent::CheckEducation() {
     EnsureCallees();
-    ResidenceComponent* res8 = citizen->_entity->FindComponent<ResidenceComponent>();
-    // [STANDALONE BRING-UP GUARDS] the profession (assigned at gameplay,
-    // not in Startup) and res8 = the residence storage (null if the citizen has
-    // no home yet). Both are null for a freshly-spawned standalone citizen; the
-    // original derefs them unconditionally. Bail (no education update) until live.
-    Profession* profList = citizen->profession;
-    if (profList == nullptr || res8 == nullptr) return;
-    int cap = profList->priority;
-    // +0x38 lies inside ResidenceComponent's embedded controller: raw.
-    int* res8Cap = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res8) + 0x38);   // LEFT: wrong object (known_port_issues 14a row 1: retail's is the StorageComponent, +0x38 capacity)
-    if (*res8Cap != cap) {
-        ResidenceComponent* res10b = citizen->_entity->FindComponent<ResidenceComponent>();
-        int cnt = CitizenComp_StorageComponent_QueryCount(reinterpret_cast<const StorageComponent*>(res10b));   // LEFT: wrong object (known_port_issues 14a row 1: retail's is the StorageComponent)
-        if (cnt < cap) {
-            *res8Cap = cap;
+    StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();
+    int cap = citizen->profession->priority;
+    if (storage->capacity != cap) {
+        StorageComponent* storage2 = citizen->_entity->FindComponent<StorageComponent>();
+        if (storage2->QueryCount() < cap) {
+            storage->capacity = cap;
         }
     }
 }

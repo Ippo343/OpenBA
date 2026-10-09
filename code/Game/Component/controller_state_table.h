@@ -56,11 +56,6 @@
 #include "Component/ControllerComponent.h"   // ControllerComponent::Controller (the node)
 #include "Component/StateMachineComponent.h" // StateMachine (the machine the handlers receive)
 
-// Our port of StateMachine::Tick (retail 0x1400a9660), defined in
-// statemachinecomponent.cpp and registered for that address. RequestStateTransition
-// below needs it for the retail nested-tick idiom on a not-yet-entered SM.
-void StateMachine_TickReimpl(StateMachine* smP, int64_t time, char param3, char param4);
-
 namespace ControllerLive {
 
 // ── The handler types. `Owner` is the class that embeds the controller (its
@@ -344,8 +339,13 @@ template <class Tag> StateTable<typename Dispatcher<Tag>::Owner> Dispatcher<Tag>
 // dispatcher bounds-rejects the request exactly as before.
 inline void RequestStateTransition(::StateMachine* m, int desiredStateId) {
     if (!m) return;
-    if (m->activeState < 0)
-        m->Tick(nullptr, 0, 0);   // 0x1400a9660; the old forwarder's integer time 0 was this null
+    if (m->activeState < 0) {
+        // Retail's inlined copies (0x14005a7ab-0x14005a7c7, 0x14005a9f7-0x14005aa13): a stack
+        // Time(0.0f) through the import 0x140152b00, `LEA RDX,[RSP+..]`, R8D = R9D = 0.
+        System::Time t0 = {0};
+        RtSystem_Time_Ctor(&t0, 0.0f);
+        m->Tick(&t0, 0, 0);       // 0x1400a9660
+    }
     ::ControllerComponent::Controller* node = m->current;   // re-read after the nested tick
     if (!node) return;
     int curIdx = m->activeState;  // re-read after the nested tick

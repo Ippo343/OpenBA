@@ -127,7 +127,7 @@ static void DoHarvestReset(GrowthComponent* comp, const Map* resourceMgr, float 
 //   0x140004680 FindComponent<MapComponent> -- the footprint (tile x / y)
 //   0x140120c30 WorkLeaf_FootprintOwnerCheck_120c30 -- spawn-site validity check
 //               (growthComp/config, x, y) -> bool(low byte)
-//   0x140005200 FindComponent<ParticleComponent>'s neighbour: see SpawnSubResource
+//   0x140003f60 FindComponent<ModelComponent> -- the parent's meshGroup, the child's mesh pick
 //   0x1400c3720 ComponentEntity_CtorFromDescription -- ComponentEntity copy-ctor
 //   0x1400052c0 FindComponent<NaturalResourceComponent> / 0x14000c460
 //               FindComponent<GrowthComponent>
@@ -150,7 +150,7 @@ void Component::ModifyFlags(uint32_t orMask, uint32_t andNotMask) {
     uint32_t newF = (oldF | orMask) & ~andNotMask;
     _flags = newF;
     if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
-        NotifyEntityChanged(_entity.Get());
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 
@@ -194,7 +194,7 @@ void NaturalResourceComponent::ResetGrowthState() {
     uint32_t newF = oldF | 0x200000;
     _flags = newF;
     if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
-        NotifyEntityChanged(_entity.Get());
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
     NaturalResourceSetAnimation(this, 2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
 }
@@ -236,11 +236,8 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     if ((char)valid == '\0') return;
 
     int mapWv = map->size;
-    int64_t parentIBP = 0;
-    NaturalResourceComponent_FindComponentByType(_entity.Get(), &parentIBP);   // 0x140005200
-    // LEFT: retail calls FindComponent<ModelComponent> (0x140003f60) here and below, the tree
-    // the ParticleComponent finder (known_port_issues 14, row 400): +0x164 is no ParticleComponent field.
-    int16_t variantSeed = *reinterpret_cast<int16_t*>(*reinterpret_cast<uintptr_t*>(&parentIBP) + 0x164);   // LEFT: row 400 (the ParticleComponent finder's result read at the ModelComponent's +0x164)
+    // 0x14011fd1b FindComponent<ModelComponent> (0x140003f60); 0x14011fd2f `MOVSX ESI,[RAX+0x164]`.
+    int16_t variantSeed = _entity->FindComponent<ModelComponent>()->meshGroup;
 
     // Allocate + copy-construct the new ComponentEntity from this entity's description.
     ComponentEntity* mem = (System::MemoryAllocator::_singleton)
@@ -257,15 +254,10 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     GrowthComponent* acc2 = newEnt->FindComponent<GrowthComponent>();   // 0x14000c460
     SetGrowthProgress(acc2, 0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)
 
-    int64_t acc3 = 0;
-    NaturalResourceComponent_FindComponentByType(newEnt, &acc3);   // 0x140005200
-    int64_t variantTarget = acc3;
+    ModelComponent* variantTarget = newEnt->FindComponent<ModelComponent>();   // 0x14011fde3 (0x140003f60)
+    ModelComponent* variantWrite = newEnt->FindComponent<ModelComponent>();    // 0x14011fe09 (0x140003f60)
 
-    int64_t acc4 = 0;
-    NaturalResourceComponent_FindComponentByType(newEnt, &acc4);   // 0x140005200
-    ModelComponent* variantWrite = reinterpret_cast<ModelComponent*>(acc4);   // LEFT: row 400 (the ParticleComponent finder's result read as the ModelComponent)
-
-    uint32_t range = ModelMeshCount(reinterpret_cast<const ModelComponent*>(variantTarget), (int)variantSeed);   // 0x140125320  // LEFT: row 400 (the ParticleComponent finder's result read as the ModelComponent)
+    uint32_t range = ModelMeshCount(variantTarget, (int)variantSeed);   // 0x140125320
     // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
     // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
     uint32_t roll2 = rng->Rand(static_cast<uint32_t>(range));
@@ -473,7 +465,7 @@ void GrowthComponent::Update(const System::Time* time) {
 
         // Notify entity if flags changed
         if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
-            NotifyEntityChanged(_entity.Get());
+            _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
 
         // Sub-resource spawning check
@@ -531,7 +523,7 @@ void GrowthComponent::Update(const System::Time* time) {
 
         // Notify entity if flags changed
         if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
-            NotifyEntityChanged(_entity.Get());
+            _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
 }
@@ -623,7 +615,7 @@ void GrowthComponent::PostUpdate() {
     uint32_t newFlags = oldFlags & ~0x10u;
     _flags = newFlags;
     if (((newFlags ^ oldFlags) & 0xffff) != 0 && _entity != nullptr) {
-        NotifyEntityChanged(_entity.Get());
+        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 

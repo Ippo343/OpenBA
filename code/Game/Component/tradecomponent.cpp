@@ -286,12 +286,13 @@ void TradeComponent::Setup() {
 // +0x28 = 0; +0x2c = -1 (the "no merchant selected" sentinel: tradeui's `>= 0` test
 // and comboEnabled key off it); +0x30..+0x58 = 0; +0x60 = 0 (qword), +0x68 = 0
 // (dword); +0x71 = 0; +0x78 = +0x80 = 0; the member at +0x88 with its back-pointer
-// (+0xa0); then `_flags |= 3` (0x83).
+// (+0xa0); then `_flags |= 3` (0x83). +0x6c..+0x70 and +0x72..+0x77 are NOT written
+// (0x14005c495 `MOV [RAX+0x8],EDX` then 0x14005c498 `MOV byte [RBX+0x71],DL`; B6 row 27).
 TradeComponent::TradeComponent()
     : tradeState(0), tradeId(-1),
       merchantOrders(), buyOrders(), manifest(),
-      stock{{nullptr, 0, {}}}, workEnabled(0),   // the tree's: retail's ctor leaves +0x6c..+0x70 as allocated
-      tradeFlag(0), _pad72{}, merchantTimer{0}, merchant(nullptr),
+      stock(),
+      tradeFlag(0), merchantTimer{0}, merchant(nullptr),
       _controller(this) {
     OrFlagsInCtor(0x3);
 }

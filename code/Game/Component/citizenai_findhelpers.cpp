@@ -245,10 +245,11 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
     do {
         ComponentEntity* cand = list->field_0x20._data[idx].Get();
 
-        Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
+        // the scan's IsDerivedFrom(InteractComponent) result, typed
+        InteractComponent* interact = static_cast<InteractComponent*>(ScanCompList1(cand, s_tid_InteractComponent));
 
         Vector3Slot vec;
-        Pf_EntityResolvePos_2e20(interact, &vec.v, 0, 0, nullptr);
+        InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
         uint32_t cell = WorldToCell(map, &vec.v.x);
         int cost = CellCost(map, cell, param_3);
 
@@ -436,10 +437,10 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
 
             if (static_cast<int>(occ) < 1) {
                 // InteractComponent on the entity -> world position
-                Component* interact = ScanCompList1(cand, s_tid_InteractComponent);
+                InteractComponent* interact = static_cast<InteractComponent*>(ScanCompList1(cand, s_tid_InteractComponent));
 
                 Vector3Slot vec;
-                Pf_EntityResolvePos_2e20(interact, &vec.v, 0, 0, nullptr);
+                InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
                 uint32_t cell = WorldToCell(map, &vec.v.x);
 
                 // path cost (Ghidra's uVar30/uVar22, cell/goal or %w/dist², were the extra
