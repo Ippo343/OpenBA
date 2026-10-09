@@ -86,9 +86,8 @@ void SpriteCaptureUI::OnCreated() {
 // [8] 0x1400793a0
 void SpriteCaptureUI::OnUpdate(const System::Time& /*time*/) {
     SpriteCaptureUI* self = this;
-    // Input::Device singleton (the tree's null guard; retail reads it unguarded)
+    // Input::Device singleton, read unguarded (0x1400793a0)
     const Input::Device* inputDevice = ::Input::Device::_singleton;
-    if (!inputDevice) return;
 
     // 1. If currently dragging, check if left mouse button (axis 4) was released
     if (self->dragging) {
@@ -122,16 +121,14 @@ check_pressed:
         }
     }
 
-    // 4. While dragging, push current bounds into the captureBox's corners
-    //    (the tree's null guard on the box; retail has none)
+    // 4. While dragging, push current bounds into the captureBox's corners (+0xd0..+0xdc,
+    //    the box read unguarded)
     if (self->dragging) {
         CaptureBoxElement* box = self->captureBox;
-        if (box) {
-            box->_x0 = self->curX;
-            box->_y0 = self->curY;
-            box->_x1 = self->anchorX;
-            box->_y1 = self->anchorY;
-        }
+        box->_x0 = self->curX;
+        box->_y0 = self->curY;
+        box->_x1 = self->anchorX;
+        box->_y1 = self->anchorY;
     }
 
     // 5. Handle pending External save
@@ -141,21 +138,17 @@ check_pressed:
             // a. End sprite capture mode on the dialog's UserInterface
             self->_dialog->_ui->EndSpriteCapture();
 
-            // b. The source directory (the tree's guard on the FileSystem kept)
+            // b. The source directory (the FileSystem singleton read unguarded)
             const IO::FileSystem* fs = ::IO::FileSystem::_singleton;
-            System::String sourceDirStr;
-            if (fs)
-                sourceDirStr = fs->GetSourceDirectory().AsString();
+            System::String sourceDirStr = fs->GetSourceDirectory().AsString();
 
-            // c. The edit element's text (the tree's guard on the element kept)
+            // c. The edit element's text (+0x30, read unguarded)
             UI::EditElement* editElem = self->editCapture;
 
             // d. Concat: sourceDir + editText -> concatStr1
             //    Then: concatStr1 + ".rsc" literal -> concatStr2
             //    Filename ctor from concatStr2 -> pathFilename
-            System::String concatStr1;
-            if (editElem)
-                concatStr1 = sourceDirStr + editElem->GetText();
+            System::String concatStr1 = sourceDirStr + editElem->GetText();
 
             // ".rsc" — retail's literal at 0x14015d424 in the exe .rdata
             const char* rscLiteral = ".rsc";
