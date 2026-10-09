@@ -51,28 +51,6 @@
 
 namespace {
 
-// Scan an entity's component list (entity+0x30 = IBP array, entity+0x38 = count)
-// for the first component whose GetTypeId (vtable +0x10) equals `typeId`. Mirrors
-// FUN_14008d100's two inline scan loops exactly: it stops at the first GetTypeId
-// match and returns it only if IsDerivedFrom(comp, typeId) also holds — otherwise
-// null (it does NOT keep scanning past a GetTypeId hit). (Not FindComponent<T>:
-// the tree skips a null slot; known_port_issues 14d.)
-Component* FindComponentByTypeId(const ComponentEntity* entity, uint32_t typeId) {
-    int i = 0;
-    while (i < entity->_components._size) {                          // count re-read (faithful)
-        Component* comp = entity->_components[i].Get();
-        if (comp == nullptr) { ++i; continue; }
-        // Slot 2 on an entity component-array element.
-        uint32_t tid = comp->Type();
-        if (tid == typeId) {
-            Component* compVal = entity->_components[i].Get();
-            return (::Object::IsDerivedFromNullSafe(compVal, typeId)) ? compVal : nullptr;
-        }
-        ++i;
-    }
-    return nullptr;
-}
-
 // CitizenBehavior's +0x100 profession tree is a Collection::Set of
 // CitizenBucket<Profession> (Entity/CitizenBehavior.h, B.4 X5-COMP): the node's
 // key is the profession, compared as an unsigned qword (a pointer compare), its
@@ -209,11 +187,6 @@ extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, con
 // ============================================================
 extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, const Profession* professionKey) {
 
-    // Type-ids resolved self-contained (do NOT read the shared .rdata DWORDs):
-    // the classes' TypeId() (caller batch CB6; was a lazy by-name cache).
-    const uint32_t s_tidWorkPlace = WorkPlaceComponent::TypeId();   // DWORD_1401c80e0
-    const uint32_t s_tidWork      = WorkComponent::TypeId();        // DWORD_1401c8070
-
     // Step 1: optimize/sort the profession node's building list (OPTIONAL — guard).
     if (Opt().liveSeatShuffle) TownRegistry_ShuffleProfessionList(townMgr, professionKey);   // 0x140089470
 
@@ -243,27 +216,24 @@ extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, cons
     int count = found->element.entities._size;             // +0x10 count
     for (int i = 0; i < count; ++i) {
         // building entity ref (InternalBasePtr value) at node.arr[i].
-        ComponentEntity* buildingIBP = found->element.entities._data[i].Get();
-        ComponentEntity* building = buildingIBP;
-        if (building == nullptr) continue;
+        // Row 99 (B7 RES): retail 0x14008d100 tests none of the building, the
+        // WorkPlaceComponent, its owner or the WorkComponent: the two inline scans are
+        // FindComponent<T>'s (0x14008d1e0-0x14008d202 / 0x14008d255-0x14008d277, `[[slot]+0x10]`
+        // with no null-slot test), and +0x60 / +0x10 / +0x30 are read through the results.
+        ComponentEntity* building = found->element.entities._data[i].Get();
 
         // 3a: find its WorkPlaceComponent; wrap in an IBP (matches original).
-        ::Object::InternalPtr<WorkPlaceComponent> wpcIBP(
-            static_cast<WorkPlaceComponent*>(FindComponentByTypeId(building, s_tidWorkPlace)));
+        ::Object::InternalPtr<WorkPlaceComponent> wpcIBP(building->FindComponent<WorkPlaceComponent>());
         WorkPlaceComponent* wpcPtr = wpcIBP.Get();
-        if (wpcPtr == nullptr) continue;                  // defensive (never in valid data)
 
         int workerCount = wpcPtr->workers._size;            // WPC+0x60 = live workers
 
         // owning entity is the embedded IBP at WPC+0x10 — CheckPtr then deref.
         ComponentEntity* owner = wpcPtr->_entity.Get();
-        if (owner == nullptr) continue;                   // defensive
 
         // 3b: find the WorkComponent on the owning entity; wrap in an IBP.
-        ::Object::InternalPtr<WorkComponent> wcIBP(
-            static_cast<WorkComponent*>(FindComponentByTypeId(owner, s_tidWork)));
+        ::Object::InternalPtr<WorkComponent> wcIBP(owner->FindComponent<WorkComponent>());
         WorkComponent* wcPtr = wcIBP.Get();
-        if (wcPtr == nullptr) continue;                   // defensive
 
         // capacity = WorkComponent+0x30; lazily compute+cache via CalcMaxWorkers.
         int capRaw = wcPtr->workState;
