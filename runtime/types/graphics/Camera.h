@@ -468,6 +468,18 @@ static_assert(offsetof(RendererDrawItem, _pad34)    == 0x34, "DrawItem::_pad34 @
 // ============================================================
 class RendererDrawGroup {
 public:
+    // The implicit default constructor, kept for the element row's users.
+    RendererDrawGroup() = default;
+    // B6 row 32: BeginDrawGroup's append-path stack record (0x180104fd0,
+    // 0x180105009..0x18010505x), store for store in member order: +0x000 the
+    // render buffer, the Camera copy ctor 0x180017a70 at +0x008 and at +0x0e0,
+    // +0x1b8, +0x1bc, then the three zeroed Array headers (the EH vector ctor).
+    // Nothing else is written: no default construction of the two Cameras first.
+    RendererDrawGroup(const Video::RenderBuffer* renderBuffer, const Camera& camera,
+                      const Camera& cullCamera, int32_t shader, uint32_t materialTypeFlags)
+        : _renderBuffer(renderBuffer), _camera(camera), _cullCamera(cullCamera),
+          _shader(shader), _materialTypeFlags(materialTypeFlags), _items() {}
+
     const Video::RenderBuffer* _renderBuffer;                 // +0x000
     Camera   _camera;                                         // +0x008  GetCamera(i)
     Camera   _cullCamera;                                     // +0x0e0  GetCullCamera(i)

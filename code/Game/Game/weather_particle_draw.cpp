@@ -168,7 +168,7 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
     const float particleSize = desc->particleSize;    // Weather +0x44
     const bool  velStretch   = desc->velocityStretch; // +0x40
     const int   particleCount = _particles.size;      // +0xE8 count
-    const int   indexCount    = _indices.size;        // +0xD8
+    const int   indexCount    = _indices._size;       // +0xD8
     const float intensity     = _intensity;           // +0xC0
 
     // (1) Copy the camera Transform3 (camera+0x64) and pull its basis columns.
@@ -334,7 +334,7 @@ void WeatherParticleGeometry::Draw(Video::Context& videoCtx, const Graphics::Cam
                 // Context +0x20f0, the dynamic index cursor (16-bit indices).
                 uint16_t*& idxCur = videoCtx._dynamicIndexCursor;
                 size_t idxBytes = static_cast<size_t>(indexCount) * 2;
-                std::memcpy(idxCur, _indices.data, idxBytes);   // +0xD0
+                std::memcpy(idxCur, _indices._data, idxBytes);   // +0xD0
                 idxCur += static_cast<size_t>(indexCount);   // idxBytes / 2
 
                 videoCtx.EndInstancedIndexedVertices(0);

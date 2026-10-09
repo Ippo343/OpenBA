@@ -42,8 +42,8 @@
 // A* / pathfinder helpers (reimplemented + registered elsewhere) — called by name through
 // Action/exe_bodies.h: Pf_WorkerApplyCmd_a6430 (0x1400a6430), Pf_EnqueueCmd1_a6a30
 // (0x1400a6a30), Pf_ArrayResize18_d830 (0x14001d830).
-// Runtime-DLL functions, called by name: ??0CriticalSection@System@@QEAA@XZ ->
-// RtSystem_CriticalSection_Ctor (system/Thread.h); ?MemFree@MemoryAllocator@System@@ ->
+// Runtime-DLL functions, called by name: ??0CriticalSection@System@@QEAA@XZ is the
+// +0x30 member's own ctor (B6 row 50); ?MemFree@MemoryAllocator@System@@ ->
 // System::MemoryAllocator::MemFree.
 
 
@@ -128,8 +128,9 @@ extern "C" void Pathfinder_Seed(Map* game, int dim) {
     // --- FUN_1400a67f0 ctor (inline) ---
     // ENDGAME B.3.9 ENG W2: the REAL class ctor on System::Thread(0x10000) --
     // creates + parks the worker thread; the 0x14015ef18 stamp is the compiler's.
+    // B6 row 50: that ctor constructs the +0x30 lock as a member
+    // (0x1400a6829 / 0x1400a682d: ??0CriticalSection right after the stamp).
     PathfinderThread* pf = ::new (pfV) PathfinderThread(0x10000);
-    RtSystem_CriticalSection_Ctor(&pf->lock);   // 0x18000c5c0 (System::CriticalSection is trivially constructible by design, Thread.h)
     pf->nextToken  = 1;          // next result-slot generation id
     pf->runInline  = 1;          // priming runs SYNC (commands apply inline); flipped to 0 (async) after priming
     pf->queueTail  = nullptr;    // queue tail
