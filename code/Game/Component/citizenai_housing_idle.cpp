@@ -117,20 +117,6 @@ namespace {
 // --- registered exe sub-callees: called by name (Component/Action/Work exe_bodies.h) ---
 
 
-// A plausible heap node pointer: non-null, not the -1 "invalid IBP" sentinel, and canonical
-// user-space (>= 64K, < 2^47). Used to fence the AVL rebalance walk (CitizenAI_Reg_helper_e360) against a
-// corrupt/invalid child or parent link — observed in standalone when an idle citizen's work-
-// candidate tree picks up a tool-placed building whose inert-factory component yields a -1
-// field, which fed 0xffffffffffffffff into the tree and faulted on deref (READ of -1). When
-// every link is valid this is a pure no-op; when one isn't, the walk treats it as absent
-// rather than dereferencing it. The transient tree is freed immediately after, so a slightly
-// less-balanced tree in that rare corrupt case only means a marginally different candidate pick.
-// NOT RETAIL: 0x14000e360 tests each link for null only (known_port_issues 14d row 210).
-static inline bool ValidNode(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: a candidate-tree link in [0x10000, 0x800000000000) (NOT RETAIL, known_port_issues row 210)
-    uint64_t u = reinterpret_cast<uintptr_t>(p);   // CAST-OK: ptr_int
-    return u >= 0x10000ULL && u < 0x0000800000000000ULL;
-}
-
 static inline WorkCandidateNode* NodeAlloc() {
     return static_cast<WorkCandidateNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
 }
@@ -774,47 +760,50 @@ uint64_t CitizenAIComponent::State_Idle() {
 //   Retail's body serves every 0x30 node with links at +0x10/+0x18/+0x20 and int16 balance /
 //   height at +0x28 / +0x2A (ICF, B13): one template, instantiated below for each tree.
 // ============================================================
+// B6 row 210: retail tests each link for NULL only (0x14000e36a the start node,
+// 0x14000e38e / 0x14000e3a5 the two children, 0x14000e3d7 / 0x14000e40b the rotation
+// children, 0x14000e434 the parent); the tree's ValidNode range fence (which also rejected
+// the -1 IBP sentinel) is gone, and a -1 link is dereferenced as retail does.
 template <class Node>
 void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** param_2) {
-    Node* node = *param_2;
-    while (ValidNode(node)) {
+    if (*param_2 == nullptr) return;
+    Node* parent;
+    do {
         Node* n = *param_2;
-        if (!ValidNode(n)) break;                                // corrupt slot -> stop the walk
-        Node* parent = n->parent;  // next up
+        parent = n->parent;  // next up
         Node* left  = n->left;
         Node* right = n->right;
-        short hL = ValidNode(left)  ? static_cast<short>(left->height + 1) : 0;
-        short hR = ValidNode(right) ? static_cast<short>(right->height + 1) : 0;
+        short hL = left  ? static_cast<short>(left->height + 1) : 0;
+        short hR = right ? static_cast<short>(right->height + 1) : 0;
         short h = (hR < hL) ? hL : hR;
         n->height = h;
         n->balance = static_cast<short>(hR - hL);
 
         if (static_cast<short>(hR - hL) > 1) {
             Node* rc = n->right;
-            if (ValidNode(rc)) {
+            if (rc) {
                 // right-heavy: if right child is left-heavy, rotate it first (e580), then e450.
                 if (rc->balance < 1 && rc->balance < 0) {
                     AvlRotateRight(rootSlot, rc);   // 0x14000e580
                     n = *param_2;
                 }
-                if (ValidNode(n)) AvlRotateLeft(rootSlot, n);   // 0x14000e450
+                AvlRotateLeft(rootSlot, n);   // 0x14000e450
             }
         }
         n = *param_2;
-        if (ValidNode(n) && n->balance < -1) {
+        if (n->balance < -1) {
             Node* lc = n->left;
-            if (ValidNode(lc)) {
+            if (lc) {
                 // left-heavy: if left child is right-heavy, rotate it first (e450), then e580.
                 if (lc->balance > -1 && lc->balance > 0) {
                     AvlRotateLeft(rootSlot, lc);   // 0x14000e450
                     n = *param_2;
                 }
-                if (ValidNode(n)) AvlRotateRight(rootSlot, n);   // 0x14000e580
+                AvlRotateRight(rootSlot, n);   // 0x14000e580
             }
         }
         *param_2 = parent;
-        node = parent;
-    }
+    } while (parent != nullptr);
 }
 
 // The trees that rebalance through 0x14000e360.
