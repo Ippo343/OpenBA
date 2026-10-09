@@ -255,12 +255,16 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             }
         }
         WorkPlaceComponent* wpIBP = wp;  // local_98
-        // workerCount (+0x60) != 0 → this workplace accepts a worker
-        if (wpIBP != nullptr && wpIBP->workers._size != 0) {
-            InteractComponent* posBuf[2] = {nullptr, nullptr};
-            posBuf[0] = entity->FindComponent<InteractComponent>();   // 0x140002ed0
-            Math::Vector3 wpos;
-            if (posBuf[0]) InteractNodePosition(posBuf[0], &wpos, 0, 0, nullptr);
+        // workerCount (+0x60) != 0 → this workplace accepts a worker. A scan miss leaves a
+        // null InternalPtr and 0x14008f3d1 `CMP [RAX+0x60],0` reads it unguarded (B6 row 850).
+        if (wpIBP->workers._size != 0) {
+            // 0x14008f3db-0x14008f40f: FindComponent<InteractComponent> 0x140002ed0 into
+            // [RBP-0x31], then InteractNodePosition 0x140122e20 UNCONDITIONALLY into the
+            // unconstructed slot [RBP-0x11] (kind 0, index 0, heading null).
+            InteractComponent* interact = entity->FindComponent<InteractComponent>();   // 0x140002ed0
+            Vector3Slot wposSlot;
+            InteractNodePosition(interact, &wposSlot.v, 0, 0, nullptr);
+            const Math::Vector3& wpos = wposSlot.v;
             int dim = map->size;
             int ix = static_cast<int>(wpos.x + static_cast<float>(dim >> 1));
             int iy = static_cast<int>(wpos.y + static_cast<float>(dim >> 1));
