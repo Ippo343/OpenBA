@@ -165,3 +165,17 @@ row's status cell ends in FIXED / NOT A DIFFERENCE / LEFT (with the owing row). 
 `worldcmp.sh` identical, or DIFFERS with every differing line attributed to a row in CLOSE_NUMBERS.
 
 ## 7. Corrections (dated, appended as blocks find them)
+
+2026-10-09, from the coordinator's own SAVE unit (the 14b rows, done first while Block 0 ran):
+- C1. **Rows that share one retail body are one commit** (D1 refinement): rows 13 / 14 / 15 / 810 are all
+  `CitizenBehavior::Serialize` 0x14008f760; the message lists every row with its own BEFORE / AFTER.
+- C2. **The 14b rows merge FIRST, not last**, because every one of them turned out byte-identical in the
+  binary encoding (overloads of the same width, a field moved within its record, a dead arm, a clamp the
+  gate's save already satisfies): no golden re-cut is expected, so one gate with resave x5 covers them;
+  a DIFF would still be bisected row by row on the branch. D3's "each alone" stays the rule for any 14b
+  row that CHANGES bytes.
+- C3. **A worktree's copy of `runs/warn_baseline_*.txt` is CRLF** (`core.autocrlf = true` on checkout; main's
+  copy is LF): a block's warning diff must `tr -d '\r'` the baseline first or every line reads as new.
+  The gate runs from main and is unaffected.
+- C4. Row 18 was already retail (B4 typed the four bytes `int8_t` with the signed-char overload); row 20 is
+  NOT A DIFFERENCE (read: Fruit +0x30 float / +0x34 bool; LayoutDescription's enums through the uint slot).
