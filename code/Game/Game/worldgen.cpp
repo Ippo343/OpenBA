@@ -453,23 +453,23 @@ static uint8_t* wg_BlendTexture_cf440(TerrainHeightfield* hf) {
 }
 
 // ============================================================
-// fd10 — lazy material resolve (blueprint §5). NULL-safe; trusts Find's return
-// and skips the post-Find IsDerivedFrom check (cascade strategy — the standalone
-// factory tree is incomplete and IsDerivedFrom NULL-derefs).
-//   name = the String of a {System::String name @+0; int cookie @+0x08; External* cache @+0x10}
-//   triple (TerrainGenerator +0x38 / +0x50 / +0x68)
-// Returns the resolved External* (or null -> untextured-but-visible terrain).
+// 0x14001fd10 — the generation-cached material resolve over a by-name reference
+// (Object/NamedExternalRef.h): when the reference's generation (+0x08) differs from
+// the ExternalFactory's, Find the name, keep the result only if it IsDerivedFrom
+// Graphics::MaterialInstance, store it at +0x10 and the factory's generation at +0x08.
+// No test of the factory singleton.
 // ============================================================
-static Graphics::MaterialInstance* wg_ResolveMaterial_fd10(const System::String* name) {
-    if (!name) return nullptr;
+static void wg_ResolveMaterial_fd10(NamedExternalRef* ref) {
     const ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;
-    if (!factory) return nullptr;
-
-    // String is at +0 of the triple.
-    System::Filename fnbuf(*name);
-    // The tree trusts Find's result (retail checks IsDerivedFrom MaterialInstance in
-    // 0x14001fd10; known_port_issues 14).
-    return factory->FindAs<Graphics::MaterialInstance>(fnbuf);
+    if (ref->generation != factory->_generation) {
+        System::Filename fnbuf(ref->name);
+        ::Object::External* obj = factory->FindAs<::Object::External>(fnbuf);
+        ::Object::External* resolved = nullptr;
+        if (obj != nullptr && ::Object::IsDerivedFromNullSafe(obj, Graphics::MaterialInstance::TypeId()))
+            resolved = obj;
+        ref->resolved = resolved;
+        ref->generation = factory->_generation;
+    }
 }
 
 // ============================================================
@@ -716,10 +716,25 @@ void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t se
     _fieldCC          = 0x20 + 1;      // 33
     _chunkIndexStride = 33 * 33;       // 1089
 
-    // Resolve the 3 ground materials (NULL-safe; untextured if unresolved).
-    _terrainMaterial = wg_ResolveMaterial_fd10(&gen->_field38.name);
-    _waterMaterialA  = wg_ResolveMaterial_fd10(&gen->_field50.name);
-    _waterMaterialB  = wg_ResolveMaterial_fd10(&gen->_field68.name);
+    // Resolve the 3 ground materials (0x1400b02a6..0x1400b03af): each triple is COPIED
+    // into a stack record (String copy, generation, cached pointer), 0x14001fd10 runs on
+    // the copy, the copy's +0x10 is stored, the copy's String destroyed. The
+    // TerrainGenerator's own triples are never updated.
+    {
+        NamedExternalRef copy(gen->_field38);
+        wg_ResolveMaterial_fd10(&copy);
+        _terrainMaterial = static_cast<Graphics::MaterialInstance*>(copy.resolved);   // +0xF8
+    }
+    {
+        NamedExternalRef copy(gen->_field50);
+        wg_ResolveMaterial_fd10(&copy);
+        _waterMaterialA = static_cast<Graphics::MaterialInstance*>(copy.resolved);    // +0x150
+    }
+    {
+        NamedExternalRef copy(gen->_field68);
+        wg_ResolveMaterial_fd10(&copy);
+        _waterMaterialB = static_cast<Graphics::MaterialInstance*>(copy.resolved);    // +0x158
+    }
 
     // Allocate + init the heightfield scratch struct (heap; retail's is b0230's
     // 0xA30-byte stack record; the tree allocates 0x10 bytes of margin past it).
