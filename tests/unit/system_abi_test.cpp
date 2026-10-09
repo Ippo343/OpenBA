@@ -248,14 +248,15 @@ UNIT_TEST(system_random_is_0x9c4_bytes_and_aliases_the_global_pod) {
     CHECK(std::is_standard_layout<System::Random>::value);
     CHECK(std::is_trivially_destructible<System::Random>::value);
 
-    // B4b-2, and for Random the reason is specific: `Object::InternalFactory`
-    // holds a `::Random` BY VALUE at +0x20 (runtime/types/object/Internal.h)
-    // while `Ctor_InternalFactory` seeds it through the
-    // `??0Random@System@@QEAA@XZ` door. A real constructor here would seed the
-    // object factory's RNG twice from two different `time(nullptr)` values the
-    // moment anyone re-spells that member — a determinism change with no build
-    // error. This assertion is what makes adding one fail the test suite.
-    CHECK(std::is_trivially_default_constructible<System::Random>::value);
+    // ENDGAME B7 (CTOR, D5): the two exported ctors (0x1800c7f20 / 0x1800c7ed0)
+    // are REAL ctors and the doors that seeded raw storage are gone, so every
+    // holder seeds exactly once (by-value members at their declaration position,
+    // raw-storage holders by placement new). The old pin here (trivially
+    // default-constructible) guarded against a ctor running BESIDE a door; with
+    // no door left the pin is the opposite: a default-constructed Random is
+    // seeded, never left as zeroed storage.
+    CHECK(!std::is_trivially_default_constructible<System::Random>::value);
+    CHECK((std::is_constructible<System::Random, uint32_t>::value));
 }
 
 UNIT_TEST(system_time_is_8_bytes_over_the_shared_global_struct_Time) {

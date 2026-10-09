@@ -794,12 +794,6 @@ Scene::Scene() : _grid(kSceneCellSize) {
 }
 }  // namespace Graphics
 
-// The exe's raw-storage holders (MemAlloc(0x78) / minimap's stack buffer)
-// construct through this forwarder; retail returns `this` in RAX.
-extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
-    return ::new (static_cast<void*>(self)) Scene();
-}
-
 // ============================================================================
 // Graphics::Scene::~Scene()
 // retail 0x1801026c0, ordinal 670   ??1Scene@Graphics@@QEAA@XZ
@@ -830,16 +824,11 @@ extern "C" Scene* RtGraphics_Scene_Ctor(Scene* self) {
 // in reverse declaration order: +0x50, +0x40, +0x30, +0x20 (0x18001c750 each),
 // then +0x10 (the tail JMP 0x18005fc20) -- retail's six calls in its order
 // (the five Arrays are the `_grid` member's since B.4 final RT).
-// The door stays for the exe's raw-storage holders.
 namespace Graphics {
 Scene::~Scene() {
     _globals.Clear();                // +0x60  retail 0x18005f1f0
 }
 }  // namespace Graphics
-
-extern "C" void RtGraphics_Scene_Dtor(Graphics::Scene* self) {
-    self->~Scene();
-}
 
 // ============================================================================
 // Graphics::Scene::AddObject(Geometry*)
