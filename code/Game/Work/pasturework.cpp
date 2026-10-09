@@ -66,7 +66,7 @@
 //   0x140003050  WorkBase_FindComponent_3050
 //   0x140002f90  WorkBase_FindComponent_2f90
 //   0x14012c3f0  CitizenComp_FUN_14012c3f0
-//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x14012e5c0 WorkComponent::CalcMaxWorkers
 //   0x140006270  WorkBase_FindComponent_6270
 //   0x14012cf10  CitizenComp_StorageComponent_QueryCount
 //   0x14009f3e0  Reimpl_MapGetTerrainPos
@@ -155,7 +155,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // component as an integer: LEFT)
     // -------------------------------------------------------
     if (local_58->workState == 0) {
-        int iVar9 = WorkComponent_CalcMaxWorkers(local_58);
+        int iVar9 = local_58->CalcMaxWorkers();
         local_58->workState = iVar9;
     }
 
@@ -448,47 +448,33 @@ int PastureWork::OnComplete(CitizenComponent** param2, ComponentEntity** /*arg2*
 
 
 // ============================================================
-// PastureWork::Slot7 (0x1400F22C0) -- Tree insertion with validation
-// Unlike other Work classes, this does more than BSTFindRemove:
-// 1. Insert citizen into BST at self+0x48
-// 2. If param3 entity is non-null:
-//    a. Check if it's derived from ComponentEntity
-//    b. Find NatRes component
-//    c. Clear "flagged for removal" bit (0x100000) in entity flags at +0x20
-//    d. If flag changed and entity has parent (+0x10), call UpdateParentEntity
+// PastureWork::Slot7 (0x1400F22C0) -- OnCancel
+// 1. Remove the citizen from the BST at self+0x48 (0x140025520)
+// 2. If the param3 entity is non-null (0x1400f22d2):
+//    a. IsDerivedFrom ComponentEntity (cell 0x1401c5d70) ? entity : null (CMOVNZ)
+//    b. Find its AnimalComponent (0x140005500), no null test
+//    c. ALWAYS clear bit 20 (0x100000) of the component flags at +0x20 (BTR, 0x1400f2319)
+//    d. Notify the entity (+0x10, 0x1400c3470) only when (old ^ new) & 0xFFFF != 0
+//       (0x1400f2320 XOR / 0x1400f2322 MOVZX EAX,AX). Retail quirk, copied: bit 20 is
+//       outside the low 16 bits, so the test is always 0 and the notify never runs.
 // ============================================================
 int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, int /*arg3*/) {
-    // Insert citizen into BST (the tree helper takes the container as uintptr_t*: LEFT)
     WorkBST_BSTFindRemove_25520(&_citizens, param2);
 
-    // Check if param3 entity is valid
     ComponentEntity* entity = *param3;
     if (entity == nullptr) {
         return 0;
     }
 
-    // Check if derived from ComponentEntity
-    if (!Object::IsDerivedFromNullSafe(entity, AnimalDescription::TypeId())) {
-        return 0;
-    }
+    ComponentEntity* asEntity = entity->IsDerivedFrom(ComponentEntity::TypeId()) ? entity : nullptr;
+    AnimalComponent* animal = asEntity->FindComponent<AnimalComponent>();
 
-    // Find the AnimalComponent (0x140005500)
-    AnimalComponent* natResObj = entity->FindComponent<AnimalComponent>();
-
-    if (natResObj == nullptr) {
-        return 0;
-    }
-
-    // Clear "flagged for removal" bit (0x100000) in the component flags at +0x20
-    uint32_t oldFlags = natResObj->_flags;
+    uint32_t oldFlags = animal->_flags;
     uint32_t newFlags = oldFlags & ~0x100000u;
-
-    if (newFlags != oldFlags) {
-        natResObj->_flags = newFlags;
-
-        // If the component has an entity (+0x10), update it
-        ComponentEntity* parentEntity = natResObj->_entity.Get();
-        if (parentEntity != nullptr) {
+    animal->_flags = newFlags;
+    if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0) {   // never true (retail quirk above)
+        ComponentEntity* parentEntity = animal->_entity.Get();
+        if (parentEntity != nullptr) {   // 0x1400f2329 CMP [RBX+0x10],0 (retail's own test)
             NotifyEntityChanged(parentEntity);
         }
     }

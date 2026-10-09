@@ -13,8 +13,6 @@
 #include "Action/exe_bodies.h"   // FindCharacterComponent, SetAnimation
 #include "Game/exe_constants.h"  // kRdata_14017214c
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Game/force_work.h"   // ForceWork::Readable — VirtualQuery-backed crash-safe probe
-#include <cstdio>
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
@@ -53,72 +51,16 @@ void PlayAnimation::Persist(IO::Stream& stream) {
 // Finds the entity's CharacterComponent, plays the animation.
 // Returns 1 (action stays active, Execute checks completion).
 // ============================================================
-// [STALE-TARGET GUARD + DIAG] The PlayAnimation target entity IBP at +0x20 is an
-// owning-weak ref into the InternalFactory handle table (see project-pile-collection-next:
-// objects register via the real Object::Internal ctor -> AddObject, and CheckPtr validates
-// by index+generation). In standalone, an object built WITHOUT the real ctor is never
-// table-registered, so CheckPtr above cannot invalidate a ref to it once it is freed:
-// *(s+0x20) then holds a freed pointer or an unresolved packed handle (gen<<32|idx), and
-// FindFamily's `*(int*)(entity+0x38)` faults (observed on the LIVE_DESTROY + RAWMAT_PICKUP
-// haul path 2026-07-24, value 0x1700000c04d). Retail relies on proper invalidation — the ref
-// reads null and the null guard below returns 0. Reproduce that outcome: if the target is not
-// a readable, plausibly-live object, log its identity (to pin the unregistered build-site for
-// the real fix) then abort the action exactly like the null path.
-static bool PlayAnim_TargetLooksLive(const ComponentEntity* target) {
-    // Plausible-pointer + readability: the object header (vtable @+0, index @+0x08,
-    // gen @+0x0c) plus a little slack must be mapped. A packed handle (~0x1700000c04d)
-    // or a freed/unmapped page fails here.
-    if (!ForceWork::Readable(target, 0x40)) {
-        static int n = 0;
-        if (n < 16) { ++n;
-            std::fprintf(stderr, "[PlayAnimGuard] ABORT: target=%p UNREADABLE "
-                                 "(unregistered/freed weak ref) — aborting action\n",
-                         static_cast<const void*>(target));
-            std::fflush(stderr);
-        }
-        return false;
-    }
-    // Readable: capture the vtable + factory index/gen so the object type can be
-    // identified offline (match vtable vs registered vtables / nm reimpl-x64.exe).
-    void* vt = *reinterpret_cast<void* const*>(target);  // LEFT: audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
-    if (!ForceWork::Readable(vt, 0x18)) {
-        static int n = 0;
-        if (n < 16) { ++n;
-            std::fprintf(stderr, "[PlayAnimGuard] ABORT: target=%p vtable=%p UNREADABLE "
-                                 "vtable — aborting action\n", static_cast<const void*>(target), vt);
-            std::fflush(stderr);
-        }
-        return false;
-    }
-    // Looks live. Log identity once-ish so a real (registered) target is also visible for
-    // comparison against the stale cases (throttled).
-    {
-        static int n = 0;
-        if (n < 24) { ++n;
-            uint32_t idx = static_cast<uint32_t>(target->GetFactoryIndex());
-            uint32_t gen = target->GetGeneration();
-            std::fprintf(stderr, "[PlayAnimGuard] target=%p vtable=%p factIdx=%u gen=0x%08x (live)\n",
-                         static_cast<const void*>(target), vt, idx, gen);
-            std::fflush(stderr);
-        }
-    }
-    return true;
-}
-
+// 0x140042420, read whole: CheckPtr(+0x20) 0x140042431; CALL 0x1400012d0 (the target's
+// CharacterComponent) 0x140042440; CheckPtr 0x14004244a; SetAnimation(character, +0x28,
+// 1.0f, 1.0f) 0x140042463; MOV EAX,1 0x14004246d. No test of the target or the component.
+// (The tree's null-target return, its readable-memory / vptr probe of the target and its
+// null-CharacterComponent return are gone: their reason, "an object built without the
+// real Object::Internal ctor is never table-registered, so CheckPtr cannot invalidate a
+// weak ref to it", is retired since B.4 gave every class its ctor.)
 int  PlayAnimation::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
-
-    if (_field20.Get() == nullptr) {
-        return 0;
-    }
-    ComponentEntity* target = _field20.Get();
-    if (!PlayAnim_TargetLooksLive(target)) {
-        return 0;   // stale/unregistered target — abort like retail's invalidated-null path
-    }
-    CharacterComponent* character = FindCharacterComponent(target);   // 0x1400012d0
-    if (character == nullptr) {
-        return 0;
-    }
+    CharacterComponent* character = FindCharacterComponent(_field20.Get());   // 0x1400012d0
     SetAnimation(character, static_cast<uint32_t>(animation), kRdata_14017214c, kRdata_14017214c);   // 0x14010a1f0
     return 1;
 }

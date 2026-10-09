@@ -27,7 +27,7 @@
 #include "Component/RawMaterialDescription.h"   // ENDGAME B.3.9 D5
 #include "Component/StorageComponent.h"         // ENDGAME B.3.9 D5
 #include "Component/StorageLocationComponent.h"
-#include "Component/BuildComponent.h"
+#include "Component/InteractComponent.h"
 #include "Component/CitizenComponent.h"
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
@@ -72,8 +72,8 @@ static inline uint32_t WorldToCell(float x, float z, int gridSize) {
 // Returns: 0 = failed validation, 1 = no work available (retry), 2 = work assigned
 int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
     // Find components on the entity (+0x10) through the guarded finders (typed locals)
-    BuildComponent* positionComp = nullptr;          // fn_FindComponent_Position: BuildComponent's cell
-    fn_FindComponent_Position(field_10.Get(), &positionComp);
+    // 0x1400e6c8b CALL 0x140002ed0: FindComponent<InteractComponent> into [RBP-0x40]
+    InteractComponent* positionComp = field_10->FindComponent<InteractComponent>();
 
     StorageLocationComponent* unknownComp = nullptr; // cell 0x1401c7ee8
     fn_FindComponent_Unknown7ee8(field_10.Get(), &unknownComp);
@@ -194,12 +194,13 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
 
         int dbgBranch = -1, dbgSlot = 0;   // trace: 0=position, 1=findslot
         if (unknownComp == nullptr) {
-            // No storage-location component — use the position component
+            // No storage-location component — use the InteractComponent. The null test is
+            // retail's: 0x1400e70ee CMP [RBP-0x40],0 / JZ 0x1400e6fb9 (MOV EAX,1).
             if (positionComp == nullptr) {
                 return 1;
             }
             dbgBranch = 0;
-            Pf_EntityResolvePos_2e20(positionComp, &destPos, 0, 0, nullptr);   // (the forwarder takes the BuildComponent as void*)
+            InteractNodePosition(positionComp, &destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
             destCell = WorldToCell(destPos.x, destPos.y, gridSize);
         } else {
             // Use search position

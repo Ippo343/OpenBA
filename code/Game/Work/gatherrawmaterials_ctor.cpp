@@ -64,62 +64,47 @@ GatherRawMaterials::GatherRawMaterials(ComponentEntity* const* buildEntityIBP) :
     // 0x1400ec752..0x1400ec771: four qwords, then the set's root qword and count dword).
 
     // --- Locate BuildComponent (-> BuildDescription at +0x18) on the build entity ---
-    // (the entity is *buildEntityIBP, which the Work base stored in field_10)
-    BuildComponent* buildComp = nullptr;
-    if (buildEntityIBP)
-        buildComp = field_10->FindComponent<BuildComponent>();
+    // (the entity is *buildEntityIBP, which the Work base stored in field_10).
+    // 0x1400ec788 CALL 0x14000d6c0, 0x1400ec7a3 [RAX+0x18] unguarded; IsDerivedFrom
+    // (0x1400ec7b0) ? desc : null (CMOVNZ, 0x1400ec7bb).
+    BuildComponent* buildComp = field_10->FindComponent<BuildComponent>();
+    Description* descObj = buildComp->_description;
+    BuildDescription* desc = descObj->IsDerivedFrom(GRMC_BuildDescTypeId())
+                                 ? static_cast<BuildDescription*>(descObj) : nullptr;
 
-    Description* descObj = buildComp ? buildComp->_description : nullptr;
-    uint32_t descTid = GRMC_BuildDescTypeId();
-    BuildDescription* desc = nullptr;
-    if (descObj && descTid && Object::IsDerivedFromNullSafe(descObj, descTid))
-        desc = static_cast<BuildDescription*>(descObj);
-
-    // --- Locate the site StorageComponent ---
-    StorageComponent* storage = nullptr;
-    if (buildEntityIBP)
-        storage = field_10->FindComponent<StorageComponent>();
+    // --- Locate the site StorageComponent (0x1400ec7d3 CALL 0x140006270) ---
+    StorageComponent* storage = field_10->FindComponent<StorageComponent>();
 
     // --- Size the two parallel int arrays to the material count ---
-    // FLAG: original reads desc+0x28 unconditionally (assumes desc valid). We guard
-    // desc==null -> matCount 0 so the arrays stay empty rather than deref null.
-    int matCount = desc ? desc->_costCount : 0;
+    // 0x1400ec7d8 / 0x1400ec7e5 read desc+0x28 with no test (a non-BuildDescription faults,
+    // as retail).
     // FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
     // GatherRawMaterials_Ctor calls it at 1400ec7e0 and 1400ec7ed, the member's own SetSize; no init arm) — a grown
     // tail is left as the allocation found it, like retail. Safe: the seeding loop right
     // below (retail 1400ec800..1400ec87f) writes BOTH arrays at every index i < +0x50
     // before either is read.
-    _present.SetSize(matCount);
-    _inFlight.SetSize(matCount);
+    _present.SetSize(desc->_costCount);
+    _inFlight.SetSize(desc->_costCount);
 
     // --- Seed _present[i] = amount already present in site storage, _inFlight[i] = 0 ---
-    int count50 = _present._size;   // == matCount after resize
-    const BuildCost* matArr = desc ? desc->_costs : nullptr;
-
-    for (int i = 0; i < count50; i++) {
-        ComponentDescription* matType = matArr ? matArr[i].material : nullptr;
+    // (0x1400ec800-0x1400ec87f: no test on the cost array, the storage or the int arrays)
+    for (int i = 0; i < _present._size; i++) {
+        ComponentDescription* matType = desc->_costs[i].material;
 
         // delivered = matching site-storage slot (total - reserved), else 0.
         int delivered = 0;
-        if (storage) {
-            int slotCount = storage->storageSlots._size;
-            const StorageComponent::Item* slots = storage->storageSlots._data;
-            if (slots) {
-                for (int s = 0; s < slotCount; s++) {
-                    if (slots[s]._resource == matType) {
-                        int total    = slots[s]._count;     // +0x08
-                        int reserved = slots[s]._reserve;   // +0x0c
-                        delivered = total - reserved;
-                        break;
-                    }
-                }
+        for (int s = 0; s < storage->storageSlots._size; s++) {
+            const StorageComponent::Item& slot = storage->storageSlots[s];
+            if (slot._resource == matType) {
+                delivered = slot._count - slot._reserve;   // +0x08 - +0x0c
+                break;
             }
         }
 
         // NOTE: the exe stores the *current storage amount* into _present[i] (NOT a
         // costQty shortfall) — verified from disassembly. _inFlight[i] starts at 0.
-        if (_present._data) _present[i] = delivered;
-        if (_inFlight._data) _inFlight[i] = 0;
+        _present[i] = delivered;
+        _inFlight[i] = 0;
     }
 
 }

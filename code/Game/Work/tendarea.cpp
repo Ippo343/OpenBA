@@ -51,7 +51,7 @@
 //   0x1400f7100  WorkBase_ValidateTask_f7100
 //   0x140014c30  WorkBase_TreeNodeFree_14c30
 //   0x140002e10  AttendanceComponent_GetJobHostComponent
-//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x14012e5c0 WorkComponent::CalcMaxWorkers
 //   0x140003050  WorkBase_FindComponent_3050
 //   0x140005380  WorkAcc_FindComponent_5380
 //   0x140005440  WorkAcc_FindComponent_5440
@@ -94,7 +94,7 @@ int TendArea::Execute(CitizenComponent** citizenRef, System::Time* /*context*/) 
     int currentWorkers = _citizens._count;
 
     if (workComp->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(workComp);
+        int maxWorkers = workComp->CalcMaxWorkers();
         workComp->workState = maxWorkers;
     }
 

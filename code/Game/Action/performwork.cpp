@@ -253,28 +253,23 @@ PerformWork::PerformWork(CitizenComponent* const* citizen, float animIndex, uint
     field44 = param_7;
     if (useToolArg) {
         if ((*citizen)->field_0xAC < 1) {
+            // 0x1400c97d1-0x1400c97ee: comp = IsDerivedFrom(desc, CitizenDescription) ? desc
+            // : null (CMOVNZ), then +0x114 is read with no test (a miss faults, as retail).
             Description* obj = workTarget->_description;
-            // IsDerivedFromOrTrust: the original gates `comp = IsDerivedFrom(obj,c7190) ? obj
-            // : null` then UNCONDITIONALLY reads comp+0x114 — i.e. it ASSUMES obj is the type
-            // (it would crash too if not). In standalone IsDerivedFrom returns false on the
-            // partial factory tree, so we TRUST obj (it IS the linked +0x18 desc) and only
-            // guard the genuinely-null case (skip the work-duration scaling -> base time).
-            const CitizenDescription* comp = static_cast<const CitizenDescription*>(obj);
-            if (comp) {
-                // Time scaleTime(comp.f114); self.time = AsSeconds(self.time) * AsSeconds(scaleTime)
-                float compSecs = comp->_f114;
-                System::Time scaleTime;
-                scaleTime._ticks = 0;
-                RtSystem_Time_Ctor(&scaleTime, compSecs);
-                // LEFT (2): retail calls Time::AsSeconds (0x140151318) on both Times; the tree
-                // reads each Time's low dword as float bits (known_port_issues 14a row 51).
-                float selfSecs  = *reinterpret_cast<const float*>(&requiredTime);  // LEFT: retail calls Time::AsSeconds (0x140151318); the tree reads the Time's low dword as float bits (known_port_issues 14a row 51)
-                float scaleSecs = *reinterpret_cast<const float*>(&scaleTime);  // LEFT: retail calls Time::AsSeconds (0x140151318); the tree reads the Time's low dword as float bits (known_port_issues 14a row 51)
-                System::Time prod;
-                prod._ticks = 0;
-                RtSystem_Time_Ctor(&prod, selfSecs * scaleSecs);
-                requiredTime = prod;
-            }
+            const CitizenDescription* comp =
+                obj->IsDerivedFrom(CitizenDescription::TypeId()) ? static_cast<const CitizenDescription*>(obj)
+                                                                 : nullptr;
+            // 0x1400c97fb Time(comp->_f114); 0x1400c9808 / 0x1400c9814 Time::AsSeconds on
+            // requiredTime and on that Time; MULSS; 0x1400c9826 Time(product) into +0x30.
+            System::Time scaleTime;
+            scaleTime._ticks = 0;
+            RtSystem_Time_Ctor(&scaleTime, comp->_f114);
+            float selfSecs  = requiredTime.AsSeconds();
+            float scaleSecs = scaleTime.AsSeconds();
+            System::Time prod;
+            prod._ticks = 0;
+            RtSystem_Time_Ctor(&prod, selfSecs * scaleSecs);
+            requiredTime = prod;
         }
     }
 }

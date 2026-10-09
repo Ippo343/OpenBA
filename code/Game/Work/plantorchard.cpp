@@ -52,7 +52,7 @@ extern "C" void OrchardDiag_NotePlantExecuted();
 // ============================================================
 //   0x140003050  FindComponent<WorkComponent>
 //   0x140005440  FindComponent<OrchardComponent>
-//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x14012e5c0 WorkComponent::CalcMaxWorkers
 //   0x14009ccf0  WorkGrid_FindCell_9ccf0
 //   0x1400a00f0  WorkBase_ValidateCell_a00f0
 //   0x14009f3e0  Reimpl_MapGetTerrainPos
@@ -113,7 +113,7 @@ int PlantOrchard::Execute(CitizenComponent** citizenRef, System::Time* /*context
     // Step 3: Check max workers
     int treeCount = _cells._count;
     if (workComp->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(workComp);
+        int maxWorkers = workComp->CalcMaxWorkers();
         workComp->workState = maxWorkers;
     }
     if (treeCount >= workComp->workState) {
