@@ -28,34 +28,29 @@
 // [4] 0x14007b730 — the class's only real slot (every other entry of its 11-slot
 // table is a shared micro-return).
 void TitleDescToolTipUI::OnCreated() {
-    // The tree's guards (retail has neither): an unbound controller returns.
-    if (!_dialog || !_dataSource)
-        return;
+    // --- "textTitle" / "textDesc": DialogInstance::FindElement, each narrowed with
+    // IsDerivedFrom through the import slot 0x140151508 (TextElement) and CMOVNZ
+    // (0x14007b785..0x14007b79d, 0x14007b7f8..0x14007b80e) ---
+    UI::Element* foundTitle = _dialog->FindElement(System::String("textTitle")).Get();
+    UI::TextElement* titleElement = ::Object::IsDerivedFromNullSafe(foundTitle, UI::TextElement::TypeId())
+        ? static_cast<UI::TextElement*>(foundTitle) : nullptr;
+    UI::Element* foundDesc = _dialog->FindElement(System::String("textDesc")).Get();
+    UI::TextElement* descElement = ::Object::IsDerivedFromNullSafe(foundDesc, UI::TextElement::TypeId())
+        ? static_cast<UI::TextElement*>(foundDesc) : nullptr;
 
-    // --- "textTitle" / "textDesc": DialogInstance::FindElement, as retail ---
-    // (retail narrows each with IsDerivedFrom against the type id Ghidra labels
-    // LabelElement's; the tree does not narrow: known_port_issues 14a.)
-    UI::TextElement* titleElement =
-        static_cast<UI::TextElement*>(_dialog->FindElement(System::String("textTitle")).Get());
-    UI::TextElement* descElement =
-        static_cast<UI::TextElement*>(_dialog->FindElement(System::String("textDesc")).Get());
-
-    // --- The data source's user data ---
-    // (retail narrows the data source to UI::Element first; the tree takes it
-    // as one.)
+    // --- The data source, narrowed to UI::Element, and its user data (read
+    // unguarded, as retail's GetUserData call) ---
     Object::Base* dataSource = _dataSource;
-    Object::Base* userData = static_cast<UI::Element*>(dataSource)->GetUserData();
+    UI::Element* sourceElement = ::Object::IsDerivedFromNullSafe(dataSource, UI::Element::TypeId())
+        ? static_cast<UI::Element*>(dataSource) : nullptr;
+    Object::Base* userData = sourceElement->GetUserData();
 
     if (userData) {
         // The user data is a TitleDescToolTipData (TitleDescToolTipUI.h) that the
         // tooltip's owner hands over through the Object::Base* slot; retail reads
-        // it the same way.
+        // it the same way, and sets both parameters with no test of either text.
         const TitleDescToolTipData* strings = reinterpret_cast<const TitleDescToolTipData*>(userData);   // LEFT: UI::Element's user data is Object::Base* (R-UI); the producer is not ported  // CAST-OK: user_data (S4 ruling)
-        if (titleElement) {
-            titleElement->SetParameter(0, strings->title);
-        }
-        if (descElement) {
-            descElement->SetParameter(0, strings->desc);
-        }
+        titleElement->SetParameter(0, strings->title);
+        descElement->SetParameter(0, strings->desc);
     }
 }
