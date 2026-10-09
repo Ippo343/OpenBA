@@ -130,7 +130,7 @@
 #include <type_traits>
 
 #include "FileSystem.h"                // RtIO::FileInfo
-#include "Modification.h"              // RtIO::ModArray: GetIconData / GetPreviewData's slot
+#include "Modification.h"              // RtIO::Mod and the Array assigns GetIconData / GetPreviewData call
 #include "../object/External.h"          // Object::External — the base
 #include "../object/Internal.h"          // Object::detail::InternalMemFree
 #include "../system/String.h"
@@ -257,11 +257,11 @@ public:
     // which can only be true if a caller passes the member's own address as the
     // return slot — transcribed, not dropped.
     //
-    // Declared with `void*` for the return slot because the two `Array<T>`
-    // instantiations they assign through are still reached by address; the
-    // bodies stay in modification_refresh.cpp where their registrations are.
-    void* GetIconData(RtIO::ModArrayOf<uint32_t>* ret) const;   // 0x180025530
-    void* GetPreviewData(RtIO::ModArrayOf<uint8_t>* ret) const; // 0x180025580
+    // Returned BY VALUE, as retail's `?AV?$Array@I` / `?AV?$Array@E` spell it:
+    // the callee zeroes the caller's slot (NRVO) and assigns into it. The
+    // bodies stay in modification_refresh.cpp.
+    Collection::Array<uint32_t> GetIconData() const;   // 0x180025530
+    Collection::Array<uint8_t>  GetPreviewData() const; // 0x180025580
 
     // ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z 0x1800b46b0
     bool ReadPackfile(const System::Filename& path);

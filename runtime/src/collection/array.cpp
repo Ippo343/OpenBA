@@ -205,11 +205,10 @@ void* MemAlloc(uint64_t bytes, int align) {
 // the callers below hand it a possibly-null pointer exactly as retail does.
 #ifdef BANISHED_UNIT_TEST
 void MemFree(void* p) { std::free(p); }   // retail's null test lives in free()
-#else
-void MemFree(void* p) {
-    System::MemoryAllocator::MemFree(p);            // dispatch slot 0x140152b68 first — see MemAlloc
-}
 #endif
+// (B7 D4: outside the unit test MemFree is header-inline in Collection.h,
+// System::MemoryAllocator::MemFree by name -- dispatch slot 0x140152b68 first,
+// see MemAlloc.)
 
 // ============================================================================
 // J1 — Collection::Array<T>::~Array, trivially-destructible T
@@ -251,13 +250,8 @@ void MemFree(void* p) {
 // 0x18001c100: `MOV RSI,[RCX]; TEST RSI,RSI; JZ zero` before the
 // Enter / Free / Leave triple), so a null buffer never reaches MemFree (and an
 // allocator instrument on MemFree, BANISHED_REDZONE, never sees a null free).
-void* ArrayDtorImpl(ArrayHdr* a) {
-    if (a->_data) MemFree(a->_data);
-    a->_data     = nullptr;
-    a->_size     = 0;
-    a->_capacity = 0;
-    return nullptr;         // retail leaves RAX == 0
-}
+// B7 D4: the body is header-inline in runtime/types/collection/Collection.h
+// (`rtcoll::ArrayDtorImpl`), unchanged, so a typed Array local open-codes it.
 
 // ============================================================================
 // J3 — Collection::Array<T>::SetSize
@@ -666,7 +660,7 @@ void InitEffectSlot(uint8_t* d) { InitAs<Audio::Scene::AttenutedEffect, &EffectS
 // rather than as a 16-byte copy.
 static void MaterialTextureAssign(RtGraphics::MaterialTexture* d,
                                   const RtGraphics::MaterialTexture* s) {
-    AdoptString(d->name, s->name);           // REFCOUNT
+    AdoptString(d->name._data, s->name._data);   // REFCOUNT
     d->image = s->image;
 }
 void AssignStringExt(uint8_t* d, const uint8_t* s) {

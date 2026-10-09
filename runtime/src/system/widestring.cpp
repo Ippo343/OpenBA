@@ -44,9 +44,9 @@
 // String.h documents, including the asymmetry (freeing branch leaves
 // `data - 8` in the object, sharing branch nulls it) — retail's
 // `ADD qword [RCX],-8 ; MOV RCX,[RCX] ; MemFree` versus `MOV qword [RCX],0`.
-// So this file reuses `RtString_ReleaseInline` through a pointer cast instead
-// of re-deriving a WideString-specific copy, exactly as filesystem_win.cpp
-// argued in Wave 4.
+// B7: this file open-codes it on WideString's own `_data`, as retail's
+// ~WideString does (it used to reuse `RtString_ReleaseInline` through a
+// `String*` view; see WideReleaseInline below).
 //
 // THE ALLOCATOR
 // -------------
@@ -185,15 +185,26 @@ int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
     return 4;
 }
 
-// The release idiom, over the SAME header String uses. Cast, do not re-derive.
-// ENDGAME B.3.4b SYSTEM (4a): the parameter is the CLASS now — every one of
-// the three callers is a `System::WideString` member body. The cast itself
-// stays, and stays here: `System::String` and `System::WideString` are the
-// same eight bytes with the same allocation header, which is the fact this
-// whole file is built on, and `RtString_ReleaseInline` is String's own
-// primitive.
+// The release idiom, over the SAME header String uses: ~WideString 0x18000a730
+// open-codes it, and so does this (B7 D4: with String's release inline, the
+// shared out-of-line `RtString_ReleaseInline` call this used through a
+// `String*` view was a call retail lacks):
+//     MOV RAX,[RCX]; TEST; JZ ret; DEC [RAX-4]; CMP [RAX-4],0; JNZ share
+//     ADD qword [RCX],-8; MOV RCX,[RCX]; JMP MemFree 0x1800c7ad0   (free arm)
+//     share: MOV qword [RCX],0                                      (null arm)
+// The asymmetry is retail's (String.h): the freeing arm leaves `data - 8`
+// (four wchar_t) in the object, the sharing arm nulls it.
 inline void WideReleaseInline(System::WideString* self) {
-    RtString_ReleaseInline(reinterpret_cast<System::String*>(self));  // LEFT: measured S4: retail has no WideString::Release (its WideString functions are the five ctors and ~WideString 0x18000a730, which open-codes the release); the tree shares String::Release (0x1800c9870, out of line) over the same block header, and open-coding it here would replace that CALL with inline code (a codegen change); ruled below; S4 ruling: no marker (FLOOR section 4 bars a marker on a this / self operand), the cast stays listed
+    wchar_t* const d = self->_data;
+    if (d == nullptr)
+        return;
+    int32_t& refs = reinterpret_cast<int32_t*>(d)[-1];  // CAST-OK: string_header
+    if (--refs == 0) {
+        self->_data = d - 4;                             // ADD qword [RCX],-8
+        RtMemFree(self->_data);
+    } else {
+        self->_data = nullptr;
+    }
 }
 
 inline int WideLength(const wchar_t* d) {

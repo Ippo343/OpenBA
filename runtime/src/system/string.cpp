@@ -86,9 +86,7 @@ void* RtMemAlloc(uint64_t size, int align) {
     return System::MemoryAllocator::MemAlloc(size, align);
 }
 
-void RtMemFree(void* p) {
-    System::MemoryAllocator::MemFree(p);
-}
+// (B7 D4: RtMemFree is header-inline in String.h outside the unit test.)
 #endif
 
 }  // namespace RtSystem
@@ -125,30 +123,7 @@ void String::SetLength(int len) {
     block[1] = 1;
 }
 
-// ?Release@String@System@@AEAAXXZ  retail 0x1800c9870, and the identical
-// sequence inlined in ~String (0x180006c80). The asymmetry is retail's: on the
-// freeing branch the object keeps `data - 8`, on the sharing branch it is
-// nulled. See String.h — reproduce it, do not tidy it.
-void String::Release() {
-    char* d = _data;
-    if (d == nullptr)
-        return;
-    if (--StringRefCount(d) == 0) {
-        _data = d - 8;
-        RtMemFree(_data);
-    } else {
-        _data = nullptr;
-    }
-}
-
-// The AddRef half of the copy ctor (0x180006cb0). `_data` must already have
-// been zeroed or released.
-void String::Adopt(char* src) {
-    if (src != nullptr) {
-        _data = src;
-        ++StringRefCount(src);
-    }
-}
+// (B7 D4: Release 0x1800c9870 and Adopt are header-inline in String.h.)
 
 // ?StrCompare@String@System@@SAHPEBD0@Z  retail 0x1800c98a0
 // Null-tolerant strcmp: null sorts before everything, two nulls are equal.
@@ -304,46 +279,19 @@ String operator+(const String& lhs, const char* rhs) {
 // on a shared buffer. A dtor is worse — running it twice is a double release
 // and, at refcount 1, a double free.
 
-// ??0String@System@@QEAA@XZ  retail 0x180006760
-String::String() : _data(nullptr) {}
+// (B7 D4: String() 0x180006760, String(const String&) 0x180006cb0, the move
+// ctor and ~String() 0x180006c80 are header-inline in String.h.)
 
 // ??0String@System@@QEAA@PEBD@Z  retail 0x18000b630
 String::String(const char* src) : _data(nullptr) {
     Set(src);
 }
 
-// ??0String@System@@QEAA@AEBV01@@Z  retail 0x180006cb0
-String::String(const String& other) : _data(nullptr) {
-    Adopt(other._data);
-}
-
-// Not retail's: the pointer steal (B31_RULES class rule 4). No refcount edit,
-// and the source's destructor becomes a no-op.
-String::String(String&& other) noexcept : _data(other._data) {
-    other._data = nullptr;
-}
-
-// ??1String@System@@QEAA@XZ  retail 0x180006c80
-String::~String() {
-    Release();
-}
-
 // ============================================================
 // Assignment / mutation — NOT DIFFED (see the header comment)
 // ============================================================
 
-// ??4String@System@@QEAAAEAV01@AEBV01@@Z  retail 0x1800c9810
-// Self-assignment and same-buffer assignment are short-circuited on the
-// POINTER, before the release; that guard is what makes `a = a` safe.
-String& String::operator=(const String& rhs) {
-    if (_data != rhs._data) {
-        Release();
-        _data = rhs._data;
-        if (_data != nullptr)
-            ++StringRefCount(_data);
-    }
-    return *this;
-}
+// (B7 D4: operator=(const String&) 0x1800c9810 is header-inline in String.h.)
 
 // Not retail's: the pointer steal. Self-move is short-circuited on the pointer
 // exactly as the copy overload above is.

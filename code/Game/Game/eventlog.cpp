@@ -279,26 +279,20 @@ void EventLog::AddEventCore(int eventType, int severity, const ::Object::Interna
     int tileIdx    = EventLog_TileIndex(entityIBP);  // null entity -> -1
 
     // --- Build the 0x28-byte entry and append ---
-    // Raw storage: only the text is constructed (and destroyed) below, as retail's
-    // stack entry is.
-    alignas(8) uint8_t entryBuf[sizeof(EventLogEntry)];
-    // LEFT: the entry is raw stack storage (H5: EventLogEntry holds a String).
-    EventLogEntry* entry = reinterpret_cast<EventLogEntry*>(entryBuf);   // LEFT: audit DEFERRED (H5 stack image): H5 raw stack entry (a real EventLogEntry local would run String's ctor / dtor)
-
-    entry->color = color;
-    new (&entry->text) System::String(formatted);
-    entry->eventType = eventType;
-    entry->severity = severity;
-    entry->tileIndex = tileIdx;
-    entry->iconIndex = iconIndex;
-    entry->popup = popup;
-
-    int count = entries.GetSize();
-    entries.SetSize(count + 1, *entry);   // the grow, 0x140019b70
-
-    // Cleanup the entry's String (the grow copied it); yearStr/seasonStr/
-    // templateStr/formatted are released by their own scope.
-    entry->text.~String();
+    // Retail 0x140095580 builds it on the stack at RSP+0x48 in this order: color
+    // (0x140095675), the String copy ctor into +0x08 (0x140095686), the five
+    // dwords (0x14009568d..0x14009569e); then the grow (0x1400956b2) and the
+    // entry's ~String (0x1400956bd) right after it, before the autoSlow tail.
+    // The block ends there. The two pads are never copied by the grow
+    // (CopyEventEntry writes the fields only), so their zeroing here is a dead
+    // stack store; the form is diseasecomponent.cpp's.
+    {
+        const EventLogEntry entry = {
+            color, {}, formatted, eventType, severity, tileIdx, iconIndex, popup, {}
+        };
+        int count = entries.GetSize();
+        entries.SetSize(count + 1, entry);   // the grow, 0x140019b70
+    }   // ~entry: the text's release, 0x1400956bd
 
     // --- Tail: critical events (0xb/0xc/0x1e/0x1f) drop the game to 1x speed
     // when the settings byte +0x17 ("pause on events") is set. Speed lives in

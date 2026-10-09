@@ -42,7 +42,13 @@ namespace RtGraphics {
 // The +0x08 half is read back by ?BuildParameters@... (0x1801033e0) as an
 // object whose +0x2c is compared against 4 and 5.
 struct MaterialTexture {
-    char* name;    // +0x00  System::String::_data (may be null)
+    // +0x00. B7: the real String (it was its raw `char*`). Every array-level
+    // operation on the element runs through the hand-derived kSpec_StringExt row
+    // (array.cpp) and saveload_draw.cpp's 0x180061480 transcription, which write
+    // `name._data` on raw storage exactly as before; the two stack pairs
+    // (AddTexture 0x180103350, SaveLoad::Draw 0x1800c2eb0) are typed locals
+    // whose String copy ctor / inline release are retail's open-coded ones.
+    System::String name;
     // B.4: typed (one pointer either way; the element stays 0x10 and
     // trivially copyable). Object::ExternalPtr<Video::ImageBuffer>, by value.
     Video::ImageBuffer* image;   // +0x08

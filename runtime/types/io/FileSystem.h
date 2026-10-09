@@ -169,8 +169,16 @@ struct FileInfo {
         : handle(-1), size(0), cursor(0), baseOffset(0) {
         winHandle = reinterpret_cast<void*>(intptr_t{-1});   // INVALID_HANDLE_VALUE (no <windows.h> in a type header), stored after the names as retail does  // CAST-OK: win32
     }
+    // +0x04 (`_unk04`) is retail's unwritten window: the default ctor leaves it
+    // whatever the stack held and the copy / assign move the byte as is
+    // (B6 C8). With String's release inline (B7 RT) GCC's -O2 inliner can see
+    // the stack temporary of `*fi = FileInfo()` and reports the copy of that
+    // field as a use of an uninitialised value; it is retail's byte.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuninitialized"
     FileInfo(const FileInfo&) = default;              // 0x18000c110
     FileInfo& operator=(const FileInfo&) = default;   // 0x18000c200
+#pragma GCC diagnostic pop
     ~FileInfo() = default;                            // 0x18000c180
 
     // +0x00 — WHAT KIND OF FILE THIS IS, and it is not a plain handle:

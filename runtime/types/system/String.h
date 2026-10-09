@@ -74,6 +74,9 @@
 
 #include <cstdint>
 #include <cstddef>
+#ifndef BANISHED_UNIT_TEST
+#include "MemoryAllocator.h"   // B7 D4: the inline release calls MemFree by name
+#endif
 
 namespace RtSystem {
 
@@ -106,6 +109,21 @@ inline int32_t  StringRefCount(const char* data) {
 // The MemAlloc alignment argument SetLength passes (0x1800c8220).
 constexpr int kStringAllocAlign = 4;
 
+// The one allocator pair: MemAlloc 0x1800c7a50 / MemFree 0x1800c7ad0. RtMemFree
+// is header-inline (B7 D4) because the inline release below calls it and every
+// retail open-coded release is ONE direct CALL 0x1800c7ad0: inline, the tree's
+// release is one direct call to System::MemoryAllocator::MemFree too, not a
+// call to a forwarder. The host unit test links no MemoryAllocator: there both
+// stay the malloc / free pair defined in runtime/src/system/string.cpp.
+void* RtMemAlloc(uint64_t size, int align);
+#ifdef BANISHED_UNIT_TEST
+void  RtMemFree(void* p);
+#else
+[[gnu::always_inline]] inline void RtMemFree(void* p) {
+    System::MemoryAllocator::MemFree(p);
+}
+#endif
+
 }  // namespace RtSystem
 
 // ============================================================================
@@ -134,16 +152,20 @@ namespace System {
 class String {
 public:
     // ---- lifecycle ---------------------------------------------------------
-    String();                                       // ??0String@System@@QEAA@XZ         0x180006760
+    // B7 D4: the lifecycle, Release, Adopt and the copy operator= are inline and
+    // FORCED inline (`gnu::always_inline`): retail open-codes them at every
+    // measured caller, and GCC's inliner otherwise keeps an out-of-line copy on
+    // some paths (GetNextItem's ^i return measured it), a call retail lacks.
+    [[gnu::always_inline]] String();                // ??0String@System@@QEAA@XZ         0x180006760
     String(const char* src);                        // ??0String@System@@QEAA@PEBD@Z     0x18000b630
-    String(const String& other);                    // ??0String@System@@QEAA@AEBV01@@Z  0x180006cb0
+    [[gnu::always_inline]] String(const String& other); // ??0String@System@@QEAA@AEBV01@@Z  0x180006cb0
     // Not retail's (C++03 had no move). A pure pointer steal that leaves the
     // source null: the refcount is untouched and the moved-from destructor is
     // a no-op, so nothing is observable (B31_RULES class rule 4).
     String(String&& other) noexcept;
-    ~String();                                      // ??1String@System@@QEAA@XZ         0x180006c80
+    [[gnu::always_inline]] ~String();               // ??1String@System@@QEAA@XZ         0x180006c80
 
-    String& operator=(const String& rhs);           // ??4String@System@@QEAAAEAV01@AEBV01@@Z 0x1800c9810
+    [[gnu::always_inline]] String& operator=(const String& rhs); // ??4String@System@@QEAAAEAV01@AEBV01@@Z 0x1800c9810
     String& operator=(String&& rhs) noexcept;       // ours, as above
 
     // ---- content -----------------------------------------------------------
@@ -190,10 +212,10 @@ public:
 
 private:
     void SetLength(int len);                        // ?SetLength@..@AEAAXH@Z (PRIVATE)  0x1800c8220
-    void Release();                                 // ?Release@..@AEAAXXZ    (PRIVATE)  0x1800c9870
+    [[gnu::always_inline]] void Release();          // ?Release@..@AEAAXXZ    (PRIVATE)  0x1800c9870
     // The AddRef half of the copy ctor, inlined ~200 times in the DLL.
     // `_data` must already be null or released.
-    void Adopt(char* src);
+    [[gnu::always_inline]] void Adopt(char* src);
 
     friend struct StringPrivateAccess;
     friend class Filename;
@@ -214,6 +236,72 @@ struct StringPrivateAccess {
     static void Release(String& s)            { s.Release(); }
     static void Adopt(String& s, char* src)   { s.Adopt(src); }
 };
+
+// ---- the inline lifecycle (B7 D4) ------------------------------------------
+// Retail open-codes these at every caller (the release idiom at ~200 sites, the
+// copy ctor's INC [data-4], the default ctor's single zero store), so they are
+// header-defined: a typed String local compiles to retail's open-coded shape
+// instead of an out-of-line call. The bodies are the ones string.cpp had,
+// unchanged: the same reads and stores, MemFree still a call.
+
+// ??0String@System@@QEAA@XZ  retail 0x180006760
+inline String::String() : _data(nullptr) {}
+
+// ??0String@System@@QEAA@AEBV01@@Z  retail 0x180006cb0
+inline String::String(const String& other) : _data(nullptr) {
+    Adopt(other._data);
+}
+
+// Not retail's: the pointer steal (B31_RULES class rule 4). No refcount edit,
+// and the source's destructor becomes a no-op.
+inline String::String(String&& other) noexcept : _data(other._data) {
+    other._data = nullptr;
+}
+
+// ??1String@System@@QEAA@XZ  retail 0x180006c80
+inline String::~String() {
+    Release();
+}
+
+// ?Release@String@System@@AEAAXXZ  retail 0x1800c9870, and the identical
+// sequence inlined in ~String (0x180006c80). The asymmetry is retail's: on the
+// freeing branch the object keeps `data - 8`, on the sharing branch it is
+// nulled. See the banner above: reproduce it, do not tidy it.
+inline void String::Release() {
+    char* d = _data;
+    if (d == nullptr)
+        return;
+    if (--RtSystem::StringRefCount(d) == 0) {
+        _data = d - 8;
+        RtSystem::RtMemFree(_data);
+    } else {
+        _data = nullptr;
+    }
+}
+
+// ??4String@System@@QEAAAEAV01@AEBV01@@Z  retail 0x1800c9810, open-coded at
+// its callers too (GetNextItem's ^lo restore 1800ce757, BeginLink 1800cdec5,
+// GenerateItems 1800cf0a4). Self-assignment and same-buffer assignment are
+// short-circuited on the POINTER, before the release; that guard is what makes
+// `a = a` safe.
+inline String& String::operator=(const String& rhs) {
+    if (_data != rhs._data) {
+        Release();
+        _data = rhs._data;
+        if (_data != nullptr)
+            ++RtSystem::StringRefCount(_data);
+    }
+    return *this;
+}
+
+// The AddRef half of the copy ctor (0x180006cb0). `_data` must already have
+// been zeroed or released.
+inline void String::Adopt(char* src) {
+    if (src != nullptr) {
+        _data = src;
+        ++RtSystem::StringRefCount(src);
+    }
+}
 
 // The three free operator+ overloads. Namespace scope in retail too (the
 // mangling `??HSystem@@..` has no class component).

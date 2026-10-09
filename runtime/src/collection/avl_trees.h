@@ -59,7 +59,6 @@ struct ProbeCounters {
 extern ProbeCounters g_pc;
 
 // ---- group A: Set<Pair<uint32_t, TypeRecord>>, 0x50-byte node -------------
-void*                PtrArrayDtor  (void* self);                       // 0x1800093e0
 // The container argument is the Set's root slot (`&set._root`, at +0x00 of the
 // Set, so the same pointer retail passes): every body only reads / writes `[RCX]`.
 RtObject::TypeNode*  RotateLeft50 (RtObject::TypeNode** root, RtObject::TypeNode*);   // 0x1800307b0

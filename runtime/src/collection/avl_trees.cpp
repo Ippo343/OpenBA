@@ -238,40 +238,10 @@ static_assert(offsetof(TypeNode, parent) == 0x30, "0x1800087c0 MOV [RDI+0x30],RB
 static_assert(offsetof(TypeNode, left)   == 0x38, "0x180030380 less arm");
 static_assert(offsetof(TypeNode, right)  == 0x40, "0x180030380 greater arm");
 
-// `Collection::Array<T*>` header, 8-byte stride. Same triple as ArrayHdr in
-// array_internal.h; redeclared rather than included because array_internal.h is
-// lane Q's and this file needs only the three fields.
-struct PtrArrayHdr {
-    uint8_t* _data;      // +0x00
-    int32_t  _size;      // +0x08
-    int32_t  _capacity;  // +0x0c
-};
-static_assert(sizeof(PtrArrayHdr) == 0x10, "Collection::Array is 16 bytes");
-
-// ---------------------------------------------------------------------------
-// 0x1800093e0 — `Collection::Array<T*>::~Array`.
-//
-// Instruction for instruction the J1 body lane Q ported eleven times
-// (array.cpp's ArrayDtorImpl): free the buffer through the inlined
-// lock/Free/unlock, then `MOV [RDI],RAX / MOV [RDI+8],RAX` with RAX == 0 —
-// ONE eight-byte store covering _size AND _capacity, so capacity IS reset here
-// unlike SetSize. RAX is zero at the RET.
-//
-// It is written out here rather than routed to `rtcoll::ArrayDtorImpl` for one
-// reason: `ArrayDtorImpl` is `static`-linkage-free but lives behind lane Q's
-// `array_internal.h`, and calling into another lane's translation unit to save
-// four lines would make this lane's kill switch not actually switch this body
-// off. The two bodies are the same and are asserted to be by the probe, which
-// drives BOTH.
-// ---------------------------------------------------------------------------
-void* PtrArrayDtor(void* self) {
-    PtrArrayHdr* a = static_cast<PtrArrayHdr*>(self);  // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); measured S4 RT2: the callers (factory_dtors.cpp:165 / :209) hand &TypeRecord::children, the _data word of TypeInfo.h's raw {children, childCount, childCapacity} triple (retail: Collection::Array<TypeRecord*>, this is its ~Array). H5 not doable as a typing: retail Startup builds the record on the stack at RSP+0x20 (0x1800c06e3..0x1800c06fa, four zero qwords; key and record one address), Inserts it (0x1800c071f), then ends the local's Array with two bare zero stores (0x1800c0728 / 0x1800c072d, free elided); a Collection::Array member makes that local's ~Array an out-of-line ArrayDtorImpl call (MemFree + three stores) and the node teardown would run ~Array implicitly beside factory_dtors' explicit call
-    MemFree(a->_data);        // retail's `if (p)` lives inside 0x1800c7ad0
-    a->_data     = nullptr;
-    a->_size     = 0;
-    a->_capacity = 0;
-    return nullptr;           // retail leaves RAX == 0
-}
+// 0x1800093e0 -- `Collection::Array<T*>::~Array` (the J1 body). B7: its one
+// owner, `TypeRecord::children`, is the real `Collection::Array<TypeRecord*>`
+// now, so ~Factory's walk (factory_dtors.cpp) calls the member's ~Array and the
+// free body that stood here over a raw {_data, _size, _capacity} view is gone.
 
 // ---------------------------------------------------------------------------
 // The height/balance recomputation of the 0x50-node family. Appears seven

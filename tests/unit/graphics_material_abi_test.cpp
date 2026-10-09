@@ -427,6 +427,9 @@ UNIT_TEST(graphics_materialinstance_layout) {
     CHECK_EQ((int)bytes[0x24], 1);
     CHECK_EQ((int)bytes[0x25], 1);
     CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x58), 6);
+    // B7: MaterialTexture holds a real System::String, so the member ~Array
+    // walks `_size` elements; the forged count goes before the probe dies.
+    probe._textures._size = 0;
 }
 
 // ---------------------------------------------------------------------------

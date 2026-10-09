@@ -63,25 +63,16 @@ using RtSystem::StringLength;
 // inlined String ctor under its own EH state, then the body); the dtor's
 // release is ~String on the base (0x180006980 = the inlined 0x180006c80).
 
-// ??0Filename@System@@QEAA@XZ  retail 0x180006220: String() (one null store).
-Filename::Filename() : String() {}
+// (B7 D4: Filename() 0x180006220, Filename(const String&) 0x18000c780, the
+// move ctor and ~Filename() 0x180006980 are header-inline in Filename.h. The
+// String(const String&) form adopts the buffer and AdjustDelimiters writes
+// through it: a Filename built from a String mutates the String's characters
+// too, retail's behaviour, which several call sites depend on.)
 
 // ??0Filename@System@@QEAA@PEBD@Z  retail 0x180026cf0: String() (the null
 // store at 0x180026d06), String::Set 0x1800c95d0, AdjustDelimiters.
 Filename::Filename(const char* src) : String() {
     Set(src);
-    AdjustDelimiters();
-}
-
-// ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x18000c780
-// Adopts the String's buffer (no copy) and then normalises. Note that
-// AdjustDelimiters can WRITE THROUGH that shared buffer — the '/'->'\\' pass
-// is in place — so constructing a Filename from a String mutates the String's
-// characters too when the path contained forward slashes. That is retail's
-// behaviour and several call sites depend on the resulting Filename and its
-// source String staying identical.
-// 0x18000c780..7a8 is String's copy ctor (null store, AddRef) on `this`.
-Filename::Filename(const String& src) : String(src) {
     AdjustDelimiters();
 }
 
@@ -103,14 +94,7 @@ Filename::Filename(const Filename& other) : String() {   // 0x1800067ee/f0: the 
     AdjustDelimiters();
 }
 
-// Not retail's: a pure pointer steal (B31_RULES class rule 4). The source was
-// normalised when it was built, so the AdjustDelimiters the copy ctor runs
-// would find nothing to do.
-Filename::Filename(Filename&& other) noexcept : String(std::move(other)) {}
 
-// ??1Filename@System@@QEAA@XZ  retail 0x180006980: no body of its own; the
-// release is the base's ~String (0x180006c80, inlined there).
-Filename::~Filename() {}
 
 // ============================================================
 // Assignment

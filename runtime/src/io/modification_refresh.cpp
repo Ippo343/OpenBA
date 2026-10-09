@@ -656,21 +656,15 @@ void Modification::RefreshList() {
 
         // 0x1800afae2 — the icon, then the preview. Each arrives in a temporary
         // Array this body hands to the member's operator= and then frees.
+        // The temporary's ~Array is the inline free and the three zero stores
+        // (0x1800afb71..0x1800afbb6), at the end of each block.
         {
-            ModArrayOf<uint32_t> tmp;
-            pkgObj->IO::PackageFile::GetIconData(&tmp);          // 0x180025530
-            const void* const slot = &tmp;
-            if (&m->ints != slot) RtColl_ArrayI32Assign_180011110(&m->ints, &tmp);
-            ::System::MemoryAllocator::MemFree(tmp.data);
-            tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
+            Collection::Array<uint32_t> tmp = pkgObj->IO::PackageFile::GetIconData();   // 0x180025530
+            if (&m->ints != &tmp) RtColl_ArrayI32Assign_180011110(&m->ints, &tmp);
         }
         {
-            ModArrayOf<uint8_t> tmp;
-            pkgObj->IO::PackageFile::GetPreviewData(&tmp);       // 0x180025580
-            const void* const slot = &tmp;
-            if (&m->bytes != slot) RtColl_ArrayU8Assign_180011220(&m->bytes, &tmp);
-            ::System::MemoryAllocator::MemFree(tmp.data);
-            tmp.data = nullptr; tmp.size = 0; tmp.capacity = 0;
+            Collection::Array<uint8_t> tmp = pkgObj->IO::PackageFile::GetPreviewData(); // 0x180025580
+            if (&m->bytes != &tmp) RtColl_ArrayU8Assign_180011220(&m->bytes, &tmp);
         }
 
         m->i2c   = static_cast<int32_t>(pkgObj->_crc);            // +0xa8 crc  0x1800afc8e
@@ -885,21 +879,21 @@ namespace IO {
 // used to be spelled here as `self + 0x80` / `self + 0x98` are now the named
 // members `_iconData` / `_previewData`, each pinned by a static_assert in
 // runtime/types/io/PackageFile.h.
-void* PackageFile::GetIconData(RtIO::ModArrayOf<uint32_t>* ret) const {
-    const void* const member = &_iconData;              // LEA RDX,[RCX+0x80]
-    ret->data = nullptr;                                // MOV [RBX],RAX
-    ret->size = 0;                                      // MOV [RBX+8],RAX — one qword,
-    ret->capacity = 0;                                  //   so capacity is zeroed too
-    if (ret != member) RtIO::RtColl_ArrayI32Assign_180011110(ret, member);  // 0x180011110
+// By value (NRVO): `ret` IS the caller's slot. Retail 0x180025530: MSVC's
+// unwind state [RSP+0x20] = 0 (MOV [RSP+0x20],EAX) while the slot is live,
+// the zeroing (MOV [RBX],RAX / MOV [RBX+8],RAX), the self test, CALL
+// 0x180011110, state 1. The landing pad GCC emits for `ret` is that unwind.
+Collection::Array<uint32_t> PackageFile::GetIconData() const {
+    Collection::Array<uint32_t> ret;                    // MOV [RBX],RAX / [RBX+8],RAX
+    if (&ret != &_iconData)                             // LEA RDX,[RCX+0x80] ; CMP RBX,RDX
+        RtIO::RtColl_ArrayI32Assign_180011110(&ret, &_iconData);  // 0x180011110
     return ret;
 }
 
-void* PackageFile::GetPreviewData(RtIO::ModArrayOf<uint8_t>* ret) const {
-    const void* const member = &_previewData;           // LEA RDX,[RCX+0x98]
-    ret->data = nullptr;
-    ret->size = 0;
-    ret->capacity = 0;
-    if (ret != member) RtIO::RtColl_ArrayU8Assign_180011220(ret, member);   // 0x180011220
+Collection::Array<uint8_t> PackageFile::GetPreviewData() const {
+    Collection::Array<uint8_t> ret;
+    if (&ret != &_previewData)                          // LEA RDX,[RCX+0x98] ; CMP RBX,RDX
+        RtIO::RtColl_ArrayU8Assign_180011220(&ret, &_previewData);   // 0x180011220
     return ret;
 }
 

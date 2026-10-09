@@ -130,6 +130,16 @@
 
 #include "scene_grid.h"
 
+// B7 RT (B6 C8): `Entry::_userValue2` is retail's unwritten window on the stack
+// Entry both insert paths build (`Entry tmp;`): the copy into the array moves
+// the qword as is, and no reader tests it. With the String / Array release
+// family inline, GCC's -O2 inliner sees the temporary and reports the copy as
+// a use of an uninitialised value, attributing it to the copy's line while
+// ignoring a pragma at that line or around either caller; the whole-file
+// pragma is the only region that silences it. Nothing is zeroed: it is
+// retail's byte.
+#pragma GCC diagnostic ignored "-Wuninitialized"
+
 // Wave 9 lane Q's allocator boundary. These two ARE the Enter/Allocate/Leave
 // and Enter/Free/Leave triples retail inlines at every site below, reached
 // through the port-aware address door — see array.cpp's banner for the

@@ -246,7 +246,7 @@ using BindingArray    = Collection::Array<RtGraphics::MaterialTexture>;
 // range; both of its dead stores are reproduced there and so are reproduced
 // here by construction.
 void ReleaseBindingNames(MaterialBinding* p, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) ReleaseStringSlot(&p[i].name);
+    for (int32_t i = 0; i < count; ++i) ReleaseStringSlot(&p[i].name._data);
 }
 
 // `FUN_180061480` (0x180061480) —
@@ -291,10 +291,10 @@ void ArrayBindingSetSize(BindingArray* a, uint32_t newSize, const MaterialBindin
         for (int32_t i = start; i < static_cast<int32_t>(newSize); ++i, ++dst, ++src) {
             if (dst == nullptr) continue;                 // retail's own null test
             const MaterialBinding* from = (i < static_cast<int32_t>(oldSize)) ? src : fill;
-            dst->name = nullptr;
-            if (from->name != nullptr) {
-                dst->name = from->name;
-                RtSystem::StringRefCount(from->name) += 1;   // the String header's refcount
+            dst->name._data = nullptr;                    // raw storage of the core
+            if (from->name._data != nullptr) {
+                dst->name._data = from->name._data;
+                RtSystem::StringRefCount(from->name._data) += 1;   // the String header's refcount
             }
             dst->image = from->image;
         }
@@ -530,19 +530,13 @@ void Save::SaveLoad::Draw(Video::Context& context,
         System::String diffuse;
         diffuse.Set("diffuse");
 
-        MaterialBinding binding;
-        binding.name  = nullptr;
-        binding.image = nullptr;
-        if (diffuse._data != nullptr) {
-            binding.name = diffuse._data;
-            RtSystem::StringRefCount(diffuse._data) += 1;   // the String header's refcount
-        }
-        binding.image = frameCopy;
+        // The pair: `name` is the String copy ctor (zero 0x1800c31b4, INC
+        // 0x1800c31cc); its destructor at the block end is the inline release
+        // 0x1800c31e7..0x1800c3209, before ~diffuse (declared first).
+        MaterialBinding binding = { diffuse, frameCopy };
 
         BindingArray* params = &mat->_textures;
         ArrayBindingSetSize(params, static_cast<uint32_t>(params->_size) + 1, &binding);
-
-        ReleaseStringSlot(&binding.name);
     }
     // ENDGAME B.3.5: `?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ`
     // 0x1801033e0 is a DEFINED member now (wave27_lane_gfxbig.cpp), so the

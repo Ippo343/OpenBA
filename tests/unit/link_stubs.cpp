@@ -49,7 +49,7 @@ namespace {
 }  // namespace
 
 namespace RtIO {
-void* RtColl_ArrayU8Assign_180011220(void*, const void*) { UnlinkedBody("RtColl_ArrayU8Assign_180011220"); }
+void* RtColl_ArrayU8Assign_180011220(Collection::Array<uint8_t>*, const Collection::Array<uint8_t>*) { UnlinkedBody("RtColl_ArrayU8Assign_180011220"); }
 }  // namespace RtIO
 extern "C" void* RtGraphics_DrawGroup_CopyCtor(void*, const void*) { UnlinkedBody("RtGraphics_DrawGroup_CopyCtor"); }
 extern "C" void* RtGraphics_Animation_CopyCtor(void*, const void*) { UnlinkedBody("RtGraphics_Animation_CopyCtor"); }

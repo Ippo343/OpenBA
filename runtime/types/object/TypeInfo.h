@@ -40,6 +40,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "../collection/Collection.h"   // B7: TypeRecord::children is the real Array
 
 namespace Object { class Base; }   // the factory pair's return type (below)
 namespace Object { class BaseTypeInfo; }   // B.4 Z RT2: TypeRecord::info, the real class
@@ -96,16 +97,19 @@ struct TypeRecord {
     uint32_t    _pad04;
     ::Object::BaseTypeInfo* info;  // +0x08  the static this record was built from
     TypeRecord* parent;        // +0x10  base class's record, or nullptr at a root
-    TypeRecord** children;     // +0x18  Array<TypeRecord*>::_data
-    int32_t     childCount;    // +0x20  Array<TypeRecord*>::_size
-    int32_t     childCapacity; // +0x24  Array<TypeRecord*>::_capacity
+    // +0x18 {_data, _size +0x20, _capacity +0x24}. B7: the real member (it was
+    // the raw triple). Its ~Array is the J1 body 0x1800093e0; ~Factory's walk
+    // (factory_dtors.cpp) calls it explicitly per node, as retail does.
+    Collection::Array<TypeRecord*> children;
 };
 static_assert(offsetof(TypeRecord, typeId)        == 0x00, "TypeRecord::typeId");
 static_assert(offsetof(TypeRecord, info)          == 0x08, "TypeRecord::info");
 static_assert(offsetof(TypeRecord, parent)        == 0x10, "TypeRecord::parent");
 static_assert(offsetof(TypeRecord, children)      == 0x18, "TypeRecord::children");
-static_assert(offsetof(TypeRecord, childCount)    == 0x20, "TypeRecord::childCount");
-static_assert(offsetof(TypeRecord, childCapacity) == 0x24, "TypeRecord::childCapacity");
+static_assert(offsetof(TypeRecord, children) + offsetof(Collection::Array<TypeRecord*>, _size)
+              == 0x20, "TypeRecord::children._size");
+static_assert(offsetof(TypeRecord, children) + offsetof(Collection::Array<TypeRecord*>, _capacity)
+              == 0x24, "TypeRecord::children._capacity");
 static_assert(sizeof(TypeRecord)                  == 0x28, "sizeof(TypeRecord)");
 static_assert(offsetof(TypeRecord, _pad04) == 0x4, "TypeRecord::_pad04");
 
