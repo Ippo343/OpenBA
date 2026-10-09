@@ -127,8 +127,9 @@ static inline System::Random* Rng() { return GameUpdateLoop::_singleton->m_rando
 // Virtual GetTypeId: original is `(**(code**)(**slot + 0x10))()` where slot is &entry,
 // *slot is the object, **slot is its vtable, vtable+0x10 (index 2) is GetTypeId, called
 // with the object as `this`. Returns the runtime type id of the object.
+// B6 row 240: retail calls [[slot]+0x10] with no null test (0x14010ac70 / 0x14010ac7c,
+// 0x14002fd90 / 0x14002fd9c); the tree's 0xffffffff for a null object is gone.
 static inline uint32_t VGetTypeId(const Object::Base* obj) {
-    if (obj == nullptr) return 0xffffffff;
     return obj->Type();   // slot 2
 }
 
@@ -144,7 +145,7 @@ static auto ScanArrAt(const E* arr, int count, uint32_t wantTid) -> decltype(Ele
     for (int i = 0; i < count; ++i) {
         if (VGetTypeId(ElemObj(arr[i])) == wantTid) {
             auto obj = ElemObj(arr[i]);
-            bool ok = Object::IsDerivedFromNullSafe(obj, wantTid);
+            bool ok = obj->IsDerivedFrom(wantTid);
             return ok ? obj : nullptr;
         }
     }
@@ -153,17 +154,16 @@ static auto ScanArrAt(const E* arr, int count, uint32_t wantTid) -> decltype(Ele
 
 // The entity's component array (+0x30, count +0x38): the bottom
 // InteractComponent / Happiness / Map scans.
+// B6 row 240: no null-entity / null-description return (0x14010ac53 reads [RBX+0x38],
+// 0x14010abca [RAX+0x28] with no test).
 static Component* ScanArr(const ComponentEntity* node, uint32_t wantTid) {
-    if (node == nullptr) return nullptr;
     int count = node->_components._size;
     return ScanArrAt(node->_components._data, count, wantTid);
 }
 // The entity description's sub-description array (+0x28, count +0x30)
 // (LAB_14010abbc validated-target radius lookup).
 static Description* ScanType5(const ComponentEntity* node, uint32_t wantTid) {
-    if (node == nullptr) return nullptr;
     const ComponentDescription* type = node->_description;
-    if (type == nullptr) return nullptr;
     int count = type->_subDescCount;
     return ScanArrAt(type->_subDescs, count, wantTid);
 }
@@ -176,17 +176,13 @@ static Description* ScanType5(const ComponentEntity* node, uint32_t wantTid) {
 // and its registered flag (+0x28) must be set.
 // ============================================================
 static char CitizenAI_helper_a720(HappinessComponent* param_1) {
+    // B6 row 240: 0x14004a73a IsDerivedFrom, 0x14004a744 CMOVNZ RDX,RBX over RDX = 0,
+    // 0x14004a748 CMP dword ptr [RDX+0x20],5 with no test, then 0x14004a74e the +0x28 byte.
     Description* obj = param_1->_description;
-    HappinessDescription* narrowed = Object::IsDerivedFromNullSafe(obj, s_tid_HappinessDescription)
+    HappinessDescription* narrowed = obj->IsDerivedFrom(s_tid_HappinessDescription)
         ? static_cast<HappinessDescription*>(obj) : nullptr;
-    if ((narrowed == nullptr || narrowed->_happinessType != 5)
-        && param_1->registered) {
-        // NOTE: original derefs narrowed+0x20 even when narrowed==0 (reads 0x20). Guarded
-        // here: a null narrowed cannot be state-5, so treat as "usable" by the flag alone.
-        if (narrowed != nullptr && narrowed->_happinessType == 5)
-            return 0;
+    if (narrowed->_happinessType != 5 && param_1->registered)
         return 1;
-    }
     return 0;
 }
 
@@ -205,7 +201,7 @@ static HappinessComponent** CitizenAI_State_Leisure_sub_fd50(ComponentEntity* pa
     while (idx < count) {
         if (VGetTypeId(arrBase[idx].Get()) == s_tid_HappinessComponent) {
             Component* obj = arrBase[idx].Get();
-            if (Object::IsDerivedFromNullSafe(obj, s_tid_HappinessComponent))
+            if (obj->IsDerivedFrom(s_tid_HappinessComponent))   // 0x14002fdf5
                 result = static_cast<HappinessComponent*>(obj);
             break;
         }
@@ -339,7 +335,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
 
     // pvVar26 = CitizenDescription on the citizen (its _description, IsDerivedFrom 0x1c7190).
     Description* descRaw = citizen->_description;
-    CitizenDescription* pvVar26 = Object::IsDerivedFromNullSafe(descRaw, s_tid_CitizenDescription)
+    CitizenDescription* pvVar26 = descRaw->IsDerivedFrom(s_tid_CitizenDescription)   // 0x14010a5ae
         ? static_cast<CitizenDescription*>(descRaw) : nullptr;
 
     // citizen ModelComponent transform translation -> grid cell (uVar37=srcCell).
@@ -394,7 +390,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         InteractComponent* posIBP = local_res20->FindComponent<InteractComponent>();   // 0x140002ed0
         InteractComponent** pp = &posIBP;
         Vector3Slot dpos;
-        if (pp) InteractNodePosition(*pp, &dpos.v, 0, 0, nullptr);
+        InteractNodePosition(*pp, &dpos.v, 0, 0, nullptr);   // 0x14010a778, no test
         int w = piVar5->size;
         int tcol = static_cast<int>(static_cast<float>(w >> 1) + dpos.v.x);
         int trow = static_cast<int>(static_cast<float>(w >> 1) + dpos.v.y);
@@ -410,14 +406,16 @@ LAB_14010a7e0:
     // social find-target (sub_99d0) at the CitizenDescription leisure radius (pvVar26+0xbc),
     // first from srcCell then homeCell.
     {
-        uint32_t radius = pvVar26 ? pvVar26->_ibc : 0;
+        // 0x14010a7e7 / 0x14010a81c MOV R9D,[RSI+0xbc]: RSI is the narrowed (or 0)
+        // CitizenDescription, read with no test (B6 row 240).
+        uint32_t radius = pvVar26->_ibc;
         ComponentEntity* findBuf = nullptr;
         ComponentEntity** pr = CitizenAI_State_Leisure_sub_99d0(GameUpdateLoop::_singleton->m_citizenList,
                                                                 &findBuf, uVar37, static_cast<int>(radius));
         local_res20 = *pr;
         if (local_res20 == nullptr) {
             if (static_cast<int>(uVar14) >= 0) {
-                uint32_t radius2 = pvVar26 ? pvVar26->_ibc : 0;
+                uint32_t radius2 = pvVar26->_ibc;
                 ComponentEntity* findBuf2 = nullptr;
                 ComponentEntity** pr2 = CitizenAI_State_Leisure_sub_99d0(GameUpdateLoop::_singleton->m_citizenList,
                                                                          &findBuf2, uVar14, static_cast<int>(radius2));
@@ -550,7 +548,9 @@ LAB_14010abbc:
     // HappinessDescription (0x1c42f8); iVar27 = its radius (+0x2c).
     {
         Description* pvr = ScanType5(local_res20, s_tid_HappinessDescription);
-        iVar27 = pvr ? static_cast<HappinessDescription*>(pvr)->_i2c : 0;
+        // 0x14010ac30 MOV R12D,[RCX+0x2c]: a miss leaves RCX = 0 (0x14010ac2c) and the read
+        // has no test (B6 row 240).
+        iVar27 = static_cast<HappinessDescription*>(pvr)->_i2c;
     }
 
 LAB_after_target:
@@ -576,9 +576,11 @@ LAB_after_target:
             // LAB_14010ad7a: +0x18 = HappinessDescription (0x1c42f8); if +0x20==5 || !registered -> false.
             HappinessComponent* hnode = local_res10n;
             Description* hdRaw = hnode->_description;
-            HappinessDescription* hd = Object::IsDerivedFromNullSafe(hdRaw, s_tid_HappinessDescription)
+            // 0x14010ad9b..0x14010ada4: CMOVNZ RCX,RBX over RCX = 0, then [RCX+0x20] with no
+            // test (B6 row 240).
+            HappinessDescription* hd = hdRaw->IsDerivedFrom(s_tid_HappinessDescription)
                 ? static_cast<HappinessDescription*>(hdRaw) : nullptr;
-            if (!((hd && hd->_happinessType == 5)
+            if (!(hd->_happinessType == 5
                   || !hnode->registered)) {
                 happinessMode = true;   // local_res10 low byte = 1
             }
