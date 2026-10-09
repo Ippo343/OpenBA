@@ -256,3 +256,18 @@ cell ends in FIXED / NOT A DIFFERENCE / LEFT (with the owing row or the user dec
   scratch worktree WITH THE GOLDEN COPIED IN (the `.bin` is git-ignored: an empty worktree makes its own
   golden and reports NEW-GOLDEN, not DIFF), and re-cut only once the container and the ordering rule are
   named (`tools/resave_gate/README.md`). Two bisect scripts must never share one worktree.
+
+2026-10-09, from the LX merge gate (resave 0/5, a real data change):
+- C4. **Row 942's validation is only as right as each caller's instantiation.** Once the load leg keeps a
+  reference only `if (IsDerivedFrom(cell))`, every caller that the 992 pass left on (or moved to) an
+  instantiation other than retail's loses its reference: the two citizen bucket-tree keys on the
+  StringTable core (`citizenlist_serialize.cpp:492 / 569`, retail 0x140018020 Profession and
+  0x140002340 ComponentDescription), 163 `<X>Mesh.rsc:edge` / `TiledDecals\<X>Material.rsc:resource`
+  refs on the GraphicsMesh core, two citizen MaterialInstances on ComponentDescription. The save
+  shrank by 107 bytes (two profession buckets gone) with no crash and every route clean: a
+  silent-null finding. TECHNIQUE (coordinator only): an `fprintf` on the failed test in
+  `SerializeExternalRef`'s `load` lambda, built in a scratch worktree at main's head, one resave run,
+  the lines kept in `b7_session/runs/<label>/probe942.txt`. RULE: a 992-style move of a caller is
+  proven by the retail body's `MOV EDX,[cell]` before `CALL [0x140152a98]`, never by the field's
+  C++ type or the resource's name; a resave DIFF whose payload SHRINKS after a type-validation change
+  is a nulled reference until shown otherwise.
