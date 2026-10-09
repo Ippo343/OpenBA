@@ -77,10 +77,9 @@ void CompleteTask::Persist(IO::Stream& stream) {
 
 int  CompleteTask::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
-    // Task machinery (gameState+0x118) is inert in standalone; guard so this is a safe
-    // no-op (the actual log production is in the PerformWork chop, not this bookkeeping).
-    if (GameUpdateLoop::_singleton == nullptr ||
-        GameUpdateLoop::_singleton->m_tutorial == nullptr) return 0;
+    // Retail 0x1400c5b40 reads the scheduler (g_pGameWorldSingleton + 0x118) with no test of
+    // the singleton or of +0x118 (B6 CLOSE-B, the 14d ACT-b bullet): the old "inert in
+    // standalone" guard went with CheckEntity's (row 13, TRADE).
 
     // Lazy-resolve task index from the work citizen
     if (this->taskIndex == 0x7FFFFFFF) {
