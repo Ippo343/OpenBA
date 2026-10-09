@@ -169,12 +169,10 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     if (IsLoading(serializer)) {
         Reimpl_Array_Resize_Stride02(&_heights, local_count);
     }
-    if (_heights.data) {
-        // Retail calls slot 0x1401523f8 (short*); the port's overload is the
-        // ushort one (0x140152488): the binary bytes are the same two per
-        // element. LEFT (known_port_issues 14, row 61): the overload is the port's.
-        serializer.Serialize(local_count, reinterpret_cast<uint16_t*>(_heights.data), nullptr);   // LEFT: audit DEFERRED (retail-difference task): known_port_issues 14, row 61: the overload is the port's.
-    }
+    // Retail 0x1400b05c0..0x1400b05ce: R8 = [R14+0xd8], EDX = the count, CALL [0x1401523f8] =
+    // Serialize(int, short*) -- the field's own int16 type, with no null test of the buffer
+    // (B6 row 61: the tree used the ushort overload behind an `if (_heights.data)`).
+    serializer.Serialize(local_count, _heights.data, nullptr);
 
     RZ_CHECK("geom 04d0 after step3 (+0xD8 uint16 heightmap arr)");
 
