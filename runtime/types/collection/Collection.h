@@ -433,8 +433,10 @@ void  MemFree(void* p);
 // header zero stores; RAX == 0 at the RET. Header-inline (B7 D4) because retail
 // open-codes it at the measured callers (RefreshList 0x1800afb71..0x1800afbb6:
 // the free and the zero stores inline), so a typed `Collection::Array<T>` local
-// must not become an out-of-line call.
-inline void* ArrayDtorImpl(ArrayHdr* a) {
+// must not become an out-of-line call. FORCED inline, as String's release is
+// (String.h): GCC's inliner otherwise keeps an out-of-line `.isra` copy at some
+// callers, a call retail lacks.
+[[gnu::always_inline]] inline void* ArrayDtorImpl(ArrayHdr* a) {
     if (a->_data) MemFree(a->_data);
     a->_data     = nullptr;
     a->_size     = 0;

@@ -88,15 +88,15 @@ namespace System {
 class Filename : public String {
 public:
     // ---- lifecycle ---------------------------------------------------------
-    Filename();                                      // ??0Filename@System@@QEAA@XZ            0x180006220
+    [[gnu::always_inline]] Filename();               // ??0Filename@System@@QEAA@XZ            0x180006220
     Filename(const char* src);                       // ??0Filename@System@@QEAA@PEBD@Z        0x180026cf0
-    Filename(const String& src);                     // ??0Filename@System@@QEAA@AEBVString@1@@Z 0x18000c780
+    [[gnu::always_inline]] Filename(const String& src); // ??0Filename@System@@QEAA@AEBVString@1@@Z 0x18000c780
     Filename(const Filename& other);                 // ??0Filename@System@@QEAA@AEBV01@@Z     0x1800067d0
     // Not retail's; a pure pointer steal, as String's is. The source was
     // already normalised by its own construction, so the AdjustDelimiters the
     // copy ctor runs would be a no-op on it.
     Filename(Filename&& other) noexcept;
-    ~Filename();                                     // ??1Filename@System@@QEAA@XZ            0x180006980
+    [[gnu::always_inline]] ~Filename();              // ??1Filename@System@@QEAA@XZ            0x180006980
 
     Filename& operator=(const Filename& rhs);        // ??4Filename@System@@QEAAAEAV01@AEBV01@@Z     0x180006770
     Filename& operator=(const String& rhs);          // ??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z 0x180026d40
@@ -126,6 +126,30 @@ private:
     friend struct FilenamePrivateAccess;
     // +0x00: String::_data, the base's one field.
 };
+// ---- the inline lifecycle (B7 D4) ------------------------------------------
+// Retail inlines these at its callers exactly as it inlines String's (GetNextItem
+// 0x1800cdf40 builds `wanted` at 1800ce932..1800ce94c: null store, INC, CALL
+// AdjustDelimiters; releases it open-coded, no ~Filename call), so they are
+// header-defined over String's inline bodies. Bodies unchanged from filename.cpp.
+
+// ??0Filename@System@@QEAA@XZ  retail 0x180006220: String() (one null store).
+inline Filename::Filename() : String() {}
+
+// ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x18000c780
+// 0x18000c780..7a8 is String's copy ctor (null store, AddRef) on `this`, then
+// the AdjustDelimiters call. AdjustDelimiters writes through the shared buffer
+// (filename.cpp's note): the source String's characters change too.
+inline Filename::Filename(const String& src) : String(src) {
+    AdjustDelimiters();
+}
+
+// Not retail's: a pure pointer steal, as String's is (see the declaration).
+inline Filename::Filename(Filename&& other) noexcept : String(static_cast<String&&>(other)) {}
+
+// ??1Filename@System@@QEAA@XZ  retail 0x180006980: no body of its own; the
+// release is the base's ~String (0x180006c80, inlined there).
+inline Filename::~Filename() {}
+
 static_assert(sizeof(Filename) == 8, "System::Filename must be 8 bytes");
 static_assert(sizeof(Filename) == sizeof(String),
               "Filename and String must be layout-identical: retail casts between them");

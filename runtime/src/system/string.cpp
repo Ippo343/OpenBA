@@ -86,9 +86,7 @@ void* RtMemAlloc(uint64_t size, int align) {
     return System::MemoryAllocator::MemAlloc(size, align);
 }
 
-void RtMemFree(void* p) {
-    System::MemoryAllocator::MemFree(p);
-}
+// (B7 D4: RtMemFree is header-inline in String.h outside the unit test.)
 #endif
 
 }  // namespace RtSystem
@@ -293,18 +291,7 @@ String::String(const char* src) : _data(nullptr) {
 // Assignment / mutation — NOT DIFFED (see the header comment)
 // ============================================================
 
-// ??4String@System@@QEAAAEAV01@AEBV01@@Z  retail 0x1800c9810
-// Self-assignment and same-buffer assignment are short-circuited on the
-// POINTER, before the release; that guard is what makes `a = a` safe.
-String& String::operator=(const String& rhs) {
-    if (_data != rhs._data) {
-        Release();
-        _data = rhs._data;
-        if (_data != nullptr)
-            ++StringRefCount(_data);
-    }
-    return *this;
-}
+// (B7 D4: operator=(const String&) 0x1800c9810 is header-inline in String.h.)
 
 // Not retail's: the pointer steal. Self-move is short-circuited on the pointer
 // exactly as the copy overload above is.
