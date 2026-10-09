@@ -71,7 +71,7 @@
 #include "../../types/audio/Audio.h"
 #include "../../types/audio/Device.h"
 #include "../../types/engine/Engine.h"     // B3R: rtengine::Ctor_* declarations
-#include "../../types/system/Value.h"      // B3R: RtSystem_Random_Ctor
+#include "../../types/system/Value.h"      // System::Random (ctor 0x1800c7f20)
 
 // The platform half (singleton_ctors_win.cpp).
 void RtLaneXPlatformLockInit(void* cs);
@@ -262,7 +262,7 @@ IO::Modification* Ctor_Modification(IO::Modification* self) {
     self->_persistIds._data     = nullptr;
     self->_persistIds._size     = 0;
     self->_persistIds._capacity = 0;
-    RtSystem_Random_Ctor(&self->_random);   // 0x1800c7f20
+    ::new (&self->_random) System::Random();   // 0x1800c7f20 (inlined in retail); raw MemAlloc storage
     ::Object::InternalFactory::_singleton = self;
     return self;
 }

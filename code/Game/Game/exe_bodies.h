@@ -291,14 +291,13 @@ void SetDialogLoaderNextLoop(MenuDialogLoopT* menuLoop, Engine::UpdateLoop* load
 //                                              uint64_t unused2, uint64_t unused3);
 // extern fn_GetLoadingSoundString_t fn_GetLoadingSoundString;
 inline System::String* GetLoadingSoundString(System::String* retStr) {
-    uint8_t rng[2520];  // System::Random is large (~2512 bytes)
-    // ??0Random@System@@QEAA@XZ 0x1800c7f20, called by name (B3R Leftovers).
-    System::Random* random = reinterpret_cast<System::Random*>(rng);   // LEFT: audit DEFERRED (ctor door; System::Random has no C++ ctor and the 2520-byte local is larger than sizeof(Random) 2500, so a typed local would resize it): H5 the Random lives in raw stack storage (retail runs its ctor and no dtor)
-    RtSystem_Random_Ctor(random);
+    // 0x140099151: the 0x9c4-byte Random at [RSP+0x30] of a 0xa00 frame, built by
+    // ??0Random@System@@QEAA@XZ 0x1800c7f20 (CALL [0x140152b50]); no dtor.
+    System::Random random;
     // the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
     // 0x1401512e8, Runtime 0x1800c8040) — `12u` picks it over Rand() and
     // Rand(int,int).
-    uint32_t variant = random->Rand(12u);
+    uint32_t variant = random.Rand(12u);
     // BANISHED_MENU_SCENE pins every random front-end pick, this one included:
     // the loading image it selects stays resident and is numbered into the
     // save's reference table, so an unpinned pick shifts every reference id

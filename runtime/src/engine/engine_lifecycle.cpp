@@ -347,37 +347,38 @@ extern "C" void RtVideo_Device_OperatorDelete(void* p) {
 //
 // `_platformHandle` is stored between the zeroed fields, from RBX, which was
 // loaded from RDX before the call. Writing it in field order below matches.
-extern "C" EngineT* RtEngine_Engine_Ctor(EngineT* self, void* platformHandle) {
+// ENDGAME B7 (CTOR, D5): the class's REAL ctor (the `RtEngine_Engine_Ctor` door
+// whose body this was is deleted). No mem-initialiser: every field is a pointer
+// or a byte with no initialiser, so the allocator ctor in the body is still the
+// first thing that runs on `this`, as at 0x1800dbf00.
+Engine::Engine::Engine(void* platformHandle) {
 
-    rtengine::Ctor_MemoryAllocator(&self->_allocator);      // 0x1800c79a0
+    rtengine::Ctor_MemoryAllocator(&_allocator);            // 0x1800c79a0
 
-    self->_fileSystem         = nullptr;
-    self->_persistence        = nullptr;
-    self->_modification       = nullptr;
-    self->_configuration      = nullptr;
-    self->_application        = nullptr;
-    self->_platformHandle     = platformHandle;
-    self->_factory            = nullptr;
-    self->_internalFactory    = nullptr;
-    self->_externalFactory    = nullptr;
-    self->_videoConfiguration = nullptr;
-    self->_videoDevice        = nullptr;
-    self->_audioConfiguration = nullptr;
-    self->_audioDevice        = nullptr;
-    self->_inputConfiguration = nullptr;
-    self->_inputDevice        = nullptr;
-    self->_achievementManager = nullptr;
-    self->_startupComplete    = 0;
-    self->_noConfigure        = 0;
+    _fileSystem         = nullptr;
+    _persistence        = nullptr;
+    _modification       = nullptr;
+    _configuration      = nullptr;
+    _application        = nullptr;
+    _platformHandle     = platformHandle;
+    _factory            = nullptr;
+    _internalFactory    = nullptr;
+    _externalFactory    = nullptr;
+    _videoConfiguration = nullptr;
+    _videoDevice        = nullptr;
+    _audioConfiguration = nullptr;
+    _audioDevice        = nullptr;
+    _inputConfiguration = nullptr;
+    _inputDevice        = nullptr;
+    _achievementManager = nullptr;
+    _startupComplete    = 0;
+    _noConfigure        = 0;
     // +0x6f2..+0x6f7: retail's 16-bit store at +0x6f0 does not reach them and
     // neither do we.
 
-    ::Engine::Engine::_singleton = self;                    // MOV [0x1801fe748],RDI
+    ::Engine::Engine::_singleton = this;                    // MOV [0x1801fe748],RDI
 
     ++g_ctorRuns;
-
-
-    return self;
 }
 
 // ============================================================================
@@ -398,16 +399,17 @@ extern "C" EngineT* RtEngine_Engine_Ctor(EngineT* self, void* platformHandle) {
 // port-aware slot; the ORDER is preserved (Engine's global first, then the
 // allocator's), which matters only in that nothing observes between them.
 //
-// The Engine object itself is NOT freed here: game_main.cpp owns the storage
-// (a 0x700-byte stack object), exactly as retail's caller did.
-extern "C" void RtEngine_Engine_Dtor(EngineT* self) {
+// The Engine object itself is NOT freed here: game_main.cpp holds it on the
+// stack, exactly as retail's caller did.
+// ENDGAME B7 (CTOR, D5): the class's REAL dtor (the `RtEngine_Engine_Dtor` door is
+// deleted). Every member is trivially destructible, so nothing runs after it.
+Engine::Engine::~Engine() {
 
     ::Engine::Engine::_singleton = nullptr;                 // MOV [0x1801fe748],0
 
-    rtengine::Dtor_MemoryAllocator(&self->_allocator);      // 0x1800c7960
+    rtengine::Dtor_MemoryAllocator(&_allocator);            // 0x1800c7960
 
     ++g_dtorRuns;
-
 }
 
 // ============================================================================

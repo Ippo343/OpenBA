@@ -64,9 +64,9 @@
 
 // B.4 GAME-b: the painter is Minimap::PaintTerrain and reads the minimap, the
 // context, the camera and the video configuration by name. Its doors (ENDGAME
-// B.3.5 / B3R): Video_RenderBuffer_Ctor / _Dtor, RtVolume_Frustum_Ctor_General,
-// RtGraphics_Renderer_Ctor / _Dtor, RtGraphics_Scene_Ctor / _Dtor (the two
-// POD-mirror doors are LEFT); the Camera is constructed directly (X5-GAME).
+// B.3.5 / B3R): Video_RenderBuffer_Ctor / _Dtor; the Camera is constructed
+// directly (X5-GAME); the Frustum, Renderer and Scene are typed locals built by
+// their real ctors (ENDGAME B7 CTOR: their doors are deleted).
 
 namespace {
 
@@ -123,16 +123,16 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     const Math::Scalar fNear(0.0f);
     const Math::Scalar fFar(512.0f);    // DAT_140172240
 
-    ::Frustum frustum = {};
-    ::Frustum* frustumRet = RtVolume_Frustum_Ctor_General(
-        &frustum, /*ortho*/true, &fNear, &fFar, &negHalfS, &halfS, &halfS, &negHalfS);
-
     // Transform3::Identity is a static that returns a Transform3 BY VALUE (48 bytes).
+    // Retail calls it first (0x1400a5302), then the general Frustum ctor
+    // ??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z (0x1800fa3d0, CALL at
+    // 0x1400a5347) on the untouched stack block [RBP+0x1c0]: no zeroing first.
     Math::Transform3 identity = Math::Transform3::Identity();
+    const ::Frustum frustum(/*ortho*/true, fNear, fFar, negHalfS, halfS, halfS, negHalfS);
 
     // Camera::Camera(frustum, transform, zUp) 0x1800fe960 on a stack local
     // (trivially destructible: nothing runs at scope exit).
-    Graphics::Camera cameraLocal(*frustumRet, identity, /*zUp*/true);
+    Graphics::Camera cameraLocal(frustum, identity, /*zUp*/true);
     Graphics::Camera* camera = &cameraLocal;
 
     // Look straight down (yaw 0, pitch -90deg), positioned at world (0,0,100).
@@ -165,15 +165,15 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     const Video::RenderBuffer* savedRenderBuffer = context._renderBuffer;
     Video::RenderBuffer* savedDefaultBuffer = context._defaultRenderBuffer;
 
-    // The Renderer and the Scene live in stack storage of their size: their
-    // destructors run at a fixed point mid-function (after context.Reset()
-    // below), where a C++ local's would run at scope exit.
-    alignas(16) uint8_t rendererStorage[256];
-    alignas(16) uint8_t sceneStorage[256];
-    Graphics::Renderer* renderer = reinterpret_cast<Graphics::Renderer*>(rendererStorage);   // LEFT: audit DEFERRED (ctor/dtor doors): stack storage the door constructs in place; ~Renderer runs mid-function (a local's dtor would move to scope exit)
-    RtGraphics_Renderer_Ctor(renderer);   // Renderer() 0x180105180
-    Graphics::Scene* scene = reinterpret_cast<Graphics::Scene*>(sceneStorage);   // LEFT: audit DEFERRED (ctor/dtor doors): stack storage the Scene ctor door builds in place; ~Scene runs mid-function (a local's dtor would move to scope exit)
-    RtGraphics_Scene_Ctor(scene);   // Scene() 0x180102730
+    // The Renderer ([RBP+0x170], Renderer() 0x180105180 at 0x1400a554b) and the
+    // Scene ([RBP+0xf0], Scene() 0x180102730 at 0x1400a5559) are stack locals of
+    // this block. It ends right after context.Reset() (0x1400a57a2), where retail
+    // runs ~Scene 0x1801026c0 (0x1400a57b0) then ~Renderer 0x1800180a0
+    // (0x1400a57be): reverse declaration order.
+    uint32_t* pixels = nullptr;   // read inside the block, traced after it
+    {
+    Graphics::Renderer renderer;
+    Graphics::Scene scene;
 
     context.SetDefaultRenderBuffer(renderBuffer);
     context.SetRenderBuffer(renderBuffer);
@@ -187,14 +187,14 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
 
     context._unknown03b8 = Math::Vector4(0.0f, 0.0f, clearDepth, 0.0f);   // +0x3b8..+0x3c4
     // Context +0x288: Context::PixelConstantStaging::pixel[4] (Video/Context.h).
-    float* const row = context._pixelConstantStaging.pixel[4];
-    row[0] = 0.0f;         // +0x288
-    row[1] = 0.0f;         // +0x28c
-    row[2] = clearDepth;   // +0x290
-    row[3] = 0.0f;         // +0x294
+    Math::Vector4& row = context._pixelConstantStaging.pixel[4];
+    row.x = 0.0f;         // +0x288
+    row.y = 0.0f;         // +0x28c
+    row.z = clearDepth;   // +0x290
+    row.w = 0.0f;         // +0x294
     context._dirty |= 0x10800;
 
-    renderer->_shaderDetail = 0;   // +0x3c (SetShaderDetail's field)
+    renderer._shaderDetail = 0;   // +0x3c (SetShaderDetail's field)
 
     // Temporarily clear VideoConfig's reflection detail (+0x34) during the capture.
     ::Video::Configuration* videoConfig = ::Video::Configuration::_singleton;
@@ -205,12 +205,12 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     }
 
     // Render the terrain (worldGeom) + sun/lighting (sunLight) top-down.
-    scene->AddGlobalObject(worldGeom);
-    scene->AddGlobalObject(sunLight);
-    scene->Clean();
-    renderer->Draw(context, 0.0f, *scene, *camera);
-    scene->RemoveGlobalObject(sunLight);
-    scene->RemoveGlobalObject(worldGeom);
+    scene.AddGlobalObject(worldGeom);
+    scene.AddGlobalObject(sunLight);
+    scene.Clean();
+    renderer.Draw(context, 0.0f, scene, *camera);
+    scene.RemoveGlobalObject(sunLight);
+    scene.RemoveGlobalObject(worldGeom);
 
     if (videoConfig)
         videoConfig->reflectionDetail = savedCfg;
@@ -220,7 +220,7 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     context.SetDefaultRenderBuffer(savedDefaultBuffer);
 
     // Read the rendered color back into the terrain pixel array.
-    uint32_t* pixels = terrainPixels._data;
+    pixels = terrainPixels._data;
     if (colorBuf && pixels)
         // ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z.
         colorBuf->CopyFromTexture(pixels, width, width);
@@ -238,8 +238,7 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     CreateAndUpload();
 
     context.Reset();
-    RtGraphics_Scene_Dtor(scene);         // ~Scene 0x1801026c0
-    RtGraphics_Renderer_Dtor(renderer);   // ~Renderer 0x1800180a0
+    }   // ~Scene 0x1801026c0, then ~Renderer 0x1800180a0
 
     if (s_trace)
         printf("[MinimapPaint] painted terrain: width=%d colorBuf=%p terrainPixels._data=%p "

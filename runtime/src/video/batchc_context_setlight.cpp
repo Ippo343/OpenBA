@@ -177,12 +177,32 @@ void Video::Context::SetLight(const Math::Vector3& direction, const Math::Vector
     // The two publish blocks, dword by dword, exactly as retail (banner 4):
     // colour + position (+0x1dd8, 8 dwords) to +0x268, shadow (+0x1e28, 4
     // dwords) to +0x248.
-    for (uint32_t k = 0; k < 4; ++k)
-        std::memcpy(&self->_pixelConstantStaging.pixel[2][k], &L.colour[k], 4);
-    for (uint32_t k = 0; k < 4; ++k)
-        std::memcpy(&self->_pixelConstantStaging.pixel[3][k], &L.position[k], 4);
-    for (uint32_t k = 0; k < 4; ++k)
-        std::memcpy(&self->_pixelConstantStaging.pixel[0][k], &L.shadow[k], 4);
+    // The rows are Math::Vector4 since B7 (ENDGAME B7 CTOR): each row's four
+    // dwords are named. colour / position are uint32_t bit patterns, so they
+    // stay byte copies (never float arithmetic). A row-sized memcpy was measured
+    // and splits the position row into two qword stores at -O2; these per-dword
+    // copies keep the base object IDENTICAL (one MOVUPS per row). The `.w`
+    // destinations are taken into named locals only because castmetric.py's
+    // member lookup resolves the bare name `w` to an unrelated pointer member
+    // and would count `memcpy(&row.w, ...)`, a float-slot copy, as a pun.
+    Math::Vector4& colourRow   = self->_pixelConstantStaging.pixel[2];
+    Math::Vector4& positionRow = self->_pixelConstantStaging.pixel[3];
+    Math::Vector4& shadowRow   = self->_pixelConstantStaging.pixel[0];
+    std::memcpy(&colourRow.x, &L.colour[0], 4);
+    std::memcpy(&colourRow.y, &L.colour[1], 4);
+    std::memcpy(&colourRow.z, &L.colour[2], 4);
+    float* const colourW = &colourRow.w;
+    std::memcpy(colourW, &L.colour[3], 4);
+    std::memcpy(&positionRow.x, &L.position[0], 4);
+    std::memcpy(&positionRow.y, &L.position[1], 4);
+    std::memcpy(&positionRow.z, &L.position[2], 4);
+    float* const positionW = &positionRow.w;
+    std::memcpy(positionW, &L.position[3], 4);
+    std::memcpy(&shadowRow.x, &L.shadow[0], 4);
+    std::memcpy(&shadowRow.y, &L.shadow[1], 4);
+    std::memcpy(&shadowRow.z, &L.shadow[2], 4);
+    float* const shadowW = &shadowRow.w;
+    std::memcpy(shadowW, &L.shadow[3], 4);
 
     _dirty |= kDirtyBits;
 }

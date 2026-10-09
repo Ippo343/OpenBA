@@ -700,8 +700,3 @@ Graphics::Camera* RtGraphics_Camera_CopyCtor(Graphics::Camera* self,
                                              const Graphics::Camera* src);  // 0x180017a70
 }  // namespace rtgfxd
 // ==== end B3R RT-VG ====
-// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
-// ---- graphics/renderer.cpp
-extern "C" Graphics::Renderer* RtGraphics_Renderer_Ctor(Graphics::Renderer* self);  // 0x180105180: placement-new Renderer()
-extern "C" void RtGraphics_Renderer_Dtor(Graphics::Renderer* self);  // 0x1800180a0: ~Renderer()
-// ==== end B3R G-Game ====

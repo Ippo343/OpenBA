@@ -118,7 +118,28 @@ static_assert(offsetof(struct Rectangle, max) == 0x08, "Volume::Rectangle::max @
 // was found that depends on any byte beyond +0x60, so the pad bytes carry no
 // meaning; they exist only to satisfy alignment.
 // ============================================================
+//
+// ENDGAME B7 (CTOR, D6): the two retail ctors are REAL ctors (frustum.cpp); the
+// `RtVolume_Frustum_Ctor_Perspective` / `_General` doors are deleted with their
+// last caller. The "zero the whole object first" above is the six `Vector4()`
+// member ctors (0x18001e0a0, retail's zeroing ctor: the twelve qword zero stores
+// 0x1800fa212..0x1800fa23d / 0x1800fa3e5..0x1800fa410) plus the flag's
+// mem-initialiser (the byte store at +0x60: 0 at 0x1800fa241, the argument at
+// 0x1800fa41c), so the planes are default-initialised in the mem-initialiser and
+// written in the body, as retail. The perspective ctor never stores the flag
+// again after that zero. The defaulted ctor is the implicit one the struct had
+// (planes zeroed by Vector4(), flag untouched); the tree's holders of a Frustum
+// member (Camera, PlayerController) use it.
 struct Frustum {
+    Frustum() = default;
+    // ??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z  0x1800fa1e0
+    Frustum(const Math::Scalar& nearZ, const Math::Scalar& farZ,
+            const Math::Scalar& fovX, const Math::Scalar& fovY);
+    // ??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z  0x1800fa3d0
+    Frustum(bool isOrthographic, const Math::Scalar& nearZ, const Math::Scalar& farZ,
+            const Math::Scalar& edgeA, const Math::Scalar& edgeB,
+            const Math::Scalar& edgeC, const Math::Scalar& edgeD);
+
     Vector4 planes[6];       // +0x00 .. +0x5f, one Vector4 {x,y,z,d} per plane
     bool    isOrthographic;  // +0x60
     // +0x61..+0x63: compiler alignment padding, not read by any known caller.
@@ -142,8 +163,6 @@ bool RtVolume_Box_Intersect(const Box* self, const Box* other);  // 0x180012160
 // ---- volume/rectangle.cpp
 struct Rectangle* RtVolume_Rectangle_Ctor(struct Rectangle* self);  // 0x18005ddd0
 // ---- volume/frustum.cpp
-Frustum* RtVolume_Frustum_Ctor_Perspective(Frustum* self, const Math::Scalar* nearZ, const Math::Scalar* farZ, const Math::Scalar* fovX, const Math::Scalar* fovY);  // 0x1800fa1e0
-Frustum* RtVolume_Frustum_Ctor_General(Frustum* self, bool isOrthographic, const Math::Scalar* nearZ, const Math::Scalar* farZ, const Math::Scalar* edgeA, const Math::Scalar* edgeB, const Math::Scalar* edgeC, const Math::Scalar* edgeD);  // 0x1800fa3d0
 Frustum* RtVolume_Frustum_MulTransform3(const Frustum* self, Frustum* ret, const Math::Transform3* t);  // 0x1800f9310
 unsigned int RtVolume_Frustum_Contains(const Frustum* self, const Box* box, unsigned int mask);  // 0x1800f8e80
 void RtVolume_Frustum_GetCorners(const Frustum* self, Math::Vector3* out);  // 0x1800f9850

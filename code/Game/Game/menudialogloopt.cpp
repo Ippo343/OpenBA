@@ -512,12 +512,12 @@ bool MenuDialogLoopT_LoadSceneA1(MenuDialogLoopT* self) {
 
     // --- Allocate Renderer (0x50 bytes, alignment 4) ---
     Graphics::Renderer* renderer = static_cast<Graphics::Renderer*>(System::MemoryAllocator::MemAlloc(0x50, 4));
-    if (renderer) RtGraphics_Renderer_Ctor(renderer);   // Renderer() 0x180105180
+    if (renderer) ::new (renderer) Graphics::Renderer();   // Renderer() 0x180105180
     self->_renderer = renderer;
 
     // --- Allocate Graphics::Scene (0x78 bytes, alignment 8) ---
     Graphics::Scene* gScene = static_cast<Graphics::Scene*>(System::MemoryAllocator::MemAlloc(0x78, 8));
-    if (gScene) RtGraphics_Scene_Ctor(gScene);
+    if (gScene) ::new (gScene) Graphics::Scene();   // Scene() 0x180102730
     self->_scene = gScene;
 
     // --- Allocate SunLight (0x108 bytes, alignment 8) ---
@@ -685,7 +685,7 @@ void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video:
     //   ctx[+0x10] |= 0x10800                            (fog/sky enable bits)
     context->_unknown03b8 = menuScene->field_0x1B4;
     // Context +0x288: Context::PixelConstantStaging::pixel[4] (Video/Context.h).
-    std::memcpy(context->_pixelConstantStaging.pixel[4], &menuScene->field_0x1B4, 16);
+    std::memcpy(&context->_pixelConstantStaging.pixel[4], &menuScene->field_0x1B4, 16);
     context->_dirty |= 0x10800;
 
     // Fog color Vector4 — the skyColor's RGB; the 4th component is fog density.

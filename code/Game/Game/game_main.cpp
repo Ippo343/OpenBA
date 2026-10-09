@@ -109,8 +109,8 @@ extern "C" void BootState_MarkQuitting();
 //   0x1800dd3c0 = Engine::MainLoop::Run(this, UpdateLoop*)
 //
 // ENDGAME B.3.7: Engine::Startup and MainLoop::Run are called as members. B3R:
-// the ctor/dtor doors (B37_RULES 2.4) are called by name -- RtEngine_Engine_Ctor /
-// _Dtor (engine/Engine.h), RtEngine_MainLoop_Ctor / _Dtor (engine/MainLoop.h); their
+// the ctor/dtor doors (B37_RULES 2.4) are called by name -- (the Engine's are its
+// real ctor / dtor since B7), RtEngine_MainLoop_Ctor / _Dtor (engine/MainLoop.h); their
 // caches, EnsureResolved, the "[GameMain] Engine ctor/dtor = %p" and "MainLoop
 // ctor/dtor = %p" lines and the "not resolved" FATAL arm went with them.
 // GameSettings <-> IO::Persistence bridge (code/Game/Game/game_settings_persist.cpp).
@@ -321,21 +321,18 @@ static void ShutdownEngineStaged(::Engine::Engine* engine) {
 
 namespace Game {
 
-// Engine instance is 0x6f8 bytes (last field at +0x6f0 + 8). Original uses
-// stack alloc of size 0x6b0 — we round up generously.
-struct alignas(16) EngineStorage {
-    unsigned char bytes[0x700];
-};
-
 int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
-    EngineStorage engine;
-    std::memset(&engine, 0, sizeof(engine));
-    // LEFT: the Engine lives in raw stack storage (its ctor is a door, RULE B5-4).
-    ::Engine::Engine* const eng = reinterpret_cast<::Engine::Engine*>(&engine);   // LEFT: audit DEFERRED (ctor door + memset): H5 the Engine lives in raw stack storage (its ctor is a door)
-
-    printf("[GameMain] Constructing Engine (storage=%p)...\n", (void*)&engine);
-    RtEngine_Engine_Ctor(eng, hInstance);
-    printf("[GameMain] Engine constructed.\n");
+    unsigned ok = 0;
+    // ENDGAME B7 (CTOR, D5): the Engine is a typed local, as in retail GameMain
+    // 0x140041ef0 (by value at [RSP+0x60]). Its real ctor ??0Engine@0@QEAA@PEAX@Z
+    // (0x1800dbf00) builds it on untouched stack: no memset first (retail has
+    // none; the ctor writes every field but +0x6f2..+0x6f7, which nothing reads).
+    // The block ends where the dtor ran before (after "Destroying Engine").
+    {
+    printf("[GameMain] Constructing Engine...\n");
+    ::Engine::Engine engine(hInstance);
+    ::Engine::Engine* const eng = &engine;
+    printf("[GameMain] Engine constructed (at %p).\n", (void*)eng);
 
     StallDebug::Mark("Init() -> RunGameMain entry + Engine ctor");
 
@@ -349,7 +346,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // shadow-verified operations said nothing about it (WAVE9_LANE_E2.md 5.1).
     const unsigned arenaMB = 0x200;
     printf("[GameMain] Engine::Startup(cmdLine=%p, %u, 0, false)...\n", (void*)cmdLine, arenaMB);
-    unsigned ok = eng->Startup(cmdLine, arenaMB, 0, false);
+    ok = eng->Startup(cmdLine, arenaMB, 0, false);
     // Engine::Startup somehow disconnects stdout/stderr from the log files
     // that WinMain freopen()'d (cause TBD — Engine::Startup itself doesn't call
     // AllocConsole/FreeConsole/SetStdHandle/freopen per Ghidra). Re-redirect
@@ -744,7 +741,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     }
 
     printf("[GameMain] Destroying Engine...\n"); fflush(stdout);
-    RtEngine_Engine_Dtor(eng);
+    }   // ~Engine 0x1800dbec0
     printf("[GameMain] Engine destroyed.\n"); fflush(stdout);
 
     return ok != 0 ? 0 : 3;
