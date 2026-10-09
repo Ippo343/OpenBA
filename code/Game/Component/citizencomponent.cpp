@@ -1636,17 +1636,18 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
 
     // Component finder on an entry entity (comp list +0x30 array / +0x38 count,
     // GetTypeId via vtable+0x10, then IsDerivedFrom). Matches Entity_FindComponent_*.
+    // B6 row 171: the inline scans (0x140111190-0x1401111c2, 0x140111210-0x140111242)
+    // call each slot's `Type()` through [RCX] with no null test and compare with the
+    // type cell without testing it for zero; a miss yields 0.
     auto FindEntityComp = [](ComponentEntity* entity, uint32_t tid) -> Component* {
-        if (tid == 0) return nullptr;
         int cnt = entity->_components._size;
         Object::InternalPtr<Component>* arr = entity->_components._data;
         for (int i = 0; i < cnt; i++) {
             Component* comp = arr[i].Get();
-            if (comp == nullptr) continue;
             uint32_t ctid = comp->Type();   // slot 2
             if (ctid == tid) {
                 Component* resolved = arr[i].Get();
-                return Object::IsDerivedFromNullSafe(resolved, tid) ? resolved : nullptr;
+                return resolved->IsDerivedFrom(tid) ? resolved : nullptr;
             }
         }
         return nullptr;
@@ -1682,14 +1683,12 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
     int count = townMgr->field_0x20._size;
     Map* mapInfo = GameUpdateLoop::_singleton->m_game;
 
-    // The original computes the home cell then loops the registry; when the registry
-    // is empty the home block is dead (its result is only read inside the loop), so we
-    // gate it behind count>0 — a byte-faithful no-op when townMgr+0x20 is empty.
-    if (count > 0) {
+    // B6 row 171: the home cell is computed BEFORE the count test (0x1401110c5 reads
+    // +0x278, 0x1401110d6 its +0x68, 0x1401110dd.. the transform, no test; 0x140111148
+    // TEST R14D,R14D / JLE skips the registry loop).
+    {
         CharacterComponent* homeEntity = character.Get();
-        if (homeEntity == nullptr) return nullptr;
         ModelComponent* homeComp = homeEntity->modelComponent.Get();
-        if (homeComp == nullptr) return nullptr;
         int mapW = mapInfo->size;
         int homeX = static_cast<int>(homeComp->transform.translation.x + static_cast<float>(mapW >> 1));
         int homeY = static_cast<int>(homeComp->transform.translation.y + static_cast<float>(mapW >> 1));
@@ -1703,8 +1702,8 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             ComponentEntity* entry = townMgr->field_0x20._data[entryIdx].Get();  // local_98
 
             Component* resComp = FindEntityComp(entry, ResidenceComponent::TypeId());   // 0x1401c7cf0
-            if (!resComp) continue;   // registered entries always carry one; guard.
-            // The InternalPtr retail builds holds the IsDerivedFrom-checked component.
+            // The InternalPtr retail builds holds the IsDerivedFrom-checked component;
+            // 0x1401111e4 reads its +0x58 with no test.
             ResidenceComponent* resIBP = static_cast<ResidenceComponent*>(resComp);
 
             bool consider;
@@ -1716,8 +1715,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             if (!consider) continue;
 
             Component* interactComp = FindEntityComp(entry, InteractComponent::TypeId());  // 0x1401c7900
-            InteractComponent* interactIBP = static_cast<InteractComponent*>(interactComp);
-            if (!interactComp) continue;   // no work-positions -> can't seat a worker.
+            InteractComponent* interactIBP = static_cast<InteractComponent*>(interactComp);   // no test
 
             int rosterCount = resIBP->residentSlots._size;
             for (int slot = 0; slot < rosterCount; slot++) {
