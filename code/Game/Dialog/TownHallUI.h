@@ -36,6 +36,7 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 #include "collection/Collection.h"   // Collection::Array (the row arrays)
+#include "Dialog/RatingGroup.h"      // the hearts / stars groups (+0xB0 / +0xD0)
 #include "Player/exe_bodies.h"        // Avl38FreeSubtree (the three trees' subtree free)
 #include "system/MemoryAllocator.h"
 
@@ -96,13 +97,9 @@ public:
     };
     using ProfessionRowArray = Collection::Array<ProfessionRow, Collection::DefaultAllocator,
                                                  Collection::ExplicitSpec<&TownHallRows::kSpec_ProfessionRow>>;
-    // +0xB0 / +0xD0: a rating group (TownHall_GroupRatingInit 0x14006abf0): the
-    // whole and the half icon of each child row (two Array<InternalPtr<
-    // ImageElement>>; retail's dtor frees the half array first, 0x1400811cc).
-    struct RatingGroup {
-        Collection::Array<UI::Element*> whole;   // +0x00
-        Collection::Array<UI::Element*> half;    // +0x10
-    };
+    // +0xB0 / +0xD0: a rating group (Dialog/RatingGroup.h; TownHall_GroupRatingInit
+    // 0x14006abf0), the one CitizenUI and StatusBarUI embed too.
+    using RatingGroup = ::RatingGroup;
     // The three trees' owning header {root, int32 count}: retail's ctor
     // (0x140081280) writes the root qword and the count dword; its dtor
     // (0x1400810d0) frees the root's left subtree, its right subtree (the
@@ -274,10 +271,7 @@ static_assert(offsetof(TownHallUI::ProfessionRow, slotsNumber) == 0x18, "Profess
 static_assert(offsetof(TownHallUI::ProfessionRow, buildingsNumber) == 0x20, "ProfessionRow::buildingsNumber");
 static_assert(offsetof(TownHallUI::ProfessionRow, button) == 0x28, "ProfessionRow::button");
 static_assert(offsetof(TownHallUI::ProfessionRow, entities) == 0x30, "ProfessionRow::entities @ +0x30");
-static_assert(offsetof(TownHallUI::RatingGroup, half) == 0x10, "RatingGroup::half @ +0x10 (0x1400811cc)");
 static_assert(sizeof(TownHallUI::OwnedTree<TownHallUI::InventoryNode>) == 0x10, "tree header {root, count, tail}");
-static_assert(sizeof(TownHallUI::RatingGroup) == 0x20, "rating group 0x20 (0x1400811c0)");
-static_assert(offsetof(TownHallUI::RatingGroup, whole) == 0x0, "RatingGroup::whole");
 static_assert(sizeof(TownHallUI::ProductionRow) == 0x28, "production row stride 0x28 (0x1400159b0)");
 static_assert(offsetof(TownHallUI::ProductionRow, stock) == 0x0, "ProductionRow::stock");
 static_assert(offsetof(TownHallUI::ProductionRow, used) == 0x8, "ProductionRow::used");
@@ -369,9 +363,7 @@ static_assert(offsetof(TownHallUI, agriBST) == 0x1D8, "agriBST @ 0x1D8 (dtor 0x1
 static_assert(offsetof(TownHallUI, agriBST.count) == 0x1E0, "agriBST.count @ 0x1E0 (dtor 0x140081131)");
 static_assert(offsetof(TownHallUI, agriBST.tail) == 0x1E4, "agriBST.tail @ 0x1E4");
 
-// townhall_helpers.cpp: the rating group's two bodies.
-void TownHall_GroupRatingInit(TownHallUI::RatingGroup* group, UI::Element* const* groupElem);  // 0x14006abf0
-void TownHall_GroupRatingUpdate(TownHallUI::RatingGroup* group, float value, float maxValue);  // 0x14006aed0
+// townhall_helpers.cpp: the rating group's two bodies are declared in Dialog/RatingGroup.h.
 
 // 0x140014890 (Dialog/toolbar_utility_helpers.cpp): the shared 0x38-node
 // find-or-insert, the inventory tree's typed wrapper (the PinnedToolNode one is in

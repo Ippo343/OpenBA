@@ -45,8 +45,8 @@
 #include "Game/PlayerToolManager.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
-// CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
-// are now in the shared header: Dialog/citizen_icon_helpers.h
+// CitizenUI_UpdateIconDisplay_Impl is in the shared header Dialog/citizen_icon_helpers.h;
+// the icon group's Init (0x14006abf0) is TownHall_GroupRatingInit (Dialog/RatingGroup.h).
 // (removed local copies — see git history for originals)
 
 // ============================================================
@@ -226,12 +226,12 @@ void StatusBarUI::OnOpened() {
     // The helper (DLG-a's citizen_icon_helpers.h) takes the group's two Arrays
     // and the InternalPtr to the group element by address.
     {
-        Object::InternalPtr<UI::Element> group(FindNamed<UI::Element>(this, "groupHearts"));
-        CitizenUI_BuildIconArray_Impl(heartsWhole, heartsHalf, &group);
+        UI::Element* group = FindNamed<UI::Element>(this, "groupHearts");
+        TownHall_GroupRatingInit(&hearts, &group);   // 0x14006abf0
     }
     {
-        Object::InternalPtr<UI::Element> group(FindNamed<UI::Element>(this, "groupStars"));
-        CitizenUI_BuildIconArray_Impl(starsWhole, starsHalf, &group);
+        UI::Element* group = FindNamed<UI::Element>(this, "groupStars");
+        TownHall_GroupRatingInit(&stars, &group);    // 0x14006abf0
     }
 
     // --- Title label ---
@@ -309,7 +309,7 @@ void StatusBarUI::OnUpdateLayout() {
     // --- Update hearts (health) icon display ---
     float maxHappy = kMaxHealth;  // default if no citizens
     if (citizenCount == 0) {
-        CitizenUI_UpdateIconDisplay_Impl(heartsWhole, heartsHalf, 0.0f, kMaxHealth);
+        CitizenUI_UpdateIconDisplay_Impl(hearts.whole, hearts.half, 0.0f, kMaxHealth);
         happySum = 0.0f;
     } else {
         // The first citizen's description (Component::_description, checked)
@@ -317,7 +317,7 @@ void StatusBarUI::OnUpdateLayout() {
         const CitizenDescription* citizenDesc =
             ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
                 ? static_cast<const CitizenDescription*>(desc) : nullptr;
-        CitizenUI_UpdateIconDisplay_Impl(heartsWhole, heartsHalf,
+        CitizenUI_UpdateIconDisplay_Impl(hearts.whole, hearts.half,
                                         healthSum / (float)citizenCount,
                                         citizenDesc->maxHealth);
 
@@ -330,7 +330,7 @@ void StatusBarUI::OnUpdateLayout() {
     }
 
     // --- Update stars (happiness) icon display ---
-    CitizenUI_UpdateIconDisplay_Impl(starsWhole, starsHalf, happySum, maxHappy);
+    CitizenUI_UpdateIconDisplay_Impl(stars.whole, stars.half, happySum, maxHappy);
 
     // --- Update status icon visibility and counts ---
     UI::Element* const statusIcons[6] = { imageStatusHome, imageStatusFood, imageStatusCold,

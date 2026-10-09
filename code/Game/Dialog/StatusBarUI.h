@@ -21,6 +21,7 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 #include "runtime/types/collection/Collection.h"
+#include "Dialog/RatingGroup.h"      // the hearts / stars groups (+0x108 / +0x128)
 
 namespace UI { class Element; class TextElement; class NumberElement; }
 
@@ -67,13 +68,11 @@ public:
     uint32_t statusCitizenIndex = 0;  // +0x100 the next-citizen-with-status cycle (0x14007a120)
     // +0x104: a gap in retail; the tree's OnUpdate uses it as its refresh throttle.
     uint32_t refreshThrottle = 0;
-    // +0x108 / +0x128: the hearts and stars icon groups (CitizenUI_BuildIconArray
+    // +0x108 / +0x128: the hearts and stars icon groups (Dialog/RatingGroup.h, Init
     // 0x14006abf0): each the "whole" and the "half" icon of every child of the
     // group. ~StatusBarUI 0x140014130 frees +0x138, +0x128, +0x118, +0x108.
-    Collection::Array<UI::Element*> heartsWhole;      // +0x108
-    Collection::Array<UI::Element*> heartsHalf;       // +0x118
-    Collection::Array<UI::Element*> starsWhole;       // +0x128
-    Collection::Array<UI::Element*> starsHalf;        // +0x138
+    RatingGroup hearts;                               // +0x108 (half +0x118)
+    RatingGroup stars;                                // +0x128 (half +0x138)
     // +0x148..+0x170: the status icons, element ids 100..105; bit n of
     // StatusIconComponent's activeMask
     UI::Element*     imageStatusHome = nullptr;       // +0x148 bit 0
@@ -132,10 +131,8 @@ static_assert(offsetof(StatusBarUI, numberWood) == 0x58, "numberWood @ 0x58");
 static_assert(offsetof(StatusBarUI, numberTextile) == 0xA8, "numberTextile @ 0xA8");
 static_assert(offsetof(StatusBarUI, numberCustom) == 0xB0, "numberCustom @ 0xB0");
 static_assert(offsetof(StatusBarUI, refreshThrottle) == 0x104, "refreshThrottle @ 0x104");
-static_assert(offsetof(StatusBarUI, heartsWhole) == 0x108, "hearts @ 0x108 (0x1400798d0)");
-static_assert(offsetof(StatusBarUI, heartsHalf) == 0x118, "hearts half @ 0x118");
-static_assert(offsetof(StatusBarUI, starsWhole) == 0x128, "stars @ 0x128 (0x1400798d0)");
-static_assert(offsetof(StatusBarUI, starsHalf) == 0x138, "stars half @ 0x138");
+static_assert(offsetof(StatusBarUI, hearts) == 0x108, "hearts @ 0x108 (0x1400798d0)");
+static_assert(offsetof(StatusBarUI, stars) == 0x128, "stars @ 0x128 (0x1400798d0)");
 static_assert(offsetof(StatusBarUI, imageStatusHome) == 0x148, "imageStatusHome @ 0x148");
 static_assert(offsetof(StatusBarUI, numberStatusHome) == 0x178, "numberStatusHome @ 0x178");
 static_assert(offsetof(StatusBarUI, imageRain) == 0x1A8, "imageRain @ 0x1A8");

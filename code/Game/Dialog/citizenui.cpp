@@ -121,8 +121,8 @@ static inline bool CitUI_OkTextParam(const UI::TextElement* elem) {
     return p == nullptr;  // reached the root cleanly (not truncated by the depth cap)
 }
 
-// CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
-// are now in the shared header: Dialog/citizen_icon_helpers.h
+// CitizenUI_UpdateIconDisplay_Impl is in the shared header Dialog/citizen_icon_helpers.h;
+// the icon group's Init (0x14006abf0) is TownHall_GroupRatingInit (Dialog/RatingGroup.h).
 
 // ============================================================
 // WorldGrid_FindEntity (0x1400f9a60)
@@ -222,12 +222,12 @@ void CitizenUI::OnCreated() {
 
     // --- Icon groups (heart/star arrays built from group children) ---
     {
-        Object::InternalPtr<UI::Element> groupHearts(FindElemInTree(parentElem, "groupHearts"));
-        CitizenUI_BuildIconArray_Impl(heartsWhole, heartsHalf, &groupHearts);
+        UI::Element* groupHearts = FindElemInTree(parentElem, "groupHearts");
+        TownHall_GroupRatingInit(&hearts, &groupHearts);   // 0x14006abf0
     }
     {
-        Object::InternalPtr<UI::Element> groupStars(FindElemInTree(parentElem, "groupStars"));
-        CitizenUI_BuildIconArray_Impl(starsWhole, starsHalf, &groupStars);
+        UI::Element* groupStars = FindElemInTree(parentElem, "groupStars");
+        TownHall_GroupRatingInit(&stars, &groupStars);     // 0x14006abf0
     }
 
     // --- Button elements (found via DialogInstance, with element IDs) ---
@@ -406,8 +406,8 @@ void CitizenUI::OnUpdateLayout() {
     {
         CitizenDescription* hd = aiDesc ? aiDesc : citizenDesc;
         if (CitUI_OkPtr(hd)) {
-            CitizenUI_UpdateIconDisplay_Impl(heartsWhole, heartsHalf, ai->health, hd->maxHealth);
-            CitizenUI_UpdateIconDisplay_Impl(starsWhole, starsHalf, ai->happiness, hd->maxHappiness);
+            CitizenUI_UpdateIconDisplay_Impl(hearts.whole, hearts.half, ai->health, hd->maxHealth);
+            CitizenUI_UpdateIconDisplay_Impl(stars.whole, stars.half, ai->happiness, hd->maxHappiness);
         }
     }
 

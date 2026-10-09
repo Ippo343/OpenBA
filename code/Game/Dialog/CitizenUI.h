@@ -20,6 +20,7 @@
 #include "runtime/types/ui/DialogController.h"
 #include "Object/exe_type.h"
 #include "collection/Collection.h"   // Collection::Array
+#include "Dialog/RatingGroup.h"      // the hearts / stars groups (+0xA0 / +0xC0)
 
 namespace UI { class Element; class TextElement; class NumberElement; class DialogInstance; }
 
@@ -57,17 +58,15 @@ public:
     UI::Element*       buttonFollow = nullptr;       // +0x88 "buttonFollow" (id 0x228)
     UI::Element*       textNameIs = nullptr;         // +0x90 "textNameIs"
     UI::TextElement*   textAction = nullptr;         // +0x98 "textAction" (SetText)
-    // +0xA0 / +0xC0: the "groupHearts" / "groupStars" icon groups, each two
-    // Collection::Array<InternalPtr<UI::Element>> (whole icons, half icons).
+    // +0xA0 / +0xC0: the "groupHearts" / "groupStars" icon groups (Dialog/RatingGroup.h),
+    // each two Collection::Array<InternalPtr<UI::Element>> (whole icons, half icons).
     // B.4 P2 DLG-1 (behaviour: H5): Array members. Retail's ctor 0x140065a40
     // zeroes the four qwords of each group (0x140065ab9..0x140065adf): Array's
     // default ctor. Retail's dtor 0x140065990 frees +0xD0, +0xC0, +0xB0, +0xA0
     // (MemFree data, then qword 0 over data and count|capacity): the members'
     // ~Array in reverse declaration order.
-    Collection::Array<UI::Element*> heartsWhole;     // +0xA0
-    Collection::Array<UI::Element*> heartsHalf;      // +0xB0
-    Collection::Array<UI::Element*> starsWhole;      // +0xC0
-    Collection::Array<UI::Element*> starsHalf;       // +0xD0
+    RatingGroup hearts;                              // +0xA0 (whole +0xA0, half +0xB0)
+    RatingGroup stars;                               // +0xC0 (whole +0xC0, half +0xD0)
     Object::InternalPtr<UI::DialogInstance> followDialog;   // +0xE0 the open FollowDialog (null)
 };
 
@@ -87,8 +86,6 @@ static_assert(offsetof(CitizenUI, buttonHome) == 0x80, "CitizenUI::buttonHome @ 
 static_assert(offsetof(CitizenUI, buttonFollow) == 0x88, "CitizenUI::buttonFollow @ +0x88");
 static_assert(offsetof(CitizenUI, textNameIs) == 0x90, "CitizenUI::textNameIs @ +0x90");
 static_assert(offsetof(CitizenUI, textAction) == 0x98, "CitizenUI::textAction @ +0x98");
-static_assert(offsetof(CitizenUI, heartsWhole) == 0xA0, "CitizenUI::heartsWhole @ +0xA0");
-static_assert(offsetof(CitizenUI, heartsHalf) == 0xB0, "CitizenUI::heartsHalf @ +0xB0");
-static_assert(offsetof(CitizenUI, starsWhole) == 0xC0, "CitizenUI::starsWhole @ +0xC0");
-static_assert(offsetof(CitizenUI, starsHalf) == 0xD0, "CitizenUI::starsHalf @ +0xD0");
+static_assert(offsetof(CitizenUI, hearts) == 0xA0, "CitizenUI::hearts @ +0xA0");
+static_assert(offsetof(CitizenUI, stars) == 0xC0, "CitizenUI::stars @ +0xC0");
 static_assert(offsetof(CitizenUI, followDialog) == 0xE0, "CitizenUI::followDialog @ +0xE0");
