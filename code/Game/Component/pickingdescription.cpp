@@ -18,7 +18,7 @@
 // Serialize order per group (exe 0x140128d00):
 //   1. refCount (int, elem+8)
 //   2. resize refArray (elem+0)            — fresh-load alloc+zero
-//   3. serialize each External* ref        — fn_Array_Serialize_External_GraphicsMesh
+//   3. serialize each External* ref        — 0x140037000 (the ExternalPtr<PickingMesh> array)
 // Tail: meshRef ExternalPtr (+0x30) via fn_ExternalPtr_Serialize3, then bool (+0x38).
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
@@ -103,8 +103,9 @@ bool PickingDescription::Serialize(IO::Stream& stream) {
                         : nullptr;
             for (int j = 0; j < refCount; ++j) e->meshes[j] = nullptr;
         }
-        // Listed: retail 0x140128d00 calls 0x140037000 here; the tree calls 0x14001bcc0.
-        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, e->meshes);
+        // 0x140128d00 calls 0x140037000 here: the ExternalPtr<Picking::PickingMesh> array body
+        // (type cell 0x140151468), not 0x14001bcc0's GraphicsMesh one (known_port_issues row 4).
+        Reimpl_Array_Serialize_External_PickingMesh(&ser, refCount, e->meshes);
     }
     Reimpl_ExternalPtr_Serialize_Typed_7140(&_material, &ser);   // 0x140007140
     ser.Serialize(_enabled, nullptr);

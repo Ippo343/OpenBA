@@ -34,6 +34,7 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/GraphicsMesh.h"   // ENDGAME B.3.9 TR: GraphicsMesh::TypeId()
 #include "graphics/Particle.h"       // ENDGAME B.3.9 TR: Particle::TypeId()
+#include "picking/PickingMesh.h"     // Picking::PickingMesh::TypeId() (0x140037000)
 #include "collection/Collection.h"   // Collection::Array / ExplicitSpec (Ptr8ZeroArray)
 namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Entity/EntityList.h)
 #include "system/Filename.h"
@@ -418,6 +419,15 @@ extern "C" void Reimpl_Array_Serialize_External_Particle(
     IO::Serializer* serializer, int count, void* arrayBase) {
     ArraySerializeExternalGeneric(serializer, count, arrayBase,
                                   Graphics::Particle::TypeId(), "Graphics::Particle");
+}
+
+// 0x140037000: PickingMesh exref array (typeInfo @ slot 0x140151468,
+// `?_typeInfo@PickingMesh@Picking@@`); the body is 0x14001bcc0's with that cell
+// (PickingDescription::Serialize 0x140128d00, known_port_issues row 4).
+extern "C" void Reimpl_Array_Serialize_External_PickingMesh(
+    IO::Serializer* serializer, int count, void* arrayBase) {
+    ArraySerializeExternalGeneric(serializer, count, arrayBase,
+                                  Picking::PickingMesh::TypeId(), "Picking::PickingMesh");
 }
 
 // ============================================================
