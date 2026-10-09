@@ -245,3 +245,14 @@ cell ends in FIXED / NOT A DIFFERENCE / LEFT (with the owing row or the user dec
   is built over raw storage by `RtVideo_Context_Ctor`'s memset (retail's nineteen zero qwords), so the
   zeroing ctor never runs (D6 shape 1 held: context_ctor / setlight / Draw B11 IDENTICAL). The memsets
   over a block holding `Vector4` take `static_cast<void*>` (-Wclass-memaccess).
+
+2026-10-09, from the RES merge gate (resave 0/5):
+- C3. **A resource-LOAD-ORDER change moves a pointer-keyed save tree.** Row 84 (`184a69e9f`) made
+  `NamedExternalRef::Resolve` find-only as retail; the old load-on-miss had loaded three professions early
+  (factory generation 0, during the goal description loads). `CitizenBehavior`'s profession bucket tree
+  (+0x100) is keyed on the raw `Profession*` and saved in that order, so the golden moved by one 105-byte
+  block with identical keys, counts and members. RULE: a resave DIFF with `reftable_diff.py` saying
+  "rows=+0 payload=+0" is read as BYTES (python: the differing ranges), bisected commit by commit in a
+  scratch worktree WITH THE GOLDEN COPIED IN (the `.bin` is git-ignored: an empty worktree makes its own
+  golden and reports NEW-GOLDEN, not DIFF), and re-cut only once the container and the ordering rule are
+  named (`tools/resave_gate/README.md`). Two bisect scripts must never share one worktree.

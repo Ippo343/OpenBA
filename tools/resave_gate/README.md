@@ -10,6 +10,21 @@ Run it under `tools/game_dir_lock.sh`. It needs `Documents/Banished/Save/Gate.sa
 golden was cut against md5 `68f99e06e6cdce6c17a8fb06e867b2c8`, a copy of the 2026-09-12
 autosave; copy any save to that name and delete the golden to start over). Exit 0 is PASS.
 
+## The golden was re-cut on 2026-10-09 (B7, the named-prerequisite pass) -- same fixture
+
+Golden md5 `3efc80a84907fbb8e25d64b4f2c99cff` -> `994eb184a8e88db9372b5b9cd13a9ed9` (23,452,937 bytes, the
+same `Gate.sav`). WHY: B7 RES row 84 (`184a69e9f`) made `NamedExternalRef::Resolve` find-only, as retail
+0x1400265b0 is (import 0x140152460 = `ExternalFactory::Find`). The old body FindOrLoad-ed every miss, and
+169 Resolve calls run at factory generation 0 during the goal / achievement description loads, where
+`Game\Profession\Profession.rsc:builder` / `:laborer` / `:trader` (and Climate / Terrain / Template refs)
+MISS: the tree loaded those professions EARLY. Now they load later from their other referrers (the same
+5683 loads), so the three Profession objects get other heap addresses, and `CitizenBehavior`'s profession
+bucket tree (+0x100, `CitizenBucketSet<Profession>`, keyed on the raw `Profession*`, walked in order by
+`SerializeCompRefTree`, retail 0x140018020) is written in a different order: the one 105-byte block at
+0x11b172d of the image (3 buckets, ascending before, descending now; keys, counts and members identical).
+Bisected commit by commit in a scratch worktree; the new order is the faithful one. 5/5 PASS after the
+NEW-GOLDEN run. The template bucket tree (+0x160) is keyed the same way and may move on other saves.
+
 ## The fixture was re-cut on 2026-10-09 (B6, the retail-difference task)
 
 `Gate.sav` is now the frame-661 autosave of a NEW GAME on the B6 COMP-merge exe (`b864cd289`,
