@@ -18,13 +18,13 @@
 //   ToolbarDialog::ToolbarDialog           0x1400b9910  (code/Game/Dialog/ToolbarDialog.h)
 
 #include <cstdint>
-#include "system/Value.h"   // System::Random (fn_GetCurrentProductIndex); was reached through engine_funcs.h
+#include "system/Value.h"   // System::Random; was reached through engine_funcs.h
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree (B3R Leftovers)
 #include "runtime/types/ui/DialogController.h"     // SA_DialogEntityAlive
 #include "Entity/ComponentEntity.h"                // ComponentEntity::_entityFlags
 #include "Component/TrackerComponent.h"            // fn_TrackerComponent_Rebuild
-#include "Component/ConsumeProduceComponent.h"     // fn_GetCurrentProductIndex
+#include "Component/ConsumeProduceComponent.h"
 
 class MainMenuDialog;  // code/Game/Dialog/MainMenuDialog.h
 class TradeUI;         // code/Game/Dialog/TradeUI.h
@@ -182,30 +182,5 @@ inline void fn_TrackerComponent_Rebuild(TrackerComponent::EntryList* dst, const 
     }
 }
 
-// GetCurrentProductIndex (FUN_140119470 in exe)
-// Reads +0x50 product index; if not -1 (0xffffffff), returns it directly.
-// If -1, performs weighted random selection from +0x58 float array (count at +0x60)
-// using System::Random::RandFloat on the game singleton's Random at +0xd8.
-// B.4 P2 DLG-1: typed on its one caller's ConsumeProduceComponent (consumeproduceui.cpp).
-// A second port of 0x140119470 is PickConsumeRecipe (Action/action_child_ctors2.cpp);
-// it differs (it guards a null game / Random), so the two are not merged here.
-inline uint32_t fn_GetCurrentProductIndex(const ConsumeProduceComponent* component) {
-    uint32_t idx = static_cast<uint32_t>(component->consumeResourceId);
-    if ((int)idx < 0) {
-        if (idx != 0xffffffff) return 0;
-        int count = component->consumeRates._size;
-        float* weights = component->consumeRates._data;
-        float totalWeight = 0.0f;
-        for (int i = 0; i < count; i++) totalWeight += weights[i];
-        System::Random* randomPtr = GameUpdateLoop::_singleton->m_random;
-        // ?RandFloat@Random@System@@QEAAMXZ (0x1800c7d40).
-        float randVal = randomPtr->RandFloat();
-        float accum = 0.0f;
-        for (int i = 0; i < count; i++) {
-            accum += weights[i];
-            if (randVal * totalWeight < accum) return (uint32_t)i;
-        }
-        return 0;
-    }
-    return idx;
-}
+// (0x140119470, the weighted recipe pick, is PickConsumeRecipe in Action/exe_bodies.h:
+// row 443 (B7 RES) merged the second port that stood here into it.)
