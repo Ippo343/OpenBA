@@ -23,7 +23,6 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
-#include "object/VSlot.h"      // B.3.x W0: Object::SlotAddressOf
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
@@ -54,43 +53,16 @@ extern void Debug_ImageElement_SetSprite(UI::ImageElement* self, const UI::Sprit
 extern void Debug_LabelElement_SetSprite(UI::LabelElement* self, const UI::Sprite* sprite);
 #endif
 
-// Helper: find a sub-description by type ID in a ComponentDescription's list
-// (_subDescs / _subDescCount).
-static inline bool SaneHeapPtr(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: non-null, 8-aligned, below 0x7FFFFFFFFFFF (sub-description array entries)
-    uintptr_t v = (uintptr_t)p;  // CAST-OK: ptr_int
-    // Non-null, 8-byte aligned, in user address space. Filters garbage/sentinel
-    // values so a malformed component array can't fault the scan.
-    return v != 0 && (v & 7) == 0 && v < 0x7FFFFFFFFFFFull;
-}
-static Object::Base* FindCompInDesc(const ComponentDescription* desc, uint32_t typeId) {
-    if (!SaneHeapPtr(desc)) return nullptr;
-    int count = desc->_subDescCount;
-    Description** array = desc->_subDescs;   // COMP-c typed _subDescs (merge fix)
-    // Guard against a count/array mismatch (our standalone desc divergence can hand
-    // a description whose array is null while the count is non-zero — the retail
-    // BuildComponent never is). Bound the count so a garbage value can't run wild.
-    if (!SaneHeapPtr(array) || count <= 0 || count > 4096) return nullptr;
-
-    for (int i = 0; i < count; i++) {
-        Description* comp = array[i];
-        if (!SaneHeapPtr(comp)) continue;
-
-        // vtable[2] returns the component's type ID. NB: vtable is a data pointer
-        // (8-aligned), but vtable[2] is a *function* pointer (code address) and is
-        // NOT necessarily 8-aligned — only require it be non-null, not SaneHeapPtr,
-        // or every component gets skipped.
-        // The standalone sanity probe reads the vptr word.
-        void** vtable = *(void***)comp;  // LEFT: audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
-        if (!SaneHeapPtr(vtable) ||
-            Object::SlotAddressOf(comp, &Object::Base::Type) == nullptr) continue;   // B.3.x: slot from the member
-        Object::Base* compBase = comp;
-        int compTypeId = compBase->Type();
-
-        if (compTypeId == (int)typeId) {
-            if (::Object::IsDerivedFromNullSafe(compBase, typeId)) {
-                return compBase;
-            }
-            break;
+// The description find retail inlines three times in 0x14005e7c0 (ToolbarDescription
+// cell 0x1401c7f58, BuildDescription 0x1401c7040, RawMaterialDescription 0x1401c7cb8):
+// count re-read per pass, slot 2 ([vtbl+0x10]) against T's cell, IsDerivedFrom on the
+// first match, no test of the description, the array or an element.
+template <class T>
+static T* FindDescInDesc(const ComponentDescription* desc) {
+    for (int i = 0; i < desc->_subDescCount; i++) {
+        if (desc->_subDescs[i]->Type() == T::TypeId()) {
+            Description* match = desc->_subDescs[i];
+            return ::Object::IsDerivedFromNullSafe(match, T::TypeId()) ? static_cast<T*>(match) : nullptr;
         }
     }
     return nullptr;
@@ -107,15 +79,6 @@ static UI::Element* FindDialogElemChecked(UI::DialogInstance* dialogInst, const 
     UI::Element* raw = FindDialogElem(dialogInst, name);
     bool isInternal = ::Object::IsDerivedFromNullSafe(raw, UI::Element::TypeId());
     return isInternal ? raw : nullptr;
-}
-
-// A standalone heuristic (below): an object that "presents a sane component
-// array" is read as the ComponentDescription the list scan expects.
-static bool PresentsComponentArray(Object::Base* obj, bool strict) {
-    const ComponentDescription* cd = static_cast<const ComponentDescription*>(obj);
-    int32_t compCount = cd->_subDescCount;
-    Description**  compArr   = cd->_subDescs;   // COMP-c typed _subDescs (merge fix)
-    return compCount > 0 && compCount < 256 && (strict ? SaneHeapPtr(compArr) : compArr != nullptr);
 }
 
 // ---- BuildRequirementUI: PROMOTED to the real reimpl (2026-06-28) ------------
@@ -177,19 +140,9 @@ void BuildRequirementUI::OnCreated() {
                 // Runtime IsDerivedFrom has no null-this check, so guard exactly as the
                 // +0x28 datasource probes above do.
                 isBuild = userData && ::Object::IsDerivedFromNullSafe(userData, ComponentDescription::TypeId());
-                ComponentDescription* descResolved = isBuild ? static_cast<ComponentDescription*>(userData) : nullptr;
-                // Standalone divergence: the in-game Toolbar sub-item buttons store
-                // their building DESCRIPTION entity as userData (toolbardialog.cpp
-                // SetUserData(button, item+0x58)). Downstream only uses `desc` as the
-                // object whose sub-description list is scanned for the
-                // ToolbarDescription, so accept a userData that presents a sane
-                // component array, rather than bailing and leaving the title/cost
-                // unset (which rendered as "???????" / "x x x").
-                if (!descResolved && userData) {
-                    if (PresentsComponentArray(userData, false))
-                        descResolved = static_cast<ComponentDescription*>(userData);
-                }
-                description = descResolved;
+                // The toolbar's sub-item buttons carry the item's ComponentDescription
+                // (toolbardialog.cpp SetUserData(button, item+0x58)).
+                description = isBuild ? static_cast<ComponentDescription*>(userData) : nullptr;
             }
             // else: +0x30 stays as-is (from previous init or nullptr)
         }
@@ -197,23 +150,10 @@ void BuildRequirementUI::OnCreated() {
 
     // --- Process description if resolved ---
     ComponentDescription* desc = description;
-    // IsDerivedFromOrTrust: when nothing resolved but +0x28 presents a sane
-    // component array (the same guard as the toolbar-button userData path above),
-    // trust it directly (the CreateBar's datasource IS the building's description).
-    if (!desc) {
-        Object::Base* ds = _dataSource;
-        if (SaneHeapPtr(ds)) {
-            if (PresentsComponentArray(ds, true)) {
-                desc = static_cast<ComponentDescription*>(ds);
-                description = desc;
-            }
-        }
-    }
     if (!desc) return;
 
     // Find ToolbarDescription in description's sub-descriptions
-    ToolbarDescription* buildReqComp =
-        static_cast<ToolbarDescription*>(FindCompInDesc(desc, ToolbarDescription::TypeId()));
+    ToolbarDescription* buildReqComp = FindDescInDesc<ToolbarDescription>(desc);
 
     // The owning dialog instance (+0x18)
     UI::DialogInstance* dialogInst = _dialog;
@@ -294,10 +234,9 @@ void BuildRequirementUI::OnCreated() {
 
     // --- Find the build-cost BuildDescription in the desc ---
     // Each entry's sub-entity (the resource-type description) is resolved during
-    // BuildDescription_Serialize. The null-resType guard below stays as defensive
-    // belt-and-suspenders.
-    BuildDescription* resourceComp =
-        static_cast<BuildDescription*>(FindCompInDesc(desc, BuildDescription::TypeId()));
+    // BuildDescription_Serialize. No BuildDescription (or a match that fails
+    // IsDerivedFrom) returns: retail's `if (!bVar5) return; if (pvVar2 == 0) return;`.
+    BuildDescription* resourceComp = FindDescInDesc<BuildDescription>(desc);
     if (!resourceComp) return;
 
     // Determine item count: min of label count and cost entry count
@@ -324,12 +263,11 @@ void BuildRequirementUI::OnCreated() {
             ComponentDescription* subEntity = entry.material;
 
             // Find RawMaterialDescription in the sub-entity's list
-            RawMaterialDescription* resType = static_cast<RawMaterialDescription*>(
-                FindCompInDesc(subEntity, RawMaterialDescription::TypeId()));
+            RawMaterialDescription* resType = FindDescInDesc<RawMaterialDescription>(subEntity);
 
-            // Set sprite on label element — but only if the resource type resolved.
+            // Set sprite on label element (retail reads resType +0x20 / +0x38 unguarded)
             UI::LabelElement* label = static_cast<UI::LabelElement*>(labels._data[i]);
-            if (SaneHeapPtr(resType)) {
+            {
                 // The small sprite: sheet (+0x20) and _nameSmall (+0x38)
                 #ifdef _DEBUG
                 uint8_t sprite[24];
