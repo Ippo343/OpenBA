@@ -496,9 +496,8 @@ extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, c
     else
         prioFlag = '\x01';
 
-    if (GameUpdateLoop::_singleton == nullptr) return;
+    // B6 row 200: 0x14012ecb7 / 0x14012ecbe read [0x1401c3dd8]+0x118 with no test.
     WorkScheduler* sched = GameUpdateLoop::_singleton->m_tutorial;
-    if (!sched) return;
 
     // Faithful to ec60: pass a pointer to a local copy of the work-ptr (88a0 only reads it).
     Object::InternalPtr<Work> localWork = *pWorkIBP;
@@ -519,11 +518,9 @@ extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, c
             p = p->left;
         }
     }
-    if (payload) {
-        wc->workFlags = payload->field_24;
-    } else {
-        wc->workFlags = 0;
-    }
+    // On a miss retail builds a NULL InternalPtr (0x14012ed09..0x14012ed1b) and reads
+    // [RAX+0x24] through it (0x14012ed2b): no test, a null read, not a 0 (B6 row 200).
+    wc->workFlags = payload->field_24;
     // The id-map half of the post is the one nothing downstream can see going wrong: a miss
     // here silently writes priority 0 into workComp+0x2c and makes the f8400 re-key a no-op
     // ("NOT in the sched+0x30 id-map"). Report the map's own state next to the lookup result
@@ -553,8 +550,7 @@ extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, c
 // themselves, which is why retail never touches +0x10 here.
 extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId,
                                               Profession* const oldProf, Profession* const newProf) {
-    // [STANDALONE GUARD] Retail is only ever called from a live world.
-    if (!ws) return;
+    // B6 row 200: retail reads [RCX+0x30] with no test (0x1400f842a).
     const int key = static_cast<int>(workId);
 
     // 1. The id-map entry (sched+0x30) — its +0x08 payload is what gets re-filed. Retail
@@ -623,14 +619,8 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* ws, uint32_t workId
         WS_cb50(ws, &out, &k, &noSubtree);
         newBucket = out;
     }
-    // [STANDALONE GUARD] Retail derefs the insert result unconditionally; ours can be null
-    // if the allocator failed. Dropping the item is bad, but far better than a write to 0x08.
-    if (!newBucket) {
-        std::fprintf(stderr, "[WorkScheduler] Rekey: could not create bucket for key %llx — "
-                     "work id %d dropped\n", reinterpret_cast<unsigned long long>(newProf), key);  // CAST-OK: ptr_int
-        std::fflush(stderr);
-        return;
-    }
+    // Retail derefs the new bucket with no test (`puVar6 = *puVar4`, then puVar6 + 1 to
+    // 0x140029a40's insert): B6 row 200 dropped the tree's allocator-failure return.
 
     // 6. Re-file under the new key. The pair is {id, pad, payload}; 9a40 reads the u32 at +0
     //    and the u64 at +8, and bumps newBucket+0x10.
