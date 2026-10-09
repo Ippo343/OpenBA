@@ -34,7 +34,7 @@
 //   +0x08  void*   descriptor  (+0x28 = string table, +0x30 = string name)
 //   +0x10  uint64  payload     (opaque; copied by the swaps)
 //
-// ── Why one body covers both drivers ─────────────────────────────────────────
+// ── Why one body covers both drivers (the core is Dialog/introsort24.h) ──────
 // 0x1400162d0 and 0x1400165d0 are the same generic introsort: median-of-3, an
 // explicit 62-entry stack instead of recursion, recurse-on-the-smaller-side, and a
 // cutoff to a max-selection sort at 8 elements or fewer. They differ only in which
@@ -57,22 +57,11 @@
 #include "Dialog/TradeUI.h"
 #include "Component/RawMaterialDescription.h"
 #include "Component/TradeComponent.h"
+#include "Dialog/introsort24.h"   // the shared introsort core (driver + small sort)
 
 namespace {
 
-typedef TradeUI::StorageItem* Elem;          // stride 0x18
 typedef TradeComponent* const* SortCtx;      // the ByComponent context: the caller's TradeComponent*
-
-inline Elem At(Elem base, int64_t i) { return base + i; }
-inline int64_t Count(Elem first, Elem last) { return last - first; }
-
-inline void Swap24(Elem x, Elem y) {
-    ComponentDescription* const t0 = x->resource;
-    RawMaterialDescription* const t1 = x->rawMaterial;
-    ValueDescription* const t2 = x->value;
-    x->resource = y->resource; x->rawMaterial = y->rawMaterial; x->value = y->value;
-    y->resource = t0;          y->rawMaterial = t1;             y->value = t2;
-}
 
 // ── The name key ─────────────────────────────────────────────────────────────
 // Both comparators derive a System::String from an element the same way:
@@ -146,148 +135,6 @@ bool ComponentLess(SortCtx ctx, const TradeUI::StorageItem* a, const TradeUI::St
     return NameLess(nullptr, a, b);          // tie -> name ascending
 }
 
-typedef bool (*LessFn)(SortCtx ctx, const TradeUI::StorageItem* a, const TradeUI::StorageItem* b);
-
-// ── The small-range sort (0x140015ad0 / 0x140016920) ─────────────────────────
-// Both are the SAME max-selection sort; 0x140016920 is merely 109 lines instead of
-// 56 because its comparator got inlined. Each pass walks [first, last] tracking the
-// running maximum and swaps it to `last`, then shrinks the range.
-//
-// The comparison is `less(runningMax, candidate)` — strict — so a candidate EQUAL to
-// the running maximum does not displace it. That detail decides where equal elements
-// land, so it is transcribed rather than tidied.
-void SmallSort(Elem first, Elem last, SortCtx ctx, LessFn less) {
-    if (last <= first) return;               // retail: `CMP RDX,RCX ; JBE ret`
-    for (; first < last; --last) {
-        Elem best = first;
-        Elem cur  = first;
-        for (Elem next = cur + 1; next <= last; next = cur + 1) {
-            if (less(ctx, best, next)) best = next;
-            cur = next;
-        }
-        Swap24(best, last);
-    }
-}
-
-// ── The introsort driver (0x1400162d0 / 0x1400165d0) ─────────────────────────
-void IntroSort(Elem array, int count, SortCtx ctx, LessFn less,
-               void (*smallSort)(Elem, Elem, SortCtx, LessFn)) {
-    if (count < 2) return;
-
-    // Retail's explicit recursion stack: 62 entries, NO overflow check. Depth is
-    // bounded because the driver always continues on the SMALLER partition and
-    // pushes the larger, so 62 frames covers any array that fits in memory.
-    //
-    // The `depth < 62` guards on the pushes below are standalone-only and cannot
-    // fire for any reachable input (trade tables are tens of entries). They are the
-    // difference between "leave a partition unsorted" and "smash the stack" if that
-    // reasoning is ever wrong — a visibly wrong table beats silent corruption.
-    Elem stackLo[62];
-    Elem stackHi[62];
-    int  depth = 0;
-
-    Elem first = array;
-    Elem last  = At(array, count - 1);
-
-    for (;;) {
-        while (Count(first, last) + 1 > 8) {
-            const int64_t n = Count(first, last) + 1;
-            Elem mid = At(first, n >> 1);
-
-            // Median-of-3, in retail's exact order.
-            if (less(ctx, mid,  first)) Swap24(first, mid);
-            if (less(ctx, last, first)) Swap24(first, last);
-            if (less(ctx, last, mid))   Swap24(mid,   last);
-
-            Elem lo = first;
-            Elem hi = last;
-            for (;;) {
-                // Scan up. When the bounded-by-mid scan runs off the end it falls
-                // into the bounded-by-last scan, which increments lo AGAIN before
-                // testing. That extra step is retail behaviour (the fallthrough to
-                // LAB_140016442), not an off-by-one — it is what steps lo past the
-                // pivot slot.
-                bool unbounded = true;
-                if (lo < mid) {
-                    unbounded = false;
-                    for (;;) {
-                        ++lo;
-                        if (mid <= lo)          { unbounded = true; break; }
-                        if (less(ctx, mid, lo)) { break; }
-                    }
-                }
-                if (unbounded) {
-                    for (;;) {
-                        ++lo;
-                        if (last < lo)          break;
-                        if (less(ctx, mid, lo)) break;
-                    }
-                }
-
-                // Scan down, bounded by mid.
-                Elem hiPrev = hi;
-                for (;;) {
-                    hiPrev = hi;
-                    --hi;
-                    if (hi <= mid)           break;
-                    if (!less(ctx, mid, hi)) break;
-                }
-
-                if (lo <= hi) {
-                    Swap24(lo, hi);
-                    if (mid == hi) mid = lo;  // pivot moved with the swap
-                    continue;
-                }
-
-                // lo crossed hi. Walk hiPrev back over the run of elements EQUAL to
-                // the pivot — "equal" meaning neither less(x,mid) nor less(mid,x).
-                bool unbounded2 = true;
-                if (mid < hiPrev) {
-                    unbounded2 = false;
-                    for (;;) {
-                        --hiPrev;
-                        if (hiPrev <= mid) { unbounded2 = true; break; }
-                        if (less(ctx, hiPrev, mid) || less(ctx, mid, hiPrev)) break;
-                    }
-                }
-                if (unbounded2) {
-                    for (;;) {
-                        --hiPrev;
-                        if (hiPrev <= first)            break;
-                        if (less(ctx, hiPrev, mid))     break;
-                        if (less(ctx, mid, hiPrev))     break;
-                    }
-                }
-
-                // Continue on the smaller side, push the larger.
-                const int64_t rightCount = Count(lo, last);
-                const int64_t leftCount  = Count(first, hiPrev);
-                if (rightCount <= leftCount) {
-                    if (first < hiPrev && depth < 62) {
-                        stackLo[depth] = first; stackHi[depth] = hiPrev; ++depth;
-                    }
-                    first = lo;
-                } else {
-                    if (lo < last && depth < 62) {
-                        stackLo[depth] = lo; stackHi[depth] = last; ++depth;
-                    }
-                    last = hiPrev;
-                }
-                break;
-            }
-
-            if (last <= first) break;
-        }
-
-        if (Count(first, last) + 1 <= 8) smallSort(first, last, ctx, less);
-
-        if (depth == 0) return;
-        --depth;
-        first = stackLo[depth];
-        last  = stackHi[depth];
-    }
-}
-
 } // namespace
 
 // ── Registered entry points ──────────────────────────────────────────────────
@@ -296,14 +143,18 @@ void IntroSort(Elem array, int count, SortCtx ctx, LessFn less,
 // never reads R8/R9 (the two "phantom" parameters the caller used to pass are gone).
 extern "C" void TradeUI_IntroSort_ByName_162d0(TradeUI::StorageItem* array, int count) {
     if (!array || count < 2) return;
-    IntroSort(array, count, nullptr, &NameLess, &SmallSort);
+    IntroSort24::Sort(array, count, [](const TradeUI::StorageItem* a, const TradeUI::StorageItem* b) {
+        return NameLess(nullptr, a, b);
+    });
 }
 
 // 0x1400165d0 — sort the trade table by stocked count (descending), name on ties.
 extern "C" void TradeUI_IntroSort_ByComponent_165d0(TradeUI::StorageItem* array, int count,
                                                     TradeComponent* const* ctx) {
     if (!array || count < 2) return;         // retail: `CMP EDX,1 ; JLE ret`
-    IntroSort(array, count, ctx, &ComponentLess, &SmallSort);
+    IntroSort24::Sort(array, count, [ctx](const TradeUI::StorageItem* a, const TradeUI::StorageItem* b) {
+        return ComponentLess(ctx, a, b);
+    });
 }
 
 // The BANISHED_TRADE_SORT_SELFTEST introsort self-test was deleted with the flag
