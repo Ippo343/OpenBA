@@ -344,10 +344,13 @@ int FencedTool::CalcCost(int startCell, int endCell,
     uint32_t anchorMinCol = minCol, anchorMinRow = minRow;
     uint32_t anchorMaxCol = effectiveMaxCol, anchorMaxRow = effectiveMaxRow;
     float anchorPos[3] = {0};
+    // Arg 7, the yaw out: its own stack slot, [RBP+0x58] (`LEA RAX,[RBP+0x58];
+    // MOV [RSP+0x30],RAX` at 0x1400db7eb); CalcCost never reads it.
+    uint32_t anchorYaw;   // written by 0x1400dbf90 before any read
 
     uint64_t anchorResult = PlayerEdit_FencedAnchorCalc_dbf90(
         this, &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
-        anchorPos, &anchorMinCol);   // the tree's arg 7; retail passes a separate slot (known_port_issues 14 row 76)
+        anchorPos, &anchorYaw);
     if ((char)anchorResult == '\0') return 3;
 
     // Check the owner's constraint rectangle
