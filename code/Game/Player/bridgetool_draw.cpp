@@ -115,15 +115,13 @@ void BridgeTool::Draw(Video::Context* context, char skip) {
     if (startCell < 0) return;
     if (endCell < 0) endCell = startCell;
 
+    // No test of the map, its size, its cells or the description (0x1400fadc0 reads
+    // [GameWorld+0xf8], its +0x00 and +0x80, and this +0x38 unguarded).
     Map* mapGrid = MapGrid();
-    if (!mapGrid) return;
     const int width = mapGrid->size;
-    if (width <= 0) return;
     const MapCell* terrainBase = mapGrid->cells.GetData();
-    if (!terrainBase) return;
 
     const CreateBridgeDescription* desc = bridgeDesc;
-    if (!desc) return;
 
     const uint32_t maskBody      = desc->_u20;
     const uint32_t maskApproach  = desc->_u24;
@@ -147,19 +145,14 @@ void BridgeTool::Draw(Video::Context* context, char skip) {
 
     const bool isDrag = (startCell != endCell);
 
-    // Map cell count — retail indexes the terrain array with no bounds test at all.
-    // A span within `radius` of the map edge would read past the end of the array on
-    // every frame of the drag, so the two `idx` range checks below are OURS, not
-    // retail's. ValidatePath's port already guards the same way (`if (idx < 0)`).
-    const int cellCount = width * width;
-
+    // Retail indexes the terrain array with no bounds test at all (a ring within
+    // `radius` of the map edge reads the cells beyond it, as retail does).
     TileArray tiles;
 
     // ---- 3. Body cells + clearance ring ------------------------------------
     for (int row = minRow; row <= maxRow; row++) {
         for (int col = minCol; col <= maxCol; col++) {
             const int bodyIdx = width * row + col;
-            if (bodyIdx < 0 || bodyIdx >= cellCount) continue;
 
             const MapCell* cell = &terrainBase[bodyIdx];
             const uint32_t  bit  = TerrainBit(cell);
@@ -198,9 +191,7 @@ void BridgeTool::Draw(Video::Context* context, char skip) {
                     ringCol = col;
                     ringRow = row + off;
                 }
-                if (ringCol < 0 || ringCol >= width || ringRow < 0) continue;
                 const int idx = width * ringRow + ringCol;
-                if (idx < 0 || idx >= cellCount) continue;
 
                 const MapCell* rCell = &terrainBase[idx];
                 const uint32_t  rBit  = TerrainBit(rCell);
