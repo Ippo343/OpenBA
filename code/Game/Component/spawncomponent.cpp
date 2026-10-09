@@ -29,6 +29,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Stream.h"       // B6 row 17: Stream::GetDirection (retail reads the stream's +0x08 word)
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "system/Timer.h"   // ENDGAME B.3.9 SS2: System::Timer::_secondsPerTick
@@ -355,20 +356,22 @@ void SpawnComponent::Persist(IO::Stream& stream) {
     if (static_cast<int>(ser.GetDirection()) == 0)   // IO::Serializer::GetDirection, retail 0x180006210
         timers.SetSize(count);  // also writes timers._size = count
 
+    // Retail 0x140055ee0: `if (0 < count)` over the restored count, each Time serialized in turn
+    // (no null test of the buffer).
     System::Time* timer = timers._data;
-    int n = timers._size;
-    for (int i = 0; i < n && timer; ++i, ++timer)
+    for (int i = 0; i < count; ++i, ++timer)
         timer->Serialize(ser);
 
-    // LEFT (a tree defect, listed): this test reads the STREAM as a Serializer, so it
-    // answers from the stream's vtable word and is never "loading"; retail tests the
-    // stream's direction here (0x140055ee0) and reconciles on every load.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(&stream)->GetDirection()) == 0) {   // LEFT: retail DIFFERENCE (known_port_issues 14b row 17)
+    // Retail reads the STREAM's direction word (`*(int*)(param_2 + 8) == 0`, Stream +0x08) and
+    // reconciles the restored count against the live description on every load. The tree used to
+    // read the stream through a Serializer view, which answered from the stream's vtable word and
+    // never said "loading" (known_port_issues 14b row 17, fixed in B6). Retail's IsDerivedFrom
+    // substitutes null on a miss and reads +0x28 of it unguarded (CMOVNZ, then the +0x28 read).
+    if (static_cast<int>(stream.GetDirection()) == 0) {
         Description* desc = _description;
-        SpawnDescription* validated = nullptr;
-        if (desc && desc->IsDerivedFrom(SpawnDescription::TypeId()))
-            validated = static_cast<SpawnDescription*>(desc);
-        int descCount = validated ? validated->_entries._size : 0;
+        SpawnDescription* validated =
+            desc->IsDerivedFrom(SpawnDescription::TypeId()) ? static_cast<SpawnDescription*>(desc) : nullptr;
+        int descCount = validated->_entries._size;
         if (timers._size != descCount)
             timers.SetSize(descCount);
     }

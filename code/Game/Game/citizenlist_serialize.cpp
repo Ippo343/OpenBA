@@ -128,6 +128,7 @@
 #include "Player/exe_bodies.h"              // Avl38Retrace (0x140014b40)
 #include "Component/exe_bodies.h"           // CitizenAI_Reg_helper_e360, StorageComponent_DynArrayResize
 #include "Game/LegacyKeyIntNode.h"         // the version < 2 key -> int tree node
+#include "Work/exe_bodies.h"               // WorkBase_TreeNodeFree_e320 (B6 row 810: retail frees the legacy tree's subtrees)
 #include "Component/wellcomponent_funcs.h"  // WellComp_AddCellEntry_88a80
 
 // Already-ported sibling functions, called by name through their declaring headers:
@@ -220,15 +221,8 @@ void SerializeIBPArray(CitizenIbpList<T>& list, IO::Serializer* serializer, uint
 // CitizenBehaviorRows in Entity/CitizenBehavior.h.)
 }  // namespace
 
-// ------------------------------------------------------------
-// FUN_140017640 ("StatsArray::Init") — stride-0x10 outer array resize.
-// Its one caller left is the version-5 clamp below, which hands it the +0x160
-// TREE header (a defect of the tree's, dead at version 6); every Array member
-// of CitizenBehavior calls its own SetSize.
-// ------------------------------------------------------------
-void ResizeStride0x10(void* hdr, int n) {
-    reinterpret_cast<CitizenIntAssocArray*>(hdr)->SetSize(n);   // LEFT: audit DEFERRED (retail-difference task, the version-5 clamp): the version-5 clamp passes the +0x160 Set header as an Array<Array<int32>> (the tree's defect, dead at version 6)
-}
+// (FUN_140017640 "StatsArray::Init", the stride-0x10 outer resize, is CitizenIntAssocArray::SetSize;
+// its last free-function spelling, ResizeStride0x10, went with the tree-only version-5 clamp: B6 row 15.)
 
 namespace {
 
@@ -425,10 +419,10 @@ LegacyKeyIntNode* LegacyTreeSucc(LegacyKeyIntNode* n) {
     }
     return parent;
 }
-void SerializeLegacyKeyIntTree(void* rootField, int32_t* countField, IO::Serializer* serializer) {   // LEFT: void* is the +0x160 root slot, which holds two node types (the typed bucket set's and this legacy 0x30-byte tree's): the one cast below is that FLOOR ruling's
-    // LEFT: version < 2 only (dead at 6): +0x160 is declared TemplateBucket* (0x38-byte
-    // nodes) while this legacy tree's nodes are 0x30 bytes: the slot holds two node types.
-    LegacyKeyIntNode** rootPtr = static_cast<LegacyKeyIntNode**>(rootField);   // LEFT: DEFERRED (retail-difference task, known_port_issues row 810); FLOOR? (B4 H5-P2: +0x160 IS typed now, CitizenBucketSet<ComponentDescription>): the version < 2 arm (never reached at save version 6) reads that Set's root slot as a second node type, the 0x30-byte LegacyKeyIntNode; one slot, two node types, so no typed member names it. NOT FLOOR (B4 S4 IBP, retail read): retail's version < 2 arm (0x140090194..0x1400901ea in Serialize 0x14008f760) never touches +0x160: it zeroes a STACK {root qword [RSP+0x30], count dword [RSP+0x38]}, reads the legacy tree into it (0x14000ebe0: count at [RCX+8], 0x30-byte nodes MemAlloc(0x30, 8)), then frees it (0x14000e320 on root+0x18 / root+0x20, MemFree the root) and zeroes it; only version >= 2 reaches +0x160 (0x140017cd0). The cast exists because the tree's caller hands +0x160's root here (known_port_issues row 810); retail's typed local {LegacyKeyIntNode* root; int32 count} removes it in that row's behaviour: commit (retail-difference task)
+void SerializeLegacyKeyIntTree(LegacyKeyIntNode** rootPtr, int32_t* countField, IO::Serializer* serializer) {
+    // version < 2 only (dead at save version 6). Retail 0x140090194..0x1400901ea reads this tree
+    // into a STACK {root, count} record and frees it (B6 row 810: the tree used to hand +0x160's root
+    // here, mixing 0x30-byte legacy nodes under a Set of 0x38-byte bucket nodes).
     int32_t count = *countField;
     serializer->Serialize(count, nullptr);
     bool loading = SerializerLoading(serializer);
@@ -541,20 +535,42 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
 
     // "Stats" int-assoc array at +0x150.
     SerializeIntAssocArray(field_0x150, ser);
+    // Retail 0x14008fe50..0x14008fed0 (B6 row 14): on a LOAD the outer array is sized to 0x47
+    // (through 0x140017640) when it is not, and every entry past the old count is sized to
+    // entry 0's inner count (0x1400021d0) and zero-filled; both counts are re-read each turn.
+    if (SerializerLoading(ser)) {
+        const int32_t oldCount = field_0x150._size;
+        if (oldCount != 0x47) field_0x150.SetSize(0x47);
+        for (int32_t i = oldCount; i < field_0x150._size; ++i) {
+            field_0x150._data[i].SetSize(field_0x150._data[0]._size);
+            Collection::Array<int32_t>& inner = field_0x150._data[i];
+            for (int32_t j = 0; j < inner._size; ++j) inner._data[j] = 0;
+        }
+    }
 
     // TREE #2 (BuildComponentRef key) on the live path (version>=2, always true
     // at version 6); legacy key/int BST otherwise (DEAD — see file header).
     if (ser->GetVersion() < 2) {
-        SerializeLegacyKeyIntTree(&field_0x160._root, &field_0x160._count, ser);
+        // Retail 0x14008f760: a stack {root [RSP+0x30] = 0, count [RSP+0x38] = 0} is read by
+        // 0x14000ebe0, then the root's left (+0x18) and right (+0x20) subtrees go through
+        // 0x14000e320, the root through MemFree, and the record is zeroed; +0x160 is untouched.
+        LegacyKeyIntNode* legacyRoot = nullptr;
+        int32_t legacyCount = 0;
+        SerializeLegacyKeyIntTree(&legacyRoot, &legacyCount, ser);
+        if (LegacyKeyIntNode* r = legacyRoot) {
+            WorkBase_TreeNodeFree_e320(&legacyRoot, r->left);
+            WorkBase_TreeNodeFree_e320(&legacyRoot, r->right);
+            System::MemoryAllocator::MemFree(r);
+        }
+        legacyRoot = nullptr;
+        legacyCount = 0;
     } else {
         SerializeCompRefTree(field_0x160, ser,
             &Reimpl_ExternalPtr_Serialize_StringTable);   // 0x140002340
     }
-    if (ser->GetVersion() == 5) {
-        // LEFT: resizes the +0x160 TREE header as an array of arrays (the tree's, dead
-        // at version 6; retail sizes +0x150 to 0x47 here on a load, 0x14008fe50).
-        ResizeStride0x10(&field_0x160._root /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
-    }
+    // (B6 row 15: the tree used to clear the +0x160 tree header here at version 5; retail
+    // 0x14008f760 has no version-5 step between the +0x160 tree and the wells -- its one
+    // version-5 clear is +0x140's, below.)
 
     SerializeIBPArray(wells, ser, WellComponent::TypeId());
 
@@ -598,10 +614,9 @@ void CitizenBehavior::Serialize(IO::Stream& stream, int* /*outParam*/) {
                 ser->Serialize(entry->maxCount, nullptr);
                 ser->Serialize(entry->field_0x0C, nullptr);
                 ser->Serialize(entry->_field10, nullptr);
-                // LEFT (a defect, kept: the stream must stay byte-identical): retail
-                // serializes the entry's Time at +0x18 (0x14008ff9d, Time::Serialize(
-                // piVar7 + 4) with piVar7 = entry + 8); the tree has always used +0x14.
-                reinterpret_cast<System::Time*>(&entry->_field14)->Serialize(*ser);   // LEFT: audit DEFERRED (retail-difference task, known_port_issues 14): CitizenBehavior.h (ENT): entry _field14 is int64_t, retail System::Time
+                // Retail 0x14008ff9d: Time::Serialize(piVar7 + 4) with piVar7 = entry + 8, i.e.
+                // the entry's Time at +0x18 (B6 row 13; the tree used to write the 8 bytes at +0x14).
+                entry->timer.Serialize(*ser);
                 ++entry;
             }
         }

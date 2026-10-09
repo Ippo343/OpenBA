@@ -491,7 +491,7 @@ extern "C" void CitizenAI_WorkScheduler_Post(WorkComponent* wc, uint32_t code, c
         wc->CancelWork();              // 0x14012eb50
     }
     char prioFlag;
-    if (flag == '\0' || wc->workFlags == 0x80000000u)
+    if (flag == '\0' || wc->workFlags == WorkComponent::kWorkFlagsNone)
         prioFlag = '\0';
     else
         prioFlag = '\x01';

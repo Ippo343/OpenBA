@@ -498,24 +498,17 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     settings->uiScale           = 100;
                     settings->autosaveInterval  = 1;
                     settings->statusIconOpacity = 100;
-                    // The tree writes a dword 1 at +0x0C and at +0x18 where retail
-                    // writes one byte (0x140042001, 0x140042013): the pad bytes after
-                    // the two flags are zeroed here, MemAlloc garbage in retail (H8
-                    // candidate, kept in W0).
-                    settings->statusIconEnable  = 1;
-                    settings->_pad0D[0] = 0;
-                    settings->_pad0D[1] = 0;
-                    settings->_pad0D[2] = 0;
+                    // Retail writes ONE byte at +0x0C (0x140042001) and at +0x18 (0x140042013);
+                    // +0x0D..+0x0F and +0x19..+0x1B keep MemAlloc's bytes (B6 row 22: the tree used
+                    // to zero them).
+                    settings->statusIconEnable  = true;
                     settings->statusIconScale   = 100;
                     // retail: one dword 0x01010001 at +0x14 (0x14004200c)
-                    settings->edgeScroll        = 1;
-                    settings->showCelsius       = 0;
-                    settings->showWeather       = 1;
-                    settings->autoSlow          = 1;
-                    settings->autoPause         = 1;
-                    settings->_pad19[0] = 0;
-                    settings->_pad19[1] = 0;
-                    settings->_pad19[2] = 0;
+                    settings->edgeScroll        = true;
+                    settings->showCelsius       = false;
+                    settings->showWeather       = true;
+                    settings->autoSlow          = true;
+                    settings->autoPause         = true;
                     settings->lastOption        = 0;   // retail: one qword 0 at +0x1C
                     settings->lastTerrain       = 0;
                     settings->lastMapSize       = 0;

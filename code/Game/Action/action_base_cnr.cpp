@@ -387,7 +387,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
 
     if (surf != nullptr) {
         WorkComponent* work = newEntity->FindComponent<WorkComponent>();   // 0x140003050
-        work->workFlags = surfMatId;
+        work->workFlags = static_cast<int32_t>(surfMatId);
     }
 
     Object::InternalPtr<ComponentEntity> listIBP = newEntity;
