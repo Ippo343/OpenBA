@@ -175,14 +175,14 @@ static inline Description* ElemObj(Description* e) { return e; }
 // B.4 P2: the two pairs are the two node classes: ComponentEntity::_components /
 // _components._size (+0x30 / +0x38) and ComponentDescription::_subDescs / _subDescCount
 // (+0x28 / +0x30). The array and the count are read once, the array first.
+//
+// B6 row 280: read in State_GrowUp 0x14010caf0-0x14010cb01 `MOV RAX,[R15+0x28]; MOV RCX,[RAX+R14*8];
+// MOV RAX,[RCX]; CALL [RAX+0x10]`: no test of the array, the element or its vptr (the tree's three
+// skips are gone).
 template <class E>
 static auto ScanArray(const E* base, int count, uint32_t typeId) -> decltype(ElemObj(*base)) {
-    if (base == nullptr) return nullptr;
     for (int i = 0; i < count; ++i) {
         auto obj = ElemObj(base[i]);
-        if (obj == nullptr) continue;
-        int64_t vt = *reinterpret_cast<const int64_t*>(obj);   // LEFT: the tree's null-vptr guard reads the vtable word (known_port_issues 14d row 280)
-        if (vt == 0) continue;
         // vtable+0x10 = GetTypeId()
         uint32_t tid = obj->Type();   // slot 2
         if (tid == typeId) {
