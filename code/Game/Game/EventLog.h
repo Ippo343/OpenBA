@@ -43,6 +43,16 @@ struct EventLogEntry {
     int32_t        iconIndex;    // +0x1C (0x1400950d0)
     int32_t        popup;        // +0x20 >= 0 shows the pop-up
     uint8_t        _pad24[4];    // +0x24
+
+    // B7 audit F3 (B6 C8): retail builds the stack entry writing the seven fields only
+    // (0x14009568d..0x14009569e); +0x04 / +0x24 are never written, by the writer or by the
+    // grow's copy. This ctor writes the same seven and leaves the pads as the stack held
+    // them (an aggregate initialiser zeroed them: two stores retail lacks).
+    EventLogEntry(uint32_t color_, const System::String& text_, int32_t eventType_, int32_t severity_,
+                  int32_t tileIndex_, int32_t iconIndex_, int32_t popup_)
+        : color(color_), text(text_), eventType(eventType_), severity(severity_),
+          tileIndex(tileIndex_), iconIndex(iconIndex_), popup(popup_) {}
+    EventLogEntry() = default;   // the array's InitAs / ZeroEventEntry path builds entries in place
 };
 
 static_assert(sizeof(EventLogEntry) == 0x28, "EventLogEntry stride 0x28 (0x140019b70)");

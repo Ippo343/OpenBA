@@ -283,13 +283,10 @@ void EventLog::AddEventCore(int eventType, int severity, const ::Object::Interna
     // (0x140095675), the String copy ctor into +0x08 (0x140095686), the five
     // dwords (0x14009568d..0x14009569e); then the grow (0x1400956b2) and the
     // entry's ~String (0x1400956bd) right after it, before the autoSlow tail.
-    // The block ends there. The two pads are never copied by the grow
-    // (CopyEventEntry writes the fields only), so their zeroing here is a dead
-    // stack store; the form is diseasecomponent.cpp's.
+    // The block ends there. The two pads are never written: not by retail's writer, not
+    // by the grow's copy (CopyEventEntry writes the fields only) -- B6 C8, audit F3.
     {
-        const EventLogEntry entry = {
-            color, {}, formatted, eventType, severity, tileIdx, iconIndex, popup, {}
-        };
+        const EventLogEntry entry(color, formatted, eventType, severity, tileIdx, iconIndex, popup);   // the pads stay unwritten (audit F3)
         int count = entries.GetSize();
         entries.SetSize(count + 1, entry);   // the grow, 0x140019b70
     }   // ~entry: the text's release, 0x1400956bd

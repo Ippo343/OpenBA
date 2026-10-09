@@ -115,14 +115,19 @@ extern "C" void Pathfinder_Seed(Map* game, int dim) {
     if (!game || dim <= 0) return;
     if (game->pathfinder != nullptr) return;   // already seeded
 
-    void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);   // 0x14009e8e6 (no null test is read after it)
+    void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);   // 0x14009e8e6
 
     // --- FUN_1400a67f0 ctor (inline) ---
     // ENDGAME B.3.9 ENG W2: the REAL class ctor on System::Thread(0x10000) --
     // creates + parks the worker thread; the 0x14015ef18 stamp is the compiler's.
     // B6 row 50: that ctor constructs the +0x30 lock as a member
     // (0x1400a6829 / 0x1400a682d: ??0CriticalSection right after the stamp).
-    PathfinderThread* pf = ::new (pfV) PathfinderThread(0x10000);
+    // 0x14009e8f3 TEST RAX,RAX; JZ 0x14009e908: retail's placement-new shape -- the ctor
+    // 0x1400a67f0 runs only on a non-null allocation; a null is stored at +0x68 (0x14009e90b)
+    // and the priming below reads it unguarded (B7 audit F2: 84b58b58f's "no null test" was wrong).
+    PathfinderThread* pf = nullptr;
+    if (pfV) {
+    pf = ::new (pfV) PathfinderThread(0x10000);
     pf->nextToken  = 1;          // next result-slot generation id
     pf->runInline  = 0;          // 0x1400a683b: retail's ctor stores 0 -- the priming below QUEUES (row 962)
     pf->queueTail  = nullptr;    // queue tail
@@ -138,8 +143,9 @@ extern "C" void Pathfinder_Seed(Map* game, int dim) {
     pf->stagedRespectBlocked = 0;
     for (int i = 0; i < 0x20; ++i)                       // staged terrain-cost array (all = 1)
         pf->stagedStepCost[i] = 1;
+    }   // end of the ctor arm (0x14009e908 joins with RBX = 0)
 
-    // Link into the map.
+    // Link into the map (0x14009e90b, the null included).
     game->pathfinder = pf;
 
     // --- e8c0 priming (row 962, B7 RES: retail's statements in retail's order) ---

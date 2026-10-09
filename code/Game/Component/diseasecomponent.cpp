@@ -456,18 +456,15 @@ void DiseaseComponent::Infect() {
         const Object::InternalPtr<ComponentEntity> entityIBP(_entity);
         int tileIdx = EventLog_TileIndex_Reg(nullptr, &entityIBP);
 
-        // Every byte zeroed, the text copy-constructed, destroyed after the grow.
-        EventLogEntry entry = {
-            0xFFFF6060u,   // color: severity-3 red
-            {},            // _pad04
-            formatted,     // text
-            0xC,           // eventType: crop infestation
-            3,             // severity
-            tileIdx,       // tileIndex
-            2,             // iconIndex (hardcoded here)
-            -1,            // popup: none
-            {},            // _pad24
-        };
+        // The seven fields written, the text copy-constructed, destroyed after the grow;
+        // the two pads stay as the stack held them (B6 C8, B7 audit F3).
+        EventLogEntry entry(0xFFFF6060u,   // color: severity-3 red
+                            formatted,     // text
+                            0xC,           // eventType: crop infestation
+                            3,             // severity
+                            tileIdx,       // tileIndex
+                            2,             // iconIndex (hardcoded here)
+                            -1);           // popup: none
 
         int count = eventLog->entries.GetSize();
         eventLog->entries.SetSize(count + 1, entry);   // the grow, 0x140019b70
