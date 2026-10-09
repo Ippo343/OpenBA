@@ -25,36 +25,20 @@
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"   // RtString_ReleaseInline (Wave 2, lane String)
 #include "../collection/avl_trees.h"          // rtavl::StringMapInsert
-#include "../../types/system/Configuration.h"  // RtSystem_ConfigMap_Find
 
-using RtIo::SettingsMapNode;
+using RtIo::SettingsNode;
 
 namespace {
 
 // ---- Map_Find / Map_Insert -------------------------------------------------
-// See runtime/types/io/Persistence.h for why these are called by address
-// rather than reimplemented: they are Collection::Set internals shared across
-// the whole DLL, not something this lane owns.
-//
-// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`.
-// `Persistence` (+0x00 root / +0x08 count / +0x0C pad) IS a real
-// `Collection::Set<SettingsMapNode>` header, and `Insert(const T&)` would
-// express Map_Insert's shape exactly (new node vs. existing-node-untouched,
-// matching Persistence::Set's own comment below). What blocks it:
-// `IO::Persistence` holds that header as three loose fields (it has no
-// constructor -- engine/singleton_ctors.cpp builds it), so the collection
-// bodies are handed `this` as the untyped Set they are.
-//
-// B3R RT-IO: both are called BY NAME: 0x18002ace0 is RtSystem_ConfigMap_Find
-// (runtime/src/system/configuration.cpp), 0x18002a090 is rtavl::StringMapInsert
-// (runtime/src/collection/avl_trees.cpp). The node each hands back IS
-// `RtIo::SettingsMapNode` (Persistence.h).
-const SettingsMapNode* CallMapFind(const IO::Persistence* self, const System::String& key) {
-    return RtSystem_ConfigMap_Find(&self->_settingsMap.root, &key);   // Map_Find, retail 0x18002ace0
-}
-SettingsMapNode* CallMapInsert(RtIo::SettingsMap* map, const System::String& key,
-                               const System::String& value) {
-    SettingsMapNode* node = nullptr;
+// B7 LX (D7a): `_settingsMap` is the real `Collection::Set<Pair<String,
+// String>>` (Persistence.h). Map_Find (0x18002ace0) IS its `Find` -- the
+// members below call it on the key's data pointer, which is what retail's
+// `MOV R10,[RBX]` re-reads every iteration. Map_Insert (0x18002a090) is
+// rtavl::StringMapInsert (avl_trees.cpp), typed on the Set.
+SettingsNode* CallMapInsert(RtIo::SettingsSet* map, const System::String& key,
+                            const System::String& value) {
+    SettingsNode* node = nullptr;
     rtavl::StringMapInsert(                                           // Map_Insert, retail 0x18002a090
         map, &node, &key._data, &value._data);
     return node;
@@ -117,7 +101,7 @@ bool RetailValueIsTrue(const char* value) {
 // Defined in `namespace IO` because a member of `IO::X` must appear in a
 // namespace ENCLOSING the class (B34_BRIEFS section A.2). The file-local
 // helpers live in this translation unit's GLOBAL anonymous namespace, so they
-// are reached as `::MakeSettingsKey` / `::CallMapFind` / `::CallMapInsert` /
+// are reached as `::MakeSettingsKey` / `::CallMapInsert` /
 // `::RetailValueIsTrue` -- spelled with the `::` on purpose,
 // so a future reader cannot mistake them for members.
 //
@@ -146,13 +130,13 @@ bool Persistence::Get(const char* section, const char* key, int& outRef) const {
     int* const out = &outRef;
 
     System::String k = ::MakeSettingsKey(section, key);
-    const SettingsMapNode* n = ::CallMapFind(this, k);
+    const SettingsNode* n = _settingsMap.Find(k._data);              // Map_Find, retail 0x18002ace0
     bool ours = (n != nullptr);
     int oursVal = *out;   // retail only ever writes *param_3 when found; preserve the caller's value otherwise
     if (ours) {
         // FUN_18007f034 in retail is a bare tail-jump to CRT strtol(s, 0, 10)
         // — no need to call the DLL for it, this is not engine-specific.
-        oursVal = static_cast<int>(std::strtol(n->value._data ? n->value._data : "", nullptr, 10));
+        oursVal = static_cast<int>(std::strtol(n->element.value._data ? n->element.value._data : "", nullptr, 10));
     }
     // ~k is retail's release.
 
@@ -168,11 +152,11 @@ bool Persistence::Get(const char* section, const char* key, bool& outRef) const 
     bool* const out = &outRef;
 
     System::String k = ::MakeSettingsKey(section, key);
-    const SettingsMapNode* n = ::CallMapFind(this, k);
+    const SettingsNode* n = _settingsMap.Find(k._data);              // Map_Find, retail 0x18002ace0
     bool ours = (n != nullptr);
     bool oursVal = *out;
     if (ours) {
-        oursVal = ::RetailValueIsTrue(n->value._data);
+        oursVal = ::RetailValueIsTrue(n->element.value._data);
     }
     // ~k is retail's release.
 
@@ -193,7 +177,7 @@ void Persistence::Set(const char* section, const char* key, int value) {
     System::String valStr = System::String::Format("%i", value);
     System::String keyStr = ::MakeSettingsKey(section, key);
 
-    SettingsMapNode* const node = ::CallMapInsert(&_settingsMap, keyStr, valStr);
+    SettingsNode* const node = ::CallMapInsert(&_settingsMap, keyStr, valStr);
 
     // Retail's asymmetric release-then-adopt, transcribed exactly
     // (0x1800b80c0 + 0x50..0x90): Map_Insert only installs the value on a
@@ -202,8 +186,8 @@ void Persistence::Set(const char* section, const char* key, int value) {
     // node Map_Insert leaves the old value untouched and Persistence::Set
     // itself must swap it. This IS `String::operator=` (0x1800c9810): the
     // same guard-on-buffer, release, adopt sequence.
-    if (node->value._data != valStr._data) {
-        node->value = valStr;
+    if (node->element.value._data != valStr._data) {
+        node->element.value = valStr;
     }
     // ~keyStr, ~valStr are retail's two releases.
 }
@@ -217,11 +201,11 @@ void Persistence::Set(const char* section, const char* key, bool value) {
     System::String valStr = System::String::Format("%s", value ? "true" : "false");
     System::String keyStr = ::MakeSettingsKey(section, key);
 
-    SettingsMapNode* const node = ::CallMapInsert(&_settingsMap, keyStr, valStr);
+    SettingsNode* const node = ::CallMapInsert(&_settingsMap, keyStr, valStr);
 
     // Same shape as Set(int) above -- `String::operator=`.
-    if (node->value._data != valStr._data) {
-        node->value = valStr;
+    if (node->element.value._data != valStr._data) {
+        node->element.value = valStr;
     }
     // ~keyStr, ~valStr are retail's two releases.
 }

@@ -171,75 +171,10 @@ static_assert(offsetof(BlockDesc, id) == 0x0, "BlockDesc::id");
 //
 //       System::String   savePath;          // +0x90
 
-// ----------------------------------------------------------------------------
-// The settings map's node.
-// ----------------------------------------------------------------------------
-// Map_Find returns a node pointer whose first two qwords are the key and
-// value Strings (Persistence::Get reads `*(node+8)` as the value's `char*`;
-// Persistence::Set writes through the same offset). The node continues with
-// parent/left/right pointers at +0x10/+0x18/+0x20 — the exact pattern
-// WAVE3_LANE_A.md measured for Set<Pair<K,V>> generally (`parent @ align8(sizeof
-// K + sizeof V)`, then left, then right).
-//
-// B.4 R-IO: the link fields are declared, each pinned by a reader in this
-// DLL: `parent` by WriteSettings (0x1800b8a9c reads [node+0x10] as the parent
-// in its in-order successor, 0x1800b8aa5 compares [parent+0x18] against the
-// node), `left`/`right` by Map_Clear (0x18000f7f4 recurses on [node+0x18],
-// 0x18000f7fd on [node+0x20]). The two 16-bit AVL words at +0x28/+0x2a are
-// runtime/src/collection/set_avl.h's (pinned there by the node allocator and
-// the rotations); they are declared for the size and never read here.
-//
-// The key and value are the real `System::String`. No SettingsMapNode is ever
-// constructed or destroyed as a C++ object: the nodes are raw memory that
-// Map_Insert (rtavl::StringMapInsert) and Map_Clear (rtsetclear::Clear) own,
-// and this header only views them, so the class type adds no ctor or dtor
-// call anywhere. What it adds is `operator=` on the value, which IS the
-// `String::operator=` (0x1800c9810) Persistence::Set and ReadSettings inline.
-//
-// Map_Find (retail 0x18002ace0) and Map_Insert (retail 0x18002a090) are
-// process-wide shared code, not Persistence-specific: MSVC folds every
-// `Set<Pair<String,String>, ...>` instantiation in the DLL into these same
-// two routines because both K and V are 8-byte String handles regardless of
-// the conceptual map. They belong to Collection::Set, a class no lane has
-// ported yet (PLAN.md §3.3, §4.3 risk 1), so this lane calls them BY ADDRESS
-// as opaque engine dependencies — exactly PLAN §6 step 3 ("resolve deps") —
-// rather than reimplementing AVL insert/find by hand, which would repeat the
-// "one BST for two node layouts" trap WAVE3_LANE_A.md and
-// reference_one_bst_find_two_node_layouts.md both warn about.
-struct SettingsMapNode {
-    System::String   key;      // +0x00
-    System::String   value;    // +0x08
-    SettingsMapNode* parent;   // +0x10
-    SettingsMapNode* left;     // +0x18
-    SettingsMapNode* right;    // +0x20
-    int16_t          balance;  // +0x28
-    int16_t          height;   // +0x2a
-    uint32_t         pad2c;    // +0x2c
-};
-static_assert(offsetof(SettingsMapNode, value)  == 0x08, "value @ +0x08 (Persistence::Get)");
-static_assert(offsetof(SettingsMapNode, parent) == 0x10, "parent @ +0x10 (0x1800b8a9c)");
-static_assert(offsetof(SettingsMapNode, left)   == 0x18, "left @ +0x18 (0x18000f7f4)");
-static_assert(offsetof(SettingsMapNode, right)  == 0x20, "right @ +0x20 (0x18000f7fd)");
-static_assert(sizeof(SettingsMapNode) == 0x30, "the Set node set_avl.h pins");
-static_assert(offsetof(SettingsMapNode, balance) == 0x28, "SettingsMapNode::balance");
-static_assert(offsetof(SettingsMapNode, height) == 0x2A, "SettingsMapNode::height");
-static_assert(offsetof(SettingsMapNode, pad2c) == 0x2C, "SettingsMapNode::pad2c");
-
-// The {root, count} header of that map: the `Set` both Map_Insert (0x18002a090:
-// `MOV [RSP+..],RCX`, then [RCX] the root and dword [RCX+0x08] the count it
-// bumps) and Map_Clear (0x18000f7d0: its two zero stores, qword +0x00 and
-// dword +0x08) take as their first argument. IO::Persistence holds one at
-// +0x00 (as `OwnedSettingsMap`, below: the member with retail's ctor / dtor),
-// System::Configuration at +0x10. A view of three words: no ctor, no dtor;
-// Configuration zeroes it and clears it by hand, in retail's order.
-struct SettingsMap {
-    SettingsMapNode* root;    // +0x00
-    int32_t          count;   // +0x08
-    uint32_t         pad0c;   // +0x0c  NOT pinned (Configuration: never written by its ctor)
-};
-static_assert(offsetof(SettingsMap, root)  == 0x00, "root @ +0x00 (0x18002ace0: MOV R9,[R8])");
-static_assert(offsetof(SettingsMap, count) == 0x08, "count @ +0x08 (Map_Clear's dword store)");
-static_assert(sizeof(SettingsMap) == 0x10, "the {root, count} Set header");
+// The settings map's node and its {root, count} header are the
+// `Collection::Set<Collection::Pair<String,String>>` instantiation itself
+// (RtIo::SettingsSet, declared below the Collection.h include): B7 LX (D7a)
+// deleted the `SettingsMapNode` / `SettingsMap` views that stood here.
 
 // ============================================================================
 // IO::Persistence::SaveBlock — 0x10 bytes. One buffer handed to the save/load
@@ -356,7 +291,7 @@ static_assert(offsetof(SaveGameInfo, sortKey) == 0x0, "SaveGameInfo::sortKey");
 // ============================================================================
 
 #include "../system/Thread.h"
-#include "../collection/Collection.h"   // Collection::Array, rtsetclear::Clear
+#include "../collection/Collection.h"   // Collection::Array, Collection::Set / Pair
 
 // The hand-derived Array row for `Array<SaveGameInfo>` (runtime/src/collection/
 // array.cpp; 0x18002ae20 / 0x18002aae0 / 0x18002ac40 -- NOT trait-expressible,
@@ -367,21 +302,48 @@ extern const ArraySpec kSpec_SaveGameInfo;
 
 namespace RtIo {
 
-// The settings map as IO::Persistence OWNS it: retail's
-// `Collection::Set<Pair<String,String>>` member, whose constructor is the two
-// stores ??0Persistence inlines (qword root at 0x1800b8047, dword count at
-// 0x1800b804a; +0x0c is NOT written, which is why this is not the tree's
-// `Collection::Set`, whose constructor also zeroes +0x0c) and whose destructor
-// is 0x18000f7d0, the tail JMP of ??1Persistence. `System::Configuration`
-// holds the same {root, count} header at +0x10 as the plain `SettingsMap` and
-// clears it by hand; nothing else derives from it.
-struct OwnedSettingsMap : SettingsMap {
-    OwnedSettingsMap() { root = nullptr; count = 0; }
-    ~OwnedSettingsMap() { rtsetclear::Clear(this); }   // 0x18000f7d0
-    OwnedSettingsMap(const OwnedSettingsMap&)            = delete;
-    OwnedSettingsMap& operator=(const OwnedSettingsMap&) = delete;
-};
-static_assert(sizeof(OwnedSettingsMap) == 0x10, "the {root, count} Set header");
+// ----------------------------------------------------------------------------
+// The settings map: `Collection::Set<Collection::Pair<String,String>>` (B7 LX,
+// D7a). IO::Persistence holds one at +0x00, System::Configuration at +0x10.
+// ----------------------------------------------------------------------------
+// The instantiation is the one whose bodies are, read at their addresses:
+//   0x18002ace0  Map_Find   == `Find`: the descent on the key's char* with the
+//                asymmetric null arms (a null node key descends right, a null
+//                search key returns the node) and the inlined SIGNED strcmp;
+//                the `Key = char*` parameter is what selects exactly those
+//                arms (Collection.h KeyTraits / CompareTraits<AVLCompare,char*>)
+//   0x18002a170  the insert core (rtavl::StringInsertCore, avl_trees.cpp,
+//                typed on this Set); 0x18002a090 Map_Insert builds the stack
+//                Pair and calls it (rtavl::StringMapInsert)
+//   0x18000f7d0  `Clear` (== ~Set: ??1Persistence's tail JMP at 0x1800b8013,
+//                ~Configuration's CALL at 0x1800c518f); 0x18000f890 is
+//                `DestroySubtree`, 0x18000fa90 `~Pair` (value +0x08, then key
+//                +0x00 -- reverse declaration order)
+//   ctor         two stores, the qword root and the dword count; +0x0c is NOT
+//                written (??0Persistence 0x1800b8047 / 0x1800b804a,
+//                ??0Configuration 0x1800c51d3 / 0x1800c51d6)
+// The node (0x18000f970 allocates 0x30 bytes, align 8; 0x18000fb00 builds
+// it) is the template's `Node`: key +0x00, value +0x08, parent +0x10
+// (WriteSettings' successor 0x1800b8a9c), left +0x18 / right +0x20 (Map_Find
+// 0x18002ad3f / 0x18002ad8d, Map_Clear 0x18000f7f4 / 0x18000f7fd), balance
+// +0x28, height +0x2a (set_avl.h's rotations).
+using SettingPair  = Collection::Pair<System::String, System::String>;
+using SettingsSet  = Collection::Set<SettingPair, Collection::AVLCompare,
+                                     Collection::DefaultAllocator, char*>;
+using SettingsNode = SettingsSet::Node;
+static_assert(sizeof(SettingPair) == 0x10, "the element of a 0x30-byte node");
+static_assert(offsetof(SettingPair, key)   == 0x00, "key @ +0x00 (0x18002ace0: MOV R9,[R8])");
+static_assert(offsetof(SettingPair, value) == 0x08, "value @ +0x08 (Persistence::Get, 0x1800c533b)");
+static_assert(offsetof(SettingsNode, element) == 0x00, "the pair leads the node");
+static_assert(offsetof(SettingsNode, parent)  == 0x10, "parent @ +0x10 (0x1800b8a9c)");
+static_assert(offsetof(SettingsNode, left)    == 0x18, "left @ +0x18 (0x18000f7f4)");
+static_assert(offsetof(SettingsNode, right)   == 0x20, "right @ +0x20 (0x18000f7fd)");
+static_assert(offsetof(SettingsNode, balance) == 0x28, "balance @ +0x28");
+static_assert(offsetof(SettingsNode, height)  == 0x2a, "height @ +0x2a");
+static_assert(sizeof(SettingsNode) == 0x30, "0x18000f970 allocates 0x30");
+static_assert(sizeof(SettingsSet) == 0x10, "the {root, count} Set header");
+static_assert(offsetof(SettingsSet, _root)  == 0x00, "root @ +0x00");
+static_assert(offsetof(SettingsSet, _count) == 0x08, "count @ +0x08 (Map_Clear's dword store)");
 
 }  // namespace RtIo
 
@@ -554,7 +516,7 @@ public:
 
     // ---- the members, at retail's offsets (PUBLIC: the save / input /
     // modification code reads them) ----------------------------------------
-    RtIo::OwnedSettingsMap _settingsMap;   // +0x00  Set<Pair<String,String>> {root, count}
+    RtIo::SettingsSet      _settingsMap;   // +0x00  Set<Pair<String,String>> {root, count}
     PersistenceWorker      _worker;        // +0x10  the embedded Thread-derived worker
     System::String         _savePath;      // +0x90  GetSavePath 0x180007ad0
 

@@ -538,16 +538,16 @@ using rtsetavl::Set;
 // the one retrace / erase core serves them both.
 static_assert(sizeof(StringPair) == 0x10, "the element of a 0x30-byte node");
 static_assert(sizeof(StringPairNode) == 0x30, "0x18000f970 allocates 0x30");
-static_assert(offsetof(StringPairNode, key)     == 0x00, "StringPairNode::key @ +0x00");
-static_assert(offsetof(StringPairNode, value)   == 0x08, "StringPairNode::value @ +0x08");
+static_assert(offsetof(StringPairNode, element) + offsetof(RtIo::SettingPair, key)   == 0x00, "StringPairNode::key @ +0x00");
+static_assert(offsetof(StringPairNode, element) + offsetof(RtIo::SettingPair, value) == 0x08, "StringPairNode::value @ +0x08");
 static_assert(offsetof(StringPairNode, parent)  == offsetof(Node, parent),  "StringPairNode::parent @ +0x10");
 static_assert(offsetof(StringPairNode, left)    == offsetof(Node, left),    "StringPairNode::left @ +0x18");
 static_assert(offsetof(StringPairNode, right)   == offsetof(Node, right),   "StringPairNode::right @ +0x20");
 static_assert(offsetof(StringPairNode, balance) == offsetof(Node, balance), "StringPairNode::balance @ +0x28");
 static_assert(offsetof(StringPairNode, height)  == offsetof(Node, height),  "StringPairNode::height @ +0x2a");
-static_assert(offsetof(StringPairNode, pad2c)   == 0x2c, "StringPairNode::pad2c @ +0x2c");
-static_assert(sizeof(RtIo::SettingsMap) == sizeof(Set), "the {root, count} header");
-static_assert(offsetof(RtIo::SettingsMap, count) == offsetof(Set, count), "SettingsMap::count @ +0x08");
+static_assert(offsetof(StringPairNode, _padTail) == 0x2c, "StringPairNode::pad2c @ +0x2c");
+static_assert(sizeof(RtIo::SettingsSet) == sizeof(Set), "the {root, count} header");
+static_assert(offsetof(RtIo::SettingsSet, _count) == offsetof(Set, count), "SettingsSet::_count @ +0x08");
 static_assert(offsetof(FilenamePairNode, parent)  == offsetof(Node, parent),  "FilenamePairNode::parent @ +0x10");
 static_assert(offsetof(FilenamePairNode, balance) == offsetof(Node, balance), "FilenamePairNode::balance @ +0x28");
 static_assert(sizeof(RtIO::PackfileIndexTree) == sizeof(Set), "the {root, count} header");
@@ -594,8 +594,8 @@ static int StrCmpSigned(const char* a, const char* b) {
 // ---------------------------------------------------------------------------
 StringPairNode* StringPairCtor(StringPairNode* node, const StringPair* src,
                                StringPairNode* parent) {
-    StringAddRefInto(&node->key._data,   src->key);
-    StringAddRefInto(&node->value._data, src->value);
+    StringAddRefInto(&node->element.key._data,   src->key);
+    StringAddRefInto(&node->element.value._data, src->value);
 
     node->parent  = parent;
     node->left    = nullptr;
@@ -627,15 +627,15 @@ namespace {
 // the node allocator, and the retrace reached through its own address door.
 struct StringPolicy : Collection::detail::NoCounters {
     using Node    = StringPairNode;
-    using SetT    = RtIo::SettingsMap;
+    using SetT    = RtIo::SettingsSet;
     using Element = StringPair;
 
-    static Node*&   Root(SetT* s)  { return s->root; }
-    static int32_t& Count(SetT* s) { return s->count; }
+    static Node*&   Root(SetT* s)  { return s->_root; }
+    static int32_t& Count(SetT* s) { return s->_count; }
     // Retail re-reads the node's key (`MOV R8,[RDI]`, 0x18002a1b4) and the
     // search key (0x18002a1bc, and AGAIN at 0x18002a212) every iteration; the
     // shared pattern calls these at exactly those points.
-    static char* NodeKey(const Node* n) { return n->key._data; }
+    static char* NodeKey(const Node* n) { return n->element.key._data; }
     static char* SearchKey(const Element* p) { return p->key; }
     static bool  IsNull(char* k) { return k == nullptr; }
     static bool  Less(char* a, char* b) { return StrCmpSigned(a, b) < 0; }
@@ -661,7 +661,7 @@ struct StringPolicy : Collection::detail::NoCounters {
 };
 }  // namespace
 
-StringPairNode** StringInsertCore(RtIo::SettingsMap* set, StringPairNode** outSlot,
+StringPairNode** StringInsertCore(RtIo::SettingsSet* set, StringPairNode** outSlot,
                                   const StringPair* pair) {
     return Collection::detail::InsertCorePattern<StringPolicy>(set, outSlot, pair);
 }
@@ -681,7 +681,7 @@ StringPairNode** StringInsertCore(RtIo::SettingsMap* set, StringPairNode** outSl
 //
 // RAX at the RET is RBX == the SECOND parameter.
 // ---------------------------------------------------------------------------
-StringPairNode** StringMapInsert(RtIo::SettingsMap* map, StringPairNode** outSlot,
+StringPairNode** StringMapInsert(RtIo::SettingsSet* map, StringPairNode** outSlot,
                                  char* const* key, char* const* value) {
     // The probe ALLOCATES, so it cannot run from a *PortInit (WAVE9.md, lane
     // PKG2). It self-schedules here instead: this moment is provably safe

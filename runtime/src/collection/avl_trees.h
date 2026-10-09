@@ -15,7 +15,7 @@
 #include <cstdint>
 
 #include "../../types/io/FileSystem.h"    // RtIO::PackfileIndexPair / Node / Tree (group D)
-#include "../../types/io/Persistence.h"    // RtIo::SettingsMapNode / SettingsMap (group B)
+#include "../../types/io/Persistence.h"    // RtIo::SettingsSet / SettingsNode (group B)
 
 namespace RtObject { struct TypeNode; struct TypeRecord; }
 namespace rtsetavl { struct Node; struct Set; }
@@ -90,11 +90,12 @@ struct StringPair {
 // The node 0x18000f970 allocates (`MOV EDX,0x30`) and 0x18000fb00 builds:
 // element at +0x00 / +0x08, parent +0x10, the two null children +0x18 / +0x20,
 // and ONE dword zero at +0x28 over balance and height. It IS the settings
-// map's node (B.4 wave X: one declaration, RtIo::SettingsMapNode in
-// io/Persistence.h, whose key and value are the two System::Strings); the
-// map's {root, count} header is RtIo::SettingsMap. Both are raw memory this
-// family builds and walks: nothing here runs a String ctor or dtor.
-using StringPairNode = RtIo::SettingsMapNode;
+// map's node: B7 LX, the `Collection::Set<Pair<String,String>>` instantiation's
+// own `Node` (RtIo::SettingsNode, io/Persistence.h), its pair's key and value
+// the two System::Strings; the map is that Set (RtIo::SettingsSet). The nodes
+// are raw memory this family builds (0x18000fb00's stores); the Set's Clear
+// destroys them.
+using StringPairNode = RtIo::SettingsNode;
 
 // Group D is the packfile index: its element, node and {root, count} header are
 // declared ONCE, in runtime/types/io/FileSystem.h (RtIO::PackfileIndexPair /
@@ -110,9 +111,9 @@ StringPairNode*  StringPairCtor  (StringPairNode* node, const StringPair* src,
                                   StringPairNode* parent);              // 0x18000fb00
 StringPairNode*  StringNodeAlloc (void* ignored, const StringPair* pair,
                                   StringPairNode* parent);              // 0x18000f970
-StringPairNode** StringInsertCore(RtIo::SettingsMap*, StringPairNode**,
+StringPairNode** StringInsertCore(RtIo::SettingsSet*, StringPairNode**,
                                   const StringPair* pair);              // 0x18002a170
-StringPairNode** StringMapInsert (RtIo::SettingsMap*, StringPairNode**,
+StringPairNode** StringMapInsert (RtIo::SettingsSet*, StringPairNode**,
                                   char* const* key, char* const* value);  // 0x18002a090
 
 // ---- group D: Set<Pair<Filename,uint64>>, 0x30-byte node ------------------

@@ -191,6 +191,7 @@
 //     `RT_ALLOC_SHADOW=1` must also set `RT_ENGINELIFE=0`.
 // ============================================================================
 
+#include <new>   // B7 LX: placement-construct System::Configuration
 #include <windows.h>
 #include <xaudio2.h>      // the two XAudio2 releases Shutdown inlines
 
@@ -272,37 +273,10 @@ unsigned g_startupFailAt = 0;   // 0 == reached the end
 
 }  // namespace
 
-// ============================================================================
-// ??0Configuration@System@@QEAA@XZ                         retail 0x1800c51b0
-// ============================================================================
-// Lane X's #15. Its whole body, and it is also the block MSVC inlined at
-// 0x1800db938-0x1800db954:
-//
-//   XOR EDX,EDX
-//   MOV [RCX],RDX          MOV [RCX+0x08],RDX
-//   LEA RAX,[RCX+0x10]
-//   MOV [RAX],RDX          MOV dword [RAX+0x08],EDX     ; an Array<T> {ptr,int}
-//   MOV [RCX+0x20],RDX     MOV dword [RCX+0x28],EDX     ; a second one
-//   MOV [0x1801fc6f8],RCX  ; ?_singleton@Configuration@System@@
-//   MOV RAX,RCX
-//
-// The two `Array` sub-objects are written as {pointer, int} and the four bytes
-// at +0x1c and +0x2c are NOT touched — retail leaves whatever the allocator
-// left there. A `memset(self, 0, 0x30)` would be wrong and no oracle in this
-// project could see it (reference_oracle_must_not_compare_unwritten_bytes.md).
-// The qword zero at +0x08 covers `_entryCount` and `_pad0c`: two named stores.
-extern "C" System::Configuration* RtSystem_Configuration_Ctor(System::Configuration* self) {
-    self->_entries     = nullptr;   // +0x00
-    self->_entryCount  = 0;         // +0x08
-    self->_pad0c       = 0;         // +0x0c
-    self->_map.root     = nullptr;   // +0x10
-    self->_map.count    = 0;         // +0x18
-    self->_currentPlatform = 0;     // +0x20  \ retail's one qword zero (H7)
-    self->_currentLanguage = 0;     // +0x24  /
-    self->_currentBuild    = 0;     // +0x28
-    System::Configuration::_singleton = self;   // class static (B.3.9 SYS)
-    return self;
-}
+// ??0Configuration@System@@QEAA@XZ (retail 0x1800c51b0): B7 LX deleted the
+// `RtSystem_Configuration_Ctor` door that stood here; the body is the class's
+// real constructor (system/Configuration.h, header-defined because Startup
+// inlines it at 0x1800db938..0x1800db954).
 
 // ============================================================================
 // ??0AchievementManager@Achievement@@QEAA@XZ               retail 0x18009eb00
@@ -484,7 +458,7 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
 
     // --- 0x1800db923: System::Configuration ---------------------------------
     System::Configuration* configuration = static_cast<System::Configuration*>(MemAlloc(0x30, 4));
-    if (configuration) RtSystem_Configuration_Ctor(configuration);
+    if (configuration) ::new (configuration) System::Configuration();   // 0x1800db938..0x1800db954, ??0Configuration inlined
     _configuration = configuration;
 
     // --- 0x1800db967: Configuration::SetCommandLine(String(cmdLine)) --------

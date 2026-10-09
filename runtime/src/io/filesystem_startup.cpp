@@ -100,9 +100,8 @@ bool FileSystem::Startup() {
     // retail's true unguarded one.
     //
     // The find itself (0x18002ace0) has NO export name in either build; it is
-    // `RtSystem_ConfigMap_Find` (runtime/src/system/configuration.cpp).
-    bool found = RtSystem_ConfigMap_Find(
-                &::System::Configuration::_singleton->_map.root, &tmp) != nullptr;   // Configuration + 0x10
+    // the settings Set's own `Find` (B7 LX: Configuration::_map is the Set).
+    bool found = ::System::Configuration::_singleton->_map.Find(tmp._data) != nullptr;   // Configuration + 0x10
 
     if (found) _platformExistsGate = 0;
 
