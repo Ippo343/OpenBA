@@ -248,16 +248,17 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
 
     // --- actionType: EBX=8 default; if the description's +0x80 <= 0xa: EBX = that+9 (0x1400c1936..0x1400c194b) ---
     int actionType = 8;
-    if (derived && local_60->_u80 <= 0xa)
+    if (local_60->_u80 <= 0xa)   // read through the narrowed pointer with no test (B6 14d G24)
         actionType = static_cast<int>(local_60->_u80) + 9;
 
     // --- PerformWork_Ctor7: heading(XMM2)=heading, actionType(R9)=actionType,
     //     time=description+0x68, p6=1, p7=description+0x80 (0x1400c194e..0x1400c1998) ---
-    // (the `derived` arms here and below are the tree's guards)
+    // B6 (14d G24): retail tests only the MemAlloc results here and below; +0x68 / +0x80
+    // are read through the narrowed description with no test.
     {
         void* obj = WAC_Alloc(0x48, 8); // MOV EDX,8; LEA ECX,[RDX+0x40] = 0x48
         Action* pwIbp = nullptr;
-        if (obj && derived) {
+        if (obj) {
             CitizenComponent* entityInner = *citizenRef;
             int p7  = static_cast<int>(local_60->_u80);         // [RSP+0x30]
             int64_t time = local_60->_time68._ticks;            // [RSP+0x20]
@@ -276,7 +277,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
     {
         void* obj = WAC_Alloc(0x480, 8); // MOV ECX,0x480
         Action* mvIbp = nullptr;
-        if (obj && derived) {
+        if (obj) {
             // switch(description+0x80); ECX = that+1 (INC ECX); CMP ECX,8; JA → default Slow(1).
             // jump table @0x1400c1e7c (idx = resKind+1, 0-based):
             //   idx0→0x1b3f Slow(1); idx1,2,5,6,7,8→0x1b31 Fast(2); idx3,4→0x1b38 Fastest(3).
@@ -315,7 +316,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
         Action* stIbp = nullptr;
         if (obj) {
             CitizenComponent* entityInner = *citizenRef;                  // RBX
-            uint32_t toolType = derived ? local_60->_u80 : 0;             // EDI = [R15+0x80]
+            uint32_t toolType = local_60->_u80;                           // EDI = [R15+0x80]
             // 0x1400c1d1e..0x1400c1d3f: the inlined ShowTool ctor — the real ctor.
             ibpB = new (obj) ShowTool(&entityInner, static_cast<int>(toolType)); // &local_res20
             stIbp = ibpB.Get();
