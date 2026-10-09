@@ -32,7 +32,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
-#include "Game/exe_bodies.h"
+#include "Component/exe_bodies.h"   // AmbientExternalPtrSerialize_Reimpl (0x1400019a0)
 
 // 0x140016f00 (inlined): AnimationEvent() is `??0AnimationEvent@Graphics@@`
 // (External's three zero stores); the 0x14015e0c0 stamp is the compiler's;
@@ -44,8 +44,9 @@ AnimAudioEvent::AnimAudioEvent() : _sound(nullptr), _chance(1.0f), _pad2c{} {}
 // was whatever the Serializer dtor left there.)
 bool AnimAudioEvent::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    // +0x20 external audio reference (stream-identical generic external-ptr serialize)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_sound, &ser);
+    // +0x20 ExternalPtr<SoundEffect>: retail calls 0x1400019a0 at 0x140087efa (the SoundEffect
+    // instantiation, type cell 0x140152a80), not the StringTable one (known_port_issues row 2).
+    AmbientExternalPtrSerialize_Reimpl(&_sound, &ser);
     // +0x28 float
     ser.Serialize(_chance, nullptr);
     return true;
