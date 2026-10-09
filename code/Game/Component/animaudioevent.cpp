@@ -10,10 +10,9 @@
 //   +0x28 float      play chance (default 1.0)
 //
 // Serialize (slot 5) reads exactly the two subclass fields: the External ref at
-// +0x20 (via the generic External-pointer serializer FUN_1400019a0, which is
-// stream-identical to fn_ExternalPtr_BuildSerialize / 0x140002340 — only the
-// type-validation global differs, not the bytes consumed) and the float at
-// +0x28. GetFileVersion (slot 3) = 2 (exe body `mov eax,2; ret`).
+// +0x20 (via ExternalPtr<SoundEffect>::Serialize FUN_1400019a0, called at
+// 0x140087efa) and the float at +0x28. GetFileVersion (slot 3) = 2 (exe body
+// `mov eax,2; ret`).
 //
 // ENDGAME B.3.8 VIS: a REAL class (AnimAudioEvent.h). Before: an 11-slot
 // hand-built g_AAE_Vtable registered at 0x14015e0c0, the object built through
@@ -44,8 +43,7 @@ AnimAudioEvent::AnimAudioEvent() : _sound(nullptr), _chance(1.0f), _pad2c{} {}
 // was whatever the Serializer dtor left there.)
 bool AnimAudioEvent::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    // +0x20 ExternalPtr<SoundEffect>: retail calls 0x1400019a0 at 0x140087efa (the SoundEffect
-    // instantiation, type cell 0x140152a80), not the StringTable one (known_port_issues row 2).
+    // +0x20 the sound: ExternalPtr<SoundEffect>::Serialize (0x140087efa CALL 0x1400019a0)
     AmbientExternalPtrSerialize_Reimpl(&_sound, &ser);
     // +0x28 float
     ser.Serialize(_chance, nullptr);

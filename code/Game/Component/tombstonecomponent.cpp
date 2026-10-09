@@ -43,7 +43,8 @@
 // Before: a 48-slot hand-built TombstoneComponent_LiveVtable filled at every
 // create (FillTypedVtable + FinishLiveVtable), Inert_ScalarDtor in slot 0 (only
 // ~Internal). After: the compiler's 16-slot vtable and a real ctor/dtor chain
-// (B38_RULES D1, D2). Slot 4 is retail's 0x140057860 (B6 row 11).
+// (B38_RULES D1, D2). Slot 4 keeps the tree's standalone-robust Startup body,
+// which is what the table installed.
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/TombstoneComponent.h"
@@ -73,19 +74,14 @@ void TombstoneComponent::Persist(IO::Stream& stream) {
 // ============================================================
 // TombstoneComponent::Startup (vtable slot [4], +0x20, original OnCreate 0x140057860)
 // ============================================================
-// Body-init dispatched at spawn by ComponentEntity_StartupComponents (vtable +0x20).
-// Populates the countdown from the TombstoneDescription's [min, min+range] lifetime *
-// secondsPerTick.
-//
-// 0x140057860-0x1400578c9: IsDerivedFrom(+0x18, TombstoneDescription cell 0x1401c4a68)
-// (CALL [0x140152a98] at 0x14005787f), CMOVNZ keeps the description or 0 (0x140057897),
-// RandFloat of [GameUpdateLoop + 0xd8], then reads +0x24 / +0x20 through it and stores
-// the Time at +0x28 (0x1400578c9). No test of the timer, the description or the
-// singleton: the timer is always written (known_port_issues row 11).
+// Body-init dispatched at construction by ComponentEntity::StartupComponents (vtable
+// +0x20), before any Persist of a loaded entity. As retail 0x140057860: the description
+// (+0x18) narrowed to TombstoneDescription (cell 0x1401c4a68, null on a miss) and read
+// unguarded, the world RNG read unguarded, and the countdown always written.
 void TombstoneComponent::Startup() {
     Description* descRaw = _description;
-    TombstoneDescription* desc = descRaw->IsDerivedFrom(TombstoneDescription::TypeId())
-                                 ? static_cast<TombstoneDescription*>(descRaw) : nullptr;
+    TombstoneDescription* desc = ::Object::IsDerivedFromNullSafe(descRaw, TombstoneDescription::TypeId())
+        ? static_cast<TombstoneDescription*>(descRaw) : nullptr;
 
     // Random float in [0,1) from the world RNG.
     float randVal = GameUpdateLoop::_singleton->m_random->RandFloat();

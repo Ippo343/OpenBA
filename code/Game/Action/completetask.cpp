@@ -77,10 +77,9 @@ void CompleteTask::Persist(IO::Stream& stream) {
 
 int  CompleteTask::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
-    // Task machinery (gameState+0x118) is inert in standalone; guard so this is a safe
-    // no-op (the actual log production is in the PerformWork chop, not this bookkeeping).
-    if (GameUpdateLoop::_singleton == nullptr ||
-        GameUpdateLoop::_singleton->m_tutorial == nullptr) return 0;
+    // Retail 0x1400c5b40 reads the scheduler (g_pGameWorldSingleton + 0x118) with no test of
+    // the singleton or of +0x118 (B6 CLOSE-B, the 14d ACT-b bullet): the old "inert in
+    // standalone" guard went with CheckEntity's (row 13, TRADE).
 
     // Lazy-resolve task index from the work citizen
     if (this->taskIndex == 0x7FFFFFFF) {
@@ -112,11 +111,12 @@ int  CompleteTask::AbstractImpl(ActionStack* actionStack) {
 
 // ============================================================
 // CheckEntity (0x1400c5ac0, vtable slot 8)
-// Resolves task index, calls task reassignment.
+// Resolves task index, calls task reassignment. Retail reads the singleton and its
+// +0x118 scheduler unguarded (0x1400c5af4 / 0x1400c5aff): no null test (B6 TRADE, row 13).
+// This is the removal half of every Work that tracks a citizen through its CompleteTask
+// (TradeWork::OnCancel, slot 7): the action-stack clear 0x1400c5400 reaches it.
 // ============================================================
 void CompleteTask::CheckEntity() {
-    if (GameUpdateLoop::_singleton == nullptr ||
-        GameUpdateLoop::_singleton->m_tutorial == nullptr) return;   // inert task mgr -> no-op
     // Lazy-resolve task index
     if (this->taskIndex == 0x7FFFFFFF) {
         this->taskIndex = workEntity->field_0x30;

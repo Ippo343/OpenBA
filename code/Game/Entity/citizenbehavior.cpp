@@ -1179,15 +1179,14 @@ void CitizenBehavior::CollectStats() {
 namespace {
 
 // FUN_14000f9e0 — the inner Array<int32> deep copy (operator=) that 0x140017640
-// runs when the outer array reallocates. B6 row 653: 0x14000fa03-0x14000fa5d tests
-// neither the allocator nor the old / source buffers: MemFree(old) unconditionally
-// (0x14000fa0b), qword zero of +0x08 then +0x00, MemAlloc(cnt << 2, 4) (0x14000fa32), and
-// the copy loop re-reads the size and the destination each pass and skips only a null
-// destination SLOT ADDRESS (0x14000fa46 ADD R8,RDX / 0x14000fa49 JZ).
+// runs when the outer array reallocates. As retail: MemFree unconditionally, the
+// size / capacity qword and the data cleared, size = the source's, a fresh block when
+// non-empty (no allocator test), then the copy with only the destination SLOT's
+// address tested (0x14000fa49) -- the source is read unguarded.
 void DeepCopyInner04Array(Collection::Array<int32_t>* d, const Collection::Array<int32_t>* s) {
     if (d == s) return;
     System::MemoryAllocator::MemFree(d->_data);
-    d->_size = 0;             // +0x08 qword zero (H7: two stores)
+    d->_size = 0;             // [d+8] qword 0 (H7: two stores)
     d->_capacity = 0;
     d->_data = nullptr;
     int32_t cnt = s->_size;
@@ -1197,7 +1196,7 @@ void DeepCopyInner04Array(Collection::Array<int32_t>* d, const Collection::Array
         d->_data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 2, 4));
     }
     for (int32_t i = 0; i < d->_size; ++i) {
-        int32_t* slot = d->_data + i;
+        int32_t* slot = &d->_data[i];
         if (slot != nullptr) *slot = s->_data[i];
     }
 }
