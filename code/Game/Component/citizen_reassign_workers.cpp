@@ -107,38 +107,10 @@ namespace {
 
 // The consumer leaves are called by name: CitizenComponent_AssignWorkplace
 // (0x1401163d0) and ActRm_StorageSubtract_d150 (0x14012d150).
-uint32_t             s_tidResidence    = 0;
-uint32_t             s_tidStorage      = 0;
-bool                 s_resolved        = false;
-
-// Resolves no door: it only caches the two component type ids.
-void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-    // ENDGAME B.3.9 (B39_RULES.md D5): 0x1401c7cf0 / 0x1401c7e78 are registered
-    // type-id cells (INVENTORY_C Table 1: ResidenceComponent, StorageComponent).
-    s_tidResidence = ResidenceComponent::TypeId();
-    s_tidStorage   = StorageComponent::TypeId();
-}
-
-// Find the first component on `entity` whose exact type-id == typeId and that passes
-// IsDerivedFrom (retail's `GetTypeId()==DWORD && IsDerivedFrom` component scan).
-// The null-entity / null-slot / zero-id tests are the tree's (known_port_issues 14d).
-template <class T>
-T* FindComponentDerived(ComponentEntity* entity, uint32_t typeId) {
-    if (!entity || typeId == 0) return nullptr;
-    int count = entity->_components._size;
-    Object::InternalPtr<Component>* arr = entity->_components._data;
-    for (int i = 0; i < count; ++i) {
-        Component* comp = arr[i].Get();
-        if (!comp) continue;
-        uint32_t id = comp->Type();   // vtable slot +0x10
-        if (id == typeId) {
-            return Object::IsDerivedFromNullSafe(comp, typeId) ? static_cast<T*>(comp) : nullptr;
-        }
-    }
-    return nullptr;
-}
+// Row 330 (B7 RES): the component scans (cells 0x1401c7cf0 / 0x1401c7e78) are
+// ComponentEntity::FindComponent<T>()'s shape -- `[[slot]+0x10]` with no null-slot test,
+// IsDerivedFrom + CMOVNZ on the first match -- so the tree's FindComponentDerived (null
+// entity / zero id / null slot tests) and its type-id cache are gone.
 
 // Candidate key: retail tree local_98 visits IN-ORDER as (cost DESC, residence ptr ASC).
 struct CostRes { int cost; ResidenceComponent* res; };
@@ -161,11 +133,10 @@ struct CostCmp {
 extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT: param_1 is dead in retail (never read) and its two callers hand different things: a ResidenceComponent::Family* and PathGraph_ReassignWorkers' own void* ctx (exe_bodies.h)
                                              ResidenceComponent* const* param_2,
                                              ResidenceComponent* const* param_3) {
+    // Row 330 (B7 RES): 0x1400d6c60 reads [gw+0xf8] / [gw+0xb0] and their fields with no test.
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-    if (gw == nullptr) return 0;
     Map* map = gw->m_game;
     ProfessionList* reg = gw->m_professionList;
-    if (!map || !reg) return 0;
     Map* pathData = map;
 
     // --- target cell from param_3's owner-entity position ---
@@ -177,7 +148,6 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT:
     InteractNodePosition(posComp, &pos.v, 0, 0, nullptr);
 
     int width = map->size;
-    if (width <= 0) return 0;
     int cellX = static_cast<int>(pos.v.x + static_cast<float>(width >> 1));
     int cellY = static_cast<int>(pos.v.y + static_cast<float>(width >> 1));
     if (cellX < 0) cellX = 0;
@@ -197,7 +167,7 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT:
 
         // An adult (desc->adultAge <= age); the null-description test is the tree's.
         CitizenDescription* desc = worker->description;
-        bool adult = desc && desc->adultAge <= worker->age;
+        bool adult = desc->adultAge <= worker->age;   // [[c+0x288]+0x44] <= [c+0x3c], no test
         if (adult &&
             worker->school == nullptr &&                                      // not at school
             worker->workplace != nullptr &&                                   // has a workplace
@@ -219,14 +189,8 @@ extern "C" uint64_t Entity_ReassignCost_6c60(const void* /*param_1*/,   // LEFT:
 // FUN_1400d62a0 (0x1400d62a0) — town residence re-balancer
 // ===========================================================================
 extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
-    if (GameUpdateLoop::_singleton == nullptr) return;
-    EnsureResolved();
-    if (!s_tidResidence) {
-        return;
-    }
-
+    // Row 330 (B7 RES): 0x1400d62a0 reads [gw+0xf0] and its +0x20 / +0x28 with no test.
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
-    if (!townMgr) return;
     int               resCount = townMgr->field_0x20._size;
     Object::InternalPtr<ComponentEntity>* resArray = townMgr->field_0x20._data;
 
@@ -236,8 +200,7 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
     // ---------- Phase 1: bucket every residence with fewer than two households ----------
     for (int r = 0; r < resCount; ++r) {
         ComponentEntity* resEntity = resArray[r].Get();
-        ResidenceComponent* resComp = FindComponentDerived<ResidenceComponent>(resEntity, s_tidResidence);
-        if (!resComp) continue;                       // retail assumes present; guard for safety
+        ResidenceComponent* resComp = resEntity->FindComponent<ResidenceComponent>();   // +0x58 read, no test
 
         if (resComp->residentSlots._size >= 2)
             continue;                                 // only single-household residences
@@ -292,11 +255,11 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
 
             // --- migrate stored goods: srcRes owner storage -> bestDest owner storage ---
             ComponentEntity*  srcOwner   = srcRes->_entity.Get();
-            StorageComponent* srcStorage = FindComponentDerived<StorageComponent>(srcOwner, s_tidStorage);
+            StorageComponent* srcStorage = srcOwner->FindComponent<StorageComponent>();
             ComponentEntity*  dstOwner   = bestDest->_entity.Get();
-            StorageComponent* dstStorage = FindComponentDerived<StorageComponent>(dstOwner, s_tidStorage);
+            StorageComponent* dstStorage = dstOwner->FindComponent<StorageComponent>();
 
-            if (srcStorage && dstStorage) {
+            {   // both finds read with no test (cd80 / d000 / d150 on them)
                 std::vector<std::pair<ComponentDescription*, int>> toSubtract;
                 int itemCount = srcStorage->storageSlots._size;
                 const StorageComponent::Item* items = srcStorage->storageSlots._data;
