@@ -195,30 +195,26 @@ void EditTool_CloseInfoDialog(EditTool* self, UI::DialogInstance* dialog) {
     // when +0x40 (pinned) is clear; a pinned panel survives deselect. The old direct
     // caller had already done this check, so it was omitted here -- but slot 5 (tool
     // teardown) has NOT, and without it a right-click would close pinned panels too.
+    // Row 692 (B7 RES), 0x1400fccf8-0x1400fcd4c: GetController, then a null controller
+    // narrows to 0 (0x1400fcd06) and a non-ToolUI one to 0 (CMOVNZ at 0x1400fcd2d); the
+    // pin byte [narrowed+0x40] is read with no test.
     {
         const uint32_t tidToolUI = ToolUI::TypeId();
         Object::InternalPtr<UI::DialogController> ctrl = dialog->GetController(tidToolUI);
-        if (ctrl.Get() != nullptr) {
-            if (ctrl->IsDerivedFrom(tidToolUI)) {
-                if (static_cast<ToolUI*>(ctrl.Get())->pinned != 0) return;   // pinned -> leave it open
-            }
-        }
+        ToolUI* toolUI = nullptr;
+        if (ctrl.Get() != nullptr && ctrl->IsDerivedFrom(tidToolUI))
+            toolUI = static_cast<ToolUI*>(ctrl.Get());
+        if (toolUI->pinned != 0) return;   // pinned -> leave it open
     }
 
-    // (3) close the dialog. The caller ran the pin check (retail cc90 re-checks it;
-    // we are only reached from the unpinned branch). CloseDialog takes the
-    // UserInterface (dialog+0x10) and an InternalPtr<DialogInstance>& — pass a
-    // stack copy, matching the toolui.cpp close-button path.
-    if (!dialog) return;
-    const uintptr_t dialogPtr = reinterpret_cast<uintptr_t>(dialog);   // the tree's address-range test below (retail 0x1400fcc90 has none: known_port_issues row 692)  // CAST-OK: ptr_int
-    if (dialogPtr < 0x10000 || dialogPtr > 0x00007FFFFFFFFFFFULL) return;
-    UI::UserInterface* userInterface = dialog->_ui;   // +0x10
-    if (!userInterface) return;
+    // (3) close the dialog: 0x1400fcd52-0x1400fcd6f, CloseDialog on the loop's
+    // UserInterface ([[0x1401c3dd8]+0x98]) with a stack InternalPtr of the dialog. Row 692:
+    // no second dialog test, no address-range test, no UserInterface test.
     Object::InternalPtr<UI::DialogInstance> dialogRef(dialog);
-    userInterface->CloseDialog(&dialogRef);
+    GameUpdateLoop::_singleton->m_userInterface->CloseDialog(&dialogRef);
     // Fires on entity-death AND on right-click deselect (vtable slot 5), so this
     // must not claim a cause it cannot know.
-    printf("[EditTool] deselect -> closed info dialog %p\n", (void*)dialogPtr);
+    printf("[EditTool] deselect -> closed info dialog %p\n", static_cast<void*>(dialog));
     fflush(stdout);
 }
 
