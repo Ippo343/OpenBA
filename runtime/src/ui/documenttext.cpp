@@ -151,19 +151,12 @@ void AssignString(char** slot, char* value) {
 }
 
 // ---- the Runtime helpers these bodies call ---------------------------------
-// A System::String / Filename held in a raw slot.
-System::String& Str(char** slot) { return *reinterpret_cast<System::String*>(slot); }   // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); measured S4 (retail GetNextItem 0x1800cdf40): every String release there is OPEN-CODED (dec refcount, MemFree 0x1800c7ad0 called directly at 1800ce43f / ce780 / ce973 / cea38 / cea68 / ceacb / cebb2 / ced7e / cee00 / ceedb / cef9f; no ~String call anywhere in the body), with the slot left holding data-8 on the free arm and nulled on the other; the tree's ~String (0x180006c80) and String::Release (0x1800c9870) are out-of-line, so a System::String local puts a CALL where retail has none at each release, plus EH cleanup pads -- typed locals do not reproduce retail; stays until String's release is inline
-const System::String& Str(char* const* slot) {
-    return *reinterpret_cast<const System::String*>(slot);                            // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); the const view of the raw char* String slot of line 155 (retail open-codes every release in GetNextItem 0x1800cdf40; a String local adds ~String calls)
-}
-System::Filename& Path(char** slot) { return *reinterpret_cast<System::Filename*>(slot); }   // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); GetNextItem's raw Filename locals `wanted` / `path`: retail releases them open-coded (MemFree 0x1800c7ad0 at 1800ce973 / cea38 / cea68, no ~Filename call); a Filename local adds the out-of-line dtor call and EH pads
-
 // ?SubString@String@System@@QEBA?AV12@HH@Z — 0x1800c9230. The last argument is
 // the INCLUSIVE end index, not a length: its body computes `end - start + 1`
 // and reserves that many characters (0x1800c9262). `ret` is the hidden return
 // slot the member's prvalue is placed in.
-char** SubString(char* const* self, char** ret, int start, int endInclusive) {
-    new (static_cast<void*>(ret)) System::String(Str(self).SubString(start, endInclusive));
+char** SubString(const System::String& self, char** ret, int start, int endInclusive) {
+    new (static_cast<void*>(ret)) System::String(self.SubString(start, endInclusive));
     return ret;
 }
 // ?ToInteger@String@System@@SAHPEBD@Z — 0x18003f620, a static taking the raw
@@ -447,24 +440,24 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 }
             }
 
-            char* word = nullptr;
-            SubString(textSlot, &word, start, end - 1);        // 1800ceea2
-
             // The word is measured WITH A TRAILING SPACE appended (the literal
             // at 0x1801567e0 is a one-character " "), so the advance a word
             // contributes already includes the gap to the next one. That is
             // why no caller ever adds a space width of its own.
-            char* measured = nullptr;
-            new (static_cast<void*>(&measured)) System::String(Str(&word) + " ");   // 1800ceeb7
-            ReleaseString(&word);                              // 1800ceebd..1800ceeea
+            // The word itself is the full-expression's temporary: SubString
+            // 1800ceea2, operator+ 1800ceeb7, and its release (1800ceebd..
+            // 1800ceeea) at the end of this statement, before the font read --
+            // retail's order.
+            const System::String measured =
+                _sourceText.SubString(start, end - 1) + " ";
 
             const Font* font = _fonts._data[_fontIndex];         // 1800ceeea
 
             Store64(&out->width, 0);                           // 1800cef02  ONE QWORD
 
-            const int32_t measuredLen = measured ? Length(measured) : 0;   // 1800cef0b
+            const int32_t measuredLen = measured._data ? Length(measured._data) : 0;   // 1800cef0b
             out->width = font->ComputeLineLayout(              // 1800cef34
-                measured, measuredLen, 0, 0, -1, 0, nullptr);
+                measured._data, measuredLen, 0, 0, -1, 0, nullptr);
             out->height = font->_lineHeight;                   // 1800cef40
             out->first  = _textPos;              // 1800cef46
             out->last   = end - 1;                             // 1800cef4f
@@ -473,8 +466,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
             Store16(&out->kind, 0);                            // 1800cef72  ONE WORD
 
             _textPos = end;                      // 1800cef78
-            ReleaseString(&measured);                          // 1800cef7e..1800cefaf
-            return true;                                       // 1800cefaf
+            return true;                                       // ~measured: 1800cef7e..1800cefaf
         }
 
         // ====================================================================
@@ -579,10 +571,10 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     const int32_t ws = FindNextWhiteSpace();
                     if (ws <= first) break;                    // 1800ce3dc
 
-                    char* number = nullptr;
-                    SubString(textSlot, &number, first, ws - 1);   // 1800ce3f5
+                    const System::String number =
+                        _sourceText.SubString(first, ws - 1);  // 1800ce3f5
                     _textPos = ws;               // 1800ce3fb
-                    int32_t v = ToInteger(number);             // 1800ce406
+                    int32_t v = ToInteger(number._data);       // 1800ce406
                     if (m == 'l') {
                         if (v < 0) v = 0;                      // 1800ce412  CMOVS
                         _penX = v;               // 1800ce415
@@ -590,8 +582,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                         if (v < 0) v = _wrapWidth;   // 1800ce4a5
                         _rightEdge = v;          // 1800ce4ab
                     }
-                    ReleaseString(&number);
-                }
+                }                                              // ~number: the release
                 // any other selector: fall through and keep parsing
             } else if (sel == 'l') {                           // 1800ce4e7
                 ++pos;
@@ -664,11 +655,8 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     const int32_t savedRowX  = _rowPenX;
                     const int32_t savedRow   = _rowFirstItem;
 
-                    char* savedLink = nullptr;                                 // 1800ce694
-                    if (_openLink.text._data != nullptr) {                  // 1800ce69f
-                        savedLink = _openLink.text._data;
-                        ++RefCount(savedLink);                                 // 1800ce6ab
-                    }
+                    // The copy ctor: null store 1800ce694, test 1800ce69f, INC 1800ce6ab.
+                    const System::String savedLink(_openLink.text);
                     const int32_t savedLinkFirst = _openLink.firstItem;
                     const int32_t savedLinkLast  = _openLink.lastItem;
                     const uint8_t savedLinkByte  = _openLink.armed;
@@ -690,7 +678,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     _rowPenX       = savedRowX;
                     _penY          = savedY;
                     _rowFirstItem  = savedRow;
-                    AssignString(&_openLink.text._data, savedLink);         // 1800ce757
+                    _openLink.text = savedLink;                              // 1800ce757 operator= 0x1800c9810, open-coded
                     _openLink.firstItem = savedLinkFirst;             // 1800ce7a5
                     _openLink.lastItem  = savedLinkLast;
                     _openLink.armed   = savedLinkByte;
@@ -704,8 +692,7 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                         _hangIndent = probe.width;               // 1800ce7f5
                         _penX -= probe.width;                    // 1800ce7fb
                     }
-                    ReleaseString(&savedLink);                                 // 1800ce801..
-                }
+                }                                              // ~savedLink: 1800ce801..
                 // any other selector: fall through and keep parsing
             } else if (sel == 'a') {                            // 1800ce82a
                 ++pos;
@@ -719,11 +706,10 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     const int32_t ws = FindNextWhiteSpace();
                     if (ws <= first) break;                     // 1800ce863
 
-                    char* target = nullptr;
-                    SubString(textSlot, &target, first, ws - 1);    // 1800ce87c
+                    const System::String target =
+                        _sourceText.SubString(first, ws - 1);   // 1800ce87c
                     _textPos = ws;                // 1800ce882
-                    BeginLink(Str(&target));                    // 1800ce890
-                    ReleaseString(&target);
+                    BeginLink(target);                          // 1800ce890
                 } else if (m == 'e') {                          // 1800ce8cc  link end
                     EndLink();     // 1800ce8d9
                     ++_textPos;                   // 1800ce8de
@@ -746,16 +732,13 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 const int32_t ws = FindNextWhiteSpace();
                 if (ws <= first) break;                         // 1800ce911
 
-                char* sub = nullptr;
-                SubString(textSlot, &sub, first, ws - 1);       // 1800ce92a
-
-                char* wanted = nullptr;                         // 1800ce932
-                if (sub != nullptr) {                           // 1800ce93a
-                    wanted = sub;
-                    ++RefCount(sub);                            // 1800ce944
-                }
-                System::FilenamePrivateAccess::AdjustDelimiters(Path(&wanted));   // 1800ce94c
-                ReleaseString(&sub);                            // 1800ce952..1800ce97f
+                // Filename(const String&) on the SubString's temporary: the null
+                // store 1800ce932, the test 1800ce93a, INC 1800ce944, CALL
+                // AdjustDelimiters 1800ce94c; the temporary (`sub`) is released
+                // at the end of the statement, 1800ce952..1800ce97f -- retail's
+                // order.
+                const System::Filename wanted(
+                    _sourceText.SubString(first, ws - 1));      // 1800ce92a
                 _textPos = ws;                    // 1800ce97f
 
                 int32_t index = 0;                              // 1800ce985
@@ -776,23 +759,18 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                         // here faults in retail exactly as it would here.
                         found = isCapture ? static_cast<UI::SpriteCapture*>(obj) : nullptr;   // 1800ce9c1  CMOVNZ
 
-                        char* path = nullptr;
-                        new (static_cast<void*>(&path)) System::Filename(       // 1800ce9ce
-                            found->GetPath());
-                        char* base = nullptr;
-                        new (static_cast<void*>(&base)) System::Filename(       // 1800ce9de
-                            Path(&path).GetPathFilename(true));
+                        {
+                            const System::Filename path = found->GetPath();               // 1800ce9ce
+                            const System::Filename base = path.GetPathFilename(true);     // 1800ce9de
 
-                        const int32_t baseLen   = base   ? Length(base)   : 0; // 1800ce9e7
-                        const int32_t wantedLen = wanted ? Length(wanted) : 0; // 1800ce9f9
-                        if (baseLen != wantedLen) {             // 1800cea05
-                            match = false;                      // 1800cea09
-                        } else {
-                            match = rtcrt::StrICmp(base, wanted) == 0;   // 0x18007eefc
-                        }
-
-                        ReleaseString(&base);                   // 1800cea1a..1800cea47
-                        ReleaseString(&path);                   // 1800cea47..1800cea78
+                            const int32_t baseLen   = base._data   ? Length(base._data)   : 0; // 1800ce9e7
+                            const int32_t wantedLen = wanted._data ? Length(wanted._data) : 0; // 1800ce9f9
+                            if (baseLen != wantedLen) {         // 1800cea05
+                                match = false;                  // 1800cea09
+                            } else {
+                                match = rtcrt::StrICmp(base._data, wanted._data) == 0;   // 0x18007eefc
+                            }
+                        }   // ~base 1800cea1a..1800cea47, then ~path 1800cea47..1800cea78
 
                         if (match) break;                       // 1800cea78
                         ++index;                                // 1800cea7c / 1800cea82
@@ -806,10 +784,8 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     out->width  = found->_width;                     // 1800ced4f
                     out->index  = index;                             // 1800ced52
                     out->kind   = 2;                                 // 1800ced55
-                    ReleaseString(&wanted);                          // 1800ced59..
-                    return true;
+                    return true;                                     // ~wanted: 1800ced59..
                 }
-                ReleaseString(&wanted);                         // 1800ceaa6..
             } else if (sel == 'i') {
                 // ================================================================
                 // ^i<digit><name> — sprite <name> out of sheet slot <digit>. A
@@ -829,14 +805,14 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                 const int32_t ws = FindNextWhiteSpace();
                 if (ws <= first) break;                         // 1800ceb35
 
-                char* name = nullptr;
-                SubString(textSlot, &name, first, ws - 1);      // 1800ceb4c
+                const System::String name =
+                    _sourceText.SubString(first, ws - 1);       // 1800ceb4c
                 _textPos = ws;                    // 1800ceb55
 
                 const SpriteSheet* sheet = _sheets._data[slot];
                 int32_t sprite = -1;
                 if (sheet != nullptr) {                         // 1800ceb69
-                    sprite = sheet->GetSpriteIndexFromName(Str(&name));
+                    sprite = sheet->GetSpriteIndexFromName(name);
                 }
                 if (sheet != nullptr && sprite >= 0) {          // 1800ceb80
                     const SpriteInfo& s = sheet->m_sprites._data[sprite];   // 1800cedb6
@@ -846,11 +822,9 @@ bool DocumentTextElement::GetNextItem(DocumentItem& item) {
                     out->index  = slot;                         // 1800cedce
                     out->kind   = 1;                            // 1800cedd2
                     out->first  = sprite;                       // 1800cedd7
-                    ReleaseString(&name);                       // 1800ceddb..
-                    return true;
+                    return true;                                // ~name: 1800ceddb..
                 }
-                ReleaseString(&name);                           // 1800ceb86..
-            }
+            }                                                   // ~name: 1800ceb86..
             // else: an unknown selector. The cursor already stepped past the
             // '^', so the selector byte itself becomes part of the next word.
         } while (false);
@@ -924,7 +898,7 @@ void DocumentTextElement::GenerateItems() {
 
         if (item.kind == 0) {                                   // 1800cf20f
             char* dead = nullptr;
-            SubString(&_sourceText._data, &dead, item.first, item.last);
+            SubString(_sourceText, &dead, item.first, item.last);
             ReleaseString(&dead);                               // 1800cf238..1800cf2a7
         }
     }
