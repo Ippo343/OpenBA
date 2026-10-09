@@ -23,6 +23,7 @@
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
+#include "Game/WorkScheduler.h"      // the harness entry reads the scheduler clock (+0x130)
 #include "system/MemoryAllocator.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"          // B3R: bodies called by name
@@ -174,12 +175,6 @@ void GatherRawMaterials::Persist(IO::Stream& stream) {
 // Returns: 0=fail, 1=retry/done, 2=action pushed.
 // ============================================================
 int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* context) {
-    // The tree's scratch: it becomes the out slot of the WorkPlaceComponent find below
-    // and is handed to 0x1400f6ef0 as its fifth argument. B4 S4 RESOLVE (re-read): retail's
-    // out slot is the R9 home [RBP+0x7f] (0x1400ebee4), NOT the R8 home that holds
-    // `context`; retail's fifth argument is `context` (known_port_issues row 861).
-    void* param3 = context;
-
     // --- Find the InteractComponent on the work entity (self+0x10) (0x140002ed0) ---
     InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
@@ -191,10 +186,9 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
     bool isDerived = Object::IsDerivedFromNullSafe(descBase, BuildDescription::TypeId());
     BuildDescription* gatherDesc = isDerived ? static_cast<BuildDescription*>(descBase) : nullptr;
 
-    // --- Check the workplace enable flag on the site's WorkPlaceComponent (0x140002e10,
-    // written into param3's slot) ---
+    // --- Check the workplace enable flag on the site's WorkPlaceComponent (0x140002e10;
+    // its out slot is the R9 home [RBP+0x7f], 0x1400ebee4) ---
     WorkPlaceComponent* workPlace = descComp->_entity->FindComponent<WorkPlaceComponent>();
-    param3 = workPlace;
     if (workPlace->isAccepting == 0) {
         return 1;  // Workplace disabled
     }
@@ -355,12 +349,11 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 int targetCell = tgtCellY * mapSz + tgtCellX;
 
                 // --- Validate work assignment: Work::StepProgress 0x1400f6ef0 (was its
-                // WorkImpl_BuildStructureStep_6ef0 forwarder). The tree hands the
-                // WorkPlaceComponent as the Time; retail hands Execute's own `context`
-                // (known_port_issues row 861) ---
+                // WorkImpl_BuildStructureStep_6ef0 forwarder). Its fifth argument is
+                // Execute's own `context`: 0x1400ec355 MOV RAX,[RBP+0x77] (the R8 home,
+                // spilled at 0x1400ebe40 and never rewritten), 0x1400ec35c [RSP+0x20] ---
                 CitizenComponent* citizenRef = *entityIBP;
-                uint64_t validated = StepProgress(&citizenRef, targetCell, citizenCell,
-                    reinterpret_cast<const System::Time*>(param3));   // LEFT: DEFERRED (retail-difference task, known_port_issues row 861): retail's fifth argument is [RBP+0x77] = the R8 home, Execute's `context` Time* spilled at 0x1400ebe40 and never rewritten (0x1400ec355 / 0x1400ec35c); the WorkPlaceComponent find writes the R9 home [RBP+0x7f] (0x1400ebee4). The fix passes `context` and drops this cast
+                uint64_t validated = StepProgress(&citizenRef, targetCell, citizenCell, context);
 
                 if ((char)validated == '\0') {
                     return 0;
@@ -714,10 +707,12 @@ extern "C" GatherRawMaterials* GatherRawMaterials_ConstructForSite(ComponentEnti
     return new (mem) GatherRawMaterials(buildEntityIBP);
 }
 
-// Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute's param3 is a
-// scratch WpExt out-IBP (written internally) and param4 is unused, so 0/0 is safe.
+// Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute's `context` is the
+// Time it hands Work::StepProgress (row 861), so the harness passes what the game's own
+// callers pass: the WorkScheduler's time (GameUpdateLoop +0x118, scheduler +0x130).
 extern "C" int GatherRawMaterials_ForceDrive(Work* self, CitizenComponent** citizenIBP) {
-    return static_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute(citizenIBP, nullptr);
+    return static_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute(
+        citizenIBP, &GameUpdateLoop::_singleton->m_tutorial->time);
 }
 
 // Execute-readiness gate for the force harness. B3R: every helper Execute and its pushed

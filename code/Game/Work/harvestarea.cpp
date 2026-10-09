@@ -65,7 +65,7 @@
 //   0x140005380 FindComponent CropFieldComponent    ComponentEntity::FindComponent<CropFieldComponent>
 //   0x1400052c0 FindComponent NaturalResource       ComponentEntity::FindComponent<NaturalResourceComponent>
 //   0x14012c3f0 status icon flag                    StatusIconComponent::SetFlag
-//   0x14012e5c0 CalcMaxWorkers                      WorkComponent_CalcMaxWorkers
+//   0x14012e5c0 CalcMaxWorkers                      WorkComponent::CalcMaxWorkers
 //   0x14009ccf0 Map_FindNearestPassable             WorkGrid_FindCell_9ccf0
 //   0x1400a00f0 Map_CanPathTo                       WorkBase_ValidateCell_a00f0
 //               (a uint64 whose low byte is the bool; read through uint8_t)
@@ -169,7 +169,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // the component as an integer: LEFT)
     int treeCount = _cells._count;
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(matDesc);
+        int maxWorkers = matDesc->CalcMaxWorkers();
         matDesc->workState = maxWorkers;
     }
     if (treeCount > matDesc->workState) {
@@ -266,12 +266,9 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                 natRes2 = entityAtCell2->FindComponent<NaturalResourceComponent>();
                             }
 
-                            // Check flag bit 20 on NatRes (flagged for removal)
-                            if (natRes1 == nullptr) {
-                                // NatRes component gone — skip this cell
-                                validityArray[i] = 0;
-                                goto next_cell;
-                            }
+                            // Check flag bit 20 on NatRes (flagged for removal): natRes1 is
+                            // read with no test (0x1400ed082 MOV RAX,[RBP-0x29] / [RAX+0x20]);
+                            // natRes2's null test below is retail's (0x1400ed0e9).
                             if ((natRes1->_flags >> 20) & 1) {
                                 goto handle_removal;
                             }
@@ -475,14 +472,9 @@ int HarvestArea::Cleanup() {
         CitizenComponent* citizenEntity = leftmost->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
-        const int before = count;
+        // 0x1400ed2cb CMP [RDI+0x50],0 / JG: loop while the count is positive, with no
+        // progress test (a cancel that does not drop the count spins, as retail).
         count = _cells._count;
-
-        // Cancelling made no progress: retail would spin here forever. The guard is a
-        // deliberate deviation (it can only fire in a state that would otherwise hang).
-        if (count == before) {
-            break;
-        }
     }
     return 0;
 }

@@ -198,30 +198,14 @@ uint32_t CitizenBehavior::CountByProfession(const Profession* key) const {
     return BstCountByKey(field_0x100._root, key);
 }
 
-// The tree's guards around 0x14012e5c0 that retail lacks (known_port_issues
-// 14d row 80): a scaled description with a zero _maxArea, or an entity with no
-// MapComponent, answers _defaultWorkers where retail divides by zero /
-// dereferences null. Everything else is WorkComponent::CalcMaxWorkers, retail's
-// body (Component/workcomponent.cpp).
-static int CalcMaxWorkersGuarded(const WorkComponent* work) {
-    const Description* base = work->_description;
-    const WorkDescription* jobType = Object::IsDerivedFromNullSafe(base, WorkDescription::TypeId())
-        ? static_cast<const WorkDescription*>(base) : nullptr;
-    if (jobType && jobType->_b34) {
-        if (jobType->_i30 == 0) return jobType->_i24;
-        if (work->_entity->FindComponent<MapComponent>() == nullptr) return jobType->_i24;
-    }
-    return work->CalcMaxWorkers();   // 0x14012e5c0
-}
-
-// 0x14012e5c0 — WorkComponent::CalcMaxWorkers. This was a SECOND port of it
-// (B4 TUT compared both with retail 2026-10-02: the same function; this copy
-// only adds the two guards above). The body is the member's; the C name stays
-// for the callers in other blocks' files.
-// Not a pure forwarder (it carries the two guards): it stays, typed, for its 21
-// callers in Component/, Game/ and Work/.
+// 0x14012e5c0 — WorkComponent::CalcMaxWorkers (Component/workcomponent.cpp), retail's one
+// body. This C name was a second port carrying two guards retail lacks (known_port_issues
+// 14d row 80: a zero _maxArea or a missing MapComponent answered _defaultWorkers); B6 WORK
+// (D12) removed them. The Work bodies and professionui call the member; the name stays
+// only as a plain call for the callers in Component/ and Game/ (other blocks' files), and
+// is deleted when they call the member.
 extern "C" int WorkComponent_CalcMaxWorkers(const WorkComponent* workComp) {
-    return CalcMaxWorkersGuarded(workComp);
+    return workComp->CalcMaxWorkers();   // 0x14012e5c0
 }
 
 // 0x14012fbb0 — WorkPlaceComponent::GetMaxWorkers. Finds the owner entity's
@@ -233,7 +217,7 @@ int WorkPlaceComponent::GetMaxWorkers() const {
     if (!comp) return 0;
 
     if (comp->workState == 0) {
-        comp->workState = CalcMaxWorkersGuarded(comp);   // 0x14012e5c0
+        comp->workState = comp->CalcMaxWorkers();   // 0x14012e5c0
     }
     return comp->workState;
 }

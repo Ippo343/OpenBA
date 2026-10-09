@@ -60,7 +60,7 @@
 //   0x140003050  ComponentEntity::FindComponent<WorkComponent>
 //   0x140002f90  ComponentEntity::FindComponent<StatusIconComponent>
 //   0x14012c3f0  StatusIconComponent::SetFlag
-//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x14012e5c0 WorkComponent::CalcMaxWorkers
 //   0x140006270  ComponentEntity::FindComponent<StorageComponent>
 //   0x14012cf10  CitizenComp_StorageComponent_QueryCount
 //   0x14009f3e0  Reimpl_MapGetTerrainPos
@@ -198,7 +198,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     int huntCount = _citizens._count;
 
     if (matDesc->workState == 0) {
-        int maxWorkers = WorkComponent_CalcMaxWorkers(matDesc);
+        int maxWorkers = matDesc->CalcMaxWorkers();
         matDesc->workState = maxWorkers;
     }
 

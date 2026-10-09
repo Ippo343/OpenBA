@@ -472,14 +472,15 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 // Get entity ref for pathfinding
                 ComponentEntity* entityRef = field_10.Get();
 
-                uintptr_t foundEntity = 0;
+                // 0x1400e7eec: the drop target into [RBP-0x60]; 0x1400e7ef1 MOV RDI,[RBP-0x60]
+                // keeps it in RDI for the setup at 0x1400e837c.
+                ComponentEntity* foundEntity = nullptr;
                 PickBestDropTarget(
-                    worldEntityList,
-                    reinterpret_cast<ComponentEntity**>(&foundEntity),   // LEFT: the slot doubles as the position out below (8 bytes, 12 written: known_port_issues row 260)
+                    worldEntityList, &foundEntity,
                     (uint32_t)field_28, matEntity,
                     available, '\x01', searchPos, &field_10);   // 0x14008d590
 
-                if (foundEntity != 0) {
+                if (foundEntity != nullptr) {
                     // Check passability
                     uint64_t passable = WorkBase_ValidateCell_a00f0(map, 0xe1f, (uint32_t)citizenCell,
                                                              (uint32_t)field_28);
@@ -487,14 +488,23 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                         return 1;
                     }
 
-                    // Get terrain position for storage
+                    // Get terrain position for storage ([RBP-0x28], zeroed at 0x1400e7f24 / 0x1400e7f2c)
                     float terrainPos[4] = {};
+                    bool haveTarget = false;
                     if (storageLoc == nullptr) {
+                        // 0x1400e8080 CMP [RBP-0x68],0 (the InteractComponent): none -> next input.
                         if (posComp != nullptr) {
-                            InteractNodePosition(posComp, reinterpret_cast<Math::Vector3*>(&foundEntity), 0, 0, nullptr);   // 0x140122e20  // LEFT: the 8-byte slot reused as a Math::Vector3 out (row 260)
-                            terrainPos[0] = *(float*)&foundEntity;      // LEFT: row 260
-                            terrainPos[1] = ((float*)&foundEntity)[1];  // LEFT: row 260
-                            terrainPos[2] = ((float*)&foundEntity)[2];  // LEFT: row 260
+                            // 0x1400e833a-0x1400e8377: InteractNodePosition(posComp, out, 0, 0, null)
+                            // with the drop-target slot [RBP-0x60] reused as the 12-byte out (the
+                            // entity is already in RDI); the three floats go to terrainPos, then
+                            // fall through into 0x1400e837c, the setup the StorageLocation arm
+                            // reaches. The tree gives the out its own Vector3 local.
+                            Vector3Slot nodePos;
+                            InteractNodePosition(posComp, &nodePos.v, 0, 0, nullptr);   // 0x140122e20
+                            terrainPos[0] = nodePos.v.x;
+                            terrainPos[1] = nodePos.v.y;
+                            terrainPos[2] = nodePos.v.z;
+                            haveTarget = true;
                         }
                     } else {
                         // Use storage slot lookup
@@ -509,23 +519,24 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                         int slotResult = FindBestAdjacentCell(
                             storageLoc, slotMapSize * slotCellY + slotCellX,
                             terrainPos);   // 0x14012d5d0 (the forwarder dropped field_28)
-                        if (slotResult >= 0) {
-                            // Set up pathfinding and create work action
-                            uintptr_t destEntity = foundEntity;
-                            CitizenComponent* destEntityRef = *citizenIBP;
+                        haveTarget = (slotResult >= 0);   // 0x1400e7f9d JNS 0x1400e837c
+                    }
+                    if (haveTarget) {
+                        // 0x1400e837c: set up pathfinding and create the work action
+                        ComponentEntity* destEntity = foundEntity;   // [RBP+0x98] = RDI
+                        CitizenComponent* destEntityRef = *citizenIBP;
 
-                            // The hidden return slot: retail reuses the town-list slot, whose
-                            // value is dead past this call; the tree gives the slot its own local.
-                            ::Object::InternalPtr<Action> pickup;
-                            WorkAct_GatherRawMatCtor_bf790(
-                                &pickup, &destEntityRef,
-                                field_20, reinterpret_cast<ComponentEntity* const*>(&destEntity),   // LEFT: row 260 (the 8-byte slot doubles as the float[3] position out)
-                                searchPos, &entityRef, terrainPos,
-                                matEntity, available, slot, 0, '\x01', 0, 0);
+                        // The hidden return slot: retail reuses the town-list slot, whose
+                        // value is dead past this call; the tree gives the slot its own local.
+                        ::Object::InternalPtr<Action> pickup;
+                        WorkAct_GatherRawMatCtor_bf790(
+                            &pickup, &destEntityRef,
+                            field_20, &destEntity,
+                            searchPos, &entityRef, terrainPos,
+                            matEntity, available, slot, 0, '\x01', 0, 0);
 
-                            int priority = field_20;
-                            return FinalizeAction(this, citizenIBP, priority, slot);
-                        }
+                        int priority = field_20;
+                        return FinalizeAction(this, citizenIBP, priority, slot);
                     }
                 }
             }

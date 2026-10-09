@@ -81,73 +81,6 @@
 // files: one cast per argument, `// LEFT: SIG` (wave X).
 
 // ============================================================
-// File-local helper: CalcWorkerSlots (FUN_14012e5c0)
-// ============================================================
-// Given a StorageLocationComponent (param_1):
-//   - Checks that param_1+0x18 is a WorkplaceJobType (DAT_1401c80a8)
-//   - If no attendance override (pBVar3[0x34]==0): return pBVar3[0x24] (base max workers)
-//   - Otherwise: look up BuildComponent on the entity at param_1+0x10,
-//     compute scaled slots = floor(buildComp.occupants * buildComp.maxOccupants / jobType.totalSlots
-//                                   * maxWorkers + 1.0f), clamped to [1, maxWorkers].
-//
-// StorageLocationComponent (param_1):
-//   +0x10: InternalBasePtr -> entity
-//   +0x18: InternalBasePtr -> WorkplaceJobType object
-//
-// WorkplaceJobType (pBVar3) fields used:
-//   +0x24: int maxWorkers
-//   +0x30: int totalSlots
-//   +0x34: byte hasAttendance (0 = no, else yes)
-//
-// BuildComponent used for attendance scaling:
-//   +0x2c: int16 maxOccupants
-//   +0x2e: int16 currentOccupants
-//
-// Original: FUN_14012e5c0.
-//
-// B4 P2 DLG-2: typed. The parameter is the WorkComponent the caller found (the
-// "StorageLocationComponent" / "WorkplaceJobType" / "BuildComponent" names above
-// are the old misnomers: +0x18 is Component::_description, the job type is a
-// WorkDescription, and the footprint is MapComponent's tileX1 / tileY1 — the
-// member WorkComponent::CalcMaxWorkers is the other port of this address; this
-// copy keeps its own null-footprint return, known_port_issues 14d row 450).
-static int CalcWorkerSlots_Impl(WorkComponent* storageLocComp) {
-    // Get WorkplaceJobType object from +0x18 (InternalBasePtr)
-    Description* jobType = storageLocComp->_description;
-    if (!jobType) return 0;
-
-    // IsDerivedFrom check
-    bool isJobType = ::Object::IsDerivedFromNullSafe(jobType, WorkDescription::TypeId());
-    if (!isJobType) return 0;
-
-    WorkDescription* jt = static_cast<WorkDescription*>(jobType);
-    int maxWorkers = jt->_i24;
-
-    // If no attendance scaling, just return base max
-    if (jt->_b34 == 0) {
-        return maxWorkers;
-    }
-
-    // Find BuildComponent on the entity at +0x10
-    ComponentEntity* entity = storageLocComp->_entity.Get();
-
-    MapComponent* buildComp = nullptr;
-    fn_FindComponent_Build(entity, &buildComp);
-
-    if (!buildComp) return maxWorkers > 0 ? maxWorkers : 1;
-
-    // Scale: (currentOccupants * maxOccupants / totalSlots) * maxWorkers + 1.0f
-    int16_t maxOcc     = buildComp->tileX1;
-    int16_t curOcc     = buildComp->tileY1;
-    int     totalSlots = jt->_i30;
-    // DAT_14017214c = 1.0f
-    int result = (int)(((float)(curOcc * maxOcc) / (float)totalSlots) * (float)maxWorkers + 1.0f);
-    if (result > maxWorkers) result = maxWorkers;
-    if (result < 1)          result = 1;
-    return result;
-}
-
-// ============================================================
 // File-local helpers: AVL BST rotations + rebalance
 // ============================================================
 // The profession -> row Set at ProfessionUI::professionIndexRoot (+0x60); its
@@ -754,7 +687,7 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
                         if (storageLocComp) {
                             int workerSlots = storageLocComp->workState;
                             if (workerSlots == 0) {
-                                workerSlots = CalcWorkerSlots_Impl(storageLocComp);
+                                workerSlots = storageLocComp->CalcMaxWorkers();   // 0x14012e5c0
                                 storageLocComp->workState = workerSlots;
                             }
                             totalWorkers += workerSlots;

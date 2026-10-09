@@ -62,18 +62,18 @@
 CharacterComponent* FindCharacterComponent(const ComponentEntity* entity) {
     CharacterComponent* found = nullptr;
     uint32_t wantId = CharacterComponent::TypeId();
+    // 0x1400012f4-0x14000132c: the scan compares each slot's type with the cell
+    // [0x1401c7078] directly (no test of the type id); 0x140001375 IsDerivedFrom on the
+    // match, CMOVNZ (0x14000137d).
     int n = entity->_components._size;
-    // The tree's guard: the type-id checks (retail compares with the cell unconditionally).
-    if (n > 0 && wantId != 0 && wantId != 0xFFFFFFFFu) {
-        ::Object::InternalPtr<Component>* list = entity->_components._data;
-        for (int i = 0; i < n; i++) {
-            Component* comp = list[i].Get();
-            uint32_t t = comp->Type();   // slot 2
-            if (t == wantId) {
-                Component* c = list[i].Get();
-                found = ::Object::IsDerivedFromNullSafe(c, wantId) ? static_cast<CharacterComponent*>(c) : nullptr;
-                break;
-            }
+    ::Object::InternalPtr<Component>* list = entity->_components._data;
+    for (int i = 0; i < n; i++) {
+        Component* comp = list[i].Get();
+        uint32_t t = comp->Type();   // slot 2
+        if (t == wantId) {
+            Component* c = list[i].Get();
+            found = c->IsDerivedFrom(wantId) ? static_cast<CharacterComponent*>(c) : nullptr;
+            break;
         }
     }
     return found;

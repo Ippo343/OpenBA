@@ -13,7 +13,6 @@
 #include "object/TypeInfo.h"
 #include "object/Type.h"   // RtObject::RtObject_Type_Serialize
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Game/force_work.h"   // ForceWork::Readable — stale action-target guard
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (diagnostic filter)
 #include <cstdio>
 #include <cstdint>
@@ -76,73 +75,23 @@ int  SendComponentMessage::AbstractImpl(ActionStack* actionStack) {
 
     uint32_t componentTypeId = _field30;
 
-    // CheckPtr on target entity
+    // 0x1400caf1a CheckPtr(+0x20); 0x1400caf20-0x1400caf57: the target's component array
+    // (+0x30 data, +0x38 count) scanned by slot 2 (Type) with no test of the target, of a
+    // slot or of the entity's flags; the first match is taken (0x1400caf95).
+    // (The tree's canonical-pointer / readable-memory / marked-for-removal probes of the
+    // target and its sentinel-slot skip are gone, B6 WORK G72: the weak-ref invalidation
+    // reason is retired with PlayAnimation's, since B.4 gave every class its ctor. If a
+    // message reaches a freed or dying entity again, that is an upstream finding: the
+    // action should not outlive its target.)
     ComponentEntity* target = _field20.Get();
-    uintptr_t entity = reinterpret_cast<uintptr_t>(target);  // CAST-OK: ptr_int
-
-    // SA-guard: the target at +0x20 is a WEAK ref, and nothing invalidates it when the
-    // entity is freed (CheckPtr is an empty function in the shipping Runtime). A citizen
-    // whose in-flight labor message targets a building that got demolished/upgraded
-    // mid-action therefore reads freed memory here. Observed live on the first upgrade
-    // that spawned a replacement: the old building was freed the same frame, and the
-    // next builder message read compArray out of the dead entity, giving compIBP =
-    // 0x346e6f (ASCII from a reused block) -> ACCESS_VIOLATION at the loop below.
-    //
-    // Retail reaches the same "nothing to deliver the message to" outcome through its
-    // own paths (the serialize side nulls +0x20 when it is not an Entity, and the
-    // no-component branch below returns 2), so failing the action is faithful in effect.
-    // Same guard shape as PlayAnimation's PlayAnim_TargetLooksLive.
-    // A non-canonical pointer is the torn-down sentinel, not an address (edittool.cpp:328
-    // and tool_base_render.cpp use the same range test).
-    const bool canonical = entity >= 0x10000 && entity <= 0x00007FFFFFFFFFFFULL;
-    // MARKED-FOR-REMOVAL (entity+0x40 bit 0x400) is the missing test. The readability
-    // probes below only prove the memory is mapped — a dying entity is still perfectly
-    // readable in the window between MarkForRemoval (which broadcasts +0x38 and lets each
-    // component release its world registrations) and the EntityList drain that frees it.
-    // Deliver a labor message in that window and the component scan below walks slots that
-    // teardown has already reset to the -1 sentinel, and `*(uintptr_t*)comp` faults on
-    // address 0xffffffffffffffff. That is the crash after 3-4 burn/rebuild cycles
-    // (2026-08-23): repeated demolitions keep citizens holding in-flight messages against
-    // buildings that are mid-teardown. Same aliveness test the dialog controllers already
-    // use (SA_DialogEntityAlive / destroyui.cpp DataSourceAlive).
-    const bool dying = canonical &&
-        ForceWork::Readable(target, 0x44) &&
-        ((target->_entityFlags >> 10) & 1) != 0;
-    if (!entity || !canonical || dying ||
-        !ForceWork::Readable(target, 0x40) ||
-        !ForceWork::Readable(target->_components._data, 8)) {
-        static int s_reported = 0;
-        if (s_reported++ < 20) {
-            std::fprintf(stderr, "[SendCompMsg] ABORT: target entity=%p is not live "
-                         "(canonical=%d dying=%d msgId=%d compType=%u) — action dropped "
-                         "instead of reading freed memory\n",
-                         static_cast<void*>(target), (int)canonical, (int)dying,
-                         _field34, componentTypeId);
-            std::fflush(stderr);
-        }
-        return 2;
-    }
-
-    // Search entity's component array for matching type
     int32_t compCount = target->_components._size;
     Object::InternalPtr<Component>* compArray = target->_components._data;
     Component* foundComp = nullptr;
 
     for (int i = 0; i < compCount; i++) {
         Component* comp = compArray[i].Get();
-
-        // Backstop for the same sentinel one level down: an entity that is NOT marked for
-        // removal can still carry an individually released slot. Retail derefs this
-        // unguarded and is right to — it never puts a sentinel in a live entity's array —
-        // so skip the slot rather than clamping it, and keep the scan going.
-        uintptr_t compAddr = reinterpret_cast<uintptr_t>(comp);  // CAST-OK: ptr_int
-        if (compAddr < 0x10000 || compAddr > 0x00007FFFFFFFFFFFULL) continue;
-
-        // Get component type ID via vtable+0x10
         int typeId = static_cast<int>(comp->Type());   // slot 2
-
         if (typeId == (int)componentTypeId) {
-            // Found matching component
             foundComp = compArray[i].Get();
             break;
         }
