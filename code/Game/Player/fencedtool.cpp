@@ -287,8 +287,6 @@ int FencedTool::CalcCost(int startCell, int endCell,
     // Cell data base pointer
     const MapCell* cellDataBase = mapGrid->cells.GetData();
 
-    float baseHeight = 0.0f;
-    bool heightInitialized = false;
     bool allValid = true;
 
     int endRow2 = (int)minRow + height;
@@ -328,11 +326,15 @@ int FencedTool::CalcCost(int startCell, int endCell,
                 float inPos[4] = {(float)(cellIdx % mapWidth) - halfOffset,
                                   (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                 float outPos[4] = {0};
-                float extra[3] = {0};   // retail: a Vector3 (0x1400db702 / 0x1400dc890), [2] read after the call
+                float extra[3] = {0};   // retail: a Vector3 at [RBP-0x70] (z = 0 stored at 0x1400db6c0)
                 Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
 
-                if (!heightInitialized) { baseHeight = outPos[2]; heightInitialized = true; }
-                Math::Scalar heightDiff(outPos[2] - baseHeight);
+                // The query's third out, z: blocked when the input z (XMM6, 0.0 for every
+                // cell) exceeds it -- `COMISS XMM6,[RBP-0x68]; JA` (0x1400db71e).
+                if (inPos[2] > extra[2]) { allValid = false; break; }
+                // |terrain z - XMM6| against the tolerance (0x1400db724..0x1400db749); XMM6
+                // is zeroed before the loop (0x1400db5b5) and never written in it.
+                Math::Scalar heightDiff(outPos[2] - inPos[2]);
                 if (HEIGHT_TOLERANCE < heightDiff.Abs().v) { allValid = false; break; }
             }
         }
