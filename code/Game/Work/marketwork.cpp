@@ -575,7 +575,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
     const int claimed = _field48.count;
     WorkComponent* workComp = field_18.Get();
     if (workComp->workState == 0) {
-        workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
+        workComp->workState = workComp->CalcMaxWorkers();
     }
     const int maxHaulers = workComp->workState;
     if (maxHaulers <= claimed) {

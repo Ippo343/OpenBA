@@ -263,7 +263,7 @@ int ClearArea::GetPriority() {
 // ============================================================
 // Execute's sub-functions, called by name (B3R)
 // ============================================================
-//   0x14012e5c0 WorkComponent_CalcMaxWorkers   0x14009fc00 WorkLeaf_GetTilesInArea_9fc00
+//   0x14012e5c0 WorkComponent::CalcMaxWorkers   0x14009fc00 WorkLeaf_GetTilesInArea_9fc00
 //   0x14009d7c0 WorkLeaf_SortTilesByDistance_9d7c0  0x1400052c0 WorkBase_FindComponent_52c0
 //   0x14009ccf0 WorkGrid_FindCell_9ccf0        0x1400a00f0 WorkBase_ValidateCell_a00f0
 //   0x1400f6ef0 WorkImpl_BuildStructureStep_6ef0  0x14009f3e0 Reimpl_MapGetTerrainPos
@@ -293,7 +293,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
     // Get total slot count for the entity
     if (workEntity->workState == 0) {
-        int count = WorkComponent_CalcMaxWorkers(workEntity);
+        int count = workEntity->CalcMaxWorkers();
         workEntity->workState = count;
     }
 

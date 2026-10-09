@@ -66,7 +66,7 @@
 //   0x140003050  WorkBase_FindComponent_3050
 //   0x140002f90  WorkBase_FindComponent_2f90
 //   0x14012c3f0  CitizenComp_FUN_14012c3f0
-//   0x14012e5c0  WorkComponent_CalcMaxWorkers
+//   0x14012e5c0 WorkComponent::CalcMaxWorkers
 //   0x140006270  WorkBase_FindComponent_6270
 //   0x14012cf10  CitizenComp_StorageComponent_QueryCount
 //   0x14009f3e0  Reimpl_MapGetTerrainPos
@@ -155,7 +155,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
     // component as an integer: LEFT)
     // -------------------------------------------------------
     if (local_58->workState == 0) {
-        int iVar9 = WorkComponent_CalcMaxWorkers(local_58);
+        int iVar9 = local_58->CalcMaxWorkers();
         local_58->workState = iVar9;
     }
 
