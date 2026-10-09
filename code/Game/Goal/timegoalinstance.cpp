@@ -85,8 +85,10 @@ Achievement::Goal::GoalState TimeGoalInstance::CheckGoalState() const {
     // id in TypeInfo_TimeGoal (dword 0x1401c62e8 = TimeGoal's own record, i.e.
     // TimeGoal::TypeId()). The tree used to ResolveAddr that cell, which is
     // not registered, so it answered 0 and the goal could never be met.
+    // B6 row 88: 0x1400dacd4 IsDerivedFrom([this+0x18]) with no null test of the goal,
+    // 0x1400dace4 CMOVNZ RBX,RDI over RBX = 0, 0x1400dacee MOV ECX,[RBX+0x30] with no test.
     const TimeGoal* timeGoal = nullptr;
-    if (goal && goal->IsDerivedFrom(TimeGoal::TypeId())) {   // the tree's null test, kept
+    if (goal->IsDerivedFrom(TimeGoal::TypeId())) {
         timeGoal = static_cast<const TimeGoal*>(goal);
     }
 
@@ -94,12 +96,8 @@ Achievement::Goal::GoalState TimeGoalInstance::CheckGoalState() const {
     float elapsedSeconds = elapsedTime.AsSeconds();
 
     // Compare against required time
-    if (timeGoal) {
-        float requiredSeconds = (float)(timeGoal->requiredYears * 0xe10);
-        return static_cast<Achievement::Goal::GoalState>((requiredSeconds <= elapsedSeconds) ? 1 : 0);
-    }
-
-    return static_cast<Achievement::Goal::GoalState>(0);
+    float requiredSeconds = (float)(timeGoal->requiredYears * 0xe10);
+    return static_cast<Achievement::Goal::GoalState>((requiredSeconds <= elapsedSeconds) ? 1 : 0);
 }
 
 // create 0x140026670: MemAlloc(0x28, 8), then the (inlined) ctor.
