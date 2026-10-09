@@ -277,6 +277,10 @@ tests 63. Down ~900 net, and the net is what matters: B.3.3's caller batches ADD
 `void*` or a POD) while removing more resolved-pointer indirections than that. Those 1,045
 are transitional by construction — each one dies with its receiver's own conversion, which
 is what the marker exists to make countable.
+`[B4 .. B7, 2026-10-02 .. 2026-10-09: the PROD metric (castmetric.py over code / runtime / standalone / dx11 /
+engine, every spelling) went 46,226 -> 8,950 (B.4 first pass) -> 389 (S4) -> 89 (B5, dx11 0) -> 26 (B6, the
+retail-difference task) -> 3 (B7, the named-prerequisite pass, 2026-10-09: 1 named prerequisite re-measured
+as an escape + 2 ruled). Every step's rules in endgame_b/B*_RULES.md, numbers in b*_session/CLOSE_NUMBERS.md.]`
 Neither A nor C touches them; B removes almost
 all of them as a consequence, one kind per step, and the count per directory is a better
 measure of B's progress than "classes converted":

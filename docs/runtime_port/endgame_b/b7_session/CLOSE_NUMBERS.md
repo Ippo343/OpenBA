@@ -1,7 +1,7 @@
 # B7 (the named-prerequisite pass) — close numbers (2026-10-09)
 
-Start `a4944195c` (B6 CLOSED; kit `b4aeac7c0`) -> close `455db4163` (Merge b7-RT, the last gated code merge) +
-the close documents. 77 commits (42 `behaviour:`, 25 `B7:`, 9 merges, the kit / gate-table / rule commits),
+Start `a4944195c` (B6 CLOSED; kit `b4aeac7c0`) -> close `455db4163` (Merge b7-RT, the last gated code merge), then
+CLOSE-A `40773f626` / `47cc3b7dd` (audit F2 / F3, `behaviour:`) / CLOSE-B `048e82e29` and the close documents. 77 commits (42 `behaviour:`, 25 `B7:`, 9 merges, the kit / gate-table / rule commits),
 5 gated merges (GATE_TABLE.md rows 1-5), 0 problems left standing; 197 files, +1,906 / -2,662 lines.
 
 ## 1. What the step did
@@ -90,8 +90,21 @@ problem, each root-caused and closed by the next commit:
 - `worldcmp.sh` vs `oldbase` (`b2a5434c`, seed 12345): 118 lines, DIFFERS on ONE line -- the `[PfSeed]` log
   text (`ASYNC worker-thread mode` -> `ASYNC worker-thread`), reworded by row 962's commit `84b58b58f`; no
   world line differs (`runs/close_worldcmp`).
-- `stepclose.sh`: PENDING
-- audit: PENDING (`b7_session/AUDIT.md`)
+- `stepclose.sh` at `a2136019b` (`runs/stepclose/summary.txt`): mods / menuquit / options / achievements / goaldialog
+  / tool_placement / tool_road / tool_removal clean; in-game save (file mode) SAVE OPERATION COMPLETE, crash 0;
+  `sa-stress` exit 0 at 139 fps (+0.5%); true release compile exit 0 (939 files, 6,493,754 bytes, 189 warnings as
+  before); clean rebuild debug / perf / unit exit 0; gate `closeclean` 0 problems (resave 3/3); NOT IMPLEMENTED
+  stubs 0, stub set 0 / 0 vs baseline; tutorial census citizen=16.
+- audit `b7_session/AUDIT.md` (62 commits: 54 OK / 5 FINDING / 3 QUESTION): F1 / F5 / F6 documentary, applied in
+  CLOSE-A (`40773f626`); F2 (retail DOES test the pathfinder's MemAlloc result: the placement-new shape restored) and
+  F3 (the EventLogEntry aggregate zeroed two pads retail leaves alone: a seven-field ctor) in `47cc3b7dd`
+  (`behaviour:`); F7 (the callerless `RtString_ReleaseInline`) in CLOSE-B (`048e82e29`). F4 (0e3708da8's `B7:` title
+  over a MemFree(null) that is gone) and Q4 (`B7:` titles over inlining-only DIFFs) stand as written: recorded here,
+  no amend (B6 C10's rule). Q1 (the file-scoped pragma) is the ruling in NEXT_SESSION §5. Q2 / Q3 (citizen picking,
+  the entity-panel close: no gated route) handed on.
+- the final gate on the close tree `048e82e29` (`runs/CLOSE`, full mode): builds exit 0, 0 new warnings, unit 920 / 0,
+  new game 5683 / 0, tutorial 5773 / 12, loadgame clean, -O2 new game clean, typetable == baseline, resave 5/5 against
+  `994eb184`; GATE RESULT 0 problems.
 
 ## 5. Residue handed on (NEXT_SESSION §2)
 

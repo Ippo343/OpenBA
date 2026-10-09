@@ -20,6 +20,29 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B7 (THE NAMED-PREREQUISITE PASS) CLOSED — 2026-10-09: castmetric 26 -> 3 (the 23 "named prerequisite" casts are
+  1; the 3 are 1 named prerequisite + 2 ruled + 0 work).** Each cast waited on one thing the tree lacked, and the
+  thing was SUPPLIED: `System::String`'s ctor / copy / dtor / Release / operator= and `rtcoll::ArrayDtorImpl` /
+  `MemFree` header-inline (`[[gnu::always_inline]]`, the same reads and stores), the ctor DOORS real ctors
+  (`System::Random`, `Engine::Engine`, `Graphics::Renderer` / `Scene`, `Volume::Frustum`'s two — which zero first,
+  as retail), `IO::Persistence` / `System::Configuration` holding a real `Collection::Set<Pair<String,String>>`,
+  the cell-BST core 0x14001ca60 a template over the node type; then the sites typed (GetNextItem's locals, the
+  by-value `Array<uint32_t>` / `<uint8_t>` getters, `TypeRecord::children`, `MaterialTexture::name`, a typed
+  `EventLogEntry`, the Engine / Renderer / Scene / Frustum / Random locals, the Vector4 pixel rows) and the two
+  harness puns retired. The B6 residue rows read and settled: RES's 24 SUSPECTED 14d items (dropped, or NOT A
+  DIFFERENCE with the instruction quoted; 920 / 921 / 922 ruled), LX's 992 / 942 (every `ExternalPtr` load kept
+  only `if IsDerivedFrom(cell)`, as retail) / 993 / 994. Ran as: the coordinator's inventory + rule sheet
+  `endgame_b/B7_RULES.md` -> four opus blocks (RT, CTOR, LX, RES) -> 5 gated merges (`b7_session/GATE_TABLE.md`),
+  two with a resave FINDING each root-caused: row 84's find-only Resolve changed the resource LOAD ORDER and moved
+  the pointer-keyed profession bucket tree (golden RE-CUT `994eb184…`, C3); row 942's validation nulled callers on
+  the WRONG instantiation (the two bucket-tree keys passed as function pointers, 163 `:edge` meshes, the decal
+  and nomad materials — fixed on LX2, no re-cut, C4) -> independent audit (`b7_session/AUDIT.md`: 54 OK / 5
+  FINDING / 3 QUESTION, applied in CLOSE-A / CLOSE-B) -> step close. Invariants unchanged (new game 5683 / 0,
+  tutorial 5773 / 12, typetable `b983f144`, 0 new warnings, unit 920 / 0); `worldcmp.sh` vs `oldbase` identical
+  but for the `[PfSeed]` log wording (row 962); `stepclose.sh` clean (sa-stress 139 fps). Acceptance: 1 line off
+  (10 = 19, the accepted miscount); line 01 = 3 of 3. ENDGAME B.1 decision 7 DECIDED by the user (C++ exceptions).
+  RESIDUE handed to the quality pass: rows 1000, 1020, 1040, 1041, 1060-1065, the introsort escape, the two
+  unprobed routes (`endgame_b/NEXT_SESSION.md` §2). Numbers: `b7_session/CLOSE_NUMBERS.md`.
 - **B6 (THE RETAIL-DIFFERENCE TASK) CLOSED — 2026-10-09: castmetric 89 -> 26 (the 63 "retail-difference task"
   casts are gone; the 26 are 23 named prerequisite + 3 ruled + 0 work).** Every one of the 63 marked a place
   where the tree did something retail does not (`known_port_issues.md` §13-14); each difference is fixed in
