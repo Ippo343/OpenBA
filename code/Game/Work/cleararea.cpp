@@ -141,9 +141,10 @@ void ClearArea::Persist(IO::Stream& stream) {
 // Params: self, citizen (unused), treeEntry (IBP*), cellIndex
 int ClearArea::OnComplete(CitizenComponent** /*citizen*/, ComponentEntity** treeEntry, int cellIndex) {
 
-    // If treeEntry is non-null, insert into entity BST at +0x48
-    ComponentEntity* entryPtr = treeEntry ? *treeEntry : nullptr;
-    if (entryPtr != nullptr) {
+    // If the entry is non-null, remove it from the entity BST at +0x48.
+    // 0x1400e5e3a CMP qword ptr [R8],0: treeEntry itself is dereferenced with no test
+    // (the one caller, TaskCleanup, passes the address of a stack copy).
+    if (*treeEntry != nullptr) {
         WorkLeaf_BstRemoveByIBP_298a0(&_entities, treeEntry);
     }
 
