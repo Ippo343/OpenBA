@@ -58,9 +58,9 @@
 // tail with elem+0x20 = 1 default, free the old block. 1:1 port of the exe helper.
 // Registered at 0x140002540 (reg_component_visuals.cpp) and called by
 // ambient_externalptr_serialize.cpp: a free function, not a member.
-// The tree's body keeps ONE step retail's SetSize-shaped body lacks -- it skips MemAlloc when
-// System::MemoryAllocator::_singleton is null (known_port_issues row 570) -- so it is not
-// replaced by the erased core; it is typed by element instead. The new tail writes +0x00
+// B6 row 570 dropped the one step retail lacked (MemAlloc skipped on a null
+// System::MemoryAllocator::_singleton; 0x140002540 calls it at 0x140002596 with no test).
+// Moving the body onto the erased core is a typing step, not this row. The new tail writes +0x00
 // (dword), +0x08 / +0x10 / +0x18 (qwords), +0x20 (dword); the two padding dwords stay untouched.
 extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount) {
     int oldCount = arr->_size;
@@ -73,10 +73,8 @@ extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBi
         if (newCount == oldCount + 1 && oldCount != 0) {
             arr->_capacity = newCount * 3;
         }
-        if (::System::MemoryAllocator::_singleton) {
-            arr->_data = static_cast<AmbientEnvironmentBiome*>(
-                ::System::MemoryAllocator::MemAlloc((uint64_t)arr->_capacity * 0x28, 8));
-        }
+        arr->_data = static_cast<AmbientEnvironmentBiome*>(
+            ::System::MemoryAllocator::MemAlloc((uint64_t)arr->_capacity * 0x28, 8));
     }
 
     int start = 0;
