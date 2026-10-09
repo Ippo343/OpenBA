@@ -226,8 +226,9 @@ void WorkAct_ConsumeProduceCtor_bef70(CitizenComponent* const* citizenRef, uint3
         WCP_Append(list, &ibpCrm);
 
         // --- optional SendComponentMessage #2 when *param_9 != 0 (0x1400bf1c5..) ---
-        // (the param_9 null arm is the tree's guard)
-        if (param_9 && static_cast<uint32_t>(*param_9) != 0) {  // CMP [RDI],0; JBE (unsigned)
+        // B6 (14d G27): 0x1400bf1c5 MOV RDI,[RBP+0x87]; 0x1400bf1cc CMP dword ptr [RDI],0 --
+        // param_9 itself is not tested.
+        if (static_cast<uint32_t>(*param_9) != 0) {  // CMP [RDI],0; JBE (unsigned)
             obj = WCP_Alloc(0x40);            // LEA ECX,[RDX+0x38] => 0x40
             Action* sm2 = nullptr;
             if (obj) {
