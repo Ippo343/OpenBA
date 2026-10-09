@@ -52,12 +52,14 @@
 
 namespace {
 
-// FindElement(name) on the panel container (the tree's FindElemByName, typed). Retail narrows each find with
-// IsDerivedFrom on the element's type id; the tree kept the element unchecked,
-// and that is kept (the .rsc declares these elements with their types).
-UI::Element* FindNamedElement(UI::Element* container, const char* name) {
+// FindElement(name) on the panel container, narrowed as OnCreated 0x140087940 narrows
+// each find: IsDerivedFrom on T's type id (the import slots 0x140151668 LabelElement,
+// 0x140151508 TextElement, 0x1401514f8 ButtonElement) with CMOVNZ, null otherwise.
+template <class T>
+T* FindNamedElement(UI::Element* container, const char* name) {
     System::String nameStr(name);
-    return container->FindElement(nameStr).Get();
+    UI::Element* found = container->FindElement(nameStr).Get();
+    return ::Object::IsDerivedFromNullSafe(found, T::TypeId()) ? static_cast<T*>(found) : nullptr;
 }
 
 // Faithful visibility subset of OnUpdateLayout (0x140087080): show the
@@ -104,9 +106,9 @@ void PopulateCounts(WorkPlaceUI* self) {
 
     // Discover the two count elements once (they don't move).
     if (!self->workPlaceCount)
-        self->workPlaceCount = static_cast<UI::LabelElement*>(FindNamedElement(panelElem, "workPlaceCount"));
+        self->workPlaceCount = FindNamedElement<UI::LabelElement>(panelElem, "workPlaceCount");
     if (!self->maxCount)
-        self->maxCount = static_cast<UI::TextElement*>(FindNamedElement(panelElem, "maxCount"));
+        self->maxCount = FindNamedElement<UI::TextElement>(panelElem, "maxCount");
 
     // Arm ALL FIVE interactive controls so their clicks route to OnElementEvent
     // with the retail ids (0x140087940):
@@ -116,7 +118,7 @@ void PopulateCounts(WorkPlaceUI* self) {
     struct Arm {
         static void One(UI::ButtonElement*& slot, UI::Element* panel, const char* name, int id) {
             if (slot) return;
-            slot = static_cast<UI::ButtonElement*>(FindNamedElement(panel, name));
+            slot = FindNamedElement<UI::ButtonElement>(panel, name);
             if (slot) slot->SetElementId(id);
         }
     };
@@ -127,7 +129,7 @@ void PopulateCounts(WorkPlaceUI* self) {
     // workPlaceButton has no field in retail; find and arm it each pass until it
     // takes (idempotent: SetElementId writes the element id).
     {
-        UI::Element* button = FindNamedElement(panelElem, "workPlaceButton");
+        UI::ButtonElement* button = FindNamedElement<UI::ButtonElement>(panelElem, "workPlaceButton");
         if (button && button->_elementId != 0x1454)
             button->SetElementId(0x1454);
     }
@@ -279,19 +281,19 @@ void WorkPlaceUI::OnCreated() {
     if (!SA_DialogEntityAlive(this)) return;
     UI::Element* dialogElem = _container;
 
-    workPlaceCount  = static_cast<UI::LabelElement*>(FindNamedElement(dialogElem, "workPlaceCount"));
-    maxCount        = static_cast<UI::TextElement*>(FindNamedElement(dialogElem, "maxCount"));
-    workerCountUp   = static_cast<UI::ButtonElement*>(FindNamedElement(dialogElem, "workerCountUp"));
-    workerCountDown = static_cast<UI::ButtonElement*>(FindNamedElement(dialogElem, "workerCountDown"));
-    jobCountUp      = static_cast<UI::ButtonElement*>(FindNamedElement(dialogElem, "jobCountUp"));
-    jobCountDown    = static_cast<UI::ButtonElement*>(FindNamedElement(dialogElem, "jobCountDown"));
+    workPlaceCount  = FindNamedElement<UI::LabelElement>(dialogElem, "workPlaceCount");
+    maxCount        = FindNamedElement<UI::TextElement>(dialogElem, "maxCount");
+    workerCountUp   = FindNamedElement<UI::ButtonElement>(dialogElem, "workerCountUp");
+    workerCountDown = FindNamedElement<UI::ButtonElement>(dialogElem, "workerCountDown");
+    jobCountUp      = FindNamedElement<UI::ButtonElement>(dialogElem, "jobCountUp");
+    jobCountDown    = FindNamedElement<UI::ButtonElement>(dialogElem, "jobCountDown");
 
     workerCountUp->SetElementId(0x1450);
     workerCountDown->SetElementId(0x1451);
     jobCountUp->SetElementId(0x1452);
     jobCountDown->SetElementId(0x1453);
 
-    UI::Element* workplaceButton = FindNamedElement(dialogElem, "workPlaceButton");
+    UI::ButtonElement* workplaceButton = FindNamedElement<UI::ButtonElement>(dialogElem, "workPlaceButton");
     workplaceButton->SetElementId(0x1454);
 
     ::Object::Base* source = _dataSource;
