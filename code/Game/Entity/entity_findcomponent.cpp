@@ -94,12 +94,6 @@ inline void FindByTypeId(ComponentEntity* entity, T** retval) {
 }
 }  // namespace
 
-// B4 FORWARD: Dialog/residenceui.cpp still calls this (its local holds the
-// StorageComponent as uintptr_t: known_port_issues 14a row 452 reads it as another class).
-void fn_FindComponent_Storage(ComponentEntity* entity, uintptr_t* retval) {
-    fn_FindComponent_Storage(entity, (StorageComponent**)retval);   // LEFT: SIG fn_FindComponent_Storage(uintptr_t*): residenceui.cpp:460 keeps the component in an integer because it reads +0x50 / +0x58 past StorageComponent (known_port_issues 14a row 452); typing the local changes that arithmetic
-}
-
 // fn_FindComponent_Build -- MapComponent (cell 0x1401c79e0), retail FUN_140004680. MISNOMER: the cell is MapComponent, not BuildComponent.
 void fn_FindComponent_Build(ComponentEntity* entity, MapComponent** retval) {
     FindByTypeId(entity, retval);

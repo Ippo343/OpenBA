@@ -40,3 +40,27 @@ vsync at 60 Hz it is a single frame at one intermediate position.
 **Faithful lever, if it ever needs to go away.** The frame rate (vsync / an in-game
 frame cap), not Clean or SetTransform. Alternatively position before AddObject in the
 component, which is an exe-side deviation and must be documented as such.
+
+## 2. The residence panel's "go to" button reads past a StorageComponent
+
+**Symptom.** None reliably visible. Clicking a resident's "go to" button on a house panel
+walks heap memory past the end of an object; on a lucky heap it centres on a resident,
+otherwise it centres on nothing, on the wrong citizen, or faults.
+
+**Retail mechanism.** `ResidenceUI::GoToCitizen` (`0x1400b56a0`, reached from slot 9
+`0x1400b5843` on element event 0x12, id 300 + n) finds the house's component through
+`0x140006270`, the StorageComponent finder: it compares `Type()` with the cell
+`0x1401c7e78` and narrows with IsDerivedFrom. That cell's only writer is
+`StorageComponent_RegisterType` (`0x14014fb10`, `LEA RCX,[0x1401c7e78]` at `0x14014fb35`,
+name "StorageComponent", factory `0x140038b50` = `MemAlloc(0x40, 8)`). The body then reads
+`[comp+0x58]` as a family count and `[comp+0x50]` as a 0x10-stride family array: both lie
+past the 0x40-byte object. The rows it means to walk are ResidenceComponent's (cell
+`0x1401c7cf0`, factory `MemAlloc(0x60, 8)`, families at +0x50 / +0x58), which
+`OnUpdateLayout` (`0x1400b51f0`) walks correctly through the Residence finder.
+
+**Proof it is retail.** Read in Ghidra 2026-10-09 (B6 Block 0, then block UI): the finder's
+cell, its RegisterType and the factory size above.
+
+**The port deviates (B6 ruling, known_port_issues row 452).** `code/Game/Dialog/residenceui.cpp`
+reads the ResidenceComponent's families by name, with a `STANDALONE DEVIATION` comment.
+The faithful lever is the StorageComponent finder at that site.
