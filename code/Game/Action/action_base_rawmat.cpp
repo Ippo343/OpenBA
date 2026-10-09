@@ -399,15 +399,14 @@ void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
 
     int rot = static_cast<int>(rotation);   // CVTTSS2SI = truncate toward zero
     if (rot < 0) { do { rot += 0x168; } while (rot < 0); }
-    // [standalone] objA = the spawned item entity's MapComponent (tile placement). On a freshly
-    // cloned raw-material entity in standalone this can be inert/absent; guard the tile writes.
-    if (objA) {
-        objA->tileX0 = static_cast<int16_t>(col);
-        objA->tileY0 = static_cast<int16_t>(row);
-        objA->tileX1 = 1;                         // one dword store of 0x10001 in retail (H7)
-        objA->tileY1 = 1;
-        objA->extraField = rot;
-    }
+    // B6 (14d G60): retail writes the MapComponent's tile, footprint and rotation and the
+    // ModelComponent's transform with no test of either finder result (0x140129760: CheckPtr,
+    // then the +0x28 / +0x2a / +0x2c / +0x30 stores, and +0x148..+0x168 / SetTransform).
+    objA->tileX0 = static_cast<int16_t>(col);
+    objA->tileY0 = static_cast<int16_t>(row);
+    objA->tileX1 = 1;                         // one dword store of 0x10001 in retail (H7)
+    objA->tileY1 = 1;
+    objA->extraField = rot;
 
     // GridToWorld: localPos = ((cellIndex%w) - half, (cellIndex/w) - half, 0).
     float half = static_cast<float>(mapWidth >> 1) - kRdata_140172114;   // 0x140172114
@@ -418,10 +417,7 @@ void PositionRawMaterial(Component* self, int cellIndex, float rotation) {
     float worldPos[3] = {0, 0, 0};
     Reimpl_MapGetTerrainPos(map, worldPos, localPos, '\0', nullptr);   // 0x14009f3e0
 
-    // [standalone] objB = the spawned item entity's ModelComponent (visual transform).
-    // Inert/absent on the freshly cloned raw-material entity in standalone → guard the
-    // transform writes (the economy accounting in the caller is unaffected).
-    if (objB) {
+    {
         float yaw = rotation, pitch = 0.0f;
         // FromYawPitchOffset out (7 dwords copied to +0x148..+0x160)
         Math::Transform xform = Math::Transform::FromYawPitchOffset(
