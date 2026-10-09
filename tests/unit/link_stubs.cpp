@@ -100,3 +100,15 @@ const ArraySpec kSpec_InterpTransform = {
     &UnlinkedLayerAssign, &UnlinkedLayerInit, nullptr, true,
     0, 0, 0, 0, 0, 0 };
 } }  // namespace rtcoll::gfxanim
+
+// ============================================================================
+// ENDGAME B7 (CTOR): `System::Random::Random()` (0x1800c7f20) is a real ctor
+// now, so every by-value `Object::InternalFactory` a host test builds (the
+// FactoryScope fixtures) runs it. Its body is in runtime/src/system/
+// value_types.cpp, which `make unit` does not link (sources.mk). The tests
+// never read the Random's state (Rand is `g_unitInternalRandHook`), so the
+// host body leaves the bytes as the implicit ctor did before B7: it does
+// nothing. NOT an UnlinkedBody abort, because it IS driven.
+// ============================================================================
+#include "../../runtime/types/system/Value.h"
+System::Random::Random() {}

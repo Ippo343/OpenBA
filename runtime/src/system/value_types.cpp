@@ -145,19 +145,25 @@ uint32_t RandImpl(System::Random* self) {
 // against (same rationale as Math::Vector2's default ctor in vector.cpp).
 // Retail seeds from `(uint)_time64(&t)`; std::time's 64-bit time_t on this
 // target truncates to unsigned the same way.
-// B.3.4b: NOT a real constructor, deliberately — see the banner at the top of
-// this file and Value.h's. It keeps the free-function shape and the door's
-// registered address.
-System::Random* RtSystem_Random_Ctor(System::Random* self) {
-    SeedMT(self, static_cast<uint32_t>(std::time(nullptr)));
-    return self;
+// ENDGAME B7 (CTOR, D5): the REAL constructor; the `RtSystem_Random_Ctor` door
+// whose body this was is deleted with its last caller. Retail's order is kept:
+// the `index = 0` store (0x1800c7f2d) precedes the _time64 call (0x1800c7f3c),
+// mt[0] is stored from its result (0x1800c7f4c), then the recurrence.
+System::Random::Random() {
+    _index = 0;
+    _mt[0] = static_cast<uint32_t>(std::time(nullptr));
+    for (int i = 1; i < 624; ++i) {
+        uint32_t prev = _mt[i - 1];
+        _mt[i] = (prev ^ (prev >> 30)) * 0x6c078965u + static_cast<uint32_t>(i);
+    }
 }
 
 // ??0Random@System@@QEAA@I@Z  retail 0x1800c7ed0
-// B.3.4b: NOT a real constructor either, same reason.
-System::Random* RtSystem_Random_CtorSeed(System::Random* self, uint32_t seed) {
-    SeedMT(self, seed);
-    return self;
+// ENDGAME B7 (CTOR, D5): the REAL constructor (the `RtSystem_Random_CtorSeed`
+// door is deleted). 0x1800c7ed4 index = 0, 0x1800c7ee0 mt[0] = seed, then the
+// 623-step recurrence 0x1800c7ef0..0x1800c7f13: SeedMT's body.
+System::Random::Random(uint32_t seed) {
+    SeedMT(this, seed);
 }
 
 // ?RandFloat@Random@System@@QEAAMXZ  retail 0x1800c7d40

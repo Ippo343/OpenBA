@@ -837,9 +837,10 @@ NewGameDialog::NewGameDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
       editSeed(nullptr), buttonOk(nullptr), textDescription(nullptr),
       mapGeneratorList(nullptr), climateGeneratorList(nullptr),
       terrainGeneratorList(nullptr) {
-    // System::Random sub-object at +0x118: ??0Random@System@@QEAA@XZ, whose body is
-    // RtSystem_Random_Ctor (called by name, B3R).
-    RtSystem_Random_Ctor(&random);
+    // The System::Random member at +0x118 was built by its real ctor
+    // ??0Random@System@@QEAA@XZ (0x1800c7f20) in the member initialisers, after the
+    // twelve element pointers and before mainMenu: retail's position (the
+    // reflected ctor 0x140071120 calls it at 0x1400711a9 the same way).
     mainMenu = parentMenu;
 }
 

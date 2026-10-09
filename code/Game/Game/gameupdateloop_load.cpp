@@ -107,7 +107,7 @@ extern "C" void  StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLo
 // namespace-scope atomic).
 
 // B3R: the Runtime ctor/dtor doors Load used to resolve by name are called by name:
-// RtSystem_Random_CtorSeed (system/Value.h), RtPicking_Scene_Ctor (picking/Scene.h),
+// System::Random(uint32_t) (system/Value.h), RtPicking_Scene_Ctor (picking/Scene.h),
 // RtUi_UserInterface_Ctor (ui/UserInterface.h), RtGraphics_AnimationManager_Ctor
 // (graphics/Animation.h), RtSave_SaveLoad_Ctor / RtSave_SavedState_Dtor
 // (save/SaveLoad.h). The "[GUL::Load] resolves:" stderr line went with the cache.
@@ -487,13 +487,11 @@ static void WeatherSimulation_Construct(WeatherSimulation* w) {
     w->temperature = 0.0f;                    // the ctor's dword 0 (the same bits)
     w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
     w->field_0x30 = 0.0f;
-    System::Random rng1;   // trivial class: no code until the ctor door below
+    // Retail's order: ctor, draw, ctor, draw (each ??0Random 0x1800c7f20; no dtor).
+    System::Random rng1;
+    const uint32_t seed1 = rng1.Rand();
     System::Random rng2;
-    uint32_t seed1 = 0, seed2 = 0;
-    RtSystem_Random_Ctor(&rng1);
-    seed1 = rng1.Rand();
-    RtSystem_Random_Ctor(&rng2);
-    seed2 = rng2.Rand();
+    const uint32_t seed2 = rng2.Rand();
     RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
     w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
     w->field_0x48 = 0.0f;
@@ -780,7 +778,7 @@ void GameUpdateLoop::Load() {
     // POINTERS (the profession BST is confirmed pointer-keyed), which ASLR reorders.
     {
         System::Random* mem = AllocSub<System::Random>(0x9c4, 4);
-        if (mem) RtSystem_Random_CtorSeed(mem, static_cast<uint32_t>(m_seed));
+        if (mem) ::new (mem) System::Random(static_cast<uint32_t>(m_seed));   // ??0Random@System@@QEAA@I@Z 0x1800c7ed0
         m_random = mem;
     }
 

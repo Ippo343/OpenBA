@@ -169,9 +169,7 @@ void NoiseUI::GenerateNoise() {
     float invScale = uvScale / scale;
 
     // Create Random with time-based seed, get two random seeds.
-    // System::Random declares no ctor: the object is storage until its ctor body runs.
-    System::Random random;
-    RtSystem_Random_Ctor(&random);   // ??0Random@System@@QEAA@XZ
+    System::Random random;   // ??0Random@System@@QEAA@XZ 0x1800c7f20 (no dtor)
     int seed1 = random.RandTol(static_cast<int32_t>(0x7ffffff));
     int seed2 = random.RandTol(static_cast<int32_t>(0x7ffffff));
 

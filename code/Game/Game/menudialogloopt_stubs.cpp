@@ -238,14 +238,11 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 // deleted at B.3.9 EXA) duplicated, with the vtable store the compiler's.
 MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
     : Engine::DialogLoopT(filename) {
-    // The member initialisers have run Audio::Scene::Scene() on +0xb30
-    // (??0Scene@Audio@@ 0x1800e0160) and zeroed the three array headers
-    // +0xbd0..+0xbf8 (retail's last six qword stores). Retail calls the Random
-    // ctor first and the Scene ctor second; here the Scene member is built before
-    // this body seeds _random. The two touch disjoint bytes: the Random ctor reads
-    // the wall clock and writes only +0x168..+0xb2c, the Scene ctor allocates and
-    // writes only +0xb30..+0xb67.
-    RtSystem_Random_Ctor(&_random);       // System::Random at +0x168  ??0Random@System@@ 0x1800c7f20
+    // The member initialisers have run System::Random::Random() on +0x168
+    // (??0Random@System@@ 0x1800c7f20, retail's CALL at 0x14009bb2e), then
+    // Audio::Scene::Scene() on +0xb30 (??0Scene@Audio@@ 0x1800e0160, 0x14009bb3b):
+    // retail's order, which is declaration order. They also zeroed the three
+    // array headers +0xbd0..+0xbf8 (retail's last six qword stores).
     // Zero-init the plain fields +0xb68..+0xbcf: every field from _pendingLoop up
     // to the first array member, pad included (retail's qword stores; the
     // memset stops before _particleArray, which its own ctor zeroed).

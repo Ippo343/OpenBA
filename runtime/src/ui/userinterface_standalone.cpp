@@ -125,11 +125,9 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
     UserInterface* const self = static_cast<UserInterface*>(ui);   // callback context: retail's message-callback user data is void* (PEAX, 0x180120310), viewed as the UserInterface that registered it  // CAST-OK: user_data
     self->Update(timeRef);
 
-    // 0x180120336..0x180120386 -- the inlined System::Random default ctor.
-    // `System::Random` declares no constructor, so the object below is
-    // storage until the ctor body runs on it.
+    // 0x180120336..0x180120386 -- the inlined System::Random default ctor
+    // (0x1800c7f20); no dtor.
     System::Random rng;
-    RtSystem_Random_Ctor(&rng);                                        // 0x1800c7f20
 
     Audio::Scene* const scene = self->_audioScene;                             // 0x180120388, +0x90
     if (scene) {                                                       // 0x18012038f

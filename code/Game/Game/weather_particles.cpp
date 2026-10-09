@@ -183,7 +183,6 @@ void WeatherParticleGeometry::Configure(Weather* d) {
     // ([0x140151400]) on it: the world Random (GameUpdateLoop::m_random) is not
     // advanced.
     System::Random random;
-    RtSystem_Random_Ctor(&random);
 
     // Normalized velocity direction (Weather.velocityDir @ +0x2c).
     float dir[3];
