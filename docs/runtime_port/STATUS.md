@@ -20,6 +20,27 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B6 (THE RETAIL-DIFFERENCE TASK) CLOSED — 2026-10-09: castmetric 89 -> 26 (the 63 "retail-difference task"
+  casts are gone; the 26 are 23 named prerequisite + 3 ruled + 0 work).** Every one of the 63 marked a place
+  where the tree did something retail does not (`known_port_issues.md` §13-14); each difference is fixed in
+  its own `behaviour:` commit quoting the retail instructions read (160 `behaviour:` commits, one per retail
+  BODY): the 14b save-format rows first (every one byte-identical, the golden unchanged), then the wrong
+  callee / object / overload rows (WORK, COMP, UI), the construction / destruction rows (C), the guards
+  retail lacks (14 cast lines and ~60 KEPT bullets dropped with the instruction range that has no test;
+  the kept ones ruled D4(a)/(b) with the harness route or PORT GAP named), row 13 SETTLED (TRADE: the stale
+  `TradeWork` entry was the mirrored find-remove core, already fixed by a4ba1f7ed / row 742 — bisected and
+  re-proven), and ten forwarders deleted once every caller called the member. Ran as: the coordinator's
+  SAVE unit -> Block 0 inventory (`b6_session/INVENTORY.md`) -> rule sheet `endgame_b/B6_RULES.md` -> five
+  opus blocks by file set (WORK, COMP, UI, C; D for the no-cast guard lines) + TRADE on the stress route ->
+  11 gated merges (`b6_session/GATE_TABLE.md`), 0 problems left standing -> independent audit
+  (`b6_session/AUDIT.md`: 104 OK / 4 FINDING / 2 QUESTION, all documentary, applied in CLOSE-D) -> step close.
+  Invariants unchanged (new game 5683 / 0, tutorial 5773 / 12, typetable `b983f144`, 0 new warnings, unit
+  920 / 0); `worldcmp.sh` vs `oldbase` identical. Acceptance: 1 line off (10 = 19, the accepted miscount);
+  line 01 = 26 of 26. FOUND: the resave FIXTURE held 11 citizens with a null profession (retail never makes
+  one): once `CheckEducation` read it unguarded as retail, the loaded game died after a PASSed roundtrip —
+  fixture and golden RE-CUT (row 990, `tools/resave_gate/README.md`), no guard. RESIDUE handed to B7
+  (rows 991-994, 942, 921 / 922, the §14 rows D did not reach): `endgame_b/NEXT_SESSION.md` §2. Numbers:
+  `b6_session/CLOSE_NUMBERS.md`. Next: the named-prerequisite pass (23 casts -> 0).
 - **B5 (THE DX11 SEAM) CLOSED — 2026-10-05: castmetric 336 -> 89 (dx11/ 240 -> 0; the 89 are 63
   retail-difference + 23 named prerequisite + 3 ruled + 0 work).** The twelve `VideoDX11::*Data` PODs are
   real `final` subclasses of the twelve `Video::*Data` bases, which flipped from `DeletingDtor(unsigned)` to
