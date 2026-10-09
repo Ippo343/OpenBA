@@ -256,7 +256,7 @@ void CropFieldComponent::Persist(IO::Stream& stream) {
     serializer.Serialize(hasCrop, nullptr);
 
     // ExternalPtr<ComponentDescription> at +0x50
-    Reimpl_ExternalPtr_Serialize_StringTable(&cropDescription, &serializer);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&cropDescription, &serializer);   // 0x140002340
 
     // Serialize entity count from +0x60
     int entityCount = slots.count;

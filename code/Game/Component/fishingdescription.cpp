@@ -40,7 +40,7 @@ FishingDescription::FishingDescription()
 // [5] 0x14011f170: stream order as retail.
 bool FishingDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_fish, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_fish, &ser);
     ser.Serialize(_terrainMask, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_u28, nullptr);   // version-gated, as retail
     return true;

@@ -74,7 +74,7 @@ bool Toolbar::Serialize(IO::Stream& stream) {
 
     // ExternalPtr fields
     Reimpl_ExternalPtr_Serialize_StringTable(&_field20, serializer);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field28, serializer);
+    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_field28, serializer);
 
     // String fields
     _field30.Serialize(*serializer);
@@ -87,7 +87,7 @@ bool Toolbar::Serialize(IO::Stream& stream) {
     Reimpl_ExternalPtr_Serialize_Toolbar(&_field60, serializer);
 
     // ExternalPtr<BuildingDescription> at +0x58
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field58, serializer);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_field58, serializer);
 
     // Encoding vcall 0x98 (the uint door) for +0x40
     serializer->Serialize(_field40, nullptr);

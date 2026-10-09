@@ -60,7 +60,7 @@ int32_t FrustumOutlineDescription::GetFileVersion() const {
 bool FrustumOutlineDescription::Serialize(IO::Stream& stream) {
     UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // ExternalPtr +0x68
+    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);   // ExternalPtr +0x68
     _spriteName.Serialize(ser);                                     // String      +0x70
     ser.Serialize(_width, nullptr);                                  // int +0x78
     ser.Serialize(_height, nullptr);                                 // int +0x7c

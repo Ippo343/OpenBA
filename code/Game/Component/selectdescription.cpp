@@ -49,7 +49,7 @@ SelectDescription::SelectDescription()
 // [5] 0x140055630: stream order as retail.
 bool SelectDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_ref20, &ser);
     _s28.Serialize(ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
     _s38.Serialize(ser);

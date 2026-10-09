@@ -130,7 +130,7 @@ void TradeWork::SerializeAssignments(IO::Serializer& ser) {
             }
             ser.Serialize(rec.quantity, nullptr);
             // The ExternalPtr (0x140002340 = fn_ExternalPtr_BuildSerialize).
-            Reimpl_ExternalPtr_Serialize_StringTable(&rec.resource, &ser);
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&rec.resource, &ser);
 
             InsertAssignment(rec);
         }
@@ -153,7 +153,7 @@ void TradeWork::SerializeAssignments(IO::Serializer& ser) {
                 node->value.citizen = nullptr;
             }
             ser.Serialize(node->value.quantity, nullptr);
-            Reimpl_ExternalPtr_Serialize_StringTable(&node->value.resource, &ser);
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&node->value.resource, &ser);
 
             // In-order successor.
             Node* right = node->right;

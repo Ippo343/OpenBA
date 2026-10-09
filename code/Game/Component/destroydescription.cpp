@@ -73,7 +73,7 @@ bool DestroyDescription::Serialize(IO::Stream& stream) {
     //    the cast and was stored as NULL. Only Template/IronMine.rsc and
     //    Template/Quarry.rsc author it (`ComponentDescription _replaceEntity =
     //    "destroyed"`), which is why the swap was invisible for so long.
-    Reimpl_ExternalPtr_Serialize_StringTable(&_replaceEntity, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_replaceEntity, &ser);
     ser.Serialize(_damagedSkin, nullptr);
     ser.Serialize(_damagedDecal, nullptr);
     ser.Serialize(_minDamageLevel, nullptr);

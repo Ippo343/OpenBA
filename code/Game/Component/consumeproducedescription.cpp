@@ -124,11 +124,11 @@ bool ConsumeProduceDescription::Serialize(IO::Stream& stream) {
             }
             if (e.inputs) {
                 for (int j = 0; j < innerN; ++j) {
-                    Reimpl_ExternalPtr_Serialize_StringTable(&e.inputs[j].material, &ser); // ExternalPtr
+                    Reimpl_ExternalPtr_Serialize_ComponentDescription(&e.inputs[j].material, &ser); // ExternalPtr
                     ser.Serialize(e.inputs[j].count, nullptr);
                 }
             }
-            Reimpl_ExternalPtr_Serialize_StringTable(&e.product, &ser);      // ExternalPtr +0x10
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&e.product, &ser);      // ExternalPtr +0x10
             ser.Serialize(e.materialType, nullptr);                          // enum +0x18
             e.name.Serialize(ser);                                          // String +0x20
         }

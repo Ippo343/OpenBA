@@ -156,7 +156,18 @@ namespace Object { class External; }
 namespace IO { class Serializer; }
 void ExternalPtrSerialize_GraphicsMesh(::Object::External*& ref, IO::Serializer& serializer);     // 0x14001b8e0
 void ExternalPtrSerialize_Weather(::Object::External*& ref, IO::Serializer& serializer);          // 0x1400196a0
-void ExternalPtrSerialize_StringTable(::Object::External*& ref, IO::Serializer& serializer);      // 0x14000bf40, 0x14000b7b0, 0x14000bd30, 0x140002340, 0x140018020
+void ExternalPtrSerialize_StringTable(::Object::External*& ref, IO::Serializer& serializer);      // 0x14000bf40 (B7 LX: that instantiation only)
+void ExternalPtrSerialize_ComponentDescription(::Object::External*& ref, IO::Serializer& serializer);  // 0x140002340
+void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& serializer);  // 0x140018020
+void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000bd30
+void ExternalPtrSerialize_PickingMesh(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000b7b0
+void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer);  // 0x1400019a0
+void ExternalPtrSerialize_PointList(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000ab20
+void ExternalPtrSerialize_Particle(::Object::External*& ref, IO::Serializer& serializer);  // 0x14000a910
+void ExternalPtrSerialize_AnimationGroup(::Object::External*& ref, IO::Serializer& serializer);  // 0x140035b40
+void ExternalPtrSerialize_Dialog(::Object::External*& ref, IO::Serializer& serializer);  // 0x140028650
+void ExternalPtrSerialize_ElementDescription(::Object::External*& ref, IO::Serializer& serializer);  // 0x140027ad0
+void ExternalPtrSerialize_DialogControllerConfig(::Object::External*& ref, IO::Serializer& serializer);  // 0x140039840
 void ExternalPtrSerialize_Toolbar(::Object::External*& ref, IO::Serializer& serializer);
 void ExternalPtrSerialize_EnvironmentDesc(::Object::External*& ref, IO::Serializer& serializer);  // 0x1400192a0
 void ExternalPtrSerialize_Typed_7140(::Object::External*& ref, IO::Serializer& serializer);       // 0x140007140
@@ -181,6 +192,17 @@ template <class T> inline void Reimpl_ExternalPtr_Serialize_Typed_7140(T* f, IO:
 template <class T> inline void Reimpl_ExternalPtr_Serialize_MapGenerator(T* f, IO::Serializer* s)     { ExternalPtrSerializeSlot<&ExternalPtrSerialize_MapGenerator>(f, s); }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_TerrainGenerator(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_TerrainGenerator>(f, s); }
 template <class T> inline void Reimpl_ExternalPtr_Serialize_ClimateGenerator(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_ClimateGenerator>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_ComponentDescription(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_ComponentDescription>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_Profession(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Profession>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_SpriteSheet(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_SpriteSheet>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_PickingMesh(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_PickingMesh>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_SoundEffect(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_SoundEffect>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_PointList(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_PointList>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_Particle(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Particle>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_AnimationGroup(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_AnimationGroup>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_Dialog(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_Dialog>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_ElementDescription(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_ElementDescription>(f, s); }
+template <class T> inline void Reimpl_ExternalPtr_Serialize_DialogControllerConfig(T* f, IO::Serializer* s) { ExternalPtrSerializeSlot<&ExternalPtrSerialize_DialogControllerConfig>(f, s); }
 
 // ---- serialize_externals_array.cpp
 namespace IO { class Serializer; }

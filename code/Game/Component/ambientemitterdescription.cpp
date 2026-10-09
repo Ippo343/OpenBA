@@ -87,7 +87,7 @@ bool AmbientEmitterDescription::Serialize(IO::Stream& stream) {
     Audio::SoundEffect** buf = _emitters;
     if (buf) {
         for (int i = 0; i < count; ++i) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&buf[i], &ser);
+            Reimpl_ExternalPtr_Serialize_SoundEffect(&buf[i], &ser);
         }
     }
     ser.Serialize(_enabled, nullptr);

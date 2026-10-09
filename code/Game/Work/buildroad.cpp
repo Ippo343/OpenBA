@@ -133,7 +133,7 @@ void BuildRoad::Persist(IO::Stream& stream) {
     }
 
     // ExternalPtr serialize for building description (+0x50)
-    Reimpl_ExternalPtr_Serialize_StringTable(&field_50, &serializer);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&field_50, &serializer);
 
     // Version-dependent fields
     int version = serializer.GetVersion();

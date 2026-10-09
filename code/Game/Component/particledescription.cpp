@@ -112,7 +112,7 @@ bool ParticleDescription::Serialize(IO::Stream& stream) {
     }
 
     for (int i = 0; i < count; ++i, ++e) {
-        Reimpl_ExternalPtr_Serialize_Typed_7140(&e->particle, &ser);   // elem+0
+        Reimpl_ExternalPtr_Serialize_Particle(&e->particle, &ser);   // elem+0
         e->name.Serialize(ser);                                       // elem+8
         ser.Serialize(e->followNode, nullptr);
         ser.Serialize(e->autoStart, nullptr);
@@ -122,7 +122,7 @@ bool ParticleDescription::Serialize(IO::Stream& stream) {
         e->prewarm.Serialize(ser);    // t0 (elem+0x18) SECOND
     }
 
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_attachPoints, &ser);   // attach points (+0x20)
+    Reimpl_ExternalPtr_Serialize_PointList(&_attachPoints, &ser);   // attach points (+0x20)
     return true;
 }
 

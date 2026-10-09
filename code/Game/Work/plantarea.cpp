@@ -628,7 +628,7 @@ void PlantArea::Persist(IO::Stream& stream) {
     ser.Serialize(cellCountBuf[0], field_58._data, nullptr);
 
     // Serialize ExternalRef at +0x68
-    Reimpl_ExternalPtr_Serialize_StringTable(&field_68, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&field_68, &ser);
 }   // ~Serializer
 
 

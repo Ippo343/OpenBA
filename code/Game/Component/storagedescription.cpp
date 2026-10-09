@@ -89,7 +89,7 @@ bool StorageDescription::Serialize(IO::Stream& stream) {
     }
     for (int i = 0; i < count; ++i, ++e) {
         ser.Serialize(e->_count, nullptr);                                  // int field, elem+8
-        Reimpl_ExternalPtr_Serialize_StringTable(&e->_resource, &ser);      // External* ref (elem+0), 0x140002340
+        Reimpl_ExternalPtr_Serialize_ComponentDescription(&e->_resource, &ser);      // External* ref (elem+0), 0x140002340
     }
     return true;
 }

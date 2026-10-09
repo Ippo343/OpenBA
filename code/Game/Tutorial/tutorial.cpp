@@ -89,7 +89,7 @@ bool Tutorial::Serialize(IO::Stream& stream) {
     TutBase_SerializeStepArray(&serializer, localCount, steps._data, nullptr);   // 0x140026fb0
 
     // 4. Serialize the ExternalPtr at +0x20
-    Reimpl_ExternalPtr_Serialize_StringTable(&setup, &serializer);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&setup, &serializer);   // 0x140002340
 
     // 5. Serialize currentStep at +0x38
     serializer.Serialize(currentStep, nullptr);

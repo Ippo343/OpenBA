@@ -62,7 +62,7 @@ bool SpawnDescription::Serialize(IO::Stream& stream) {
     if (count > 0) {
         Entry* elem = _entries.GetData();
         for (int i = 0; i < count && elem; ++i, ++elem) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&elem->_template, &ser);   // 0x140002340
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&elem->_template, &ser);   // 0x140002340
             ser.Serialize(elem->_minSpawnAge, nullptr);
             ser.Serialize(elem->_maxSpawnAge, nullptr);
         }

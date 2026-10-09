@@ -62,7 +62,7 @@ bool PopulationDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_densityGrowth, nullptr);
     ser.Serialize(_i44, nullptr);
     ser.Serialize(_rescan, nullptr);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_herdTemplate, &ser);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_herdTemplate, &ser);   // 0x140002340
     _name.Serialize(ser);
     return true;
 }

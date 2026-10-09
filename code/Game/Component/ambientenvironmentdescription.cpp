@@ -131,7 +131,7 @@ bool AmbientEnvironmentDescription::Serialize(IO::Stream& stream) {
         AmbientEnvironmentBiome* elem = _entries._data;
         for (int i = 0; i < count; ++i, ++elem) {
             ser.Serialize(elem->terrainMask, nullptr);                          // enum
-            Reimpl_ExternalPtr_Serialize_StringTable(&elem->entityFilter, &ser);  // ExternalPtr, 0x140002340
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&elem->entityFilter, &ser);  // ExternalPtr, 0x140002340
             AmbientExternalPtrSerialize_Reimpl(&elem->daySound, &ser);           // ExternalPtr, 0x1400019a0
             AmbientExternalPtrSerialize_Reimpl(&elem->nightSound, &ser);         // ExternalPtr, 0x1400019a0
             ser.Serialize(elem->weight, nullptr);                               // int

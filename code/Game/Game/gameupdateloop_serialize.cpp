@@ -264,7 +264,7 @@ static void GoalRefTree_Serialize_e2e0(AvlTreeHead<PinnedToolNode>* set,
             PinnedToolEntry rec;
             bool used = false;
             rec.key = nullptr; rec.x = 0; rec.y = 0;
-            Reimpl_ExternalPtr_Serialize_StringTable(&rec.key, serializer);   // 0x140002340
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&rec.key, serializer);   // 0x140002340
             serializer->Serialize(rec.x, nullptr);
             serializer->Serialize(rec.y, nullptr);
             serializer->Serialize(used, nullptr);
@@ -278,7 +278,7 @@ static void GoalRefTree_Serialize_e2e0(AvlTreeHead<PinnedToolNode>* set,
         PinnedToolNode* cur = node;
         while (cur->left) cur = cur->left;
         while (cur) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&cur->key, serializer);   // 0x140002340
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&cur->key, serializer);   // 0x140002340
             serializer->Serialize(cur->x, nullptr);
             serializer->Serialize(cur->y, nullptr);
             serializer->Serialize(cur->active, nullptr);

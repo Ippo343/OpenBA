@@ -42,7 +42,7 @@ bool QuarryDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ser.Serialize(_maxDepth, nullptr);
     ser.Serialize(_initialDepth, nullptr);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_floorMesh, &ser);   // 0x14000b7b0
+    Reimpl_ExternalPtr_Serialize_PickingMesh(&_floorMesh, &ser);   // 0x14000b7b0
     return true;
 }
 

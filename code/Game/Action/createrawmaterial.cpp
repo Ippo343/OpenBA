@@ -98,7 +98,7 @@ void CreateRawMaterial::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 3);
 
     // Type reference (+0x20)
-    Reimpl_ExternalPtr_Serialize_StringTable(&descEntity, &ser);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&descEntity, &ser);   // 0x140002340
 
     // The working citizen (+0x28)
     sourceBuilding.InternalBasePtr::Serialize(ser);

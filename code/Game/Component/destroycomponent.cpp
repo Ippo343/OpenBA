@@ -82,7 +82,7 @@ void DestroyComponent::Persist(IO::Stream& stream) {
     ser.Serialize(progress, nullptr);
     ser.Serialize(progressTarget, nullptr);
     ser.Serialize(hasBuildComponent, nullptr);   // +0x51
-    Reimpl_ExternalPtr_Serialize_StringTable(&upgradeTarget, &ser);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&upgradeTarget, &ser);   // 0x140002340
     ser.Serialize(burning, nullptr);             // +0x50
     burnTime.Serialize(ser);
 }

@@ -124,7 +124,7 @@ TradeDescription::~TradeDescription() {
 // [5] 0x14005c7f0: stream order as retail.
 bool TradeDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_merchantTemplate, &ser);   // ExternalPtr +0x30
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_merchantTemplate, &ser);   // ExternalPtr +0x30
 
     // merchant array @ +0x48 (count @ +0x50)
     ser.Serialize(_merchantCount, nullptr);
@@ -169,7 +169,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
         }
     }
 
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);   // ExternalPtr +0x20
+    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_ref20, &ser);   // ExternalPtr +0x20
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref28, &ser);   // ExternalPtr +0x28
 
     // goods-category array @ +0x38 (count @ +0x40)

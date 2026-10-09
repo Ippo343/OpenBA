@@ -797,7 +797,7 @@ void WorkPlaceComponent::Persist(IO::Stream& stream) {
         }
     } else {
         // Version >= 1: serialize via FUN_140018020
-        Reimpl_ExternalPtr_Serialize_StringTable(&profession, &ser);
+        Reimpl_ExternalPtr_Serialize_Profession(&profession, &ser);
     }
 }
 // ============================================================

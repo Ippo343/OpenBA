@@ -49,8 +49,8 @@ WorkPlaceDescription::WorkPlaceDescription()
 // [5] 0x14012f420: stream order as retail.
 bool WorkPlaceDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_profession0, &ser);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_profession1, &ser);
+    Reimpl_ExternalPtr_Serialize_Profession(&_profession0, &ser);
+    Reimpl_ExternalPtr_Serialize_Profession(&_profession1, &ser);
     return true;
 }
 

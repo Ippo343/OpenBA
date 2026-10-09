@@ -429,7 +429,7 @@ void SerializeLegacyKeyIntTree(LegacyKeyIntNode** rootPtr, int32_t* countField, 
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             uint64_t key = 0;
-            Reimpl_ExternalPtr_Serialize_StringTable(&key, serializer);
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&key, serializer);
             int32_t value = 0;
             serializer->Serialize(value, nullptr);
 
@@ -462,7 +462,7 @@ void SerializeLegacyKeyIntTree(LegacyKeyIntNode** rootPtr, int32_t* countField, 
     } else {
         LegacyKeyIntNode* node = LegacyTreeMin(*rootPtr);
         while (node) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&node->key, serializer);
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&node->key, serializer);
             serializer->Serialize(node->value, nullptr);
             node = LegacyTreeSucc(node);
         }

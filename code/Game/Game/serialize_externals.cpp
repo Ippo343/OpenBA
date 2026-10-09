@@ -26,6 +26,18 @@
 #include "Game/Weather.h"   // Weather::TypeId() (ENDGAME B.3.9 TR)
 #include "graphics/GraphicsMesh.h"   // Graphics::GraphicsMesh::TypeId() (ENDGAME B.3.9 TR)
 #include "ui/StringTable.h"   // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
+// B7 LX (row 992): the type of each further instantiation the StringTable core used to serve.
+#include "Component/ComponentDescription.h"   // ComponentDescription::TypeId() -- cell 0x1401c7318
+#include "Game/Profession.h"                  // Profession::TypeId() -- cell 0x1401c5a98
+#include "ui/SpriteSheet.h"
+#include "picking/PickingMesh.h"
+#include "audio/SoundEffect.h"
+#include "pathfinding/PointList.h"
+#include "graphics/Particle.h"
+#include "graphics/AnimationGroup.h"
+#include "ui/Dialog.h"
+#include "ui/ElementDescription.h"
+#include "ui/DialogControllerConfig.h"
 #include "Game/serialize_externals.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External / ExternalFactory
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
@@ -164,8 +176,60 @@ void ExternalPtrSerialize_Weather(::Object::External*& ref, IO::Serializer& seri
     SerializeExternalRefChecked(ref, serializer, Weather::TypeId(), "Weather", "ExternalPtr::Serialize");
 }
 
+// 0x14000bf40 -- ExternalPtr<UI::StringTable>::Serialize (the import ?_typeInfo@StringTable@UI@@,
+// slot 0x140151488). B7 LX (row 992): it serves THAT instantiation only; the four other
+// retail bodies it used to stand for test other types and have their own cores below.
 void ExternalPtrSerialize_StringTable(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, UI::StringTable::TypeId(), "StringTable", "ExternalPtr::Serialize");
+}
+
+// ---- B7 LX (row 992): one core per retail instantiation, each testing the ONE type cell
+// its retail body reads before `CALL [0x140152a98]` (IsDerivedFrom). The exe cells are read
+// as a dword; the Runtime types through their import slot (`MOV RCX,[slot]; MOV EDX,[RCX]`).
+// 0x140002340 -- ExternalPtr<ComponentDescription>: MOV EDX,[0x1401c7318].
+void ExternalPtrSerialize_ComponentDescription(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, ComponentDescription::TypeId(), "ComponentDescription", "ExternalPtr::Serialize");
+}
+// 0x140018020 -- ExternalPtr<Profession>: MOV EDX,[0x1401c5a98].
+void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Profession::TypeId(), "Profession", "ExternalPtr::Serialize");
+}
+// 0x14000bd30 -- ExternalPtr<UI::SpriteSheet>: import slot 0x140151480.
+void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, UI::SpriteSheet::TypeId(), "SpriteSheet", "ExternalPtr::Serialize");
+}
+// 0x14000b7b0 -- ExternalPtr<Picking::PickingMesh>: import slot 0x140151468.
+void ExternalPtrSerialize_PickingMesh(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Picking::PickingMesh::TypeId(), "PickingMesh", "ExternalPtr::Serialize");
+}
+// 0x1400019a0 -- ExternalPtr<Audio::SoundEffect>: import slot 0x140152a80 (0x140001c70 is
+// its array loop).
+void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Audio::SoundEffect::TypeId(), "SoundEffect", "ExternalPtr::Serialize");
+}
+// 0x14000ab20 -- ExternalPtr<Pathfinding::PointList>: import slot 0x140151448.
+void ExternalPtrSerialize_PointList(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Pathfinding::PointList::TypeId(), "PointList", "ExternalPtr::Serialize");
+}
+// 0x14000a910 -- ExternalPtr<Graphics::Particle>: import slot 0x140151420.
+void ExternalPtrSerialize_Particle(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Graphics::Particle::TypeId(), "Particle", "ExternalPtr::Serialize");
+}
+// 0x140035b40 -- ExternalPtr<Graphics::AnimationGroup>: import slot 0x140152980.
+void ExternalPtrSerialize_AnimationGroup(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, Graphics::AnimationGroup::TypeId(), "AnimationGroup", "ExternalPtr::Serialize");
+}
+// 0x140028650 -- ExternalPtr<UI::Dialog>: import slot 0x140151728.
+void ExternalPtrSerialize_Dialog(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, UI::Dialog::TypeId(), "Dialog", "ExternalPtr::Serialize");
+}
+// 0x140027ad0 -- ExternalPtr<UI::ElementDescription>: import slot 0x140151a50.
+void ExternalPtrSerialize_ElementDescription(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, UI::ElementDescription::TypeId(), "ElementDescription", "ExternalPtr::Serialize");
+}
+// 0x140039840 -- ExternalPtr<UI::DialogControllerConfig>: import slot 0x1401529c0.
+void ExternalPtrSerialize_DialogControllerConfig(::Object::External*& ref, IO::Serializer& serializer) {
+    SerializeExternalRefChecked(ref, serializer, UI::DialogControllerConfig::TypeId(), "DialogControllerConfig", "ExternalPtr::Serialize");
 }
 
 void ExternalPtrSerialize_Toolbar(::Object::External*& ref, IO::Serializer& serializer) {
