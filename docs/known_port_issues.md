@@ -256,6 +256,29 @@ assignment with no CompleteTask left on its stack (a builder that pushes without
 e.g. 0x1400c0ad0 with its cancel flag 0, runs on top of the old chain). SUSPECTED, not CONFIRMED.
 No `behaviour:` commit; no check added.
 
+B6 TRADE, 2026-10-09: found by bisect and already fixed on main. On 0518766d0, the commit
+that filed this row, the route's debug exe hangs at shutdown on the default budget (exit 4,
+frame 12,953). The main thread spins in `TradeWork::Cleanup` (0x1400f6be0) under
+`EntityList_Shutdown`: it clears the leftmost citizen's stack and the CompleteTask cancel
+never takes the citizen out of the set. That is the same unremoved entry the Validate fault
+walks once the citizen is freed. A first-parent bisect of 0518766d0..338120596 on that signal
+names merge dfea96f41, commit a4ba1f7ed (row 742). The shared find-remove core 0x14002c690
+under `TradeWork::OnComplete` / `OnCancel` walked mirrored (right on key < node), so a removal
+found its node only at the root or on the mirrored path. Restoring the mirrored walk on
+338120596 brings it back: 52 of 70 slot 6 / 7 removals missed and the same Cleanup hang
+returned (exit 4, frame 12,527). On 338120596 the route is clean on both exes with
+`BANISHED_STRESS_FRAMES=40000`: perf exit 0, 65 trades, frame 94,299; debug exit 0,
+65 trades, frame 83,828. Every insert met a removal that found its node (135/135 and
+143/143). Both open questions above are answered: the death path does reach
+`CharacterComponent::OnRemove` (`MarkEntityForRemoval`, entity flags 0xcf, bit 1 set), and
+a citizen holding an entry with no CompleteTask is pruned by Validate while it lives. The
+one retail difference on the path, `CompleteTask::CheckEntity`'s null singleton / scheduler
+return, is dropped in 90d256918 (0x1400c5ac0 has none). The 14d KEPT (WORK-c) bullet naming
+it is settled by that commit. `AbstractImpl`'s twin guard (14d KEPT ACT-b) is left to block D.
+No trader died while still in the set on any run, so the death-to-OnCancel link ran only as
+code read. | FIXED (B6 TRADE, 90d256918): the stale entry was row 742's mirrored 0x14002c690
+walk (fixed in a4ba1f7ed); the CheckEntity guard retail lacks is dropped.
+
 ## 14. Differences from retail found by the B.4 blocks and left — a list (2026-09-29)
 
 Each was found by a B.4 block while it converted the body, read against retail by that block, and

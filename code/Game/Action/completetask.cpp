@@ -112,11 +112,12 @@ int  CompleteTask::AbstractImpl(ActionStack* actionStack) {
 
 // ============================================================
 // CheckEntity (0x1400c5ac0, vtable slot 8)
-// Resolves task index, calls task reassignment.
+// Resolves task index, calls task reassignment. Retail reads the singleton and its
+// +0x118 scheduler unguarded (0x1400c5af4 / 0x1400c5aff): no null test (B6 TRADE, row 13).
+// This is the removal half of every Work that tracks a citizen through its CompleteTask
+// (TradeWork::OnCancel, slot 7): the action-stack clear 0x1400c5400 reaches it.
 // ============================================================
 void CompleteTask::CheckEntity() {
-    if (GameUpdateLoop::_singleton == nullptr ||
-        GameUpdateLoop::_singleton->m_tutorial == nullptr) return;   // inert task mgr -> no-op
     // Lazy-resolve task index
     if (this->taskIndex == 0x7FFFFFFF) {
         this->taskIndex = workEntity->field_0x30;
