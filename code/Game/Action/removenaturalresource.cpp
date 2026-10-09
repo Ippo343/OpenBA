@@ -98,21 +98,13 @@ int  RemoveNaturalResource::AbstractImpl(ActionStack* actionStack) {
     // The resource entity's NaturalResourceComponent (+0x28)
     NaturalResourceComponent* nrComp = _field28->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
 
-    // Standalone-safety: the NR component find can resolve null when the action's target
-    // (+0x28) is not wired to a live tree entity. In retail it is always a valid natural
-    // resource, so the original derefs local_res8+0x18 unconditionally. Guard so the
-    // organic forester cut sequence (which now reaches here — the MoveTo/arrival keystone
-    // makes the citizen actually arrive at the tree) is crash-safe rather than dereffing
-    // null+0x18. The diagnostic reports the target so the cut-sequence target wiring (the
-    // remaining economy gap, PerformWork_Action_Ctor3) can be closed. Returning 0 completes
-    // the action so the citizen isn't wedged. The live-world path (non-null) is unchanged.
-    if (nrComp == nullptr) {
-        return 0;
-    }
+    // B6 (14d G71): 0x1400cab10 reads the found component's +0x18 with no test (CheckPtr,
+    // then obj = [local_res8+0x18]); the old guard's cause, the swapped
+    // RemoveNaturalResource ctor arguments in 0x1400c1eb0's port, is fixed there.
     Description* descObj = nrComp->_description;
 
     // Check if description is NaturalResourceDescription type
-    bool isNatResDesc = ::Object::IsDerivedFromNullSafe(descObj, NaturalResourceDescription::TypeId());
+    bool isNatResDesc = descObj->IsDerivedFrom(NaturalResourceDescription::TypeId());   // cell 0x1401c7b68
     const NaturalResourceDescription* natResDesc =
         isNatResDesc ? static_cast<const NaturalResourceDescription*>(descObj) : nullptr;
 
@@ -150,7 +142,7 @@ int  RemoveNaturalResource::AbstractImpl(ActionStack* actionStack) {
 void RemoveNaturalResource::CheckEntity() {
     NaturalResourceComponent* nrComp = _field28->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
 
-    if (!nrComp) return;   // [standalone] NR component not found -> nothing to clear
+    // B6 (14d G71): 0x1400caaa0 reads [comp+0x20] with no test.
     uint32_t flagsOld = nrComp->_flags;
     uint32_t flagsNew = flagsOld & 0xFFEFFFFF;  // clear bit 20
     nrComp->_flags = flagsNew;
