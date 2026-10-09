@@ -636,22 +636,21 @@ void ReflectionImageBuffer::Render(Renderer& rend, const Scene& scene,
 
     const Math::Transform3 mirrored = cameraToWorld * reflect;
 
-    // The mirrored camera: retail copies the camera (the copy door) into a stack
-    // Camera, overwrites its transform with the mirrored one and copies THAT into
-    // the group's Camera slot. The slot ends holding the same bytes when the door
-    // copies the camera straight into it and the transform is overwritten there;
-    // `Graphics::Camera` cannot be a C++ local (its default ctor is protected, B5-4).
-    Graphics::RendererSceneEntry group;            // ctor: `_drawableIds` zeroed (+0x100)
-    group._scene        = &scene;
-    group._renderBuffer = p->_target;
-    rtgfxd::RtGraphics_Camera_CopyCtor(&group._camera, &cam);
-    group._camera._cameraToWorld = mirrored;
-    group._shaderDetail      = 0;
-    group._shader            = 2;
-    group._materialTypeFlags = 0x8001;
-    group._drawGroupIndex    = -1;
-    group._detailId          = ::Video::Configuration::_singleton->reflectionDetail;
-    // +0x0fc: never written by retail. Left as it is.
+    // The mirrored camera (B6 row 32): retail copy-constructs the camera into a
+    // stack Camera (0x1800a6dac / 0x1800a6db0 CALL 0x180017a70 on RBP-0x40),
+    // overwrites its +0x64..+0x93 transform with the mirrored one
+    // (0x1800a6db5..0x1800a6e06), then builds the scene group on the stack with
+    // the SceneGroup ctor 0x1800628d0 inlined (0x1800a6e17..0x1800a6e68: +0x00,
+    // +0x08, the Camera copy ctor from the stack Camera at +0x10, +0xe8 = 0,
+    // +0xec = 2, +0xf0 = 0x8001, +0xf4 = -1, +0xf8 = the reflection detail, the
+    // Array header zeroed; +0xfc unwritten). Both are typed locals now (the group
+    // was default-constructed and then filled field by field).
+    Graphics::Camera mirroredCamera(cam);
+    mirroredCamera._cameraToWorld = mirrored;
+    const int32_t reflectionDetail = ::Video::Configuration::_singleton->reflectionDetail;
+    Graphics::RendererSceneEntry group(&scene, p->_target, mirroredCamera,
+                                       /*shaderDetail*/ 0, /*detailId*/ reflectionDetail,
+                                       /*shader*/ 2, /*materialTypeFlags*/ 0x8001);
 
     GroupArraySetSize(&rend._sceneGroups, rend._sceneGroups._size + 1, &group);
 

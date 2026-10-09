@@ -827,13 +827,12 @@ int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBuffer,
 
     // ---- APPEND ----------------------------------------------------------
     ++rtgfxbody28::g_beginGroupAppends;
-    RendererDrawGroup temp;
-    temp._renderBuffer = renderBuffer;
-    // ??0Camera@Graphics@@QEAA@AEBV01@@Z (0x180017a70), the copy door, by name.
-    rtgfxd::RtGraphics_Camera_CopyCtor(&temp._camera, &drawCamera);
-    rtgfxd::RtGraphics_Camera_CopyCtor(&temp._cullCamera, &cullCamera);
-    temp._shader            = shader;
-    temp._materialTypeFlags = passMask;
+    // B6 row 32: the stack record is built by its own constructor, retail's
+    // stores only: +0x000, the two Camera copy ctors (??0Camera@Graphics@@QEAA@
+    // AEBV01@@Z 0x180017a70) at +0x008 / +0x0e0, +0x1b8, +0x1bc, the three zeroed
+    // Arrays. (It was default-constructed first, the two Cameras' members
+    // included, then copied over.)
+    RendererDrawGroup temp(renderBuffer, drawCamera, cullCamera, shader, passMask);
 
     //   SYMBOL:      0x1800638e0 — Collection::Array<RendererDrawGroup>::SetSize.
     //                CONFIRMED ABSENT from the export directory with pefile, not
