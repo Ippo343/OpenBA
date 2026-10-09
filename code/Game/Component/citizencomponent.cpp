@@ -123,14 +123,12 @@
 class StatusIconComponent;
 void StatusIcon_Toggle(StatusIconComponent* self, int bit, bool setFlag);
 
-// Adapter for FUN_14012c3f0 (healthComp*, flagIndex, flagValue). Null-guards the cached StatusIconComponent IBP
-// (CitizenComponent+0x280): a partial-world citizen lacking a live status-icon component
-// has it null, and StatusIcon_Toggle dereferences self+0x10 immediately. The original
-// never sees a null here (every citizen carries the component) — this guard is a
-// standalone-only safety, not a behavior change.
+// Adapter for FUN_14012c3f0 (healthComp*, flagIndex, flagValue). Retail passes [RDI+0x280]
+// with no test (0x140113254 .. 0x14011334b, five CALL 0x14012c3f0); B6 row 171 dropped the
+// null test. It still routes to StatusIcon_Toggle, not StatusIconComponent::SetFlag: that
+// copy restores the sprite setup retail's slot 11 guarantees (its own comment).
 static void CitizenStatusIcon_SetFlag(StatusIconComponent* icon, int flagIndex, char value) {
-    if (icon)
-        StatusIcon_Toggle(icon, flagIndex, value != 0);
+    StatusIcon_Toggle(icon, flagIndex, value != 0);
 }
 
 
@@ -207,14 +205,9 @@ static inline float RdataF(uint32_t bits) {
 // The per-tick lifecycle Update drives the world-state that gates the citizen Work
 // state: a citizen only gets Work (id 5) as a candidate once it is HOUSED and/or
 // EMPLOYED — both assigned here.
-// Crash-safe guards bail until the body is populated + the world singleton is live.
+// B6 row 171: retail tests none of the description, the entity or the singleton
+// (0x140112ea3 reads [0x1401c3dd8]+0x130, 0x140112ebe [RDI+0x288]).
 void CitizenComponent::Update(const System::Time* timeArg) {
-    // GUARD: Update derefs the CitizenDescription (+0x288, set by BodyInit), the
-    // owner entity (+0x10), and the GameWorld weather (+0x130). Bail until ready.
-    if (description == nullptr) return;
-    if (_entity == nullptr) return;
-    if (GameUpdateLoop::_singleton == nullptr) return;
-
     const System::Time* deltaTime = timeArg;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     // +0x130 is not the Weather resource (B4_RULES correction 5): the WeatherSimulation.
@@ -424,22 +417,9 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     // Unemployed flag
     char isUnemployed;
     Profession* profData1F0 = profession;
-    // [STANDALONE GUARD] +0x1F0 = profession object, null until assigned at gameplay
-    // (same field CitizenAI CheckEducation null-guards). In retail EVERY citizen —
-    // children included — is stamped with the default profession at spawn
-    // (FUN_140117080 → ProfessionList+0x30), and that object's +0x4C bool governs the
-    // "unemployed" icon (flag 3). A null pointer here is a standalone-only gap, NOT a
-    // genuine "no profession". The old fallback defaulted profByte=0 (== unemployed),
-    // which mislabelled EVERY not-yet-employed citizen. Children/students can never hold
-    // a workplace (+0x248 stays 0 for them), so that fallback pinned a permanent "?"
-    // no-job badge on every child. Fall back on age instead: adults with no profession
-    // stamped still read as unemployed (they legitimately need a job), but children
-    // (age < adultAge) and students (in-school, +0x208 != 0) never do — which is what
-    // isAdult already encodes (computed at the top of Update). With a real profession
-    // present (stamped SA) this branch is skipped, so retail behaviour is
-    // byte-identical.
-    char profByte = (profData1F0 != nullptr) ? profData1F0->field4C
-                                             : (isAdult ? 0 : 1);
+    // B6 row 171: 0x1401132f8 MOV RAX,[RDI+0x1f0]; 0x1401132ff CMP byte ptr [RAX+0x4c],0 --
+    // no test (every citizen carries a profession: B6_RULES C5, row 990).
+    char profByte = profData1F0->field4C;
     if (profByte == 0 && workplace == nullptr) {
         isUnemployed = 1;
     } else {
@@ -630,9 +610,8 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     if (workplace == nullptr) {
         ComponentEntity* housingResult = nullptr;
         profData1F0 = profession;
-        // [STANDALONE GUARD] +0x1F0 profession-list null until assigned → treat the
-        // +0x4C byte as 0 (unassigned profession) — same guard as the unemployed flag.
-        char profByte634 = (profData1F0 != nullptr) ? profData1F0->field4C : 0;
+        // 0x1401135db / 0x1401135e6: the +0x4C byte read with no test (B6 row 171).
+        char profByte634 = profData1F0->field4C;
         if (profByte634 == 0) {
             // Unranked profession
             housingResult = FindWorkplace();
