@@ -10,6 +10,18 @@ Run it under `tools/game_dir_lock.sh`. It needs `Documents/Banished/Save/Gate.sa
 golden was cut against md5 `68f99e06e6cdce6c17a8fb06e867b2c8`, a copy of the 2026-09-12
 autosave; copy any save to that name and delete the golden to start over). Exit 0 is PASS.
 
+## The fixture was re-cut on 2026-10-09 (B6, the retail-difference task)
+
+`Gate.sav` is now the frame-661 autosave of a NEW GAME on the B6 COMP-merge exe (`b864cd289`,
+seed 12345, medium map, `BANISHED_SAVE_TEST=600`), md5 `b197edf5650119bc55754f523cf0f800`; the
+golden was re-cut from it (23,452,937 bytes, md5 in `golden/Gate.resaved.md5`), 4/4 PASS after
+the NEW-GOLDEN run, crash log 0. The 2026-09-12 fixture is kept beside it as
+`Gate.sav.pre_b6_20260912`. WHY: that save held 11 citizens (ages 0.26-1.7 years, born under the
+tree's old birth path) with a NULL profession; retail never creates such a citizen, and once B6
+row 1 made `CheckEducation` read the profession unguarded as retail does (0x14010f7f2), every
+resave run crashed at frame 60 after a PASSed roundtrip. The upstream null was the fixture, not
+the code (known_port_issues row 990). The route's loader line is no longer the old `calls=5691`.
+
 ## What it measures
 
 The DLL-absent exe loads the save unattended (`BANISHED_AUTOLOAD`), and in the

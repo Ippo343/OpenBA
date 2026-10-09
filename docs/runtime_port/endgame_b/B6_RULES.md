@@ -179,3 +179,8 @@ row's status cell ends in FIXED / NOT A DIFFERENCE / LEFT (with the owing row). 
   The gate runs from main and is unaffected.
 - C4. Row 18 was already retail (B4 typed the four bytes `int8_t` with the signed-char overload); row 20 is
   NOT A DIFFERENCE (read: Fruit +0x30 float / +0x34 bool; LayoutDescription's enums through the uint slot).
+- C5. **A faithful crash can point at a FIXTURE.** The COMP merge's resave runs died at frame 60 once
+  `CheckEducation` read the profession unguarded (row 1): the 2026-09-12 `Gate.sav` held 11 citizens
+  with a null profession, born under the old tree. Retail never makes one; the live paths all pass
+  one; the save was the upstream null (row 990). Fixture and golden re-cut (`tools/resave_gate/README.md`);
+  no guard, no load-time fixup. The rule stands: root-cause the null, and the root may be a file.
