@@ -1336,6 +1336,9 @@ char CitizenComponent::CanFindHousing() {
         // its type-id global is unfilled. The real game always resolves it. Bail
         // "not buildable" rather than deref res8+0x2e (p[0x17]). Surfaced by the
         // BANISHED_FORCE_WORK harness setting +0x238 to a real building entity.
+        // B6 (row 171): retail has no test (0x140115c37 / 0x140115cce read [RSP+0x40]
+        // then +0x2a with none); KEPT under D4(a) because the comment names the
+        // BANISHED_FORCE_WORK harness route.
         if (res8 == nullptr) return false;
         MapCell* base = grid->cells.GetData();
         int dim = GameUpdateLoop::_singleton->m_game->size;
@@ -1352,13 +1355,10 @@ char CitizenComponent::CanFindHousing() {
         MapComponent* res8 = workplace->FindComponent<MapComponent>();   // 0x140004680
         if (tileBuildable(res8)) return 1;
     }
+    // B6 row 171: 0x140115d31 reads +0x278, 0x140115d42 its +0x68 and 0x140115d49.. the
+    // transform with no test (the "Brick 4 bring-up" null guards are gone).
     CharacterComponent* mc = character.Get();
-    if (mc == nullptr) return 0;
     ModelComponent* geom = mc->modelComponent.Get();
-    // [STANDALONE BRING-UP GUARD] mc+0x68 is the citizen's geometry/transform IBP,
-    // populated only once the CharacterComponent position pipeline is live (Brick 4).
-    // Until then it is null; bail "can't find housing" rather than deref geom+0x158.
-    if (geom == nullptr) return 0;
     int dim = grid->size;
     int x = (int)(geom->transform.translation.x + (float)(dim >> 1));
     int y = (int)(geom->transform.translation.y + (float)(dim >> 1));
