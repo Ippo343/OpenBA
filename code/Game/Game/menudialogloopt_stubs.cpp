@@ -493,11 +493,10 @@ void MenuDialogLoopT::Shutdown() {
 
 bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     StallDebug::Tick("MenuDLT::Update");
-    // The first-tick clamp below writes the caller's Time and restores it
-    // before returning (MainLoop owns it); retail's slot takes it by const&.
-    // LEFT: the standalone first-tick clamp writes MainLoop's Time through the
-    // const& of retail's slot signature (our divergence, not retail's).
-    System::Time* time = const_cast<System::Time*>(&timeRef);   // LEFT: audit DEFERRED (retail-difference task): the standalone first-tick clamp writes MainLoop's Time through the const& of retail's slot signature (our divergence, not retail's).
+    // Retail's slot takes MainLoop's Time by const& and never writes it: the first
+    // Update after the synchronous Startup gets the whole Startup time as its dt, as
+    // in retail (whose Startup is synchronous too). B6 ruling: no first-tick clamp.
+    const System::Time* time = &timeRef;
     // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.
@@ -545,31 +544,6 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // standalone/modal_driver.cpp.
     if (ModalDriver::Enabled())
         ModalDriver::Poll();
-
-    // Clamp the first tick's dt to ~16ms. Startup blocks for ~540ms while
-    // LoadScene_PhaseA runs synchronously on the main thread; the first
-    // Update tick post-Startup gets all that accumulated time as `dt`. If we
-    // forward it as-is to DialogLoopT::Update, UI::Update advances the
-    // fade alpha by `dt * rate * 4 = 0.54 * -1.0 * 4 = -2.16` in a single
-    // tick, which clamps to alpha=0 immediately and skips the entire fade-in
-    // animation — the menu pops in instantly instead of revealing smoothly
-    // (visible as a flash). One-frame clamp is enough; subsequent ticks have
-    // normal small dt because the load is done.
-    int64_t origTicks = 0;
-    bool clamped = false;
-    if (tick <= 1 && time && ::System::Timer::_ticksPerSecond > 0) {
-        System::Time* tm = time;
-        origTicks = tm->_ticks;
-        int64_t maxTicks = ::System::Timer::_ticksPerSecond / 60;  // ~16.67ms
-        if (origTicks > maxTicks) {
-            tm->_ticks = maxTicks;
-            clamped = true;
-            printf("[MenuDLT::Update] tick=%d dt clamped from %lld to %lld "
-                   "(%.2fms) — was post-LoadScene_PhaseA stall accumulator\n",
-                   tick, (long long)origTicks, (long long)maxTicks,
-                   (double)maxTicks * 1000.0 / (double)::System::Timer::_ticksPerSecond);
-        }
-    }
 
     // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
     if (time) {
@@ -647,11 +621,6 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // QUALIFIED (slot 3 is VIRTUAL on the base; this is the class's own Update).
     bool result = Engine::DialogLoopT::Update(*time);
     if (menuUI) MouseInject::PostUpdate(menuUI);
-
-    // Restore the original dt so MainLoop's frame accounting stays correct.
-    if (clamped) {
-        time->_ticks = origTicks;
-    }
     return result;
 }
 
