@@ -66,7 +66,6 @@ inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, con
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
 void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
-void NotifyEntityChanged(ComponentEntity* entity);  // 0x1400c3470 (a second body of ComponentEntity::RefreshEntityFlags)
 
 // ---- action_base_move.cpp
 class CharacterComponent;     // Component/CharacterComponent.h
@@ -197,7 +196,6 @@ static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exac
 Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* out, int kind, int index, float* heading);  // 0x140122e20
 int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
-void* Pf_EntityResolvePos_2e20(void* self, Math::Vector3* retVec3, int p3, int p4, float* p5);  // 0x140122e20 B4 FORWARD -> InteractNodePosition
 int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 
 // ---- action_pf_roots_drop.cpp

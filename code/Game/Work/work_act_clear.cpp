@@ -238,7 +238,7 @@ void WorkAct_HarvestAreaCtor_c1530(CitizenComponent* const* citizenRef, uint32_t
             if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0 &&            // TEST CX,CX
                 targetObj->_entity != nullptr) {
                 ComponentEntity* detach = targetObj->_entity.Get();
-                NotifyEntityChanged(detach);
+                detach->RefreshEntityFlags();   // 0x1400c3470
             }
 
             targets = targets + 1; // ADD R15,0x8

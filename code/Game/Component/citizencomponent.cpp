@@ -1199,7 +1199,7 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
         WorkComponent* sloc = wp->_entity->FindComponent<WorkComponent>();
         int maxSlots = sloc->workState;
         if (maxSlots == 0) {
-            maxSlots = WorkComponent_CalcMaxWorkers(sloc);
+            maxSlots = sloc->CalcMaxWorkers();
             sloc->workState = maxSlots;
         }
 
@@ -1210,7 +1210,7 @@ ComponentEntity* CitizenComponent::FindWorkplace() {
                     WorkComponent* s2 = wp->_entity->FindComponent<WorkComponent>();
                     int s2slots = s2->workState;
                     if (s2slots == 0) {
-                        s2slots = WorkComponent_CalcMaxWorkers(s2);
+                        s2slots = s2->CalcMaxWorkers();
                         s2->workState = s2slots;
                     }
                     int gap = s2slots - wp->workers._size;
@@ -1264,7 +1264,7 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
         WorkComponent* sloc = wp->_entity->FindComponent<WorkComponent>();
         int maxSlots = sloc->workState;
         if (maxSlots == 0) {
-            maxSlots = WorkComponent_CalcMaxWorkers(sloc);
+            maxSlots = sloc->CalcMaxWorkers();
             sloc->workState = maxSlots;
         }
 
@@ -1302,7 +1302,7 @@ ComponentEntity* CitizenComponent::FindRankedWorkplace() {
         WorkComponent* sloc = wp->_entity->FindComponent<WorkComponent>();
         int maxSlots = sloc->workState;
         if (maxSlots == 0) {
-            maxSlots = WorkComponent_CalcMaxWorkers(sloc);
+            maxSlots = sloc->CalcMaxWorkers();
             sloc->workState = maxSlots;
         }
         if (wp->workers._size < maxSlots) {

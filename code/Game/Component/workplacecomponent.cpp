@@ -203,7 +203,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
         changed = new4 ^ old4;
     }
     if ((changed & 0xffff) != 0 && mesh->_entity != nullptr) {
-        NotifyEntityChanged(mesh->_entity.Get());   // 0x1400c3470
+        mesh->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 
@@ -514,7 +514,7 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     // address).
     WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
     if (workComp)
-        workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
+        workComp->workState = workComp->CalcMaxWorkers();
 
     // The natural profession comes from the linked WorkPlaceDescription (+0x20). Retail
     // reads it through IsDerivedFrom(desc, DAT_1401c8118) — and if that check FAILS retail

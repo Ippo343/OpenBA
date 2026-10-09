@@ -198,15 +198,8 @@ uint32_t CitizenBehavior::CountByProfession(const Profession* key) const {
     return BstCountByKey(field_0x100._root, key);
 }
 
-// 0x14012e5c0 — WorkComponent::CalcMaxWorkers (Component/workcomponent.cpp), retail's one
-// body. This C name was a second port carrying two guards retail lacks (known_port_issues
-// 14d row 80: a zero _maxArea or a missing MapComponent answered _defaultWorkers); B6 WORK
-// (D12) removed them. The Work bodies and professionui call the member; the name stays
-// only as a plain call for the callers in Component/ and Game/ (other blocks' files), and
-// is deleted when they call the member.
-extern "C" int WorkComponent_CalcMaxWorkers(const WorkComponent* workComp) {
-    return workComp->CalcMaxWorkers();   // 0x14012e5c0
-}
+// (0x14012e5c0 is WorkComponent::CalcMaxWorkers, Component/workcomponent.cpp; the C forwarder
+// WorkComponent_CalcMaxWorkers went in B6 once every caller called the member.)
 
 // 0x14012fbb0 — WorkPlaceComponent::GetMaxWorkers. Finds the owner entity's
 // WorkComponent (FindComponent<WorkComponent>, 0x140003050) and returns its

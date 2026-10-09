@@ -160,7 +160,7 @@ void SetGrowthProgress(GrowthComponent* self, float progress) {
     uint32_t flagsNew = flagsOld & 0xffffffef;
     self->_flags = flagsNew;
     if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
-        NotifyEntityChanged(self->_entity.Get());   // 0x1400c3470
+        self->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 
@@ -239,7 +239,7 @@ void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animId
         uint32_t flagsNew = flagsOld | 4;
         self->_flags = flagsNew;
         if ((((flagsNew ^ flagsOld) & 0xffff) != 0) && (self->_entity != nullptr)) {
-            NotifyEntityChanged(self->_entity.Get());   // 0x1400c3470
+            self->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
 }

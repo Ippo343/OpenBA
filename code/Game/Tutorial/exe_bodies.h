@@ -39,8 +39,6 @@ extern "C" void TutBase_SerializeImageArray(IO::Serializer* serializer, int coun
 extern "C" void TutBase_SerializeSetupArray(IO::Serializer* serializer, int count, TutorialSetup** arrayData, void*);  // 0x140028f40
 extern "C" void TutBase_SerializeGoalArray(IO::Serializer* serializer, int count, TutorialGoal** arrayData, void*);  // 0x140029190
 extern "C" void TutBase_SerializeImageRef(UI::ElementDescription** fieldPtr, IO::Serializer* serializer);  // 0x140027ad0
-class WorkComponent;
-extern "C" int WorkComponent_CalcMaxWorkers(const WorkComponent* workComp);  // 0x14012e5c0: a plain call of WorkComponent::CalcMaxWorkers (tutorial_base.cpp)
 
 // ---- tutorial_wave.cpp
 class Tutorial;

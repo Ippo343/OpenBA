@@ -282,7 +282,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
                     changed = after ^ before;
                 }
                 if ((changed & 0xffff) != 0 && mi->_entity != nullptr) {
-                    NotifyEntityChanged(mi->_entity.Get());
+                    mi->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
                 }
             }
         }
