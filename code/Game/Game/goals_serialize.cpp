@@ -83,7 +83,7 @@ void RebalanceBucketTree(WorkSchedulerBucketNode** root, WorkSchedulerBucketNode
     Avl38Retrace(root, &from);
 }
 void EraseIdNode(WorkSchedulerTree* tree, WorkSchedulerIdNode* node) {               // 0x14001ca60
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: audit DEFERRED (Work leaves ledger): SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF)
+    WorkCellBST_Remove_ca60(tree, node);   // the template on WorkSchedulerIdNode (Work/CellBst.h)
 }
 // 0x14001a6e0 takes the tree's {root, count} header: it unlinks the node, rewrites the root
 // when it changes, and decrements the count dword at +8 (known_port_issues 796, fixed).

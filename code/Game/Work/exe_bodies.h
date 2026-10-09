@@ -138,7 +138,8 @@ inline void WorkBST_BSTRemove_a6e0(AvlTreeHead<Node>* head, Node* node) {
 
 // ---- work_base_cellbst.cpp
 void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40
-void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg);  // 0x14001ca60
+// 0x14001ca60 WorkCellBST_Remove_ca60: the template over the node type, Work/CellBst.h (B7 LX).
+#include "Work/CellBst.h"
 namespace IO { class Serializer; }
 void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0
 // The typed entry points an area work's real `Collection::Set<T>` member (a 0x10-byte
@@ -149,26 +150,11 @@ inline void* WorkCellBST_Insert_9a40(Collection::Set<T>* set, void* outResult, v
     static_assert(sizeof(T) == 0x10, "the cell core's element is 0x10 bytes");
     return WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(set), outResult, keyRec);  // CAST-OK: elem_stride
 }
-template <class T>
-inline void WorkCellBST_Remove_ca60(Collection::Set<T>* set, typename Collection::Set<T>::Node* node) {
-    static_assert(sizeof(T) == 0x10, "the cell core's element is 0x10 bytes");
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(set), node);  // CAST-OK: elem_stride
-}
-// The pathfinder's region-pair index (RegionPairCache +0x28) is the same {root, count}
-// header over the 0x30-byte AvlNode30 (Action/PathAvl.h): the same core removes from it.
-template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
-template <class Node>
-inline void WorkCellBST_Remove_ca60(AvlTreeHead<Node>* head, Node* node) {
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(head), node);  // CAST-OK: elem_stride
-}
 // The work scheduler's {root, count} trees (Game/WorkScheduler.h: the id map at
 // scheduler +0x30 and every bucket's entries) are handed to the same two cores.
 struct WorkSchedulerTree;   // Game/WorkScheduler.h
 inline void* WorkCellBST_Insert_9a40(WorkSchedulerTree* tree, void* outResult, void* keyRec) {
     return WorkCellBST_Insert_9a40(reinterpret_cast<uintptr_t*>(tree), outResult, keyRec);   // (the typed wrapper's one hand-off into the erased core)  // CAST-OK: elem_stride
-}
-inline void WorkCellBST_Remove_ca60(WorkSchedulerTree* tree, void* node) {
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);   // (the typed wrapper's one hand-off into the erased core)  // CAST-OK: elem_stride
 }
 template <class T>
 inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* ser) {

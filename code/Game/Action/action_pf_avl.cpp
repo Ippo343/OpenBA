@@ -24,6 +24,8 @@
 #include "Game/LegacyKeyIntNode.h"     // LegacyKeyIntNode
 #include "Component/TradeComponent.h"  // TradeResourceNode
 #include "Work/Work.h"                 // WorkEntitySetNode
+#include "Work/HarvestArea.h"          // HarvestArea::Claim (B7 LX: 0x14001ca60's cell set)
+#include "Work/HarvestOrchard.h"       // HarvestOrchard::Claim (likewise)
 #include "Component/LeisureCandidateSet.h"   // LeisureHomeNode
 #include "Player/PathTool.h"           // PathSegmentNode (PathTool::SetSelected's dedup trees)
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc
@@ -232,6 +234,10 @@ template PathSegmentNode* AvlRotateRight<PathSegmentNode>(PathSegmentNode**, Pat
 // 0x140013480 bodies, B13).
 template void AvlRebalance<WorkSchedulerIdNode>(WorkSchedulerIdNode**, WorkSchedulerIdNode**);
 template void AvlRebalance<WorkEntitySetNode>(WorkEntitySetNode**, WorkEntitySetNode**);
+// B7 LX: the cell sets 0x14001ca60 removes from (Work/CellBst.h, one instantiation per node).
+template void AvlRebalance<WorkCellSetNode>(WorkCellSetNode**, WorkCellSetNode**);
+template void AvlRebalance<Collection::Set<HarvestArea::Claim>::Node>(Collection::Set<HarvestArea::Claim>::Node**, Collection::Set<HarvestArea::Claim>::Node**);
+template void AvlRebalance<Collection::Set<HarvestOrchard::Claim>::Node>(Collection::Set<HarvestOrchard::Claim>::Node**, Collection::Set<HarvestOrchard::Claim>::Node**);
 // The 0x28 nodes of other modules' trees (retail: the same 0x14001a8c0 body, B13): the work
 // scheduler's +0x10 count tree and CitizenAI leisure's home set.
 template void AvlRebalance<WorkSchedulerCountNode>(WorkSchedulerCountNode**, WorkSchedulerCountNode**);
