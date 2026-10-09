@@ -8,18 +8,11 @@
 // (PathSetup_c8c10 -> SetTerrainCosts_e550 -> Pf_EnqueueCmd1_a6a30) derefs null +0x170.
 //
 // This function replicates the pathfinder-relevant subset of e8c0 (alloc + the a67f0 ctor +
-// the a6110 grid ctor inline + the cost-table / walkability / per-cell-flag priming), then
-// stores it at gameObject+0x68. It runs the pathfinder in SYNCHRONOUS mode (+0x5c = 1):
-// every enqueue helper (a6a30 / a6c10 / a6b20 / a6430-dispatch) then takes its inline
-// `Pf_WorkerApplyCmd_a6430` branch instead of queueing + Thread::Start, so a path query
-// completes (runs the A*) on the calling thread before PathfinderQuery returns. No worker
-// thread, no vtable virtual ever invoked — the lowest-risk bring-up (Option B from the RE
-// spec). The A* closure + enqueue helpers are already reimplemented + registered
-// (action_pf_astar.cpp / reg_pf_astar.cpp). Field offsets verified 1:1 vs the Ghidra
-// decompiles of FUN_1400a67f0 / FUN_1400a6110 / CreateNaturalResource_impl_sub_e8c0.
-//
-// Gated behind BANISHED_LIVE_CHARACTER_MOVETICK (the env that enables the move-tick
-// executor — the only consumer); default builds stay byte-unchanged.
+// the a6110 grid ctor inline + the search-flag / cost-table / per-cell-flag priming), then
+// stores it at gameObject+0x68. As retail, the ctor leaves +0x5c (runInline) 0, so the
+// priming commands are QUEUED and the worker thread is started by the first one (row 962).
+// Field offsets verified 1:1 vs the Ghidra decompiles of FUN_1400a67f0 / FUN_1400a6110 /
+// CreateNaturalResource_impl_sub_e8c0.
 //
 // ENDGAME B.3.8 block LOOP: the object is the REAL class `PathfinderThread`
 // (code/Game/Game/PathfinderThread.h); its worker loop is `Run()` and slot 1 is
@@ -122,8 +115,7 @@ extern "C" void Pathfinder_Seed(Map* game, int dim) {
     if (!game || dim <= 0) return;
     if (game->pathfinder != nullptr) return;   // already seeded
 
-    void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);
-    if (!pfV) return;
+    void* pfV = System::MemoryAllocator::MemAlloc(0x1f8, 4);   // 0x14009e8e6 (no null test is read after it)
 
     // --- FUN_1400a67f0 ctor (inline) ---
     // ENDGAME B.3.9 ENG W2: the REAL class ctor on System::Thread(0x10000) --
@@ -132,7 +124,7 @@ extern "C" void Pathfinder_Seed(Map* game, int dim) {
     // (0x1400a6829 / 0x1400a682d: ??0CriticalSection right after the stamp).
     PathfinderThread* pf = ::new (pfV) PathfinderThread(0x10000);
     pf->nextToken  = 1;          // next result-slot generation id
-    pf->runInline  = 1;          // priming runs SYNC (commands apply inline); flipped to 0 (async) after priming
+    pf->runInline  = 0;          // 0x1400a683b: retail's ctor stores 0 -- the priming below QUEUES (row 962)
     pf->queueTail  = nullptr;    // queue tail
     pf->queueHead  = nullptr;    // queue head
     pf->queueCount = 0;          // queue count
@@ -150,37 +142,34 @@ extern "C" void Pathfinder_Seed(Map* game, int dim) {
     // Link into the map.
     game->pathfinder = pf;
 
-    // --- e8c0 priming (synchronous: every cmd applies inline via a6430) ---
-    // cmd type 4 — walkability sub-flags {arg0=1, arg1=0, arg2=0}.
-    const PathCommandArgs cmd4 = { 4, 1, 0, 0 };
-    pf->ApplyCommand(cmd4);
+    // --- e8c0 priming (row 962, B7 RES: retail's statements in retail's order) ---
+    // 0x14009e90f-0x14009e9db is SetSearchFlags(1, 0, 0) (0x1400a68b0) inlined: the staged
+    // flags compared (+0x1f4 == 1, +0x1f5 == 0, +0x1f6 == 0), then stored (word +0x1f4 = 1,
+    // byte +0x1f6 = 0), command {4, 1, 0, 0}; runInline is 0, so ONE node is queued under
+    // the lock (0x14009e96c-0x14009e9cc) and the worker Started when not running
+    // (0x14009e9d2-0x14009e9db).
+    pf->SetSearchFlags(1, 0, 0);
 
-    // terrain step-cost table (idx 0..10) — a6a30 applies inline (runInline != 0).
+    // 0x14009e9e1-0x14009ea98: the eleven step costs through 0x1400a6a30, each QUEUED
+    // (runInline 0; every staged cost is 1 from the ctor, so each one differs).
     static const int kCosts[11] = { 3, 3, 4, 8, 0x10, 0x10, 0x10, 0x10, 0x10, 3, 4 };
     for (int i = 0; i < 11; ++i)
         pf->SetStepCost(i, kCosts[i]);
 
     // per-cell terrain flags: low 7 bits = the cell's terrainType (+0x29),
     // bit 7 = blocked (the cell's blocker, +0x00, set). The map's cells, stride 0x30.
+    // 0x14009eaa3-0x14009eb16: no test on the flag bytes or the cell array.
     uint8_t* flags    = pf->grid.cellFlags;
     MapCell* cellGrid = game->cells.GetData();
     int      cellN    = game->cells.GetSize();
-    if (flags && cellGrid) {
-        for (int i = 0; i < cellN; ++i) {
-            uint8_t  type    = cellGrid[i].terrainType;
-            bool     blocked = cellGrid[i].blocker != nullptr;
-            flags[i] = static_cast<uint8_t>((flags[i] & 0x80) | type);
-            flags[i] = static_cast<uint8_t>((blocked ? 0x80 : 0) | (flags[i] & 0x7f));
-        }
+    for (int i = 0; i < cellN; ++i) {
+        uint8_t  type    = cellGrid[i].terrainType;
+        bool     blocked = cellGrid[i].blocker != nullptr;
+        flags[i] = static_cast<uint8_t>((flags[i] & 0x80) | type);
+        flags[i] = static_cast<uint8_t>((blocked ? 0x80 : 0) | (flags[i] & 0x7f));
     }
 
-    // Priming is complete. Flip to ASYNC so runtime path queries (cmd 5 via a6c10) queue and
-    // wake the worker thread instead of running the A* inline on the main thread. Requires the
-    // worker's MemFree, which is System::MemoryAllocator::MemFree: always ASYNC.
-    bool async = true;
-    if (async) pf->runInline = 0;
-
-    fprintf(stderr, "[PfSeed] pathfinder seeded @ game+0x68 = %p (dim=%d, cells=%d, %s mode)\n",
-            pfV, dim, cellN, async ? "ASYNC worker-thread" : "sync");
+    fprintf(stderr, "[PfSeed] pathfinder seeded @ game+0x68 = %p (dim=%d, cells=%d, ASYNC worker-thread)\n",
+            pfV, dim, cellN);
     fflush(stderr);
 }
