@@ -247,8 +247,12 @@ void MemFree(void* p) {
 // NOT PARAMETERIZED. The eleven bodies are the same instructions with the same
 // operands; the element stride never appears, because freeing a buffer does not
 // need to know what is in it. This is why one C++ function serves all eleven.
+// B6 row 104: the null test comes FIRST, as every J1 copy has it (0x18001c750,
+// 0x18001c100: `MOV RSI,[RCX]; TEST RSI,RSI; JZ zero` before the
+// Enter / Free / Leave triple), so a null buffer never reaches MemFree (and an
+// allocator instrument on MemFree, BANISHED_REDZONE, never sees a null free).
 void* ArrayDtorImpl(ArrayHdr* a) {
-    MemFree(a->_data);      // retail's `if (p)` lives inside 0x1800c7ad0
+    if (a->_data) MemFree(a->_data);
     a->_data     = nullptr;
     a->_size     = 0;
     a->_capacity = 0;
