@@ -233,14 +233,15 @@ extern "C" void Entity_PlaceAtCell_7b20(TombstoneComponent* self, int cell, floa
 // (matches retail), worldArg = game-world singleton (passed to the pathfinder cmd).
 extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
                                              uint64_t /*citizenCell*/, void* /*worldArg*/) {
+    // No test of the world, the cemetery, the MapComponent, the description, the new
+    // entity or its TombstoneComponent: 0x140046a90 reads each unguarded.
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    if (!world || !cem) return;
     ComponentEntity* nullIBP = nullptr;                          // the InternalBasePtr(nullptr) ctor
     Map* map = world->m_game;                                    // +0xf8
     MapCell* cellRec = map->cells.GetData();                               // +0x80, stride 0x30
     uint8_t oldState = cellRec[cell].terrainType;                // +0x29
     bool stateWasWalk = ((1u << (oldState & 0x1f)) & 0x1e0u) != 0;   // old state 5..8
-    map->field_0xA2 |= static_cast<uint8_t>(stateWasWalk);   // the tree ORs the byte (Map::field_0xA2 is uint8_t)
+    map->field_0xA2 |= static_cast<uint8_t>(stateWasWalk);   // SETNZ AL; OR byte [map+0xa2],AL (0x140046afd)
     cellRec[cell].terrainType = 2;
     int size = map->size;
     if (stateWasWalk)
@@ -249,27 +250,20 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     cellRec[cell].occupant = nullIBP;  // = null (+0x08)
     // Tombstone yaw = the cemetery's own placed rotation (position component +0x30).
     MapComponent* resIBP = cem->_entity->FindComponent<MapComponent>();   // 0x140004680
-    int rot = resIBP ? resIBP->extraField : 0;
+    int rot = resIBP->extraField;
     // Tombstone description lives at CemeteryDescription+0x20.
     Description* desc = cem->_description;                       // +0x18
-    Description* cemDescBase = (desc
-                     && Object::IsDerivedFromNullSafe(desc, CemeteryDescription::TypeId())) ? desc : nullptr;
-    // [STANDALONE GUARD] retail trusts the IsDerivedFrom gate then derefs
-    // unguarded; type-ids can be unfilled early in standalone, so trust the
-    // raw description (mirrors tombstonecomponent.cpp's OnCreate note).
-    if (!cemDescBase) cemDescBase = desc;
-    if (!cemDescBase) return;
-    CemeteryDescription* cemDesc = static_cast<CemeteryDescription*>(cemDescBase);
+    // Narrowed to CemeteryDescription (cell 0x1401c40c8), null on a miss, +0x20 read unguarded.
+    CemeteryDescription* cemDesc = Object::IsDerivedFromNullSafe(desc, CemeteryDescription::TypeId())
+                                   ? static_cast<CemeteryDescription*>(desc) : nullptr;
     ComponentDescription* tombDesc = cemDesc->_ref20;            // +0x20
-    if (!tombDesc) return;   // [STANDALONE GUARD]
     ComponentEntity* built = nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
     if (mem) built = ComponentEntity_CtorFromDescription(mem, tombDesc);
     ComponentEntity* entIBP = built;
-    if (!entIBP) return;   // [STANDALONE GUARD] alloc/ctor failed
     TombstoneComponent* tsIBP = nullptr;
     ComponentEntity_FindTombstoneComp_4800(entIBP, &tsIBP);
-    if (tsIBP) Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));
+    Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));
     Object::InternalPtr<ComponentEntity> regIBP = entIBP;
     EntityList_RegisterEntity_Impl(world->m_entityList, &regIBP,   // +0xe8
                                    static_cast<int>(tombDesc->_category));   // +0x20
