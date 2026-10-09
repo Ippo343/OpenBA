@@ -588,29 +588,10 @@ int PickReachableCell(const Component* target, uint32_t param_2, float* param_3)
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
     int iVar4 = -1;
 
-    ComponentEntity* rawAnchorEntity = *entityIBP;
+    // B6 (14d G50): 0x140087fb0 CheckPtr(param_1) then FindComponent<InteractComponent> on
+    // *param_1 with no test of the entity (no gate run ever printed the old [EmployCrash]
+    // diagnostic this replaces); only the two finder results are tested, as below.
     ComponentEntity* resolvedAnchorEntity = *entityIBP;
-    // DIAGNOSTIC (BUILDCTRL builder-employment crash): retail Entity_impl_7fb0 derefs
-    // *param_1 unconditionally, so a null/dead entity here is always a crash — meaning
-    // retail never reaches this with one. Our BUILDCTRL employ path does (a just-placed
-    // foundation's work IBP, or a citizen's residence pointing at a deconstructed
-    // building). Log the identity (raw = pre-CheckPtr value; resolved==0 => CheckPtr
-    // nulled a dead weak-ref) and return the legitimate -1 "no anchor cell" sentinel so
-    // the caller degrades gracefully instead of reading null+0x38. This is INSTRUMENTATION
-    // to locate the upstream null — not the final fix (do not leave a silent guard here).
-    if (resolvedAnchorEntity == nullptr) {
-        static int s_anchorNullHits = 0;
-        if ((s_anchorNullHits++ & 0x3f) == 0) {
-            // LEFT: the diagnostic prints the raw pointer as an integer (%llx).
-            std::fprintf(stderr, "[EmployCrash] Pf_EntityAnchorCell_7fb0 NULL entity: "
-                         "IBPptr=%p raw=0x%llx resolved=0 (hit #%d) -> return -1\n",
-                         static_cast<const void*>(entityIBP),
-                         static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(rawAnchorEntity)),   // CAST-OK: ptr_int
-                         s_anchorNullHits);
-            std::fflush(stderr);
-        }
-        return -1;
-    }
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     InteractComponent* interact = resolvedAnchorEntity->FindComponent<InteractComponent>();   // 0x140002ed0
 
