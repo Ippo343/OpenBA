@@ -248,49 +248,65 @@ void* RtColl_ArrayFilenameDtor_1800098d0(ModArrayOf<System::Filename>* a) {
 // The `oldSize` read happens BEFORE the store (`MOV ECX,[RDI+8]` then
 // `MOV EDX,[RBX+8]` then `MOV [RBX+8],ECX`) — the push-one-element case is
 // detected against the size the array had on entry.
-template <class T>
-static void ArrayAssignGrow(ModArrayOf<T>* dst, const ModArrayOf<T>* src,
-                            uint32_t stride, int align) {
-    const int32_t oldSize = dst->size;
-    dst->size = src->size;
-    if (dst->size > dst->capacity) {
-        dst->capacity = dst->size;
-        if (dst->size == oldSize + 1 && oldSize != 0)
-            dst->capacity = dst->size + dst->size * 2;
-        dst->data = static_cast<T*>(::System::MemoryAllocator::MemAlloc(
-            static_cast<uint64_t>(static_cast<int64_t>(dst->capacity)) * stride, align));
-    }
-}
-
 // The copy loop's `ADD R9,RDX; JZ skip` is a test on `dst->data + i*stride`,
 // not on `dst->data` — transcribed rather than simplified, because it is the
 // only thing standing between a failed MemAlloc and a write through null, and
 // it is also why the loop re-reads dst->size on every iteration.
 
-// 0x180011110 — Collection::Array<int32>::operator=
-void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv) {
-    ModArrayOf<uint32_t>* dst = static_cast<ModArrayOf<uint32_t>*>(dstv);   // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); measured S4 RT2: the by-value shape (Collection::Array<uint32_t> GetXData() const, NRVO, caller temporary destroyed at scope end) was BUILT: -O2 adds an EH landing pad (ArrayDtorImpl + _Unwind_Resume) to the callee 0x180025530 and turns the caller's inline MemFree + zero stores into an out-of-line rtcoll::ArrayDtorImpl call, while retail RefreshList inlines the free (lock, 0x1800c6c00, unlock) and the zero stores (0x1800afb71..0x1800afbb6); the slot stays the ctor-less ModArrayOf and this entry keeps the void* door
-    const ModArrayOf<uint32_t>* src = static_cast<const ModArrayOf<uint32_t>*>(srcv);   // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); the source is Collection::Array<uint32_t> (Mod::ints, PackageFile::_iconData) while the destination at GetIconData is the ModArrayOf return slot (line 272's finding): two header types by caller
+// The free that opens both bodies is the element-free ~Array 0x1800111a0 /
+// 0x1800112a0 (their own CALL in retail), on the typed member header: the
+// unconditional MemFree (retail's `if (p)` lives inside 0x1800c7ad0), then the
+// header zeroed (`[RDI+8]` one qword: size AND capacity).
+template <class T>
+static void* ArrayFreeBuffer(Collection::Array<T>* a) {
+    ::System::MemoryAllocator::MemFree(a->_data);
+    a->_data     = nullptr;
+    a->_size     = 0;
+    a->_capacity = 0;
+    return nullptr;               // retail leaves RAX == 0
+}
+
+// ArrayAssignGrow's rule (above) on the typed header.
+template <class T>
+static void ArrayAssignGrow(Collection::Array<T>* dst, const Collection::Array<T>* src,
+                            uint32_t stride, int align) {
+    const int32_t oldSize = dst->_size;
+    dst->_size = src->_size;
+    if (dst->_size > dst->_capacity) {
+        dst->_capacity = dst->_size;
+        if (dst->_size == oldSize + 1 && oldSize != 0)
+            dst->_capacity = dst->_size + dst->_size * 2;
+        dst->_data = static_cast<T*>(::System::MemoryAllocator::MemAlloc(
+            static_cast<uint64_t>(static_cast<int64_t>(dst->_capacity)) * stride, align));
+    }
+}
+
+// 0x180011110 — Collection::Array<int32>::operator=. Every caller holds a
+// `Collection::Array<uint32_t>` on both sides (Mod::ints, PackageFile::_iconData,
+// GetIconData's by-value result).
+void* RtColl_ArrayI32Assign_180011110(Collection::Array<uint32_t>* dst,
+                                      const Collection::Array<uint32_t>* src) {
     ArrayFreeBuffer(dst);                       // CALL 0x1800111a0
     ArrayAssignGrow(dst, src, 4, 4);
-    for (int32_t i = 0; i < dst->size; ++i) {
-        uint32_t* d = dst->data + i;
+    for (int32_t i = 0; i < dst->_size; ++i) {
+        uint32_t* d = dst->_data + i;
         if (d == nullptr) continue;
-        d[0] = src->data[i];
+        d[0] = src->_data[i];
     }
     return dst;
 }
 
-// 0x180011220 — Collection::Array<uint8>::operator=
-void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv) {
-    ModArrayOf<uint8_t>* dst = static_cast<ModArrayOf<uint8_t>*>(dstv);   // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); measured S4 RT2: the by-value shape (Collection::Array<uint8_t> GetXData() const, NRVO, caller temporary destroyed at scope end) was BUILT: -O2 adds an EH landing pad (ArrayDtorImpl + _Unwind_Resume) to the callee 0x180025580 and turns the caller's inline MemFree + zero stores into an out-of-line rtcoll::ArrayDtorImpl call, while retail RefreshList inlines the free (lock, 0x1800c6c00, unlock) and the zero stores (0x1800afb71..0x1800afbb6); the slot stays the ctor-less ModArrayOf and this entry keeps the void* door
-    const ModArrayOf<uint8_t>* src = static_cast<const ModArrayOf<uint8_t>*>(srcv);   // LEFT: DEFERRED (named prerequisite: retail open-codes this release / teardown inline; the tree's ~Array / ~String is an out-of-line call, so the typed local changes codegen until the dtor is inlinable as retail's); the source is Collection::Array<uint8_t> (Mod::bytes, PackageFile::_previewData, array.cpp's inner-array op) while the destination at GetPreviewData is the ModArrayOf return slot (line 286's finding)
+// 0x180011220 — Collection::Array<uint8>::operator=. Both sides are
+// `Collection::Array<uint8_t>` (Mod::bytes, PackageFile::_previewData,
+// GetPreviewData's by-value result, array.cpp's inner-array element op).
+void* RtColl_ArrayU8Assign_180011220(Collection::Array<uint8_t>* dst,
+                                     const Collection::Array<uint8_t>* src) {
     ArrayFreeBuffer(dst);                       // CALL 0x1800112a0
     ArrayAssignGrow(dst, src, 1, 1);
-    for (int32_t i = 0; i < dst->size; ++i) {
-        uint8_t* d = dst->data + i;
+    for (int32_t i = 0; i < dst->_size; ++i) {
+        uint8_t* d = dst->_data + i;
         if (d == nullptr) continue;
-        *d = src->data[i];
+        *d = src->_data[i];
     }
     return dst;
 }

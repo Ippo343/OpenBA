@@ -305,8 +305,9 @@ static_assert(offsetof(ReloadEntry, _hole04) == 0x4, "ReloadEntry::_hole04");
 // runtime/save and code/Game/Dialog use), but it is the real class: String /
 // Filename / Array / Set members with retail's copy ctor, operator= and
 // destructor (see its banner above). `ModSetNode` stays the erased node of
-// the width-8 AVL core; `ModArrayOf<T>` stays the header of the PackageFile
-// return slots and FileSystem::_userPackFilenames.
+// the width-8 AVL core; `ModArrayOf<T>` stays the header of
+// FileSystem::_userPackFilenames (B7: the PackageFile icon / preview return
+// slots are `Collection::Array<T>` by value).
 //
 // *** WHAT IS AND IS NOT DECLARED. ***
 // ------------------------------------
@@ -415,7 +416,9 @@ namespace RtIO {
 extern "C" void RtIo_Modification_SortMods(Mod* data, int32_t count, void*);  // 0x180028760
 // ---- io/modification.cpp
 void* RtColl_ArrayFilenameDtor_1800098d0(ModArrayOf<System::Filename>* a);  // 0x1800098d0
-void* RtColl_ArrayI32Assign_180011110(void* dstv, const void* srcv);  // 0x180011110
-void* RtColl_ArrayU8Assign_180011220(void* dstv, const void* srcv);  // 0x180011220
+void* RtColl_ArrayI32Assign_180011110(Collection::Array<uint32_t>* dst,
+                                      const Collection::Array<uint32_t>* src);  // 0x180011110
+void* RtColl_ArrayU8Assign_180011220(Collection::Array<uint8_t>* dst,
+                                     const Collection::Array<uint8_t>* src);    // 0x180011220
 }  // namespace RtIO
 // ==== end B3R W0-P0c ====
