@@ -235,4 +235,13 @@ cell ends in FIXED / NOT A DIFFERENCE / LEFT (with the owing row or the user dec
 
 ## 7. Corrections (dated, appended as blocks find them)
 
-(none yet)
+2026-10-09, from block CTOR's hand-in:
+- C1. **Retail's Frustum ctors ZERO FIRST** (D6 / INVENTORY A.3 were wrong; Volume.h's banner was right):
+  0x1800fa1e0 writes twelve zero qwords over +0x00..+0x5f and the +0x60 byte (0x1800fa212..0x1800fa241)
+  before the planes; 0x1800fa3d0 likewise (0x1800fa3e5..0x1800fa41c). The real ctors mirror that: the
+  `Vector4()` members and the flag in the mem-initialiser, then the plane stores. The "untouched stack
+  block" on the three cast lines described the CALLER, which is still true (no caller-side zeroing).
+- C2. **`Context::PixelConstantStaging::pixel` is `Math::Vector4[5]`** with no ctor cost because `Context`
+  is built over raw storage by `RtVideo_Context_Ctor`'s memset (retail's nineteen zero qwords), so the
+  zeroing ctor never runs (D6 shape 1 held: context_ctor / setlight / Draw B11 IDENTICAL). The memsets
+  over a block holding `Vector4` take `static_cast<void*>` (-Wclass-memaccess).
