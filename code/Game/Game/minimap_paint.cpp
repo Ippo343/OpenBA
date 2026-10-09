@@ -64,9 +64,9 @@
 
 // B.4 GAME-b: the painter is Minimap::PaintTerrain and reads the minimap, the
 // context, the camera and the video configuration by name. Its doors (ENDGAME
-// B.3.5 / B3R): Video_RenderBuffer_Ctor / _Dtor, RtVolume_Frustum_Ctor_General
-// (a POD-mirror door, LEFT); the Camera is constructed directly (X5-GAME); the
-// Renderer and Scene are typed locals (ENDGAME B7 CTOR: their doors are deleted).
+// B.3.5 / B3R): Video_RenderBuffer_Ctor / _Dtor; the Camera is constructed
+// directly (X5-GAME); the Frustum, Renderer and Scene are typed locals built by
+// their real ctors (ENDGAME B7 CTOR: their doors are deleted).
 
 namespace {
 
@@ -123,16 +123,16 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
     const Math::Scalar fNear(0.0f);
     const Math::Scalar fFar(512.0f);    // DAT_140172240
 
-    ::Frustum frustum = {};
-    ::Frustum* frustumRet = RtVolume_Frustum_Ctor_General(
-        &frustum, /*ortho*/true, &fNear, &fFar, &negHalfS, &halfS, &halfS, &negHalfS);
-
     // Transform3::Identity is a static that returns a Transform3 BY VALUE (48 bytes).
+    // Retail calls it first (0x1400a5302), then the general Frustum ctor
+    // ??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z (0x1800fa3d0, CALL at
+    // 0x1400a5347) on the untouched stack block [RBP+0x1c0]: no zeroing first.
     Math::Transform3 identity = Math::Transform3::Identity();
+    const ::Frustum frustum(/*ortho*/true, fNear, fFar, negHalfS, halfS, halfS, negHalfS);
 
     // Camera::Camera(frustum, transform, zUp) 0x1800fe960 on a stack local
     // (trivially destructible: nothing runs at scope exit).
-    Graphics::Camera cameraLocal(*frustumRet, identity, /*zUp*/true);
+    Graphics::Camera cameraLocal(frustum, identity, /*zUp*/true);
     Graphics::Camera* camera = &cameraLocal;
 
     // Look straight down (yaw 0, pitch -90deg), positioned at world (0,0,100).

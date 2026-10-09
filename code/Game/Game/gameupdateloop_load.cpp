@@ -566,13 +566,10 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
         fovX = atanf(halfW / den) * kTwo * kRad2Deg;
     }
     const Math::Scalar nearS(nearZ), farS(farZ), fovXS(fovX), fovYS(fovY);
-    // Raw storage: a ::Frustum local would run its zeroing
-    // default ctor (the Vector4 planes) before the ctor door.
-    uint8_t frustum[0xC0];
-    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: audit DEFERRED (zeroing ctor): a ::Frustum local runs its implicit default ctor (Vector4 zeroes each of the six planes) before the perspective ctor 0x1800fa1e0; this body hands it an untouched stack block
-        &nearS, &farS, &fovXS, &fovYS);
-    camera.SetFrustum(
-        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // LEFT: audit DEFERRED (zeroing ctor): the Frustum lives in a raw 0xC0 stack block (a ::Frustum local would run its Vector4-zeroing default ctor first); the ctor door's result is held as void*
+    // ??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z 0x1800fa1e0 on a stack local
+    // (its Vector4 planes are zeroed inside that ctor, as retail's are).
+    const ::Frustum frustum(nearS, farS, fovXS, fovYS);
+    camera.SetFrustum(frustum);
 }
 
 // 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs
@@ -794,10 +791,10 @@ void GameUpdateLoop::Load() {
         PlayerController* pc = nullptr;
         if (mem) {
             const Math::Scalar nearZ(2.0f), farZ(70.0f), fovX(60.0f), fovY(aspect * 60.0f);
-            uint8_t frustum[0xC0] = {};
-            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);   // LEFT: audit DEFERRED (zeroing ctor): the 0xC0 stack block is zeroed as bytes (a ::Frustum local would run its Vector4-zeroing default ctor per plane instead)
-            RtVolume_Frustum_Ctor_Perspective(fr, &nearZ, &farZ, &fovX, &fovY);
-            pc = ::new (mem) PlayerController(*fr, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
+            // ??0Frustum 0x1800fa1e0 on a stack local; no byte-zeroing of the
+            // block first (retail has none: the ctor zeroes the planes itself).
+            const ::Frustum frustum(nearZ, farZ, fovX, fovY);
+            pc = ::new (mem) PlayerController(frustum, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
         }
         m_playerController = pc;
     }

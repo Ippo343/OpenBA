@@ -113,23 +113,26 @@ void SelectVertices(const Vector4& plane, const Box& box, Vector3& nVertex, Vect
 // Symmetric perspective ctor: near, far, fovX (degrees), fovY (degrees).
 // Always builds a PERSPECTIVE frustum (isOrthographic = false); the four
 // side planes pass through the origin (w = 0), apex-at-eye style.
+//
+// ENDGAME B7 (CTOR, D6): the REAL ctor (the `RtVolume_Frustum_Ctor_Perspective`
+// door is deleted). Retail's order: the six planes' Vector4() zeroing and the
+// flag's 0 (0x1800fa212..0x1800fa241) are the mem-initialiser; then sin / cos
+// (0x1800fa272..0x1800fa2a0) and the 24 plane stores 0x1800fa2cd..0x1800fa363.
+// The flag is not stored again.
 // ============================================================
-Frustum* RtVolume_Frustum_Ctor_Perspective(Frustum* self, const Scalar* nearZ, const Scalar* farZ,
-                                            const Scalar* fovX, const Scalar* fovY) {
-    float halfFovXRad = fovX->v * RtMathConst::kHalf * RtMathConst::kDegToRad;
-    float halfFovYRad = fovY->v * RtMathConst::kHalf * RtMathConst::kDegToRad;
+Frustum::Frustum(const Scalar& nearZ, const Scalar& farZ, const Scalar& fovX, const Scalar& fovY)
+    : planes(), isOrthographic(false) {
+    float halfFovXRad = fovX.v * RtMathConst::kHalf * RtMathConst::kDegToRad;
+    float halfFovYRad = fovY.v * RtMathConst::kHalf * RtMathConst::kDegToRad;
     float sinX = RtLibm::Sin(halfFovXRad), cosX = RtLibm::Cos(halfFovXRad);
     float sinY = RtLibm::Sin(halfFovYRad), cosY = RtLibm::Cos(halfFovYRad);
 
-    self->planes[0] = { 0.0f, RtMathConst::kOne, 0.0f, nearZ->v };
-    self->planes[1] = { 0.0f, RtMathConst::kMinusOne, 0.0f, -farZ->v };
-    self->planes[2] = { cosX, sinX, 0.0f, 0.0f };
-    self->planes[3] = { -cosX, sinX, 0.0f, 0.0f };
-    self->planes[4] = { 0.0f, sinY, -cosY, 0.0f };
-    self->planes[5] = { 0.0f, sinY, cosY, 0.0f };
-    self->isOrthographic = false;
-
-    return self;
+    planes[0] = { 0.0f, RtMathConst::kOne, 0.0f, nearZ.v };
+    planes[1] = { 0.0f, RtMathConst::kMinusOne, 0.0f, -farZ.v };
+    planes[2] = { cosX, sinX, 0.0f, 0.0f };
+    planes[3] = { -cosX, sinX, 0.0f, 0.0f };
+    planes[4] = { 0.0f, sinY, -cosY, 0.0f };
+    planes[5] = { 0.0f, sinY, cosY, 0.0f };
 }
 
 // ============================================================
@@ -138,33 +141,36 @@ Frustum* RtVolume_Frustum_Ctor_Perspective(Frustum* self, const Scalar* nearZ, c
 // values). near/far planes are identical between the two modes; only the 4
 // side planes differ (see Volume.h's Frustum comment for what each mode
 // means).
+//
+// ENDGAME B7 (CTOR, D6): the REAL ctor (the `RtVolume_Frustum_Ctor_General` door
+// is deleted). Retail's order: the planes' Vector4() zeroing
+// (0x1800fa3e5..0x1800fa410) and the flag from the argument (0x1800fa41c) are the
+// mem-initialiser; the branch on the flag (0x1800fa424) and the plane stores follow.
 // ============================================================
-Frustum* RtVolume_Frustum_Ctor_General(Frustum* self, bool isOrthographic,
-                                        const Scalar* nearZ, const Scalar* farZ,
-                                        const Scalar* edgeA, const Scalar* edgeB,
-                                        const Scalar* edgeC, const Scalar* edgeD) {
-    self->isOrthographic = isOrthographic;
-    self->planes[0] = { 0.0f, RtMathConst::kOne, 0.0f, nearZ->v };
-    self->planes[1] = { 0.0f, RtMathConst::kMinusOne, 0.0f, -farZ->v };
+Frustum::Frustum(bool isOrthographic_,
+                 const Scalar& nearZ, const Scalar& farZ,
+                 const Scalar& edgeA, const Scalar& edgeB,
+                 const Scalar& edgeC, const Scalar& edgeD)
+    : planes(), isOrthographic(isOrthographic_) {
+    planes[0] = { 0.0f, RtMathConst::kOne, 0.0f, nearZ.v };
+    planes[1] = { 0.0f, RtMathConst::kMinusOne, 0.0f, -farZ.v };
 
-    if (!isOrthographic) {
+    if (!isOrthographic_) {
         float a, b;
-        NormalizeSide2(nearZ->v, -edgeA->v, a, b);
-        self->planes[2] = { a, b, 0.0f, 0.0f };
-        NormalizeSide2(edgeB->v, -nearZ->v, a, b);
-        self->planes[3] = { b, a, 0.0f, 0.0f };
-        NormalizeSide2(edgeC->v, -nearZ->v, a, b);
-        self->planes[4] = { 0.0f, a, b, 0.0f };
-        NormalizeSide2(-edgeD->v, nearZ->v, a, b);
-        self->planes[5] = { 0.0f, a, b, 0.0f };
+        NormalizeSide2(nearZ.v, -edgeA.v, a, b);
+        planes[2] = { a, b, 0.0f, 0.0f };
+        NormalizeSide2(edgeB.v, -nearZ.v, a, b);
+        planes[3] = { b, a, 0.0f, 0.0f };
+        NormalizeSide2(edgeC.v, -nearZ.v, a, b);
+        planes[4] = { 0.0f, a, b, 0.0f };
+        NormalizeSide2(-edgeD.v, nearZ.v, a, b);
+        planes[5] = { 0.0f, a, b, 0.0f };
     } else {
-        self->planes[2] = { RtMathConst::kOne, 0.0f, 0.0f, edgeA->v };
-        self->planes[3] = { RtMathConst::kMinusOne, 0.0f, 0.0f, -edgeB->v };
-        self->planes[4] = { 0.0f, 0.0f, RtMathConst::kMinusOne, -edgeC->v };
-        self->planes[5] = { 0.0f, 0.0f, RtMathConst::kOne, edgeD->v };
+        planes[2] = { RtMathConst::kOne, 0.0f, 0.0f, edgeA.v };
+        planes[3] = { RtMathConst::kMinusOne, 0.0f, 0.0f, -edgeB.v };
+        planes[4] = { 0.0f, 0.0f, RtMathConst::kMinusOne, -edgeC.v };
+        planes[5] = { 0.0f, 0.0f, RtMathConst::kOne, edgeD.v };
     }
-
-    return self;
 }
 
 // ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z   retail 0x1800f9310
