@@ -1413,7 +1413,7 @@ void GameUpdateLoop::Draw(float alpha) {
                 if (s_forceSnow) params.x = s_snowVal;
                 videoCtx->_unknown03b8 = params;                  // ctx+0x3b8
                 // ctx+0x288: Context::PixelConstantStaging::pixel[4] (Video/Context.h).
-                *reinterpret_cast<Math::Vector4*>(videoCtx->_pixelConstantStaging.pixel[4]) = params;   // ctx+0x288  // LEFT: audit DEFERRED (zeroing ctor): the row is float[4] (Context.h: a Math::Vector4 member would run its zeroing ctor in Context's ctor); the Vector4 store keeps the one 16-byte MOVUPS a memcpy splits into two qword stores at -O2
+                videoCtx->_pixelConstantStaging.pixel[4] = params;   // ctx+0x288: one 16-byte store
                 videoCtx->_dirty |= 0x10800;                      // ctx+0x10
             }
         }

@@ -187,11 +187,11 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
 
     context._unknown03b8 = Math::Vector4(0.0f, 0.0f, clearDepth, 0.0f);   // +0x3b8..+0x3c4
     // Context +0x288: Context::PixelConstantStaging::pixel[4] (Video/Context.h).
-    float* const row = context._pixelConstantStaging.pixel[4];
-    row[0] = 0.0f;         // +0x288
-    row[1] = 0.0f;         // +0x28c
-    row[2] = clearDepth;   // +0x290
-    row[3] = 0.0f;         // +0x294
+    Math::Vector4& row = context._pixelConstantStaging.pixel[4];
+    row.x = 0.0f;         // +0x288
+    row.y = 0.0f;         // +0x28c
+    row.z = clearDepth;   // +0x290
+    row.w = 0.0f;         // +0x294
     context._dirty |= 0x10800;
 
     renderer._shaderDetail = 0;   // +0x3c (SetShaderDetail's field)
