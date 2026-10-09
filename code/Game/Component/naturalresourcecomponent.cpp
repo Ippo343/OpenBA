@@ -16,7 +16,7 @@
 // Volume.h's own `sizeof(Rectangle)` assert into a hard error.
 #include "graphics/Mesh.h"   // ENDGAME B.3.5 caller batch I2
 #include "Component/naturalresourcecomponent_funcs.h"
-#include "Component/ParticleComponent.h"
+#include "Component/ModelComponent.h"   // OnRemove: FindComponent<ModelComponent>, meshInstance
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
 #include "Action/exe_bodies.h"   // ActCNR_RemoveNatRes_1260f0
@@ -39,17 +39,14 @@
 // nothing called) are the bodies by name.
 
 //
-// NOT INSTALLED (B.4 COMP-d). X-G1-1b read 0x140125c40: retail's finder is 0x140003f60 =
-// FindComponent<ModelComponent> (CALL at 0x140125c60, cell 0x1401c7a50), and the +0x28 it
-// reads is the ModelComponent's MeshInstance. THE TREE CALLS THE WRONG FINDER here (0x140005200,
-// FindComponent<ParticleComponent>, cell 0x1401c4720): known_port_issues 14a row 552. Not fixed
-// (B.4 changes no behaviour); installing slot 8 with the ModelComponent finder is the fix.
+// NOT INSTALLED (B.4 COMP-d): slot 8 is still a PORT GAP (known_port_issues row 5: installing it
+// is a live change on every natural-resource removal, a user decision). The body is retail's:
+// 0x140125c60 `CALL 0x140003f60` = FindComponent<ModelComponent> (cell 0x1401c7a50), then
+// 0x140125c75 `ADD RCX,0x28; CALL [0x1401514b0]` = the ModelComponent's MeshInstance::IsAnimating
+// (row 552 fixed in B6: the tree called the ParticleComponent finder 0x140005200).
 void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
-    ParticleComponent* found = self->_entity->FindComponent<ParticleComponent>();   // 0x140005200
-
-    // LEFT: the wrong finder (row 552): retail reads the ModelComponent's +0x28 MeshInstance.
-    bool isAnimating = reinterpret_cast<const Graphics::MeshInstance*>(   // LEFT: row 552 (the wrong finder: retail reads the ModelComponent's +0x28 MeshInstance)
-        reinterpret_cast<const uint8_t*>(found) + 0x28)->IsAnimating();   // LEFT: row 552 (the wrong finder: retail reads the ModelComponent's +0x28 MeshInstance)
+    ModelComponent* model = self->_entity->FindComponent<ModelComponent>();   // 0x140003f60
+    bool isAnimating = model->meshInstance.IsAnimating();
     if (isAnimating) return;
 
     // Clear bit 2 of the flags
@@ -67,15 +64,6 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
         ComponentEntity* nullRef = nullptr;   // InternalPtr (the ctor is a plain store)
         RemoveNaturalResourceCore(self, &nullRef, 0);   // 0x1401260f0 (was its ActCNR_RemoveNatRes_1260f0 forwarder)
     }
-}
-
-// ============================================================
-// 0x140005200 — FindComponent<ParticleComponent> into an InternalPtr out-slot.
-// ============================================================
-// B4 FORWARD: 1 outside caller file (diseasecomponent.cpp).
-void NaturalResourceComponent_FindComponentByType(ComponentEntity* entity, void* outIBP) {
-    new (outIBP) ::Object::InternalPtr<ParticleComponent>(
-        entity->FindComponent<ParticleComponent>());
 }
 
 // ===== ENDGAME B.3.8 CIT — NaturalResourceComponent as a REAL class =====
