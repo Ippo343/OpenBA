@@ -1440,10 +1440,14 @@ public:
         Node* node;         // +0x00 — the entire iterator
     };
 
-    // Retail's ctor is the compiler's: two stores of zero. `= default` is not
-    // used because the two fields must be zeroed, not left indeterminate
-    // (B31_RULES class rule 5).
-    Set() : _root(nullptr), _count(0), _pad0c(0) {}
+    // Retail's ctor is the compiler's: two stores of zero, the root qword and
+    // the count dword (FireWork 0x1400e9c19 / 0x1400e9c1c; EntityList
+    // 0x1400c3fe5 / 0x1400c3fe8 and 0x1400c3ff4 / 0x1400c3ff7; CitizenBehavior
+    // 0x140090b08 / 0x140090b0b and 0x140090b60 / 0x140090b63). `_pad0c` is
+    // NOT written: it keeps whatever the storage held (rows 640 / 651 / 652).
+    // `= default` is not used because the two fields must be zeroed, not left
+    // indeterminate (B31_RULES class rule 5).
+    Set() : _root(nullptr), _count(0) {}
 
     // The class OWNS its nodes, so the destructor is Clear. Retail's containers
     // are destroyed the same way (set_clear.cpp's 0x18000f7d0 is exactly this
@@ -1696,7 +1700,7 @@ public:
     // standard-layout and that `offsetof` stays well defined.
     Node*   _root;          // +0x00
     int32_t _count;         // +0x08
-    int32_t _pad0c;         // +0x0c: NOT PINNED — never read or written
+    int32_t _pad0c;         // +0x0c: NOT PINNED — never read; the ctor leaves it as found
 };
 
 // ============================================================================

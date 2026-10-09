@@ -363,9 +363,8 @@ ModPathNode* RtColl_SetCloneSubtree_1800104f0(void* set, const ModPathNode* src)
 // width, icon height, crc) and the pad at +0x51..+0x57 UNWRITTEN — every path
 // that appends the record writes all three first, and the two early-out paths
 // destroy it without reading them. So `i24` / `i28` / `i2c` have no initialiser
-// here. The one store this adds against retail is the set's `_pad0c`
-// (`Collection::Set()` zeroes it; retail writes only the root qword and the
-// count dword): dead, nothing reads +0x6c.
+// here. The set's `_pad0c` (+0x6c) is left unwritten too: `Collection::Set()`
+// writes only the root qword and the count dword, as retail does (B6 row 640).
 Mod::Mod()
     : name(), author(), description(),
       i18(0), i1c(0),                 // one qword store in retail
@@ -399,8 +398,8 @@ Mod::Mod()
 //     of what that scan would), so retail's second call is a no-op on the first
 //     call's result. One AdjustDelimiters call fewer than retail; no store,
 //     refcount or free differs.
-//   * set: zeroed (Set(): root, count — and `_pad0c`, the one store retail
-//     does not make, dead: nothing reads +0x6c), then retail's self test, the
+//   * set: zeroed (Set(): root and count, as retail; +0x6c unwritten), then
+//     retail's self test, the
 //     clone 0x1800104f0 when the source has a root, and the count.
 //   * files: zeroed, then Array<Filename>::operator= (0x1800091f0).
 Mod::Mod(const Mod& src)
