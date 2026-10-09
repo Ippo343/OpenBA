@@ -243,7 +243,6 @@ static T* FindDescriptionOnTemplate(const ComponentDescription* tmpl, uint32_t t
 // clicking a building finds nothing. Mirrors the resource path's identical write (~L1724).
 // Also makes footprints navigation-blocking (faithful).
 // Forward decl (defined near the resource-marking pass below).
-static void StartTown_WriteCellType(Map* game, MapCell* cells, int idx, uint8_t newType);
 
 static void StartTown_MarkBuildingCells(Map* game, int tileX, int tileY, int fpW, int fpH,
                                         ComponentEntity* entity, int rot) {
@@ -314,7 +313,7 @@ static void StartTown_MarkBuildingCells(Map* game, int tileX, int tileY, int fpW
                 if (c == '_') occupy = false;
             }
 
-            if (stampClass) StartTown_WriteCellType(game, cells, idx, cls);
+            if (stampClass) game->SetTerrainType(idx, cls);   // 0x14009f2f0
             cell->occupant = occupy ? entity : nullptr;
             if (occupy) marked++; else freed++;
             if (stampClass && cls == 2) roadCells++;
@@ -4495,38 +4494,10 @@ static int StartTown_ClassifyCell(Map* game, int dim, int idx) {
 // f2f0 notify targets: RegionGraph::MarkCellDirty (0x1400a8c90) and
 // PathfinderThread::SetCellTerrain (0x1400a6fe0).
 
-// FUN_14009f2f0 — write cell+0x29 = `type`, set the Game+0xa2 dirty flag, and run the
-// two notify calls: a8c90 (region-dirty, subsystem @ game+0x70, boundary-flip only) and
-// a6fe0 (pathfinder cmd-2, worker @ game+0x68, ALWAYS).
-//
-// ⚠ These were guarded off under "Game+0x68/+0x70 are zero in standalone" — STALE since
-// Pathfinder_Seed moved before StartTown (gameupdateloop_load.cpp). Skipping a6fe0 left
-// the pathfinder's byte MIRROR (pf+0x158) holding the pre-town classification, so the
-// road A* (which reads the mirror, not the grid) accepted cells the preview painted red
-// — the "places anywhere" validity gap. Null-subsystem checks keep the old safety.
-// LEFT free (B3): retail 0x14009f2f0 is Map::SetTerrainType (Action/action_pf_roots_road.cpp);
-// this copy keeps the null-subsystem checks and the PerfX mirror, so it is not rewired.
-static void StartTown_WriteCellType(Map* game, MapCell* cells, int idx, uint8_t newType) {
-    MapCell* cell = &cells[idx];
-    const uint8_t oldType = cell->terrainType;
-    const uint32_t oldMask = 1u << (oldType & 0x1f);
-    const uint32_t newMask = 1u << (newType & 0x1f);
-    // dirty bit: set when the cell crosses the buildable<->water/mountain boundary
-    // (matches f2f0's "((old&0xe1f && new&0x1e0) || (old&0x1e0 && new&0xe1f))").
-    uint8_t dirty = 0;
-    if (((oldMask & 0xe1f) && (newMask & 0x1e0)) || ((oldMask & 0x1e0) && (newMask & 0xe1f)))
-        dirty = 1;
-    game->field_0xA2 |= dirty;
-    cell->terrainType = newType;
-    PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
-    const int dim = game->size;
-    RegionGraph* regionObj = game->regionGraph;
-    if (dirty && regionObj && dim > 0)
-        regionObj->MarkCellDirty(idx % dim, idx / dim);
-    PathfinderThread* pfThread = game->pathfinder;
-    if (pfThread)
-        pfThread->SetCellTerrain((int)idx, (int)newType);
-}
+// FUN_14009f2f0 is Map::SetTerrainType (Action/action_pf_roots_road.cpp): write cell+0x29,
+// OR the boundary-flip bit into Map+0xa2, MarkCellDirty on a flip, SetCellTerrain always.
+// The region graph (+0x70) and the pathfinder (+0x68) are seeded before the start town
+// (gameupdateloop_load.cpp: Pathfinder_Seed, Region_Seed), so the member is called as is.
 
 // G3 — the resource entity is written into its map cell (cell+0x08) so the
 // ForesterWork harvest scan can find it. See the long note at the cell+0x08 write
@@ -4582,7 +4553,7 @@ static void StartTown_MarkResourceCellGrid(Map* game, ComponentEntity* ownerEnti
                 ComponentEntity* cellOwner = cell->blocker.Get();   // cell+0x00
                 if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
                     t = 2;
-                StartTown_WriteCellType(game, cells, cellIdx, t);
+                game->SetTerrainType(cellIdx, t);   // 0x14009f2f0
             }
             // Cell entity-link (cell+0x08).
             //
@@ -4663,7 +4634,7 @@ extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* own
                 ComponentEntity* cellOwner = cell->blocker.Get();   // cell+0x00
                 if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
                     t = 2;
-                StartTown_WriteCellType(game, cells, cellIdx, t);
+                game->SetTerrainType(cellIdx, t);   // 0x14009f2f0
             }
             cell->occupant = nullptr;        // dee0: null the cell entity-link, ALWAYS
         }
