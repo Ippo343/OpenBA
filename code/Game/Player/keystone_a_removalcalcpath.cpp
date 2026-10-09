@@ -191,8 +191,7 @@ Work* WorkScheduler::FindWorkAtCell(int cell) {
 void DestroyComponent::PostDestroyEvent() {
     InitTypeIds();
     StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();
-    if (!machine) return;  // SA-guard: entity has no StateMachineComponent
-    StateMachine& sm = machine->stateMachine;
+    StateMachine& sm = machine->stateMachine;   // no test (0x14011e4d0)
     sm.current->PostEvent(&sm, sm.activeState, 1);
 }
 
