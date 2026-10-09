@@ -518,7 +518,14 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     void* param2 = element;
     if (msg != 0x12) return;
-    if (id == 1) return;              // close -> handled by ToolUI::Slot9
+    // B7 LX (row 994 G33): retail 0x140067050's id-1 arm, first and unguarded:
+    // `FUN_140102b60(*(g_pGameWorldSingleton + 0x120), 0); return;` -- SelectTool(0)
+    // on the tool manager, no test of the world singleton. It returned here before
+    // ("close -> handled by ToolUI::Slot9", which deselected the EditTool by hand).
+    if (id == 1) {
+        GameUpdateLoop::_singleton->m_toolManager->SelectTool(nullptr);   // 0x140102b60
+        return;
+    }
     if (id != 0x65 && id != 100) return;
     // pin (id 100) needs the ToolUI type-id to fetch the sibling controller; center
     // (id 0x65) tolerates null component type-ids (finders just return "not found").
@@ -534,12 +541,6 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
     if (msg != 0x12) return;
 
     PlayerToolManager* playerController = GameUpdateLoop::_singleton->m_toolManager;
-
-    if (id == 1) {
-        // Close entity panel — set edit mode to 0
-        playerController->SelectTool(nullptr);
-        return;
-    }
 
     if (id == 0x65) {
         // Center camera on entity (buttonCenter). Faithful to the exe center block
