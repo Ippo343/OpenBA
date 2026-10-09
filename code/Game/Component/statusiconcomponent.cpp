@@ -49,19 +49,10 @@
 // ??0Time@System@@QEAA@M@Z (RtSystem_Time_Ctor), 0x140004680 FindComponent<MapComponent>,
 // 0x14009f3e0 Reimpl_MapGetTerrainPos (grid cell -> world position).
 
-// A StatusIconComponent that never ran StatusIconComponent_StartupInit still carries the
-// inert factory's zero-fill: the embedded geometry's vtable (+0x28) is 0 AND the scene
-// object id (+0x100) is 0. That 0 is "never initialised", NOT scene object 0 � feeding it
-// to Graphics::Scene::RemoveObject spins forever (in-world freeze, see
-// reference_inert_component_sentinel_fields), and AddObject-ing a geometry whose vtable is
-// null faults in the renderer's draw pass. The geometry vtable is the in-band marker: the
-// real ctor and StartupInit both always write it, and nothing ever clears it.
-// [STANDALONE GUARD D4] (a guard of the tree's; retail has none).
-// LEFT: the test reads the billboard's vptr (a guard the real ctor makes always-true;
-// removing it is NEXT_SESSION �0.2's).
-static inline bool SI_Initialised(const StatusIconComponent* c) {
-    return *reinterpret_cast<void* const*>(&c->_geometry) != nullptr;   // LEFT: the vptr test (above); audit DEFERRED (retail-difference task): a tree-only vptr guard retail lacks
-}
+// B6: SI_Initialised (a test of the billboard geometry's vptr, "[STANDALONE GUARD D4]") is gone.
+// The real ctor (StatusIconComponent::StatusIconComponent, retail 0x14012c0c0) builds the
+// geometry at construction, so the test was always true; retail has no such test in
+// SetFlag 0x14012c3f0, OnRemove, Tick or the citizen-side Toggle copy.
 
 // The graphics scene the icons register with: GameUpdateLoop +0x60.
 static Graphics::Scene* StatusIcon_Scene() {
@@ -224,15 +215,6 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             _geometry.activeMask |= bit;
         }
         uint32_t changed;
-        // [STANDALONE GUARD D4] geometry (+0x28) vtable installed?
-        // See the long note in the clear-branch below: both scene calls depend on it.
-        const bool inited = SI_Initialised(this);
-
-        // [diag] BANISHED_SI_CENSUS - report BOTH arms. "No bad scene nodes" is only a
-        // fix if the icons still REGISTER; if `inited` were false the guard would suppress
-        // every AddObject and the SceneWatch silence would mean the feature is off, not
-        // healthy. So count uninitialised components separately from suppressed adds.
-        // See [[reference_diagnostics_must_report_outcomes]].
         if (static_cast<int32_t>(_geometry.activeMask) == 0) {
             // [STANDALONE GUARD] A StatusIconComponent that never ran StartupInit still
             // carries the inert factory's zero-fill: the embedded geometry's vtable
@@ -254,17 +236,13 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             // (2026-08-29) is that node, and it is the `EXEC of <heap>` in Scene::Clean.
             // The upstream fix is the real ctor (StatusIconComponent::StatusIconComponent),
             // which builds the geometry at CONSTRUCTION where retail's ctor 0x14012c0c0
-            // has it, so `inited` below is true for loaded icons too. The gate stays as the
-            // same [STANDALONE GUARD D4] its twin StatusIcon_Toggle carries.
+            // has it, so the geometry is always built; the gate that tested it is gone (B6).
             //
             // WARNING: THIS FUNCTION IS PORTED TWICE - see
             // [[reference_one_retail_fn_ported_twice_diverges]]. The other copy is
             // StatusIcon_Toggle (below), which HAD the guard; THIS copy is the one the
             // building-side callers reach for 0x14012c3f0. Change both or neither.
-            if (!inited) {
-                if (iconId == 0)
-                    iconId = -1;
-            } else if (-1 < iconId) {
+            if (-1 < iconId) {
                 StatusIcon_Scene()->RemoveObject(static_cast<uint32_t>(iconId));
                 iconId = -1;
             }
@@ -274,7 +252,7 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             changed = after ^ before;
         } else {
             GameSettings* settings = g_gameSettings;
-            if (inited && settings && settings->statusIconEnable != '\0' && iconId < 0) {
+            if (settings && settings->statusIconEnable != '\0' && iconId < 0) {
                 uint32_t id = StatusIcon_Scene()->AddObject(&_geometry);
                 iconId = static_cast<int32_t>(id);
                 SceneWatch_Note(id, &_geometry, "StatusIcon(12c3f0)::Add");
@@ -332,12 +310,12 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
 // non-pointer value read out of the array and dereferenced as a component pointer.
 //
 // SCOPE (thinned 2026-07-25 after the buildui wrong-finder fix landed and a live pause
-// ran clean with none of these firing). Exactly two deviations from the decompile remain:
+// ran clean with none of these firing). One deviation from the decompile remains (D4,
+// the never-ran-StartupInit sentinel test, was removed in B6):
 //   D2  the array ENTRY walked by StatusIcon_FindCompByName is range/alignment checked
 //       before it is dereferenced — 0xa fails both (below 0x10000 and not 8-aligned),
 //       as does every other small free-list-ish integer a reused block leaves behind.
 //       This is the read that actually faulted, which is why it is the one kept.
-//   D4  the "component never ran StartupInit" sentinel discipline (see SI_Initialised).
 //
 // D2 TESTS ONLY THE ENTRY, AND ONLY AS A DATA POINTER — do not extend it. It briefly also
 // tested the component's vtable pointer and the GetTypeId function pointer at vtable+0x10;
@@ -399,13 +377,6 @@ void StatusIconComponent::OnRemove() {
     if (GameUpdateLoop::_singleton == nullptr) return;
     Graphics::Scene* scene = StatusIcon_Scene();
     int32_t sceneId = iconId;
-    // [STANDALONE GUARD D4] a component that never ran StartupInit still has the inert
-    // zero-fill, so sceneId 0 means "never registered" rather than scene object 0 —
-    // RemoveObject on it spins forever (in-world freeze). Repair the sentinel instead.
-    if (!SI_Initialised(this)) {
-        if (sceneId == 0) iconId = -1;
-        return;
-    }
     if (sceneId >= 0 && scene) {
         scene->RemoveObject((uint32_t)sceneId);
         iconId = -1;
@@ -436,7 +407,6 @@ void StatusIconComponent::OnRemove() {
 // fault. Retail would have had a fully-consistent array here.
 // [StatusIcon] GUARD trace budgets (were function-local statics; B6-5).
 static int s_siBadEntryBudget = 8;
-static int s_siUninitBudget = 4;
 
 // B.3.8 CB1b: the caller passes the class's TypeId() (a plain read), which replaces
 // the per-name first-use cache this helper used to keep (B6-5); `typeName` is only
@@ -491,10 +461,6 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     if (GameUpdateLoop::_singleton == nullptr) return;
     Graphics::Scene* scene = StatusIcon_Scene();
 
-    // [STANDALONE GUARD D4] see SI_Initialised: with no StartupInit the geometry has no
-    // vtable and +0x100 == 0 is "never registered", so neither scene call below may run.
-    const bool inited = SI_Initialised(selfC);
-
     // Culled-entity guard: if the owner entity is culled (entity+0x40 bit 10) the original
     // skips the SET path (only clears are honoured while culled).
     ComponentEntity* entity = selfC->_entity.Get();
@@ -509,9 +475,7 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     if ((int32_t)*pFlags == 0) {
         // All status bits cleared → remove the icon from the scene.
         int32_t sid = selfC->iconId;
-        if (!inited) {
-            if (sid == 0) selfC->iconId = -1;   // repair the zero-fill sentinel
-        } else if (sid >= 0 && scene) {
+        if (sid >= 0 && scene) {
             scene->RemoveObject((uint32_t)sid);
             selfC->iconId = -1;
         }
@@ -527,8 +491,8 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
         // instead (slot 11 has no dispatcher here), so the guarantee has to be restored
         // at the same point: a stream-restored component has never run slot 4, and adding
         // its sprite-less geometry is a silent no-draw. See StatusIcon_EnsureSprite.
-        if (inited) StatusIcon_EnsureSprite(selfC);
-        if (inited && vis != 0 && selfC->iconId < 0 && scene) {
+        StatusIcon_EnsureSprite(selfC);
+        if (vis != 0 && selfC->iconId < 0 && scene) {
             uint32_t id = scene->AddObject(&selfC->_geometry);
             selfC->iconId = (int32_t)id;
             SceneWatch_Note(id, &selfC->_geometry, "StatusIconComponent::Show");
@@ -633,20 +597,6 @@ void StatusIconComponent::Startup() {
 // the model's bounding box); the map-cell fallback mirrors the original for entities
 // without a model. Verified line-by-line against the disassembly.
 void StatusIconComponent::Tick(const System::Time* /*time*/) {
-    // [STANDALONE GUARD D4] never-initialised component: the inert factory's zero-fill left
-    // the geometry vtable (+0x28) null, so +0x100 == 0 is "not registered", not scene
-    // object 0. Touching the scene from here would either add a null-vtable geometry to
-    // the draw list or RemoveObject an id that was never handed out (which spins forever).
-    if (!SI_Initialised(this)) {
-        if (SI_LogOnce(&s_siUninitBudget)) {
-            fprintf(stderr, "[StatusIcon] GUARD: comp=%p never ran StartupInit "
-                    "(geom vtable +0x28 == 0, sceneId=%d) — icon refresh skipped\n",
-                    static_cast<void*>(this), iconId);
-            fflush(stderr);
-        }
-        return;
-    }
-
     GameSettings* settings = g_gameSettings;
     if (!settings || GameUpdateLoop::_singleton == nullptr) return;
     Graphics::Scene* scene = StatusIcon_Scene();
