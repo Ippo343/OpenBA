@@ -75,7 +75,7 @@ void EventLogUI::OnOpened() {
     {
         System::String nameStr("display");
         UI::Element* found = dialogElem->FindElement(nameStr).Get();
-        displayElem = ::Object::IsDerivedFromNullSafe(found, UI::TableElement::TypeId())
+        displayElem = found->IsDerivedFrom(UI::TableElement::TypeId())   // 0x14006784c, no null test (B7 LX row 993)
                           ? static_cast<UI::TableElement*>(found) : nullptr;
     }
 
