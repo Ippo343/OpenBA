@@ -18,7 +18,7 @@
 
 #include "Component/statemachinecomponent_funcs.h"
 #include "Component/ControllerComponent.h"
-#include "Component/controller_state_table.h"   // StateMachine_TickReimpl's declaration
+#include "Component/controller_state_table.h"   // ControllerLive (the root node table)
 #include "Component/DestroyComponent.h"
 #include "Entity/ComponentEntity.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (state-2 workplace hand-off)
@@ -239,15 +239,6 @@ void StateMachine::Tick(const System::Time* time, char useAlt, char run) {
             run = '\0';
         }
     } while (pendingState >= 0);
-}
-
-// B4 FORWARD: 2 outside caller files (firecomponent_smstate.cpp, tradecomponent_states.cpp),
-// both passing an integer where the machine takes a `const System::Time*`.
-void StateMachine_TickReimpl(StateMachine* smP, int64_t time, char param3, char param4) {
-    // LEFT: the integer callers (firecomponent_smstate.cpp x2, tradecomponent_states.cpp x2) hand
-    // the tick VALUE of a Time(0), which arrives here as a null pointer; retail passes &Time
-    // (known_port_issues 14, row 510).
-    smP->Tick(reinterpret_cast<const System::Time*>(time), param3, param4);   // LEFT: SIG StateMachine_TickReimpl: integer time (row 510)
 }
 
 // ============================================================================
