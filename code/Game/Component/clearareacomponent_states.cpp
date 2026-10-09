@@ -175,33 +175,27 @@ static bool Grid_NoTargetResource(const Map* grid, int x1, int y1, int w, int h,
 //   groundOK = (desc._clearGround==0) || Grid_GroundClear
 //   if (desc._clearTrees==0 || desc._clearBuildings!=0) done = groundOK && Grid_AllEmpty
 //   else                                                done = groundOK && Grid_NoTargetResource(target)
-// Retail takes the description through IsDerivedFrom (CMOVNZ to 0) and then reads its
-// flags unguarded; the tree reads them off the component's description, answering zero
-// flags when it has none. Retail derefs the MapComponent and the map unguarded; the tree
-// answers false. Both kept (B9).
+// B6 (14d G2): 0x140118458-0x140118476 IsDerivedFrom(+0x18, ClearAreaDescription cell
+// 0x1401c7200), CMOVNZ to 0; the flags (+0x29 at 0x140118499, +0x28, +0x2a, +0x20) are read
+// through it with no test; the MapComponent (0x140004680) at 0x14011849d.. and
+// [0x1401c3dd8]+0xf8 (0x1401184b3 / 0x1401184bc) are read with no test.
 // ============================================================
 bool ClearAreaComponent::IsDone() {
-    if (GameUpdateLoop::_singleton == nullptr) return true;
     Description* d = _description;
-    const ClearAreaDescription* desc = static_cast<ClearAreaDescription*>(d);
-    bool clearTrees = false, clearGround = false, clearBuildings = false;
-    const ComponentDescription* target = nullptr;
-    if (desc) {
-        clearTrees     = desc->_clearTrees;
-        clearGround    = desc->_clearGround;
-        clearBuildings = desc->_clearBuildings;
-        target         = desc->_target;
-    }
+    const ClearAreaDescription* desc = d->IsDerivedFrom(ClearAreaDescription::TypeId())
+                                       ? static_cast<ClearAreaDescription*>(d) : nullptr;
+    const bool clearTrees     = desc->_clearTrees;
+    const bool clearGround    = desc->_clearGround;
+    const bool clearBuildings = desc->_clearBuildings;
+    const ComponentDescription* target = desc->_target;
 
-    MapComponent* mc = FindOn<MapComponent>(_entity.Get());   // 0x140004680
-    if (!mc) return false;
+    MapComponent* mc = _entity->FindComponent<MapComponent>();   // 0x140118489 CALL 0x140004680
     int x1 = static_cast<int16_t>(mc->tileX0);
     int y1 = static_cast<int16_t>(mc->tileY0);
     int w  = static_cast<int16_t>(mc->tileX1);
     int h  = static_cast<int16_t>(mc->tileY1);
 
     const Map* grid = GameUpdateLoop::_singleton->m_game;
-    if (!grid) return false;
 
     bool groundOK = !clearGround || Grid_GroundClear(grid, x1, y1, w, h);
     if (!groundOK) return false;
