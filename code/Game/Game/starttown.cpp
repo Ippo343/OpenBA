@@ -143,8 +143,8 @@ static constexpr float kDeg2Rad    = 3.14159265358979323846f / 180.0f;
 
 // Force-work harness (env BANISHED_FORCE_WORK): the first spawned start-town
 // structure (a StorageBarn = a real workplace building entity) is captured here so
-// the CitizenAI force-assign harness can point a citizen's workplace(+0x238) /
-// housed-flag(+0x68) at it, exercising the Work loop before the town-manager
+// the CitizenAI force-assign harness can point a citizen's workplace(+0x238)
+// at it (B7 LX: no longer +0x68, the Disease* slot), exercising the Work loop before the town-manager
 // building registry is brought up. Set in StartTown_SpawnStructures.
 ComponentEntity* g_pForceWorkBuilding = nullptr;
 

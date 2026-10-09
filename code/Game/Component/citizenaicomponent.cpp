@@ -570,8 +570,12 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
     // registry is brought up, directly point ONE citizen at a real workplace
     // building (the first start-town StorageBarn, captured in starttown.cpp):
     //   +0x238 = home (inline InternalBasePtr)              -> State_Work target
-    //   +0x68  = the Disease* slot (non-null)               -> makes Work a candidate
     // One-shot per citizen (only seeds while +0x238 is still empty).
+    // B7 LX (B7_RULES D8a): the harness no longer plants the building in +0x68,
+    // which is `CitizenComponent::disease` (a Disease*, not a housing flag): a
+    // ComponentEntity* there made the citizen read as SICK to CitizenAI's
+    // candidate list (citizenai_candidatelist.cpp dereferences `disease`), a
+    // latent fault seen under BANISHED_FORCE_WORK only.
     if (citizen) {
         const char* e = Opt().forceWork;   // read per call: Options are fixed at boot (B6-5)
         const int s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
@@ -579,11 +583,9 @@ void CitizenAIComponent::Update(const System::Time* timeArg) {
             if (citizen->home == nullptr) {
                 new (&citizen->home) ::Object::InternalBasePtr(
                         g_pForceWorkBuilding);
-                // the harness plants a non-disease pointer in the Disease* slot
-                *reinterpret_cast<void**>(&citizen->disease) = g_pForceWorkBuilding;   // LEFT: DEFERRED (named prerequisite: the harness decision, retire or retype the force-work harness); the force-work harness plants the ComponentEntity* in the Disease* slot (a harness pun, kept)
                 if (s_caiForceWorkLog.fetch_add(1, std::memory_order_relaxed) < 6) {
-                    fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p housed+0x68=%p\n",
-                            (void*)citizen.Get(), g_pForceWorkBuilding, g_pForceWorkBuilding);
+                    fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p\n",
+                            (void*)citizen.Get(), g_pForceWorkBuilding);
                     fflush(stderr);
                 }
             }
