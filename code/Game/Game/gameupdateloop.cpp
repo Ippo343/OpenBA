@@ -2002,7 +2002,7 @@ void GameUpdateLoop::Shutdown() {
     // Renderer
     if (m_renderer != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Renderer...\n");
-        RtGraphics_Renderer_Dtor(m_renderer);   // ~Renderer 0x1800180a0
+        m_renderer->~Renderer();   // ~Renderer 0x1800180a0
         System::MemoryAllocator::MemFree(m_renderer);
     }
 
@@ -2072,7 +2072,7 @@ void GameUpdateLoop::Shutdown() {
     // Graphics::Scene
     if (m_graphicsScene != nullptr) {
         TRACE("[GameUpdateLoop::Shutdown]   destroying Graphics::Scene...\n");
-        RtGraphics_Scene_Dtor(m_graphicsScene);   // ~Scene 0x1801026c0
+        m_graphicsScene->~Scene();   // ~Scene 0x1801026c0
         System::MemoryAllocator::MemFree(m_graphicsScene);
     }
 

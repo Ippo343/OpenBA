@@ -56,7 +56,7 @@
 #include "graphics/Scene.h"     // ENDGAME B.3.7: MenuDLT::Shutdown (carry-over 11)
 #include "save/SaveLoad.h"      // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "audio/Audio.h"        // ENDGAME B.3.8 LOOP: ~MenuDialogLoopT runs ~Audio::Scene
-#include "graphics/Camera.h"    // B3R: RtGraphics_Renderer_Dtor
+#include "graphics/Camera.h"    // Graphics::Renderer (~Renderer)
 #include "system/MemoryAllocator.h"   // B3R: System::MemoryAllocator::MemAlloc / MemFree
 #include "ui/Cursor.h"          // B4: GameContainer cursor slots
 #include "ui/SpriteSheet.h"     // B4: GameContainer::spriteSheet
@@ -465,12 +465,12 @@ void MenuDialogLoopT::Shutdown() {
     if (void* t = _transform) System::MemoryAllocator::MemFree(t);
     // 7. +0xba0 Graphics::Scene: ~Scene (??1Scene@Graphics@@ 0x1801026c0) then freed.
     if (Graphics::Scene* g = _scene) {
-        RtGraphics_Scene_Dtor(g);
+        g->~Scene();
         System::MemoryAllocator::MemFree(g);
     }
     // 8. +0xb98 Graphics::Renderer: ~Renderer (??1Renderer@Graphics@@ 0x1800180a0) then freed.
     if (Graphics::Renderer* r = _renderer) {
-        RtGraphics_Renderer_Dtor(r);
+        r->~Renderer();
         System::MemoryAllocator::MemFree(r);
     }
     // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad (??1SaveLoad@Save@@ 0x1800c3c90) then freed.

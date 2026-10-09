@@ -76,7 +76,7 @@
 #include "ui/StringTable.h"  // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Game/exe_bodies.h"
-#include "graphics/Camera.h"            // Graphics::Camera, RtGraphics_Renderer_Ctor
+#include "graphics/Camera.h"            // Graphics::Camera, Graphics::Renderer
 #include "graphics/Animation.h"         // RtGraphics_AnimationManager_Ctor
 #include "picking/Scene.h"              // RtPicking_Scene_Ctor
 #include "ui/UserInterface.h"           // RtUi_UserInterface_Ctor
@@ -805,7 +805,7 @@ void GameUpdateLoop::Load() {
     // Step 7 — Renderer (+0x90, 0x50).
     {
         Graphics::Renderer* mem = AllocSub<Graphics::Renderer>(0x50, 4);
-        if (mem) RtGraphics_Renderer_Ctor(mem);   // Renderer() 0x180105180
+        if (mem) ::new (mem) Graphics::Renderer();   // Renderer() 0x180105180
         m_renderer = mem;
     }
 
@@ -906,7 +906,7 @@ void GameUpdateLoop::Load() {
     // Step 18 — Graphics::Scene (+0x60, 0x78).
     {
         Graphics::Scene* mem = AllocSub<Graphics::Scene>(0x78, 8);
-        if (mem) RtGraphics_Scene_Ctor(mem);
+        if (mem) ::new (mem) Graphics::Scene();   // Scene() 0x180102730
         m_graphicsScene = mem;
     }
 
