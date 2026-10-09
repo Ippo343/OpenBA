@@ -226,9 +226,9 @@ static void ToolTile_SetPlacedModel(ModelComponent* model, bool foundation) {
 uint64_t PlacementTool::CreateAt(int param_2, int param_3, int param_4, int param_5,
                                  const Math::Vector3* param_6, float param_7) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    // DAT_140172248 is 0x447a0000 = 1000.0f (read 2026-10-02); the tree has always passed
-    // 250.0f. LEFT, not fixed in B4: known_port_issues 14 row 70.
-    const float DAT_140172248 = 250.0f;
+    // DAT_140172248 is 0x447a0000 = 1000.0f (read again 2026-10-09):
+    // `MOVSS XMM0,[0x140172248]; MOVSS [RSP+0x48],XMM0` at 0x1400fd6e6 / 0x1400fd6ee.
+    const float DAT_140172248 = 1000.0f;
 
     Map* piVar10 = gameWorld->m_game;
     int iVar12 = (param_4 - param_2) + 1;   // width
