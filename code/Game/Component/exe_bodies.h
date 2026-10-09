@@ -137,7 +137,6 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t wor
 
 // ---- citizenaicomponent.cpp
 class StorageComponent;
-int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self);  // forwarder to StorageComponent::QueryCount 0x14012cf10 (row 551; no caller left since B6 D and CLOSEB: the coordinator deletes it)
 int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0
 
 // ---- citizencomponent.cpp
