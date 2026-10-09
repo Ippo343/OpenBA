@@ -361,9 +361,9 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     if (cancelFirst != 0) WorkBase_TaskListCleanup_c5400(list);
 
     // heading = Entity_impl_29a0(worldPos, &target inner) — returned in XMM0.
-    // (the targetIBP null arm is the tree's guard)
+    // 0x1400c0b31 MOV RAX,[R12]: the target reference read with no test (B6 14d G25).
     // LEFT: SIG WorkAct_PerformWorkCtor9_c0ad0 (the caller hands the pile reference as void*).
-    ComponentEntity* targetInner = targetIBP ? *targetIBP : nullptr;
+    ComponentEntity* targetInner = *targetIBP;
     float heading = 0.0f;
     {
         ComponentEntity* headingArg = targetInner;
@@ -400,12 +400,9 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     character->actionStack.field_0x10 = ibpSm;
 
     // --- path-mask byte from the pile's map cell (terrain type +0x29) ---
-    // (the singleton arm is the tree's guard)
-    uint8_t cellFlag = 0;
-    if (GameUpdateLoop::_singleton != nullptr) {
-        Map* grid = GameUpdateLoop::_singleton->m_game;
-        cellFlag = grid->cells.GetData()[static_cast<int64_t>(cellIdx)].terrainType;
-    }
+    // 0x1400c0c24-0x1400c0c44: [0x1401c3dd8]+0xf8 and the cell read with no test.
+    Map* grid = GameUpdateLoop::_singleton->m_game;
+    uint8_t cellFlag = grid->cells.GetData()[static_cast<int64_t>(cellIdx)].terrainType;
 
     // --- inline PerformWork action, kind 7 ---
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
