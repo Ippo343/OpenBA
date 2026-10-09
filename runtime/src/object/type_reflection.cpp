@@ -335,9 +335,11 @@ bool Factory::Startup() {
         entry.record._pad04        = 0;
         entry.record.info          = info;
         entry.record.parent        = nullptr;
-        entry.record.children      = nullptr;
-        entry.record.childCount    = 0;
-        entry.record.childCapacity = 0;
+        // `entry.record.children` is zeroed by its ctor (the three zero stores
+        // retail writes at 0x1800c06e3..0x1800c06fa); its ~Array at the end of
+        // the iteration is retail's two bare zero stores 0x1800c0728 /
+        // 0x1800c072d -- at -O2 GCC keeps no stack copy at all (the insert is
+        // inline and stores straight into the node), so no free is emitted.
 
         // R8 and R9 are the SAME address at 0x1800c070f/0x1800c070a: the key IS
         // the record's first field. `Collection::Set` says the same thing by
@@ -393,34 +395,34 @@ bool Factory::Startup() {
         // here rather than routed through `Collection::Array<T>::SetSize`
         // because retail inlined it: this call site has no `ArraySpec`, no
         // registered address, and a stride and align baked in as immediates.
-        const int64_t oldSize = parentRec->childCount;             // MOVSXD
+        const int64_t oldSize = parentRec->children._size;             // MOVSXD
         const int32_t newSize = static_cast<int32_t>(oldSize) + 1;
         if (newSize == static_cast<int32_t>(oldSize)) continue;    // 0x1800c07b0
 
-        TypeRecord** const old = parentRec->children;
-        parentRec->childCount = newSize;
-        if (newSize > parentRec->childCapacity) {                  // SIGNED
-            parentRec->childCapacity = newSize;
+        TypeRecord** const old = parentRec->children._data;
+        parentRec->children._size = newSize;
+        if (newSize > parentRec->children._capacity) {                  // SIGNED
+            parentRec->children._capacity = newSize;
             // The growth rule: triple ONLY when this is a one-element growth of
             // a non-empty array, i.e. never on the first push. A type with two
             // or more children is what exercises it.
             if (newSize == static_cast<int32_t>(oldSize) + 1 && oldSize != 0)
-                parentRec->childCapacity = newSize * 3;            // 32-bit LEA
-            parentRec->children = static_cast<TypeRecord**>(TypeChildAlloc(  // LEFT: TypeChildAlloc (TypeInfo.h) is the inlined Array<TypeRecord*> growth allocator (void*); an allocation result by meaning, not by the tier-I name shape
+                parentRec->children._capacity = newSize * 3;            // 32-bit LEA
+            parentRec->children._data = static_cast<TypeRecord**>(TypeChildAlloc(  // LEFT: TypeChildAlloc (TypeInfo.h) is the inlined Array<TypeRecord*> growth allocator (void*); an allocation result by meaning, not by the tier-I name shape
                 static_cast<uint64_t>(
-                    static_cast<int64_t>(parentRec->childCapacity)) * 8, 8));
+                    static_cast<int64_t>(parentRec->children._capacity)) * 8, 8));
         }
 
         // 0x1800c082c: start at oldSize when the buffer did NOT move (append
         // only), at 0 when it did (copy then append).
-        for (int64_t i = (old == parentRec->children) ? oldSize : 0;
+        for (int64_t i = (old == parentRec->children._data) ? oldSize : 0;
              i < newSize; ++i) {
-            TypeRecord** const dst = parentRec->children + i;
+            TypeRecord** const dst = parentRec->children._data + i;
             if (!dst) continue;      // retail's TEST RDX,RDX at 0x1800c0849
             *dst = (i < oldSize) ? old[i] : &node->element.record;
         }
 
-        if (old != parentRec->children && old)                     // 0x1800c086e
+        if (old != parentRec->children._data && old)                     // 0x1800c086e
             TypeChildFree(old);
     }
 
@@ -499,7 +501,7 @@ uint32_t Factory::GetParentType(uint32_t typeId) const {
 int32_t Factory::GetChildTypeCount(uint32_t typeId) const {
     const TypeSet::Node* n = _types.Find(typeId);
     const TypeRecord* rec = &n->element.record;
-    return rec->childCount;
+    return rec->children._size;
 }
 
 // ?GetChildType@Factory@Object@@QEBAIIH@Z — the index is NOT bounds-checked in
@@ -507,7 +509,7 @@ int32_t Factory::GetChildTypeCount(uint32_t typeId) const {
 uint32_t Factory::GetChildType(uint32_t typeId, int32_t index) const {
     const TypeSet::Node* n = _types.Find(typeId);
     const TypeRecord* rec = &n->element.record;
-    return rec->children[index]->typeId;
+    return rec->children._data[index]->typeId;
 }
 
 // ?GetTypeIdForFileExtension@Factory@Object@@QEBAIPEBD@Z   retail 0x1800c04c0

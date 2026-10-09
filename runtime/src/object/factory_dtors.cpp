@@ -101,7 +101,6 @@
 #include "../../types/object/Internal.h"
 #include "../../types/object/External.h"
 #include "../system/string.h"
-#include "../collection/avl_trees.h"   // B3R: rtavl::PtrArrayDtor (0x1800093e0)
 #include "../../types/system/MemoryAllocator.h"   // B3R: rtalloc::FreeLockedIgnoringSelf (0x180009c30)
 
 namespace RtObjFactoryDtor {
@@ -118,11 +117,10 @@ using RtObject::PathStackEntry;
 
 // ---------------------------------------------------------------------------
 // The two already-ported callees, called by name (B3R RT-Core):
-//   0x1800093e0  rtavl::PtrArrayDtor -- a trivial J1-equivalent
-//                `Array<T*>::~Array` over `TypeNode::value.children`, three
-//                independently named scalar fields in TypeInfo.h rather than
-//                a real `Collection::Array<TypeRecord*>` member, so it stays
-//                the free body.
+//   0x1800093e0  `Collection::Array<TypeRecord*>::~Array` over
+//                `TypeNode::value.children` (B7: the real member; the free
+//                `rtavl::PtrArrayDtor` over the raw triple is gone), called
+//                explicitly because the node is freed raw, as retail does.
 //   0x180009c30  rtalloc::FreeLockedIgnoringSelf -- arg 1 IS IGNORED by the
 //                callee, and kept for exactly that reason.
 // ---------------------------------------------------------------------------
@@ -162,7 +160,7 @@ void TypeSubtreeFree(void* set, ::Object::Factory::TypeSet::Node* node) {
         return;
     TypeSubtreeFree(set, node->left);
     TypeSubtreeFree(set, node->right);
-    rtavl::PtrArrayDtor(&node->element.record.children);   // node + 0x20
+    node->element.record.children.~Array();                // node + 0x20, 0x1800093e0
     rtalloc::FreeLockedIgnoringSelf(set, node);
 }
 
@@ -206,7 +204,7 @@ void RtObject_Factory_Dtor(::Object::Factory* self) {
     if (root != nullptr) {
         TypeSubtreeFree(self, root->left);
         TypeSubtreeFree(self, root->right);
-        rtavl::PtrArrayDtor(&root->element.record.children);   // root + 0x20
+        root->element.record.children.~Array();                // root + 0x20, 0x1800093e0
         rtalloc::FreeLockedIgnoringSelf(self, root);
     }
     s._root  = nullptr;
