@@ -160,7 +160,7 @@ uint64_t g_erased    = 0;   // EFFECTIVENESS: descents that actually HIT a node
 uint64_t g_missed    = 0;   // EFFECTIVENESS: descents that found nothing
 uint64_t g_released  = 0;   // control: COM slots that were non-null
 uint64_t g_checks    = 0;   // EFFECTIVENESS: self-check actually evaluated
-uint64_t g_noApp     = 0;   // control: the singleton was null
+constexpr uint64_t g_noApp = 0;   // control: the singleton was null (never since B6 D G20: kept for the summary line)
 
 struct ShutdownSummary {
     ~ShutdownSummary() {
