@@ -544,7 +544,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
     if (id == 0x65) {
         // Center camera on entity (buttonCenter). Faithful to the exe center block
         // (0x140066870..0x140066a8c) — the same position math as
-        // Toolbar_CenterOnEntity_Impl Section 2:
+        // PlayerToolManager::CenterOnEntity Section 2:
         //   - ModelComponent present AND no MultiObjectComponent  -> single object
         //     (citizen/animal/small building): use the model's world Transform
         //     translation (ModelComponent+0x148 Transform, pos at +0x158/+0x15C).
@@ -636,11 +636,12 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
             toolPtr->dragging = 0;
         }
 
-        // If unpinned, remove entity from tracking set (tool manager +0x50)
+        // If unpinned, remove entity from the open-entity set (tool manager +0x60):
+        // SyncPin 0x1400666b0 `ADD RCX,0x60` (0x1400667de), `CALL 0x14002c690` (0x1400667e2)
         if (checkPin->_checked == 0) {
             ComponentEntity* entityKey = entity;
             PlayerToolManager* worldObj = GameUpdateLoop::_singleton->m_toolManager;
-            Avl38SetFindRemove(&worldObj->field_0x50, &entityKey);   // 0x14002c690
+            Avl38SetFindRemove(&worldObj->field_0x60, &entityKey);   // 0x14002c690
             return;
         }
 

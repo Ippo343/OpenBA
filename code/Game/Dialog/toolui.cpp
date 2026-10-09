@@ -320,14 +320,8 @@ void ToolUI::OnCreated() {
 // the datasource in per-frame dialog slots; its drag-arm (EntityUI::Slot8,
 // 0x140066AD0) is scoped by construction: EntityUI exists only on entity
 // dialogs. This helper reproduces that scoping dialog-side, entity untouched.
-// The address window is the tree's guard (a stale dialog pointer), not retail's.
 static bool ToolUI_DialogHasEntityUI(const UI::DialogInstance* dialog) {
-    static uint32_t s_tidEntityUI = 0;
-    if (!s_tidEntityUI) s_tidEntityUI = EntityUI::TypeId();
-    if (!s_tidEntityUI) return false;
-    uintptr_t di = reinterpret_cast<uintptr_t>(dialog);  // CAST-OK: ptr_int
-    if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return false;
-    return dialog->GetController(s_tidEntityUI).Get() != nullptr;
+    return dialog->GetController(EntityUI::TypeId()).Get() != nullptr;
 }
 
 // The mouse position in UI units (KeyMap axes 0 / 1 scaled by the dialog's
@@ -558,17 +552,9 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
                 }
             }
         }
-        // Standalone dialogs/controllers are only partially initialized. Validate the
-        // pointers this path dereferences before use so a bad field can't fault: the
-        // world singleton (walked for the tracking BST below) and the dialog-instance
-        // pointer (deref'd for its UserInterface). The address window matches
-        // CitUI_OkPtr (canonical Win64 user-space heap window).
-        if (GameUpdateLoop::_singleton == nullptr)
-            return;
-        {
-            uintptr_t di = reinterpret_cast<uintptr_t>(_dialog);  // CAST-OK: ptr_int
-            if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return;
-        }
+        // 0x14007bc30's close arm: CloseDialog through +0x18's UserInterface, then the
+        // tool manager's +0x50 set walked for this ToolUI's template -- no test of the
+        // world singleton or of the dialog pointer.
         Object::InternalPtr<UI::DialogInstance> dialogRef(_dialog);
         _dialog->_ui->CloseDialog(&dialogRef);
 

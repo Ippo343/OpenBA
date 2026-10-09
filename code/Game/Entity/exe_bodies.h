@@ -111,7 +111,6 @@ void fn_FindComponent_SM(ComponentEntity* entity, ClearAreaComponent** retval);
 void fn_FindComponent_Citizen(ComponentEntity* entity, CitizenComponent** retval);
 // fn_FindComponent_Storage — DAT_1401c7e78, original FUN_140006270
 void fn_FindComponent_Storage(ComponentEntity* entity, StorageComponent** retval);
-void fn_FindComponent_Storage(ComponentEntity* entity, uintptr_t* retval);   // B4 FORWARD: Dialog/residenceui.cpp still calls this
 // fn_FindComponent_Cemetery — DAT_1401c4090, original FUN_140010a00
 void fn_FindComponent_Cemetery(ComponentEntity* entity, CemeteryComponent** retval);
 // fn_FindComponent_Immigration — DAT_1401c4480, original FUN_140012020

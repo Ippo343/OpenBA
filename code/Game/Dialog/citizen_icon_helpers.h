@@ -4,7 +4,7 @@
 //
 // Originally at:
 //   CitizenUI_UpdateIconDisplay — FUN_14006aed0
-//   CitizenUI_BuildIconArray   — FUN_14006abf0
+//   (the group's Init, FUN_14006abf0, is TownHall_GroupRatingInit: Dialog/RatingGroup.h)
 
 #include "collection/Collection.h"   // Collection::Array
 #include "ui/UserInterface.h"
@@ -51,55 +51,5 @@ inline void CitizenUI_UpdateIconDisplay_Impl(const Collection::Array<UI::Element
             (iVar2 == fillLevel) ? 1 : 0);
 
         iVar2 += 2;
-    }
-}
-
-// ============================================================
-// CitizenUI_BuildIconArray (0x14006abf0)
-// ============================================================
-// Builds two InternalBasePtr arrays (whole-icon and half-icon) from
-// a group element's children. Each child has sub-elements named
-// "whole" and "half" found via FindElement.
-//
-// whole / half: the icon group's two arrays (as above)
-// groupElemIBP: the InternalPtr to the parent group element (re-read per pass)
-inline void CitizenUI_BuildIconArray_Impl(Collection::Array<UI::Element*>& whole,
-                                          Collection::Array<UI::Element*>& half,
-                                          const Object::InternalPtr<UI::Element>* groupElemIBP)
-{
-    UI::Element* groupElem = groupElemIBP->Get();
-    if (!groupElem) return;
-    int childCount = groupElem->ChildCount();
-    if (childCount <= 0) return;
-
-    for (int childIdx = 0; childIdx < childCount; childIdx++) {
-        // --- Whole icon element ---
-        {
-            System::String nameStr("whole");
-
-            UI::Element* childElem = groupElem->Child(childIdx).Get();
-            UI::Element* wholeElem = childElem->FindElement(nameStr).Get();
-
-            // Push to the whole array. The old copy loop wrote `*dst = 0;` then
-            // unconditionally overwrote the same qword — a transcription
-            // artifact with no net effect.
-            whole.SetSize(whole.GetSize() + 1, wholeElem);
-        }
-
-        // --- Half icon element ---
-        {
-            System::String nameStr("half");
-
-            UI::Element* groupElem2 = groupElemIBP->Get();
-            UI::Element* childElem = groupElem2->Child(childIdx).Get();
-            UI::Element* halfElem = childElem->FindElement(nameStr).Get();
-
-            // Push to the half array.
-            half.SetSize(half.GetSize() + 1, halfElem);
-        }
-
-        // Re-check group element (may have been reallocated)
-        groupElem = groupElemIBP->Get();
-        childCount = groupElem->ChildCount();
     }
 }

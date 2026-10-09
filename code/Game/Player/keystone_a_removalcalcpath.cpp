@@ -191,8 +191,7 @@ Work* WorkScheduler::FindWorkAtCell(int cell) {
 void DestroyComponent::PostDestroyEvent() {
     InitTypeIds();
     StateMachineComponent* machine = _entity->FindComponent<StateMachineComponent>();
-    if (!machine) return;  // SA-guard: entity has no StateMachineComponent
-    StateMachine& sm = machine->stateMachine;
+    StateMachine& sm = machine->stateMachine;   // no test (0x14011e4d0)
     sm.current->PostEvent(&sm, sm.activeState, 1);
 }
 
@@ -298,18 +297,8 @@ void DestroyComponent::RunStateMachine() {
     System::Time timeOutSlot = {0};
     int32_t outState;   // seeded below, before FindTransition writes it
 
+    // No test of the find's result (0x14011dfa0 reads +0x52 / +0x50 at once).
     StateMachineComponent* st0 = _entity->FindComponent<StateMachineComponent>();
-    if (!st0) {  // SA-guard: no StateMachineComponent on the entity (crashed
-                 // live 2026-07-20 on the first upgrade click, pre-7d98 fill)
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            fprintf(stderr, "[SM-dfa0] entity has no StateMachineComponent — "
-                            "pump skipped\n");
-            fflush(stderr);
-        }
-        return;
-    }
     int8_t cVar5 = st0->stateMachine.pendingState;
     if (cVar5 < 0) cVar5 = st0->stateMachine.currentInput;
     if (cVar5 == 6) return;

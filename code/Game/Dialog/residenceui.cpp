@@ -47,6 +47,7 @@
 #include "Component/CitizenDescription.h"
 #include "runtime/types/ui/TableElement.h"
 #include "Component/AttendanceComponent.h"   // B4 S4 RT2: InternalPtr<AttendanceComponent>::Get() needs the class complete
+#include "Game/PlayerToolManager.h"   // CenterOnEntity 0x140103040 (row 452)
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
@@ -440,15 +441,18 @@ void ResidenceUI::OnUpdateLayout() {
 // Iterates the component's rooms to find the citizen at the given
 // flat index, then centers the camera on that citizen entity.
 //
-// Room layout: +0x50 = room array ptr (0x10-byte entries: ptr, count),
-//              +0x58 = room count.
-// Each room entry: [citizenListPtr 8][count 4][pad 4].
-// citizenListPtr -> array of citizen entity pointers (8 bytes each).
-// Citizen entity +0x10 = InternalBasePtr self-reference.
+// Original: 0x1400B56A0 (from ResidenceUI_Slot9 0x1400b5843: element event 0x12, id 300 + n).
 //
-// Original: 0x1400B56A0. Retail finds the component through 0x140006270, the
-// StorageComponent cell (0x1401c7e78), and reads +0x50 / +0x58 of it: the class
-// of those two fields is not settled, so the walk stays raw (LEFT).
+// STANDALONE DEVIATION (B6 ruling, known_port_issues row 452): retail reads StorageComponent
+// +0x50/+0x58 past a 0x40-byte object. 0x1400b56a0 finds the component through 0x140006270,
+// whose cell 0x1401c7e78 is written only by StorageComponent_RegisterType 0x14014fb10
+// (factory 0x140038b50 = MemAlloc(0x40)), then walks [comp+0x58] families of
+// [comp+0x50] at stride 0x10 -- heap past the StorageComponent's end (docs/retail_bugs.md).
+// The tree reads the ResidenceComponent's family rows by name instead: the same rows
+// OnUpdateLayout 0x1400b51f0 walks through cell 0x1401c7cf0. The rest is retail's shape:
+// the flat index counts residents family by family; the hit hands the resident's entity
+// (CitizenComponent +0x10) and DialogController +0x18 to PlayerToolManager::CenterOnEntity
+// 0x140103040 (receiver GameUpdateLoop +0x120).
 
 void ResidenceUI::GoToCitizen(int citizenIndex) {
     // Get entity from data source +0x28
@@ -456,32 +460,25 @@ void ResidenceUI::GoToCitizen(int citizenIndex) {
     bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
-    // Find StorageComponent on the residence entity
-    uintptr_t storageComp = 0;
-    fn_FindComponent_Storage(entity, &storageComp);
+    ResidenceComponent* residenceComp = entity->FindComponent<ResidenceComponent>();
 
-    // Iterate storage room groups to find citizen at flat index
+    // Iterate the families to find the resident at the flat index
     int flatIdx = 0;
-    int groupCount = *(int*)(storageComp + 0x58);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
+    int groupCount = residenceComp->residentSlots._size;
 
     for (int g = 0; g < groupCount; g++) {
-        uintptr_t groupArrayBase = *(uintptr_t*)(storageComp + 0x50);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
-        int residentCount = *(int*)(groupArrayBase + 8 + (uintptr_t)g * 0x10);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
+        int residentCount = residenceComp->residentSlots[g]._size;
 
         for (int r = 0; r < residentCount; r++) {
             if (flatIdx == citizenIndex) {
-                // Found the target citizen — re-read storageComp after CheckPtr
-                uintptr_t citizenPtr = *(uintptr_t*)(   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
-                    *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
-                    + (uintptr_t)r * 8);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
-
-                // Get citizen's InternalBasePtr self-reference at +0x10
-                uint64_t citizenBP = *(uint64_t*)(citizenPtr + 0x10);   // LEFT: retail reads StorageComponent (0x40 bytes) at +0x50/+0x58 (known_port_issues 14a row 452)
-                // The owning dialog (DialogController::_dialog, +0x18)
+                CitizenComponent* citizen = residenceComp->residentSlots[g][r].Get();
+                // The resident's entity (Component::_entity, +0x10) and the owning dialog
+                // (DialogController::_dialog, +0x18), each copied into a stack slot
+                ComponentEntity* citizenEntity = citizen->_entity.Get();
                 UI::DialogInstance* parentDialog = _dialog;
 
                 // Center camera on this citizen via the tool manager (gameWorld+0x120)
-                Toolbar_CenterOnEntity_Impl(GameUpdateLoop::_singleton->m_toolManager, &parentDialog, &citizenBP);
+                GameUpdateLoop::_singleton->m_toolManager->CenterOnEntity(&parentDialog, &citizenEntity);
                 return;
             }
             flatIdx++;

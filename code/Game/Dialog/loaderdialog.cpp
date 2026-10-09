@@ -78,22 +78,20 @@ LoaderDialog::LoaderDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
 
 
 // Public entry called from SplashDLT::CreateDialog (standalone/splash_loop_stubs.cpp):
-// alloc, ctor, wrap the result in the caller's IBP.
+// alloc, ctor, wrap the result in the caller's IBP. Retail 0x140099070: MemAlloc(0xc8, 8)
+// unconditionally (0x140099096); a null result skips the ctor (0x1400990aa) and the
+// return slot takes the null pointer (InternalBasePtr ctor, 0x140099109 / 0x140099113).
 extern "C" Object::InternalPtr<UI::DialogInstance>* LoaderDialog_FromSplashDLT(
         Engine::DialogLoaderLoopT* loop, Object::InternalPtr<UI::DialogInstance>* retInternalBasePtr) {
-    if (!System::MemoryAllocator::_singleton) {   // B3R: the g_pMemAllocSingleton snapshot, read live
-        if (retInternalBasePtr) {
-            *reinterpret_cast<uint64_t*>(retInternalBasePtr) = 0;   // LEFT: the tree-only null-allocator arm zeroes 16 bytes over the caller's 8-byte InternalPtr slot (known_port_issues row 572 (b))
-            *(reinterpret_cast<uint64_t*>(retInternalBasePtr) + 1) = 0;   // LEFT: the tree-only null-allocator arm zeroes 16 bytes over the caller's 8-byte InternalPtr slot (known_port_issues row 572 (b))
-        }
-        return retInternalBasePtr;
-    }
     void* mem = System::MemoryAllocator::MemAlloc(sizeof(LoaderDialog), 8);
-    // `loop` is the GameLoadDialogLoopT (a DialogLoaderLoopT).
-    Engine::DialogLoaderLoopT* dlt = loop;
-    LoaderDialog* dlg = ::new (mem) LoaderDialog(&dlt->_ui,
-                                                 dlt->_dialogExternal,
-                                                 Object::InternalPtr<UI::DialogInstance>());
+    LoaderDialog* dlg = nullptr;
+    if (mem != nullptr) {
+        // `loop` is the GameLoadDialogLoopT (a DialogLoaderLoopT).
+        Engine::DialogLoaderLoopT* dlt = loop;
+        dlg = ::new (mem) LoaderDialog(&dlt->_ui,
+                                       dlt->_dialogExternal,
+                                       Object::InternalPtr<UI::DialogInstance>());
+    }
     ::new (retInternalBasePtr) Object::InternalPtr<UI::DialogInstance>(dlg);
     return retInternalBasePtr;
 }

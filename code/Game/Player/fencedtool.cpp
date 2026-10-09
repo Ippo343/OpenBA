@@ -287,8 +287,6 @@ int FencedTool::CalcCost(int startCell, int endCell,
     // Cell data base pointer
     const MapCell* cellDataBase = mapGrid->cells.GetData();
 
-    float baseHeight = 0.0f;
-    bool heightInitialized = false;
     bool allValid = true;
 
     int endRow2 = (int)minRow + height;
@@ -328,11 +326,15 @@ int FencedTool::CalcCost(int startCell, int endCell,
                 float inPos[4] = {(float)(cellIdx % mapWidth) - halfOffset,
                                   (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                 float outPos[4] = {0};
-                float extra[3] = {0};   // retail: a Vector3 (0x1400db702 / 0x1400dc890), [2] read after the call
+                float extra[3] = {0};   // retail: a Vector3 at [RBP-0x70] (z = 0 stored at 0x1400db6c0)
                 Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
 
-                if (!heightInitialized) { baseHeight = outPos[2]; heightInitialized = true; }
-                Math::Scalar heightDiff(outPos[2] - baseHeight);
+                // The query's third out, z: blocked when the input z (XMM6, 0.0 for every
+                // cell) exceeds it -- `COMISS XMM6,[RBP-0x68]; JA` (0x1400db71e).
+                if (inPos[2] > extra[2]) { allValid = false; break; }
+                // |terrain z - XMM6| against the tolerance (0x1400db724..0x1400db749); XMM6
+                // is zeroed before the loop (0x1400db5b5) and never written in it.
+                Math::Scalar heightDiff(outPos[2] - inPos[2]);
                 if (HEIGHT_TOLERANCE < heightDiff.Abs().v) { allValid = false; break; }
             }
         }
@@ -344,10 +346,13 @@ int FencedTool::CalcCost(int startCell, int endCell,
     uint32_t anchorMinCol = minCol, anchorMinRow = minRow;
     uint32_t anchorMaxCol = effectiveMaxCol, anchorMaxRow = effectiveMaxRow;
     float anchorPos[3] = {0};
+    // Arg 7, the yaw out: its own stack slot, [RBP+0x58] (`LEA RAX,[RBP+0x58];
+    // MOV [RSP+0x30],RAX` at 0x1400db7eb); CalcCost never reads it.
+    uint32_t anchorYaw;   // written by 0x1400dbf90 before any read
 
     uint64_t anchorResult = PlayerEdit_FencedAnchorCalc_dbf90(
         this, &anchorMinCol, &anchorMinRow, &anchorMaxCol, &anchorMaxRow,
-        anchorPos, &anchorMinCol);   // the tree's arg 7; retail passes a separate slot (known_port_issues 14 row 76)
+        anchorPos, &anchorYaw);
     if ((char)anchorResult == '\0') return 3;
 
     // Check the owner's constraint rectangle
@@ -526,12 +531,16 @@ void FencedTool::Draw(Video::Context* context, char param3) {
                         float inPos[4] = {(float)(cellIdx % mapWidth) - halfOffset,
                                           (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                         float outPos[4] = {0};
-                        float extra[3] = {0};   // retail: a Vector3 (0x1400db702 / 0x1400dc890), [2] read after the call
+                        float extra[3] = {0};   // retail: a Vector3 (0x1400dc890), [2] read after the call
                         Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
 
-                        Math::Scalar heightDiff(outPos[2] - 0.0f);
-                        if (heightDiff.Abs().v <= HEIGHT_TOL) {
-                            valid = true;
+                        // The query's third out, z: red when the input z (XMM6, 0.0) exceeds it
+                        // -- `COMISS XMM6,[RBP-0x40]; JA` to the red arm (0x1400dc8ad / 0x1400dc8b1).
+                        if (!(inPos[2] > extra[2])) {
+                            Math::Scalar heightDiff(outPos[2] - 0.0f);
+                            if (heightDiff.Abs().v <= HEIGHT_TOL) {
+                                valid = true;
+                            }
                         }
                     }
                 }
@@ -615,16 +624,7 @@ void FencedTool::Startup() {
     // 1. Find CreateFencedDescription on the tool group (+0x20)
     CreateFencedDescription* fencedDesc = FencedFindComponent<CreateFencedDescription>(descriptionPtr);
     this->fencedDesc = fencedDesc;
-    // SA guard (retail would fault): without the CreateFencedDescription every
-    // later step derefs null+0x28. Reachable when the 0x1401c4100 type-id
-    // storage is unseeded (reg_pipeline_typeids.cpp) or the template lacks a
-    // createfenced block. Trace loudly — a silent bail here cost a crash-debug.
-    if (!fencedDesc) {
-        fprintf(stderr, "[FencedTool] Startup: no CreateFencedDescription on entity=%p "
-                "(tid=0x%x) — tool left un-wired\n", static_cast<void*>(descriptionPtr),
-                CreateFencedDescription::TypeId());
-        return;
-    }
+    // No test of the result: 0x1400dcd50 stores it at +0x38 and goes on.
 
     // 2. Find MapDescription on the tool group (+0x20)
     MapDescription* areaDesc = FencedFindComponent<MapDescription>(descriptionPtr);

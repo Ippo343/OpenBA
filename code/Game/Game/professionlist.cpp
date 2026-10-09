@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Dialog/introsort24.h"   // FUN_14001e7c0's introsort core
 
 // FUN_140018020(ExternalPtr<Profession>*, Serializer*) -- typed ExternalPtr
 // serialize. The address is registered to this body (address_registry.cpp); it
@@ -131,44 +132,30 @@ bool ProfessionList::Serialize(IO::Stream& stream) {
 // retail does not have (SetSizeCore skips a null element address instead).
 // Caller batch CB6: the list's and each Profession's fields are read by name;
 // the by-name fallback for the Profession type id is Profession::TypeId().
-// The tree keeps three tests retail 0x1400a90a0 lacks (known_port_issues 14d,
-// GAME-b): the null ExternalFactory singleton and the 0 type id return early, and
-// an external that is not a Profession is skipped where retail reads +0x4e of the
-// null it substitutes.
+// As retail: no test of the factory singleton or the type id; each external found is
+// narrowed with IsDerivedFrom (null when not a Profession) and its +0x4e read unguarded.
 void ProfessionList::Startup() {
-    if (!::Object::ExternalFactory::_singleton)
-        return;
-
     // 0x1401c5a98 is Profession's type-id cell (Table 1).
     uint32_t profTid = Profession::TypeId();
-    if (!profTid) return;
 
     const ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
     ::Object::External* found = efactory->FindNextAs<::Object::External>(profTid, nullptr);
     for (; found; found = efactory->FindNextAs<::Object::External>(profTid, found)) {
-        if (!found->IsDerivedFrom(profTid)) continue;
-        Profession* prof = static_cast<Profession*>(found);
+        Profession* prof = ::Object::IsDerivedFromNullSafe(found, profTid)
+            ? static_cast<Profession*>(found) : nullptr;
         if (prof->isAvailable == 0) continue;  // +0x4e: not player-selectable
 
         // Growable push into +0x20 (buf) / +0x28 (count) / +0x2c (cap).
         professions.SetSize(professions.GetSize() + 1, prof);
     }
 
-    // Sort ascending by sort priority (Profession+0x48) — FUN_14001e7c0 semantics.
-    int n = professions.GetSize();                               // +0x28 count
-    Profession** arr = professions.GetData();                    // +0x20
-    if (n > 1 && arr) {
-        for (int i = 1; i < n; i++) {
-            Profession* key = arr[i];
-            int keyPri = key->field48;   // +0x48
-            int j = i - 1;
-            while (j >= 0 && arr[j]->field48 > keyPri) {
-                arr[j + 1] = arr[j];
-                j--;
-            }
-            arr[j + 1] = key;
-        }
-    }
+    // Sort ascending by sort priority (Profession+0x48): `if (count < 2) return;` then
+    // FUN_14001e7c0, retail's introsort over the 8-byte array (Dialog/introsort24.h).
+    if (professions.GetSize() >= 2)
+        IntroSort24::Sort(professions.GetData(), professions.GetSize(),
+                      [](Profession* const* a, Profession* const* b) {
+                          return (*a)->field48 < (*b)->field48;   // +0x48
+                      });
 
 #ifdef _DEBUG
     printf("[ProfessionList] Startup: %d professions in array (tid=0x%08x)\n",

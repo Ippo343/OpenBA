@@ -115,9 +115,9 @@ void StatusIconUI::OnUpdateLayout() {
         if (::Object::IsDerivedFromNullSafe(config, StatusIconUIConfig::TypeId()))
             cfgPtr = static_cast<StatusIconUIConfig*>(config);
 
-        // Retail reads the `_showOnMainPage` BOOL and enters the page restriction
-        // when it is FALSE.
-        if (cfgPtr && !cfgPtr->_showOnMainPage) {
+        // Retail reads the `_showOnMainPage` BOOL (+0x20 of the narrowed config, no
+        // null test) and enters the page restriction when it is FALSE.
+        if (!cfgPtr->_showOnMainPage) {
             // The type filter is EntityUI's id. Retail (0x14007b14b) is
             //   MOV R8D,[0x1401c4f00]   ; EntityUI type id
             //   CALL [0x140151768]      ; DialogInstance::GetController
@@ -129,21 +129,11 @@ void StatusIconUI::OnUpdateLayout() {
                 entityUI = static_cast<EntityUI*>(ctrl);
 
             // Retail: iconsActive = (GetActivePage(pages) - 2U <= 1), i.e. the page
-            // is pageBuild(2) or pageDestroy(3) per StandardDialog.rsc:64-74. Once this
-            // gate is entered retail ALWAYS recomputes the flag — it never leaves it true.
-            //
-            // SA guard: retail reads the EntityUI's pages unconditionally and would
-            // fault here. We fall back to FALSE (hidden), not true — the config has
-            // explicitly said "not on the main page", and the main page is what is open
-            // by default.
-            iconsActive = false;
-            if (entityUI != nullptr) {
-                UI::PageElement* pageElem = entityUI->pages;
-                if (pageElem != nullptr) {
-                    int activePage = pageElem->GetActivePage();
-                    iconsActive = (activePage >= 2 && activePage <= 3);
-                }
-            }
+            // is pageBuild(2) or pageDestroy(3) per StandardDialog.rsc:64-74, with the
+            // EntityUI (+0x40 its pages) read unguarded (0x14007b0a0).
+            UI::PageElement* pageElem = entityUI->pages;
+            int activePage = pageElem->GetActivePage();
+            iconsActive = static_cast<uint32_t>(activePage - 2) <= 1u;
         }
     }
 

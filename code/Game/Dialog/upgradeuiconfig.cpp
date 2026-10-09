@@ -7,7 +7,7 @@
 // Vtable at 0x14015df60. NO "UpgradeDescription" class exists in retail — this
 // config IS the upgrade definition:
 //
-//   +0x20  Object::ExternalPtr<ComponentEntity> — the upgrade TARGET BUILDING
+//   +0x20  Object::ExternalPtr<ComponentDescription> — the upgrade TARGET BUILDING
 //          template (e.g. the stone house). UpgradeUI's click handler
 //          (0x140086c90) copies it into DestroyComponent+0x60 before pumping
 //          the state machine; state-5 tick 0x14011c120 clones it via
@@ -16,8 +16,9 @@
 // Factory        0x140016c00: MemAlloc(0x28) + base ctor + vtable + clear +0x20
 // CreateInPlace  0x140016c60: same, no alloc
 // Serialize      0x140086fb0 (vtable +0x28): IO::Serializer(stream, 0) +
-//                ExternalPtr<ComponentEntity>::Serialize on +0x20 — ported via
-//                the canonical ExternalPtrSerializeGeneric body.
+//                ExternalPtr<ComponentDescription>::Serialize 0x140002340 on +0x20
+//                (load: FindOrLoad, kept only if IsDerivedFrom the cell 0x1401c7318)
+//                — ported via the canonical ExternalPtrSerializeGeneric body.
 // GetVersion     (vtable +0x18, 0x140087000): return 1.
 // GetTypeId      (vtable +0x10, 0x140016be0): return DWORD_1401c5868.
 //
@@ -40,7 +41,7 @@
 
 #include "object/Internal.h"
 #include "Dialog/UpgradeUIConfig.h"
-#include "Entity/ComponentEntity.h"   // X::TypeId() (B.3.9 CG2)
+#include "Component/ComponentDescription.h"   // ComponentDescription::TypeId() (cell 0x1401c7318)
 
 // ============================================================================
 // ENDGAME B.3.8 PNL — UpgradeUIConfig as a REAL class (UpgradeUIConfig.h). The hand-built
@@ -52,13 +53,13 @@
 // the class inherits.
 
 // [5] 0x140086fb0 — deserialize the target-template reference
-// (ExternalPtr<ComponentEntity>, the canonical ExternalPtrSerializeGeneric body).
+// (ExternalPtr<ComponentDescription> 0x140002340, the canonical ExternalPtrSerializeGeneric body).
 bool UpgradeUIConfig::Serialize(IO::Stream& stream) {
     IO::Serializer serializer(stream, 0);
-    // ENDGAME B.3.9 CG2: TypeId_ComponentEntity (0x1401c5d70) -> ComponentEntity::TypeId().
-    uint32_t componentEntityTypeId = ComponentEntity::TypeId();
-    ExternalPtrSerializeGeneric(&_target, &serializer, &componentEntityTypeId,
-                                "ComponentEntity");
+    // 0x140002340 validates the loaded External against ComponentDescription (cell 0x1401c7318).
+    uint32_t componentDescriptionTypeId = ComponentDescription::TypeId();
+    ExternalPtrSerializeGeneric(&_target, &serializer, &componentDescriptionTypeId,
+                                "ComponentDescription");
     return true;
 }
 

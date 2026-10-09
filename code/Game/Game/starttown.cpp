@@ -243,7 +243,6 @@ static T* FindDescriptionOnTemplate(const ComponentDescription* tmpl, uint32_t t
 // clicking a building finds nothing. Mirrors the resource path's identical write (~L1724).
 // Also makes footprints navigation-blocking (faithful).
 // Forward decl (defined near the resource-marking pass below).
-static void StartTown_WriteCellType(Map* game, MapCell* cells, int idx, uint8_t newType);
 
 static void StartTown_MarkBuildingCells(Map* game, int tileX, int tileY, int fpW, int fpH,
                                         ComponentEntity* entity, int rot) {
@@ -314,7 +313,7 @@ static void StartTown_MarkBuildingCells(Map* game, int tileX, int tileY, int fpW
                 if (c == '_') occupy = false;
             }
 
-            if (stampClass) StartTown_WriteCellType(game, cells, idx, cls);
+            if (stampClass) game->SetTerrainType(idx, cls);   // 0x14009f2f0
             cell->occupant = occupy ? entity : nullptr;
             if (occupy) marked++; else freed++;
             if (stampClass && cls == 2) roadCells++;
@@ -629,39 +628,6 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
 
 // The starting-herd spawn (retail FUN_1400a0b10): Component/exe_bodies.h.
 
-// Reimplementation of 0x140091a20 ("Game_RemoveEntity" is a Ghidra mislabel — the
-// body is an add-if-not-present into the +0x120 dynamic array). Kept inline because
-// standalone cannot ResolveAddr an unported exe address.
-// Not static: the trade checkout (code/Game/Dialog/tradeui_checkout.cpp, the
-// FUN_140081420 named above) is the other caller that grows this list.
-//
-// ENDGAME B.3.2 step 2: the inlined grow-and-append is now the 3-argument
-// `Collection::Array<void*>::SetSize` (desc is the fill), trait-derived and
-// trait-equivalent (pointer element: 8-byte copy, no destroy, the 2-argument
-// init is never reached by a fill call). Compared arm for arm against
-// rtcoll::SetSizeCore and the retail body 0x140091a20 (re-decompiled
-// 2026-09-13): the capacity rule reads `count != 0 ? newCount*3 : newCount`,
-// which IS the reference's `newSize == oldSize+1 && oldSize != 0` because this
-// site only ever appends ONE element (newCount = count + 1, so the first half
-// of the conjunction is always true); the exact-equal early return is vacuous
-// for the same reason; `_size` first, cap<<3 at align 8, prefix copied only
-// when the block moved, fill at index count, old block freed only when it
-// moved. Every arm matched.
-// LEFT free (B3): retail 0x140091a20 is already the member CitizenBehavior::RemoveEntity
-// (Game/game.cpp, GAME-a); this copy differs from it (the !townMgr / !desc /
-// !MemoryAllocator guards, SetSize for the grow), so it is not rewired until the two
-// are reconciled against retail (known_port_issues 14).
-void TownMgr_AddAvailableAgri(CitizenBehavior* townMgr, ComponentDescription* desc) {
-    if (!townMgr || !desc || !System::MemoryAllocator::_singleton) return;
-    ComponentDescription** arr = townMgr->field_0x120._data;
-    int     count = townMgr->field_0x120._size;
-    // Dedup: already present -> nothing to do.
-    for (int i = 0; i < count; ++i)
-        if (arr && arr[i] == desc) return;
-
-    townMgr->field_0x120.SetSize(count + 1, desc);   // the stride-8 append with a fill
-}
-
 // Seed one agri pool: pick `count` random entries from the `size`-entry pool and
 // dedup-append each resolved description into townMgr+0x120. Faithful to the retail
 // loop (System::Random::Rand(worldRng, size) per pick).
@@ -686,7 +652,7 @@ static int SeedAgriPool(MapGenerator* sc, CitizenBehavior* townMgr, System::Rand
         // Retail order: spawn FIRST (0x1400a35dc), then the availability add
         // (0x1400a35e7). Both consume the same resolved template.
         if (spawnCentre) StartTown_SpawnStartingHerd(sc, spawnCentre, tmpl);
-        TownMgr_AddAvailableAgri(townMgr, tmpl);
+        townMgr->RemoveEntity(tmpl);   // 0x140091a20 (the dedup append into +0x120)
 
         ++added;
     }
@@ -1783,46 +1749,6 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
             } else {
                 fprintf(stderr, "[startTown::struct] [%d] WARN: StateMachineComponent not found for +0x52 stamp\n",
                         logIndex);
-                fflush(stderr);
-            }
-
-            // ── Stamp the build-material bookkeeping a CONSTRUCTED building carries. ──
-            // Same class of gap as the +0x52 stamp above. These structures are spawned
-            // already-complete, so BuildComponent_DemoGateSkip (model already at its final
-            // sub-mesh) skips their build state machine and State1Enter never runs — leaving
-            // the cost multiplier (+0x4c) and the delivered counter (+0x48) at factory-zero.
-            // The upgrade path reads exactly those two: DestroyComponent state-5 enter takes
-            // its REFUND+BUILD branch — the one that spawns the replacement foundation — only
-            // when delivered(+0x48) != 0 (destroycomponent_states.cpp Yard_Delivered). With
-            // both zero a starter house demolished correctly and then never got a replacement
-            // (observed live 2026-07-25: "delivered(+0x48)=0 required=0 -> REMOVE(no-spawn)").
-            // Stamp it as fully delivered: multiplier chosen the same way State1Enter picks it
-            // (default 1, workplace +0x58 only when that is a valid positive value), then
-            // delivered = required = buildDesc(+0x18)->+0x30 * multiplier.
-            //
-            // RETIRED by the instant-build path (BANISHED_LIVE_SM_ONADDED): State8Enter's
-            // INSTANT branch writes +0x4c (via sub_8720) and +0x48 = matComp[0x30] * +0x4c
-            // itself, from the real BuildDescription, during RegisterEntity below.
-            BuildComponent* bcBuilt = StartTown_InstantBuildPath()
-                          ? nullptr : FindComponentOnEntity<BuildComponent>(entity, BuildComponent::TypeId());
-            if (bcBuilt) {
-                BuildComponent* bc = bcBuilt;
-                uint32_t mult = 1;
-                WorkPlaceComponent* wpcBuilt =
-                    FindComponentOnEntity<WorkPlaceComponent>(entity, WorkPlaceComponent::TypeId());
-                if (wpcBuilt) {
-                    uint32_t wpMult = *(uint32_t*)((uintptr_t)wpcBuilt + 0x58);   // LEFT: audit DEFERRED (retail-difference task, row 95): the low dword of WorkPlaceComponent::workers (+0x58, a pointer) read as a count — a tree defect (known_port_issues 14); dead while StartTown_InstantBuildPath() is true
-                    if ((int32_t)wpMult > 0) mult = wpMult;
-                }
-                bc->costMultiplier = (int32_t)mult;
-                const Description* linked = bc->_description;
-                const BuildDescription* bDesc = static_cast<const BuildDescription*>(linked);
-                int required = bDesc ? bDesc->_i30 * (int)mult : 0;
-                bc->laborProgress = required;
-                fprintf(stderr, "[startTown::struct] [%d] stamped BuildComponent as built: "
-                        "mult(+0x4c)=%u delivered(+0x48)=%d desc=%p%s\n",
-                        logIndex, mult, required, bDesc,
-                        required == 0 ? "  <-- WARN: required computed 0, upgrade will still REMOVE(no-spawn)" : "");
                 fflush(stderr);
             }
 
@@ -4227,8 +4153,8 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
 // world position the colonists are jittered around (citizen Foundation-F).
 static int StartTown_SpawnCitizens(MapGenerator* startConfig, EntityList* entityList,
                                    Map* game, int spawnX, int spawnY) {
-    const int famCount  = startConfig->families.count;   // read as int32 (Serialize int&)
-    MapGenerator::InitialFamily* families = startConfig->families.data;
+    const int famCount  = startConfig->families._size;   // read as int32 (Serialize int&)
+    MapGenerator::InitialFamily* families = startConfig->families._data;
     if (famCount <= 0 || !families) return 0;
     // Town-centre world position (same tile->world mapping as the camera) +
     // founding-family spawn jitter radius (startConfig+0x40). FUN_1400a3300 found
@@ -4568,38 +4494,10 @@ static int StartTown_ClassifyCell(Map* game, int dim, int idx) {
 // f2f0 notify targets: RegionGraph::MarkCellDirty (0x1400a8c90) and
 // PathfinderThread::SetCellTerrain (0x1400a6fe0).
 
-// FUN_14009f2f0 — write cell+0x29 = `type`, set the Game+0xa2 dirty flag, and run the
-// two notify calls: a8c90 (region-dirty, subsystem @ game+0x70, boundary-flip only) and
-// a6fe0 (pathfinder cmd-2, worker @ game+0x68, ALWAYS).
-//
-// ⚠ These were guarded off under "Game+0x68/+0x70 are zero in standalone" — STALE since
-// Pathfinder_Seed moved before StartTown (gameupdateloop_load.cpp). Skipping a6fe0 left
-// the pathfinder's byte MIRROR (pf+0x158) holding the pre-town classification, so the
-// road A* (which reads the mirror, not the grid) accepted cells the preview painted red
-// — the "places anywhere" validity gap. Null-subsystem checks keep the old safety.
-// LEFT free (B3): retail 0x14009f2f0 is Map::SetTerrainType (Action/action_pf_roots_road.cpp);
-// this copy keeps the null-subsystem checks and the PerfX mirror, so it is not rewired.
-static void StartTown_WriteCellType(Map* game, MapCell* cells, int idx, uint8_t newType) {
-    MapCell* cell = &cells[idx];
-    const uint8_t oldType = cell->terrainType;
-    const uint32_t oldMask = 1u << (oldType & 0x1f);
-    const uint32_t newMask = 1u << (newType & 0x1f);
-    // dirty bit: set when the cell crosses the buildable<->water/mountain boundary
-    // (matches f2f0's "((old&0xe1f && new&0x1e0) || (old&0x1e0 && new&0xe1f))").
-    uint8_t dirty = 0;
-    if (((oldMask & 0xe1f) && (newMask & 0x1e0)) || ((oldMask & 0x1e0) && (newMask & 0xe1f)))
-        dirty = 1;
-    game->field_0xA2 |= dirty;
-    cell->terrainType = newType;
-    PerfX::TerrainNoteWrite(cell);   // [PerfX] mirror
-    const int dim = game->size;
-    RegionGraph* regionObj = game->regionGraph;
-    if (dirty && regionObj && dim > 0)
-        regionObj->MarkCellDirty(idx % dim, idx / dim);
-    PathfinderThread* pfThread = game->pathfinder;
-    if (pfThread)
-        pfThread->SetCellTerrain((int)idx, (int)newType);
-}
+// FUN_14009f2f0 is Map::SetTerrainType (Action/action_pf_roots_road.cpp): write cell+0x29,
+// OR the boundary-flip bit into Map+0xa2, MarkCellDirty on a flip, SetCellTerrain always.
+// The region graph (+0x70) and the pathfinder (+0x68) are seeded before the start town
+// (gameupdateloop_load.cpp: Pathfinder_Seed, Region_Seed), so the member is called as is.
 
 // G3 — the resource entity is written into its map cell (cell+0x08) so the
 // ForesterWork harvest scan can find it. See the long note at the cell+0x08 write
@@ -4655,7 +4553,7 @@ static void StartTown_MarkResourceCellGrid(Map* game, ComponentEntity* ownerEnti
                 ComponentEntity* cellOwner = cell->blocker.Get();   // cell+0x00
                 if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
                     t = 2;
-                StartTown_WriteCellType(game, cells, cellIdx, t);
+                game->SetTerrainType(cellIdx, t);   // 0x14009f2f0
             }
             // Cell entity-link (cell+0x08).
             //
@@ -4736,7 +4634,7 @@ extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* own
                 ComponentEntity* cellOwner = cell->blocker.Get();   // cell+0x00
                 if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
                     t = 2;
-                StartTown_WriteCellType(game, cells, cellIdx, t);
+                game->SetTerrainType(cellIdx, t);   // 0x14009f2f0
             }
             cell->occupant = nullptr;        // dee0: null the cell entity-link, ALWAYS
         }
@@ -5315,7 +5213,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
     fprintf(stderr, "[startTown::spawn] pools: simple(+0x98)=%d bldg(+0x88)=%d "
             "resource(+0x78)=%d citizenFam(+0x68)=%d\n",
             sc->refArray3._size, sc->refArray2._size,
-            sc->refArray1._size, sc->families.count);
+            sc->refArray1._size, sc->families._size);
     fflush(stderr);
 
     // DIAG — fn-pointer state + per-pool first-entry resolution probe.

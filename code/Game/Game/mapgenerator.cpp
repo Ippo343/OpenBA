@@ -68,16 +68,9 @@ MapGenerator::~MapGenerator() {}
 
 // The pool destructors 0x14001b030 / 0x14001b0a0 are the String pools' own
 // `~Array` (MapGenerator.h, the rows below); the InitialFamily pool's, which
-// retail inlines at 0x14001af47: MemFree the data, then zero both qwords.
-template <>
-MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>::~DynArrayHeader() {
-    // retail calls MemFree unconditionally (0x14001af4b); the tree's null test
-    // stays (known_port_issues 14d)
-    if (data) Object::detail::InternalMemFree(data);
-    data = nullptr;
-    count = 0;
-    capacity = 0;
-}
+// retail inlines at 0x14001af47 (`MOV RCX,[RBX+0x60]; CALL [0x140152b68]`, then
+// both qwords zeroed), is that pool's `~Array` too: the row has no destroy, so
+// ClearCallback is the unconditional MemFree and the three zero stores.
 
 // ============================================================
 // MapGenerator::Reconstruct (vtable +0x30, Slot6) — Reset to defaults
@@ -197,14 +190,14 @@ void MG_InitFamily(uint8_t* e) {
 // stays explicit: `init` writes byte 0 and dword 4 and deliberately leaves
 // [1,4) untouched — an `init unwritten` extent, i.e. a probe contract, not a
 // trait. (An element with zeroing NSDMIs would also write the padding.)
-const rtcoll::ArraySpec kSpec_MGFamily = {           // exe 0x14001b270
+}  // namespace
+const rtcoll::ArraySpec MapGeneratorRows::kSpec_InitialFamily = {   // exe 0x14001b270
     "Array<InitialFamily>", 8, 4,
     &AssignMGFamily, &MG_InitFamily, nullptr, /*byteCopy*/true,
     /*assign unwritten*/ 0, 0,
     /*init   unwritten*/ 1, 4,
     /*seed zero       */ 0, 0 };
-using MGFamilyArray = Collection::Array<uint8_t, Collection::DefaultAllocator,
-                                        Collection::ExplicitSpec<&kSpec_MGFamily>>;
+namespace {
 
 // stride 0x18 — ExternalRef {String@0, gen@8, resolved@0x10}, exe 0x14001b340.
 // Neither arm writes [0x0c,0x10); the tail seed of -1 is load-bearing (see
@@ -283,9 +276,7 @@ namespace {
 
 // The resize of each pool: 0x14001b270 (stride 8), 0x14001b340 (0x18) and
 // 0x14001b4e0 (0x30), the three retail bodies, each the core through its row.
-void MG_Resize(MapGenerator::DynArrayHeader<InitialFamily>& pool, int newCount) {
-    reinterpret_cast<MGFamilyArray*>(&pool)->SetSize(newCount);   // LEFT: audit DEFERRED (retail-difference task, row 470): MapGenerator::families stays a DynArrayHeader: its dtor keeps the tree's `if (data)` before MemFree (retail 0x14001af4b has none; known_port_issues 14d), which ~Array would drop
-}
+void MG_Resize(MapGenerator::InitialFamilyArray& pool, int newCount) { pool.SetSize(newCount); }
 void MG_Resize(MapGenerator::ExternalRefArray& pool, int newCount) { pool.SetSize(newCount); }
 void MG_Resize(MapGenerator::InitialStructureArray& pool, int newCount) { pool.SetSize(newCount); }
 
@@ -325,8 +316,8 @@ bool MapGenerator::Serialize(IO::Stream& stream) {
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
     {
-        const int n = MG_SerializeCount(serializer, families, families.count);
-        InitialFamily* e = families.data;
+        const int n = MG_SerializeCount(serializer, families, families._size);
+        InitialFamily* e = families._data;
         for (int i = 0; e && i < n; ++i) {
             serializer.Serialize(e[i].educated, nullptr);        // _educated
             serializer.Serialize(e[i].maxChildCount, nullptr);   // _maxChildCount

@@ -239,7 +239,10 @@ bool MenuScene::Serialize(IO::Stream& stream) {
     RZ_CHECK("Slot5 before geometry deserialize");
     if (geometry) {
         geometry->Serialize(io);                 // 0x1400b04d0
-        geometry->SerializeLegacyBatches(io);    // 0x1400af1a0
+        // Only a version >= 1 stream carries the legacy batches: GetVersion of the
+        // outer serializer, `CMP EAX,1; JL` past the call (0x1400a36da..0x1400a36f0).
+        if (outer.GetVersion() >= 1)
+            geometry->SerializeLegacyBatches(io);    // 0x1400af1a0
     }
     RZ_CHECK("Slot5 after geometry deserialize");
 

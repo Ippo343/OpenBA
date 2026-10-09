@@ -258,11 +258,9 @@ void GameLoadDialogLoopT::Shutdown() {
 
 bool GameLoadDialogLoopT::Update(const System::Time& time) {
     StallDebug::Tick("SplashDLT::Update");
-    // The first-tick clamp below writes the caller's Time and restores it
-    // before returning (MainLoop owns it); retail's slot takes it by const&.
-    // LEFT: the standalone first-tick clamp writes MainLoop's Time through the
-    // const& of retail's slot signature (our divergence, not retail's).
-    System::Time* dt = const_cast<System::Time*>(&time);   // LEFT: audit DEFERRED (retail-difference task): the standalone first-tick clamp writes MainLoop's Time through the const& of retail's slot signature (our divergence, not retail's).
+    // Retail's slot takes MainLoop's Time by const& and never writes it: the first
+    // Update after the synchronous Startup gets the whole Startup time as its dt, as
+    // in retail (whose Startup is synchronous too). B6 ruling: no first-tick clamp.
 
     // Pump the embedded UI — flushes the pending-open list (where Startup
     // pushed our LoaderDialog), runs each open dialog's OnUpdate, processes
@@ -270,43 +268,12 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // is created but never moved into the active list, so Draw walks an
     // empty list and the screen stays blank. Mirrors Runtime
     // DialogLoaderLoopT::Update @ 0x1800daf20.
-    //
-    // Clamp first-tick dt: Startup ran synchronously and may have spent
-    // 60-100ms+ doing the own-rsc load (first splash) or ~3ms (subsequent
-    // splashes). Either way, MainLoop accumulates that time and feeds it back
-    // as the first Update's dt. UI::Update advances the fade alpha by
-    // dt * rate * 4, so a 1029ms boot-to-first-frame stall (common on the
-    // very first splash because Engine::Startup + MainLoop init dominates)
-    // would clamp the reveal alpha to 0 in one tick and skip the entire
-    // fade-in animation. Limit dt to ~16ms (one 60Hz frame) on the first tick
-    // so the fade animates frame-by-frame.
-    int64_t origTicks = 0;
-    bool clamped = false;
-    if (_elapsedTicks == 0 && dt &&
-        ::System::Timer::_ticksPerSecond > 0) {
-        origTicks = dt->_ticks;
-        double dtMs = (double)origTicks * 1000.0 / (double)::System::Timer::_ticksPerSecond;
-        printf("[SplashDLT::Update] self=%p first-tick dt=%lld (%.2fms)\n",
-               (void*)this, (long long)origTicks, dtMs);
-        int64_t maxTicks = ::System::Timer::_ticksPerSecond / 60;
-        if (origTicks > maxTicks) {
-            dt->_ticks = maxTicks;
-            clamped = true;
-            printf("[SplashDLT::Update] self=%p first-tick dt clamped from %lld "
-                   "to %lld (~16ms) — Startup stall accumulator\n",
-                   (void*)this, (long long)origTicks, (long long)maxTicks);
-        }
-    }
 
     _ui.Update(time);
 
     // Safety net for the deferred window reveal — if the Draw path never runs,
     // this reveals the window anyway rather than leaving the process invisible.
     BootWindow::PumpWatchdog();
-
-    if (clamped) {
-        dt->_ticks = origTicks;
-    }
 
     // Run the deferred MenuScene load, once, on the first frame where this
     // splash has actually revealed. RunGameMain only Arm()s it — running
@@ -363,7 +330,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
     Sleep(14);
 
-    _elapsedTicks += dt->_ticks;
+    _elapsedTicks += time._ticks;
 
     // (The "Fix 1 deferred load kick" that used to sit here is gone — it was the
     // second dispatcher of next->vtable->Load. See the Step 3 note in
@@ -394,7 +361,7 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
     // be here was an artefact of our deferred load kick, which is gone.
     if (::System::Timer::_ticksPerSecond > 0 &&
         _nextLoop && _nextLoop->GetLoadProgress() != 0) {
-        _tipTimer += dt->_ticks;
+        _tipTimer += time._ticks;
         if (_tipTimer >= ::System::Timer::_ticksPerSecond * 2) {   // 2.0s
             _tipTimer = 0;
             // [diag] measure the ACTUAL interval and the retail gate value.

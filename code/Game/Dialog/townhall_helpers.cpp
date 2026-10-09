@@ -44,6 +44,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Dialog/exe_bodies.h"
 #include "Dialog/TownHallUI.h"   // TownHallInventoryEntry
+#include "Dialog/introsort24.h"  // the inventory sorts' introsort core
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 // B4 X-G1-2b / Y GAMEB: the entry points take their retail objects.
@@ -182,54 +183,35 @@ extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int ser
 // ===========================================================================
 // 0x140015200 / 0x140015500 — sort the UpdateProduction display array
 // (0x18-byte entries: +0x00 entity, +0x08 RawMaterialDescription*, +0x10 count).
-// Comparators verified in Ghidra (operator_impl_c710 / operator_impl_c620):
-//   asc:  localized name (UIString(desc+0x28 table, desc+0x30 key) -> System::String) <
-//   desc: count greater-first, name ascending as tie-break
-// The exe uses an introsort; ordering semantics are what matter for the UI, so a
-// stable insertion sort with the same comparators is used here (N is small).
+// Both are retail's 0x18-row introsort (Dialog/introsort24.h) with their own
+// comparator, read in Ghidra:
+//   0x140015200 (small sort 0x140015ad0), comparator 0x14007c710: the localized
+//     names, UIString(desc+0x28 table, desc+0x30 key) -> System::String, compared
+//     with System::String::operator<; desc read unguarded.
+//   0x140015500 (small sort 0x140015c40, the comparator inlined), comparator
+//     0x14007c620: count greater-first, the name compare on a tie.
+// The two "phantom" trailing arguments are the callers' (&sortCombo, null); the
+// comparators never read them.
 // ===========================================================================
 namespace {
 
 // The entry is TownHallInventoryEntry (Dialog/TownHallUI.h).
 using InvEntry = TownHallInventoryEntry;
 
-// System::String is a char* with the length stored as int at ptr-8.
-bool SysStrLess(const System::String& a, const System::String& b) {
-    const char* sa = a._data;
-    const char* sb = b._data;
-    int la = sa ? RtSystem::StringLength(sa) : 0;
-    int lb = sb ? RtSystem::StringLength(sb) : 0;
-    int n = (la < lb) ? la : lb;
-    int c = (n > 0) ? memcmp(sa, sb, (size_t)n) : 0;
-    if (c != 0) return c < 0;
-    return la < lb;
-}
-
-// The raw material's localized name: UIString(desc +0x28 table, +0x30 key).
+// The raw material's localized name: UIString(desc +0x28 table, +0x30 key) -> System::String.
 System::String LocalizedName(const RawMaterialDescription* desc) {
     UI::String text(::Object::ExternalPtr<UI::StringTable>(desc->_stringTable), desc->_name);
     return text.operator System::String();
 }
 
-// Localized display-name compare of two RawMaterialDescription components.
+// 0x14007c710 — the name compare.
 bool InvNameLess(const InvEntry* a, const InvEntry* b) {
-    if (!a->desc || !b->desc) return a->desc && !b->desc ? true : false;
     System::String sysA = LocalizedName(a->desc);
     System::String sysB = LocalizedName(b->desc);
-    return SysStrLess(sysA, sysB);
+    return sysA < sysB;
 }
 
-typedef bool (*InvLess_t)(const InvEntry*, const InvEntry*);
-
-void InvInsertionSort(InvEntry* items, int count, InvLess_t less) {
-    for (int i = 1; i < count; i++) {
-        InvEntry key = items[i];
-        int j = i - 1;
-        while (j >= 0 && less(&key, &items[j])) { items[j + 1] = items[j]; j--; }
-        items[j + 1] = key;
-    }
-}
-
+// 0x14007c620 — count descending, the name compare on a tie.
 bool InvDescLess(const InvEntry* a, const InvEntry* b) {
     if (a->value > b->value) return true;
     if (a->value < b->value) return false;
@@ -239,10 +221,10 @@ bool InvDescLess(const InvEntry* a, const InvEntry* b) {
 } // namespace
 
 extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*) {
-    if (count > 1) InvInsertionSort(items, count, &InvNameLess);
+    IntroSort24::Sort(items, count, &InvNameLess);   // 0x140015200
 }
 extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*) {
-    if (count > 1) InvInsertionSort(items, count, &InvDescLess);
+    IntroSort24::Sort(items, count, &InvDescLess);   // 0x140015500
 }
 
 // ===========================================================================

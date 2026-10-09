@@ -77,7 +77,7 @@
 //   colorDiv = DAT_14017222c = 255.0f
 // (0x140098800's 1 / 100 / 90 / 90 are PlayerController::PlayerController's, menuscene.cpp.)
 namespace MenuSceneConst {
-    static constexpr float kHelper8660_FovX        = 40.0f;   // DAT_1401721dc
+    static constexpr float kHelper8660_FovX        = 40.0f;   // DAT_1401721dc (UpdateCamera's fovY)
     static constexpr float kHelper8660_NearZ       = 2.0f;    // DAT_140172174
     static constexpr float kHelper8660_FarZ        = 512.0f;  // DAT_140172240
 
@@ -92,41 +92,6 @@ static inline float ColorChannel(const System::Color& c, int shift) {
 // ============================================================
 // Local helpers — reimplementations of small exe-internal helpers we depend on
 // ============================================================
-
-// The menu's copy of FUN_140098660 (exe 0x140098660, PlayerController::
-// UpdateCamera) — per-frame camera frustum update. Original handles widescreen
-// FOV adjustment via sinf/atanf math; for Phase A we use the simple fovX =
-// aspect * fovY frustum and skip the ultrawide clamp. NOTE: it reads
-// Video::Configuration +0x04 / +0x08 (interfaceIndex / adapterIndex) as the
-// width and height, where 0x140098660 reads Video::Device's back buffer size
-// (+0x04 / +0x08): known_port_issues 14a row 60.
-static void MenuScene_Helper_8660(PlayerController& controller, float fovY_deg, float nearZ, float farZ) {
-    // B.3.5: the `!fn_Graphics_Camera_SetFrustum` readiness term went with the
-    // door; B3R: the Frustum ctor door's too. The singleton object test stays.
-    if (!::Video::Configuration::_singleton) {
-        return;
-    }
-    const ::Video::Configuration* videoConfig = ::Video::Configuration::_singleton;
-    int width  = videoConfig->interfaceIndex;   // +0x04 (row 60)
-    int height = videoConfig->adapterIndex;     // +0x08 (row 60)
-    // VideoConfig is filled lazily by the runtime in standalone Phase A; until
-    // it has real dimensions, fall back to 16:9 reference aspect (matches the
-    // original's DAT_140172170 = 1.7778).
-    if (height <= 0) {
-        width = 16;
-        height = 9;
-    }
-
-    float aspect = static_cast<float>(width) / static_cast<float>(height);
-    const Math::Scalar fovX(aspect * fovY_deg);
-    const Math::Scalar fovY(fovY_deg), nearS(nearZ), farS(farZ);
-    // (Original ultrawide clamp at aspect > 16/9 omitted — Phase A MVP.)
-
-    ::Frustum frustum = {};
-    RtVolume_Frustum_Ctor_Perspective(&frustum, &nearS, &farS, &fovX, &fovY);
-
-    controller.camera.SetFrustum(frustum);
-}
 
 // ============================================================
 // Phase B: append-only dynamic array helpers
@@ -677,11 +642,12 @@ void MenuDialogLoopT_DrawScene_PhaseA(MenuDialogLoopT* self, float alpha, Video:
     Graphics::Scene* gScene = self->_scene;
     if (!transform || !renderer || !sunLight || !gScene) return;
 
-    // Per-frame camera update: aspect-aware fovX, near/far from helper-8660 set.
-    MenuScene_Helper_8660(*transform,
-                          MenuSceneConst::kHelper8660_FovX,
-                          MenuSceneConst::kHelper8660_NearZ,
-                          MenuSceneConst::kHelper8660_FarZ);
+    // Per-frame camera update: PlayerController::UpdateCamera 0x140098660 on +0xbb8
+    // (0x14009b474..0x14009b4a0: XMM1 = [0x1401721dc] fovY, XMM2 = [0x140172174] near,
+    // XMM3 = [0x140172240] far) -- the same body the game loop calls.
+    transform->UpdateCamera(MenuSceneConst::kHelper8660_FovX,
+                            MenuSceneConst::kHelper8660_NearZ,
+                            MenuSceneConst::kHelper8660_FarZ);
 
     // SunLight::Set(self, dir*, sunVec4*, ambientVec4*).
     // Colors are 0xAARRGGBB; the Vector4 is (R, G, B, 1.0). This mirrors the

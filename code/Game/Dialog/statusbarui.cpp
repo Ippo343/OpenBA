@@ -15,6 +15,7 @@
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/NumberElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/RibbonElement.h"   // the hearts / stars groups' narrowing (0x140151720)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -45,8 +46,8 @@
 #include "Game/PlayerToolManager.h"
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
-// CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
-// are now in the shared header: Dialog/citizen_icon_helpers.h
+// CitizenUI_UpdateIconDisplay_Impl is in the shared header Dialog/citizen_icon_helpers.h;
+// the icon group's Init (0x14006abf0) is TownHall_GroupRatingInit (Dialog/RatingGroup.h).
 // (removed local copies — see git history for originals)
 
 // ============================================================
@@ -60,8 +61,9 @@ static constexpr float kFtoC_Num        = 5.0f;    // DAT_140172198
 static constexpr float kFtoC_Den        = 9.0f;    // DAT_1401721ac
 
 // ============================================================
-// Helper: the dialog's element of that name (retail: DialogInstance::
-// FindElement, then an IsDerivedFrom check the tree does not repeat)
+// Helper: the dialog's element of that name, as OnOpened 0x14007a3d0 stores
+// most of its finds: DialogInstance::FindElement and the result taken as it is
+// (`MOV RAX,[RAX]; MOV [R15+x],RAX`, no IsDerivedFrom).
 // ============================================================
 template <class T>
 static T* FindNamed(StatusBarUI* self, const System::String& name) {
@@ -72,85 +74,6 @@ static T* FindNamed(StatusBarUI* self, const char* name) {
     return FindNamed<T>(self, System::String(name));
 }
 
-namespace statusbarui_sa {
-
-// ENDGAME B.3.9 CG2: TypeId_StatusIconComponent (cell 0x1401c7e08) ->
-// StatusIconComponent::TypeId(), TypeId_CitizenDescription -> CitizenDescription::
-// TypeId(). Both class statics always answer, so the backfill retires (and the
-// empty EnsureGlobals that was left went with B3R).
-
-// Every function/global the Draw+Startup+event paths dereference unguarded must
-// be live, or a null-deref faults (no SEH under MinGW). B3R: the engine_funcs door
-// readiness tests were always true and are gone; the allocator singleton (the old
-// g_pMemAllocSingleton snapshot) is read live.
-bool Ready() {
-    return System::MemoryAllocator::_singleton != nullptr;
-}
-
-// The world-side data Startup reads unguarded: the town (m_citizenList) with its
-// resource stock block (professionResources), the calendar and the weather. The
-// citizen roster may legitimately be count 0 (handled by the impl).
-bool TownReady() {
-    const GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    if (game == nullptr) return false;
-    const CitizenBehavior* town = game->m_citizenList;
-    if (!town) return false;
-    if (town->professionResources._data == nullptr) return false;  // resource stock
-    if (game->m_dayCounter == nullptr) return false;          // game clock
-    if (game->m_weather == nullptr) return false;             // weather
-    return true;
-}
-
-// Controller bound to its element + dialog instance (framework sets +0x18/+0x20).
-inline bool Bound(const StatusBarUI* self) {
-    return self->_dialog != nullptr && self->_container != nullptr;
-}
-
-// Draw bound the core elements (they all exist in Dialog/StatusBar.rsc:content).
-inline bool Built(const StatusBarUI* ui) {
-    return ui->textSeason && ui->textPopulation && ui->numberYear && ui->numberWood;
-}
-
-
-
-// One-shot gate diagnostic — a silently-skipping gate is indistinguishable from
-// a zeroed dialog (same lesson as TownHallSA_Diag).
-static void DiagOnce(const StatusBarUI* self) {
-    static bool s_done = false;
-    if (s_done) return;
-    s_done = true;
-    const GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    const CitizenBehavior* town = game ? game->m_citizenList : nullptr;
-    fprintf(stderr, "[StatusBarUI] SA first OnUpdate: self=%p bound=%d built=%d ready=%d "
-            "town=%d citizens=%d stock=%p\n",
-            static_cast<const void*>(self), self ? (Bound(self) ? 1 : 0) : -1,
-            self ? (Built(self) ? 1 : 0) : -1,
-            Ready() ? 1 : 0, TownReady() ? 1 : 0,
-            town ? town->citizens._size : -1,
-            town ? static_cast<const void*>(town->professionResources._data) : nullptr);
-    fflush(stderr);
-}
-
-// Delayed one-shot stock dump — fires on the ~10th throttled refresh (~5s in),
-// after CitizenBehavior_Update's CountResources has re-tallied the stock,
-// so the log shows the values the dialog is actually displaying.
-static void DiagStockOnce(void) {
-    static int s_calls = 0;
-    if (s_calls < 0 || ++s_calls != 10) return;
-    s_calls = -1;
-    const GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    const CitizenBehavior* town = game ? game->m_citizenList : nullptr;
-    const ProfessionResourceEntry* stock = town ? town->professionResources._data : nullptr;
-    if (!stock) return;
-    fprintf(stderr, "[StatusBarUI] SA stock slots (cur@+0):");
-    for (int i = 0; i < 0x15; i++)
-        fprintf(stderr, " %d:%d", i, stock[i].currentCount);
-    fprintf(stderr, "\n");
-    fflush(stderr);
-}
-
-}  // namespace statusbarui_sa
-
 // ============================================================
 // StatusBarUI_Draw (0x14007a3d0, vtable +0x28):
 // Element initialization — finds all named UI elements
@@ -158,9 +81,6 @@ static void DiagStockOnce(void) {
 
 // [5] 0x14007a3d0
 void StatusBarUI::OnOpened() {
-    if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
-    if (statusbarui_sa::Built(this)) return;   // idempotence
-
     // --- Date, population, temperature ---
     textSeason        = FindNamed<UI::TextElement>(this, "textSeason");
     textPopulation    = FindNamed<UI::TextElement>(this, "textPopulation");
@@ -218,31 +138,31 @@ void StatusBarUI::OnOpened() {
     imageSnow        = FindNamed<UI::Element>(this, "imageSnow");
 
     // --- Hearts/Stars icon groups ---
-    // NOTE: retail type-checks the group against a UI type-info whose decompiled
-    // label ("TypeId_HelpButtonElem" = ButtonElement) is wrong for these ribbon
-    // groups — with that id the check rejects the element and hearts stay blank.
-    // The elements come from our own StatusBar.rsc, so accept the find result
-    // directly (CitizenUI's identical groupHearts/groupStars binding does the same).
-    // The helper (DLG-a's citizen_icon_helpers.h) takes the group's two Arrays
-    // and the InternalPtr to the group element by address.
+    // Each group is narrowed to RibbonElement (IsDerivedFrom through the import slot
+    // 0x140151720 + CMOVNZ, 0x14007acf1..0x14007ad08 / 0x14007ad6e..0x14007ad85) and its
+    // InternalPtr handed by address to the group's Init 0x14006abf0 (RCX = +0x108 / +0x128).
     {
-        Object::InternalPtr<UI::Element> group(FindNamed<UI::Element>(this, "groupHearts"));
-        CitizenUI_BuildIconArray_Impl(heartsWhole, heartsHalf, &group);
+        UI::Element* found = FindNamed<UI::Element>(this, "groupHearts");
+        UI::Element* group = ::Object::IsDerivedFromNullSafe(found, UI::RibbonElement::TypeId()) ? found : nullptr;
+        TownHall_GroupRatingInit(&hearts, &group);   // 0x14006abf0
     }
     {
-        Object::InternalPtr<UI::Element> group(FindNamed<UI::Element>(this, "groupStars"));
-        CitizenUI_BuildIconArray_Impl(starsWhole, starsHalf, &group);
+        UI::Element* found = FindNamed<UI::Element>(this, "groupStars");
+        UI::Element* group = ::Object::IsDerivedFromNullSafe(found, UI::RibbonElement::TypeId()) ? found : nullptr;
+        TownHall_GroupRatingInit(&stars, &group);    // 0x14006abf0
     }
 
-    // --- Title label ---
-    // Same wrong-label situation as the hearts/stars groups above: retail checks
-    // against the LabelElement type-info, not ButtonElement — accept directly.
-    labelTitleParam = FindNamed<UI::TextElement>(this, "labelTitleParam");
+    // --- Title label: narrowed to TextElement (import slot 0x140151508 + CMOVNZ,
+    // 0x14007adeb..0x14007adff) into +0x30 ---
+    {
+        UI::Element* found = FindNamed<UI::Element>(this, "labelTitleParam");
+        labelTitleParam = ::Object::IsDerivedFromNullSafe(found, UI::TextElement::TypeId())
+            ? static_cast<UI::TextElement*>(found) : nullptr;
+    }
 
-    // --- Set initial title text from map name ---
+    // --- Set initial title text from map name (SetParameter unguarded, 0x14007ae48) ---
     System::String mapName(GameUpdateLoop::_singleton->m_saveName);   // FUN_140011f90: the String copy
-    if (labelTitleParam)
-        labelTitleParam->SetParameter(0, mapName);
+    labelTitleParam->SetParameter(0, mapName);
 }
 
 // ============================================================
@@ -256,9 +176,6 @@ void StatusBarUI::OnOpened() {
 
 // [7] 0x1400798d0
 void StatusBarUI::OnUpdateLayout() {
-    if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
-    if (!statusbarui_sa::Built(this)) StatusBarUI::OnOpened();
-    if (!statusbarui_sa::Built(this)) return;
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
     // The town (+0xF0)
@@ -309,7 +226,7 @@ void StatusBarUI::OnUpdateLayout() {
     // --- Update hearts (health) icon display ---
     float maxHappy = kMaxHealth;  // default if no citizens
     if (citizenCount == 0) {
-        CitizenUI_UpdateIconDisplay_Impl(heartsWhole, heartsHalf, 0.0f, kMaxHealth);
+        CitizenUI_UpdateIconDisplay_Impl(hearts.whole, hearts.half, 0.0f, kMaxHealth);
         happySum = 0.0f;
     } else {
         // The first citizen's description (Component::_description, checked)
@@ -317,7 +234,7 @@ void StatusBarUI::OnUpdateLayout() {
         const CitizenDescription* citizenDesc =
             ::Object::IsDerivedFromNullSafe(desc, CitizenDescription::TypeId())
                 ? static_cast<const CitizenDescription*>(desc) : nullptr;
-        CitizenUI_UpdateIconDisplay_Impl(heartsWhole, heartsHalf,
+        CitizenUI_UpdateIconDisplay_Impl(hearts.whole, hearts.half,
                                         healthSum / (float)citizenCount,
                                         citizenDesc->maxHealth);
 
@@ -330,7 +247,7 @@ void StatusBarUI::OnUpdateLayout() {
     }
 
     // --- Update stars (happiness) icon display ---
-    CitizenUI_UpdateIconDisplay_Impl(starsWhole, starsHalf, happySum, maxHappy);
+    CitizenUI_UpdateIconDisplay_Impl(stars.whole, stars.half, happySum, maxHappy);
 
     // --- Update status icon visibility and counts ---
     UI::Element* const statusIcons[6] = { imageStatusHome, imageStatusFood, imageStatusCold,
@@ -393,11 +310,10 @@ void StatusBarUI::OnUpdateLayout() {
     float rawTemp = weather->temperature;
     float displayTemp = rawTemp;
 
-    // Celsius mode (GameSettings::showCelsius). Null-guarded: the settings slot
-    // can be unresolved in standalone — default to Fahrenheit (setting off)
-    // like a fresh install.
+    // Celsius mode (GameSettings::showCelsius): retail reads the settings byte with
+    // no test of the settings pointer (`g_pGameSettingsPtr[0x15]`).
     const GameSettings* settings = g_gameSettings;
-    if (settings && settings->showCelsius != 0) {
+    if (settings->showCelsius != 0) {
         displayTemp = ((rawTemp - kFreezingF) * kFtoC_Num) / kFtoC_Den;
     }
     numberTemperature->SetValue(static_cast<int32_t>((int)displayTemp));
@@ -473,71 +389,53 @@ void StatusBarUI::OnUpdateLayout() {
 // iconIndex: 0=home, 1=food, 2=cold, 3=job, 4=tool, 5=disease
 // Bitmask: 1 << iconIndex tested against StatusIconComponent's activeMask (+0xF0).
 // ============================================================
-static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex) {
+static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, uint8_t iconIndex) {
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    if (!game) return;
 
     // Bit 10 of the game flags = locked/paused
     if ((game->m_gameFlags >> 10) & 1) return;
 
-    // The town's citizens
+    // The town's citizens (no test of the town or of the count: 0x14007a120)
     const CitizenBehavior* town = game->m_citizenList;
-    if (!town) return;
-
-    int citizenCount = town->citizens._size;
-    if (citizenCount <= 0) return;
-
-    const Object::InternalPtr<CitizenComponent>* citizens = town->citizens._data;
-    uint32_t bitMask = 1u << (iconIndex & 0x1F);
-
-    // Increment cycling index
-    self->statusCitizenIndex++;
+    const int citizenCount = town->citizens._size;
+    const uint32_t bitMask = 1u << (iconIndex & 0x1F);
     int checked = 0;
 
-    // Wrap if past end
-    if ((int)self->statusCitizenIndex >= citizenCount) {
+    // Advance the cycle (+0x100); a negative index restarts at 0, otherwise the walk
+    // enters at its bound test.
+    self->statusCitizenIndex++;
+    if (static_cast<int32_t>(self->statusCitizenIndex) >= 0) goto bound_test;
+
+    for (;;) {
         self->statusCitizenIndex = 0;
-    }
+        do {
+            {
+                const CitizenComponent* citizen =
+                    town->citizens._data[static_cast<int32_t>(self->statusCitizenIndex)].Get();
+                // The citizen's StatusIconComponent, read unguarded (+0xf0)
+                const StatusIconComponent* icons = citizen->_entity->FindComponent<StatusIconComponent>();
 
-    while (true) {
-        int idx = (int)self->statusCitizenIndex;
-        if (idx >= citizenCount) {
-            self->statusCitizenIndex = 0;
-            // Continue outer loop (wrap and keep searching)
-        }
-
-        const CitizenComponent* citizen = citizens[self->statusCitizenIndex].Get();
-        if (!citizen) goto next;
-
-        {
-            // The citizen's StatusIconComponent (null when the entity has none)
-            const StatusIconComponent* icons = citizen->_entity->FindComponent<StatusIconComponent>();
-
-            uint32_t statusBits = icons ? icons->_geometry.activeMask : 0;
-
-            if ((statusBits & bitMask) != 0 || checked >= citizenCount) {
-                // Found a match (or exhausted all citizens): retail finds the
-                // component again and bails when the bit is not set
-                ComponentEntity* navEntity = citizens[self->statusCitizenIndex]->_entity.Get();
-                const StatusIconComponent* navIcons = navEntity->FindComponent<StatusIconComponent>();
-                if (navIcons) {
+                if ((icons->_geometry.activeMask & bitMask) != 0 || citizenCount <= checked) {
+                    // Found a match (or exhausted all citizens): retail finds the
+                    // component again and returns when the bit is not set
+                    ComponentEntity* navEntity =
+                        town->citizens._data[static_cast<int32_t>(self->statusCitizenIndex)]->_entity.Get();
+                    const StatusIconComponent* navIcons = navEntity->FindComponent<StatusIconComponent>();
                     if ((navIcons->_geometry.activeMask & bitMask) == 0) return;
+
+                    // Navigate to the citizen entity (0x140103040)
+                    ComponentEntity* entityRef =
+                        town->citizens._data[static_cast<int32_t>(self->statusCitizenIndex)]->_entity.Get();
+                    UI::DialogInstance* dialogRef = self->_dialog;
+                    game->m_toolManager->CenterOnEntity(&dialogRef, &entityRef);
+                    return;
                 }
-
-                // Navigate to the citizen entity (0x140103040)
-                ComponentEntity* entityRef = citizens[self->statusCitizenIndex]->_entity.Get();
-                UI::DialogInstance* dialogRef = self->_dialog;
-                game->m_toolManager->CenterOnEntity(&dialogRef, &entityRef);
-                return;
             }
-        }
-
-next:
-        self->statusCitizenIndex++;
-        checked++;
-        if ((int)self->statusCitizenIndex >= citizenCount) {
-            self->statusCitizenIndex = 0;
-        }
+            self->statusCitizenIndex++;
+            checked++;
+bound_test:
+            ;
+        } while (static_cast<int32_t>(self->statusCitizenIndex) < citizenCount);
     }
 }
 
@@ -565,17 +463,11 @@ next:
 // [9] 0x14007a3a0
 void StatusBarUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventId,
                                  int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    if (!statusbarui_sa::Built(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
-
-    // Only handle click events (eventType == 2)
-    if (eventType != 2) return;
-
-    // Status icons have element IDs 100-105 (set in Draw via fn_Element_SetElementId)
-    // Icon 0 = home (bit 0), icon 1 = food (bit 1), ..., icon 5 = disease (bit 5)
-    int iconIndex = eventId - 100;
-    if (iconIndex < 0 || iconIndex >= 6) return;
-
-    StatusBarUI_StatusIconHandler_Impl(this, iconIndex);
+    // Click events (2) on element ids 100..106: `param_4 - 100U < 7` (0x14007a3a0);
+    // the six status icons carry 100..105 (OnOpened). Icon 0 = home (bit 0), ...
+    if (eventType == 2 && static_cast<uint32_t>(eventId - 100) < 7) {
+        StatusBarUI_StatusIconHandler_Impl(this, static_cast<uint8_t>(eventId + 0x9c));
+    }
 }
 
 // ============================================================================
@@ -593,46 +485,14 @@ void StatusBarUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
 //   idx7 (+0x38) = 0x1400798d0  full stats refresh      -> StatusBarUI_Startup
 //   idx9 (+0x48) = 0x14007a3a0  status-icon click       -> StatusBarUI_OnRemove
 //
-// The utility DialogInstance uses the same ToolUI child-dialog vtable as the
-// entity-info dialogs (toolbardialog.cpp Toolbar_Utility_Impl), whose SA
-// framework dispatches ONLY controller slot idx8 (+0x40) per frame — so, like
-// the TownHallUI promotion, the self-heal build + a throttled refresh run from
-// idx8, with idx4/idx5/idx7 also wired for any direct framework dispatch.
+// Slot 5 is dispatched by DialogInstance::OnOpened when the dialog is added
+// (UserInterface::AddDialog), slot 7 by DialogInstance::ComputeLayout from
+// UserInterface::Update's per-frame layout pass: the retail refresh.
 //
 // Data sources (all live after the town-registry passes in starttown.cpp):
 // town citizen list townMgr+0xa0/+0xa8 (population/status/hearts/stars),
 // resource stock townMgr+0x170, game clock gw+0x128, weather gw+0x130, and
 // the town name String at gw+0x28 (title parameter).
-
-
-// [4] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StatusBarUI::OnCreated() {
-    StatusBarUI::OnOpened();
-}
-
-
-
-// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StatusBarUI::OnUpdate(const System::Time& /*time*/) {
-    statusbarui_sa::DiagOnce(this);
-    if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
-    if (!statusbarui_sa::Built(this)) {
-        StatusBarUI::OnOpened();
-        if (statusbarui_sa::Built(this)) {
-            fprintf(stderr, "[StatusBarUI] SA build OK — elements bound, first refresh\n");
-            fflush(stderr);
-        } else {
-            return;
-        }
-        StatusBarUI::OnUpdateLayout();
-        return;
-    }
-    // +0x104 (a gap in retail) as a throttle counter.
-    if (refreshThrottle++ % 30 == 0) {
-        StatusBarUI::OnUpdateLayout();
-        statusbarui_sa::DiagStockOnce();
-    }
-}
 
 
 // create 0x1400140e0: MemAlloc(0x1d0, 8), then the ctor (DialogController ->

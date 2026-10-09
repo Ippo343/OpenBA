@@ -190,8 +190,11 @@ static RawArray<TerrainPathPoint>* coastline_DeepCopyPath_24ac0(RawArray<Terrain
                                                                 const RawArray<TerrainPathPoint>* s) {
     if (d == s) return d;
 
-    if (d->data) System::MemoryAllocator::MemFree(d->data);
-    d->size = 0;                    // count
+    // 0x140024ae3..0x140024af7: unconditional MemFree of the old data, then ONE qword
+    // zero of size AND capacity (+0x08), then data.
+    System::MemoryAllocator::MemFree(d->data);
+    d->size = 0;                    // count    (+0x08, low dword of the qword store)
+    d->capacity = 0;                // capacity (+0x0c, high dword of the qword store)
     d->data = nullptr;              // data
 
     int n = s->size;                // src count

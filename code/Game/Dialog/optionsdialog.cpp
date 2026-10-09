@@ -736,8 +736,9 @@ void OptionsDialog::OnClosed() {}
 // Input::Configuration singleton, enables/disables mouse clipping,
 // enables cursor, and saves input config.
 void OptionsDialog::ApplyInputSettings() {
+    // No test of either singleton: 0x140072360 stores through Input::Configuration
+    // (0x14007237f) and calls EnableMouseClipping / Save on the two singletons as read.
     ::Input::Configuration* inputCfg = ::Input::Configuration::_singleton;
-    if (!inputCfg) return;
 
     // Read mouse clip checkbox -> Input::Configuration::_mouseClipping (+0x08)
     inputCfg->_mouseClipping = checkMouseClip->_checked != 0;
@@ -751,12 +752,10 @@ void OptionsDialog::ApplyInputSettings() {
     // Enable/disable mouse clipping based on checkbox
     bool mouseClip = checkMouseClip->_checked;
     ::Input::Device* inputDevice = ::Input::Device::_singleton;
-    if (inputDevice)
-        inputDevice->EnableMouseClipping(static_cast<uint8_t>(mouseClip));
+    inputDevice->EnableMouseClipping(static_cast<uint8_t>(mouseClip));
 
-    // Save input configuration
-    if (inputCfg)
-        inputCfg->Save();
+    // Save input configuration (the tail jump at 0x140072413)
+    inputCfg->Save();
 }
 
 // ============================================================

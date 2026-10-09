@@ -56,16 +56,18 @@
 //
 // In standalone we load Dialog/EventPopup.rsc by path (yielding the same
 // Dialog-typed External the exe reaches via _dialog -> Dialog::GetReference)
-// and drive the EventPopupDialog ctor. Returns the new dialog, or null if the
-// resource/allocation is unavailable.
+// and drive the EventPopupDialog ctor. Retail's shape otherwise (0x140067d88..
+// 0x140067e3d): IsDerivedFrom Dialog, MemAlloc(0xC0, 8), the ctor only when the
+// allocation succeeded, then AddDialog with the pointer, null or not; no test of
+// the UI, the factory or the resource.
 
 static EventPopupDialog* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventIndex) {
     UI::UserInterface* ui = self->_ui;
-    if (!ui) return nullptr;
 
     // Load Dialog/EventPopup.rsc. The exe pulls this same resource from the ribbon's
-    // own referenced-resource slot (_dialog); loading by path is equivalent and
-    // sidesteps the member-return Dialog::GetReference ABI.
+    // own referenced-resource slot: `Dialog::GetReference(_dialog, 0)` (0x140067d88 /
+    // 0x140067d93, R8D = 0). PORT GAP 0x1800388d0 Dialog::GetReference (declared,
+    // not ported in runtime/types/ui/Dialog.h): loading by path stands in for it.
     //
     // NOT cached across calls. It used to be, behind a one-shot s_triedRes flag --
     // the same shape as the Male.ndb/Female.ndb cache in citizen_names.cpp that
@@ -75,23 +77,21 @@ static EventPopupDialog* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, 
     // a lookup-or-load; the repeat cost is a hash lookup, and popups are rare.
     const UI::Dialog* popupRes = nullptr;
     {
-        if (::Object::ExternalFactory::_singleton) {
-            System::Filename filename("Dialog/EventPopup.rsc");
-            const ::Object::External* found =
-                ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
-            // Accept the loaded resource if it is Dialog-derived — the same guard the
-            // exe applies before using it as the popup's external context.
-            if (found && ::Object::IsDerivedFromNullSafe(found, UI::Dialog::TypeId()))
-                popupRes = static_cast<const UI::Dialog*>(found);
-        }
+        System::Filename filename("Dialog/EventPopup.rsc");
+        const ::Object::External* found =
+            ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
+        // The IsDerivedFrom Dialog the exe applies to the reference (0x140067da8 + CMOVNZ).
+        if (::Object::IsDerivedFromNullSafe(found, UI::Dialog::TypeId()))
+            popupRes = static_cast<const UI::Dialog*>(found);
     }
-    if (!popupRes) return nullptr;
 
     void* mem = System::MemoryAllocator::MemAlloc(0xC0, 8);
-    if (!mem) return nullptr;
-    EventPopupDialog* popup = ::new (mem) EventPopupDialog(ui, popupRes,
-                                                          Object::InternalPtr<UI::DialogInstance>(),
-                                                          eventIndex);
+    EventPopupDialog* popup = nullptr;
+    if (mem != nullptr) {
+        popup = ::new (mem) EventPopupDialog(ui, popupRes,
+                                             Object::InternalPtr<UI::DialogInstance>(),
+                                             eventIndex);
+    }
 
     Object::InternalPtr<UI::DialogInstance> dialogPtr(popup);
     ui->AddDialog(&dialogPtr);
@@ -331,11 +331,11 @@ void EventNotifyDialog::OnUpdate(const System::Time& time) {
                 g_gameContainer->warningEffect, static_cast<Audio::Scene::SoundType>(1),
                 zeroTime);
         }
-
-        totalEvents = eventLogPtr->entries.GetSize() - 1;
     }
 
-    // Update last processed event index
+    // Update last processed event index: the count - 1 read BEFORE the scan
+    // (`MOV R14D,[RBP+0x67]` 0x140067fd5, stored at 0x140068047); an event logged
+    // during the scan is picked up next frame.
     lastEventIndex = totalEvents;
 }
 

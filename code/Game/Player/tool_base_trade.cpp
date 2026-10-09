@@ -297,9 +297,6 @@ void Avl38SetRemove(AvlTreeHead<PinnedToolNode>* set, PinnedToolNode* node) {
 void Avl38SetFindRemove(AvlTreeHead<TrackedEntityNode>* set, ComponentEntity* const* key) {
     Avl38FindRemove(set, key);   // 0x14002c690
 }
-void Avl38SetFindRemove(AvlTreeHead<PinnedToolNode>* set, ComponentEntity* const* key) {
-    Avl38FindRemove(set, key);   // 0x14002c690
-}
 void Avl38SetRemove(AvlTreeHead<TradeWork::Node>* set, TradeWork::Node* node) {
     Avl38Remove(set, node);   // 0x140025740
 }
