@@ -4187,8 +4187,8 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
 // world position the colonists are jittered around (citizen Foundation-F).
 static int StartTown_SpawnCitizens(MapGenerator* startConfig, EntityList* entityList,
                                    Map* game, int spawnX, int spawnY) {
-    const int famCount  = startConfig->families.count;   // read as int32 (Serialize int&)
-    MapGenerator::InitialFamily* families = startConfig->families.data;
+    const int famCount  = startConfig->families._size;   // read as int32 (Serialize int&)
+    MapGenerator::InitialFamily* families = startConfig->families._data;
     if (famCount <= 0 || !families) return 0;
     // Town-centre world position (same tile->world mapping as the camera) +
     // founding-family spawn jitter radius (startConfig+0x40). FUN_1400a3300 found
@@ -5275,7 +5275,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
     fprintf(stderr, "[startTown::spawn] pools: simple(+0x98)=%d bldg(+0x88)=%d "
             "resource(+0x78)=%d citizenFam(+0x68)=%d\n",
             sc->refArray3._size, sc->refArray2._size,
-            sc->refArray1._size, sc->families.count);
+            sc->refArray1._size, sc->families._size);
     fflush(stderr);
 
     // DIAG — fn-pointer state + per-pool first-entry resolution probe.

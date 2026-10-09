@@ -35,6 +35,7 @@ namespace UI { class StringTable; }
 namespace MapGeneratorRows {
 extern const rtcoll::ArraySpec kSpec_ExternalRef;        // exe 0x14001b340 / 0x14001b030
 extern const rtcoll::ArraySpec kSpec_InitialStructure;   // exe 0x14001b4e0 / 0x14001b0a0
+extern const rtcoll::ArraySpec kSpec_InitialFamily;      // exe 0x14001b270 (no destroy: the dtor is 0x14001af47's MemFree)
 }  // namespace MapGeneratorRows
 
 class MapGenerator final : public Object::External {
@@ -47,23 +48,6 @@ public:
     // String(), dword -1, qword 0: 0x1400a3080 / 0x1400a312f / 0x1400a3153 /
     // 0x1400a3177); its dtor (0x14001aea0, per ref) is ~String alone.
     using ExternalRef = NamedExternalRef;
-    // Generic dynamic array header: data + count + capacity (0x10), typed by its
-    // element (B.4 GAME-c: the element per pool is the stride retail's dtor
-    // 0x14001aea0 destroys it with: 0x14001b030 = 0x18 ExternalRef, 0x14001b0a0 =
-    // 0x30 InitialStructure).
-    // B4 P2 GAME-3: the pool owns its elements the way retail's member arrays
-    // do: the ctor (0x1400a3030) zeroes both qwords, and each pool's destructor
-    // is the one retail's dtor 0x14001aea0 runs at its offset, in member order
-    // (defined per element type in mapgenerator.cpp). B4 X7-GAME-A: only the
-    // InitialFamily pool is still this header (its dtor keeps a null test).
-    template <class T>
-    struct DynArrayHeader {
-        T*       data = nullptr;  // +0x00: pointer to element array
-        int32_t  count = 0;       // +0x08: number of elements
-        int32_t  capacity = 0;    // +0x0C: allocated capacity
-        ~DynArrayHeader();
-    };
-
     // One _citizens entry (stride 8, 0x14001b270; Serialize: bool, int).
     struct InitialFamily {
         bool     educated;        // +0x00 _educated
@@ -90,6 +74,11 @@ public:
         Collection::ExplicitSpec<&MapGeneratorRows::kSpec_ExternalRef>>;
     using InitialStructureArray = Collection::Array<InitialStructure, Collection::DefaultAllocator,
         Collection::ExplicitSpec<&MapGeneratorRows::kSpec_InitialStructure>>;
+    // The InitialFamily pool (B6 row 470): `Array<T>` over its row; the ctor is the
+    // zero stores retail's ctor 0x1400a3030 writes, the dtor retail's inline
+    // 0x14001af47 (unconditional MemFree, then the header zeroed).
+    using InitialFamilyArray = Collection::Array<InitialFamily, Collection::DefaultAllocator,
+        Collection::ExplicitSpec<&MapGeneratorRows::kSpec_InitialFamily>>;
 
     MapGenerator();                                               // 0x1400a3030
 
@@ -116,7 +105,7 @@ public:
 
     // +0x60: InitialFamily array (8-byte elements, raw MemAlloc/MemFree); the
     // count is retail's int32 at +0x68, the capacity +0x6C.
-    DynArrayHeader<InitialFamily> families;  // +0x60 _citizens (dtor 0x14001af47: MemFree, zero both qwords)
+    InitialFamilyArray families;  // +0x60 _citizens {data, count +0x68, capacity +0x6C} (dtor 0x14001af47: MemFree, zero both qwords)
 
     ExternalRefArray      refArray1;   // +0x70: ExternalRef (0x18) pool (dtor 0x14001af41 -> 0x14001b030)
     InitialStructureArray refArray2;   // +0x80: InitialStructure (0x30) pool (dtor 0x14001af37 -> 0x14001b0a0)
@@ -198,12 +187,10 @@ static_assert(offsetof(MapGenerator, subdivisions) == 0x3C, "+0x3C");
 static_assert(offsetof(MapGenerator, scale) == 0x40, "+0x40");
 static_assert(offsetof(MapGenerator, templateRef) == 0x48, "+0x48");
 static_assert(offsetof(MapGenerator, families) == 0x60, "+0x60");
-static_assert(offsetof(MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>, count) == 0x08, "+0x68 count");
+static_assert(offsetof(MapGenerator::InitialFamilyArray, _size) == 0x08, "+0x68 count");
 static_assert(offsetof(MapGenerator::ExternalRef, generation) == 0x08, "ExternalRef +0x08");
 static_assert(offsetof(MapGenerator::ExternalRef, resolved) == 0x10, "ExternalRef +0x10");
 
-// The InitialFamily pool's destructor (mapgenerator.cpp), declared before any use.
-template <> MapGenerator::DynArrayHeader<MapGenerator::InitialFamily>::~DynArrayHeader();
 static_assert(offsetof(MapGenerator, refArray1) == 0x70, "+0x70");
 static_assert(offsetof(MapGenerator, refArray2) == 0x80, "+0x80");
 static_assert(offsetof(MapGenerator, refArray3) == 0x90, "+0x90");
