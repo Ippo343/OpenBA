@@ -43,8 +43,7 @@
 // Before: a 48-slot hand-built TombstoneComponent_LiveVtable filled at every
 // create (FillTypedVtable + FinishLiveVtable), Inert_ScalarDtor in slot 0 (only
 // ~Internal). After: the compiler's 16-slot vtable and a real ctor/dtor chain
-// (B38_RULES D1, D2). Slot 4 keeps the tree's standalone-robust Startup body,
-// which is what the table installed.
+// (B38_RULES D1, D2). Slot 4 is retail's 0x140057860 (B6 row 11).
 // ============================================================================
 #include "Object/factory_registration.h"
 #include "Component/TombstoneComponent.h"
@@ -76,25 +75,17 @@ void TombstoneComponent::Persist(IO::Stream& stream) {
 // ============================================================
 // Body-init dispatched at spawn by ComponentEntity_StartupComponents (vtable +0x20).
 // Populates the countdown from the TombstoneDescription's [min, min+range] lifetime *
-// secondsPerTick. _description is already the TombstoneDescription
-// (ComponentEntity_CtorFromDescription's copy-ctor stores it there) — we TRUST it
-// directly rather than going through IsDerivedFrom, which is unreliable in standalone
-// (the factory tree is incomplete — see growthcomponent.cpp's note). Without this the
-// inert factory leaves the countdown 0, so Update's `timer < 1` test fires on the FIRST
-// tick and marks the tombstone for instant removal. Idempotent (only inits a 0 timer).
+// secondsPerTick.
 //
-// Listed: retail 0x140057860 gates the description on IsDerivedFrom(DAT_1401c4a68) and
-// always writes; this is the tree's form (its unreferenced faithful twin, the C function
-// TombstoneComponent_Serialize, is deleted).
+// 0x140057860-0x1400578c9: IsDerivedFrom(+0x18, TombstoneDescription cell 0x1401c4a68)
+// (CALL [0x140152a98] at 0x14005787f), CMOVNZ keeps the description or 0 (0x140057897),
+// RandFloat of [GameUpdateLoop + 0xd8], then reads +0x24 / +0x20 through it and stores
+// the Time at +0x28 (0x1400578c9). No test of the timer, the description or the
+// singleton: the timer is always written (known_port_issues row 11).
 void TombstoneComponent::Startup() {
-
-    // Already initialized (a live tombstone carries a positive lifetime) — leave it.
-    if (lifetime._ticks != 0) return;
-
     Description* descRaw = _description;
-    if (!descRaw) return;
-    if (GameUpdateLoop::_singleton == nullptr) return;
-    TombstoneDescription* desc = static_cast<TombstoneDescription*>(descRaw);
+    TombstoneDescription* desc = descRaw->IsDerivedFrom(TombstoneDescription::TypeId())
+                                 ? static_cast<TombstoneDescription*>(descRaw) : nullptr;
 
     // Random float in [0,1) from the world RNG.
     float randVal = GameUpdateLoop::_singleton->m_random->RandFloat();
