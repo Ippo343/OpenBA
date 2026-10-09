@@ -243,14 +243,15 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
             ComponentEntity* entObj = (*slot)->_entity.Get();
 
             // find the entity's InteractComponent (scan its component array @ entObj+0x30)
-            Component* interact = nullptr;
-            interact = ScanArr(entObj, s_tid_InteractComponent);
-            Component* interactIBP[2] = {nullptr, nullptr};
+            // (the scan's IsDerivedFrom(InteractComponent) result, typed)
+            InteractComponent* interact = nullptr;
+            interact = static_cast<InteractComponent*>(ScanArr(entObj, s_tid_InteractComponent));
+            InteractComponent* interactIBP[2] = {nullptr, nullptr};
             interactIBP[0] = interact;   // the InternalBasePtr ctor: `mov [rcx],rdx`
 
             // resolve world pos -> clamped grid cell
             Vector3Slot posVec;
-            Pf_EntityResolvePos_2e20(interactIBP[0], &posVec.v, 0, 0, nullptr);
+            InteractNodePosition(interactIBP[0], &posVec.v, 0, 0, nullptr);   // 0x140122e20
             int w = mapGrid->size;
             int col = static_cast<int>(posVec.v.x + static_cast<float>(w >> 1));
             int row = static_cast<int>(posVec.v.y + static_cast<float>(w >> 1));
