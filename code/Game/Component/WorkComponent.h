@@ -28,6 +28,10 @@ class WorkComponent final : public Component {
     DECLARE_EXE_TYPE(WorkComponent)
 
 public:
+    // The "posted no work" sentinel of workFlags (ctor 0x14012e820 stores 0x80000000; the field is
+    // retail's int: Serialize(int&) at 0x14012e7ab).
+    static constexpr int32_t kWorkFlagsNone = static_cast<int32_t>(0x80000000u);
+
     WorkComponent();                                              // 0x14012e820
 
     // 0x14012e7e0
@@ -45,7 +49,7 @@ public:
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     int32_t  workId;       // +0x28 posted work id (ctor -1 = none posted)
-    uint32_t workFlags;    // +0x2c (ctor 0x80000000 = the same sentinel); really the posted work's
+    int32_t  workFlags;    // +0x2c (ctor 0x80000000 = the same sentinel; B6 row 19: retail serializes it through Serialize(int&), 0x14012e7ab); really the posted work's
                            //        queue-order key (CancelWork copies Work::field_24 back; known_port_issues 201)
     int32_t  workState;    // +0x30 work capacity (ctor 0); really the cached max worker count
                            //        (OnAdded 0x14012e6f0 stores CalcMaxWorkers; known_port_issues 173)

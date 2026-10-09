@@ -145,7 +145,7 @@ void WorkComponent::CancelWork() {
 // posted no work" sentinel, and 0x80000000 is the same sentinel for workFlags
 // (PostWork 0x14012ec60 tests `*(int*)(self+0x2c) == -0x80000000`).
 WorkComponent::WorkComponent()
-    : workId(-1), workFlags(0x80000000u), workState(0), _pad34{} {
+    : workId(-1), workFlags(kWorkFlagsNone), workState(0), _pad34{} {
     OrFlagsInCtor(0x3);
 }
 
@@ -187,13 +187,11 @@ void WorkComponent::Persist(IO::Stream& stream) {
         ser.Serialize(workState, nullptr);
     }
 
-    // Version >= 2: serialize workFlags. Retail calls the int door here
-    // (the flags are an int in the stream); the value is the same bits.
+    // Version >= 2: workFlags through Serialize(int&) on the field itself
+    // (0x14012e7ab LEA RDX,[RDI+0x2c]; CALL [0x140152ac8]; B6 row 19).
     version = ser.GetVersion();
     if (version >= 2) {
-        int flags = static_cast<int>(workFlags);
-        ser.Serialize(flags, nullptr);
-        workFlags = static_cast<uint32_t>(flags);
+        ser.Serialize(workFlags, nullptr);
     }
 }
 

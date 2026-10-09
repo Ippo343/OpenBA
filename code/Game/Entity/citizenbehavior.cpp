@@ -39,7 +39,7 @@
 #include "Action/exe_bodies.h"      // Pf_IsDstReachable_f810, Pf_EntityAnchorCell_7fb0, PathPairs_Clear_25b30
 #include "Action/PathAvl.h"         // PathCostTreeInsert (0x140025a10)
 #include "Component/exe_bodies.h"   // CitizenEmploy_Strat_c4b0, PathGraph_ReassignWorkers, CitizenAssignCitizens, CitizenComp_AssignHousing
-#include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x10 / 0x20
+#include "Game/exe_bodies.h"        // EventLog_AddEvent, ResizeStride0x20
 #include "Work/exe_bodies.h"        // WorkBase_TreeNodeFree_e320, WorkBase_CalcDistance_8830
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL

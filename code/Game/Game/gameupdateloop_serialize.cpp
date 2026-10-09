@@ -173,9 +173,9 @@ void EventLog::Serialize(IO::Stream& stream) {
         }
         for (int i = skip; i < entries.GetSize(); i++) {
             EventLogEntry& e = entries[i];
-            // LEFT: retail serializes the colour through the uint overload
-            // (0x1400952c0); the tree's int overload is kept (an H8 question).
-            ser.Serialize(reinterpret_cast<int&>(e.color), nullptr);   // LEFT: audit DEFERRED (retail-difference task, known_port_issues 14): retail serializes the colour through the uint overload (0x1400952c0); the tree's int overload is kept (an H8 question).
+            // Retail 0x14009538a CALL [0x140152a50] = Serialize(unsigned int&): the colour's own
+            // type (B6 row 16; the tree used the int overload through a cast).
+            ser.Serialize(e.color, nullptr);
             e.text.Serialize(ser);
             ser.Serialize(e.eventType, nullptr);
             ser.Serialize(e.severity, nullptr);
