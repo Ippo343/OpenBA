@@ -49,15 +49,14 @@ namespace {
 // (12d990's param_2 is the entity's ComponentDescription, not the entity — and it looks
 // for RawMaterialDESCRIPTION, not a component.) Both verified in their own disassembly.
 
-// 8d3c0's search: the ComponentEntity's components. Per-slot CheckPtr, as the original.
-// The null-slot skip is the tree's (kept; see known_port_issues 14d).
+// 8d3c0's search: the ComponentEntity's components. Per-slot CheckPtr, as the original,
+// and no null-slot test (0x14008d410-0x14008d42d: [slot] -> [vtbl+0x10] directly).
 template <class T>
 T* PG_FindComp(ComponentEntity* entity) {
     const uint32_t tid = T::TypeId();
     int count = entity->_components._size;
     for (int i = 0; i < count; ++i) {
         Component* comp = entity->_components[i].Get();
-        if (!comp) continue;
         if (comp->Type() != tid) continue;
         Component* c = entity->_components[i].Get();
         return c->IsDerivedFrom(tid) ? static_cast<T*>(c) : nullptr;
@@ -141,7 +140,7 @@ static uint64_t PickupGate_Accepts_12d990(StorageLocationComponent* slComp, Comp
 //
 // Measured 2026-07-16: list0.count == 1 in standalone at game start (the Barn), so this
 // loop does run; the "empty list" hypothesis was ruled out by probe, not assumed.
-// The null-entry skips are the tree's (kept).
+// No null-entry test: 0x14008d400 / 0x14008d45f read the entry and its +0x38 count directly.
 // ============================================================
 bool CitizenBehavior::HasStorageFor(ComponentDescription* resource, int amount) {
     // `if (0 < (int)param_1[1])` — the list's int32 count.
@@ -152,12 +151,10 @@ bool CitizenBehavior::HasStorageFor(ComponentDescription* resource, int amount) 
         Object::InternalPtr<ComponentEntity>* slot = &arr[i];
 
         ComponentEntity* ent = slot->Get();
-        if (!ent) continue;
         StorageLocationComponent* slComp = PG_FindComp<StorageLocationComponent>(ent);
 
         // The original re-reads the list entry (and re-CheckPtrs) for the second scan.
         ent = slot->Get();
-        if (!ent) continue;
         StorageComponent* stComp = PG_FindComp<StorageComponent>(ent);
 
         if (PickupGate_Accepts_12d990(slComp, resource)) {
