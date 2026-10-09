@@ -91,36 +91,26 @@ bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng) 
 // ActHunt_NotifyEntityChanged_c3470, both called by name.
 
 void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5) {
-    // Standalone-inert guard: `model` is the animation target. In retail it is never null —
-    // the caller resolved it from a live entity. In standalone some finds resolve null when
-    // a shared type-id global is the unfilled sentinel (e.g. AnimateNaturalResource on a
-    // tree). Skip as a safe no-op rather than deref null at +0x18. The live-world path is
-    // unchanged.
-    if (model == nullptr) return;
-
-    Description* obj = model->_description;
+    // B6 (14d G57): retail tests neither the model nor the narrowed description: it reads
+    // +0x18, narrows it (IsDerivedFrom, ModelDescription cell 0x1401c7a88; CMOVNZ to 0), and
+    // reads [desc+0x20] + meshGroup * 0x18 for PlayAnimation with no test.
     // The type-gate validates the ModelComponent's description is a ModelDescription
     // (DAT_1401c7a88; its DATA writer is ModelDescription_Register @ 0x14014f435). Without
     // it the gate fails → PlayAnimation skipped → the skinned bone palette stays frozen
     // (RenderDoc-verified).
-    const uint32_t s_tidModelDesc = ModelDescription::TypeId();   // B.3.8: no lazy cache (B6-5)
-    bool derived = s_tidModelDesc ? ::Object::IsDerivedFromNullSafe(obj, s_tidModelDesc) : false;
-    const ModelDescription* animHolder = derived ? static_cast<const ModelDescription*>(obj) : nullptr;
+    Description* obj = model->_description;
+    const ModelDescription* animHolder = obj->IsDerivedFrom(ModelDescription::TypeId())
+                                         ? static_cast<const ModelDescription*>(obj) : nullptr;
 
     System::Time timeA = {};  // p4
     System::Time timeB = {};  // p3
     RtSystem_Time_Ctor(&timeA, p4); RtSystem_Time_Ctor(&timeB, p3);
 
-    // Defensive: the original reads the mesh groups unconditionally (it relies on the
-    // type always being derived here). Guard so a type miss in the inert standalone world
-    // is a safe no-op rather than a null deref.
-    if (animHolder) {
-        short animIndex = model->meshGroup;
-        Graphics::AnimationGroup* animData = animHolder->_meshGroups[static_cast<uintptr_t>(animIndex)].field_0x00;
-        // PlayAnimation(meshInstance, animData, animId, &tB=p3, &tA=p4, p5)
-        model->meshInstance.PlayAnimation(Object::ExternalPtr<Graphics::AnimationGroup>(animData), static_cast<int>(animId),
-                                          &timeB, &timeA, p5);
-    }
+    short animIndex = model->meshGroup;
+    Graphics::AnimationGroup* animData = animHolder->_meshGroups[static_cast<uintptr_t>(animIndex)].field_0x00;
+    // PlayAnimation(meshInstance, animData, animId, &tB=p3, &tA=p4, p5)
+    model->meshInstance.PlayAnimation(Object::ExternalPtr<Graphics::AnimationGroup>(animData), static_cast<int>(animId),
+                                      &timeB, &timeA, p5);
 
     uint32_t old = model->_flags;
     uint32_t nw = old | 4u;
