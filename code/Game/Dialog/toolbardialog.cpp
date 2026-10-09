@@ -1147,9 +1147,8 @@ found_speed:
 // Original: 0x1400b8d40.
 
 void ToolbarDialog::OnUpdateLayout() {
-    // The game world (the tree's guard; retail reads it unguarded)
+    // The game world, read unguarded (0x1400b8d40: [GameWorld+0x120] at once)
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    if (!gameWorld) return;
     PlayerToolManager* toolManager = gameWorld->m_toolManager;
 
     // The tool manager's active group (+0x20) and game speed (+0x34)
@@ -1166,16 +1165,14 @@ void ToolbarDialog::OnUpdateLayout() {
             // ShowGroup: uncheck button if this group is not the active one
             // (the address compare retail makes: +0x20 against the item's template)
             if (activeDialog != item->_field58) {
-                // The button element from the parallel array (the tree's null skip)
+                // The button element from the parallel array, narrowed (null when not
+                // a CheckElement) and its +0xd8 read unguarded, as retail
                 UI::Element* elem = buttonElements[i];
-                if (!elem) continue;
-
-                // IsDerivedFrom check, then cast
                 bool isDerived = ::Object::IsDerivedFromNullSafe(elem, UI::CheckElement::TypeId());
                 UI::CheckElement* check = isDerived ? static_cast<UI::CheckElement*>(elem) : nullptr;
 
                 // If button is currently checked, uncheck it
-                if (check != nullptr && check->_checked != 0) {
+                if (check->_checked != 0) {
                     // The ONLY place a toolbar button is silently unchecked from the
                     // per-frame update; it fires only on the 1->0 transition.
                     check->_checked = 0;
@@ -1185,7 +1182,6 @@ void ToolbarDialog::OnUpdateLayout() {
         else if (actionType == 9) {
             // SpeedUp: enable/disable based on whether current speed < max speed
             UI::Element* elem = buttonElements[i];
-            if (!elem) continue;
 
             int32_t speedCount = speedValues.GetSize();
             bool canSpeedUp = (int32_t)gameSpeed < speedValues[speedCount - 1];
@@ -1194,7 +1190,6 @@ void ToolbarDialog::OnUpdateLayout() {
         else if (actionType == 6) {
             // SpeedDown: enable/disable based on whether current speed > min speed
             UI::Element* elem = buttonElements[i];
-            if (!elem) continue;
 
             bool canSpeedDown = speedValues[0] < (int32_t)gameSpeed;
             elem->Enable(canSpeedDown);   // slot 8
@@ -1202,7 +1197,6 @@ void ToolbarDialog::OnUpdateLayout() {
         else if (actionType == 8) {
             // Unpause button: enabled while paused
             UI::Element* elem = buttonElements[i];
-            if (!elem) continue;
 
             uint8_t isPaused = toolManager->paused;
             elem->Enable(isPaused);   // slot 8
@@ -1210,7 +1204,6 @@ void ToolbarDialog::OnUpdateLayout() {
         else if (actionType == 7) {
             // Pause button: enabled while NOT paused
             UI::Element* elem = buttonElements[i];
-            if (!elem) continue;
 
             uint8_t isPaused = toolManager->paused;
             elem->Enable(isPaused == 0);   // slot 8
@@ -1218,7 +1211,6 @@ void ToolbarDialog::OnUpdateLayout() {
         else if (actionType == 10) {
             // SpeedDisplay: the button's child 1 (a TextElement) shows "%ix"
             UI::Element* elem = buttonElements[i];
-            if (!elem) continue;
 
             UI::Element* childElem = elem->Child(1).Get();
 
@@ -1229,10 +1221,7 @@ void ToolbarDialog::OnUpdateLayout() {
             // Format speed string: "%ix" with gameSpeed value
             System::String fmtStr = System::String::Format("%ix", (uint64_t)gameSpeed);
 
-            // (the tree's null guard on the text element)
-            if (textElem != nullptr) {
-                textElem->SetParameter(0, fmtStr);
-            }
+            textElem->SetParameter(0, fmtStr);   // unguarded, as retail
         }
     }
 
