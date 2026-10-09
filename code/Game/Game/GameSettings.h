@@ -37,19 +37,22 @@
 #include <cstdint>
 #include <cstddef>
 
+// The six flags are `bool`: retail persists them through Persistence::Get(bool&) / Set(bool)
+// (0x140098bc7 LEA R9,[RBX+0xc] -> [0x1401522f0]; 0x1400989d7 MOVZX R9D,byte [RBX+0xc] -> [0x140152300])
+// and GameMain writes them as bytes (0x140042001, 0x14004200c, 0x140042013). B6 rows 21 / 22.
 struct GameSettings {
     int32_t uiScale;             // +0x00 "UIScale"            (OptionsDialog sliderUIScale)
     int32_t autosaveInterval;    // +0x04 "AutosaveInterval"   (comboAutosave index)
     int32_t statusIconOpacity;   // +0x08 "StatusIconOpacity"  (sliderStatusIcon)
-    uint8_t statusIconEnable;    // +0x0C "StatusIconEnable"   (checkStatusIcon)
-    uint8_t _pad0D[3];           // +0x0D not written by retail
+    bool    statusIconEnable;    // +0x0C "StatusIconEnable"   (checkStatusIcon)
+    uint8_t _pad0D[3];           // +0x0D not written by retail (and not by the tree since B6 row 22)
     int32_t statusIconScale;     // +0x10 "StatusIconScale"    (sliderStatusIconScale)
-    uint8_t edgeScroll;          // +0x14 "EdgeScroll"
-    uint8_t showCelsius;         // +0x15 "ShowCelcius" (retail's spelling of the key)
-    uint8_t showWeather;         // +0x16 "ShowWeather"
-    uint8_t autoSlow;            // +0x17 "AutoSlow"
-    uint8_t autoPause;           // +0x18 "AutoPause"
-    uint8_t _pad19[3];           // +0x19 not written by retail
+    bool    edgeScroll;          // +0x14 "EdgeScroll"
+    bool    showCelsius;         // +0x15 "ShowCelcius" (retail's spelling of the key)
+    bool    showWeather;         // +0x16 "ShowWeather"
+    bool    autoSlow;            // +0x17 "AutoSlow"
+    bool    autoPause;           // +0x18 "AutoPause"
+    uint8_t _pad19[3];           // +0x19 not written by retail (and not by the tree since B6 row 22)
     int32_t lastOption;          // +0x1C "LastOption"   (OptionsDialog's last tab)
     int32_t lastTerrain;         // +0x20 "LastTerrain"  (NewGameDialog)
     int32_t lastMapSize;         // +0x24 "LastMapSize"

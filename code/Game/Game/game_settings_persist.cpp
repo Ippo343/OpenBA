@@ -41,7 +41,7 @@ namespace {
 // The 16 keys in retail's order. Order matters only for log readability, but
 // keeping it identical makes a diff against the decompile trivial.
 struct IntKey  { const char* key; int32_t GameSettings::* field; };
-struct BoolKey { const char* key; uint8_t GameSettings::* field; };   // one byte, Get(bool&)
+struct BoolKey { const char* key; bool GameSettings::* field; };   // retail's bool, Get(bool&) / Set(bool)
 
 const IntKey  kIntKeys[] = {
     { "UIScale", &GameSettings::uiScale },
@@ -90,8 +90,7 @@ extern "C" void GameSettings_Load(GameSettings* settings) {
     for (const auto& k : kIntKeys)
         p->Get("Game", k.key, settings->*k.field);
     for (const auto& k : kBoolKeys)
-        p->Get(
-            "Game", k.key, *reinterpret_cast<bool*>(&(settings->*k.field)));   // LEFT: H8 (audit WORK:H8; a byte_io marker candidate for the coordinator): retail hands the byte to Get(bool&) (0x140098bc7 LEA R9,[RBX+0xc] -> slot 0x1401522f0, likewise +0x14..+0x18), but a bool field adds a != 0 normalisation where OptionsDialog stores UI::CheckElement::_checked (uint8_t, runtime/types/ui/CheckElement.h) into it (optionsdialog.cpp ~781 / ~794-798)  // CAST-OK: byte_io (S4 ruling)
+        p->Get("Game", k.key, settings->*k.field);   // 0x140098bc7 LEA R9,[RBX+0xc] -> [0x1401522f0] Get(bool&), likewise +0x14..+0x18
 
     fprintf(stderr, "[GameSettings] Load: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d (UIScale=%d AutosaveInterval=%d)\n",
@@ -117,9 +116,10 @@ extern "C" void GameSettings_Save(GameSettings* settings) {
     // ENDGAME B.3.4a closing: onto IO::Persistence::Set, DOOR-typed as above.
     for (const auto& k : kIntKeys)
         p->Set("Game", k.key, settings->*k.field);
+    // 0x1400989d7 MOVZX R9D,byte ptr [RBX+0xc] -> CALL [0x140152300] Set(bool): the byte is passed
+    // raw, no `!= 0` (B6 row 21; likewise +0x15, +0x14, +0x16, +0x17, +0x18 at 0x140098a0e..0x140098a7e).
     for (const auto& k : kBoolKeys)
-        p->Set(
-            "Game", k.key, (settings->*k.field) != 0);
+        p->Set("Game", k.key, settings->*k.field);
 
     fprintf(stderr, "[GameSettings] Save: LastTerrain=%d LastMapSize=%d LastClimate=%d "
             "LastStart=%d LastDisaster=%d\n",

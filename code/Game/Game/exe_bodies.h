@@ -18,7 +18,7 @@
 //
 // Internal linkage in the defining file (static / anonymous namespace):
 // not declared -- that would change linkage, which this step does not do.
-//   ResizeStride0x10                       0x140017640  (citizenlist_serialize.cpp:339, anonymous namespace)
+//   (ResizeStride0x10 0x140017640 is CitizenIntAssocArray::SetSize since B6 row 15)
 
 #include <cstdint>
 // The inline bodies' own needs (they reached these through engine/funcs/engine_funcs.h
@@ -289,7 +289,6 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
 }
 
 // ---- citizenlist_serialize.cpp (B3R G-Game: external linkage given; read by citizenbehavior.cpp)
-void ResizeStride0x10(void* hdr, int n);  // 0x140017640
 
 // ---- B3R G-Game: bodies of this module called directly (formerly through local extern
 // prototypes in geometry_serialize.cpp / worldgen.cpp); not registered.

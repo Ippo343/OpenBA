@@ -328,17 +328,23 @@ extern "C" void Reimpl_Array_Resize_Stride10_Spawn(SpawnDescription::EntryArray*
 extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer,
                                                 uint32_t count,
                                                 MenuSceneMesh* meshes) {
-    if (!serializer || !meshes || count == 0) return;
-
-    for (uint32_t i = 0; i < count; ++i) {
-        // The port writes the record as eight uint32 words: retail's seven
-        // floats and two shorts (FUN_14001bbf0) are the same bytes in the binary
-        // encoding. LEFT (known_port_issues 14, row 63): the word view of the record.
-        uint32_t* words = reinterpret_cast<uint32_t*>(&meshes[i]);   // LEFT: audit DEFERRED (retail-difference task, row 63): known_port_issues 14, row 63: the word view of the record.
-        for (int off = 0; off < 7; ++off) {
-            serializer->Serialize(words[off], nullptr);   // position, color, yaw
-        }
-        serializer->Serialize(words[7], nullptr);         // meshIndex | skinIndex << 16
+    // Retail tests `0 < (int)count` only (no serializer / array null test): the two guards went with
+    // row 63 (B6_RULES D4).
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        // Retail 0x14001bbf0: seven CALL [0x140152a60] (Serialize(float&)) at 0x14001bc1a..0x14001bc79
+        // on +0x00..+0x18, then two CALL [0x140152468] (Serialize(short&)) at 0x14001bc89 / 0x14001bc99
+        // on +0x1c / +0x1e. The binary encoding writes the same bytes as the old eight-word view;
+        // a text encoding would not (known_port_issues row 63, fixed in B6).
+        MenuSceneMesh& m = meshes[i];
+        serializer->Serialize(m.position.x, nullptr);
+        serializer->Serialize(m.position.y, nullptr);
+        serializer->Serialize(m.position.z, nullptr);
+        serializer->Serialize(m.color[0], nullptr);
+        serializer->Serialize(m.color[1], nullptr);
+        serializer->Serialize(m.color[2], nullptr);
+        serializer->Serialize(m.yaw, nullptr);
+        serializer->Serialize(m.meshIndex, nullptr);
+        serializer->Serialize(m.skinIndex, nullptr);
     }
 }
 
