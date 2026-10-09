@@ -327,7 +327,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
 // Local-name map to the Ghidra decompile:
 //   self=local_90 (param_1+0x38), pvVar26=CitizenDescription/scan-result, piVar5=map,
 //   pRVar6/local_88=rng, uVar37=srcCell/local_res10, uVar14=homeCell, local_res20=target,
-//   iVar27=blockRadius, local_a0/9c/98=animDest, local_d8/d0=homeBst/count,
+//   iVar27=blockRadius, local_a0/9c/98=animDest, homeBox=homeBst {root, count},
 //   local_c8/c0=cellBst/count, happinessMode=local_res10 low byte.
 // ============================================================
 uint64_t CitizenAIComponent::State_Leisure() {
@@ -376,7 +376,6 @@ uint64_t CitizenAIComponent::State_Leisure() {
     int local_res18_w = 0;      // box width (low dword of local_res18)
     float local_a0 = 0, local_9c = 0, local_98 = 0;  // animDest vec
     bool happinessMode = false; // local_res10 low byte
-    LeisureHomeNode* local_d8 = nullptr; uint32_t local_d0 = 0;   // home-box BST root/count
 
     if (local_res20 == nullptr) goto LAB_14010a7e0;
 
@@ -435,7 +434,10 @@ LAB_14010a846:
     // home-box BST: insert reachable, work-valid cells in a 13x13 box around srcCell, then
     // (rand%count)-th in-order becomes local_res20. iVar27 ends = 6 for the bloom.
     {
-        local_d8 = nullptr; local_d0 = 0;
+        // ONE {root, count} record (retail [RBP-0x79] / [RBP-0x71], zeroed at 0x14010a846 /
+        // 0x14010a84a): the insert 0x140021a30 counts into it itself.
+        Collection::Set<ComponentEntity*> homeBox;
+        homeBox._root = nullptr; homeBox._count = 0;
         int baseCol = static_cast<int>(uVar37) % piVar5->size;
         int boxRow = static_cast<int>(uVar37) / piVar5->size - 6;
         for (int rows = 0xd; rows != 0; --rows) {
@@ -458,8 +460,10 @@ LAB_14010a846:
                             char ok = citizen->CanReach(cand);
                             if (ok != '\0') {
                                 LeisureHomeNode* outNode = nullptr;   // &local_a0 (out-node, result unused)
-                                { WorkBST_RegisterWork_1a30(reinterpret_cast<uintptr_t*>(&local_d8), &outNode, &cand);   // LEFT: the home-box set is two separate locals (root, count), not one {root, count} record as retail 0x14010a560 has: typing it removes the hand increment below (known_port_issues row 704, a behaviour change)
-                                                   local_d0 = local_d0 + 1; }
+                                // 0x14010a935 `LEA RCX,[RBP-0x79]; CALL 0x140021a30`: the insert's own
+                                // `INC [RSI+8]` is the only count (0x14010a93e is `INC EBX`), so a
+                                // duplicate key (the same building on several cells) is not counted.
+                                WorkBST_RegisterWork_1a30(&homeBox, &outNode, &cand);
                             }
                         }
                     }
@@ -474,14 +478,14 @@ LAB_14010a846:
             char ok = citizen->CanReach(citizen->home.Get());   // local_res10 = home
             if (ok != '\0') {
                 ComponentEntity* key = citizen->home.Get();
-                if (local_d8 == nullptr) {
+                if (homeBox._root == nullptr) {
                     LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
                     if (nd) { nd->element = key; nd->parent = nullptr; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
-                    local_d0 = local_d0 + 1;
-                    local_d8 = nd;
+                    homeBox._count = homeBox._count + 1;
+                    homeBox._root = nd;
                 } else {
                     ComponentEntity* keyVal = key;   // compared as ulonglong (pointer key)
-                    LeisureHomeNode* cur = local_d8; LeisureHomeNode* ins = cur; bool done = false;
+                    LeisureHomeNode* cur = homeBox._root; LeisureHomeNode* ins = cur; bool done = false;
                     do {
                         ins = cur;
                         if (cur->element <= keyVal) {
@@ -491,8 +495,8 @@ LAB_14010a846:
                                 LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
                                 if (nd) { nd->element = keyVal; nd->parent = ins; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
                                 ins->right = nd;
-                                AvlRebalance(&local_d8, &ins);   // 0x14001a8c0
-                                local_d0 = local_d0 + 1; done = true; break;
+                                AvlRebalance(&homeBox._root, &ins);   // 0x14001a8c0
+                                homeBox._count = homeBox._count + 1; done = true; break;
                             }
                         } else {
                             cur = cur->left;
@@ -500,8 +504,8 @@ LAB_14010a846:
                                 LeisureHomeNode* nd = static_cast<LeisureHomeNode*>(System::MemoryAllocator::MemAlloc(sizeof(LeisureHomeNode), 8));
                                 if (nd) { nd->element = keyVal; nd->parent = ins; nd->left = nullptr; nd->right = nullptr; nd->balance = 0; nd->height = 0; }
                                 ins->left = nd;
-                                AvlRebalance(&local_d8, &ins);   // 0x14001a8c0
-                                local_d0 = local_d0 + 1; done = true; break;
+                                AvlRebalance(&homeBox._root, &ins);   // 0x14001a8c0
+                                homeBox._count = homeBox._count + 1; done = true; break;
                             }
                         }
                     } while (!done);
@@ -509,9 +513,9 @@ LAB_14010a846:
             }
         }
         // pick (rand%count)-th in-order node; its key (+0x00) is local_res20.
-        if (static_cast<int>(local_d0) > 0) {
-            uint32_t pick = pRVar6->Rand(static_cast<uint32_t>(local_d0));
-            LeisureHomeNode* node = local_d8; LeisureHomeNode* chosen = local_d8;
+        if (homeBox._count > 0) {
+            uint32_t pick = pRVar6->Rand(static_cast<uint32_t>(homeBox._count));
+            LeisureHomeNode* node = homeBox._root; LeisureHomeNode* chosen = homeBox._root;
             while (node != nullptr) { chosen = node; node = node->left; }
             for (uint32_t s = pick; s > 0; --s) {
                 if (chosen != nullptr) {
@@ -531,12 +535,12 @@ LAB_14010a846:
             }
             local_res20 = (chosen != nullptr) ? chosen->element : nullptr;
         }
-        if (local_d8 != nullptr) {
-            { WorkBase_TreeNodeFree_14c30(&local_d8, local_d8->left);
-                             WorkBase_TreeNodeFree_14c30(&local_d8, local_d8->right); }
-            System::MemoryAllocator::MemFree(local_d8);
+        if (homeBox._root != nullptr) {
+            { WorkBase_TreeNodeFree_14c30(&homeBox._root, homeBox._root->left);
+                             WorkBase_TreeNodeFree_14c30(&homeBox._root, homeBox._root->right); }
+            System::MemoryAllocator::MemFree(homeBox._root);
         }
-        local_d8 = nullptr; local_d0 = 0;
+        homeBox._root = nullptr; homeBox._count = 0;
         goto LAB_after_target;   // local_res20 set (or still null) -> bound decision
     }
 
