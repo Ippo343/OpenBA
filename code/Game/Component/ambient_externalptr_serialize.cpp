@@ -12,12 +12,10 @@
 // were wired to the BuildSerialize substitute / left unresolved).
 //
 // This reimpl performs the identical stream I/O (three modes: encoding==3 re-resolve,
-// reference mode, path-string mode) using the resolved engine helpers, but RELAXES
-// the final type check: it keeps the FindOrLoad'd External regardless of type. The
-// standalone factory graph does not register the runtime "SoundEffect" TypeInfo, so
-// a strict check would still null a genuine sound; every field this function serves
-// is an audio/external ExternalPtr, so keeping the loaded object is correct. This
-// matches the retail net effect (a valid SoundEffect is kept).
+// reference mode, path-string mode) using the resolved engine helpers, and (B7 LX,
+// row 942) retail's final type check: the FindOrLoad'd External is kept only when it
+// derives from SoundEffect, else the field is NULL. (It used to keep any External,
+// on the pre-B belief that the standalone factory did not register SoundEffect.)
 //
 // Registered at exe 0x1400019a0 so every caller (AmbientEnvironmentDescription /
 // AmbientEmitterComponent / AnimAudioEvent / MenuScene serialize) resolves it.
@@ -83,7 +81,9 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, I
         Audio::SoundEffect* loaded = nullptr;
         if (efactory)
             loaded = efactory->FindOrLoadAs<Audio::SoundEffect>(pathBuf);
-        // RELAXED type check (see file header): keep the loaded External.
-        *field = loaded;
+        // B7 LX (row 942): retail 0x1400019a0 keeps the result only when it derives
+        // from SoundEffect (`IsDerivedFrom` import 0x140152a98 on the import slot
+        // 0x140152a80's type id), else stores NULL. It kept any External.
+        *field = (loaded && loaded->IsDerivedFrom(Audio::SoundEffect::TypeId())) ? loaded : nullptr;
     }
 }

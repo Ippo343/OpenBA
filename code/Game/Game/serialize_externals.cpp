@@ -103,11 +103,15 @@ void SerializeExternalRef(::Object::External*& ref, IO::Serializer& serializer,
                           uint32_t typeId, bool typeIdResolved) {
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
 
-    // Loads one path and keeps it when it derives from the type (or the type is
-    // not registered yet).
+    // Loads one path and keeps it only when it derives from the instantiation's type
+    // (or the type is not registered yet). B7 LX (row 942): retail's load leg, e.g.
+    // 0x140002340 at 0x1400024d8..: `p = FindOrLoad(path); *slot = p &&
+    // p->IsDerivedFrom(cell) ? p : NULL` -- the member `?IsDerivedFrom@Base@Object@@`
+    // (import 0x140152a98, Runtime 0x1800c0390), called on the non-null result only.
+    // It was `IsDerivedFromOrTrust`, which ignored the type and kept any External.
     auto load = [&](const System::Filename& path) -> ::Object::External* {
         ::Object::External* loaded = efactory->FindOrLoadAs<::Object::External>(path);
-        if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId)))
+        if (loaded && (!typeIdResolved || loaded->IsDerivedFrom(typeId)))
             return loaded;
         return nullptr;
     };
@@ -120,7 +124,7 @@ void SerializeExternalRef(::Object::External*& ref, IO::Serializer& serializer,
         System::Filename pathBuf = ref->GetPath();
         const ::Object::External* found = efactory->FindOrLoad(pathBuf);
         if (found && typeIdResolved) {
-            ::Object::IsDerivedFromOrTrust(found, typeId);
+            found->IsDerivedFrom(typeId);   // retail's call, result discarded (0x140002340 mode 3)
         }
         return;
     }
