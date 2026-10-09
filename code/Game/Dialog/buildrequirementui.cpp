@@ -62,7 +62,7 @@ static T* FindDescInDesc(const ComponentDescription* desc) {
     for (int i = 0; i < desc->_subDescCount; i++) {
         if (desc->_subDescs[i]->Type() == T::TypeId()) {
             Description* match = desc->_subDescs[i];
-            return ::Object::IsDerivedFromNullSafe(match, T::TypeId()) ? static_cast<T*>(match) : nullptr;
+            return match->IsDerivedFrom(T::TypeId()) ? static_cast<T*>(match) : nullptr;   // the member (B7 LX row 993)
         }
     }
     return nullptr;
