@@ -716,10 +716,11 @@ void EntityList::RegisterEntity(Object::InternalPtr<ComponentEntity>* entityIBP,
 }
 
 // B4 FORWARD: 38 outside caller(s) (code/Game/Action, Component, Game, Work,
-// standalone; componententity_funcs.h). The null guards are the tree's (retail's
-// 0x1400c48a0 has none); kept here, not extended into the member.
+// standalone; componententity_funcs.h). B6 (14d G5): retail 0x1400c48a0's first
+// instruction reads the list (`CMP byte [RCX+0xe0],0`) and 0x1400c48e7 the IBP's
+// target, with no null test; every caller passes &local and the world's +0xe8 list,
+// so the tree's `!entityList || !entityIBP` return is gone.
 void EntityList_RegisterEntity_Impl(EntityList* entityList, Object::InternalPtr<ComponentEntity>* entityIBP, int category) {
-    if (!entityList || !entityIBP) return;
     entityList->RegisterEntity(entityIBP, category);
 }
 
