@@ -1786,46 +1786,6 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                 fflush(stderr);
             }
 
-            // ── Stamp the build-material bookkeeping a CONSTRUCTED building carries. ──
-            // Same class of gap as the +0x52 stamp above. These structures are spawned
-            // already-complete, so BuildComponent_DemoGateSkip (model already at its final
-            // sub-mesh) skips their build state machine and State1Enter never runs — leaving
-            // the cost multiplier (+0x4c) and the delivered counter (+0x48) at factory-zero.
-            // The upgrade path reads exactly those two: DestroyComponent state-5 enter takes
-            // its REFUND+BUILD branch — the one that spawns the replacement foundation — only
-            // when delivered(+0x48) != 0 (destroycomponent_states.cpp Yard_Delivered). With
-            // both zero a starter house demolished correctly and then never got a replacement
-            // (observed live 2026-07-25: "delivered(+0x48)=0 required=0 -> REMOVE(no-spawn)").
-            // Stamp it as fully delivered: multiplier chosen the same way State1Enter picks it
-            // (default 1, workplace +0x58 only when that is a valid positive value), then
-            // delivered = required = buildDesc(+0x18)->+0x30 * multiplier.
-            //
-            // RETIRED by the instant-build path (BANISHED_LIVE_SM_ONADDED): State8Enter's
-            // INSTANT branch writes +0x4c (via sub_8720) and +0x48 = matComp[0x30] * +0x4c
-            // itself, from the real BuildDescription, during RegisterEntity below.
-            BuildComponent* bcBuilt = StartTown_InstantBuildPath()
-                          ? nullptr : FindComponentOnEntity<BuildComponent>(entity, BuildComponent::TypeId());
-            if (bcBuilt) {
-                BuildComponent* bc = bcBuilt;
-                uint32_t mult = 1;
-                WorkPlaceComponent* wpcBuilt =
-                    FindComponentOnEntity<WorkPlaceComponent>(entity, WorkPlaceComponent::TypeId());
-                if (wpcBuilt) {
-                    uint32_t wpMult = *(uint32_t*)((uintptr_t)wpcBuilt + 0x58);   // LEFT: audit DEFERRED (retail-difference task, row 95): the low dword of WorkPlaceComponent::workers (+0x58, a pointer) read as a count — a tree defect (known_port_issues 14); dead while StartTown_InstantBuildPath() is true
-                    if ((int32_t)wpMult > 0) mult = wpMult;
-                }
-                bc->costMultiplier = (int32_t)mult;
-                const Description* linked = bc->_description;
-                const BuildDescription* bDesc = static_cast<const BuildDescription*>(linked);
-                int required = bDesc ? bDesc->_i30 * (int)mult : 0;
-                bc->laborProgress = required;
-                fprintf(stderr, "[startTown::struct] [%d] stamped BuildComponent as built: "
-                        "mult(+0x4c)=%u delivered(+0x48)=%d desc=%p%s\n",
-                        logIndex, mult, required, bDesc,
-                        required == 0 ? "  <-- WARN: required computed 0, upgrade will still REMOVE(no-spawn)" : "");
-                fflush(stderr);
-            }
-
             // ── Activate a pre-built EMPLOYER: seat WPC+0x48 = desc+0x20 (the key retail
             // seats at data load and f670 re-seats at build completion) + SetAccepting.
             // Registration into townMgr+0x100 is the WPC controller's state-2 enter
