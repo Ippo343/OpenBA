@@ -20,6 +20,7 @@
 #include <cstddef>
 #include "graphics/Geometry.h"
 #include "Action/PathSearch.h"   // RawArray<T>
+#include "collection/Collection.h"   // Collection::Array<uint16_t> (+0xD0)
 
 class Weather;   // Game/Weather.h
 
@@ -55,9 +56,13 @@ public:
     float    _intensity;          // +0xC0  0..1
     float    _fadeDirection;      // +0xC4  +1 fade in, -1 fade out
     Weather* _descriptor;         // +0xC8  ExternalPtr<Weather> (0x1400d3f80 stores it)
-    RawArray<uint16_t> _indices;  // +0xD0  Array<uint16> (0x1400d3f80 sizes it by 0x14001c890), 6 per particle
+    Collection::Array<uint16_t> _indices;  // +0xD0  0x1400d3f80 sizes it by 0x14001c890 (SetSize), 6 per particle
     RawArray<WeatherParticle> _particles;   // +0xE0  Array<WeatherParticle> (0x140025090)
-    // Raw fields (RawArray): ~WeatherParticleGeometry (0x1400d3c10) frees both by hand.
+    // B6 row 91: `_indices` is a real Array. Its ctor is the ctor's +0xD0 / +0xD8
+    // zero stores (0x1400d3f50 / 0x1400d3f57, between +0xC8 and +0xE0 in
+    // declaration order); its ~Array is the dtor's second free (0x1400d3c10:
+    // MemFree +0xE0, zero; MemFree +0xD0, zero), run after the body frees
+    // `_particles` by hand (still a RawArray).
 };
 
 static_assert(sizeof(WeatherParticleGeometry) == 0xF0, "WeatherParticleGeometry is MemAlloc(0xf0)");

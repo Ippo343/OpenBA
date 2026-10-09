@@ -118,14 +118,15 @@ static void WeatherParticle_ArrayAlloc(RawArray<WeatherParticle>* h, int newCoun
 // ============================================================
 // Geometry ctor — port of FUN_1400d3f10 (0xf0 bytes).
 // ============================================================
-// Graphics::Geometry() and the 0x140160240 stamp are the compiler's.
-WeatherParticleGeometry::WeatherParticleGeometry() {
-    _intensity = 0.0f;
-    _fadeDirection = 1.0f;          // fade direction (+1 = fade in)
-    _descriptor = nullptr;
-    _indices.data = nullptr;        // index buffer
-    _indices.size = 0;
-    _indices.capacity = 0;
+// Graphics::Geometry() and the 0x140160240 stamp are the compiler's. Retail's
+// stores run in declaration order (0x1400d3f39..0x1400d3f65): +0xC0, +0xC4,
+// +0xC8, then the +0xD0 / +0xD8 qwords (`_indices`' Array ctor), then +0xE0 /
+// +0xE8.
+WeatherParticleGeometry::WeatherParticleGeometry()
+    : _intensity(0.0f),
+      _fadeDirection(1.0f),         // fade direction (+1 = fade in)
+      _descriptor(nullptr),
+      _indices() {                  // index buffer
     _particles.data = nullptr;      // particle array
     _particles.size = 0;
     _particles.capacity = 0;
@@ -143,21 +144,14 @@ extern "C" void* WeatherParticle_GeoCtor(void* mem) {
 // ============================================================
 WeatherParticleGeometry::~WeatherParticleGeometry() {
     // ENDGAME B.3.2 step 2: the particle array at +0xe0 is torn down by
-    // `~Array` (MemFree the block, zero data and the count/capacity qword —
-    // the same three stores this body made by hand; trivial element, no
-    // destroy). The +0xd0 index buffer is not an Array (its +0xd8 is a bare
-    // count) and keeps its hand-written free.
-    // (~Array of a trivial element: MemFree, then zero data and the count / capacity.)
+    // hand (~Array of a trivial element: MemFree, then zero data and the
+    // count / capacity qword: 0x1400d3c1b..0x1400d3c2f).
     System::MemoryAllocator::MemFree(_particles.data);
     _particles.data = nullptr;
     _particles.size = 0;
     _particles.capacity = 0;
-    {
-        if (_indices.data) System::MemoryAllocator::MemFree(_indices.data);
-    }
-    _indices.data = nullptr;
-    _indices.size = 0;
-    _indices.capacity = 0;
+    // B6 row 91: the +0xd0 index Array is then freed by its own ~Array, the
+    // member's (retail's second MemFree and two qword zeroes, unguarded).
     // Graphics::Geometry::~Geometry: the compiler's chain.
 }
 
@@ -178,15 +172,18 @@ void WeatherParticleGeometry::Configure(Weather* d) {
 
     WeatherParticle_ArrayAlloc(&_particles, particleCount);   // +0xE0
 
-    // Index buffer: 6 shorts (2 tris) per particle; its {data, count} at +0xD0 / +0xD8.
-    {
-        int idxCount = particleCount * 6;
-        uint16_t* p = (System::MemoryAllocator::_singleton)
-                      ? static_cast<uint16_t*>(System::MemoryAllocator::MemAlloc((size_t)idxCount * 2, 2))
-                      : nullptr;
-        _indices.data = p;                // +0xD0
-        _indices.size = idxCount;         // +0xD8 (dword store)
-    }
+    // Index buffer: 6 shorts (2 tris) per particle. B6 row 91: sized through
+    // Array<uint16>::SetSize 0x14001c890 (0x1400d3fc3..0x1400d3fd5: data, size
+    // and capacity; the old block is kept or freed by SetSize's own rule).
+    _indices.SetSize(_descriptor->particleCount * 6);
+
+    // B6 row 90: a LOCAL Random, constructed on the stack (0x1400d3fda LEA
+    // RCX,[RBP-0x80]; 0x1400d3fde CALL [0x140152b50] ??0Random@System@@QEAA@XZ)
+    // and never destroyed (no ~Random exists). Every draw below is RandFloatTol
+    // ([0x140151400]) on it: the world Random (GameUpdateLoop::m_random) is not
+    // advanced.
+    System::Random random;
+    RtSystem_Random_Ctor(&random);
 
     // Normalized velocity direction (Weather.velocityDir @ +0x2c).
     float dir[3];
@@ -200,25 +197,22 @@ void WeatherParticleGeometry::Configure(Weather* d) {
     float speedTol  = d->velocityTolerence;  // Weather +0x3c
 
     WeatherParticle* particles = _particles.data;   // +0xE0
-    uint16_t* indices = _indices.data;              // +0xD0
-    System::Random* rng = (GameUpdateLoop::_singleton != nullptr)
-                    ? GameUpdateLoop::_singleton->m_random
-                    : nullptr;
+    uint16_t* indices = _indices._data;             // +0xD0
 
     for (int i = 0; i < particleCount; ++i) {
         WeatherParticle& p = particles[i];   // stride 0x24
 
         // Random position within the box: randTol per axis * size * 0.5.
-        float r0 = rng ? rng->RandFloatTol() : 0.0f;
-        float r1 = rng ? rng->RandFloatTol() : 0.0f;
-        float r2 = rng ? rng->RandFloatTol() : 0.0f;
+        float r0 = random.RandFloatTol();
+        float r1 = random.RandFloatTol();
+        float r2 = random.RandFloatTol();
         // Original order: Vector3(r2*size, size*r1, size*r0) then *0.5.
         p.position[0] = r2 * boxSize * kHalf;
         p.position[1] = r1 * boxSize * kHalf;
         p.position[2] = r0 * boxSize * kHalf;
 
         // Velocity = dir * (randTol*speedTol + speedBase).
-        float rs = rng ? rng->RandFloatTol() : 0.0f;
+        float rs = random.RandFloatTol();
         float speed = rs * speedTol + speedBase;
         p.velocity[0] = dir[0] * speed;
         p.velocity[1] = dir[1] * speed;
@@ -230,7 +224,8 @@ void WeatherParticleGeometry::Configure(Weather* d) {
         p.previousPosition[2] = p.position[2] - p.velocity[2] * kTickDt;
 
         // Quad indices {base+0,+1,+2, +0,+2,+3}.
-        if (indices) {
+        // Unguarded, as retail's six stores (SetSize gave the block).
+        {
             uint16_t base = (uint16_t)(i * 4);
             uint16_t* q = indices + (size_t)i * 6;
             q[0] = base;     q[1] = base + 1; q[2] = base + 2;
