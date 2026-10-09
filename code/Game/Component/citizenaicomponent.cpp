@@ -308,15 +308,8 @@ void CitizenComponent::SetupElder() {
 }
 
 
-// CitizenComp_StorageComponent_QueryCount: NOT a retail body. 0x14012cf10 is the member
-// StorageComponent::QueryCount (storagecomponent.cpp), which reads the receiver's +0x30 unguarded
-// (0x14012cf28 `CMP [RCX+0x30],R12D`). This was a second port of it with a `!self` return retail
-// lacks (known_port_issues row 551); the guard is gone and the body is the member. The Component
-// and Work callers call the member (B6 COMP, B6 block D), and tradework.cpp's three since CLOSEB
-// (e35119a91): this forwarder has no caller left and is deleted by the coordinator.
-int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self) {
-    return self->QueryCount();
-}
+// (CitizenComp_StorageComponent_QueryCount, a second port of StorageComponent::QueryCount 0x14012cf10 with a
+// null return retail lacks -- known_port_issues row 551 -- went in B6 once every caller called the member.)
 
 // Reimpl of Storage_GetResourceCount (0x14012a9d0):
 // walks to the owner entity's StorageComponent (finder 0x140006270 — NOT the

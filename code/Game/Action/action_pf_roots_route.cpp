@@ -62,7 +62,7 @@
 #include "Work/exe_bodies.h"            // WorkBase_* (a00f0, 8830, 2ed0)
 #include "Game/exe_bodies.h"            // Reimpl_MapGetTerrainPos
 #include "Game/exe_constants.h"         // kRdata_140172114
-#include "Component/exe_bodies.h"       // FloorComponent_FindResData, CitizenComp_StorageComponent_QueryCount
+#include "Component/exe_bodies.h"       // FloorComponent_FindResData
 #include "system/MemoryAllocator.h"     // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
 #include <cstdio>
