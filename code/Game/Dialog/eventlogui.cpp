@@ -12,6 +12,7 @@
 #include "Dialog/ui_panels.h"
 #include "runtime/types/collection/Collection.h"
 #include "runtime/types/ui/CheckElement.h"
+#include "runtime/types/ui/TableElement.h"   // the "display" table's GetRowCount (+0xC0)
 #include "Game/PlayerController.h"
 #include "ui/UserInterface.h"
 #include "object/TypeInfo.h"
@@ -68,19 +69,22 @@ void EventLogUI::OnOpened() {
     buttonNext->SetElementId(0x65);      // buttonNext = 0x65
     buttonBottom->SetElementId(0x66);    // buttonBottom = 0x66
 
-    // --- Find "display" container element ---
-    UI::Element* displayElem;
+    // --- Find the "display" table, narrowed to TableElement (IsDerivedFrom through
+    // the import slot 0x140151510, CMOVNZ: 0x140067840..0x140067856) ---
+    UI::TableElement* displayElem;
     {
         System::String nameStr("display");
-        displayElem = dialogElem->FindElement(nameStr).Get();
+        UI::Element* found = dialogElem->FindElement(nameStr).Get();
+        displayElem = ::Object::IsDerivedFromNullSafe(found, UI::TableElement::TypeId())
+                          ? static_cast<UI::TableElement*>(found) : nullptr;
     }
 
-    // Resize display text array and display button array to the row count.
+    // Resize display text array and display button array to the table's ROW count
+    // (+0xC0, `MOV EDX,[RAX+0xc0]` at 0x14006787d / 0x14006789a, GetRowCount).
     // Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Both elements are 8-byte InternalPtr handles (byte-copy).
-    int displayRowCount = displayElem->ChildCount();
-    displayTexts.SetSize(displayRowCount);
-    displayButtons.SetSize(displayRowCount);
+    displayTexts.SetSize(displayElem->GetRowCount());
+    displayButtons.SetSize(displayElem->GetRowCount());
 
     // Iterate display rows: store child text element, store the row as a
     // button, set element IDs
