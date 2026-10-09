@@ -724,13 +724,15 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
     WA_Append(list, &ibp40);
 
     // --- optional SendComponentMessage #2 when *param_8 != 0 ---
-    // (the condPtr8 / msgIdPtr9 null arms are the tree's guards)
-    if (parentRef && *parentRef != nullptr) {
+    // B6 (14d G26): retail tests *param_8 only (0x1400be82d MOV R15,[RBP+0x68];
+    // 0x1400be831 CMP qword ptr [R15],0) and reads *param_9 with no test (0x1400be85d /
+    // 0x1400be861).
+    if (*parentRef != nullptr) {
         obj = System::MemoryAllocator::MemAlloc(0x40, 8);
         Action* sm2 = nullptr;
         if (obj) {
             ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-            uint32_t msgId = msgIdPtr9 ? *msgIdPtr9 : 0;
+            uint32_t msgId = *msgIdPtr9;
             ComponentEntity* entityInner = *parentRef;
             sm2 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, smParam11);   // 0x1400cb1d0
         }
@@ -752,7 +754,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
     Action* cnr = nullptr;
     if (obj) {
-        ComponentEntity* srcInner = parentRef ? *parentRef : nullptr;
+        ComponentEntity* srcInner = *parentRef;   // *param_8, no test
         cnr = new (obj) CreateNaturalResource(plantDesc, &srcInner, createParam6);   // 0x1400c6a20
     }
     ibpRes8 = cnr;
