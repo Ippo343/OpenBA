@@ -142,6 +142,8 @@ static void PopulateGeneratorCombo(UI::ComboElement* combo, ::Object::ExternalLi
 // Loads "Game/Names/Cities.ndb", generates a random town name using the
 // NameDatabase, then checks if it ends in "vill" and appends "e" to make "ville".
 // Original: 0x140099ac0.
+// retStr is the caller's UNINITIALISED return slot: 0x1400a4b30 constructs the String in it
+// (known_port_issues rows 572 (a) / 941).
 static void GenerateTownName(System::String& retStr, System::Random* random, int maxLen) {
     // Load the city-name database. The IsDerivedFrom type-check retail runs on
     // the result is skipped: the standalone factory tree is incomplete and the
@@ -186,7 +188,13 @@ static void GenerateRandomName(UI::EditElement* editElem, System::Random* random
     int finalAdj = (int)((uint32_t)longDivAdj >> 31);
     int nameLen = (divResult + finalAdj) * 2;
 
-    System::String nameStr;
+    // The uninitialised return slot of 0x140099ac0 (constructed once, by 0x1400a4b30).
+    union NameSlot {
+        System::String str;
+        NameSlot() {}
+        ~NameSlot() { str.~String(); }
+    } nameSlot;
+    System::String& nameStr = nameSlot.str;
     GenerateTownName(nameStr, random, nameLen);
 
     // Mirrors the seed logging below: both halves of the "randomise" row report

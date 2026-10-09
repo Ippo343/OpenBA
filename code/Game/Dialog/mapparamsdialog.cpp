@@ -213,8 +213,17 @@ void MapParamsDialog::GenerateName() {
         System::Random* random = GameUpdateLoop::_singleton->m_random;
 
         // GenerateTownName — reimpl of FUN_140099ac0
-        // Load NameDatabase, generate name, fix "vill" suffix
-        System::String nameBuf;
+        // Load NameDatabase, generate name, fix "vill" suffix.
+        // The name String is constructed ONCE, by 0x1400a4b30 into its return slot:
+        // 0x14006b700 hands 0x140099ac0 an uninitialised stack slot (local_res8), which
+        // passes it on to 0x1400a4b30; 0x14006b700 destroys it after SetText. The union
+        // is that uninitialised slot (no default construction before the generator's).
+        union NameSlot {
+            System::String str;
+            NameSlot() {}
+            ~NameSlot() { str.~String(); }
+        } nameSlot;
+        System::String& nameBuf = nameSlot.str;
         {
             System::Filename fnBuf("Game/Names/Cities.ndb");
             const NameDatabase* nameDB = static_cast<const NameDatabase*>(
@@ -225,7 +234,7 @@ void MapParamsDialog::GenerateName() {
             // and *TypeId_NameDatabase is itself NULL until something
             // lazy-resolves it. FindOrLoad by exact filename is authoritative.
 
-            NameDB_GenerateName(&nameBuf, nameDB, random, 5, nameLen);   // 0x1400a4b30
+            NameDB_GenerateName(&nameSlot.str, nameDB, random, 5, nameLen);   // 0x1400a4b30
 
             bool endsVill = false;
             if (nameBuf._data != nullptr) {
