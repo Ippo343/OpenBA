@@ -531,12 +531,16 @@ void FencedTool::Draw(Video::Context* context, char param3) {
                         float inPos[4] = {(float)(cellIdx % mapWidth) - halfOffset,
                                           (float)(cellIdx / mapWidth) - halfOffset, 0.0f, 0.0f};
                         float outPos[4] = {0};
-                        float extra[3] = {0};   // retail: a Vector3 (0x1400db702 / 0x1400dc890), [2] read after the call
+                        float extra[3] = {0};   // retail: a Vector3 (0x1400dc890), [2] read after the call
                         Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', extra);
 
-                        Math::Scalar heightDiff(outPos[2] - 0.0f);
-                        if (heightDiff.Abs().v <= HEIGHT_TOL) {
-                            valid = true;
+                        // The query's third out, z: red when the input z (XMM6, 0.0) exceeds it
+                        // -- `COMISS XMM6,[RBP-0x40]; JA` to the red arm (0x1400dc8ad / 0x1400dc8b1).
+                        if (!(inPos[2] > extra[2])) {
+                            Math::Scalar heightDiff(outPos[2] - 0.0f);
+                            if (heightDiff.Abs().v <= HEIGHT_TOL) {
+                                valid = true;
+                            }
                         }
                     }
                 }
