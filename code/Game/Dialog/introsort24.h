@@ -1,8 +1,9 @@
 #pragma once
 // code/Game/Dialog/introsort24.h
-// The one introsort retail instantiates for its 0x18-byte UI table rows, as a
-// template over the row type and its comparator (B6 row 39: the core that lived in
-// tradeui_sort.cpp, lifted so the TownHall sorts use it too).
+// The one introsort retail instantiates for its UI table rows (0x18 bytes) and the
+// profession list (8-byte pointers), as a template over the row type and its
+// comparator (B6 row 39: the core that lived in tradeui_sort.cpp, lifted so the
+// TownHall sorts use it too; B6 G75: ProfessionList's 0x14001e7c0 is the same body).
 //
 // Retail instances (all read in Ghidra; same body, different comparator):
 //   driver      small sort   comparator   rows
@@ -10,13 +11,14 @@
 //   0x1400165d0 0x140016920  0x140084430  TradeUI by stocked count   (tradeui_sort.cpp)
 //   0x140015200 0x140015ad0  0x14007c710  TownHall inventory, name ascending
 //   0x140015500 0x140015c40  0x14007c620  TownHall inventory, count descending, name on ties
+//   0x14001e7c0 (inline)     (inline)     ProfessionList: Profession* by +0x48 ascending
 // (0x140015ad0 is shared by the TradeUI name sort and the TownHall ascending sort.)
 //
 // The driver: median-of-3, an explicit 62-entry stack instead of recursion, continue
 // on the smaller partition and push the larger, and a cutoff to a max-selection sort
 // at 8 elements or fewer. The partition is transcribed step for step (an introsort
 // is UNSTABLE: rows that compare equal end where the exact partition sequence puts
-// them). A row swap moves the three qwords.
+// them). A row swap moves the row's qwords.
 
 #include <cstdint>
 
@@ -24,13 +26,13 @@ namespace IntroSort24 {
 
 template <class T>
 inline void SwapRows(T* x, T* y) {
-    static_assert(sizeof(T) == 0x18, "the introsort's rows are 0x18 bytes (the /24 magic divisor)");
     T t = *x;
     *x = *y;
     *y = t;
 }
 
-// The small-range sort (0x140015ad0 / 0x140016920 / 0x140015c40): each pass walks
+// The small-range sort (0x140015ad0 / 0x140016920 / 0x140015c40, inlined in
+// 0x14001e7c0): each pass walks
 // [first, last] tracking the running maximum and swaps it to `last`. The comparison
 // is `less(runningMax, candidate)` -- strict -- so a candidate EQUAL to the running
 // maximum does not displace it.
@@ -48,7 +50,7 @@ void SmallSort(T* first, T* last, Less less) {
     }
 }
 
-// The driver (0x1400162d0 / 0x1400165d0 / 0x140015200 / 0x140015500).
+// The driver (0x1400162d0 / 0x1400165d0 / 0x140015200 / 0x140015500 / 0x14001e7c0).
 template <class T, class Less>
 void Sort(T* array, int count, Less less) {
     if (count < 2) return;
