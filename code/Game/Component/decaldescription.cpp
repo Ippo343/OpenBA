@@ -95,7 +95,7 @@ bool DecalDescription::Serialize(IO::Stream& stream) {
         AllocArray(_materials, _materialCount, _materialCap, refCount, 8);
         for (int j = 0; j < refCount; ++j) _materials[j] = nullptr;
     }
-    Reimpl_Array_Serialize_External_GraphicsMesh(&ser, refCount, _materials);
+    Reimpl_Array_Serialize_External_MaterialInstance(&ser, refCount, _materials);   // 0x140020150 (0x14011b9fc)
 
     ser.Serialize(_sizeB, nullptr);   // sizeB
 
