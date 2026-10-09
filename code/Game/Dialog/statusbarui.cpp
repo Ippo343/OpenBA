@@ -217,9 +217,6 @@ void StatusBarUI::OnOpened() {
 
 // [7] 0x1400798d0
 void StatusBarUI::OnUpdateLayout() {
-    if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
-    if (!statusbarui_sa::Built(this)) StatusBarUI::OnOpened();
-    if (!statusbarui_sa::Built(this)) return;
     GameUpdateLoop* game = GameUpdateLoop::_singleton;
 
     // The town (+0xF0)
@@ -354,11 +351,10 @@ void StatusBarUI::OnUpdateLayout() {
     float rawTemp = weather->temperature;
     float displayTemp = rawTemp;
 
-    // Celsius mode (GameSettings::showCelsius). Null-guarded: the settings slot
-    // can be unresolved in standalone — default to Fahrenheit (setting off)
-    // like a fresh install.
+    // Celsius mode (GameSettings::showCelsius): retail reads the settings byte with
+    // no test of the settings pointer (`g_pGameSettingsPtr[0x15]`).
     const GameSettings* settings = g_gameSettings;
-    if (settings && settings->showCelsius != 0) {
+    if (settings->showCelsius != 0) {
         displayTemp = ((rawTemp - kFreezingF) * kFtoC_Num) / kFtoC_Den;
     }
     numberTemperature->SetValue(static_cast<int32_t>((int)displayTemp));
