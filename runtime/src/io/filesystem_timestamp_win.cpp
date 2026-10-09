@@ -90,7 +90,6 @@
 
 namespace RtIO {
 
-using RtSystem::RtString_ReleaseInline;
 
 // ============================================================================
 // ?GetFileTimeStamp@FileSystem@IO@@QEBA?AVDateTime@System@@AEBVFilename@4@@Z

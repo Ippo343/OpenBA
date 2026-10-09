@@ -182,7 +182,6 @@
 
 namespace RtIO {
 
-using RtSystem::RtString_ReleaseInline;
 
 namespace {
 

@@ -137,7 +137,6 @@ namespace RtIO {
 using RtSystem::StringRefCount;
 using RtSystem::RtMemAlloc;
 using RtSystem::RtMemFree;
-using RtSystem::RtString_ReleaseInline;
 using RtSystem::RtSystem_Configuration_GetPlatformName;
 using RtSystem::RtSystem_Configuration_GetBuildName;
 

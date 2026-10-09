@@ -26,7 +26,6 @@ void  RtMemFree(void* p);
 
 // The release idiom inlined at ~200 sites in the DLL; the body of
 // ?Release@String@System@@AEAAXXZ (0x1800c9870) and of ~String (0x180006c80).
-void RtString_ReleaseInline(System::String* self);
 
 // ?StrCompare@String@System@@SAHPEBD0@Z  retail 0x1800c98a0
 int RtString_StrCompare(const char* a, const char* b);

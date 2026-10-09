@@ -156,7 +156,6 @@
 
 namespace RtIO {
 
-using RtSystem::RtString_ReleaseInline;
 using RtSystem::StringRefCount;
 
 // The stream layouts live in `RtIo` (lower-case o) while FileInfo/FileSystem

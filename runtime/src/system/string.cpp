@@ -1100,9 +1100,7 @@ namespace RtSystem {
 // ---- the primitives declared in runtime/src/system/string.h ----------------
 // (B.4 acceptance MOD: `RtString_SetLength` and `RtString_GetLength` had no
 // caller left and are gone with the POD they took.)
-void RtString_ReleaseInline(System::String* self) {
-    System::StringPrivateAccess::Release(*self);
-}
+// (RtString_ReleaseInline: deleted at the B7 close -- no caller since cd81636d3, audit F7.)
 int RtString_StrCompare(const char* a, const char* b) {
     return System::String::StrCompare(a, b);
 }

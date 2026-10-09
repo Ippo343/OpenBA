@@ -377,7 +377,6 @@
 
 namespace RtIO {
 
-using RtSystem::RtString_ReleaseInline;
 
 // Retail's `Collection::Array<Filename>` — {_data, _size, _capacity}, the same
 // 16-byte header every Array in this engine has (runtime/types/collection/
