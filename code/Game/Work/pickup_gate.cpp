@@ -67,13 +67,12 @@ T* PG_FindComp(ComponentEntity* entity) {
 
 // 12d990's search: the description list. Faithful to the original's shape: NO per-slot
 // CheckPtr, and it BREAKS on the first type-id match (returning null when that hit fails
-// IsDerivedFrom, rather than scanning on). The null-entry skip is the tree's (kept).
+// IsDerivedFrom, rather than scanning on). No null-entry test (0x14012d9c0-0x14012d9d1).
 RawMaterialDescription* PG_FindRawMaterialDesc(ComponentDescription* descObj) {
     const uint32_t tid = RawMaterialDescription::TypeId();
     int count = descObj->_subDescCount;
     for (int i = 0; i < count; ++i) {
         Description* d = descObj->_subDescs[i];
-        if (!d) continue;
         if (d->Type() != tid) continue;
         Description* c = descObj->_subDescs[i];
         return c->IsDerivedFrom(tid) ? static_cast<RawMaterialDescription*>(c) : nullptr;
