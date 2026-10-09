@@ -41,8 +41,8 @@ NomadDescription::NomadDescription()
 bool NomadDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     Reimpl_ExternalPtr_Serialize_ComponentDescription(&_citizen, &ser);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_materialGender0, &ser);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_materialGender1, &ser);
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_materialGender0, &ser);   // 0x140007140 MaterialInstance (0x14004ff58)
+    Reimpl_ExternalPtr_Serialize_Typed_7140(&_materialGender1, &ser);   // 0x140007140 MaterialInstance (0x14004ff66)
     return true;
 }
 
