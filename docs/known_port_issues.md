@@ -476,7 +476,7 @@ stated condition.
   target has no NaturalResourceDescription) and `derived` arms (0x1400c1530), the `targetIBP` and
   singleton tests of 0x1400c0ad0, the `condPtr8` / `msgIdPtr9` null arms of 0x1400be6e0 and the
   `param_9` null arm of 0x1400bef70; `CompleteTask::CheckEntity`'s null singleton / scheduler
-  return (retail 0x1400c5ac0 has none; see entry 13). All SUSPECTED except the last (CONFIRMED).
+  return (retail 0x1400c5ac0 has none; see entry 13). DROPPED (B6 TRADE 90d256918: 0x1400c5af4 / 0x1400c5aff load both unguarded). All SUSPECTED except the last (CONFIRMED).
   0x1400bef70's two reads through the null receiver ([0+0x50], [0+0x28]) stay unguarded, as retail.
 - KEPT (DLG-d): StatusBarUI's Bound / Ready / TownReady / Built gates on slots 5, 7 and 9, its
   test of textSeason's string table and of a null `g_gameSettings` (0x1400798d0 has none); the
@@ -518,7 +518,7 @@ stated condition.
   test is unreachable there (0x14012c560 has already dereferenced the storage).
 - KEPT (ACT-b): `AnimateNaturalResource::Execute`'s null-ModelComponent return (0x1400c55b0 reads
   +0x28 unguarded); `CompleteTask::AbstractImpl`'s null singleton / `m_tutorial` return
-  (0x1400c5b40); `CreateRawMaterial::AbstractImpl`'s zero-batch return (0x1400c6c22 divides by it);
+  (0x1400c5b40); DROPPED (B6 CLOSE-B: 0x1400c5b40 reads g_pGameWorldSingleton + 0x118 unguarded); `CreateRawMaterial::AbstractImpl`'s zero-batch return (0x1400c6c22 divides by it);
   the `MoveTo` ctor's `charDescTid &&` and `random ?` tests (0x1400c9170 has neither);
   the `PerformWork` ctor's null-CitizenDescription skip of the scaling (0x1400c97e2..0x1400c97ee:
   CMOVNZ picks null on an IsDerivedFrom miss and +0x114 is read unguarded, CONFIRMED);

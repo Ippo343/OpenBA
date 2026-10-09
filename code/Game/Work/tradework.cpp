@@ -193,7 +193,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
     // ---- 1. citizen already carrying trade goods? ---------------------------
     CitizenComponent* citizenEnt = *citizenRef;
     StorageComponent* carried = citizenEnt->_entity->FindComponent<StorageComponent>();   // local_res20
-    if (CitizenComp_StorageComponent_QueryCount(carried) > 0) {
+    if (carried->QueryCount() > 0) {
         citizenEnt->LongTermPlan();   // 0x140115e60
         return 2;
     }
@@ -274,7 +274,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         // The matDesc / weight arm is the tree's guard; retail divides unguarded.
         if (matDesc && matDesc->_weight != 0) {
             int freeSpace = carryStor->capacity;
-            int cur = CitizenComp_StorageComponent_QueryCount(carryStor);
+            int cur = carryStor->QueryCount();
             int room = (freeSpace - cur) / matDesc->_weight;
             if (room < qty) qty = room;
         }
@@ -377,7 +377,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         StorageComponent* b8 = TW_StorageOf(citizen->_entity.Get());   // local_b8
         if (matDesc && matDesc->_weight != 0) {   // the tree's guard, as in pass 2
             int cap  = b8->capacity;
-            int cur  = CitizenComp_StorageComponent_QueryCount(b8);
+            int cur  = b8->QueryCount();
             int room = (cap - cur) / matDesc->_weight;
             if (room < qtyMove) qtyMove = room;
         }
