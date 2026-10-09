@@ -107,27 +107,10 @@ static inline uint32_t CompTypeId(const Object::Base* comp) {
 //    slot is an InternalPtr<MarketLocationComponent>, written once.)
 ::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(
         ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2) {
-    EnsureInit();
-    MarketLocationComponent* ptr = nullptr;
-    uint32_t tid = s_tid_MarketLocationComp;
-    int count = param_1->_components._size;
-    if (0 < count) {
-        int i = 0;
-        do {
-            Component* comp = param_1->_components[i].Get();
-            if (comp && CompTypeId(comp) == tid) {
-                Component* cand = param_1->_components[i].Get();
-                if (cand && Object::IsDerivedFromNullSafe(cand, tid)) {
-                    ptr = static_cast<MarketLocationComponent*>(cand);
-                }
-                goto done;
-            }
-            i = i + 1;
-        } while (i < count);
-    }
-    ptr = nullptr;
-done:
-    *param_2 = ::Object::InternalPtr<MarketLocationComponent>(ptr);
+    // Row 250 (B7 RES): 0x1400178c0 IS FindComponent<MarketLocationComponent> (cell
+    // 0x1401c4560) into the caller's IBP: `[[slot]+0x10]` with no null-slot test
+    // (0x1400178f0-0x14001790c), IsDerivedFrom + CMOVNZ on the first match.
+    *param_2 = ::Object::InternalPtr<MarketLocationComponent>(param_1->FindComponent<MarketLocationComponent>());
     return param_2;
 }
 
@@ -186,14 +169,14 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                     Description* compSlot = lVar16->_subDescs[off];
                     if (CompTypeId(compSlot) == s_tid_RadiusDescription) {
                         Description* c = lVar16->_subDescs[off];
-                        if (c && Object::IsDerivedFromNullSafe(c, s_tid_RadiusDescription))
+                        if (c->IsDerivedFrom(s_tid_RadiusDescription))
                             pvVar12 = static_cast<RadiusDescription*>(c);
                         break;
                     }
                     idx++; off++;
                 }
             }
-            int iVar15 = pvVar12 ? pvVar12->_radius : 0;
+            int iVar15 = pvVar12->_radius;   // 0x14008de19: [desc+0x28], no test
 
             // -- compute whether candidate is within the "B" (param_4) distance band --
             bool bVar5 = false;
@@ -233,7 +216,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                     ::Object::InternalPtr<MarketLocationComponent>* pIVar10 =
                         CitizenAI_sub_78c0(local_a0, local_50_ibp);              // find MarketLocationComponent
                     MarketLocationComponent* marketComp = pIVar10->Get();
-                    int cost = (marketComp) ? PickReachableCell(marketComp, param_3, local_78) : -1;
+                    int cost = PickReachableCell(marketComp, param_3, local_78);   // no test
                     if ((-1 < cost) && (cost < local_a8_best)) {
                         *found = local_a0;
                         param_6[0] = local_78[0];
@@ -288,7 +271,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                             Description* compSlot = slotDesc->_subDescs[off];
                             if (CompTypeId(compSlot) == s_tid_RawMaterialDescription) {
                                 Description* c = slotDesc->_subDescs[off];
-                                if (c && Object::IsDerivedFromNullSafe(c, s_tid_RawMaterialDescription))
+                                if (c->IsDerivedFrom(s_tid_RawMaterialDescription))
                                     pvVar12 = static_cast<RawMaterialDescription*>(c);
                                 break;
                             }
@@ -296,80 +279,34 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                         }
                     }
 
-                    // -- find StorageLocationComponent (DAT_1401c7ee8) in candidate entity list (+0x30/+0x38) --
-                    ComponentEntity* lVar16 = local_a0;
-                    Component* pvVar14 = nullptr;
-                    {
-                        int n = local_a0->_components._size;
-                        int idx = 0; int64_t off = 0;
-                        while (idx < n) {
-                            Component* comp = lVar16->_components[off].Get();
-                            if (comp && CompTypeId(comp) == s_tid_StorageLocationComp) {
-                                Component* c = lVar16->_components[off].Get();
-                                if (c && Object::IsDerivedFromNullSafe(c, s_tid_StorageLocationComp))
-                                    pvVar14 = c;
-                                break;
-                            }
-                            idx++; off++;
-                        }
-                    }
+                    // -- the inline FindComponent<StorageLocationComponent> (cell 0x1401c7ee8): retail's
+                    //    one test of a scan result in this phase (0x14008e14c, the IBP != 0) --
+                    Component* pvVar14 = local_a0->FindComponent<StorageLocationComponent>();
 
                     if (pvVar14 != nullptr) {
                         Component* lVarComp = pvVar14;
-                        // IsDerivedFrom((found+0x18), StorageLocationDescription) -> read +0x20 mask
+                        // IsDerivedFrom((found+0x18), StorageLocationDescription), CMOVNZ over 0,
+                        // +0x20 read with no test
                         Description* sub = lVarComp->_description;
-                        StorageLocationDescription* derived = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_StorageLocationDesc))
+                        StorageLocationDescription* derived = sub->IsDerivedFrom(s_tid_StorageLocationDesc)
                                                                   ? static_cast<StorageLocationDescription*>(sub) : nullptr;
-                        uint32_t mask = derived ? derived->_locationType : 0;
+                        uint32_t mask = derived->_locationType;
                         if (mask == 0) {
-                            // fall back to Entity_FindComponent_Storage(found+0x10)->+0x3c
+                            // Entity_FindComponent_Storage(found+0x10)->+0x3c, no test (the tree's
+                            // scoped fallback scan is gone)
                             StorageComponent* stor = lVarComp->_entity->FindComponent<StorageComponent>();
-                            // [M-D SCOPED FALLBACK] the registered 6270-family finder reads
-                            // dead .rdata typeid 0x1401c7e78 (unregistered in standalone) ->
-                            // never matches; self-contained scan of the owning entity's comp
-                            // list instead (shared global stays unfilled by design).
-                            if (stor == nullptr) {
-                                static uint32_t s_tidStorageComp = 0;
-                                if (s_tidStorageComp == 0)
-                                    s_tidStorageComp = StorageComponent::TypeId();
-                                ComponentEntity* ownEnt = lVarComp->_entity.Get();
-                                if (ownEnt && s_tidStorageComp) {
-                                    int n2 = ownEnt->_components._size;
-                                    Object::InternalPtr<Component>* arr2 = ownEnt->_components._data;
-                                    for (int k = 0; k < n2 && arr2; ++k) {
-                                        Component* c2 = arr2[k].Get();
-                                        if (c2 && CompTypeId(c2) == s_tidStorageComp) { stor = static_cast<StorageComponent*>(c2); break; }
-                                    }
-                                }
-                            }
-                            mask = stor ? stor->rawMaterialFlags : 0;
+                            mask = stor->rawMaterialFlags;
                         }
 
-                        uint32_t radiusFlags = pvVar12 ? pvVar12->_flags : 0;
+                        uint32_t radiusFlags = pvVar12->_flags;   // [rawMat+0x5c], no test
                         if ((radiusFlags & mask) != 0) {
                             float local_68[3] = {0.0f, 0.0f, 0.0f};
 
-                            // -- 2nd RawMaterialDescription-style scan? NO: this is the StorageLocationComponent
-                            //    scan again over the candidate entity (+0x30/+0x38) for the COST source --
-                            ComponentEntity* lVar16b = local_a0;
-                            Component* pvVar12b = nullptr;
-                            {
-                                int n = local_a0->_components._size;
-                                int idx = 0; int64_t off = 0;
-                                while (idx < n) {
-                                    Component* comp = lVar16b->_components[off].Get();
-                                    if (comp && CompTypeId(comp) == s_tid_StorageLocationComp) {
-                                        Component* c = lVar16b->_components[off].Get();
-                                        if (c && Object::IsDerivedFromNullSafe(c, s_tid_StorageLocationComp))
-                                            pvVar12b = c;
-                                        break;
-                                    }
-                                    idx++; off++;
-                                }
-                            }
+                            // the StorageLocationComponent find again (the COST source)
+                            Component* pvVar12b = local_a0->FindComponent<StorageLocationComponent>();
 
                             // (Pf_FindBestAdjacentCell_d5d0 ignored its fourth argument, uVar19, which is gone)
-                            int cost = (pvVar12b) ? FindBestAdjacentCell(pvVar12b, param_3, local_68) : -1;
+                            int cost = FindBestAdjacentCell(pvVar12b, param_3, local_68);   // no test
                             if ((-1 < cost) && (cost < local_a8_best)) {
                                 *found = local_a0;
                                 param_6[0] = local_68[0];
