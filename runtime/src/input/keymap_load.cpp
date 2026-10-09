@@ -164,8 +164,9 @@ bool RetailKeyLess(const char* a, const char* b) {
 // re-reads `*R12` per lookup. Reproduced: the singleton is hoisted, the root
 // is not.
 const char* FindSettingValue(const ::IO::Persistence* persistence, const char* key) {
-    // The tree's own guard; retail's `TEST R11,R11` is the root test the loop makes.
-    if (persistence == nullptr) return nullptr;
+    // 0x1800a7256 MOV R11,[R12] reads the root through the hoisted singleton with no
+    // test; 0x1800a725a TEST R11,R11 is the root test the loop makes (B6 14d G19:
+    // the tree's null-Persistence return is gone; Engine::Startup builds it at 0x1800dba5e).
     const RtIo::SettingsMapNode* node = persistence->_settingsMap.root;   // +0x00
     while (node != nullptr) {
         const char* nodeKey = node->key._data;                            // +0x00

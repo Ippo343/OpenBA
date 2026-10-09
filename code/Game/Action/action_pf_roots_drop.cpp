@@ -121,7 +121,9 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
             created = ComponentEntity_CtorFromDescription(mem, material);   // 0x1400c3720
         }
         RawMaterialComponent* pile = created->FindComponent<RawMaterialComponent>();   // 0x1400223c0
-        int randv = world->m_random ? world->m_random->RandTol(2) : 0;
+        // B6 (14d G63): 0x1400c7a13 MOV RBX,[R15+0xd8] and RandTol(2) on it with no
+        // test.
+        int randv = world->m_random->RandTol(2);
         PositionRawMaterial(pile, cell, static_cast<float>(randv) * kRdata_140172204);   // 0x140129760
         pile->quantity = count;
         pile->profession = nullptr;

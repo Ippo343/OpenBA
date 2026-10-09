@@ -62,7 +62,7 @@
 //   0x14012c3f0  StatusIconComponent::SetFlag
 //   0x14012e5c0 WorkComponent::CalcMaxWorkers
 //   0x140006270  ComponentEntity::FindComponent<StorageComponent>
-//   0x14012cf10  CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10  StorageComponent::QueryCount
 //   0x14009f3e0  Reimpl_MapGetTerrainPos
 //   0x1400bbbc0  WorkAct_HuntWorkCtor_bbbc0
 //   0x140021a30  WorkBST_RegisterWork_1a30
@@ -148,8 +148,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
     // -------------------------------------------------------
     StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-    // (0x14012cf10 takes the storage as an integer: LEFT)
-    int storageCount = CitizenComp_StorageComponent_QueryCount(storage);
+    int storageCount = storage->QueryCount();
     if (storageCount >= 1) {
         (*citizenIBP)->LongTermPlan();
         return 2;

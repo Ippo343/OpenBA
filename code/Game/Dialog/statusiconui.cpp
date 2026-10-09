@@ -174,18 +174,13 @@ void StatusIconUI::OnUpdateLayout() {
 // StatusIconComponent's active bits) ever ran. The class now has:
 //   +0x20 (idx4)  OnCreated      — cache the "icons" group children (runs once at setup)
 //   +0x38 (idx7)  OnUpdateLayout — the exe's real visibility-update slot
-//   +0x40 (idx8)  OnUpdate       — the ONLY slot the framework dispatches per frame
-//                                  (DialogInstance::OnUpdate, Runtime 0x180115400); it drives
-//                                  the visibility update every frame so the icons track state.
+//   +0x40 (idx8)  inherited      — DialogController::OnUpdate (table slot 0x14003a96c);
+//                                  slot 7 runs every frame from DialogInstance::ComputeLayout
+//                                  (B6 row 36).
 //
 // The StatusIconComponent's bits are populated by the citizen/building status logic
 // (code/Game/Component/statusiconcomponent.cpp). When they are all clear (a healthy
 // citizen) every icon is hidden — the correct "no active warnings" appearance.
-
-// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StatusIconUI::OnUpdate(const System::Time& /*time*/) {
-    StatusIconUI::OnUpdateLayout();
-}
 
 // create 0x140014180: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).

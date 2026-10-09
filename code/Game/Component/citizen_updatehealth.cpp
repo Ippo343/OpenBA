@@ -357,9 +357,9 @@ extern "C" void CitizenComp_IntArrayResize(RawArray<float>* arr, int newCount, c
 extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, float* pos, float* radius,
                                        int typeId, RawArray<CharacterComponent*>* arr) {
     EnsureInit();
-    if (out) *out = nullptr;
-    if (!grid || !pos || !radius || !arr)
-        return out;
+    // B6 row 331: no test of any argument -- 0x1400929f0 the walker init on the grid,
+    // 0x1400929fa MOVSS XMM12,[RBX] (the radius), 0x140092a02 MOV qword ptr [RDI],0 (*out),
+    // 0x140092a39.. [R15] (pos); the tree's null returns are gone.
 
     // The 0x2430-byte stack walker (retail: at RBP+0x10; top at walker+0x08, node r at
     // walker+0x24 + r*0x24, cell at node+0x18, grid at walker+0x2428 — 0x140092a82,
@@ -368,6 +368,7 @@ extern "C" void* Map_RadiusQuery_92990(const CharacterGrid* grid, void** out, fl
     walker.Init(grid, -1.0f, 1.0f);   // 0x140018dd0
 
     float r  = *radius;
+    *out = nullptr;   // 0x140092a02, after the radius read
     float r2 = r * r;
 
     // Query box {min, max} around pos.

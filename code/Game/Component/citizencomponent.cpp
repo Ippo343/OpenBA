@@ -123,14 +123,12 @@
 class StatusIconComponent;
 void StatusIcon_Toggle(StatusIconComponent* self, int bit, bool setFlag);
 
-// Adapter for FUN_14012c3f0 (healthComp*, flagIndex, flagValue). Null-guards the cached StatusIconComponent IBP
-// (CitizenComponent+0x280): a partial-world citizen lacking a live status-icon component
-// has it null, and StatusIcon_Toggle dereferences self+0x10 immediately. The original
-// never sees a null here (every citizen carries the component) — this guard is a
-// standalone-only safety, not a behavior change.
+// Adapter for FUN_14012c3f0 (healthComp*, flagIndex, flagValue). Retail passes [RDI+0x280]
+// with no test (0x140113254 .. 0x14011334b, five CALL 0x14012c3f0); B6 row 171 dropped the
+// null test. It still routes to StatusIcon_Toggle, not StatusIconComponent::SetFlag: that
+// copy restores the sprite setup retail's slot 11 guarantees (its own comment).
 static void CitizenStatusIcon_SetFlag(StatusIconComponent* icon, int flagIndex, char value) {
-    if (icon)
-        StatusIcon_Toggle(icon, flagIndex, value != 0);
+    StatusIcon_Toggle(icon, flagIndex, value != 0);
 }
 
 
@@ -207,14 +205,9 @@ static inline float RdataF(uint32_t bits) {
 // The per-tick lifecycle Update drives the world-state that gates the citizen Work
 // state: a citizen only gets Work (id 5) as a candidate once it is HOUSED and/or
 // EMPLOYED — both assigned here.
-// Crash-safe guards bail until the body is populated + the world singleton is live.
+// B6 row 171: retail tests none of the description, the entity or the singleton
+// (0x140112ea3 reads [0x1401c3dd8]+0x130, 0x140112ebe [RDI+0x288]).
 void CitizenComponent::Update(const System::Time* timeArg) {
-    // GUARD: Update derefs the CitizenDescription (+0x288, set by BodyInit), the
-    // owner entity (+0x10), and the GameWorld weather (+0x130). Bail until ready.
-    if (description == nullptr) return;
-    if (_entity == nullptr) return;
-    if (GameUpdateLoop::_singleton == nullptr) return;
-
     const System::Time* deltaTime = timeArg;
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
     // +0x130 is not the Weather resource (B4_RULES correction 5): the WeatherSimulation.
@@ -424,22 +417,9 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     // Unemployed flag
     char isUnemployed;
     Profession* profData1F0 = profession;
-    // [STANDALONE GUARD] +0x1F0 = profession object, null until assigned at gameplay
-    // (same field CitizenAI CheckEducation null-guards). In retail EVERY citizen —
-    // children included — is stamped with the default profession at spawn
-    // (FUN_140117080 → ProfessionList+0x30), and that object's +0x4C bool governs the
-    // "unemployed" icon (flag 3). A null pointer here is a standalone-only gap, NOT a
-    // genuine "no profession". The old fallback defaulted profByte=0 (== unemployed),
-    // which mislabelled EVERY not-yet-employed citizen. Children/students can never hold
-    // a workplace (+0x248 stays 0 for them), so that fallback pinned a permanent "?"
-    // no-job badge on every child. Fall back on age instead: adults with no profession
-    // stamped still read as unemployed (they legitimately need a job), but children
-    // (age < adultAge) and students (in-school, +0x208 != 0) never do — which is what
-    // isAdult already encodes (computed at the top of Update). With a real profession
-    // present (stamped SA) this branch is skipped, so retail behaviour is
-    // byte-identical.
-    char profByte = (profData1F0 != nullptr) ? profData1F0->field4C
-                                             : (isAdult ? 0 : 1);
+    // B6 row 171: 0x1401132f8 MOV RAX,[RDI+0x1f0]; 0x1401132ff CMP byte ptr [RAX+0x4c],0 --
+    // no test (every citizen carries a profession: B6_RULES C5, row 990).
+    char profByte = profData1F0->field4C;
     if (profByte == 0 && workplace == nullptr) {
         isUnemployed = 1;
     } else {
@@ -630,9 +610,8 @@ void CitizenComponent::Update(const System::Time* timeArg) {
     if (workplace == nullptr) {
         ComponentEntity* housingResult = nullptr;
         profData1F0 = profession;
-        // [STANDALONE GUARD] +0x1F0 profession-list null until assigned → treat the
-        // +0x4C byte as 0 (unassigned profession) — same guard as the unemployed flag.
-        char profByte634 = (profData1F0 != nullptr) ? profData1F0->field4C : 0;
+        // 0x1401135db / 0x1401135e6: the +0x4C byte read with no test (B6 row 171).
+        char profByte634 = profData1F0->field4C;
         if (profByte634 == 0) {
             // Unranked profession
             housingResult = FindWorkplace();
@@ -1336,6 +1315,9 @@ char CitizenComponent::CanFindHousing() {
         // its type-id global is unfilled. The real game always resolves it. Bail
         // "not buildable" rather than deref res8+0x2e (p[0x17]). Surfaced by the
         // BANISHED_FORCE_WORK harness setting +0x238 to a real building entity.
+        // B6 (row 171): retail has no test (0x140115c37 / 0x140115cce read [RSP+0x40]
+        // then +0x2a with none); KEPT under D4(a) because the comment names the
+        // BANISHED_FORCE_WORK harness route.
         if (res8 == nullptr) return false;
         MapCell* base = grid->cells.GetData();
         int dim = GameUpdateLoop::_singleton->m_game->size;
@@ -1352,13 +1334,10 @@ char CitizenComponent::CanFindHousing() {
         MapComponent* res8 = workplace->FindComponent<MapComponent>();   // 0x140004680
         if (tileBuildable(res8)) return 1;
     }
+    // B6 row 171: 0x140115d31 reads +0x278, 0x140115d42 its +0x68 and 0x140115d49.. the
+    // transform with no test (the "Brick 4 bring-up" null guards are gone).
     CharacterComponent* mc = character.Get();
-    if (mc == nullptr) return 0;
     ModelComponent* geom = mc->modelComponent.Get();
-    // [STANDALONE BRING-UP GUARD] mc+0x68 is the citizen's geometry/transform IBP,
-    // populated only once the CharacterComponent position pipeline is live (Brick 4).
-    // Until then it is null; bail "can't find housing" rather than deref geom+0x158.
-    if (geom == nullptr) return 0;
     int dim = grid->size;
     int x = (int)(geom->transform.translation.x + (float)(dim >> 1));
     int y = (int)(geom->transform.translation.y + (float)(dim >> 1));
@@ -1636,17 +1615,18 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
 
     // Component finder on an entry entity (comp list +0x30 array / +0x38 count,
     // GetTypeId via vtable+0x10, then IsDerivedFrom). Matches Entity_FindComponent_*.
+    // B6 row 171: the inline scans (0x140111190-0x1401111c2, 0x140111210-0x140111242)
+    // call each slot's `Type()` through [RCX] with no null test and compare with the
+    // type cell without testing it for zero; a miss yields 0.
     auto FindEntityComp = [](ComponentEntity* entity, uint32_t tid) -> Component* {
-        if (tid == 0) return nullptr;
         int cnt = entity->_components._size;
         Object::InternalPtr<Component>* arr = entity->_components._data;
         for (int i = 0; i < cnt; i++) {
             Component* comp = arr[i].Get();
-            if (comp == nullptr) continue;
             uint32_t ctid = comp->Type();   // slot 2
             if (ctid == tid) {
                 Component* resolved = arr[i].Get();
-                return Object::IsDerivedFromNullSafe(resolved, tid) ? resolved : nullptr;
+                return resolved->IsDerivedFrom(tid) ? resolved : nullptr;
             }
         }
         return nullptr;
@@ -1682,14 +1662,12 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
     int count = townMgr->field_0x20._size;
     Map* mapInfo = GameUpdateLoop::_singleton->m_game;
 
-    // The original computes the home cell then loops the registry; when the registry
-    // is empty the home block is dead (its result is only read inside the loop), so we
-    // gate it behind count>0 — a byte-faithful no-op when townMgr+0x20 is empty.
-    if (count > 0) {
+    // B6 row 171: the home cell is computed BEFORE the count test (0x1401110c5 reads
+    // +0x278, 0x1401110d6 its +0x68, 0x1401110dd.. the transform, no test; 0x140111148
+    // TEST R14D,R14D / JLE skips the registry loop).
+    {
         CharacterComponent* homeEntity = character.Get();
-        if (homeEntity == nullptr) return nullptr;
         ModelComponent* homeComp = homeEntity->modelComponent.Get();
-        if (homeComp == nullptr) return nullptr;
         int mapW = mapInfo->size;
         int homeX = static_cast<int>(homeComp->transform.translation.x + static_cast<float>(mapW >> 1));
         int homeY = static_cast<int>(homeComp->transform.translation.y + static_cast<float>(mapW >> 1));
@@ -1703,8 +1681,8 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             ComponentEntity* entry = townMgr->field_0x20._data[entryIdx].Get();  // local_98
 
             Component* resComp = FindEntityComp(entry, ResidenceComponent::TypeId());   // 0x1401c7cf0
-            if (!resComp) continue;   // registered entries always carry one; guard.
-            // The InternalPtr retail builds holds the IsDerivedFrom-checked component.
+            // The InternalPtr retail builds holds the IsDerivedFrom-checked component;
+            // 0x1401111e4 reads its +0x58 with no test.
             ResidenceComponent* resIBP = static_cast<ResidenceComponent*>(resComp);
 
             bool consider;
@@ -1716,8 +1694,7 @@ ComponentEntity* CitizenComponent::FindHome(int32_t* slot, bool anyHousehold) {
             if (!consider) continue;
 
             Component* interactComp = FindEntityComp(entry, InteractComponent::TypeId());  // 0x1401c7900
-            InteractComponent* interactIBP = static_cast<InteractComponent*>(interactComp);
-            if (!interactComp) continue;   // no work-positions -> can't seat a worker.
+            InteractComponent* interactIBP = static_cast<InteractComponent*>(interactComp);   // no test
 
             int rosterCount = resIBP->residentSlots._size;
             for (int slot = 0; slot < rosterCount; slot++) {
@@ -1816,14 +1793,10 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     };
     int shift = catShift(param_4);
 
+    // B6 row 171: 0x14008ef7b FindComponent<StorageComponent> (CALL 0x140006270), then
+    // 0x14008efa1 reads [store+0x30] with no test: no fallback finder, no null bail.
     ComponentEntity* storeEntity = *param_3;
     StorageComponent* store = storeEntity->FindComponent<StorageComponent>();
-    // Scoped standalone fallback (registered 6270 port's typeid is dead .rdata) +
-    // null bail: retail asserts the storage exists; in standalone an entity in a
-    // town search list may still lack a live StorageComponent — treat as no slot.
-    if (store == nullptr)
-        store = StandaloneFindStorageComp(storeEntity);
-    if (store == nullptr) { *param_2 = nullptr; return param_2; }
 
     uint32_t chosen = 0xffffffff;
     int64_t taskCount = store->storageSlots._size;
@@ -1838,7 +1811,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
             Description* comp = arr[i];
             uint32_t tid = comp->Type();   // slot 2
             if (tid == rawMatTid) {
-                return Object::IsDerivedFromNullSafe(comp, rawMatTid)
+                return comp->IsDerivedFrom(rawMatTid)
                            ? static_cast<RawMaterialDescription*>(comp) : nullptr;
             }
         }
@@ -1851,7 +1824,10 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
         StorageComponent::Item* listBase = store->storageSlots._data;
         ComponentDescription* entry = listBase[row]._resource;
         RawMaterialDescription* mat = findMat(entry);
-        bool bitSet = mat && shift >= 0 &&
+        // A category outside 0..4 reads nothing; inside, +0x5c is read through the
+        // narrowed pointer with no test (0x14008f012 XOR EAX,EAX on a miss, then
+        // 0x14008f019 MOV ECX,[RAX+0x5c]).
+        bool bitSet = shift >= 0 &&
             ((mat->_flags >> shift) & 1);
         int demand = listBase[row]._count -
                      listBase[row]._reserve;
@@ -1871,8 +1847,8 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     for (int64_t row = 0; row < taskCount; row++) {
         StorageComponent::Item* entryP = store->storageSlots._data + row;
         RawMaterialDescription* mat = findMat(entryP->_resource);
-        bool bitSet = mat && shift >= 0 &&
-            ((mat->_flags >> shift) & 1);
+        bool bitSet = shift >= 0 &&
+            ((mat->_flags >> shift) & 1);   // 0x14008f144..0x14008f1a8, no test
         int demand = entryP->_count - entryP->_reserve;
         if (bitSet && demand > 0) {
             if (chosen == cur) { *param_2 = entryP->_resource; return param_2; }

@@ -68,7 +68,7 @@
 //   0x14012c3f0  CitizenComp_FUN_14012c3f0
 //   0x14012e5c0 WorkComponent::CalcMaxWorkers
 //   0x140006270  WorkBase_FindComponent_6270
-//   0x14012cf10  CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10  StorageComponent::QueryCount
 //   0x14009f3e0  Reimpl_MapGetTerrainPos
 //   0x140021a30  WorkBST_RegisterWork_1a30
 //   0x140115e60  CitizenAI_State_LongTermPlan

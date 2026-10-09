@@ -40,7 +40,7 @@
 #include "Action/MoveTo.h"
 #include "math/Math.h"
 #include "Action/exe_bodies.h"      // B3R: the action ctor bodies called by name
-#include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
+#include "Component/exe_bodies.h"   // B3R: (unused since B6 block D: the QueryCount callers call the member)
 #include "Game/exe_constants.h"     // B3R: kRdata_*
 #include "system/Value.h"           // B3R: RtSystem_Time_Ctor
 #include <cstring>
@@ -77,7 +77,7 @@
 //   0x1400c9170 MoveTo ctor                        Pf_MoveToCtor_9170
 //   0x1400c9b70 PickupRawMaterial copy-ctor        WorkAct_PickupRawMaterialCopyCtor_c9b70 (below)
 //   0x140006270 FindComponent<StorageComponent>
-//   0x14012cf10 StorageComponent::QueryCount       CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10 StorageComponent::QueryCount       (the member)
 //   slot 0x140152b60 MemoryAllocator::MemAlloc     System::MemoryAllocator::MemAlloc
 //   slot 0x140152b00 System::Time::Time(float)     RtSystem_Time_Ctor
 // Math::Vector3 Normalize / Heading are direct Math::Vector3 member calls (B.3.1 step 2).
@@ -110,7 +110,7 @@ static inline float WA_MoveSpeed() { return kRdata_140172280; }
 static int WA_CitizenCarryCount(CitizenComponent* const* citizenRef) {
     CitizenComponent* e = *citizenRef;
     StorageComponent* storage = e->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    return CitizenComp_StorageComponent_QueryCount(storage);
+    return storage->QueryCount();
 }
 
 // ============================================================
@@ -130,9 +130,12 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
                                    float* worldPos, int /*zero*/, uint8_t zeroByte) {
 
     // --- derive the NaturalResourceDescription off the target (param_3) ---
+    // IsDerivedFrom(+0x18, cell 0x1401c7b68), CMOVNZ to 0; every later read through it
+    // (+0x80 at 0x1400c228d / 0x1400c22f6 / 0x1400c23d3, +0x64, +0x68, +0x70) has no test
+    // (B6 14d G23).
     Description* targetComp = (*targetRef)->_description;
     NaturalResourceDescription* derivedTarget = nullptr;
-    if (Object::IsDerivedFromNullSafe(targetComp, NaturalResourceDescription::TypeId()))
+    if (targetComp->IsDerivedFrom(NaturalResourceDescription::TypeId()))
         derivedTarget = static_cast<NaturalResourceDescription*>(targetComp);
 
     ComponentEntity* targetInner = (*targetRef)->_entity.Get();
@@ -207,11 +210,11 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
 
     // --- compute performWork param_5 from the description's +0x80 ---
     int pwParam = 8;
-    if (derivedTarget && derivedTarget->_u80 < 0xb)
+    if (derivedTarget->_u80 < 0xb)
         pwParam = static_cast<int>(derivedTarget->_u80) + 9;
 
     // --- if the description's +0x64 (byte) is set: inline PerformWork + two AnimateNaturalResource ---
-    if (derivedTarget && derivedTarget->_b64) {
+    if (derivedTarget->_b64) {
         void* inlineObj = System::MemoryAllocator::MemAlloc(0x48, 8);
         Action* pw = nullptr;
         if (inlineObj) {
@@ -247,10 +250,9 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
 
     // --- PerformWork_Ctor7: heading(XMM2)=heading, actionType(R9)=pwParam,
     //     time=description+0x68, p6=1, p7=description+0x80 (resKind) ---
-    // (the derivedTarget arms here and below are the tree's guards)
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
     Action* pw7 = nullptr;
-    if (obj && derivedTarget) {
+    if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         int resKind  = static_cast<int>(derivedTarget->_u80);
         int64_t time = derivedTarget->_time68._ticks;
@@ -262,7 +264,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     // --- MoveTo (path type from the description's +0x80 switch) ---
     obj = System::MemoryAllocator::MemAlloc(0x480, 8);
     Action* mv = nullptr;
-    if (obj && derivedTarget) {
+    if (obj) {
         int pathType = 1; // Slow default (disasm: EBX=1 at 0x1400c2123)
         switch (derivedTarget->_u80) {
             case 0: case 1: case 4: case 5: case 6: case 7: pathType = 2; break; // Fast
@@ -281,7 +283,7 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
     // --- ShowTool (the description's +0x80 tool type) action ---
     obj = System::MemoryAllocator::MemAlloc(0x30, 8);
     Action* st2 = nullptr;
-    if (obj && derivedTarget) {
+    if (obj) {
         CitizenComponent* entityInner = *citizenRef;
         int toolType = static_cast<int>(derivedTarget->_u80);
         st2 = new (obj) ShowTool(&entityInner, toolType);
@@ -359,9 +361,9 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     if (cancelFirst != 0) WorkBase_TaskListCleanup_c5400(list);
 
     // heading = Entity_impl_29a0(worldPos, &target inner) — returned in XMM0.
-    // (the targetIBP null arm is the tree's guard)
+    // 0x1400c0b31 MOV RAX,[R12]: the target reference read with no test (B6 14d G25).
     // LEFT: SIG WorkAct_PerformWorkCtor9_c0ad0 (the caller hands the pile reference as void*).
-    ComponentEntity* targetInner = targetIBP ? *targetIBP : nullptr;
+    ComponentEntity* targetInner = *targetIBP;
     float heading = 0.0f;
     {
         ComponentEntity* headingArg = targetInner;
@@ -398,12 +400,9 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     character->actionStack.field_0x10 = ibpSm;
 
     // --- path-mask byte from the pile's map cell (terrain type +0x29) ---
-    // (the singleton arm is the tree's guard)
-    uint8_t cellFlag = 0;
-    if (GameUpdateLoop::_singleton != nullptr) {
-        Map* grid = GameUpdateLoop::_singleton->m_game;
-        cellFlag = grid->cells.GetData()[static_cast<int64_t>(cellIdx)].terrainType;
-    }
+    // 0x1400c0c24-0x1400c0c44: [0x1401c3dd8]+0xf8 and the cell read with no test.
+    Map* grid = GameUpdateLoop::_singleton->m_game;
+    uint8_t cellFlag = grid->cells.GetData()[static_cast<int64_t>(cellIdx)].terrainType;
 
     // --- inline PerformWork action, kind 7 ---
     obj = System::MemoryAllocator::MemAlloc(0x48, 8);
@@ -725,13 +724,15 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
     WA_Append(list, &ibp40);
 
     // --- optional SendComponentMessage #2 when *param_8 != 0 ---
-    // (the condPtr8 / msgIdPtr9 null arms are the tree's guards)
-    if (parentRef && *parentRef != nullptr) {
+    // B6 (14d G26): retail tests *param_8 only (0x1400be82d MOV R15,[RBP+0x68];
+    // 0x1400be831 CMP qword ptr [R15],0) and reads *param_9 with no test (0x1400be85d /
+    // 0x1400be861).
+    if (*parentRef != nullptr) {
         obj = System::MemoryAllocator::MemAlloc(0x40, 8);
         Action* sm2 = nullptr;
         if (obj) {
             ComponentEntity* innerIbp = nullptr;   // retail: InternalBasePtr(nullptr) in a stack slot
-            uint32_t msgId = msgIdPtr9 ? *msgIdPtr9 : 0;
+            uint32_t msgId = *msgIdPtr9;
             ComponentEntity* entityInner = *parentRef;
             sm2 = new (obj) SendComponentMessage(&entityInner, &msgId, 0, &innerIbp, smParam11);   // 0x1400cb1d0
         }
@@ -753,7 +754,7 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
     obj = System::MemoryAllocator::MemAlloc(0x38, 8);
     Action* cnr = nullptr;
     if (obj) {
-        ComponentEntity* srcInner = parentRef ? *parentRef : nullptr;
+        ComponentEntity* srcInner = *parentRef;   // *param_8, no test
         cnr = new (obj) CreateNaturalResource(plantDesc, &srcInner, createParam6);   // 0x1400c6a20
     }
     ibpRes8 = cnr;

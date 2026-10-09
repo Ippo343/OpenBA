@@ -482,35 +482,11 @@ void RegionGraph::MarkCellDirty(int x, int y) {
 Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* retVec3, int p3, int p4, float* p5) {
     Description* buildRaw = self->_description;
 
+    // B6 (14d G49): 0x140122e4f IsDerivedFrom(+0x18, cell 0x1401c7938), 0x140122e5f CMOVNZ to 0,
+    // 0x140122e6e reads the node count through it with no test.
     uint32_t tid = InteractDescription::TypeId();
     const InteractDescription* build = nullptr;
-    if (::Object::IsDerivedFromNullSafe(buildRaw, tid)) build = static_cast<const InteractDescription*>(buildRaw);
-
-    // [SA-GUARD 2026-07-20] Retail reads the node count unguarded — its data guarantees the
-    // description passes the 1c7938 check. Standalone component wiring can miss it (crashed
-    // live: ClearStorage_Execute on the upgrade haul-away resolving the house position).
-    // Zero-vec fallback, same policy as the ModelComponent fallback below.
-    if (!build) {
-        // A caller landing here has almost certainly picked the WRONG finder: this
-        // wants an InteractComponent (0x140002ed0, type DWORD_1401c7900), whose description
-        // IS an InteractDescription. A BuildComponent (0x14000d6c0, DWORD_1401c7008)
-        // carries a BuildDescription, a SIBLING of InteractDescription -- the cast can
-        // never pass, and the zero vec below silently becomes the map centre.
-        // (Cost PathTool's route builder every workplace position; fixed 2026-08-20.)
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            std::fprintf(stderr, "[Pf2e20] +0x18 comp failed 1c7938 check "
-                         "(self=%p raw=%p tid=0x%x) — zero-vec fallback\n",
-                         static_cast<const void*>(self), static_cast<const void*>(buildRaw), tid);
-            std::fflush(stderr);
-        }
-        Math::Vector3 zero(Math::Scalar(0.0f));   // splat 0
-        retVec3->x = zero.x;
-        retVec3->y = zero.y;
-        retVec3->z = zero.z;
-        return retVec3;
-    }
+    if (buildRaw->IsDerivedFrom(tid)) build = static_cast<const InteractDescription*>(buildRaw);
 
     const InteractDescription::NodeArray& nodes = (&build->_useNodes)[p3];
     int local_68 = nodes.count;
@@ -536,50 +512,27 @@ Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3
         return retVec3;
     }
 
+    // 0x140122e8f FindComponent<ModelComponent> (0x140003f60); its transform is read at
+    // 0x140122ecc.. / 0x140122f58.. with no test (B6 14d G49: the exact-type fallback scan and
+    // the zero-vector return are gone).
     ModelComponent* model = self->_entity->FindComponent<ModelComponent>();   // 0x140003f60
-    // [M-D SCOPED FALLBACK] a self-contained exact-type scan of the owning entity (null
-    // slots skipped); if it still has no ModelComponent, return a zero vec instead of the
-    // retail unguarded `null+0x148` transform read.
-    if (model == nullptr) {
-        const uint32_t s_tidModel = ModelComponent::TypeId();   // B.3.8: no lazy cache (B6-5)
-        ComponentEntity* ownEnt = self->_entity.Get();
-        if (ownEnt && s_tidModel) {
-            int n = ownEnt->_components._size;
-            ::Object::InternalPtr<Component>* arr = ownEnt->_components._data;
-            for (int k = 0; k < n && arr; ++k) {
-                Component* c = arr[k].Get();
-                if (!c) continue;
-                if (c->Type() == s_tidModel) {
-                    model = static_cast<ModelComponent*>(c);
-                    break;
-                }
-            }
-        }
-        if (model == nullptr) {
-            if (p5) *p5 = 0.0f;
-            retVec3->x = retVec3->y = retVec3->z = 0.0f;
-            return retVec3;
-        }
-    }
 
     // The node (kind, index) — disasm-verified (0x140122ea2..0x140122f42): node stride
     // 0x18 = {offset.xyz @0x0, dir.xyz @0xc}. The heading branch rotates node.direction and
     // the tail transforms node.offset.
-    const InteractDescription::Node* nodeArr = nodes.data;
-    const InteractDescription::Node* node = nodeArr ? &nodeArr[p4] : nullptr;
-    static const Math::Vector3 kZero3(0, 0, 0);
+    const InteractDescription::Node* node = &nodes.data[p4];   // 0x140122eb1 / 0x140122f3d, no test
 
     if (p5 != nullptr) {
         // local_50..local_38 = the 7 dwords of the ModelComponent's Math::Transform
         Math::Transform xform = model->transform;
         // local_60 (Vector3 out) = quaternion.Rotate(node.dir)
-        Math::Vector3 dir = xform.rotation.Rotate(node ? node->direction : kZero3);
+        Math::Vector3 dir = xform.rotation.Rotate(node->direction);
         float h = dir.Heading();
         *p5 = h;
     }
 
     Math::Transform xform2 = model->transform;
-    Math::Vector3 pos = xform2 * (node ? node->offset : kZero3);
+    Math::Vector3 pos = xform2 * node->offset;
     retVec3->x = pos.x;
     retVec3->y = pos.y;
     retVec3->z = pos.z;
@@ -635,29 +588,10 @@ int PickReachableCell(const Component* target, uint32_t param_2, float* param_3)
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
     int iVar4 = -1;
 
-    ComponentEntity* rawAnchorEntity = *entityIBP;
+    // B6 (14d G50): 0x140087fb0 CheckPtr(param_1) then FindComponent<InteractComponent> on
+    // *param_1 with no test of the entity (no gate run ever printed the old [EmployCrash]
+    // diagnostic this replaces); only the two finder results are tested, as below.
     ComponentEntity* resolvedAnchorEntity = *entityIBP;
-    // DIAGNOSTIC (BUILDCTRL builder-employment crash): retail Entity_impl_7fb0 derefs
-    // *param_1 unconditionally, so a null/dead entity here is always a crash — meaning
-    // retail never reaches this with one. Our BUILDCTRL employ path does (a just-placed
-    // foundation's work IBP, or a citizen's residence pointing at a deconstructed
-    // building). Log the identity (raw = pre-CheckPtr value; resolved==0 => CheckPtr
-    // nulled a dead weak-ref) and return the legitimate -1 "no anchor cell" sentinel so
-    // the caller degrades gracefully instead of reading null+0x38. This is INSTRUMENTATION
-    // to locate the upstream null — not the final fix (do not leave a silent guard here).
-    if (resolvedAnchorEntity == nullptr) {
-        static int s_anchorNullHits = 0;
-        if ((s_anchorNullHits++ & 0x3f) == 0) {
-            // LEFT: the diagnostic prints the raw pointer as an integer (%llx).
-            std::fprintf(stderr, "[EmployCrash] Pf_EntityAnchorCell_7fb0 NULL entity: "
-                         "IBPptr=%p raw=0x%llx resolved=0 (hit #%d) -> return -1\n",
-                         static_cast<const void*>(entityIBP),
-                         static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(rawAnchorEntity)),   // CAST-OK: ptr_int
-                         s_anchorNullHits);
-            std::fflush(stderr);
-        }
-        return -1;
-    }
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     InteractComponent* interact = resolvedAnchorEntity->FindComponent<InteractComponent>();   // 0x140002ed0
 

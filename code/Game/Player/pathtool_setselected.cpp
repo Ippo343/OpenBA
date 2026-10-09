@@ -396,21 +396,18 @@ void PathTool::BuildRoutes() {
             continue;   // no query issued → skip this route
         }
 
-        PathfinderThread* holder = map->pathfinder;
-        // Wait for the async worker to publish this query's cells.
-        bool ready = false;
-        // Standalone safety: bail the spin after a large bound (the exe spins forever;
-        // if the async pathfinder worker is not feeding results we must not hang the game).
-        for (int64_t spin = 0; spin < 20000000; ++spin) {
+        // Wait for the async worker to publish this query's cells. B6 row 77: retail spins
+        // with no bound (0x1400ddc40-0x1400ddc76: re-read [map+0x68] each pass, test the slot,
+        // else Application::YieldToThreads and JMP back); the tree's 20,000,000-spin bail is gone.
+        PathfinderThread* holder;
+        for (;;) {
+            holder = map->pathfinder;   // 0x1400ddc40 MOV RDX,[RSI+0x68]
             int cap = holder->results.size;
             PathResult* table = holder->results.data;
             if (qIdx < cap &&
                 table[qIdx].token == qId &&
-                table[qIdx].ready != '\0') { ready = true; break; }
-            ::Application::Application::_singleton->YieldToThreads();
-        }
-        if (!ready) {
-            continue;
+                table[qIdx].ready != '\0') break;
+            ::Application::Application::_singleton->YieldToThreads();   // 0x1400ddc70
         }
 
         // Copy the path cells (capped at 0x800) into routeEntry.pathCells, release the slot.

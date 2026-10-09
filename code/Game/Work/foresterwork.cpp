@@ -79,7 +79,7 @@
 //   0x140021a30  WorkBST_RegisterWork_1a30
 //   0x140115e60  CitizenAI_State_LongTermPlan
 //   0x140006270  WorkBase_FindComponent_6270
-//   0x14012cf10  CitizenComp_StorageComponent_QueryCount
+//   0x14012cf10  StorageComponent::QueryCount
 //   0x1400296b0  WorkBST_BST_Serialize_296b0
 //   0x1400f7100  Work::ValidateTask
 //   0x14001a6e0  WorkBST_BSTRemove_a6e0
@@ -583,8 +583,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
         // Too many failures — check if citizen's storage has items, then replan
         StorageComponent* storage = (*citizenIBP)->_entity->FindComponent<StorageComponent>();
 
-        // (0x14012cf10 takes the storage as an integer: LEFT)
-        int storageCount = CitizenComp_StorageComponent_QueryCount(storage);
+        int storageCount = storage->QueryCount();
         if (storageCount < 1) {
             return 0;
         }

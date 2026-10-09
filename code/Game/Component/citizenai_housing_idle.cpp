@@ -117,20 +117,6 @@ namespace {
 // --- registered exe sub-callees: called by name (Component/Action/Work exe_bodies.h) ---
 
 
-// A plausible heap node pointer: non-null, not the -1 "invalid IBP" sentinel, and canonical
-// user-space (>= 64K, < 2^47). Used to fence the AVL rebalance walk (CitizenAI_Reg_helper_e360) against a
-// corrupt/invalid child or parent link — observed in standalone when an idle citizen's work-
-// candidate tree picks up a tool-placed building whose inert-factory component yields a -1
-// field, which fed 0xffffffffffffffff into the tree and faulted on deref (READ of -1). When
-// every link is valid this is a pure no-op; when one isn't, the walk treats it as absent
-// rather than dereferencing it. The transient tree is freed immediately after, so a slightly
-// less-balanced tree in that rare corrupt case only means a marginally different candidate pick.
-// NOT RETAIL: 0x14000e360 tests each link for null only (known_port_issues 14d row 210).
-static inline bool ValidNode(const void* p) {   // LEFT: void* is a raw address (diagnostic probe), not an object: a candidate-tree link in [0x10000, 0x800000000000) (NOT RETAIL, known_port_issues row 210)
-    uint64_t u = reinterpret_cast<uintptr_t>(p);   // CAST-OK: ptr_int
-    return u >= 0x10000ULL && u < 0x0000800000000000ULL;
-}
-
 static inline WorkCandidateNode* NodeAlloc() {
     return static_cast<WorkCandidateNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
 }
@@ -562,14 +548,10 @@ uint64_t Helper_sub_79b0(WorkScheduler* param_1, CitizenComponent* const* param_
     if (tryCommon && ret == 0) {
         // LAB_1400f7a89: build with a FRESH empty IBP as the skip-key holder (no skip filter),
         // but only when the citizen's "remember" flag (local_res20+0x4c) is set OR param_6.
-        // SA-invariant guard: retail reads *(local_res20+0x4c) unconditionally because param_4
-        // (the owner/target key) is never null at this idle-walk point. In the standalone exe a
-        // citizen occasionally reaches State_Idle with a null owner key (citizen+0x1f0 == 0, not
-        // yet home-assigned), so local_res20 can be 0 -> READ of 0x4c crash. Treat a null key as
-        // "no remembered target" (remember flag unset); the common walk still runs when param_6.
-        // TODO(2c-B follow-up): root-cause why some SA citizens have citizen+0x1f0 == 0.
-        // NOT RETAIL: 0x1400f7a8d reads the byte unguarded (known_port_issues 14d row 211).
-        if ((local_res20 != nullptr && local_res20->field4C) || (param_6 != '\0')) {
+        // B6 row 211: 0x1400f7a89 MOV RAX,[RBP+0x48]; 0x1400f7a8d CMP byte ptr [RAX+0x4c],0 --
+        // the key's byte is read with no test (every citizen carries a profession: B6_RULES
+        // C5, row 990's fixture re-cut, the root of the old "citizen+0x1f0 == 0" null).
+        if (local_res20->field4C || (param_6 != '\0')) {
             ::Object::InternalPtr<ComponentEntity> freshIbp(nullptr);   // the IBP ctor 0x1400f7aa6
             uint8_t hit = BuildAndWalk(freshIbp.Get());
             ret = (hit != 0) ? 1 : 0;
@@ -774,47 +756,50 @@ uint64_t CitizenAIComponent::State_Idle() {
 //   Retail's body serves every 0x30 node with links at +0x10/+0x18/+0x20 and int16 balance /
 //   height at +0x28 / +0x2A (ICF, B13): one template, instantiated below for each tree.
 // ============================================================
+// B6 row 210: retail tests each link for NULL only (0x14000e36a the start node,
+// 0x14000e38e / 0x14000e3a5 the two children, 0x14000e3d7 / 0x14000e40b the rotation
+// children, 0x14000e434 the parent); the tree's ValidNode range fence (which also rejected
+// the -1 IBP sentinel) is gone, and a -1 link is dereferenced as retail does.
 template <class Node>
 void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** param_2) {
-    Node* node = *param_2;
-    while (ValidNode(node)) {
+    if (*param_2 == nullptr) return;
+    Node* parent;
+    do {
         Node* n = *param_2;
-        if (!ValidNode(n)) break;                                // corrupt slot -> stop the walk
-        Node* parent = n->parent;  // next up
+        parent = n->parent;  // next up
         Node* left  = n->left;
         Node* right = n->right;
-        short hL = ValidNode(left)  ? static_cast<short>(left->height + 1) : 0;
-        short hR = ValidNode(right) ? static_cast<short>(right->height + 1) : 0;
+        short hL = left  ? static_cast<short>(left->height + 1) : 0;
+        short hR = right ? static_cast<short>(right->height + 1) : 0;
         short h = (hR < hL) ? hL : hR;
         n->height = h;
         n->balance = static_cast<short>(hR - hL);
 
         if (static_cast<short>(hR - hL) > 1) {
             Node* rc = n->right;
-            if (ValidNode(rc)) {
+            if (rc) {
                 // right-heavy: if right child is left-heavy, rotate it first (e580), then e450.
                 if (rc->balance < 1 && rc->balance < 0) {
                     AvlRotateRight(rootSlot, rc);   // 0x14000e580
                     n = *param_2;
                 }
-                if (ValidNode(n)) AvlRotateLeft(rootSlot, n);   // 0x14000e450
+                AvlRotateLeft(rootSlot, n);   // 0x14000e450
             }
         }
         n = *param_2;
-        if (ValidNode(n) && n->balance < -1) {
+        if (n->balance < -1) {
             Node* lc = n->left;
-            if (ValidNode(lc)) {
+            if (lc) {
                 // left-heavy: if left child is right-heavy, rotate it first (e450), then e580.
                 if (lc->balance > -1 && lc->balance > 0) {
                     AvlRotateLeft(rootSlot, lc);   // 0x14000e450
                     n = *param_2;
                 }
-                if (ValidNode(n)) AvlRotateRight(rootSlot, n);   // 0x14000e580
+                AvlRotateRight(rootSlot, n);   // 0x14000e580
             }
         }
         *param_2 = parent;
-        node = parent;
-    }
+    } while (parent != nullptr);
 }
 
 // The trees that rebalance through 0x14000e360.

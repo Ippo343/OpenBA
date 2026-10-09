@@ -37,11 +37,12 @@
 bool HuntIsReady(const HuntComponent* hunt) {
     Description* obj = hunt->_description;
     const HuntDescription* desc = nullptr;
-    if (::Object::IsDerivedFromNullSafe(obj, HuntDescription::TypeId())) desc = static_cast<const HuntDescription*>(obj);
+    if (obj->IsDerivedFrom(HuntDescription::TypeId())) desc = static_cast<const HuntDescription*>(obj);
 
     float scale = kRdata_140172234;   // 0x140172234 = 300.0f
-    // The tree's guard: retail reads the description unconditionally.
-    float holdSeconds = desc ? desc->_f20 : 0.0f;
+    // B6 (14d G58): 0x140122ab0 CMOVNZ RDX,RBX over RDX = 0, 0x140122ab4 MOVSS XMM1,[RDX+0x20]:
+    // no test.
+    float holdSeconds = desc->_f20;
 
     System::Time time = {};
     RtSystem_Time_Ctor(&time, holdSeconds * scale);   // ??0Time@System@@QEAA@M@Z

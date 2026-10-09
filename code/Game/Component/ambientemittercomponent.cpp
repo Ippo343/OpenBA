@@ -70,9 +70,9 @@ static Audio::Scene* WorldAudioScene() {
 // zero-init the new tail with element layout [u32 0][f32 1.0][u64 0]. The exe body
 // is hand-unrolled x4; this is the equivalent scalar 1:1 port.
 // Retail 0x140001770 is Array<AmbientEmitterSlot>::SetSize exactly (unconditional MemAlloc,
-// treble rule, copy-then-free, no element destroy). The tree's body keeps ONE step retail
-// lacks -- it skips MemAlloc when System::MemoryAllocator::_singleton is null (known_port_issues
-// row 570) -- so it is not replaced by the erased core; it is typed by element instead.
+// treble rule, copy-then-free, no element destroy). B6 row 570 dropped the one step retail
+// lacked (MemAlloc skipped on a null System::MemoryAllocator::_singleton; retail calls it at
+// 0x1400017c0 with no test). Moving the body onto the erased core is a typing step, not this row.
 extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount) {
     int oldCount = arr->_size;
     if (newCount == oldCount) return;
@@ -84,10 +84,8 @@ extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot
         if (newCount == oldCount + 1 && oldCount != 0) {
             arr->_capacity = newCount * 3;
         }
-        if (::System::MemoryAllocator::_singleton) {
-            arr->_data = static_cast<AmbientEmitterSlot*>(
-                ::System::MemoryAllocator::MemAlloc((uint64_t)arr->_capacity << 4, 8));
-        }
+        arr->_data = static_cast<AmbientEmitterSlot*>(
+            ::System::MemoryAllocator::MemAlloc((uint64_t)arr->_capacity << 4, 8));
     }
 
     int start = 0;

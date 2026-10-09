@@ -66,7 +66,7 @@ static RawMaterialDescription* FindRawMaterialDescription(const ComponentDescrip
         Description* comp = material->_subDescs[i];
         uint32_t typeId = comp->Type();   // slot 2
         if (typeId == RawMaterialDescription::TypeId()) {
-            if (::Object::IsDerivedFromNullSafe(comp, RawMaterialDescription::TypeId())) {
+            if (comp->IsDerivedFrom(RawMaterialDescription::TypeId())) {
                 return static_cast<RawMaterialDescription*>(comp);
             }
             return nullptr;
@@ -170,7 +170,9 @@ int  PickupStoredRawMaterial::AbstractImpl(ActionStack* actionStack) {
             int currentTotal = parentStorage->QueryCount();   // 0x14012cf10
 
             // Compute how many units we can pick up based on remaining capacity
-            int quantityPerUnit = rawMatDesc ? rawMatDesc->_weight : 1;
+            // B6 (14d G69): (cap - stored) / [desc+0x48] through the narrowed (or 0)
+            // pointer with no test (0x1400c9d40, after LAB_1400c9e36).
+            int quantityPerUnit = rawMatDesc->_weight;
             requestedCount = (maxCapacity - currentTotal) / quantityPerUnit;
         }
 
@@ -437,7 +439,7 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(CitizenComponent* const* citize
             uint32_t tid = child->Type();   // slot 2
             if (tid == wantTid) {
                 Description* match = material->_subDescs[idx];
-                if (::Object::IsDerivedFromNullSafe(match, RawMaterialDescription::TypeId()))
+                if (match->IsDerivedFrom(RawMaterialDescription::TypeId()))
                     rawMatDesc = static_cast<RawMaterialDescription*>(match);
                 break;
             }
@@ -450,9 +452,9 @@ PickupStoredRawMaterial::PickupStoredRawMaterial(CitizenComponent* const* citize
     if (requested <= 0) {
         // LEFT: 0x140116540 is declared in Work/exe_bodies.h (WORK) taking the citizen as intptr_t.
         int total = WorkLeaf_FreeStorageCapacity_116540(_field20.Get());   // 0x140116540
-        // unitWeight = rawMatDesc->_weight; guard the null-find (original assumes found).
-        int perUnit = rawMatDesc ? rawMatDesc->_weight : 0;
-        requested = (perUnit != 0) ? total / perUnit : 0;
+        // B6 (14d G69): param_5 = total / [desc+0x48] through the narrowed (or 0) pointer,
+        // no null or zero test (0x1400ca520).
+        requested = total / rawMatDesc->_weight;
     }
 
     // storage availability for the material = count - reserved; clamp requested down to it

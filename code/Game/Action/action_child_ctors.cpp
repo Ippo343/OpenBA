@@ -56,9 +56,10 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP) {
         // --- none: derive a world pos from the entity's MapComponent tile ---
         const MapComponent* node = (*entityIBP)->FindComponent<MapComponent>();   // 0x140004680
 
-        GameUpdateLoop* gw = GameUpdateLoop::_singleton;
-        Map* mapPtr = gw ? gw->m_game : nullptr;
-        int32_t width = mapPtr ? mapPtr->size : 1;
+        // B6 (14d G61): 0x1400c2a30 / 0x1400c2a37 read [0x1401c3dd8]+0xf8 and 0x1400c2a4b its
+        // size with no test; 0x1400c2a76 IDIV R9D divides by it with no zero test.
+        Map* mapPtr = GameUpdateLoop::_singleton->m_game;
+        int32_t width = mapPtr->size;
 
         int32_t s28 = node->tileX0;
         int32_t s2a = node->tileY0;
@@ -66,8 +67,8 @@ float HeadingToward(const float* worldPos, ComponentEntity* const* entityIBP) {
         int32_t s2e = node->tileY1;
 
         int32_t cellIdx = (s2a + (s2e >> 1)) * width + (s2c >> 1) + s28;
-        int32_t quot = (width != 0) ? cellIdx / width : 0;   // EAX after IDIV
-        int32_t rem  = (width != 0) ? cellIdx % width : 0;    // EDX after IDIV
+        int32_t quot = cellIdx / width;   // EAX after IDIV
+        int32_t rem  = cellIdx % width;   // EDX after IDIV
         float   center = static_cast<float>(width >> 1) - 0.5f;  // (width>>1) - DAT_140172114
 
         float inVec[3];

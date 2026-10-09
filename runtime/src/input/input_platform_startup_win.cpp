@@ -257,8 +257,9 @@ bool Device::PlatformStartup() {
             ErrorSetText("InputDevice: The application failed to set the keyboard device data format.", false);
             return false;
         }
-        // 0x1800e195e: the window handle comes from Application::_singleton[0].
-        HWND hwnd = app ? static_cast<HWND>(app->_windowHandle) : nullptr;  // CAST-OK: win32
+        // 0x1800e195e: the window handle comes from Application::_singleton[0]
+        // (0x1800e196e MOV RDX,[RAX], no test: B6 14d G18).
+        HWND hwnd = static_cast<HWND>(app->_windowHandle);  // CAST-OK: win32
         hr = kbd->SetCooperativeLevel(hwnd, kCoopLevel);         // +0x68, 0x1800e1971
         if (hr != 0) {
             ErrorSetText("InputDevice: The application failed to set the keyboard device cooperative level.", false);
@@ -296,7 +297,7 @@ bool Device::PlatformStartup() {
 
     POINT p;
     GetCursorPos(&p);                                            // 0x1800e1adb
-    ScreenToClient(app ? static_cast<HWND>(app->_windowHandle) : nullptr, &p);  // 0x1800e1af0  CAST-OK: win32
+    ScreenToClient(static_cast<HWND>(app->_windowHandle), &p);  // 0x1800e1ae1 / 0x1800e1aed, no test  CAST-OK: win32
     _lastCursorX = p.x;
     _lastCursorY = p.y;
 

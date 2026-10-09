@@ -64,7 +64,7 @@
 void Work::InitFromEntity(ComponentEntity* const* pEntityIBP) {
     ComponentEntity* const* entityRef = pEntityIBP;   // LEFT: SIG Work::InitFromEntity(void*) / Work(void*): the leaves' builders (resourceproduce_creatework.cpp, tradecomponent_states.cpp, cropfieldcomponent_states.cpp ...) hand the entity reference untyped
     field_10 = nullptr;
-    field_10 = entityRef ? *entityRef : nullptr;   // the tree's guard (retail reads *param_2)
+    field_10 = *entityRef;   // 0x1400f731a MOV RAX,[RSI]: no test (B6 14d G21)
     field_18 = nullptr;
     field_20 = -1;
     field_24 = 0;
@@ -75,17 +75,14 @@ void Work::InitFromEntity(ComponentEntity* const* pEntityIBP) {
     field_40 = 0;
 
     if (field_10 != nullptr) {
-        // 0x140004680 = FindComponent<MapComponent>, called twice as retail does.
+        // 0x140004680 = FindComponent<MapComponent>, called twice as retail does
+        // (0x1400f7361 / 0x1400f737f); the first result is tested (0x1400f7366), the
+        // second and [0x1401c3dd8]+0xf8 are read with no test (0x1400f7390-0x1400f73b0).
         if (field_10->FindComponent<MapComponent>() != nullptr) {
             MapComponent* footprint = field_10->FindComponent<MapComponent>();
-            // The footprint / singleton / map null arms are the tree's guards;
-            // retail reads **(gw + 0xF8) unguarded.
-            if (footprint && GameUpdateLoop::_singleton != nullptr) {
-                Map* map = GameUpdateLoop::_singleton->m_game;
-                int mapSize = map ? map->size : 0;
-                field_28 = (((int)footprint->tileY1 >> 1) + (int)footprint->tileY0) * mapSize +
-                           (((int)footprint->tileX1 >> 1) + (int)footprint->tileX0);
-            }
+            Map* map = GameUpdateLoop::_singleton->m_game;
+            field_28 = (((int)footprint->tileY1 >> 1) + (int)footprint->tileY0) * map->size +
+                       (((int)footprint->tileX1 >> 1) + (int)footprint->tileX0);
         }
         // 0x140003050 = FindComponent<WorkComponent>, on the entity re-read from *param_2.
         field_18 = (*entityRef)->FindComponent<WorkComponent>();

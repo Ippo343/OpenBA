@@ -121,8 +121,9 @@ uint32_t ExternalListTypeId() {
 // packfile first, loose file second, and the two FileSystem bytes at +0x18 and
 // +0x19 gate them independently.
 bool CompiledResourceExists(const System::Filename& compiled) {
+    // 0x1800dd988 MOV RDI,[0x1801fc6a8]; 0x1800dd98f CMP byte ptr [RDI+0x18],0: no test
+    // (B6 14d G16: Engine::Startup mints the FileSystem before any loop loads).
     const IO::FileSystem* fs = IO::FileSystem::_singleton;
-    if (fs == nullptr) return false;
 
     if (fs->_existsInPackfileGate != 0) {
         if (fs->ExistsInPackfile(compiled))   // 0x1800ab180
@@ -188,9 +189,12 @@ void Engine::UpdateLoop::LoadResources() {
 
     // ---- 0x1800dd8c8: every ENABLED modification --------------------------
     // Retail reads Modification::_singleton here, NOT `Engine::_modification`,
-    // and derefs it unguarded. The null test below is ours ONLY for the case
-    // the mint leaves the slot empty; with the DLL present it is never taken.
-    if (IO::Modification* mods = IO::Modification::_singleton) {
+    // and derefs it unguarded (0x1800dd8c8 MOV R13,[0x1801fc6b0]; 0x1800dd8d2
+    // CMP [R13+0x10],R12D). B6 (14d G15): the tree's null test is gone --
+    // Engine::Startup constructs the Modification (0x1800dba95) before any loop
+    // loads its resources.
+    {
+        IO::Modification* mods = IO::Modification::_singleton;
         const int32_t count = mods->_mods._size;
         RtIO::Mod* base = mods->_mods._data;
         for (int32_t i = 0; i < count; ++i) {

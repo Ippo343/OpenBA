@@ -40,7 +40,7 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"      // B3R: ActCNR_FindComponent_c460
-#include "Component/exe_bodies.h"   // B3R: CitizenComp_StorageComponent_QueryCount
+#include "Component/exe_bodies.h"   // B3R: (unused since B6 block D: the QueryCount callers call the member)
 #include <cstdint>
 #include "Component/GrowthDescription.h"   // ENDGAME B.3.9 D5: GrowthDescription::TypeId()
 #include "Component/GrowthComponent.h"
@@ -57,7 +57,7 @@
 //   self+0x10 = an InternalBasePtr to the owning entity.
 // Sub-callees (all registered / engine):
 //   0x140006270 Entity_FindComponent_Storage = WorkBase_FindComponent_6270 (by name, B3R)
-//   0x14012cf10 StorageComponent_QueryCount  = CitizenComp_StorageComponent_QueryCount (by name)
+//   0x14012cf10 StorageComponent_QueryCount  = StorageComponent::QueryCount (the member)
 // ============================================================
 // RCX is a Component (only its +0x10 entity is read; the callers hand citizens).
 int WorkLeaf_FreeStorageCapacity_116540(const Component* owner) {
@@ -69,7 +69,7 @@ int WorkLeaf_FreeStorageCapacity_116540(const Component* owner) {
     int capacity = storage->capacity;
 
     // CheckPtr(&ibpStorage); iVar2 = StorageComponent_QueryCount(storage)
-    int count = CitizenComp_StorageComponent_QueryCount(storage);
+    int count = storage->QueryCount();
 
     return capacity - count;
 }

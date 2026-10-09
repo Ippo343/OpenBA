@@ -143,7 +143,7 @@ void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef
 //  4. Work slots 9 then 8, DeletePtr the Work, then remove the task node itself (ca60).
 //
 // Retail does not tolerate a missing bucket in step 3 (0x1400F8F5E reads address 0x8);
-// the tree's `if (node != nullptr)` guard continues instead (kept; WAVE 9 LANE N).
+// neither does the tree since B6 (14d G62: the old `if (node != nullptr)` is gone).
 // ============================================================
 void TaskCleanup(WorkScheduler* sched, int taskIdx) {
     // 1. Locate the task node in the id tree.
@@ -221,8 +221,9 @@ void TaskCleanup(WorkScheduler* sched, int taskIdx) {
             }
         }
 
-        if (node != nullptr) {
-            // the bucket's entry tree (node+0x8); key compared against taskIdx.
+        // the bucket's entry tree (node+0x8); key compared against taskIdx. B6 (14d G62): a
+        // missed bucket leaves node = 0 (0x1400f8f5c) and retail reads [0+0x8] with no test.
+        {
             WorkIdNode* e = IdRoot(node->bucket.entries);
             while (e != nullptr) {
                 int k = e->key;

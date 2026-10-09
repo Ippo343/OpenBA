@@ -312,8 +312,8 @@ void CitizenComponent::SetupElder() {
 // StorageComponent::QueryCount (storagecomponent.cpp), which reads the receiver's +0x30 unguarded
 // (0x14012cf28 `CMP [RCX+0x30],R12D`). This was a second port of it with a `!self` return retail
 // lacks (known_port_issues row 551); the guard is gone and the body is the member. The Component
-// callers call the member; the Work / tradework callers (other B6 blocks' files) still name this
-// forwarder until they move, then it is deleted.
+// and Work callers call the member (B6 COMP, B6 block D), and tradework.cpp's three since CLOSEB
+// (e35119a91): this forwarder has no caller left and is deleted by the coordinator.
 int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self) {
     return self->QueryCount();
 }

@@ -120,9 +120,9 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* scheduler, CitizenComp
 // with `this`.
 int Work::TryAutoPickup(CitizenComponent** citizenRef) {
     AutoPickupComponent* apComp = field_10->FindComponent<AutoPickupComponent>();   // 0x140022520
-    // The null / singleton arms are the tree's guards.
-    if (apComp == nullptr || !apComp->isEnabled) return 0;
-    if (GameUpdateLoop::_singleton == nullptr) return 0;
+    // B6 (14d G22): 0x1400e3de0 / 0x1400e3de5 read the component's +0x28 with no test;
+    // 0x1400e3df5 / 0x1400e3e06 read [0x1401c3dd8]+0x118 with no test.
+    if (!apComp->isEnabled) return 0;
     WorkScheduler* mgr = GameUpdateLoop::_singleton->m_tutorial;
 
     int i = 0;

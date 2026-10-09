@@ -49,42 +49,10 @@
 
 // DAT_1401c7158 -- TypeInfo for entity type check
 
-// ---- Carry-model path (ShowTool with toolId < 0) --------------------------------
-// The retail show function (Entity_impl_73b0) reads the carried resource's mesh from
-// its ModelDescription (DAT_1401c7a88) and its carry-scale from its RawMaterial-
-// Description (DWORD_1401c7cb8). Both type-ids are read straight from exe .rdata, so
-// in standalone (where those slots are null) 73b0 never matches the mesh component and
-// null-derefs. This is a faithful C++ re-port of 73b0's toolId<0 branch that resolves
-// the type-ids from the runtime registry in standalone and guards the two component
-// lookups, so a material template lacking either component simply shows no model
-// instead of crashing. Verified 1:1 against the Ghidra decompile + disassembly of
-// 0x1401173b0; dispatch-slot identities confirmed via Ghidra external xrefs.
-// Math::Vector4 splat ctor (slot 0x140152958, ??0Vector4@Math@@QEAA@AEBVScalar@1@@Z) is a
-// direct member of the real class (B.3.1).
-// ENDGAME B.3.5 batch K1: the four caches that used to hold
-// GraphicsMesh::GetNodeIndexFromName (slot 0x140152970), Geometry::Attach
-// (0x140152968), MeshInstance::SetMesh (0x140151498) and Scene::AddObject
-// (0x140151370) went with their last callers in ShowTool_ShowCarried, which now
-// call the members. The MeshInstance default-CTOR door below stays: no
-// Video/Graphics class has a real constructor (B35_RULES section 11 / B4b-2).
-
-
-// Scan a material template's sub-descriptions for the first one whose runtime type-id
-// (slot 2 Type()) equals `tid`. Faithful to the two scan loops inside 73b0, with the
-// tree's null-host / zero-tid / null-slot skips. Returns null if not found (SA-safe).
-static Description* ShowTool_FindComponentByTid(const ComponentDescription* host, uint32_t tid) {
-    if (!host || !tid) return nullptr;
-    int count = host->_subDescCount;
-    Description** arr = host->_subDescs;
-    for (int i = 0; i < count; i++) {
-        Description* comp = arr[i];
-        if (!comp) continue;
-        uint32_t got = comp->Type();   // slot 2
-        if (got == tid)
-            return ::Object::IsDerivedFromNullSafe(comp, tid) ? comp : nullptr;
-    }
-    return nullptr;
-}
+// B6 (14d G74): the tree's second, guarded port of 0x1401173b0's toolId < 0 branch
+// (ShowTool_ShowCarried and its finder) is gone: AbstractImpl calls ShowCitizenTool
+// (action_base_complete.cpp, the one port of 0x1401173b0) for every toolId it shows,
+// as retail 0x14004275e does.
 
 // ============================================================
 // ShowTool::Serialize (0x140042780)
@@ -104,101 +72,6 @@ void ShowTool::Persist(IO::Stream& stream) {
 }
 
 // ============================================================
-// ShowTool_ShowCarried — faithful port of Entity_impl_73b0's toolId<0 branch.
-// Attaches the model of the resource the citizen is carrying to the "tool" bone of
-// the character mesh. The carried item = the highest-count entry in the citizen's
-// StorageComponent; its mesh comes from that item's ModelDescription and its scale
-// from the item's RawMaterialDescription (+0x50 carry-scale). Every lookup is guarded
-// so a partially-materialized standalone material (missing ModelDescription/
-// RawMaterialDescription, which is exactly what crashed the retail function in SA)
-// simply shows no model instead of faulting.
-// ============================================================
-static void ShowTool_ShowCarried(CitizenComponent* citizen) {
-    // Skip if the entity is flagged for destruction (bit 10 of its +0x40 flags).
-    ComponentEntity* inner = citizen->_entity.Get();
-    if (!inner) return;
-    if ((inner->_entityFlags >> 10) & 1) return;
-
-    // Hide the previously-shown item first, if any.
-    if (citizen->toolSceneId >= 0) HideCitizenTool(citizen);   // 0x1401176e0
-
-    // Character mesh holder = CharacterComponent (+0x278) -> its ModelComponent (+0x68).
-    CharacterComponent* smComp = citizen->character.Get();
-    if (!smComp) return;
-    ModelComponent* charMeshHolder = smComp->modelComponent.Get();
-    if (!charMeshHolder) return;
-
-    // --- Storage scan: pick the highest-count item in the citizen's storage. ---
-    StorageComponent* storageComp = nullptr;
-    fn_FindComponent_Storage(citizen->_entity.Get(), &storageComp);
-    if (!storageComp) return;
-    int itemCount = storageComp->storageSlots._size;
-
-    if (itemCount < 1) return;
-    ComponentDescription* bestItem = nullptr;
-    int bestCount = 0;
-    for (int i = 0; i < itemCount; i++) {
-        const StorageComponent::Item& item = storageComp->storageSlots[i];
-        int cnt = item._count;
-        if (bestCount < cnt) {
-            bestCount = cnt;
-            bestItem = item._resource;
-        }
-    }
-
-    if (!bestItem) return;
-    // --- Resolve the display mesh (ModelDescription) + carry-scale (RawMaterial). ---
-    Description* modelFound = ShowTool_FindComponentByTid(bestItem, ModelDescription::TypeId());   // cell 0x1401c7a88
-    if (!modelFound) return;                      // SA guard: no display model -> nothing shown
-    const ModelDescription* modelDesc = static_cast<const ModelDescription*>(modelFound);
-    Description* rawFound = ShowTool_FindComponentByTid(bestItem, RawMaterialDescription::TypeId());   // cell 0x1401c7cb8
-    if (!rawFound) return;                        // SA guard
-    float carryScale = static_cast<const RawMaterialDescription*>(rawFound)->_carryScale;
-
-    // mesh = mesh 0 of mesh group 0 (faithful double-deref from 73b0).
-    const ModelMeshGroup* meshGroup = modelDesc->_meshGroups;
-    if (!meshGroup) return;
-    Graphics::GraphicsMesh** meshSlot = meshGroup->meshes;
-    if (!meshSlot) return;
-    Graphics::GraphicsMesh* mesh = *meshSlot;
-
-    // The citizen's held-item MeshInstance (+0xB8), built by the citizen's ctor
-    // (0x140114808); retail 0x1401173b0 only SetMesh's it.
-    Graphics::MeshInstance* held = &citizen->meshInstance;
-
-    // --- Assign the mesh to the citizen's held-item MeshInstance (+0xb8). ---
-    held->SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
-
-    // Scale Vector4 (splat carryScale) -> MeshInstance::_color (+0x10c..+0x118).
-    Math::Vector4 scaleVec((Math::Scalar(carryScale)));
-    held->_color[0] = scaleVec.x;
-    held->_color[1] = scaleVec.y;
-    held->_color[2] = scaleVec.z;
-    held->_color[3] = scaleVec.w;
-
-    // Attach the held-item geometry to the character mesh's "tool" node/bone.
-    Graphics::GraphicsMesh* graphicsMesh = charMeshHolder->meshInstance.GetMesh().Get();
-    int nodeIdx = graphicsMesh
-                ? graphicsMesh->GetNodeIndexFromName("tool")
-                : -1;
-    charMeshHolder->meshInstance.Attach(held, nodeIdx);
-
-    // MeshInstance::Update(held, &time0) — slot 1 of `Graphics::Geometry`, called
-    // unconditionally as retail (0x140117688 CALL [RAX+0x8]).
-    const System::Time time0{0};
-    held->Update(time0);
-
-    // Add the held-item geometry to the live Graphics::Scene (GameUpdateLoop +0x60).
-    Graphics::Scene* scene = (GameUpdateLoop::_singleton != nullptr)
-                           ? GameUpdateLoop::_singleton->m_graphicsScene : nullptr;
-    uint32_t objId = scene
-                   ? scene->AddObject(held)
-                   : 0xffffffff;
-    citizen->toolId = -2;                          // carry sentinel
-    citizen->toolSceneId = static_cast<int32_t>(objId);   // scene object handle
-}
-
-// ============================================================
 // ShowTool::AbstractImpl / _purecall (0x140042710)
 // If toolId > 10 and != 0xFFFFFFFE, hide tool. Otherwise show tool.
 // Always returns 1.
@@ -206,51 +79,34 @@ static void ShowTool_ShowCarried(CitizenComponent* citizen) {
 
 int  ShowTool::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
+    // B6 (14d G73 / G74): 0x14004271a-0x140042772 tests neither the citizen nor its removal:
+    // toolId > 10 (unsigned) and != -2 -> 0x1401176e0 on [+0x20]; else 0x1401173b0 on
+    // [+0x20] with the toolId (the carry path, -2, included).
     uint32_t toolId = static_cast<uint32_t>(_field28);
-
-
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
-        CitizenComponent* entity = _field20.Get();
-        if (!entity) return 1;  // entity removed, nothing to do
-        HideCitizenTool(entity);   // 0x1401176e0
+        HideCitizenTool(_field20.Get());   // 0x1401176e0
         return 1;
     }
-
-    CitizenComponent* entity = _field20.Get();
-    if (!entity) return 1;  // entity removed, nothing to do
-
-    // toolId < 0 (e.g. 0xFFFFFFFE = -2) is the "carry" path: show the model of the
-    // resource the citizen is hauling. The retail helper (Entity_impl_73b0) reads the
-    // ModelDescription/RawMaterialDescription type-ids straight from exe .rdata, which
-    // is null in standalone — so it can never match the mesh component and null-derefs.
-    // Use our faithful, guarded re-port instead.
-    if ((int)toolId < 0) {
-        ShowTool_ShowCarried(entity);
-        return 1;
-    }
-
-    ShowCitizenTool(entity, (int)toolId);   // 0x1401173b0
+    ShowCitizenTool(_field20.Get(), static_cast<int>(toolId));   // 0x1401173b0
     return 1;
 }
 
 // ============================================================
 // ShowTool::CheckEntity (0x1400426d0)
-// Hides tool on the citizen at +0x20.
+// Hides tool on the citizen at +0x20: CheckPtr, then a tail jump to 0x1401176e0 with no
+// test (B6 14d G73).
 // ============================================================
 void ShowTool::CheckEntity() {
-    CitizenComponent* entity = _field20.Get();
-    if (!entity) return;  // entity already gone
-    HideCitizenTool(entity);   // 0x1401176e0
+    HideCitizenTool(_field20.Get());   // 0x1401176e0
 }
 
 // ============================================================
 // ShowTool::GetTarget (0x140042680)
-// Returns true if the citizen's (+0x20) owning entity (Component +0x10) matches the param.
+// Returns true if the citizen's (+0x20) owning entity (Component +0x10) matches the param:
+// 0x14004269a / 0x1400426a0 read [+0x20] then its +0x10 with no test (B6 14d G73).
 // ============================================================
 bool ShowTool::GetTarget(ComponentEntity** param) {
-    CitizenComponent* entity = _field20.Get();
-    if (!entity) return false;  // entity gone, no match
-    return entity->_entity.Get() == *param;
+    return _field20->_entity.Get() == *param;
 }
 
 // ============================================================

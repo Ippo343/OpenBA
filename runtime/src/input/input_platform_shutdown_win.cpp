@@ -160,7 +160,7 @@ uint64_t g_erased    = 0;   // EFFECTIVENESS: descents that actually HIT a node
 uint64_t g_missed    = 0;   // EFFECTIVENESS: descents that found nothing
 uint64_t g_released  = 0;   // control: COM slots that were non-null
 uint64_t g_checks    = 0;   // EFFECTIVENESS: self-check actually evaluated
-uint64_t g_noApp     = 0;   // control: the singleton was null
+constexpr uint64_t g_noApp = 0;   // control: the singleton was null (never since B6 D G20: kept for the summary line)
 
 struct ShutdownSummary {
     ~ShutdownSummary() {
@@ -227,21 +227,17 @@ void Device::PlatformShutdown() {
     ++g_entries;
 
     // ---- the three message-callback erases ---------------------------------
+    // Retail derefs [0x1801fc678] unguarded (0x1800e1b8a..0x1800e1bf2). B6 (14d G20): the
+    // tree's null test is gone. Its reason ("our standalone can reach shutdown on a path
+    // where the Application singleton was never published") does not hold: Engine::Startup
+    // publishes the Application (step 6) before it creates the Input::Device (step 13), both
+    // shutdown paths (Engine::Shutdown, game_main's ShutdownEngineStaged) shut the device
+    // down before the Application, and every recorded B6 gate run printed nullSingleton=0.
+    // g_noApp stays in the summary line (now always 0).
     Application::Application*  app  = Application::Application::_singleton;
-    if (app == nullptr) {
-        // Retail derefs [0x1801fc678] unguarded. It is NOT guarded here to be
-        // safe — it is guarded because our standalone can reach shutdown on a
-        // path where the Application singleton was never published, which retail
-        // cannot (CLAUDE.md's "don't fix a faithful crash with a null check"
-        // permits a guard exactly where our standalone genuinely differs, and
-        // requires it be said). The counter makes the difference VISIBLE rather
-        // than silently skipped.
-        ++g_noApp;
-    } else {
-        if (EraseCallback(app, kMsgSetFocus))   ++g_erased; else ++g_missed;  // 0x1800e1b8a
-        if (EraseCallback(app, kMsgKillFocus))  ++g_erased; else ++g_missed;  // 0x1800e1bbd
-        if (EraseCallback(app, kMsgMouseWheel)) ++g_erased; else ++g_missed;  // 0x1800e1bf2
-    }
+    if (EraseCallback(app, kMsgSetFocus))   ++g_erased; else ++g_missed;  // 0x1800e1b8a
+    if (EraseCallback(app, kMsgKillFocus))  ++g_erased; else ++g_missed;  // 0x1800e1bbd
+    if (EraseCallback(app, kMsgMouseWheel)) ++g_erased; else ++g_missed;  // 0x1800e1bf2
 
     // ---- the three COM teardowns, in retail's order and with its asymmetry --
     // MOUSE first (+0x11E8): Unacquire, then Release.
