@@ -660,7 +660,7 @@ void InitEffectSlot(uint8_t* d) { InitAs<Audio::Scene::AttenutedEffect, &EffectS
 // rather than as a 16-byte copy.
 static void MaterialTextureAssign(RtGraphics::MaterialTexture* d,
                                   const RtGraphics::MaterialTexture* s) {
-    AdoptString(d->name, s->name);           // REFCOUNT
+    AdoptString(d->name._data, s->name._data);   // REFCOUNT
     d->image = s->image;
 }
 void AssignStringExt(uint8_t* d, const uint8_t* s) {

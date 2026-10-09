@@ -109,12 +109,8 @@ Matrix* RtMatrixMul(const Matrix* lhs, Matrix* ret, const Matrix* rhs) {
     return ret;
 }
 
-// System::MemoryAllocator::MemFree(void*) — the STATIC one-argument overload,
-// which is what retail's inlined `System::String::~String` calls. Retail
-// 0x1800c7ad0, ordinal 3228.
-void RtMemFree(void* p) {
-    System::MemoryAllocator::MemFree(p);
-}
+// (B7: the local `RtMemFree` forwarder that stood here had one caller,
+// AddTexture's hand-written release, which is the String's inline ~String now.)
 
 // ---- DLL internals, called at their retail addresses -----------------------
 // These are `FUN_`-named COMDATs: one array helper per element type, emitted by
@@ -638,23 +634,14 @@ void MaterialInstance::SetMaterial(Object::ExternalPtr<Material> material) {
 // cannot simply say `_textures.SetSize(…)`, and it is stated at the helper.
 void MaterialInstance::AddTexture(const System::String& name,
                                   Object::ExternalPtr<Video::ImageBuffer> image) {
-    MaterialTexture local;
-    local.name = nullptr;
-    char* data = name._data;                         // System::String is one pointer
-    if (data) {
-        ++*reinterpret_cast<int32_t*>(data - 4);  // CAST-OK: string_header
-        local.name = data;
-    }
-    local.image = image.Get();
+    // B7: the pair's String is the copy ctor (zero 0x180103362, INC
+    // 0x180103381) and its destructor after the call is the inline release
+    // 0x1801033a2..0x1801033c1.
+    const MaterialTexture local = { name, image.Get() };
 
     RtArraySetSizeTexturePairs(&_textures,
                                static_cast<uint32_t>(_textures.GetSize() + 1),
                                &local);
-
-    if (local.name) {
-        int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);  // CAST-OK: string_header
-        if (--*refCount == 0) RtMemFree(local.name - 8);
-    }
 }
 
 }  // namespace Graphics

@@ -354,14 +354,8 @@ namespace {
 // GFXMAT24_PROBE -- a define nothing in the tree sets, for a
 // tools/gfxmat24_probe that does not exist.
 //
-// 0x1800c9930, `System::String::Serialize`: each element's leading String.
-// LEFT: `MaterialTexture::name` stays raw (a `System::String` member would
-// make the element non-trivial and change its array's lifecycle rows), so the
-// String is viewed at the field. (B.4 acceptance MOD: `MaterialConstant::name`
-// is the real String and serializes by name.)
-inline void SerString(void* field, IO::Serializer& ser) {
-    static_cast<System::String*>(field)->Serialize(ser);   // LEFT: DEFERRED (named prerequisite: retail open-codes the String ctor / release inline at AddTexture 0x180103350 and Draw 0x1800c2eb0; the tree's are out-of-line calls); S4 LAST measured (Runtime-x64.dll disassembly): a System::String MaterialTexture::name cannot land where retail's does at the two STACK-PAIR sites. AddTexture 0x180103350 open-codes the pair's String: zero store [RSP+0x28] (0x180103362), refcount bump INC [RAX-4] (0x180103381), and after the 0x180061480 call the inline release (0x1801033a2..0x1801033c1: DEC [RCX-4]; on zero store data-8 and call 0x1800c7ad0, else store 0); Draw 0x1800c2eb0 does the same for its "diffuse" binding (zero 0x1800c31b4, INC 0x1800c31cc, inline release 0x1800c31e7..0x1800c3209). The tree's String(), String(const String&) and ~String are out of line (system/string.cpp:308/316/327), so a MaterialTexture local with a String member turns each open-coded store/bump/release into a call that retail does not make (the documenttext/modification/avl_trees pattern). The two ARRAY-ELEMENT sites (array.cpp MaterialTextureAssign, saveload_draw.cpp ArrayBindingSetSize: raw storage of the erased core) could write `name._data` and stay byte-identical, but that alone does not type this line's caller set. Typing this needs the String's ctor/release inline first (a global String change), or the two locals left as raw pairs
-}
+// (B7: `MaterialTexture::name` is the real String; it serializes by name,
+// 0x1800c9930, as `MaterialConstant::name` does.)
 
 }  // namespace
 
@@ -437,7 +431,7 @@ bool MaterialInstance::Serialize(IO::Stream& streamv) {
         // The bound is latched (EDI), as retail does.
         RtGraphics::MaterialTexture* p = _textures._data;
         for (int32_t i = 0; i < n; ++i) {
-            SerString(&p->name, ser);                       // 0x1800c9930
+            p->name.Serialize(ser);                         // 0x1800c9930
             Object::SerializeExternal<Video::ImageBuffer>(ser, p->image);   // 0x18005d0f0
             ++p;
             ++g_matSerTextures;

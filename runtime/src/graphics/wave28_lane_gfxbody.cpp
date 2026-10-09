@@ -256,7 +256,7 @@ bool StringEqualsInline(const char* a, const char* b) {
 }
 
 // Each element's leading `System::String` data pointer (+0x00).
-inline const char* ElementName(const MaterialTexture& t) { return t.name; }
+inline const char* ElementName(const MaterialTexture& t) { return t.name._data; }
 inline const char* ElementName(const MaterialConstant& c) { return c.name._data; }
 
 // The shared loop. The stride is the element's size (`ADD R11,<n>` at the
