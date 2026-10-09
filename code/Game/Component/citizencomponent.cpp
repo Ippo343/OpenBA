@@ -2392,8 +2392,7 @@ void CitizenComponent::Startup() {
     // ctor scalars moved to CitizenComponent_CtorScalars — see the note there.
 
 
-    ComponentEntity* owner = _entity.Get();
-    if (!owner) return;   // not yet wired into an entity
+    ComponentEntity* owner = _entity.Get();   // retail never tests +0x10 (0x140114067)
 
     // +0x278 = CharacterComponent IBP ("Family" finder; CitizenAI reads its +0x60
     // char-index as the alive flag: index>=0 alive, -1 dead).
@@ -2404,33 +2403,13 @@ void CitizenComponent::Startup() {
     statusIcon = static_cast<StatusIconComponent*>(
         CitizenComp_FindSiblingByTypeId(owner, StatusIconComponent::TypeId()));
 
-    // +0x288 = CitizenDescription: trust comp+0x18 (the copy-ctor stored it).
-    // The original validates IsDerivedFrom(obj, CitizenDescription 0x1401c7190),
-    // but that is unreliable in standalone's partial factory tree (GrowthComponent
-    // precedent), so trust the +0x18 pointer directly (Component::_description, a
-    // Description*): the pointer is taken as the description it holds.
-    description = reinterpret_cast<CitizenDescription*>(_description);   // LEFT: the tree skips retail's IsDerivedFrom 0x1401c7190 (known_port_issues row 705: a retail difference, recorded not fixed)
-    if (description) {
-        health = description->_f6c;
-        happiness = description->maxHappiness;
-
-        // --- ADULT-AGE SPAWN FIX (env BANISHED_SPAWN_ADULTS) -------------------
-        // Our simplified start-town spawn (StartTown_SpawnCitizens) only CopyCtors
-        // + registers colonist entities; it skips the real per-citizen init
-        // (FUN_140117080) that assigns age/maxAge. So every citizen keeps age=0
-        // (< adultAge desc+0x44 = 2.0) -> perpetual child -> the CitizenComponent
-        // lifecycle never runs the adult housing/workplace assignment section
-        // (citizencomponent.cpp:633) -> never housed/employed -> the Work state is
-        // never a CitizenAI candidate (project_economy_loop). Mirror the founder
-        // adult age the real spawn pool (0x1400a0dd0) gives:
-        //     age = RandFloat*(reproMax*0.5 - adultMin) + adultMin
-        // (desc+0x50 adultMin=2.0, desc+0x54 reproMax=8.0  -> age in [2.0, 4.0]),
-        // and the randomized lifespan (FUN_140117080): maxAge = RandFloatTol*desc+0x3c
-        // + desc+0x38 (base 15.0, tol +/-2.0). maxAge MUST be set: the inert factory
-        // zeroes it, and the Update old-age death check (maxAge <= age) would fire
-        // immediately once a non-zero adult age is present. Default-off so a plain
-        // BANISHED_LIVE_CITIZEN run stays byte-identical.
-    }
+    // +0x288 = the +0x18 description if it IsDerivedFrom CitizenDescription, else null
+    // (0x1401140a1-0x1401140c1: IsDerivedFrom [0x1401c7190] through 0x140152a98, CMOVNZ);
+    // then +0x6c / +0xa4 are read UNGUARDED (0x1401140c8 / 0x1401140ce).
+    description = _description->IsDerivedFrom(CitizenDescription::TypeId())
+                      ? static_cast<CitizenDescription*>(_description) : nullptr;
+    health = description->_f6c;
+    happiness = description->maxHappiness;
 }
 
 
