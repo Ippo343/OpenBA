@@ -205,11 +205,10 @@ void* MemAlloc(uint64_t bytes, int align) {
 // the callers below hand it a possibly-null pointer exactly as retail does.
 #ifdef BANISHED_UNIT_TEST
 void MemFree(void* p) { std::free(p); }   // retail's null test lives in free()
-#else
-void MemFree(void* p) {
-    System::MemoryAllocator::MemFree(p);            // dispatch slot 0x140152b68 first — see MemAlloc
-}
 #endif
+// (B7 D4: outside the unit test MemFree is header-inline in Collection.h,
+// System::MemoryAllocator::MemFree by name -- dispatch slot 0x140152b68 first,
+// see MemAlloc.)
 
 // ============================================================================
 // J1 — Collection::Array<T>::~Array, trivially-destructible T

@@ -51,6 +51,9 @@
 #include <new>           // placement new: Array's element ops, and Set building
                          //   its element inside the node
 #include <type_traits>   // the traits rtcoll::SpecFor<T> reads
+#ifndef BANISHED_UNIT_TEST
+#include "../system/MemoryAllocator.h"   // B7 D4: the inline rtcoll::MemFree
+#endif
 
 // The erased node and container types the ported AVL cores take (B.4 R-COLL):
 // `detail::AvlOps<Node, W>` hands a typed `Set<T>` / `Set<T>::Node` to them.
@@ -426,7 +429,18 @@ using ArrayHdr = Collection::Array<uint8_t>;
 // the function-pointer door runtime/src/collection/alloc_door.cpp that answered
 // the same two statics, had no caller left and is deleted.)
 void* MemAlloc(uint64_t bytes, int align);
+// B7 D4: header-inline outside the unit test, so the inline ~Array's free is
+// ONE direct call to System::MemoryAllocator::MemFree (0x1800c7ad0), as retail's
+// open-coded teardown is (RefreshList 0x1800afb71..0x1800afbb6 inlines even
+// MemFree's lock / Free / unlock), not a call to this forwarder. The unit test
+// keeps array.cpp's std::free.
+#ifdef BANISHED_UNIT_TEST
 void  MemFree(void* p);
+#else
+[[gnu::always_inline]] inline void MemFree(void* p) {
+    System::MemoryAllocator::MemFree(p);
+}
+#endif
 
 // The J1 body (array.cpp's banner reads it at 0x18001c750 / 0x18001c100 and
 // nine twins): null test first, MemFree (a call, 0x1800c7ad0), then the three
