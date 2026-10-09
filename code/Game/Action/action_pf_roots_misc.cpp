@@ -412,7 +412,7 @@ void HerdStartMigration(HerdComponent* herd) {
 
     // Positive branch: compute clamped target rectangle + write member move targets.
     Description* pvVar11 = herd->_description;
-    bool bVar3 = ::Object::IsDerivedFromNullSafe(pvVar11, HerdDescription::TypeId());
+    bool bVar3 = pvVar11->IsDerivedFrom(HerdDescription::TypeId());   // cell 0x1401c7858
     const HerdDescription* pvVar6 = bVar3 ? static_cast<const HerdDescription*>(pvVar11) : nullptr;
     int local_res10 = pvVar6->_spread;
     int worldW = GameUpdateLoop::_singleton->m_game->size;
@@ -434,23 +434,9 @@ void HerdStartMigration(HerdComponent* herd) {
         do {
             ComponentEntity* local_58 = herd->members[memberIdx]->_entity.Get();
             AnimalComponent* foundComp = local_58->FindComponent<AnimalComponent>();
-            // DEVIATION (guard): retail writes unconditionally — it can, because a
-            // dead member is erased from the herd list by WildAnimalComponent's
-            // OnRemove before migration ever walks it. A null foundComp here means
-            // that cleanup didn't happen (or the member lost its AnimalComponent):
-            // skipping the write beats the retail-faithful WRITE-null+0x38 crash,
-            // and the trace makes the cleanup bug visible instead of silent.
-            if (!foundComp) {
-                static int s_nullMemberLogs = 0;
-                if (s_nullMemberLogs < 8) {
-                    ++s_nullMemberLogs;
-                    fprintf(stderr, "[Herd] StartMigration: member %u of herd %p has no "
-                            "AnimalComponent (dead entry not erased?) — skipping\n",
-                            memberIdx, static_cast<void*>(herd));
-                }
-                memberIdx = memberIdx + 1;
-                continue;
-            }
+            // B6 (14d G56): retail writes the four wander fields through the narrowed
+            // (or 0) AnimalComponent with no test (the decompile's LAB_140122574 block:
+            // CheckPtr, then +0x38 / +0x3a / +0x3c / +0x3e stores).
             foundComp->wanderX = (int16_t)local_res18;
             foundComp->wanderY = (int16_t)local_res20;
             foundComp->wanderWidth = (int16_t)local_res8_lo;
