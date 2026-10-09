@@ -308,37 +308,14 @@ void CitizenComponent::SetupElder() {
 }
 
 
-// Reimpl of StorageComponent_QueryCount (0x14012cf10):
-// O(n*m) inventory scan — sums (RawMaterialDescription.unitVolume * slotCount)
-// across all inventory rows. Reads type via vtable+0x10, filters by DAT_1401c7cb8.
+// CitizenComp_StorageComponent_QueryCount: NOT a retail body. 0x14012cf10 is the member
+// StorageComponent::QueryCount (storagecomponent.cpp), which reads the receiver's +0x30 unguarded
+// (0x14012cf28 `CMP [RCX+0x30],R12D`). This was a second port of it with a `!self` return retail
+// lacks (known_port_issues row 551); the guard is gone and the body is the member. The Component
+// callers call the member; the Work / tradework callers (other B6 blocks' files) still name this
+// forwarder until they move, then it is deleted.
 int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self) {
-    EnsureCallees();
-    if (!self) return 0;   // defensive: callers may pass a null/unfound storage
-    int total = 0;
-    int rowCount = self->storageSlots._size;
-    if (0 < rowCount) {
-        int row = 0;
-        do {
-            const StorageComponent::Item* arr = self->storageSlots._data;
-            const ComponentDescription* inv = arr[row]._resource;
-            const RawMaterialDescription* mat = nullptr;
-            int n = inv->_subDescCount;
-            for (int j = 0; j < n; j++) {
-                Description* sub = inv->_subDescs[j];
-                uint32_t tid = sub->Type();   // slot 2
-                if (tid == *s_TypeId_RawMaterial) {
-                    mat = Object::IsDerivedFromNullSafe(sub, *s_TypeId_RawMaterial)
-                              ? static_cast<const RawMaterialDescription*>(sub) : nullptr;
-                    break;
-                }
-            }
-            int slotCount = arr[row]._count;
-            row++;
-            int unitVol = mat ? mat->_weight : 0;
-            total += unitVol * slotCount;
-        } while (row < self->storageSlots._size);
-    }
-    return total;
+    return self->QueryCount();
 }
 
 // Reimpl of Storage_GetResourceCount (0x14012a9d0):

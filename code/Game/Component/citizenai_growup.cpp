@@ -461,7 +461,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
 
     // the citizen's own StorageComponent → QueryCount (carrying anything?)
     StorageComponent* own = citizen->_entity->FindComponent<StorageComponent>();
-    int count = (own) ? CitizenComp_StorageComponent_QueryCount(own) : 0;
+    int count = (own) ? own->QueryCount() : 0;
 
     if (count >= 1) {
         // Citizen's own storage is non-empty (QueryCount >= 1) → defer to LongTermPlan
