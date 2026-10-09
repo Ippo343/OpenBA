@@ -15,6 +15,7 @@
 #include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/NumberElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/RibbonElement.h"   // the hearts / stars groups' narrowing (0x140151720)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -60,8 +61,9 @@ static constexpr float kFtoC_Num        = 5.0f;    // DAT_140172198
 static constexpr float kFtoC_Den        = 9.0f;    // DAT_1401721ac
 
 // ============================================================
-// Helper: the dialog's element of that name (retail: DialogInstance::
-// FindElement, then an IsDerivedFrom check the tree does not repeat)
+// Helper: the dialog's element of that name, as OnOpened 0x14007a3d0 stores
+// most of its finds: DialogInstance::FindElement and the result taken as it is
+// (`MOV RAX,[RAX]; MOV [R15+x],RAX`, no IsDerivedFrom).
 // ============================================================
 template <class T>
 static T* FindNamed(StatusBarUI* self, const System::String& name) {
@@ -120,9 +122,6 @@ inline bool Built(const StatusBarUI* ui) {
 
 // [5] 0x14007a3d0
 void StatusBarUI::OnOpened() {
-    if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
-    if (statusbarui_sa::Built(this)) return;   // idempotence
-
     // --- Date, population, temperature ---
     textSeason        = FindNamed<UI::TextElement>(this, "textSeason");
     textPopulation    = FindNamed<UI::TextElement>(this, "textPopulation");
@@ -180,31 +179,31 @@ void StatusBarUI::OnOpened() {
     imageSnow        = FindNamed<UI::Element>(this, "imageSnow");
 
     // --- Hearts/Stars icon groups ---
-    // NOTE: retail type-checks the group against a UI type-info whose decompiled
-    // label ("TypeId_HelpButtonElem" = ButtonElement) is wrong for these ribbon
-    // groups — with that id the check rejects the element and hearts stay blank.
-    // The elements come from our own StatusBar.rsc, so accept the find result
-    // directly (CitizenUI's identical groupHearts/groupStars binding does the same).
-    // The helper (DLG-a's citizen_icon_helpers.h) takes the group's two Arrays
-    // and the InternalPtr to the group element by address.
+    // Each group is narrowed to RibbonElement (IsDerivedFrom through the import slot
+    // 0x140151720 + CMOVNZ, 0x14007acf1..0x14007ad08 / 0x14007ad6e..0x14007ad85) and its
+    // InternalPtr handed by address to the group's Init 0x14006abf0 (RCX = +0x108 / +0x128).
     {
-        UI::Element* group = FindNamed<UI::Element>(this, "groupHearts");
+        UI::Element* found = FindNamed<UI::Element>(this, "groupHearts");
+        UI::Element* group = ::Object::IsDerivedFromNullSafe(found, UI::RibbonElement::TypeId()) ? found : nullptr;
         TownHall_GroupRatingInit(&hearts, &group);   // 0x14006abf0
     }
     {
-        UI::Element* group = FindNamed<UI::Element>(this, "groupStars");
+        UI::Element* found = FindNamed<UI::Element>(this, "groupStars");
+        UI::Element* group = ::Object::IsDerivedFromNullSafe(found, UI::RibbonElement::TypeId()) ? found : nullptr;
         TownHall_GroupRatingInit(&stars, &group);    // 0x14006abf0
     }
 
-    // --- Title label ---
-    // Same wrong-label situation as the hearts/stars groups above: retail checks
-    // against the LabelElement type-info, not ButtonElement — accept directly.
-    labelTitleParam = FindNamed<UI::TextElement>(this, "labelTitleParam");
+    // --- Title label: narrowed to TextElement (import slot 0x140151508 + CMOVNZ,
+    // 0x14007adeb..0x14007adff) into +0x30 ---
+    {
+        UI::Element* found = FindNamed<UI::Element>(this, "labelTitleParam");
+        labelTitleParam = ::Object::IsDerivedFromNullSafe(found, UI::TextElement::TypeId())
+            ? static_cast<UI::TextElement*>(found) : nullptr;
+    }
 
-    // --- Set initial title text from map name ---
+    // --- Set initial title text from map name (SetParameter unguarded, 0x14007ae48) ---
     System::String mapName(GameUpdateLoop::_singleton->m_saveName);   // FUN_140011f90: the String copy
-    if (labelTitleParam)
-        labelTitleParam->SetParameter(0, mapName);
+    labelTitleParam->SetParameter(0, mapName);
 }
 
 // ============================================================
