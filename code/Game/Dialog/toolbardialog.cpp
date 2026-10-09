@@ -1487,8 +1487,7 @@ ToolbarDialog::~ToolbarDialog() {
 // replaces (ui_dialog_stub_factories.cpp, B38 D4).
 
 // ============================================================
-// PlayerToolManager::CenterOnEntity (FUN_140103040; the tree's
-// Toolbar_CenterOnEntity_Impl, a B4 FORWARD forwarder now)
+// PlayerToolManager::CenterOnEntity (FUN_140103040)
 // ============================================================
 void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, ComponentEntity* const* entityPtr) {
     GameUpdateLoop* const game = GameUpdateLoop::_singleton;
@@ -1652,10 +1651,3 @@ void PlayerToolManager::CenterOnEntity(UI::DialogInstance* const* dialog, Compon
     }
 }
 
-// B4 FORWARD: outside callers in Dialog/citizenui.cpp, entityui.cpp, townhallui.cpp,
-// workplaceui.cpp and residenceui.cpp's GoToCitizen (its entity is still raw).
-void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
-    reinterpret_cast<PlayerToolManager*>(toolController)->CenterOnEntity(   // LEFT: SIG Toolbar_CenterOnEntity_Impl: citizenui.cpp hands a ComponentEntity as the dialog and a component as the entity (known_port_issues row 690), residenceui.cpp the entity word of a raw StorageComponent read (row 452)
-        reinterpret_cast<UI::DialogInstance* const*>(parentDialogPtr),   // LEFT: SIG Toolbar_CenterOnEntity_Impl: citizenui.cpp hands a ComponentEntity as the dialog and a component as the entity (known_port_issues row 690), residenceui.cpp the entity word of a raw StorageComponent read (row 452)
-        reinterpret_cast<ComponentEntity* const*>(entityPtr));   // LEFT: SIG Toolbar_CenterOnEntity_Impl: citizenui.cpp hands a ComponentEntity as the dialog and a component as the entity (known_port_issues row 690), residenceui.cpp the entity word of a raw StorageComponent read (row 452)
-}

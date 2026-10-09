@@ -544,7 +544,7 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
     if (id == 0x65) {
         // Center camera on entity (buttonCenter). Faithful to the exe center block
         // (0x140066870..0x140066a8c) — the same position math as
-        // Toolbar_CenterOnEntity_Impl Section 2:
+        // PlayerToolManager::CenterOnEntity Section 2:
         //   - ModelComponent present AND no MultiObjectComponent  -> single object
         //     (citizen/animal/small building): use the model's world Transform
         //     translation (ModelComponent+0x148 Transform, pos at +0x158/+0x15C).

@@ -84,14 +84,6 @@ template <class Node> struct AvlTreeHead;   // Action/PathAvl.h
 struct PinnedToolNode; struct PinnedToolEntry;   // Game/PlayerToolManager.h
 PinnedToolNode* Avl38SetInsert(AvlTreeHead<PinnedToolNode>* set, const PinnedToolEntry& rec);   // 0x140014890
 
-// ---- toolbardialog.cpp
-// B.4 DLG-d: 0x140102b60 / 0x140101a80 / 0x140101ce0 / 0x140103040 are
-// PlayerToolManager members (SelectTool, ToggleUtilityDialog, OpenPauseMenu,
-// CenterOnEntity; Game/PlayerToolManager.h). These are their forwarders.
-// toolController = the tool manager; parentDialogPtr = InternalPtr<DialogInstance>*
-// (may hold null); entityPtr = InternalPtr<ComponentEntity>*.
-void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr);  // 0x140103040 B4 FORWARD: 5 outside caller files -> PlayerToolManager::CenterOnEntity
-
 // ---- toolui.cpp
 // B4 DLG-d: FUN_14012e100 is UIDescription::AddControllers (Component/UIDescription.h),
 // its body in toolui.cpp.

@@ -482,7 +482,7 @@ void CitizenUI::OnUpdateLayout() {
 // - buttonHome (0x226): Navigate camera to citizen's home building
 // - buttonFollow (0x228): Open follow dialog to track this citizen
 //
-// Navigation uses Toolbar_CenterOnEntity_Impl (FUN_140103040) which moves
+// Navigation uses PlayerToolManager::CenterOnEntity (FUN_140103040) which moves
 // the camera to the entity's world position or build footprint center.
 
 // [9] 0x1400650f0
@@ -498,23 +498,22 @@ void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         // --- buttonProfession: go to school / workplace ---
         CitizenComponent* ai = CitizenUI_FindCitizen(_dataSource);
 
-        void* targetRef;
-        void* dialogRef;
+        // Both arms hand RDX = &(copy of DialogController +0x18) and R8 = &(copy of the
+        // target entity) (0x1400649d0: 0x140064a61-0x140064a6d on the at-school arm).
+        ComponentEntity* targetRef;
+        UI::DialogInstance* dialogRef = _dialog;
         if (ai->school != nullptr) {
-            // At school: navigate to the school component
+            // At school (+0x208): navigate to the school's entity (Component::_entity, +0x10)
             AttendanceComponent* school = ai->school.Get();
-            targetRef = school;
-            // and its entity (Component::_entity)
-            dialogRef = school->_entity.Get();
+            targetRef = school->_entity.Get();
         } else {
             if (ai->workplace == nullptr) return;
             // Has a workplace (+0x248): navigate there
             targetRef = ai->workplace.Get();
-            dialogRef = _dialog;
         }
 
         PlayerToolManager* gameSubsys = GameUpdateLoop::_singleton->m_toolManager;
-        Toolbar_CenterOnEntity_Impl(gameSubsys, &dialogRef, &targetRef);
+        gameSubsys->CenterOnEntity(&dialogRef, &targetRef);
     }
     else if (param4 == 0x226) {
         // --- buttonHome: go to home building ---
