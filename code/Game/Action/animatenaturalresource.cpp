@@ -75,14 +75,9 @@ int  AnimateNaturalResource::Execute(ActionStack* actionStack, const System::Tim
     (void)actionStack;
     (void)time;
 
+    // B6 (14d G64): 0x1400c55b0 finds the ModelComponent (0x140003f60), CheckPtr, then
+    // MeshInstance::IsAnimating on [model]+0x28 with no test.
     ModelComponent* model = _field20->FindComponent<ModelComponent>();   // 0x140003f60
-
-    // Standalone-inert guard: on a tree whose ModelComponent find resolves null (inert
-    // resource-entity render layer, unfilled type-id global), report "not animating" so the
-    // action completes rather than dereferencing null+0x28 inside MeshInstance::IsAnimating.
-    // Retail (live model) is unchanged.
-    if (model == nullptr) return 0;
-
     return model->meshInstance.IsAnimating() ? 1 : 0;
 }
 
