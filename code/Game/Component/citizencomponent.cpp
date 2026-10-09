@@ -1816,14 +1816,10 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     };
     int shift = catShift(param_4);
 
+    // B6 row 171: 0x14008ef7b FindComponent<StorageComponent> (CALL 0x140006270), then
+    // 0x14008efa1 reads [store+0x30] with no test: no fallback finder, no null bail.
     ComponentEntity* storeEntity = *param_3;
     StorageComponent* store = storeEntity->FindComponent<StorageComponent>();
-    // Scoped standalone fallback (registered 6270 port's typeid is dead .rdata) +
-    // null bail: retail asserts the storage exists; in standalone an entity in a
-    // town search list may still lack a live StorageComponent — treat as no slot.
-    if (store == nullptr)
-        store = StandaloneFindStorageComp(storeEntity);
-    if (store == nullptr) { *param_2 = nullptr; return param_2; }
 
     uint32_t chosen = 0xffffffff;
     int64_t taskCount = store->storageSlots._size;
@@ -1838,7 +1834,7 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
             Description* comp = arr[i];
             uint32_t tid = comp->Type();   // slot 2
             if (tid == rawMatTid) {
-                return Object::IsDerivedFromNullSafe(comp, rawMatTid)
+                return comp->IsDerivedFrom(rawMatTid)
                            ? static_cast<RawMaterialDescription*>(comp) : nullptr;
             }
         }
@@ -1851,7 +1847,10 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
         StorageComponent::Item* listBase = store->storageSlots._data;
         ComponentDescription* entry = listBase[row]._resource;
         RawMaterialDescription* mat = findMat(entry);
-        bool bitSet = mat && shift >= 0 &&
+        // A category outside 0..4 reads nothing; inside, +0x5c is read through the
+        // narrowed pointer with no test (0x14008f012 XOR EAX,EAX on a miss, then
+        // 0x14008f019 MOV ECX,[RAX+0x5c]).
+        bool bitSet = shift >= 0 &&
             ((mat->_flags >> shift) & 1);
         int demand = listBase[row]._count -
                      listBase[row]._reserve;
@@ -1871,8 +1870,8 @@ ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, Compone
     for (int64_t row = 0; row < taskCount; row++) {
         StorageComponent::Item* entryP = store->storageSlots._data + row;
         RawMaterialDescription* mat = findMat(entryP->_resource);
-        bool bitSet = mat && shift >= 0 &&
-            ((mat->_flags >> shift) & 1);
+        bool bitSet = shift >= 0 &&
+            ((mat->_flags >> shift) & 1);   // 0x14008f144..0x14008f1a8, no test
         int demand = entryP->_count - entryP->_reserve;
         if (bitSet && demand > 0) {
             if (chosen == cur) { *param_2 = entryP->_resource; return param_2; }
