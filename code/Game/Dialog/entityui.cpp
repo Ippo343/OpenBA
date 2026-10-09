@@ -636,11 +636,12 @@ void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t
             toolPtr->dragging = 0;
         }
 
-        // If unpinned, remove entity from tracking set (tool manager +0x50)
+        // If unpinned, remove entity from the open-entity set (tool manager +0x60):
+        // SyncPin 0x1400666b0 `ADD RCX,0x60` (0x1400667de), `CALL 0x14002c690` (0x1400667e2)
         if (checkPin->_checked == 0) {
             ComponentEntity* entityKey = entity;
             PlayerToolManager* worldObj = GameUpdateLoop::_singleton->m_toolManager;
-            Avl38SetFindRemove(&worldObj->field_0x50, &entityKey);   // 0x14002c690
+            Avl38SetFindRemove(&worldObj->field_0x60, &entityKey);   // 0x14002c690
             return;
         }
 
