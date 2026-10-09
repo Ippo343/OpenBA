@@ -247,11 +247,10 @@ void WeatherParticleGeometry::Configure(Weather* d) {
     }
 
     // Material layer bitmask: geo+0x30 = 1 << (material+0x20 & 0x1f).
+    // Retail 0x1400d4323-0x1400d4338 reads [[desc+0x20]+0x20] with no test (row 960).
     Graphics::MaterialInstance* material = d->material;   // Weather +0x20
-    if (material) {
-        uint32_t layer = material->_shaderClass;   // MaterialInstance +0x20
-        _materialTypeFlags = 1u << (layer & 0x1f);   // Graphics::Geometry +0x30
-    }
+    uint32_t layer = material->_shaderClass;   // MaterialInstance +0x20
+    _materialTypeFlags = 1u << (layer & 0x1f);   // Graphics::Geometry +0x30
 }
 
 // The C entry debugui.cpp calls. The null test is the old body's.
