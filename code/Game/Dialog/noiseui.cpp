@@ -28,7 +28,7 @@
 #include "runtime/types/ui/EditElement.h"
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
-#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3); ~NoiseUI deletes by name
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #include "utility/PerlinNoise.h"   // B3R: RtUtility_PerlinNoise_Ctor / _Generate
@@ -302,6 +302,18 @@ void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
 
     // Regenerate noise texture from edit values
     self->GenerateNoise();
+}
+
+// [0] 0x140071bc0 (the body of the scalar-deleting dtor 0x140012da0). Retail
+// stamps 0x14015ca80, then deletes +0x40 (0x140071be0..0x140071bf1), +0x38
+// (0x140071bf3..0x140071c04) and +0x30 (0x140071c06..0x140071c17), each
+// `TEST RCX,RCX; JZ` then `CALL [vptr]` with EDX = 1: C++ `delete` through the
+// virtual dtor, in that order (ModDialog's dtor spells its three the same way),
+// then tail-jumps to ~DialogController ([0x1401515c8]).
+NoiseUI::~NoiseUI() {
+    delete spriteSheet;   // +0x40
+    delete material;      // +0x38
+    delete imageBuffer;   // +0x30
 }
 
 // B4 DLG-d (correction 2): the class's slots 4 and 9 run the ported bodies
