@@ -36,12 +36,16 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 
 
-// Helper: the named element under the panel's root, as the EditElement it is.
-// Retail (0x1400714c0) keeps it only when IsDerivedFrom(EditElement); the tree
-// never checked (kept, listed: every noise*.rsc slider IS an EditElement).
+// Helper: the named element under the panel's root, if it is an EditElement.
+// B6 row 9: retail (0x1400714c0, five times) CheckPtrs the FindElement result,
+// calls IsDerivedFrom(EditElement's type id) on it with no null test, and
+// stores the element when it answers true, else null (the CMOV over 0).
 static UI::EditElement* NoiseUI_FindEdit(UI::Element* root, const char* name) {
     System::String nameStr(name);
-    return static_cast<UI::EditElement*>(root->FindElement(nameStr).Get());
+    UI::Element* elem = root->FindElement(nameStr).Get();
+    return elem->IsDerivedFrom(UI::EditElement::TypeId())
+               ? static_cast<UI::EditElement*>(elem)
+               : nullptr;
 }
 
 // ============================================================
