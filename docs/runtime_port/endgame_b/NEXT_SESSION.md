@@ -45,6 +45,15 @@ family means every -O2 object differs from an older base by inlining only — ta
 kit commit). Shape: Block 0 inventory by class (one row per free function: the class, the retail mangled
 name, callers), then opus blocks by namespace in worktrees, the coordinator gating as B7.
 
+**FIRST, the two user decisions of 2026-10-09 (one `behaviour:` commit each, gated before the pass starts):**
+- **Install `NaturalResourceComponent` slot 8** (row 5 / 552): the faithful OnRemove 0x140125c40 goes into its
+  vtable slot (today a PORT GAP arm); routes: new game, stress (`sa-stress`), `tool_removal` — every tree cut and
+  stone quarried runs it.
+- **Wire `GrowthComponent::SpawnSubResource`'s callee** (entry 3): the port of 0x14009f5d0 called from the spawn
+  arm after its signature is checked against 0x14011fba0's call; watch the entity census (`[TownCensus]`) on
+  new game / tutorial / stress — sub-resources spread as retail from then on, so `worldcmp.sh` may legitimately
+  move (attribute every line).
+
 **Also in the step (the B7 residue, same task):**
 - **Row 1040** (`Desc_LoadExternalArray`: one untyped body for two retail array instantiations 0x1400049c0 /
   0x140032090, no type test): a type per caller (ten), then the member test — the LX2 array cores
@@ -61,8 +70,7 @@ name, callers), then opus blocks by namespace in worktrees, the coordinator gati
 - **Unprobed routes** (audit Q2 / Q3): citizen click-picking (row 252) and closing an entity panel (994 G33)
   changed and no gated route exercises them; the user's by-hand check, or a route added to `uiroutes.sh`.
 - **The probe technique** (B7_RULES C4) is how to check ExternalPtr references a new route exercises.
-- The two user decisions NOT taken: `NaturalResourceComponent` slot 8 (row 5), `SpawnSubResource` (entry 3);
-  row 34 (the launcher dialog) needs a port of 0x1800a1ae0 and its dialog resource.
+- Row 34 (the launcher dialog): USER DECISION 2026-10-09 — port it with the PORT GAPs (§4), not here.
 
 ## 3. Device-lost (DEFERRED by the user — read before touching it)
 
@@ -75,7 +83,9 @@ only when the user lifts the deferral; `devlost.sh` keeps `DLMAX=5`.
 - **ENDGAME B.1 decision 7 (exceptions), DECIDED** (§0): the ~25 setjmp / longjmp / SEH files become C++
   exceptions or error returns per site; `-fexceptions` everywhere; `reference_longjmp_unwind_runs_retail_cleanup`
   is the trap to read first.
-- The PORT GAPs (the device-lost pair among them), then device-lost.
+- The PORT GAPs (the device-lost pair among them; **the launcher dialog, row 34, decided 2026-10-09: the proc
+  0x1800a1ae0 ported, the dialog template 0x66 re-created as the exe's own resource, a menu route for the gate**),
+  then device-lost.
 - The retail quirks copied as-is (docs/retail_bugs.md): a list to revisit only if the user wants a "fixed"
   build flavour someday — NOT part of ENDGAME B.
 
