@@ -629,39 +629,6 @@ static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef
 
 // The starting-herd spawn (retail FUN_1400a0b10): Component/exe_bodies.h.
 
-// Reimplementation of 0x140091a20 ("Game_RemoveEntity" is a Ghidra mislabel — the
-// body is an add-if-not-present into the +0x120 dynamic array). Kept inline because
-// standalone cannot ResolveAddr an unported exe address.
-// Not static: the trade checkout (code/Game/Dialog/tradeui_checkout.cpp, the
-// FUN_140081420 named above) is the other caller that grows this list.
-//
-// ENDGAME B.3.2 step 2: the inlined grow-and-append is now the 3-argument
-// `Collection::Array<void*>::SetSize` (desc is the fill), trait-derived and
-// trait-equivalent (pointer element: 8-byte copy, no destroy, the 2-argument
-// init is never reached by a fill call). Compared arm for arm against
-// rtcoll::SetSizeCore and the retail body 0x140091a20 (re-decompiled
-// 2026-09-13): the capacity rule reads `count != 0 ? newCount*3 : newCount`,
-// which IS the reference's `newSize == oldSize+1 && oldSize != 0` because this
-// site only ever appends ONE element (newCount = count + 1, so the first half
-// of the conjunction is always true); the exact-equal early return is vacuous
-// for the same reason; `_size` first, cap<<3 at align 8, prefix copied only
-// when the block moved, fill at index count, old block freed only when it
-// moved. Every arm matched.
-// LEFT free (B3): retail 0x140091a20 is already the member CitizenBehavior::RemoveEntity
-// (Game/game.cpp, GAME-a); this copy differs from it (the !townMgr / !desc /
-// !MemoryAllocator guards, SetSize for the grow), so it is not rewired until the two
-// are reconciled against retail (known_port_issues 14).
-void TownMgr_AddAvailableAgri(CitizenBehavior* townMgr, ComponentDescription* desc) {
-    if (!townMgr || !desc || !System::MemoryAllocator::_singleton) return;
-    ComponentDescription** arr = townMgr->field_0x120._data;
-    int     count = townMgr->field_0x120._size;
-    // Dedup: already present -> nothing to do.
-    for (int i = 0; i < count; ++i)
-        if (arr && arr[i] == desc) return;
-
-    townMgr->field_0x120.SetSize(count + 1, desc);   // the stride-8 append with a fill
-}
-
 // Seed one agri pool: pick `count` random entries from the `size`-entry pool and
 // dedup-append each resolved description into townMgr+0x120. Faithful to the retail
 // loop (System::Random::Rand(worldRng, size) per pick).
@@ -686,7 +653,7 @@ static int SeedAgriPool(MapGenerator* sc, CitizenBehavior* townMgr, System::Rand
         // Retail order: spawn FIRST (0x1400a35dc), then the availability add
         // (0x1400a35e7). Both consume the same resolved template.
         if (spawnCentre) StartTown_SpawnStartingHerd(sc, spawnCentre, tmpl);
-        TownMgr_AddAvailableAgri(townMgr, tmpl);
+        townMgr->RemoveEntity(tmpl);   // 0x140091a20 (the dedup append into +0x120)
 
         ++added;
     }

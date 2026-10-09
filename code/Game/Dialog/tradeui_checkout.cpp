@@ -13,7 +13,7 @@
 //
 //   0x140091e60 = RawMaterialComponent_RegisterRawMaterial
 //                 append-if-absent into townMgr+0x110 (raw-material availability)
-//   0x140091a20 = TownMgr_AddAvailableAgri
+//   0x140091a20 = CitizenBehavior::RemoveEntity (the dedup append into +0x120)
 //                 append-if-absent into townMgr+0x120 (crop/livestock/orchard
 //                 availability) — see the block comment above the reimpl in
 //                 code/Game/Game/starttown.cpp, which already names FUN_140081420
@@ -94,8 +94,7 @@
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
 // 0x140091e60 RawMaterialComponent_RegisterRawMaterial: Component/exe_bodies.h.
-// 0x140091a20 — appends into townMgr+0x120 (code/Game/Game/starttown.cpp)
-extern void TownMgr_AddAvailableAgri(CitizenBehavior* townMgr, ComponentDescription* desc);
+// 0x140091a20 — CitizenBehavior::RemoveEntity (a misnomer: the dedup append into +0x120).
 
 namespace {
 
@@ -295,11 +294,11 @@ void TradeUI::OnTradeButton() {
             }
             // Natural resource (crop / orchard seed): availability only.
             else if (FindComponentByTypeId(bought, NaturalResourceDescription::TypeId())) {
-                TownMgr_AddAvailableAgri(town, bought);
+                town->RemoveEntity(bought);   // 0x140091a20
             }
             // Livestock: availability, plus spawn the animals into the world.
             else if (FindComponentByTypeId(bought, LivestockDescription::TypeId())) {
-                TownMgr_AddAvailableAgri(town, bought);
+                town->RemoveEntity(bought);   // 0x140091a20
                 // The door was named fn_Building_AddBuyToStorage; it is bound to
                 // 0x14005ace0 TradeComponent_SpawnPurchasedLivestock (B3R: the binding
                 // decides). The never-taken "did not resolve" arm went with the door.
