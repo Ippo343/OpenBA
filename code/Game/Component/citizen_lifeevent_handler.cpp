@@ -231,16 +231,18 @@ extern "C" void Entity_PlaceAtCell_7b20(TombstoneComponent* self, int cell, floa
 // Claim the grave cell and spawn the tombstone entity there.
 // cemComp = cemetery component, cell = grave cell index, citizenCell unused
 // (matches retail), worldArg = game-world singleton (passed to the pathfinder cmd).
+// B6 (rows 311 / 310): retail tests nothing in this body but the MemAlloc result
+// (0x140046ba6 JZ); the world, cemetery, MapComponent, description and tombstone
+// reads are unguarded.
 extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
                                              uint64_t /*citizenCell*/, void* /*worldArg*/) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    if (!world || !cem) return;
     ComponentEntity* nullIBP = nullptr;                          // the InternalBasePtr(nullptr) ctor
     Map* map = world->m_game;                                    // +0xf8
     MapCell* cellRec = map->cells.GetData();                               // +0x80, stride 0x30
     uint8_t oldState = cellRec[cell].terrainType;                // +0x29
     bool stateWasWalk = ((1u << (oldState & 0x1f)) & 0x1e0u) != 0;   // old state 5..8
-    map->field_0xA2 |= static_cast<uint8_t>(stateWasWalk);   // the tree ORs the byte (Map::field_0xA2 is uint8_t)
+    map->field_0xA2 |= stateWasWalk;   // 0x140046afa SETNZ AL; 0x140046afd OR byte ptr [RBX+0xa2],AL
     cellRec[cell].terrainType = 2;
     int size = map->size;
     if (stateWasWalk)
@@ -249,30 +251,23 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     cellRec[cell].occupant = nullIBP;  // = null (+0x08)
     // Tombstone yaw = the cemetery's own placed rotation (position component +0x30).
     MapComponent* resIBP = cem->_entity->FindComponent<MapComponent>();   // 0x140004680
-    int rot = resIBP ? resIBP->extraField : 0;
+    int rot = resIBP->extraField;                                // 0x140046b6c [RAX+0x30], no test
     // Tombstone description lives at CemeteryDescription+0x20.
+    // 0x140046b81 IsDerivedFrom(+0x18, cell 0x1401c40c8); 0x140046b8c CMOVNZ: the
+    // description or 0, read at +0x20 below with no test.
     Description* desc = cem->_description;                       // +0x18
-    Description* cemDescBase = (desc
-                     && Object::IsDerivedFromNullSafe(desc, CemeteryDescription::TypeId())) ? desc : nullptr;
-    // [STANDALONE GUARD] retail trusts the IsDerivedFrom gate then derefs
-    // unguarded; type-ids can be unfilled early in standalone, so trust the
-    // raw description (mirrors tombstonecomponent.cpp's OnCreate note).
-    if (!cemDescBase) cemDescBase = desc;
-    if (!cemDescBase) return;
-    CemeteryDescription* cemDesc = static_cast<CemeteryDescription*>(cemDescBase);
-    ComponentDescription* tombDesc = cemDesc->_ref20;            // +0x20
-    if (!tombDesc) return;   // [STANDALONE GUARD]
+    CemeteryDescription* cemDesc = desc->IsDerivedFrom(CemeteryDescription::TypeId())
+                                   ? static_cast<CemeteryDescription*>(desc) : nullptr;
     ComponentEntity* built = nullptr;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-    if (mem) built = ComponentEntity_CtorFromDescription(mem, tombDesc);
+    if (mem) built = ComponentEntity_CtorFromDescription(mem, cemDesc->_ref20);   // +0x20
     ComponentEntity* entIBP = built;
-    if (!entIBP) return;   // [STANDALONE GUARD] alloc/ctor failed
     TombstoneComponent* tsIBP = nullptr;
     ComponentEntity_FindTombstoneComp_4800(entIBP, &tsIBP);
-    if (tsIBP) Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));
+    Entity_PlaceAtCell_7b20(tsIBP, cell, static_cast<float>(rot));   // 0x140046c00, no test
     Object::InternalPtr<ComponentEntity> regIBP = entIBP;
     EntityList_RegisterEntity_Impl(world->m_entityList, &regIBP,   // +0xe8
-                                   static_cast<int>(tombDesc->_category));   // +0x20
+                                   static_cast<int>(cemDesc->_ref20->_category));   // 0x140046c05..0x140046c09 +0x20
 }
 
 // ---------------------------------------------------------------- 0x140116dd0
