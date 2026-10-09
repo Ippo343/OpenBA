@@ -53,9 +53,8 @@
 void AutoSaveDialog::OnOpened() {
     StopTimer(0);
 
-    // Autosave-interval setting: gs[1] = the Options 'Autosave' combo index (0..7).
-    if (g_gameSettings == nullptr)
-        return;
+    // Autosave-interval setting: gs[1] = the Options 'Autosave' combo index (0..7),
+    // read with no test of the settings pointer (0x14005e120).
     int speedSetting = g_gameSettings->autosaveInterval;
 
     // Autosave interval table, in MINUTES, read off retail's .rdata (2026-08-30).
