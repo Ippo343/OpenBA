@@ -500,21 +500,10 @@ static void StorageUI_SortItems(StorageUIItem* items, int count) {
 //   +0x20 (idx4) OnCreated = table build (setup; framework calls once). It calls
 //                OnUpdateLayout (via vtable[7]) at its end to do the initial populate.
 //   +0x38 (idx7) OnUpdateLayout = populate rows from the entity's carried inventory.
-//   +0x40 (idx8)           = base DialogController::OnUpdate (per-frame; the
-//                framework DialogInstance::OnUpdate dispatches ONLY +0x40 each
-//                frame, Runtime 0x180115400). Base is a content no-op, so we drive
-//                the refresh here: build once (if the framework's idx4 setup didn't
-//                run yet), then re-populate every frame so the counts stay live.
-
-// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StorageUI::OnUpdate(const System::Time& /*time*/) {
-    if (!storageui_sa::Ready() || !SA_DialogEntityAlive(this)) return;
-    if (rows.GetSize() == 0) {
-        StorageUI::OnCreated();
-    } else {
-        StorageUI::OnUpdateLayout();
-    }
-}
+//   +0x40 (idx8)           = base DialogController::OnUpdate, inherited (table slot
+//                0x14003a96c). OnCreated runs from DialogInstance::AddController
+//                (0x18011343d); OnUpdateLayout every frame from
+//                DialogInstance::ComputeLayout (B6 row 36).
 
 // create 0x140021330: MemAlloc(0x40, 8), then the ctor (DialogController ->
 // Internal: AddObject, the compiler's stamps, the field initialisers).

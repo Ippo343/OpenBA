@@ -9,7 +9,7 @@
 //   [1] TypeName  [2] Type  (DECLARE_EXE_TYPE)
 //   [4] 0x14007b270  OnCreated
 //   [7] 0x14007b0a0  OnUpdateLayout
-//   [8] retail inherits the base; the tree overrides it (STANDALONE DEVIATION)
+//   [8] 0x14003a96c  JMP [0x1401515f8]: DialogController's (inherited)
 //   every other slot is UI::DialogController's (inherited, not declared).
 // ============================================================================
 
@@ -33,8 +33,8 @@ public:
     ~StatusIconUI() override = default;                           // [0] 0x140014370
     void OnCreated() override;   // [4] 0x14007b270
     void OnUpdateLayout() override;   // [7] 0x14007b0a0
-    // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
-    void OnUpdate(const System::Time& time) override;
+    // [8] inherited: DialogController::OnUpdate (table slot 0x14003a96c jumps to the import);
+    // the refresh is slot 7, which DialogInstance::ComputeLayout dispatches every frame
 
     // ---- fields ----------------------------------------------------------
     // +0x30 the "icons" group's children: a Collection::Array<InternalPtr<UI::Element>>

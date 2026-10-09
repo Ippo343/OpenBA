@@ -10,7 +10,7 @@
 //   [3] 0x1400b8ca0  RET 0
 //   [4] 0x1400b8820  OnCreated
 //   [7] 0x1400b8450  OnUpdateLayout
-//   [8] retail inherits the base; the tree overrides it (STANDALONE DEVIATION)
+//   [8] 0x14003a96c  JMP [0x1401515f8]: DialogController's (inherited)
 //   every other slot is UI::DialogController's (inherited, not declared).
 // ============================================================================
 
@@ -46,8 +46,8 @@ public:
     void Persist(IO::Stream&/*stream*/) override {}   // [3] 0x1400b8ca0  RET 0 in retail
     void OnCreated() override;   // [4] 0x1400b8820
     void OnUpdateLayout() override;   // [7] 0x1400b8450
-    // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
-    void OnUpdate(const System::Time& time) override;
+    // [8] inherited: DialogController::OnUpdate (table slot 0x14003a96c jumps to the import);
+    // the refresh is slot 7, which DialogInstance::ComputeLayout dispatches every frame
 
     // ---- fields ----------------------------------------------------------
     // +0x30 Collection::Array<StorageUIRow>: one row per table cell, appended
