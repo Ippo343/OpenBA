@@ -779,10 +779,14 @@ int RegionGraph::PathLength(int start, uint32_t goal) {
 // into the index (0x14001c940).
 //
 // Faithfulness traps: the (a,b) normalisation is applied THREE times exactly as decompiled
-// (lookup key, slot store, index key). The slot's +0x0C dword is an uninitialised stack
-// dword in retail (the high half of two CONCAT44 stores); the tree writes 0.
+// (lookup key, slot store, index key).
+// B6 row 49: the slot's +0x0C dword is NOT written here. Retail builds each record in a
+// stack temporary ({a,b} qword at RSP+0x20, the distance dword at RSP+0x28) and copies it
+// as three qwords (0x1400a5c55 / 0x1400a5c5d / 0x1400a5c61 on eviction, 0x1400a5cbb /
+// 0x1400a5cc3 / 0x1400a5cc7 on store): the second qword carries RSP+0x2C, a stack dword
+// nothing initialised, into +0x0C. There is no value to copy, so the field is left as it
+// was; nothing reads it.
 void RegionPairCache::Store(int param_2, int param_3, uint32_t param_4) {
-    uint32_t uStack_3c = 0; // decompiler-visible pad (high half of CONCAT44 stores)
     int iVar7 = param_2;
     int iVar8 = param_3;
     if (param_2 < param_3) {
@@ -842,7 +846,6 @@ LAB_1400a5c1b:
         e->regionA = -1;                   // one qword store of -1 over regionA / regionB
         e->regionB = -1;
         e->distance = -1;
-        e->field_0x0C = uStack_3c;         // the CONCAT44 high half
         e->time = 0;
         oldest = oldest + 1;
         int iVar8c = oldest;
@@ -862,7 +865,6 @@ LAB_1400a5c1b:
     puVar1->regionA = keyHi;
     puVar1->regionB = keyLo;
     puVar1->distance = static_cast<int32_t>(param_4);
-    puVar1->field_0x0C = uStack_3c;
     puVar1->time = uVar5;
     int local_res8 = param_2;
     int iStackX_c = param_3;
