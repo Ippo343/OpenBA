@@ -548,14 +548,10 @@ uint64_t Helper_sub_79b0(WorkScheduler* param_1, CitizenComponent* const* param_
     if (tryCommon && ret == 0) {
         // LAB_1400f7a89: build with a FRESH empty IBP as the skip-key holder (no skip filter),
         // but only when the citizen's "remember" flag (local_res20+0x4c) is set OR param_6.
-        // SA-invariant guard: retail reads *(local_res20+0x4c) unconditionally because param_4
-        // (the owner/target key) is never null at this idle-walk point. In the standalone exe a
-        // citizen occasionally reaches State_Idle with a null owner key (citizen+0x1f0 == 0, not
-        // yet home-assigned), so local_res20 can be 0 -> READ of 0x4c crash. Treat a null key as
-        // "no remembered target" (remember flag unset); the common walk still runs when param_6.
-        // TODO(2c-B follow-up): root-cause why some SA citizens have citizen+0x1f0 == 0.
-        // NOT RETAIL: 0x1400f7a8d reads the byte unguarded (known_port_issues 14d row 211).
-        if ((local_res20 != nullptr && local_res20->field4C) || (param_6 != '\0')) {
+        // B6 row 211: 0x1400f7a89 MOV RAX,[RBP+0x48]; 0x1400f7a8d CMP byte ptr [RAX+0x4c],0 --
+        // the key's byte is read with no test (every citizen carries a profession: B6_RULES
+        // C5, row 990's fixture re-cut, the root of the old "citizen+0x1f0 == 0" null).
+        if (local_res20->field4C || (param_6 != '\0')) {
             ::Object::InternalPtr<ComponentEntity> freshIbp(nullptr);   // the IBP ctor 0x1400f7aa6
             uint8_t hit = BuildAndWalk(freshIbp.Get());
             ret = (hit != 0) ? 1 : 0;
