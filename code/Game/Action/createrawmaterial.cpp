@@ -195,21 +195,11 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
     // the hauler", which is why it caps the per-entity batch.
     int unitVolume = rawMatDesc->_weight;   // +0x48
     int carrierVolume = totalQuantity;      // +0x40
-    // STANDALONE-ONLY TRIPWIRE (retail has no equivalent and needs none). Retail's IDIV
-    // relies on +0x48 being non-zero and its cap being >= 1; a cap of 0 makes batchSize 0,
-    // the loop tail's `SUB R13D,EDI` subtract nothing, and 0x1400c6efa jump back forever —
-    // an in-world FREEZE, not a crash. We can still reach that state because a not-yet-
-    // ported construction path would leave +0x40 at its zeroed ctor value, so fail LOUDLY
-    // with the operands instead of hanging. If this ever fires, fix the ctor site that
-    // passed a zero capacity — do not soften this into a clamp.
-    if (unitVolume <= 0 || carrierVolume < unitVolume) {   // i.e. the quotient would be <= 0
-        fprintf(stderr, "[CreateRawMaterial] ABORT: batch cap would be 0 — "
-                "carrierVolume(action+0x40)=%d unitVolume(rawMatDesc+0x48)=%d totalItems=%d. "
-                "Retail would spin here forever; the ctor site that built this action passed "
-                "a zero/short capacity as arg7.\n", carrierVolume, unitVolume, totalItems);
-        fflush(stderr);
-        return 0;
-    }
+    // B6 (14d G66): retail divides with no test (0x1400c6c22 MOV EAX,[R15+0x40]; CDQ;
+    // IDIV dword ptr [RBX+0x48]). The old "STANDALONE-ONLY TRIPWIRE" covered a then-unported
+    // construction path; all four retail sites (0x1400bb7b0, 0x1400bbea0, 0x1400beae0,
+    // 0x1400bef70, the xrefs of 0x1400c71a0) are ported and pass StorageComponent+0x38, and
+    // Persist restores +0x40. A zero cap would loop in retail as here: that is the finding.
     int maxPerEntity = carrierVolume / unitVolume;
 
     // Spawn loop: create entities for all items
