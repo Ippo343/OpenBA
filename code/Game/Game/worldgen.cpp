@@ -123,8 +123,8 @@ static constexpr float kBaseScale  = 8.0f;   // 0x1401721a8  (pn1+1)*8
 static constexpr float kHScale     = 48.0f;  // 0x1401721e4  (pn2+0.25)*48
 static constexpr float kQuantize   = 256.0f; // 0x140172230  float->int16 fixed-point scale
 
-// Runtime bodies called by name: the seeded Random ctor ??0Random@System@@QEAA@I@Z ->
-// RtSystem_Random_CtorSeed (system/Value.h); Utility::PerlinNoise ctor / Generate ->
+// Runtime bodies called by name: the seeded Random ctor ??0Random@System@@QEAA@I@Z
+// (System::Random(uint32_t), system/Value.h); Utility::PerlinNoise ctor / Generate ->
 // RtUtility_PerlinNoise_Ctor / _Generate (utility/PerlinNoise.h).
 
 // Toggle: full f390 feature pipeline vs first-light (e5d0 only).
@@ -745,7 +745,7 @@ void WorldGeometry::BuildTerrain(TerrainGenerator* gen, int sizeIdx, uint32_t se
         return;
     }
     memset(static_cast<void*>(hf), 0, kHeightfieldAlloc);
-    RtSystem_Random_CtorSeed(&hf->random, seed);
+    ::new (&hf->random) System::Random(seed);   // ??0Random@System@@QEAA@I@Z 0x1800c7ed0 on the raw record
     hf->generator = gen;
     hf->sizeRow   = sizeRow;
 

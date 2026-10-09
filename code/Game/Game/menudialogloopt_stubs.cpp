@@ -56,7 +56,7 @@
 #include "graphics/Scene.h"     // ENDGAME B.3.7: MenuDLT::Shutdown (carry-over 11)
 #include "save/SaveLoad.h"      // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include "audio/Audio.h"        // ENDGAME B.3.8 LOOP: ~MenuDialogLoopT runs ~Audio::Scene
-#include "graphics/Camera.h"    // B3R: RtGraphics_Renderer_Dtor
+#include "graphics/Camera.h"    // Graphics::Renderer (~Renderer)
 #include "system/MemoryAllocator.h"   // B3R: System::MemoryAllocator::MemAlloc / MemFree
 #include "ui/Cursor.h"          // B4: GameContainer cursor slots
 #include "ui/SpriteSheet.h"     // B4: GameContainer::spriteSheet
@@ -238,14 +238,11 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
 // deleted at B.3.9 EXA) duplicated, with the vtable store the compiler's.
 MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
     : Engine::DialogLoopT(filename) {
-    // The member initialisers have run Audio::Scene::Scene() on +0xb30
-    // (??0Scene@Audio@@ 0x1800e0160) and zeroed the three array headers
-    // +0xbd0..+0xbf8 (retail's last six qword stores). Retail calls the Random
-    // ctor first and the Scene ctor second; here the Scene member is built before
-    // this body seeds _random. The two touch disjoint bytes: the Random ctor reads
-    // the wall clock and writes only +0x168..+0xb2c, the Scene ctor allocates and
-    // writes only +0xb30..+0xb67.
-    RtSystem_Random_Ctor(&_random);       // System::Random at +0x168  ??0Random@System@@ 0x1800c7f20
+    // The member initialisers have run System::Random::Random() on +0x168
+    // (??0Random@System@@ 0x1800c7f20, retail's CALL at 0x14009bb2e), then
+    // Audio::Scene::Scene() on +0xb30 (??0Scene@Audio@@ 0x1800e0160, 0x14009bb3b):
+    // retail's order, which is declaration order. They also zeroed the three
+    // array headers +0xbd0..+0xbf8 (retail's last six qword stores).
     // Zero-init the plain fields +0xb68..+0xbcf: every field from _pendingLoop up
     // to the first array member, pad included (retail's qword stores; the
     // memset stops before _particleArray, which its own ctor zeroed).
@@ -468,12 +465,12 @@ void MenuDialogLoopT::Shutdown() {
     if (void* t = _transform) System::MemoryAllocator::MemFree(t);
     // 7. +0xba0 Graphics::Scene: ~Scene (??1Scene@Graphics@@ 0x1801026c0) then freed.
     if (Graphics::Scene* g = _scene) {
-        RtGraphics_Scene_Dtor(g);
+        g->~Scene();
         System::MemoryAllocator::MemFree(g);
     }
     // 8. +0xb98 Graphics::Renderer: ~Renderer (??1Renderer@Graphics@@ 0x1800180a0) then freed.
     if (Graphics::Renderer* r = _renderer) {
-        RtGraphics_Renderer_Dtor(r);
+        r->~Renderer();
         System::MemoryAllocator::MemFree(r);
     }
     // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad (??1SaveLoad@Save@@ 0x1800c3c90) then freed.

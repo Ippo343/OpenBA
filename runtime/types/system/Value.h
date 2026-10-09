@@ -194,6 +194,21 @@ namespace System {
 // ----------------------------------------------------------------------------
 class Random {
 public:
+    // ENDGAME B7 (CTOR, B7_RULES D5): the two exported ctors are REAL ctors; the
+    // `RtSystem_Random_Ctor` / `_CtorSeed` doors are deleted with their last
+    // caller. B4b-2's reason above is gone: every by-value holder
+    // (MenuDialogLoopT, GameLoadDialogLoopT, NewGameDialog, the
+    // `Graphics::Particle::_rng` static) now runs THIS ctor at the member's
+    // position instead of a door in its body, and the raw-storage holders
+    // (`Object::InternalFactory`, `TerrainHeightfield`) placement-new it.
+    // Still NO destructor: retail has no ~Random, so the class stays trivially
+    // destructible (pinned below).
+    // ??0Random@System@@QEAA@XZ   0x1800c7f20 — `index = 0`, mt[0] = (uint)_time64(NULL)
+    //   (CALL 0x18007fb9c), then mt[i] = 0x6c078965 * (mt[i-1] ^ (mt[i-1] >> 30)) + i.
+    Random();
+    // ??0Random@System@@QEAA@I@Z  0x1800c7ed0 — the same with mt[0] = seed.
+    explicit Random(uint32_t seed);
+
     // ?Rand@Random@System@@QEAAIXZ         0x1800c7f90  — the full 32-bit draw
     uint32_t Rand();
     // ?Rand@Random@System@@QEAAII@Z        0x1800c8040  — bound==0 returns 0
@@ -373,7 +388,5 @@ static_assert(std::is_trivially_destructible<DateTime>::value, "B4b-2");
 // reader can call it by name. Nothing calls it through this declaration yet.
 
 // ---- system/value_types.cpp
-System::Random* RtSystem_Random_Ctor(System::Random* self);  // 0x1800c7f20
-System::Random* RtSystem_Random_CtorSeed(System::Random* self, uint32_t seed);  // 0x1800c7ed0
 System::Time* RtSystem_Time_Ctor(System::Time* self, float seconds);  // 0x1800078c0
 // ==== end B3R W0-P0c ====

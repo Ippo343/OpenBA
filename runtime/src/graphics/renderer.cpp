@@ -288,14 +288,6 @@ Renderer::~Renderer() {}
 
 }  // namespace Graphics
 
-extern "C" Graphics::Renderer* RtGraphics_Renderer_Ctor(Graphics::Renderer* self) {
-    return ::new (static_cast<void*>(self)) Graphics::Renderer();
-}
-
-extern "C" void RtGraphics_Renderer_Dtor(Graphics::Renderer* self) {
-    self->~Renderer();
-}
-
 // ============================================================================
 // Graphics::MaterialInstance
 // ============================================================================

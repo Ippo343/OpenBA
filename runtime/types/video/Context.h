@@ -506,7 +506,11 @@ public:
     struct PixelConstantStaging {
         const VideoProgram* videoProgram;   // +0x00 (ctx +0x200)  SetVideoProgram 0x18001a040
         float material[4][4];               // +0x08 (ctx +0x208)  Reset memsets 0x40; uploaded to _materialConstants
-        float pixel[5][4];                  // +0x48 (ctx +0x248)  Reset memsets 0x50; uploaded to _pixelConstants
+        // ENDGAME B7 (CTOR, D6): one Math::Vector4 per sixteen-byte row (was
+        // float[5][4]). Its zeroing ctor (0x18001e0a0) never runs here: Context is
+        // built over raw storage by RtVideo_Context_Ctor, whose memset of the whole
+        // block is retail's nineteen zero qwords; a row store is one 16-byte MOVUPS.
+        Math::Vector4 pixel[5];             // +0x48 (ctx +0x248)  Reset memsets 0x50; uploaded to _pixelConstants
     };
     PixelConstantStaging _pixelConstantStaging;          // 0x0200
 

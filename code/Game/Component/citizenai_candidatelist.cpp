@@ -142,18 +142,13 @@ int CitizenComponent::HasSufficientResources() {
     // second find (feeds the per-slot requirement read)
     ResidenceComponent* storageObj = home->FindComponent<ResidenceComponent>();
 
-    // [STANDALONE GUARD] the find returns null when the ResidenceComponent type-id
-    // is unfilled (the recurring standalone limitation). Guard so the scans can't
-    // deref null+0x50/+0x58.
-    int iVar2 = 0;
-    if (storageObj) {
-        iVar2 = storageObj->residentSlots[homeSlot]._size;
-    }
+    // Row 291 (B7 RES): 0x14011575d-0x140115767 and 0x140115791-0x140115798 read both
+    // finds' +0x50 / +0x58 with no test; the tree's [STANDALONE GUARD] returns are gone.
+    int iVar2 = storageObj->residentSlots[homeSlot]._size;
     float fVar1 = lVar3desc->_fc4;   // CVTTSS2SI = trunc
     int factor = (int)fVar1;
 
     // Row scan over local_res8.
-    if (local_res8 == nullptr) return 0;   // no storage resolved -> "insufficient"
     int rowCount = local_res8->residentSlots._size;
     int iVar7 = 0;
     if (0 < rowCount) {
@@ -185,7 +180,7 @@ int CitizenComponent::HasSufficientResources2() {
     ResidenceComponent* local_res8 = home->FindComponent<ResidenceComponent>();
     CitizenDescription* lVar1desc = description;
 
-    if (local_res8 == nullptr) return 0;   // [STANDALONE GUARD] no storage resolved
+    // Row 291 (B7 RES): the find is read with no test (0x140115841 onward).
     int rowCount = local_res8->residentSlots._size;
     int iVar6 = 0;
     if (0 < rowCount) {
@@ -232,32 +227,10 @@ int CitizenComponent::HasSufficientResources2() {
 // disassembly, which the decompiler hides (both finders print under one name):
 //   140115dfb: CALL 0x140006270
 // ============================================================
+// Row 291 (B7 RES): 0x140115dfb-0x140115e10 is the find, CheckPtr and a tail call of
+// QueryCount on the result with no test; the tree's null warning-and-return is gone.
 int CitizenComponent::CarryCount() {
     StorageComponent* carry = _entity->FindComponent<StorageComponent>();
-    // Standalone: the citizen's own-entity StorageComponent find returns null when
-    // its type-id global is unfilled (the recurring keystone-B pattern). The real
-    // game always has a carry-inventory storage here; guard so QueryCount(null) -
-    // which derefs +0x30 - can't fault. No storage found => count 0.
-    //
-    // This is NOT a cosmetic guard: this function is the citizen's CARRY COUNT
-    // (body = FindComponent_Storage -> QueryCount), and it is the gate on state 0xd
-    // (LongTermPlan) = the haul-to-storage leg. If the find ever returns null here,
-    // every citizen reads as "carrying nothing" and NOBODY EVER DELIVERS, silently.
-    // So say so loudly (once) rather than let a null-guard mask it -- root-cause the
-    // find, do not paper over it.
-    if (!carry) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            s_warned = true;
-            std::fprintf(stderr,
-                "[Deliver] WARNING: citizen carry StorageComponent find (0x140006270) "
-                "returned NULL -- carry count reads 0 for every citizen, so state 0xd "
-                "(LongTermPlan / haul-to-storage) can never be a candidate and nothing "
-                "will ever be delivered. Root-cause the find; do not null-guard it.\n");
-            std::fflush(stderr);
-        }
-        return 0;
-    }
     return carry->QueryCount();   // 0x14012cf10
 }
 

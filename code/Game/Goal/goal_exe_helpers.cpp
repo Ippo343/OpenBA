@@ -31,12 +31,13 @@
 // expected type (TypeInfo at *0x140152870), caches it (or null), and updates
 // the generation.
 //
-// In standalone the type-id storage slot (0x140152870) is unregistered → null,
-// so the IsDerivedFrom check is skipped and the Find result is trusted — same
-// strategy as ResolveExternalByName_Impl's TypeId_ComponentDescription_FC guard.
+// Row 84 (B7 RES), retail 0x1400265b0: the factory singleton is read with no test
+// (0x1400265cc-0x1400265d6); the miss is FIND-ONLY: Filename(String) 0x140151d68, the
+// import 0x140152460 is ?Find@ExternalFactory (no load, no name normalisation); the
+// generation is read twice, before the compare (0x1400265d6) and again for the store
+// (0x140026630). The tree's FindOrLoad of a normalised name on a miss is gone.
 void NamedExternalRef::Resolve() {
     ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    if (!efactory) return;
 
     int32_t refGen     = generation;
     int32_t factoryGen = efactory->_generation;
@@ -44,24 +45,6 @@ void NamedExternalRef::Resolve() {
 
     System::Filename filename(name);
     ::Object::External* found = efactory->FindAs<::Object::External>(filename);
-    bool loaded = false;
-    if (!found) {
-        const char* text = name._data;
-        if (text && text[0]) {
-            // Only the LOADER rejects backslashes; the factory's key comparison
-            // normalizes separators (measured — see tutorial_base.cpp).
-            char normalized[260];
-            size_t k = 0;
-            for (; text[k] && k < sizeof(normalized) - 1; ++k)
-                normalized[k] = (text[k] == '\\') ? '/' : text[k];
-            normalized[k] = 0;
-
-            System::String   normStr(normalized);
-            System::Filename normFile(normStr);
-            found = efactory->FindOrLoadAs<::Object::External>(normFile);
-            loaded = true;
-        }
-    }
 
     ::Object::External* result = nullptr;
     if (found) {
@@ -74,9 +57,7 @@ void NamedExternalRef::Resolve() {
     }
 
     resolved = result;
-    // Re-read the generation: a FindOrLoad that actually loaded bumps it, and
-    // stamping the pre-load value would make the next call redo the whole
-    // lookup for nothing.
+    // 0x140026630: the generation is re-read from the factory for the store.
     generation = efactory->_generation;
 
 }

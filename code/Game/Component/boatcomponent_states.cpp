@@ -167,18 +167,16 @@ void RequestTransition(StateMachine* sm, int desiredStateId) {
 // The node's slot 2 is Controller::PostEvent, called by name. The tree's old null tests
 // on the table and the slot it read are gone with the table read (a compiler vtable and
 // its slots are never null; known_port_issues row 352).
+// Row 352 (B7 RES): 0x140044fa7-0x140044fda and 0x1400452d4-0x140045311 test nothing --
+// the destination, its StateMachineComponent and the current node are read straight; the
+// tree's three null returns are gone.
 void PostEventToDestination(BoatComponent* boat, int eventId) {
     ComponentEntity* destEntity = boat->destination.Get();
-    if (!destEntity) return;
 
     StateMachineComponent* smc = destEntity->FindComponent<StateMachineComponent>();
-    if (!smc) {
-        return;
-    }
 
     StateMachine* sm   = &smc->stateMachine;
     ControllerComponent::Controller* node = smc->stateMachine.current;
-    if (!node) return;
     const int curIdx = smc->stateMachine.activeState;
     node->PostEvent(sm, curIdx, eventId);
 }
@@ -187,11 +185,11 @@ void PostEventToDestination(BoatComponent* boat, int eventId) {
 // (0x140045272.. and 0x140044c52..): mark the boat's own entity for removal and push it
 // onto the entity list's removal array at gw+0xE8 -> +0xd0/+0xd8.
 void DeleteBoatEntity(BoatComponent* boat) {
+    // 0x140045272-0x14004528c: the entity list is read before the entity's test, with
+    // no test of its own; the entity pointer is retail's one test (row 352, B7 RES).
     ComponentEntity* entIBP = boat->_entity.Get();
-    if (!entIBP) return;
-    if (!GameUpdateLoop::_singleton) return;
     EntityList* const entityList = GameUpdateLoop::_singleton->m_entityList;
-    if (!entityList) return;
+    if (!entIBP) return;
 
     if ((entIBP->_entityFlags >> 10) & 1) return;   // already going
     MarkEntityForRemoval(entIBP);

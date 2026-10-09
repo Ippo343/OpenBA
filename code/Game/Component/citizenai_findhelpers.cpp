@@ -45,10 +45,11 @@
 //   sections B/C pass), that's harmless register noise; the port mirrors the decompile but arg1 is
 //   don't-care.
 //
-// SELF-CONTAINED-BRICK type-ids (.rdata BaseTypeInfo first DWORD = runtime CRC type id; UNFILLED
-//   0xFFFFFFFF in standalone). Resolved self-contained via Object::GetTypeIdByName so the
-//   type-matched component scans actually match; every scan-result deref is additionally
-//   NULL-guarded. TypeNames recovered from each global's *_Register/_RegisterType [DATA] writer:
+// Type ids: each class's TypeId() (the cells below). Row 250 (B7 RES): the scans are
+//   retail's (no null-slot test; the entity scans are ComponentEntity::FindComponent<T>()),
+//   and the scan results are read as retail reads them: only the ef40 out-slot, the
+//   preferred candidate and e370 Phase C's StorageLocationComponent are tested
+//   (0x14008e707 `local_80 != 0`). TypeNames recovered from each global's *_Register/_RegisterType [DATA] writer:
 //     DAT_1401c7d28  -> ResidenceDescription_Register     -> "ResidenceDescription"      [2ac30]
 //     DAT_1401c7900  -> InteractComponent_RegisterType    -> "InteractComponent"         [ec70, e370]
 //     DWORD_1401c7cb8-> RawMaterialDescription_Register   -> "RawMaterialDescription"    [e370]
@@ -115,31 +116,16 @@ static inline uint32_t CompTypeId(const Object::Base* comp) {
     return comp->Type();   // slot 2
 }
 
-// Scan an entity's comp-list1 (entity+0x30 array, entity+0x38 count) for a component whose
-// GetTypeId()==tid, IsDerivedFrom-confirm, return it (or null). CheckPtr each slot.
-static Component* ScanCompList1(ComponentEntity* entity, uint32_t tid) {
-    int n = entity->_components._size;
-    Object::InternalPtr<Component>* arr = entity->_components._data;
-    for (int i = 0; i < n; ++i) {
-        Component* comp = arr[i].Get();
-        if (comp && CompTypeId(comp) == tid) {
-            Component* obj = arr[i].Get();
-            if (obj && Object::IsDerivedFromNullSafe(obj, tid)) return obj;
-            return nullptr;
-        }
-    }
-    return nullptr;
-}
-
 // Scan a comp-list2 (base+0x28 array, base+0x30 count) — the description/sub-component list of
-// a slot. Entries are raw component pointers (no CheckPtr in the original). Return matching or null.
+// a slot. Entries are raw pointers, `[[entry]+0x10]` called with no test; the first type match
+// is narrowed with IsDerivedFrom and the scan stops (retail's inline loop in 0x14008e370).
 static Description* ScanCompList2(ComponentDescription* base, uint32_t tid) {
     int n = base->_subDescCount;
     Description** arr = base->_subDescs;
     for (int i = 0; i < n; ++i) {
         Description* comp = arr[i];
-        if (comp && CompTypeId(comp) == tid) {
-            if (Object::IsDerivedFromNullSafe(comp, tid))
+        if (CompTypeId(comp) == tid) {
+            if (comp->IsDerivedFrom(tid))
                 return comp;
             return nullptr;
         }
@@ -160,9 +146,10 @@ bool ResidenceCheck_2ac30(ResidenceComponent* self) {
     EnsureInit();
     Description* obj = self->_description;
     float cur = GameUpdateLoop::_singleton->m_weather->temperature;   // +0x130 -> +0x18
-    ResidenceDescription* desc = (obj && Object::IsDerivedFromNullSafe(obj, s_tid_ResidenceDescription))
+    // 0x14012ac5c-0x14012ac74: IsDerivedFrom, CMOVNZ over 0, [desc+0x28] with no test.
+    ResidenceDescription* desc = obj->IsDerivedFrom(s_tid_ResidenceDescription)
                                      ? static_cast<ResidenceDescription*>(obj) : nullptr;
-    float thresh = desc ? desc->_coldThreshold : 0.0f;
+    float thresh = desc->_coldThreshold;
     if (thresh <= cur) return true;
     return 0 < self->heatRemaining._ticks;
 }
@@ -245,8 +232,8 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
     do {
         ComponentEntity* cand = list->field_0x20._data[idx].Get();
 
-        // the scan's IsDerivedFrom(InteractComponent) result, typed
-        InteractComponent* interact = static_cast<InteractComponent*>(ScanCompList1(cand, s_tid_InteractComponent));
+        // the inline FindComponent<InteractComponent> (cell 0x1401c7900), wrapped in an IBP
+        InteractComponent* interact = cand->FindComponent<InteractComponent>();
 
         Vector3Slot vec;
         InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
@@ -259,7 +246,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
                 ComponentEntity* self_00 = list->field_0x20._data[idx].Get();
                 // 0x140008090 (was its CitizenComp_Entity_FindComponent_Storage forwarder)
                 ResidenceComponent* storComp = self_00->FindComponent<ResidenceComponent>();
-                bool ok = storComp ? ResidenceCheck_2ac30(storComp) : false;
+                bool ok = ResidenceCheck_2ac30(storComp);   // CheckPtr'd, no test
                 if (ok && (-1 < cost)) {
                     *found = cand;
                     param_4[0] = vec.v.x;
@@ -340,9 +327,9 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                     float vec[4] = {0, 0, 0, 0};
                     ::Object::InternalPtr<MarketLocationComponent> marketIBP[2];
                     ::Object::InternalPtr<MarketLocationComponent>* mp = CitizenAI_sub_78c0(cand, marketIBP);
-                    MarketLocationComponent* marketComp = mp ? mp->Get() : nullptr;
-                    // 0x14004edb0 (was its Pf_PickReachableCell_edb0 forwarder)
-                    int mcost = marketComp ? PickReachableCell(marketComp, param_3, vec) : -1;
+                    MarketLocationComponent* marketComp = mp->Get();
+                    // 0x14004edb0 (was its Pf_PickReachableCell_edb0 forwarder), no test
+                    int mcost = PickReachableCell(marketComp, param_3, vec);
                     if ((-1 < mcost) && (mcost < best)) {
                         *found = cand;
                         param_5[0] = vec[0];
@@ -375,39 +362,31 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                     Description* rawMat = ScanCompList2(
                         slot, s_tid_RawMaterialDesc);
 
-                    // StorageLocationComponent on the candidate entity (comp-list1)
-                    Component* storComp = ScanCompList1(cand, s_tid_StorageLocationComp);
+                    // StorageLocationComponent on the candidate entity: retail's ONE test of a
+                    // scan result in this phase (0x14008e707, `local_80 != 0`).
+                    Component* storComp = cand->FindComponent<StorageLocationComponent>();
 
                     if (storComp != nullptr) {
                         Component* storC = storComp;
-                        // mask from StorageLocationDescription sub-object at storC+0x18, +0x20
+                        // mask from StorageLocationDescription sub-object at storC+0x18, +0x20:
+                        // IsDerivedFrom, CMOVNZ over 0, [derived+0x20] with no test.
                         Description* sub = storC->_description;
-                        StorageLocationDescription* derived = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_StorageLocationDesc))
+                        StorageLocationDescription* derived = sub->IsDerivedFrom(s_tid_StorageLocationDesc)
                                                                   ? static_cast<StorageLocationDescription*>(sub) : nullptr;
-                        uint32_t mask = derived ? derived->_locationType : 0;
+                        uint32_t mask = derived->_locationType;
                         if (mask == 0) {
-                            // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
+                            // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder); +0x3c
+                            // read with no test. (The tree's scoped fallback scan is gone.)
                             StorageComponent* s = storC->_entity->FindComponent<StorageComponent>();
-                            // [M-D SCOPED FALLBACK] the registered 6270 port's typeid is dead
-                            // .rdata (0x1401c7e78 unregistered) -> never matches in standalone;
-                            // self-contained scan of the owning entity instead (do NOT fill the
-                            // shared global). Same lesson as GrowthComponent +0x30.
-                            if (s == nullptr) {
-                                static uint32_t s_tidStorageComp = 0;
-                                if (s_tidStorageComp == 0)
-                                    s_tidStorageComp = StorageComponent::TypeId();
-                                s = static_cast<StorageComponent*>(
-                                    ScanCompList1(storC->_entity.Get(), s_tidStorageComp));
-                            }
-                            mask = s ? s->rawMaterialFlags : 0;
+                            mask = s->rawMaterialFlags;
                         }
-                        uint32_t radiusFlags = rawMat ? static_cast<RawMaterialDescription*>(rawMat)->_flags : 0;
+                        uint32_t radiusFlags = static_cast<RawMaterialDescription*>(rawMat)->_flags;   // [rawMat+0x5c], no test
                         if ((radiusFlags & mask) != 0) {
                             float vec[4] = {0, 0, 0, 0};
                             // 2nd StorageLocationComponent scan over the entity (cost source)
-                            Component* costComp = ScanCompList1(cand, s_tid_StorageLocationComp);
-                            // 0x14012d5d0 (was its Pf_FindBestAdjacentCell_d5d0 forwarder)
-                            int dcost = costComp ? FindBestAdjacentCell(costComp, param_3, vec) : -1;
+                            Component* costComp = cand->FindComponent<StorageLocationComponent>();
+                            // 0x14012d5d0 (was its Pf_FindBestAdjacentCell_d5d0 forwarder), no test
+                            int dcost = FindBestAdjacentCell(costComp, param_3, vec);
                             if ((-1 < dcost) && (dcost < best)) {
                                 param_5[0] = vec[0];
                                 param_5[1] = vec[1];
@@ -431,13 +410,12 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
             ComponentEntity* cand = list->field_0x20._data[i].Get();
 
             // ResidenceComponent on the entity (comp-list1 at cand+0x30 / +0x38)
-            ResidenceComponent* resComp = static_cast<ResidenceComponent*>(
-                ScanCompList1(cand, s_tid_ResidenceComponent));
+            ResidenceComponent* resComp = cand->FindComponent<ResidenceComponent>();
             uint64_t occ = CitizenAI_helper_70b0(resComp);
 
             if (static_cast<int>(occ) < 1) {
                 // InteractComponent on the entity -> world position
-                InteractComponent* interact = static_cast<InteractComponent*>(ScanCompList1(cand, s_tid_InteractComponent));
+                InteractComponent* interact = cand->FindComponent<InteractComponent>();
 
                 Vector3Slot vec;
                 InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20

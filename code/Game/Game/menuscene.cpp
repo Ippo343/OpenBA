@@ -90,9 +90,7 @@ PlayerController::PlayerController()
                  // last two are interpreted as half-FOV angles (in degrees) for
                  // sin/cos (Volume::Frustum::Frustum, Runtime 0x1800fa1e0).
                  const Math::Scalar nearZ(1.0f), farZ(100.0f), fovX(90.0f), fovY(90.0f);
-                 ::Frustum frustum = {};
-                 RtVolume_Frustum_Ctor_Perspective(&frustum, &nearZ, &farZ, &fovX, &fovY);
-                 return frustum;
+                 return ::Frustum(nearZ, farZ, fovX, fovY);   // 0x1800fa1e0
              }(),
              // ?Identity@Transform3@Math@@SA?AV12@XZ  retail 0x1800347f0.
              Math::Transform3::Identity(), true) {

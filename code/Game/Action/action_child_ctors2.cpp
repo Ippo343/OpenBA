@@ -24,6 +24,9 @@
 // r = RandFloat(world.random), walk the weights again returning the first index where
 // the running sum exceeds r*total. Otherwise (or no weights) returns 0.
 // (Returns ulonglong index; non-negative *(int*)(+0x50) returns that value.)
+// Row 443 (B7 RES): the ONE port of 0x140119470 (Dialog's fn_GetCurrentProductIndex is
+// gone, consumeproduceui.cpp calls this). 0x140119470 reads [[gw]+0xd8] and calls RandFloat
+// on it with no test; the tree's null-game / null-Random 0.0 draw is gone.
 // ============================================================
 uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self) {
     uint32_t sel = static_cast<uint32_t>(self->consumeResourceId);
@@ -36,10 +39,8 @@ uint64_t PickConsumeRecipe(const ConsumeProduceComponent* self) {
                 const float* w = self->consumeRates._data;
                 for (int k = 0; k < n; ++k) total += w[k];
             }
-            System::Random* random = GameUpdateLoop::_singleton
-                ? GameUpdateLoop::_singleton->m_random
-                : nullptr;
-            float r = random ? random->RandFloat() : 0.0f;
+            System::Random* random = GameUpdateLoop::_singleton->m_random;
+            float r = random->RandFloat();
             result = 0;
             if (0 < n) {
                 const float* w = self->consumeRates._data;

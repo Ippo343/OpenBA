@@ -44,27 +44,14 @@
 //       the FUN_1400a3300 call site 0x1400a342b: RCX = RDI = a3300's param_1 =
 //       the SAME startConfig object StartTown_SpawnEntities receives.
 //
-// Private 1:1 helper transcriptions (needed because the registered ports of
-// these exe addresses — Pf_StorageCanAccept_cd80 / Pf_ResourceLimitFlagTest_c560
-// / CitizenComp_StorageComponent_QueryCount / WorkBase_FindComponent_6270 — all
-// read their type-ids from raw .rdata addresses that resolve to NULL in
-// standalone, so their type match never fires there; these files are outside
-// this brick's disjoint-file contract, so the working-type-id copies live here):
-//   * 0x14012cd80 StorageComponent_impl_cd80 (accept check)
-//   * 0x14012c560 StorageComponent_helper_c560 (flag-mask gate)
-//   * 0x14012cf10 StorageComponent::QueryCount (volume-weighted total)
-//   * 0x140006270 Entity_FindComponent_Storage (component scan)
-//
-// Type-ids are obtained with the documented fallback: prefer the raw .rdata
-// global when resolvable AND non-zero, else ::Object::GetTypeIdByName (valid
-// after Object::Factory::Startup). The shared .rdata globals are never written.
-//
-// Standalone-inert deviations (documented; retail dereferences unguarded):
-//   * SpawnResources phase A / cd80 / c560 / QueryCount: a template with no
-//     RawMaterialDescription would make retail read *(NULL+0x5c/0x48) — every
-//     retail raw-material template has one; we skip/return-0 instead of faulting.
-//   * 7ff0: bails (with trace) when the entity has no StorageComponent or the
-//     component has no StorageDescription (retail would fault).
+// Row 98 (B7 RES): the private copies of 0x140006270 (FindComponent<StorageComponent>),
+// 0x14012cf10 (StorageComponent::QueryCount), 0x14012c560 and 0x14012cd80 that stood here
+// (their reason -- type ids read from raw .rdata cells resolving null -- went with the
+// cells) are gone: the bodies call ComponentEntity::FindComponent<T>() and StorageCanAdd
+// (0x14012cd80) by name. Every "standalone-inert" skip / bail went with them: retail reads
+// the town manager, the found components, the narrowed descriptions and the template's
+// RawMaterialDescription with no test (0x14012d234-0x14012d250, 0x140107ff0's finds and
+// +0x20 / +0x24 / +0x28 reads, 0x140091660's +0x5c read and its cd80 call, 0x1400a1f0a).
 //
 // Trace: BANISHED_STORAGE_TRACE=1 prints [StorageSeed] lines.
 
@@ -94,9 +81,7 @@
 // Type-ids: 0x1401c7cb8/7e78/7eb0/79e0 are these four classes' cells (Table 1).
 // ============================================================
 static uint32_t TidRawMaterialDescription() { return RawMaterialDescription::TypeId(); }
-static uint32_t TidStorageComponent()       { return StorageComponent::TypeId(); }
 static uint32_t TidStorageDescription()     { return StorageDescription::TypeId(); }
-static uint32_t TidMapComponent()           { return MapComponent::TypeId(); }
 
 // ============================================================
 // Exe helpers, called by name (all registered in standalone):
@@ -107,8 +92,7 @@ static uint32_t TidMapComponent()           { return MapComponent::TypeId(); }
 // ============================================================
 
 static inline CitizenBehavior* TownMgr() {
-    if (GameUpdateLoop::_singleton == nullptr) return nullptr;
-    return GameUpdateLoop::_singleton->m_citizenList;   // +0xf0
+    return GameUpdateLoop::_singleton->m_citizenList;   // [[0x1401c3dd8]+0xf0], no test
 }
 
 // Slot 2. Every caller passes an element of an entity's component array or a
@@ -125,7 +109,6 @@ static inline uint32_t GetTypeIdOf(const Object::Base* obj) {
 // TEMPLATE (a ComponentDescription: sub-descriptions at +0x28, count +0x30) — the
 // exact inline loop of Game_SpawnResources / cd80 / c560 / QueryCount.
 static RawMaterialDescription* FindRawMatDescOnTemplate(const ComponentDescription* tmpl) {
-    if (!tmpl) return nullptr;
     const uint32_t tid = TidRawMaterialDescription();
     int count = tmpl->_subDescCount;
     Description** arr = tmpl->_subDescs;
@@ -133,67 +116,10 @@ static RawMaterialDescription* FindRawMatDescOnTemplate(const ComponentDescripti
         Description* desc = arr[i];
         if (GetTypeIdOf(desc) == tid) {
             // Original: IsDerivedFrom-narrow, break either way.
-            return ::Object::IsDerivedFromNullSafe(desc, tid) ? static_cast<RawMaterialDescription*>(desc) : nullptr;
+            return desc->IsDerivedFrom(tid) ? static_cast<RawMaterialDescription*>(desc) : nullptr;
         }
     }
     return nullptr;
-}
-
-// Entity_FindComponent_Storage (FUN_140006270) equivalent: scan a live entity's
-// component-IBP array (+0x30 array / +0x38 count, CheckPtr each slot) for the
-// StorageComponent. Returns the component or null. (Not FindComponent<T>: this
-// copy keeps the tree's null-entity and null-slot skips; known_port_issues 14d.)
-static StorageComponent* FindStorageOnEntity(const ComponentEntity* entity) {
-    if (!entity) return nullptr;
-    const uint32_t tid = TidStorageComponent();
-    int count = entity->_components._size;
-    for (int i = 0; i < count; i++) {
-        Component* comp = entity->_components[i].Get();
-        if (!comp) continue;
-        if (GetTypeIdOf(comp) == tid) {
-            return (::Object::IsDerivedFromNullSafe(comp, tid)) ? static_cast<StorageComponent*>(comp) : nullptr;
-        }
-    }
-    return nullptr;
-}
-
-// StorageComponent::QueryCount (0x14012cf10) — VOLUME-weighted total:
-// sum over the items (+0x28, stride 0x10) of RawMaterialDescription::_weight *
-// the item's count. (The item's material template at item+0x00.)
-static int Seed_QueryCount(const StorageComponent* storageComp) {
-    int total = 0;
-    int slots = storageComp->storageSlots._size;
-    const StorageComponent::Item* arr = storageComp->storageSlots._data;
-    for (int i = 0; i < slots; i++) {
-        const StorageComponent::Item* slot = &arr[i];
-        RawMaterialDescription* desc = FindRawMatDescOnTemplate(slot->_resource);
-        // Standalone-inert guard: retail reads desc+0x48 unguarded.
-        int unitVol = desc ? desc->_weight : 0;
-        total += unitVol * slot->_count;
-    }
-    return total;
-}
-
-// StorageComponent_helper_c560 (0x14012c560): does the storage's material-flag
-// mask (+0x3c) intersect the material's RawMaterialDescription flags (+0x5c)?
-static int Seed_FlagTest_c560(const StorageComponent* storageComp, const ComponentDescription* matTempl) {
-    RawMaterialDescription* desc = FindRawMatDescOnTemplate(matTempl);
-    // Standalone-inert guard: retail reads *(NULL+0x5c) when no description.
-    if (!desc) return 0;
-    uint32_t compMask  = storageComp->rawMaterialFlags;
-    uint32_t descFlags = desc->_flags;
-    return ((compMask & descFlags) != 0) ? 1 : 0;
-}
-
-// StorageComponent_impl_cd80 (0x14012cd80): accept check —
-// c560 flag gate && (unitVolume * n + QueryCount) <= capacity(+0x38).
-static int Seed_CanAccept_cd80(const StorageComponent* storageComp, const ComponentDescription* matTempl, int n) {
-    if (!Seed_FlagTest_c560(storageComp, matTempl)) return 0;
-    int current = Seed_QueryCount(storageComp);
-    RawMaterialDescription* desc = FindRawMatDescOnTemplate(matTempl);
-    if (!desc) return 0;  // standalone-inert guard (retail reads *(NULL+0x48))
-    int unitVol = desc->_weight;
-    return (unitVol * n + current <= storageComp->capacity) ? 1 : 0;
 }
 
 // ============================================================
@@ -204,9 +130,6 @@ static int Seed_CanAccept_cd80(const StorageComponent* storageComp, const Compon
 // via FUN_140003110. Retail does NOT dedup and does NOT CheckPtr here.
 extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLocationComp) {
     CitizenBehavior* townMgr = TownMgr();
-    if (!townMgr || !storageLocationComp) {
-        return;
-    }
     ComponentEntity* entityRef = storageLocationComp->_entity.Get();   // the component's +0x10 entity
     int newCount = townMgr->field_0x00._size + 1;
     QwordArraySetSize(&townMgr->field_0x00, newCount, &entityRef);   // 0x140003110
@@ -222,21 +145,17 @@ extern "C" void TownRegistry_RegisterStorageLocation(const Component* storageLoc
 // param = any component whose +0x10 holds the building's entity IBP (retail
 // passes the BuildComponent; the StorageComponent itself works — same layout).
 extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntity) {
-    if (!componentWithEntity) return;
     const Component* p = componentWithEntity;
 
     ComponentEntity* entity = p->_entity.Get();
-    StorageComponent* sc = FindStorageOnEntity(entity);
-    if (!sc) {
-        return;
-    }
+    StorageComponent* sc = entity->FindComponent<StorageComponent>();   // 0x140006270
     CitizenBehavior* townMgr = TownMgr();
 
     // Credit existing (construction-delivery) slot contents to the town stock
     // table at townMgr+0x170 (the currentCount... +0xc field per 0x20-stride row,
     // index FUN_140088f90). No-op for a freshly spawned building (0 slots).
     int slots = sc->storageSlots._size;
-    if (slots > 0 && townMgr && townMgr->professionResources._data) {
+    if (slots > 0) {
         StorageComponent::Item* arr = sc->storageSlots._data;
         for (int i = 0; i < slots; i++) {
             StorageComponent::Item* slot = &arr[i];
@@ -250,36 +169,22 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
     }
 
     // StorageDescription (comp+0x18, IsDerivedFrom-narrowed).
+    // IsDerivedFrom on +0x18 (the member, called on the pointer as is), CMOVNZ over 0;
+    // +0x20 / +0x24 / +0x28 are read through the result with no test.
     Description* descObj = sc->_description;
     StorageDescription* desc = nullptr;
-    if (descObj && ::Object::IsDerivedFromNullSafe(descObj, TidStorageDescription()))
+    if (descObj->IsDerivedFrom(TidStorageDescription()))
         desc = static_cast<StorageDescription*>(descObj);
-    if (!desc) {
-        return;  // standalone-inert guard (retail reads *(NULL+0x20))
-    }
 
     // _areaBasedLimit (+0x20): multiply _volumeLimit by the MapComponent footprint.
     int tileArea = 1;
     if (desc->_flagA) {
         ComponentEntity* ent2 = sc->_entity.Get();
-        // Find the MapComponent (typeid 0x1401c79e0) on the entity.
-        MapComponent* mapComp = nullptr;
-        const uint32_t tidMap = TidMapComponent();
-        int compCount = ent2 ? ent2->_components._size : 0;
-        for (int i = 0; i < compCount; i++) {
-            Component* comp = ent2->_components[i].Get();
-            if (comp && GetTypeIdOf(comp) == tidMap) {
-                mapComp = (::Object::IsDerivedFromNullSafe(comp, tidMap)) ? static_cast<MapComponent*>(comp) : nullptr;
-                break;
-            }
-        }
-        // Original wraps in an IBP (fn_InternalBasePtr_Ctor) then CheckPtr's it.
-        ::Object::InternalPtr<MapComponent> mapIBP(mapComp);
-        if (mapIBP) {
-            tileArea = static_cast<int>(mapIBP->tileY1) *
-                       static_cast<int>(mapIBP->tileX1);
-        } else {
-        }
+        // The inline FindComponent<MapComponent> (cell 0x1401c79e0), wrapped in an IBP and
+        // read (+0x2c / +0x2e) with no test.
+        ::Object::InternalPtr<MapComponent> mapIBP(ent2->FindComponent<MapComponent>());
+        tileArea = static_cast<int>(mapIBP->tileY1) *
+                   static_cast<int>(mapIBP->tileX1);
     }
 
     int volumeLimit    = desc->_pickupValue;
@@ -294,7 +199,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(Component* componentWithEntit
 // 0x140091660 — Game_SpawnResources(townMgr, mask, count)
 // ============================================================
 extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint32_t mask, int count) {
-    if (!townMgr) return;
 
     // ---- Phase A: filter the raw-material template list (+0x110/+0x118) ----
     // ENDGAME B.3.2 step 2: retail's local_48/local_40 {data,count,cap} triple is
@@ -315,8 +219,7 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
     for (int t = 0; t < tmplCount; t++) {
         ComponentDescription* tmpl = tmplArr[t];
         RawMaterialDescription* desc = FindRawMatDescOnTemplate(tmpl);
-        // Standalone-inert guard: retail reads *(desc+0x5c) unguarded.
-        if (!desc) continue;
+        // 0x14009171a: [desc+0x5c] read with no test.
         if ((desc->_flags & mask) == 0)
             continue;
         // Faithful grow-append (8-byte entries; cap = n+1, tripled when growing
@@ -334,13 +237,12 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
             if (locCount < 1) break;
             for (int i = 0; i < locCount; i++) {
                 ComponentEntity* entityRef = townMgr->field_0x00._data[i].Get();
-                StorageComponent* storage = FindStorageOnEntity(entityRef);
-                // Original wraps the found component in an IBP before use.
-                ::Object::InternalPtr<StorageComponent> compIBP(storage);
+                // The inline FindComponent<StorageComponent> (cell 0x1401c7e78), wrapped in
+                // an IBP; cd80 is called on it with no test (0x1400918cf onward).
+                ::Object::InternalPtr<StorageComponent> compIBP(entityRef->FindComponent<StorageComponent>());
                 if (placed < count) {
                     ComponentDescription* tmpl = matched[placed % matchedCount];
-                    if (compIBP &&
-                        Seed_CanAccept_cd80(compIBP.Get(), tmpl, 1)) {
+                    if (StorageCanAdd(compIBP.Get(), tmpl, 1)) {   // 0x14012cd80
                         StorageAdd(compIBP.Get(), tmpl, 1);   // 0x14012d000
                         placed++;
                         progress = true;
@@ -358,9 +260,6 @@ extern "C" void TownStorage_SpawnResources_91660(CitizenBehavior* townMgr, uint3
 // ============================================================
 extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig) {
     CitizenBehavior* townMgr = TownMgr();
-    if (!startConfig || !townMgr) {
-        return;
-    }
     // The seven counts are MapGenerator +0xFC..+0x114.
     const MapGenerator* sc = startConfig;
     // Mask labels corrected 2026-07-19 (binary-verified flag values, see

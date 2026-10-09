@@ -160,11 +160,11 @@
 // [RSP+0x60] in a 0x760-byte frame whose next locals are its home slots, so the
 // object cannot exceed 0x700.
 //
-// HELD BY VALUE, BUILT THROUGH THE DOOR (B5-4): the exe keeps it on GameMain's
-// stack and calls the imported `??0Engine@0@QEAA@PEAX@Z`. The tree's GameMain
-// (code/Game/Game/game_main.cpp) holds raw storage and calls the same door, so
-// the class is CONCRETE with a PROTECTED defaulted constructor (not retail's:
-// that stays the registered DOOR `RtEngine_Engine_Ctor`, engine_lifecycle.cpp).
+// HELD BY VALUE: the exe keeps it on GameMain's stack and calls the imported
+// `??0Engine@0@QEAA@PEAX@Z`. ENDGAME B7 (CTOR, D5): the tree's GameMain
+// (code/Game/Game/game_main.cpp) holds a typed `Engine` local too; the ctor and
+// dtor below are retail's (engine_lifecycle.cpp), and the `RtEngine_Engine_Ctor`
+// / `_Dtor` doors that built raw storage are deleted.
 //
 // `?_singleton@Engine@1@0PEAV11@EA` (0x1801fe748) is the class static below; its
 // minted row is RETIRED (ENDGAME B.3.9 ENG W2). B.4 R-ENG: each subsystem field
@@ -184,9 +184,9 @@ namespace Engine {
 
 class Engine {
 public:
-    // ---- lifetime: DOORS (engine_lifecycle.cpp), declared, undefined -------
-    explicit Engine(void* platformHandle);                        // 0x1800dbf00  door RtEngine_Engine_Ctor
-    ~Engine();                                                    // 0x1800dbec0  door RtEngine_Engine_Dtor
+    // ---- lifetime (engine_lifecycle.cpp) ------------------------------------
+    explicit Engine(void* platformHandle);                        // 0x1800dbf00
+    ~Engine();                                                    // 0x1800dbec0
 
     // ---- PORTED --------------------------------------------------------------
     uint32_t Startup(const char* commandLine, uint32_t minRangeMB,
@@ -228,12 +228,6 @@ public:
     void PlatformShutdown();                                      // 0x1800a20f0
     Engine& operator=(const Engine& other);                       // 0x18000c7d0  (the 0x6f8 copy)
 
-protected:
-    // RULE B5-4: NOT retail's ctor (that is the door). The exe's GameMain holds
-    // the object by value in raw storage and constructs it through the door.
-    Engine() = default;
-
-public:
     // ---- the 0x6f8 bytes, evidence per field in the table at the top -------
     // The allocator subobject. NOT a pointer: `GetMemoryAllocator` returns
     // `this`, so `&engine->_allocator == (void*)engine`.
@@ -322,7 +316,3 @@ Audio::Device*         Ctor_AudioDevice(Audio::Device* self);                   
 Audio::Configuration*  Ctor_AudioConfiguration(Audio::Configuration* self);             // 0x1800ddeb0
 }  // namespace rtengine
 // ==== end B3R RT-Core ====
-// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
-extern "C" ::Engine::Engine* RtEngine_Engine_Ctor(::Engine::Engine* self, void* platformHandle);  // ??0Engine@0@QEAA@PEAX@Z
-extern "C" void RtEngine_Engine_Dtor(::Engine::Engine* self);  // ??1Engine@0@QEAA@XZ
-// ==== end B3R G-Game ====

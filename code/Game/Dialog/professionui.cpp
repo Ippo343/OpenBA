@@ -619,81 +619,44 @@ void ProfessionUI::OnUpdate(const System::Time& /*time*/) {
             }
         }
 
+        // Row 451 (B7 RES): 0x1400767e1-0x14007694a tests nothing in this walk -- the
+        // re-found bucket (its +0x8 read even on a miss), the entity, every component slot
+        // (`[[slot]+0x10]`), the WorkPlaceComponent (+0x50 read through the narrowed
+        // pointer), its +0x10 owner and the WorkComponent. The two scans are
+        // ComponentEntity::FindComponent<T>()'s shape (cells 0x1401c80e0 / 0x1401c8070).
         int totalWorkers = 0;
         for (int e = 0; e < entityCount; e++) {
             // Re-search BST each iteration (original does this to get fresh entity list)
             ProfessionBucket* bstNode2 = citizenMgr->field_0x100._root;
-            Object::InternalPtr<ComponentEntity>* freshEntityList = nullptr;
+            ProfessionBucket* hit = nullptr;
             while (bstNode2) {
                 Profession* nk = bstNode2->element.key;
                 if (profKey < nk) { bstNode2 = bstNode2->left; }
                 else if (profKey > nk) { bstNode2 = bstNode2->right; }
-                else { freshEntityList = bstNode2->element.entities._data; break; }
+                else { hit = bstNode2; break; }
             }
-            if (!freshEntityList) continue;
+            Object::InternalPtr<ComponentEntity>* freshEntityList = hit->element.entities._data;
 
             // CheckPtr on entity IBP (original does this)
             ComponentEntity* entityBP = freshEntityList[e].Get();
-            if (!entityBP) continue;
 
-            // Find WorkplaceComponent on entity
-            int compCount = entityBP->_components._size;
-            Object::InternalPtr<Component>* compArray = entityBP->_components._data;
-            WorkPlaceComponent* workplaceComp = nullptr;
+            // Wrap in IBP and CheckPtr (original does InternalBasePtr_Ctor + CheckPtr)
+            Object::InternalPtr<WorkPlaceComponent> wpcIBP(entityBP->FindComponent<WorkPlaceComponent>());
+            WorkPlaceComponent* workplaceComp = wpcIBP.Get();
 
-            for (int c = 0; c < compCount; c++) {
-                Component* comp = compArray[c].Get();
-                if (!comp) continue;
-                int typeId = comp->Type();
-                if (typeId == (int)WorkPlaceComponent::TypeId()) {
-                    if (::Object::IsDerivedFromNullSafe(comp, WorkPlaceComponent::TypeId())) {
-                        workplaceComp = static_cast<WorkPlaceComponent*>(comp);
-                    }
-                    break;
+            // Check if workplace is enabled (+0x50 != 0)
+            if (workplaceComp->isAccepting != 0) {
+                // The WorkComponent on the owner entity via +0x10
+                ComponentEntity* parentEntity = workplaceComp->_entity.Get();
+                Object::InternalPtr<WorkComponent> slcIBP(parentEntity->FindComponent<WorkComponent>());
+                WorkComponent* storageLocComp = slcIBP.Get();
+
+                int workerSlots = storageLocComp->workState;
+                if (workerSlots == 0) {
+                    workerSlots = storageLocComp->CalcMaxWorkers();   // 0x14012e5c0
+                    storageLocComp->workState = workerSlots;
                 }
-            }
-
-            if (workplaceComp) {
-                // Wrap in IBP and CheckPtr (original does InternalBasePtr_Ctor + CheckPtr)
-                Object::InternalPtr<WorkPlaceComponent> wpcIBP(workplaceComp);
-                workplaceComp = wpcIBP.Get();
-
-                // Check if workplace is enabled (+0x50 != 0)
-                if (workplaceComp && workplaceComp->isAccepting != 0) {
-                    // Find StorageLocationComponent on parent entity via +0x10
-                    ComponentEntity* parentEntity = workplaceComp->_entity.Get();
-                    if (!parentEntity) continue;
-                    int pCompCount = parentEntity->_components._size;
-                    Object::InternalPtr<Component>* pCompArray = parentEntity->_components._data;
-                    WorkComponent* storageLocComp = nullptr;
-
-                    for (int c = 0; c < pCompCount; c++) {
-                        Component* comp = pCompArray[c].Get();
-                        if (!comp) continue;
-                        int typeId = comp->Type();
-                        if (typeId == (int)WorkComponent::TypeId()) {
-                            if (::Object::IsDerivedFromNullSafe(comp, WorkComponent::TypeId())) {
-                                storageLocComp = static_cast<WorkComponent*>(comp);
-                            }
-                            break;
-                        }
-                    }
-
-                    if (storageLocComp) {
-                        // Wrap in IBP and CheckPtr (original does InternalBasePtr_Ctor + CheckPtr)
-                        Object::InternalPtr<WorkComponent> slcIBP(storageLocComp);
-                        storageLocComp = slcIBP.Get();
-
-                        if (storageLocComp) {
-                            int workerSlots = storageLocComp->workState;
-                            if (workerSlots == 0) {
-                                workerSlots = storageLocComp->CalcMaxWorkers();   // 0x14012e5c0
-                                storageLocComp->workState = workerSlots;
-                            }
-                            totalWorkers += workerSlots;
-                        }
-                    }
-                }
+                totalWorkers += storageLocComp->workState;
             }
         }
 

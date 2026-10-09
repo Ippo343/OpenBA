@@ -76,7 +76,7 @@
 #include "ui/StringTable.h"  // UI::StringTable::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "video/Device.h"   // ENDGAME B.3.9 SS2: Video::Device::_singleton
 #include "Game/exe_bodies.h"
-#include "graphics/Camera.h"            // Graphics::Camera, RtGraphics_Renderer_Ctor
+#include "graphics/Camera.h"            // Graphics::Camera, Graphics::Renderer
 #include "graphics/Animation.h"         // RtGraphics_AnimationManager_Ctor
 #include "picking/Scene.h"              // RtPicking_Scene_Ctor
 #include "ui/UserInterface.h"           // RtUi_UserInterface_Ctor
@@ -107,7 +107,7 @@ extern "C" void  StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLo
 // namespace-scope atomic).
 
 // B3R: the Runtime ctor/dtor doors Load used to resolve by name are called by name:
-// RtSystem_Random_CtorSeed (system/Value.h), RtPicking_Scene_Ctor (picking/Scene.h),
+// System::Random(uint32_t) (system/Value.h), RtPicking_Scene_Ctor (picking/Scene.h),
 // RtUi_UserInterface_Ctor (ui/UserInterface.h), RtGraphics_AnimationManager_Ctor
 // (graphics/Animation.h), RtSave_SaveLoad_Ctor / RtSave_SavedState_Dtor
 // (save/SaveLoad.h). The "[GUL::Load] resolves:" stderr line went with the cache.
@@ -487,13 +487,11 @@ static void WeatherSimulation_Construct(WeatherSimulation* w) {
     w->temperature = 0.0f;                    // the ctor's dword 0 (the same bits)
     w->field_0x2C = 0.0f;                     // +0x2C / +0x30: one qword store
     w->field_0x30 = 0.0f;
-    System::Random rng1;   // trivial class: no code until the ctor door below
+    // Retail's order: ctor, draw, ctor, draw (each ??0Random 0x1800c7f20; no dtor).
+    System::Random rng1;
+    const uint32_t seed1 = rng1.Rand();
     System::Random rng2;
-    uint32_t seed1 = 0, seed2 = 0;
-    RtSystem_Random_Ctor(&rng1);
-    seed1 = rng1.Rand();
-    RtSystem_Random_Ctor(&rng2);
-    seed2 = rng2.Rand();
+    const uint32_t seed2 = rng2.Rand();
     RtUtility_PerlinNoise_Ctor(&w->noise, 0.25f, 4.0f, (int)seed2, (int)seed1);
     w->field_0x44 = 0.0f;                     // +0x44 / +0x48: one qword store
     w->field_0x48 = 0.0f;
@@ -568,13 +566,10 @@ void PlayerController::UpdateCamera(float fovY, float nearZ, float farZ) {
         fovX = atanf(halfW / den) * kTwo * kRad2Deg;
     }
     const Math::Scalar nearS(nearZ), farS(farZ), fovXS(fovX), fovYS(fovY);
-    // Raw storage: a ::Frustum local would run its zeroing
-    // default ctor (the Vector4 planes) before the ctor door.
-    uint8_t frustum[0xC0];
-    void* fr = RtVolume_Frustum_Ctor_Perspective(reinterpret_cast<::Frustum*>(frustum),   // LEFT: audit DEFERRED (zeroing ctor): a ::Frustum local runs its implicit default ctor (Vector4 zeroes each of the six planes) before the perspective ctor 0x1800fa1e0; this body hands it an untouched stack block
-        &nearS, &farS, &fovXS, &fovYS);
-    camera.SetFrustum(
-        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // LEFT: audit DEFERRED (zeroing ctor): the Frustum lives in a raw 0xC0 stack block (a ::Frustum local would run its Vector4-zeroing default ctor first); the ctor door's result is held as void*
+    // ??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z 0x1800fa1e0 on a stack local
+    // (its Vector4 planes are zeroed inside that ctor, as retail's are).
+    const ::Frustum frustum(nearS, farS, fovXS, fovYS);
+    camera.SetFrustum(frustum);
 }
 
 // 0x1401025c0 — the PlayerToolManager ctor (+0x120, 0xb0). The two InternalPtrs
@@ -780,7 +775,7 @@ void GameUpdateLoop::Load() {
     // POINTERS (the profession BST is confirmed pointer-keyed), which ASLR reorders.
     {
         System::Random* mem = AllocSub<System::Random>(0x9c4, 4);
-        if (mem) RtSystem_Random_CtorSeed(mem, static_cast<uint32_t>(m_seed));
+        if (mem) ::new (mem) System::Random(static_cast<uint32_t>(m_seed));   // ??0Random@System@@QEAA@I@Z 0x1800c7ed0
         m_random = mem;
     }
 
@@ -796,10 +791,10 @@ void GameUpdateLoop::Load() {
         PlayerController* pc = nullptr;
         if (mem) {
             const Math::Scalar nearZ(2.0f), farZ(70.0f), fovX(60.0f), fovY(aspect * 60.0f);
-            uint8_t frustum[0xC0] = {};
-            ::Frustum* fr = reinterpret_cast<::Frustum*>(frustum);   // LEFT: audit DEFERRED (zeroing ctor): the 0xC0 stack block is zeroed as bytes (a ::Frustum local would run its Vector4-zeroing default ctor per plane instead)
-            RtVolume_Frustum_Ctor_Perspective(fr, &nearZ, &farZ, &fovX, &fovY);
-            pc = ::new (mem) PlayerController(*fr, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
+            // ??0Frustum 0x1800fa1e0 on a stack local; no byte-zeroing of the
+            // block first (retail has none: the ctor zeroes the planes itself).
+            const ::Frustum frustum(nearZ, farZ, fovX, fovY);
+            pc = ::new (mem) PlayerController(frustum, 0.0f, -40.0f, 25.0f);   // 0x1400985b0
         }
         m_playerController = pc;
     }
@@ -807,7 +802,7 @@ void GameUpdateLoop::Load() {
     // Step 7 — Renderer (+0x90, 0x50).
     {
         Graphics::Renderer* mem = AllocSub<Graphics::Renderer>(0x50, 4);
-        if (mem) RtGraphics_Renderer_Ctor(mem);   // Renderer() 0x180105180
+        if (mem) ::new (mem) Graphics::Renderer();   // Renderer() 0x180105180
         m_renderer = mem;
     }
 
@@ -908,7 +903,7 @@ void GameUpdateLoop::Load() {
     // Step 18 — Graphics::Scene (+0x60, 0x78).
     {
         Graphics::Scene* mem = AllocSub<Graphics::Scene>(0x78, 8);
-        if (mem) RtGraphics_Scene_Ctor(mem);
+        if (mem) ::new (mem) Graphics::Scene();   // Scene() 0x180102730
         m_graphicsScene = mem;
     }
 

@@ -148,8 +148,9 @@ using SceneObjectId = uint32_t;
 // So no `Collection::Array<Scene>`, no embedded `Scene` member, no `Scene` copy
 // anywhere. `??0Scene@Graphics@@QEAA@XZ` (0x180102730) and
 // `??1Scene@Graphics@@QEAA@XZ` (0x1801026c0) are real (scene.cpp); the exe's
-// raw-storage holders reach them through the RtGraphics_Scene_Ctor / _Dtor
-// forwarders.
+// heap holders placement-new / explicitly destroy it and the minimap holds a
+// stack local (ENDGAME B7 CTOR: the RtGraphics_Scene_Ctor / _Dtor forwarders
+// are deleted).
 //
 // RULE B5-7 applies here as much as to `Camera` and `Renderer`: the
 // `Engine::Loader` thread constructs the Scene (`gameupdateloop_load.cpp:1090`)
@@ -346,8 +347,3 @@ extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill); 
 }  // namespace rtgfxd
 // ==== end B3R W0-P0c ====
 
-// ==== B3R G-Game (R5): Runtime bodies code/Game calls by name ====
-// ---- graphics/scene.cpp
-extern "C" Graphics::Scene* RtGraphics_Scene_Ctor(Graphics::Scene* self);  // 0x180102730
-extern "C" void RtGraphics_Scene_Dtor(Graphics::Scene* self);  // 0x1801026c0: ~Scene()
-// ==== end B3R G-Game ====

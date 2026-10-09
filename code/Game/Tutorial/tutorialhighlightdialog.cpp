@@ -132,9 +132,11 @@ float ArrowBob(const TutorialHighlightDialog* self) {
 // glowGroup with a four-sided padding measured against the scaled screen, then
 // puts the arrow on the corner selected by the rotation field.
 // ---------------------------------------------------------------------------
+// Row 89 (B7 RES): 0x1400dfac0 tests nothing -- the target element (+0xe0), glow
+// (+0xc8), the Video::Device singleton, the UserInterface (+0x10), glowGroup (+0xc0)
+// and arrow (+0xd0) are each CheckPtr'd and read straight; the tree's null tests are gone.
 void TutorialHighlightDialog::PlaceOnElement() {
     UI::Element* elem = targetElement;
-    if (!elem) return;
 
     // Element layout rect: +0x68 left, +0x6C top, +0x70 right, +0x74 bottom.
     int left   = elem->_layoutLeft;
@@ -142,8 +144,7 @@ void TutorialHighlightDialog::PlaceOnElement() {
     int width  = elem->_layoutRight - left;
     int height = elem->_layoutBottom - top;
 
-    if (glow)
-        glow->SetWidthHeight(width + 0x1A, height + 0x1A);
+    glow->SetWidthHeight(width + 0x1A, height + 0x1A);
 
     int padLeft = left - 13;
     int padTop  = top  - 13;
@@ -154,26 +155,19 @@ void TutorialHighlightDialog::PlaceOnElement() {
     //   MOV RAX,[0x140151a80] ; MOV RCX,[RAX] ; MOVD XMM0,[RCX+4]
     // — one deref short lands on the holder and reads garbage dimensions, which
     // is exactly what mis-sizes and mis-places the glow ring.
-    int screenW = 0, screenH = 0;
-    if (const ::Video::Device* device = ::Video::Device::_singleton) {
-        screenW = device->backBufferWidth;
-        screenH = device->backBufferHeight;
-    }
-    float scale = 1.0f;
-    UI::UserInterface* ui = _ui;
-    if (ui) scale = ui->_uiScale;
+    const ::Video::Device* device = ::Video::Device::_singleton;   // 0x1400dfb74-0x1400dfb85
+    int screenW = device->backBufferWidth;
+    int screenH = device->backBufferHeight;
+    float scale = _ui->_uiScale;                                     // 0x1400dfb7e / 0x1400dfb8a
 
-    if (glowGroup) {
-        glowGroup->SetPadding(padLeft,
-                              (static_cast<int>(static_cast<float>(screenW) * scale) - padLeft) - width - 0x1A,
-                              padTop,
-                              (static_cast<int>(static_cast<float>(screenH) * scale) - padTop) - height - 0x1A);
-        glowGroup->SetNeedsSizeCalc();
-    }
+    glowGroup->SetPadding(padLeft,
+                          (static_cast<int>(static_cast<float>(screenW) * scale) - padLeft) - width - 0x1A,
+                          padTop,
+                          (static_cast<int>(static_cast<float>(screenH) * scale) - padTop) - height - 0x1A);
+    glowGroup->SetNeedsSizeCalc();
 
     // Arrow: corner + sign pair chosen by the rotation.
     UI::ImageElement* arrowElem = arrow;
-    if (!arrowElem) return;
 
     UI::Sprite sprite = arrowElem->GetSprite();
     int arrowW = sprite.Width();
@@ -336,9 +330,10 @@ void TutHLDiag(const ComponentEntity* entity, bool ok, const Rectangle& rect) {
 
 }  // namespace
 
+// Row 89 (B7 RES): 0x1400dfda0 tests nothing but the screen-rect result
+// (0x1400dfdfa); glowGroup (+0xc0) and arrow (+0xd0) are read straight.
 void TutorialHighlightDialog::PlaceOnEntity() {
-    if (glowGroup)
-        glowGroup->SetFlagsOnOff(1, 0);   // hide
+    glowGroup->SetFlagsOnOff(1, 0);   // hide
 
     // Volume::Rectangle rect; ok = EntityScreenRect(rect, &entityIBP, &rect)
     alignas(16) struct Rectangle rect;
@@ -360,10 +355,9 @@ void TutorialHighlightDialog::PlaceOnEntity() {
 
     UI::ImageElement* arrowElem = arrow;
     if (!ok) {
-        if (arrowElem) arrowElem->SetFlagsOnOff(1, 0);   // hide
+        arrowElem->SetFlagsOnOff(1, 0);   // hide
         return;
     }
-    if (!arrowElem) return;
     arrowElem->SetFlagsOnOff(0, 1);                  // show
 
     UI::Sprite sprite = arrowElem->GetSprite();

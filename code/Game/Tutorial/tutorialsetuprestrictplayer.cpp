@@ -45,66 +45,13 @@
 // ============================================================
 
 // ============================================================
-// TutRestrict_ResolveRefOrLoad — ExternalRef resolve with a load-on-miss tail
+// The two ExternalRefs resolve through ResolveExternalByName_Impl (0x14001b1d0),
+// ExternalFactory::Find alone (0x14001b215, the import 0x140152460): find-only, no
+// load. Row 83 (B7 RES): the tree's TutRestrict_ResolveRefOrLoad added a FindOrLoad of
+// the separator-normalised name on a miss, a load retail does not do; it is gone. If a
+// restricted tutorial step now resolves a null tool (PlayerToolManager +0x88), the
+// upstream finding is the preload that left the name out of the factory.
 // ============================================================
-// STANDALONE DEVIATION, deliberate. Retail resolves both of this class's
-// ExternalRefs with ResolveExternalByName_Impl (0x14001b1d0), which is
-// ExternalFactory::Find alone — find-only, no load. Retail can afford that
-// because by the time a tutorial step applies, UpdateLoop::LoadResources has
-// already preloaded the Game/GameResources.rsc dependency tree (which pulls in
-// Template\*.rsc) INTO the factory. Our preload leaves those entries in the
-// loop's m_resourceList instead, so Find() misses — see the same, already
-// documented gap in TutBase_ResolveToolbarRef (tutorial_base.cpp) and in
-// StartTown_ResolveTemplate (starttown.cpp).
-//
-// A miss here is not cosmetic: the resolved pointer is written to
-// PlayerController+0x88, and Toolbar_ShowGroup_Impl / SetEditMode (0x140102b60)
-// does
-//     if (pc[0x80] && groupId) groupId = pc[0x88];
-// so with a null there EVERY toolbar selection during a restricted tutorial step
-// resolves to "no tool" — the build tool silently does nothing. The same null
-// also skips the +0xa4/+0xa8/+0xac block below, and PlacementTool::Draw
-// (0x1400fdcc0) section 2 — the yellow "place it here" footprint the tutorial
-// text refers to — only draws while a placement tool is live. One null, both
-// symptoms.
-//
-// Retail would fault on neither (it never has the null), so this is not a guard
-// over a faithful crash: it is the standalone resource-environment gap. The real
-// fix is to make the preload populate the ExternalFactory the way retail's does.
-static void TutRestrict_ResolveRefOrLoad(NamedExternalRef* ref) {
-    if (!ref) return;
-    ResolveExternalByName_Impl(ref);            // faithful find-only path first
-    if (ref->resolved) return;                  // hit — nothing to do
-
-    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    if (!efactory) return;
-
-    const char* name = ref->name._data;
-    if (!name || !name[0]) return;
-
-    // Only the LOADER rejects backslashes; the factory's key comparison
-    // normalizes separators (measured — see tutorial_base.cpp).
-    char normalized[260];
-    size_t k = 0;
-    for (; name[k] && k < sizeof(normalized) - 1; ++k)
-        normalized[k] = (name[k] == '\\') ? '/' : name[k];
-    normalized[k] = 0;
-
-    ::Object::External* found = nullptr;
-    {
-        System::String   normStr(normalized);
-        System::Filename normFile(normStr);
-        found = efactory->FindOrLoadAs<::Object::External>(normFile);
-    }
-
-    ::Object::External* result = nullptr;
-    if (found) {
-        if (Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
-            result = found;
-        }
-    }
-    ref->resolved = result;
-}
 
 
 // ============================================================
@@ -153,7 +100,7 @@ bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
 
         // On load: resolve external by name
         if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-            TutRestrict_ResolveRefOrLoad(&toolRef);
+            ResolveExternalByName_Impl(&toolRef);
         }
     }
 
@@ -166,7 +113,7 @@ bool TutorialSetupRestrictPlayer::Serialize(IO::Stream& stream) {
 
         // On load: resolve external by name
         if (serializer._stream && static_cast<int>(serializer.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
-            TutRestrict_ResolveRefOrLoad(&cameraRef);
+            ResolveExternalByName_Impl(&cameraRef);
         }
     }
     return true;
@@ -185,12 +132,12 @@ void TutorialSetupRestrictPlayer::Destruct() { this->~TutorialSetupRestrictPlaye
 // copies the 0x18 reference to the stack and resolves the copy).
 static Object::External* ResolveCopy(const NamedExternalRef& ref) {
     NamedExternalRef local(ref);
-    TutRestrict_ResolveRefOrLoad(&local);
+    ResolveExternalByName_Impl(&local);
     return local.resolved;   // then the copy's ~String
 }
 
 // The resolved reference as the ComponentDescription it was validated as
-// (TutRestrict_ResolveRefOrLoad / 0x14001b1d0 keep only a ComponentDescription).
+// (0x14001b1d0 keeps only a ComponentDescription: IsDerivedFrom 0x1401c7318).
 static ComponentDescription* AsDescription(Object::External* e) {
     return static_cast<ComponentDescription*>(e);
 }
@@ -240,7 +187,7 @@ void TutorialSetupRestrictPlayer::Begin() {
 
     // Resolve toolRef on original (+0x38) and if it has a cached External ptr,
     // also set camera restriction bounds
-    TutRestrict_ResolveRefOrLoad(&toolRef);
+    ResolveExternalByName_Impl(&toolRef);
     if (toolRef.resolved != nullptr) {
         PlayerToolManager* playerCtrl2 = gameWorld->m_toolManager;
         playerCtrl2->field_0xA8 = absMin;
@@ -271,7 +218,7 @@ void TutorialSetupRestrictPlayer::End() {
 
     // Resolve toolRef on original (+0x38) and if it has a cached External,
     // clear the tool selection (SelectTool(nullptr), 0x140102b60)
-    TutRestrict_ResolveRefOrLoad(&toolRef);
+    ResolveExternalByName_Impl(&toolRef);
     if (toolRef.resolved != nullptr) {
         PlayerToolManager* playerCtrl2 = gameWorld->m_toolManager;
         playerCtrl2->SelectTool(nullptr);   // 0x140102b60 (the door was named SetEditMode)
