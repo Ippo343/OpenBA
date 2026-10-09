@@ -111,44 +111,6 @@ inline bool Built(const StatusBarUI* ui) {
     return ui->textSeason && ui->textPopulation && ui->numberYear && ui->numberWood;
 }
 
-
-
-// One-shot gate diagnostic — a silently-skipping gate is indistinguishable from
-// a zeroed dialog (same lesson as TownHallSA_Diag).
-static void DiagOnce(const StatusBarUI* self) {
-    static bool s_done = false;
-    if (s_done) return;
-    s_done = true;
-    const GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    const CitizenBehavior* town = game ? game->m_citizenList : nullptr;
-    fprintf(stderr, "[StatusBarUI] SA first OnUpdate: self=%p bound=%d built=%d ready=%d "
-            "town=%d citizens=%d stock=%p\n",
-            static_cast<const void*>(self), self ? (Bound(self) ? 1 : 0) : -1,
-            self ? (Built(self) ? 1 : 0) : -1,
-            Ready() ? 1 : 0, TownReady() ? 1 : 0,
-            town ? town->citizens._size : -1,
-            town ? static_cast<const void*>(town->professionResources._data) : nullptr);
-    fflush(stderr);
-}
-
-// Delayed one-shot stock dump — fires on the ~10th throttled refresh (~5s in),
-// after CitizenBehavior_Update's CountResources has re-tallied the stock,
-// so the log shows the values the dialog is actually displaying.
-static void DiagStockOnce(void) {
-    static int s_calls = 0;
-    if (s_calls < 0 || ++s_calls != 10) return;
-    s_calls = -1;
-    const GameUpdateLoop* game = GameUpdateLoop::_singleton;
-    const CitizenBehavior* town = game ? game->m_citizenList : nullptr;
-    const ProfessionResourceEntry* stock = town ? town->professionResources._data : nullptr;
-    if (!stock) return;
-    fprintf(stderr, "[StatusBarUI] SA stock slots (cur@+0):");
-    for (int i = 0; i < 0x15; i++)
-        fprintf(stderr, " %d:%d", i, stock[i].currentCount);
-    fprintf(stderr, "\n");
-    fflush(stderr);
-}
-
 }  // namespace statusbarui_sa
 
 // ============================================================
@@ -593,46 +555,14 @@ void StatusBarUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
 //   idx7 (+0x38) = 0x1400798d0  full stats refresh      -> StatusBarUI_Startup
 //   idx9 (+0x48) = 0x14007a3a0  status-icon click       -> StatusBarUI_OnRemove
 //
-// The utility DialogInstance uses the same ToolUI child-dialog vtable as the
-// entity-info dialogs (toolbardialog.cpp Toolbar_Utility_Impl), whose SA
-// framework dispatches ONLY controller slot idx8 (+0x40) per frame — so, like
-// the TownHallUI promotion, the self-heal build + a throttled refresh run from
-// idx8, with idx4/idx5/idx7 also wired for any direct framework dispatch.
+// Slot 5 is dispatched by DialogInstance::OnOpened when the dialog is added
+// (UserInterface::AddDialog), slot 7 by DialogInstance::ComputeLayout from
+// UserInterface::Update's per-frame layout pass: the retail refresh.
 //
 // Data sources (all live after the town-registry passes in starttown.cpp):
 // town citizen list townMgr+0xa0/+0xa8 (population/status/hearts/stars),
 // resource stock townMgr+0x170, game clock gw+0x128, weather gw+0x130, and
 // the town name String at gw+0x28 (title parameter).
-
-
-// [4] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StatusBarUI::OnCreated() {
-    StatusBarUI::OnOpened();
-}
-
-
-
-// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
-void StatusBarUI::OnUpdate(const System::Time& /*time*/) {
-    statusbarui_sa::DiagOnce(this);
-    if (!statusbarui_sa::Bound(this) || !statusbarui_sa::Ready() || !statusbarui_sa::TownReady()) return;
-    if (!statusbarui_sa::Built(this)) {
-        StatusBarUI::OnOpened();
-        if (statusbarui_sa::Built(this)) {
-            fprintf(stderr, "[StatusBarUI] SA build OK — elements bound, first refresh\n");
-            fflush(stderr);
-        } else {
-            return;
-        }
-        StatusBarUI::OnUpdateLayout();
-        return;
-    }
-    // +0x104 (a gap in retail) as a throttle counter.
-    if (refreshThrottle++ % 30 == 0) {
-        StatusBarUI::OnUpdateLayout();
-        statusbarui_sa::DiagStockOnce();
-    }
-}
 
 
 // create 0x1400140e0: MemAlloc(0x1d0, 8), then the ctor (DialogController ->

@@ -7,11 +7,11 @@
 //   create 0x1400140e0: MemAlloc(0x1d0, 8), ??0DialogController, stamp, fields.
 //   [0] 0x140014130 scalar deleting dtor (~StatusBarUI + MemFree on &1)
 //   [1] TypeName  [2] Type  (DECLARE_EXE_TYPE)
-//   [4] retail inherits the base; the tree overrides it (STANDALONE DEVIATION)
+//   [4] 0x14003a984  JMP [0x140151770]: DialogController's (inherited)
 //   [5] 0x14007a3d0  OnOpened
 //   [6] 0x14007a3c0  RET 0
 //   [7] 0x1400798d0  OnUpdateLayout
-//   [8] retail inherits the base; the tree overrides it (STANDALONE DEVIATION)
+//   [8] 0x14003a96c  JMP [0x1401515f8]: DialogController's (inherited)
 //   [9] 0x14007a3a0  OnElementEvent
 //   every other slot is UI::DialogController's (inherited, not declared).
 // ============================================================================
@@ -36,13 +36,12 @@ public:
     // Retail frees the icon arrays at +0x138, +0x128, +0x118, +0x108: the four
     // Array members' dtors, in that order.
     ~StatusBarUI() override = default;                            // [0] 0x140014130
-    // [4] STANDALONE DEVIATION: retail inherits DialogController::OnCreated (RET); the tree drives this panel from here.
-    void OnCreated() override;
+    // [4] inherited: DialogController::OnCreated (table slot 0x14003a984 jumps to the import)
     void OnOpened() override;   // [5] 0x14007a3d0
     void OnClosed() override {}   // [6] 0x14007a3c0  RET 0 in retail
     void OnUpdateLayout() override;   // [7] 0x1400798d0
-    // [8] STANDALONE DEVIATION: retail inherits DialogController::OnUpdate (RET); the tree drives this panel's per-frame refresh here.
-    void OnUpdate(const System::Time& time) override;
+    // [8] inherited: DialogController::OnUpdate (table slot 0x14003a96c jumps to the import);
+    // the refresh is slot 7, which UserInterface::Update's layout pass dispatches every frame
     void OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
                         int32_t c, int32_t d, int32_t e, void* userData) override;   // [9] 0x14007a3a0
 
@@ -66,8 +65,8 @@ public:
     UI::NumberElement* numberTextile = nullptr;       // +0xA8 [10]
     UI::NumberElement* numberCustom[10] = {};         // +0xB0..+0xF8 "numberCustom0".."9": [11..20]
     uint32_t statusCitizenIndex = 0;  // +0x100 the next-citizen-with-status cycle (0x14007a120)
-    // +0x104: a gap in retail; the tree's OnUpdate uses it as its refresh throttle.
-    uint32_t refreshThrottle = 0;
+    // +0x104: a gap in retail (nothing reads or writes it).
+    uint32_t _gap104 = 0;
     // +0x108 / +0x128: the hearts and stars icon groups (Dialog/RatingGroup.h, Init
     // 0x14006abf0): each the "whole" and the "half" icon of every child of the
     // group. ~StatusBarUI 0x140014130 frees +0x138, +0x128, +0x118, +0x108.
@@ -130,7 +129,7 @@ static_assert(offsetof(StatusBarUI, numberTemperature) == 0x50, "numberTemperatu
 static_assert(offsetof(StatusBarUI, numberWood) == 0x58, "numberWood @ 0x58");
 static_assert(offsetof(StatusBarUI, numberTextile) == 0xA8, "numberTextile @ 0xA8");
 static_assert(offsetof(StatusBarUI, numberCustom) == 0xB0, "numberCustom @ 0xB0");
-static_assert(offsetof(StatusBarUI, refreshThrottle) == 0x104, "refreshThrottle @ 0x104");
+static_assert(offsetof(StatusBarUI, _gap104) == 0x104, "the +0x104 gap");
 static_assert(offsetof(StatusBarUI, hearts) == 0x108, "hearts @ 0x108 (0x1400798d0)");
 static_assert(offsetof(StatusBarUI, stars) == 0x128, "stars @ 0x128 (0x1400798d0)");
 static_assert(offsetof(StatusBarUI, imageStatusHome) == 0x148, "imageStatusHome @ 0x148");
