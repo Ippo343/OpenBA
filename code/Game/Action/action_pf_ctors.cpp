@@ -150,6 +150,9 @@ int InteractNodeCount(const InteractComponent* self, int kind) {
     // standalone. The real game always resolves it; guard so the seed read can't deref
     // null+0x30 (the counter simply contributes 0). Surfaced via the BANISHED_FORCE_WORK
     // harness (Leisure/Work anchor a citizen on an inert workplace building's position comp).
+    // B6 (14d G51): retail has no test (0x1401230a6 CMOVNZ R8,RBX over R8 = 0, then
+    // 0x1401230ad MOV EBP,[R8+RAX*8]); KEPT under D4(a) because the comment names the
+    // BANISHED_FORCE_WORK harness route.
     int total = interact ? (&interact->_useNodes)[kind].count : 0;
     for (int i = 0; i < self->useLocations._size; ++i) {
         total = total + InteractNodeCount(self->useLocations[i].Get(), kind);
