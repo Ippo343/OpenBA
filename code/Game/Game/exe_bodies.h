@@ -147,6 +147,8 @@ namespace IO { class Serializer; }
 extern "C" void Reimpl_Array_Serialize_Stride20(IO::Serializer* serializer, uint32_t count, MenuSceneMesh* meshes);  // 0x14001bbf0
 extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bcc0
 extern "C" void Reimpl_Array_Serialize_External_Particle(IO::Serializer* serializer, int count, void* arrayBase);  // 0x14001bff0
+extern "C" void Reimpl_Array_Serialize_External_EdgeMesh(IO::Serializer* serializer, int count, void* arrayBase);  // 0x140007580
+extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(IO::Serializer* serializer, int count, void* arrayBase);  // 0x140020150
 
 // ---- serialize_externals.cpp
 // ExternalPtr<T>::Serialize, one retail instantiation each (ICF serves several T

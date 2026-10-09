@@ -34,6 +34,8 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "graphics/GraphicsMesh.h"   // ENDGAME B.3.9 TR: GraphicsMesh::TypeId()
 #include "graphics/Particle.h"       // ENDGAME B.3.9 TR: Particle::TypeId()
+#include "graphics/Mesh.h"           // B7 LX2: Graphics::EdgeMesh::TypeId()
+#include "graphics/Material.h"       // B7 LX2: Graphics::MaterialInstance
 #include "collection/Collection.h"   // Collection::Array / ExplicitSpec (Ptr8ZeroArray)
 namespace rtcoll { extern const ArraySpec kSpec_PtrZero; }   // 0x180008d60 (Entity/EntityList.h)
 #include "system/Filename.h"
@@ -411,6 +413,24 @@ extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
     IO::Serializer* serializer, int count, void* arrayBase) {
     ArraySerializeExternalGeneric(serializer, count, arrayBase,
                                   Graphics::GraphicsMesh::TypeId(), "Graphics::GraphicsMesh");
+}
+
+// B7 LX2 (row 942's gate): 0x140007580 -- the EdgeMesh exref array (typeInfo import
+// slot 0x140151330, ?_typeInfo@EdgeMesh@Graphics@@), HighlightDescription's group refs
+// (0x14004c9d0 calls it at 0x14004ca7d).
+extern "C" void Reimpl_Array_Serialize_External_EdgeMesh(
+    IO::Serializer* serializer, int count, void* arrayBase) {
+    ArraySerializeExternalGeneric(serializer, count, arrayBase,
+                                  Graphics::EdgeMesh::TypeId(), "Graphics::EdgeMesh");
+}
+
+// B7 LX2 (row 942's gate): 0x140020150 -- the MaterialInstance exref array (typeInfo
+// import slot 0x140151350), DecalDescription's materials (0x14011b980 calls it at
+// 0x14011b9fc).
+extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(
+    IO::Serializer* serializer, int count, void* arrayBase) {
+    ArraySerializeExternalGeneric(serializer, count, arrayBase,
+                                  Graphics::MaterialInstance::GetTypeInfo().typeId, "Graphics::MaterialInstance");
 }
 
 // #8 Particle exref array (typeInfo @ slot 0x140151420)
