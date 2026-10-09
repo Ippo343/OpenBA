@@ -203,7 +203,7 @@ void WorkPlaceComponent::Detach(Object::InternalPtr<CitizenComponent>* worker) {
         changed = new4 ^ old4;
     }
     if ((changed & 0xffff) != 0 && mesh->_entity != nullptr) {
-        NotifyEntityChanged(mesh->_entity.Get());   // 0x1400c3470
+        mesh->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 
@@ -359,15 +359,10 @@ void WorkPlaceComponent::SetAccepting(bool accepting) {
     } else {
         // (a) raise the closed indicator, keyed on the owner's state machine state.
         StateMachineComponent* sm = _entity->FindComponent<StateMachineComponent>();   // 0x140003ea0
-        // Partial-world guard: a standalone workplace can lack the state machine. The
-        // original derefs it unguarded; with none present treat the building as "normal"
-        // (the state the start-town / force-completed buildings are actually in).
-        // The pending state (+0x52), else the requested one (+0x50).
-        uint8_t state = 0;
-        if (sm) {
-            state = static_cast<uint8_t>(sm->stateMachine.pendingState);
-            if (sm->stateMachine.pendingState < 0) state = static_cast<uint8_t>(sm->stateMachine.currentInput);
-        }
+        // The pending state (+0x52), else the requested one (+0x50), read unguarded
+        // (0x14012fc2d-0x14012fc4a; B6 G4: the tree's "partial-world" null arm is gone).
+        uint8_t state = static_cast<uint8_t>(sm->stateMachine.pendingState);
+        if (sm->stateMachine.pendingState < 0) state = static_cast<uint8_t>(sm->stateMachine.currentInput);
         bool normalState = ((state & 0xf6) == 0) && (state != 9);
         mesh->SetFlag(normalState ? 0 : 1, '\x01');
     }
@@ -519,7 +514,7 @@ void WorkPlaceComponent::LeaveBuilderProfession() {
     // address).
     WorkComponent* workComp = _entity->FindComponent<WorkComponent>();
     if (workComp)
-        workComp->workState = WorkComponent_CalcMaxWorkers(workComp);
+        workComp->workState = workComp->CalcMaxWorkers();
 
     // The natural profession comes from the linked WorkPlaceDescription (+0x20). Retail
     // reads it through IsDerivedFrom(desc, DAT_1401c8118) — and if that check FAILS retail

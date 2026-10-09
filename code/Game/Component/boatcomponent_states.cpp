@@ -104,7 +104,7 @@ namespace {
 //   0x140003f60 FindComponent<ModelComponent>
 //   0x1400012d0 FindComponent<CharacterComponent>
 //   0x140003ea0 FindComponent<StateMachineComponent>
-//   0x1400a9660 StateMachine_TickReimpl       0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0
+//   0x1400a9660 StateMachine::Tick            0x1400c2ea0 ActHunt_MarkEntityRemoval_c2ea0
 //   the Math import slots (Vector3 ctors 0x140152a30 / 0x140151268, Length 0x140151290,
 //   Dot 0x140151298, Normalize 0x1401512c0 / 0x1401512b8, Heading 0x1401512d8,
 //   Transform::FromYawPitchOffset 0x140151288, Transform::operator= 0x140151280) and

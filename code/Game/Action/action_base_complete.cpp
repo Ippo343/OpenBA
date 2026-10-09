@@ -326,11 +326,10 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId) {
                 }
             }
         }
-        // LEFT: the tree reads the qword at ModelDescription +0x28 (_meshGroupCount /
-        // _meshGroupCap) as a pointer and dereferences it; retail 0x1401173b0 reads
-        // _meshGroups[0].meshes[0] (one more dereference). Recorded in known_port_issues
-        // entry 14; kept as the tree's (no behaviour change here).
-        meshPtr = **reinterpret_cast<Graphics::GraphicsMesh* const* const*>(&fenceComp->_meshGroupCount);   // LEFT: known_port_issues entry 14 (the tree's read differs from retail 0x1401173b0)
+        // Mesh 0 of mesh group 0: 0x140117526 MOV RAX,[RCX+0x20] (_meshGroups),
+        // 0x140117532 MOV RSI,[RAX+0x8] (group 0's meshes), 0x140117536 MOV RSI,[RSI].
+        // fenceComp is null on a miss (RCX = RDI = 0) and read unguarded, as retail.
+        meshPtr = fenceComp->_meshGroups[0].meshes[0];
 
         // locate the RawMaterialDescription for the UV scale
         const uint32_t tidRawMat = RawMaterialDescription::TypeId();

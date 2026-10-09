@@ -108,43 +108,8 @@ void MarkEntityForRemoval(ComponentEntity* entity) {
     entity->_entityFlags |= 0x400u;
 }
 
-// ============================================================
-// FUN_1400c3470 (0x1400c3470) — ComponentEntity::RefreshEntityFlags: recompute the entity's
-// flags (the OR of every component's low 16 flag bits) and, if the entity is in an
-// EntityList, stage it for the update tree when bit 4 changed and for the post-update tree
-// when bit 0x10 changed (0x140003110 appends).
-// HIGH-REUSE (called from many Component/Work files).
-// The tree has a second body of this address, the member ComponentEntity::RefreshEntityFlags
-// (Entity/componententity.cpp, block WORK-a), which skips null component slots and appends
-// through Collection::Array::SetSize; the C spelling's callers keep this one (no null skip,
-// the 0x140003110 port) until the two are reconciled.
-// ============================================================
-void NotifyEntityChanged(ComponentEntity* entity) {
-    uint32_t oldFlags = entity->_entityFlags;
-    int count = entity->_components._size;
-    entity->_entityFlags = 0;
-
-    if (count > 0) {
-        ::Object::InternalPtr<Component>* base = entity->_components._data;
-        for (int64_t i = 0; i < count; i++) {
-            Component* comp = base[i].Get();
-            entity->_entityFlags |= static_cast<uint32_t>(static_cast<uint16_t>(comp->_flags));
-        }
-    }
-
-    EntityList* owner = entity->_entityList;
-    if (owner != nullptr) {
-        uint32_t newFlags = entity->_entityFlags;
-        if (((oldFlags ^ newFlags) & 4) != 0) {
-            ComponentEntity* ibp = entity;
-            QwordArraySetSize(&owner->stagingUpdate, owner->stagingUpdate._size + 1, &ibp);
-        }
-        if (((oldFlags ^ newFlags) & 0x10) != 0) {
-            ComponentEntity* ibp = entity;
-            QwordArraySetSize(&owner->stagingPostUpdate, owner->stagingPostUpdate._size + 1, &ibp);
-        }
-    }
-}
+// (0x1400c3470 is ComponentEntity::RefreshEntityFlags, Entity/componententity.cpp: B6 COMP row 46 made
+// the member retail's one body and this file's second copy, NotifyEntityChanged, went with it.)
 
 // ============================================================
 // CompleteRoad_helper_c640 (0x14009c640) — RETIRED duplicate. The port is

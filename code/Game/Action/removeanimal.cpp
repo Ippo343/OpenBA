@@ -28,7 +28,6 @@
 #include "Entity/ComponentEntity.h"
 #include "Entity/EntityList.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
-#include "Component/FireDescription.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -47,8 +46,6 @@
 // call site below to a member call on the typed array, so its
 // resolved-pointer stand-in is gone.
 //
-// DAT_1401c4218 is FireDescription's cell (the variable name below lies — Table 1).
-//
 // ENDGAME B.3.9 CB: retail reads this record field ONLY in the class's own TypeName
 // slot (the type-id cell 0x1401c6080 by RemoveAnimal_Slot2 0x140022e50 and the
 // NAME field 0x1401c6088 (+8) by RemoveAnimal_Slot1 0x140022e60 -- both slots); DECLARE_EXE_TYPE answers that slot, so the tree's copy of it is gone.
@@ -66,11 +63,11 @@ void RemoveAnimal::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     _field20.InternalBasePtr::Serialize(ser);
 
-    // Type-check: retail tests ComponentEntity (cell 0x1401c5d70 at 0x1400ca8e1); the tree
-    // tests FireDescription (known_port_issues 14a row 52), kept.
+    // Type-check: a loaded ref that is not a ComponentEntity is cleared
+    // (0x1400ca8d8 TEST / 0x1400ca8e1 MOV EDX,[0x1401c5d70] / 0x1400ca8f1 store 0).
     ComponentEntity* entityRef = _field20.Get();
     if (entityRef != nullptr) {
-        if (!::Object::IsDerivedFromNullSafe(entityRef, FireDescription::TypeId())) {
+        if (!entityRef->IsDerivedFrom(ComponentEntity::TypeId())) {
             _field20 = nullptr;
         }
     }
@@ -134,7 +131,7 @@ void RemoveAnimal::CheckEntity() {
 
         if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
             if (animal->_entity != nullptr) {
-                NotifyEntityChanged(animal->_entity.Get());   // 0x1400c3470
+                animal->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
             }
         }
     }

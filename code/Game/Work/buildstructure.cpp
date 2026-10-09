@@ -268,7 +268,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
     // Calculate max builders if not yet done (WorkComponent +0x30)
     if (matDesc->workState == 0) {
-        matDesc->workState = WorkComponent_CalcMaxWorkers(matDesc);
+        matDesc->workState = matDesc->CalcMaxWorkers();
     }
 
     // If at max builders, verify this citizen is on the builder list
@@ -524,70 +524,6 @@ Profession** BuildStructure::GetTarget(Profession** retBuf) {
 }
 
 // ============================================================
-// Helper: FUN_1400f7100 — Check if citizen has a CompleteTask
-// matching this Work's priority.
-// ============================================================
-// Walks the citizen's state machine action stack, finds CompleteTask
-// actions, and checks if any match the Work's priority at +0x20.
-// Returns 1 if found (and stores task IBP in *outTask), 0 otherwise.
-
-// DWORD_1401c7158 = CitizenComponent (ENDGAME B.3.9 D5: by cell, not by the legacy
-// comment name "TypeInfo_CompleteTask" -- CompleteTask has its own cell, 0x1401c5e50).
-// known_port_issues row 221: retail's Validate calls Work::ValidateTask (0x1400f7100) at
-// 0x1400e4c67; this local copy tests the citizen against ComponentEntity and the actions
-// against CitizenComponent (typed only, LEFT).
-static bool CheckCitizenHasTask(BuildStructure* self, CitizenComponent** citizenIBP, CompleteTask** outTask) {
-    uint32_t taskTypeId = CitizenComponent::TypeId();
-
-    static int s_dormant = 0, s_kept = 0, s_dropped = 0;
-    struct Rep { static void go(uint32_t tid, int d, int k, int dr) {
-        fprintf(stderr, "[CITID/BuildValidate] tid=%u dormantSkips=%d kept=%d dropped=%d\n",
-                tid, d, k, dr);
-        fflush(stderr);
-    } };
-
-    // Check IBP is valid
-    if (*citizenIBP == nullptr) return false;
-
-    // DAT_1401c5d70 = ComponentEntity (ENDGAME B.3.9 D5: by cell).
-    bool isEntity = (*citizenIBP)->IsA(ComponentEntity::TypeId());
-    if (!isEntity) return false;
-
-    // The citizen's CharacterComponent (+0x278)
-    CharacterComponent* character = (*citizenIBP)->character.Get();
-
-    // Iterate action stack: +0x48 = array, +0x60 = the running index
-    int actionCount = character->actionStack.current + 1;  // original: 0x60 field + 1
-    if (actionCount <= 0) return false;
-
-    ::Object::InternalPtr<Action>* actionArray = character->actionStack.actions._data;
-    for (int i = 0; i < actionCount; i++) {
-        Action* action = actionArray[i].Get();
-
-        // Check if this action is a CompleteTask
-        bool isCompleteTask = Object::IsDerivedFromNullSafe(action, taskTypeId);
-        if (!isCompleteTask) continue;
-
-        // Found a CompleteTask — check priority match
-        CompleteTask* taskPtr = isCompleteTask ? static_cast<CompleteTask*>(action) : nullptr;
-
-        if (taskPtr != nullptr) {
-            // Check if task's index (+0x30) matches work's id (+0x20)
-            if (taskPtr->taskIndex == self->field_20) {
-                if (outTask) *outTask = taskPtr;
-                if (++s_kept <= 3 || s_kept % 500 == 0)
-                    Rep::go(taskTypeId, s_dormant, s_kept, s_dropped);
-                return true;
-            }
-        }
-    }
-
-    if (++s_dropped <= 3 || s_dropped % 500 == 0)
-        Rep::go(taskTypeId, s_dormant, s_kept, s_dropped);
-    return false;
-}
-
-// ============================================================
 // Validate (vtable +0x48, 0x1400E4BE0)
 // ============================================================
 // Walks the BST at +0x60 (citizens assigned to build slots).
@@ -596,8 +532,8 @@ static bool CheckCitizenHasTask(BuildStructure* self, CitizenComponent** citizen
 // After traversal, removes invalid citizens from the BST and
 // updates the slot array (+0x50) accordingly.
 //
-// Returns: 0 = some work remains (citizens validated/removed)
-//          1 = BST is empty (no assigned citizens)
+// Returns: 0 = some citizens were removed
+//          1 = none removed, or the BST is empty (0x1400e4eea MOV BL,1)
 
 int BuildStructure::Validate() {
 
@@ -626,7 +562,8 @@ int BuildStructure::Validate() {
             CitizenComponent* citizenKey = node->element;
             CompleteTask* taskResult = nullptr;
 
-            bool hasTask = CheckCitizenHasTask(this, &citizenKey, &taskResult);
+            // 0x1400e4c67 CALL 0x1400f7100: Work::ValidateTask(this, -, &key, &task).
+            bool hasTask = ValidateTask(nullptr, &citizenKey, &taskResult);
 
             if (!hasTask) {
                 // Citizen has no matching task — add to remove list
@@ -715,8 +652,8 @@ int BuildStructure::Validate() {
                         searchNode = searchNode->left;  // left at +0x10
                     } else {
                         if (rList[i] <= searchNode->element) {
-                            // Found — remove from BST
-                            WorkBST_BSTFindRemove_25520(&_citizens, searchNode);
+                            // Found — unlink THIS node (0x1400e4e7d CALL 0x14001a6e0)
+                            WorkBST_BSTRemove_a6e0(&_citizens, searchNode);
                             break;
                         }
                         searchNode = searchNode->right;  // right at +0x18
@@ -744,9 +681,11 @@ int BuildStructure::Validate() {
         }
     }
 
+    // Nothing removed: 0x1400e4e2c TEST R12D,R12D / JZ 0x1400e4ee2 -> MOV BL,1 (known_port_issues
+    // row 900: the tree returned 0 here; every caller ignores the result).
     System::MemoryAllocator::MemFree(slotList);
     System::MemoryAllocator::MemFree(removeList);
-    return 0;
+    return 1;
 
 done_empty:
     System::MemoryAllocator::MemFree(slotList);

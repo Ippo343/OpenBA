@@ -158,7 +158,7 @@ void RemoveNaturalResource::CheckEntity() {
     if (((flagsNew ^ flagsOld) & 0xFFFF) != 0) {
         ComponentEntity* parent = nrComp->_entity.Get();
         if (parent != nullptr) {
-            NotifyEntityChanged(nrComp->_entity.Get());   // 0x1400c3470
+            nrComp->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
 }

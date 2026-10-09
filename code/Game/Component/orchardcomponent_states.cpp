@@ -104,7 +104,7 @@ using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;
 // FindComponent<WorkComponent>, 0x140004680 FindComponent<MapComponent>, 0x14000a170
 // FindComponent<ClearAreaComponent>. Leaves, called by name (B3R):
 //   0x14012ec60 CitizenAI_WorkScheduler_Post   0x14012fc00 WorkPlaceComponent_SetAccepting
-//   0x14012eb50 WorkComponent_RegisterWorkSlot 0x1400a9660 StateMachine_TickReimpl
+//   0x14012eb50 WorkComponent_RegisterWorkSlot 0x1400a9660 StateMachine::Tick
 //   0x14012ead0 WorkComponent_CheckWorkSlot
 //     (FUN_14012ead0 — "does the work component currently hold a work slot?"; the companion
 //     of 0x14012eb50 (release). State 10 gates both its update and its seasonal re-post on it.)
@@ -133,11 +133,8 @@ void OrchardRequestState(StateMachine* machine, int wantId) {
     if (machine->activeState < 0) {
         System::Time timeBuf[2] = {};      // Time is 8 bytes; 16 is deliberate headroom
         RtSystem_Time_Ctor(&timeBuf[0], 0.0f);   // (see the Time-ctor 8-byte-clobber lesson)
-        // B3R: the door this replaced was typed (sm, void* time, char, char) and passed
-        // &timeBuf; the body StateMachine_TickReimpl took the Time BY VALUE (int64_t), so
-        // what it has always received here is the buffer's ADDRESS. That is kept bit for
-        // bit (no behaviour change in this step); retail passes the Time value (0).
-        machine->Tick(timeBuf, 0, 0);   // 0x1400a9660 (StateMachine_TickReimpl's member)
+        // The ADDRESS of the stack Time(0), as every retail caller passes it (B6 row 510).
+        machine->Tick(timeBuf, 0, 0);   // 0x1400a9660
     }
     ControllerComponent::Controller* chainHead = machine->current;
     if (!chainHead) return;

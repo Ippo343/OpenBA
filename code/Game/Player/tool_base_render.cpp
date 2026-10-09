@@ -470,7 +470,7 @@ void Impl_c4a0(HighlightComponent* hc) {
         uint32_t f1 = f0 & 0xfffffffb;
         hc->_flags = f1;
         if (((f1 ^ f0) & 0xffff) != 0 && hc->_entity != nullptr) {
-            NotifyEntityChanged(hc->_entity.Get());   // 0x1400c3470
+            hc->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
     // Release the built EdgeMesh (vtable slot 0).
@@ -611,7 +611,7 @@ add_prebuilt:
         uint32_t f1 = f0 | 4;
         hc->_flags = f1;
         if (((f1 ^ f0) & 0xffff) != 0 && hc->_entity != nullptr) {
-            NotifyEntityChanged(hc->_entity.Get());   // 0x1400c3470
+            hc->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
 }

@@ -137,7 +137,7 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t wor
 
 // ---- citizenaicomponent.cpp
 class StorageComponent;
-int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self);  // 0x14012cf10
+int CitizenComp_StorageComponent_QueryCount(const StorageComponent* self);  // forwarder to StorageComponent::QueryCount 0x14012cf10 (row 551; deleted once the Work callers move)
 int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0
 
 // ---- citizencomponent.cpp
@@ -205,7 +205,6 @@ extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140
 // ---- modelcomponent.cpp
 
 // ---- naturalresourcecomponent.cpp
-void NaturalResourceComponent_FindComponentByType(ComponentEntity* entity, void* outIBP);  // 0x140005200
 
 // ---- nomadcomponent.cpp
 

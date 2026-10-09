@@ -145,7 +145,7 @@ void WorkComponent::CancelWork() {
 // posted no work" sentinel, and 0x80000000 is the same sentinel for workFlags
 // (PostWork 0x14012ec60 tests `*(int*)(self+0x2c) == -0x80000000`).
 WorkComponent::WorkComponent()
-    : workId(-1), workFlags(0x80000000u), workState(0), _pad34{} {
+    : workId(-1), workFlags(kWorkFlagsNone), workState(0), _pad34{} {
     OrFlagsInCtor(0x3);
 }
 
@@ -187,13 +187,11 @@ void WorkComponent::Persist(IO::Stream& stream) {
         ser.Serialize(workState, nullptr);
     }
 
-    // Version >= 2: serialize workFlags. Retail calls the int door here
-    // (the flags are an int in the stream); the value is the same bits.
+    // Version >= 2: workFlags through Serialize(int&) on the field itself
+    // (0x14012e7ab LEA RDX,[RDI+0x2c]; CALL [0x140152ac8]; B6 row 19).
     version = ser.GetVersion();
     if (version >= 2) {
-        int flags = static_cast<int>(workFlags);
-        ser.Serialize(flags, nullptr);
-        workFlags = static_cast<uint32_t>(flags);
+        ser.Serialize(workFlags, nullptr);
     }
 }
 
@@ -256,13 +254,15 @@ void WorkComponent::Command(int) {}
 DEFINE_EXE_TYPE(WorkComponent, "Component")
 
 // 0x14012e5c0 — the starting worker count from the WorkDescription (+0x18) and the
-// footprint (0x140004680 FindComponent<MapComponent>). The null-description return
-// is the tree's (retail reads through the null).
+// footprint (0x140004680 FindComponent<MapComponent>). Read whole (B6 WORK, D12): the
+// description is IsDerivedFrom ? desc : null (0x14012e5e9 CMOVNZ) and +0x34 is read with
+// no test; the MapComponent is read with no test; a result above _defaultWorkers returns
+// _defaultWorkers as is (0x14012e668 CMP / JG 0x14012e67b), only a result at or below it
+// is clamped to >= 1 (0x14012e66d-0x14012e677).
 int WorkComponent::CalcMaxWorkers() const {
     Description* base = _description;
-    WorkDescription* jobType = Object::IsDerivedFromNullSafe(base, WorkDescription::TypeId())
+    WorkDescription* jobType = base->IsDerivedFrom(WorkDescription::TypeId())
         ? static_cast<WorkDescription*>(base) : nullptr;
-    if (!jobType) return 0;
     if (!jobType->_b34) {                        // _scaleWorkersWithSize
         return jobType->_i24;                    // _defaultWorkers
     }
@@ -272,7 +272,7 @@ int WorkComponent::CalcMaxWorkers() const {
     int width      = static_cast<int16_t>(build->tileX1);
     int height     = static_cast<int16_t>(build->tileY1);
     int result = (int)(((float)(width * height) / (float)maxArea) * (float)defaultWorkers + 1.0f);
-    if (result > defaultWorkers) result = defaultWorkers;
+    if (result > defaultWorkers) return defaultWorkers;
     if (result < 1)              result = 1;
     return result;
 }
