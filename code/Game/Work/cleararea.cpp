@@ -677,8 +677,8 @@ cleanup:
 
 int ClearArea::Validate() {
 
-    // Dynamic array for entities to remove from tree at +0x48
-    uintptr_t* removeArr = nullptr;
+    // Dynamic array for entities to remove from tree at +0x48 (the set's keys)
+    ComponentEntity** removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCap = 0;
 
@@ -695,9 +695,10 @@ int ClearArea::Validate() {
         while (node != nullptr) {
             // The node's citizen (+0x08)
             CitizenComponent* citizen = node->element.citizen.Get();
-            // The tree collects the citizen; retail 0x1400e5c25..0x1400e5c34 collects the node's
-            // key (the entity, +0x00): known_port_issues row 220.
-            uintptr_t entityIBP = reinterpret_cast<uintptr_t>(citizen);   // LEFT: known_port_issues row 220 (the removal list holds the citizen)
+            // What an invalid entry appends is the node's KEY, the entity (+0x00):
+            // 0x1400e5c25 MOV RAX,RBX (RBX = the node); 0x1400e5c31 MOV RAX,[RAX];
+            // 0x1400e5c34 MOV [R8],RAX.
+            ComponentEntity* entityKey = node->element.entity.Get();
 
             // Validate this entry
             uint8_t valid = ValidateTask(nullptr, &citizen, nullptr);
@@ -712,7 +713,7 @@ int ClearArea::Validate() {
                             newCap = newCount * 3;
                         }
                         removeCap = newCap;
-                        uintptr_t* newArr = static_cast<uintptr_t*>(System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8));
+                        ComponentEntity** newArr = static_cast<ComponentEntity**>(System::MemoryAllocator::MemAlloc((uint64_t)newCap * 8, 8));
 
                         // Copy existing entries
                         uint32_t copyStart = 0;
@@ -721,11 +722,11 @@ int ClearArea::Validate() {
                         }
                         for (uint32_t i = copyStart; i < newCount; i++) {
                             if (newArr != nullptr) {
-                                uintptr_t src = 0;
+                                ComponentEntity* src = nullptr;
                                 if (i < removeCount && removeArr != nullptr) {
                                     src = removeArr[i];
                                 } else {
-                                    src = entityIBP;
+                                    src = entityKey;
                                 }
                                 newArr[i] = src;
                             }
@@ -736,7 +737,7 @@ int ClearArea::Validate() {
                         }
                         removeArr = newArr;
                     } else {
-                        removeArr[removeCount] = entityIBP;
+                        removeArr[removeCount] = entityKey;
                     }
                     removeCount = newCount;
                 }
@@ -814,7 +815,9 @@ int ClearArea::Validate() {
         for (uint32_t i = 0; i < removeCount; i++) {
             WorkEntitySetNode* bstNode = _entities._root;
             while (bstNode != nullptr) {
-                uintptr_t nodeKey = reinterpret_cast<uintptr_t>(bstNode->element.entity.Get());   // LEFT: known_port_issues row 220 (compared with the collected citizens)
+                // 0x1400e5d72 / 0x1400e5d83: the collected entity against the node's key
+                // (unsigned compares: JC left, JNC found), then 0x14001ca60 removes the node.
+                ComponentEntity* nodeKey = bstNode->element.entity.Get();
                 if (removeArr[i] < nodeKey) {
                     bstNode = bstNode->left;
                 } else {
