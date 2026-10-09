@@ -194,9 +194,9 @@ bool CitizenDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_ibc, nullptr);
     {
         // ExternalRef<Profession> x3 at +0x20/+0x28/+0x30 (0x140018020)
-        Reimpl_ExternalPtr_Serialize_StringTable(&_professions[0], &ser);
-        Reimpl_ExternalPtr_Serialize_StringTable(&_professions[1], &ser);
-        Reimpl_ExternalPtr_Serialize_StringTable(&_professions[2], &ser);
+        Reimpl_ExternalPtr_Serialize_Profession(&_professions[0], &ser);
+        Reimpl_ExternalPtr_Serialize_Profession(&_professions[1], &ser);
+        Reimpl_ExternalPtr_Serialize_Profession(&_professions[2], &ser);
     }
     ser.Serialize(_f64, nullptr);
     ser.Serialize(_f68, nullptr);

@@ -81,27 +81,16 @@
 // worst possible place to guess.
 //
 // ---------------------------------------------------------------------------
-// 3. THE BST FIND (0x18002ace0) IS PORTED, AND IT IS SELF-CONTAINED
+// 3. THE BST FIND (0x18002ace0) IS THE SET'S `Find`
 // ---------------------------------------------------------------------------
-// Unlike the insert, the FIND has no callees at all: 50 instructions, two
-// inlined `strcmp`s and two pointer follows. It is ported here because
-// `IO::FileSystem::Startup` (the very next row in the boot queue,
-// runtime/src/io/filesystem_startup.cpp) calls it on THIS class's map, as does
-// `FileSystem::SetupDirectories` at three more sites. Registered by ADDRESS
-// only — it has no name in either build.
-//
-// Node layout, read out of the two functions that walk it:
-//     +0x00  char*  key      (a System::String's `data`, i.e. block+8)
-//     +0x18  Node*  left
-//     +0x20  Node*  right
-// and the map object's first qword is the root.
-//
-// The comparison retail inlines is a signed-char `strcmp`, reproduced literally
-// in `TreeStrCmp` below rather than delegated to `std::strcmp`: the C library's
-// return value is only specified by SIGN, and this code branches on `>= 0`, so
-// a libc that returned the difference of UNSIGNED chars would take the other
-// branch on any byte >= 0x80 — which is exactly what a path or a mod name can
-// contain.
+// B7 LX (D7a): `_map` is `Collection::Set<Pair<String,String>>`
+// (RtIo::SettingsSet, io/Persistence.h) and 0x18002ace0 -- 50 instructions,
+// two inlined SIGNED strcmps (`MOVSX` at 0x18002ad31 / 0x18002ad7f), the
+// asymmetric null arms (a null node key descends right, a null search key
+// returns the node), left +0x18 / right +0x20 -- is that template's `Find`
+// over its `char*` key, arm for arm. The free port `RtSystem_ConfigMap_Find`
+// and its `TreeStrCmp` (the same body as Collection's `AvlStrCmpSigned`) are
+// deleted; every caller calls `_map.Find(key._data)`.
 // ============================================================================
 
 #include <cstdint>
@@ -110,7 +99,7 @@
 
 #include "../../types/system/String.h"
 #include "../../types/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
-#include "../../types/io/Persistence.h"         // B.4 R-SYS: RtIo::SettingsMapNode, the map's node
+#include "../../types/io/Persistence.h"         // RtIo::SettingsSet, the map at +0x10
 // RtString_GetLength / RtSystem_String_SubString / RtString_ReleaseInline, the
 // three already-ported String primitives the two Parse bodies below need.
 // Spelled "./string.h" rather than "string.h": this file lives in the same
@@ -119,116 +108,13 @@
 #include "./string.h"
 #include <new>                 // placement new into the retail hidden return slot
 #include "../collection/avl_trees.h"            // B3R: rtavl::StringMapInsert
-#include "../../types/collection/Collection.h"  // B3R: rtsetclear::Clear, rtcoll::RtColl_ArrayDtorElem_180010ab0
+#include "../../types/collection/Collection.h"  // Collection::Array / Set (the two members)
 
 
 // ?_singleton@Configuration@System@@0PEAV12@EA  0x1801fc6f8 — the class static
 // (ENDGAME B.3.9 SYS, B39_RULES D7); RtSystemPortInit redirects the minted row
 // onto it, so the name door, the address door and this member are one cell.
 System::Configuration* System::Configuration::_singleton = nullptr;
-
-namespace {
-
-// ENDGAME B.3.1 step 2: the `??1String@System@@QEAA@XZ` door typedef is gone
-// with its two call sites — the locals in SetCommandLine are RAII objects now,
-// so their destructors ARE that call.
-// (B.4 Z LAST IO: the unused `GetCmdLineStrFn` typedef that stood here is gone.)
-
-// ---------------------------------------------------------------------------
-// The node the two tree walkers agree on. B.4 R-SYS: it is RtIo::SettingsMapNode
-// (io/Persistence.h), the one node every Set<Pair<String,String>> in the DLL
-// shares; this file's local copy of it is gone. The offsets this file reads,
-// with the retail instruction for each:
-// ---------------------------------------------------------------------------
-static_assert(offsetof(RtIo::SettingsMapNode, key)   == 0x00, "0x18002ace0: MOV R9,[R8]");
-// +0x08 pinned by GetCommandLineString at 0x1800c533b (`MOV RCX,[RAX+0x8]`)
-// immediately followed by `INC dword [RCX-0x4]` at 0x1800c534c -- a String
-// refcount bump, so the qword at +0x08 is a System::String's data.
-static_assert(offsetof(RtIo::SettingsMapNode, value) == 0x08, "0x1800c533b: MOV RCX,[RAX+0x8]");
-static_assert(offsetof(RtIo::SettingsMapNode, left)  == 0x18, "0x18002ad3f: MOV R8,[R8+0x18]");
-static_assert(offsetof(RtIo::SettingsMapNode, right) == 0x20, "0x18002ad8d: MOV R8,[R8+0x20]");
-
-// Retail's inlined comparison, written out instead of calling std::strcmp.
-// See §3 of the banner for why the sign convention is load-bearing.
-//
-// The disassembly's shape is preserved: a first-byte fast path, then a walk
-// that stops at the first mismatch OR at either terminator, then ONE signed
-// difference taken at the index the walk stopped on.
-//
-// THE INDEX IS THE WHOLE FUNCTION, and the first version of this got it wrong
-// by one (integrator, 2026-09-08). Retail increments RDX BEFORE the comparison
-// that decides whether to loop:
-//
-//   ad18:  TEST CL,CL                    ; a[i] == 0 ?      -> stop AT i
-//          CMP  byte [RAX],0             ; b[i] == 0 ?      -> stop AT i
-//          MOVZX ECX,[R11+RAX+1]         ; c = a[i+1]
-//          INC  RAX / INC RDX            ; i <- i+1   <<<<< BEFORE the compare
-//          CMP  CL,byte [RAX]            ; a[i] vs b[i]
-//          JZ   ad18                     ; equal -> loop
-//   ad31:  result = (signed)a[RDX] - (signed)b[RDX]
-//
-// so the loop EXITS ON A MISMATCH WITH RDX ALREADY POINTING AT IT. The earlier
-// version tested `a[i+1] == b[i+1]` in the while condition and incremented only
-// inside the body, so on the exiting (mismatching) comparison it never
-// incremented and returned `a[i] - b[i]` at an index where the two bytes were
-// known EQUAL. It therefore returned 0 for every pair of distinct strings that
-// share a first byte -- which is every key in a settings map, since they are all
-// prefixed by their section name.
-//
-// That made the find a "return the first node whose key starts with the same
-// letter" — see the caller below for what it cost.
-int TreeStrCmp(const char* a, const char* b) {
-    size_t i = 0;
-    if (a[0] == b[0]) {
-        while (a[i] != '\0' && b[i] != '\0') {
-            ++i;
-            if (a[i] != b[i]) break;
-        }
-    }
-    return static_cast<int>(static_cast<signed char>(a[i])) -
-           static_cast<int>(static_cast<signed char>(b[i]));
-}
-
-}  // namespace
-
-// ============================================================================
-// 0x18002ace0 — the config map's string-keyed find.  UNEXPORTED.
-// ============================================================================
-// Retail, structurally:
-//
-//   node = map->root
-//   while (node) {
-//       if (node->key == 0)            goto rightTest;      // 0x18002acfa
-//       if (wanted->data == 0)         { node = node->left;  continue; }
-//       if (TreeStrCmp(wanted->data, node->key) <  0) { node = node->left;  continue; }
-//     rightTest:
-//       if (wanted->data == 0)         return node;          // 0x18002ad4b
-//       if (node->key == 0)            { node = node->right; continue; }
-//       if (TreeStrCmp(node->key, wanted->data) >= 0) return node;
-//       node = node->right;
-//   }
-//   return nullptr;
-//
-// The two null-key arms are retail's and they are ASYMMETRIC on purpose: a null
-// SEARCH key returns the current node, a null NODE key descends. Both are kept.
-extern "C" RtIo::SettingsMapNode* RtSystem_ConfigMap_Find(
-        RtIo::SettingsMapNode* const* root, const System::String* wanted) {
-    RtIo::SettingsMapNode* node = *root;
-    while (node != nullptr) {
-        bool goRight = false;
-        if (node->key._data != nullptr) {
-            if (wanted->_data == nullptr) { node = node->left; continue; }
-            if (TreeStrCmp(wanted->_data, node->key._data) < 0) { node = node->left; continue; }
-        }
-        // rightTest
-        if (wanted->_data == nullptr) return node;
-        if (node->key._data == nullptr) goRight = true;
-        else if (TreeStrCmp(node->key._data, wanted->_data) >= 0) return node;
-        (void)goRight;
-        node = node->right;
-    }
-    return nullptr;
-}
 
 // ============================================================================
 // ENDGAME B.3.4b SYSTEM (4c) — the `System::Configuration` member BODIES.
@@ -243,7 +129,7 @@ extern "C" RtIo::SettingsMapNode* RtSystem_ConfigMap_Find(
 
 void System::Configuration::SetCommandLine(const System::String& cmd) {
 
-    RtIo::SettingsMap* map = &_map;
+    RtIo::SettingsSet* map = &_map;
 
     // ENDGAME B.3.4b: the B.3.1 step-2 bridge is gone from this body — `cmd` IS
     // the class now, because the parameter is. The POD-to-class conversion
@@ -283,11 +169,9 @@ void System::Configuration::SetCommandLine(const System::String& cmd) {
                     //
                     // 0x18002a090 is `rtavl::StringMapInsert`
                     // (runtime/src/collection/avl_trees.cpp), the
-                    // `Collection::Set<Pair<String,String>>::Insert` body. `map`
-                    // here is the map's {root, count} header (`self + 0x10`,
-                    // RtIo::SettingsMap), so it is the free body, called by
-                    // name (B3R), not a member.
-                    RtIo::SettingsMapNode* node = nullptr;
+                    // `Collection::Set<Pair<String,String>>` Map_Insert body,
+                    // typed on the Set (`self + 0x10`, RtIo::SettingsSet).
+                    RtIo::SettingsNode* node = nullptr;
                     rtavl::StringMapInsert(
                         map, &node,
                         &key._data, &val._data);
@@ -466,10 +350,10 @@ System::String System::Configuration::GetCommandLineString(
 
     // The find takes the MAP, not `this` — `configuration + 0x10`, whose first
     // qword is the root — which is why it is not a member of this class.
-    const RtIo::SettingsMapNode* node = RtSystem_ConfigMap_Find(&_map.root, &key);
+    const RtIo::SettingsNode* node = _map.Find(key._data);           // 0x18002ace0
 
     // 0x1800c533b: the found node's VALUE, and the temporary's reference.
-    char* temp = (node != nullptr) ? node->value._data : nullptr;
+    char* temp = (node != nullptr) ? node->element.value._data : nullptr;
     if (temp != nullptr) ++RtSystem::StringRefCount(temp);
 
     // 0x1800c537f: the slot is zeroed FIRST and unconditionally, then adopted.
@@ -534,18 +418,9 @@ System::String System::Configuration::GetCommandLineString(
 // and it is reproduced rather than tidied: "fixing" it would free a block
 // retail still considers live, which is strictly worse than the leak.
 System::Configuration::~Configuration() {
-    // NOT CONVERTED (ENDGAME B.3.2 step 2), both calls below: `self` is a raw
-    // `void*` — there is no `System::Configuration` type header in
-    // runtime/types declaring real `Collection::Set<Pair<String,String>>` /
-    // `Collection::Array<T>` members at +0x10 / +0x00 to call `.Clear()` or
-    // `.~Array()` on, so both stay the free bodies, called by name (B3R).
-    //
-    // 0x1800c518f -- the string->string map at +0x10: rtsetclear::Clear
-    // (0x18000f7d0).
-    rtsetclear::Clear(&_map);
-
-    // 0x1800c519d -- the tail call, on `this` itself:
-    // rtcoll::RtColl_ArrayDtorElem_180010ab0.
-    rtcoll::RtColl_ArrayDtorElem_180010ab0(static_cast<void*>(this));
-
+    // B7 LX (D7a): the body is empty. The two calls retail makes are the two
+    // members' destructors, which the compiler runs after this body in reverse
+    // declaration order -- `_map` (+0x10): ~Set == Clear, 0x1800c518f CALL
+    // 0x18000f7d0; then `_entries` (+0x00): ~Array<String>, 0x1800c519d JMP
+    // 0x180010ab0.
 }

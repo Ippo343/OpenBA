@@ -32,16 +32,18 @@ void TitleDescToolTipUI::OnCreated() {
     // IsDerivedFrom through the import slot 0x140151508 (TextElement) and CMOVNZ
     // (0x14007b785..0x14007b79d, 0x14007b7f8..0x14007b80e) ---
     UI::Element* foundTitle = _dialog->FindElement(System::String("textTitle")).Get();
-    UI::TextElement* titleElement = ::Object::IsDerivedFromNullSafe(foundTitle, UI::TextElement::TypeId())
+    // B7 LX row 993: the member, unguarded (MOV RCX,RBX / CALL [0x140152a98] with no
+    // null test at 0x14007b791, 0x14007b804, 0x14007b839).
+    UI::TextElement* titleElement = foundTitle->IsDerivedFrom(UI::TextElement::TypeId())
         ? static_cast<UI::TextElement*>(foundTitle) : nullptr;
     UI::Element* foundDesc = _dialog->FindElement(System::String("textDesc")).Get();
-    UI::TextElement* descElement = ::Object::IsDerivedFromNullSafe(foundDesc, UI::TextElement::TypeId())
+    UI::TextElement* descElement = foundDesc->IsDerivedFrom(UI::TextElement::TypeId())
         ? static_cast<UI::TextElement*>(foundDesc) : nullptr;
 
     // --- The data source, narrowed to UI::Element, and its user data (read
     // unguarded, as retail's GetUserData call) ---
     Object::Base* dataSource = _dataSource;
-    UI::Element* sourceElement = ::Object::IsDerivedFromNullSafe(dataSource, UI::Element::TypeId())
+    UI::Element* sourceElement = dataSource->IsDerivedFrom(UI::Element::TypeId())
         ? static_cast<UI::Element*>(dataSource) : nullptr;
     Object::Base* userData = sourceElement->GetUserData();
 

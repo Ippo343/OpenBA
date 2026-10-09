@@ -40,9 +40,9 @@ NomadDescription::NomadDescription()
 // [5] 0x14004ff20: stream order as retail.
 bool NomadDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_citizen, &ser);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_materialGender0, &ser);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_materialGender1, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_citizen, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_materialGender0, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_materialGender1, &ser);
     return true;
 }
 

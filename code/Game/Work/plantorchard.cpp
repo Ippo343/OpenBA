@@ -489,7 +489,7 @@ void PlantOrchard::Persist(IO::Stream& stream) {
     // `Serialize(int&)` scalar door, and called with four arguments.
     ser.Serialize(cellCountBuf[0], field_58._data, nullptr);   // 0x140151458 = the bool-array overload
 
-    Reimpl_ExternalPtr_Serialize_StringTable(&field_68, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&field_68, &ser);
 }   // ~Serializer
 
 

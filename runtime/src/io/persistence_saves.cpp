@@ -72,7 +72,7 @@
 #include "../../types/io/Persistence.h"
 #include "../../types/io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "../system/string.h"
-#include "../../types/collection/Collection.h"   // rtsetclear::Clear
+#include "../../types/collection/Collection.h"
 
 using RtIo::SaveGameInfo;
 using RtIo::SaveBlock;
@@ -80,9 +80,8 @@ using RtIo::SaveBlock;
 // B3R RT-IO: the three unexported DLL internals this file reached by address
 // are called by name: RtIo_PersistenceWorker_EnqueueDelete (0x1800b7390,
 // command 2), RtIo_PersistenceWorker_EnqueueLoad (0x1800b7460, command 1) --
-// both persistence_worker_win.cpp -- and rtsetclear::Clear (0x18000f7d0, the
-// settings-map dtor; ENDGAME B.3.2's reason for not using `Collection::Set<T>`
-// still holds: `SettingsMapNode`'s two fields are the old POD String).
+// both persistence_worker_win.cpp. The settings-map dtor 0x18000f7d0 is
+// `~Collection::Set<Pair<String,String>>` (B7 LX: `_settingsMap` is the Set).
 
 
 // Retail's own format string, read out of .rdata at 0x180155840.
@@ -240,7 +239,7 @@ Persistence::~Persistence() {
     // B.4 wave X (X7-RT): the body is empty. retail 0x1800b7fb0 is the three
     // member destructors in reverse declaration order -- ~_savePath (the
     // String release at 0x1800b7fc6), ~_worker (CALL 0x1800b7740 at
-    // 0x1800b8000), ~_settingsMap (JMP 0x18000f7d0 at 0x1800b8013) -- and the
+    // 0x1800b8000), ~_settingsMap (JMP 0x18000f7d0 at 0x1800b8013, ~Set == Clear) -- and the
     // compiler runs exactly those after this body.
 }
 

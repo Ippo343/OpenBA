@@ -465,7 +465,8 @@ static void wg_ResolveMaterial_fd10(NamedExternalRef* ref) {
         System::Filename fnbuf(ref->name);
         ::Object::External* obj = factory->FindAs<::Object::External>(fnbuf);
         ::Object::External* resolved = nullptr;
-        if (obj != nullptr && ::Object::IsDerivedFromNullSafe(obj, Graphics::MaterialInstance::TypeId()))
+        // Retail's own null test (0x14001fd69 TEST RSI,RSI), then the member (B7 LX row 993).
+        if (obj != nullptr && obj->IsDerivedFrom(Graphics::MaterialInstance::TypeId()))
             resolved = obj;
         ref->resolved = resolved;
         ref->generation = factory->_generation;

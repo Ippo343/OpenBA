@@ -84,7 +84,7 @@ void DropOffRawMaterial::Persist(IO::Stream& stream) {
     }
 
     // Serialize resource type ExternalPtr (+0x28)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_field28, &ser);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_field28, &ser);   // 0x140002340
 
     // Serialize flag (+0x20) and count (+0x24)
     ser.Serialize(_field20, nullptr);

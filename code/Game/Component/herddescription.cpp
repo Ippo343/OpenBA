@@ -44,7 +44,7 @@ HerdDescription::HerdDescription()
 // [5] 0x1401221e0: stream order as retail.
 bool HerdDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_animal, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_animal, &ser);
     ser.Serialize(_maxSize, nullptr);
     ser.Serialize(_minSize, nullptr);
     ser.Serialize(_grazeMinutes, nullptr);

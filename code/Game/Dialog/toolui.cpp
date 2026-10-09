@@ -56,8 +56,6 @@
 
 // code/Game/Object/factory_registration.cpp
 
-// Forward declaration — defined in entityui.cpp
-extern "C" bool EditTool_IsEditTool(Tool* tool);   // code/Game/Player/edittool.cpp
 
 // ============================================================
 // UIDescription::AddControllers (0x14012e100; the tree's UIDesc_AddControllers_Impl)
@@ -514,44 +512,12 @@ void ToolUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32
         _dialog->_ui->BringDialogToFront(&dialogRef);
         return;
     } else if (msg == 0x12 && id == 1) {
-        // Close button — close dialog and remove from entity tracking
-        // Before closing an ENTITY info panel, drop the selecting EditTool's stale
-        // dialog reference. Retail tears the tool down on close (EntityUI::Slot9 ->
-        // SetEditMode(0)); that slot is stubbed in standalone, so otherwise the
-        // EditTool keeps ticking on the now-freed dialog and faults next frame
-        // inside GetController. Clearing the tool's selection makes its tick
-        // early-out. Scoped to entity dialogs (this ToolUI's datasource is a
-        // ComponentEntity) so utility dialogs (map/help) that share this close path
-        // don't lose the user's active tool. Entity-ness established dialog-side +
-        // aliveness-gated before the IsDerivedFrom probe (see
-        // ToolUI_DialogHasEntityUI). On a dead entity the ref-drop is skipped and
-        // the dialog still closes.
-        if (GameUpdateLoop::_singleton != nullptr &&
-            ToolUI_DialogHasEntityUI(_dialog) && SA_DialogEntityAlive(this)) {
-            Object::Base* ds = _dataSource;
-            if (ds && ::Object::IsDerivedFromNullSafe(ds, ComponentEntity::TypeId())) {
-                PlayerToolManager* pc = GameUpdateLoop::_singleton->m_toolManager;
-                if (pc) {
-                    Tool* activeTool = pc->currentTool.Get();
-                    // ONLY an EditTool keeps a selected entity at +0x30. When a build
-                    // tool is armed instead, that offset is DragTool's endCell /
-                    // lastEndCell int pair, and cb40 would hand those two ints to the
-                    // component finder as an entity pointer (measured 2026-08-19),
-                    // while the two stores below would clobber the tool's drag state.
-                    // A build tool has no selection to clear, so skip the whole block.
-                    if (activeTool && EditTool_IsEditTool(activeTool)) {
-                        // Deselect like retail cc90 steps (1)+(2): clear the
-                        // selection highlight (reads the entity from the tool's
-                        // selection, so call it BEFORE nulling), then drop both the
-                        // dialog ref and the selected-entity ref.
-                        EditTool* editTool = static_cast<EditTool*>(activeTool);
-                        HighlightClear_Impl(editTool);   // 0x1400fcb40
-                        editTool->entityRef = 0;
-                        editTool->lastEntityRef = 0;
-                    }
-                }
-            }
-        }
+        // Close button — close dialog and remove from entity tracking.
+        // B7 LX (row 994 G33): retail 0x14007bc30's close arm is CloseDialog and the
+        // tracked-set walk, nothing else. The EditTool-deselect block that stood here
+        // (a tree stand-in for "EntityUI slot 9's teardown the standalone does not
+        // run") is gone: EntityUI::OnElementEvent's id-1 arm IS retail 0x140067050's
+        // `SelectTool(toolManager, 0)` (entityui.cpp), which tears the tool down.
         // 0x14007bc30's close arm: CloseDialog through +0x18's UserInterface, then the
         // tool manager's +0x50 set walked for this ToolUI's template -- no test of the
         // world singleton or of the dialog pointer.

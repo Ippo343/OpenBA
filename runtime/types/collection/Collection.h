@@ -1943,9 +1943,18 @@ void  EffectSlotAssign(uint8_t* dst, const uint8_t* src);  // 0x180051650 (B.4: 
 
 // rtpathid::Insert / SubtreeFree (0x180027380 / 0x180027970): runtime/src/collection/set_avl_pathid.h
 
-namespace RtIo { struct SettingsMap; }   // io/Persistence.h
-namespace rtsetclear {
-// ---- collection/set_clear.cpp
-void Clear(RtIo::SettingsMap* set);  // 0x18000f7d0
-}  // namespace rtsetclear
+// Collection::Pair<K, V> -- the element of a keyed Set (B7 LX, D7a). Retail's
+// mangled names spell it (`Set<Pair<String,String>>`, the settings map of
+// IO::Persistence +0x00 and System::Configuration +0x10). The key is the
+// leading sub-object, so `Set<Pair<K,V>, Compare, Allocator, K>` descends on
+// it; the compiler's member-wise copy and destroy are retail's: the node ctor
+// 0x18000fb00 copies +0x00 then +0x08, the element dtor 0x18000fa90 releases
+// +0x08 then +0x00 (reverse declaration order).
+namespace Collection {
+template <class K, class V>
+struct Pair {
+    K key;     // +0x00
+    V value;   // align(sizeof(K))
+};
+}  // namespace Collection
 // ==== end B3R W0-P0c ====

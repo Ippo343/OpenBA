@@ -118,7 +118,7 @@ void PickupStoredRawMaterial::Persist(IO::Stream& stream) {
     if (matCount > 0) {
         uint64_t remaining = (uint64_t)matCount;
         do {
-            Reimpl_ExternalPtr_Serialize_StringTable(&entry->material, &ser);   // 0x140002340
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&entry->material, &ser);   // 0x140002340
             ser.Serialize(entry->count, nullptr);
             ++entry;
             remaining--;

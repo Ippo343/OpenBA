@@ -63,7 +63,7 @@ RawMaterialDescription::RawMaterialDescription()
 // [5] 0x140129520: stream order as retail.
 bool RawMaterialDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);
+    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);
     _name.Serialize(ser);
     _nameSmall.Serialize(ser);

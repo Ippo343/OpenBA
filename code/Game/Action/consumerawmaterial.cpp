@@ -79,7 +79,7 @@ void ConsumeRawMaterial::Persist(IO::Stream& stream) {
     if (version == 0) {
         // Legacy v0 format: single ExternalPtr + int (no material list)
         ComponentDescription* legacyMaterial = nullptr;
-        Reimpl_ExternalPtr_Serialize_StringTable(&legacyMaterial, &ser);   // 0x140002340
+        Reimpl_ExternalPtr_Serialize_ComponentDescription(&legacyMaterial, &ser);   // 0x140002340
         int legacyCount;
         ser.Serialize(legacyCount, nullptr);
     } else {
@@ -99,7 +99,7 @@ void ConsumeRawMaterial::Persist(IO::Stream& stream) {
         if (matCount > 0) {
             uint64_t remaining = (uint64_t)matCount;
             do {
-                Reimpl_ExternalPtr_Serialize_StringTable(&entry->material, &ser);   // 0x140002340
+                Reimpl_ExternalPtr_Serialize_ComponentDescription(&entry->material, &ser);   // 0x140002340
                 ser.Serialize(entry->count, nullptr);
                 ++entry;
                 remaining--;

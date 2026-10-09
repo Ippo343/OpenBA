@@ -200,7 +200,7 @@ void RawMaterialComponent::Persist(IO::Stream& stream) {
 
     // Version >= 2: the ExternalPtr<Profession>
     if (ser.GetVersion() >= 2) {
-        Reimpl_ExternalPtr_Serialize_StringTable(&profession, &ser);   // 0x140018020
+        Reimpl_ExternalPtr_Serialize_Profession(&profession, &ser);   // 0x140018020
     }
 }
 

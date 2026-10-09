@@ -50,7 +50,7 @@ ValueDescription::ValueDescription()
 // [5] 0x14005cd60: stream order as retail.
 bool ValueDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_sprite, &ser);
+    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_sprite, &ser);
     _name.Serialize(ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
     _s38.Serialize(ser);

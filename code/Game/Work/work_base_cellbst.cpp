@@ -180,78 +180,9 @@ void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec) {
     return outResult;
 }
 
-// Reimpl of FUN_14001ca60 (TradeDescription_impl_ca60) — AVL delete of `nodeArg`.
-// Same three-case structure as the simple-BST delete, cell offsets.
-// Caller: void fn(void* bstRoot, void* node).
-void WorkCellBST_Remove_ca60(uintptr_t* root, void* nodeArg) {
-    CellSet* set = reinterpret_cast<CellSet*>(root);   // WorkCellBST_Remove_ca60: one body over five node / header types (ICF: cell, entity, scheduler id / bucket, region pair, goals)  // CAST-OK: elem_stride
-    Node* node = reinterpret_cast<Node*>(nodeArg);   // the erased core's view of the node it unlinks: one body (ICF) over five node types (cell, entity, scheduler id / bucket, region pair, goals)  // CAST-OK: elem_stride
-    Node* local_res8 = node->parent;
-    set->_count -= 1; // count--
-    Node* lVar5 = node->right;
-
-    if (lVar5 == nullptr) {
-        Node* parent = node->parent;
-        Node* left   = node->left;
-        if (parent == nullptr) set->_root = left;
-        else if (parent->left == node) parent->left = left;
-        else parent->right = left;
-        lVar5 = node->left;             // surviving child = left
-    } else {
-        Node* lVar1 = node->left;
-        if (lVar1 != nullptr) {
-            Node* pred = lVar1;
-            Node* walk = lVar1;
-            do { pred = walk; walk = pred->right; } while (pred->right != nullptr);
-
-            local_res8 = nullptr;
-            if (pred != lVar1) {
-                lVar5 = pred->left;
-                local_res8 = pred->parent;
-                local_res8->right = lVar5;          // pred->parent->right = pred->left
-                if (lVar5 != nullptr) lVar5->parent = local_res8;
-                pred->left = node->left;
-                CellBST_UpdateHB(local_res8);
-            }
-            lVar5 = local_res8;
-            pred->right = node->right;
-            if (pred->left != nullptr)
-                pred->left->parent = pred;
-            if (pred->right != nullptr)
-                pred->right->parent = pred;
-            Node* nodeParent = node->parent;
-            pred->parent = nodeParent;
-            Node* local_res10;
-            if (nodeParent == nullptr) {
-                set->_root = pred;
-                pred->parent = nullptr;
-                local_res10 = set->_root;
-            } else {
-                if (nodeParent->left == node)
-                    nodeParent->left = pred;
-                else
-                    nodeParent->right = pred;
-                local_res10 = pred;
-            }
-            System::MemoryAllocator::MemFree(node);
-            if (lVar5 == nullptr) CellBST_Retrace(&set->_root, &local_res10);
-            else CellBST_Retrace(&set->_root, &local_res8);
-            return;
-        }
-        // node->left == 0, node->right != 0
-        Node* parent = node->parent;
-        if (parent == nullptr) set->_root = lVar5;
-        else if (parent->left == node) parent->left = lVar5;
-        else parent->right = lVar5;
-        lVar5 = node->right;            // surviving child = right
-    }
-
-    if (lVar5 != nullptr) lVar5->parent = node->parent;
-    Node* local_res10 = lVar5;
-    System::MemoryAllocator::MemFree(node);
-    if (lVar5 == nullptr) CellBST_Retrace(&set->_root, &local_res8);
-    else CellBST_Retrace(&set->_root, &local_res10);
-}
+// FUN_14001ca60 (TradeDescription_impl_ca60) -- the AVL delete -- is the template
+// `WorkCellBST_Remove_ca60<Node>` in Work/CellBst.h (B7 LX): one body over the five node /
+// header types, each caller instantiating it on its own.
 
 // Reimpl of FUN_140029de0 (TradeDescription_impl_9de0) — serialize the cell BST.
 // Stream order: count(int), then `count` (int key, IBP) pairs. LOAD inserts each pair

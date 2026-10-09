@@ -88,7 +88,7 @@ void Pickup::Persist(IO::Stream& stream) {
     // Version >= 1: serialize the ExternalPtr at +0x58
     int version = serializer.GetVersion();
     if (version > 0) {
-        Reimpl_ExternalPtr_Serialize_StringTable(&candidateList, &serializer);
+        Reimpl_ExternalPtr_Serialize_Profession(&candidateList, &serializer);
     }
 }
 

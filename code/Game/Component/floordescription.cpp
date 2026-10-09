@@ -37,7 +37,7 @@ FloorDescription::FloorDescription()
 bool FloorDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     // +0x20 ExternalPtr through exe 0x14000b7b0 (Reimpl_ExternalPtr_Serialize_StringTable).
-    Reimpl_ExternalPtr_Serialize_StringTable(&_mesh, &ser);
+    Reimpl_ExternalPtr_Serialize_PickingMesh(&_mesh, &ser);
     ser.Serialize(_addOnCreate, nullptr);
     return true;
 }

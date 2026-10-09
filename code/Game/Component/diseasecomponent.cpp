@@ -810,7 +810,7 @@ void DiseaseComponent::Persist(IO::Stream& stream) {
 
     IO::Stream& s = stream;
     IO::Serializer ser(s, 1);
-    Reimpl_ExternalPtr_Serialize_StringTable(&curedIdentity, &ser);   // 0x140002340 ExternalPtr<ComponentDescription>
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&curedIdentity, &ser);   // 0x140002340 ExternalPtr<ComponentDescription>
     ser.Serialize(isPasture, nullptr);
     rollAccum.Serialize(ser);     // 0x140152aa8 Time::Serialize
     duration.Serialize(ser);

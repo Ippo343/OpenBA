@@ -112,7 +112,7 @@ void ClearArea::Persist(IO::Stream& stream) {
     WorkLeaf_BstSerializeIBPpair_29c10(&_entities, &serializer);
 
     // Serialize the description ExternalPtr at +0x68
-    Reimpl_ExternalPtr_Serialize_StringTable(&field_68, &serializer);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&field_68, &serializer);
 
     // Serialize clearTrees bool at +0x70 (the field is uint8_t storage)
     serializer.Serialize(field_70, nullptr);

@@ -183,8 +183,8 @@ bool ConfigHasKey(::System::Configuration* cfg, const char* key) {
     // class static, so retail's genuinely-unguarded dereference is restored.
     System::String k(key);
     // Configuration + 0x10. Unexported (no name in either build): 0x18002ace0
-    // is RtSystem_ConfigMap_Find (runtime/src/system/configuration.cpp).
-    return RtSystem_ConfigMap_Find(&cfg->_map.root, &k) != nullptr;
+    // is the settings Set's own `Find` (B7 LX).
+    return cfg->_map.Find(k._data) != nullptr;
 }
 
 // The `-pathres` / `-pathdat` / `-pathpkg` override, which retail emits three

@@ -73,7 +73,7 @@ ImmigrationDescription::~ImmigrationDescription() {
 // [5] 0x14004e7f0: stream order as retail.
 bool ImmigrationDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_nomad, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_nomad, &ser);
     ser.Serialize(_minPopulation, nullptr);
     // External*-array @ +0x30 (count @ +0x38, cap @ +0x3c, stride 8)
     ser.Serialize(_requiredBuildingCount, nullptr);

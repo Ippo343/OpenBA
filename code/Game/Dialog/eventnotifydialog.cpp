@@ -80,8 +80,10 @@ static EventPopupDialog* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, 
         System::Filename filename("Dialog/EventPopup.rsc");
         const ::Object::External* found =
             ::Object::ExternalFactory::_singleton->FindOrLoad(filename);
-        // The IsDerivedFrom Dialog the exe applies to the reference (0x140067da8 + CMOVNZ).
-        if (::Object::IsDerivedFromNullSafe(found, UI::Dialog::TypeId()))
+        // The IsDerivedFrom Dialog the exe applies to the reference (0x140067da8 + CMOVNZ):
+        // the member, on the reference unguarded (MOV RCX,RBX straight from the load at
+        // 0x140067d99; no null test -- B7 LX row 993).
+        if (found->IsDerivedFrom(UI::Dialog::TypeId()))
             popupRes = static_cast<const UI::Dialog*>(found);
     }
 

@@ -145,7 +145,7 @@ bool CreatePlacedDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_i44, nullptr);
     ser.Serialize(_i48, nullptr);
     ser.Serialize(_i40, nullptr);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_created, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_created, &ser);
     return true;
 }
 

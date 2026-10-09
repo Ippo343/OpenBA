@@ -42,7 +42,7 @@ CreateRoadDescription::CreateRoadDescription()
 bool CreateRoadDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ser.Serialize(_b20, nullptr);
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_created, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_created, &ser);
     return true;
 }
 

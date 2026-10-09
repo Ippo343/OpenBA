@@ -76,7 +76,7 @@ EnvironmentDescription::~EnvironmentDescription() {}
 bool EnvironmentDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
-    Reimpl_ExternalPtr_Serialize_StringTable(&_environmentRef, &ser);   // ExternalPtr +0x20
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_environmentRef, &ser);   // ExternalPtr +0x20
 
     // count through a local (the resize below owns +0x30)
     int count = _weatherArray._size;
@@ -89,7 +89,7 @@ bool EnvironmentDescription::Serialize(IO::Stream& stream) {
 
     for (uint32_t i = 0; i < static_cast<uint32_t>(count); ++i) {
         Reimpl_ExternalPtr_Serialize_Weather(&_weatherArray[i].weather, &ser);
-        Reimpl_ExternalPtr_Serialize_StringTable(&_weatherArray[i].description, &ser);
+        Reimpl_ExternalPtr_Serialize_ComponentDescription(&_weatherArray[i].description, &ser);
     }
 
     // 12 inline weather entries @ +0x38, each 0x20 bytes. Retail 0x1400940f0..0x140094170:

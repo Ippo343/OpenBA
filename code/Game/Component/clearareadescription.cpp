@@ -56,7 +56,7 @@ bool ClearAreaDescription::Serialize(IO::Stream& stream) {
     // 1. ExternalPtr (+0x20). Same stream layout as the StringTable ExternalPtr
     //    helper (FUN_14000bf40); only the validated typeId differs (trusted in
     //    standalone via IsDerivedFromOrTrust).
-    Reimpl_ExternalPtr_Serialize_StringTable(&_target, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_target, &ser);
     ser.Serialize(_clearTrees, nullptr);
     ser.Serialize(_clearGround, nullptr);
     ser.Serialize(_clearBuildings, nullptr);

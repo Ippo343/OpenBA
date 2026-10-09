@@ -64,7 +64,7 @@ bool CreateDragDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_i30, nullptr);
     ser.Serialize(_i34, nullptr);
     ser.Serialize(_b24, nullptr);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_created, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_created, &ser);
     return true;
 }
 

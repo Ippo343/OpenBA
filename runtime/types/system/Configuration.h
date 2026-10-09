@@ -66,20 +66,20 @@
 // (`Input::Device`, `Audio::Device`) and it is REPRODUCED, not tidied: freeing
 // a block retail still considers live is strictly worse than the leak.
 //
-// **THE FIELD TYPES AT +0x08 / +0x18 / +0x28 ARE POSITIONAL, NOT STRUCTURAL.**
-// The only thing this tree does with them is what the constructor does — zero
-// them — and what `~Array` (0x180010ab0) and `Set<>::Clear` (0x18000f7d0) do,
-// and both of those are reached BY ADDRESS through `ResolveAddr`, so no name
-// here is load-bearing. There is no `Collection::Set<Pair<String,String>>` or
-// `Collection::Array<T>` class to spell yet; when there is, these three names
-// are what get replaced, and the `offsetof` asserts below are what stops the
+// **THE FIELD TYPES AT +0x20 / +0x28 ARE POSITIONAL, NOT STRUCTURAL.** The
+// four accessors below name them; +0x00 and +0x10 are the real classes (next
+// paragraph), and the `offsetof` asserts below are what stopped that
 // replacement from moving anything.
 //
-// **THE MAP'S ROOT IS `_map.root`.** `RtSystem_ConfigMap_Find` (0x18002ace0),
-// `IO::FileSystem::Startup` and `FileSystem::SetupDirectories` all read the
-// map as "a `void*` at `configuration + 0x10` whose first qword is the root".
-// That spelling does not change in this commit; the member bodies now reach it
-// as `&_map.root`, which is the same address by construction.
+// **B7 LX (D7a): +0x00 AND +0x10 ARE THE REAL CLASSES.** +0x00 is
+// `Collection::Array<System::String>` (0x180010ab0 is its J2 String-element
+// destructor, array_destroy.cpp `kD_Str_08`) and +0x10 the settings
+// `Collection::Set<Pair<String,String>>` (RtIo::SettingsSet, io/Persistence.h).
+// Map_Find (0x18002ace0) IS the Set's `Find`: `IO::FileSystem::Startup`,
+// `FileSystem::SetupDirectories`, the engine's command-line test and
+// GetCommandLineString call `_map.Find(key._data)`. Declared in that order, the
+// two members' destructors run Set then Array after `~Configuration`'s empty
+// body -- 0x1800c518f CALL 0x18000f7d0, then 0x1800c519d JMP 0x180010ab0.
 //
 // ⚠ THE GREP HAZARD (B34_RULES §7.2) is armed for this name: inside a
 // `namespace System { ... }` block a bare `Configuration` binds this class.
@@ -96,7 +96,7 @@
 // every namespace block, never inside an `#if` (B31 hygiene / B34_BRIEFS §A.8).
 #include "String.h"
 
-#include "../io/Persistence.h"   // RtIo::SettingsMapNode / SettingsMap: the map's node and header
+#include "../io/Persistence.h"   // RtIo::SettingsSet: the map at +0x10 (and Collection::Array)
 
 namespace System {
 
@@ -126,12 +126,30 @@ public:
     // said. Never register the member directly.
     String GetCommandLineString(const String& key) const;
 
+    // ??0Configuration@System@@QEAA@XZ                            0x1800c51b0
+    // B7 LX (D7a): the real constructor (the `RtSystem_Configuration_Ctor`
+    // door is deleted; Engine::Startup placement-constructs the 0x30-byte
+    // block). The members' ctors are retail's stores in address order:
+    //   1800c51c3 / c51c6  qword +0x00, qword +0x08   `_entries` (Array: data,
+    //                                                  size + capacity)
+    //   1800c51d3 / c51d6  qword +0x10, dword +0x18   `_map` (Set: root, count;
+    //                                                  +0x1c NOT written)
+    //   1800c51d9 / c51dd  qword +0x20, dword +0x28   platform + language, build
+    //   1800c51e0          `_singleton = this`
+    // Header-defined: Engine::Startup INLINES it (0x1800db938..0x1800db954).
+    Configuration()
+        : _entries(), _map(),
+          _currentPlatform(0), _currentLanguage(0),   // 1800c51d9: one qword zero (H7)
+          _currentBuild(0) {                          // 1800c51dd
+        _singleton = this;                            // 1800c51e0 MOV [0x1801fc6f8],RCX
+    }
+
     // ??1Configuration@System@@QEAA@XZ                            0x1800c5170
     // NON-VIRTUAL (`QEAA`, not `UEAA` — the `UEAA` spelling does not exist in
     // this DLL and would have resolved NULL in silence,
     // `reference_phantom_dtor_mangling_qeaa_vs_ueaa.md`). Clears the map at
-    // +0x10 and tail-calls `~Array(+elem)` on `this`; both callees are already
-    // ported and are reached BY ADDRESS, so this adds no dependency. PUBLIC and
+    // +0x10 and tail-calls `~Array(+elem)` on `this`: the empty body, then the
+    // two members' destructors in reverse declaration order. PUBLIC and
     // non-virtual: nothing derives from this class and nothing deletes one
     // through a base.
     ~Configuration();
@@ -166,16 +184,14 @@ public:
     // PUBLIC for the same reason `System::Thread`'s handles are: the
     // unconverted tree reaches these bytes through a cast, and `offsetof` on
     // them has to be well formed.
-    void*    _entries;       // +0x00  the Array sub-object's data pointer
-    int32_t  _entryCount;    // +0x08  ~Array (0x180010ab0) reads the count here
-    uint32_t _pad0c;         // +0x0c  inside the ctor's qword zero; unread
-    // The string->string map's root node. B.4 R-SYS: typed as the node every
-    // `Set<Pair<String,String>>` in this DLL shares (Map_Find 0x18002ace0 and
-    // Map_Insert 0x18002a090 serve this map and IO::Persistence's alike): two
-    // Strings, then parent / left / right (io/Persistence.h).
-    // The map's {root, count, pad} header (RtIo::SettingsMap): root +0x10,
-    // count +0x18, and +0x1c  ⚠ NEVER WRITTEN by the constructor.
-    RtIo::SettingsMap _map;  // +0x10
+    // +0x00 -- `Collection::Array<System::String>`: data +0x00, size +0x08
+    // (~Array 0x180010ab0 reads the count there), capacity +0x0c.
+    Collection::Array<System::String> _entries;   // +0x00
+    // +0x10 -- the string->string map, `Collection::Set<Pair<String,String>>`
+    // (RtIo::SettingsSet: Map_Find 0x18002ace0 and Map_Insert 0x18002a090
+    // serve this map and IO::Persistence's alike): root +0x10, count +0x18,
+    // and +0x1c  ⚠ NEVER WRITTEN by the constructor (the Set ctor's two stores).
+    RtIo::SettingsSet _map;  // +0x10
     // B.4 R-SYS: +0x20..+0x2b are THREE DWORDS, not a {ptr,int} sub-object.
     // Named by the exported one-line accessors (Runtime-x64.dll):
     //   ?SetCurrentPlatform@ 0x1800c4c20  MOV dword [RCX+0x20],EDX
@@ -194,12 +210,11 @@ public:
 };
 
 static_assert(sizeof(Configuration) == 0x30, "System::Configuration is 0x30 bytes");
-static_assert(offsetof(Configuration, _pad0c) == 0xC, "Configuration::_pad0c");
 static_assert(offsetof(Configuration, _entries)     == 0x00, "Array data @ +0x00");
-static_assert(offsetof(Configuration, _entryCount)  == 0x08, "0x180010ab0 reads [this+0x8]");
+static_assert(offsetof(Configuration, _entries) + offsetof(Collection::Array<System::String>, _size) == 0x08, "0x180010ab0 reads [this+0x8]");
 static_assert(offsetof(Configuration, _map)         == 0x10, "LEA RAX,[RCX+0x10]");
-static_assert(offsetof(Configuration, _map) + offsetof(RtIo::SettingsMap, count) == 0x18, "MOV dword [RAX+0x08],EDX");
-static_assert(offsetof(Configuration, _map) + offsetof(RtIo::SettingsMap, pad0c) == 0x1c, "never written -- keep it named");
+static_assert(offsetof(Configuration, _map) + offsetof(RtIo::SettingsSet, _count) == 0x18, "MOV dword [RAX+0x08],EDX");
+static_assert(offsetof(Configuration, _map) + offsetof(RtIo::SettingsSet, _pad0c) == 0x1c, "never written -- keep it named");
 static_assert(offsetof(Configuration, _currentPlatform) == 0x20, "GetCurrentPlatform 0x1800c5270 MOV EAX,[RCX+0x20]");
 static_assert(offsetof(Configuration, _currentLanguage) == 0x24, "GetCurrentLanguage 0x1800c4c30 MOV EAX,[RCX+0x24]");
 static_assert(offsetof(Configuration, _currentBuild)    == 0x28, "GetCurrentBuild 0x1800c52f0 MOV EAX,[RCX+0x28]");
@@ -216,26 +231,11 @@ static_assert(std::is_standard_layout<Configuration>::value,
 // ============================================================================
 //
 // **1. THE CONSTRUCTOR, `??0Configuration@System@@QEAA@XZ` @ 0x1800c51b0.**
-// It IS ported and it IS registered — `runtime/src/engine/engine_lifecycle.cpp`
-// :322 (the body), :995-996 (by NAME and by ADDRESS). That CORRECTS
-// B34B_RULES.md §1.1, which said "registered NOWHERE"; the correction is
-// recorded in §1.5 there. It is not converted here anyway, because its body
-// lives in another owner's file and reads a file-local
-// `ConfigurationSingletonSlot()`, and **splitting a declaration from its body
-// across two owners is how a merge loses one half** — the same sequencing
-// argument B34B_RULES §3 made for `IO::Serializer::Serialize(int64_t&)`. So the
-// class declares NO constructor: that door still writes all six slots by hand,
-// and a constructor here would be a second initialisation of the same object.
-//
-// ⚠ `is_trivially_default_constructible` CANNOT BE THE PIN FOR THAT, and the
-// reason is a trap worth recording. GCC (and libstdc++'s `__is_trivially_*`)
-// fold the DESTRUCTOR's triviality into `is_trivially_constructible`, and this
-// class has a real `~Configuration`. So the trait reads FALSE here for a reason
-// that has nothing to do with the constructor. The weaker statement is what is
-// asserted, and the strong one is the comment above it.
+// CONVERTED (B7 LX, D7a): the class declares and defines it (inline, above);
+// the `RtSystem_Configuration_Ctor` door that wrote the six slots by hand
+// is deleted with its one caller (Engine::Startup, engine_lifecycle.cpp).
 static_assert(std::is_default_constructible<Configuration>::value,
-              "no constructor is declared here: the ??0 door in "
-              "engine_lifecycle.cpp still writes all six slots by hand");
+              "??0Configuration (0x1800c51b0) is the class's constructor");
 static_assert(!std::is_trivially_destructible<Configuration>::value,
               "the CLASS owns ??1Configuration@System@@ (0x1800c5170) -- if "
               "this ever reads trivial, the destructor has been deleted and the "
@@ -272,12 +272,9 @@ static_assert(!std::is_trivially_destructible<Configuration>::value,
 // this tree and none is registered; an uncalled port is an unverified port.
 // Addresses are in B34B_RULES §1.1 for whoever ports them.
 //
-// Also NOT a member: the config map's find at **0x18002ace0**. It is
-// unexported, it takes the MAP (`configuration + 0x10`) and not `this`, and
-// B34B_RULES §1.1 already records that the by-address row registering it is the
-// map helper and not a Configuration export. It stays
-// `RtSystem_ConfigMap_Find`, a free function, and its registration row is
-// untouched.
+// The config map's find at **0x18002ace0** is unexported and takes the MAP
+// (`configuration + 0x10`), not `this`: it is the Set's own `Find` (B7 LX:
+// `RtSystem_ConfigMap_Find` is deleted, every caller calls `_map.Find`).
 // ============================================================================
 
 }  // namespace System
@@ -289,13 +286,6 @@ static_assert(!std::is_trivially_destructible<Configuration>::value,
 // reader can call it by name. Nothing calls it through this declaration yet.
 namespace System { class String; }       // system/String.h
 
-// ---- system/configuration.cpp
-// B.4 R-SYS: typed. `root` is the map's first qword (Configuration::_map.root,
-// IO::Persistence::_settingsMap.root): retail loads `node = [RCX]`. The key is
-// the real String (`MOV R9,[RDX]` reads its data pointer); the result is the
-// node or null.
-extern "C" RtIo::SettingsMapNode* RtSystem_ConfigMap_Find(
-    RtIo::SettingsMapNode* const* root, const System::String* wanted);  // 0x18002ace0
 // ---- system/value_types.cpp
 System::String* RtSystem_Configuration_CurrentBuildId(System::String* ret);  // 0x1800c4c60
 // ==== end B3R W0-P0c ====

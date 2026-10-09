@@ -184,11 +184,15 @@ extern "C" ComponentEntity* ClearAreaComponent_HarnessOwner(ClearAreaComponent* 
 // Harness entry: run the footprint sweep for a given building entity. Builds a
 // synthetic ClearAreaComponent whose owner (+0x10) is the building, then sweeps —
 // exactly what the live component's driver does on placement. Returns entities marked.
-// The raw zeroed buffer (no constructor) is the harness's own; it is kept.
+// B7 LX (B7_RULES D8b): a REAL ClearAreaComponent local (it was a zeroed raw buffer
+// viewed as one). Its constructor chain (0x140117fa0 -> Component 0x1401188b0 ->
+// Object::Internal 0x1800bfd10) registers it with the InternalFactory (AddObject) and
+// its destructor chain (~Internal 0x1800bfdb0) unregisters it (RemoveObject) at the
+// scope's end, so the harness leaves no factory entry behind. The fields the zeroed
+// buffer differed in (`_flags` 0x80, the controller's owner back-pointer, the vptrs)
+// are not read by FootprintSweep.
 extern "C" int ClearAreaComponent_HarnessSweep(ComponentEntity* ownerEntity) {
-    alignas(8) uint8_t buf[sizeof(ClearAreaComponent)];
-    std::memset(buf, 0, sizeof(buf));
-    ClearAreaComponent* comp = reinterpret_cast<ClearAreaComponent*>(buf);        // harness-only   // LEFT: DEFERRED (named prerequisite: the harness decision, retire the ClearPlace probe with tool_harness.cpp); WORK (audit harness row) left: a real ClearAreaComponent() runs Internal::Internal, which registers the object with the InternalFactory (AddObject) and unregisters it at scope exit, a side effect the zeroed buffer never had; retiring the harness deletes tool_harness.cpp:2021's ClearPlace probe (a user decision)
-    comp->_entity = ownerEntity;
-    return comp->FootprintSweep();
+    ClearAreaComponent comp;
+    comp._entity = ownerEntity;
+    return comp.FootprintSweep();
 }

@@ -56,7 +56,7 @@ void CreateNaturalResource::Persist(IO::Stream& stream) {
 
     // Serialize resource data (version 1)
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_StringTable(&descEntity, &ser);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&descEntity, &ser);   // 0x140002340
     ser.Serialize(cellIndex, nullptr);
 
     int version = ser.GetVersion();

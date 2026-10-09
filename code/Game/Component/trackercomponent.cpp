@@ -66,7 +66,7 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     if (localCount1 > 0) {
         Entry* entry = displayed._data;
         for (int i = 0; i < localCount1; i++) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&entry->_resource, &ser);   // 0x140002340
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&entry->_resource, &ser);   // 0x140002340
             ser.Serialize(entry->_count, nullptr);
             ++entry;
         }
@@ -83,7 +83,7 @@ void TrackerComponent::Persist(IO::Stream& stream) {
     if (localCount2 > 0) {
         Entry* entry = produced._data;
         for (int i = 0; i < localCount2; i++) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&entry->_resource, &ser);   // 0x140002340
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&entry->_resource, &ser);   // 0x140002340
             ser.Serialize(entry->_count, nullptr);
             ++entry;
         }

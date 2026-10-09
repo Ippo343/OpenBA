@@ -83,7 +83,7 @@ void RebalanceBucketTree(WorkSchedulerBucketNode** root, WorkSchedulerBucketNode
     Avl38Retrace(root, &from);
 }
 void EraseIdNode(WorkSchedulerTree* tree, WorkSchedulerIdNode* node) {               // 0x14001ca60
-    WorkCellBST_Remove_ca60(reinterpret_cast<uintptr_t*>(tree), node);  // LEFT: audit DEFERRED (Work leaves ledger): SIG WorkCellBST_Remove_ca60: one body over five node / header types (ICF)
+    WorkCellBST_Remove_ca60(tree, node);   // the template on WorkSchedulerIdNode (Work/CellBst.h)
 }
 // 0x14001a6e0 takes the tree's {root, count} header: it unlinks the node, rewrites the root
 // when it changes, and decrements the count dword at +8 (known_port_issues 796, fixed).
@@ -400,7 +400,7 @@ void SerializeBucketTree(WorkSchedulerBucketNode** treeRoot, int32_t* treeCount,
             // Building the subtree somewhere else and then inserting the record loses every
             // Work subtree on load.
             WorkSchedulerBucket rec = {};
-            Reimpl_ExternalPtr_Serialize_StringTable(&rec.key, &ser);   // ExternalPtr<Profession> (0x140018020)
+            Reimpl_ExternalPtr_Serialize_Profession(&rec.key, &ser);   // ExternalPtr<Profession> (0x140018020)
             SerializeIdTree(&rec.entries, ser);
 
             WorkSchedulerBucketNode* outNode = nullptr;
@@ -416,7 +416,7 @@ void SerializeBucketTree(WorkSchedulerBucketNode** treeRoot, int32_t* treeCount,
         }
     } else {
         for (WorkSchedulerBucketNode* cNode = Leftmost(*treeRoot); cNode; cNode = Next(cNode)) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&cNode->bucket.key, &ser);
+            Reimpl_ExternalPtr_Serialize_Profession(&cNode->bucket.key, &ser);
             // Retail passes the node's OWN {root, count} header. Copying the root into a
             // stack pair with a zeroed count made d340 write "0 entries" and then walk the
             // real subtree anyway, so the save stream carried N records the load never read

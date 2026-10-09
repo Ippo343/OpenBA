@@ -46,7 +46,7 @@ StatusIconDescription::StatusIconDescription()
 // [5] 0x14012c180: stream order as retail.
 bool StatusIconDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // 0x14000bd30
+    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);   // 0x14000bd30
     ser.Serialize(_scale, nullptr);
     ser.Serialize(_flag, nullptr);
     return true;

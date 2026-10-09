@@ -73,7 +73,7 @@ bool CreateRemovalDescription::Serialize(IO::Stream& stream) {
         _refs.SetSize(count);
     }
     Reimpl_ExternalPtrArray_Serialize(&ser, count, _refs._data, nullptr);   // ExtPtr[count] (0x1400049c0)
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref38, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_ref38, &ser);
     ser.Serialize(_b40, nullptr);
     ser.Serialize(_b41, nullptr);
     ser.Serialize(_b42, nullptr);

@@ -41,7 +41,7 @@ LivestockDescription::LivestockDescription()
 // [5] 0x140123f60: stream order as retail.
 bool LivestockDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_byproduct, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_byproduct, &ser);
     ser.Serialize(_productionInterval, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;

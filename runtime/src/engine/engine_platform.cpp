@@ -90,9 +90,9 @@
 #include "../../types/system/String.h"
 #include "../../types/io/Modification.h"
 #include "../../types/io/Persistence.h"            // B3R: WriteSettings by name
-#include "../../types/system/Configuration.h"      // B3R: GetCommandLineString, RtSystem_ConfigMap_Find
+#include "../../types/system/Configuration.h"      // B3R: GetCommandLineString, Configuration::_map
 #include "../../types/system/MemoryAllocator.h"
-#include "../../types/collection/Collection.h"     // B3R: rtsetclear::Clear
+#include "../../types/collection/Collection.h"     // Collection::Set (the settings map)
 #include "../system/string.h"
 
 // The platform seam. runtime/src/engine/engine_platform_win.cpp.
@@ -138,14 +138,12 @@ bool CommandLineHasValue(const System::Configuration* cfg, const char* keyText) 
 }
 
 // Retail's OTHER command-line test: the map find at `Configuration + 0x10`.
-// Unexported in both shipped builds; the body is
-// runtime/src/system/configuration.cpp's RtSystem_ConfigMap_Find (0x18002ace0),
-// called by name (B3R).
+// Unexported in both shipped builds; 0x18002ace0 is the settings Set's own
+// `Find` (B7 LX: `Configuration::_map` is the Collection::Set).
 bool CommandLineHasKey(System::Configuration* cfg, const char* keyText) {
     if (cfg == nullptr) return false;
     String key(keyText);       // 0x18000b630: zero, then Set
-    // The map sub-object at +0x10 starts with `_map.root`.
-    const bool found = RtSystem_ConfigMap_Find(&cfg->_map.root, &key) != nullptr;
+    const bool found = cfg->_map.Find(key._data) != nullptr;       // 0x18002ace0
     // `key` releases here — retail's 0x1800a1934, now ~String.
     return found;
 }
@@ -172,18 +170,10 @@ void DisableAllModifications() {
 // the instruction stream, not reconstructed from a header.
 void ResetConfigurations(EngineT* self) {
     // Persistence's settings map is cleared by an UNEXPORTED recursive helper
-    // (0x18000f7d0 -> 0x18000f890 / 0x18000fa90 / 0x180009c30), ported as
-    // rtsetclear::Clear (runtime/src/collection/set_clear.cpp), called by name
-    // (B3R).
-    //
-    // NOT CONVERTED (ENDGAME B.3.2 step 2): 0x18000f7d0 is `rtsetclear::Clear`,
-    // a `Collection::Set<Pair<String,String>>::Clear` door. Calling it as a
-    // member needs `Persistence::_settingsMap` (the three-word
-    // `RtIo::SettingsMap` header, B.4 wave X) to be a real
-    // `Collection::Set<Pair<String,String>, ...>` member (H5), so it stays the
-    // free body, handed the header.
+    // (0x18000f7d0 -> 0x18000f890 / 0x18000fa90 / 0x180009c30): the member
+    // `Collection::Set<Pair<String,String>>::Clear` (B7 LX).
     if (::IO::Persistence* ps = ::IO::Persistence::_singleton) {
-        rtsetclear::Clear(&ps->_settingsMap);                     // 0x18000f7d0
+        ps->_settingsMap.Clear();                                 // 0x18000f7d0
     }
 
     // Each Configuration below is freed without its destructor and rebuilt with

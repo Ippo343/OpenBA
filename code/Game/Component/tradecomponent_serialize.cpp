@@ -209,7 +209,7 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
     if (Loading(ser)) {
         for (int32_t i = 0; i < count; ++i) {
             ComponentDescription* key = nullptr;
-            Reimpl_ExternalPtr_Serialize_StringTable(&key, &ser);
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&key, &ser);
             int32_t value = 0;
             ser.Serialize(value, nullptr);
 
@@ -253,7 +253,7 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
     if (!n) return;
     while (TradeResourceNode* l = n->left) n = l;
     while (n) {
-        Reimpl_ExternalPtr_Serialize_StringTable(&n->resource, &ser);
+        Reimpl_ExternalPtr_Serialize_ComponentDescription(&n->resource, &ser);
         ser.Serialize(n->quantity, nullptr);
 
         TradeResourceNode* r = n->right;
@@ -357,7 +357,7 @@ void TradeComponent::Persist(IO::Stream& stream) {
     {
         TradeManifestLine* elem = manifest._data;
         for (int32_t i = 0; i < refCount && elem; ++i, ++elem) {
-            Reimpl_ExternalPtr_Serialize_StringTable(&elem->good, &ser);
+            Reimpl_ExternalPtr_Serialize_ComponentDescription(&elem->good, &ser);
             ser.Serialize(elem->price, nullptr);
             ser.Serialize(elem->stock, nullptr);
         }

@@ -454,7 +454,7 @@ void OrchardComponent::Persist(IO::Stream& stream) {
     SerializeSlots(ser, localCount, slots);   // 0x14000a230
 
     // The tree type ExternalPtr at +0x60
-    Reimpl_ExternalPtr_Serialize_StringTable(&treeType, &ser);   // 0x140002340
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&treeType, &ser);   // 0x140002340
 }
 
 // [4] 0x140051dd0: `MOV qword [RCX+0x60],0` — one store, nothing else.

@@ -59,7 +59,9 @@ template <class T>
 T* FindNamedElement(UI::Element* container, const char* name) {
     System::String nameStr(name);
     UI::Element* found = container->FindElement(nameStr).Get();
-    return ::Object::IsDerivedFromNullSafe(found, T::TypeId()) ? static_cast<T*>(found) : nullptr;
+    // The member, unguarded: no null test before any of 0x140087940's IsDerivedFrom
+    // calls (0x1400879a8, 0x140087a1f, ...; B7 LX row 993).
+    return found->IsDerivedFrom(T::TypeId()) ? static_cast<T*>(found) : nullptr;
 }
 
 // Faithful visibility subset of OnUpdateLayout (0x140087080): show the

@@ -187,7 +187,7 @@
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 closing pass
 #include "../../types/system/MemoryAllocator.h"
 #include "../../funcs/rt_libm.h"        // rtcrt::StrICmp
-#include "../../types/system/Configuration.h"   // RtSystem_ConfigMap_Find
+#include "../../types/system/Configuration.h"   // io/Persistence.h: RtIo::SettingsSet
 
 namespace RtIO {
 
@@ -745,13 +745,12 @@ void Modification::RefreshList() {
             System::Filename keyStr;
             ::new (&keyStr.AsString()) System::String(
                 System::String::Format("%s%s", "ModEnabled_", nameRef));
-            // The settings map's node is `RtIo::SettingsMapNode` {key, value};
-            // the finder (R-CORE's, system/Configuration.h) returns it as void*.
-            const RtIo::SettingsMapNode* node =
-                RtSystem_ConfigMap_Find(                         // 0x18002ace0
-                    &pers->_settingsMap.root, &keyStr.AsString());
+            // The settings map is `Collection::Set<Pair<String,String>>`
+            // (RtIo::SettingsSet); 0x18002ace0 is its `Find` (B7 LX).
+            const RtIo::SettingsNode* node =
+                pers->_settingsMap.Find(keyStr.AsString()._data);   // 0x18002ace0
             if (node != nullptr) {
-                const char* v = node->value._data;               // +0x08
+                const char* v = node->element.value._data;       // +0x08
                 const int cmp = (v == nullptr) ? -1 : std::strcmp(v, "true");
                 m->enabled = static_cast<uint8_t>(cmp == 0);
             }
@@ -762,11 +761,10 @@ void Modification::RefreshList() {
             System::Filename keyStr;
             ::new (&keyStr.AsString()) System::String(
                 System::String::Format("%s%s", "ModIndex_", nameRef));
-            const RtIo::SettingsMapNode* node =
-                RtSystem_ConfigMap_Find(
-                    &pers->_settingsMap.root, &keyStr.AsString());
+            const RtIo::SettingsNode* node =
+                pers->_settingsMap.Find(keyStr.AsString()._data);   // 0x18002ace0
             if (node != nullptr) {
-                const char* v = node->value._data;               // +0x08
+                const char* v = node->element.value._data;       // +0x08
                 m->order = RtCrt_ParseInt10_18007f034(v);        // 0x18007f034
             }
         }  // ~keyStr releases here

@@ -345,7 +345,7 @@ void ComponentEntity::Persist(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     // Serialize description ExternalPtr at +0x28
-    Reimpl_ExternalPtr_Serialize_StringTable(&_description, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_description, &ser);
 
     // Serialize component count
     int compCount = _components._size;

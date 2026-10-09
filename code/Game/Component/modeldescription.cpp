@@ -106,7 +106,7 @@ bool ModelDescription::Serialize(IO::Stream& stream) {
     }
 
     for (int i = 0; i < count; ++i, ++e) {
-        Reimpl_ExternalPtr_Serialize_GraphicsMesh(&e->field_0x00, &ser);      // elem+0
+        Reimpl_ExternalPtr_Serialize_AnimationGroup(&e->field_0x00, &ser);      // elem+0
 
         ser.Serialize(e->meshCount, nullptr);   // mesh count, elem+0x10
         int matCount = e->meshCount;

@@ -296,13 +296,12 @@ void StatusBarUI::OnUpdateLayout() {
     {
         System::String monthKey = System::String::Format("Month%i", (uint64_t)monthIdx);
 
-        // A UI::String of textSeason's own string table and the key. Guard the
-        // string table (retail asserts it; a missing table would crash
-        // StringTable::GetIndexFromName in standalone).
-        if (textSeason && textSeason->_text.table != nullptr) {
-            UI::String month(textSeason->_text.GetStringTable(), monthKey);
-            textSeason->SetText(&month);
-        }
+        // A UI::String of textSeason's own string table (+0xd8) and the key, then
+        // SetText. B7 LX (row 994 G30): retail 0x1400798d0 tests neither textSeason
+        // nor its table (the UI::String ctor on [+0x38]+0xd8, then
+        // TextElement::SetText on [+0x38]); the guard that stood here is gone.
+        UI::String month(textSeason->_text.GetStringTable(), monthKey);
+        textSeason->SetText(&month);
     }
 
     // --- Update temperature ---

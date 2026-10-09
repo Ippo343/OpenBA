@@ -37,7 +37,7 @@ ForesterDescription::ForesterDescription()
 // [5] 0x14011fa80: stream order as retail.
 bool ForesterDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref20, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_ref20, &ser);
     if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
     return true;
 }

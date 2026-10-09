@@ -167,7 +167,7 @@ bool MusicList::Serialize(IO::Stream& stream) {
             // the byte-identical instantiation (same one UIDescription's element
             // ptrs use). Reading +0x00 as a bare String consumed the wrong byte
             // count and drifted the whole element loop past EOF.
-            Reimpl_ExternalPtr_Serialize_StringTable(&elem[i].sound, &ser);
+            Reimpl_ExternalPtr_Serialize_SoundEffect(&elem[i].sound, &ser);
         }
     }
 

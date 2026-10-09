@@ -45,7 +45,7 @@ bool FruitDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_ripenSeasons, nullptr);
     ser.Serialize(_optimalTemp, nullptr);
     ser.Serialize(_tempRange, nullptr);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_ref30, &ser);
     return true;
 }
 

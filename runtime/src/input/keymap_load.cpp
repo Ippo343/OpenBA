@@ -167,15 +167,15 @@ const char* FindSettingValue(const ::IO::Persistence* persistence, const char* k
     // 0x1800a7256 MOV R11,[R12] reads the root through the hoisted singleton with no
     // test; 0x1800a725a TEST R11,R11 is the root test the loop makes (B6 14d G19:
     // the tree's null-Persistence return is gone; Engine::Startup builds it at 0x1800dba5e).
-    const RtIo::SettingsMapNode* node = persistence->_settingsMap.root;   // +0x00
+    const RtIo::SettingsNode* node = persistence->_settingsMap._root;     // +0x00
     while (node != nullptr) {
-        const char* nodeKey = node->key._data;                            // +0x00
+        const char* nodeKey = node->element.key._data;                    // +0x00
         if (RetailKeyLess(key, nodeKey)) {
             node = node->left;                                            // +0x18
         } else if (RetailKeyLess(nodeKey, key)) {
             node = node->right;                                           // +0x20
         } else {
-            return node->value._data;                                     // +0x08
+            return node->element.value._data;                             // +0x08
         }
     }
     return nullptr;

@@ -130,7 +130,7 @@ bool ToolbarDescription::Serialize(IO::Stream& stream) {
     // FUN_14000bf40 (ExternalPtr<UI::StringTable>). Both have a byte-identical stream
     // layout (only the validated typeId differs, trusted in standalone). Use the
     // registered Serialize2 for both.
-    Reimpl_ExternalPtr_Serialize_StringTable(&_spriteSheet, &ser);   // 1. _spriteSheet
+    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);   // 1. _spriteSheet
     _name.Serialize(ser);                        // 2. _name
     Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);   // 3. _stringTable
     _str1.Serialize(ser);                        // 4.

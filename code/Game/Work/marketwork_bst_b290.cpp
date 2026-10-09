@@ -110,7 +110,7 @@ void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer) {
     // resize (MOV RBX,qword ptr [RBX]) — reading it earlier would use the freed buffer.
     MarketWork::Carry* p = arr->data;
     for (int i = 0; i < count; ++i) {
-        Reimpl_ExternalPtr_Serialize_StringTable(&p->resource, serializer);
+        Reimpl_ExternalPtr_Serialize_ComponentDescription(&p->resource, serializer);
         serializer->Serialize(p->count, nullptr);
         ++p;
     }
@@ -268,7 +268,7 @@ void MarketBst_b290(MarketWork::ClaimTree* tree, IO::Serializer* serializer) {
             }
             MarketWork::Carry* p = node->element.carries.data;
             for (int i = 0; i < count; ++i) {
-                Reimpl_ExternalPtr_Serialize_StringTable(&p->resource, serializer);
+                Reimpl_ExternalPtr_Serialize_ComponentDescription(&p->resource, serializer);
                 serializer->Serialize(p->count, nullptr);
                 ++p;
             }

@@ -182,12 +182,11 @@
 #include "../../types/io/Registry.h"
 #include "../../types/system/String.h"
 #include "../collection/avl_trees.h"          // rtavl::StringMapInsert
-#include "../../types/collection/Collection.h"   // rtsetclear::Clear
-#include "../../types/system/Configuration.h"    // RtSystem_ConfigMap_Find
+#include "../../types/collection/Collection.h"   // Collection::Set (the settings map)
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/WideString.h"
 
-using RtIo::SettingsMapNode;
+using RtIo::SettingsNode;
 using RtSystem::StringRefCount;
 
 namespace {
@@ -218,27 +217,15 @@ static_assert(std::is_same<HKEY, HKEY__*>::value, "Registry.h's HKEY__* is <wind
 // ---------------------------------------------------------------------------
 // B3R RT-IO: every dependency below is called BY NAME (they were RT_EXPORT_ONCE
 // / ResolveAddr / RtResolveCached doors):
-//   0x18000f7d0  Map_Clear   -> rtsetclear::Clear (collection/set_clear.cpp)
+//   0x18000f7d0  Map_Clear   -> `_settingsMap.Clear()` (Collection::Set, B7 LX)
 //   0x18002a090  Map_Insert  -> rtavl::StringMapInsert (collection/avl_trees.cpp)
-//   0x18002ace0  Map_Find    -> RtSystem_ConfigMap_Find (system/configuration.cpp)
+//   0x18002ace0  Map_Find    -> `_settingsMap.Find` (Collection::Set, B7 LX)
 //   System::WideString ctor / Set / AsUTF8, System::String::Set / Format,
 //   IO::Registry's ctor, System::MemoryAllocator::MemAlloc / MemFree.
 
-// ENDGAME B.3.2 step 2 (2026-09-13) — NOT CONVERTED to `Collection::Set<T>`
-// members: `Persistence` (+0x00/+0x08/+0x0C) IS a `Set<Pair<String,String>>`
-// header and 0x18000f7d0 IS `Set<T>::Clear()` (set_clear.cpp's own banner
-// names it), but `IO::Persistence` holds that header as three loose fields
-// (it has no constructor -- engine/singleton_ctors.cpp builds it), so the
-// collection bodies are handed the map's {root, count} header (B.4 wave X:
-// `RtIo::SettingsMap`, Persistence.h).
-void MapClear(RtIo::SettingsMap* map) {
-    rtsetclear::Clear(map);                                           // 0x18000f7d0
-}
-
-// Map_Insert hands back the collection's opaque-element node; the settings
-// map's node IS `RtIo::SettingsMapNode` (Persistence.h).
-SettingsMapNode* MapInsert(RtIo::SettingsMap* map, const System::String& key, const System::String& value) {
-    SettingsMapNode* node = nullptr;
+// Map_Insert hands back the Set's node (`RtIo::SettingsNode`, Persistence.h).
+SettingsNode* MapInsert(RtIo::SettingsSet* map, const System::String& key, const System::String& value) {
+    SettingsNode* node = nullptr;
     rtavl::StringMapInsert(map,                                      // 0x18002a090
                            &node, &key._data, &value._data);
     return node;
@@ -340,7 +327,7 @@ Registry::~Registry() {
 // Defined in `namespace IO` because a member of `IO::X` must appear in a
 // namespace ENCLOSING the class (B34_BRIEFS section A.2); the file-local
 // helpers live in this translation unit's GLOBAL anonymous namespace and are
-// reached as `::MapClear` / `::MapInsert` / `::AssignFromWide` / `::kNameChars`
+// reached as `::MapInsert` / `::AssignFromWide` / `::kNameChars`
 // / `::kValueChars` / `::kValueBytes`. Every POD is spelled `RtIo::` or
 // `RtSystem::` and every real class `System::` (B34_RULES section 7.2); note
 // this file's POD namespace is `RtIo`, LOWERCASE o.
@@ -354,7 +341,7 @@ namespace IO {
 
 void Persistence::ReadSettings() {
 
-    ::MapClear(&_settingsMap);                                 // 0x1800b84db
+    _settingsMap.Clear();                                      // 0x1800b84db -> 0x18000f7d0
 
     // 0x1800b84e7 `Registry reg(nullptr)`. Its destructor is retail's inlined
     // ~Registry at 0x1800b887d (Registry.h's banner), the last of the three
@@ -389,15 +376,15 @@ void Persistence::ReadSettings() {
         ::AssignFromWide(name, nameBuf);                       // 0x1800b85b2..
         ::AssignFromWide(value, valueBuf);                     // 0x1800b86a5..
 
-        SettingsMapNode* const n = ::MapInsert(&_settingsMap, name, value);   // 0x1800b87ad
+        SettingsNode* const n = ::MapInsert(&_settingsMap, name, value);      // 0x1800b87ad
 
         // 0x1800b87b2-0x1800b882d. Map_Insert leaves an ALREADY-PRESENT key's
         // value untouched, so retail re-seats it by hand. The `!=` is the
         // self-assignment guard; see banner points 1 and 2.
         if (n != nullptr) {
             // `String::operator=` (retail 0x1800c9810).
-            if (n->value._data != value._data) {
-                n->value = value;
+            if (n->element.value._data != value._data) {
+                n->element.value = value;
             }
         }
     }
@@ -566,13 +553,8 @@ void Persistence::ReadSettings() {
 namespace {
 
 // ---- dependencies this half adds -------------------------------------------
-// 0x18002ace0 -- `RtSystem_ConfigMap_Find` (runtime/src/system/configuration.cpp),
-// by name (B3R RT-IO). There is no export name at that RVA at all. Its
-// signature (system/Configuration.h) takes the map's root slot and the key
-// String and returns the node (B.4 R-SYS).
-const SettingsMapNode* MapFind(const IO::Persistence* map, const System::String& key) {
-    return RtSystem_ConfigMap_Find(&map->_settingsMap.root, &key);
-}
+// 0x18002ace0 -- Map_Find, the Set's own `Find` (B7 LX): there is no export
+// name at that RVA at all.
 
 // The allocator boundary for phase 2's array: retail open-codes
 // `Lock(alloc+0x640); Allocate/Free(_singleton, ...); Unlock()` at 0x1800b8d69
@@ -601,21 +583,21 @@ void EmitDelete(HKEY key, const wchar_t* name) {
 }
 
 // ---- the tree walk phase 1 uses -------------------------------------------
-// The links are SettingsMapNode's own (Persistence.h): parent +0x10 (pinned by
+// The links are the Set node's own (RtIo::SettingsNode, Persistence.h): parent +0x10 (pinned by
 // this very function, 0x1800b8a9c / 0x1800b8aa5), left +0x18, right +0x20.
-const SettingsMapNode* Leftmost(const SettingsMapNode* node) {
+const SettingsNode* Leftmost(const SettingsNode* node) {
     if (!node) return nullptr;
     for (;;) {
-        const SettingsMapNode* l = node->left;
+        const SettingsNode* l = node->left;
         if (!l) return node;
         node = l;
     }
 }
 
 // 0x1800b8a80..0x1800b8acb, transcribed branch for branch.
-const SettingsMapNode* InorderSuccessor(const SettingsMapNode* node) {
+const SettingsNode* InorderSuccessor(const SettingsNode* node) {
     if (!node) return nullptr;
-    const SettingsMapNode* r = node->right;
+    const SettingsNode* r = node->right;
     if (r) {                                    // 0x1800b8a89
         for (;;) {                              // 0x1800b8a8e
             node = r;
@@ -623,7 +605,7 @@ const SettingsMapNode* InorderSuccessor(const SettingsMapNode* node) {
             if (!r) return node;                // 0x1800b8a98
         }
     }
-    const SettingsMapNode* p = node->parent;    // 0x1800b8a9c
+    const SettingsNode* p = node->parent;    // 0x1800b8a9c
     if (!p) return node->parent;
     if (p->left == node) return p;              // 0x1800b8aa5
     while (p && p->right == node) {             // 0x1800b8ab5
@@ -710,11 +692,11 @@ void Persistence::WriteSettings() const {
     {
         IO::Registry reg(nullptr);                              // 0x1800b8912
 
-        const SettingsMapNode* node = Leftmost(_settingsMap.root);   // 0x1800b8918
+        const SettingsNode* node = Leftmost(_settingsMap._root);  // 0x1800b8918
         while (node != nullptr) {
             {
-                System::WideString wValue(node->value);         // 0x1800b894b
-                System::WideString wName(node->key);            // 0x1800b895d
+                System::WideString wValue(node->element.value); // 0x1800b894b
+                System::WideString wName(node->element.key);    // 0x1800b895d
 
                 if (reg._key != nullptr) {                      // 0x1800b896e
                     const wchar_t* data = wValue._data;
@@ -755,11 +737,11 @@ void Persistence::WriteSettings() const {
                     break;                                          // 0x1800b8bc0
                 if (cch > kNameChars) break;                        // 0x1800b8bd0
 
-                const SettingsMapNode* found;
+                const SettingsNode* found;
                 {
                     System::String key;
                     AssignFromWide(key, nameBuf);                   // 0x1800b8be8..
-                    found = MapFind(this, key);                     // 0x18002ace0
+                    found = _settingsMap.Find(key._data);           // 0x18002ace0
                     // ~key
                 }
                 if (found != nullptr) continue;                     // 0x1800b8cd3

@@ -470,25 +470,21 @@ UNIT_TEST(system_compression_is_one_pointer_and_must_stay_eight_bytes) {
 // ===========================================================================
 // PART I — B.3.4b SYSTEM (4c): `System::Configuration`.
 // ===========================================================================
-// The 0x30 bytes are pinned by a CONSTRUCTOR THIS COMMIT DOES NOT OWN:
-// `??0Configuration@System@@QEAA@XZ` (0x1800c51b0) lives in
-// `runtime/src/engine/engine_lifecycle.cpp:322` and writes all six slots at
-// literal offsets. So every offsetof below is a contract with a body in another
-// file, which is exactly the case a static_assert in a header cannot state on
-// its own and a named test can.
+// The 0x30 bytes are pinned by `??0Configuration@System@@QEAA@XZ` (0x1800c51b0),
+// the class's own header-defined constructor since B7 LX (D7a): +0x00 is
+// `Collection::Array<System::String>`, +0x10 the settings
+// `Collection::Set<Pair<String,String>>` (RtIo::SettingsSet).
 //
-// Nothing is constructed or called here: `configuration.cpp` stands on the port
-// registry (RT_EXPORT_ONCE for the two Parse doors, ResolveAddr for the map
-// insert and for both teardown callees) and does not link on the host, like
-// thread_win.cpp and value_types.cpp.
+// Nothing is constructed or called here: `configuration.cpp` does not link on
+// the host, like thread_win.cpp and value_types.cpp.
 
 UNIT_TEST(system_configuration_is_0x30_bytes_at_the_ctors_literal_offsets) {
     CHECK_EQ(sizeof(System::Configuration), static_cast<size_t>(0x30));
     CHECK_EQ(offsetof(System::Configuration, _entries),     static_cast<size_t>(0x00));
-    CHECK_EQ(offsetof(System::Configuration, _entryCount),  static_cast<size_t>(0x08));
-    CHECK_EQ(offsetof(System::Configuration, _map.root),     static_cast<size_t>(0x10));
-    CHECK_EQ(offsetof(System::Configuration, _map.count),    static_cast<size_t>(0x18));
-    CHECK_EQ(offsetof(System::Configuration, _map.pad0c),   static_cast<size_t>(0x1c));
+    CHECK_EQ(offsetof(System::Configuration, _entries._size),  static_cast<size_t>(0x08));
+    CHECK_EQ(offsetof(System::Configuration, _map._root),    static_cast<size_t>(0x10));
+    CHECK_EQ(offsetof(System::Configuration, _map._count),   static_cast<size_t>(0x18));
+    CHECK_EQ(offsetof(System::Configuration, _map._pad0c),   static_cast<size_t>(0x1c));
     CHECK_EQ(offsetof(System::Configuration, _currentPlatform), static_cast<size_t>(0x20));
     CHECK_EQ(offsetof(System::Configuration, _currentBuild),    static_cast<size_t>(0x28));
     CHECK_EQ(offsetof(System::Configuration, _pad2c),       static_cast<size_t>(0x2c));
@@ -496,22 +492,11 @@ UNIT_TEST(system_configuration_is_0x30_bytes_at_the_ctors_literal_offsets) {
     CHECK(std::is_standard_layout<System::Configuration>::value);
 }
 
-UNIT_TEST(configuration_owns_its_destructor_but_declares_no_constructor) {
+UNIT_TEST(configuration_owns_its_constructor_and_destructor) {
     // The class owns `??1Configuration@System@@` (0x1800c5170) -- the map clear
-    // at +0x10 and the `~Array(+elem)` tail call on `this`. If this reads
-    // trivial, the destructor has been deleted and the `??1` door clears
-    // nothing.
+    // at +0x10 and the `~Array(+elem)` tail call on `this`, its two members'
+    // destructors. If this reads trivial, the destructor has been deleted.
     CHECK(!std::is_trivially_destructible<System::Configuration>::value);
-
-    // And it declares NO constructor, because `??0Configuration@System@@`
-    // (0x1800c51b0) is ported AND registered in engine_lifecycle.cpp:322/995
-    // -- another owner's file -- and still writes all six slots by hand. A
-    // constructor here would run beside it.
-    //
-    // NOTE FOR WHOEVER TIGHTENS THIS: `is_trivially_default_constructible`
-    // cannot be the pin. GCC folds the DESTRUCTOR's triviality into
-    // `is_trivially_constructible`, and this class has a real destructor, so
-    // that trait reads false for a reason unrelated to the constructor. The
-    // weaker statement is what is checkable here; the strong one is the comment.
+    // And `??0Configuration@System@@` (0x1800c51b0) is its constructor (B7 LX).
     CHECK(std::is_default_constructible<System::Configuration>::value);
 }

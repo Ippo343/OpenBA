@@ -67,7 +67,7 @@ bool CreateFencedDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_i60, nullptr);
     ser.Serialize(_i64, nullptr);
     ser.Serialize(_b68, nullptr);
-    Reimpl_ExternalPtr_Serialize_StringTable(&_ref70, &ser);
+    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_ref70, &ser);
     return true;
 }
 
