@@ -618,16 +618,7 @@ void FencedTool::Startup() {
     // 1. Find CreateFencedDescription on the tool group (+0x20)
     CreateFencedDescription* fencedDesc = FencedFindComponent<CreateFencedDescription>(descriptionPtr);
     this->fencedDesc = fencedDesc;
-    // SA guard (retail would fault): without the CreateFencedDescription every
-    // later step derefs null+0x28. Reachable when the 0x1401c4100 type-id
-    // storage is unseeded (reg_pipeline_typeids.cpp) or the template lacks a
-    // createfenced block. Trace loudly — a silent bail here cost a crash-debug.
-    if (!fencedDesc) {
-        fprintf(stderr, "[FencedTool] Startup: no CreateFencedDescription on entity=%p "
-                "(tid=0x%x) — tool left un-wired\n", static_cast<void*>(descriptionPtr),
-                CreateFencedDescription::TypeId());
-        return;
-    }
+    // No test of the result: 0x1400dcd50 stores it at +0x38 and goes on.
 
     // 2. Find MapDescription on the tool group (+0x20)
     MapDescription* areaDesc = FencedFindComponent<MapDescription>(descriptionPtr);
