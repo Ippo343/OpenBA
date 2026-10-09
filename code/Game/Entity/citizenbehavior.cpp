@@ -1179,26 +1179,26 @@ void CitizenBehavior::CollectStats() {
 namespace {
 
 // FUN_14000f9e0 — the inner Array<int32> deep copy (operator=) that 0x140017640
-// runs when the outer array reallocates.
+// runs when the outer array reallocates. B6 row 653: 0x14000fa03-0x14000fa5d tests
+// neither the allocator nor the old / source buffers: MemFree(old) unconditionally
+// (0x14000fa0b), qword zero of +0x08 then +0x00, MemAlloc(cnt << 2, 4) (0x14000fa32), and
+// the copy loop re-reads the size and the destination each pass and skips only a null
+// destination SLOT ADDRESS (0x14000fa46 ADD R8,RDX / 0x14000fa49 JZ).
 void DeepCopyInner04Array(Collection::Array<int32_t>* d, const Collection::Array<int32_t>* s) {
     if (d == s) return;
-    void* old = d->_data;
-    if (old) System::MemoryAllocator::MemFree(old);
-    d->_size = 0;
+    System::MemoryAllocator::MemFree(d->_data);
+    d->_size = 0;             // +0x08 qword zero (H7: two stores)
+    d->_capacity = 0;
     d->_data = nullptr;
     int32_t cnt = s->_size;
     d->_size = cnt;
     if (cnt > 0) {
         d->_capacity = cnt;
-        if (System::MemoryAllocator::_singleton)
-            d->_data =
-                static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 2, 4));
+        d->_data = static_cast<int32_t*>(System::MemoryAllocator::MemAlloc(static_cast<uint64_t>(cnt) << 2, 4));
     }
-    int32_t newCnt = d->_size;
-    if (newCnt > 0) {
-        int32_t* dp = d->_data;
-        int32_t* sp = s->_data;
-        if (dp && sp) for (int32_t i = 0; i < newCnt; ++i) dp[i] = sp[i];
+    for (int32_t i = 0; i < d->_size; ++i) {
+        int32_t* slot = d->_data + i;
+        if (slot != nullptr) *slot = s->_data[i];
     }
 }
 
