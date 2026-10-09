@@ -203,12 +203,10 @@ uint32_t CitizenBehavior::CountByProfession(const Profession* key) const {
 
 // 0x14012fbb0 — WorkPlaceComponent::GetMaxWorkers. Finds the owner entity's
 // WorkComponent (FindComponent<WorkComponent>, 0x140003050) and returns its
-// cached capacity (+0x30), computing it lazily if still 0. The null-component
-// return is the tree's (retail reads through it; 14d row 81).
+// cached capacity (+0x30), computing it lazily if still 0. B6 row 81: retail tests
+// nothing (0x14012fbdc MOV RBX,[RBX]; 0x14012fbdf CMP dword ptr [RBX+0x30],0).
 int WorkPlaceComponent::GetMaxWorkers() const {
     WorkComponent* comp = _entity->FindComponent<WorkComponent>();
-    if (!comp) return 0;
-
     if (comp->workState == 0) {
         comp->workState = comp->CalcMaxWorkers();   // 0x14012e5c0
     }
