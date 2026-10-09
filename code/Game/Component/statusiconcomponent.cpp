@@ -184,7 +184,7 @@ void StatusIconComponent::ShowAfterLoad() {
                 // If flags changed (low 16 bits) and owner non-null, notify entity
                 if (((newFlags ^ oldFlags) & 0xFFFF) != 0) {
                     if (_entity != nullptr) {
-                        NotifyEntityChanged(_entity.Get());
+                        _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
                     }
                 }
 
@@ -266,7 +266,7 @@ void StatusIconComponent::SetFlag(uint8_t flagIndex, char value) {
             changed = after ^ before;
         }
         if ((changed & 0xffff) != 0 && _entity != nullptr) {
-            NotifyEntityChanged(_entity.Get());
+            _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
         }
     }
 }
@@ -506,7 +506,7 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     }
     selfC->_flags = new20;
     if (((new20 ^ old20) & 0xffff) != 0 && selfC->_entity != nullptr) {
-        NotifyEntityChanged(selfC->_entity.Get());
+        selfC->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
 }
 

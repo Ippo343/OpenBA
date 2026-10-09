@@ -270,7 +270,7 @@ extern "C" void* FindAvailableBuilding(CitizenBehavior* townMgr, void* out, cons
         int capacity = capRaw;
         if (capacity == 0) {
             // The B4 FORWARD (its two guards before the member's body stay: known_port_issues row 80).
-            capacity = WorkComponent_CalcMaxWorkers(wcPtr);   // 0x14012e5c0
+            capacity = wcPtr->CalcMaxWorkers();   // 0x14012e5c0
             wcPtr->workState = capacity;
         }
 

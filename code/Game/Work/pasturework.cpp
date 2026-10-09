@@ -475,7 +475,7 @@ int PastureWork::OnCancel(CitizenComponent** param2, ComponentEntity** param3, i
     if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0) {   // never true (retail quirk above)
         ComponentEntity* parentEntity = animal->_entity.Get();
         if (parentEntity != nullptr) {   // 0x1400f2329 CMP [RBX+0x10],0 (retail's own test)
-            NotifyEntityChanged(parentEntity);
+            parentEntity->RefreshEntityFlags();   // 0x1400c3470
         }
     }
     return 0;

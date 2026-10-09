@@ -69,7 +69,7 @@ void HuntComponent::Update(const System::Time* time) {
     // Lazily compute the capacity divisor if not cached
     int capacity = work->workState;
     if (capacity == 0) {
-        capacity = WorkComponent_CalcMaxWorkers(work);
+        capacity = work->CalcMaxWorkers();
         work->workState = capacity;
     }
 

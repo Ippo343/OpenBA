@@ -229,7 +229,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
 
     int capacity = 0;
     if (buildComp == nullptr) {
-        if (workComp) capacity = WorkComponent_CalcMaxWorkers(workComp);
+        if (workComp) capacity = workComp->CalcMaxWorkers();
     } else {
         InteractComponent* posComp = _entity->FindComponent<InteractComponent>();   // 0x140002ed0
         // [STANDALONE GUARD] Retail derefs the finder's out-IBP unconditionally; a partial

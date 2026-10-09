@@ -196,7 +196,7 @@ void TradeComponent::SpawnPurchasedLivestock(ComponentDescription* tmpl, unsigne
             animal->_flags = after;
             if (static_cast<uint16_t>(before) != static_cast<uint16_t>(after) &&
                 animal->_entity != nullptr) {
-                NotifyEntityChanged(animal->_entity.Get());
+                animal->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
             }
 
             // The roam rect: where this animal is allowed to wander.
