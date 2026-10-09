@@ -266,12 +266,9 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                                 natRes2 = entityAtCell2->FindComponent<NaturalResourceComponent>();
                             }
 
-                            // Check flag bit 20 on NatRes (flagged for removal)
-                            if (natRes1 == nullptr) {
-                                // NatRes component gone — skip this cell
-                                validityArray[i] = 0;
-                                goto next_cell;
-                            }
+                            // Check flag bit 20 on NatRes (flagged for removal): natRes1 is
+                            // read with no test (0x1400ed082 MOV RAX,[RBP-0x29] / [RAX+0x20]);
+                            // natRes2's null test below is retail's (0x1400ed0e9).
                             if ((natRes1->_flags >> 20) & 1) {
                                 goto handle_removal;
                             }
@@ -475,14 +472,9 @@ int HarvestArea::Cleanup() {
         CitizenComponent* citizenEntity = leftmost->element.citizen.Get();
         WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
 
-        const int before = count;
+        // 0x1400ed2cb CMP [RDI+0x50],0 / JG: loop while the count is positive, with no
+        // progress test (a cancel that does not drop the count spins, as retail).
         count = _cells._count;
-
-        // Cancelling made no progress: retail would spin here forever. The guard is a
-        // deliberate deviation (it can only fire in a state that would otherwise hang).
-        if (count == before) {
-            break;
-        }
     }
     return 0;
 }
