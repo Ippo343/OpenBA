@@ -139,7 +139,7 @@ class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 
 // ---- action_pf_avl.cpp
 struct PathGraph;
-extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
+extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30  // B8: stays free -- not a PathGraph member: retail 0x140025b30 is the Array<PathCellPair> SetSize(0) instantiation over the array at PathGraph+0x00 (MOVSXD RBP,[RCX+8]; realloc / -1 fill / MemFree tail); PathGraph::m_pairs is not a Collection::Array, typing it is the Array<T> template's work (RT)
 
 // ---- action_pf_ctors.cpp
 struct ActionStack;
