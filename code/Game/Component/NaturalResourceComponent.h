@@ -35,7 +35,10 @@ public:
     // 0x140125d80, no own work
     ~NaturalResourceComponent() override = default;               // [0] 0x1400366b0
     void Persist(IO::Stream& stream) override;                          // [3] 0x140125cf0
-    void Tick(const System::Time* time) override;                               // [8] 0x140125c40 PORT GAP
+    // The removal-animation tick: clears the tick bit once the mesh stops animating and
+    // removes the resource when the dead bit is set (defined in naturalresourcecomponent.cpp;
+    // INSTALLED 2026-10-09, user decision -- known_port_issues row 5).
+    void Tick(const System::Time* time) override;                 // [8] 0x140125c40
     // Set the dead bit 0x200000, refresh the entity, animation index 2 (defined in
     // growthcomponent.cpp, B4 COMP-c).
     void ResetGrowthState();                                      // 0x140126780

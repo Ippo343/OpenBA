@@ -15,7 +15,7 @@
 // function once <windows.h> has been seen (via resolve.h), which turns
 // Volume.h's own `sizeof(Rectangle)` assert into a hard error.
 #include "graphics/Mesh.h"   // ENDGAME B.3.5 caller batch I2
-#include "Component/naturalresourcecomponent_funcs.h"
+#include "Component/NaturalResourceComponent.h"
 #include "Component/ModelComponent.h"   // OnRemove: FindComponent<ModelComponent>, meshInstance
 #include "object/TypeInfo.h"
 #include "graphics/Camera.h"
@@ -29,40 +29,44 @@
 #include "Component/exe_bodies.h"
 
 // ============================================================
-// NaturalResourceComponent::OnRemove (0x140125c40)
+// NaturalResourceComponent::Tick (vtable slot [8], 0x140125c40)
 // ============================================================
-// Checks animation state, clears path queue, modifies flags,
-// potentially reassigns natural resource ownership.
+// The per-tick body a resource runs while its removal animation plays (the tick bit 0x4 is
+// set by NaturalResourceSetAnimation 0x140126440 when the dead bit goes on): once the
+// ModelComponent's MeshInstance stops animating it clears the tick bit, refreshes the
+// entity's flag summary, and -- if the dead bit 0x200000 is set -- removes the resource
+// (0x1401260f0). The profile build's name for this body is OnRemove (its error string
+// "natrual resource is alread being removed!"); the slot it sits in is Component's [8]
+// Tick(const Time*) (vtable 0x140163e10: [7] = Component's 0x140118830, [8] = 0x140125c40).
+// The time argument is unread (retail: no read of RDX).
 //
-// Nothing calls this body (the class's slot 8 is a PORT GAP, below). B3R: its three
-// doors (0x140005200, 0x1400c3470, 0x1401260f0, filled only by an init function that
-// nothing called) are the bodies by name.
-
-//
-// NOT INSTALLED (B.4 COMP-d): slot 8 is still a PORT GAP (known_port_issues row 5: installing it
-// is a live change on every natural-resource removal, a user decision). The body is retail's:
-// 0x140125c60 `CALL 0x140003f60` = FindComponent<ModelComponent> (cell 0x1401c7a50), then
-// 0x140125c75 `ADD RCX,0x28; CALL [0x1401514b0]` = the ModelComponent's MeshInstance::IsAnimating
-// (row 552 fixed in B6: the tree called the ParticleComponent finder 0x140005200).
-void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
-    ModelComponent* model = self->_entity->FindComponent<ModelComponent>();   // 0x140003f60
+// INSTALLED 2026-10-09 (USER DECISION, B7 close -- known_port_issues row 5 / 552): until then
+// slot 8 was an inert override and the body a free function nothing called, so a cut tree or a
+// quarried rock never ran this and the entity was removed by the dead-bit path alone.
+// The body is retail's: 0x140125c60 `CALL 0x140003f60` = FindComponent<ModelComponent>
+// (cell 0x1401c7a50), then 0x140125c75 `ADD RCX,0x28; CALL [0x1401514b0]` = the
+// ModelComponent's MeshInstance::IsAnimating (row 552 fixed in B6: the tree called the
+// ParticleComponent finder 0x140005200). B3R: its three doors (0x140005200, 0x1400c3470,
+// 0x1401260f0, filled only by an init function that nothing called) are the bodies by name.
+void NaturalResourceComponent::Tick(const System::Time*) {
+    ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
     bool isAnimating = model->meshInstance.IsAnimating();
     if (isAnimating) return;
 
     // Clear bit 2 of the flags
-    uint32_t oldFlags = self->_flags;
+    uint32_t oldFlags = _flags;
     uint32_t newFlags = oldFlags & ~0x4u;
-    self->_flags = newFlags;
+    _flags = newFlags;
 
     // If flags changed in low 16 bits and entity exists, update
-    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && self->_entity != nullptr) {
-        self->_entity->RefreshEntityFlags();   // 0x1400c3470
+    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && _entity != nullptr) {
+        _entity->RefreshEntityFlags();   // 0x1400c3470
     }
 
     // If bit 21 of flags is set, reassign resource
-    if ((self->_flags >> 0x15) & 1) {
+    if ((_flags >> 0x15) & 1) {
         ComponentEntity* nullRef = nullptr;   // InternalPtr (the ctor is a plain store)
-        RemoveNaturalResourceCore(self, &nullRef, 0);   // 0x1401260f0 (was its ActCNR_RemoveNatRes_1260f0 forwarder)
+        RemoveNaturalResourceCore(this, &nullRef, 0);   // 0x1401260f0 (was its ActCNR_RemoveNatRes_1260f0 forwarder)
     }
 }
 
@@ -99,11 +103,6 @@ void NaturalResourceComponent::Persist(IO::Stream& stream) {
     ser.Serialize(mature, nullptr);
     ser.Serialize(harvestable, nullptr);
 }
-
-// [8] 0x140125c40. PORT GAP (retail 0x140125c40) — B38 D9: the body is ported
-// above (NaturalResourceComponent_OnRemove) but the tree's table never
-// installed it; the inert stub is kept here (see the NOT INSTALLED note above).
-void NaturalResourceComponent::Tick(const System::Time*) {}
 
 // create 0x140036550: MemAlloc(0x30, 8), then the (inlined) ctor.
 ::Object::Base* NaturalResourceComponent::CreateNewObject() {
