@@ -131,6 +131,7 @@
 // B5 DEV-A: the `Video::DeviceData` base `VideoDX11::DeviceData` derives from.
 #include "video/CompanionData.h"
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
+#include "platform_gfx.h"   // Platform::ResolveD3D11CreateDevice / ResolveCreateDXGIFactory1
 #include <new>
 #include <type_traits>
 
@@ -181,23 +182,18 @@ namespace {
 // ============================================================
 // d3d11.dll / dxgi.dll entry points
 //
-// These are the only two non-COM graphics imports the DLL has.
-//
-// They used to be read out of VideoDX11's OWN import address table — the exact
-// pointers the shipped code CALLs through — with GetProcAddress as a fallback
-// that the comment claimed was unreachable "because VideoDX11 could not have
-// loaded without these imports resolving". Standalone mode made it not merely
-// reachable but the only path: the DLL is never loaded, so there is no IAT.
-//
-// The order is therefore inverted. LoadLibrary (not GetModuleHandle) is what
-// makes this work standalone: with VideoDX11 absent, nothing else in the
-// process has pulled d3d11.dll or dxgi.dll in yet, so asking for a handle to an
-// already-loaded module returns null and the renderer never comes up.
+// These are the only two non-COM graphics imports the DLL has. Where they come
+// from is the platform's business since Phase D.4 RENDER §C.1: the
+// GetModuleHandleW / LoadLibraryW / GetProcAddress body that was
+// ResolveGfxImport here moved unchanged to src/platform/win/gfx_win.cpp, behind
+// src/platform/common/platform_gfx.h (that file carries its history: the
+// retail IAT, why LoadLibrary comes first standalone). Platform::GfxProc is
+// FARPROC on Win64, so the one cast per entry point stays here.
 //
 // B5 DEV-A (D4): CreateDXGIFactory1's out-parameter is `void**` in dxgi.h, but
 // both callers here pass IID_IDXGIFactory1 and nothing else, so the resolved
 // pointer is typed as what it returns into: `IDXGIFactory1**`. The pointer is
-// already the product of the GetProcAddress cast below; typing it means the
+// already the product of the cast below; typing it means the
 // two call sites write straight into their IDXGIFactory1* (DeviceData::unk10 /
 // the walk's local) with no `void**` cast of their own (the `com_iid` floor
 // ceiling is full).
@@ -208,34 +204,14 @@ typedef HRESULT (WINAPI *D3D11CreateDevice_t)(IDXGIAdapter*, D3D_DRIVER_TYPE, HM
                                               ID3D11Device**, D3D_FEATURE_LEVEL*,
                                               ID3D11DeviceContext**);
 
-FARPROC ResolveGfxImport(uintptr_t iatGhidra, const wchar_t* dll, const char* name) {
-    // Primary: the system DLL, loading it if necessary. Same function either
-    // way — the shipped DLL's IAT slot holds exactly what GetProcAddress
-    // returns, since that is what the loader wrote into it.
-    HMODULE m = GetModuleHandleW(dll);
-    if (!m) m = LoadLibraryW(dll);
-    if (m) {
-        if (FARPROC fn = GetProcAddress(m, name))
-            return fn;
-    }
-
-    // There is no second source: the old fallback read VideoDX11-x64.dll's own
-    // IAT slot, and that DLL is never mapped (ENDGAME.md A.1).
-    (void)iatGhidra;
-
-    fprintf(stderr, "[Dx11] FAILED to resolve %ls!%s — the renderer cannot start\n",
-            dll, name);
-    return nullptr;
-}
-
 CreateDXGIFactory1_t GetCreateDXGIFactory1() {
     static CreateDXGIFactory1_t fn = reinterpret_cast<CreateDXGIFactory1_t>(   // CAST-OK: win32
-        ResolveGfxImport(0x180013530, L"dxgi.dll", "CreateDXGIFactory1"));   // GetProcAddress's FARPROC
+        Platform::ResolveCreateDXGIFactory1());   // GetProcAddress's FARPROC
     return fn;
 }
 D3D11CreateDevice_t GetD3D11CreateDevice() {
     static D3D11CreateDevice_t fn = reinterpret_cast<D3D11CreateDevice_t>(   // CAST-OK: win32
-        ResolveGfxImport(0x180013520, L"d3d11.dll", "D3D11CreateDevice"));   // GetProcAddress's FARPROC
+        Platform::ResolveD3D11CreateDevice());   // GetProcAddress's FARPROC
     return fn;
 }
 
