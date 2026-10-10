@@ -702,15 +702,17 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     }
                 }
 
+                // Retail GameMain pushes the whole struct back into
+                // IO::Persistence here (0x1400422a3 -> 0x140098970), before
+                // the frees and before Engine::Shutdown's WriteSettings
+                // flushes Persistence to disk. NewGameDialog's OK only writes
+                // the settings STRUCT, so this call is what makes the player's
+                // terrain / size / climate / start / disaster picks outlive
+                // the process. The call comes BEFORE retail's test
+                // (0x1400422a0 MOV RCX,RBX; CALL; 0x1400422a8 TEST RBX,RBX), which
+                // guards only the free (B9 RES, row 1209).
+                settings->Save();
                 if (settings) {
-                    // Retail GameMain pushes the whole struct back into
-                    // IO::Persistence here (0x1400422a3 -> 0x140098970), before
-                    // the frees and before Engine::Shutdown's WriteSettings
-                    // flushes Persistence to disk. NewGameDialog's OK only writes
-                    // the settings STRUCT, so this call is what makes the player's
-                    // terrain / size / climate / start / disaster picks outlive
-                    // the process.
-                    settings->Save();
                     g_gameSettings = nullptr;
                     System::MemoryAllocator::MemFree(settings);
                     printf("[GameMain] Settings freed.\n");
