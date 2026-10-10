@@ -140,8 +140,7 @@ void WorldGeometry::StoreBatchMaterial(int index, Graphics::MaterialInstance* de
 void Map::PlaceRoadCell(uint32_t cellIdx,
                                                 uint8_t roadType, uint64_t /*endCell*/,
                                                 uint32_t mapDescVal, ComponentDescription* roadDescExtra) {
-    if (!cells.GetData()) return;
-    MapCell* cell = &cells.GetData()[(int)cellIdx];
+    MapCell* cell = &cells.GetData()[(int)cellIdx];   // 0x14009c992: [RCX+0x80], no test
 
     // Only upgrade: bail unless the new road type outranks what is already there.
     if (!(roadType < cell->field_0x2A)) return;

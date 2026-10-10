@@ -102,6 +102,11 @@ void CitizenComponent::OnRemove() {
         // or is emancipated into an unattached adult.
         // 0x140113d7f-0x140113ea5: `while (+0x260 != 0)`, no progress test; the
         // under-age compare reads OUR description (+0x288) unguarded (0x140113d9c).
+        // Termination (row 1207): HandleLifeEvent(4) runs MarkForRemoval (0x1400c2ea0)
+        // when the member's entity lacks 0x400, and a citizen entity carries flag 0x2
+        // (the ctor's 0xcb), so MarkForRemoval runs this OnRemove on the member BEFORE
+        // setting 0x400 -- step 3 unlinks it from our ring. A member whose entity already
+        // has 0x400 went through that same broadcast, so it is no longer in the ring.
         Object::InternalPtr<CitizenComponent>* ringHead = &_firstChild;
         CitizenComponent* member = ringHead->Get();
         while (member != nullptr) {

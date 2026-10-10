@@ -251,12 +251,6 @@ namespace professionui_sa {
         }
         fflush(stdout);
     }
-    // Has Slot5 populated the caches yet? counts(+0x30) is allocated by the Slot5 tail
-    // (ExeArrayResize2), spinners(+0x40) grown as each profession row is added.
-    bool IsSetUp(ProfessionUI* self) {
-        return self->counts._data != nullptr &&
-               self->spinners._data != nullptr;
-    }
 }
 
 // ============================================================
@@ -271,14 +265,10 @@ namespace professionui_sa {
 
 // [5] 0x140076ca0
 void ProfessionUI::OnOpened() {
-    // Idempotent: the framework dispatches Slot5 once during dialog creation, which
-    // populates the table + spinner/number caches + BST. A SECOND run (e.g. the
-    // harness re-drive, or a stray framework re-dispatch) does NOT clear first —
-    // it re-clones the table cells and appends to the +0x40/+0x50 arrays, doubling
-    // them (n=20→40) while the counts array (+0x30) stays sized to profCount. The
-    // subsequent Slot8 then walks 40 half-built spinner IBPs and faults. Skip if
-    // setup already ran.
-    if (professionui_sa::IsSetUp(this)) { professionui_sa::Trace("Slot5-skip(already set up)", this); return; }
+    // 0x140076ca0 starts with the "professionTable" String / FindElement, no test: the
+    // framework runs this slot once per open (UserInterface::AddDialog ->
+    // DialogInstance::OnOpened). A second run re-clones the rows; the harness re-drive
+    // that made one is gone (B9 RES, known_port_issues row 1200).
     professionui_sa::Trace("Slot5", this);
 
     // Find "professionTable" element in the controller's container
@@ -877,7 +867,8 @@ void ProfessionUI::HandleButton(int profIndex) {
 // [9] 0x140076c10
 void ProfessionUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4,
                                   int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
-    if (!professionui_sa::IsSetUp(this)) return;
+    // 0x140076c10 starts `CMP R8D,0x12` / `0x15`: no set-up test (element events
+    // reach an opened dialog only).
     professionui_sa::Trace("Slot9", this);
     ProfessionList* profListPtr = GameUpdateLoop::_singleton->m_professionList;
     int profCount = profListPtr->professions.GetSize();

@@ -10,7 +10,7 @@
 //   0x14009fa80  FUN_14009fa80                   the rect stamp itself
 //   (0x140053720 ParticleComponent fade-OUT and 0x140042960 audio-emitter move are
 //    the TORNADO lane's ports — called here, not duplicated; see below.)
-//   0x140042c60  FUN_140042c60                   start ONE audio emitter
+//   (0x140042c60 is AmbientEmitterComponent::PlaySlot, ambientemittercomponent.cpp.)
 //   0x1400e9bd0  FireWork_Ctor(mem, entityIBP, capacity)
 //
 // ── How the loop closes ──────────────────────────────────────────────────────
@@ -180,49 +180,6 @@ void FireComponent::MarkDanger(short delta) {
 // (reference_one_retail_fn_ported_twice_diverges) — writing a second copy here
 // would have been exactly that failure mode, with each copy faithful in a
 // different half.
-
-// ============================================================
-// FUN_140042c60 — start ONE audio emitter (index `idx`) on this component.
-// ============================================================
-// Entry {+0x00 uint handle, +0x04 float volume, +0x08 ExternalPtr sound}, stride
-// 0x10; the sound ref is lazily copied from the AmbientEmitterDescription's
-// (+0x28) sound array. SoundType 3 = ambient looping.
-// (An AmbientEmitterComponent body, COMP-a's class; its reads stay as they were.)
-extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ac, int idx) {
-    if (!ac) return;
-    GameUpdateLoop* gw = GameWorld();
-    if (!gw) return;
-    Audio::Scene* scene = gw->m_audioScene;   // +0x78
-    if (!scene) return;
-
-    // 0x140042c74-0x140042c9c: IsDerivedFrom on [RCX+0x18] against the cell
-    // 0x1401c3e98 read fresh, no null test, CMOVNZ (B8 RES, row 1041).
-    Description* obj = ac->_description;
-    AmbientEmitterDescription* desc = obj->IsDerivedFrom(AmbientEmitterDescription::TypeId())
-                                          ? static_cast<AmbientEmitterDescription*>(obj) : nullptr;
-
-    if (!ac->slots._data) return;
-    AmbientEmitterSlot& entry = ac->slots._data[idx];
-
-    if (entry.sound == nullptr && desc) {
-        if (desc->_emitters)
-            entry.sound = desc->_emitters[idx];
-    }
-
-    uint32_t handle = scene->FindEffect3D(Object::ExternalPtr<Audio::SoundEffect>(entry.sound));
-    entry.handle = handle;
-    if (handle == 0) {
-        const System::Time t0{MakeTime(0.0f)};
-        const Vector3 posZero = { 0.0f, 0.0f, 0.0f };
-        handle = scene->PlayEffect3D(
-            Object::ExternalPtr<Audio::SoundEffect>(entry.sound), static_cast<Audio::Scene::SoundType>(3),
-            t0, posZero);
-        entry.handle = handle;
-    }
-    // AmbientEmitterComponent::position is a Math::Vector3, the type Audio::Scene takes
-    // (::Vector3 is engine/types/common.h's alias of Math::Vector3).
-    scene->AddEmitter(entry.handle, ac->position, entry.volume);
-}
 
 // ============================================================
 // FireWork_Ctor (0x1400e9bd0) — the 3-arg ctor, the ONLY producer of a FireWork:

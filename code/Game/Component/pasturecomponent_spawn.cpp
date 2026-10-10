@@ -286,13 +286,9 @@ extern "C" void Pasture_SetLivestockType(PastureComponent* pasture, ComponentDes
 // (sub_7140, pasturecomponent_states.cpp:287) pulls matching ones in once the player
 // builds a pasture and picks that type. Both of those are already ported and live.
 int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* tmpl) {
-    if (!tmpl || !centre) return 0;
-
-    const int groupCount = paramF8;   // +0xf8
-    if (groupCount <= 0) return 0;
-
+    // 0x1400a0b10-0x1400a0b77: RCX / RDX / R8 saved, [0x1401c3dd8]+0xd8 read, Rand(2), and
+    // only then the group count: no test of the template, the centre or the world.
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
-    if (!w) return 0;
     System::Random* rng = w->m_random;
 
     // Retail scans the entity's component array inline and compares GetTypeId (vtable
@@ -302,6 +298,8 @@ int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* t
     // Retail seeds the alternating sex from ONE Rand(2) before the loop and flips it every
     // iteration, so a group of 8 comes out 4/4 rather than 8 independent coin flips.
     bool female = rng->Rand(2u) == 0u;
+
+    const int groupCount = paramF8;   // +0xf8 (0x1400a0b77; retail re-reads it at 0x1400a0d80, nothing writes it in the loop)
 
     const float offX      = paramEC;   // +0xec
     const float offY      = paramF0;   // +0xf0
@@ -313,8 +311,7 @@ int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* t
     int spawned = 0;
     for (int i = 0; i < groupCount; ++i) {
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
-        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
-        if (!ent) continue;
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;   // 0x1400a0ba4: the ctor skipped, not the body
 
         // Inline AnimalComponent scan (retail LAB_1400a0c40 path).
         AnimalComponent* animal = ent->FindComponent<AnimalComponent>();
@@ -328,7 +325,7 @@ int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* t
         const float px = centre[0] + offX + tolX * radius;
         const float py = centre[1] + offY + tolY * radius;
 
-        if (animal) {
+        {   // 0x1400a0cd8-0x1400a0d13: the finder's result placed with no test
             const float yaw = rng->RandFloatTol() * yawSpread;
             // THREE floats, not two: retail builds a full Vector3 (Z = centre Z) and the
             // callee reads all three.
@@ -337,7 +334,7 @@ int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* t
         }
         female = !female;   // alternate AFTER placing, as retail does
 
-        if (animal) {
+        {   // 0x1400a0d23-0x1400a0d4a: no test
             // age, randomised so the herd doesn't move in lockstep.
             animal->age = rng->RandFloat();
             animal->UpdateBehavior();   // 0x140107320

@@ -270,22 +270,15 @@ int Map::CalcDistance(uint32_t cellA, uint32_t cellB) {
 //   (low byte of the returned uint64 is the bool; the WorldGrid_ValidateCell int-variant
 //    callers read the low 32 bits).
 uint64_t Map::ValidateCell(uint32_t pathType, uint32_t destCell, int srcCell) {
-    // [STANDALONE GUARD] srcCell == -1 when an entity's cell can't be resolved
-    // (Entity_impl_7fb0 returns -1 because the building's MapComponent isn't found
-    // via FUN_140004680 in standalone — unfilled type-id). (uint32_t)(-1)*0x30 then
-    // wild-reads the cell array. The real game always passes in-range cells. Bail
-    // "not reachable" on any out-of-range cell. Surfaced by BANISHED_FORCE_WORK
-    // (CheckWorkplaceValid anchors the inert workplace building).
-    int dim = size;
-    int64_t cellCount = static_cast<int64_t>(dim) * dim;
-    if (srcCell < 0 || static_cast<int64_t>(srcCell) >= cellCount ||
-        static_cast<int64_t>(destCell) >= cellCount)
-        return 0;
-
+    // 0x1400a00f0 tests neither cell: FillZones, then [RCX+0x80] indexed by both
+    // (B9 RES row 1120 dropped the port's range test; its route, a FindComponent<MapComponent>
+    // with an unfilled type id, no longer exists).
     FillZones();   // 0x14009c480 (was its Pf_ZoneRefresh_9c480 forwarder)
 
-    const MapCell& recSrc  = cells.GetData()[static_cast<uint32_t>(srcCell)];
-    const MapCell& recDest = cells.GetData()[destCell];
+    // Both cells are sign-extended before the index (0x1400a0104 MOVSXD RSI,R9D /
+    // 0x1400a0107 MOVSXD RDI,R8D).
+    const MapCell& recSrc  = cells.GetData()[srcCell];
+    const MapCell& recDest = cells.GetData()[static_cast<int>(destCell)];
 
     uint32_t typeSrc  = 1u << (recSrc.terrainType & 0x1f);
     uint32_t typeDest = 1u << (recDest.terrainType & 0x1f);
