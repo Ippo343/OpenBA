@@ -111,27 +111,6 @@ inline bool HasText(const System::String& s) {
 }  // namespace
 
 // ===========================================================================
-// 0x1400262B0 — Object::ExternalPtr<Tutorial>::Serialize
-// 0x140028650 — Object::ExternalPtr<UI::Dialog>::Serialize
-//
-// Both are the stock ExternalPtr<T>::Serialize template body — byte-identical
-// to FUN_14001B8E0 / FUN_140002340 / FUN_140027AD0 — differing only in the type
-// used for the post-load IsDerivedFrom. 0x140028650's operand is the exe slot
-// at 0x140151728, which standalone/address_registry.cpp already documents as
-// UI::Dialog's type id.
-//
-// These two are why a Tutorial.rsc load could not work: every FinishTutorialGoal
-// serialize skipped its Tutorial ExternalPtr and every TutorialSetupDialog
-// serialize skipped its Dialog ExternalPtr, which does not merely lose the
-// field — it mis-advances the stream cursor for everything that follows
-// ([[reference-unresolved-rdata-const-deletes-guarded-test]] family).
-// Both go through ExternalPtrSerializeGeneric's typed T** wrapper (Game/serialize_externals.h).
-// ===========================================================================
-void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) {
-    ExternalPtrSerializeGeneric(field, serializer, nullptr, "Tutorial");
-}
-
-// ===========================================================================
 // 0x1401001F0 — the tutorial's insert into the PlayerToolManager's +0x50
 // tracked set (a PlayerToolManager member in retail; GAME-b's class, kept
 // free here).

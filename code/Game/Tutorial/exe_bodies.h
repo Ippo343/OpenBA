@@ -42,7 +42,6 @@ extern "C" void TutBase_SerializeGoalArray(IO::Serializer* serializer, int count
 // ---- tutorial_wave.cpp
 class Tutorial;
 namespace IO { class Serializer; }
-void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer);  // 0x1400262b0 (B4 X7-GAME-A: typed; its two callers hold Tutorial*)  // B8: stays free -- DIFFERENT BODY: ExternalPtrSerializeGeneric with no type cell (the type resolved lazily by name, unvalidated when unresolved), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 namespace UI { class Dialog; }
 class PlayerToolManager;
 class ComponentDescription;
