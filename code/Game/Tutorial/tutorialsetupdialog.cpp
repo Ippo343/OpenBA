@@ -27,6 +27,7 @@
 #include "Game/PlayerToolManager.h"
 #include <cstdint>
 #include <new>
+#include "ui/Dialog.h"   // B8 RT2: ::Object::SerializeExternal<UI::Dialog> (the downcast needs it complete)
 
 // ============================================================
 // Construction / destruction (ENDGAME B.3.8 block GOAL)
@@ -108,7 +109,7 @@ bool TutorialSetupDialog::Serialize(IO::Stream& stream) {
     }
 
     HighlightPath().Serialize(ser);
-    TutWave_SerializeDialogRef(&highlightDialog, &ser);   // ExternalPtr<UI::Dialog> (0x140028650)
+    ::Object::SerializeExternal<UI::Dialog>(ser, highlightDialog);   // ExternalPtr<UI::Dialog> (0x140028650)
     ser.Serialize(arrowRotation, nullptr);
 
     // Temporary Filename retail's compiler emitted as this scope's guard.

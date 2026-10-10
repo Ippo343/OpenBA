@@ -45,7 +45,6 @@ class Tutorial;
 namespace IO { class Serializer; }
 void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer);  // 0x1400262b0 (B4 X7-GAME-A: typed; its two callers hold Tutorial*)  // B8: stays free -- DIFFERENT BODY: ExternalPtrSerializeGeneric with no type cell (the type resolved lazily by name, unvalidated when unresolved), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 namespace UI { class Dialog; }
-void TutWave_SerializeDialogRef(UI::Dialog** field, IO::Serializer* serializer);  // 0x140028650 (ExternalPtr<UI::Dialog>::Serialize)  // B8: stays free -- DIFFERENT BODY: ExternalPtrSerializeGeneric with no type cell (the type resolved lazily by name, unvalidated when unresolved), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 class PlayerToolManager;
 class ComponentDescription;
 // A PlayerToolManager member in retail (GAME-b's class): kept free.

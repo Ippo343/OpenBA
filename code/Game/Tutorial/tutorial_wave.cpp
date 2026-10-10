@@ -131,11 +131,6 @@ void TutWave_SerializeTutorialRef(Tutorial** field, IO::Serializer* serializer) 
     ExternalPtrSerializeGeneric(field, serializer, nullptr, "Tutorial");
 }
 
-void TutWave_SerializeDialogRef(UI::Dialog** field, IO::Serializer* serializer) {
-    ExternalPtrSerializeGeneric(field, serializer,
-                                nullptr, "UI::Dialog");
-}
-
 // ===========================================================================
 // 0x1401001F0 — the tutorial's insert into the PlayerToolManager's +0x50
 // tracked set (a PlayerToolManager member in retail; GAME-b's class, kept

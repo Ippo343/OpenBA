@@ -199,10 +199,6 @@ void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& 
 void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, Audio::SoundEffect::TypeId(), "SoundEffect", "ExternalPtr::Serialize");
 }
-// 0x140028650 -- ExternalPtr<UI::Dialog>: import slot 0x140151728.
-void ExternalPtrSerialize_Dialog(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, UI::Dialog::TypeId(), "Dialog", "ExternalPtr::Serialize");
-}
 // 0x140027ad0 -- ExternalPtr<UI::ElementDescription>: import slot 0x140151a50.
 void ExternalPtrSerialize_ElementDescription(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, UI::ElementDescription::TypeId(), "ElementDescription", "ExternalPtr::Serialize");

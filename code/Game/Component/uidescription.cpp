@@ -53,6 +53,7 @@
 #include <cstdint>
 #include <new>
 #include "ui/DialogControllerConfig.h"   // B8 RT2: ::Object::SerializeExternal<UI::DialogControllerConfig> (the downcast needs it complete)
+#include "ui/Dialog.h"   // B8 RT2: ::Object::SerializeExternal<UI::Dialog> (the downcast needs it complete)
 
 // ---------------------------------------------------------------------------
 // [8] exe 0x1400396e0 — UIDescription::GetComponentType, defined below
@@ -113,7 +114,7 @@ bool UIDescription::Serialize(IO::Stream& stream) {
 
     // 1. _descRef ExternalPtr (+0x28). FUN_140028650 — identical stream layout
     //    to the registered Serialize2 (typeId trusted in standalone).
-    Reimpl_ExternalPtr_Serialize_Dialog(&_dialog, &ser);
+    ::Object::SerializeExternal<UI::Dialog>(ser, _dialog);
     // 2. int (+0x40)
     ser.Serialize(_valHead, nullptr);
     // 3. count (+0x38)
