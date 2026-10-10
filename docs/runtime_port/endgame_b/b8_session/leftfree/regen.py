@@ -71,14 +71,14 @@ for rel, (src, code) in sorted(CM._CACHE.items()):
                 addr = a[0] if a else ''
                 cm = re.findall(r'//\s*(.*)', txt)
                 # the ruling: a `B8:` tag on the declaration's lines, else the comment lines above it
-                tag = next((c for c in cm if 'B8:' in c), '')
+                tag = next((c for c in cm if 'B9:' in c), '') or next((c for c in cm if 'B8:' in c), '')
                 if not tag:
                     above = []
                     j = k - 1
                     while j >= 0 and srclines[j].strip().startswith('//') and len(above) < 6:
                         above.insert(0, srclines[j].strip()[2:].strip())
                         j -= 1
-                    tag = next((c for c in above + cm if 'B8:' in c), ' '.join(cm) or ' '.join(above))
+                    tag = next((c for c in above + cm if 'B9:' in c), '') or next((c for c in above + cm if 'B8:' in c), ' '.join(cm) or ' '.join(above))
                 break
         tag = re.sub(r'\s+', ' ', tag).strip()
         rowsA.append((rel, line, n, addr, tag))
@@ -106,7 +106,7 @@ secC = secC[secC.find('## C.'):] if '## C.' in secC else secC
 
 out = []
 out.append('# LEFT_FREE: declarations left as free functions, and `void*`-first parameters in code/Game\n')
-out.append(f'Regenerated at main `{head()}` by `b8_session/leftfree/regen.py` (B8, the quality pass: the generating script is KEPT). '
+out.append(f'Regenerated at main `{head()}` by `b8_session/leftfree/regen.py` (B8, the quality pass: the generating script is KEPT; B9 re-read every survivor: a `B9:` tag on the line wins over the B8 one). '
            'Checked mechanically by `acceptance.sh` lines 08 and 09 (an identifier counts as listed when it appears anywhere in this file). '
            'History: first written at `239c7591d` (B4 close); not regenerated through S4 .. B7 (411 declared names at the B8 kit); the B8 pass '
            'moved every member of a class in retail into that class and deleted the forwarders and erased cores -- what is left here is a '
