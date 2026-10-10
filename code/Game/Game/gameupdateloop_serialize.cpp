@@ -457,13 +457,13 @@ void Minimap::Serialize(IO::Stream& stream) {
     // overlay array (+0x28) first — matches the retail order
     int n = overlayPixels._size;
     ser.Serialize(n, nullptr);
-    if (!IsSaving(&stream)) Reimpl_Array_Resize_Stride04(&overlayPixels, n);   // 0x1400021d0
+    if (!IsSaving(&stream)) overlayPixels.SetSize(n);   // 0x1400021d0
     ser.Serialize(n, overlayPixels._data, nullptr);
 
     // terrain array (+0x18)
     n = terrainPixels._size;
     ser.Serialize(n, nullptr);
-    if (!IsSaving(&stream)) Reimpl_Array_Resize_Stride04(&terrainPixels, n);   // 0x1400021d0
+    if (!IsSaving(&stream)) terrainPixels.SetSize(n);   // 0x1400021d0
     ser.Serialize(n, terrainPixels._data, nullptr);
 
     ser.Serialize(size, nullptr);

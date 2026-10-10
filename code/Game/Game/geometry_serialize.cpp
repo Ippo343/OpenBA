@@ -293,7 +293,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t c = counters._size;
         serializer.Serialize(c, nullptr);
         if (IsLoading(serializer)) {
-            Reimpl_Array_Resize_Stride04(&counters, c);
+            counters.SetSize(c);   // 0x1400021d0
         }
         if (counters._data) serializer.Serialize(c, counters._data, nullptr);
     }

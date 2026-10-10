@@ -126,7 +126,7 @@ extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Graphic
     int needed   = index + 1;
     if (oldCount < needed) {
         Reimpl_Array_Resize_Stride08(&refs, needed);
-        Reimpl_Array_Resize_Stride04(&ints, needed);
+        ints.SetSize(needed);   // 0x1400021d0
         // Zero the freshly grown tail of the int array. Retail bounds this by the int
         // array's own dword at +0x228 (0x1400acdd8 / 0x1400ace01: CMP EBX,[RDI+0x228]) -- the
         // low dword of its {data, size|capacity} header, i.e. its size -- NOT by `needed`.

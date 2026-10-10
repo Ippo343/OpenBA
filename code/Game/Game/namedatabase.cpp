@@ -97,7 +97,7 @@ bool NameDatabase::Serialize(IO::Stream& stream) {
     // --- array4: stride 0x4 (int) — bulk ---
     int c4 = _array4.GetSize();
     ser.Serialize(c4, nullptr);
-    if (isLoading()) Reimpl_Array_Resize_Stride04(&_array4, c4);
+    if (isLoading()) _array4.SetSize(c4);   // 0x1400021d0
     ser.Serialize(c4, _array4.GetData(), nullptr);
 
     return true;
