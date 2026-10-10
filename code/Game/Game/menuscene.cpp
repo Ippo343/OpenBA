@@ -49,6 +49,7 @@
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include <type_traits>
 #include "Game/Weather.h"   // B8 RT2: ::Object::SerializeExternal<Weather> (the downcast needs it complete)
+#include "graphics/Particle.h"   // B8 RT2: ::Object::SerializeExternalArray<Graphics::Particle> (the downcast needs it complete)
 #include "graphics/GraphicsMesh.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::GraphicsMesh> (the downcast needs it complete)
 
 // MenuScene::particles grows through 0x14001bf10 (stride 0x14, align 4, byte copy,
@@ -366,7 +367,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
         Reimpl_Array_Resize_Stride08(&particleResources, count68);
     }
     if (count68 > 0) {
-        Reimpl_Array_Serialize_External_Particle(&outer, count68, particleResources.GetData());
+        ::Object::SerializeExternalArray<Graphics::Particle>(outer, count68, particleResources.GetData());
     }
 
     if (!s_particleLogged.exchange(true)) {

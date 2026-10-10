@@ -426,13 +426,6 @@ extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(
                                   Graphics::MaterialInstance::GetTypeInfo().typeId, "Graphics::MaterialInstance");
 }
 
-// #8 Particle exref array (typeInfo @ slot 0x140151420)
-extern "C" void Reimpl_Array_Serialize_External_Particle(
-    IO::Serializer* serializer, int count, void* arrayBase) {
-    ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  Graphics::Particle::TypeId(), "Graphics::Particle");
-}
-
 // ============================================================
 // STANDALONE_EXE: address registry hooks
 // ============================================================
