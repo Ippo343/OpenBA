@@ -279,7 +279,7 @@ void FireComponent::Ignite() {
     // --- the two abort gates, on the DestroyComponent ---
     DestroyComponent* destroyComp = _entity->FindComponent<DestroyComponent>();   // 0x140005780
 
-    if (FireComponent_IsBeingDemolished_11e690(destroyComp)) {
+    if (destroyComp->IsBeingDemolished()) {
         return;
     }
     if ((destroyComp->InRemovalState() ? 1 : 0) != 0) {   // 0x14011e710 (the PlayerPath_Sub_11e710 forwarder's member)
