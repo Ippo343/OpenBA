@@ -34,10 +34,6 @@ Object::InternalPtr<UI::Element>* FindUIElementByPath_Impl(Object::InternalPtr<U
 namespace IO { class Serializer; }
 namespace UI { class ElementDescription; }
 class TutorialStep; class TutorialImage; class TutorialSetup; class TutorialGoal;
-extern "C" void TutBase_SerializeStepArray(IO::Serializer* serializer, int count, TutorialStep** arrayData, void*);  // 0x140026fb0  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
-extern "C" void TutBase_SerializeImageArray(IO::Serializer* serializer, int count, TutorialImage** arrayData, void*);  // 0x140028cf0  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
-extern "C" void TutBase_SerializeSetupArray(IO::Serializer* serializer, int count, TutorialSetup** arrayData, void*);  // 0x140028f40  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
-extern "C" void TutBase_SerializeGoalArray(IO::Serializer* serializer, int count, TutorialGoal** arrayData, void*);  // 0x140029190  // B8: stays free -- DIFFERENT BODY: RCX is the IO::Serializer; the member that exists is Object::ExternalPtr<T>::SerializeArray / SerializeExternalArray (External.h, the retail body); this loop runs the exe port body (lazy type-by-name fallback, null tests): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- tutorial_wave.cpp
 class Tutorial;

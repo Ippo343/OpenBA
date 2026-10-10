@@ -6,11 +6,8 @@
 // silently skipping the guarded call.
 //
 // Two families:
-//   A. ExternalPtr<T> serialize helpers (26fb0 single-style + 4 array variants +
-//      27de0 cached-resolve). The single-element body is the canonical
-//      ExternalPtr<T>::Serialize — identical to FUN_140002340 / FUN_14000bf40 /
-//      FUN_14001b8e0 — so we reuse the proven ExternalPtrSerializeGeneric
-//      (code/Game/Game/serialize_externals.cpp). The array helpers loop it.
+//   A. 27de0 cached-resolve (the four ExternalPtr<T> array helpers 26fb0 / 28cf0 /
+//      28f40 / 29190 are Object::SerializeExternalArray<T> at their callers since B8 RT2).
 //   B. TutorialGoalCount::Check data helpers (BST counts, work-capacity, slider cast).
 //
 // Closure-safety: family A's entire sub-callee closure is Runtime exports
@@ -38,7 +35,7 @@
 #include "Game/Toolbar.h"                // B.3.9 EXA: Toolbar::TypeId()
 #include "ui/SpinnerElement.h"           // UI::SpinnerElement::TypeId() (D5, ENDGAME B.3.9 CG3)
 #include "Tutorial/exe_bodies.h"
-#include "Tutorial/TutorialStep.h"    // the SerArray element classes (B4 Y GAMEA)
+#include "Tutorial/TutorialStep.h"
 #include "Tutorial/TutorialImage.h"
 #include "Tutorial/TutorialSetup.h"
 #include "Tutorial/TutorialGoal.h"
@@ -56,43 +53,6 @@
 // ============================================================
 // Family A — ExternalPtr serialize helpers
 // ============================================================
-
-// Per-element ExternalPtr<T>::Serialize via the canonical generic body (its
-// typed wrapper, Game/serialize_externals.h). typeId resolves lazily by name
-// (cascade-safe: loads without type validation if the name is not yet
-// registered — never crashes).
-template <class T>
-static inline void SerOne(T** field, IO::Serializer* serializer, const char* typeName) {
-    ExternalPtrSerializeGeneric(field, serializer, /*typeIdPtr*/ nullptr, typeName);
-}
-
-// Array-of-ExternalPtr<T>::Serialize (8-byte stride). param_4 is an unused
-// scratch register in the original; ignored here.
-//   0x140026fb0  Tutorial steps      (TutorialStep)
-//   0x140028cf0  TutorialStep images (TutorialImage)
-//   0x140028f40  TutorialStep setups (TutorialSetup)
-//   0x140029190  TutorialStep goals  (TutorialGoal)
-// B4 Y GAMEA: the slots are the callers' typed Array<T*> elements (stride 8).
-template <class T>
-static void SerArray(IO::Serializer* serializer, int count, T** arrayData, const char* typeName) {
-    if (!arrayData || count <= 0) return;
-    for (int i = 0; i < count; ++i) {
-        SerOne(&arrayData[i], serializer, typeName);
-    }
-}
-
-extern "C" void TutBase_SerializeStepArray(IO::Serializer* serializer, int count, TutorialStep** arrayData, void*) {
-    SerArray(serializer, count, arrayData, "TutorialStep");
-}
-extern "C" void TutBase_SerializeImageArray(IO::Serializer* serializer, int count, TutorialImage** arrayData, void*) {
-    SerArray(serializer, count, arrayData, "TutorialImage");
-}
-extern "C" void TutBase_SerializeSetupArray(IO::Serializer* serializer, int count, TutorialSetup** arrayData, void*) {
-    SerArray(serializer, count, arrayData, "TutorialSetup");
-}
-extern "C" void TutBase_SerializeGoalArray(IO::Serializer* serializer, int count, TutorialGoal** arrayData, void*) {
-    SerArray(serializer, count, arrayData, "TutorialGoal");
-}
 
 /// 0x140027de0 — ExternalPtr<Toolbar>'s resolve by name: resolve + cache a
 // Toolbar external referenced by name. Mirrors ResolveExternalByName_Impl
