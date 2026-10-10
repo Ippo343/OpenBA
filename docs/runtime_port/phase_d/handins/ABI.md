@@ -74,3 +74,27 @@ normaliser is `fnnorm.sh` in the block's scratchpad. The RENAMED-IDENTICAL rows 
 `src/engine/global_types.h` (one include line), `src/game/Object/exe_type.h` (an include and the
 DEFINE_EXE_VTABLE label), `src/engine/object/VSlot.h` (return type), `tests/unit/slot_check.h`.
 The new files are `src/engine/abi.h`, `tools/abi_audit.py` and `tools/abi_audit.baseline`.
+
+## Post-merge: main 1c27606dd (SETTINGS-1 + THREADS-1)
+
+`git merge main` (merge commit `04699345a`) had no conflicts. `tests/unit/sources.mk` / `sources.cmake`
+came from main unchanged, since this branch never touched them, so no regeneration was needed. The
+retypes in `gameupdateloop.cpp` survived beside THREADS' QPC changes. Static gate on the merged tree:
+debug / perf / unit exit 0, unit 945 / 0, 0 new warnings (debug, perf), castmetric 2, `abi_audit.py` OK.
+The pinned check is unchanged at 1 row (962 class definitions scanned). No row grew. The SETTINGS and
+THREADS seams moved Win32 code out, so `--write-baseline` lowered these rows:
+
+| pattern | directory | before | after |
+|---|---|---|---|
+| callconv | src/app | 5 | 4 |
+| callconv | src/engine | 15 | 11 |
+| callconv | src/game | 1 | 0 |
+| declspec | src/engine | 13 | 8 |
+| win_include | src/app | 10 | 8 |
+| win_include | src/diag | 22 | 20 |
+| win_include | src/engine | 14 | 13 |
+| win_include | src/game | 12 | 7 |
+| win32_typedef | src/app | 90 | 83 |
+| win32_typedef | src/diag | 113 | 102 |
+| win32_typedef | src/engine | 14 | 13 |
+| win32_typedef | src/game | 16 | 11 |
