@@ -43,14 +43,12 @@ extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalon
 class Work;   // Work/Work.h
 
 // ---- harvestorchard_ctor.cpp
-extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)  // B8: stays free -- the door runs the port's orchard diagnostic counter (OrchardDiag_NoteHarvestConstructed, standalone/orchard_diag.cpp) before the constructor; the counter has no header for its caller to call it by
 
 // ---- pasturework.cpp
 extern "C" Work* PastureWork_CreateForEntity(ComponentEntity* const* entityRefSlot);  // no retail address (local extern in pasturecomponent_states.cpp)  // B8: harness / port-only -- a constructor door with no retail symbol (pasturecomponent_states.cpp's work post)
 
 // ---- plantorchard_ctor.cpp
 class ComponentDescription;
-extern "C" Work* PlantOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP, ComponentDescription* treeType);  // no retail address (local extern in orchardcomponent_states.cpp)  // B8: stays free -- the door runs the port's orchard diagnostic counter (OrchardDiag_NotePlantConstructed, standalone/orchard_diag.cpp) before the constructor; the counter has no header for its caller to call it by
 
 // ---- tendarea_ctor.cpp
 

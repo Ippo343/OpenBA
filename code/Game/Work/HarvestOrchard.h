@@ -16,7 +16,7 @@
 //   ctors: the default one (the tree built it with Work_GenericCtor: base init, leaf
 //   fields zeroed — kept) and the from-entity ctor 0x1400ee060 (harvestorchard_ctor.cpp),
 //   which OrchardComponent's state 11 (orchardcomponent_states.cpp, block MI-B) calls
-//   through the door HarvestOrchard_CtorFromEntity. Nothing outside this block stamps
+//   by name on its MemAlloc(0x68, 8) block (B9). Nothing outside this block stamps
 //   0x140161520.
 // ============================================================================
 
