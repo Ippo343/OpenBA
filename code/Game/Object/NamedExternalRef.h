@@ -47,6 +47,8 @@ struct NamedExternalRef {
     void Resolve();
     // 0x140027de0: ExternalPtr<Toolbar>'s (Tutorial/tutorial_base.cpp).
     void ResolveToolbar();
+    // 0x14001b1d0: the by-name resolver every owner calls (Component/componentdescription.cpp).
+    void ResolveDescription();
 };
 static_assert(sizeof(NamedExternalRef) == 0x18, "the by-name reference is 0x18");
 static_assert(offsetof(NamedExternalRef, name) == 0x00, "NamedExternalRef +0x00 name");

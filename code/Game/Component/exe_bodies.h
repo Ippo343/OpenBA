@@ -279,15 +279,7 @@ int fn_StorageComponent_QueryCount(StorageComponent* storageComp);  // 0x14012cf
 // tutorial_base.cpp: R5, two bodies.)
 
 // ---- componentdescription.cpp
-// ResolveExternalByName (FUN_14001b1d0 in exe) — REPLACED with inline C++
-// Resolves and caches an External object by filename.
-// Input: the by-name record (Object/NamedExternalRef.h): name, generation, resolved.
-// If the generation counter matches the factory's, the cached result is still valid.
-// Otherwise, looks up the External by converting the String to a Filename and calling
-// ExternalFactory::Find. If found and passes IsDerivedFrom(ComponentDescription::TypeId()),
-// caches the result; otherwise caches nullptr. Body: code/Game/Component/componentdescription.cpp.
 struct NamedExternalRef;
-void ResolveExternalByName_Impl(NamedExternalRef* ref);  // 0x14001b1d0
 
 // ---- keystone_a_map.cpp (B3R G-Game: read by code/Game/Game/gamegrid_serialize.cpp)
 int CreateNaturalResource_helper_e2c0(Map* map, int cellIndex);  // 0x14009e2c0

@@ -201,17 +201,17 @@ DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
 // 0x14001b1d0 resolves a by-name ComponentDescription reference (Object/NamedExternalRef.h):
 // the template's name, the ExternalFactory generation it was last resolved at, and the
 // cached result.
-void ResolveExternalByName_Impl(NamedExternalRef* ref) {
+void NamedExternalRef::ResolveDescription() {
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
     if (!factory) return;
 
     // Check generation counter: if matches, cached value is still valid
     int32_t factoryGen = factory->_generation;
-    if (ref->generation == factoryGen) return;
+    if (generation == factoryGen) return;
 
     // Convert String to Filename, look up in factory.
     // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
-    System::Filename filename(ref->name);
+    System::Filename filename(name);
     ::Object::External* found = factory->FindAs<::Object::External>(filename);
 
     // Validate the found object is a ComponentDescription (cell 0x1401c7318). The
@@ -225,6 +225,6 @@ void ResolveExternalByName_Impl(NamedExternalRef* ref) {
     }
 
     // Cache result and update generation
-    ref->resolved   = result;
-    ref->generation = factoryGen;
+    resolved   = result;
+    generation = factoryGen;
 }

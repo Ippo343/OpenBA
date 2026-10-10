@@ -223,7 +223,7 @@ extern "C" float StartTown_FoundingChildAge(const ComponentDescription* citizenT
 static ComponentDescription* FoundingSpawn_RefreshTemplate(MapGenerator* startConfig, ComponentDescription* fallback) {
     if (!startConfig) return fallback;
     if (::Object::ExternalFactory::_singleton)
-        ResolveExternalByName_Impl(&startConfig->templateRef);   // +0x48
+        startConfig->templateRef.ResolveDescription();   // +0x48
     ::Object::External** cache = &startConfig->templateRef.resolved;   // +0x58
     if (*cache == nullptr && fallback != nullptr) {
         *cache = fallback;                       // restore what FindOrLoad had loaded

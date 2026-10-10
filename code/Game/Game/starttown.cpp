@@ -571,7 +571,7 @@ static bool SpawnAndRegister(ComponentDescription* tmpl, EntityList* entityList)
 // packages now that the entity-description factories are registered (Foundation
 // C). Caches the result in entry+0x10.
 static ComponentDescription* StartTown_ResolveTemplate(MapGenerator::ExternalRef* entry) {
-    ResolveExternalByName_Impl(entry);                       // try the cheap cached path first
+    entry->ResolveDescription();                       // try the cheap cached path first
     // A pool's template is a ComponentDescription (the template pools name ComponentDescription resources).
     ComponentDescription* tmpl = static_cast<ComponentDescription*>(entry->resolved);
     if (tmpl) return tmpl;
@@ -5239,7 +5239,7 @@ extern "C" void StartTown_SpawnEntities(MapGenerator* startConfig, GameUpdateLoo
         MapGenerator::ExternalRef* base = p.first;
         if (!p.inlineRef) {                                     // array pool
                if (!base || p.count <= 0) { fprintf(stderr, "[startTown::probe] %s empty\n", p.tag); continue; } }
-        ResolveExternalByName_Impl(base);
+        base->ResolveDescription();
         fprintf(stderr, "[startTown::probe] %s gen=%d tmpl=%p name=\"%.40s\"\n",
                 p.tag, base->generation, base->resolved, dumpStr(base));
     }
