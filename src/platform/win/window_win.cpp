@@ -24,6 +24,19 @@ static_assert(Platform::Window::kPosFrameChangedNoActivate == (SWP_FRAMECHANGED 
               "SetWindowPos flags");
 static_assert(Platform::Window::kMonitorDefaultToNull == MONITOR_DEFAULTTONULL,
               "MonitorFromRect flag");
+static_assert(Platform::Window::kMsgDestroy == WM_DESTROY, "WM_DESTROY");
+static_assert(Platform::Window::kMsgSize == WM_SIZE, "WM_SIZE");
+static_assert(Platform::Window::kMsgActivate == WM_ACTIVATE, "WM_ACTIVATE");
+static_assert(Platform::Window::kMsgSetFocus == WM_SETFOCUS, "WM_SETFOCUS");
+static_assert(Platform::Window::kMsgKillFocus == WM_KILLFOCUS, "WM_KILLFOCUS");
+static_assert(Platform::Window::kMsgClose == WM_CLOSE, "WM_CLOSE");
+static_assert(Platform::Window::kMsgQuit == WM_QUIT, "WM_QUIT");
+static_assert(Platform::Window::kMsgEraseBackground == WM_ERASEBKGND, "WM_ERASEBKGND");
+static_assert(Platform::Window::kMsgSetCursor == WM_SETCURSOR, "WM_SETCURSOR");
+static_assert(Platform::Window::kMsgSysKeyDown == WM_SYSKEYDOWN, "WM_SYSKEYDOWN");
+static_assert(Platform::Window::kMsgMouseWheel == WM_MOUSEWHEEL, "WM_MOUSEWHEEL");
+static_assert(Platform::Window::kMsgExitSizeMove == WM_EXITSIZEMOVE, "WM_EXITSIZEMOVE");
+static_assert(Platform::Window::kKeyF10 == VK_F10, "VK_F10");
 
 namespace Platform {
 namespace Window {
@@ -103,6 +116,15 @@ void GetCurrentDisplaySize(int32_t* width, int32_t* height) {
     ::EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm);
     *width  = static_cast<int32_t>(dm.dmPelsWidth);
     *height = static_cast<int32_t>(dm.dmPelsHeight);
+}
+
+int64_t DefaultWindowProc(void* window, uint32_t message, uint64_t wParam, int64_t lParam) {
+    return ::DefWindowProcW(Hwnd(window), message, static_cast<WPARAM>(wParam),
+                            static_cast<LPARAM>(lParam));
+}
+
+void PostQuitMessage(int32_t exitCode) {
+    ::PostQuitMessage(exitCode);
 }
 
 }  // namespace Window

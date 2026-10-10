@@ -35,6 +35,27 @@ struct Rect {
 
 namespace Window {
 
+// ---------------------------------------------------------------------------
+// Window message ids (SDL plan W2, the A.2 table). `Application::_messageCallbacks` is
+// keyed by these Win32 ids (its layout is retail's) and `Application::WindowProc`
+// switches on them; from W3 the SDL pump synthesises them from SDL events. The values are
+// the WM_* ids (window_win.cpp static_asserts each against <windows.h>).
+// ---------------------------------------------------------------------------
+constexpr uint32_t kMsgDestroy         = 0x0002;   // WM_DESTROY
+constexpr uint32_t kMsgSize            = 0x0005;   // WM_SIZE        Video::Device::SizeWindow
+constexpr uint32_t kMsgActivate        = 0x0006;   // WM_ACTIVATE    DeviceData_OnActivate
+constexpr uint32_t kMsgSetFocus        = 0x0007;   // WM_SETFOCUS    Input::Device::OnFocusMessage
+constexpr uint32_t kMsgKillFocus       = 0x0008;   // WM_KILLFOCUS   Input::Device::OnLostFocusMessage
+constexpr uint32_t kMsgClose           = 0x0010;   // WM_CLOSE
+constexpr uint32_t kMsgQuit            = 0x0012;   // WM_QUIT
+constexpr uint32_t kMsgEraseBackground = 0x0014;   // WM_ERASEBKGND
+constexpr uint32_t kMsgSetCursor       = 0x0020;   // WM_SETCURSOR   DeviceData_OnSetCursor
+constexpr uint32_t kMsgSysKeyDown      = 0x0104;   // WM_SYSKEYDOWN
+constexpr uint32_t kMsgMouseWheel      = 0x020A;   // WM_MOUSEWHEEL  Input::Device::OnMouseWheelMessage
+constexpr uint32_t kMsgExitSizeMove    = 0x0232;   // WM_EXITSIZEMOVE Video::Device::MoveWindow
+// The one key WindowProc tests: VK_F10 (WM_SYSKEYDOWN's wParam).
+constexpr uint64_t kKeyF10             = 0x79;
+
 // SetWindowPos's insert-after argument, the two values retail passes.
 enum class ZOrder : int32_t {
     Top,         // nullptr (== HWND_TOP): AdjustDisplay's fullscreen branch
@@ -78,6 +99,12 @@ void* MonitorFromRect(const Rect* rect, uint32_t flags);
 // out = dmPelsWidth / dmPelsHeight. The return value is not checked (retail's): a failure
 // leaves zeros.
 void GetCurrentDisplaySize(int32_t* width, int32_t* height);
+
+// The window procedure's OS half (SDL plan W2). DefWindowProcW: the default handling
+// Application::WindowProc falls through to (W3 deletes it: SDL owns the real WndProc).
+int64_t DefaultWindowProc(void* window, uint32_t message, uint64_t wParam, int64_t lParam);
+// PostQuitMessage: WindowProc's WM_DESTROY arm.
+void PostQuitMessage(int32_t exitCode);
 
 }  // namespace Window
 }  // namespace Platform

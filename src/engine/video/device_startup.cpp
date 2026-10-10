@@ -101,6 +101,7 @@
 #include "video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
 #include "application/Application.h"  // ENDGAME B.3.7 callers (K5)
 #include "../collection/set_avl.h"
+#include "src/platform/common/platform_window.h"   // Phase D.4 SDL W2: the message ids
 
 using Video::Configuration;
 using Video::Device;
@@ -454,8 +455,8 @@ bool Video::Device::PlatformStartup() {
                 ::Application::Application* app = ::Application::Application::_singleton;
                 // ENDGAME B.3.7 callers (K5): members of the real class (the
                 // callback Set lives in src/engine/application/message_callbacks.cpp).
-                app->RegisterMessageCallback(5, &Video::Device::SizeWindow);
-                app->RegisterMessageCallback(0x232, &Video::Device::MoveWindow);
+                app->RegisterMessageCallback(Platform::Window::kMsgSize, &Video::Device::SizeWindow);           // 5
+                app->RegisterMessageCallback(Platform::Window::kMsgExitSizeMove, &Video::Device::MoveWindow);    // 0x232
                 return true;
             }
 
