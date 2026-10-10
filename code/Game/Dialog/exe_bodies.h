@@ -103,10 +103,10 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
 
 // ---- tradeui_buyentries.cpp
 class TradeComponent;
-extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray);  // 0x140059670 (the out array is two types by caller: TradeUI::_purchaseItems / tradecomponent_dock's goods list)
+extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray);  // 0x140059670 (the out array is two types by caller: TradeUI::_purchaseItems / tradecomponent_dock's goods list) B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x140059684-0x140059694 has none; row 1101); as a member it is `!this`, which -O2 deletes
 
 // ---- tradeui_checkout.cpp
-extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade);  // 0x14005a490
+extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade);  // 0x14005a490 B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x14005a490..: [RCX+0x18] read first has none; row 1102); as a member it is `!this`, which -O2 deletes
 // B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp) -> TradeUI::OnTradeButton
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t );  // 0x140081420
 
@@ -114,13 +114,12 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* , void* , int64_t ); 
 class TradeComponent;        // code/Game/Component/TradeComponent.h
 class ComponentDescription;  // code/Game/Component/ComponentDescription.h
 namespace System { class String; }
-extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::String* out);  // 0x140015fd0
-extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState, ComponentDescription* resourceEntity, int8_t addFlag);  // 0x140059490
+extern "C" void TradeUI_AddPurchaseOrder_59490(TradeComponent* tradeState, ComponentDescription* resourceEntity, int8_t addFlag);  // 0x140059490 B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x140059490..: [RCX+0x30] / [RCX+0x2c] read first has none; row 1103); as a member it is `!this`, which -O2 deletes
 // B4 P2 DLG-3: TradeUI_StorageTree_Insert_e1c0 (0x14000e1c0) is declared typed in Dialog/TradeUI.h.
 
 // ---- tradeui_price.cpp
 class ComponentDescription;
-extern "C" int TradeUI_GetResourcePrice_a520(const TradeComponent* trade, const ComponentDescription* resource);  // 0x14005a520
+extern "C" int TradeUI_GetResourcePrice_a520(const TradeComponent* trade, const ComponentDescription* resource);  // 0x14005a520 B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x14005a520..: [RCX+0x2c] read first; nor of the resource has none; row 1104); as a member it is `!this`, which -O2 deletes
 
 // ---- tradeui_sort.cpp
 // B4 P2 DLG-3: the two introsort drivers are declared typed in Dialog/TradeUI.h.

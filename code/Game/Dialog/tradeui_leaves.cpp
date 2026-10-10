@@ -83,14 +83,14 @@
 //
 // Returning `out` matters: callers use the return value, not their own buffer
 // pointer, so dropping the return would leave them reading an uninitialised local.
-extern "C" void* TradeUI_GetOrderName_15fd0(TradeComponent* tradeState, System::String* out) {
+void* TradeComponent::GetOrderName(System::String* out) {
     if (!out) return out;
-    const int32_t idx = tradeState->tradeId;
+    const int32_t idx = tradeId;
     if (idx < 0) {
         new (out) System::String();
         return out;
     }
-    const TradeMerchantOrder* base = tradeState->merchantOrders._data;
+    const TradeMerchantOrder* base = merchantOrders._data;
     if (!base) {      // standalone guard: retail derefs blind
         new (out) System::String();
         return out;

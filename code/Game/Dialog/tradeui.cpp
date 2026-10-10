@@ -532,7 +532,7 @@ void TradeUI::RefreshBuyTable()
 
             // Set parameter 0: order name string
             System::String orderNameBuf;
-            TradeUI_GetOrderName_15fd0(trade, &orderNameBuf);   // 0x140015fd0
+            trade->GetOrderName(&orderNameBuf);   // 0x140015fd0
             textElem->SetParameter(0, orderNameBuf);
 
             // Set parameter 1: UI string from order entry
