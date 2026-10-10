@@ -327,3 +327,10 @@ UNIT_TREE_SRCS += src/engine/system/error.cpp
 # member, string.cpp (above). B5 DEV-B moved the seven Array helpers it calls
 # out of device_startup.cpp (which cannot link here) into it.
 UNIT_TREE_SRCS += src/engine/video/device_enum_types.cpp
+# Phase D.4 THREADS E.1: the Platform:: thread / sync / time primitives
+# (tests/unit/platform_sync_test.cpp). The Win32 impls and the std event twin link
+# side by side: the event tests run against both.
+UNIT_TREE_SRCS += src/platform/win/sync_win.cpp \
+                  src/platform/win/thread_win.cpp \
+                  src/platform/win/time_win.cpp \
+                  src/platform/common/event_std.cpp
