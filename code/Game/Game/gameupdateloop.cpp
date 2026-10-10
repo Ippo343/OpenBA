@@ -120,6 +120,7 @@ extern "C" void EntityUI_ToolDraw_SA(PlayerToolManager* entityUI, Video::Context
 #include "Entity/CitizenBehavior.h"      // m_citizenList's class: CitizenBehavior::Update
 #include "graphics/Animation.h"          // RtGraphics_AnimationManager_Dtor
 #include "picking/Scene.h"
+#include "Game/MusicPlayer.h"   // MusicPlayer::Update (0x1400a40e0)
                                 // `namespace Object { ... }` forward decl below
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere
                                 // in this file, even at global scope)
@@ -1008,7 +1009,7 @@ post_simulation:
     // track by month + town mood, so while this stays null background music
     // never plays. See engine/types/GameUpdateLoop.h +0x80.
     TRACE("[GameUpdateLoop::Update] calling MusicPlayer::Update...\n");
-    MusicPlayer_Update(m_musicPlayer);   // 0x1400a40e0
+    m_musicPlayer->Update();   // 0x1400a40e0
     TRACE("[GameUpdateLoop::Update] MusicPlayer::Update done\n");
 
     // Step 8: World geometry vtable call (terrain update)

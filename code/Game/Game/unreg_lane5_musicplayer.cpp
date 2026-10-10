@@ -159,11 +159,6 @@ void EnsureTrackList(MusicPlayer* mp) {
 // ============================================================
 // MusicPlayer::Update — faithful port of exe 0x1400a40e0
 // ============================================================
-// B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a: `MusicPlayer_Update(m_musicPlayer)`).
-extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer) {
-    if (!musicPlayer) return;
-    musicPlayer->Update();
-}
 
 void MusicPlayer::Update() {
     if (GameUpdateLoop::_singleton == nullptr) return;

@@ -227,7 +227,6 @@ extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const W
 
 // ---- unreg_lane5_musicplayer.cpp
 class MusicPlayer;   // Game/MusicPlayer.h
-extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B4 FORWARD -> MusicPlayer::Update (1 outside caller: gameupdateloop.cpp)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- w2_takescreenshot.cpp
 
