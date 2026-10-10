@@ -196,11 +196,10 @@ extern "C" void FireComp_StartAudioEmitter_42c60(AmbientEmitterComponent* ac, in
     Audio::Scene* scene = gw->m_audioScene;   // +0x78
     if (!scene) return;
 
+    // 0x140042c74-0x140042c9c: IsDerivedFrom on [RCX+0x18] against the cell
+    // 0x1401c3e98 read fresh, no null test, CMOVNZ (B8 RES, row 1041).
     Description* obj = ac->_description;
-    static uint32_t s_tidEmitterDesc = 0;
-    if (s_tidEmitterDesc == 0 || s_tidEmitterDesc == 0xFFFFFFFFu)
-        s_tidEmitterDesc = AmbientEmitterDescription::TypeId();
-    AmbientEmitterDescription* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, s_tidEmitterDesc))
+    AmbientEmitterDescription* desc = obj->IsDerivedFrom(AmbientEmitterDescription::TypeId())
                                           ? static_cast<AmbientEmitterDescription*>(obj) : nullptr;
 
     if (!ac->slots._data) return;
