@@ -158,6 +158,7 @@
 #include "audio/Device.h"
 #include "audio/SoundBuffer.h"
 #include "audio/Stream.h"
+#include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the Stream lock
 
 namespace {
 
@@ -288,7 +289,7 @@ void Stream::Run() {
         // and nowhere else — audio_voice_callback_win.cpp §2 cites this store.
         voiceRec->bufferEvent = _bufferEvent;                           // 1800a114d
 
-        auto* const lock = reinterpret_cast<CRITICAL_SECTION*>(_lock);  // CAST-OK: win32
+        Platform::LockStorage* const lock = &_lock;
         HANDLE handles[2];                                              // [RBP-0x50]
         XAUDIO2_VOICE_STATE state{};                                    // [RBP-0x78]
 
@@ -331,23 +332,23 @@ void Stream::Run() {
             }
 
             // ---- wait until the voice has fewer than 3 buffers queued ------
-            EnterCriticalSection(lock);                                 // 1800a124b
+            Platform::MutexLock(lock);                                 // 1800a124b
             IXAudio2SourceVoice* voice = voiceRec->voice;
             if (!voice) { how = kExitBail; break; }                     // 1800a1258
             voice->GetState(&state);                                    // +0xc8
-            LeaveCriticalSection(lock);                                 // 1800a126f
+            Platform::MutexUnlock(lock);                                 // 1800a126f
 
             bool bailed = false;
             while (state.BuffersQueued >= kQueueHighWater) {            // 1800a1279
                 handles[0] = static_cast<HANDLE>(_bufferEvent);    // 1800a1280
                 handles[1] = static_cast<HANDLE>(_wakeEvent);      // 1800a1288
                 const DWORD woke = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
-                EnterCriticalSection(lock);                             // 1800a12ab
+                Platform::MutexLock(lock);                             // 1800a12ab
                 if (woke != 0) { bailed = true; break; }                // 1800a12b3
                 voice = voiceRec->voice;
                 if (!voice) { bailed = true; break; }                   // 1800a12c0
                 voice->GetState(&state);                                // +0xc8
-                LeaveCriticalSection(lock);                             // 1800a12d7
+                Platform::MutexUnlock(lock);                             // 1800a12d7
             }
             if (bailed) { how = kExitBail; break; }
             curSeg32 = curSeg;   // 1800a12e3 — restores EBX after the wait
@@ -378,11 +379,11 @@ void Stream::Run() {
             wma.PacketCount = static_cast<uint32_t>(nPackets);          // 1800a1337
             wma.pDecodedPacketCumulativeBytes = block->cumulativeBytes; // 1800a133b
 
-            EnterCriticalSection(lock);                                 // 1800a1343
+            Platform::MutexLock(lock);                                 // 1800a1343
             voice = voiceRec->voice;
             if (!voice) { how = kExitBail; break; }                     // 1800a1350
             voice->SubmitSourceBuffer(&xb, &wma);                       // 1800a1361 +0xa8
-            LeaveCriticalSection(lock);                                 // 1800a136b
+            Platform::MutexUnlock(lock);                                 // 1800a136b
             ++g_chunks;
 
             ++slotIndex;                                                // 1800a1374
@@ -407,32 +408,32 @@ void Stream::Run() {
         if (how == kExitBail) {
             // 1800a1487 — every bail leaves the lock HELD; this is its release.
             ++g_abandoned;
-            LeaveCriticalSection(lock);
+            Platform::MutexUnlock(lock);
         } else if (how == kExitDrain) {
             // 1800a13bd — the track finished and does not loop: wait for the
             // voice to play out what is already queued, unless the track
             // changes underneath us.
             for (;;) {
-                EnterCriticalSection(lock);                             // 1800a13c1
+                Platform::MutexLock(lock);                             // 1800a13c1
                 IXAudio2SourceVoice* voice = voiceRec->voice;
-                if (!voice) { LeaveCriticalSection(lock); break; }      // 1800a13ce
+                if (!voice) { Platform::MutexUnlock(lock); break; }      // 1800a13ce
                 voice->GetState(&state);                                // +0xc8
-                LeaveCriticalSection(lock);                             // 1800a140c
+                Platform::MutexUnlock(lock);                             // 1800a140c
                 if (state.BuffersQueued == 0) break;                    // 1800a1412 JBE
 
                 handles[0] = static_cast<HANDLE>(_bufferEvent);    // 1800a1420
                 handles[1] = static_cast<HANDLE>(_wakeEvent);      // 1800a1428
                 const DWORD woke = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
-                EnterCriticalSection(lock);                             // 1800a144b
+                Platform::MutexLock(lock);                             // 1800a144b
                 if (woke != 0) {                                        // 1800a1453
                     ++g_abandoned;
-                    LeaveCriticalSection(lock);
+                    Platform::MutexUnlock(lock);
                     break;
                 }
                 voice = voiceRec->voice;
-                if (!voice) { LeaveCriticalSection(lock); break; }      // 1800a1460
+                if (!voice) { Platform::MutexUnlock(lock); break; }      // 1800a1460
                 voice->GetState(&state);                                // +0xc8
-                LeaveCriticalSection(lock);                             // 1800a1477
+                Platform::MutexUnlock(lock);                             // 1800a1477
                 if (state.BuffersQueued == 0) break;                    // 1800a147d JA
             }
         }

@@ -5,7 +5,9 @@
 #include "frame_limiter.h"
 #include "options.h"
 
-#include <windows.h>
+#include <windows.h>   // EnumDisplaySettingsW: the refresh rate (the SDL seam's, later)
+#include "platform_thread.h"   // Platform::SleepMs
+#include "platform_time.h"     // Platform::PerfCounter / PerfFrequency / WaitTimer* / CpuRelax
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -26,23 +28,19 @@ bool      g_havePrev      = false;    // false until the first Tick primes it
 
 // High-resolution waitable timer (Win10 1803+). Lets us sleep with sub-ms
 // precision without timeBeginPeriod's process-wide clock bump. Null => fall
-// back to a plain Sleep(1)+spin loop.
-HANDLE    g_timer         = nullptr;
+// back to a plain Sleep(1)+spin loop. Platform::WaitTimerCreate keeps the
+// high-resolution-then-plain fallback (src/platform/win/time_win.cpp).
+Platform::WaitTimerHandle g_timer = nullptr;
 
 // FPS accounting (updated once per ~second).
 int64_t   g_fpsWindowStart = 0;
 int       g_fpsFrameCount  = 0;
 double    g_measuredFps    = 0.0;
 
-// CREATE_WAITABLE_TIMER_HIGH_RESOLUTION is only in newer SDK headers.
-#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
-#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
-#endif
-
 inline int64_t QpcNow() {
-    LARGE_INTEGER li;
-    QueryPerformanceCounter(&li);
-    return li.QuadPart;
+    int64_t li;
+    Platform::PerfCounter(&li);   // QueryPerformanceCounter
+    return li;
 }
 
 // Query the primary display's current refresh rate in Hz. Returns 0 if unknown.
@@ -62,9 +60,9 @@ int QueryDisplayRefreshHz() {
 void Init() {
     g_initialized = true;
 
-    LARGE_INTEGER f;
-    QueryPerformanceFrequency(&f);
-    g_qpcFreq = f.QuadPart;
+    int64_t f;
+    Platform::PerfFrequency(&f);  // QueryPerformanceFrequency
+    g_qpcFreq = f;
 
     // --- Resolve the ceiling FPS ---
     double targetFps = 0.0;
@@ -101,13 +99,9 @@ void Init() {
         g_intervalTicks = (int64_t)((double)g_qpcFreq / targetFps);
         if (g_intervalTicks < 1) g_intervalTicks = 1;
 
-        g_timer = CreateWaitableTimerExW(
-            nullptr, nullptr,
-            CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-        if (!g_timer) {
-            // Older OS without high-res flag — fall back to a manual-reset timer.
-            g_timer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
-        }
+        // CreateWaitableTimerExW(.., HIGH_RESOLUTION, TIMER_ALL_ACCESS), and on an
+        // older OS without the high-res flag CreateWaitableTimerW(NULL, FALSE, NULL).
+        g_timer = Platform::WaitTimerCreate();
 
         // Log to stderr: in standalone, stdout is freopen'd to standalone_debug.log
         // which a stale instance can hold open (redirect silently fails, output
@@ -141,18 +135,16 @@ void WaitUntil(int64_t deadlineTick) {
         if (remaining > spinMarginTicks && g_timer) {
             // Sleep all but the spin tail. SetWaitableTimer due time is in
             // 100 ns units, negative = relative.
+            // WaitTimerSleep is SetWaitableTimer(-due) + WaitForSingleObject(INFINITE);
+            // it returns false, without waiting, when the timer cannot be armed.
             int64_t sleepTicks = remaining - spinMarginTicks;
-            LARGE_INTEGER due;
-            due.QuadPart = -((sleepTicks * 10000000) / g_qpcFreq);
-            if (due.QuadPart < 0 &&
-                SetWaitableTimer(g_timer, &due, 0, nullptr, nullptr, FALSE)) {
-                WaitForSingleObject(g_timer, INFINITE);
-            } else {
-                Sleep(0);
+            const int64_t due100ns = (sleepTicks * 10000000) / g_qpcFreq;
+            if (!(due100ns > 0 && Platform::WaitTimerSleep(g_timer, due100ns))) {
+                Platform::SleepMs(0);   // Sleep(0)
             }
         } else {
             // Final sub-ms tail: spin politely (hint the CPU, don't burn power).
-            YieldProcessor();
+            Platform::CpuRelax();       // YieldProcessor
         }
     }
 }

@@ -21,11 +21,12 @@
 #include <cstdint>
 
 #include "video/Device.h"   // Video::Device::lock
+#include "platform_sync.h"   // Platform::MutexDestroy
 
 void RtVideoDeleteDeviceLock(Video::Device* device) {
     // Retail does not null-check `this` — nor does it need to, the caller is
     // the destructor. `lock` is the opaque CRITICAL_SECTION bytes (RULE B5-6).
-    DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(device->lock));   // CAST-OK: win32
+    Platform::MutexDestroy(&device->lock);   // DeleteCriticalSection
 }
 
 // ============================================================================

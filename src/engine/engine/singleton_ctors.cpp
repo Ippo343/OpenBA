@@ -74,7 +74,7 @@
 #include "system/Value.h"      // System::Random (ctor 0x1800c7f20)
 
 // The platform half (singleton_ctors_win.cpp).
-void RtLaneXPlatformLockInit(void* cs);
+void RtLaneXPlatformLockInit(Platform::LockStorage* cs);
 // Installs allocator.cpp's `g_plat` function-pointer seam if it is not already
 // installed, and returns whether it took. See the long comment above the
 // MemoryAllocator subject in the probe: `rtalloc::Construct` opens with
@@ -359,7 +359,7 @@ Video::Device* Ctor_VideoDevice(Video::Device* self, int32_t type) {
     self->interfaceCapacity  = 0;
     self->onVideoError       = nullptr;   // +0x50 } two qword stores in retail
     self->onVideoRestart     = nullptr;   // +0x58 }
-    RtLaneXPlatformLockInit(self->lock);
+    RtLaneXPlatformLockInit(&self->lock);
     for (int i = 0; i < 3; ++i) {
         self->dllSlots[i].module           = nullptr;
         self->dllSlots[i].getDeviceName    = nullptr;

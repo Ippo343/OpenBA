@@ -102,6 +102,8 @@
 #include <cstddef>
 #include <type_traits>
 
+#include "platform_sync.h"   // Platform::LockStorage: the +0x60 lock bytes
+
 // `System::String` is INCLUDED (ENDGAME B5 DEV-B): `Adapter::name` and
 // `GraphicsInterface::name` are `System::String` members, which needs the
 // complete type. `Device::SetCursor` takes an `Object::ExternalPtr<ImageBuffer>`
@@ -583,8 +585,9 @@ public:
     // side of a device reset (0x18000183c / 0x18000187d, both null-checked).
     void            (*onVideoError)();     // +0x50
     void            (*onVideoRestart)();   // +0x58
-    uint8_t           lock[0x28];          // +0x60  CRITICAL_SECTION (InitializeCriticalSection + spin 5000)
-                                           //        RULE B5-6: opaque, never a std::mutex.
+    Platform::LockStorage lock;            // +0x60  CRITICAL_SECTION (InitializeCriticalSection + spin 5000)
+                                           //        RULE B5-6: opaque, never a std::mutex;
+                                           //        built in place by Platform::MutexInit.
     uint32_t          lockOwnerThreadId;   // +0x88  RenderBuffer::PlatformConstruct / ~RenderBuffer
     int32_t           lockRecursionCount;  // +0x8C  ditto
     void*             windowHandle;        // +0x90  HWND, copied from Application::_singleton[0] by Startup

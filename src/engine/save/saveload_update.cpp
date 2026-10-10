@@ -46,7 +46,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include <windows.h>   // ResetEvent / SetEvent -- UpdateList state 0 calls both
+#include "platform_sync.h"   // ResetEvent / SetEvent -- UpdateList state 0 calls both
 
 #include "saveload_internal.h"
 #include "io/Persistence.h"
@@ -1426,8 +1426,8 @@ void Save::SaveLoad::UpdateList() {
             persistence->_worker._command = 4;   // request: list saves
             persistence->_worker._status  = 0;   // result: pending
 
-            ResetEvent(persistence->_worker._hFinished);
-            SetEvent(persistence->_worker._hStart);
+            Platform::EventReset(persistence->_worker._hFinished);   // ResetEvent
+            Platform::EventSet(persistence->_worker._hStart);        // SetEvent
         }
 
         _progress = 1;
