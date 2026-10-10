@@ -175,13 +175,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     foodTimer.Serialize(*s);
     field_0x60.Serialize(*s);
 
-    {
-        // ENDGAME B.3.9 C1 (D5): 0x1401c5948 is Disease's registered type-id cell
-        // (INVENTORY_C Table 1).
-        const uint32_t tid = Disease::TypeId();
-        ExternalPtrSerializeGeneric(&disease, s,
-                                    &tid, "CitizenDisease");
-    }
+    ::Object::SerializeExternal<Disease>(*s, disease);   // 0x140030790 (B8 RT2)
 
     field_0x70.Serialize(*s);
     field_0x78.Serialize(*s);
