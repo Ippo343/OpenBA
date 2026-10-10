@@ -77,3 +77,4 @@ build/unit/
 docs/runtime_port/endgame_b/b*_session/runs/
 docs/runtime_port/phase_d/runs/
 docs/history/notes/wp_runs/*.err
+*.lock~
