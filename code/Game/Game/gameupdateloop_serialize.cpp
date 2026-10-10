@@ -699,7 +699,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     m_playerController->Serialize(stream);                                           // 0x1400988c0
     m_entityList->Serialize(stream);                                                 // 0x1400c44a0
     m_worldGeometry->Serialize(stream);                                              // 0x1400b04d0
-    if (m_citizenList) m_citizenList->Serialize(stream, outParam);                   // 0x14008f760
+    m_citizenList->Serialize(stream, outParam);                                      // 0x14008f760 (0x140095c7a: [RDI+0xf0], no test)
     m_game->Serialize(stream);                                                       // 0x14009f100
     m_tutorial->Serialize(stream);                                                   // 0x1400f9240
     m_toolManager->Serialize(stream);                                                // 0x140102920
@@ -717,7 +717,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
     m_weather->Serialize(stream);                    // 0x140093c90
     m_imageCapture->Serialize(stream);               // 0x1400a57f0
     EntityList_PostLoad_c4730(m_entityList, &stream);
-    if (m_citizenList) m_citizenList->PostLoad();   // 0x14008f580
+    m_citizenList->PostLoad();   // 0x14008f580 (0x140095d44: [RDI+0xf0], no test)
 
     if (intFactory) intFactory->ClearPersistState();
     extFactory->EnableReferenceMode(false);
