@@ -49,7 +49,6 @@ namespace System { class Time; }
 struct ActionStack;
 
 // ---- citizen_assign_citizens.cpp
-extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0
 
 // ---- citizen_assignworkplace.cpp
 
@@ -73,7 +72,6 @@ extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* prof
 // ---- citizen_needsupdate.cpp
 
 // ---- citizen_reassign_workers.cpp
-extern "C" void PathGraph_ReassignWorkers(void* ctxV);  // 0x1400d62a0
 
 // ---- citizen_updatehealth.cpp
 class CharacterGrid; class CharacterComponent; template <class T> struct RawArray;

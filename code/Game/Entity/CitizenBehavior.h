@@ -301,6 +301,10 @@ struct PathGraph {
     // citizenbehavior.cpp) ----
     bool ProcessPaths();      // 0x1400d6f00 up to 7 pending pair costs per call
     void BuildPathGraph();    // 0x1400d70c0 rebuild the pair list when idle
+    // ProcessPaths' tail hands the PathGraph in RCX (0x1400d709f `MOV RCX,RBX`); neither body
+    // reads it (they read the GameUpdateLoop singleton). Bodies in Component/citizen_*.cpp.
+    void ReassignWorkers();   // 0x1400d62a0
+    void AssignCitizens();    // 0x1400d43b0
 };
 static_assert(sizeof(PathGraph) == 0x28, "PathGraph size");
 static_assert(offsetof(PathGraph, m_pairs)        == 0x00, "");
