@@ -216,17 +216,19 @@ void ProductionUI::OnCreated() {
 // Original helper: 0x140075A50.
 
 void ProductionUI::UpdateList(int listIndex) {
-    // Get entity from the controller's data source (+0x28)
+    // Get entity from the controller's data source (+0x28): 0x140075a71-0x140075a96,
+    // IsDerivedFrom on [RCX+0x28] with no null test, CMOVNZ.
     Object::Base* entity = _dataSource;
-    bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
+    bool isEntity = entity->IsDerivedFrom(ComponentEntity::TypeId());
     ComponentEntity* entityPtr = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
-    // Find the TrackerComponent (FindComponent<TrackerComponent> 0x140013320).
-    // B8 ENT (B8_RULES C3): the null-entity test the old guarded finder carried is KEPT
-    // HERE, at this one caller: this slot runs every frame, dispatched before any click
-    // binds a producing building (the deviation comment below), so the data source can
-    // be unbound -- a null source retail never has. Retail calls the finder unguarded.
-    TrackerComponent* tracker = entityPtr ? entityPtr->FindComponent<TrackerComponent>() : nullptr;
+    // Find the TrackerComponent (FindComponent<TrackerComponent> 0x140013320), called
+    // at 0x140075ab2 on the cast result with no test. B8 RES: the null-entity test ENT
+    // kept here is gone -- the controller's data source is bound before it can tick:
+    // DialogInstance's ctor runs AddController(type, _dataSource = the clicked entity,
+    // edittool_select.cpp) for every controller before UserInterface::AddDialog opens
+    // and queues the dialog, so no slot of this controller runs with it unbound.
+    TrackerComponent* tracker = entityPtr->FindComponent<TrackerComponent>();
 
     // STANDALONE DEVIATION (the only guard in this file). Retail derefs
     // tracker+0x48 unguarded because every entity that can reach Dialog/

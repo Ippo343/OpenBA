@@ -142,7 +142,6 @@ void RegionPairCache::Expire(const int64_t* dt) {
 
     const int64_t window = lifetime;
     RegionPairEntry* ringBase = ring.data;
-    if (ringBase == nullptr) return;
 
     int head = oldest;
     if (newestTime - ringBase[head].time <= window) {

@@ -327,7 +327,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
 
             // Iterate through herb types in the description list
             int herbTypeCount = radiusComp->_herbCount;
-            Object::External** herbTypeList = radiusComp->_herbs;
+            ComponentDescription** herbTypeList = radiusComp->_herbs;
 
             for (int herbIdx = 0; herbIdx < herbTypeCount; herbIdx++) {
                 // Check growth >= threshold

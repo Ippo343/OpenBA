@@ -22,6 +22,7 @@
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
 #include "object/External.h"
+#include "Component/ComponentDescription.h"   // the SerializeExternalArray<ComponentDescription> instantiation
 #include "object/TypeInfo.h"
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
@@ -36,7 +37,6 @@ inline bool Reading(IO::Serializer& ser) {
 }
 }  // namespace
 
-extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase);  // componentdescription.cpp
 
 // ctor (inlined into create 0x140006bb0 / createInPlace 0x140006c20):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -62,11 +62,12 @@ bool HerbalistDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_herbCount, nullptr);
     int n = _herbCount;
     if (Reading(ser) && n > 0 && System::MemoryAllocator::_singleton) {
-        _herbs = static_cast<Object::External**>(System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8));
+        _herbs = static_cast<ComponentDescription**>(System::MemoryAllocator::MemAlloc((uint64_t)n * 8, 8));
         _herbCap = n;
         if (_herbs) for (int i = 0; i < n; ++i) _herbs[i] = nullptr;
     }
-    Desc_LoadExternalArray(&ser, n, _herbs);
+    // 0x14004b345 CALL 0x1400049c0: the ComponentDescription instantiation (cell 0x1401c7318).
+    Object::SerializeExternalArray<ComponentDescription>(ser, n, _herbs);
     ser.Serialize(_u30, nullptr);
     return true;
 }

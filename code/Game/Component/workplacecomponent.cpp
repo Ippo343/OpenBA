@@ -245,7 +245,9 @@ void WorkPlaceComponent::Attach(Object::InternalPtr<CitizenComponent>* worker) {
 // AssignHousing's it there. AssignHousing detaches from the old workplace first, which is
 // what decrements +0x60 and makes the loop terminate.
 //
-// TWO STANDALONE DEVIATIONS:
+// ONE STANDALONE DEVIATION (the progress guard that stood second here is gone, B8 RES
+// row 1060: retail's loop has no progress test and terminates because the workplace
+// stopped accepting before the loop):
 //  1. g_wpcRosterOnly is held across the whole loop. Without it each AssignHousing drives
 //     the Detach/Attach status-icon visuals, i.e. FUN_14012c3f0 -> Graphics::Scene::
 //     RemoveObject on the building's StatusIconComponent. Our components come from the
@@ -254,11 +256,6 @@ void WorkPlaceComponent::Attach(Object::InternalPtr<CitizenComponent>* worker) {
 //     0 — the engine's list walk then spins and the game freezes in-world (the failure
 //     mode fixed at source for HighlightComponent in 0f97d16). Roster-only keeps the list
 //     mutation, which is all the loop's termination depends on.
-//  2. A progress guard. Retail's `while (+0x60 > 0)` assumes the finder never hands back
-//     THIS workplace; if it did, the count never drops. An unterminated loop HERE is an
-//     in-world freeze rather than a crash — the worst failure mode this codebase has (see
-//     reference_inert_component_sentinel_fields) — so it breaks out loudly instead. This
-//     is the ONLY deviation left in this function; it cannot fire on well-formed state.
 //
 // HISTORY (2026-07-25): this loop faulted twice on live clicks — READ of 0x8, then READ of
 // 0xffffffffffffffff inside AssignHousing. Neither was a bug in this port. BuildUI_Slot9
@@ -275,10 +272,10 @@ void WorkPlaceComponent::EvictRoster() {
     const bool savedRosterOnly = g_wpcRosterOnly;
     g_wpcRosterOnly = true;
 
-    int guard = 0;
+    // 0x140130011-0x14013006c: `while ([RSI+0x60] > 0)`, no progress test. It ends because
+    // SetAccepting stored +0x50 = 0 first, so the finders (FindAvailableBuilding's
+    // isAccepting test) never hand back THIS workplace (B8 RES, row 1060).
     while (workers._size > 0) {
-        int before = workers._size;
-
         CitizenComponent* worker = workers[0].Get();
 
         // Pick the finder off the worker's profession record (+0x1f0 -> +0x4c).
@@ -291,14 +288,6 @@ void WorkPlaceComponent::EvictRoster() {
 
         // Re-read the roster base — the finders above can reallocate it.
         workers[0].Get()->SetWorkplace(newWorkplace);   // 0x140111ee0 (the tree's "AssignHousing")
-
-        if (workers._size >= before || ++guard > 4096) {
-            std::fprintf(stderr, "[WorkPlace] pause eviction made no progress on comp=%p "
-                         "(roster %d -> %d, worker=%p) — breaking to avoid a spin\n",
-                         static_cast<void*>(this), before, workers._size, static_cast<void*>(worker));
-            std::fflush(stderr);
-            break;
-        }
     }
 
     g_wpcRosterOnly = savedRosterOnly;

@@ -64,24 +64,17 @@ static float PC_UVScale();  // defined with the helper ports below
 // active workplace), so the re-bucket is safe AND required to drive the tick. Always on.
 static bool PC_RebucketEntity() { return true; }
 
-// ParticleDescription type id — cell 0x1401c4758 was unregistered (ResolveAddr
-// always returned NULL), so the raw read fell back to ParticleDescription::TypeId()
-// unconditionally; converting by cell (D5) is mechanically equivalent to the old
-// fallback path.
-static uint32_t PC_DescTypeId() {
-    const uint32_t id = ParticleDescription::TypeId();
-    if (id != 0 && id != 0xFFFFFFFF) return id;
-    return 0;
-}
-
-// The component's description as a ParticleDescription.
+// The component's description as a ParticleDescription: the member
+// Base::IsDerivedFrom (import slot 0x140152a98) on the +0x18 description against
+// the cell 0x1401c4758, no null test, CMOVNZ -- every retail body that reads it:
+// Place 0x140052560 (0x1400525b8-0x1400525d6), StartEmitterFade 0x140053660
+// (0x140053674-0x1400536a2), Setup 0x140052480 (0x1400524bf-0x1400524da), OnAdded
+// 0x140052f70 (0x140052f7d-0x140052f97 and 0x140052fdb-0x140052ff9), Tick 0x140052b30
+// (0x140052bff-0x140052c1b), Slot11 0x1400531b0 (0x1400531c4-0x1400531e3), OnEvent
+// 0x140053090 (0x1400530a3-0x1400530c1). (B8 RES, row 1041: was IsDerivedFromOrTrust.)
 static ParticleDescription* GetParticleDesc(const ParticleComponent* self) {
     Description* baseObj = self->_description;
-    if (!baseObj) return nullptr;
-    // +0x18 is the description sub-block the component was instantiated from;
-    // the SA factory tree can false-negative IsDerivedFrom, so trust non-null
-    // (Object::IsDerivedFromOrTrust convention).
-    return Object::IsDerivedFromOrTrust(baseObj, PC_DescTypeId())
+    return baseObj->IsDerivedFrom(ParticleDescription::TypeId())
                ? static_cast<ParticleDescription*>(baseObj) : nullptr;
 }
 

@@ -21,6 +21,7 @@
 // + serialize_struct60b_serialize.cpp (the proven External-array FindOrLoad body).
 
 #include "Component/ComponentDescription.h"
+#include "Component/Description.h"   // the SerializeExternalArray<Description> instantiation
 #include "object/TypeInfo.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -28,7 +29,6 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
-#include <atomic>
 #include <new>
 #include "system/MemoryAllocator.h"
 #include "Component/exe_bodies.h"
@@ -39,81 +39,6 @@
 // word — IO::Serializer::GetDirection (0x180006210) — 0 = reading.
 static inline bool Reading(IO::Serializer& ser) {
     return static_cast<int>(ser.GetDirection()) == 0;
-}
-
-// ============================================================
-// Sub-description array deserialize (FUN_140032090)
-// ============================================================
-// Per element: load the referenced sub-description External via FindOrLoad
-// (reference-mode or path-string mode, plus the encoding==3 export walk). This is
-// the proven body from serialize_struct60b_serialize.cpp, minus type validation
-// (sub-descriptions self-identify their type in the package; we trust it).
-// Exported so other description types with External-ref arrays (AnimalDescription,
-// etc.) reuse this exact proven loop.
-// B6-5: descriptions load on the loader thread; the one-shot log flag is an atomic
-// at namespace scope (was a function-local plain bool).
-static std::atomic<bool> s_warnedUnwired{false};
-
-extern "C" void Desc_LoadExternalArray(IO::Serializer* serializer, int count, void* arrayBase) {
-    if (!serializer || count <= 0 || !arrayBase) return;
-    if (!::Object::ExternalFactory::_singleton) {
-        if (!s_warnedUnwired.exchange(true)) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); }
-        return;
-    }
-    ::Object::ExternalFactory* efactory = ::Object::ExternalFactory::_singleton;
-    // The callers (AnimalDescription, HerbalistDescription, ImmigrationDescription,
-    // TradeDescription, ComponentDescription) hand in their External* array untyped.
-    IO::Serializer& ser = *serializer;
-    const ::Object::External** slots = reinterpret_cast<const ::Object::External**>(arrayBase);   // the one load body's view of five callers' arrays of different External-derived pointers (AnimalDescription::_refs, HerbalistDescription::_herbs, ImmigrationDescription::_requiredBuildings, TradeDescription goods, ComponentDescription::_subDescs); it stores the loaded External* into each slot  // CAST-OK: elem_stride
-
-    const int encState = ser.GetEncoding().GetKind();   // Encoding slot 2 (+0x10)
-
-    for (int i = 0; i < count; ++i) {
-        const ::Object::External** slot = &slots[i];
-
-        if (encState == 3) {                       // path-export walk (read-only)
-            if (!*slot) continue;
-            System::Filename pathBuf = (*slot)->GetPath();
-            (void)efactory->FindOrLoad(pathBuf);
-            continue;
-        }
-
-        System::Filename fnameBuf;
-        bool refMode = efactory->IsReferenceModeEnabled();
-
-        if (refMode) {
-            uint32_t refId = 0xFFFFFFFFu;
-            if (*slot) refId = efactory->GetReferenceId(*slot);
-            bool needsPath = false;
-            if (!*slot || !Reading(ser) || refId != 0xFFFFFFFFu) {
-                ser.Serialize(refId, nullptr);
-                if (refId != 0xFFFFFFFFu) {
-                    if (Reading(ser)) {
-                        System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
-                        fnameBuf = tmpFn;
-                    }
-                    needsPath = true;
-                }
-            } else {
-                ser.Serialize(refId, nullptr);
-            }
-            if (needsPath && Reading(ser)) {
-                *slot = efactory->FindOrLoad(fnameBuf);
-            }
-        } else {
-            bool hasRef = (*slot != nullptr);
-            ser.Serialize(hasRef, nullptr);
-            if (hasRef) {
-                if (*slot) {
-                    fnameBuf = (*slot)->GetPath();
-                }
-                fnameBuf.AsString().Serialize(ser);
-                if (Reading(ser)) {
-                    *slot = efactory->FindOrLoad(fnameBuf);
-                }
-            }
-        }
-    }
 }
 
 
@@ -162,8 +87,9 @@ bool ComponentDescription::Serialize(IO::Stream& stream) {
         if (_subDescs) for (int i = 0; i < count; ++i) _subDescs[i] = nullptr;
     }
 
-    // load each sub-description (FUN_140032090)
-    Desc_LoadExternalArray(&ser, count, _subDescs);
+    // load each sub-description: 0x140118b65 CALL 0x140032090, the ExternalPtr array
+    // template's instantiation over the Description cell 0x1401c72e0 (B8 RES, row 1040).
+    Object::SerializeExternalArray<Description>(ser, count, _subDescs);
     return true;
 }
 
@@ -202,29 +128,29 @@ DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
 // the template's name, the ExternalFactory generation it was last resolved at, and the
 // cached result.
 void NamedExternalRef::ResolveDescription() {
+    // 0x14001b1ec-0x14001b1f6: the factory singleton is read with no test (B8 RES, row 1064).
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
-    if (!factory) return;
 
     // Check generation counter: if matches, cached value is still valid
-    int32_t factoryGen = factory->_generation;
-    if (generation == factoryGen) return;
+    if (generation == factory->_generation) return;
 
-    // Convert String to Filename, look up in factory.
+    // Convert String to Filename, look up in factory; the Filename dies right after
+    // the find (0x14001b223), before the type test.
     // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
-    System::Filename filename(name);
-    ::Object::External* found = factory->FindAs<::Object::External>(filename);
-
-    // Validate the found object is a ComponentDescription (cell 0x1401c7318). The
-    // null-pointer escape that stood here went with the cell pointer (it was
-    // registered, so the escape never ran).
-    ::Object::External* result = nullptr;
-    if (found) {
-        if (::Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
-            result = found;
-        }
+    ::Object::External* found;
+    {
+        System::Filename filename(name);
+        found = factory->FindAs<::Object::External>(filename);
     }
 
-    // Cache result and update generation
+    // Keep the result only if it is a ComponentDescription (cell 0x1401c7318):
+    // 0x14001b229 tests the find's result, then IsDerivedFrom (slot 0x140152a98).
+    ::Object::External* result = nullptr;
+    if (found && found->IsDerivedFrom(ComponentDescription::TypeId())) {
+        result = found;
+    }
+
+    // Cache result, then the generation RE-READ after the find (0x14001b24d).
     resolved   = result;
-    generation = factoryGen;
+    generation = factory->_generation;
 }

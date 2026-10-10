@@ -16,7 +16,6 @@
 // +0x08 array.data / +0x10 count / +0x14 cap / +0x18 parent / +0x20 left /
 // +0x28 right / +0x30 balance.
 
-#include "options.h"             // Opt().liveSeatShuffle
 #include "Action/exe_bodies.h"    // ActHunt_DynArraySetCount_3110
 #include "Component/exe_bodies.h" // ResidenceComponent_impl_7230, AttendanceComponent_GetJobHostComponent
 #include "Tutorial/exe_bodies.h"  // (WorkComponent_CalcMaxWorkers went in B6: the member is called)
@@ -42,8 +41,8 @@
 //   0x140003110 ActHunt_DynArraySetCount_3110 -- growable 8-byte-element array: set count
 //               to newCount + append *elem (Action/exe_bodies.h)
 //   0x140089470 TownRegistry_ShuffleProfessionList -- per-profession building-list
-//               shuffle; registered (and so reached) only under Opt().liveSeatShuffle
-//               (BANISHED_LIVE_SEAT_SHUFFLE): the option is tested at the call site
+//               shuffle; FindAvailableBuilding calls it unconditionally, as retail
+//               0x14008d11b (B8 RES, row 1061: the BANISHED_LIVE_SEAT_SHUFFLE gate is gone)
 //   0x14012e5c0 WorkComponent_CalcMaxWorkers -- max worker slots (Tutorial/exe_bodies.h;
 //               the registered, live one of the two bodies of this address)
 //   0x140002e10 AttendanceComponent_GetJobHostComponent -- find the job host into an
@@ -137,13 +136,10 @@ extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const W
 // — that one shuffles the town HOUSE list for strategy 3. Different array, different
 // caller.
 //
-// BEHAVIOUR CHANGE, therefore OPT-IN: until now this address resolved to null in
-// standalone and FindAvailableBuilding silently skipped step 1, making seat order
-// deterministic (always the first registered building with room). Registering it
-// makes seating random, which is retail-correct but is a real, observable change to
-// every seat decision. It is gated in reg_town_workplace_registry.cpp behind
-// BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in the default-on table: unproven
-// behaviour starts opt-in, and this one wants an explicit A/B before it graduates.
+// Called on every FindAvailableBuilding, as retail (B8 RES, row 1061). Until then it ran
+// only under the opt-in BANISHED_LIVE_SEAT_SHUFFLE flag, so seat order was deterministic
+// (always the first registered building with room); it is retail's random order now,
+// drawing from the game Random (+0xd8) on every seat decision.
 // ============================================================
 void CitizenBehavior::ShuffleProfessionList(const Profession* professionKey) {
     if (GameUpdateLoop::_singleton == nullptr) return;
@@ -187,8 +183,8 @@ void CitizenBehavior::ShuffleProfessionList(const Profession* professionKey) {
 // ============================================================
 void* CitizenBehavior::FindAvailableBuilding(void* out, const Profession* professionKey) {
 
-    // Step 1: optimize/sort the profession node's building list (OPTIONAL — guard).
-    if (Opt().liveSeatShuffle) ShuffleProfessionList(professionKey);   // 0x140089470
+    // Step 1: shuffle the profession node's building list, unconditionally (0x14008d11b).
+    ShuffleProfessionList(professionKey);   // 0x140089470
 
     // Step 2: walk the +0x100 profession BST for the key (key<node -> left[+0x20];
     // key>node -> right[+0x28]; == -> found).

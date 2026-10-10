@@ -41,6 +41,10 @@
 #include "Component/PastureComponent.h"
 #include "Dialog/PastureUI.h"
 #include "Component/PickingComponent.h"
+#include "Component/ModelComponent.h"     // the pick route's aim point (transform +0x148)
+#include "Component/CitizenComponent.h"   // the pick route's citizen list entries
+#include "Dialog/CitizenUI.h"             // the pick route's panel check
+#include "picking/Scene.h"                // Picking::Scene::Intersect / GetUserData
 #include "Component/TradeComponent.h"
 #include "Dialog/TradeUI.h"
 #include "Component/UIComponent.h"
@@ -2898,6 +2902,145 @@ void BridgeTick(PlayerToolManager* entityUI, int frameNum) {
     }
 }
 
+// ============================================================================
+// B8 RES -- BANISHED_TOOL_HARNESS=pick (known_port_issues row 252, audit Q2)
+// ============================================================================
+// Picks a citizen through the real picking path, the way EditTool::OnKey
+// (0x1400fd030) does after its mouse ray: Picking::Scene::Intersect on a ray, the
+// hit's Picking::Scene::GetUserData (the entity PickingComponent::RefreshMesh
+// 0x140128f50 registered with the pick mesh), then EditTool::SelectEntity
+// (0x1400fd3b0). Only the OS cursor is replaced: the ray starts 50 units above the
+// citizen's model position and points straight down (Z is up). A citizen whose pick
+// mesh was never registered (row 252's upstream finding) answers no hit.
+// Success line: "[ToolHarness][pick] PICKED citizen ... panel OPENED ... CitizenUI=1".
+void FirePick(PlayerToolManager* toolManager) {
+    if (!toolManager) { fprintf(stderr, "[ToolHarness][pick] ERROR: tool manager null\n"); return; }
+    EditTool* tool = EditTool_HarnessAcquire(toolManager);
+    if (!tool) { fprintf(stderr, "[ToolHarness][pick] EditTool activation FAILED\n"); return; }
+
+    GameUpdateLoop* gw = GetGW();
+    Picking::Scene* scene = gw->m_pickingScene;
+    CitizenBehavior* town = gw->m_citizenList;
+    const int citizenCount = town->citizens._size;
+    fprintf(stderr, "[ToolHarness][pick] citizens=%d pickingScene=%p EditTool=%p\n",
+            citizenCount, static_cast<void*>(scene), static_cast<void*>(tool));
+
+    int tried = 0;
+    for (int i = 0; i < citizenCount && tried < 16; ++i) {
+        CitizenComponent* citizen = town->citizens._data[i].Get();
+        ComponentEntity* entity = citizen->_entity.Get();
+        ModelComponent* model = entity->FindComponent<ModelComponent>();
+        PickingComponent* picking = entity->FindComponent<PickingComponent>();
+        if (!model) continue;   // harness: nothing to aim at
+        ++tried;
+
+        const Math::Vector3& pos = model->transform.translation;
+        const Math::Vector3 start(pos.x, pos.y, pos.z + 50.0f);
+        const Math::Vector3 dir(0.0f, 0.0f, -1.0f);
+        Math::Vector3 hitPos, hitNormal;
+        const int hitId = scene->Intersect(start, dir, Math::Scalar(400.0f), hitPos, hitNormal);
+        void* hitData = (hitId >= 0) ? scene->GetUserData(static_cast<uint32_t>(hitId)) : nullptr;
+        fprintf(stderr, "[ToolHarness][pick] citizen[%d] entity=%p pos=(%.2f,%.2f,%.2f) "
+                "PickingComponent=%p pickingId=%d -> hitId=%d userData=%p (%s)\n",
+                i, static_cast<void*>(entity), pos.x, pos.y, pos.z,
+                static_cast<void*>(picking), picking ? picking->pickingId : -1,
+                hitId, hitData,
+                hitData == entity ? "this citizen" : (hitData ? "another entity" : "no hit"));
+        if (hitData != entity) continue;
+
+        Object::InternalPtr<ComponentEntity> entityParam(entity);
+        tool->SelectEntity(&entityParam);   // 0x1400fd3b0, as OnKey
+        UI::DialogInstance* dialog = tool->entityRef;
+        const bool citizenUI = dialog && dialog->GetController(CitizenUI::TypeId()).Get() != nullptr;
+        fprintf(stderr, "[ToolHarness][pick] PICKED citizen entity=%p -> panel %s (dialog=%p, "
+                "CitizenUI=%d)\n", static_cast<void*>(entity), dialog ? "OPENED" : "NOT opened",
+                static_cast<void*>(dialog), citizenUI ? 1 : 0);
+        return;
+    }
+    fprintf(stderr, "[ToolHarness][pick] FAILED: no citizen answered its own pick ray "
+            "(%d tried)\n", tried);
+}
+
+// ============================================================================
+// B8 RES -- BANISHED_TOOL_HARNESS=panelclose (row 994 G33, audit Q3)
+// ============================================================================
+// Opens a founding house's info panel through the real select (EditTool::SelectEntity),
+// then kPanelCloseDelay frames later clicks its close button the way the UI delivers a
+// click: DialogInstance::OnElementEvent (0x180114ed0) with the dialog's "buttonClose"
+// element, msg 0x12, id 1 -- every controller's slot 9 runs, ToolUI's close arm
+// (0x14007bc30: CloseDialog) and EntityUI's id-1 arm (0x140067050: SelectTool(0), the
+// tool teardown that deselects). Five frames later it reports whether the dialog left
+// the UserInterface's open list. The old dialog / tool are compared by pointer only
+// after the click, never dereferenced.
+// Success lines: "[ToolHarness][panelclose] CLOSE clicked ... tool replaced=1" and
+// "[ToolHarness][panelclose] after 5 frames: dialog open=0 ... CLOSED".
+constexpr int kPanelCloseDelay = 120;
+int                 s_pc_closeFrame = 0;
+int                 s_pc_checkFrame = 0;
+UI::DialogInstance* s_pc_dialog     = nullptr;
+EditTool*           s_pc_tool       = nullptr;
+
+void FirePanelClose(PlayerToolManager* toolManager, int frameNum) {
+    if (!toolManager) { fprintf(stderr, "[ToolHarness][panelclose] ERROR: tool manager null\n"); return; }
+    EditTool* tool = EditTool_HarnessAcquire(toolManager);
+    if (!tool) { fprintf(stderr, "[ToolHarness][panelclose] EditTool activation FAILED\n"); return; }
+
+    const int houses = StartTown_GetFoundingHouseCount();
+    for (int i = 0; i < houses; ++i) {
+        ComponentEntity* house = StartTown_GetFoundingHouseEntity(i);
+        if (!house) continue;
+        if (!EditTool_HarnessSelectEntity(tool, house)) continue;
+        s_pc_dialog     = tool->entityRef;
+        s_pc_tool       = tool;
+        s_pc_closeFrame = frameNum + kPanelCloseDelay;
+        fprintf(stderr, "[ToolHarness][panelclose] OPEN house[%d]=%p dialog=%p EditTool=%p; "
+                "close scheduled for frame %d\n", i, static_cast<void*>(house),
+                static_cast<void*>(s_pc_dialog), static_cast<void*>(tool), s_pc_closeFrame);
+        return;
+    }
+    fprintf(stderr, "[ToolHarness][panelclose] FAILED: no founding house opened a panel "
+            "(houses=%d)\n", houses);
+}
+
+void PanelCloseTick(PlayerToolManager* toolManager, int frameNum) {
+    UI::UserInterface* ui = GetGW()->m_userInterface;
+    if (s_pc_closeFrame != 0 && frameNum >= s_pc_closeFrame) {
+        s_pc_closeFrame = 0;
+        UI::DialogInstance* dialog = s_pc_dialog;
+        Object::InternalPtr<UI::DialogInstance> dialogRef(dialog);
+        const bool openBefore = ui->IsDialogOpen(&dialogRef);
+        System::String closeName("buttonClose");
+        Object::InternalPtr<UI::Element> closeButton = dialog->FindElement(closeName);
+        fprintf(stderr, "[ToolHarness][panelclose] frame %d: dialog=%p open=%d buttonClose=%p "
+                "EditTool=%p selected=%p\n", frameNum, static_cast<void*>(dialog),
+                openBefore ? 1 : 0, static_cast<void*>(closeButton.Get()),
+                static_cast<void*>(s_pc_tool), static_cast<void*>(s_pc_tool->lastEntityRef));
+        if (!closeButton.Get()) {
+            fprintf(stderr, "[ToolHarness][panelclose] FAILED: the panel has no buttonClose\n");
+            return;
+        }
+        dialog->OnElementEvent(&closeButton, 0x12, 1, 0, 0, 0, nullptr);   // the button click
+        Tool* toolAfter = toolManager->currentTool.Get();
+        EditTool* editAfter = EditTool_IsEditTool(toolAfter) ? static_cast<EditTool*>(toolAfter)
+                                                             : nullptr;
+        fprintf(stderr, "[ToolHarness][panelclose] CLOSE clicked: tool replaced=%d "
+                "(was %p, now %p) new EditTool dialog=%p selected=%p\n",
+                toolAfter != s_pc_tool ? 1 : 0, static_cast<void*>(s_pc_tool),
+                static_cast<void*>(toolAfter),
+                editAfter ? static_cast<void*>(editAfter->entityRef) : nullptr,
+                editAfter ? static_cast<void*>(editAfter->lastEntityRef) : nullptr);
+        s_pc_checkFrame = frameNum + 5;
+        return;
+    }
+    if (s_pc_checkFrame != 0 && frameNum >= s_pc_checkFrame) {
+        s_pc_checkFrame = 0;
+        Object::InternalPtr<UI::DialogInstance> dialogRef(s_pc_dialog);   // pointer compare only
+        const bool openAfter = ui->IsDialogOpen(&dialogRef);
+        fprintf(stderr, "[ToolHarness][panelclose] after 5 frames: dialog open=%d (%s)\n",
+                openAfter ? 1 : 0, openAfter ? "STILL OPEN" : "CLOSED");
+    }
+}
+
 }  // namespace
 
 // GameUpdateLoop's Update hands its m_toolManager over (gameupdateloop.cpp; its local
@@ -3009,6 +3152,9 @@ extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
         FirePasturePanel(entityUI);
     }
 
+    // panelclose: the scheduled close click and its check (FirePanelClose above).
+    if (s_pc_closeFrame != 0 || s_pc_checkFrame != 0) PanelCloseTick(entityUI, frameNum);
+
     if (s_fired) return;
     if (frameNum < s_settleFrame) return;
 
@@ -3039,6 +3185,10 @@ extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
         FireSelectEntity(entityUI);
     } else if (std::strcmp(s_toolName, "selectcitizen") == 0) {
         FireSelectCitizen(entityUI);
+    } else if (std::strcmp(s_toolName, "pick") == 0) {
+        FirePick(entityUI);
+    } else if (std::strcmp(s_toolName, "panelclose") == 0) {
+        FirePanelClose(entityUI, frameNum);
     } else if (std::strcmp(s_toolName, "utility") == 0) {
         FireUtilityDialog();
     } else if (std::strcmp(s_toolName, "markremoval") == 0) {

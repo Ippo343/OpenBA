@@ -69,10 +69,12 @@ using StorageCtrlDispatch = ::ControllerLive::Dispatcher<StorageCtrlTag>;
 // state-2 walk at this node, starving WPC's edf0 (so the completed barn stayed
 // registered as an available Builder workplace, capacity 4, and absorbed the
 // first 4 builders town-wide) and ClearArea's state-2 event-1 broadcast.
+// The enter table holds a plain function pointer, so this is the thunk to the member,
+// which is retail's handler body and returns its 0 (B8 RES, row 1065; the `!data` test
+// went with it: 0x14012d234 reads [RCX+0x10] unguarded, and the dispatcher hands the
+// node's owning component, never null).
 static char StorageLoc_State2Enter(StorageLocationComponent* data, StateMachine* /*sm*/) {
-    if (!data) return 0;
-    data->RegisterStorageLocation();
-    return 0;
+    return data->RegisterStorageLocation();
 }
 
 // state-3 ENTER — port of StorageLocationDescription_helper_d1f0. Retail:
