@@ -549,9 +549,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // Per-frame particle simulation tick (chimney smoke, etc). Without this
     // particles are added to the scene at Load but never simulate — emitters
     // don't spawn sprites, so smokestacks render empty.
-    if (time) {
-        TickParticles(time);
-    }
+    TickParticles(time);
 
     // Per-frame Audio::Scene::Update — advances the menu music stream (and any
     // ambient/3D channels) on the loop's embedded Audio::Scene (self+0xb30).
@@ -559,9 +557,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // Audio::Device::Update channel reaper below, matching retail frame order.
     // Without this, StartMusic's PlayEffect starts the music but it never
     // progresses (no new sample buffers get queued).
-    if (time) {
-        TickAudioScene(time);
-    }
+    TickAudioScene(time);
 
     // Per-frame Audio::Device::Update. Original MainLoop::Run only fires
     // this once at startup, but the function is just channel cleanup

@@ -394,21 +394,14 @@ void MenuDialogLoopT::LoadParticles_PhaseC(MenuScene* menuScene, Graphics::Scene
 // Without this, particles are added to the scene but never simulate — emitters
 // don't spawn sprites, so chimneys don't smoke.
 void MenuDialogLoopT::TickParticles(const System::Time* time) {
-    if (!time) return;
-    const System::Time& now = *time;
+    const System::Time& now = *time;   // the slot's Time& (RDX of 0x14009b6e0), never tested
 
-    // Retail reads the +0xbd0 array AS `Geometry**` (exe 0x14009b6e0).
+    // Retail reads the +0xbd0 array AS `Geometry**` (exe 0x14009b6e0) and re-reads its
+    // size (+0xbd8) each turn; neither the array nor an element is tested.
     Collection::Array<Graphics::Geometry*>& particles =
         _particleArray;
-    Graphics::Geometry** arr = particles.GetData();
-    int32_t count = particles.GetSize();
-
-    if (!arr || count <= 0) return;
-    for (int32_t i = 0; i < count; ++i) {
-        Graphics::Geometry* inst = arr[i];
-        if (!inst) continue;
-        inst->Update(now);   // slot 1 of Graphics::Geometry
-    }
+    for (int32_t i = 0; i < particles.GetSize(); ++i)
+        particles.GetData()[i]->Update(now);   // slot 1 of Graphics::Geometry
 
     // Match retail MenuDLT::Update ordering (exe 0x14009b6e0):
     //   per-instance Update loop  →  _frameIndex++  →  Scene::Clean
@@ -916,8 +909,6 @@ void MenuDialogLoopT::StopMusic() {
 // is what advances the music stream each frame — without it PlayEffect starts
 // the music but it never progresses.
 void MenuDialogLoopT::TickAudioScene(const System::Time* time) {
-    if (!time) return;
-
     Audio::Scene* audioScene = &_audioScene;   // the embedded Audio::Scene (+0xb30)
 
     System::Time elapsed = *time;
