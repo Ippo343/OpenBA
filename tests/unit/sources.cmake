@@ -34,4 +34,5 @@ set(UNIT_TREE_SRCS
   ${CMAKE_SOURCE_DIR}/src/platform/win/allocator_win.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/system/error.cpp
   ${CMAKE_SOURCE_DIR}/src/engine/video/device_enum_types.cpp
+  ${CMAKE_SOURCE_DIR}/src/engine/io/settings_file.cpp
 )
