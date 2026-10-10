@@ -883,16 +883,14 @@ void FireUtilityDialog() {
     fprintf(stderr, "[ToolHarness] utility-dialog open returned — dialog should now render "
            "(watch subsequent frames for crashes).\n");
 
-    // Drive controller setup explicitly (AddDialog doesn't reach controller setup
-    // through the standalone ToolUI child-dialog vtable). Map: Slot4 SetupImage binds
-    // the uploaded terrain/overlay textures. Professions: Slot5 populates the table +
-    // spinner/number caches. The content sub-tree is often inserted a frame or more
-    // after the open, so the +90-frame delayed rescan (ToolHarness_Tick) is what
-    // usually lands it; this same-frame attempt is a best-effort.
+    // Drive controller setup explicitly for the Map (Slot4 SetupImage binds the
+    // uploaded terrain/overlay textures). The content sub-tree is often inserted a frame
+    // or more after the open, so the +90-frame delayed rescan (ToolHarness_Tick) is what
+    // usually lands it; this same-frame attempt is a best-effort. Professions are NOT
+    // re-driven: AddDialog's open already ran ProfessionUI::OnOpened (slot 5), and a
+    // second run re-clones the table rows (B9 RES, known_port_issues row 1200).
     if (std::strstr(tmplName, "Map") != nullptr)
         ToolbarUtility_HarnessDriveController("MapUI", 4);
-    else if (std::strstr(tmplName, "Profession") != nullptr)
-        ToolbarUtility_HarnessDriveController("ProfessionUI", 5);
 
     // --- Minimap image-buffer probe (map-render bring-up) ---------------------
     // MapUI::Slot4 (SetupImage) reads the minimap subsystem at gameWorld+0x148,
@@ -3111,8 +3109,9 @@ extern "C" void ToolHarness_Tick(PlayerToolManager* entityUI, int frameNum) {
             bool isProf = tmpl && std::strstr(tmpl, "Profession") != nullptr;
             fprintf(stderr, "[ToolHarness] DELAYED rescan at frame %d (looking for %s content)...\n",
                    frameNum, isProf ? "profession" : "minimap");
-            if (isProf) ToolbarUtility_HarnessDriveController("ProfessionUI", 5);
-            else        ToolbarUtility_HarnessDriveController("MapUI", 4);
+            // ProfessionUI's slot 5 already ran in AddDialog's open: not re-driven
+            // (row 1200); the rescan only reports for it.
+            if (!isProf) ToolbarUtility_HarnessDriveController("MapUI", 4);
         }
     }
 
