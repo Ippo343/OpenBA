@@ -11,9 +11,9 @@
 #include "TradeComponent.h"
 #include <cstdint>
 
-void TradeMerchantOrders_SetSize(TradeComponent& trade, int count);    // 0x14000e760
+template <> void TradeComponent::MerchantOrderArray::SetSize(int count);   // 0x14000e760 (the member, specialized: tradecomponent.cpp)
 void TradeMerchantOrders_Destroy(TradeMerchantOrder* base, int count);  // 0x14000ef10
-void TradeBuyOrders_SetSize(TradeComponent& trade, int count);          // 0x14000e8d0
+template <> void Collection::Array<TradeBuyOrder>::SetSize(int count);         // 0x14000e8d0 (the member, specialized: tradecomponent.cpp)
 
 // The AVL map ComponentDescription -> int (TradeResourceNode): the stock tree and
 // 0x140059ad0's purchase tally (tradecomponent_serialize.cpp).

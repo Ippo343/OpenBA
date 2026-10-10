@@ -27,11 +27,11 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, I
 
 // ---- ambientemittercomponent.cpp
 struct AmbientEmitterSlot;   // Component/AmbientEmitterComponent.h (Collection.h: via Entity/CitizenBehavior.h)
-extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount);  // 0x140001770
+template <> void Collection::Array<AmbientEmitterSlot>::SetSize(int newCount);  // 0x140001770 (the member, specialized: ambientemittercomponent.cpp)
 
 // ---- ambientenvironmentdescription.cpp
 struct AmbientEnvironmentBiome;   // Component/AmbientEnvironmentDescription.h
-extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount);  // 0x140002540
+template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCount);  // 0x140002540 (the member, specialized: ambientenvironmentdescription.cpp)
 
 // ---- attendancecomponent.cpp
 void AttendanceComponent_ReleasePartnerSlot(CitizenComponent* self, char reroll);  // 0x140115a50
