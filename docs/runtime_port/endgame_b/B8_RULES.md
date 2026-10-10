@@ -193,4 +193,14 @@ clean. `worldcmp.sh` vs the DEC run identical, or DIFFERS with every line attrib
 
 ## 7. Corrections (dated, appended as blocks find them)
 
-(none yet)
+2026-10-10, from block COMP-A's hand-in:
+- C1. **b11cmp.py does not pair a free function with the member it became** (it pairs a rename only when
+  the qualified name is unchanged), so a move shows as ONLY-BASE + ONLY-TIP and the callers as DIFF on the
+  callee's symbol. `b8_session/b11pair.py BASE TIP MAPFILE <tu-substring>... [--detail]` is b11cmp's parser
+  with a by-hand map (`old_bare_name -> Class::Member`, one per line): the moved body pairs as
+  RENAMED-IDENTICAL / RENAMED-SAME / RENAMED-DIFF and callers are compared with the callee renamed. D7's
+  expected verdicts read with it: RENAMED-IDENTICAL for the body, IDENTICAL for the callers.
+- C2. **A devirtualised call inside a moved body is a RENAMED-DIFF to accept when the target is the slot's
+  own** (CitizenComponent::ShowTool: `static_cast<Graphics::Geometry*>(&meshInstance)->Update(t)` became a
+  direct `MeshInstance::Update` call once GCC saw the embedded member's dynamic type): same callees in the
+  same order, stores and compares equal; quoted in the commit, not a reason to keep the row free.
