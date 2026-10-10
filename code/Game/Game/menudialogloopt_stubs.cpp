@@ -562,7 +562,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // Without this, StartMusic's PlayEffect starts the music but it never
     // progresses (no new sample buffers get queued).
     if (time) {
-        MenuDialogLoopT_TickAudioScene(this, time);
+        TickAudioScene(time);
     }
 
     // Per-frame Audio::Device::Update. Original MainLoop::Run only fires

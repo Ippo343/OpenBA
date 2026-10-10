@@ -103,6 +103,7 @@ public:
     void StartMusic();   // part of Startup 0x14009b930 (Game/menudialogloopt.cpp)
     void StopMusic();   // part of Shutdown 0x14009b280 (call at 0x14009b41a) (Game/menudialogloopt.cpp)
     void BindUISounds();   // part of 0x140099260 (Game/menudialogloopt.cpp)
+    void TickAudioScene(const System::Time* time);   // part of Update 0x14009b6e0 (Game/menudialogloopt.cpp)
 };
 
 static_assert(sizeof(MenuDialogLoopT) == 0xc00, "MenuDialogLoopT is 0xc00 (MemAlloc(0xc00, 8))");

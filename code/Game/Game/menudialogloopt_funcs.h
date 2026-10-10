@@ -207,7 +207,6 @@ void MenuDialogLoopT_TickAudio(const System::Time* time);
 // Calls Audio::Scene::Update(scene@+0xb30, elapsedTime, Time(0),
 //   &Random@+0x168, &listenerVec3{0,0,0}, 0.0f) as a member call. Caller passes
 // the frame's System::Time pointer.
-void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, const System::Time* time);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_UpdateCamera_PhaseA — mirror the camera-animation block of
 // MenuDLT::Update (exe 0x14009b6e0). Animates the orbit yaw, derives the

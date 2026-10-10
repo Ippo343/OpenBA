@@ -965,16 +965,16 @@ void MenuDialogLoopT::BindUISounds() {
 // Application::IsPaused / Audio::Scene::Pause(channel 2) transition logic). This
 // is what advances the music stream each frame — without it PlayEffect starts
 // the music but it never progresses.
-void MenuDialogLoopT_TickAudioScene(MenuDialogLoopT* self, const System::Time* time) {
-    if (!self || !time) return;
+void MenuDialogLoopT::TickAudioScene(const System::Time* time) {
+    if (!time) return;
 
-    Audio::Scene* audioScene = &self->_audioScene;   // the embedded Audio::Scene (+0xb30)
+    Audio::Scene* audioScene = &_audioScene;   // the embedded Audio::Scene (+0xb30)
 
     System::Time elapsed = *time;
     System::Time timeZero; timeZero._ticks = 0;            // Time(0), passed by value
     const Math::Vector3 listener(0.0f, 0.0f, 0.0f);         // origin listener (2D menu music)
 
-    audioScene->Update(elapsed, timeZero, self->_random, listener, 0.0f);
+    audioScene->Update(elapsed, timeZero, _random, listener, 0.0f);
 
     static int n = 0;
     if (n < 3) {
