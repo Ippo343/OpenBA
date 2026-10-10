@@ -154,24 +154,6 @@ void VecPush(RawArray<T>* v, const T& elem, int align) {
     v->size = n;
 }
 
-// Resize a range-array (stride 0x10, align 4) to N entries, copy-only (sub_efd0).
-void RangeResize(RawArray<GeometryDrawRange>* v, int n) {
-    if (n == v->size) return;
-    GeometryDrawRange* oldData = v->data;
-    int oldCount = v->size;
-    v->size = n;
-    if (v->capacity < n) {
-        v->capacity = n;
-        GeometryDrawRange* nb = static_cast<GeometryDrawRange*>(MemAllocA((uint64_t)n * sizeof(GeometryDrawRange), 4));
-        if (nb && oldData && oldCount > 0) {
-            int keep = (oldCount < n) ? oldCount : n;
-            std::memcpy(nb, oldData, (size_t)keep * sizeof(GeometryDrawRange));
-        }
-        if (oldData && oldData != nb) System::MemoryAllocator::MemFree(oldData);
-        v->data = nb;
-    }
-}
-
 // ============================================================
 // Vertex weld (f3e0 equivalent): full 16-byte key dedup -> monotonic index.
 // The retail f3e0 uses an RB-tree keyed on the packed vertex; a hash with exact
@@ -597,7 +579,9 @@ void WorldGeometry::BuildWaterBodies(const TerrainHeightfield* hf) {
     RawArray<uint16_t>*       idxAcc = &_contourIndices;    // uint16 indices
 
     int bodyCount = hf->paths._size;
-    RangeResize(rangeA, bodyCount);       // sub_efd0; sets rangeA.count (geom+0x1c8)
+    // 0x1400ab2e5: CALL 0x14001efd0, Collection::Array<GeometryDrawRange>::SetSize
+    // (stride 0x10, MemAlloc align 4, the empty else arm); sets geom+0x1c8.
+    RawArraySetSize(*rangeA, bodyCount);
 
     // Stage A: faithful dense rounded-bank builder. It falls back to the older
     // approximation for degenerate (<3-point) bodies that produce no geometry.
@@ -660,7 +644,7 @@ void WorldGeometry::BuildWaterShores(const TerrainHeightfield* hf) {
     RawArray<uint16_t>*       idxAcc = &_contourIndices;
 
     int featureCount = hf->waterFeatures._size;
-    RangeResize(rangeB, featureCount);
+    RawArraySetSize(*rangeB, featureCount);   // 0x1400ab66b: CALL 0x14001efd0
 
     int   N        = _fieldD0;           // heightmap edge
     const int16_t* hmap = _heights.data;      // int16 heightmap
