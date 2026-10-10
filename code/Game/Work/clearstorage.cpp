@@ -174,7 +174,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
         uint32_t resourceTypeId = (uint32_t)field_28;
         ComponentEntity* destEntity = nullptr;
 
-        PickBestDropTarget(worldArray,
+        worldArray->PickBestDropTarget(
                            &destEntity, resourceTypeId, itemEntity, availCount, 1,
                            searchPos, &entityIBP);   // 0x14008d590
 

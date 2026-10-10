@@ -93,7 +93,6 @@ class CitizenBehavior; class Profession; struct TownHallInventoryEntry;   // Ent
 // TownHall_GroupRatingInit (0x14006abf0) / TownHall_GroupRatingUpdate (0x14006aed0):
 // Dialog/TownHallUI.h (they take TownHallUI::RatingGroup). The two row-array
 // pushes 0x140015800 / 0x1400159b0 are Array<Row>::SetSize (TownHallUI's members).
-extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int seriesIdx, int startTick, int endTick);  // 0x140090f20
 extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015200
 extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015500
 extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* profession);  // 0x140091180

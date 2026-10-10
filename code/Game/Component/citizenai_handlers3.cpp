@@ -136,7 +136,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
         CitizenBehavior* listEnt = GameUpdateLoop::_singleton->m_citizenList;
         const ModelComponent* model = CitizenModel(citizen.Get());
         uint32_t cell = ModelCell(model, mg);
-        Entity_impl_ec70(listEnt, &found, cell, &dest.x);   // find nearest valid residence
+        listEnt->FindElderResidence(&found, cell, &dest.x);   // find nearest valid residence
         if (found != nullptr) { holderEntity = found; doPush = true; }
     }
 
@@ -208,7 +208,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             ComponentEntity* e370arg = citizen->home.Get();   // param_7 (home preferred candidate)
             ComponentDescription* outComp = nullptr;   // local_res20
             ComponentEntity* outBest = nullptr;        // local_res18
-            CitizenAI_helper_e370(listpair, &outBest, cell, &outComp, &dest.x, 0, &e370arg);
+            listpair->FindAdultTarget(&outBest, cell, &outComp, &dest.x, 0, &e370arg);
             found = outBest;
             if (outBest == nullptr) retryWorkPath = true;  // goto LAB_14010d03c
         }
@@ -244,7 +244,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             const ModelComponent* model = CitizenModel(citizen.Get());
             uint32_t cell = ModelCell(model, mg);
             ComponentDescription* outComp = nullptr;  // local_res18
-            CitizenAI_FindBestTarget_dd30(listpair, &found, cell, bGoal, &outComp, &dest.x, 0);
+            listpair->FindBestTarget(&found, cell, bGoal, &outComp, &dest.x, 0);
             if (found == nullptr) {
                 // no target -> cooldown stamp (timers[0] & timers[14]) + return 0
                 System::Time stamp{};

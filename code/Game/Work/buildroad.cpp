@@ -436,8 +436,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             const Object::InternalPtr<ComponentEntity> excludeEntity;   // null
 
             ComponentEntity* foundEntity = nullptr;
-            PickBestDropTarget(
-                citizenList, &foundEntity,
+            citizenList->PickBestDropTarget(&foundEntity,
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
                 field_50, 1, '\0', velocity, &excludeEntity);   // 0x14008d590
 

@@ -219,7 +219,7 @@ void WorkPlaceComponent::EnterBuilderProfession() {
     CitizenBehavior* const townMgr = gw->m_citizenList;
     if (townMgr) {
         ComponentEntity* ownerLocal = ownerRef;      // the insert takes an InternalBasePtr*
-        ResidenceComponent_impl_95a0(townMgr, &ownerLocal, builderKey);   // 0x1400895a0
+        townMgr->RegisterWorkplace(&ownerLocal, builderKey);   // 0x1400895a0
     }
 
     // 6. Worker capacity for the demolition site. No BuildComponent on the owner entity ->

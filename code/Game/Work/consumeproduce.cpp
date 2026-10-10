@@ -475,8 +475,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 // 0x1400e7eec: the drop target into [RBP-0x60]; 0x1400e7ef1 MOV RDI,[RBP-0x60]
                 // keeps it in RDI for the setup at 0x1400e837c.
                 ComponentEntity* foundEntity = nullptr;
-                PickBestDropTarget(
-                    worldEntityList, &foundEntity,
+                worldEntityList->PickBestDropTarget(&foundEntity,
                     (uint32_t)field_28, matEntity,
                     available, '\x01', searchPos, &field_10);   // 0x14008d590
 
@@ -582,8 +581,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                 if (by >= mapSize) by = mapSize - 1;
 
                 ComponentEntity* foundStorage = nullptr;
-                PickBestDropTarget(
-                    worldEntityList, &foundStorage,
+                worldEntityList->PickBestDropTarget(&foundStorage,
                     mapSize * by + bx, matEntity2, 1, '\0', searchPos2,
                     &field_10);   // 0x14008d590
 

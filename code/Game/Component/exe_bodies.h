@@ -58,11 +58,6 @@ extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0
 class CitizenBehavior;   // Entity/CitizenBehavior.h
 class Profession;        // Game/Profession.h
 class ComponentEntity;   // Entity/ComponentEntity.h
-extern "C" CitizenComponent** CitizenEmploy_Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008cbf0
-extern "C" CitizenComponent** CitizenEmploy_Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008ca20
-extern "C" CitizenComponent** CitizenEmploy_Strat_c5f0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c5f0
-extern "C" CitizenComponent** CitizenEmploy_Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c4b0
-extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c3d0
 extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);  // 0x140091130
 extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)  // B8: stays free -- not a ComponentEntity member: no retail body of its own; it is the append inside ResidenceComponent::EnterBuilt (0x140129de0, RCX the ResidenceComponent), its one caller -- folding it back is ResidenceComponent's (COMP-B), and its four port-only guards (entity, GameUpdateLoop, townMgr, the count check) go with that
 extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop
@@ -101,8 +96,6 @@ extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const Syste
 class ResidenceComponent;
 class CitizenBehavior;
 bool ResidenceCheck_2ac30(ResidenceComponent* self);  // 0x14012ac30
-ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, float* param_4);  // 0x14008ec70
-ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, ComponentDescription** param_4, float* param_5, uint64_t , ComponentEntity** origP7);  // 0x14008e370
 
 // ---- citizenai_findtarget.cpp
 class ComponentEntity;
@@ -110,7 +103,6 @@ class MarketLocationComponent;
 namespace Object { template <class T> class InternalPtr; }
 ::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(
     ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2);  // 0x1400178c0
-CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, uint32_t param_4, ComponentDescription** param_5, float* param_6, uint32_t param_7);  // 0x14008dd30
 
 // ---- citizenai_gather.cpp
 class Component;

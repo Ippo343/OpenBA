@@ -937,7 +937,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
             float destPos[3] = {0.0f, 0.0f, 0.0f};
             Object::InternalPtr<ComponentEntity> exclude = field_10;  // this market
             ComponentEntity* found = nullptr;
-            PickBestDropTarget(town,
+            town->PickBestDropTarget(
                                &found,
                                static_cast<uint32_t>(cellIdx), resType, take, '\x01',
                                destPos, &exclude);   // 0x14008d590

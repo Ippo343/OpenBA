@@ -347,7 +347,7 @@ void CitizenComponent::LongTermPlan() {
         Object::InternalPtr<ComponentEntity> matchIBP = nullptr;   // local_a8
         ComponentEntity* outBest  = nullptr;   // local_98
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(listPair, &outBest, homeCell,
+        listPair->PickBestDropTarget(&outBest, homeCell,
                            rowBase->_resource, rowBase->_count, '\x01', outVec, &matchIBP);
         if (outBest == nullptr) {
             // d590 found nothing for this row → treat as committed-with-empty (the original
@@ -492,7 +492,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
 
     ComponentEntity* found = nullptr;          // local_b0
     ComponentDescription* outComp = nullptr;   // local_res18
-    CitizenAI_FindBestTarget_dd30(listPair, &found, homeCell, bGoal, &outComp, destA, 3);
+    listPair->FindBestTarget(&found, homeCell, bGoal, &outComp, destA, 3);
     if (found == nullptr) {
         return 0;   // no source → low byte 0
     }

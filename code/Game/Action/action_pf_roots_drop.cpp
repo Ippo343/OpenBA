@@ -195,7 +195,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         if (size <= iVar8) iVar8 = size - 1;
         if (iVar5 < 0) iVar5 = 0;
         if (size <= iVar5) iVar5 = size - 1;
-        PickBestDropTarget(world->m_citizenList,
+        world->m_citizenList->PickBestDropTarget(
                            &found, static_cast<uint32_t>(size * iVar5 + iVar8), material, iVar9, '\x01',
                            dropPos, &exclude);   // 0x14008d590
         if (found == nullptr) {

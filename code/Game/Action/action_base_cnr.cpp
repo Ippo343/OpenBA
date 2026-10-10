@@ -354,7 +354,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     // consumes. It needs only the citizen, the material and the yield, NOT the spawned
     // item entity, so it runs unconditionally.
     ComponentEntity* regIBP = *citizenIBP;
-    RegisterRawMaterial(gameWorld->m_citizenList, &regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
+    gameWorld->m_citizenList->CountProducedMaterial(&regIBP, harvestFlag, d->_building, amount);   // 0x140088ef0
 
     // Query the existing surface work at the cell (for its +0x24).
     Work* surf = gameWorld->m_tutorial->FindWorkAtCell(cell);   // 0x1400f8d50

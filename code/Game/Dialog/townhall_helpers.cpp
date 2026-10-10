@@ -166,8 +166,8 @@ const rtcoll::ArraySpec kSpec_ProfessionRow = {          // exe 0x140015800
 // 0x140090f20 — sum a town history series (CitizenBehavior +0x150) over
 // [startTick, endTick] (clamped to [0, count-1]).
 // ===========================================================================
-extern "C" int TownHall_QueryProductionStat(const CitizenBehavior* town, int seriesIdx, int startTick, int endTick) {
-    const Collection::Array<int32_t>* seriesBase = town->field_0x150._data;
+int CitizenBehavior::QueryProductionStat(int seriesIdx, int startTick, int endTick) const {
+    const Collection::Array<int32_t>* seriesBase = field_0x150._data;
     if (!seriesBase) return 0;
     const Collection::Array<int32_t>& series = seriesBase[seriesIdx];
     const int32_t* data = series.GetData();
