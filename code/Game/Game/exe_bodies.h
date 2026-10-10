@@ -245,6 +245,5 @@ inline System::String* GetLoadingSoundString(System::String* retStr) {
 // serialize_heightmap_mesh.cpp
 // serialize_image_upload.cpp
 // serialize_resize_helpers.cpp
-extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount);  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
 namespace Math { class Vector2; }
 extern "C" void Reimpl_Array_Resize_ArrayOfArrays(RawArray<RawArray<Math::Vector2>>* arrayHeader, int newCount);  // WorldGeometry +0x1E0  // B8: stays free -- its holder is WorldGeometry::_contourOutlines, a WorldGeometryArray (RawArray: no ctor / dtor), not a Collection::Array<T>; Array<T>::SetSize exists over another body; this body tests what retail does not (null header, negative count, null allocator)

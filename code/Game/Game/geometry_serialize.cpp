@@ -87,7 +87,7 @@ void SerializeDrawRanges(IO::Serializer& serializer, RawArray<GeometryDrawRange>
     int32_t c = ranges.size;
     serializer.Serialize(c, nullptr);
     if (IsLoading(serializer)) {
-        Reimpl_Array_Resize_Stride16A(&ranges, c);
+        RawArraySetSize(ranges, c);   // Array<GeometryDrawRange>::SetSize 0x14001efd0
     }
     if (c > 0 && ranges.data) {
         for (int i = 0; i < c; ++i) {

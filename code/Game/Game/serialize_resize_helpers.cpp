@@ -138,15 +138,6 @@ void GenericArrayResize(void* arrayHeader, int newCount,   // LEFT: void* is the
 } // anonymous namespace
 
 // ============================================================
-// Helper #2 — stride 0x10 int4 array (TradeWork_impl_b260_sub_efd0)
-// ============================================================
-//
-// MemAlloc(cap<<4, 4). Per element: copy 4 dwords (16 bytes total).
-extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount) {
-    GenericArrayResize(arrayHeader, newCount, 0x10, 4);
-}
-
-// ============================================================
 // Helper #6 — stride 0x0C 3-int array (FUN_14001c7c0)
 // ============================================================
 //
