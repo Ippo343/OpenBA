@@ -2111,19 +2111,6 @@ void TradeUI::RefreshDisplay() {
 }
 
 // ============================================================
-// B4 FORWARD: the C spellings of the members above that callers outside this
-// block still name (standalone/trade_buy_harness.cpp declares its own copies).
-// ============================================================
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
-void TradeUI_UpdateBuyTotals(TradeUI* self) { self->UpdateBuyTotals(); }
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
-void TradeUI_UpdateSellTotals(TradeUI* self) { self->UpdateSellTotals(); }
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
-void TradeUI_RefreshSellTable(TradeUI* self) { self->RefreshSellTable(); }
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp)
-void TradeUI_RefreshBuyTable(TradeUI* self) { self->RefreshBuyTable(); }
-
-// ============================================================
 // NOTE: this block used to defer three functions as "needs opus". All three have
 // since landed, so the list is kept only to say where they went — a deferral list
 // that outlives the deferral is exactly the kind of comment this project keeps

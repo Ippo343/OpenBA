@@ -1034,8 +1034,7 @@ void FireMarkRemoval() {
 
     // The two backend primitives: ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0) and
     // ActHunt_DynArraySetCount_3110 (0x140003110).
-    fprintf(stderr, "[MarkRemoval] MarkForRemoval(c2ea0)=%p ArrayPush(3110)=%p\n",
-            reinterpret_cast<void*>(&MarkEntityForRemoval),
+    fprintf(stderr, "[MarkRemoval] ArrayPush(3110)=%p\n",
             reinterpret_cast<void*>(kArrayPush));
 
     // Scan a rectangle near map centre for the first markable entity (either cell slot).
@@ -1064,7 +1063,7 @@ void FireMarkRemoval() {
                        row, col, cell, slot, local, flags, compCnt, tid);
 
                 // --- Step 1: MarkForRemoval (sets flag 0x400, notifies components) ---
-                MarkEntityForRemoval(local);
+                local->MarkForRemoval();
                 uint32_t flagsAfter = local->_entityFlags;
 
                 // --- Step 2: push onto EntityList removalList (+0xD0) ---
@@ -1160,12 +1159,12 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     EntityList* entityList = gw ? gw->m_entityList : nullptr;
     ComponentEntity* local = house;
     if (!local || !entityList) {
-        fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
-               local, reinterpret_cast<void*>(&MarkEntityForRemoval),
+        fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p push=%p el=%p)\n",
+               local,
                reinterpret_cast<void*>(kArrayPush), entityList);
         return;
     }
-    MarkEntityForRemoval(local);                                   // 0x1400c2ea0
+    local->MarkForRemoval();                                   // 0x1400c2ea0
     IBPArray* rl = &entityList->removalList;
     int cntBefore = rl->_size;
     QwordArraySetSize(rl, cntBefore + 1, &local);   // 0x140003110
@@ -2000,8 +1999,7 @@ void FireClearPlace() {
     //    finder's name says Build; its type id is MapComponent's (Entity/exe_bodies.h).
     ComponentEntity* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
     if (!house) { fprintf(stderr, "[ClearPlace] no founding house to borrow\n"); return; }
-    MapComponent* bc = nullptr;
-    fn_FindComponent_Build(house, &bc);
+    MapComponent* bc = house->FindComponent<MapComponent>();
     if (!bc) { fprintf(stderr, "[ClearPlace] house has no BuildComponent\n"); return; }
 
     // 3. Save the real footprint, then override it to a 1x1 rect over the resource cell.
@@ -2068,8 +2066,7 @@ void FireClearLive() {
            ((caFlags >> 3) & 1) ? "LIVE (will be ticked)"
                                 : "NOT live — set BANISHED_CLEAR_FOOTPRINT=1");
 
-    MapComponent* bc = nullptr;   // fn_FindComponent_Build's type id is MapComponent's (Entity/exe_bodies.h)
-    fn_FindComponent_Build(house, &bc);
+    MapComponent* bc = house->FindComponent<MapComponent>();   // the footprint rect (the old "Build" finder's cell is MapComponent's)
     if (!bc) { fprintf(stderr, "[ClearLive] no BuildComponent\n"); return; }
     // Override the footprint to a 1x1 rect over the resource (persistent — the live tick
     // needs it in place when it fires). Minor house corruption acceptable for the probe.
@@ -2161,8 +2158,7 @@ void FireClearHarvest() {
     ClearAreaComponent* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
     if (!caComp) { fprintf(stderr, "[ClearHarvest] house has no ClearAreaComponent\n"); return; }
 
-    MapComponent* bc = nullptr;   // fn_FindComponent_Build's type id is MapComponent's (Entity/exe_bodies.h)
-    fn_FindComponent_Build(house, &bc);
+    MapComponent* bc = house->FindComponent<MapComponent>();   // the footprint rect (the old "Build" finder's cell is MapComponent's)
     if (!bc) { fprintf(stderr, "[ClearHarvest] house has no BuildComponent\n"); return; }
     int16_t sCol = bc->tileX0;
     int16_t sRow = bc->tileY0;

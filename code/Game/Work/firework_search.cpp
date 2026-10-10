@@ -270,7 +270,7 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
 
     // Anchor cell of the well's entity, then its terrain position into outB.
     ComponentEntity* anchorEntity = wellEntity;
-    int anchorCell = Pf_EntityAnchorCell_7fb0(&anchorEntity, nullptr);
+    int anchorCell = EntityAnchorCell(&anchorEntity, nullptr);
     float half = static_cast<float>(map->size >> 1) - HalfCell();
     float inXY[3];
     inXY[0] = static_cast<float>(anchorCell % map->size) - half;

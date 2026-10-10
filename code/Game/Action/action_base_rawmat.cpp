@@ -365,7 +365,7 @@ void TrackerComponent::Upsert(ComponentDescription* material, int value) {
 // FUN_140088ef0 — register produced raw material: the source entity's TrackerComponent (when
 // placeNear) gets the upsert, and the town's per-category resource count grows.
 // ============================================================
-void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source,
+void CitizenBehavior::CountProducedMaterial(ComponentEntity* const* source,
                          char placeNear, ComponentDescription* material, int quantity) {
     if (source && *source != nullptr && placeNear != '\0') {
         TrackerComponent* tracker = (*source)->FindComponent<TrackerComponent>();   // 0x140013320
@@ -375,7 +375,7 @@ void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source,
     }
     int cat = ResourceCategory(material);   // 0x140088f90
     if (cat >= 0) {
-        town->professionResources._data[cat]._field10 += quantity;
+        professionResources._data[cat]._field10 += quantity;
     }
 }
 

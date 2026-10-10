@@ -104,7 +104,7 @@ int  RemoveAnimal::AbstractImpl(ActionStack* actionStack) {
         if (((flags >> 10) & 1) == 0) {
 
             // Mark entity for removal
-            MarkEntityForRemoval(localRef);   // 0x1400c2ea0
+            localRef->MarkForRemoval();   // 0x1400c2ea0
 
             // Append to EntityList::removalList (+0xD0) through 0x140003110 (Array SetSize(n, fill))
             QwordArraySetSize(&cleanupMgr->removalList,   // 0x140003110

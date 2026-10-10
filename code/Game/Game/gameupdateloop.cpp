@@ -1965,7 +1965,7 @@ void GameUpdateLoop::Shutdown() {
     // "teardown corrupted it", which no run so far can tell apart.
     // EntityList shutdown
     TRACE("[GameUpdateLoop::Shutdown] calling EntityList::Shutdown...\n");
-    EntityList_Shutdown_c3d30(m_entityList);   // 0x1400c3d30
+    m_entityList->Shutdown();   // 0x1400c3d30
     TRACE("[GameUpdateLoop::Shutdown] EntityList::Shutdown done\n");
 
     // Remove global scene objects

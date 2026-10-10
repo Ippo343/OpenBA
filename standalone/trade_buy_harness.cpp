@@ -52,7 +52,6 @@
 // stock afterwards leaves the rows as they were, so the refresh has to be
 // re-run explicitly -- otherwise the tree fills and sellRows stays 0 forever.
 #include "Dialog/tradeui_funcs.h"     // TradeUI_Refresh* / _Update*Totals (B4 FORWARD)
-// TradeUI_OnTradeButton: Dialog/exe_bodies.h.
 
 // edittool.cpp — activate the EditTool and drive the select path the way an
 // in-world click does. HarnessSelectEntity is the wrapper (it builds the
@@ -249,8 +248,8 @@ extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum)
                          tradeComp ? tradeComp->stock.count : -1);                          // +0x68
         }
         if (seeded > 0) {
-            TradeUI_RefreshSellTable(tui);
-            TradeUI_RefreshBuyTable(tui);
+            tui->RefreshSellTable();
+            tui->RefreshBuyTable();
             const int after = tui->_sellItems.GetSize();                // +0x38
             std::fprintf(stderr, "[TradeSell] f=%d refreshed after seeding: sellRows %d -> %d\n",
                          frameNum, sellCount, after);
@@ -267,10 +266,10 @@ extern "C" void TradeSellHarness_Tick(PlayerToolManager* entityUI, int frameNum)
 
     // The checkout reads the sell TOTAL off the numberSellTotal element, not from the
     // rows, so the totals have to be recomputed before it runs or the credit is 0.
-    TradeUI_UpdateSellTotals(tui);
-    TradeUI_UpdateBuyTotals(tui);
+    tui->UpdateSellTotals();
+    tui->UpdateBuyTotals();
 
-    TradeUI_OnTradeButton(tui, nullptr, nullptr, 0);
+    tui->OnTradeButton();
 
     const int creditAfter = townMgr->field_0x1AC;    // +0x1ac
     s_totalSold += (creditAfter - creditBefore);

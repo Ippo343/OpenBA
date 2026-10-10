@@ -555,30 +555,30 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
     if (add) {
         // Add one worker: request a slot, then convert idle -> working -> student -> any.
         ComponentEntity* retBuf[2] = {nullptr, nullptr};
-        FindAvailableBuilding(town, retBuf, profession);   // 0x14008d100
+        town->FindAvailableBuilding(retBuf, profession);   // 0x14008d100
         ComponentEntity* slot = retBuf[0];
         ComponentEntity* slotCopy = slot;
         // Each strategy returns its `out` argument, so the result is read there.
         CitizenComponent* found = nullptr;
-        CitizenEmploy_Strat_cbf0(town, &found, &slotCopy, profession);   // 0x14008cbf0
+        town->FindWorkerToRelocate(&found, &slotCopy, profession);   // 0x14008cbf0
         // Faithful to retail driver dd10 (0x14007dd10): FindWorking (0x14008ca20)
         // unconditionally anchors *availPtr, so retail gates it behind a real
         // building (slot != 0). FindIdle / FindStudent / FindAny guard it themselves.
         if (found == nullptr && slot != nullptr) {
             slotCopy = slot;
-            CitizenEmploy_Strat_ca20(town, &found, &slotCopy, profession);   // 0x14008ca20
+            town->FindNearestHousedLaborer(&found, &slotCopy, profession);   // 0x14008ca20
         }
         if (found == nullptr) {
             slotCopy = slot;
-            CitizenEmploy_Strat_c5f0(town, &found, &slotCopy, profession);   // 0x14008c5f0
+            town->FindLaborerFromFullestHouse(&found, &slotCopy, profession);   // 0x14008c5f0
         }
         if (found == nullptr) {
             slotCopy = slot;
             CitizenComponent* anyBuf = nullptr;
-            CitizenEmploy_Strat_c4b0(town, &anyBuf, &slotCopy, profession);   // 0x14008c4b0
+            town->FindIdleLaborer(&anyBuf, &slotCopy, profession);   // 0x14008c4b0
         }
     } else {  // 0x1451 — remove one worker of this profession
-        TownHall_RemoveWorker(town, profession);   // 0x140091180
+        town->RemoveWorker(profession);   // 0x140091180
     }
 }
 

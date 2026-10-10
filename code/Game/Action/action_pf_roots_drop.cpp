@@ -40,7 +40,8 @@
 #include "Action/RemoveAnimal.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_6270, WorkBase_TaskListCleanup_c5400
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include <cstring>
@@ -118,7 +119,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
         ComponentEntity* created = nullptr;
         ComponentEntity* mem = static_cast<ComponentEntity*>(MemAlloc(0x48, 8));
         if (mem != nullptr) {
-            created = ComponentEntity_CtorFromDescription(mem, material);   // 0x1400c3720
+            created = ::new (mem) ComponentEntity(material);   // 0x1400c3720
         }
         RawMaterialComponent* pile = created->FindComponent<RawMaterialComponent>();   // 0x1400223c0
         // B6 (14d G63): 0x1400c7a13 MOV RBX,[R15+0xd8] and RandTol(2) on it with no
@@ -128,7 +129,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
         pile->quantity = count;
         pile->profession = nullptr;
         Object::InternalPtr<ComponentEntity> registered = created;
-        EntityList_RegisterEntity_Impl(world->m_entityList, &registered,
+        world->m_entityList->RegisterEntity(&registered,
                                        static_cast<int>(material->_category));   // 0x1400c48a0
     }
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
@@ -194,7 +195,7 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         if (size <= iVar8) iVar8 = size - 1;
         if (iVar5 < 0) iVar5 = 0;
         if (size <= iVar5) iVar5 = size - 1;
-        PickBestDropTarget(world->m_citizenList,
+        world->m_citizenList->PickBestDropTarget(
                            &found, static_cast<uint32_t>(size * iVar5 + iVar8), material, iVar9, '\x01',
                            dropPos, &exclude);   // 0x14008d590
         if (found == nullptr) {

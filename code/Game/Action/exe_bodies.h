@@ -55,14 +55,12 @@ inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, con
                   "an 8-byte T* / InternalPtr<T> slot array, filled with an InternalPtr<T>");
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
-void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
 
 // ---- action_base_move.cpp
 class CharacterComponent;     // Component/CharacterComponent.h
 class CitizenComponent;       // Component/CitizenComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Math { class Vector3; }
-CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0x1400012d0
 class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
@@ -85,7 +83,6 @@ class ComponentEntity;        // Entity/ComponentEntity.h
 class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
 int ResourceCategory(const ComponentDescription* material);  // 0x140088f90  // B8: stays free -- free in retail: 0x140088f90 reads the material from RDX (0x140088faa MOV RBX,RDX) and never reads RCX, which its callers leave unset (0x14010806c: the storage item array)
-void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
 // 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
 // {material, count, pad} element: ONE retail body each serving four element types
 // (TrackerComponent::Entry, ConsumeRawMaterial::Entry, PickupStoredRawMaterial::Entry,
@@ -127,7 +124,7 @@ class ConsumeProduceComponent;   // Component/ConsumeProduceComponent.h
 
 // ---- action_pf_avl.cpp
 struct PathGraph;
-extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30
+extern "C" void PathPairs_Clear_25b30(PathGraph* pg);  // 0x140025b30  // B8: stays free -- not a PathGraph member: retail 0x140025b30 is the Array<PathCellPair> SetSize(0) instantiation over the array at PathGraph+0x00 (MOVSXD RBP,[RCX+8]; realloc / -1 fill / MemFree tail); PathGraph::m_pairs is not a Collection::Array, typing it is the Array<T> template's work (RT)
 
 // ---- action_pf_ctors.cpp
 struct ActionStack;
@@ -168,7 +165,6 @@ struct Vector3Slot {
 };
 static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
-int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 
 // ---- action_pf_roots_drop.cpp
 class AnimalDescription;      // Component/AnimalDescription.h
@@ -190,7 +186,6 @@ namespace Math { class Scalar; }
 
 // ---- action_pf_roots_route.cpp
 namespace Object { template <class T> class InternalPtr; }
-ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590
 
 // ---- keystone_a_zone.cpp
 class PathfinderThread;       // Game/PathfinderThread.h

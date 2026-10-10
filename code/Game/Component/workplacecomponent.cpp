@@ -589,7 +589,7 @@ char WorkPlaceComponent::EnterBuilt() {
     CitizenBehavior* townMgr = GameUpdateLoop::_singleton->m_citizenList;
     if (!townMgr) return 0;
     ComponentEntity* ownerRef = _entity.Get();
-    ResidenceComponent_impl_95a0(townMgr, &ownerRef, key);   // 0x1400895a0
+    townMgr->RegisterWorkplace(&ownerRef, key);   // 0x1400895a0
     return 0;
 }
 

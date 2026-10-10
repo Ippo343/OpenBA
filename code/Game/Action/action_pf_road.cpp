@@ -887,6 +887,3 @@ float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* out
 
 
 // B4 FORWARD: outside callers in ~20 files (Component, Entity, Game, Player, Work)
-int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2) {
-    return EntityAnchorCell(param_1IBP, param_2);
-}

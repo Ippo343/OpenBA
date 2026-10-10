@@ -146,7 +146,7 @@ void Game_TriggerDisasterByType_Impl(int disasterType) {
     }
 }
 
-void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFlag, int count) {
+void CitizenBehavior::SpawnResources(uint32_t resourceFlag, int count) {
 
     // Dynamic array for matching entities
     // Ghidra uses local_48 = array ptr, local_40 = packed CONCAT44(capacity, count)
@@ -156,10 +156,10 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
 
     // Phase 1: Build array of entity pointers whose RawMaterialDescription flags match
     // resourceFlag. The description array is +0x110 (data) / +0x118 (count).
-    if (citizenList->field_0x110._size > 0) {
+    if (field_0x110._size > 0) {
         int entityIdx = 0;
         do {
-            ComponentDescription* entityDesc = citizenList->field_0x110._data[entityIdx];
+            ComponentDescription* entityDesc = field_0x110._data[entityIdx];
             ComponentDescription* entity = entityDesc;
 
             // Find the RawMaterialDescription among its sub-descriptions (+0x28/+0x30)
@@ -236,7 +236,7 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
             }
 
             entityIdx++;
-        } while (entityIdx < citizenList->field_0x110._size);
+        } while (entityIdx < field_0x110._size);
 
         // Phase 2: Round-robin distribute items across citizens' StorageComponents
         // Citizens are InternalBasePtr entries: +0x00 = array ptr, +0x08 = count
@@ -246,11 +246,11 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
             while (true) {
                 bool anyAdded = false;
                 int citizenIdx = 0;
-                if (citizenList->field_0x00._size < 1) break;
+                if (field_0x00._size < 1) break;
 
                 do {
                     // Each citizen entry is an InternalBasePtr — load then CheckPtr
-                    ComponentEntity* citizen = citizenList->field_0x00._data[citizenIdx].Get();
+                    ComponentEntity* citizen = field_0x00._data[citizenIdx].Get();
 
                     // Find StorageComponent on citizen
                     // Citizen component array is IBP entries at citizen+0x30, count at citizen+0x38
@@ -303,7 +303,7 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
                     }
 
                     citizenIdx++;
-                } while (citizenIdx < citizenList->field_0x00._size);
+                } while (citizenIdx < field_0x00._size);
 
                 if (!anyAdded || spawned >= count) break;
             }

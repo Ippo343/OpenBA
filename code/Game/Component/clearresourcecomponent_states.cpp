@@ -113,7 +113,7 @@ char ClearResourceComponent::State2Enter() {
         return 1;
     }
 
-    MarkEntityForRemoval(entity);
+    entity->MarkForRemoval();
     entityList->removalList
         .SetSize(entityList->removalList._size + 1, entity);
 

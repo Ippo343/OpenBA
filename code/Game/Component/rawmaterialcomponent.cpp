@@ -71,7 +71,7 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
             // Check bit 10 of entity flags at +0x40
             if (((entity->_entityFlags >> 10) & 1) == 0) {
 
-                MarkEntityForRemoval(entity);
+                entity->MarkForRemoval();
 
                 // Add to world pending list
                 {

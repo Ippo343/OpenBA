@@ -306,7 +306,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcStorIBP[2] = {nullptr};        // local_d8 (the exclude reference)
         ComponentEntity* srcStorPrimary = nullptr;         // local_b8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(resList, &srcStorPrimary, cell,
+        resList->PickBestDropTarget(&srcStorPrimary, cell,
                            resType, qty, 1, searchPos, srcStorIBP);
         if (srcStorPrimary == nullptr) { continue; }
 
@@ -348,7 +348,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
         Object::InternalPtr<ComponentEntity> srcIBP[2] = {nullptr};            // local_90 (the exclude reference)
         ComponentEntity* srcStorage = nullptr;             // local_e8 (primary result)
         // 0x14008d590 (was its Pf_PickBestDropTarget_8d590 forwarder)
-        PickBestDropTarget(resList, &srcStorage, cell,
+        resList->PickBestDropTarget(&srcStorage, cell,
                            resType, 1, 0, srcPos, srcIBP);
         if (srcStorage == nullptr) continue;
 

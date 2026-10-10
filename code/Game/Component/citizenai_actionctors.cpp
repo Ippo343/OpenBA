@@ -173,7 +173,7 @@ static void PushMoveTo(CitizenComponent* const* citizenRef, ActionStack* stack, 
     void* mem = MemA(0x480);
     Action* act = nullptr;
     if (mem) {
-        CharacterComponent* fam = FindCharacterComponent((*citizenRef)->_entity.Get());   // 0x1400012d0
+        CharacterComponent* fam = ((*citizenRef)->_entity.Get())->FindComponent<CharacterComponent>();   // 0x1400012d0
         float speed = kRdata_140172280;
         act = new (mem) MoveTo(&fam, pathType, 0, dest, static_cast<uint32_t>(mask), 0, speed);   // 0x1400c9170
     }

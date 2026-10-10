@@ -25,7 +25,8 @@
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Action/exe_bodies.h"            // ActHunt_*, ActCNR_* helpers
 #include "Work/exe_bodies.h"              // WorkBase_FindComponent_52c0, WorkLeaf_FootprintOwnerCheck_120c30
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "math/Math.h"                    // Math::Vector4, Math::Scalar
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone sibling-id fallback)
@@ -246,7 +247,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
                     ? static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8)) : nullptr;
     ComponentEntity* newEnt = nullptr;
     if (mem) {
-        newEnt = ComponentEntity_CtorFromDescription(mem, _entity->_description);   // 0x1400c3720
+        newEnt = ::new (mem) ComponentEntity(_entity->_description);   // 0x1400c3720
     }
     ::Object::InternalPtr<ComponentEntity> newIBP(newEnt);
 
@@ -267,7 +268,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
                     static_cast<uint16_t>(variantSeed), (short)roll2);
 
     ::Object::InternalPtr<ComponentEntity> regArg = newIBP;
-    EntityList_RegisterEntity_Impl(world->m_entityList, &regArg,   // 0x1400c48a0
+    world->m_entityList->RegisterEntity(&regArg,   // 0x1400c48a0
         _entity->_description->_category);
 }
 

@@ -19,7 +19,7 @@
 // address rows are gone: nothing reads 0x14015fa78 back, and 0x14015faa0 is
 // served by Action::Vtable() (ACT).
 
-#include "Entity/componententity_funcs.h"
+#include "Entity/ComponentEntity.h"
 #include "Entity/EntityList.h"
 #include "Component/ComponentDescription.h"
 #include "Component/Component.h"
@@ -603,12 +603,6 @@ void ComponentEntity::Persist(IO::Stream& stream) {
     }
 }
 
-// The 0x1400c3720 door: fn_EntityFactory_CreateEntity resolves here by address
-// (standalone/address_registry.cpp). Placement-constructs on the caller's block.
-ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, ComponentDescription* description) {
-    return new (static_cast<void*>(self)) ComponentEntity(description);
-}
-
 // ============================================================
 // EntityList registration (FUN_1400c48a0 + helpers) — Foundation B
 // ============================================================
@@ -715,15 +709,6 @@ void EntityList::RegisterEntity(Object::InternalPtr<ComponentEntity>* entityIBP,
     }
 
     (*entityIBP)->OnAddedPass();
-}
-
-// B4 FORWARD: 38 outside caller(s) (code/Game/Action, Component, Game, Work,
-// standalone; componententity_funcs.h). B6 (14d G5): retail 0x1400c48a0's first
-// instruction reads the list (`CMP byte [RCX+0xe0],0`) and 0x1400c48e7 the IBP's
-// target, with no null test; every caller passes &local and the world's +0xe8 list,
-// so the tree's `!entityList || !entityIBP` return is gone.
-void EntityList_RegisterEntity_Impl(EntityList* entityList, Object::InternalPtr<ComponentEntity>* entityIBP, int category) {
-    entityList->RegisterEntity(entityIBP, category);
 }
 
 // ============================================================

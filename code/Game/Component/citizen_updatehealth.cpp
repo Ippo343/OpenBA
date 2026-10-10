@@ -650,8 +650,7 @@ void CitizenComponent::SpreadDisease() {
         ComponentEntity* entity = found.data[i]->_entity.Get();
         if (entity == _entity.Get()) continue;   // skip self
 
-        CitizenComponent* citizenIBP = nullptr;
-        Entity_FindComponentByExeTypeId(entity, &citizenIBP, &typeId);
+        CitizenComponent* citizenIBP = entity->FindComponent<CitizenComponent>();   // typeId is CitizenComponent's (above)
         if (citizenIBP && citizenIBP->disease == nullptr) {
             victim = citizenIBP;
             if (PlagueTraceOn()) {

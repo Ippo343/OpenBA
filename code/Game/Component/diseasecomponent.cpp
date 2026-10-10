@@ -588,7 +588,7 @@ void DiseaseComponent::KillOneAnimal() {
             ComponentEntity* victim = member->_entity.Get();
             if (victim == nullptr) break;
             if (((victim->_entityFlags >> 10) & 1) != 0) break;
-            MarkEntityForRemoval(victim);
+            victim->MarkForRemoval();
             if (entityMgr) {
                 QwordArraySetSize(
                     &entityMgr->removalList,

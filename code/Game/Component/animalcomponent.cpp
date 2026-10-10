@@ -57,6 +57,7 @@
 #include "Component/CharacterDescription.h"   // ENDGAME B.3.9 C1: 0x1401c70b0 cell class
 #include "Component/CharacterComponent.h"
 #include "Component/ModelComponent.h"
+#include "Component/TradeComponent.h"         // FindComponent<TradeComponent> (0x140015140)
 #include "Entity/ComponentEntity.h"
 #include "Entity/EntityList.h"
 #include "Game/Map.h"
@@ -472,7 +473,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
         if ((entity->_entityFlags >> 10) & 1) return;
 
-        MarkEntityForRemoval(entity);
+        entity->MarkForRemoval();
         if (corpseOwner) {
             const int newCount = corpseOwner->removalList._size + 1;
             corpseOwner->removalList
@@ -578,8 +579,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
             bool blocked = false;
             if (occupant != nullptr) {
-                TradeComponent* buildingIBP = nullptr;
-                fn_FindComponent_Building(occupant, &buildingIBP);
+                TradeComponent* buildingIBP = occupant->FindComponent<TradeComponent>();
                 // ⚠ fn_FindComponent_Building is a MISLABEL — retail 0x140015140
                 // matches DWORD_1401c4b80, which is TradeComponent, not any notion of
                 // "building". Verified at instruction level, and retail's own animal

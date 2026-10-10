@@ -25,8 +25,10 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Action/exe_bodies.h"            // Pf_FindPlacementCell_bd40, ActRm_* helpers
 #include "Game/exe_bodies.h"              // Reimpl_ExternalPtr_Serialize_StringTable
-#include "Entity/componententity_funcs.h" // ComponentEntity_CtorFromDescription
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Entity/EntityList.h"
+#include "Entity/CitizenBehavior.h"   // CitizenBehavior::CountProducedMaterial (0x140088ef0)
 #include "Game/Map.h"
 #include "system/MemoryAllocator.h"       // System::MemoryAllocator::MemAlloc
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -236,7 +238,7 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
             ComponentEntity* newEntityMem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(0x48, 8));
             ComponentEntity* newEntity = nullptr;
             if (newEntityMem != nullptr) {
-                newEntity = ComponentEntity_CtorFromDescription(newEntityMem, descEntity);   // 0x1400c3720
+                newEntity = ::new (newEntityMem) ComponentEntity(descEntity);   // 0x1400c3720
             }
 
             // The new entity's reference (an InternalBasePtr in retail)
@@ -271,8 +273,8 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
 
             // Register raw material with the town
             ComponentEntity* sourceIBP = secondaryEntity.Get();
-            RegisterRawMaterial(   // 0x140088ef0
-                gameWorld->m_citizenList, &sourceIBP,
+            gameWorld->m_citizenList->CountProducedMaterial(   // 0x140088ef0
+                &sourceIBP,
                 placeNearFlag, descEntity, batchSize);
 
             // Register entity with entity list

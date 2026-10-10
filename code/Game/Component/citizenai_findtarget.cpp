@@ -136,7 +136,7 @@ static inline uint32_t CompTypeId(const Object::Base* comp) {
 //   StorageLocationDescription sub-object: (found+0x18) -> base for IsDerivedFrom(+0x20 mask)
 //   if mask==0: Entity_FindComponent_Storage(found+0x10) -> *ptr +0x3c = mask
 // ============================================================
-CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3,
+CitizenBehavior* CitizenBehavior::FindBestTarget(ComponentEntity** found, uint32_t param_3,
                                                uint32_t param_4, ComponentDescription** param_5, float* param_6,
                                                uint32_t param_7) {
     // (B4 P2 CAI-2: list is the CitizenBehavior every caller passes, GameUpdateLoop +0xF0:
@@ -152,12 +152,12 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
     int local_a8_best = 0x7fffffff;   // best cost so far
 
     // -------- Phase 1: scan the PRIMARY list (param_1[2], count param_1[3]) --------
-    if (0 < list->field_0x10._size) {
+    if (0 < field_0x10._size) {
         int iVar20 = 0;
         do {
-            ComponentEntity* local_a0 = list->field_0x10._data[iVar20].Get();                // candidate entity
+            ComponentEntity* local_a0 = field_0x10._data[iVar20].Get();                // candidate entity
             ComponentEntity* local_90 = local_a0;                                // IBP scratch
-            uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_90, nullptr);        // entity -> cell idx
+            uint32_t cell = EntityAnchorCell(&local_90, nullptr);        // entity -> cell idx
 
             // -- find RadiusDescription (DWORD_1401c4870) in candidate component-list2 (+0x28) --
             ComponentDescription* lVar16 = local_a0->_description;
@@ -228,22 +228,22 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                 }
             }
             iVar20 = iVar20 + 1;
-        } while (iVar20 < list->field_0x10._size);
+        } while (iVar20 < field_0x10._size);
 
         // If a "B"-qualified primary hit was found, return immediately (skip fallback).
         if ((static_cast<char>(local_98_flag) != '\0') && (*found != nullptr)) {
-            return list;
+            return this;
         }
     }
 
     // -------- Phase 2: scan the FALLBACK list (param_1[0], count param_1[1]) --------
-    if (0 < list->field_0x00._size) {
+    if (0 < field_0x00._size) {
         int iVar20 = 0;
         int iVar15loop = local_a8_best;
         do {
-            ComponentEntity* local_a0 = list->field_0x00._data[iVar20].Get();               // candidate entity
+            ComponentEntity* local_a0 = field_0x00._data[iVar20].Get();               // candidate entity
             ComponentEntity* local_58 = local_a0;                               // IBP scratch
-            uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_58, nullptr);
+            uint32_t cell = EntityAnchorCell(&local_58, nullptr);
 
             // path cost candidate -> param_3
             int iVar8 = local_80->PathDistance(cell, param_3, '\x01');
@@ -321,9 +321,9 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
                 }
             }
             iVar20 = iVar20 + 1;
-        } while (iVar20 < list->field_0x00._size);
+        } while (iVar20 < field_0x00._size);
     }
 
-    return list;
+    return this;
 }
 

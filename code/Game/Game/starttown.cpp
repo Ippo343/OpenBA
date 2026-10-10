@@ -95,7 +95,8 @@
 
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "utility/PerlinNoise.h"       // RtUtility_PerlinNoise_Ctor / _Generate (B3R)
-#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Action/exe_bodies.h"         // ActRm_StorageAdd_d000, Pf_EntityAnchorCell_7fb0
 #include "Component/exe_bodies.h"      // ResidenceComponent_*, CitizenComp_*, RawMaterialComponent_RegisterRawMaterial
 #include "Work/exe_bodies.h"           // WorkGrid_FindCell_9ccf0, WorkBase_ValidateCell_a00f0, WorkBase_FindComponent_6270
@@ -558,10 +559,10 @@ static constexpr int TEMPLATE_CATEGORY = 0x20;  // *(template+0x20) = entity-lis
 static bool SpawnAndRegister(ComponentDescription* tmpl, EntityList* entityList) {
     if (!tmpl) return false;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
-    ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+    ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
     ::Object::InternalPtr<ComponentEntity> ibp(ent);
     int category = static_cast<int32_t>(tmpl->_category);
-    EntityList_RegisterEntity_Impl(entityList, &ibp, category);
+    entityList->RegisterEntity(&ibp, category);
     return ent != nullptr;
 }
 
@@ -1410,7 +1411,7 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
         // the door notch walkable in occ so every later pocket test sees it as ground.
         {
             ComponentEntity* entIBP = ent;
-            const int cell = Pf_EntityAnchorCell_7fb0(&entIBP, nullptr);   // 0x140087fb0
+            const int cell = EntityAnchorCell(&entIBP, nullptr);   // 0x140087fb0
             if (cell >= 0) {
                 const int ddx = cell % mapW - bestX, ddy = cell / mapW - bestY;
                 occ[(size_t)cell] = 0;
@@ -1512,7 +1513,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
                               int w0, int h0, bool isDemoFoundation, int logIndex) -> ComponentEntity* {
         // Instantiate + wrap.
         ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
-        ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+        ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
         ::Object::InternalPtr<ComponentEntity> entIBP(ent);
 
         // 90 / -90 / 270 degrees swap the footprint axes.
@@ -1771,7 +1772,7 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
 
         // Register with the world entity list (category = template+0x20).
         int category = static_cast<int32_t>(tmpl->_category);
-        EntityList_RegisterEntity_Impl(entityList, &entIBP, category);
+        entityList->RegisterEntity(&entIBP, category);
 
         // Close the instant-build bracket opened above — retail clears the bit on the
         // very next instruction after RegisterEntity, so everything from here on (the
@@ -4973,7 +4974,7 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
 
                 // Instantiate, place its model at the tile (Foundation F), register.
                 ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
-                ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+                ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
                 ::Object::InternalPtr<ComponentEntity> entIBP(ent);
                 // Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY,
                 // w=1,h=1) AND the jittered ModelComponent world transform. This is the
@@ -5009,7 +5010,7 @@ static int StartTown_SpawnResources(MapGenerator* startConfig, GameUpdateLoop* w
                 // BANISHED_LIVE_GROWTH is on it stages the tree at a random growth value.
                 StartTown_GrowthInitResource(ent, tidGrowth, rng);
 
-                EntityList_RegisterEntity_Impl(entityList, &entIBP, category);
+                entityList->RegisterEntity(&entIBP, category);
 
                 // Wild-food chain diag (see tidSpawnComp above) + the initial
                 // sub-resource seed (ComponentEntity_impl_5cc0, retail call site
@@ -5089,7 +5090,7 @@ static bool SpawnEnvVolumeAndRegister(ComponentDescription* tmpl, EntityList* en
                                       int gridX, int gridY, int chunk) {
     if (!tmpl) return false;
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
-    ComponentEntity* ent = mem ? ComponentEntity_CtorFromDescription(mem, tmpl) : nullptr;
+    ComponentEntity* ent = mem ? ::new (mem) ComponentEntity(tmpl) : nullptr;
     if (!ent) return false;
 
     const uint32_t s_tidEnv = AmbientEnvironmentComponent::TypeId();   // caller batch CB6: was a lazy cache
@@ -5100,7 +5101,7 @@ static bool SpawnEnvVolumeAndRegister(ComponentDescription* tmpl, EntityList* en
 
     ::Object::InternalPtr<ComponentEntity> ibp(ent);
     int category = static_cast<int32_t>(tmpl->_category);
-    EntityList_RegisterEntity_Impl(entityList, &ibp, category);
+    entityList->RegisterEntity(&ibp, category);
     return true;
 }
 

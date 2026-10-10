@@ -122,7 +122,7 @@ int  PerformWork::AbstractImpl(ActionStack* actionStack) {
         float pitch = 0.0f;
 
         // The CharacterComponent found on the citizen's entity
-        CharacterComponent* familyPtr = FindCharacterComponent(workTarget->_entity.Get());   // 0x1400012d0
+        CharacterComponent* familyPtr = workTarget->_entity.Get()->FindComponent<CharacterComponent>();   // 0x1400012d0
 
         // Convert yaw to direction vector and set it
         Math::Vector3 dirVec = Math::Vector3::FromYawPitch(Math::Scalar(yawVal), Math::Scalar(pitch));

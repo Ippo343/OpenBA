@@ -221,7 +221,7 @@ void NoiseUI::GenerateNoise() {
 }
 
 // ============================================================
-// NoiseUI::Slot4 (vtable +0x20) — Setup noise visualization
+// NoiseUI::OnCreated (slot 4, vtable +0x20) — Setup noise visualization
 // ============================================================
 // Original: 0x1400714C0
 //
@@ -229,14 +229,14 @@ void NoiseUI::GenerateNoise() {
 // MaterialInstance + SpriteSheet via SetupImage, finds 5 edit
 // elements and the "buttonGenerate" button (ID 1000).
 
-void NoiseUI_Slot4(NoiseUI* self) {
+void NoiseUI::OnCreated() {
     // Allocate ImageBuffer (0x68 bytes)
     void* imgBuf = System::MemoryAllocator::MemAlloc(0x68, 8);
     Video::ImageBuffer* image = nullptr;
     if (imgBuf != nullptr) {
         image = ::new (imgBuf) Video::ImageBuffer();   // B.3.9 EXA: the real class (exe table 0x14015c8c0 is its own)
     }
-    self->imageBuffer = image;
+    imageBuffer = image;
 
     // ImageBuffer::Create (slot 9, vtable +0x48):
     //   Create(ImageType=0, Usage=2, Format=5, mip=0, width=256,
@@ -266,19 +266,19 @@ void NoiseUI_Slot4(NoiseUI* self) {
     }
 
     // Copy pixel data to ImageBuffer texture
-    self->imageBuffer->CopyToTexture(pixels, 0x100, 0x100);
+    imageBuffer->CopyToTexture(pixels, 0x100, 0x100);
     System::MemoryAllocator::MemFree(pixels);
 
     // Setup MaterialInstance + SpriteSheet, find "noiseImage" element
-    self->SetupImage(self->imageBuffer, &self->spriteSheet, &self->material);
+    SetupImage(imageBuffer, &spriteSheet, &material);
 
     // The five edits
-    UI::Element* root = self->_container;
-    self->noisePersistance = NoiseUI_FindEdit(root, "noisePersistance");
-    self->noiseOctaves     = NoiseUI_FindEdit(root, "noiseOctaves");
-    self->noiseScale       = NoiseUI_FindEdit(root, "noiseScale");
-    self->noiseCutOff      = NoiseUI_FindEdit(root, "noiseCutOff");
-    self->noiseGradient    = NoiseUI_FindEdit(root, "noiseGradient");
+    UI::Element* root = _container;
+    noisePersistance = NoiseUI_FindEdit(root, "noisePersistance");
+    noiseOctaves     = NoiseUI_FindEdit(root, "noiseOctaves");
+    noiseScale       = NoiseUI_FindEdit(root, "noiseScale");
+    noiseCutOff      = NoiseUI_FindEdit(root, "noiseCutOff");
+    noiseGradient    = NoiseUI_FindEdit(root, "noiseGradient");
 
     // Find "buttonGenerate" button, set element ID to 1000
     System::String nameStr("buttonGenerate");
@@ -287,23 +287,20 @@ void NoiseUI_Slot4(NoiseUI* self) {
 }
 
 // ============================================================
-// NoiseUI::Slot9 (vtable +0x48) — Handle button click
+// NoiseUI::OnElementEvent (slot 9, vtable +0x48) — Handle button click
 // ============================================================
 // Original: 0x1400714A0
 //
 // When msg==0x12 (button click) and id==1000 (buttonGenerate),
 // regenerates the Perlin noise texture using current edit values.
 
-void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
-                   int param5, int param6) {
-    (void)param2;
-    (void)param5;
-    (void)param6;
-
+void NoiseUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t msg,
+                             int32_t id, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/,
+                             void* /*userData*/) {
     if (msg != 0x12 || id != 1000) return;
 
     // Regenerate noise texture from edit values
-    self->GenerateNoise();
+    GenerateNoise();
 }
 
 // [0] 0x140071bc0 (the body of the scalar-deleting dtor 0x140012da0). Retail
@@ -316,17 +313,4 @@ NoiseUI::~NoiseUI() {
     delete spriteSheet;   // +0x40
     delete material;      // +0x38
     delete imageBuffer;   // +0x30
-}
-
-// B4 DLG-d (correction 2): the class's slots 4 and 9 run the ported bodies
-// (until now PORT GAP no-ops in ui_dialog_stub_factories.cpp).
-// [4] 0x1400714c0
-void NoiseUI::OnCreated() {
-    NoiseUI_Slot4(this);
-}
-// [9] 0x1400714a0
-void NoiseUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a,
-                             int32_t b, int32_t c, int32_t d, int32_t /*e*/,
-                             void* /*userData*/) {
-    NoiseUI_Slot9(this, element, a, b, c, d);
 }

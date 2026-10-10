@@ -69,7 +69,8 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
-#include "Entity/componententity_funcs.h"   // ComponentEntity_CtorFromDescription, EntityList_RegisterEntity_Impl
+#include "Entity/ComponentEntity.h"   // ComponentEntity(ComponentDescription*) (0x1400c3720)
+#include "Entity/EntityList.h"        // EntityList::RegisterEntity (0x1400c48a0)
 #include "Component/exe_bodies.h"            // CitizenComp_DeferredInit_117080
 #include "Action/exe_bodies.h"               // Vector3Slot (the spawn position)
 #include "Game/exe_bodies.h"                 // fn_Random_RandFloatTol
@@ -257,7 +258,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     ComponentDescription* tmpl = FoundingSpawn_RefreshTemplate(startConfig, citizenTemplate);
     ComponentEntity* mem = static_cast<ComponentEntity*>(System::MemoryAllocator::MemAlloc(ENTITY_SIZE, 8));
     ComponentEntity* ent = (mem && tmpl)
-                     ? ComponentEntity_CtorFromDescription(mem, tmpl)   // 0x1400c3720
+                     ? ::new (mem) ComponentEntity(tmpl)   // 0x1400c3720
                      : nullptr;
     if (!ent) {
         fprintf(stderr, "[FoundingSpawn] BAIL: CopyCtor produced no entity "
@@ -339,7 +340,7 @@ extern "C" ComponentEntity* StartTown_SpawnColonistRetail(MapGenerator* startCon
     int category = tmpl ? tmpl->_category   // +0x20
                         : 0;
     ::Object::InternalPtr<ComponentEntity> regIBP = entIBP;
-    EntityList_RegisterEntity_Impl(entityList, &regIBP, category);   // 0x1400c48a0
+    entityList->RegisterEntity(&regIBP, category);   // 0x1400c48a0
 
     // LEFT: starttown.cpp (its block) takes the component as bytes.
     if (outCitizenComp) *outCitizenComp = comp;

@@ -326,10 +326,3 @@ void TradeUI::OnTradeButton() {
     // existing port stands in for it.
     UpdateBuyTotals();
 }
-
-// B4 FORWARD: 1 outside caller(s) (standalone/trade_buy_harness.cpp). p2/p3/p4
-// are the dispatcher's register leftovers; retail reads none of them.
-extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/, int64_t /*p4*/) {
-    if (!self) return;
-    self->OnTradeButton();
-}

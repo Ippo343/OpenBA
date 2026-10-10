@@ -398,8 +398,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 
     } else {
         // The citizen's entity (+0x10) storage, through the guarded finder
-        StorageComponent* storageComp = nullptr;
-        fn_FindComponent_Storage((*entityIBP)->_entity.Get(), &storageComp);
+        StorageComponent* storageComp = ((*entityIBP)->_entity.Get())->FindComponent<StorageComponent>();
 
         int available = storageComp->QueryAvailable(field_50);   // 0x14012ce70 (retail 0x1400e4306-0x1400e430e: the FindComponent result, untested)
 
@@ -436,8 +435,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             const Object::InternalPtr<ComponentEntity> excludeEntity;   // null
 
             ComponentEntity* foundEntity = nullptr;
-            PickBestDropTarget(
-                citizenList, &foundEntity,
+            citizenList->PickBestDropTarget(&foundEntity,
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
                 field_50, 1, '\0', velocity, &excludeEntity);   // 0x14008d590
 
