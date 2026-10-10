@@ -231,7 +231,6 @@ extern "C" void StartTown_SeedStartingResources(MapGenerator* startConfig);  // 
 
 // ---- town_workplace_registry.cpp
 class CitizenBehavior; class ComponentEntity; class Profession;
-extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, const Profession* professionKey);  // 0x140089470
 class WorkPlaceComponent;
 extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);  // B8: stays free -- harness / port-only: no retail body (the INVENTORY address 0x140089470 is the shuffle's); the tree's spawn-time registration wiring over CitizenBehavior::RegisterWorkplace 0x1400895a0 (buildcomponent_state1.cpp, starttown.cpp)
 

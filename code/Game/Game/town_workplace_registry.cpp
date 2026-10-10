@@ -145,11 +145,11 @@ extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const W
 // BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in the default-on table: unproven
 // behaviour starts opt-in, and this one wants an explicit A/B before it graduates.
 // ============================================================
-extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, const Profession* professionKey) {
-    if (townMgr == nullptr || GameUpdateLoop::_singleton == nullptr) return;
+void CitizenBehavior::ShuffleProfessionList(const Profession* professionKey) {
+    if (GameUpdateLoop::_singleton == nullptr) return;
 
     // BST search for the key (same walk as the reader below).
-    ProfessionBucket* node = TreeRoot(townMgr);
+    ProfessionBucket* node = TreeRoot(this);
     ProfessionBucket* found = nullptr;
     while (node != nullptr) {
         if (professionKey < node->element.key)       node = node->left;   // left
@@ -188,7 +188,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(CitizenBehavior* townMgr, con
 void* CitizenBehavior::FindAvailableBuilding(void* out, const Profession* professionKey) {
 
     // Step 1: optimize/sort the profession node's building list (OPTIONAL — guard).
-    if (Opt().liveSeatShuffle) TownRegistry_ShuffleProfessionList(this, professionKey);   // 0x140089470
+    if (Opt().liveSeatShuffle) ShuffleProfessionList(professionKey);   // 0x140089470
 
     // Step 2: walk the +0x100 profession BST for the key (key<node -> left[+0x20];
     // key>node -> right[+0x28]; == -> found).
