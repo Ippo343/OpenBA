@@ -91,7 +91,6 @@ RawMaterialDescription** WorkAcc_FindComponent_6330(ComponentDescription* desc, 
 class NaturalResourceComponent;
 void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t workId, NaturalResourceComponent* const* targetRef, float* worldPos, int, uint8_t zeroByte);  // 0x1400c1eb0
 class PickupRawMaterial;
-PickupRawMaterial* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, CitizenComponent* const* p2, ComponentEntity* const* p3);  // 0x1400c9b70
 void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_t workId, ComponentEntity* const* targetIBP, float* worldPos, int cellIdx, uint8_t cancelFirst);  // 0x1400c0ad0
 void WorkAct_PlayAnimationCtor_c2490(CitizenComponent* const* citizenRef, uint32_t priority, uint32_t citizenIndex);  // 0x1400c2490
 void WorkAct_GrazingWorkCtor_bb0a0(CitizenComponent* const* citizenRef, uint32_t priority, ComponentEntity* const* workEntityIBP, uint32_t, float* targetPos, float* srcPos, uint32_t typeId, uint32_t flag8, uint32_t cellIdx9);  // 0x1400bb0a0

@@ -316,18 +316,11 @@ void WorkAct_PerformWorkCtor_c1eb0(CitizenComponent* const* citizenRef, uint32_t
 //   self+0x20 = 0 then *p2   (citizen inner)
 //   self+0x28 = 0 then *p3   (target/pile inner)
 // Returns self (RAX).
-// B4 P2 WORK-3: typed (its one caller is c0ad0 below); retail's is PickupRawMaterial's
-// ctor (Action/PickupRawMaterial.h, ACT's header).
-PickupRawMaterial* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, CitizenComponent* const* p2,
-                                                           ComponentEntity* const* p3) {
-    if (!self) return nullptr;
-
-    // The real ctor (Action(): Internal, +0x10/+0x18 = 0; +0x20/+0x28 zeroed), then
-    // the two field copies.
-    PickupRawMaterial* a = new (self) PickupRawMaterial();
-    a->_field20 = p2 ? *p2 : nullptr;
-    a->_field28 = p3 ? *p3 : nullptr;
-    return a;
+// B8: PickupRawMaterial's two-argument constructor (its one caller is c0ad0 below, which
+// placement-news it on the MemAlloc it tested).
+PickupRawMaterial::PickupRawMaterial(CitizenComponent* const* p2, ComponentEntity* const* p3)
+    : _field20(p2 ? *p2 : nullptr),
+      _field28(p3 ? *p3 : nullptr) {
 }
 
 // ============================================================
@@ -435,7 +428,7 @@ void WorkAct_PerformWorkCtor9_c0ad0(CitizenComponent* const* citizenRef, uint32_
     if (obj) {
         ComponentEntity* targetSlot = targetInner;
         CitizenComponent* citizenSlot = *citizenRef;
-        prm = WorkAct_PickupRawMaterialCopyCtor_c9b70(obj, &citizenSlot, &targetSlot);
+        prm = new (obj) PickupRawMaterial(&citizenSlot, &targetSlot);   // 0x1400c9b70
     }
     ibpB = prm;
     WA_Append(list, &ibpB);
