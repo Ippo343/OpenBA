@@ -651,7 +651,7 @@ static int SeedAgriPool(MapGenerator* sc, CitizenBehavior* townMgr, System::Rand
         if (!tmpl) continue;
         // Retail order: spawn FIRST (0x1400a35dc), then the availability add
         // (0x1400a35e7). Both consume the same resolved template.
-        if (spawnCentre) StartTown_SpawnStartingHerd(sc, spawnCentre, tmpl);
+        if (spawnCentre) sc->SpawnStartingHerd(spawnCentre, tmpl);
         townMgr->RemoveEntity(tmpl);   // 0x140091a20 (the dedup append into +0x120)
 
         ++added;

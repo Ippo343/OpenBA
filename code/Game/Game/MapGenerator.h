@@ -27,6 +27,7 @@
 #include "Object/NamedExternalRef.h"   // MapGenerator::ExternalRef
 
 namespace UI { class StringTable; }
+class ComponentDescription;   // Component/ComponentDescription.h
 
 // The element rows of the two String-bearing pools (mapgenerator.cpp): the grow
 // bodies 0x14001b340 (0x18, ExternalRef) / 0x14001b4e0 (0x30, InitialStructure)
@@ -141,6 +142,7 @@ public:
     float    param170;           // +0x170: last serialized field
     uint8_t  _pad174[4];         // +0x174: padding to 0x178
     void SeedStartingResources();   // 0x1400a1f00 (Game/town_storage_seed.cpp)
+    int SpawnStartingHerd(const float* centre, ComponentDescription* tmpl);   // 0x1400a0b10 (Component/pasturecomponent_spawn.cpp)
 };
 
 static_assert(sizeof(MapGenerator::ExternalRef) == 0x18, "ExternalRef is 0x18");
