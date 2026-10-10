@@ -285,7 +285,7 @@ int  CreateRawMaterial::AbstractImpl(ActionStack* actionStack) {
                 AutoPickupComponent* autoPickup = secondaryEntity->FindComponent<AutoPickupComponent>();   // 0x140022520
                 if (autoPickup != nullptr) {
                     WorkComponent* work = entityIBP->FindComponent<WorkComponent>();   // 0x140003050
-                    AutoPickupAppend(autoPickup, static_cast<uint32_t>(work->workId));   // 0x140044810
+                    autoPickup->Append(static_cast<uint32_t>(work->workId));   // 0x140044810
                 }
             }
         }

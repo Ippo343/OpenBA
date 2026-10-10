@@ -546,7 +546,7 @@ void PastureProduce(PastureComponent* self) {
         if (autoPickup) {
             WorkComponent* pileWork = entRef->FindComponent<WorkComponent>();   // 0x140003050
             const uint32_t v = static_cast<uint32_t>(pileWork->workId);
-            AutoPickupAppend(autoPickup, v);   // 0x140044810 (ActRm_DynArrayPush4_44810's body)
+            autoPickup->Append(v);   // 0x140044810 (ActRm_DynArrayPush4_44810's body)
         }
 
         std::fprintf(stderr, "[Pasture] produce: pasture=%p resource=%p cell=%d "

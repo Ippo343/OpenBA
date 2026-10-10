@@ -95,7 +95,6 @@ class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
 void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012d150
 void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count);  // 0x14012d000
-void AutoPickupAppend(AutoPickupComponent* self, uint32_t value);  // 0x140044810
 int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0

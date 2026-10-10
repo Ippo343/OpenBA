@@ -423,7 +423,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
         if (out != nullptr) {
             WorkComponent* work = newEntity->FindComponent<WorkComponent>();   // 0x140003050
             uint32_t v = static_cast<uint32_t>(work->workId);
-            AutoPickupAppend(out, v);   // 0x140044810
+            out->Append(v);   // 0x140044810
         }
     }
 }
