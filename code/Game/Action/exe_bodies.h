@@ -95,7 +95,7 @@ class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
 void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012d150
 void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count);  // 0x14012d000
-int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
+int ResourceCategory(const ComponentDescription* material);  // 0x140088f90  // B8: stays free -- free in retail: 0x140088f90 reads the material from RDX (0x140088faa MOV RBX,RDX) and never reads RCX, which its callers leave unset (0x14010806c: the storage item array)
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
 // 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte

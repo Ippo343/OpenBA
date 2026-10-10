@@ -17,6 +17,6 @@ void TradeBuyOrders_SetSize(TradeComponent& trade, int count);          // 0x140
 
 // The AVL map ComponentDescription -> int (TradeResourceNode): the stock tree and
 // 0x140059ad0's purchase tally (tradecomponent_serialize.cpp).
-TradeResourceNode* TradeResourceTree_NewNode(ComponentDescription* key, int32_t value,
+TradeResourceNode* TradeResourceTree_NewNode(ComponentDescription* key, int32_t value,  // B8: stays free -- not a ComponentDescription body: the TradeResourceNode allocation (MemAlloc(0x30) + fields), inlined in retail (0x140059ad0 is the purchase-tally body, not this); TradeResourceNode is COMP-B's
                                              TradeResourceNode* parent);   // MemAlloc(0x30, 8)
 void TradeResourceTree_Retrace(TradeResourceNode** root, TradeResourceNode* start);   // 0x14000e360
