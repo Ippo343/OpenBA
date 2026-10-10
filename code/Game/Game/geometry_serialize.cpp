@@ -213,7 +213,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t cnt = 0;
         serializer.Serialize(flag, nullptr);
         serializer.Serialize(cnt, nullptr);
-        Reimpl_Array_Resize_Stride16B(&contourVertices, cnt >> 4);   // 16-byte stride
+        RawArraySetSize(contourVertices, cnt >> 4);   // Array<TerrainVertex>::SetSize 0x14001ef10
         if (contourVertices.data) serializer.SerializeBytes(cnt, contourVertices.data, nullptr);
         serializer.Serialize(flag, nullptr);
         serializer.Serialize(cnt, nullptr);
@@ -225,7 +225,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
         int32_t vcount = contourVertices.size;
         serializer.Serialize(vcount, nullptr);
         if (IsLoading(serializer)) {
-            Reimpl_Array_Resize_Stride16B(&contourVertices, vcount);
+            RawArraySetSize(contourVertices, vcount);   // 0x14001ef10
         }
         if (vcount > 0 && contourVertices.data) {
             for (int i = 0; i < vcount; ++i) {

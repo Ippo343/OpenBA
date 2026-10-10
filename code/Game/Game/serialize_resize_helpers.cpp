@@ -147,17 +147,6 @@ extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount) {
 }
 
 // ============================================================
-// Helper #4 — stride 0x10 mesh-vertex array (FUN_14001ef10)
-// ============================================================
-//
-// MemAlloc(cap<<4, 2). Per element: copy 2 qwords (16 bytes total).
-// Same byte size as Helper #2 but different alignment (2 vs 4) — kept
-// separate because the original exe also keeps these distinct functions.
-extern "C" void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount) {
-    GenericArrayResize(arrayHeader, newCount, 0x10, 2);
-}
-
-// ============================================================
 // Helper #6 — stride 0x0C 3-int array (FUN_14001c7c0)
 // ============================================================
 //
