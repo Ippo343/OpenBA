@@ -104,16 +104,16 @@ bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp) {
 // bit 20 of their flags (+0x20) set and (b) exceed their AnimalDescription's
 // +0x30 threshold. Returns the best index, or -1 if none.
 // ABI: int fn(longlong self).
-int WorkLeaf_Pasture_8350(const PastureComponent* pasture) {
+int PastureComponent::FindOldestLivestock() const {
     const uint32_t tidThresh = AnimalDescription::TypeId(); // 0x1401c6fd0
 
     int bestIndex = -1;
     float bestScore = 0.0f;
-    int n = pasture->animals._size;
+    int n = animals._size;
     if (n <= 0) return -1;
 
     for (int outer = 0; outer < n; ++outer) {
-        LivestockComponent* livestock = pasture->animals[outer].Get();
+        LivestockComponent* livestock = animals[outer].Get();
 
         // The AnimalComponent (0x1401c6f98) of the animal's entity.
         AnimalComponent* sub = livestock->_entity->FindComponent<AnimalComponent>();

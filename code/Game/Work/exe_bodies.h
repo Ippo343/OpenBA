@@ -207,7 +207,6 @@ class ConsumeProduceComponent;
 class PastureComponent;
 class ResourceProduceComponent;
 bool WorkLeaf_ConsumeProduce_93a0(const ConsumeProduceComponent* comp);  // 0x1401193a0
-int WorkLeaf_Pasture_8350(const PastureComponent* pasture);  // 0x140128350
 void WorkLeaf_ConsumeProduce_b310(ResourceProduceComponent* producer);  // 0x14012b310
 
 // ---- work_leaf_market.cpp (WorkLeaf_MarketTreeCleanup_2af40: Work/MarketWork.h)

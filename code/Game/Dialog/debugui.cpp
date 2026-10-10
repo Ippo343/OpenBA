@@ -377,7 +377,7 @@ static void Game_SpawnItemsInStorage_Impl() {
 
             // Spawn one item
             AnimalComponent* noParent = nullptr;   // the InternalBasePtr(nullptr) retail builds
-            Pasture_SpawnLivestock(storage, &noParent);   // 0x140128670 (door misnamed fn_StorageComponent_SpawnItem)
+            storage->SpawnLivestock(&noParent);   // 0x140128670 (door misnamed fn_StorageComponent_SpawnItem)
         }
     }
 }

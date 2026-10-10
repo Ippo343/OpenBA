@@ -215,7 +215,6 @@ extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140
 // ---- pasturecomponent_spawn.cpp
 class PastureComponent;
 class AnimalComponent;
-extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP);  // 0x140128670
 extern "C" int Pasture_FillAllPastures();  // 0x140060290
 class MapGenerator;   // Game/MapGenerator.h
 extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10
