@@ -570,7 +570,7 @@ void TradeComponent::AutoTrade() {
         ComponentDescription* good = n->resource;
         const int units = n->quantity;
         townMgr->RegisterRawMaterial(good);   // 0x140091e60
-        StorageAdd(storage, good, units);   // 0x14012d000
+        storage->AddItem(good, units);   // 0x14012d000
         delivered += units;
         ++deliveredLines;
     }

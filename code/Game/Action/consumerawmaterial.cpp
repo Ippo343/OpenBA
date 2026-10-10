@@ -186,7 +186,7 @@ int  ConsumeRawMaterial::AbstractImpl(ActionStack* actionStack) {
         }
 
         // SubtractItem from storage
-        StorageSubtract(storage, matEntry->material, requestedCount);   // 0x14012d150
+        storage->SubtractItem(matEntry->material, requestedCount);   // 0x14012d150
 
         // Update the town's per-category consumption counter
         CitizenBehavior* town = GameUpdateLoop::_singleton->m_citizenList;

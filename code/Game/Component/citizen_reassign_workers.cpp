@@ -269,13 +269,13 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
                     int   avail      = entry._count;
                     int   reserved   = entry._reserve;
                     int   amount     = avail - reserved;
-                    if (StorageCanAdd(dstStorage, descriptor, amount)) {   // 0x14012cd80
-                        StorageAdd(dstStorage, descriptor, amount);         // 0x14012d000
+                    if (dstStorage->CanAdd(descriptor, amount)) {   // 0x14012cd80
+                        dstStorage->AddItem(descriptor, amount);         // 0x14012d000
                         toSubtract.emplace_back(descriptor, amount);
                     }
                 }
                 for (auto& s : toSubtract)
-                    StorageSubtract(srcStorage, s.first, s.second);         // 0x14012d150
+                    srcStorage->SubtractItem(s.first, s.second);         // 0x14012d150
             }
 
             // --- retire the now-occupied destination from the empty set ---

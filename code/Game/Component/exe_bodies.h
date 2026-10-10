@@ -232,7 +232,7 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, 
 // ---- statusiconcomponent.cpp
 
 // ---- storagecomponent.cpp
-int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity);  // 0x14012ce70 B4 FORWARD: 1 outside caller (Work/buildroad.cpp) -> StorageComponent::QueryAvailable
+int StorageComponent_QueryAvailable(StorageComponent* storageComp, const ComponentDescription* materialEntity);  // 0x14012ce70 B8: stays free -- read, not moved: its null test is the tree's (retail BuildRoad 0x1400e4306-0x1400e430e calls 0x14012ce70 untested; row 1100); buildroad.cpp on the member would drop it
 
 // ---- toolbardescription.cpp
 #include "collection/Collection.h"   // Collection::Array (the resize's header)
@@ -272,7 +272,6 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* se
 //   [8..11] = item quantity count
 // For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
 // then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
-int fn_StorageComponent_QueryCount(StorageComponent* storageComp);  // 0x14012cf10 B4 FORWARD: callers in Component / Dialog -> StorageComponent::QueryCount
 
 // ---- workcomponent.cpp
 // FUN_14012e5c0: Calculate the STARTING job count of a WorkComponent (DAT_1401c8070) —

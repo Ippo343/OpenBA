@@ -98,8 +98,6 @@ class ComponentDescription;   // Component/ComponentDescription.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
-void StorageSubtract(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012d150
-void StorageAdd(StorageComponent* storage, ComponentDescription* material, int count);  // 0x14012d000
 void AutoPickupAppend(AutoPickupComponent* self, uint32_t value);  // 0x140044810
 int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
 void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
@@ -159,7 +157,6 @@ class StorageComponent;       // Component/StorageComponent.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 void Pf_SetFlagRefreshUpdate_107260(Component* self);  // 0x140107260
 int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
-bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material);  // 0x14012c560
 void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count);  // 0x140116760
 int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material);  // 0x1401167c0
 
@@ -219,7 +216,6 @@ void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 // ---- action_pf_roots_road.cpp
 
 // ---- action_pf_roots_route.cpp
-bool StorageCanAdd(StorageComponent* storage, const ComponentDescription* material, int count);  // 0x14012cd80
 int FindBestAdjacentCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14012d5d0
 namespace Object { template <class T> class InternalPtr; }
 ComponentEntity** PickBestDropTarget(const CitizenBehavior* lists, ComponentEntity** best, uint32_t goalCell, const ComponentDescription* material, int count, char useCapacity, float* outPos, const Object::InternalPtr<ComponentEntity>* exclude);  // 0x14008d590

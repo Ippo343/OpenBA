@@ -247,7 +247,7 @@ void TradeUI::OnTradeButton() {
 
             ComponentDescription* resEntity = _sellItems[i].resource;
 
-            StorageSubtract(storage, resEntity, qty);   // 0x14012d150
+            storage->SubtractItem(resEntity, qty);   // 0x14012d150
 
             // Credit the town's per-category produced-goods tally.
             //   town->professionResources (+0x170): the category array, running total at +0x0c
@@ -289,7 +289,7 @@ void TradeUI::OnTradeButton() {
             // Raw material: deliver into the post's storage, and make the
             // material available to the town.
             if (FindComponentByTypeId(bought, RawMaterialDescription::TypeId())) {
-                StorageAdd(storage, bought, qty);   // 0x14012d000
+                storage->AddItem(bought, qty);   // 0x14012d000
                 town->RegisterRawMaterial(bought);   // 0x140091e60
             }
             // Natural resource (crop / orchard seed): availability only.

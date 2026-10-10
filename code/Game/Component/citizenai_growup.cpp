@@ -337,7 +337,7 @@ void CitizenComponent::LongTermPlan() {
             int amount = rowBase->_count;
             // 0x14012cd80 (was its Pf_StorageCanAccept_cd80 forwarder); sc was found by the
             // StorageComponent type id.
-            uint32_t hit = (scIBP) ? StorageCanAdd(static_cast<StorageComponent*>(scIBP), descComp, amount) : 0;
+            uint32_t hit = (scIBP) ? static_cast<StorageComponent*>(scIBP)->CanAdd(descComp, amount) : 0;
             if (static_cast<char>(hit) != '\0') { satisfied = true; break; }
         }
         if (satisfied) { committed = true; break; }

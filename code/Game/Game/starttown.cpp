@@ -4103,7 +4103,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
             seedN = maxFoodUnits;
         }
 
-        if (seedN > 0) StorageAdd(sc, foodTmpl, seedN);   // 0x14012d000
+        if (seedN > 0) sc->AddItem(foodTmpl, seedN);   // 0x14012d000
         ++seeded;
 
         // Firewood stand-in (see the note at the template pick). The heat tick burns one
@@ -4123,7 +4123,7 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
                 fuelUnits = maxFuelUnits;
             }
             if (fuelUnits > 0) {
-                StorageAdd(sc, fuelTmpl, fuelUnits);   // 0x14012d000
+                sc->AddItem(fuelTmpl, fuelUnits);   // 0x14012d000
                 ++fuelSeeded;
             }
         }

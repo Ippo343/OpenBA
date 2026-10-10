@@ -1535,7 +1535,7 @@ void CitizenComponent::EatFrom(ComponentEntity* target) {
         // subtract one unit from the storage + bump the town per-category
         // consumed counter (townMgr = *(gameWorld+0xf0), counters at +0x170,
         // 0x20-byte stride, count at +0xC: CitizenBehavior::professionResources).
-        StorageSubtract(store, work, 1);   // 0x14012d150
+        store->SubtractItem(work, 1);   // 0x14012d150
         CitizenBehavior* worldGrid = GameUpdateLoop::_singleton->m_citizenList;
         {
             uint32_t idx = ResourceCategory(work);   // 0x140088f90 (its first argument, the storage, is never read)

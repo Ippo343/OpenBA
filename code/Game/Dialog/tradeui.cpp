@@ -1159,7 +1159,7 @@ void TradeUI::OnUpdateLayout() {
 
     // --- Storage capacity check ---
     int storageCapacity = storageComp->capacity;
-    int storageCount = fn_StorageComponent_QueryCount(storageComp);
+    int storageCount = storageComp->QueryCount();
     bool bStorageFull = storageCapacity < storageCount + (buyTotal - sellTotal);
 
     // --- Show/hide warning texts ---

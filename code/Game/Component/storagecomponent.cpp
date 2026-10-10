@@ -289,7 +289,7 @@ void StorageComponent::OnAdded() {
     if (templateCount > 0) {
         for (int i = 0; i < templateCount; i++) {
             const StorageDescription::Volume& entry = templateArray[i];
-            StorageAdd(this, entry._resource, entry._count);   // 0x14012d000 (ActRm_StorageAdd_d000 is its forwarder)
+            AddItem(entry._resource, entry._count);   // 0x14012d000 (ActRm_StorageAdd_d000 is its forwarder)
         }
     }
 }
@@ -339,8 +339,3 @@ int StorageComponent::QueryCount() const {
     return total;
 }
 
-// B4 FORWARD: callers in destroyui.cpp, storagecapacityui.cpp, tradeui.cpp (X3-GAME's) and two
-// Component files; the closing wave calls QueryCount there.
-int fn_StorageComponent_QueryCount(StorageComponent* storageComp) {
-    return storageComp->QueryCount();
-}

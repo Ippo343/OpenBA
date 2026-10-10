@@ -615,6 +615,7 @@ TUT (rows 80-84, 88-89):
 | 1063 | `RegionPairCache::Expire` (`Action/region_paircache.cpp`, 0x1400a5d10) | returns when the ring's data pointer is null | 0x1400a5d23-0x1400a5d2e reads [ring + idx*0x18 + 0x10] with no test | CONFIRMED (B7 RES; the file's Tick lines only were RES's, this line was left) |
 | 1064 | `ResolveExternalByName_Impl` (`Component/componentdescription.cpp`, 0x14001b1d0) | returns on a null ExternalFactory and stores the generation read BEFORE the find | 0x14001b1ec-0x14001b1f6 reads the factory with no test; 0x14001b24d re-reads [factory+0x8] for the store | CONFIRMED (B7 RES read it while fixing row 83; not RES's file) |
 | 1065 | `TownRegistry_RegisterStorageLocation` (`Game/town_storage_seed.cpp`, 0x14012d230, StorageLocationComponent state-2 enter) | declared `void` | 0x14012d25a `XOR AL,AL` -- the enter handler returns false | SUSPECTED (B7 RES; what the state machine does with the result not read) |
+| 1100 | `StorageComponent_QueryAvailable` (`Component/storagecomponent.cpp`, the forwarder over `StorageComponent::QueryAvailable` 0x14012ce70; caller `Work/buildroad.cpp` BuildRoad::Execute) | KEPT: `if (!storageComp) return 0;` before the member call | 0x1400e4306-0x1400e430e: `MOV RCX,[RBP-0x9]` (the FindComponent result) then `CALL 0x14012ce70` with no test; 0x14012ce70 reads [RCX+0x30] first | CONFIRMED (B8 COMP-B); the row stays free (re-tagged in `Component/exe_bodies.h`) until the guard is settled |
 
 ### 14e. Stores that may normalise where retail copies
 

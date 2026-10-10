@@ -166,7 +166,7 @@ int InteractNodeCount(const InteractComponent* self, int kind) {
 // the storage's rawMaterialFlags. If no match, `found` stays null and _flags reads from
 // address 0x5c — faithful to the original.
 // ============================================================
-bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDescription* material) {
+bool StorageComponent::AcceptsMaterial(const ComponentDescription* material) const {
     const RawMaterialDescription* found = nullptr;
     for (int i = 0; i < material->_subDescCount; ++i) {
         Description* child = material->_subDescs[i];
@@ -177,7 +177,7 @@ bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDesc
             break;
         }
     }
-    return (storage->rawMaterialFlags & found->_flags) != 0;
+    return (rawMaterialFlags & found->_flags) != 0;
 }
 
 // ============================================================
@@ -186,7 +186,7 @@ bool StorageAcceptsMaterial(const StorageComponent* storage, const ComponentDesc
 // ============================================================
 void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count) {
     StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    StorageSubtract(storage, material, count);   // 0x14012d150
+    storage->SubtractItem(material, count);   // 0x14012d150
 }
 
 // ============================================================

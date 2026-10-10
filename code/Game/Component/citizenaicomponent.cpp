@@ -105,7 +105,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
     // Our inline version has a null guard on the component lookup.
     int storageCount = 0;
     if (storageComp) {
-        storageCount = fn_StorageComponent_QueryCount(storageComp);
+        storageCount = storageComp->QueryCount();
     }
     if (storageCount == 0) {
         dataC8._ticks = 0;

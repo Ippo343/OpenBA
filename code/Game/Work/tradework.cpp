@@ -384,7 +384,7 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // gate: can the trade-post building storage accept this resource+qty?
         // 0x14012cd80 (was its Pf_StorageCanAccept_cd80 forwarder; the door read AL)
-        if (static_cast<char>(StorageCanAdd(bldgStor, resType, qtyMove)) == 0)
+        if (static_cast<char>(bldgStor->CanAdd(resType, qtyMove)) == 0)
             continue;
 
         // source position from the trade post's interact component (+ its parts):

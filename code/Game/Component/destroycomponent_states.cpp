@@ -190,7 +190,7 @@ bool DestroyComponent::StorageEmpty() {
     // finder, DAT_1401c7e78) — NOT the ConsumeProduce finder.
     StorageComponent* storage = _entity->FindComponent<StorageComponent>();
     if (!storage) return true;
-    return fn_StorageComponent_QueryCount(storage) == 0;
+    return storage->QueryCount() == 0;
 }
 
 // ============================================================

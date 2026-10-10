@@ -290,12 +290,12 @@ void Game_SpawnResources_Impl(CitizenBehavior* citizenList, uint32_t resourceFla
                             // CheckPtr the storage IBP before use
 
                             // Call original exe CanAdd function (0x14012cd80)
-                            uint32_t canAdd = StorageCanAdd(storageIBP, *matchSlot, 1);   // 0x14012cd80
+                            uint32_t canAdd = storageIBP->CanAdd(*matchSlot, 1);   // 0x14012cd80
                             if ((char)canAdd != '\0') {
                                 // CheckPtr again before AddItem
 
                                 // Call original exe AddItem function (0x14012d000)
-                                StorageAdd(storageIBP, *matchSlot, 1);   // 0x14012d000
+                                storageIBP->AddItem(*matchSlot, 1);   // 0x14012d000
                                 spawned++;
                                 anyAdded = true;
                             }
