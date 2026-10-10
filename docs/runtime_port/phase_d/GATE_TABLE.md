@@ -10,3 +10,4 @@ Invariants (B9 close): new game 5683 / 0, tutorial 5773 / 12, typetable `965b527
 
 | row | branch / step | merge commit | gate problems | new game | tutorial | typetable | resave | unit | warnings | castmetric | routes | notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| SLOTS | d0-slots (tip `9f1f1038f`) | (pending) | | | | | | | | | newgame, tutorial, loadgame, perf, resave x3 (gate); then tools / orchard / stress / disaster by hand | rows 1202 / 1203 / 1204 FIXED, 1270 (no decal race: six port-only early returns in OnAdded) FIXED, 1271 / 1272 LEFT; starttown's 0x100000 pre-sets and MarkBuildingCells gone; slot 12 now paints building minimap dots |
