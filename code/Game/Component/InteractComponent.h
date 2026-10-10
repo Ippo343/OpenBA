@@ -24,6 +24,7 @@
 #include "Object/exe_type.h"
 #include "collection/Collection.h"   // Collection::Array (useLocations)
 #include "object/Internal.h"         // Object::InternalPtr<T>
+#include "Component/InteractDescription.h"   // InteractDescription::NodeArray (FindWalkablePos), Math::Vector3
 
 // The use-location list grows through retail's stride-8 row (0x1400032e0: stride 8,
 // align 8, the new tail ZEROED, no element destroy) and is freed by the inlined ~Array
@@ -40,6 +41,10 @@ public:
     ~InteractComponent() override = default;                      // [0] 0x1400352f0
     void Persist(IO::Stream& stream) override;                          // [3] 0x140123340
     void OnAdded() override;                                      // [6] 0x140123110
+    int  NodeCount(int kind) const;                               // 0x140123070 nodes of `kind` here and in the parts
+    Math::Vector3* NodePosition(Math::Vector3* out, int kind, int index, float* heading) const;   // 0x140122e20 the index-th node of `kind`, world space
+    bool FindWalkablePos(const InteractDescription::NodeArray* nodes, float* param_3, float* param_4, int* param_5);   // 0x140122be0
+    uint8_t FindWalkablePosRecursive(int param_2, float* param_3, float* param_4, int* param_5);   // 0x140122b00
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist
     // 0x140123340 (int count +0x30 with the +0x28 IBP array, each validated against

@@ -254,7 +254,7 @@ void NomadComponent::Init(const Object::InternalPtr<ComponentEntity>* hallEntity
     if (!model) return;
     float yaw = rng->RandFloatTol() * kYawRange;
     model->SetTransformFromYaw(&spawnPoint, yaw);   // 0x140003870
-    ModelSelectMesh(model,   // 0x1401253d0
+    model->SelectMesh(// 0x1401253d0
                     static_cast<uint16_t>(gender), 0);
     if (ndesc) {
         Graphics::MaterialInstance* mat = (gender == 0) ? ndesc->_materialGender0 : ndesc->_materialGender1;
@@ -292,7 +292,7 @@ void ImmigrationComponent::Spawn() {
             y = (r == 2) ? edge : (W - edge) - 1;
         }
         Math::Vector3 hp;
-        InteractNodePosition(pc, &hp, 0, 0, nullptr);
+        pc->NodePosition(&hp, 0, 0, nullptr);
         int cx = static_cast<int>(hp.x + static_cast<float>(W >> 1));
         int cy = static_cast<int>(hp.y + static_cast<float>(W >> 1));
         if (cx < 0) cx = 0;
@@ -346,12 +346,11 @@ void ImmigrationComponent::Spawn() {
         uint32_t nPts = id ? static_cast<uint32_t>(id->_createNodes.count) : 0;
         int nChildren = pc->useLocations._size;
         for (int ci = 0; ci < nChildren; ++ci) {
-            nPts += static_cast<uint32_t>(InteractNodeCount(
-                pc->useLocations[ci].Get(), 2));   // 0x140123070
+            nPts += static_cast<uint32_t>(pc->useLocations[ci].Get()->NodeCount(2));   // 0x140123070
         }
         uint32_t ptIdx = rng->Rand(static_cast<uint32_t>(nPts));
         Math::Vector3 meet(0.0f, 0.0f, 0.0f);
-        InteractNodePosition(pc, &meet, 2, static_cast<int>(ptIdx), nullptr);
+        pc->NodePosition(&meet, 2, static_cast<int>(ptIdx), nullptr);
 
         // Clone the nomad template.
         void* mem = System::MemoryAllocator::MemAlloc(0x48, 8);

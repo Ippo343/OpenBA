@@ -340,7 +340,7 @@ void DestroyComponent::RubbleStep() {
     // Pick-mesh rebuild.
     PickingComponent* picking = FindOn<PickingComponent>(_entity.Get());   // 0x140026a30
     if (picking) {
-        PickingComponent_RegisterMesh(picking);
+        picking->RefreshMesh();
     }
 
     // Scorch decal: swap the DecalComponent's state, and if a decal is currently

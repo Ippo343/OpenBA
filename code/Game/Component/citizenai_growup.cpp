@@ -263,7 +263,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             // unconstructed slot [RBP-0x11] (kind 0, index 0, heading null).
             InteractComponent* interact = entity->FindComponent<InteractComponent>();   // 0x140002ed0
             Vector3Slot wposSlot;
-            InteractNodePosition(interact, &wposSlot.v, 0, 0, nullptr);
+            interact->NodePosition(&wposSlot.v, 0, 0, nullptr);
             const Math::Vector3& wpos = wposSlot.v;
             int dim = map->size;
             int ix = static_cast<int>(wpos.x + static_cast<float>(dim >> 1));
@@ -337,7 +337,7 @@ void CitizenComponent::LongTermPlan() {
             int amount = rowBase->_count;
             // 0x14012cd80 (was its Pf_StorageCanAccept_cd80 forwarder); sc was found by the
             // StorageComponent type id.
-            uint32_t hit = (scIBP) ? StorageCanAdd(static_cast<StorageComponent*>(scIBP), descComp, amount) : 0;
+            uint32_t hit = (scIBP) ? static_cast<StorageComponent*>(scIBP)->CanAdd(descComp, amount) : 0;
             if (static_cast<char>(hit) != '\0') { satisfied = true; break; }
         }
         if (satisfied) { committed = true; break; }

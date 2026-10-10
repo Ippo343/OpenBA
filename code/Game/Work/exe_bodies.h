@@ -181,8 +181,6 @@ uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destC
 // ---- work_base_walkpos.cpp
 #include "Component/InteractDescription.h"   // InteractDescription::NodeArray
 class InteractComponent;
-bool WorkImpl_WalkablePos_122be0(InteractComponent* interact, const InteractDescription::NodeArray* nodes, float* param_3, float* param_4, int* param_5);  // 0x140122be0
-uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int param_2, float* param_3, float* param_4, int* param_5);  // 0x140122b00
 
 // ---- work_leaf_clear.cpp
 class CropFieldComponent;
@@ -199,13 +197,10 @@ void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, R
 class Component;
 class GrowthDescription;
 GrowthDescription** WorkLeaf_FindGrowthDescription_c3c0(const ComponentDescription* desc, GrowthDescription** retOut);  // 0x14000c3c0
-long long WorkLeaf_FootprintOwnerCheck_120c30(const GrowthDescription* growth, int col, int row);  // 0x140120c30
 
 // ---- work_leaf_hunt.cpp
 class ConsumeProduceComponent;
 class PastureComponent;
 class ResourceProduceComponent;
-int WorkLeaf_Pasture_8350(const PastureComponent* pasture);  // 0x140128350
-void WorkLeaf_ConsumeProduce_b310(ResourceProduceComponent* producer);  // 0x14012b310
 
 // ---- work_leaf_market.cpp (WorkLeaf_MarketTreeCleanup_2af40: Work/MarketWork.h)

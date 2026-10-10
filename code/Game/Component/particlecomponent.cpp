@@ -343,10 +343,6 @@ void ParticleComponent::StartEmitterFade(int index) {
     StartEmitter(index);   // 0x140052a50
 }
 
-// B4 FORWARD: 2 outside callers (diseasecomponent.cpp, firecomponent_ignite.cpp).
-extern "C" void ParticleComponent_StartEmitterFade(ParticleComponent* self, int index) {
-    self->StartEmitterFade(index);
-}
 
 // ============================================================
 // ParticleComponent_sub_2480 — setup (0x140052480)

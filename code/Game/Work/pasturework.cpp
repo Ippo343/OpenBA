@@ -211,7 +211,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         if (local_a8->capacity < pastureCount) {
             // Find an animal to remove via helper (0x140128350 takes the component as an
             // integer: LEFT)
-            int slotIdx = WorkLeaf_Pasture_8350(local_a8);
+            int slotIdx = local_a8->FindOldestLivestock();
             if (slotIdx >= 0) {
                 // The livestock at that slot, its entity's AnimalComponent (0x140005500)
                 LivestockComponent* livestock = local_a8->animals[slotIdx].Get();
@@ -299,13 +299,13 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
         // -------------------------------------------------------
         InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
-        int posCount = InteractNodeCount(posComp, 2);   // 0x140123070
+        int posCount = posComp->NodeCount(2);   // 0x140123070
 
         if (posCount > 0) {
             int iPvVar20 = 0;
             do {
                 Vector3Slot local_80;
-                InteractNodePosition(posComp, &local_80.v, 2, iPvVar20, nullptr);
+                posComp->NodePosition(&local_80.v, 2, iPvVar20, nullptr);
 
                 int iVar10map = map->size;
                 int iVar21pos = (int)(local_80.v.x + (float)(iVar10map >> 1));

@@ -437,7 +437,7 @@ void TradeComponent::Command(int /*command*/) {
             work->InitFromEntity(&entityIBP);
         }
         Object::InternalPtr<Work> workIBP(work);
-        CitizenAI_WorkScheduler_Post(sched, 1, '\0', &workIBP);   // 0x14012ec60
+        sched->PostWork(1, '\0', &workIBP);   // 0x14012ec60
         newState = '\x01';
     } else {
         sched->CancelWork();   // 0x14012eb50

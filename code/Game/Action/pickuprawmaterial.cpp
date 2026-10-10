@@ -107,7 +107,7 @@ int  PickupRawMaterial::AbstractImpl(ActionStack* actionStack) {
     StorageComponent* storage = _field20->_entity->FindComponent<StorageComponent>();   // 0x140006270
 
     // Add the material to the storage
-    StorageAdd(storage, itemType, quantity);   // 0x14012d000
+    storage->AddItem(itemType, quantity);   // 0x14012d000
 
     // Check the pile entity again, flag it for removal if not yet flagged
     ComponentEntity* entityRef = _field28.Get();

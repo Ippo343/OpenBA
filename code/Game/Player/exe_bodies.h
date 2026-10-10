@@ -42,7 +42,6 @@ extern "C" uint32_t BridgeTool_ValidatePath_Impl(const BridgeTool* self, int sta
 
 // ---- keystone_a_removalcalcpath.cpp
 class DestroyComponent;
-extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component);  // 0x14011dfa0 -> DestroyComponent::RunStateMachine (its address is printed by Dialog/upgradeui.cpp)
 extern "C" uint64_t RemovalCalc_helper_c700(Map* param_1, int param_2);  // 0x14009c700
 
 // ---- tool_base_createbar.cpp
@@ -98,7 +97,6 @@ int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
              bool param_9, float param_10, float param_11,
              float param_12, float param_13, float param_14,
              char param_15, int param_16, int param_17, bool param_19);  // 0x1400b0d80 (a WorldGeometry member in retail; param_18 is dead)
-int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  // 0x140055430
 
 // ---- tool_base_highlight_tess.cpp
 extern "C" void TradeWork_impl_ace40(WorldGeometry* geometry, int param_2, char param_3, int param_4, int param_5);  // 0x1400ace40
@@ -120,7 +118,6 @@ extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x
 class EditTool;
 extern "C" void HighlightSelect_Impl(EditTool* self);  // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(EditTool* self);  // 0x1400fcb40
-extern "C" void HighlightRepaint_Impl(HighlightComponent* self);  // 0x14004c4a0
 
 // ---- tool_base_screenrect.cpp
 extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t /*never read*/, int param_2, int param_3, int param_4, int param_5, Math::Vector3* param_6);  // 0x1400fec70

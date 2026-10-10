@@ -346,11 +346,6 @@ void DestroyComponent::RunStateMachine() {
     SM_RunPhase(sm, &timeOutSlot);
 }
 
-// Kept for Dialog/upgradeui.cpp's log line, which prints this driver's address
-// (nothing calls it).
-extern "C" void RemovalCalc_StateMachine_dfa0(DestroyComponent* component) {
-    component->RunStateMachine();
-}
 
 // ============================================================
 // 0x14009c700  RemovalTool_helper_c700

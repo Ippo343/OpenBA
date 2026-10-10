@@ -102,8 +102,8 @@ W* AllocWork(int size) {
     {
         InteractComponent* pos = entity->FindComponent<InteractComponent>();   // 0x140002ed0
         if (pos) {
-            const int n0 = InteractNodeCount(pos, 0);
-            const int n2 = InteractNodeCount(pos, 2);
+            const int n0 = pos->NodeCount(0);
+            const int n2 = pos->NodeCount(2);
             // 0x1400032e0 is citizenRefs.SetSize, 0x1400021d0 is spotStates.SetSize
             // (retail FishingWork_Ctor calls them at 1400eab83 / 1400eab8e). 0x1400021d0
             // leaves a grown tail as-found. Safe — the zero loop right below (retail
@@ -282,8 +282,8 @@ static ConsumeProduce* ConsumeProduceAction_Ctor(ConsumeProduce* work, Component
     {
         InteractComponent* pos = (*entity)->FindComponent<InteractComponent>();   // 0x140002ed0
         if (pos) {
-            const int n0 = InteractNodeCount(pos, 0);
-            const int n2 = InteractNodeCount(pos, 2);
+            const int n0 = pos->NodeCount(0);
+            const int n2 = pos->NodeCount(2);
             // 0x1400032e0 is field_58.SetSize, 0x1400021d0 is field_68.SetSize (retail
             // ConsumeProduceAction_Ctor calls them at 1400e92d8 / 1400e92e3). 0x1400021d0
             // leaves a grown tail as-found. Safe — the zero loop right below (retail

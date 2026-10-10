@@ -200,7 +200,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
                 return 1;
             }
             dbgBranch = 0;
-            InteractNodePosition(positionComp, &destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
+            positionComp->NodePosition(&destPos, 0, 0, nullptr);   // 0x1400e7103 / 0x1400e7118 CALL 0x140122e20
             destCell = WorldToCell(destPos.x, destPos.y, gridSize);
         } else {
             // Use search position

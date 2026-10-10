@@ -246,11 +246,11 @@ void FireComponent::Extinguish() {
         part->FadeOutEmitter(desc->particleEmitter);   // 0x140053720
     }
 
-    // DestroyComponent: leave the BURNING state. (The tree's null test on the
-    // DestroyComponent stays in the B4 FORWARD body it calls.)
+    // DestroyComponent: leave the BURNING state (retail 0x14004953a-0x14004954f hands
+    // the FindComponent result to 0x14011ea10 untested).
     {
         DestroyComponent* dest = _entity->FindComponent<DestroyComponent>();   // 0x140005780
-        FireComponent_StopBurning_11ea10(dest);
+        dest->StopBurning();
     }
 
     // WorkComponent: release the firefighting work slot (this is what retires the
@@ -279,7 +279,7 @@ void FireComponent::Ignite() {
     // --- the two abort gates, on the DestroyComponent ---
     DestroyComponent* destroyComp = _entity->FindComponent<DestroyComponent>();   // 0x140005780
 
-    if (FireComponent_IsBeingDemolished_11e690(destroyComp)) {
+    if (destroyComp->IsBeingDemolished()) {
         return;
     }
     if ((destroyComp->InRemovalState() ? 1 : 0) != 0) {   // 0x14011e710 (the PlayerPath_Sub_11e710 forwarder's member)
@@ -295,7 +295,7 @@ void FireComponent::Ignite() {
     const float   burnSecs = burnFullTime.AsSeconds();
     const System::Time burnHalf = {MakeTime(burnSecs * kRdata_140172114)};
 
-    if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf)) {
+    if (!destroyComp->BeginBurning(&burnHalf)) {
         return;
     }
 
@@ -307,7 +307,7 @@ void FireComponent::Ignite() {
     // ParticleComponent: fade the flames in.
     {
         ParticleComponent* part = _entity->FindComponent<ParticleComponent>();   // 0x140005200
-        ParticleComponent_StartEmitterFade(part, desc->particleEmitter);
+        part->StartEmitterFade(desc->particleEmitter);
     }
 
     // --- MINT the FireWork and POST it to the reservation ledger ---
@@ -327,7 +327,7 @@ void FireComponent::Ignite() {
     ::Object::InternalPtr<Work> workIbp(work);
 
     if (workComp) {
-        CitizenAI_WorkScheduler_Post(workComp, 0x4000, 0, &workIbp);
+        workComp->PostWork(0x4000, 0, &workIbp);
     }
     if (workComp) {
         gw->m_tutorial->PrioritizeWork(workComp->workId);   // 0x1400f9ad0 (+0x118)
@@ -490,9 +490,3 @@ void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
         Extinguish();
 }
 
-// ---- B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp); the closing wave
-// rewires it. The null test is the tree's.
-extern "C" void FireComponent_Ignite_610(FireComponent* self) {
-    if (!self) return;
-    self->Ignite();   // LEFT: B4 FORWARD (debugui.cpp)
-}

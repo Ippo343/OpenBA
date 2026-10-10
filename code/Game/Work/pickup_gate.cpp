@@ -158,7 +158,7 @@ bool CitizenBehavior::HasStorageFor(ComponentDescription* resource, int amount) 
         StorageComponent* stComp = PG_FindComp<StorageComponent>(ent);
 
         if (PickupGate_Accepts_12d990(slComp, resource)) {
-            if (static_cast<char>(StorageCanAdd(stComp, resource, amount)))   // 0x14012cd80; the door read AL
+            if (static_cast<char>(stComp->CanAdd(resource, amount)))   // 0x14012cd80; the door read AL
                 return true;
         }
     }

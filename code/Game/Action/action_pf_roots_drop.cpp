@@ -132,7 +132,7 @@ void DropRawMaterialOnGround(CitizenComponent* citizen, ComponentDescription* ma
                                        static_cast<int>(material->_category));   // 0x1400c48a0
     }
     StorageComponent* storage = citizen->_entity->FindComponent<StorageComponent>();   // 0x140006270
-    StorageSubtract(storage, material, count);   // 0x14012d150
+    storage->SubtractItem(material, count);   // 0x14012d150
 }
 
 // ============================================================
@@ -172,8 +172,8 @@ uint64_t DropOffExec(DropOffRawMaterial* self, ActionStack* stack, StorageCompon
         iVar9 = iVar5;
     }
     if (0 < iVar9) {
-        if (StorageCanAdd(*target, material, iVar9)) {   // 0x14012cd80
-            StorageAdd(*target, material, iVar9);   // 0x14012d000
+        if ((*target)->CanAdd(material, iVar9)) {   // 0x14012cd80
+            (*target)->AddItem(material, iVar9);   // 0x14012d000
             citizen->StorageDropOff(material, iVar9);   // 0x140116760
             return 1;
         }

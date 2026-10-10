@@ -280,8 +280,8 @@ haveSlot:
 // radius). Returns the highlight slot or -1.
 // 1:1 port of FUN_140055430 (b0d80 args disasm-verified; uvScale = g_fUVScale = 1.0f).
 // ============================================================
-int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2) {
-    Graphics::MaterialInstance* target = param_1->_material;
+int RadiusDescription::AddHighlight(int param_2) const {
+    Graphics::MaterialInstance* target = _material;
     if (target == nullptr) return -1;
 
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
@@ -293,7 +293,7 @@ int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2) {
     if (highlightMgr == nullptr) return -1;
     int row = param_2 / mapSize;
     int col = param_2 % mapSize;
-    int r   = param_1->_radius;
+    int r   = _radius;
 
     const float uv = kRdata_14017214c;   // 1.0f; retail MOVSSes it (and 0.0f) into the float stack slots (0x1400554c0)
 

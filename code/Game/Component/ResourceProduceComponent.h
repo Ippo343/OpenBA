@@ -70,6 +70,8 @@ public:
     virtual char  OnExitProducing() { return 0; }                   // [20] 0x140006b10
     virtual char  ProduceTick(const System::Time* time) { (void)time; return 0; } // [21] 0x140006b10
 
+    void        RequestProduce();                                   // 0x14012b310 set produceFlag, ask the controller for the producing transition
+
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the shared RP controller (D6)
     // +0x48 the panel's pause latch: state 2 enter picks 14 (paused) when it is
