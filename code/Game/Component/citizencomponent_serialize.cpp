@@ -238,13 +238,7 @@ void CitizenComponent::Persist(IO::Stream& stream) {
     SerializeValidatedIBP(&character, *s, CharacterComponent::TypeId());
     SerializeValidatedIBP(&statusIcon, *s, StatusIconComponent::TypeId());
 
-    {
-        // ENDGAME B.3.9 C1 (D5): 0x1401c7190 is CitizenDescription's registered
-        // type-id cell (INVENTORY_C Table 1).
-        const uint32_t tidDesc = CitizenDescription::TypeId();
-        ExternalPtrSerializeGeneric(&description, s,
-                                    &tidDesc, "CitizenDescription");
-    }
+    ::Object::SerializeExternal<CitizenDescription>(*s, description);   // 0x140030990 (B8 RT2)
 
     s->Serialize(field_0x34, nullptr);
 
