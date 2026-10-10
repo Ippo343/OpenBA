@@ -97,7 +97,7 @@ uint32_t SafeGetTypeId(::Object::Base* obj) {
     // Probe the vptr's table entry for Type() -- the slot is taken from the
     // member, never a literal (B3X_RULES X3) -- then call it by name.
     uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);   // CAST-OK: crash_walk
-    const long typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
+    const int32_t typeSlot = ::Object::CompilerSlotOf(&::Object::Base::Type);
     if (typeSlot < 0) return 0;
     if (!Readable(reinterpret_cast<void*>(vt + static_cast<uintptr_t>(typeSlot) * sizeof(void*)), 8)) return 0;   // CAST-OK: crash_walk
     if (!Executable(::Object::SlotAddressOf(obj, &::Object::Base::Type))) return 0;

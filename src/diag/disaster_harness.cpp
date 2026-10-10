@@ -299,7 +299,7 @@ bool EntityTile(ComponentEntity* entity, int* outX, int* outY) {
 // The ignition itself is the retail leaf, through the same pointer the debug button
 // uses: fn_FireComponent_Ignite -> ResolveAddr(Exe, 0x140049610).
 
-struct Cand { ComponentEntity* entity; FireComponent* fire; int x; int y; long dist2; };
+struct Cand { ComponentEntity* entity; FireComponent* fire; int x; int y; int32_t dist2; };
 
 void ForceFire(int frameNum, int want) {
     Object::InternalPtr<ComponentEntity>* arr = nullptr; int n = 0;
@@ -354,11 +354,11 @@ void ForceFire(int frameNum, int want) {
     }
 
     // Centroid of the house cluster, then nearest-first ordering.
-    long sx = 0, sy = 0;
+    int32_t sx = 0, sy = 0;
     for (int i = 0; i < nCand; ++i) { sx += cands[i].x; sy += cands[i].y; }
     const int cx = static_cast<int>(sx / nCand), cy = static_cast<int>(sy / nCand);
     for (int i = 0; i < nCand; ++i) {
-        const long dx = cands[i].x - cx, dy = cands[i].y - cy;
+        const int32_t dx = cands[i].x - cx, dy = cands[i].y - cy;
         cands[i].dist2 = dx * dx + dy * dy;
     }
     // Selection sort — nCand is tiny and a stable, obvious order beats a clever one.
@@ -369,7 +369,7 @@ void ForceFire(int frameNum, int want) {
         if (best != i) { Cand t = cands[i]; cands[i] = cands[best]; cands[best] = t; }
     }
 
-    DLOG("Fire", "house cluster centroid=(%d,%d); nearest house at (%d,%d) d2=%ld\n",
+    DLOG("Fire", "house cluster centroid=(%d,%d); nearest house at (%d,%d) d2=%d\n",
          cx, cy, cands[0].x, cands[0].y, cands[0].dist2);
 
     // Snapshot before igniting: FireComponent::Ignite can register the entity into

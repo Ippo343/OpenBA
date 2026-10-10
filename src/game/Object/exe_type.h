@@ -66,6 +66,7 @@
 // ============================================================================
 
 #include <cstdint>
+#include "abi.h"                          // RT_ASM_LABEL
 #include "object/TypeInfo.h"
 #include "Object/factory_registration.h"   // Object::AbstractTypeFactory
 
@@ -126,7 +127,7 @@ private:                                                                        
 
 // `TVSymbol` is the Itanium name of the class's vtable group, e.g.
 // "_ZTV13WellComponent" (13 = strlen("WellComponent")). x86_64-w64-mingw32 has
-// no user-label prefix, so the asm label is the symbol verbatim.
+// no user-label prefix; RT_ASM_LABEL (abi.h) pastes the target's in front.
 #define DEFINE_EXE_VTABLE(Class, TVSymbol)                                        \
-    extern const void* const Class##_VtableGroup[] __asm__(TVSymbol);             \
+    extern const void* const Class##_VtableGroup[] RT_ASM_LABEL(TVSymbol);       \
     const void* Class::Vtable() { return &Class##_VtableGroup[2]; }

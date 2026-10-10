@@ -25,7 +25,6 @@
 #include "Goal/goal_exe_helpers.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
-#include <windows.h>
 #include "object/External.h"
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"

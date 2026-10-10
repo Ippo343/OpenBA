@@ -20,6 +20,7 @@
 // link here; the inline InitFields of Particle / ParticleInstance are REAL.
 // ============================================================================
 #include "unit.h"
+#include "abi.h"   // RT_ASM_LABEL
 #include "slot_check.h"
 #include "dtor_check.h"
 
@@ -39,13 +40,13 @@
 #include <new>
 #include <type_traits>
 
-extern const void* const g_rbGeoVtGroup[] __asm__("_ZTVN8Graphics8GeometryE");
-extern const void* const g_rbPiVtGroup[]  __asm__("_ZTVN8Graphics16ParticleInstanceE");
-extern const void* const g_rbPaVtGroup[]  __asm__("_ZTVN8Graphics8ParticleE");
-extern const void* const g_rbMiVtGroup[]  __asm__("_ZTVN8Graphics12MeshInstanceE");
-extern const void* const g_rbSlVtGroup[]  __asm__("_ZTVN8Graphics8SunLightE");
-extern const void* const g_rbMatVtGroup[] __asm__("_ZTVN8Graphics16MaterialInstanceE");
-extern const void* const g_rbRiVtGroup[]  __asm__("_ZTVN8Graphics21ReflectionImageBufferE");
+extern const void* const g_rbGeoVtGroup[] RT_ASM_LABEL("_ZTVN8Graphics8GeometryE");
+extern const void* const g_rbPiVtGroup[]  RT_ASM_LABEL("_ZTVN8Graphics16ParticleInstanceE");
+extern const void* const g_rbPaVtGroup[]  RT_ASM_LABEL("_ZTVN8Graphics8ParticleE");
+extern const void* const g_rbMiVtGroup[]  RT_ASM_LABEL("_ZTVN8Graphics12MeshInstanceE");
+extern const void* const g_rbSlVtGroup[]  RT_ASM_LABEL("_ZTVN8Graphics8SunLightE");
+extern const void* const g_rbMatVtGroup[] RT_ASM_LABEL("_ZTVN8Graphics16MaterialInstanceE");
+extern const void* const g_rbRiVtGroup[]  RT_ASM_LABEL("_ZTVN8Graphics21ReflectionImageBufferE");
 
 namespace {
 const void* GeoVt() { return &g_rbGeoVtGroup[2]; }
@@ -677,7 +678,7 @@ FrameCopyImageBuffer::FrameCopyImageBuffer() {
 FrameCopyImageBuffer::~FrameCopyImageBuffer() { ++g_fcDtor; g_fcDtorVptr = FcVptrOf(this); }
 }  // namespace Graphics
 
-extern const void* const g_rbFcVtGroup[] __asm__("_ZTVN8Graphics20FrameCopyImageBufferE");
+extern const void* const g_rbFcVtGroup[] RT_ASM_LABEL("_ZTVN8Graphics20FrameCopyImageBufferE");
 
 namespace {
 
@@ -788,7 +789,7 @@ ParticleSystemInstance::~ParticleSystemInstance() {
 }
 }  // namespace Graphics
 
-extern const void* const g_rbPsiVtGroup[] __asm__("_ZTVN8Graphics22ParticleSystemInstanceE");
+extern const void* const g_rbPsiVtGroup[] RT_ASM_LABEL("_ZTVN8Graphics22ParticleSystemInstanceE");
 
 namespace {
 
@@ -899,7 +900,7 @@ EdgeMeshInstance::~EdgeMeshInstance() {
 }
 }  // namespace Graphics
 
-extern const void* const g_rbEmiVtGroup[] __asm__("_ZTVN8Graphics16EdgeMeshInstanceE");
+extern const void* const g_rbEmiVtGroup[] RT_ASM_LABEL("_ZTVN8Graphics16EdgeMeshInstanceE");
 
 namespace {
 

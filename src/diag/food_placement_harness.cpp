@@ -243,8 +243,8 @@ void ProbeClass(const FoodClass& fc) {
     // where the shift is read off a named member (Object::Base::TypeName is
     // retail slot 1): 0 while the class declares `DeletingDtor`, 1 once it
     // declares `virtual ~T()` (GCC's two destructor slots, B3X_RULES X3).
-    const long shift = ::Object::CompilerSlotOf(&::Object::Base::TypeName) - 1;
-    auto compilerSlot = [shift](int retailSlot) -> long {
+    const int32_t shift = ::Object::CompilerSlotOf(&::Object::Base::TypeName) - 1;
+    auto compilerSlot = [shift](int retailSlot) -> int32_t {
         return retailSlot == 0 ? 0 : retailSlot + shift;
     };
     char map[kSlots + 1];

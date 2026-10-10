@@ -4422,7 +4422,7 @@ extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* own
                 else if (rot == 0xb4)     { gy = iy;            gx = (w0 - 1) - ix; }
                 else if (rot == 0x10e)    { gy = (h0 - 1) - ix; gx = (w0 - 1) - iy; }
                 else                      { gy = (h0 - 1) - iy; gx = ix; }
-                const long sidx = (long)gy * (w0 + 1) + gx;
+                const int32_t sidx = (int32_t)gy * (w0 + 1) + gx;
                 const char c = (sidx >= 0 && sidx < shapeLen) ? shape[sidx] : 0;
                 occupied = (c == '#' || c == '_');
             }
