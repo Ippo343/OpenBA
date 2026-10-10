@@ -89,7 +89,7 @@ void GeometryBatch_Serialize(IO::Serializer& serializer, int count, GeometryBatc
         GeometryBatch& b = batches[i];
 
         // 1. Typed ExternalPtr (Graphics::MaterialInstance) at +0x00 (0x140007140).
-        Reimpl_ExternalPtr_Serialize_Typed_7140(&b.material, &serializer);
+        ::Object::SerializeExternal<Graphics::MaterialInstance>(serializer, b.material);
 
         // 2. slot and the culling box (+0x28..+0x38).
         serializer.Serialize(b.slot, nullptr);

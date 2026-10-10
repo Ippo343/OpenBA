@@ -40,6 +40,7 @@
 #include "system/MemoryAllocator.h"
 #include <cstdint>
 #include <new>
+#include "graphics/Material.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::MaterialInstance> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140036e00 / createInPlace 0x140036e70):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -116,7 +117,7 @@ bool PickingDescription::Serialize(IO::Stream& stream) {
         for (int j = 0; j < refCount; ++j)
             ExternalPtrSerializeSlot<&PickingMeshRefSerialize>(&e->meshes[j], &ser);
     }
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_material, &ser);   // 0x140007140
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(ser, _material);   // 0x140007140
     ser.Serialize(_enabled, nullptr);
     return true;
 }

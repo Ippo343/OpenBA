@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <new>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "graphics/Material.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::MaterialInstance> (the downcast needs it complete)
 
 // ============================================================
 // Weather::Weather — Initialize all fields to defaults
@@ -89,7 +90,7 @@ Object::External* Weather::Construct() {
 bool Weather::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&material, &ser);   // ExternalPtr material (+0x20)
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(ser, material);   // ExternalPtr material (+0x20)
     ser.Serialize(particleCount, nullptr);        // +0x28
     velocityDir.Serialize(ser);                  // +0x2C Vector3
     ser.Serialize(velocity, nullptr);             // +0x38

@@ -177,7 +177,7 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     RZ_CHECK("geom 04d0 after step3 (+0xD8 uint16 heightmap arr)");
 
     // ---- Step 4: the terrain material at +0xF8 (0x140007140). ----
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_terrainMaterial, &serializer);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(serializer, _terrainMaterial);
 
     // ---- Step 5: the raw heightmap bytes at +0x140 (4 bytes per cell). ----
     // On loading: build the mesh first (0x1400ac1e0), then allocate the buffer,
@@ -246,8 +246,8 @@ void WorldGeometry::Serialize(IO::Stream& stream) {
     RZ_CHECK("geom 04d0 after step6 (vertex/index arrays)");
 
     // ---- Step 7: the two water materials at +0x150 / +0x158 (0x140007140). ----
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_waterMaterialA, &serializer);
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_waterMaterialB, &serializer);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(serializer, _waterMaterialA);
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(serializer, _waterMaterialB);
 
     // ---- Step 8: the two draw-range arrays at +0x1C0 and +0x1D0. ----
     SerializeDrawRanges(serializer, _contourRangesA);

@@ -29,6 +29,7 @@
 #include "Game/exe_bodies.h"
 #include <cstdint>
 #include <new>
+#include "graphics/Material.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::MaterialInstance> (the downcast needs it complete)
 
 // ctor (inlined into create 0x14000b9e0 / createInPlace 0x14000ba50):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -42,7 +43,7 @@ RadiusDescription::RadiusDescription()
 bool RadiusDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ser.Serialize(_radius, nullptr);
-    Reimpl_ExternalPtr_Serialize_Typed_7140(&_material, &ser);   // 0x140007140
+    ::Object::SerializeExternal<Graphics::MaterialInstance>(ser, _material);   // 0x140007140
     return true;
 }
 
