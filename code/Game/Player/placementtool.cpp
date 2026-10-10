@@ -306,7 +306,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
                 }
             }
             // Add new highlight
-            radiusDisplayIdx = Player_HighlightAdd_55430(radiusComponent, centerCell);
+            radiusDisplayIdx = radiusComponent->AddHighlight(centerCell);
             lastCenterCell = centerCell;
         }
     }
