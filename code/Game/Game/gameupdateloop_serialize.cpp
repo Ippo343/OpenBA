@@ -547,7 +547,10 @@ extern "C" void BucketTree_Serialize_21ba0(IO::Serializer* serializer, void* /*u
             // The bucket element is retail's InternalPtr<ComponentEntity> (EntityList.h):
             // InternalBasePtr::Serialize (0x140021c16) on the slot itself.
             slot->InternalBasePtr::Serialize(*serializer);
-            if (slot->Get() != nullptr && s_tidCompEnt &&
+            // 0x140021c1c..0x140021c34: TEST RCX,RCX / JZ, then
+            // MOV EDX,[0x1401c5d70] / CALL IsDerivedFrom / TEST AL,AL / JNZ,
+            // store 0 -- no test of the type id itself (row 1164).
+            if (slot->Get() != nullptr &&
                 !::Object::IsDerivedFromNullSafe(slot->Get(), s_tidCompEnt)) {
                 *slot = nullptr;
             }
