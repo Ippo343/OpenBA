@@ -202,29 +202,29 @@ DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
 // the template's name, the ExternalFactory generation it was last resolved at, and the
 // cached result.
 void ResolveExternalByName_Impl(NamedExternalRef* ref) {
+    // 0x14001b1ec-0x14001b1f6: the factory singleton is read with no test (B8 RES, row 1064).
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
-    if (!factory) return;
 
     // Check generation counter: if matches, cached value is still valid
-    int32_t factoryGen = factory->_generation;
-    if (ref->generation == factoryGen) return;
+    if (ref->generation == factory->_generation) return;
 
-    // Convert String to Filename, look up in factory.
+    // Convert String to Filename, look up in factory; the Filename dies right after
+    // the find (0x14001b223), before the type test.
     // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
-    System::Filename filename(ref->name);
-    ::Object::External* found = factory->FindAs<::Object::External>(filename);
-
-    // Validate the found object is a ComponentDescription (cell 0x1401c7318). The
-    // null-pointer escape that stood here went with the cell pointer (it was
-    // registered, so the escape never ran).
-    ::Object::External* result = nullptr;
-    if (found) {
-        if (::Object::IsDerivedFromNullSafe(found, ComponentDescription::TypeId())) {
-            result = found;
-        }
+    ::Object::External* found;
+    {
+        System::Filename filename(ref->name);
+        found = factory->FindAs<::Object::External>(filename);
     }
 
-    // Cache result and update generation
+    // Keep the result only if it is a ComponentDescription (cell 0x1401c7318):
+    // 0x14001b229 tests the find's result, then IsDerivedFrom (slot 0x140152a98).
+    ::Object::External* result = nullptr;
+    if (found && found->IsDerivedFrom(ComponentDescription::TypeId())) {
+        result = found;
+    }
+
+    // Cache result, then the generation RE-READ after the find (0x14001b24d).
     ref->resolved   = result;
-    ref->generation = factoryGen;
+    ref->generation = factory->_generation;
 }
