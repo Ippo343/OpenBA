@@ -12,22 +12,33 @@
 // src/engine/io/filesystem.cpp.
 //
 // The rest is NOT retail (plans/SETTINGS.md §B, §C):
+//   DocumentsDir(std::string&)       the same SHGetFolderPathW, converted
+//                                    without the engine allocator.
 //   ReadWholeFile / WriteFileAtomic  CreateFileW / ReadFile / WriteFile /
-//                                    MoveFileExW / CreateDirectoryW over the
-//                                    engine's own UTF-8 -> UTF-16 conversion
-//                                    (WideString's const char* ctor,
-//                                    0x1800cb110). Per D4_RULES C3 these stay
-//                                    here until THREADS' file primitives land.
+//                                    MoveFileExW / CreateDirectoryW over
+//                                    MultiByteToWideChar(CP_UTF8) for the
+//                                    path. Per D4_RULES C3 these stay here
+//                                    until THREADS' file primitives land.
 //   ReadLegacySettings               the one-time, read-only import of
 //                                    retail's registry store: KEY_READ, never
 //                                    created, REG_SZ values only.
+//
+// ALLOCATOR-FREE (SETTINGS E.3). Everything but the System::String
+// DocumentsDir uses std::string / std::wstring only, because
+// src/app/main.cpp's harness guard runs before Engine::Startup constructs
+// System::MemoryAllocator. The UTF-16 -> UTF-8 conversion below is
+// WideString::AsUTF8's rule (0x1800cacd0: a valid surrogate pair is one
+// 4-byte sequence, a lone surrogate encodes to ZERO bytes), so an imported
+// key or value is byte-identical to what retail's ReadSettings put in the map.
 // ============================================================================
 
 #include <windows.h>
 #include <shlobj.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 #include <string>
 #include <vector>
 
@@ -41,14 +52,52 @@ namespace {
 // Format("Software\\%s\\%s", "Shining Rock Software LLC", "Banished")).
 const wchar_t kLegacyKey[] = L"Software\\Shining Rock Software LLC\\Banished";
 
-// `len` UTF-16 units -> UTF-8, through the engine's AsUTF8.
+// `len` UTF-16 units -> UTF-8 by WideString::AsUTF8's rule (the banner):
+// a high surrogate followed by a low one is one supplementary code point; a
+// lone high or low surrogate is dropped. No engine allocation.
 std::string WideToUtf8(const wchar_t* w, size_t len) {
-    if (len == 0)
-        return std::string();
-    std::wstring copy(w, len);              // NUL-terminate a counted run
-    System::WideString ws(copy.c_str());
-    System::String utf8 = ws.AsUTF8();
-    return std::string(utf8._data ? utf8._data : "");
+    std::string out;
+    out.reserve(len);
+    for (size_t i = 0; i < len; ++i) {
+        uint32_t c = static_cast<uint16_t>(w[i]);
+        if (c >= 0xD800 && c < 0xDC00) {
+            if (i + 1 >= len) continue;                       // lone high
+            const uint32_t c2 = static_cast<uint16_t>(w[i + 1]);
+            if (c2 < 0xDC00 || c2 >= 0xE000) continue;        // lone high
+            c = 0x10000u + (((c - 0xD800u) << 10) | (c2 - 0xDC00u));
+            ++i;
+        } else if (c >= 0xDC00 && c < 0xE000) {
+            continue;                                         // lone low
+        }
+        if (c < 0x80) {
+            out.push_back(static_cast<char>(c));
+        } else if (c < 0x800) {
+            out.push_back(static_cast<char>(0xC0 | (c >> 6)));
+            out.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+        } else if (c < 0x10000) {
+            out.push_back(static_cast<char>(0xE0 | (c >> 12)));
+            out.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+        } else {
+            out.push_back(static_cast<char>(0xF0 | (c >> 18)));
+            out.push_back(static_cast<char>(0x80 | ((c >> 12) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | (c & 0x3F)));
+        }
+    }
+    return out;
+}
+
+// A UTF-8 path -> UTF-16 for the W file APIs. Empty on a conversion failure,
+// which every caller treats as "cannot open".
+std::wstring Utf8ToWide(const char* s) {
+    const int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, nullptr, 0);
+    if (n <= 0)
+        return std::wstring();
+    std::wstring out(static_cast<size_t>(n), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, &out[0], n);
+    out.resize(static_cast<size_t>(n - 1));                   // the NUL
+    return out;
 }
 
 // The directory part of a wide path (up to the last separator), or empty.
@@ -102,12 +151,23 @@ bool DocumentsDir(System::String& out) {
     return true;
 }
 
+bool DocumentsDir(std::string& out) {
+    wchar_t buf[264];
+    const HRESULT hr = SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, 0, buf);
+    if (hr != S_OK)
+        return false;
+    out = WideToUtf8(buf, wcslen(buf));
+    return true;
+}
+
 bool ReadWholeFile(const char* pathUtf8, std::string& out) {
     if (pathUtf8 == nullptr || pathUtf8[0] == 0)
         return false;
-    const System::WideString wpath(pathUtf8);
+    const std::wstring wpath = Utf8ToWide(pathUtf8);
+    if (wpath.empty())
+        return false;
 
-    HANDLE h = CreateFileW(wpath._data, GENERIC_READ,
+    HANDLE h = CreateFileW(wpath.c_str(), GENERIC_READ,
                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE)
@@ -136,8 +196,9 @@ bool ReadWholeFile(const char* pathUtf8, std::string& out) {
 bool WriteFileAtomic(const char* pathUtf8, const char* data, size_t n) {
     if (pathUtf8 == nullptr || pathUtf8[0] == 0)
         return false;
-    const System::WideString wpathW(pathUtf8);
-    const std::wstring wpath(wpathW._data);
+    const std::wstring wpath = Utf8ToWide(pathUtf8);
+    if (wpath.empty())
+        return false;
     const std::wstring wtmp = wpath + L".tmp";
 
     const std::wstring parent = ParentOf(wpath);

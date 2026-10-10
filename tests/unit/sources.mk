@@ -330,3 +330,8 @@ UNIT_TREE_SRCS += src/engine/video/device_enum_types.cpp
 # Phase D.4 SETTINGS E.1: the settings.cfg codec (tests/unit/settings_file_test.cpp).
 # Standard library only: no engine type, no OS call.
 UNIT_TREE_SRCS += src/engine/io/settings_file.cpp
+# Phase D.4 SETTINGS E.3: settings.cfg on disk (tests/unit/persistence_settings_test.cpp).
+# The store over the codec and the real Win32 file bodies; widestring.cpp for
+# settings_win.cpp's System::String DocumentsDir (not called by the tests).
+UNIT_TREE_SRCS += src/engine/io/settings_store.cpp src/platform/win/settings_win.cpp \
+                  src/engine/system/widestring.cpp

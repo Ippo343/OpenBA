@@ -452,7 +452,8 @@ static_assert(!std::has_virtual_destructor<PersistenceWorker>::value,
 // MEMBERS, by the file their body lives in:
 //   persistence.cpp              Get(int&), Get(bool&), Set(int), Set(bool),
 //                                GetSavePath
-//   persistence_registry_win.cpp ReadSettings, WriteSettings
+//   persistence_settings.cpp     ReadSettings, WriteSettings (settings.cfg,
+//                                Phase D.4 SETTINGS E.3; retail: the registry)
 //   persistence_saves.cpp        GetSaveCount, GetSaveInfo, GetSaveFilename,
 //                                BeginDelete, BeginLoad, ~Persistence
 //   persistence_saves_win.cpp    BeginGetSaveGameInfo
