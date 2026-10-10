@@ -60,7 +60,6 @@ struct GameContainer;
 class OptionsDialog;
 namespace UI { class UserInterface; class Dialog; class DialogInstance; }
 namespace Object { template <class T> class InternalPtr; }
-extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* userInterface);  // 0x140099260  // B8: stays free -- not moved: the body returns on a null container / UI (retail does not, row 1126); as a member GCC deletes a `this` test
 // B4 FORWARD: 1 outside caller (Dialog/mainmenudialog.cpp) -> OptionsDialog's ctor
 OptionsDialog* OptionsDialog_Ctor_Standalone(void* self, UI::UserInterface* ui, const UI::Dialog* extRes, const Object::InternalPtr<UI::DialogInstance>* parentIBP);  // 0x140075150
 

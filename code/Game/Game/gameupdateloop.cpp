@@ -1606,7 +1606,7 @@ void GameUpdateLoop::Startup() {
 
     // Setup UI references (cursors, lists, etc.)
     TRACE("[GameUpdateLoop::Startup] calling SetupUIRefs...\n");
-    ApplyKeyMapToUI_Impl(g_gameContainer, m_userInterface);   // 0x140099260
+    g_gameContainer->ApplyKeyMapToUI(m_userInterface);   // 0x140099260
     // Report the OUTCOME. "SetupUIRefs done" printed identically for the whole time
     // 0x140099260 was unregistered and the call was a no-op; the fields it writes are
     // the only evidence it ran. uiScale 0 == never applied (edittool.cpp:674 reads it).
