@@ -251,7 +251,7 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     ::Object::InternalPtr<ComponentEntity> newIBP(newEnt);
 
     NaturalResourceComponent* acc1 = newEnt->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
-    NaturalResourcePlaceAtCell(acc1, mapWv * y + x);   // 0x140126540 (was its ActCNR_SetupModelAtCell_126540 forwarder)
+    acc1->PlaceAtCell(mapWv * y + x);   // 0x140126540 (was its ActCNR_SetupModelAtCell_126540 forwarder)
 
     GrowthComponent* acc2 = newEnt->FindComponent<GrowthComponent>();   // 0x14000c460
     acc2->SetProgress(0.0f);   // 0x140120db0 (was its ActCNR_SetGrowthProgress_120db0 forwarder)

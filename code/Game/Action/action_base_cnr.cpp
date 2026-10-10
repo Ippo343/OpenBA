@@ -248,9 +248,9 @@ void NaturalResourceComponent::SetAnimation(uint32_t animIdx) {
 // Reimpl of Entity_impl_6540 (FUN_140126540) — CreateNaturalResource model placement.
 // Positions the entity's MapComponent and ModelComponent at the cell, with jitter.
 // ============================================================
-uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex) {
+uint64_t NaturalResourceComponent::PlaceAtCell(int cellIndex) {
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    Description* desc = self->_description;
+    Description* desc = _description;
     Map* map = gameWorld->m_game;
     System::Random* rng = gameWorld->m_random;
     int gridW = map->size;
@@ -276,8 +276,8 @@ uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellInde
     float yawScale = kRdata_140172220;   // 0x140172220
     float yaw = rng->RandFloatTol() * yawScale;
 
-    MapComponent* pos = self->_entity->FindComponent<MapComponent>();       // 0x140004680
-    ModelComponent* model = self->_entity->FindComponent<ModelComponent>(); // 0x140003f60
+    MapComponent* pos = _entity->FindComponent<MapComponent>();       // 0x140004680
+    ModelComponent* model = _entity->FindComponent<ModelComponent>(); // 0x140003f60
 
     pos->tileX0 = static_cast<int16_t>(cellIndex % gridW);
     pos->tileY0 = static_cast<int16_t>(cellIndex / gridW);

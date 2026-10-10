@@ -271,7 +271,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
 
     // Place at tile index (NaturalResourceComponent, FindComponent 0x1400052c0)
     NaturalResourceComponent* natRes = newEntity->FindComponent<NaturalResourceComponent>();
-    NaturalResourcePlaceAtCell(natRes, placeMapSize * y + x);   // 0x140126540 (ActCNR_SetupModelAtCell_126540's body)
+    natRes->PlaceAtCell(placeMapSize * y + x);   // 0x140126540 (ActCNR_SetupModelAtCell_126540's body)
 
     // Reset the growth (GrowthComponent, FindComponent 0x14000c460)
     GrowthComponent* growth = newEntity->FindComponent<GrowthComponent>();

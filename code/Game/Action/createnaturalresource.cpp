@@ -134,7 +134,7 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
 
     // Find the NaturalResourceComponent -- place its model at the cell
     NaturalResourceComponent* naturalResource = entityIBP->FindComponent<NaturalResourceComponent>();   // 0x1400052c0
-    NaturalResourcePlaceAtCell(naturalResource, cellIndex);   // 0x140126540
+    naturalResource->PlaceAtCell(cellIndex);   // 0x140126540
 
     // Find and set up GrowthComponent -- set progress to 0.0
     GrowthComponent* growth = entityIBP->FindComponent<GrowthComponent>();   // 0x14000c460
