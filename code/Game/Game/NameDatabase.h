@@ -68,6 +68,3 @@ static_assert(offsetof(NameDatabase, _array2) == 0x30, "+0x30");
 static_assert(offsetof(NameDatabase, _array3) == 0x40, "+0x40");
 static_assert(offsetof(NameDatabase, _array4) == 0x50, "+0x50");
 
-// Helper #6 of serialize_resize_helpers.cpp (exe 0x14001c7c0): Collection::Array<NameDatabaseEntry>
-// resize (stride 0x0C, align 4) for NameDatabase::Serialize's _array1.
-extern "C" void Reimpl_Array_Resize_Stride0C(Collection::Array<NameDatabaseEntry>* arrayHeader, int newCount);

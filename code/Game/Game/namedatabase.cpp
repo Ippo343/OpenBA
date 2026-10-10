@@ -69,7 +69,7 @@ bool NameDatabase::Serialize(IO::Stream& stream) {
     // --- array1: stride 0xc (3 fields/elem) ---
     int c1 = _array1.GetSize();
     ser.Serialize(c1, nullptr);
-    if (isLoading()) Reimpl_Array_Resize_Stride0C(&_array1, c1);
+    if (isLoading()) _array1.SetSize(c1);   // 0x14001c7c0
     if (c1 > 0) {
         NameDatabaseEntry* p = _array1.GetData();   // element0
         for (int i = 0; i < c1; ++i) {
