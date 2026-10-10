@@ -356,8 +356,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
                 }
 
                 // Check path to the nearest passable cell
-                bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(
-                    mapGrid, 0xe1f, nearestCell, citizenGridCell)) != 0;   // the bool door read AL
+                bool canPath = static_cast<uint8_t>(mapGrid->ValidateCell(0xe1f, nearestCell, citizenGridCell)) != 0;   // the bool door read AL
                 if (!canPath) {
                     continue;
                 }

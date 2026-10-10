@@ -184,6 +184,7 @@ public:
     int FindCell(int srcCell, int destCell, uint32_t passFlags);   // 0x14009ccf0 (Work/work_base_grid.cpp)
     int CalcDistance(uint32_t cellA, uint32_t cellB);   // 0x140008830 (Work/work_base_reimpl.cpp)
     void GetTilesInArea(int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty) const;   // 0x14009fc00 (Work/work_leaf_clear.cpp)
+    uint64_t ValidateCell(uint32_t pathType, uint32_t destCell, int srcCell);   // 0x1400a00f0 (Work/work_base_reimpl.cpp)
 };
 
 static_assert(sizeof(Map) == 0xF8, "Map is 0xF8 (Load MemAlloc(0xf8, 8))");

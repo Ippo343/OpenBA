@@ -209,7 +209,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     int nearestCell = mapGrid->FindCell(srcCellIdx, citizenGridCell, 0xe0f);
 
                     if (nearestCell >= 0) {
-                        uint64_t canPath = (uint64_t)static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
+                        uint64_t canPath = (uint64_t)static_cast<uint8_t>(mapGrid->ValidateCell(0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
                         if ((char)canPath != 0) {
                             // Check the NaturalResourceComponent (0x1400052c0)
                             NaturalResourceComponent* natRes = entityAtCell->FindComponent<NaturalResourceComponent>();

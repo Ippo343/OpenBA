@@ -306,7 +306,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 
     int targetCell = field_58;
 
-    uint64_t passResult = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, (uint32_t)cellIndex, targetCell);
+    uint64_t passResult = mapGrid->ValidateCell(0xe1f, (uint32_t)cellIndex, targetCell);
     if ((char)passResult == '\0') {
         return 1;
     }
@@ -355,7 +355,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             return 1;
         }
 
-        passResult = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, (uint32_t)adjacentCell, cellIndex);
+        passResult = mapGrid->ValidateCell(0xe1f, (uint32_t)adjacentCell, cellIndex);
         if ((char)passResult == '\0') {
             return 1;
         }

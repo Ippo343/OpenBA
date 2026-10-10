@@ -238,7 +238,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 
                         // Pathfinding check
                         uint32_t uVar11 = (uint32_t)piVar4->FindCell(animalCell, uVar23, 0xe1f);
-                        uint64_t uVar16 = (uint64_t)WorkBase_ValidateCell_a00f0(piVar4, 0xe1f, (uint32_t)uVar11, uVar23);
+                        uint64_t uVar16 = (uint64_t)piVar4->ValidateCell(0xe1f, (uint32_t)uVar11, uVar23);
 
                         if ((char)uVar16 != '\0') {
                             // The AnimalComponent's description for the RemoveAnimal action
@@ -360,7 +360,7 @@ int PastureWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
 
         int nearCell = piVar4->FindCell(randCell, uVar23, 0xe1f);
         if (nearCell >= 0) {
-            uint64_t canPath = (uint64_t)WorkBase_ValidateCell_a00f0(piVar4, 0xe1f, uVar23, nearCell);
+            uint64_t canPath = (uint64_t)piVar4->ValidateCell(0xe1f, uVar23, nearCell);
             uint32_t dVar7 = PastureComponent::TypeId();  // DWORD_1401c7ba0
 
             if ((char)canPath != '\0') {

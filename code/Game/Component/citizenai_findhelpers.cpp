@@ -241,7 +241,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
         int cost = CellCost(map, cell, param_3);
 
         if (cost < best) {
-            uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
+            uint64_t valid = mapGrid->ValidateCell(0xe1f, param_3, static_cast<int>(cell));
             if (static_cast<char>(valid) != '\0') {
                 ComponentEntity* self_00 = list->field_0x20._data[idx].Get();
                 // 0x140008090 (was its CitizenComp_Entity_FindComponent_Storage forwarder)
@@ -294,7 +294,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
         float vec[4] = {0, 0, 0, 0};
         ComponentEntity* candIBP = preferred;
         uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, vec));
-        uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
+        uint64_t valid = mapGrid->ValidateCell(0xe1f, param_3, static_cast<int>(cell));
         if (static_cast<char>(valid) != '\0') {
             int dist = mapGrid->CalcDistance(cell, param_3);
             ComponentEntity* candA = *origP7;

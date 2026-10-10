@@ -251,7 +251,7 @@ int HarvestArea::Execute(CitizenComponent** citizenIBP, System::Time* /*context*
                     int nearestCell = mapGrid->FindCell(srcCellIdx, citizenGridCell, 0xe0f);
 
                     if (nearestCell >= 0) {
-                        uint64_t canPath = (uint64_t)static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
+                        uint64_t canPath = (uint64_t)static_cast<uint8_t>(mapGrid->ValidateCell(0xe1f, citizenGridCell, nearestCell));   // the bool door read AL
                         if ((char)canPath != 0) {
                             // Check NaturalResourceComponent on entity
                             // natRes must be contiguous: the action ctor 0x1400c1530

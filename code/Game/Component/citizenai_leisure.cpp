@@ -265,7 +265,7 @@ static ComponentEntity** CitizenAI_State_Leisure_sub_99d0(CitizenBehavior* param
                 cost = static_cast<int>(d) + wgrid;
             }
 
-            if (cost < param_4 * 2 && (static_cast<char>(WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, destCell)) != '\0')) {
+            if (cost < param_4 * 2 && (static_cast<char>(mapGrid->ValidateCell(0xe1f, param_3, destCell)) != '\0')) {
                 HappinessComponent* node = param_1->happinessComponents._data[idx].Get();
                 Description* prim = node->_description;
                 HappinessDescription* narrowed = Object::IsDerivedFromNullSafe(prim, s_tid_HappinessDescription)
@@ -397,7 +397,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         if (tcol < 0) tcol = 0; if (w <= tcol) tcol = w - 1;
         if (trow < 0) trow = 0; if (w <= trow) trow = w - 1;
         uint32_t uVar35 = static_cast<uint32_t>(w * trow + tcol);
-        uint8_t reach = WorkBase_ValidateCell_a00f0(piVar5, 0xe1f, uVar37, uVar35);
+        uint8_t reach = piVar5->ValidateCell(0xe1f, uVar37, uVar35);
         if (static_cast<char>(reach) == '\0') goto LAB_14010a7e0;
         goto LAB_14010a83d;   // target validated
     }

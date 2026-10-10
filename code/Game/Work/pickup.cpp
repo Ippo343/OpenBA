@@ -301,7 +301,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
 
     const int selfAccess = grid->FindCell(selfCell, citizenCell, 0xe07);
     if (selfAccess < 0) return 1;
-    if (!WorkBase_ValidateCell_a00f0(grid, 0xe1f, static_cast<uint64_t>(static_cast<uint32_t>(selfAccess)),
+    if (!grid->ValidateCell(0xe1f, static_cast<uint64_t>(static_cast<uint32_t>(selfAccess)),
                           static_cast<uint32_t>(citizenCell)))
         return 1;
 
@@ -376,7 +376,7 @@ int Pickup::Execute(CitizenComponent** citizenRef, System::Time* time) {
 
             const int nAccess = grid->FindCell(nCell, citizenCell, 0xe07);
             if (nAccess < 0) continue;
-            if (!WorkBase_ValidateCell_a00f0(grid, 0xe1f,
+            if (!grid->ValidateCell(0xe1f,
                                   static_cast<uint64_t>(static_cast<uint32_t>(nAccess)),
                                   static_cast<uint32_t>(citizenCell)))
                 continue;

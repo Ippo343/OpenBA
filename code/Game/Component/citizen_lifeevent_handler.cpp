@@ -151,7 +151,7 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
             dist = static_cast<int>(sqrtf(static_cast<float>(dy * dy + dx * dx))) + size;
         }
         if (dist < best
-            && (WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
+            && (mapGrid->ValidateCell(0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
             if (static_cast<int>(Cemetery_PickFreeSlot_6c60(slot->Get())) >= 0) {
                 *out = slot->Get();
                 best = dist;

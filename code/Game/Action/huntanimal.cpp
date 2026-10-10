@@ -250,7 +250,7 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
     }
 
     // Check path validity
-    uint64_t pathValid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, pathCost, toCell);   // 0x1400a00f0
+    uint64_t pathValid = mapGrid->ValidateCell(0xe1f, pathCost, toCell);   // 0x1400a00f0
     if ((char)pathValid == 0) {
         // Path not valid, bail
         return;

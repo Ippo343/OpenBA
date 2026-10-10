@@ -271,7 +271,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             if (ix < 0) ix = 0; if (dim <= ix) ix = dim - 1;
             if (iy < 0) iy = 0; if (dim <= iy) iy = dim - 1;
             uint32_t cell = static_cast<uint32_t>(dim * iy + ix);
-            uint64_t reachable = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, cell);
+            uint64_t reachable = mapGrid->ValidateCell(0xe1f, param_3, cell);
             if (static_cast<char>(reachable) != '\0') {
                 int cost = mapGrid->CalcDistance(param_3, cell);
                 if (cost < bestCost) {

@@ -234,7 +234,7 @@ int FishingWork::Execute(CitizenComponent** citizenIBP, System::Time* /*time*/) 
             // fishable-tile score, and this branch used to return silently — a working
             // dock and a stranded one logged exactly the same nothing. Count it and print
             // the two region ids, which name the cause outright.
-            uint64_t passResult = WorkBase_ValidateCell_a00f0(map, 0xe1f, (uint32_t)citizenCell, spotCell);
+            uint64_t passResult = map->ValidateCell(0xe1f, (uint32_t)citizenCell, spotCell);
             if ((char)passResult == '\0') {
                 return 1;
             }

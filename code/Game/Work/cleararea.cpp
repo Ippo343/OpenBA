@@ -444,7 +444,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Validate cell is passable
-                int valid = static_cast<int>(WorkBase_ValidateCell_a00f0(map, 0xe1f, (int)(uint32_t)cellIdx, refTileIdx));   // the door read EAX
+                int valid = static_cast<int>(map->ValidateCell(0xe1f, (int)(uint32_t)cellIdx, refTileIdx));   // the door read EAX
                 if (!(valid & 0xFF)) {
                     continue;
                 }
@@ -550,7 +550,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Validate cell passability
-                int passable = static_cast<int>(WorkBase_ValidateCell_a00f0(map, 0xe1f, (int)tileIdx, refTileIdx));   // the door read EAX
+                int passable = static_cast<int>(map->ValidateCell(0xe1f, (int)tileIdx, refTileIdx));   // the door read EAX
                 if (!(passable & 0xFF)) {
                     tileCount = tileArray.size;
                     continue;

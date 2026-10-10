@@ -289,7 +289,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
 
         // Check 4: passability from random cell to citizen
         if (terrainOk && distOk && emptyCell) {
-            bool canPath = (char)WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, testCell, citizenGridCell) != 0;
+            bool canPath = (char)mapGrid->ValidateCell(0xe1f, testCell, citizenGridCell) != 0;
             allChecksPass = canPath;
         }
     }

@@ -1058,7 +1058,7 @@ static std::function<ComponentEntity*(ComponentDescription* /*tmpl*/, int /*tile
 // was typed `char (*)(int*, uint32_t, uint32_t, int)` and read AL only. B3R keeps
 // today's bits with the cast (a behaviour: candidate).
 static inline char ST_CanPathTo(Map* map, uint32_t mask, uint32_t destCell, int srcCell) {
-    return static_cast<char>(WorkBase_ValidateCell_a00f0(map, mask, destCell, srcCell));
+    return static_cast<char>(map->ValidateCell(mask, destCell, srcCell));
 }
 
 static bool ST_SiteIsWorkable(int tx, int ty, int fw, int fh) {

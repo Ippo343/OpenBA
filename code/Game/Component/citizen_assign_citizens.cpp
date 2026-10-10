@@ -136,7 +136,7 @@ int ComputeCost(Map* map, int fromCell, int toCell) {
     if (fromCell < 0 || toCell < 0) return kUnreachable;
     // The body returns its bool in the low byte of a uint64 (work_base_reimpl.cpp).
     if (!static_cast<bool>(static_cast<uint8_t>(
-            WorkBase_ValidateCell_a00f0(map, 0xe1f, static_cast<uint32_t>(fromCell),
+            map->ValidateCell(0xe1f, static_cast<uint32_t>(fromCell),
                                         static_cast<int>(static_cast<uint32_t>(toCell))))))
         return kUnreachable;
 

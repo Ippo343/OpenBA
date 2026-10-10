@@ -173,7 +173,6 @@ float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320
 struct ActionStack;
-uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0  // B8: stays free -- not moved: the body tests the map for null (retail does not, row 1120); as a member GCC deletes a `this` test
 
 // ---- work_base_walkpos.cpp
 #include "Component/InteractDescription.h"   // InteractDescription::NodeArray

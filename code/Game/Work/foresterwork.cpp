@@ -400,7 +400,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
                 if (plantEnabled && resourceEntity == nullptr) {
                     // PLANT PATH: empty cell, check if we can plant here
-                    bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(map, 0xe1f, testCell, citizenGridCell));   // the door read AL
+                    bool canPath = static_cast<uint8_t>(map->ValidateCell(0xe1f, testCell, citizenGridCell));   // the door read AL
                     if (canPath) {
                         // Check terrain suitability for planting
                         bool terrainOk = map->TestPlacement(   // 0x14009f5d0 (the Map* overload; the int* forwarder went)
@@ -495,8 +495,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
                             if (nearestCell < 0) goto next_attempt;
 
                             // Check path to the nearest passable cell
-                            bool canPath2 = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(
-                                map, 0xe1f, nearestCell, citizenGridCell));   // the door read AL
+                            bool canPath2 = static_cast<uint8_t>(map->ValidateCell(0xe1f, nearestCell, citizenGridCell));   // the door read AL
                             if (!canPath2) goto next_attempt;
 
                             // Reset fail counter
