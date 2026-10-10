@@ -86,17 +86,6 @@ BuildRoad::BuildRoad(ComponentEntity* const* ownerIbp, uint32_t cellIdx, uint32_
     field_28 = static_cast<int32_t>(cellIdx);   // retail also mirrors the cell into the Work base
 }
 
-// The by-address door RoadTool's commit path calls (roadtool_calcpath.cpp resolves
-// 0x1400e4b50): the real ctor on the caller's memory (B8-5 — the same bytes).
-BuildRoad* BuildRoad_CtorParams_Impl(BuildRoad* self, ComponentEntity* const* ownerIbp, uint32_t cellIdx,
-                                     uint32_t mapDescVal, ComponentDescription* roadDescExtra,
-                                     uint32_t roadTypeExisting, uint32_t roadState,
-                                     uint32_t terrainType) {
-    if (!self) return nullptr;
-    return (new (static_cast<void*>(self)) BuildRoad(
-        ownerIbp, cellIdx, mapDescVal, roadDescExtra, roadTypeExisting, roadState, terrainType));
-}
-
 // ============================================================
 // Serialize (0x1400e4980)
 // Work_Serialize + Serializer(version=1) + serialize fields

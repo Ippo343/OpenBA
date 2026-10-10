@@ -183,11 +183,11 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(Map* mapGrid, uint32_t cellIdx,
     BuildRoad* mem = static_cast<BuildRoad*>(System::MemoryAllocator::MemAlloc(0x70, 8));
     if (mem) {
         new (&ownerIbp) ::Object::InternalBasePtr(nullptr);   // the IBP ctor 0x140152a90
-        work = BuildRoad_CtorParams_Impl(mem, &ownerIbp, cellIdx,
-                                      mapDescVal, roadDescExtra,
-                                      cell->field_0x2A,      // existing road type
-                                      cell->field_0x2B,      // existing road state
-                                      cell->terrainType);    // terrain type
+        work = new (mem) BuildRoad(&ownerIbp, cellIdx,   // 0x1400e4b50
+                                   mapDescVal, roadDescExtra,
+                                   cell->field_0x2A,      // existing road type
+                                   cell->field_0x2B,      // existing road state
+                                   cell->terrainType);    // terrain type
     }
 
     if (!work) {
