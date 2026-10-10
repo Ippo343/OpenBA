@@ -13,19 +13,12 @@
 //   dtor   0x14011b8b0 (slot 0 0x1400338d0, 83 B: the plain restamp + ~Internal shape)
 //   table  0x140162fd0, 16 slots:
 //     [0]  0x1400338d0 scalar deleting dtor  [1]/[2] TypeName/Type
-//     [3]  0x14011b820 Persist               [4] 0x14011b7d0 Startup (Ghidra "Serialize")
+//     [3]  0x14011b820 Persist               [4] 0x14011b7d0 Startup
 //     [6]  0x14011b560 OnAdded (Ghidra "Draw", AddDecal)
 //     [7]  0x14011b510 OnRemove (Ghidra "OnCreate", release the decal slot)
 //     [11] 0x14011b810 Slot11 (7 B) PORT GAP [12] 0x14011b760 OnEvent PORT GAP
-//     every other slot = Component's
-//
-// TREE DIVERGENCES kept (behaviour of the tree's table, not retail's):
-//   [4] runs the standalone draw-flag bucketing (DecalComponent_SetDrawFlag)
-//       instead of retail's 0x14011b7d0 (ported as DecalComponent_Serialize,
-//       never installed);
-//   [8] retail inherits Component's `RET`; the tree drives the build-once
-//       retry from it (the owner is bucketed by [4]). Retiring both is a
-//       titled behaviour change of its own.
+//     every other slot = Component's (row 1202: [4] is retail's body and [8] is
+//     Component's again since Phase D SLOTS)
 // ============================================================================
 
 #include <cstdint>
@@ -42,10 +35,9 @@ public:
     // 0x14011b8b0
     ~DecalComponent() override = default;                         // [0]  0x1400338d0
     void Persist(IO::Stream& stream) override;                          // [3]  0x14011b820
-    void Startup() override;                                      // [4]  0x14011b7d0 TREE DIVERGENCE
+    void Startup() override;                                      // [4]  0x14011b7d0
     void OnAdded() override;                                      // [6]  0x14011b560
     void OnRemove() override;                                     // [7]  0x14011b510
-    void Tick(const System::Time* time) override;                               // [8]  = Component's in retail; TREE DIVERGENCE
     void Slot11() override;                                       // [11] 0x14011b810 PORT GAP
     void OnEvent(int eventId) override;                           // [12] 0x14011b760 PORT GAP
 

@@ -29,7 +29,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
-| `DecalComponent_Serialize` | 9 | 0x14011b7d0 | 0x14011b7d0 B8: stays free -- read, not moved: retail's slot [4] Startup body, never installed (DecalComponent.h TREE DIVERGENCE: the tree's Startup is a different body); no caller; installing it is behaviour: |
+| `DecalComponent_Serialize` | 9 | 0x14011b7d0 | 0x14011b7d0 B8: stays free -- read, not moved: retail's slot [4] Startup body, never installed (DecalComponent.h TREE DIVERGENCE: the tree's Startup is a different body); no caller; installing it is behaviour: -- Phase D SLOTS: installed as DecalComponent::Startup |
 
 ### code/Game/Component/diseasecomponent_funcs.h (1)
 
