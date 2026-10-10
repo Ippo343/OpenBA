@@ -105,7 +105,6 @@ extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const Syste
 // ---- citizenai_findhelpers.cpp
 class ResidenceComponent;
 class CitizenBehavior;
-bool ResidenceCheck_2ac30(ResidenceComponent* self);  // 0x14012ac30
 ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, float* param_4);  // 0x14008ec70
 ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, ComponentDescription** param_4, float* param_5, uint64_t , ComponentEntity** origP7);  // 0x14008e370
 

@@ -142,16 +142,16 @@ static Description* ScanCompList2(ComponentDescription* base, uint32_t tid) {
 //   value (gw+0x130 -> +0x18), OR there is still pending capacity (param_1+0x48 > 0).
 // ============================================================
 //   (B4 P2 CAI-2: the receiver is the ResidenceComponent every caller passes.)
-bool ResidenceCheck_2ac30(ResidenceComponent* self) {
+bool ResidenceComponent::CheckHeating() {
     EnsureInit();
-    Description* obj = self->_description;
+    Description* obj = _description;
     float cur = GameUpdateLoop::_singleton->m_weather->temperature;   // +0x130 -> +0x18
     // 0x14012ac5c-0x14012ac74: IsDerivedFrom, CMOVNZ over 0, [desc+0x28] with no test.
     ResidenceDescription* desc = obj->IsDerivedFrom(s_tid_ResidenceDescription)
                                      ? static_cast<ResidenceDescription*>(obj) : nullptr;
     float thresh = desc->_coldThreshold;
     if (thresh <= cur) return true;
-    return 0 < self->heatRemaining._ticks;
+    return 0 < heatRemaining._ticks;
 }
 
 // ============================================================
@@ -246,7 +246,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
                 ComponentEntity* self_00 = list->field_0x20._data[idx].Get();
                 // 0x140008090 (was its CitizenComp_Entity_FindComponent_Storage forwarder)
                 ResidenceComponent* storComp = self_00->FindComponent<ResidenceComponent>();
-                bool ok = ResidenceCheck_2ac30(storComp);   // CheckPtr'd, no test
+                bool ok = storComp->CheckHeating();   // CheckPtr'd, no test
                 if (ok && (-1 < cost)) {
                     *found = cand;
                     param_4[0] = vec.v.x;

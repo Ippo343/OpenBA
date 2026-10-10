@@ -144,7 +144,7 @@ uint64_t CitizenAIComponent::State_ElderTransition() {
         if (citizen->home != nullptr) {
             if (citizen->home != nullptr) {
                 ResidenceComponent* stor = citizen->home->FindComponent<ResidenceComponent>();
-                bool ok = (stor) ? ResidenceCheck_2ac30(stor) : false;
+                bool ok = (stor) ? stor->CheckHeating() : false;
                 if (ok) {
                     InteractComponent* pp = citizen->home->FindComponent<InteractComponent>();
                     pp->NodePosition(&dest, 0, 0, nullptr);
@@ -265,7 +265,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             flag = 0;
         } else {
             ResidenceComponent* storComp2 = found->FindComponent<ResidenceComponent>();
-            flag = (storComp2 && ResidenceCheck_2ac30(storComp2)) ? 1 : 0;
+            flag = (storComp2 && storComp2->CheckHeating()) ? 1 : 0;
         }
         holderEntity = found;
         holderCitizen = citizen.Get();
