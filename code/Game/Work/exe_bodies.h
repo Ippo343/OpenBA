@@ -176,7 +176,6 @@ WorkEntitySetNode** WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssi
 void WorkLeaf_BstSerializeIBPpair_29c10(Collection::Set<WorkEntityAssignment>* set, IO::Serializer* ser);  // 0x140029c10
 struct GridTile;   // Work/GridTile.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-void WorkLeaf_SortTilesByDistance_9d7c0(const Map* map, RawArray<GridTile>* tiles, int refCell);  // 0x14009d7c0
 void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty);  // 0x14009fc00
 
 // ---- work_leaf_gather.cpp

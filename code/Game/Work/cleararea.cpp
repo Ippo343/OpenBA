@@ -388,7 +388,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
         uint32_t refTileIdx = (uint32_t)(gridSize * tileY + tileX);
 
         // Sort tiles by distance from citizen
-        WorkLeaf_SortTilesByDistance_9d7c0(map, &tileArray, refTileIdx);
+        map->SortTilesByDistance(&tileArray, refTileIdx);
 
         // ============================================================
         // Phase 1: Clear trees (field_70)

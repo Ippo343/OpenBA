@@ -67,6 +67,7 @@
 
 class ComponentEntity;
 class PathfinderThread;
+struct GridTile;   // Work/GridTile.h
 namespace IO { class Stream; }
 
 struct MapCell {
@@ -118,6 +119,7 @@ public:
     Map();                       // 0x14009ee70 (defined in gameupdateloop_load.cpp)
     ~Map();                      // 0x14009ed60 (keystone_a_gamedtor.cpp); Shutdown MemFrees the map after it
     void Serialize(IO::Stream& stream);   // 0x14009f100 (gamegrid_serialize.cpp)
+    void SortTilesByDistance(RawArray<GridTile>* tiles, int refCell) const;   // 0x14009d7c0 (Work/work_leaf_clear.cpp)
 
     int32_t  size;               // +0x00 map edge in cells (Serialize int&)
     uint8_t  _pad04[4];          // +0x04 not written by the ctor
