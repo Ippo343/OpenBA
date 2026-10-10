@@ -483,7 +483,7 @@ void MenuDialogLoopT::Shutdown() {
     // 11. Audio::Scene::StopAll(this+0xb30). NOT skippable: it parks the
     //     streamed menu music's thread before the next LoaderLoop's
     //     Loader::Load remounts the packages under it (open defect (c)).
-    MenuDialogLoopT_StopMusic(this);
+    StopMusic();
     // 12. The tail `JMP UI::UserInterface::EnableCursor(this+0x40, false)`.
     _ui.EnableCursor(false);
 }

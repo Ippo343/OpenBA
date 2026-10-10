@@ -899,9 +899,8 @@ void MenuDialogLoopT::StartMusic() {
 // the thread abandons its pass and closes the file before the remount starts.
 // Without it the stream kept reading through the remount and faulted on the
 // freed/null array (STATUS open defect (c), ~1 in 60 resave runs).
-void MenuDialogLoopT_StopMusic(MenuDialogLoopT* self) {
-    if (!self) return;
-    self->_audioScene.StopAll();   // the embedded Audio::Scene (+0xb30)
+void MenuDialogLoopT::StopMusic() {
+    _audioScene.StopAll();   // the embedded Audio::Scene (+0xb30)
 }
 
 // ============================================================

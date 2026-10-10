@@ -180,7 +180,6 @@ void MenuDialogLoopT_TickAudio(const System::Time* time);
 // the tail of MenuDLT::Shutdown (exe 0x14009b280, call at 0x14009b41a). Stops the
 // streamed menu music BEFORE the next LoaderLoop's Loader::Load remounts the
 // packages; the body's banner says why that ordering is load-bearing.
-void MenuDialogLoopT_StopMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_BindUISounds — mirror the sound-binding block of
 // OptionsDialog_helper_9260 (exe 0x140099260). Copies five SoundEffect
