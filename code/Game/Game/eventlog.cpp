@@ -121,33 +121,22 @@ const rtcoll::ArraySpec EventLogRows::kSpec_EventEntry = {   // exe 0x140019b70 
 // Helpers
 // ============================================================
 
-// YearString (0x1400951d0): String::Format("%i", *(int*)clock), clock = *(gw+0x128).
+// YearString (0x1400951d0): String::Format("%i", *(int*)clock), clock = *(gw+0x128),
+// read with no test (0x1400951f5 MOV RCX,[RAX+0x128] / 0x1400951fc MOV R8D,[RCX]).
 System::String EventLog::YearString() const {
-    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;   // 0x1400951ee [0x1401c3dd8]
-    Calendar* clock = gameWorld->m_dayCounter;
-    int year = clock ? clock->year : 0;
-    return System::String::Format("%i", year);
+    Calendar* clock = GameUpdateLoop::_singleton->m_dayCounter;   // 0x1400951ee [0x1401c3dd8]
+    return System::String::Format("%i", clock->year);
 }
 
 // SeasonString (0x140095230): monthIdx = (int)(AsSeconds(clock+8) / 3600 * 12);
-// if monthIdx >= 12 -> 0. seasons table = this->seasons (+0x08).
+// if monthIdx >= 12 -> 0 (0x140095286 CMP / CMOVGE). The text is GetText on this->seasons
+// (+0x08) built straight into the caller's return slot (0x14009528e MOV RDX,RDI /
+// 0x140095291 MOV RCX,[RBX+0x8]); neither the clock nor the table is tested.
 System::String EventLog::SeasonString() const {
-    GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;   // 0x140095259 [0x1401c3dd8]
-    Calendar* clock = gameWorld->m_dayCounter;
-    int idx = 0;
-    if (clock) {
-        float secs = clock->yearTime.AsSeconds();
-        idx = (int)(secs / 3600.0f * 12.0f);
-        if (idx >= 12) idx = 0;
-    }
-    System::String retStr;
-    const UI::StringTable* seasonsTable = seasons;
-    if (seasonsTable) {
-        ::new (&retStr) System::String(seasonsTable->GetText(idx));
-    } else {
-        retStr = System::String("");
-    }
-    return retStr;
+    Calendar* clock = GameUpdateLoop::_singleton->m_dayCounter;   // 0x140095259 [0x1401c3dd8]
+    int idx = (int)(clock->yearTime.AsSeconds() / 3600.0f * 12.0f);
+    if (idx >= 12) idx = 0;
+    return seasons->GetText(idx);
 }
 
 // SeverityColor: severity -> ARGB text color (shared by both AddEvent variants).
