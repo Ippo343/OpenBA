@@ -517,12 +517,3 @@ void WorldGeometry::RebuildDirtyChunks() {
 // B4 X-G2-3: Reimpl_TradeWork_sub_c1e0 (the C entry of WorldGeometry::BuildTerrainMesh) had
 // no caller left: deleted.
 
-// B4 FORWARD: 1 outside caller (Action/action_pf_road.cpp, ACT-a: a float[3]).
-extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row) {
-    if (!self || !out) return out;
-    const Math::Vector3 n = self->TerrainNormal(col, row);
-    out[0] = n.x;
-    out[1] = n.y;
-    out[2] = n.z;
-    return out;
-}

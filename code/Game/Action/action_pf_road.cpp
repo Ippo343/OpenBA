@@ -140,8 +140,7 @@ static inline int ClampCell(int v, int w) {
 static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* outVtx, uint8_t blend) {
     int half = geo->_gridSize >> 1;
 
-    float normal[3] = {0, 0, 0};   // local_18/local_14/local_10
-    Reimpl_TradeWork_helper_e270(geo, normal, x, y);   // 0x1400ae270
+    const Math::Vector3 normal = geo->TerrainNormal(x, y);   // 0x1400ae270 into local_18/local_14/local_10
 
     short hSv = static_cast<short>(half);
     outVtx->x = static_cast<short>(static_cast<short>(x) - hSv);
@@ -166,13 +165,13 @@ static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* 
     short hVal = hm[static_cast<int64_t>(hmW) * cy + cx];
 
     // normal encode: byte = (normal + 1.0) * 127.5  (all three components)
-    float n2 = normal[2] + addOff;
-    float n0 = normal[0] + addOff;
+    float n2 = normal.z + addOff;
+    float n0 = normal.x + addOff;
     outVtx->normalW = 0;
     outVtx->blend = static_cast<uint16_t>(blend);
     outVtx->height = hVal;
     outVtx->normal[0] = static_cast<int8_t>(static_cast<int64_t>(n0 * encScl));
-    outVtx->normal[1] = static_cast<int8_t>(static_cast<int64_t>((normal[1] + addOff) * encScl));
+    outVtx->normal[1] = static_cast<int8_t>(static_cast<int64_t>((normal.y + addOff) * encScl));
     outVtx->normal[2] = static_cast<int8_t>(static_cast<int64_t>(n2 * encScl));
     // AO uv shorts:
     float span = static_cast<float>(geo->_gridSize);

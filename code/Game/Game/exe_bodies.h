@@ -204,7 +204,6 @@ extern "C" void Reimpl_ExternalPtrArray_Serialize(IO::Serializer* serializer, in
 // (the 0x140007140 family's cores are declared with serialize_externals.cpp's above)
 
 // ---- serialize_heightmap_mesh.cpp
-extern "C" void* Reimpl_TradeWork_helper_e270(const WorldGeometry* self, float* out, int col, int row);  // 0x1400ae270 WorldGeometry::TerrainNormal  // B4 FORWARD: 1 outside caller(s)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- serialize_resize_helpers.cpp
 extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);  // 0x14001c890  // B8: stays free -- erased core over a void* header: its holders are Collection::Array<T>, WorldGeometryArray<T> (a RawArray) and local headers of several T; Array<T>::SetSize exists over another body (rtcoll::SetSizeCore + spec), so an Array<T>::Resize would be a second spelling, and this body tests what retail does not (null header, negative count, null allocator)
