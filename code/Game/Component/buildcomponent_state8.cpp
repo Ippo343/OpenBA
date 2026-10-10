@@ -259,7 +259,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
                 BC8_ReaddDrawChildren(me);
             }
             if (pickingComponents[i].Get() != nullptr) {
-                PickingComponent_RegisterMesh(pickingComponents[i].Get());  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
+                pickingComponents[i].Get()->RefreshMesh();  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         // Brick 2c: alloc BuildStructure (0x70) + find the site WorkComponent (c8070)
@@ -326,7 +326,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
                 BC8_ReaddDrawChildren(me);
             }
             if (pickingComponents[i].Get() != nullptr) {
-                PickingComponent_RegisterMesh(pickingComponents[i].Get());  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
+                pickingComponents[i].Get()->RefreshMesh();  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         ::ControllerLive::RequestStateTransition(sm, 2);
@@ -398,7 +398,7 @@ char BuildComponent::State8Update(StateMachine* sm) {
                 BC8_SetMeshFrame(me, frame);
                 me->_entity->SendEvent(0);
                 if (pickingComponents[i].Get() != nullptr) {
-                    PickingComponent_RegisterMesh(pickingComponents[i].Get());  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
+                    pickingComponents[i].Get()->RefreshMesh();  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
                 }
             }
         }
@@ -419,7 +419,7 @@ char BuildComponent::State8Update(StateMachine* sm) {
                 BC8_ReaddDrawChildren(me);
             }
             if (pickingComponents[i].Get() != nullptr) {
-                PickingComponent_RegisterMesh(pickingComponents[i].Get());  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
+                pickingComponents[i].Get()->RefreshMesh();  // lane D: deref the IBP -- retail takes the PickingComponent, not its slot
             }
         }
         ::ControllerLive::RequestStateTransition(sm, 2);

@@ -9,8 +9,6 @@
 // buildings, whose real OnAdded/Startup lifecycle never fires in standalone. Idempotent
 // enough for a single spawn-time call per entity. `pc` = raw PickingComponent pointer.
 // B4 FORWARD: outside callers in buildcomponent.cpp, buildcomponent_state8.cpp,
-// destroycomponent_state6.cpp -> PickingComponent::RefreshMesh
-void PickingComponent_RegisterMesh(PickingComponent* pc);
 
 // Convenience: find `entity`'s PickingComponent and register its mesh (for callers that
 // hold an entity, e.g. the player-placement create path). Respects BANISHED_LIVE_PICKMESH.
