@@ -277,7 +277,7 @@ void CharacterComponent::OnAdded() {}
 
 // [7] 0x140109980 — release the char index (the other half of the allocation).
 void CharacterComponent::OnRemove() {
-    WorkBase_TaskListCleanup_c5400(&actionStack);   // 0x1400c5400, the action-stack clear
+    actionStack.Clear();   // 0x1400c5400, the action-stack clear
 
     // GameUpdateLoop::m_characterGrid (+0x88)
     CharacterGrid* charMgr = GameUpdateLoop::_singleton

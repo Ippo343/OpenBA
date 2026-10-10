@@ -431,7 +431,7 @@ int PlantArea::Cleanup() {
 
         // Cancel work via the citizen's action stack
         CitizenComponent* citizen = leftmost->element.citizen.Get();
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
 
         count = _cells._count;
     }

@@ -502,7 +502,7 @@ int Pickup::Slot5(CitizenComponent** citizenSlot, System::Time* param3) {
         // Citizen changed workplace -- cancel old work and re-target
         CitizenComponent* oldCitizen = citizenIBP.Get();
 
-        WorkBase_TaskListCleanup_c5400(&oldCitizen->character->actionStack);
+        oldCitizen->character->actionStack.Clear();
 
         // Re-run Slot4 with the new citizen
         CitizenComponent* local_buf[1] = { *citizenSlot };
@@ -557,7 +557,7 @@ int Pickup::Cleanup() {
     if (status == 1) {
         CitizenComponent* citizenEntity = citizenIBP.Get();
 
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
+        citizenEntity->character->actionStack.Clear();
     }
     return 0;
 }

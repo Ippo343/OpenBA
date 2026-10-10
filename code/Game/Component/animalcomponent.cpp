@@ -712,7 +712,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
             if (accept) {
                 ActionStack* stack = &character->actionStack;
-                WorkBase_TaskListCleanup_c5400(stack);
+                stack->Clear();
 
                 Action* action = nullptr;
                 void* mem = (::System::MemoryAllocator::_singleton)

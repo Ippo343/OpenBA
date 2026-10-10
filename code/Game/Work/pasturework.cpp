@@ -499,7 +499,7 @@ int PastureWork::Cleanup() {
 
         CitizenComponent* citizenEntity = leftmost->element;
 
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
+        citizenEntity->character->actionStack.Clear();
 
         count = _citizens._count;
     }

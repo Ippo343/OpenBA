@@ -146,7 +146,7 @@ int MarketWork::Cleanup() {
 
         // Cancel the work item: the claiming citizen's action list
         CitizenComponent* citizen = leftmost->element.citizen.Get();
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
 
         count = _field48.count;
     }

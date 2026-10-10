@@ -235,7 +235,7 @@ void RemoveAnimalActions(CitizenComponent* const* citizenIBP, uint32_t task, flo
     ActionStack* stack = &character->actionStack;
 
     if (static_cast<char>(gate) != '\0') {
-        WorkBase_TaskListCleanup_c5400(stack);   // 0x1400c5400
+        stack->Clear();   // 0x1400c5400
         // --- SendComponentMessage child action ---
         void* mem = MemAlloc(0x40, 8);
         Action* message = nullptr;

@@ -464,7 +464,7 @@ int ClearStorage::Cleanup() {
 
         // The node's citizen; cancel its CharacterComponent's action list (+0x48)
         CitizenComponent* citizen = leftmost->element;
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
     }
     return 0;
 }

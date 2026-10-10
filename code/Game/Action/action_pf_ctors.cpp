@@ -127,7 +127,7 @@ void Pf_SetFlagRefreshUpdate_107260(Component* self) {
     }
     CharacterComponent* character = self->_entity->FindComponent<CharacterComponent>();   // 0x1400012d0
     if (0 < character->actionStack.current + 1) {
-        WorkBase_TaskListCleanup_c5400(&character->actionStack);   // 0x1400c5400
+        character->actionStack.Clear();   // 0x1400c5400
         System::Time time = {};
         RtSystem_Time_Ctor(&time, 0.0f);
         self->Update(&time);   // slot 9
