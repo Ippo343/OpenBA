@@ -236,7 +236,7 @@ ComponentEntity** Entity_impl_ec70(CitizenBehavior* list, ComponentEntity** foun
         InteractComponent* interact = cand->FindComponent<InteractComponent>();
 
         Vector3Slot vec;
-        InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
+        interact->NodePosition(&vec.v, 0, 0, nullptr);   // 0x140122e20
         uint32_t cell = WorldToCell(map, &vec.v.x);
         int cost = CellCost(map, cell, param_3);
 
@@ -418,7 +418,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
                 InteractComponent* interact = cand->FindComponent<InteractComponent>();
 
                 Vector3Slot vec;
-                InteractNodePosition(interact, &vec.v, 0, 0, nullptr);   // 0x140122e20
+                interact->NodePosition(&vec.v, 0, 0, nullptr);   // 0x140122e20
                 uint32_t cell = WorldToCell(map, &vec.v.x);
 
                 // path cost (Ghidra's uVar30/uVar22, cell/goal or %w/dist², were the extra

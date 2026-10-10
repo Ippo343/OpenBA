@@ -225,7 +225,7 @@ int HomeDoorCell(CitizenComponent* const* citizen) {
     // (the "duplicate routes" report).
     InteractComponent* door = (*citizen)->home->FindComponent<InteractComponent>();   // 0x140002ed0
     Math::Vector3 vec;
-    InteractNodePosition(door, &vec, 0, 0, nullptr);
+    door->NodePosition(&vec, 0, 0, nullptr);
     int w = map->size;
     int col = (int)(vec.x + (float)(w >> 1));   // local_18 = x
     int row = (int)((float)(w >> 1) + vec.y);   // local_14 = y

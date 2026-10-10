@@ -135,7 +135,7 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
         // The cemetery's map position = its InteractComponent's resolved position.
         InteractComponent* icIBP = entity->FindComponent<InteractComponent>();   // cell 0x1401c7900
         Math::Vector3 pos;
-        InteractNodePosition(icIBP, &pos, 0, 0, nullptr);         // 0x140122e20
+        icIBP->NodePosition(&pos, 0, 0, nullptr);         // 0x140122e20
         int size = map->size;
         int cx = static_cast<int>(pos.x + static_cast<float>(size >> 1));
         int cy = static_cast<int>(pos.y + static_cast<float>(size >> 1));
@@ -272,7 +272,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
         pos.y = homeEnt->transform.translation.y;   // +0x15c
         pos.z = homeEnt->transform.translation.z;   // +0x160
     } else {
-        InteractNodePosition(home->FindComponent<InteractComponent>(), &pos, 0, 0, nullptr);   // 0x140122e20
+        home->FindComponent<InteractComponent>()->NodePosition(&pos, 0, 0, nullptr);   // 0x140122e20
     }
 
     // --- Clamp to a map cell ---

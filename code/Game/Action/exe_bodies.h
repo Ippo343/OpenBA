@@ -154,7 +154,6 @@ class InteractComponent;      // Component/InteractComponent.h
 class StorageComponent;       // Component/StorageComponent.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 void Pf_SetFlagRefreshUpdate_107260(Component* self);  // 0x140107260
-int InteractNodeCount(const InteractComponent* self, int kind);  // 0x140123070
 void Pf_StorageDropOff_116760(Component* self, ComponentDescription* material, int count);  // 0x140116760
 int Pf_StorageCountDelta_1167c0(Component* self, const ComponentDescription* material);  // 0x1401167c0
 
@@ -188,7 +187,6 @@ struct Vector3Slot {
     [[gnu::always_inline]] Vector3Slot() {}
 };
 static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
-Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* out, int kind, int index, float* heading);  // 0x140122e20
 int PickReachableCell(const Component* target, uint32_t goalCell, float* outPos);  // 0x14004edb0
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
 int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell

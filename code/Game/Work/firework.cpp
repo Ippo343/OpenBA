@@ -177,8 +177,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     if (posCompIBP->useLocations._size > 0) {
         for (int i = 0; i < posCompIBP->useLocations._size; i++) {
             Object::InternalPtr<InteractComponent>* childIBP = &posCompIBP->useLocations[i];
-            bool childResult = WorkImpl_WalkablePosRecursive_122b00(
-                childIBP->Get(), 0, srcPos, bestPos, &bestDist);
+            bool childResult = childIBP->Get()->FindWalkablePosRecursive(0, srcPos, bestPos, &bestDist);
             pathFound = pathFound || childResult;
         }
     }

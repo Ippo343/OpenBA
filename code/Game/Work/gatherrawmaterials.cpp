@@ -319,8 +319,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 if (posComp->useLocations._size > 0) {
                     int childCount = 0;
                     do {
-                        uint8_t childFound = WorkImpl_WalkablePosRecursive_122b00(
-                            posComp->useLocations[childCount].Get(), 1,
+                        uint8_t childFound = posComp->useLocations[childCount].Get()->FindWalkablePosRecursive(1,
                             searchPos, targetPos, &bestDist);
                         childCount++;
                         found |= childFound;

@@ -455,11 +455,11 @@ void PastureProduce(PastureComponent* self) {
         }
 
         // Find a footprint cell with no occupant and drop the produce pile there.
-        const int nCells = InteractNodeCount(pos, 2);   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
+        const int nCells = pos->NodeCount(2);   // 0x140123070 (Pf_RecursiveChildSum_123070's body)
         int placedCell = -1;
         for (int c = 0; c < nCells && placedCell < 0; ++c) {
             Math::Vector3 xy;
-            InteractNodePosition(pos, &xy, 2, c, nullptr);
+            pos->NodePosition(&xy, 2, c, nullptr);
             const int dim = grid->size;
             int gx = static_cast<int>(xy.x + static_cast<float>(dim >> 1));
             int gy = static_cast<int>(xy.y + static_cast<float>(dim >> 1));

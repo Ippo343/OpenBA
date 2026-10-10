@@ -263,7 +263,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(const CitizenBehavior* param_1, Comp
             // unconstructed slot [RBP-0x11] (kind 0, index 0, heading null).
             InteractComponent* interact = entity->FindComponent<InteractComponent>();   // 0x140002ed0
             Vector3Slot wposSlot;
-            InteractNodePosition(interact, &wposSlot.v, 0, 0, nullptr);
+            interact->NodePosition(&wposSlot.v, 0, 0, nullptr);
             const Math::Vector3& wpos = wposSlot.v;
             int dim = map->size;
             int ix = static_cast<int>(wpos.x + static_cast<float>(dim >> 1));

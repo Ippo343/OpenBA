@@ -182,8 +182,7 @@ uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destC
 // ---- work_base_walkpos.cpp
 #include "Component/InteractDescription.h"   // InteractDescription::NodeArray
 class InteractComponent;
-bool WorkImpl_WalkablePos_122be0(InteractComponent* interact, const InteractDescription::NodeArray* nodes, float* param_3, float* param_4, int* param_5);  // 0x140122be0
-uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int param_2, float* param_3, float* param_4, int* param_5);  // 0x140122b00
+bool WorkImpl_WalkablePos_122be0(InteractComponent* interact, const InteractDescription::NodeArray* nodes, float* param_3, float* param_4, int* param_5);  // 0x140122be0 B8: stays free -- DIFF: as InteractComponent::FindWalkablePos, CitizenAIComponent::State_Work (citizenai_handlers3.cpp:326) loses its post-call `if (posComp != nullptr)` arm (GCC: `this` is non-null; 17 -> 16 calls). The callee derefs RCX (+0x10) first, so a null never passed the call; movable if that fold is accepted
 
 // ---- work_leaf_clear.cpp
 class CropFieldComponent;

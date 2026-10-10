@@ -312,10 +312,10 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
 
         // destination position from the trade post's interact component:
         Vector3Slot destPos;                             // local_a0
-        uint32_t range = InteractNodeCount(posComp, 0);   // 0x140123070
+        uint32_t range = posComp->NodeCount(0);   // 0x140123070
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
-        InteractNodePosition(posComp, &destPos.v, 0, rnd, nullptr);
+        posComp->NodePosition(&destPos.v, 0, rnd, nullptr);
 
         // build the fetch path (branch 1): dest = source storage, src = trade-post building.
         ComponentEntity* destStorage = srcStorPrimary;                  // local_d8 = local_b8
@@ -398,13 +398,13 @@ int TradeWork::Execute(CitizenComponent** citizenRef, System::Time* /*context*/)
             Object::InternalPtr<InteractComponent>* parts = posComp->useLocations._data;
             int cn = posComp->useLocations._size;
             for (int k = 0; k < cn; k++) {
-                range += InteractNodeCount(parts[k].Get(), 0);   // 0x140123070
+                range += parts[k].Get()->NodeCount(0);   // 0x140123070
             }
         }
         System::Random* rng = gw ? gw->m_random : nullptr;
         uint32_t rnd = rng ? rng->Rand(static_cast<uint32_t>(range)) : 0;
         Vector3Slot srcPos2;                             // local_68
-        InteractNodePosition(posComp, &srcPos2.v, 0, rnd, nullptr);
+        posComp->NodePosition(&srcPos2.v, 0, rnd, nullptr);
 
         // build the fetch path (branch 2): dest = trade-post building, src = source storage.
         CitizenComponent* citizenVal = *citizenRef;                        // local_b0 = *param2

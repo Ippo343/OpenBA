@@ -81,7 +81,7 @@ BuildStructure::BuildStructure(ComponentEntity* const* entityIBP, bool altAnim)
     if (entityIBP) {
         // The site's InteractComponent (Work(entityIBP) stored *entityIBP in field_10)
         InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
-        int count = InteractNodeCount(posComp, 1);   // 0x140123070
+        int count = posComp->NodeCount(1);   // 0x140123070
         // FUN_14000a590(&_slots, count): resizes the {data,count,cap} array in place,
         // writing _slots._size = count. New bytes are uninitialised, so zero-fill below.
         Reimpl_Array_Resize_Byte(&_slots, count);
@@ -255,7 +255,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
     }
 
     // --- Phase 2: Check if we have positions left to build ---
-    int totalPositions = InteractNodeCount(posComp, 1);   // 0x140123070
+    int totalPositions = posComp->NodeCount(1);   // 0x140123070
     if (_citizens._count >= totalPositions) {
         return 1;
     }
@@ -342,7 +342,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
 
         // Get world position for this build point
         Vector3Slot candidatePos;
-        InteractNodePosition(posComp, &candidatePos.v, 1, chosenIndex, nullptr);   // 0x140122e20
+        posComp->NodePosition(&candidatePos.v, 1, chosenIndex, nullptr);   // 0x140122e20
 
         gridSize = map->size;
         int candidateCell = WorldToCell(gridSize, candidatePos.v.x, candidatePos.v.y);
@@ -354,7 +354,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
             if (CheckCellConnectivity(gridData, buildingCell, candidateCell)) {
                 // Found accessible point -- get exact position
                 Vector3Slot bestPos;
-                InteractNodePosition(posComp, &bestPos.v, 1, chosenIndex, nullptr);   // 0x140122e20
+                posComp->NodePosition(&bestPos.v, 1, chosenIndex, nullptr);   // 0x140122e20
 
                 gridSize = map->size;
                 int exactCell = WorldToCell(gridSize, bestPos.v.x, bestPos.v.y);
@@ -371,7 +371,7 @@ int BuildStructure::Execute(CitizenComponent** citizenPtr, System::Time* /*conte
                     if (posIdx == chosenIndex) continue;
 
                     Vector3Slot testPos;
-                    InteractNodePosition(posComp, &testPos.v, 1, posIdx, nullptr);   // 0x140122e20
+                    posComp->NodePosition(&testPos.v, 1, posIdx, nullptr);   // 0x140122e20
 
                     gridSize = map->size;
                     int testCell = WorldToCell(gridSize, testPos.v.x, testPos.v.y);

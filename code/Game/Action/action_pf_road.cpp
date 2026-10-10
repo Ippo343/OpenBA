@@ -479,8 +479,8 @@ void RegionGraph::MarkCellDirty(int x, int y) {
 // counts (0x140123070) and recurse into the owning one with (index - running count).
 // Otherwise resolve the node through the entity's ModelComponent transform: optionally
 // rotate the node's direction to get a heading, then transform the node's offset.
-Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* retVec3, int p3, int p4, float* p5) {
-    Description* buildRaw = self->_description;
+Math::Vector3* InteractComponent::NodePosition(Math::Vector3* retVec3, int p3, int p4, float* p5) const {
+    Description* buildRaw = _description;
 
     // B6 (14d G49): 0x140122e4f IsDerivedFrom(+0x18, cell 0x1401c7938), 0x140122e5f CMOVNZ to 0,
     // 0x140122e6e reads the node count through it with no test.
@@ -492,18 +492,18 @@ Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3
     int local_68 = nodes.count;
 
     if (local_68 <= p4) {
-        int childN = self->useLocations._size;
+        int childN = useLocations._size;
         int i = 0;
         if (0 < childN) {
             do {
-                int n = InteractNodeCount(self->useLocations[i].Get(), p3);   // 0x140123070
+                int n = useLocations[i].Get()->NodeCount(p3);   // 0x140123070
                 if (local_68 <= p4 && p4 < n + local_68) {
-                    InteractNodePosition(self->useLocations[i].Get(), retVec3, p3, p4 - local_68, p5);   // 0x140122e20
+                    useLocations[i].Get()->NodePosition(retVec3, p3, p4 - local_68, p5);   // 0x140122e20
                     return retVec3;
                 }
                 i++;
                 local_68 += n;
-            } while (i < self->useLocations._size);
+            } while (i < useLocations._size);
         }
         Math::Vector3 zero(Math::Scalar(0.0f));   // Math::Vector3::Vector3(ret,&scalar0)
         retVec3->x = zero.x;
@@ -515,7 +515,7 @@ Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3
     // 0x140122e8f FindComponent<ModelComponent> (0x140003f60); its transform is read at
     // 0x140122ecc.. / 0x140122f58.. with no test (B6 14d G49: the exact-type fallback scan and
     // the zero-vector return are gone).
-    ModelComponent* model = self->_entity->FindComponent<ModelComponent>();   // 0x140003f60
+    ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
 
     // The node (kind, index) — disasm-verified (0x140122ea2..0x140122f42): node stride
     // 0x18 = {offset.xyz @0x0, dir.xyz @0xc}. The heading branch rotates node.direction and
@@ -552,11 +552,11 @@ int PickReachableCell(const Component* target, uint32_t param_2, float* param_3)
 
     InteractComponent* interact = target->_entity->FindComponent<InteractComponent>();   // 0x140002ed0
 
-    uint32_t cnt = static_cast<uint32_t>(InteractNodeCount(interact, 0));   // 0x140123070
+    uint32_t cnt = static_cast<uint32_t>(interact->NodeCount(0));   // 0x140123070
     uint32_t rnd = world->m_random->Rand(static_cast<uint32_t>(cnt));
 
     Math::Vector3 pos;   // local_28/24/20
-    InteractNodePosition(interact, &pos, 0, static_cast<int>(rnd), nullptr);   // 0x140122e20
+    interact->NodePosition(&pos, 0, static_cast<int>(rnd), nullptr);   // 0x140122e20
     param_3[0] = pos.x;
     param_3[1] = pos.y;
     param_3[2] = pos.z;
@@ -597,15 +597,15 @@ int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
 
     bool handled = false;
     if (interact != nullptr) {
-        int n = InteractNodeCount(interact, 0);   // 0x140123070
+        int n = interact->NodeCount(0);   // 0x140123070
         if (0 < n) {
-            int n2 = InteractNodeCount(interact, 0);
+            int n2 = interact->NodeCount(0);
             if (1 < n2) {
-                uint32_t n3 = static_cast<uint32_t>(InteractNodeCount(interact, 0));
+                uint32_t n3 = static_cast<uint32_t>(interact->NodeCount(0));
                 world->m_random->Rand(static_cast<uint32_t>(n3)); // result discarded
             }
             Math::Vector3 pos;   // local_28/24/20
-            InteractNodePosition(interact, &pos, 0, 0, nullptr);   // 0x140122e20
+            interact->NodePosition(&pos, 0, 0, nullptr);   // 0x140122e20
             int w = world->m_game->size;
             int gx = static_cast<int>(pos.x + static_cast<float>(w >> 1));
             int gy = static_cast<int>(pos.y + static_cast<float>(w >> 1));

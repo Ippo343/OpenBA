@@ -250,11 +250,11 @@ LAB_14012d8ce:;
         iVar15 = -1;
     } else {
         int iVar6 = 0x7fffffff;
-        int iVar4 = InteractNodeCount(interact, 0);   // 0x140123070
+        int iVar4 = interact->NodeCount(0);   // 0x140123070
         iVar15 = 0;
         if (0 < iVar4) {
             do {
-                InteractNodePosition(interact, &posVec, 0, iVar15, nullptr);   // 0x140122e20
+                interact->NodePosition(&posVec, 0, iVar15, nullptr);   // 0x140122e20
                 int iVar13 = map->size;
                 int iVar4b = (int)(posVec.x + (float)(iVar13 >> 1));
                 int iVar5 = (int)(posVec.y + (float)(iVar13 >> 1));
@@ -284,7 +284,7 @@ LAB_14012d8ce:;
                 }
 LAB_14012d744:
                 iVar15 = iVar15 + 1;
-                iVar4 = InteractNodeCount(interact, 0);   // 0x140123070
+                iVar4 = interact->NodeCount(0);   // 0x140123070
             } while (iVar15 < iVar4);
         }
         iVar15 = -1;

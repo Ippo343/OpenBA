@@ -110,9 +110,9 @@ bool WorkImpl_WalkablePos_122be0(InteractComponent* interact, const InteractDesc
 // IsDerivedFrom DAT_1401c7938), runs WalkablePos_122be0 on node array `param_2`
 // (0 use, 1 build, 2 create: desc + 0x28 + param_2*0x10), then recurses into each
 // part (useLocations +0x28, count +0x30). Returns the OR of all sub-results.
-uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int param_2,
+uint8_t InteractComponent::FindWalkablePosRecursive(int param_2,
                                              float* param_3, float* param_4, int* param_5) {
-    Description* buildRaw = interact->_description;
+    Description* buildRaw = _description;
     InteractDescription* build = nullptr;
     if (Object::IsDerivedFromNullSafe(buildRaw, InteractDescription::TypeId()))
         build = static_cast<InteractDescription*>(buildRaw);
@@ -120,12 +120,12 @@ uint8_t WorkImpl_WalkablePosRecursive_122b00(InteractComponent* interact, int pa
     // The three node arrays are consecutive (+0x28 / +0x38 / +0x48): retail indexes them.
     const InteractDescription::NodeArray* nodes = &build->_useNodes + param_2;
     uint8_t result = WorkImpl_WalkablePos_122be0(
-        interact, nodes, param_3, param_4, param_5) ? 1 : 0;
+        this, nodes, param_3, param_4, param_5) ? 1 : 0;
 
-    int childCount = interact->useLocations._size;
-    Object::InternalPtr<InteractComponent>* childArr = interact->useLocations._data;
+    int childCount = useLocations._size;
+    Object::InternalPtr<InteractComponent>* childArr = useLocations._data;
     for (int i = 0; i < childCount; i++) {
-        uint8_t sub = WorkImpl_WalkablePosRecursive_122b00(childArr[i].Get(),
+        uint8_t sub = childArr[i].Get()->FindWalkablePosRecursive(
                                                            param_2, param_3, param_4, param_5);
         result = static_cast<uint8_t>(result | sub);
     }

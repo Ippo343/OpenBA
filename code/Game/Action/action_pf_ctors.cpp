@@ -140,8 +140,8 @@ void Pf_SetFlagRefreshUpdate_107260(Component* self) {
 // +0x28/+0x38/+0x48, the count read at +0x30 + kind * 0x10) plus, recursively, every
 // sub-location's count.
 // ============================================================
-int InteractNodeCount(const InteractComponent* self, int kind) {
-    Description* desc = self->_description;
+int InteractComponent::NodeCount(int kind) const {
+    Description* desc = _description;
     const InteractDescription* interact =
         ::Object::IsDerivedFromNullSafe(desc, InteractDescription::TypeId())
             ? static_cast<const InteractDescription*>(desc) : nullptr;
@@ -154,8 +154,8 @@ int InteractNodeCount(const InteractComponent* self, int kind) {
     // 0x1401230ad MOV EBP,[R8+RAX*8]); KEPT under D4(a) because the comment names the
     // BANISHED_FORCE_WORK harness route.
     int total = interact ? (&interact->_useNodes)[kind].count : 0;
-    for (int i = 0; i < self->useLocations._size; ++i) {
-        total = total + InteractNodeCount(self->useLocations[i].Get(), kind);
+    for (int i = 0; i < useLocations._size; ++i) {
+        total = total + useLocations[i].Get()->NodeCount(kind);
     }
     return total;
 }
