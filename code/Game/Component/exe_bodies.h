@@ -242,7 +242,6 @@ extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::S
 
 // ---- workplacecomponent.cpp
 class WorkPlaceComponent;
-void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting);  // 0x14012fc00 B4 FORWARD -> WorkPlaceComponent::SetAccepting (buildui.cpp takes its address) B8: stays free -- read, not moved: nothing calls it; its only use is `&WorkPlaceComponent_SetAccepting` printed by a log line (Dialog/buildui.cpp:485), and a member has no plain address (D3)
 
 // ---- zonecomponent.cpp
 // B.4 COMP-f: 0x140088e20 is CitizenBehavior::AddZoneEntity.
