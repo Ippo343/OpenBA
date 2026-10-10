@@ -37,6 +37,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/exe_bodies.h"
+#include "Player/exe_bodies.h"   // PlayerPath_CharComp_f5d0 (0x14009f5d0), the spawn placement test
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -203,16 +204,18 @@ void NaturalResourceComponent::ResetGrowthState() {
 void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     GameUpdateLoop* world = GameUpdateLoop::_singleton;
     if (!world) return;
-    const Map* map = world->m_game;   // +0xF8
+    Map* map = world->m_game;   // +0xF8
     System::Random* rng = world->m_random;
     // world flag bit 10 must be clear
     if ((world->m_gameFlags >> 10 & 1) != 0) return;
 
-    float roll = rng->RandFloat();
-    const float uvScale = RdataF(kRdata_140172140);   // 0x140172140
+    float roll = rng->RandFloat();   // 0x14011fbff CALL [0x1401512f8]
+    // 0x14011fc05..0x14011fc1c: CVTDQ2PS [cfg+0x48]; MOVSS XMM2,[0x14017214c] (= 1.0f); DIVSS;
+    // COMISS roll,XMM2; JA skip. (Until 2026-10-09 the tree divided 0x140172140 = 0.98f, the
+    // UV scale retail passes to the placement test below -- the two constants were confused.)
     int spawnChanceDenom = cfg->_i48;
     if (spawnChanceDenom == 0) return;
-    if (roll > uvScale / (float)spawnChanceDenom) return;
+    if (roll > kRdata_14017214c / (float)spawnChanceDenom) return;
 
     MapComponent* res = _entity->FindComponent<MapComponent>();   // 0x140004680
     int16_t baseX = static_cast<int16_t>(res->tileX0);
@@ -223,13 +226,13 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     int y = (int)baseY + rng->RandTol(static_cast<int32_t>(tol));
     if (!(x >= 0 && y >= 0 && x < map->size && y < map->size)) return;
 
-    // PORT GAP 0x14009f5d0 CharacterComponent_impl_f5d0: not ported here; retail calls it
-    // here, (mapW, x, y, 4, (int)[0x140172140], (int)[0x140172248], 0.0f, 0, 0, 0), as the
-    // tile placement test. This file's pointer to it was never filled (no resolve), so
-    // the tree has always taken the not-placed arm: the sub-resource is not spawned.
-    // (Its port PlayerPath_CharComp_f5d0 exists; wiring it is a behaviour change.)
-    const bool placed = false;
-    if (!placed) return;
+    // 0x14011fc99..0x14011fce6: the single-cell placement test 0x14009f5d0 with
+    // (map, x, y, 4, [0x140172140] = 0.98f, [0x140172248] = 1000.0f, 0.0f, 0, 0, nullptr);
+    // TEST AL,AL; JZ skip. WIRED 2026-10-09 (USER DECISION, B7 close -- the tree's pointer to it
+    // was never filled, so until then no sub-resource ever spawned: the not-placed arm was taken
+    // on every roll).
+    if (!PlayerPath_CharComp_f5d0(map, x, y, 4, RdataF(kRdata_140172140),
+                                  RdataF(kRdata_140172248), 0.0f, '\0', '\0', nullptr)) return;
 
     int64_t valid = WorkLeaf_FootprintOwnerCheck_120c30(
         cfg, x, y);   // 0x140120c30
