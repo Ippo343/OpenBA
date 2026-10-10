@@ -114,8 +114,9 @@ void FireComponent::Update(const System::Time* time) {
         // Retail: FUN_1400a9290(&accum, (float*)(desc + 0x44), gw->rng) — called
         // UNCONDITIONALLY with the description pointer, which retail always has.
         // No `if (desc)` here: that guard is what used to delete this roll.
+        // 0x140048ff0-0x140049008: IsDerivedFrom on [this+0x18] (no null test), CMOVNZ.
         Description* obj = _description;
-        FireDescription* desc = (obj && ::Object::IsDerivedFromOrTrust(obj, FireDescription::TypeId()))
+        FireDescription* desc = obj->IsDerivedFrom(FireDescription::TypeId())
                    ? static_cast<FireDescription*>(obj) : nullptr;
         System::Random* rng = gw->m_random;
         float* pair = desc->igniteChance;
