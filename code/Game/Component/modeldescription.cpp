@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <new>
 #include "graphics/AnimationGroup.h"   // B8 RT2: ::Object::SerializeExternal<Graphics::AnimationGroup> (the downcast needs it complete)
+#include "graphics/GraphicsMesh.h"   // B8 RT2: ::Object::SerializeExternalArray<Graphics::GraphicsMesh> (the downcast needs it complete)
 
 namespace {
 // {data, count, cap}: set count = cap = n and allocate n elements (8-aligned).
@@ -117,7 +118,7 @@ bool ModelDescription::Serialize(IO::Stream& stream) {
             for (int j = 0; j < matCount; ++j) e->meshes[j] = nullptr;
         }
         // serialize the mesh array of External* (elem+8 base)
-        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, matCount, e->meshes);
+        ::Object::SerializeExternalArray<Graphics::GraphicsMesh>(ser, matCount, e->meshes);
     }
     ser.Serialize(_defaultMeshGroup, nullptr);
     ser.Serialize(_defaultMeshIndex, nullptr);

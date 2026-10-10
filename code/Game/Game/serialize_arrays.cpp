@@ -408,13 +408,6 @@ void ArraySerializeExternalGeneric(IO::Serializer* serializer, int count, void* 
 
 } // namespace
 
-// #7 GraphicsMesh exref array (typeInfo @ slot 0x140151f20)
-extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
-    IO::Serializer* serializer, int count, void* arrayBase) {
-    ArraySerializeExternalGeneric(serializer, count, arrayBase,
-                                  Graphics::GraphicsMesh::TypeId(), "Graphics::GraphicsMesh");
-}
-
 // B7 LX2 (row 942's gate): 0x140007580 -- the EdgeMesh exref array (typeInfo import
 // slot 0x140151330, ?_typeInfo@EdgeMesh@Graphics@@), HighlightDescription's group refs
 // (0x14004c9d0 calls it at 0x14004ca7d).

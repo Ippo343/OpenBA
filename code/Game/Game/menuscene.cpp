@@ -298,7 +298,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
         Reimpl_Array_Resize_Stride08(&meshResources, count48);
     }
     if (count48 > 0) {
-        Reimpl_Array_Serialize_External_GraphicsMesh(&outer, count48, meshResources.GetData());
+        ::Object::SerializeExternalArray<Graphics::GraphicsMesh>(outer, count48, meshResources.GetData());
     }
 
     RZ_CHECK("Slot5 after arr40 (GraphicsMesh exrefs)");

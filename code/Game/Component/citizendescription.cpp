@@ -46,6 +46,7 @@
 #include "system/MemoryAllocator.h"   // B3R: the allocator doors
 #include "Game/exe_bodies.h"
 #include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
+#include "graphics/GraphicsMesh.h"   // B8 RT2: ::Object::SerializeExternalArray<Graphics::GraphicsMesh> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -176,7 +177,7 @@ bool CitizenDescription::Serialize(IO::Stream& stream) {
         // 0x14001bcc0 takes three arguments: its prologue spills R9 to the home slot
         // [RBP+0x58], which the body only reuses as a local after writing it, so the
         // old door's 4th nullptr was never read.
-        Reimpl_Array_Serialize_External_GraphicsMesh(&ser, count, _refs._data);
+        ::Object::SerializeExternalArray<Graphics::GraphicsMesh>(ser, count, _refs._data);
     }
     ser.Serialize(_f114, nullptr);
     ser.Serialize(maxEducation, nullptr);
