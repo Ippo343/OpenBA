@@ -256,7 +256,7 @@ void DebugUI::OnWeatherComboChanged() {
 
                 // Initialize with descriptor data
                 Weather* descPtr = descArray[i].weather;
-                WeatherParticle_Config(static_cast<WeatherParticleGeometry*>(geometryArray[i]), descPtr);   // 0x1400d3f80
+                static_cast<WeatherParticleGeometry*>(geometryArray[i])->Configure(descPtr);   // 0x1400d3f80
 
                 // Add to graphics scene
                 Graphics::Scene* graphicsScene = world->m_graphicsScene;

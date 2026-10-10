@@ -234,7 +234,6 @@ class MusicPlayer;   // Game/MusicPlayer.h
 extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
 class WeatherParticleGeometry;
 class Weather;
-extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 // 0x1400198a0 Reimpl_WeatherArray_Resize: declared in Component/EnvironmentDescription.h (it takes the typed array).
 
 // ---- weather_sim.cpp

@@ -252,12 +252,6 @@ void WeatherParticleGeometry::Configure(Weather* d) {
     _materialTypeFlags = 1u << (layer & 0x1f);   // Graphics::Geometry +0x30
 }
 
-// The C entry debugui.cpp calls. The null test is the old body's.
-extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor) {
-    if (!geo || !descriptor) return;
-    geo->Configure(descriptor);
-}
-
 // ============================================================
 // Update (vtable +0x08) — port of FUN_1400d2e60(geo, const Time& dt).
 // Integrates particle positions and wraps them into the [-half, half] box,
