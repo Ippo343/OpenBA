@@ -55,6 +55,13 @@
 // Moving it past this function is what lets the next attempt name the NEXT
 // wall. That is the whole claim.
 //
+// Phase D.4 SETTINGS E.5 (the user's decision, ENDGAME §E item 2): the
+// launcher dialog is NOT ported. Its two check boxes are the settings.cfg
+// entries `LauncherDisableMods` / `LauncherResetSettings`, read and cleared
+// (one-shot) on every boot and ORed where retail ORs the two bytes; Half B
+// shows nothing and proceeds as Play. The refusal function is deleted. See
+// the block above Half A in PlatformConfigure.
+//
 // ---------------------------------------------------------------------------
 // 3. TWO THINGS THE DECOMPILER GETS WRONG HERE
 // ---------------------------------------------------------------------------
@@ -97,7 +104,6 @@
 
 // The platform seam. src/platform/win/engine_platform_win.cpp.
 bool RtEnginePlatformShiftHeld();
-long long RtEnginePlatformShowLauncherDialog();
 
 // ENDGAME B.3.7: `Engine::Engine` is the real class; a global
 // `using RtEngine::Engine;` is ill-formed next to `namespace Engine`.
@@ -257,7 +263,9 @@ void ResetConfigurations(EngineT* self) {
 unsigned g_calls        = 0;
 unsigned g_deconfigure  = 0;   // configure == false
 unsigned g_skippedDlg   = 0;   // Half A, the branch an unattended boot takes
-unsigned g_shownDlg     = 0;   // Half B
+unsigned g_shownDlg     = 0;   // Half B (no dialog is shown: SETTINGS E.5)
+unsigned g_launcherNoMods = 0; // LauncherDisableMods read true (one-shot)
+unsigned g_launcherReset  = 0; // LauncherResetSettings read true (one-shot)
 
 }  // namespace
 
@@ -292,12 +300,42 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
         skipDialog = !forced;
     }
 
+    // ---- NOT RETAIL: the launcher's two check boxes as settings.cfg entries
+    // (Phase D.4 SETTINGS E.5; ENDGAME §E item 2, known_port_issues row 34).
+    // Retail's launcher dialog (DialogBoxParamW, template 0x66, proc
+    // 0x1800a1ae0) wrote two bytes its caller ORs with `-nomods` / `-reset`
+    // below. The dialog is replaced by two entries a player edits in the file:
+    // `LauncherDisableMods` / `LauncherResetSettings` (Persistence keys
+    // "Launcher"+"DisableMods" / "Launcher"+"ResetSettings", bool, absent =
+    // false). The user's answers (D4_RULES §3 Q1): ONE-SHOT, so each is set
+    // back to false here and the WriteSettings each half makes below persists
+    // the clear (a persistent ResetSettings=true would wipe the settings on
+    // every boot); honoured on EVERY boot, Half A included, because the file
+    // is now the launcher and Half A is the ordinary boot.
+    bool launcherNoMods = false;
+    bool launcherReset  = false;
+    _persistence->Get("Launcher", "DisableMods",   launcherNoMods);   // 0x1800b8290
+    _persistence->Get("Launcher", "ResetSettings", launcherReset);
+    _persistence->Set("Launcher", "DisableMods",   false);            // 0x1800b8380
+    _persistence->Set("Launcher", "ResetSettings", false);
+    if (launcherNoMods) ++g_launcherNoMods;
+    if (launcherReset)  ++g_launcherReset;
+
     if (skipDialog) {
         // 0x1800a1787: arm the bit, persist, and tell the caller to proceed.
         ++g_skippedDlg;
         _videoConfiguration->settingsValid = 1;
         _videoConfiguration->Save();
         _persistence->WriteSettings();                        // 0x1800b88e0
+
+        // NOT RETAIL: retail returns here and never reads the check boxes or
+        // the command line on this half. The two entries are honoured anyway
+        // (Q1, above), in Half B's order; `-nomods` / `-reset` stay
+        // Half-B-only, as in retail.
+        if (launcherNoMods)
+            DisableAllModifications();
+        if (launcherReset)
+            ResetConfigurations(this);
         return true;
     }
 
@@ -310,20 +348,28 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
         device->ValidateConfiguration();
     }
 
-    const long long result = RtEnginePlatformShowLauncherDialog();
+    // 0x1800a17d4: DialogBoxParamW(hinst 0x1801fc680, MAKEINTRESOURCE(0x66),
+    // NULL, 0x1800a1ae0, 0). NOT RETAIL: no dialog is shown (the entries
+    // above replace it); the result is IDOK, Play.
+    const long long result = 1;
 
     _videoConfiguration->settingsValid = 1;
     _videoConfiguration->Save();
     _persistence->WriteSettings();                            // 0x1800b88e0
 
-    // 0x1800a17ff / 0x1800a18bf. Retail ORs the launcher dialog's checkbox
-    // byte (0x1801fc699 / 0x1801fc698) before the command line; with no
-    // launcher dialog in the standalone that byte is always 0, so only the
-    // command line decides.
-    if (CommandLineHasKey(_configuration, "nomods"))
+    // 0x1800a17ff / 0x1800a18bf. Retail ORs the launcher dialog's check-box
+    // byte before the command line: 0x1801fc699 ("disable mods") at
+    // 0x1800a17ff, 0x1801fc698 ("reset settings") at 0x1800a18bf. The two
+    // entries take the bytes' places. DOUBT, stated: that byte-to-option
+    // mapping is this file's own reading (the banner §1 and this comment
+    // agree, and docs/reference/engine_architecture.md does not record it);
+    // SETTINGS-2 could not re-read 0x1800a17ff / 0x1800a18bf in the retail
+    // disassembly. The ORDER below is retail's either way: the mods test
+    // first, then reset.
+    if (launcherNoMods || CommandLineHasKey(_configuration, "nomods"))
         DisableAllModifications();
 
-    if (CommandLineHasKey(_configuration, "reset"))
+    if (launcherReset || CommandLineHasKey(_configuration, "reset"))
         ResetConfigurations(this);
 
     return result == 1;   // 0x1800a1a97: IDOK from the launcher template
@@ -331,6 +377,7 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
 
 extern "C" void RtEnginePlatformSummary() {
     printf("[RtPort]   Engine::PlatformConfigure: calls=%u deconfigure=%u "
-           "dialog-skipped=%u dialog-shown=%u\n",
-           g_calls, g_deconfigure, g_skippedDlg, g_shownDlg);
+           "half-a=%u half-b=%u launcher-nomods=%u launcher-reset=%u\n",
+           g_calls, g_deconfigure, g_skippedDlg, g_shownDlg,
+           g_launcherNoMods, g_launcherReset);
 }

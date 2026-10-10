@@ -170,6 +170,13 @@ static void DumpVideoSettings(const char* tag) {
 // repair their settings. That is the whole mechanism, and the standalone now
 // participates in it unmodified.
 //
+// Phase D.4 SETTINGS E.5: this exe has NO launcher dialog. Half B (the bit
+// set) validates the configuration and proceeds as Play; the dialog's two
+// check boxes are the settings.cfg entries LauncherDisableMods /
+// LauncherResetSettings. Nothing can block on a modal any more, so the
+// clearing below now only keeps an unattended run on Half A, retail's
+// ordinary boot path, rather than Half B's ValidateConfiguration.
+//
 // The one case it does not survive is ours: during development we kill the
 // process constantly, which looks exactly like a crash and leaves the bit set.
 // An automated run (make sa-run / sa-run-menu) would then block forever on a
@@ -194,8 +201,9 @@ static void DumpVideoSettings(const char* tag) {
 static void HarnessGuardUnattendedBoot() {
     const bool unattended = Opt().unattendedBoot;
     if (!unattended) {
-        printf("[Standalone] Attended run — launcher dialog left to retail rules "
-               "(it appears iff the last run did not finish Engine::Startup)\n");
+        printf("[Standalone] Attended run — launcher half left to retail rules "
+               "(Half B iff the last run did not finish Engine::Startup; no dialog, "
+               "settings.cfg's Launcher* entries replace it)\n");
     }
 
     // Phase D.4 SETTINGS E.4: the store is <Documents>\Banished\settings.cfg
@@ -1233,10 +1241,10 @@ static bool Init() {
     //     Video::Configuration::Startup.
     DumpVideoSettings("AT-BOOT");
     HarnessGuardUnattendedBoot();
-    // Start publishing boot state BEFORE Engine::Startup: the launcher dialog the guard
-    // above tries to suppress opens inside Startup, and if it does appear the process
-    // stays alive pumping messages while the log goes silent -- which reads exactly like
-    // a slow load. See boot_state_watchdog.cpp.
+    // Start publishing boot state BEFORE Engine::Startup: a modal dialog inside Startup
+    // (an error box; the launcher dialog itself is gone since SETTINGS E.5) keeps the
+    // process alive pumping messages while the log goes silent -- which reads exactly
+    // like a slow load. See boot_state_watchdog.cpp.
     BootState::Start();
     StallDebug::Mark("settings probe + harness guard");
 
