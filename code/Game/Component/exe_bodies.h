@@ -16,7 +16,7 @@
 // Must compile when included first in an otherwise empty translation unit.
 
 #include <cstdint>
-#include "Entity/CitizenBehavior.h"   // CitizenIbpList<T> (BuildComponent_FindInQueue)
+#include "Entity/CitizenBehavior.h"   // CitizenIbpList<T>, and Collection.h for the declarations below
 
 class CitizenComponent;
 
@@ -36,10 +36,10 @@ template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCoun
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
 
 // ---- buildcomponent.cpp
-int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550  // B8: stays free -- retail's is Collection::Array<InternalPtr<T>>'s index-of (0x140017550: RCX the array, [RCX+8] the count, RDX the key), a member of RT's Array template
+// 0x140017550 is Collection::Array<InternalPtr<T>>::Find (B9 RT).
 
 // ---- cemeterycomponent.cpp
-extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0  // B8: stays free -- the erased Array<T*> remove-by-value (0x140002cc0): retail's is Collection::Array<T*>'s member, RT's template (it has no Remove(value) yet)
+// 0x140002cc0 is Collection::Array<InternalPtr<T>>::Remove (B9 RT).
 
 // ---- charactercomponent.cpp
 class Action;
@@ -124,7 +124,7 @@ namespace Math { class Vector3; }
 // ---- cropfieldcomponent.cpp
 struct CropSlot;
 namespace IO { class Serializer; }
-void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B8: stays free -- not an Array<T> member (B8 RT2 reading): Collection::Array has no Serialize by design (Collection.h, hazard 6) and IO::Serializer declares only the scalar-array overloads, so there is no instantiation to move it onto; retail 0x1400336c0 is `TEST EDX,EDX; JLE` then per 0x20 slot int, int, InternalBasePtr + IsDerivedFrom(ComponentEntity) when non-null, InternalBasePtr + IsDerivedFrom(NaturalResourceComponent) when non-null, bool: the body as written
+void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B9: stays free -- one template in retail, not an Array<T> member (B9 RT reading): 0x1400336c0, 0x14001bbf0 and 0x140021ba0 are one element loop `(RCX serializer, EDX count, R8 data)`, `TEST EDX,EDX / JLE`, then per element the element's own serialize inlined, R9 never set -- the same register shape as the DLL's scalar array exports `Serializer::Serialize(int n, T* d, const char*)` (0x1400c45d0: EDX 5, R8 data, R9 0), and MenuScene_Slot5 calls three more instantiations (0x14001bbf0 / 0x14001bcc0 / 0x14001bff0) after an open-coded count + SetSize; R8 is the data pointer (`MOV R8,[RDI+0x30]`), never the Array header, so Collection.h hazard 6 stands; the member owed is a template `IO::Serializer::Serialize<T>(int, T*, const char*)` (runtime/types/io/Serializer.h, not RT's file) with this body as one instantiation; here T = CropSlot (two Serialize(int&), two InternalPtr + IsDerivedFrom filters 0x1401c5d70 / 0x1401c7b30, Serialize(bool&) 0x140152a58) (B9 RT)
 
 // ---- cropfieldcomponent_states.cpp
 class CropFieldComponent;

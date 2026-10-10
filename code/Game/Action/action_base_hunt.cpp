@@ -49,43 +49,9 @@ bool HuntComponent::IsReady() const {
     return time._ticks <= huntProgress._ticks;
 }
 
-// ============================================================
-// FUN_140003110 (0x140003110) — Array<qword>::SetSize(n, fill).
-// ============================================================
-// Grows the array to newCount elements (capacity grows: if first growth beyond a non-zero
-// count by exactly 1, cap *= 3), then fills [start..newCount) — the rows below the old count
-// are copied from the OLD buffer; new rows take *fill. Frees the old buffer if reallocated.
-void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill) {
-    int oldCount = arr->size;
-    if (newCount == oldCount) return;
-
-    void** oldBase = arr->data;
-    arr->size = newCount;
-    if (arr->capacity < newCount) {
-        arr->capacity = newCount;
-        if (newCount == oldCount + 1 && oldCount != 0)
-            arr->capacity = newCount * 3;
-        arr->data = static_cast<void**>(System::MemoryAllocator::MemAlloc(
-                       static_cast<uint64_t>(static_cast<int64_t>(arr->capacity)) << 3, 8));
-    }
-
-    int startIdx = (oldBase == arr->data) ? oldCount : 0;
-    for (int64_t i = startIdx; i < newCount; i++) {
-        void** dst = arr->data + i;
-        if (dst) {
-            *dst = nullptr;
-            void* srcVal;
-            if (i < oldCount)
-                srcVal = oldBase[i];
-            else
-                srcVal = *fill;
-            *dst = srcVal;
-        }
-    }
-
-    if (oldBase != arr->data)
-        System::MemoryAllocator::MemFree(oldBase);
-}
+// 0x140003110 is Collection::Array<InternalPtr<T>>::SetSize(n, fill) (kSpec_PtrZero:
+// stride 8, align 8, the zero-then-copy element store): its callers call the member
+// (B9 RT; it was the hand port QwordArraySetSize here).
 
 // ============================================================
 // FUN_1400c2ea0 (0x1400c2ea0) — mark an entity (and its removable components) for removal.

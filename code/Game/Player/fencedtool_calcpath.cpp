@@ -131,7 +131,7 @@ void CellWorldPos(Map* mapGrid, int col, int row, float out[3]) {
 // Append the entity to the master's MultiObject list (0x140003110 on +0x48).
 void AppendChild(MultiObjectComponent* multi, ComponentEntity* entity) {
     ComponentEntity* val = entity;
-    QwordArraySetSize(&multi->children, multi->children._size + 1, &val);
+    multi->children.SetSizeFill(multi->children._size + 1, &val);   // 0x140003110
 }
 
 // Register the entity with the EntityList under its template's category (+0x20).

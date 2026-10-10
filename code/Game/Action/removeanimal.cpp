@@ -107,8 +107,7 @@ int  RemoveAnimal::AbstractImpl(ActionStack* actionStack) {
             localRef->MarkForRemoval();   // 0x1400c2ea0
 
             // Append to EntityList::removalList (+0xD0) through 0x140003110 (Array SetSize(n, fill))
-            QwordArraySetSize(&cleanupMgr->removalList,   // 0x140003110
-                                          cleanupMgr->removalList._size + 1, &localRef);
+            cleanupMgr->removalList.SetSize(cleanupMgr->removalList._size + 1, localRef);   // 0x140003110
         }
     }
     return 0;

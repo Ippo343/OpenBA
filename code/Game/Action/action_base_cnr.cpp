@@ -311,8 +311,7 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     if (parent != nullptr) {
         if (((parent->_entityFlags >> 10) & 1) == 0) {
             parent->MarkForRemoval();   // 0x1400c2ea0
-            QwordArraySetSize(&entityList->removalList,   // 0x140003110
-                                          entityList->removalList._size + 1, &parent);
+            entityList->removalList.SetSize(entityList->removalList._size + 1, parent);   // 0x140003110
         }
     }
 

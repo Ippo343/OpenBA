@@ -60,7 +60,7 @@ extern "C" void  TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const 
 
 // ---- Exe helpers, called directly --------------------------------------------------
 // FUN_140004740 InteractComponent_FindWorkplaceComponent(entity, retIBP) -> retIBP
-// BuildComponent_helper_7550 == 0x140017550 == BuildComponent_FindInQueue(arrayBase, ibp)
+// BuildComponent_helper_7550 == 0x140017550 == Collection::Array<InternalPtr<T>>::Find(ibp) (B9 RT)
 // FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised into
 // the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 // FUN_140003050 WorkBase_FindComponent_3050(entity, retIBP) -> WorkComponent (0x1401c8070)
@@ -249,7 +249,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
         townMgr = GameUpdateLoop::_singleton->m_citizenList;
     Object::InternalPtr<BuildComponent> siteIbp(this);
     if (townMgr) {
-        int idx = BuildComponent_FindInQueue(&townMgr->buildComponents, &siteIbp);
+        int idx = townMgr->buildComponents.Find(siteIbp);   // 0x140017550
         if (idx < 0) {
             // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             int newCount = townMgr->buildComponents._size + 1;

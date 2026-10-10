@@ -109,7 +109,7 @@ namespace {
 // Layer 2 (merchant spawn / teardown) leaves:
 //   0x1400c3720 ComponentEntity_CtorFromDescription  0x1400c48a0 EntityList_RegisterEntity_Impl
 //   0x14000eb20 FindComponent<BoatComponent>         0x1400456e0 BoatComponent::SetDestination
-//   0x1400a9660 StateMachine::Tick                   0x140002cc0 CemeteryListErase_Reimpl
+//   0x1400a9660 StateMachine::Tick                   0x140002cc0 Array<T>::Remove
 
 // The TradeDescription off +0x18, cast exactly as retail does it.
 // The deref of the result is left UNGUARDED below, as retail leaves it: retail
@@ -439,8 +439,7 @@ char TradeComponent::Teardown() {
     GameUpdateLoop* gw = GameUpdateLoop::_singleton;
     if (gw) {
         // The town manager's trading-post list at +0x30.
-        CemeteryListErase_Reimpl(&gw->m_citizenList->field_0x30._data,
-                    &entityIBP);
+        gw->m_citizenList->field_0x30.Remove(entityIBP);
     }
 
     if (merchant.Get() != nullptr) {

@@ -491,12 +491,12 @@ LAB_140025afa:
 // ===========================================================================
 
 // 0x140025b30 — PathPairs_Clear: reset the pairs scratch array (pg+0x00 header
-// {data@+0, count@+8, capacity@+0xC}) count to 0. Ghidra dropped the second
-// parameter (newCount, EDX); both live callers (ProcessPaths @1400d70aa,
-// BuildPathGraph @1400d7266) pass newCount==0, for which the faithful behavior is
-// a single count reset — capacity (>=0) is never < newCount(0), so there is no
-// realloc/copy/free and the decompiled `< 0` growth loops are pure signedness
-// artifacts of the lost argument (intentionally NOT transcribed).
+// {data@+0, count@+8, capacity@+0xC}) count to 0. B9 RT reading: retail is
+// Array<PathCellPair>::SetSize(0) CONSTANT-FOLDED, one argument (0x140025b3a
+// MOVSXD RBP,[RCX+8] / TEST EBP,EBP / JZ; MOV [RCX+8],EDI with EDI 0) -- no second
+// parameter was dropped. Capacity (>=0) is never < 0, so the grow arm, the -1 fill
+// loop (it runs while the index is negative) and the free are dead: the whole
+// effect is the count reset (ProcessPaths @1400d70aa, BuildPathGraph @1400d7266).
 extern "C" void PathPairs_Clear_25b30(PathGraph* pg)
 {
     pg->m_pairCount = 0;

@@ -21,11 +21,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Entity/CitizenBehavior.h"
 
-// FUN_140002cc0 -- ERASE-by-value from an InternalBasePtr array {ptr@+0, count@+8}.
-// (The legacy name said "push"; the body at 0x140002cc0 scans for a matching
-// resolved pointer, shifts the tail down and decrements the count -- the 1:1 port
-// is cemeterycomponent.cpp's CemeteryListErase_Reimpl. It is the UNregister.)
-extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);   // 0x140002cc0
+// FUN_140002cc0 -- ERASE-by-value from an InternalBasePtr array {ptr@+0, count@+8}:
+// Collection::Array<InternalPtr<T>>::Remove (Collection.h; B9 RT). It is the UNregister.
 
 // FUN_140003110 was Collection::Array<void*>::SetSize(n, fill) monomorphised
 // into the exe (ENDGAME B.3.2 step 2) — converted at its call site below.
@@ -173,7 +170,7 @@ void HealerComponent::OnRemove() {
     if (GameUpdateLoop::_singleton != nullptr) {
         CitizenBehavior* town = TownManager();
         if (town)
-            CemeteryListErase_Reimpl(&town->healers._data, &self);   // 0x140002cc0
+            town->healers.Remove(self);   // 0x140002cc0
     }
 }
 

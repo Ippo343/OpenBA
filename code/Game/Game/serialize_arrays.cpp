@@ -271,7 +271,8 @@ static_assert(sizeof(SpawnDescription::Entry) == sizeof(SpawnEntry), "the row's 
 // the realloc path, which is why stride-8 got its own body. Both now run
 // SetSizeCore, whose `init` arm is unconditional for every slot >= oldCount.)
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
-    if (!arrayHeader) return;
+    // 0x140001bbf: MOVSXD RBP,dword ptr [RCX + 0x8] is the first read -- no test of
+    // RCX; every caller hands the address of a member array (B9 RT).
     // The erased resize core (ruled elem_stride, S4): Geometry+0x210 and friends are still raw headers.
     reinterpret_cast<Ptr8ZeroArray*>(arrayHeader)->SetSize(newCount);   // LEFT: erased core, a FLOOR ruling candidate (B4 Z LAST CODE): eight holders of five element types in two header types reach 0x140001bb0 (Collection::Array<T*>: MenuScene +0x40/+0x60, Tutorial steps, TutorialStep's three ExternalPtr arrays; RawArray: WorldGeometry::_batchMaterials, the +0x1E0 inner Vector2 outlines; AmbientEmitterDescription +0x28 raw triple); Array<T*>'s own SetSize leaves the tail unzeroed (trait row), so each typed wrapper would carry this same header cast  // CAST-OK: elem_stride (S4 ruling)
 }
