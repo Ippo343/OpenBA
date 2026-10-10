@@ -15,7 +15,7 @@
 //     [0] 0x1400373c0 scalar deleting dtor   [1]/[2] TypeName/Type
 //     [3] 0x140129330 Persist                [4] 0x1401292c0 Startup (Ghidra "Serialize")
 //     [6] 0x1401291d0 OnAdded (Ghidra "Draw", posts the Pickup work)
-//     [9] 0x140129130 Update (expiry timer) PORT GAP
+//     [9] 0x140129130 Update (expiry timer)
 //     every other slot = Component's
 // ============================================================================
 
@@ -38,7 +38,7 @@ public:
     void Persist(IO::Stream& stream) override;                          // [3] 0x140129330
     void Startup() override;                                      // [4] 0x1401292c0
     void OnAdded() override;                                      // [6] 0x1401291d0
-    void Update(const System::Time* time) override;                             // [9] 0x140129130 PORT GAP
+    void Update(const System::Time* time) override;                             // [9] 0x140129130
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     // Persist 0x140129330: Serialize(int&) +0x28, System::Time::Serialize +0x38, then

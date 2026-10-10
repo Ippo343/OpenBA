@@ -29,7 +29,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
-| `DecalComponent_Serialize` | 9 | 0x14011b7d0 | 0x14011b7d0 B8: stays free -- read, not moved: retail's slot [4] Startup body, never installed (DecalComponent.h TREE DIVERGENCE: the tree's Startup is a different body); no caller; installing it is behaviour: |
+| `DecalComponent_Serialize` | 9 | 0x14011b7d0 | 0x14011b7d0 B8: stays free -- read, not moved: retail's slot [4] Startup body, never installed (DecalComponent.h TREE DIVERGENCE: the tree's Startup is a different body); no caller; installing it is behaviour: -- Phase D SLOTS: installed as DecalComponent::Startup |
 
 ### code/Game/Component/diseasecomponent_funcs.h (1)
 
@@ -62,7 +62,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
-| `MapComponent_Draw` | 17 | 0x140124370 | 0x140124370 B8: stays free -- read, not moved: retail's slot [6] OnAdded body, never installed (the tree's MapComponent::OnAdded is a different body, mapcomponent.cpp); no caller; installing it is behaviour: |
+| `MapComponent_Draw` | 17 | 0x140124370 | 0x140124370 B8: stays free -- read, not moved: retail's slot [6] OnAdded body, never installed (the tree's MapComponent::OnAdded is a different body, mapcomponent.cpp); no caller; installing it is behaviour: -- Phase D SLOTS: installed as MapComponent::OnAdded |
 
 ### code/Game/Component/pickingcomponent_funcs.h (1)
 
@@ -74,7 +74,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
-| `RawMaterialComponent_Update` | 15 | 0x140129130 | 0x140129130 B8: stays free -- read, not moved: retail's slot [9] Update body, never installed (the tree's RawMaterialComponent::Update is the inert PORT GAP stub); no caller; installing it is behaviour: |
+| `RawMaterialComponent_Update` | 15 | 0x140129130 | 0x140129130 B8: stays free -- read, not moved: retail's slot [9] Update body, never installed (the tree's RawMaterialComponent::Update is the inert PORT GAP stub); no caller; installing it is behaviour: -- Phase D SLOTS: installed as RawMaterialComponent::Update |
 
 ### code/Game/Component/spawncomponent_funcs.h (1)
 

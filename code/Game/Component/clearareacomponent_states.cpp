@@ -138,6 +138,8 @@ static bool Grid_GroundClear(const Map* grid, int x1, int y1, int w, int h) {
 // 0% for good (user-reported 2026-08-23; measured as every footprint cell holding the
 // new entity's own pointer). CountRemaining already skips self this exact
 // way; this makes the two agree.
+// Row 1272: StartTown_MarkBuildingCells is gone since Phase D SLOTS (row 1203), so this
+// skip has no route left; it goes once the upgrade / rebuild route confirms.
 static bool Grid_AllEmpty(const Map* grid, int x1, int y1, int w, int h, ComponentEntity* selfEntity) {
     int width = grid->size;
     const MapCell* tiles = GridTiles(grid);

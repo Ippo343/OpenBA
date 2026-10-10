@@ -5,14 +5,14 @@
 // Fields: +0x28=decalState (uint32), +0x2C=decalId (int32, -1=none), +0x30=decalScale (float, 1.0)
 //
 // Vtable at 0x140162fd0. Non-trivial overrides:
-//   Shutdown  (0x14011b820) -- Serializes decalScale and decalState
-//   Serialize (0x14011b7d0) -- Reads building data, copies scale from data+0x20
-//   Draw      (0x14011b560) -- Complex terrain decal rendering (111 instrs)
-//   OnCreate  (0x14011b510) -- Removes decal from terrain if decalId >= 0
+//   [3] Persist  (0x14011b820) -- serializes decalScale and decalState
+//   [4] Startup  (0x14011b7d0) -- decalScale = DecalDescription::_initialAlpha
+//   [6] OnAdded  (0x14011b560) -- builds the terrain decal (AddDecal)
+//   [7] OnRemove (0x14011b510) -- releases the decal slot if decalId >= 0
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/decalcomponent_funcs.h"
+#include "Component/DecalComponent.h"
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/DecalDescription.h"   // B.3.8 CB1a (TypeId)
 #include "object/Internal.h"
@@ -76,24 +76,11 @@ void WorldGeometry::RemoveDecal(int decalId) {
 // ============================================================
 // Helper: the component's DecalDescription (IsDerivedFrom 0x1401c75b8, else null)
 // ============================================================
+// Retail calls IsDerivedFrom on [RCX+0x18] with no test (0x14011b641 / 0x14011b7ea).
 static DecalDescription* GetDecalDescription(DecalComponent* self) {
     Description* obj = self->_description;
-    if (!obj)
-        return nullptr;
     bool derived = obj->IsDerivedFrom(DecalDescription::TypeId());
     return derived ? static_cast<DecalDescription*>(obj) : nullptr;
-}
-
-// ============================================================
-// DecalComponent::Serialize (vtable slot [4], 0x14011b7d0)
-// ============================================================
-// Gets DecalDescription via IsDerivedFrom(+0x18, DAT_1401c75b8),
-// reads scale from building data+0x20 and stores in decalScale (+0x30).
-void DecalComponent_Serialize(DecalComponent* self) {
-    DecalDescription* config = GetDecalDescription(self);
-    if (config) {
-        self->decalScale = config->_initialAlpha;
-    }
 }
 
 // ============================================================
@@ -109,9 +96,8 @@ void DecalComponent_Serialize(DecalComponent* self) {
 // resulting decalId is stored at self+0x2c so OnCreate can release it.
 //
 // This is the brown ground foundation under a StorageYard (and any building carrying a
-// DecalDescription). STANDALONE: reached via the live vtable / driver below when
-// BANISHED_LIVE_DECAL is set; the b0d80 → ace40 closure must be registered
-// (reg_player_highlight.cpp) and the Transform2/Vector2 slots wired.
+// DecalDescription). Dispatched by ComponentEntity::OnAddedPass at
+// EntityList::RegisterEntity (the ctor's flags 0xc3 carry bit 0), as retail.
 
 // AddDecal (0x1400b0d80, tool_base_highlight.cpp; Player/exe_bodies.h) — 19-arg
 // tile-slot manager + tessellate.
@@ -119,10 +105,6 @@ void DecalComponent_Serialize(DecalComponent* self) {
 // Draw-path helpers, called directly: 0x140004680 FindComponent(MapComponent)
 // (FloorComponent_FindResData), 0x140003f60 FindComponent(ModelComponent)
 // (ActCNR_FindComponent_3f60), DAT_1401c3dd8 = g_pGameWorldSingleton.
-// RefreshEntityFlags (0x1400c3470, ActHunt_NotifyEntityChanged_c3470) — re-aggregate
-// the owning entity's component flags and (un)register it in the update tree; used to
-// bucket the decal's owner via the draw flag so the tree walk's +0x40 slot drives the
-// build-once, then un-bucket once placed.
 
 // ============================================================================
 // ENDGAME B.3.8 VIS — DecalComponent as a REAL class (DecalComponent.h).
@@ -135,25 +117,13 @@ void DecalComponent_Serialize(DecalComponent* self) {
 #include "Object/factory_registration.h"
 #include "Component/DecalComponent.h"
 
-// Building ground-decal rendering (BANISHED_LIVE_DECAL, default OFF — like
-// BANISHED_LIVE_STORAGEDISPLAY). A building's DecalDescription (e.g. StorageYard's
-// brown dirt "foundation" — StorageYard.rsc `decal` -> Terrain/TiledDecals/
-// StorageYardMaterial.rsc) is painted onto the terrain by DecalComponent::Draw, which
-// AddDecal's it into the terrain-decal system at gameWorld+0x110. That slot array is
-// walked + submitted every frame by GeomDraw_CollectDraw (geometry_draw.cpp), so the
-// decal only needs to be BUILT ONCE.
-//
-// DRIVER NOTE (tree-driven, commit 85845b9): the retail decal build is driven by the
-// component lifecycle (OnCreate/OnAdded via the Fourth UpdatePriority bucket). In
-// standalone that bucket IS reachable once the owner entity is bucketed, so the build is
-// driven through the faithful tree walk (no explicit per-frame drain):
-//   * Startup slot (index 4 / +0x20) — dispatched by ComponentEntity::StartupComponents
-//     at spawn — sets the draw flag (+0x20 bit 0x4) + c3470-rebuckets the owner, letting
-//     the OnAdded pass dispatch slot 6 (Draw = AddDecal).
-//   * The new +0x40 slot (index 8) retries the build while decalId < 0 (a still-loading
-//     material leaves decalId == -1), then un-buckets once placed (clears bit 0x4 + c3470)
-//     — build-once. Once AddDecal returns a slot index, decalId >= 0 and it is skipped.
-// Default (env off) => nothing wired => the default sa-run stays byte-identical.
+// Building ground-decal rendering. A building's DecalDescription (e.g. StorageYard's
+// brown dirt "foundation" -- StorageYard.rsc `decal` -> Terrain/TiledDecals/
+// StorageYardMaterial.rsc) is painted onto the terrain by OnAdded, which AddDecal's it
+// into the terrain-decal system at gameWorld+0x110. That slot array is walked and
+// submitted every frame by GeomDraw_CollectDraw (geometry_draw.cpp), so the decal is
+// BUILT ONCE, from OnAdded (row 1270: no retry, no load race), and rebuilt only by the
+// slot-12 arms (the completion ramp below, the scorch / quarry re-adds).
 // 0x14011b8f0: Component() is the CALL 0x1401188b0; the 0x140162fd0 stamp is
 // the compiler's; then
 //     c7 43 28 00000000   mov [rbx+0x28], 0        decalState = 0
@@ -166,21 +136,6 @@ void DecalComponent_Serialize(DecalComponent* self) {
 DecalComponent::DecalComponent()
     : decalState(0), decalId(-1), decalScale(1.0f), _pad34{} {
     OrFlagsInCtor(0xc3);
-}
-
-// Bucket (or un-bucket) this decal's owning entity into the update tree via the draw flag
-// (component +0x20 bit 0x4), so the EntityList tree walk dispatches the component's +0x40
-// slot. c3470 (RefreshEntityFlags) re-aggregates the owner's flags and (de)registers it;
-// it no-ops safely if the entityList isn't set yet (the flag itself is then picked up by
-// the later EntityList registration). Setting the flag ⇒ eventual bucketing either way.
-static void DecalComponent_SetDrawFlag(DecalComponent* c, bool on) {
-    uint32_t oldFlags = c->_flags;
-    uint32_t newFlags = on ? (oldFlags | 0x4u) : (oldFlags & ~0x4u);
-    if (newFlags == oldFlags) return;
-    c->_flags = newFlags;
-    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && c->_entity) {
-        c->_entity.Get()->RefreshEntityFlags();   // 0x1400c3470
-    }
 }
 
 // [3] 0x14011b820 — decalScale/decalState round-trip here.
@@ -203,19 +158,27 @@ void DecalComponent::Persist(IO::Stream& stream) {
         ser.Serialize(decalState, nullptr);
     }
 }
-// [4] TREE DIVERGENCE (retail 0x14011b7d0): bucket the owner so the tree walk
-// drives the build-once.
-void DecalComponent::Startup() { DecalComponent_SetDrawFlag(this, true); }
+// [4] 0x14011b7d0-0x14011b808: IsDerivedFrom on [RCX+0x18] (cell 0x1401c75b8), CMOVNZ,
+// then `+0x30 = [desc+0x20]` with no test. Dispatched by ComponentEntity::
+// StartupComponents from the description ctor (0x1400c38bc) and by Persist only for a
+// component the save lacks (0x1400c3343): a loaded decal keeps its saved decalScale.
+// So a new building's foundation paints at _initialAlpha (0.5, translucent) until the
+// completion ramp below sets 1.0.
+void DecalComponent::Startup() {
+    decalScale = GetDecalDescription(this)->_initialAlpha;
+}
 // [6] 0x14011b560 — Draw: build + submit the terrain decal.
+//
+// Retail tests nothing here but the ModelComponent (0x14011b60d CMP / JZ): the
+// MapComponent (0x14011b5d6), the DecalDescription cast (0x14011b64b CMOVNZ, then
+// [RSI+0x40] at 0x14011b64f), GameUpdateLoop+0x110 (0x14011b687) and the material
+// array (0x14011b6f4) are all read unguarded; the only null test on the way is
+// AddDecal's own material test (0x1400b0dbb). The tree's six early returns served
+// the July per-frame build driver (2ac870693 / 85845b95b), which retried the build
+// until it stopped bailing -- see known_port_issues row 1270.
 void DecalComponent::OnAdded() {
-    if (GameUpdateLoop::_singleton == nullptr) {
-        return;
-    }
     // CheckPtr(owner) then FindComponent(MapComponent) for the tile footprint.
     MapComponent* mapComp = _entity->FindComponent<MapComponent>();   // 0x140004680
-    if (!mapComp) {
-        return;
-    }
 
     int minX   = static_cast<int16_t>(mapComp->tileX0);
     int minY   = static_cast<int16_t>(mapComp->tileY0);
@@ -235,51 +198,19 @@ void DecalComponent::OnAdded() {
 
     // DecalDescription = IsDerivedFrom(_description, DecalDescription typeId) ? it : null.
     DecalDescription* decalDesc = GetDecalDescription(this);
-    if (!decalDesc) {
-        return;
-    }
 
-    // Decal alpha (+0x30 decalScale, used as decalScale*255 -> the vertex alpha /
-    // shader lightFogAlpha.w). Retail lifecycle:
-    //   * Serialize seeds it from DecalDescription._initialAlpha (= 0.5) — the
-    //     DURING-CONSTRUCTION (half-built, translucent foundation) value.
-    //   * When the building COMPLETES, DecalComponent Slot12(msg=1) sets +0x30 = 1.0
-    //     (0x3f800000) and re-adds the decal -> a fully-opaque finished foundation.
-    // This used to hardcode 1.0 because nothing drove the completion ramp, and
-    // _initialAlpha=0.5 then left every FINISHED foundation washed out. The ramp is now
-    // wired (DecalComponent_EnterBuiltState below, driven from BuildComponent's 8->2
-    // State8Finalize and from start-town's force-complete stamp), so seed the authored
-    // value like retail: a building under construction paints its footprint at
-    // _initialAlpha and goes fully opaque when it completes. Templates that are never
-    // "built" author _initialAlpha=1.0 themselves (e.g. Pasture), so they are unaffected.
-    //
-    // This is what the 2026-08-23 "rebuilt house shows the OLD decal" report was: the
-    // replacement is a fresh FOUNDATION, but it painted the completed building's
-    // full-opacity footprint immediately, so the ground looked unchanged from before the
-    // fire. Material/tile/rotation/variant were all already correct (traced).
-    if (decalScale == 0.0f) {
-        float initialAlpha = decalDesc->_initialAlpha;
-        decalScale = (initialAlpha > 0.0f) ? initialAlpha : 1.0f;
-    }
-
+    // Decal alpha: decalScale (+0x30) * 255 -> the vertex alpha. Startup seeds it from
+    // _initialAlpha; the completion ramp sets 1.0 and re-adds.
     // Per-variant UV rect (defaults {0,0,uvScale,uvScale} when variant >= count).
     float uvScale = kRdata_14017214c;
     DecalUVRect uv = {0.0f, 0.0f, uvScale, uvScale};
     if (variant < decalDesc->_uvRectCount) {
-        if (decalDesc->_uvRects) {
-            uv = decalDesc->_uvRects[variant];
-        }
+        uv = decalDesc->_uvRects[variant];
     }
 
     WorldGeometry* decalSys = GameUpdateLoop::_singleton->m_worldGeometry;
-    if (!decalSys) {
-        return;
-    }
 
     // material = DecalDescription material-array[decalState].
-    if (!decalDesc->_materials) {
-        return;
-    }
     Graphics::MaterialInstance* material = decalDesc->_materials[decalState];
 
     bool     tiledFlag = decalDesc->_tiled;
@@ -313,15 +244,6 @@ void DecalComponent::OnRemove() {
     }
     decalId = -1;
 }
-// index 8 (+0x40) — per-frame draw-tick, dispatched by the EntityList tree walk once the
-// owner is bucketed. Build-once: attempt the build until placed (Draw self-guards if the
-// scene/material aren't ready), then un-bucket so the tree stops ticking this component
-// (the placed decal is thereafter rendered by GeomDraw_CollectDraw, not the update tree).
-// TREE DIVERGENCE: retail's slot 8 is Component's `RET`.
-void DecalComponent::Tick(const System::Time* /*time*/) {
-    if (decalId < 0) DecalComponent::OnAdded();                  // retry the build until the material is ready
-    if (decalId >= 0) DecalComponent_SetDrawFlag(this, false);   // placed -> un-bucket
-}
 // [11] 0x14011b810. PORT GAP (retail 0x14011b810, 7 B) — B38 D9: never ported;
 // the tree's table left it inert; kept inert here.
 void DecalComponent::Slot11() {}
@@ -336,12 +258,15 @@ void DecalComponent::OnEvent(int) {}
 //   * BuildComponent_State8Finalize (the 8->2 transition) — the normal construction path
 //   * StartTown's force-complete stamp — start-town houses skip the build states
 // Same collapse, and for the same reason, as WorkPlaceComponent_EnterBuiltState.
+// The body is retail's msg-1 arm (0x14011b769-0x14011b79c): nothing unless decalScale
+// != 1.0 (0x14011b773) and a decal is placed (0x14011b77e); then OnRemove ([RAX+0x38]),
+// decalScale = 1.0, OnAdded (tail JMP [RAX+0x30]).
 static void DecalComponent_EnterBuiltState(DecalComponent* cc) {
-    if (!cc) return;
-    if (cc->decalScale == 1.0f) return;          // already opaque — nothing to redo
+    if (cc->decalScale == 1.0f) return;
+    if (cc->decalId < 0) return;
+    cc->DecalComponent::OnRemove();
     cc->decalScale = 1.0f;
-    cc->DecalComponent::OnRemove();              // release the current slot (decalId = -1)
-    DecalComponent_SetDrawFlag(cc, true);        // re-bucket: the tick rebuilds it at 1.0
+    cc->DecalComponent::OnAdded();
 }
 
 // Find the owner entity's DecalComponent and run the completion ramp on it.

@@ -8,11 +8,11 @@
 //   Persist   (0x140129330) — versioned serialization of quantity, age, profession
 //   Startup   (0x1401292c0) — quantity from the description, register the template with the town
 //   OnAdded   (0x1401291d0) — post the Pickup work to the entity's WorkComponent
-//   Update    (0x140129130) — accumulate time, check threshold, mark for collection
+//   Update    (0x140129130) — age the pile; past Time(3600) mark it for removal
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/rawmaterialcomponent_funcs.h"
+#include "Component/RawMaterialComponent.h"
 #include "Component/RawMaterialDescription.h"
 #include "Component/ComponentDescription.h"
 #include "Component/WorkComponent.h"
@@ -43,46 +43,6 @@
 //   0x14012ec60 CitizenAI_WorkScheduler_Post (the work-scheduler POST, not a draw)
 //   .rdata 0x14017225c = 3600.0f, the pile expiry threshold; the GameWorld cell is
 //   g_pGameWorldSingleton.
-
-// ============================================================
-// RawMaterialComponent::Update (vtable slot [9], 0x140129130)
-// ============================================================
-// Accumulates delta time into the age. When threshold exceeded,
-// marks entity for collection and adds to world pending list.
-
-void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime) {
-
-    // Accumulate delta time into the age (a System::Time)
-    self->age._ticks += *pDeltaTime;
-
-    // The threshold: Time(3600.0f) (.rdata 0x14017225c)
-    System::Time thresholdTime;
-    RtSystem_Time_Ctor(&thresholdTime, 3600.0f);
-
-    // Check if accumulated time exceeds threshold
-    if (thresholdTime._ticks < self->age._ticks) {
-        ComponentEntity* entity = self->_entity.Get();
-
-        if (GameUpdateLoop::_singleton == nullptr) return;
-        EntityList* worldMgr = GameUpdateLoop::_singleton->m_entityList;
-
-        if (entity != nullptr) {
-
-            // Check bit 10 of entity flags at +0x40
-            if (((entity->_entityFlags >> 10) & 1) == 0) {
-
-                entity->MarkForRemoval();
-
-                // Add to world pending list
-                {
-                    int currentCount = worldMgr->removalList._size;
-                    worldMgr->removalList
-                        .SetSize(currentCount + 1, self->_entity.Get());
-                }
-            }
-        }
-    }
-}
 
 // ============================================================
 // CitizenBehavior::RegisterRawMaterial (0x140091e60): append a raw-material
@@ -291,11 +251,33 @@ void RawMaterialComponent::OnAdded() {
     workComp->PostWork(category, '\x01', &itemRef);
 }
 
-// [9] 0x140129130. PORT GAP (retail 0x140129130) — B38 D9: the body is ported
-// above (RawMaterialComponent_Update, the pile expiry timer) but the tree's
-// table never installed it; the inert stub is kept here. Installing it is its
-// own titled commit.
-void RawMaterialComponent::Update(const System::Time*) {}
+// [9] 0x140129130-0x1401291c3: the pile expiry timer. `age (+0x38) += *dt`
+// (0x140129144); past Time(3600.0f) (.rdata 0x14017225c, one game year) and with the
+// entity (+0x10, tested 0x140129173) not removal-marked (+0x40 bit 10, 0x14012918b),
+// MarkForRemoval (0x1400c2ea0) and append to EntityList::removalList (GameUpdateLoop
+// +0xe8, +0xd0; 0x140003110). GameUpdateLoop+0xe8 is read before the entity test
+// (0x140129167) with no test of the loop. Dispatched by EntityList::Update's bucket walk
+// (component flag bit 3 of the ctor's 0x89) with the entity's delta time.
+void RawMaterialComponent::Update(const System::Time* time) {
+    age._ticks += time->_ticks;
+
+    System::Time thresholdTime;
+    RtSystem_Time_Ctor(&thresholdTime, 3600.0f);   // import 0x140152b00
+    if (age._ticks <= thresholdTime._ticks) {
+        return;
+    }
+
+    ComponentEntity* entity = _entity.Get();
+    EntityList* worldMgr = GameUpdateLoop::_singleton->m_entityList;   // +0xe8
+    if (entity == nullptr) {
+        return;
+    }
+    if (((entity->_entityFlags >> 10) & 1) != 0) {
+        return;
+    }
+    entity->MarkForRemoval();   // 0x1400c2ea0
+    worldMgr->removalList.SetSize(worldMgr->removalList._size + 1, _entity.Get());   // 0x140003110
+}
 
 // create 0x140037270: MemAlloc(0x40, 8), then the ctor.
 ::Object::Base* RawMaterialComponent::CreateNewObject() {
