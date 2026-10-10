@@ -98,7 +98,8 @@ constexpr float kTradeDiscount = 0.75f;      // DAT_140172124
 
 // ── 0x14005a520 ──────────────────────────────────────────────────────────────
 int TradeComponent::GetResourcePrice(const ComponentDescription* resource) const {
-    if (!resource) return 0;   // the tree's; retail reads [RDX+0x30] untested (row 1104)
+    // No resource test (B8 RES, row 1104): 0x14005a544 (undocked) and the docked branch
+    // read [RDX+0x30] untested; every caller hands a storage slot's / sell row's resource.
     const int32_t merchantIdx = tradeId;
 
     // ── No merchant docked: the base value, straight out of ValueDescription.
