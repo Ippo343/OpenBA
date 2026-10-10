@@ -47,7 +47,6 @@ extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x
 class Action;
 namespace System { class Time; }
 struct ActionStack;
-void Character_UpdateAnimation_Reimpl(ActionStack* arrayBase, Action** ptrRef, const System::Time* deltaTime);  // 0x1400c4f80
 
 // ---- citizen_assign_citizens.cpp
 extern "C" void CitizenAssignCitizens(void* ctxV);  // 0x1400d43b0
@@ -95,7 +94,6 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, Com
 
 // ---- citizenai_executor.cpp
 struct ActionStack;   // Action/Action.h
-extern "C" void CitizenAI_ActionExecutor_c4c50(ActionStack* param_1, const System::Time* param_2);  // 0x1400c4c50
 
 // ---- citizenai_findhelpers.cpp
 class ResidenceComponent;

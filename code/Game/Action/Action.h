@@ -121,6 +121,10 @@ struct ActionStack {
     // Cancels every entry (slot 8 down each chain), DeletePtr's the entries, current = -1,
     // releases +0x10 (work_base_reimpl.cpp).
     void Clear();                                     // 0x1400c5400
+    // The executor: precheck / main / pop over the top entry's chain (citizenai_executor.cpp).
+    void Execute(const System::Time* time);           // 0x1400c4c50
+    // Slot 6 down the chain from *ptrRef (CharacterComponent::Update; charactercomponent.cpp).
+    void UpdateAnimation(Action** ptrRef, const System::Time* deltaTime);   // 0x1400c4f80
     ActionStack(const ActionStack&) = delete;
     ActionStack& operator=(const ActionStack&) = delete;
 
