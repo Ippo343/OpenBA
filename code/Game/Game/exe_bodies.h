@@ -142,7 +142,7 @@ class Component; class MapGenerator;
 // ---- town_workplace_registry.cpp
 class CitizenBehavior; class ComponentEntity; class Profession;
 class WorkPlaceComponent;
-extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);  // B8: stays free -- harness / port-only: no retail body (the INVENTORY address 0x140089470 is the shuffle's); the tree's spawn-time registration wiring over CitizenBehavior::RegisterWorkplace 0x1400895a0 (buildcomponent_state1.cpp, starttown.cpp)
+extern "C" void TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);  // B9: harness / port-only -- read: no retail body; retail registers a workplace from WorkPlaceComponent's OnCreate (0x14012f520 -> CitizenBehavior::RegisterWorkplace 0x1400895a0, the +0x10 entity copied to a stack local); this is the standalone's spawn-time wiring of that call (buildcomponent_state1.cpp's natural-builder arm, starttown.cpp)
 
 // ---- unreg_lane5_musicplayer.cpp
 class MusicPlayer;   // Game/MusicPlayer.h

@@ -54,8 +54,8 @@ struct ActionStack;
 class CitizenBehavior;   // Entity/CitizenBehavior.h
 class Profession;        // Game/Profession.h
 class ComponentEntity;   // Entity/ComponentEntity.h
-extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)  // B8: stays free -- not a ComponentEntity member: no retail body of its own; it is the append inside ResidenceComponent::EnterBuilt (0x140129de0, RCX the ResidenceComponent), its one caller -- folding it back is ResidenceComponent's (COMP-B), and its four port-only guards (entity, GameUpdateLoop, townMgr, the count check) go with that
-extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop  // B8: harness / port-only -- the headless driver of 0x14007dd10's inner loop (dd10 reads a UI widget the drivers lack); no retail symbol of its own
+extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)  // B9: stays free -- read: it IS retail 0x140129de0's whole body (ResidenceComponent::EnterBuilt: [RCX+0x10] copied to a local, townMgr [[0x1401c3dd8]+0xf0], SetSizeFill(count + 1) at 0x140129e09, no test) plus three port-only tests and an outcome log; its one caller EnterBuilt is residencecomponent.cpp (not this block's): folding it back is row 1260
+extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop  // B9: harness / port-only -- read: its callers are standalone harnesses only (food_workers_harness.cpp, orchard_workers_harness.cpp, stress_harness.cpp); retail seats workers in 0x14007dd10's per-worker loop, which reads the profession widget the drivers lack
 
 // ---- citizen_lifeevent.cpp
 

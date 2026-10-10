@@ -183,4 +183,4 @@ namespace System { class String; }
 
 // ---- region_paircache.cpp
 struct RegionPairCache;   // Action/PathSearch.h
-extern "C" RegionPairCache* Pf_RegionPairCache_Build();  // no retail address (the tail of 0x14009e8c0; caller code/Game/Game/region_seed.cpp)  // B8: harness / port-only -- no retail symbol: the allocation tail of 0x14009e8c0, split out for region_seed.cpp
+extern "C" RegionPairCache* Pf_RegionPairCache_Build();  // no retail address (the tail of 0x14009e8c0; caller code/Game/Game/region_seed.cpp)  // B9: harness / port-only -- read: no retail symbol; 0x14009e8c0 builds the 0x38-byte cache in place (MemAlloc(0x38, 4), the field init, the 0x20000-entry ring resize 0x14001cca0), region_paircache.cpp's port of that snippet; region_seed.cpp (the standalone's region-map seeding) is its one caller

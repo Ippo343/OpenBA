@@ -97,11 +97,11 @@ void WorkAct_PlantWorkCtor_be6e0(CitizenComponent* const* citizenRef, uint32_t p
 #include "Work/KeyBst.h"
 
 // ---- work_base_cellbst.cpp
-void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40  // B8: stays free -- D3: its out-node slot is a Profession* (cleararea.cpp:606), a ClaimNode* array (harvestarea.cpp / harvestorchard.cpp) or a void* (citizenai_work_scheduler.cpp); a typed Node** out needs a new local per caller
+void* WorkCellBST_Insert_9a40(uintptr_t* root, void* outResult, void* keyRec);  // 0x140029a40  // B9: stays free -- measured with the 8-byte family (5738a31c7: typed out slots SAME, the template done): the one body 0x140029a40 serves element types that name their key / value differently -- WorkCellAssignment {cell, citizen} (ClearArea / PlantArea / PlantOrchard), HarvestArea / HarvestOrchard::Claim {slot, citizen}, and the scheduler's raw WorkSchedulerIdNode {key, work} trees fed anonymous {id, pad, work} records (citizenai_work_scheduler.cpp); a template over the node type needs one key / value spelling, i.e. a per-element accessor (a helper) or one element type, which the tree lacks
 // 0x14001ca60 WorkCellBST_Remove_ca60: the template over the node type, Work/CellBst.h (B7 LX).
 #include "Work/CellBst.h"
 namespace IO { class Serializer; }
-void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0  // B8: stays free -- its load path inserts through 0x140029a40 (stays free, above)
+void WorkCellBST_Serialize_9de0(uintptr_t* root, IO::Serializer* ser);  // 0x140029de0  // B9: stays free -- its load path inserts through 0x140029a40 (stays free, above: the element types' key / value names differ), its save path reads WorkCellAssignment's {cell, citizen} for every set it is handed
 // The typed entry points an area work's real `Collection::Set<T>` member (a 0x10-byte
 // {int key, pointer} element, 0x30-byte node) is handed to: one retail body per entry serves
 // every such set (ICF), so the Set's {root, count} header is given to the ONE erased core here.
