@@ -129,7 +129,6 @@ class ProfessionList;
 
 // ---- serialize_arrays.cpp
 class PlayerController;
-extern "C" void Reimpl_Transform_SerializeWrapper(PlayerController* controller, IO::Stream* stream);  // 0x1400988c0  // B4 FORWARD: 1 outside caller(s)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);  // 0x140001bb0  // B8: stays free -- erased core: Ptr8ZeroArray::SetSize (kSpec_PtrZero) over a cast void* header; its holders are Array<T*> (default spec: another tail rule), WorldGeometryArray<T> and a raw pointer + count (AmbientEmitterDescription::_emitters); one member per holder would carry the same cast
 // 0x14000c520 Reimpl_Array_Resize_Stride10_Spawn: declared in Component/SpawnDescription.h (it takes the typed entry array).
 struct MenuSceneMesh;
