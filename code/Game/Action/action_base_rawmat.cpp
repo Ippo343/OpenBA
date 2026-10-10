@@ -305,11 +305,11 @@ void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<Mater
 // If the calendar year changed since trackerId, copy the +0x28 list into +0x38 (d9d0) and
 // reset the +0x28 list. Then upsert {material, count} into +0x28: if present add, else
 // append (grow 3x on a non-first append). Leaf.
-void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value) {
-    TrackerComponent::EntryList* live = &tracker->displayed;
-    TrackerComponent::EntryList* archive = &tracker->produced;
+void TrackerComponent::Upsert(ComponentDescription* material, int value) {
+    TrackerComponent::EntryList* live = &displayed;
+    TrackerComponent::EntryList* archive = &produced;
     int gen = GameUpdateLoop::_singleton->m_dayCounter->year;
-    if (gen != tracker->trackerId) {
+    if (gen != trackerId) {
         MaterialArrayAssign(archive, live);   // 0x14000d9d0
         System::MemoryAllocator::MemFree(live->_data);
         live->_data = nullptr;
@@ -318,7 +318,7 @@ void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, in
         // the next upsert then committed a count over a NULL array -> ACCESS_VIOLATION).
         live->_size = 0;
         live->_capacity = 0;
-        tracker->trackerId = gen;
+        trackerId = gen;
     }
 
     int n = live->_size;
@@ -370,7 +370,7 @@ void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source,
     if (source && *source != nullptr && placeNear != '\0') {
         TrackerComponent* tracker = (*source)->FindComponent<TrackerComponent>();   // 0x140013320
         if (tracker != nullptr) {
-            TrackerUpsert(tracker, material, quantity);   // 0x140058fd0
+            tracker->Upsert(material, quantity);   // 0x140058fd0
         }
     }
     int cat = ResourceCategory(material);   // 0x140088f90

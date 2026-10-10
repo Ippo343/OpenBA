@@ -517,7 +517,7 @@ void PastureProduce(PastureComponent* self) {
         if (pastureEntity) {
             TrackerComponent* tracker = pastureEntity->FindComponent<TrackerComponent>();   // 0x140013320
             if (tracker) {
-                TrackerUpsert(tracker, produced, perUnit);   // 0x140058fd0 (ActRm_ArrayUpsert_58fd0's body)
+                tracker->Upsert(produced, perUnit);   // 0x140058fd0 (ActRm_ArrayUpsert_58fd0's body)
             }
         }
 

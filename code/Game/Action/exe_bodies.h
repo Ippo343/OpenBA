@@ -92,7 +92,6 @@ class StorageComponent;       // Component/StorageComponent.h
 class TrackerComponent;       // Component/TrackerComponent.h
 void AutoPickupAppend(AutoPickupComponent* self, uint32_t value);  // 0x140044810
 int ResourceCategory(const ComponentDescription* material);  // 0x140088f90
-void TrackerUpsert(TrackerComponent* tracker, ComponentDescription* material, int value);  // 0x140058fd0
 void RegisterRawMaterial(CitizenBehavior* town, ComponentEntity* const* source, char placeNear, ComponentDescription* material, int quantity);  // 0x140088ef0
 void PositionRawMaterial(Component* self, int cellIndex, float rotation);  // 0x140129760
 // 0x14000da70 Array<T>::SetSize / 0x14000d9d0 Array<T>::operator= over a 16-byte
