@@ -236,8 +236,9 @@ extern "C" void Cemetery_SpawnTombstone_6a90(CemeteryComponent* cem, int cell,
     int rot = resIBP->extraField;
     // Tombstone description lives at CemeteryDescription+0x20.
     Description* desc = cem->_description;                       // +0x18
-    // Narrowed to CemeteryDescription (cell 0x1401c40c8), null on a miss, +0x20 read unguarded.
-    CemeteryDescription* cemDesc = Object::IsDerivedFromNullSafe(desc, CemeteryDescription::TypeId())
+    // Narrowed to CemeteryDescription (cell 0x1401c40c8), null on a miss, +0x20 read unguarded;
+    // the description itself is not tested (0x140046b74-0x140046b8c: CALL IsDerivedFrom, CMOVNZ).
+    CemeteryDescription* cemDesc = desc->IsDerivedFrom(CemeteryDescription::TypeId())
                                    ? static_cast<CemeteryDescription*>(desc) : nullptr;
     ComponentDescription* tombDesc = cemDesc->_ref20;            // +0x20
     ComponentEntity* built = nullptr;
