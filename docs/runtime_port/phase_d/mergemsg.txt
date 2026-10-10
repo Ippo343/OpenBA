@@ -1,0 +1,3 @@
+Merge d0-slots: rows 1202 / 1203 / 1204 FIXED -- DecalComponent slot 4 = retail Startup (the slot-8 retry and draw-flag bucketing gone), MapComponent slots 6 / 12 = retail AddToMap (starttown's 0x100000 pre-sets and MarkBuildingCells deleted; building minimap dots now painted), RawMaterialComponent slot 9 = retail Update (pile expiry); row 1270: no decal material-load race (six port-only early returns in OnAdded dropped); rows 1271 / 1272 LEFT
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
