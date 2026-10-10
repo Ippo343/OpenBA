@@ -10,7 +10,7 @@ RENAMED-DIFF); a mapped base function with no tip counterpart in the object is O
 (_GLOBAL__sub_I_*) are paired by position.
 """
 import collections, os, sys, re
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'b4_session'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'endgame_b', 'b4_session'))
 import b11cmp as B
 
 base, tip, mapfile = sys.argv[1:4]
