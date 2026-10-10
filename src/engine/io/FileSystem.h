@@ -329,11 +329,11 @@ static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[
 // the next owner needs before it can move anything else.
 //
 // STILL FREE FUNCTIONS, by file, for whoever finishes this class:
-//   filesystem_win.cpp            GetSaveDirectory — the one platform helper
-//                                 left; it is a `FileSystem` member and it is
-//                                 NOT converted, because nothing else in that
-//                                 file is and the commit that takes it should
-//                                 take the file whole.
+//   (GetSaveDirectory is a member in filesystem.cpp since Phase D.4 SETTINGS
+//                                 E.2; its OS half is Platform::DocumentsDir in
+//                                 src/platform/win/settings_win.cpp, and
+//                                 filesystem_win.cpp, the file that held it,
+//                                 is deleted.)
 // Everything else in `src/engine/io/filesystem*.cpp` is a member of the class
 // below. The NON-`IO::FileSystem` bodies that share those files stay free
 // functions on purpose: `RtIo_FileInfo_CopyCtor` / `RtIo_FileInfo_Assign` are
@@ -423,9 +423,9 @@ public:
     // ?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ 0x1800acfd0
     // ENDGAME B.3.4a closing: the last FileSystem member to move. Unlike the
     // two directory getters above it reads NO field of `this` at all — retail
-    // loads the pointer and never dereferences it (filesystem_win.cpp's banner
-    // proves that from the disassembly, not the decompile) — so the body is a
-    // SHGetFolderPathW call, not a copy ctor. `const` matches retail's `QEBA`;
+    // loads the pointer and never dereferences it (filesystem.cpp's comment on
+    // the body records that from the disassembly) — so the body is a
+    // Platform::DocumentsDir call, not a copy ctor. `const` matches retail's `QEBA`;
     // the by-value Filename return is the hidden-retslot ABI, as above.
     System::Filename GetSaveDirectory() const;
 

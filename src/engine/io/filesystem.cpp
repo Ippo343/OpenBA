@@ -3,9 +3,9 @@
 // ============================================================================
 // Byte-faithful ports of the 6 FileSystem/Modification exports our tree calls
 // (docs/history/runtime_port/call_surface_20260906.csv) that do not need Win32.
-// GetSaveDirectory (SHGetFolderPathW) lives in filesystem_win.cpp, per
-// PLAN.md §4.1 decision 1's platform seam — <windows.h> must never appear
-// here. src/engine/io/FileSystem.h and Modification.h carry the layouts;
+// GetSaveDirectory's OS half (SHGetFolderPathW) is Platform::DocumentsDir in
+// src/platform/win/settings_win.cpp (Phase D.4 SETTINGS E.2) — <windows.h>
+// must never appear here. src/engine/io/FileSystem.h and Modification.h carry the layouts;
 // read them first.
 //
 //   ?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z          retail 0x1800ab310
@@ -14,8 +14,8 @@
 //   ?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z    retail 0x1800ab050
 //   ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z           retail 0x1800aea10
 //
-// (GetSaveDirectory: ?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ
-//  retail 0x1800acfd0, in filesystem_win.cpp.)
+//   ?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ   retail 0x1800acfd0
+//   (moved here from src/platform/win/filesystem_win.cpp, Phase D.4 SETTINGS E.2)
 //
 // All six names were checked against the shipped DLL's export directory with
 // pefile BEFORE any code was written here (WAVE4_LANE_D.md §2) — none is a
@@ -49,7 +49,10 @@
 #include "io/FileSystem.h"
 #include "io/Modification.h"
 #include "io/PackageFile.h"   // the packfile array's element
+#include "system/Error.h"
+#include "system/String.h"
 #include "system/string_internal.h"
+#include "platform_settings.h"   // Platform::DocumentsDir (src/platform/common)
 
 namespace RtIO {
 
@@ -314,6 +317,59 @@ int Modification::Find(const System::Filename& path) const {
     }
 
     return ours;
+}
+
+// ?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ   retail 0x1800acfd0
+//
+//     Filename FileSystem::GetSaveDirectory() const
+//     {
+//         wchar_t buf[264];
+//         if (SHGetFolderPathW(NULL, CSIDL_PERSONAL, NULL, 0, buf) != S_OK) {
+//             Error::SetText("FileSystem: Unable to retrive the Documents "
+//                             "folder for saving!", true);
+//             return Filename();               // null
+//         }
+//         WideString ws;  ws.Set(buf);
+//         String utf8 = ws.AsUTF8();
+//         String formatted = String::Format("%s\\%s\\", utf8.data, "Banished");
+//         Filename ret;  ret.data = formatted.data;  if (ret.data) ++refcount;
+//         ret.AdjustDelimiters();
+//         return ret;
+//     }
+//
+// Phase D.4 SETTINGS E.2: the body moved here from the deleted
+// src/platform/win/filesystem_win.cpp. Its OS half (SHGetFolderPathW, the
+// WideString and AsUTF8) is Platform::DocumentsDir; the Format, the Filename
+// and the Error::SetText arm below are retail's, unchanged.
+//
+// Retail's `this` (RCX) is loaded into RBX and never dereferenced — confirmed
+// in the disassembly, not just the decompile — so the member touches no field;
+// that is a fact about retail, not a gap. Every call allocates a FRESH buffer
+// (unlike GetDataDirectory / GetSourceDirectory, which AddRef a shared one).
+System::Filename FileSystem::GetSaveDirectory() const {
+    System::String docs;
+    if (!Platform::DocumentsDir(docs)) {
+        System::Error::SetText(
+            "FileSystem: Unable to retrive the Documents folder for saving!", true);
+        // Retail's `*(longlong*)in_RDX = 0` is the default ctor (0x180006220),
+        // not a store through a live object.
+        return System::Filename();
+    }
+
+    System::String formatted = System::String::Format(
+        "%s\\%s\\", docs._data ? docs._data : "", "Banished");
+
+    // AddRef-then-AdjustDelimiters IS `??0Filename@System@@QEAA@AEBVString@1@@Z`
+    // (0x18000c780): retail stores the formatted buffer's own pointer into the
+    // return slot, bumps its refcount and normalises
+    // (0x1800acfd0: `*(longlong*)in_RDX = lVar2; *(int*)(lVar2-4) += 1;`).
+    System::Filename result(formatted);
+
+    // The releases are the locals' destructors in reverse declaration order:
+    // `formatted` ([RSP+0x288], 0x1800ad0a3), then the UTF-8 docs string
+    // ([RSP+0x38], 0x1800ad0dc). Retail's third, the WideString ([RSP+0x280],
+    // 0x1800ad109), now happens inside Platform::DocumentsDir.
+    return result;
 }
 
 // ?_singleton@FileSystem@IO@@0PEAV12@EA (0x1801fc6a8) -- the class static

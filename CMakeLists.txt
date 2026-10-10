@@ -66,7 +66,8 @@ endif()
 # ---------------------------------------------------------------------------------------
 file(GLOB_RECURSE GAME_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/game/*.cpp)
 file(GLOB_RECURSE ENGINE_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/engine/*.cpp)
-file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/win/*.cpp)
+file(GLOB_RECURSE PLATFORM_SRCS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/platform/win/*.cpp
+                                                  ${CMAKE_SOURCE_DIR}/src/platform/common/*.cpp)
 file(GLOB_RECURSE RENDER_SRCS   CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/render/dx11/*.cpp)
 file(GLOB         APP_SRCS      CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/*.cpp)
 file(GLOB         DIAG_SRCS     CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/diag/*.cpp)
@@ -76,7 +77,8 @@ set(BANISHED_INCLUDES
   ${CMAKE_SOURCE_DIR}/src/engine
   ${CMAKE_SOURCE_DIR}/src/render/dx11
   ${CMAKE_SOURCE_DIR}/src/app
-  ${CMAKE_SOURCE_DIR}/src/diag)
+  ${CMAKE_SOURCE_DIR}/src/diag
+  ${CMAKE_SOURCE_DIR}/src/platform/common)
 
 # The log-strip guard the Makefile runs before every log-stripped build (tools/check_log_strip.py)
 find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -95,7 +97,7 @@ target_include_directories(reimpl-x64 PRIVATE ${BANISHED_INCLUDES})
 target_compile_options(reimpl-x64 PRIVATE ${BANISHED_CXX_FLAGS} ${FLAVOUR_FLAGS})
 # the flavour flags are on the link line too (the Makefile does the same: -flto reaches the linker)
 target_link_options(reimpl-x64 PRIVATE ${FLAVOUR_FLAGS} -static-libgcc -static-libstdc++ -mwindows)
-# shell32: SHGetFolderPathW (FileSystem::GetSaveDirectory); ole32: CoInitializeEx in Engine::Startup
+# shell32: SHGetFolderPathW (Platform::DocumentsDir); ole32: CoInitializeEx in Engine::Startup
 target_link_libraries(reimpl-x64 PRIVATE user32 dbghelp shell32 ole32 dinput8 dxguid)
 if(TARGET check-log-strip)
   add_dependencies(reimpl-x64 check-log-strip)
