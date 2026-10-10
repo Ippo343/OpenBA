@@ -139,7 +139,7 @@ void WorkAct_HuntWorkCtor_bbbc0(CitizenComponent* const* citizenIBP, uint32_t wo
         obj = WAH_Alloc(0x480, 8);
         if (obj) {
             ComponentEntity* entityInner = citizen->_entity.Get();
-            CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
+            CharacterComponent* family = entityInner->FindComponent<CharacterComponent>();   // 0x1400012d0
             float speed = kRdata_140172280;  // -1.0f
             // MoveTo(self, family, Slow=1, 0, param_4, 0xe1f, 0, speed)  (disasm R8D=1, [RSP+0x28]=0xe1f)
             mainAction = new (obj) MoveTo(&family, 1 /*Slow; disasm LEA R8D,[R9+1]*/, 0, worldPos, 0xe1f, 0, speed);
@@ -309,7 +309,7 @@ void WorkAct_ShowToolCtor3_bdd20(CitizenComponent** citizenRef, uint32_t workId,
     Action* mv = nullptr;
     if (obj) {
         ComponentEntity* entityInner = citizen->_entity.Get();
-        CharacterComponent* family = FindCharacterComponent(entityInner);   // 0x1400012d0
+        CharacterComponent* family = entityInner->FindComponent<CharacterComponent>();   // 0x1400012d0
         float speed = kRdata_140172280;  // XMM0=[0x140172280]=-1.0
         // MoveTo(self, family, Fastest=3, 0, param_5, 0xe1f, 0, speed)  (disasm R8D=3, [RSP+0x28]=0xe1f)
         mv = new (obj) MoveTo(&family, 3 /*Fastest; disasm LEA R8D,[R9+3]*/, 0, destination, 0xe1f, 0, speed);

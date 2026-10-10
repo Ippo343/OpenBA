@@ -256,8 +256,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     InteractComponent* posComp = field_10->FindComponent<InteractComponent>();
 
     // --- Find ConsumeProduceComponent (type 0x1401c7350) on work entity ---
-    ConsumeProduceComponent* smComp = nullptr;
-    fn_FindComponent_ConsumeProduce(field_10.Get(), &smComp);
+    ConsumeProduceComponent* smComp = field_10.Get()->FindComponent<ConsumeProduceComponent>();
 
     // --- Get ConsumeProduceDescription from the component's description (+0x18) ---
     Description* descBase = smComp->_description;
@@ -265,8 +264,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
     ConsumeProduceDescription* cpDesc = isDerived ? static_cast<ConsumeProduceDescription*>(descBase) : nullptr;
 
     // --- Find StorageLocationComponent (for storage slot lookup) ---
-    StorageLocationComponent* storageLoc = nullptr;
-    fn_FindComponent_Unknown7ee8(field_10.Get(), &storageLoc);
+    StorageLocationComponent* storageLoc = field_10.Get()->FindComponent<StorageLocationComponent>();
 
     // --- Check resource depletion (bVar6) ---
     // Get active product index from ConsumeProduce component

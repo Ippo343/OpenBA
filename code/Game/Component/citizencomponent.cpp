@@ -914,8 +914,7 @@ static Work* LookupRegionByID(const WorkScheduler* areaMap, int32_t regionId) {
 // ============================================================
 static bool fn_CitizenComponent_HasVacancy(const WorkPlaceComponent* workplaceComp) {
     int roster = workplaceComp->workers._size;
-    WorkComponent* sl = nullptr;   // the InternalPtr fn_FindComponent_Work writes
-    fn_FindComponent_Work(workplaceComp->_entity.Get(), &sl);
+    WorkComponent* sl = workplaceComp->_entity.Get()->FindComponent<WorkComponent>();   // FindComponent<WorkComponent> 0x140003050
     if (sl == nullptr) return false;
     if (sl->workState == 0) {
         int cap = sl->CalcMaxWorkers();

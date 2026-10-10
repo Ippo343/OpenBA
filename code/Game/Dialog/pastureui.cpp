@@ -52,8 +52,7 @@ void PastureUI::UpdateSlider() {
     ComponentEntity* entityVal = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
     // Find PastureComponent
-    PastureComponent* pasture = nullptr;
-    fn_FindComponent_Pasture(entityVal, &pasture);
+    PastureComponent* pasture = entityVal->FindComponent<PastureComponent>();
     if (!pasture) return;
 
     // The slider element (+0x38)
@@ -134,8 +133,7 @@ void PastureUI::OnUpdateLayout() {
     bool isEntity = ::Object::IsDerivedFromNullSafe(dataSource, ComponentEntity::TypeId());
     ComponentEntity* entity = isEntity ? static_cast<ComponentEntity*>(dataSource) : nullptr;
 
-    PastureComponent* comp = nullptr;
-    fn_FindComponent_Pasture(entity, &comp);
+    PastureComponent* comp = entity->FindComponent<PastureComponent>();
     // SA guard (retail unguarded): entity without a PastureComponent, or the
     // combo/slider elements not seated yet (Slot4 hasn't run) — bail.
     if (!comp) return;
@@ -186,8 +184,7 @@ void PastureUI::SetResource(ComponentDescription* newType) {
     }
 
     // Find PastureComponent on entity
-    PastureComponent* pasture = nullptr;
-    fn_FindComponent_Pasture(checkedEntity, &pasture);
+    PastureComponent* pasture = checkedEntity->FindComponent<PastureComponent>();
     if (!pasture) return;   // SA guard (retail unguarded)
 
     // If currently no resource set (comp+0x28 == 0) and new resource is valid,
@@ -227,8 +224,7 @@ ComponentDescription** PastureUI::GetResource(ComponentDescription** param2) {
     }
 
     // Find PastureComponent on entity
-    PastureComponent* pasture = nullptr;
-    fn_FindComponent_Pasture(checkedEntity, &pasture);
+    PastureComponent* pasture = checkedEntity->FindComponent<PastureComponent>();
     // (the ExternalPtr retslot)
     if (!pasture) { *param2 = nullptr; return param2; }  // SA guard
 
@@ -270,8 +266,7 @@ void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, in
         bool isEntity = ::Object::IsDerivedFromNullSafe(entity, ComponentEntity::TypeId());
         ComponentEntity* checkedEntity = isEntity ? static_cast<ComponentEntity*>(entity) : nullptr;
 
-        PastureComponent* pasture = nullptr;
-        fn_FindComponent_Pasture(checkedEntity, &pasture);
+        PastureComponent* pasture = checkedEntity->FindComponent<PastureComponent>();
 
         float sliderValue = slider->_value;
         pasture->capacity = (int32_t)sliderValue;

@@ -69,7 +69,6 @@ class CharacterComponent;     // Component/CharacterComponent.h
 class CitizenComponent;       // Component/CitizenComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Math { class Vector3; }
-CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0x1400012d0
 class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h

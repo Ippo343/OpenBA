@@ -186,7 +186,7 @@ void WorkAct_GatherWorkCtor_bb7b0(CitizenComponent* const* citizenRef, uint32_t 
     Action* mv = nullptr;
     if (obj) {
         ComponentEntity* entInner = (*citizenRef)->_entity.Get(); // [RBP+0x47]
-        CharacterComponent* family = FindCharacterComponent(entInner);   // 0x1400012d0            // [RBP-0x21]
+        CharacterComponent* family = entInner->FindComponent<CharacterComponent>();   // 0x1400012d0            // [RBP-0x21]
         float speed = kRdata_140172280;          // [0x140172280] = -1.0f
         // disasm: R8D=1 (Slow), R9D=0, [RSP+0x20]=param_4, [RSP+0x28]=0xe1f, [RSP+0x30]=0, [RSP+0x38]=speed
         mv = new (obj) MoveTo(&family, 1 /*Slow; disasm LEA R8D,[R9+1]*/, 0, worldPos, 0xe1f, 0, speed);
@@ -322,7 +322,7 @@ void WorkAct_FishWorkCtor_beae0(CitizenComponent* const* citizenRef, uint32_t wo
     Action* mv = nullptr;
     if (obj) {
         ComponentEntity* entInner = (*citizenRef)->_entity.Get(); // [RBP+0x40]
-        CharacterComponent* family = FindCharacterComponent(entInner);   // 0x1400012d0            // [RBP-0x18]
+        CharacterComponent* family = entInner->FindComponent<CharacterComponent>();   // 0x1400012d0            // [RBP-0x18]
         float speed = kRdata_140172280;          // [0x140172280] = -1.0f
         // disasm: R8D = 2 (Fast; LEA R8D,[R9+2]), R9D=0, [RSP+0x20]=R13(=param_4),
         //         [RSP+0x28]=0xe1f, [RSP+0x30]=0, [RSP+0x38]=speed

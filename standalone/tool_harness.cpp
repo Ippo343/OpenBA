@@ -1999,8 +1999,7 @@ void FireClearPlace() {
     //    finder's name says Build; its type id is MapComponent's (Entity/exe_bodies.h).
     ComponentEntity* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
     if (!house) { fprintf(stderr, "[ClearPlace] no founding house to borrow\n"); return; }
-    MapComponent* bc = nullptr;
-    fn_FindComponent_Build(house, &bc);
+    MapComponent* bc = house->FindComponent<MapComponent>();
     if (!bc) { fprintf(stderr, "[ClearPlace] house has no BuildComponent\n"); return; }
 
     // 3. Save the real footprint, then override it to a 1x1 rect over the resource cell.
@@ -2067,8 +2066,7 @@ void FireClearLive() {
            ((caFlags >> 3) & 1) ? "LIVE (will be ticked)"
                                 : "NOT live — set BANISHED_CLEAR_FOOTPRINT=1");
 
-    MapComponent* bc = nullptr;   // fn_FindComponent_Build's type id is MapComponent's (Entity/exe_bodies.h)
-    fn_FindComponent_Build(house, &bc);
+    MapComponent* bc = house->FindComponent<MapComponent>();   // the footprint rect (the old "Build" finder's cell is MapComponent's)
     if (!bc) { fprintf(stderr, "[ClearLive] no BuildComponent\n"); return; }
     // Override the footprint to a 1x1 rect over the resource (persistent — the live tick
     // needs it in place when it fires). Minor house corruption acceptable for the probe.
@@ -2160,8 +2158,7 @@ void FireClearHarvest() {
     ClearAreaComponent* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
     if (!caComp) { fprintf(stderr, "[ClearHarvest] house has no ClearAreaComponent\n"); return; }
 
-    MapComponent* bc = nullptr;   // fn_FindComponent_Build's type id is MapComponent's (Entity/exe_bodies.h)
-    fn_FindComponent_Build(house, &bc);
+    MapComponent* bc = house->FindComponent<MapComponent>();   // the footprint rect (the old "Build" finder's cell is MapComponent's)
     if (!bc) { fprintf(stderr, "[ClearHarvest] house has no BuildComponent\n"); return; }
     int16_t sCol = bc->tileX0;
     int16_t sRow = bc->tileY0;
