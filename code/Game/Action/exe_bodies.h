@@ -73,8 +73,6 @@ class CitizenComponent;       // Component/CitizenComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 namespace Math { class Vector3; }
 CharacterComponent* FindCharacterComponent(const ComponentEntity* entity);  // 0x1400012d0
-void SetFacingDirection(CharacterComponent* character, const Math::Vector3& dir);  // 0x14010a060
-void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, float p4);  // 0x14010a1f0
 uint8_t CitizenBreakCheck(CitizenComponent* citizen);  // 0x140116650
 class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h

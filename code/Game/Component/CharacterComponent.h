@@ -55,6 +55,12 @@ public:
     // ---- non-virtual members (retail addresses) ----
     // 0x14010a0e0: steer toward `target` under mover control (+0x28 = 1).
     void DriveToward(const Math::Vector3* target, float heading, float speed);
+    // 0x14010a060: face along `dir` (x, y) -- +0x28 = 0, +0x2C the normalized direction,
+    // +0x3C its heading (action_base_move.cpp).
+    void SetFacingDirection(const Math::Vector3& dir);
+    // 0x14010a1f0: play animation `animId` on the model (blend `p3`), +0x38 = the mesh
+    // speed scale * `p4` (action_base_move.cpp).
+    void SetAnimation(uint32_t animId, float p3, float p4);
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     // Fields (B.4 W0-H1) from ctor 0x140109d20, Persist 0x140109ab0 and the

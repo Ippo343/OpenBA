@@ -255,7 +255,7 @@ void CitizenComponent::Initialize(const Math::Vector3* pos, uint32_t gender, cha
     maxAge = rf * spanA + baseA;
 
     // 13. sprite/anim init on the CharacterComponent (+0x278)
-    SetAnimation(character.Get(), 0,
+    character.Get()->SetAnimation(0,
               kRdata_14017214c, 0.0f);
 }
 
