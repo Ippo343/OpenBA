@@ -450,6 +450,7 @@ public:
     // The +0x100 profession registry (Game/town_workplace_registry.cpp).
     void RegisterWorkplace(ComponentEntity** workplaceRef, const Profession* profession); // 0x1400895a0
     void* FindAvailableBuilding(void* out, const Profession* professionKey);             // 0x14008d100
+    void RemoveWorker(const Profession* profession);                                     // 0x140091180 (Dialog/townhall_helpers.cpp)
     void AddWorker(Profession* profession);                                              // 0x140091130 (Component/citizen_employ_cascade.cpp)
 };
 

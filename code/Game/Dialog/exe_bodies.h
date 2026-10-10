@@ -95,7 +95,6 @@ class CitizenBehavior; class Profession; struct TownHallInventoryEntry;   // Ent
 // pushes 0x140015800 / 0x1400159b0 are Array<Row>::SetSize (TownHallUI's members).
 extern "C" void TownHall_InventorySortAsc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015200
 extern "C" void TownHall_InventorySortDesc(TownHallInventoryEntry* items, int count, void*, void*);  // 0x140015500
-extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* profession);  // 0x140091180
 
 // ---- townhallui.cpp
 // B.4 DLG-e: the fifteen TownHallUI bodies are members (Dialog/TownHallUI.h).

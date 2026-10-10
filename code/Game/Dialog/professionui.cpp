@@ -749,7 +749,7 @@ next_iter:
         do {
             CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
             Profession* profession = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[idx];
-            TownHall_RemoveWorker(citizenList, profession);   // 0x140091180
+            citizenList->RemoveWorker(profession);   // 0x140091180
             toRemove--;
         } while (toRemove != 0);
     }

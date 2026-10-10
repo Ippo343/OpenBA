@@ -1636,7 +1636,7 @@ void TownHallUI::OnProfessionSpinner(int index) {
         for (int i = 0; i < toRemove; i++) {
             CitizenBehavior* citizenList = GameUpdateLoop::_singleton->m_citizenList;
             Profession* profession = GameUpdateLoop::_singleton->m_professionList->professions.GetData()[index];
-            TownHall_RemoveWorker(citizenList, profession);   // 0x140091180
+            citizenList->RemoveWorker(profession);   // 0x140091180
         }
     }
 

@@ -578,7 +578,7 @@ void WorkPlaceUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, 
             town->FindIdleLaborer(&anyBuf, &slotCopy, profession);   // 0x14008c4b0
         }
     } else {  // 0x1451 — remove one worker of this profession
-        TownHall_RemoveWorker(town, profession);   // 0x140091180
+        town->RemoveWorker(profession);   // 0x140091180
     }
 }
 
