@@ -122,7 +122,6 @@ class Map;
 class WorldGeometry;
 namespace Video { class Context; }
 namespace Graphics { class SunLight; }
-extern "C" void Minimap_PaintTerrain(Minimap* minimap, Video::Context* context, WorldGeometry* worldGeom, Graphics::SunLight* sunLight);  // 0x1400a5140  // B4 FORWARD: 1 outside caller(s)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 
 // ---- professionlist.cpp
 class ProfessionList;

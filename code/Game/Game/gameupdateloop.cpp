@@ -1343,7 +1343,7 @@ void GameUpdateLoop::Draw(float alpha) {
         Minimap* imageCapture = m_imageCapture;
         Video::Context* videoCtx = ::Engine::MainLoop::_singleton->_context;
         // ImageCapture::DrawCheck (exe FUN_1400a5140) is our clean port
-        // Minimap_PaintTerrain. It fires
+        // Minimap::PaintTerrain. It fires
         // once — when the minimap's terrain GPU buffer (imageCapture+0x08) is still
         // null — to render the terrain top-down into the minimap pixel arrays.
         if (imageCapture->terrainImage == nullptr) {
@@ -1353,7 +1353,7 @@ void GameUpdateLoop::Draw(float alpha) {
             gs->RemoveGlobalObject(m_sunLight);
             gs->RemoveGlobalObject(m_worldGeometry);
 
-            Minimap_PaintTerrain(imageCapture, videoCtx, m_worldGeometry, m_sunLight);   // 0x1400a5140
+            imageCapture->PaintTerrain(*videoCtx, m_worldGeometry, m_sunLight);   // 0x1400a5140
 
             gs->AddGlobalObject(m_sunLight);
             gs->AddGlobalObject(m_worldGeometry);
