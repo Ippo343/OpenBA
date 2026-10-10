@@ -26,9 +26,7 @@ class ModelComponent;         // Component/ModelComponent.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
-void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animIdx);  // 0x140126440
-uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex);  // 0x140126540
-void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag);  // 0x1401260f0
+uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex);  // 0x140126540 B8: stays free -- DIFF: as NaturalResourceComponent::PlaceAtCell, CreateNaturalResource::AbstractImpl (createnaturalresource.cpp:137) folds the later diagnostic `!naturalResource` test (GCC: `this` is non-null) and its indirect calls reorder in the layout. A null never passed the call; movable if that fold is accepted
 
 // ---- action_base_complete.cpp
 class CitizenComponent;       // Component/CitizenComponent.h

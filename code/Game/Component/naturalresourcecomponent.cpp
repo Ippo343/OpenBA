@@ -66,7 +66,7 @@ void NaturalResourceComponent::Tick(const System::Time*) {
     // If bit 21 of flags is set, reassign resource
     if ((_flags >> 0x15) & 1) {
         ComponentEntity* nullRef = nullptr;   // InternalPtr (the ctor is a plain store)
-        RemoveNaturalResourceCore(this, &nullRef, 0);   // 0x1401260f0 (was its ActCNR_RemoveNatRes_1260f0 forwarder)
+        RemoveResource(&nullRef, 0);   // 0x1401260f0 (was its ActCNR_RemoveNatRes_1260f0 forwarder)
     }
 }
 

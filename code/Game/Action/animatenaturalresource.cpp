@@ -61,7 +61,7 @@ void AnimateNaturalResource::Persist(IO::Stream& stream) {
 int  AnimateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     (void)actionStack;
 
-    NaturalResourceSetAnimation(_field20->FindComponent<NaturalResourceComponent>(),   // 0x1400052c0
+    _field20->FindComponent<NaturalResourceComponent>()->SetAnimation(   // 0x1400052c0
                                 static_cast<uint32_t>(animIndex));                     // 0x140126440
 
     return (this->waitForAnim != 0) ? 1 : 0;

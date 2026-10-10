@@ -197,7 +197,7 @@ void NaturalResourceComponent::ResetGrowthState() {
     if (((newF ^ oldF) & 0xFFFF) != 0 && _entity != nullptr) {
         _entity.Get()->RefreshEntityFlags();   // 0x1400c3470
     }
-    NaturalResourceSetAnimation(this, 2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
+    SetAnimation(2);   // 0x140126440 (was its ActCNR_SetAnimIndex_126440 forwarder)
 }
 
 // Reimpl of FUN_14011fba0 (GrowthComponent spawn sub-resource onto a nearby tile)

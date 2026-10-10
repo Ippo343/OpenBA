@@ -544,7 +544,7 @@ void DiseaseComponent::KillOnePlant() {
                 natRes->resourceScale = 0.0f;   // yield -> nothing
                 natRes->harvestable = false;  // +0x2d byte store 0
                 natRes->_flags |= 0x200000u;  // dead
-                NaturalResourceSetAnimation(natRes, 2);   // 0x140126440
+                natRes->SetAnimation(2);   // 0x140126440
                 killed = true;
                 break;
             }
