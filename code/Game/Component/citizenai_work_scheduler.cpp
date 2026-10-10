@@ -180,8 +180,8 @@ static WorkSchedulerBucketNode** WS_cb50(WorkScheduler* ws, WorkSchedulerBucketN
     if (tmp.entries.root) {
         WorkSchedulerIdNode* sub = tmp.entries.root;
         {
-            WorkBase_TreeNodeFree_e320(&tmp.entries.root, sub->left);
-            WorkBase_TreeNodeFree_e320(&tmp.entries.root, sub->right);
+            WorkBase_TreeNodeFree(&tmp.entries.root, sub->left);
+            WorkBase_TreeNodeFree(&tmp.entries.root, sub->right);
         }
         System::MemoryAllocator::MemFree(sub);
     }

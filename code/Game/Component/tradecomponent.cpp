@@ -310,8 +310,8 @@ TradeComponent::~TradeComponent() = default;
 
 TradeStockTree::~TradeStockTree() {
     if (TradeResourceNode* r = root) {
-        WorkBase_TreeNodeFree_e320(&root, r->left);
-        WorkBase_TreeNodeFree_e320(&root, r->right);
+        WorkBase_TreeNodeFree(&root, r->left);
+        WorkBase_TreeNodeFree(&root, r->right);
         Object::detail::InternalMemFree(r);
     }
     root = nullptr;

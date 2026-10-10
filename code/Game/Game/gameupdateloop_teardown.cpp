@@ -97,8 +97,8 @@ void ArrayOfArrays_Clear_175d0(RawArray<RawArray<Math::Vector2>>& outlines) {
 extern "C" void ArrayPlusTree_Clear_171b0(PathGraph* self) {
     PathCostNode* root = self->m_bst.root;
     if (root) {
-        WorkBase_TreeNodeFree_e320(&self->m_bst.root, root->left);
-        WorkBase_TreeNodeFree_e320(&self->m_bst.root, root->right);
+        WorkBase_TreeNodeFree(&self->m_bst.root, root->left);
+        WorkBase_TreeNodeFree(&self->m_bst.root, root->right);
         MemFree(root);
     }
     self->m_bst.root = nullptr;
@@ -118,8 +118,8 @@ extern "C" void ArrayPlusTree_Clear_171b0(PathGraph* self) {
 extern "C" void Tree_Clear_dcb0(WorkSchedulerTree* tree) {
     WorkSchedulerIdNode* root = tree->root;
     if (root) {
-        WorkBase_TreeNodeFree_e320(tree, root->left);
-        WorkBase_TreeNodeFree_e320(tree, root->right);
+        WorkBase_TreeNodeFree(tree, root->left);
+        WorkBase_TreeNodeFree(tree, root->right);
         MemFree(root);
     }
     tree->root = nullptr;
@@ -133,8 +133,8 @@ extern "C" void NodeSubTree_Clear_2cf30(WorkSchedulerBucketNode* node) {
     WorkSchedulerTree* subTree = &node->bucket.entries;
     WorkSchedulerIdNode* root = subTree->root;
     if (root) {
-        WorkBase_TreeNodeFree_e320(subTree, root->left);
-        WorkBase_TreeNodeFree_e320(subTree, root->right);
+        WorkBase_TreeNodeFree(subTree, root->left);
+        WorkBase_TreeNodeFree(subTree, root->right);
         MemFree(root);
     }
     subTree->root = nullptr;
@@ -338,8 +338,8 @@ void WorkScheduler::Teardown() {
     {
         WorkSchedulerNode20* root = field_0x20;
         if (root) {
-            WorkBase_TreeNodeFree_e320(&field_0x20, root->left);
-            WorkBase_TreeNodeFree_e320(&field_0x20, root->right);
+            WorkBase_TreeNodeFree(&field_0x20, root->left);
+            WorkBase_TreeNodeFree(&field_0x20, root->right);
             MemFree(root);
         }
         field_0x20 = nullptr;
@@ -350,8 +350,8 @@ void WorkScheduler::Teardown() {
     {
         WorkSchedulerCountNode* root = field_0x10.root;
         if (root) {
-            WorkBase_TreeNodeFree_14c30(&field_0x10.root, root->left);
-            WorkBase_TreeNodeFree_14c30(&field_0x10.root, root->right);
+            WorkBase_TreeNodeFree(&field_0x10.root, root->left);
+            WorkBase_TreeNodeFree(&field_0x10.root, root->right);
             MemFree(root);
         }
         field_0x10.count = 0;

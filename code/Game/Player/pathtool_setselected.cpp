@@ -449,11 +449,11 @@ void PathTool::BuildRoutes() {
 
     // --- Free the AVL trees (14c30 recursively frees a subtree). ---
     if (segTree) {
-        WorkBase_TreeNodeFree_14c30(&segTree, segTree->left); WorkBase_TreeNodeFree_14c30(&segTree, segTree->right);
+        WorkBase_TreeNodeFree(&segTree, segTree->left); WorkBase_TreeNodeFree(&segTree, segTree->right);
         System::MemoryAllocator::MemFree(segTree);
     }
     if (pointTree) {
-        WorkBase_TreeNodeFree_14c30(&pointTree, pointTree->left); WorkBase_TreeNodeFree_14c30(&pointTree, pointTree->right);
+        WorkBase_TreeNodeFree(&pointTree, pointTree->left); WorkBase_TreeNodeFree(&pointTree, pointTree->right);
         System::MemoryAllocator::MemFree(pointTree);
     }
 }

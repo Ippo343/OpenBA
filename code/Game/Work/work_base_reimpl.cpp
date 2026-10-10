@@ -89,47 +89,8 @@ void Work::InitFromEntity(ComponentEntity* const* pEntityIBP) {
     }
 }
 
-// ============================================================
-// Recursive binary-tree post-order free
-// ============================================================
-// Both are simple recursive post-order frees of a binary tree, differing only in
-// the byte offsets of the two child pointers within a node. The first arg (tree
-// root / allocator owner) is unused by the original beyond being forwarded.
-// Caller signature: void fn(void* root, void* node)
-namespace {
-struct FreeNodeLinks10 {          // 0x140014c30's view of a node
-    uint8_t _payload[0x10];       // +0x00 the element (never read here)
-    void*   left;                 // +0x10
-    void*   right;                // +0x18
-};
-static_assert(offsetof(FreeNodeLinks10, left) == 0x10 && offsetof(FreeNodeLinks10, right) == 0x18, "");
-struct FreeNodeLinks18 {          // 0x14000e320's view of a node
-    uint8_t _payload[0x18];       // +0x00 the element (never read here)
-    void*   left;                 // +0x18
-    void*   right;                // +0x20
-};
-static_assert(offsetof(FreeNodeLinks18, left) == 0x18 && offsetof(FreeNodeLinks18, right) == 0x20, "");
-}  // namespace
-
-// Reimpl of FUN_140014c30 (TreeNodeCleanup) — children at +0x10 and +0x18.
-void WorkBase_TreeNodeFree_14c30(void* root, void* node) {
-    if (node) {
-        const FreeNodeLinks10* links = reinterpret_cast<const FreeNodeLinks10*>(node);   // the one recursive free body 0x140014c30 (ICF) over every node type whose links sit at +0x10 / +0x18 (21 call sites, a dozen node types): the erased core's view of the node it frees  // CAST-OK: elem_stride
-        WorkBase_TreeNodeFree_14c30(root, links->left);
-        WorkBase_TreeNodeFree_14c30(root, links->right);
-        System::MemoryAllocator::MemFree(node);
-    }
-}
-
-// Reimpl of FUN_14000e320 (TreeNodeFree) — children at +0x18 and +0x20.
-void WorkBase_TreeNodeFree_e320(void* root, void* node) {
-    if (node) {
-        const FreeNodeLinks18* links = reinterpret_cast<const FreeNodeLinks18*>(node);   // the one recursive free body 0x14000e320 (ICF) over every node type whose links sit at +0x18 / +0x20 (PathCostNode, the scheduler / trade / goals trees): the erased core's view of the node it frees  // CAST-OK: elem_stride
-        WorkBase_TreeNodeFree_e320(root, links->left);
-        WorkBase_TreeNodeFree_e320(root, links->right);
-        System::MemoryAllocator::MemFree(node);
-    }
-}
+// (0x140014c30 / 0x14000e320, the recursive node free: the template WorkBase_TreeNodeFree,
+// Work/exe_bodies.h, B9.)
 
 // ============================================================
 // Work base lifecycle

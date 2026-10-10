@@ -386,8 +386,8 @@ void PathGraph::BuildPathGraph() {
     PathCostNode* oldBst = pg->m_bst.root;
     if (oldBst != nullptr) {
         // Recursively free left and right subtrees
-        WorkBase_TreeNodeFree_e320(&pg->m_bst.root, oldBst->left);    // 0x14000e320
-        WorkBase_TreeNodeFree_e320(&pg->m_bst.root, oldBst->right);
+        WorkBase_TreeNodeFree(&pg->m_bst.root, oldBst->left);    // 0x14000e320
+        WorkBase_TreeNodeFree(&pg->m_bst.root, oldBst->right);
         System::MemoryAllocator::MemFree(oldBst);
     }
     pg->m_bst.root = nullptr;

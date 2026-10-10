@@ -151,8 +151,23 @@ class WorkScheduler;   // Game/WorkScheduler.h
 float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010  // B8: free in retail -- the CRT sqrtf (0x140132010): the float in XMM0, no object
 
 // ---- work_base_reimpl.cpp
-void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30  // B8: stays free -- templated over (tree, node) and measured: GCC unrolls the recursion into its callers (Map::~Map, WorldGeometry / DirtyChunkSet / MenuSceneTreeMap dtors, goals / teardown clears: DIFF, same post-order, same MemFree order, the shared ICF body gone); the one erased body stays
-void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320  // B8: stays free -- as 0x140014c30 above (same measurement, the +0x18 / +0x20 link layout)
+// retail 0x140014c30 / 0x14000e320 -- the recursive post-order node free of the exe's Set /
+// Map instances: MSVC folded one body per link layout (left +0x10 / right +0x18, and +0x18 /
+// +0x20) over every node type (ICF). One template over (header, node): RCX the header (its
+// root slot, forwarded unread), RDX the node; each caller instantiates it on its own node
+// type, whose `left` / `right` give the offsets. [[gnu::noipa]]: retail's body is out of
+// line and recursive (0x140014c49 / 0x140014c55 CALL itself, MemFree after); without it GCC
+// unrolls the recursion into the callers (inline) or drops the unread header argument
+// (.isra clone, noinline alone), and the instantiation would not be retail's 3-call body.
+#include "system/MemoryAllocator.h"
+template <class Root, class Node>
+[[gnu::noipa]] void WorkBase_TreeNodeFree(Root* root, Node* node) {
+    if (node) {
+        WorkBase_TreeNodeFree(root, node->left);
+        WorkBase_TreeNodeFree(root, node->right);
+        System::MemoryAllocator::MemFree(node);
+    }
+}
 struct ActionStack;
 
 // ---- work_base_walkpos.cpp

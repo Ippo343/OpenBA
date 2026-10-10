@@ -562,8 +562,8 @@ uint64_t Helper_sub_79b0(WorkScheduler* param_1, CitizenComponent* const* param_
     // free the transient result tree
     WorkCandidateNode* r = resultPair.root;
     if (r != nullptr) {
-        WorkBase_TreeNodeFree_e320(&resultPair.root, r->left);
-        WorkBase_TreeNodeFree_e320(&resultPair.root, r->right);
+        WorkBase_TreeNodeFree(&resultPair.root, r->left);
+        WorkBase_TreeNodeFree(&resultPair.root, r->right);
         System::MemoryAllocator::MemFree(r);
     }
     return ret;
