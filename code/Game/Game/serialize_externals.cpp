@@ -194,10 +194,6 @@ void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& s
 void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, UI::SpriteSheet::TypeId(), "SpriteSheet", "ExternalPtr::Serialize");
 }
-// 0x14000b7b0 -- ExternalPtr<Picking::PickingMesh>: import slot 0x140151468.
-void ExternalPtrSerialize_PickingMesh(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, Picking::PickingMesh::TypeId(), "PickingMesh", "ExternalPtr::Serialize");
-}
 // 0x1400019a0 -- ExternalPtr<Audio::SoundEffect>: import slot 0x140152a80 (0x140001c70 is
 // its array loop).
 void ExternalPtrSerialize_SoundEffect(::Object::External*& ref, IO::Serializer& serializer) {

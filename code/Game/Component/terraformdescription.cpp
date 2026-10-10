@@ -27,6 +27,7 @@
 #include "Game/exe_bodies.h"
 #include <cstdint>
 #include <new>
+#include "picking/PickingMesh.h"   // B8 RT2: ::Object::SerializeExternal<Picking::PickingMesh> (the downcast needs it complete)
 
 // ctor (inlined into create 0x14000ccf0 / createInPlace 0x14000cd60):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -41,9 +42,9 @@ TerraformDescription::TerraformDescription()
 // [5] 0x1400576a0: stream order as retail.
 bool TerraformDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_PickingMesh(&_floorMesh, &ser);     // 0x14000b7b0
+    ::Object::SerializeExternal<Picking::PickingMesh>(ser, _floorMesh);     // 0x14000b7b0
     ser.Serialize(_floorModifyBits, nullptr);
-    Reimpl_ExternalPtr_Serialize_PickingMesh(&_ceilingMesh, &ser);   // 0x14000b7b0
+    ::Object::SerializeExternal<Picking::PickingMesh>(ser, _ceilingMesh);   // 0x14000b7b0
     ser.Serialize(_ceilingModifyBits, nullptr);
     return true;
 }
