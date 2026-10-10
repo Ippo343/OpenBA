@@ -26,7 +26,6 @@
 
 
 // --- behaviour bodies: DiseaseComponent members (DiseaseComponent.h) -------
-// B4 FORWARD: 2 outside caller files (Dialog/debugui.cpp, standalone/disaster_harness.cpp).
 
 // --- shared leaves ----------------------------------------------------------
 // "Is the crop recorded at the last cure still planted on my tiles?" — the

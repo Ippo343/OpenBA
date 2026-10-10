@@ -878,5 +878,3 @@ void DiseaseComponent::Update(const System::Time* time) {
 
 DEFINE_EXE_TYPE(DiseaseComponent, "Component")
 
-// ---- B4 FORWARD: 2 outside caller files (Dialog/debugui.cpp,
-// standalone/disaster_harness.cpp); the closing wave rewires them.
