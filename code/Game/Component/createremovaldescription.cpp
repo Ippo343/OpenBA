@@ -42,6 +42,7 @@
 #include <new>
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140032b70 / createInPlace 0x140032be0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -73,7 +74,7 @@ bool CreateRemovalDescription::Serialize(IO::Stream& stream) {
         _refs.SetSize(count);
     }
     Reimpl_ExternalPtrArray_Serialize(&ser, count, _refs._data, nullptr);   // ExtPtr[count] (0x1400049c0)
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_ref38, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _ref38);
     ser.Serialize(_b40, nullptr);
     ser.Serialize(_b41, nullptr);
     ser.Serialize(_b42, nullptr);

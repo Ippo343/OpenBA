@@ -252,7 +252,7 @@ void PastureComponent::Persist(IO::Stream& stream) {
     // Main serializer block (version 0)
     IO::Serializer ser(*st, 0);
 
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&livestockType, &ser);   // 0x140002340
+    ::Object::SerializeExternal<ComponentDescription>(ser, livestockType);   // 0x140002340
 
     int countBuf = animals._size;
     ser.Serialize(countBuf, nullptr);

@@ -38,6 +38,7 @@
 #include "Component/WorkComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ============================================================
 // Sub-functions, called by name (B3R; the module exe_bodies.h headers)
@@ -628,7 +629,7 @@ void PlantArea::Persist(IO::Stream& stream) {
     ser.Serialize(cellCountBuf[0], field_58._data, nullptr);
 
     // Serialize ExternalRef at +0x68
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&field_68, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, field_68);
 }   // ~Serializer
 
 

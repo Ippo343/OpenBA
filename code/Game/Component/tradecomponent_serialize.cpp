@@ -85,6 +85,7 @@
 #include "system/MemoryAllocator.h"
 #include "Component/exe_bodies.h"
 #include "Game/exe_bodies.h"        // Reimpl_ExternalPtr_Serialize_StringTable, Reimpl_ExternalPtrArray_Serialize
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 namespace {
 
@@ -209,7 +210,7 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
     if (Loading(ser)) {
         for (int32_t i = 0; i < count; ++i) {
             ComponentDescription* key = nullptr;
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&key, &ser);
+            ::Object::SerializeExternal<ComponentDescription>(ser, key);
             int32_t value = 0;
             ser.Serialize(value, nullptr);
 
@@ -253,7 +254,7 @@ void TradeComp_BstSerialize(TradeComponent& trade, IO::Serializer& ser) {
     if (!n) return;
     while (TradeResourceNode* l = n->left) n = l;
     while (n) {
-        Reimpl_ExternalPtr_Serialize_ComponentDescription(&n->resource, &ser);
+        ::Object::SerializeExternal<ComponentDescription>(ser, n->resource);
         ser.Serialize(n->quantity, nullptr);
 
         TradeResourceNode* r = n->right;
@@ -357,7 +358,7 @@ void TradeComponent::Persist(IO::Stream& stream) {
     {
         TradeManifestLine* elem = manifest._data;
         for (int32_t i = 0; i < refCount && elem; ++i, ++elem) {
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&elem->good, &ser);
+            ::Object::SerializeExternal<ComponentDescription>(ser, elem->good);
             ser.Serialize(elem->price, nullptr);
             ser.Serialize(elem->stock, nullptr);
         }

@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <new>
 #include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 #include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 // FUN_140024c70 — Object::ExternalPtr<Toolbar>::Serialize (serialize_externals.cpp;
@@ -89,7 +90,7 @@ bool Toolbar::Serialize(IO::Stream& stream) {
     ::Object::SerializeExternal<Toolbar>(*serializer, _field60);
 
     // ExternalPtr<BuildingDescription> at +0x58
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_field58, serializer);
+    ::Object::SerializeExternal<ComponentDescription>(*serializer, _field58);
 
     // Encoding vcall 0x98 (the uint door) for +0x40
     serializer->Serialize(_field40, nullptr);

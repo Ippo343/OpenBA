@@ -201,6 +201,7 @@ void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int coun
 // member object (B38_RULES D1, D2, D6).
 // ============================================================================
 #include "Object/factory_registration.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // 0x14011afd0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // `_controller(this)` is the member's back-pointer; +0x48 (word) = 0x100; +0x50 =
@@ -256,7 +257,7 @@ void CropFieldComponent::Persist(IO::Stream& stream) {
     serializer.Serialize(hasCrop, nullptr);
 
     // ExternalPtr<ComponentDescription> at +0x50
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&cropDescription, &serializer);   // 0x140002340
+    ::Object::SerializeExternal<ComponentDescription>(serializer, cropDescription);   // 0x140002340
 
     // Serialize entity count from +0x60
     int entityCount = slots.count;

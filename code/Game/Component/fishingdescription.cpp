@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x1400343c0 / createInPlace 0x140034430):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -40,7 +41,7 @@ FishingDescription::FishingDescription()
 // [5] 0x14011f170: stream order as retail.
 bool FishingDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_fish, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _fish);
     ser.Serialize(_terrainMask, nullptr);
     if (ser.GetVersion() > 0) ser.Serialize(_u28, nullptr);   // version-gated, as retail
     return true;

@@ -69,10 +69,11 @@ class ComponentEntity;
 class PathfinderThread;
 namespace IO { class Stream; }
 
+class ComponentDescription;   // Component/ComponentDescription.h (MapCell +0x10)
 struct MapCell {
     Object::InternalPtr<ComponentEntity> blocker;    // +0x00 (0x14009d360)
     Object::InternalPtr<ComponentEntity> occupant;   // +0x08 (0x14009dc20)
-    void*    field_0x10;             // +0x10 ExternalPtr, string-table serialized (0x140002340)
+    ComponentDescription* field_0x10;   // +0x10 ExternalPtr<ComponentDescription> (serialized by 0x140002340; typed B8 RT2)
     int32_t  regionId;               // +0x18 init -1; not serialized, copied on resize
     std::array<uint8_t, 9> field_0x1C;   // +0x1C Serialize(9, uchar*) (0x14001aca0); +0x22 read by 0x140115be0;
                                      //       indexed by influence state (0x14009f990); resize copies it whole

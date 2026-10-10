@@ -50,6 +50,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/ProfessionList.h"
 #include "Game/Map.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // Diagnostic trace for the harvest-completion investigation. Gated by
 // BANISHED_CLEAR_TRACE (shared with clearareacomponent_states.cpp); default off.
@@ -112,7 +113,7 @@ void ClearArea::Persist(IO::Stream& stream) {
     WorkLeaf_BstSerializeIBPpair_29c10(&_entities, &serializer);
 
     // Serialize the description ExternalPtr at +0x68
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&field_68, &serializer);
+    ::Object::SerializeExternal<ComponentDescription>(serializer, field_68);
 
     // Serialize clearTrees bool at +0x70 (the field is uint8_t storage)
     serializer.Serialize(field_70, nullptr);

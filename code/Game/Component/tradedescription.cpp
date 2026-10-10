@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <new>
 #include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 #include "ui/StringTable.h"   // B8 RT2: ::Object::SerializeExternal<UI::StringTable> (the downcast needs it complete)
 
 namespace {
@@ -126,7 +127,7 @@ TradeDescription::~TradeDescription() {
 // [5] 0x14005c7f0: stream order as retail.
 bool TradeDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 1);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_merchantTemplate, &ser);   // ExternalPtr +0x30
+    ::Object::SerializeExternal<ComponentDescription>(ser, _merchantTemplate);   // ExternalPtr +0x30
 
     // merchant array @ +0x48 (count @ +0x50)
     ser.Serialize(_merchantCount, nullptr);

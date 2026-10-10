@@ -39,6 +39,7 @@
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.9 D5: CitizenComponent::TypeId()
 #include "Player/exe_bodies.h"   // Avl38Retrace (0x140025920)
 #include "Action/exe_bodies.h"   // ActRm_VectorClone_d9d0, ActRm_ArrayResize16_da70
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ============================================================
 // External closure — every one of these is already ported + registered
@@ -110,7 +111,7 @@ void MarketBst_b5f0(MarketWork::CarryList* arr, IO::Serializer* serializer) {
     // resize (MOV RBX,qword ptr [RBX]) — reading it earlier would use the freed buffer.
     MarketWork::Carry* p = arr->data;
     for (int i = 0; i < count; ++i) {
-        Reimpl_ExternalPtr_Serialize_ComponentDescription(&p->resource, serializer);
+        ::Object::SerializeExternal<ComponentDescription>(*serializer, p->resource);
         serializer->Serialize(p->count, nullptr);
         ++p;
     }
@@ -268,7 +269,7 @@ void MarketBst_b290(MarketWork::ClaimTree* tree, IO::Serializer* serializer) {
             }
             MarketWork::Carry* p = node->element.carries.data;
             for (int i = 0; i < count; ++i) {
-                Reimpl_ExternalPtr_Serialize_ComponentDescription(&p->resource, serializer);
+                ::Object::SerializeExternal<ComponentDescription>(*serializer, p->resource);
                 serializer->Serialize(p->count, nullptr);
                 ++p;
             }

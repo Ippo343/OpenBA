@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x1400048e0 / createInPlace 0x140004920):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -67,7 +68,7 @@ bool CreateFencedDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_i60, nullptr);
     ser.Serialize(_i64, nullptr);
     ser.Serialize(_b68, nullptr);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_ref70, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _ref70);
     return true;
 }
 

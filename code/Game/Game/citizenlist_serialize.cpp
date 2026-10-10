@@ -395,7 +395,7 @@ void SerializeCompRefTree(CitizenBucketSet<Key>& tree, IO::Serializer* serialize
 // ------------------------------------------------------------
 // The node: Game/LegacyKeyIntNode.h (rebalanced by the shared 0x30 walk 0x14000e360).
 
-LegacyKeyIntNode* AllocLegacyTreeNode(uint64_t key, LegacyKeyIntNode* parent, int32_t value) {
+LegacyKeyIntNode* AllocLegacyTreeNode(ComponentDescription* key, LegacyKeyIntNode* parent, int32_t value) {
     if (!System::MemoryAllocator::_singleton) return nullptr;
     LegacyKeyIntNode* n = static_cast<LegacyKeyIntNode*>(System::MemoryAllocator::MemAlloc(0x30, 8));
     if (!n) return nullptr;
@@ -432,8 +432,8 @@ void SerializeLegacyKeyIntTree(LegacyKeyIntNode** rootPtr, int32_t* countField, 
     bool loading = SerializerLoading(serializer);
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
-            uint64_t key = 0;
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&key, serializer);
+            ComponentDescription* key = nullptr;
+            ::Object::SerializeExternal<ComponentDescription>(*serializer, key);
             int32_t value = 0;
             serializer->Serialize(value, nullptr);
 
@@ -466,7 +466,7 @@ void SerializeLegacyKeyIntTree(LegacyKeyIntNode** rootPtr, int32_t* countField, 
     } else {
         LegacyKeyIntNode* node = LegacyTreeMin(*rootPtr);
         while (node) {
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&node->key, serializer);
+            ::Object::SerializeExternal<ComponentDescription>(*serializer, node->key);
             serializer->Serialize(node->value, nullptr);
             node = LegacyTreeSucc(node);
         }

@@ -41,6 +41,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "Entity/ComponentEntity.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ============================================================
 // Helpers, called by name (B3R)
@@ -79,7 +80,7 @@ void ConsumeRawMaterial::Persist(IO::Stream& stream) {
     if (version == 0) {
         // Legacy v0 format: single ExternalPtr + int (no material list)
         ComponentDescription* legacyMaterial = nullptr;
-        Reimpl_ExternalPtr_Serialize_ComponentDescription(&legacyMaterial, &ser);   // 0x140002340
+        ::Object::SerializeExternal<ComponentDescription>(ser, legacyMaterial);   // 0x140002340
         int legacyCount;
         ser.Serialize(legacyCount, nullptr);
     } else {
@@ -99,7 +100,7 @@ void ConsumeRawMaterial::Persist(IO::Stream& stream) {
         if (matCount > 0) {
             uint64_t remaining = (uint64_t)matCount;
             do {
-                Reimpl_ExternalPtr_Serialize_ComponentDescription(&entry->material, &ser);   // 0x140002340
+                ::Object::SerializeExternal<ComponentDescription>(ser, entry->material);   // 0x140002340
                 ser.Serialize(entry->count, nullptr);
                 ++entry;
                 remaining--;

@@ -49,6 +49,7 @@
 #include <cstdint>
 #include <new>
 #include "system/MemoryAllocator.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 
 // ctor (inlined into create 0x14002f320 / createInPlace 0x14002f390):
@@ -125,7 +126,7 @@ bool BuildDescription::Serialize(IO::Stream& stream) {
         e->material = nullptr;                                     // External* (resolved ref)
         e->quantity = 0;                                           // int cost qty
         ser.Serialize(e->quantity, nullptr);                       // int @ elem+0x08
-        Reimpl_ExternalPtr_Serialize_ComponentDescription(&e->material, &ser);   // ref  @ elem+0x00
+        ::Object::SerializeExternal<ComponentDescription>(ser, e->material);   // ref  @ elem+0x00
     }
 
     ser.Serialize(_i30, nullptr);   // int +0x30

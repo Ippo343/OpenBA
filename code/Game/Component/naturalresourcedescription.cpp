@@ -43,6 +43,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/Profession.h"   // B8 RT2: ::Object::SerializeExternal<Profession> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -80,7 +81,7 @@ NaturalResourceDescription::NaturalResourceDescription()
 // [5] 0x140125e10: stream order as retail.
 bool NaturalResourceDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_building, &ser);   // +0x20 ExternalPtr<BuildingDescription>
+    ::Object::SerializeExternal<ComponentDescription>(ser, _building);   // +0x20 ExternalPtr<BuildingDescription>
     ser.Serialize(_f28, nullptr);
     ser.Serialize(_f2c, nullptr);
     ser.Serialize(_f30, nullptr);

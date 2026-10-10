@@ -385,6 +385,7 @@ void TraceCanCommand(int cmdId, int curState, int planted, int slotCount, bool h
 // member object (B38_RULES D1, D2, D6).
 // ============================================================================
 #include "Object/factory_registration.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // 0x140051f40. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // `_controller(this)` is the member's back-pointer; +0x48 = 0; +0x4c = -1; +0x50 =
@@ -454,7 +455,7 @@ void OrchardComponent::Persist(IO::Stream& stream) {
     SerializeSlots(ser, localCount, slots);   // 0x14000a230
 
     // The tree type ExternalPtr at +0x60
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&treeType, &ser);   // 0x140002340
+    ::Object::SerializeExternal<ComponentDescription>(ser, treeType);   // 0x140002340
 }
 
 // [4] 0x140051dd0: `MOV qword [RCX+0x60],0` — one store, nothing else.

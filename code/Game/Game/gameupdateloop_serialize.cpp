@@ -85,6 +85,7 @@
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
 #include "Game/MapGenerator.h"   // B8 RT2: ::Object::SerializeExternal<MapGenerator> (the downcast needs it complete)
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 #include "Component/EnvironmentDescription.h"   // B8 RT2: ::Object::SerializeExternal<EnvironmentDescription> (the downcast needs it complete)
 #include "Game/ClimateGenerator.h"   // B8 RT2: ::Object::SerializeExternal<ClimateGenerator> (the downcast needs it complete)
 #include "Game/TerrainGenerator.h"   // B8 RT2: ::Object::SerializeExternal<TerrainGenerator> (the downcast needs it complete)
@@ -268,7 +269,7 @@ static void GoalRefTree_Serialize_e2e0(AvlTreeHead<PinnedToolNode>* set,
             PinnedToolEntry rec;
             bool used = false;
             rec.key = nullptr; rec.x = 0; rec.y = 0;
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&rec.key, serializer);   // 0x140002340
+            ::Object::SerializeExternal<ComponentDescription>(*serializer, rec.key);   // 0x140002340
             serializer->Serialize(rec.x, nullptr);
             serializer->Serialize(rec.y, nullptr);
             serializer->Serialize(used, nullptr);
@@ -282,7 +283,7 @@ static void GoalRefTree_Serialize_e2e0(AvlTreeHead<PinnedToolNode>* set,
         PinnedToolNode* cur = node;
         while (cur->left) cur = cur->left;
         while (cur) {
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&cur->key, serializer);   // 0x140002340
+            ::Object::SerializeExternal<ComponentDescription>(*serializer, cur->key);   // 0x140002340
             serializer->Serialize(cur->x, nullptr);
             serializer->Serialize(cur->y, nullptr);
             serializer->Serialize(cur->active, nullptr);

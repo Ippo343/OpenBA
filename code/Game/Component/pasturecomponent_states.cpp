@@ -756,7 +756,7 @@ void PastureComponent::Command(int cmd) {
 // 2026-07-30 (deferred item from the animal wave's Update 2).
 // ============================================================
 extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h,
-                                                void* ref) {
+                                                ComponentDescription* ref) {
     if (!grid || w <= 0) return 0;
     const Map* map = grid;
     const int dim = map->size;

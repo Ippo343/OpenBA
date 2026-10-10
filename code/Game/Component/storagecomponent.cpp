@@ -179,7 +179,7 @@ void StorageComponent::Persist(IO::Stream& stream) {
             Item& slotEntry = slotBase[i];
             ser.Serialize(slotEntry._count, nullptr);
             ser.Serialize(slotEntry._reserve, nullptr);
-            Reimpl_ExternalPtr_Serialize_ComponentDescription(&slotEntry._resource, &ser);   // 0x140002340
+            ::Object::SerializeExternal<ComponentDescription>(ser, slotEntry._resource);   // 0x140002340
         }
     }
 

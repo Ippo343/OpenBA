@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140033c30 / createInPlace 0x140033ca0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -73,7 +74,7 @@ bool DestroyDescription::Serialize(IO::Stream& stream) {
     //    the cast and was stored as NULL. Only Template/IronMine.rsc and
     //    Template/Quarry.rsc author it (`ComponentDescription _replaceEntity =
     //    "destroyed"`), which is why the swap was invisible for so long.
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_replaceEntity, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _replaceEntity);
     ser.Serialize(_damagedSkin, nullptr);
     ser.Serialize(_damagedDecal, nullptr);
     ser.Serialize(_minDamageLevel, nullptr);

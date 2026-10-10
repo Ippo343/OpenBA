@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140005980 / createInPlace 0x1400059f0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -45,7 +46,7 @@ bool FruitDescription::Serialize(IO::Stream& stream) {
     ser.Serialize(_ripenSeasons, nullptr);
     ser.Serialize(_optimalTemp, nullptr);
     ser.Serialize(_tempRange, nullptr);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_ref30, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _ref30);
     return true;
 }
 

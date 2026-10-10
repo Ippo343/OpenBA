@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // ctor (inlined into create 0x140032d30 / createInPlace 0x140032da0):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -42,7 +43,7 @@ CreateRoadDescription::CreateRoadDescription()
 bool CreateRoadDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
     ser.Serialize(_b20, nullptr);
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&_created, &ser);
+    ::Object::SerializeExternal<ComponentDescription>(ser, _created);
     return true;
 }
 

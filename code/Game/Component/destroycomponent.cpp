@@ -35,6 +35,7 @@
 #include "Object/factory_registration.h"
 #include "Component/DestroyComponent.h"
 #include "Game/exe_bodies.h"
+#include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)
 
 // The upgrade/demolish controller: the entity's StateMachineComponent links the
 // member and the 0x14011dfa0 pump (UpgradeUI click) drives states 3->4->5
@@ -82,7 +83,7 @@ void DestroyComponent::Persist(IO::Stream& stream) {
     ser.Serialize(progress, nullptr);
     ser.Serialize(progressTarget, nullptr);
     ser.Serialize(hasBuildComponent, nullptr);   // +0x51
-    Reimpl_ExternalPtr_Serialize_ComponentDescription(&upgradeTarget, &ser);   // 0x140002340
+    ::Object::SerializeExternal<ComponentDescription>(ser, upgradeTarget);   // 0x140002340
     ser.Serialize(burning, nullptr);             // +0x50
     burnTime.Serialize(ser);
 }
