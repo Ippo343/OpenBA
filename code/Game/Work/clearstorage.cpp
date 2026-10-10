@@ -181,7 +181,7 @@ int ClearStorage::Execute(CitizenComponent** citizenAI, System::Time* time) {
 
         // Check if path is possible
         uint32_t workTypeId = (uint32_t)field_28;
-        if (!WorkBase_ValidateCell_a00f0(gridDataPtr, 0xe1f, srcCell, workTypeId)) {
+        if (!gridDataPtr->ValidateCell(0xe1f, srcCell, workTypeId)) {
             return 1;
         }
 

@@ -359,9 +359,3 @@ void WeatherSimulation::Update(const System::Time* time) {
 
 }
 
-// B4 FORWARD: 2 outside callers (gameupdateloop.cpp, GAME-a; debugui.cpp, DLG).
-// The null test is the old body's.
-extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const System::Time* time) {
-    if (!weatherSelf) return;
-    weatherSelf->Update(time);
-}

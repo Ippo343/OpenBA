@@ -48,8 +48,6 @@ class AutoSaveDialog;  // code/Game/Dialog/AutoSaveDialog.h
 // fn_EntityUI_SelectEntity — reimplemented in entityui.cpp as EntityUI_SelectEntity_Impl
 // FUN_140102e30: BST insert/update for entity tracking
 class PlayerToolManager; class ComponentEntity;
-void EntityUI_SelectEntity_Impl(PlayerToolManager* playerController, ComponentEntity* const* entityPtr,
-                                 uint32_t x, uint32_t y);
 
 // ---- eventnotifydialog.cpp
 class EventNotifyDialog;  // code/Game/Dialog/EventNotifyDialog.h
@@ -60,7 +58,6 @@ struct GameContainer;
 class OptionsDialog;
 namespace UI { class UserInterface; class Dialog; class DialogInstance; }
 namespace Object { template <class T> class InternalPtr; }
-extern "C" void ApplyKeyMapToUI_Impl(GameContainer* keyMap, UI::UserInterface* userInterface);  // 0x140099260
 // B4 FORWARD: 1 outside caller (Dialog/mainmenudialog.cpp) -> OptionsDialog's ctor
 
 // ---- saveloaddialog.cpp

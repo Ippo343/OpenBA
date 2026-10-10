@@ -26,11 +26,11 @@
 // transposed traversal); ties resolve to the first-visited minimum, so the exact order is
 // preserved here. The Map's cells, terrain type (+0x29).
 // Caller: int fn(Map* map, int srcCell, int destCell, uint32_t passFlags)
-int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFlags) {
-    int gridW = map->size;
+int Map::FindCell(int srcCell, int destCell, uint32_t passFlags) {
+    int gridW = size;
     int best = -1;
     int bestDist = 0;
-    MapCell* cellArr = map->cells.GetData();
+    MapCell* cellArr = cells.GetData();
 
     int col = srcCell % gridW - 1;                 // iVar9, advances with the outer loop
     for (int rowD = -1; rowD <= 1; rowD++, col++) {
@@ -66,8 +66,8 @@ int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFl
 // GAME-a's, so this stays free).
 // RCX = the WorkScheduler, RDX = the citizen reference (an InternalPtr<CitizenComponent>
 // slot: 0x1400f86b9 `MOV RAX,[R14]` copies it into the Execute argument), R8D = the cell id, R9B = flag.
-uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* scheduler, CitizenComponent** citizenRef, int cellId, char flag) {
-    WorkSchedulerIdNode* node = scheduler->trees[0].root;
+uint64_t WorkScheduler::TryAssignWorkplace(CitizenComponent** citizenRef, int cellId, char flag) {
+    WorkSchedulerIdNode* node = trees[0].root;
     for (;;) {
         for (;;) {
             if (node == nullptr) return 0;
@@ -80,7 +80,7 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* scheduler, CitizenComp
     if (node == nullptr) return 0;
 
     Work* work = node->work.Get();   // IBP
-    uint32_t mgrGen = scheduler->stepCount;
+    uint32_t mgrGen = stepCount;
     if (static_cast<uint32_t>(work->field_2c) == mgrGen)
         return static_cast<uint64_t>(mgrGen & 0xffffff00u);
 
@@ -88,7 +88,7 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* scheduler, CitizenComp
     work->Validate();
 
     CitizenComponent* citizenCopy = *citizenRef;
-    uint64_t uVar2 = static_cast<uint32_t>(work->Execute(&citizenCopy, &scheduler->time));
+    uint64_t uVar2 = static_cast<uint32_t>(work->Execute(&citizenCopy, &time));
 
     if (static_cast<int>(uVar2) == 2)
         return (uVar2 & 0xffffffffffffff00ull) | 1;
@@ -98,7 +98,7 @@ uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* scheduler, CitizenComp
             work->Validate();   // [9] (0x1400f86f4)
             citizenCopy = *citizenRef;
             // [5] Slot5(&citizen, scheduler+0x130) (0x1400f871a); the caller reads AL.
-            uint64_t assignR = static_cast<uint32_t>(work->Slot5(&citizenCopy, &scheduler->time));
+            uint64_t assignR = static_cast<uint32_t>(work->Slot5(&citizenCopy, &time));
             if (static_cast<char>(assignR) != '\0')
                 return (assignR & 0xffffffffffffff00ull) | 1;
         }
@@ -138,7 +138,7 @@ int Work::TryAutoPickup(CitizenComponent** citizenRef) {
             } else {
                 if (cellId <= node->key) {   // found
                     CitizenComponent* citizenCopy = *citizenRef;
-                    uint64_t r = WorkGrid_TryAssignWorkplace_f8620(mgr, &citizenCopy,
+                    uint64_t r = mgr->TryAssignWorkplace(&citizenCopy,
                                                                    cellId, '\x01');
                     if (static_cast<char>(r) != '\0') return 2;
                     keepElement = true;

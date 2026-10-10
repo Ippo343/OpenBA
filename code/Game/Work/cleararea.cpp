@@ -349,7 +349,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     int16_t y2 = area->tileY1;
 
     // Get tiles in the area
-    WorkLeaf_GetTilesInArea_9fc00(map, (int)x1, (int)y1, (int)x2, (int)y2,
+    map->GetTilesInArea((int)x1, (int)y1, (int)x2, (int)y2,
                                  &tileArray, includeEmptyTiles);
 
     int tileCount = tileArray.size;
@@ -435,13 +435,13 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Find valid cell near this tile
-                int cellIdx = WorkGrid_FindCell_9ccf0(map, tile->cell, refTileIdx, 0xe07);
+                int cellIdx = map->FindCell(tile->cell, refTileIdx, 0xe07);
                 if (cellIdx < 0) {
                     continue;
                 }
 
                 // Validate cell is passable
-                int valid = static_cast<int>(WorkBase_ValidateCell_a00f0(map, 0xe1f, (int)(uint32_t)cellIdx, refTileIdx));   // the door read EAX
+                int valid = static_cast<int>(map->ValidateCell(0xe1f, (int)(uint32_t)cellIdx, refTileIdx));   // the door read EAX
                 if (!(valid & 0xFF)) {
                     continue;
                 }
@@ -474,7 +474,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
 
                 // Get nearby walkable position
                 float walkPos[4];
-                Reimpl_MapGetTerrainPos(map, walkPos, &posVec.x, 0, nullptr);
+                map->GetTerrainPos(walkPos, &posVec.x, 0, nullptr);
 
                 // Create PerformWork action for tree removal
                 NaturalResourceComponent* targetIBP = natRes;
@@ -547,7 +547,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 }
 
                 // Validate cell passability
-                int passable = static_cast<int>(WorkBase_ValidateCell_a00f0(map, 0xe1f, (int)tileIdx, refTileIdx));   // the door read EAX
+                int passable = static_cast<int>(map->ValidateCell(0xe1f, (int)tileIdx, refTileIdx));   // the door read EAX
                 if (!(passable & 0xFF)) {
                     tileCount = tileArray.size;
                     continue;
@@ -568,7 +568,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 Math::Vector3 posVec(worldX, worldY, 0.0f);
 
                 float walkPos[4];
-                Reimpl_MapGetTerrainPos(map, walkPos, &posVec.x, 0, nullptr);
+                map->GetTerrainPos(walkPos, &posVec.x, 0, nullptr);
 
                 // Create PerformWork action for ground clearing
                 CitizenComponent* citizenRef = *citizenIBP;
@@ -633,7 +633,7 @@ int ClearArea::Execute(CitizenComponent** citizenIBP, System::Time* time) {
                 // Create citizen IBP for gather work
                 CitizenComponent* citizenRef = *citizenIBP;
 
-                int gatherResult = static_cast<int>(WorkGrid_TryAssignWorkplace_f8620(gatherSys, &citizenRef,
+                int gatherResult = static_cast<int>(gatherSys->TryAssignWorkplace(&citizenRef,
                                                           resourceTypeId, 0));   // the door read EAX
                 if (gatherResult & 0xFF) {
                     result = 2;

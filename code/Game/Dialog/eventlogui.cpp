@@ -231,7 +231,7 @@ void EventLogUI::NavigateToRow(int32_t rowIdx) {
             0.0f
         };
         float outPos[3] = {};
-        Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
+        mapGrid->GetTerrainPos(outPos, inXY, '\0', nullptr);   // 0x14009f3e0
         PlayerController* camTarget = game->m_playerController;
         camTarget->target.x = outPos[0];
         camTarget->target.y = outPos[1];

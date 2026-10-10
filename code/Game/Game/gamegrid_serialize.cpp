@@ -244,9 +244,9 @@ void Map::Serialize(IO::Stream& stream) {
                 MapCell* e = &cells.GetData()[i];
                 if (e->blocker == nullptr &&
                     e->occupant == nullptr) {
-                    bool occupied = CheckCellTerrain(this, i) != 0;   // 0x14009cb00
+                    bool occupied = CheckCellTerrain(i) != 0;   // 0x14009cb00
                     if (!occupied) {
-                        int cls = CreateNaturalResource_helper_e2c0(this, i);   // 0x14009e2c0
+                        int cls = ClassifyTerrain(i);   // 0x14009e2c0
                         e->terrainType = static_cast<uint8_t>(cls);
                     }
                 }

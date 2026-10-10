@@ -25,14 +25,10 @@ class GrowthComponent;        // Component/GrowthComponent.h
 class ModelComponent;         // Component/ModelComponent.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
-uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
 
 // ---- action_base_complete.cpp
 class CitizenComponent;       // Component/CitizenComponent.h
 class WorkScheduler;          // Game/WorkScheduler.h
-bool TryCompleteTask(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8760
-void TaskReassign(const WorkScheduler* sched, CitizenComponent* const* entityRef, int taskIdx, ComponentEntity* const* targetRef, uint32_t taskParam);  // 0x1400f8800
-void TaskCleanup(WorkScheduler* sched, int taskIdx);  // 0x1400f8e30
 
 // ---- action_base_hunt.cpp
 class HuntComponent;          // Component/HuntComponent.h
@@ -147,9 +143,6 @@ struct GeometryBatchVertex;   // Game/WorldGeometryElements.h
 
 // ---- action_pf_road.cpp
 class WorldGeometry;
-void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend);  // 0x1400acc10
-int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin, const float* maxT, float* outHit, float* outT, float* outNormal);  // 0x1400aaa20 (body: RayTestCell, action_pf_road.cpp)
-float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal);  // 0x1400b0f90 (body: TerrainHeightUnder, action_pf_road.cpp)
 // The caller's slot for a by-value Math::Vector3 result that retail leaves UNCONSTRUCTED.
 // 0x140122e20 returns a Vector3 through the hidden return slot (RDX) and writes x, y, z on
 // every path, so its retail callers hand it bare stack (e.g. 0x14010d9ab, 0x1400e52d3). A
@@ -186,9 +179,6 @@ namespace Object { template <class T> class InternalPtr; }
 class PathfinderThread;       // Game/PathfinderThread.h
 namespace Object { template <class T> class InternalPtr; }
 namespace System { class String; }
-int RoadTool_helper_6e30(PathfinderThread* pf, int start, int goal, int passableTypes, int32_t* path, int maxNodes);  // 0x1400a6e30
-void ZoneComponent_sub_d360(Map* map, const Object::InternalPtr<ComponentEntity>* owner, int x, int y, unsigned int w, int h, const System::String* footprint, int rotation);  // 0x14009d360
-int RoadTool_sub_ce00(Map* map, unsigned int passableTypes, unsigned int start, uint64_t goal, void* unused5, int32_t* path, uint8_t manhattan, uint8_t respectBlocked);  // 0x14009ce00
 
 // ---- region_graph_build.cpp
 

@@ -670,7 +670,7 @@ void AnimalComponent::Update(const System::Time* time) {
                                  0.0f};
 
                 float world[3] = {0.0f, 0.0f, 0.0f};
-                Reimpl_MapGetTerrainPos(g, world, tile, '\0', nullptr);   // 0x14009f3e0
+                g->GetTerrainPos(world, tile, '\0', nullptr);   // 0x14009f3e0
                 dest[0] = world[0];
                 dest[1] = world[1];
                 dest[2] = world[2];

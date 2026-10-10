@@ -479,7 +479,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                 if (foundEntity != nullptr) {
                     // Check passability
-                    uint64_t passable = WorkBase_ValidateCell_a00f0(map, 0xe1f, (uint32_t)citizenCell,
+                    uint64_t passable = map->ValidateCell(0xe1f, (uint32_t)citizenCell,
                                                              (uint32_t)field_28);
                     if ((char)passable == '\0') {
                         return 1;
@@ -720,8 +720,7 @@ int ConsumeProduce::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
                     CitizenComponent* citizenRef3 = *citizenIBP;
                     // GameUpdateLoop +0x118, the WorkScheduler
                     WorkScheduler* assignMgr = gameWorld->m_tutorial;
-                    uint64_t assigned = WorkGrid_TryAssignWorkplace_f8620(
-                        assignMgr, &citizenRef3, locComp->workId, '\x01');
+                    uint64_t assigned = assignMgr->TryAssignWorkplace(&citizenRef3, locComp->workId, '\x01');
                     if ((char)assigned != '\0') {
                         return 2;
                     }

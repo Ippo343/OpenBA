@@ -302,7 +302,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
             }
 
             // Check distance is within 2x workplace radius
-            int dist = WorkBase_CalcDistance_8830(mapGrid, entityGridCell, testCell);
+            int dist = mapGrid->CalcDistance(entityGridCell, testCell);
             if (dist > workplaceRadius * 2) {
                 continue;
             }
@@ -350,15 +350,13 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
                 }
 
                 // Find nearest passable cell for pathfinding
-                int nearestCell = WorkGrid_FindCell_9ccf0(
-                    mapGrid, testCell, citizenGridCell, 0xe07);
+                int nearestCell = mapGrid->FindCell(testCell, citizenGridCell, 0xe07);
                 if (nearestCell < 0) {
                     continue;
                 }
 
                 // Check path to the nearest passable cell
-                bool canPath = static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(
-                    mapGrid, 0xe1f, nearestCell, citizenGridCell)) != 0;   // the bool door read AL
+                bool canPath = static_cast<uint8_t>(mapGrid->ValidateCell(0xe1f, nearestCell, citizenGridCell)) != 0;   // the bool door read AL
                 if (!canPath) {
                     continue;
                 }
@@ -373,7 +371,7 @@ int HerbalistWork::Execute(CitizenComponent** citizenIBP, System::Time* /*contex
                     0.0f);
 
                 float pathPos[3];
-                Reimpl_MapGetTerrainPos(map, pathPos, &cutPos.x, 0, nullptr);
+                map->GetTerrainPos(pathPos, &cutPos.x, 0, nullptr);
 
                 CitizenComponent* harvestBuf[2] = { *citizenIBP, nullptr };
                 NaturalResourceComponent* harvestTargetBuf[2] = { natResComp2, nullptr };

@@ -125,7 +125,7 @@ void CellWorldPos(Map* mapGrid, int col, int row, float out[3]) {
     if (!mapGrid) return;
     const float c = static_cast<float>(mapGrid->size >> 1) - 0.5f;
     float in[3] = { static_cast<float>(col) - c, static_cast<float>(row) - c, 0.f };
-    Reimpl_MapGetTerrainPos(mapGrid, out, in, '\0', nullptr);
+    mapGrid->GetTerrainPos(out, in, '\0', nullptr);
 }
 
 // Append the entity to the master's MultiObject list (0x140003110 on +0x48).

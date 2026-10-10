@@ -91,6 +91,7 @@
 #include "Game/PlayerToolManager.h"
 #include <atomic>
 #include "Component/CharacterGrid.h"   // CharacterGrid::RadiusQuery
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 // "[Tornado] STRUCK a building" trace budget (was a function-local static; B6-5).
 static std::atomic<int> s_tornadoStruckTraced{0};
@@ -720,7 +721,7 @@ void TornadoComponent::Startup() {
                         0.0f };
         float clamped[3] = { in[0], in[1], 0.0f };
         {
-            float* r = Reimpl_MapGetTerrainPos(map, clamped, in, 0, nullptr);   // 0x14009f3e0
+            float* r = map->GetTerrainPos(clamped, in, 0, nullptr);   // 0x14009f3e0
             if (r) { clamped[0] = r[0]; clamped[1] = r[1]; clamped[2] = r[2]; }
         }
         out[0] = clamped[0]; out[1] = clamped[1]; out[2] = clamped[2];
@@ -758,7 +759,7 @@ void TornadoComponent::Startup() {
     // --- post the warning to the event log, and pause if the setting says so ---
     EventLog* eventLog = gw->m_eventNotifier;
     Object::InternalBasePtr nullIbp(nullptr);
-    EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
+    eventLog->AddEvent(0x1e, 3, &nullIbp);
 
     if (g_gameSettings != nullptr && g_gameSettings->autoSlow != 0) {
         PlayerToolManager* speedObj = gw->m_toolManager;
@@ -871,7 +872,7 @@ void TornadoComponent::Tick(const System::Time* time) {
 
     {
         float out[3] = { 0.0f, 0.0f, 0.0f };
-        float* r = Reimpl_MapGetTerrainPos(map, out, &position.x, 1, nullptr);   // 0x14009f3e0
+        float* r = map->GetTerrainPos(out, &position.x, 1, nullptr);   // 0x14009f3e0
         if (r) {
             position.x = r[0];
             position.y = r[1];

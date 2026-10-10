@@ -43,6 +43,7 @@
 #include "Action/exe_bodies.h"   // Pf_EntityAnchorCell_7fb0 (0x140087fb0)
 #include "Work/exe_bodies.h"     // WorkBase_CalcDistance_8830 (0x140008830)
 #include "Game/exe_bodies.h"     // FindAvailableBuilding (0x14008d100)
+#include "Game/Map.h"           // Map::CalcDistance (0x140008830)
 
 // Deps ported elsewhere, called by name through their headers:
 //   0x140087fb0 Pf_EntityAnchorCell_7fb0 — an entity IBP's anchor cell (used for distance).
@@ -165,7 +166,7 @@ CitizenComponent** Strat_ca20(CitizenBehavior* townMgr, CitizenComponent** out,
                 if (cz->home != nullptr) {
                     ComponentEntity* resAnchor = cz->home.Get();   // +0x238
                     uint32_t czCell = (uint32_t)EntityAnchorCell(&resAnchor, nullptr);
-                    int d = WorkBase_CalcDistance_8830(game, czCell, availCell);
+                    int d = game->CalcDistance(czCell, availCell);
                     if (d <= bestDist) { best = cz; bestDist = d; }
                 }
             }
@@ -210,7 +211,7 @@ CitizenComponent** Strat_cbf0(CitizenBehavior* townMgr, CitizenComponent** out,
         uint32_t resCell = (uint32_t)EntityAnchorCell(&resAnchor, nullptr);
         int d = bestDist;
         if ((int)availCell >= 0) {
-            d = WorkBase_CalcDistance_8830(game, resCell, availCell);
+            d = game->CalcDistance(resCell, availCell);
             if (d > bestDist) continue;
         }
 

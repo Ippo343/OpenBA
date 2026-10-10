@@ -152,7 +152,7 @@ extern "C" CemeteryComponent** Cemetery_FindNearestWithSlot_9740(CitizenBehavior
             dist = static_cast<int>(sqrtf(static_cast<float>(dy * dy + dx * dx))) + size;
         }
         if (dist < best
-            && (WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
+            && (mapGrid->ValidateCell(0xe1f, citizenCell, static_cast<int>(cemCell)) & 0xff) != 0) {
             if (static_cast<int>(Cemetery_PickFreeSlot_6c60(slot->Get())) >= 0) {
                 *out = slot->Get();
                 best = dist;
@@ -201,7 +201,7 @@ extern "C" void Entity_PlaceAtCell_7b20(TombstoneComponent* self, int cell, floa
     float inXY[3] = { static_cast<float>(cell % size) - half,
                       static_cast<float>(cell / size) - half, 0.0f };
     Math::Vector3 terr(0.0f, 0.0f, 0.0f);
-    Reimpl_MapGetTerrainPos(map, &terr.x, inXY, '\0', nullptr);
+    map->GetTerrainPos(&terr.x, inXY, '\0', nullptr);
     Math::Scalar pitch(0.0f);
     Math::Scalar yawF(yawDeg);
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yawF, pitch, terr);

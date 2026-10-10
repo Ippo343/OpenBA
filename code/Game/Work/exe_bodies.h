@@ -147,9 +147,7 @@ inline void WorkCellBST_Serialize_9de0(Collection::Set<T>* set, IO::Serializer* 
 
 // ---- work_base_grid.cpp
 class Map;   // Game/Map.h
-int WorkGrid_FindCell_9ccf0(Map* map, int srcCell, int destCell, uint32_t passFlags);  // 0x14009ccf0
 class WorkScheduler;   // Game/WorkScheduler.h
-uint64_t WorkGrid_TryAssignWorkplace_f8620(WorkScheduler* mgr, CitizenComponent** citizenRef, int cellId, char flag);  // 0x1400f8620
 
 // ---- work_base_impl2.cpp
 float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010  // B8: free in retail -- the CRT sqrtf (0x140132010): the float in XMM0, no object
@@ -158,8 +156,6 @@ float WorkImpl_Sqrtf_132010(float param_1);  // 0x140132010  // B8: free in reta
 void WorkBase_TreeNodeFree_14c30(void* root, void* node);  // 0x140014c30  // B8: stays free -- templated over (tree, node) and measured: GCC unrolls the recursion into its callers (Map::~Map, WorldGeometry / DirtyChunkSet / MenuSceneTreeMap dtors, goals / teardown clears: DIFF, same post-order, same MemFree order, the shared ICF body gone); the one erased body stays
 void WorkBase_TreeNodeFree_e320(void* root, void* node);  // 0x14000e320  // B8: stays free -- as 0x140014c30 above (same measurement, the +0x18 / +0x20 link layout)
 struct ActionStack;
-int WorkBase_CalcDistance_8830(Map* map, uint32_t cellA, uint32_t cellB);  // 0x140008830
-uint64_t WorkBase_ValidateCell_a00f0(Map* map, uint32_t pathType, uint32_t destCell, int srcCell);  // 0x1400a00f0
 
 // ---- work_base_walkpos.cpp
 #include "Component/InteractDescription.h"   // InteractDescription::NodeArray
@@ -173,7 +169,6 @@ WorkEntitySetNode** WorkLeaf_BstInsertByIBP_29920(Collection::Set<WorkEntityAssi
 void WorkLeaf_BstSerializeIBPpair_29c10(Collection::Set<WorkEntityAssignment>* set, IO::Serializer* ser);  // 0x140029c10  // B8: stays free -- already typed on its one instantiation (Collection::Set<WorkEntityAssignment>, ClearArea::_entities); nothing erased
 struct GridTile;   // Work/GridTile.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-void WorkLeaf_GetTilesInArea_9fc00(const Map* map, int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty);  // 0x14009fc00
 
 // ---- work_leaf_gather.cpp
 class Component;

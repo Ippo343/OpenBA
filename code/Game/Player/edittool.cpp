@@ -43,6 +43,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/WorldGeometry.h"
 #include "Game/Map.h"
+#include "Game/PlayerController.h"   // PlayerController::WorldToScreen (0x140098210)
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -155,7 +156,7 @@ static bool TryProjectEntityModelPos(const ComponentEntity* entityObj, float* ou
     if (!camHolder) return false;
 
     float screen[2] = { 0.0f, 0.0f };
-    if (!PlayerScreenRect_WorldToScreen_098210(camHolder, &worldPos, screen)) return false;
+    if (!camHolder->WorldToScreen(&worldPos, screen)) return false;
     *outX = screen[0];
     *outY = screen[1];
     return true;
@@ -455,10 +456,10 @@ char EditTool::OnKey(char param2) {
     if (SelDiagOn()) {
         static int calls = 0;
         if (calls < 3) { calls++;
-            printf("[SelDiag] OnKey#%d param2=%d CamRay=%p MapHit=%p AtCell=%p "
+            printf("[SelDiag] OnKey#%d param2=%d CamRay=%p "
                    "inputConfig=%p\n", calls, param2,
-                   (void*)&PlayerRay_GetMouseRay_1005a0, (void*)&PlayerRay_TerrainMarch_aa530,
-                   (void*)&PlayerEdit_EntityAtCell_a0280, (void*)Input::Configuration::_singleton);
+                   (void*)&PlayerRay_GetMouseRay_1005a0,
+                   (void*)Input::Configuration::_singleton);
             fflush(stdout);
         }
     }
@@ -528,7 +529,7 @@ char EditTool::OnKey(char param2) {
         maxDistArr[0] = 400.0f;  // 0x43c80000
         maxDistArr[1] = 0.0f;
 
-        bool mapHit = PlayerRay_TerrainMarch_aa530(mapComponent, rayOrigin, rayDir,
+        bool mapHit = mapComponent->TerrainMarch(rayOrigin, rayDir,
                                                    maxDistArr, hitPos, &maxDist) != 0;
 
         if (mapHit) {
@@ -549,7 +550,7 @@ char EditTool::OnKey(char param2) {
 
             if (cellIndex > 0) {
                 ComponentEntity* retIBP = nullptr;
-                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                ComponentEntity** result = entityList->EntityAtCell(&retIBP, cellIndex);
                 if (result) foundEntity = *result;
             }
             if (SelDiagOn())
@@ -560,8 +561,8 @@ char EditTool::OnKey(char param2) {
                    rayOrigin[0], rayOrigin[1], rayOrigin[2], rayDir[0], rayDir[1], rayDir[2]);
         }
     } else if (SelDiagOn()) {
-        printf("[SelDiag] MapHitTest skipped (MapHit=%p mapComp=%p)\n",
-               (void*)&PlayerRay_TerrainMarch_aa530, (void*)mapComponent);
+        printf("[SelDiag] MapHitTest skipped (mapComp=%p)\n",
+               (void*)mapComponent);
     }
 
     // Picking scene intersection (3D ray picking for precise entity selection)
@@ -789,7 +790,7 @@ extern "C" int EditTool_HarnessSelectNearby(EditTool* editTool) {
                 if (cellIndex <= 0) continue;
 
                 ComponentEntity* retIBP = nullptr;
-                ComponentEntity** result = PlayerEdit_EntityAtCell_a0280(entityList, &retIBP, cellIndex);
+                ComponentEntity** result = entityList->EntityAtCell(&retIBP, cellIndex);
                 ComponentEntity* entity = result ? *result : nullptr;
                 if (!entity) continue;
                 found++;

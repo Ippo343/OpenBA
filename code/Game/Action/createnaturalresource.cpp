@@ -112,7 +112,7 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     }
 
     // Check terrain validity for this cell
-    uint64_t terrainResult = CheckCellTerrain(map, cellIndex);   // 0x14009cb00
+    uint64_t terrainResult = map->CheckCellTerrain(cellIndex);   // 0x14009cb00
     if ((char)terrainResult != '\0') {
         CNR_BAIL("terrain check says the cell is unavailable");
     }

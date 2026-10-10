@@ -246,10 +246,3 @@ void Minimap::PaintTerrain(Video::Context& context, Graphics::Geometry* worldGeo
                (void*)terrainImage);
 }
 
-// B4 FORWARD: 1 outside caller (gameupdateloop.cpp, GAME-a). The null tests are
-// the old body's.
-extern "C" void Minimap_PaintTerrain(Minimap* minimap, Video::Context* context,
-                                     WorldGeometry* worldGeom, Graphics::SunLight* sunLight) {
-    if (!minimap || !context) return;
-    minimap->PaintTerrain(*context, worldGeom, sunLight);
-}

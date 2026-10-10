@@ -47,7 +47,7 @@ static int MapTileGrid_Classify(Map* game, int dim, int idx) {
     float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
     float out[3] = { 0, 0, 0 };
     float tri[4] = { 0, 0, 0, 0 };
-    Reimpl_MapGetTerrainPos(game, out, in, 1, tri);   // flag=1 => height-only, no picking refine
+    game->GetTerrainPos(out, in, 1, tri);   // flag=1 => height-only, no picking refine
     const float h     = out[2];
     const float slope = tri[2];
     if (h < kDeepWaterMax) return TILE_DEEP_WATER;

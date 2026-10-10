@@ -82,6 +82,7 @@ public:
     // B.4 GAME-c (bodies in weather_sim.cpp / weather_particles.cpp)
     void Update(const System::Time* time);              // 0x1400944e0 (the per-tick sim)
     void SetEffectEnabled(int slot, bool enable);       // 0x1400942c0
+    void Teardown();   // 0x140093eb0 (Game/game_leaf_helpers.cpp)
 };
 
 static_assert(sizeof(WeatherSimulation) == 0x78, "WeatherSimulation is 0x78 (Load MemAlloc(0x78, 8))");

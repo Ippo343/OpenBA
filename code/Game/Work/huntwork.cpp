@@ -277,7 +277,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
         bool terrainOk = (terrainBit & 0x1e0u) == 0;
 
         // Check 2: distance from workplace to random cell
-        int dist = WorkBase_CalcDistance_8830(mapGrid, entityGridCell, testCell);
+        int dist = mapGrid->CalcDistance(entityGridCell, testCell);
         bool distOk = dist <= areaRadius * 2;
 
         // Check 3: no entity at the cell (the cell's occupant, +8)
@@ -289,7 +289,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
 
         // Check 4: passability from random cell to citizen
         if (terrainOk && distOk && emptyCell) {
-            bool canPath = (char)WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, testCell, citizenGridCell) != 0;
+            bool canPath = (char)mapGrid->ValidateCell(0xe1f, testCell, citizenGridCell) != 0;
             allChecksPass = canPath;
         }
     }
@@ -308,7 +308,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
 
         // Get terrain height
         float pathPos[3];
-        Reimpl_MapGetTerrainPos(map, pathPos, &huntPos.x, 0, nullptr);
+        map->GetTerrainPos(pathPos, &huntPos.x, 0, nullptr);
 
         CitizenComponent* citizenEntRef = *citizenIBP;
 

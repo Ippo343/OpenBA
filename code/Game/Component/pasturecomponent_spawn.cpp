@@ -140,7 +140,7 @@ void PastureComponent::SpawnLivestock(AnimalComponent* const* parent) {
                 float world2[3] = { static_cast<float>(cell % dim) - half,
                                     static_cast<float>(cell / dim) - half, 0.0f };
                 float out3[3] = {0, 0, 0};
-                Reimpl_MapGetTerrainPos(w->m_game, out3, world2, 0, nullptr);
+                w->m_game->GetTerrainPos(out3, world2, 0, nullptr);
                 posX = out3[0] + jitterX;
                 posY = out3[1] + jitterY;
             }
@@ -285,10 +285,10 @@ extern "C" void Pasture_SetLivestockType(PastureComponent* pasture, ComponentDes
 // (0x140123c70) files them into gameState+0x80, and the pasture state-2 adopt pass
 // (sub_7140, pasturecomponent_states.cpp:287) pulls matching ones in once the player
 // builds a pasture and picks that type. Both of those are already ported and live.
-extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl) {
-    if (!sc || !tmpl || !centre) return 0;
+int MapGenerator::SpawnStartingHerd(const float* centre, ComponentDescription* tmpl) {
+    if (!tmpl || !centre) return 0;
 
-    const int groupCount = sc->paramF8;   // +0xf8
+    const int groupCount = paramF8;   // +0xf8
     if (groupCount <= 0) return 0;
 
     GameUpdateLoop* w = GameUpdateLoop::_singleton;
@@ -303,9 +303,9 @@ extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre
     // iteration, so a group of 8 comes out 4/4 rather than 8 independent coin flips.
     bool female = rng->Rand(2u) == 0u;
 
-    const float offX      = sc->paramEC;   // +0xec
-    const float offY      = sc->paramF0;   // +0xf0
-    const float radius    = sc->paramF4;   // +0xf4
+    const float offX      = paramEC;   // +0xec
+    const float offY      = paramF0;   // +0xf0
+    const float radius    = paramF4;   // +0xf4
     const float yawSpread = kRdata_140172220;  // 0x140172220 = 180.0f
 
     const ComponentDescription* templ = tmpl;

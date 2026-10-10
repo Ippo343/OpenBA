@@ -311,15 +311,6 @@ void EventLog::AddEvent(int eventType, int severity, const ::Object::InternalBas
     AddEventCore(eventType, severity, entityIBP, nullptr, 0);
 }
 
-// B4 FORWARD: 5 outside caller files (Component/firecomponent_ignite.cpp,
-// immigrationcomponent_states.cpp, tornadocomponent.cpp, tradecomponent_states.cpp,
-// Entity/citizenbehavior.cpp; citizen_updatehealth / citizen_lifeevent reach the
-// citizen variant below).
-extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severity, const ::Object::InternalBasePtr* entityIBP) {
-    if (!eventLog) return;
-    eventLog->AddEvent(eventType, severity, entityIBP);
-}
-
 // ============================================================
 // AddEventWithName (0x140095750)
 // ============================================================
@@ -347,16 +338,6 @@ void EventLog::AddCitizenEvent(int eventType, int severity, const ::Object::Inte
         extraStr ? extraStr->_data : "",
     };
     AddEventCore(eventType, severity, entityIBP, extra, 3);
-}
-
-// B4 FORWARD: 2 outside caller files (Component/citizen_lifeevent.cpp,
-// Component/citizen_updatehealth.cpp).
-extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity,
-                                         const ::Object::InternalBasePtr* entityIBP,
-                                         const System::String* nameStr, const System::String* titleStr,
-                                         const System::String* extraStr) {
-    if (!eventLog) return;
-    eventLog->AddCitizenEvent(eventType, severity, entityIBP, nameStr, titleStr, extraStr);
 }
 
 // ============================================================

@@ -296,7 +296,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
 
     int targetCell = field_58;
 
-    uint64_t passResult = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, (uint32_t)cellIndex, targetCell);
+    uint64_t passResult = mapGrid->ValidateCell(0xe1f, (uint32_t)cellIndex, targetCell);
     if ((char)passResult == '\0') {
         return 1;
     }
@@ -316,7 +316,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             CitizenComponent* citizenRef = *entityIBP;
 
             WorkScheduler* assignMgr = gameWorld->m_tutorial;
-            uint64_t assignResult = WorkGrid_TryAssignWorkplace_f8620(assignMgr, &citizenRef, workId, '\0');
+            uint64_t assignResult = assignMgr->TryAssignWorkplace(&citizenRef, workId, '\0');
             if ((char)assignResult != '\0') {
                 return 2;
             }
@@ -340,12 +340,12 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         mapSize = map->size;
         cellIndex = PosToCellIndex(map, GetPositionData(entityIBP));
 
-        int adjacentCell = WorkGrid_FindCell_9ccf0(mapGrid, targetCell, cellIndex, 0xe07);
+        int adjacentCell = mapGrid->FindCell(targetCell, cellIndex, 0xe07);
         if (adjacentCell < 0) {
             return 1;
         }
 
-        passResult = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, (uint32_t)adjacentCell, cellIndex);
+        passResult = mapGrid->ValidateCell(0xe1f, (uint32_t)adjacentCell, cellIndex);
         if ((char)passResult == '\0') {
             return 1;
         }
@@ -353,7 +353,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         Math::Vector3 worldPos = CellToWorldVec3(map, adjacentCell);
 
         float terrainPos[4] = {};
-        Reimpl_MapGetTerrainPos(map, terrainPos, &worldPos.x, '\0', nullptr);
+        map->GetTerrainPos(terrainPos, &worldPos.x, '\0', nullptr);
 
         NaturalResourceComponent* targetRef = natResComp;
         CitizenComponent* citizenRef = *entityIBP;
@@ -373,7 +373,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
         Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
 
         float terrainPos[4] = {};
-        Reimpl_MapGetTerrainPos(map, terrainPos, &worldPos.x, '\0', nullptr);
+        map->GetTerrainPos(terrainPos, &worldPos.x, '\0', nullptr);
 
         CitizenComponent* citizenRef = *entityIBP;
 
@@ -399,7 +399,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
 
             float terrainPos[4] = {};
-            Reimpl_MapGetTerrainPos(map, terrainPos, &worldPos.x, '\0', nullptr);
+            map->GetTerrainPos(terrainPos, &worldPos.x, '\0', nullptr);
 
             CitizenComponent* citizenRef = *entityIBP;
 
@@ -452,7 +452,7 @@ int BuildRoad::Execute(CitizenComponent** entityIBP, System::Time* /*context*/) 
             Math::Vector3 worldPos = CellToWorldVec3(map, targetCell);
 
             float terrainPos[4] = {};
-            Reimpl_MapGetTerrainPos(map, terrainPos, &worldPos.x, '\0', nullptr);
+            map->GetTerrainPos(terrainPos, &worldPos.x, '\0', nullptr);
 
             CitizenComponent* citizenRef = *entityIBP;
 

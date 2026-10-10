@@ -254,7 +254,7 @@ void SpawnComponent::DoSpawn(SpawnDescription* desc, int entryIndex, char random
     float ca = SC_RdataF32(kRdata_140172140);
     float cb = SC_RdataF32(kRdata_140172248);
     bool canPlace =
-        PlayerPath_CharComp_f5d0(map, x, y, 4, ca, cb, 0.0f, '\0', '\0', nullptr);   // 0x14009f5d0 (the Map* overload the int* one forwards to)
+        map->TestPlacement(x, y, 4, ca, cb, 0.0f, '\0', '\0', nullptr);   // 0x14009f5d0 (the Map* overload the int* one forwards to)
     if (!canPlace) { ++g_doSpawn.cannotPlace; return; }
     if (!(static_cast<char>(templ->CheckFootprint(x, y)) != '\0')) { ++g_doSpawn.tileTaken; return; }
 

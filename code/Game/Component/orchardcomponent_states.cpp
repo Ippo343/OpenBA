@@ -665,8 +665,7 @@ char OrchardComponent::EnterHarvesting() {
         }
     }
     if (pos)     // SA: retail derefs the finder's out-param unguarded; see state 9 enter.
-        MapGrid_StampCellRefs_9f770(grid,
-            static_cast<int16_t>(pos->tileX0), static_cast<int16_t>(pos->tileY0),
+        grid->StampCellRefs(static_cast<int16_t>(pos->tileX0), static_cast<int16_t>(pos->tileY0),
             static_cast<int16_t>(pos->tileX1), static_cast<int16_t>(pos->tileY1),
             treeType);
     return 1;

@@ -259,15 +259,15 @@ void EntityList::Shutdown() {
 // ============================================================
 // (The receiver is the 0xB0 PlayerToolManager at GameUpdateLoop+0x120; the
 // name is the tree's.)
-extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
+void PlayerToolManager::Teardown() {
     // Active tool (+0x28): Tool slot 5 Shutdown (0x140102505: RCX only), then
     // drop the IBP.
-    if (self->currentTool != nullptr) {
-        self->currentTool->Shutdown();   // slot 5
-        self->currentTool.DeletePtr();   // 0x14010250c
+    if (currentTool != nullptr) {
+        currentTool->Shutdown();   // slot 5
+        currentTool.DeletePtr();   // 0x14010250c
     }
 
-    self->cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)
+    cameraViews.~Array();   // retail's inlined ~Array, here in the body's order (no C++ dtor runs: Shutdown MemFrees the block)
 
     // Two trees with kids at +0x20/+0x28 (+0x60 then +0x50).
     // (B.4 Y GAMEB: the two sets have their own node types now; the same
@@ -282,11 +282,11 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
         set.root = nullptr;
         set.count = 0;
     };
-    freeSet(self->field_0x60);
-    freeSet(self->field_0x50);
+    freeSet(field_0x60);
+    freeSet(field_0x50);
 
     // Tool registry tree (+0x10): nodes carry an IBP payload at +0x10.
-    IbpTree_Clear_2de90(&self->toolRegistry);
+    IbpTree_Clear_2de90(&toolRegistry);
 }
 
 // ============================================================
@@ -294,12 +294,12 @@ extern "C" void EntityUI_Dtor_1024d0(PlayerToolManager* self) {
 // ============================================================
 // (The receiver is the 0x138 WorkScheduler at GameUpdateLoop+0x118; the name
 // is the tree's.)
-extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self) {
+void WorkScheduler::Teardown() {
     // In-order walk of the id tree trees[0] (+0x30), dropping each node's Work
     // (+0x08). The nodes themselves are freed by the vector-dtor pass further
     // down, not here.
     {
-        WorkSchedulerIdNode* node = self->trees[0].root;
+        WorkSchedulerIdNode* node = trees[0].root;
         while (node && node->left) node = node->left;
         while (node) {
             node->work.DeletePtr();
@@ -320,41 +320,41 @@ extern "C" void Tutorial_Dtor_f8ff0(WorkScheduler* self) {
 
     // Tree at +0x120 whose nodes each own a sub-tree (kids +0x20/+0x28).
     {
-        WorkSchedulerBucketNode* root = self->field_0x120;
+        WorkSchedulerBucketNode* root = field_0x120;
         if (root) {
-            TreeNodeFree_2ce60(&self->field_0x120, root->left);
-            TreeNodeFree_2ce60(&self->field_0x120, root->right);
+            TreeNodeFree_2ce60(&field_0x120, root->left);
+            TreeNodeFree_2ce60(&field_0x120, root->right);
             NodeSubTree_Clear_2cf30(root);
             MemFree(root);
         }
-        self->field_0x120 = nullptr;
-        self->field_0x128 = 0;
+        field_0x120 = nullptr;
+        field_0x128 = 0;
     }
 
     // 15 tree headers of 0x10 bytes at +0x30, cleared back to front.
-    VectorDtorIter(self->trees, [](WorkSchedulerTree* e) { Tree_Clear_dcb0(e); });
+    VectorDtorIter(trees, [](WorkSchedulerTree* e) { Tree_Clear_dcb0(e); });
 
     // Tree at +0x20 (kids +0x18/+0x20).
     {
-        WorkSchedulerNode20* root = self->field_0x20;
+        WorkSchedulerNode20* root = field_0x20;
         if (root) {
-            WorkBase_TreeNodeFree_e320(&self->field_0x20, root->left);
-            WorkBase_TreeNodeFree_e320(&self->field_0x20, root->right);
+            WorkBase_TreeNodeFree_e320(&field_0x20, root->left);
+            WorkBase_TreeNodeFree_e320(&field_0x20, root->right);
             MemFree(root);
         }
-        self->field_0x20 = nullptr;
-        self->field_0x28 = 0;
+        field_0x20 = nullptr;
+        field_0x28 = 0;
     }
 
     // Tree at +0x10 (kids +0x10/+0x18).
     {
-        WorkSchedulerCountNode* root = self->field_0x10.root;
+        WorkSchedulerCountNode* root = field_0x10.root;
         if (root) {
-            WorkBase_TreeNodeFree_14c30(&self->field_0x10.root, root->left);
-            WorkBase_TreeNodeFree_14c30(&self->field_0x10.root, root->right);
+            WorkBase_TreeNodeFree_14c30(&field_0x10.root, root->left);
+            WorkBase_TreeNodeFree_14c30(&field_0x10.root, root->right);
             MemFree(root);
         }
-        self->field_0x10.count = 0;
-        self->field_0x10.root = nullptr;
+        field_0x10.count = 0;
+        field_0x10.root = nullptr;
     }
 }

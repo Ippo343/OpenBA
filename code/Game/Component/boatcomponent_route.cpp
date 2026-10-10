@@ -239,7 +239,7 @@ extern "C" int BoatRoute_FindWaterPath(Map* map, void* /*unused2*/, uint32_t fro
     for (int i = 0; i < 11; ++i)   // 0x1400a6a30: the cost rides in R8 (read as an int), the ctx in R9
         pf->SetStepCost(i, kCost[i]);
     pf->SetSearchFlags(1, 0, 0);   // 0x1400a68b0 (1, 0, 0)
-    const int n = RoadTool_helper_6e30(pf, static_cast<int>(fromCell), static_cast<int>(toCell & 0xffffffffu),
+    const int n = pf->QueryPath(static_cast<int>(fromCell), static_cast<int>(toCell & 0xffffffffu),
                                        0x380, outBuf, 0x1000);   // 0x1400a6e30
     return n;
 }
@@ -427,7 +427,7 @@ void BoatComponent::SetDestination(const Object::InternalPtr<ComponentEntity>* d
                     0.0f
                 };
                 float snapped[3] = {0.0f, 0.0f, 0.0f};
-                Reimpl_MapGetTerrainPos(terrain, snapped, cellPos, '\0', nullptr);   // 0x14009f3e0
+                terrain->GetTerrainPos(snapped, cellPos, '\0', nullptr);   // 0x14009f3e0
                 AppendRoutePoint(this, snapped);
             }
         }

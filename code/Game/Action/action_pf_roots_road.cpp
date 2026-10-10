@@ -165,7 +165,7 @@ void Map::ResetTerrainHeights(int param_2, int param_3, int param_4, int param_5
                 local_78 = Math::Vector3(
                                     static_cast<float>(iVar5 % static_cast<int>(uVar1)) - fVar7,
                                     static_cast<float>(iVar5 / static_cast<int>(uVar1)) - fVar7, 0.0f);
-                Reimpl_MapGetTerrainPos(this, gw, &local_78.x, '\0', nullptr);   // 0x14009f3e0
+                GetTerrainPos(gw, &local_78.x, '\0', nullptr);   // 0x14009f3e0
                 gw[2] = 0.0f;  // original: local_90 = 0 (a 4-byte zero into the z slot; the same bits)
                 fVar7 = static_cast<float>(lVar2->_gridSize >> 1);
                 co = Math::Vector3(gw[0] + fVar7, gw[1] + fVar7, 0.0f);

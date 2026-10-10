@@ -116,7 +116,7 @@ void CitizenBehavior::ScanWaterCell(Map* map, int coarseCell, int ringX, int rin
 
             // Reachability: path-type 0xe07 query then explicit length query.
             {
-                uint64_t ok = WorkBase_ValidateCell_a00f0(map, 0xe07, srcCell, static_cast<int>(uVar7));
+                uint64_t ok = map->ValidateCell(0xe07, srcCell, static_cast<int>(uVar7));
                 if (static_cast<char>(ok) != '\0') {
                     int iVar2;
                     iVar2 = map->PathDistance(srcCell, uVar7, '\x01');   // 0x14009f810 (was its Pf_IsDstReachable_f810 forwarder)
@@ -236,7 +236,7 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
         inXY_a[1] = static_cast<float>(cellA / map->size) - half;
         inXY_a[2] = 0.0f;
         float outPosA[3];
-        Reimpl_MapGetTerrainPos(map, outPosA, inXY_a, '\0', nullptr);
+        map->GetTerrainPos(outPosA, inXY_a, '\0', nullptr);
         outA[0] = outPosA[0];
         outA[1] = outPosA[1];
         outA[2] = outPosA[2];
@@ -249,7 +249,7 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
         inXY_b[1] = static_cast<float>(cellB / map->size) - half2;
         inXY_b[2] = 0.0f;
         float outPosB[3];
-        Reimpl_MapGetTerrainPos(map, outPosB, inXY_b, '\0', nullptr);
+        map->GetTerrainPos(outPosB, inXY_b, '\0', nullptr);
         outB[0] = outPosB[0];
         outB[1] = outPosB[1];
         outB[2] = outPosB[2];
@@ -277,7 +277,7 @@ int64_t CitizenBehavior::FindWater(uint32_t centreCell, int extent, float* outA,
     inXY[1] = static_cast<float>(anchorCell / map->size) - half;
     inXY[2] = 0.0f;
     float outP[3];
-    Reimpl_MapGetTerrainPos(map, outP, inXY, '\0', nullptr);
+    map->GetTerrainPos(outP, inXY, '\0', nullptr);
     outB[0] = outP[0];
     outB[1] = outP[1];
     outB[2] = outP[2];

@@ -243,14 +243,14 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
     Map* mapGrid = map;
 
     // Check path cost between the two cells
-    uint32_t pathCost = (uint32_t)WorkGrid_FindCell_9ccf0(mapGrid, fromCell, toCell, 0xe1f);   // 0x14009ccf0
+    uint32_t pathCost = (uint32_t)mapGrid->FindCell(fromCell, toCell, 0xe1f);   // 0x14009ccf0
     if ((int)pathCost < 0) {
         // No valid path, bail
         return;
     }
 
     // Check path validity
-    uint64_t pathValid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, pathCost, toCell);   // 0x1400a00f0
+    uint64_t pathValid = mapGrid->ValidateCell(0xe1f, pathCost, toCell);   // 0x1400a00f0
     if ((char)pathValid == 0) {
         // Path not valid, bail
         return;
@@ -275,7 +275,7 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
                           (float)(cellIdx / mapSize) - halfFloat,
                           0.0f);
 
-    Reimpl_MapGetTerrainPos(map, worldPos, &gridPos.x, 0, nullptr);   // 0x14009f3e0 reads x, y
+    map->GetTerrainPos(worldPos, &gridPos.x, 0, nullptr);   // 0x14009f3e0 reads x, y
 
     // Build the removal actions on the hunter: citizen, task -1, worldPos, fromCell, the
     // animal, its description, gate 0

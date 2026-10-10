@@ -140,8 +140,7 @@ static inline int ClampCell(int v, int w) {
 static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* outVtx, uint8_t blend) {
     int half = geo->_gridSize >> 1;
 
-    float normal[3] = {0, 0, 0};   // local_18/local_14/local_10
-    Reimpl_TradeWork_helper_e270(geo, normal, x, y);   // 0x1400ae270
+    const Math::Vector3 normal = geo->TerrainNormal(x, y);   // 0x1400ae270 into local_18/local_14/local_10
 
     short hSv = static_cast<short>(half);
     outVtx->x = static_cast<short>(static_cast<short>(x) - hSv);
@@ -166,13 +165,13 @@ static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* 
     short hVal = hm[static_cast<int64_t>(hmW) * cy + cx];
 
     // normal encode: byte = (normal + 1.0) * 127.5  (all three components)
-    float n2 = normal[2] + addOff;
-    float n0 = normal[0] + addOff;
+    float n2 = normal.z + addOff;
+    float n0 = normal.x + addOff;
     outVtx->normalW = 0;
     outVtx->blend = static_cast<uint16_t>(blend);
     outVtx->height = hVal;
     outVtx->normal[0] = static_cast<int8_t>(static_cast<int64_t>(n0 * encScl));
-    outVtx->normal[1] = static_cast<int8_t>(static_cast<int64_t>((normal[1] + addOff) * encScl));
+    outVtx->normal[1] = static_cast<int8_t>(static_cast<int64_t>((normal.y + addOff) * encScl));
     outVtx->normal[2] = static_cast<int8_t>(static_cast<int64_t>(n2 * encScl));
     // AO uv shorts:
     float span = static_cast<float>(geo->_gridSize);
@@ -186,7 +185,7 @@ static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* 
 // The 4 corners are (x,y),(x+1,y),(x+1,y+1),(x,y+1); each filled via caa0 into a local
 // vertex, then scattered into quad[i] (the normal bytes move from +0x0C to +0x10). After the
 // 4th, the corners' mask-atlas coordinates come from the (DAT_1401c23d0 + shape*8) table.
-void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend) {
+void WorldGeometry::BuildRoadQuad(int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend) {
     RoadVertexScratch localVtx;   // caa0 writes a full 0x14-byte vertex here (local_38..)
 
     int iVar5 = 0;
@@ -197,7 +196,7 @@ void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* qua
         else if (iVar5 == 2) { iVar3 = y + 1; iVar2 = x + 1; }
         else if (iVar5 == 3) { iVar3 = y + 1; }
         // iVar5 == 0 -> (x,y)
-        FillRoadVertex(geo, iVar2, iVar3, &localVtx, blend);   // 0x1400acaa0
+        FillRoadVertex(this, iVar2, iVar3, &localVtx, blend);   // 0x1400acaa0
 
         // Scatter the local vertex into quad[iVar5], in retail's store order.
         GeometryBatchVertex& v = quad[iVar5];
@@ -571,9 +570,9 @@ int Component::PickReachableCell(uint32_t param_2, float* param_3) const {
     // LEFT: 0x1400a00f0 / 0x140008830's C declarations (Work/exe_bodies.h, WORK-a's header)
     // take the Map as int*.
     Map* mapGrid = map;
-    uint64_t ok = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_2, static_cast<int>(cell));   // 0x1400a00f0
+    uint64_t ok = mapGrid->ValidateCell(0xe1f, param_2, static_cast<int>(cell));   // 0x1400a00f0
     if (static_cast<char>(ok) == '\0') return -1;
-    return WorkBase_CalcDistance_8830(mapGrid, param_2, cell);   // 0x140008830
+    return mapGrid->CalcDistance(param_2, cell);   // 0x140008830
 }
 
 // ============================================================
@@ -636,7 +635,7 @@ int EntityAnchorCell(ComponentEntity* const* entityIBP, float* param_2) {
         local[1] = static_cast<float>(iVar4 / map->size) - half;
         local[2] = 0.0f;
         float wp[3] = {0, 0, 0};   // local_28..local_20
-        Reimpl_MapGetTerrainPos(map, wp, local, '\0', nullptr);   // 0x14009f3e0
+        map->GetTerrainPos(wp, local, '\0', nullptr);   // 0x14009f3e0
         param_2[0] = wp[0];
         param_2[1] = wp[1];
         param_2[2] = wp[2];
@@ -802,7 +801,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
                                     // build the quad (cc10) into the local scratch (local_98).
                                     GeometryBatchVertex quad[4];
-                                    Pf_RoadQuad_cc10(this, fineCol + vtxOff, fineRow + vtxOff,
+                                    BuildRoadQuad(fineCol + vtxOff, fineRow + vtxOff,
                                                   quad, blendVal, blendId);   // 0x1400acc10
 
                                     GeometryBatch& rec = batches._data[batchId];
@@ -873,13 +872,13 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
 // The exported names of the two file-static bodies (callers: Component/quarrycomponent_deform.cpp,
 // Player/tool_base_ray.cpp; Player/tool_base_tilerender.cpp).
-int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin,
+int WorldGeometry::CellQuadRay(int x, int y, const float* dir, const float* origin,
                         const float* maxT, float* outHit, float* outT, float* outNormal) {
-    return RayTestCell(geo, x, y, dir, origin, maxT, outHit, outT, outNormal);
+    return RayTestCell(this, x, y, dir, origin, maxT, outHit, outT, outNormal);
 }
 
-float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal) {
-    return TerrainHeightUnder(geo, point, outNormal);
+float WorldGeometry::HeightUnderPoint(const float* point, float* outNormal) {
+    return TerrainHeightUnder(this, point, outNormal);
 }
 
 // (Pf_EntityResolvePos_2e20, the void* forwarder to InteractNodePosition, went in B6 once its

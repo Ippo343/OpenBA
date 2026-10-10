@@ -239,8 +239,8 @@ void PlayerToolManager::UpdateCamera(int inputFlag, int64_t timeTicks) {
             int cellB = field_0xA8;
             float inA[3] = { (float)(cellA % gw) - halfCell, (float)(cellA / gw) - halfCell, 0.0f };
             float inB[3] = { (float)(cellB % gw) - halfCell, (float)(cellB / gw) - halfCell, 0.0f };
-            Reimpl_MapGetTerrainPos(grid, worldA, inA, '\0', nullptr);   // 0x14009f3e0
-            Reimpl_MapGetTerrainPos(grid, worldB, inB, '\0', nullptr);
+            grid->GetTerrainPos(worldA, inA, '\0', nullptr);   // 0x14009f3e0
+            grid->GetTerrainPos(worldB, inB, '\0', nullptr);
             float midX = (worldA[0] + worldB[0]) * kHalf;
             float midY = (worldA[1] + worldB[1]) * kHalf;
             float* fx = &pc->target.x;

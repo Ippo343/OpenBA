@@ -102,6 +102,7 @@ public:
     uint8_t      stagedManhattan;          // +0x1F5
     uint8_t      stagedRespectBlocked;     // +0x1F6
     uint8_t      _pad1F7;                  // +0x1F7
+    int QueryPath(int start, int goal, int passableTypes, int32_t* path, int maxNodes);   // 0x1400a6e30 (Action/keystone_a_zone.cpp)
 };
 
 static_assert(sizeof(PathfinderThread) == 0x1f8, "PathfinderThread is MemAlloc(0x1f8)");

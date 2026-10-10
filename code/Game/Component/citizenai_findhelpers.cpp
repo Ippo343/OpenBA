@@ -241,7 +241,7 @@ ComponentEntity** CitizenBehavior::FindElderResidence(ComponentEntity** found, u
         int cost = CellCost(map, cell, param_3);
 
         if (cost < best) {
-            uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
+            uint64_t valid = mapGrid->ValidateCell(0xe1f, param_3, static_cast<int>(cell));
             if (static_cast<char>(valid) != '\0') {
                 ComponentEntity* self_00 = field_0x20._data[idx].Get();
                 // 0x140008090 (was its CitizenComp_Entity_FindComponent_Storage forwarder)
@@ -294,9 +294,9 @@ ComponentEntity** CitizenBehavior::FindAdultTarget(ComponentEntity** found, uint
         float vec[4] = {0, 0, 0, 0};
         ComponentEntity* candIBP = preferred;
         uint32_t cell = static_cast<uint32_t>(EntityAnchorCell(&candIBP, vec));
-        uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
+        uint64_t valid = mapGrid->ValidateCell(0xe1f, param_3, static_cast<int>(cell));
         if (static_cast<char>(valid) != '\0') {
-            int dist = WorkBase_CalcDistance_8830(mapGrid, cell, param_3);
+            int dist = mapGrid->CalcDistance(cell, param_3);
             ComponentEntity* candA = *origP7;
             ComponentDescription* outSlot = nullptr;
             CitizenComp_Entity_impl_ef40(candA, &outSlot, &candA, 0);

@@ -67,8 +67,11 @@
 
 class ComponentEntity;
 class PathfinderThread;
-struct GridTile;   // Work/GridTile.h
+class ComponentDescription;      // Component/ComponentDescription.h
+class CreatePlacedDescription;   // Component/CreatePlacedDescription.h
+struct GridTile;                 // Work/GridTile.h
 namespace IO { class Stream; }
+namespace System { class String; }
 
 struct MapCell {
     Object::InternalPtr<ComponentEntity> blocker;    // +0x00 (0x14009d360)
@@ -170,6 +173,21 @@ public:
     void SetTerrainType(int cell, uint32_t terrainType);  // 0x14009f2f0 (Action/action_pf_roots_road.cpp, B.4 ACT-a)
     void ResetTerrainHeights(int x0, int y0, int x1, int y1);   // 0x14009e0e0 (Action/action_pf_roots_road.cpp)
     void FinishRoadCell(int cell, uint8_t orientation, uint32_t terrainType);   // 0x14009c640 (Action/action_pf_roots_road.cpp)
+    uint64_t CheckCellTerrain(int cellIndex) const;   // 0x14009cb00 (Action/action_base_cnr.cpp)
+    void StampFootprint(const Object::InternalPtr<ComponentEntity>* owner, int x, int y, unsigned int w, int h, const System::String* footprint, int rotation);   // 0x14009d360 (Action/keystone_a_zone.cpp)
+    int FindRoadPath(unsigned int passableTypes, unsigned int start, uint64_t goal, void* unused5, int32_t* path, uint8_t manhattan, uint8_t respectBlocked);   // 0x14009ce00 (Action/keystone_a_zone.cpp)
+    int ClassifyTerrain(int cellIndex);   // 0x14009e2c0 (Component/keystone_a_map.cpp)
+    float* GetTerrainPos(float* outPos3, const float* inXY2, char flag, float* outTri);   // 0x14009f3e0 (Game/mapquery.cpp)
+    uint64_t RemovePendingRoad(int param_2);   // 0x14009c700 (Player/keystone_a_removalcalcpath.cpp)
+    ComponentEntity** EntityAtCell(ComponentEntity** retIBP, int cellIndex) const;   // 0x1400a0280 (Player/tool_base_edit.cpp)
+    bool TestPlacement(int param_2, int param_3, uint32_t param_4, float param_5, float param_6, float param_7, char param_8, char param_9, const ComponentDescription* param_10);   // 0x14009f5d0 (Player/tool_base_path.cpp)
+    uint64_t FootprintValidity(int param_2, int param_3, int param_4, int param_5, unsigned int param_6, const CreatePlacedDescription* param_7, const System::String* param_8, float param_9, float param_10, float param_11, char param_12, const System::String* param_13, int param_14, const ComponentDescription* param_15);   // 0x14009d580 (Player/tool_base_tile.cpp)
+    int FindCell(int srcCell, int destCell, uint32_t passFlags);   // 0x14009ccf0 (Work/work_base_grid.cpp)
+    int CalcDistance(uint32_t cellA, uint32_t cellB);   // 0x140008830 (Work/work_base_reimpl.cpp)
+    void GetTilesInArea(int x, int y, int w, int h, RawArray<GridTile>* outArr, char collectEmpty) const;   // 0x14009fc00 (Work/work_leaf_clear.cpp)
+    uint64_t ValidateCell(uint32_t pathType, uint32_t destCell, int srcCell);   // 0x1400a00f0 (Work/work_base_reimpl.cpp)
+    uint64_t StampCellRefs(int x, int y, int w, int h, void* ref);   // 0x14009f770 (Component/pasturecomponent_states.cpp)
+    void PlaceRoadCell(uint32_t cellIdx, uint8_t roadType, uint64_t endCell, uint32_t mapDescVal, ComponentDescription* roadDescExtra);   // 0x14009c960 (Player/roadtool_calcpath.cpp)
 };
 
 static_assert(sizeof(Map) == 0xF8, "Map is 0xF8 (Load MemAlloc(0xf8, 8))");

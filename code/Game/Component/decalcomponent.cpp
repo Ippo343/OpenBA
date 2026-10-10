@@ -73,12 +73,6 @@ void WorldGeometry::RemoveDecal(int decalId) {
     }
 }
 
-// B4 FORWARD: radiusui.cpp, placementtool.cpp (they hold the WorldGeometry typed; the
-// closing wave calls RemoveDecal there).
-void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decalId) {
-    terrainDecalSys->RemoveDecal(decalId);   // LEFT: B4 FORWARD radiusui.cpp / placementtool.cpp (other agents') hold the WorldGeometry as void*
-}
-
 // ============================================================
 // Helper: the component's DecalDescription (IsDerivedFrom 0x1401c75b8, else null)
 // ============================================================
@@ -294,8 +288,7 @@ void DecalComponent::OnAdded() {
     int alpha = static_cast<int>(decalScale * 255.0f);   // DAT_14017222c = 255.0f
 
     // AddDecal 0x1400b0d80 (was its TradeWork_impl_0d80 forwarder; its dead param_18 is gone).
-    int id = AddDecal(
-        decalSys, minX, minY,
+    int id = decalSys->AddDecal(minX, minY,
         width - 1 + minX, height - 1 + minY,
         static_cast<uint8_t>(alpha), rotation,
         material,

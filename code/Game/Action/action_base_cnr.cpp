@@ -93,12 +93,12 @@ inline float RdataF(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); 
 // availability check. Returns 1 (true) in the low byte if the cell is unavailable
 // (terrain bit 0/1, field_0x2A set, or pending in the field_0xE8 tree), else 0.
 // ============================================================
-uint64_t CheckCellTerrain(const Map* map, int cellIndex) {
-    const MapCell& rec = map->cells.GetData()[cellIndex];
+uint64_t Map::CheckCellTerrain(int cellIndex) const {
+    const MapCell& rec = cells.GetData()[cellIndex];
     uint32_t passBits = 1u << (rec.terrainType & 0x1f);
     uint64_t high = passBits;   // retail's RAX before the tree walk
     if (((passBits & 2) == 0) && ((passBits & 1) == 0) && (rec.field_0x2A == 0xff)) {
-        const AvlNode28* node = map->field_0xE8.root;
+        const AvlNode28* node = field_0xE8.root;
         while (true) {
             while (true) {
                 if (node == nullptr) return 0;
@@ -267,7 +267,7 @@ uint64_t NaturalResourceComponent::PlaceAtCell(int cellIndex) {
 
     float inCell[2] = { cellX, cellY };
     float outPos[3] = { 0.0f, 0.0f, 0.0f };
-    Reimpl_MapGetTerrainPos(map, outPos, inCell, '\0', nullptr);   // 0x14009f3e0
+    map->GetTerrainPos(outPos, inCell, '\0', nullptr);   // 0x14009f3e0
 
     float r1 = rng->RandFloatTol();
     float r2 = rng->RandFloatTol();

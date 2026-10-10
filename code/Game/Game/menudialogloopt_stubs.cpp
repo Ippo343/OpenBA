@@ -335,7 +335,7 @@ void MenuDialogLoopT::Startup() {
                "didn't run ChunkedSceneLoader) — falling back to synchronous "
                "LoadScene_PhaseA\n");
         StallDebug::Phase phaseA("MenuDLT LoadScene_PhaseA fallback");
-        bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(this);
+        bool sceneOk = LoadScene_PhaseA();
         printf("[MenuDLT::Startup] fallback LoadScene_PhaseA returned %s\n",
                sceneOk ? "true" : "false");
     } else {
@@ -394,7 +394,7 @@ void MenuDialogLoopT::Startup() {
     // loop's Audio::Scene (self+0xb30) at the DialogInstance base (self+0xd0) and
     // plays Audio/Music/Menu.rsc (loaded into self+0xb88 by Load) on the
     // music channel. Per-frame Audio::Scene::Update (Update) advances it.
-    MenuDialogLoopT_StartMusic(this);
+    StartMusic();
 
     // Bind the UI hover/press/click sounds onto the embedded UserInterface
     // (self+0x40), mirroring OptionsDialog_helper_9260's sound block. Must run
@@ -402,7 +402,7 @@ void MenuDialogLoopT::Startup() {
     // after EnsureUISoundsLoaded populated the KeyMap container. The element
     // framework (ButtonElement/Element::Update, driven by DialogLoopT::Update
     // in Update) then plays these automatically on hover/click.
-    MenuDialogLoopT_BindUISounds(this);
+    BindUISounds();
 }
 
 void MenuDialogLoopT::Shutdown() {
@@ -483,7 +483,7 @@ void MenuDialogLoopT::Shutdown() {
     // 11. Audio::Scene::StopAll(this+0xb30). NOT skippable: it parks the
     //     streamed menu music's thread before the next LoaderLoop's
     //     Loader::Load remounts the packages under it (open defect (c)).
-    MenuDialogLoopT_StopMusic(this);
+    StopMusic();
     // 12. The tail `JMP UI::UserInterface::EnableCursor(this+0x40, false)`.
     _ui.EnableCursor(false);
 }
@@ -545,14 +545,14 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
     if (time) {
         float dt = time->AsSeconds();
-        MenuDialogLoopT_UpdateCamera_PhaseA(this, dt);
+        UpdateCamera_PhaseA(dt);
     }
 
     // Per-frame particle simulation tick (chimney smoke, etc). Without this
     // particles are added to the scene at Load but never simulate — emitters
     // don't spawn sprites, so smokestacks render empty.
     if (time) {
-        MenuDialogLoopT_TickParticles(this, time);
+        TickParticles(time);
     }
 
     // Per-frame Audio::Scene::Update — advances the menu music stream (and any
@@ -562,7 +562,7 @@ bool MenuDialogLoopT::Update(const System::Time& timeRef) {
     // Without this, StartMusic's PlayEffect starts the music but it never
     // progresses (no new sample buffers get queued).
     if (time) {
-        MenuDialogLoopT_TickAudioScene(this, time);
+        TickAudioScene(time);
     }
 
     // Per-frame Audio::Device::Update. Original MainLoop::Run only fires
@@ -671,7 +671,7 @@ void MenuDialogLoopT::Draw(float alpha) {
 
     // Phase A: render the 3D menu scene before the UI overlay.
     if (context) {
-        MenuDialogLoopT_DrawScene_PhaseA(this, alpha, context);
+        DrawScene_PhaseA(alpha, context);
     }
 
     if (context) {
@@ -720,7 +720,7 @@ void MenuDialogLoopT::Load() {
     // Like DialogLoopT::Load this is a plain refcounted ExternalFactory load,
     // safe to run on the Engine::Loader thread (no scene-graph mutation).
     // Playback is started later from Startup (main thread).
-    MenuDialogLoopT_LoadMusic(this);
+    LoadMusic();
 }
 
 void MenuDialogLoopT::OnVideoError() {

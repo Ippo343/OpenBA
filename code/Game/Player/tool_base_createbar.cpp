@@ -266,13 +266,13 @@ extern "C" uint32_t UpdateToolUI_ebb0(const void* /*dummy*/, const ::Box* box,
 // param_1 = the tool's owner, the PlayerToolManager (Tool +0x10): +0x00 the open
 // dialog, +0x08/+0x0C the smoothed x/y coords OpenToolDialog seeds to -1.0.
 // (PlayerToolManager.h is block GAME-b's: a free function over the typed manager.)
-void UpdateCreateBar(PlayerToolManager* param_1, int param_2, int param_3,
+void PlayerToolManager::UpdateCreateBar(int param_2, int param_3,
                      const System::String* param_4, char param_5, char param_6, char param_7,
                      int param_8, int param_9, int param_10, const ::Box* param_11,
                      const Math::Transform* param_12) {
     // No dialog open -> nothing to update.
-    if (param_1->field_0x00 == nullptr) return;
-    UI::DialogInstance* dialog = param_1->field_0x00;
+    if (field_0x00 == nullptr) return;
+    UI::DialogInstance* dialog = field_0x00;
 
     // Resolve the CreateBar controller (BuildRequirementUI) from the dialog.
     uint32_t ctrlTid = BuildRequirementUI::TypeId();
@@ -376,8 +376,8 @@ void UpdateCreateBar(PlayerToolManager* param_1, int param_2, int param_3,
     int screenY = static_cast<int>(cy) - halfH;
 
     // --- Smooth toward the target (0.25 new / 0.75 cached); first frame (cached<0) snaps ---
-    float* cachedX = &param_1->field_0x08;
-    float* cachedY = &param_1->field_0x0C;
+    float* cachedX = &field_0x08;
+    float* cachedY = &field_0x0C;
     if (*cachedX >= 0.0f) {
         *cachedX = static_cast<float>(screenX) * 0.25f + *cachedX * 0.75f;  // DAT_140172100 / DAT_140172124
         *cachedY = static_cast<float>(screenY) * 0.25f + *cachedY * 0.75f;

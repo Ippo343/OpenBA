@@ -104,7 +104,7 @@ void DragPlacementTool::Startup() {
 static inline bool TerrainValidate(Map* mapPtr, uint32_t col, uint32_t row, uint32_t terrainMask,
                                    float p5, float heightTol, float p7, char allowOverlap,
                                    bool hasExisting, const ComponentDescription* entityTemplate) {
-    return PlayerPath_CharComp_f5d0(mapPtr, (int)col, (int)row, terrainMask, p5, heightTol, p7,
+    return mapPtr->TestPlacement((int)col, (int)row, terrainMask, p5, heightTol, p7,
                                     allowOverlap, (char)hasExisting, entityTemplate);
 }
 

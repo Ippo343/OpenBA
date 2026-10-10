@@ -417,7 +417,7 @@ void PastureProduce(PastureComponent* self) {
 
     MapComponent* mc = self->_entity->FindComponent<MapComponent>();   // 0x140004680
     if (!mc) return;
-    MapGrid_StampCellRefs_9f770(w->m_game, static_cast<int16_t>(mc->tileX0),
+    w->m_game->StampCellRefs(static_cast<int16_t>(mc->tileX0),
                                 static_cast<int16_t>(mc->tileY0),
                                 static_cast<int16_t>(mc->tileX1),
                                 static_cast<int16_t>(mc->tileY1), tmpl);
@@ -756,10 +756,10 @@ void PastureComponent::Command(int cmd) {
 // registered — the null guard made footprint stamping a silent no-op until
 // 2026-07-30 (deferred item from the animal wave's Update 2).
 // ============================================================
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h,
+uint64_t Map::StampCellRefs(int x, int y, int w, int h,
                                                 void* ref) {
-    if (!grid || w <= 0) return 0;
-    const Map* map = grid;
+    if (w <= 0) return 0;
+    const Map* map = this;
     const int dim = map->size;
     // +0x10 of a cell is its owner ref.
     MapCell* cells = map->cells._data;

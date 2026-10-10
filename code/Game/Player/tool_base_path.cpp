@@ -98,16 +98,16 @@ bool DestroyComponent::InRemovalState() {
 // param_5) is the 5th-argument vector's z term.
 // The map's header (Map.h) is block GAME-b's: a free function over the typed map.
 // ============================================================
-bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t param_4,
+bool Map::TestPlacement(int param_2, int param_3, uint32_t param_4,
                               float param_5, float param_6, float param_7,
                               char param_8, char param_9, const ComponentDescription* param_10) {
     const float kHalf = 0.5f;  // DAT_140172114
 
-    if (!((-1 < param_2) && (param_2 < param_1->size) && (-1 < param_3) && (param_3 < param_1->size)))
+    if (!((-1 < param_2) && (param_2 < size) && (-1 < param_3) && (param_3 < size)))
         return false;
 
-    int iVar2 = param_1->size * param_3 + param_2;
-    const MapCell* cell = &param_1->cells.GetData()[iVar2];
+    int iVar2 = size * param_3 + param_2;
+    const MapCell* cell = &cells.GetData()[iVar2];
 
     uint8_t passByte = cell->terrainType;
     if ((~param_4 & (1u << (passByte & 0x1f))) != 0)
@@ -141,11 +141,11 @@ bool PlayerPath_CharComp_f5d0(Map* param_1, int param_2, int param_3, uint32_t p
     float queryPos[2];                         // input pos (local_40/local_3c)
     float extraOut[3] = {0.0f, 0.0f, 0.0f};    // 5th-arg output vec (local_30)
 
-    float base = (float)(param_1->size >> 1) - kHalf;
-    queryPos[0] = (float)(iVar2 % param_1->size) - base;
-    queryPos[1] = (float)(iVar2 / param_1->size) - base;
+    float base = (float)(size >> 1) - kHalf;
+    queryPos[0] = (float)(iVar2 % size) - base;
+    queryPos[1] = (float)(iVar2 / size) - base;
 
-    Reimpl_MapGetTerrainPos(param_1, outPos, queryPos, '\0', extraOut);
+    GetTerrainPos(outPos, queryPos, '\0', extraOut);
 
     // param_5 ([RSP+0xa0]) <= extraOut.z ([RSP+0x50]); then outPos.z ([RSP+0x60])
     // - param_7, Abs, <= param_6 ([RSP+0xa8]).
@@ -280,8 +280,7 @@ uint64_t RemovalTool::CanRemoveField(ComponentEntity* const* param_2, int param_
                 for (int y = param_4; y < param_4 + 1; y++) {
                     for (int x = param_3; x < param_3 + 1; x++) {
                         // param_9 (string '.' check) is always false: local_90==0.
-                        bool cell = PlayerPath_CharComp_f5d0(
-                            local_78, x, y, passMask, 0.0f, kHundred, 0.0f, cVar1, '\0', nullptr);
+                        bool cell = local_78->TestPlacement(x, y, passMask, 0.0f, kHundred, 0.0f, cVar1, '\0', nullptr);
                         if (!cell) { all = false; break; }
                     }
                     if (!all) break;

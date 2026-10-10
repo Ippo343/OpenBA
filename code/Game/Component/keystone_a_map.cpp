@@ -50,6 +50,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Game/Minimap.h"   // Minimap::ClearTerrain (0x1400a4d30)
 
 // dc20 stale-occupant EVICTION tally. Counts only the arm that actually destroys
 // (MarkForRemoval + push onto the world removal queue), not the arm that skips an
@@ -104,7 +105,7 @@ constexpr float kT_Ret6   = 2.0f;    // DAT_140172174 = 0x40000000
 //   -0.25 <= h <= 0.75 & slope>=0.9 -> 2 (flat buildable)
 //   else height < 2.0          -> 10, else 6
 // Returned byte is consumed by callers as `1 << (b & 0x1f) & 0x1e0`.
-int CreateNaturalResource_helper_e2c0(Map* map, int param_2) {
+int Map::ClassifyTerrain(int param_2) {
     // Stack layout mirrors the original (e2c0 disasm):
     //   local_18 (RSP+0x50) = out vec3   -> [0],[1] = world XY, local_10 (RSP+0x58)=height
     //   local_38 (RSP+0x30) = in XY      -> local_38=x, local_34=y
@@ -114,11 +115,11 @@ int CreateNaturalResource_helper_e2c0(Map* map, int param_2) {
     float inXY[2];                     // local_38 / local_34
     float outMat[3] = {0, 0, 0};       // local_28[0..1] + local_20 (init 0.0)
 
-    float half = (float)(map->size >> 1) - kHalf;            // local_34 = width/2 - 0.5
-    inXY[0] = (float)(param_2 % map->size) - half;           // local_38 = col - half
-    inXY[1] = (float)(param_2 / map->size) - half;           // local_34 = row - half
+    float half = (float)(size >> 1) - kHalf;            // local_34 = width/2 - 0.5
+    inXY[0] = (float)(param_2 % size) - half;           // local_38 = col - half
+    inXY[1] = (float)(param_2 / size) - half;           // local_34 = row - half
 
-    Reimpl_MapGetTerrainPos(map, outVec, inXY, '\x01', outMat);   // 0x14009f3e0
+    GetTerrainPos(outVec, inXY, '\x01', outMat);   // 0x14009f3e0
 
     float height = outVec[2];                                       // local_10
     float slope  = outMat[2];                                       // local_20
@@ -316,7 +317,7 @@ void CreateNaturalResource_impl_dee0(Map* param_1, ComponentEntity* const* owner
 
                     MapCell* plVar11 = &param_1->cells.GetData()[static_cast<int64_t>(iVar14)];   // +0x80, stride 0x30
                     if (bVar6) {
-                        int cls = CreateNaturalResource_helper_e2c0(param_1, iVar14);
+                        int cls = param_1->ClassifyTerrain(iVar14);
                         uint8_t bVar13 = (uint8_t)cls;
                         if (((1 << (bVar13 & 0x1f) & 0x1e0u) != 0) && (plVar11->blocker != nullptr)) {   // +0x00
                             if (plVar11->blocker != *owner) {
@@ -353,7 +354,7 @@ void MapComponent::AddToMap() {
     MapDescription* pvVar5 = bVar3 ? static_cast<MapDescription*>(obj) : nullptr;
 
     if (pvVar5->_showOnMap) {
-        MapTerrainClear_Reimpl(GameUpdateLoop::_singleton->m_imageCapture,   // 0x1400a4d30 (+0x148)
+        GameUpdateLoop::_singleton->m_imageCapture->ClearTerrain(// 0x1400a4d30 (+0x148)
                                static_cast<int>(pvVar5->_color._value),
                                (int)static_cast<int16_t>(tileX0),
                                (int)static_cast<int16_t>(tileY0),

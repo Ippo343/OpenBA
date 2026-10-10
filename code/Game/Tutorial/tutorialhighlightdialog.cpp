@@ -247,7 +247,7 @@ void TutHLDiag(const ComponentEntity* entity, bool ok, const Rectangle& rect) {
             float bias = static_cast<float>(g >> 1) - 0.5f;
             float in[3] = { static_cast<float>(rx + (rw >> 1)) - bias,
                             static_cast<float>(ry + (rh >> 1)) - bias, 0.0f };
-            Reimpl_MapGetTerrainPos(grid, centreWorld, in, '\0', nullptr);   // 0x14009f3e0
+            grid->GetTerrainPos(centreWorld, in, '\0', nullptr);   // 0x14009f3e0
         }
     }
 

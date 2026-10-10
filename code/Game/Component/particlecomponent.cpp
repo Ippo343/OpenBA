@@ -176,7 +176,7 @@ void ParticleComponent::Place(int index) {
             float half = (float)(W >> 1) - 0.5f;
             Math::Vector3 in((float)(idx % W) - half, (float)(idx / W) - half, 0.0f);
             Math::Vector3 out(0.0f, 0.0f, 0.0f);
-            Reimpl_MapGetTerrainPos(game, &out.x, &in.x, '\0', nullptr);
+            game->GetTerrainPos(&out.x, &in.x, '\0', nullptr);
             tf.translation = out;
         }
     }

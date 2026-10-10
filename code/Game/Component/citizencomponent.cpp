@@ -1767,8 +1767,7 @@ char CitizenComponent::CanReach(ComponentEntity* target) {
     ComponentEntity* ibpVal = target;
     int regionId = EntityAnchorCell(&ibpVal, nullptr);
     uint32_t cellIdx = static_cast<uint32_t>(mapW * tileY + tileX);
-    char res = static_cast<char>(static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(
-        map, 0xe1f, cellIdx, regionId)));
+    char res = static_cast<char>(static_cast<uint8_t>(map->ValidateCell(0xe1f, cellIdx, regionId)));
     return res;
 }
 
@@ -2051,7 +2050,7 @@ bool CitizenComp_sub_40f0(AttendanceComponent* att, CitizenComponent* citizen) {
     int posY  = clampTile(pos.y);
     uint32_t fromCell = (uint32_t)(mapW * posY + posX);
     uint32_t toCell   = (uint32_t)(mapW * homeY + homeX);
-    char ok = WorkBase_ValidateCell_a00f0(mapInfo, 0xe1f, fromCell, toCell);
+    char ok = mapInfo->ValidateCell(0xe1f, fromCell, toCell);
     if (!ok) g_sub40f0_exit = 3;
     return ok != 0;
 }
@@ -2113,7 +2112,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
         int cost = 1;
         if ((int)srcRegion >= 0) {
             Map* mapInfo = GameUpdateLoop::_singleton->m_game;
-            cost = WorkBase_CalcDistance_8830(mapInfo, dstRegion, srcRegion);
+            cost = mapInfo->CalcDistance(dstRegion, srcRegion);
         }
         if (bestCost < 0 || cost < bestCost) {
             best = cand;

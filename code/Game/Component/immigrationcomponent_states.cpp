@@ -90,6 +90,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 namespace {
 
@@ -361,7 +362,7 @@ void ImmigrationComponent::Spawn() {
         float half = static_cast<float>(W >> 1) - kHalfCell;
         float cellPos[3] = { static_cast<float>(c % W) - half, static_cast<float>(c / W) - half, 0.0f };
         Math::Vector3 spawn(0.0f, 0.0f, 0.0f);
-        Reimpl_MapGetTerrainPos(grid, &spawn.x, cellPos, '\0', nullptr);
+        grid->GetTerrainPos(&spawn.x, cellPos, '\0', nullptr);
 
         // Bind its NomadComponent to this hall and drop it into the world.
         NomadComponent* nomad = ent ? ent->FindComponent<NomadComponent>() : nullptr;
@@ -585,7 +586,7 @@ char ImmigrationComponent::EnterAnswer() {
     GameUpdateLoop* gw = GW();
     if (gw) {
         Object::InternalPtr<ComponentEntity> ownerIBP(_entity);
-        EventLog_AddEvent(gw->m_eventNotifier, 0xe, 2, &ownerIBP);
+        gw->m_eventNotifier->AddEvent(0xe, 2, &ownerIBP);
     }
     return 1;
 }

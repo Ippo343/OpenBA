@@ -554,7 +554,7 @@ void EventNotifyDialog::NavigateToEvent(int32_t index) {
 
     // terrain pick — the actual 3D world position
     float outPos[3] = {};
-    Reimpl_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);   // 0x14009f3e0
+    mapGrid->GetTerrainPos(outPos, inXY, '\0', nullptr);   // 0x14009f3e0
 
     PlayerController* camTarget = game->m_playerController;
     camTarget->target.x = outPos[0];

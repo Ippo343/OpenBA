@@ -129,11 +129,11 @@ inline void EmitVertex(GeometryBatch* batch, AvlTreeHead<DecalVertexNode>* set,
 // =================================================================================
 // TradeWork_impl_ace40 — 0x1400ace40
 // =================================================================================
-extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char param_3,
+void WorldGeometry::TessellateDecal(int param_2, char param_3,
                                      int param_4, int param_5) {
     const float fUV = kRdata_14017214c;   // g_fUVScale (1.0f in retail)
 
-    GeometryBatch* batch = param_1->_decals._data + param_2;   // +0x1f0
+    GeometryBatch* batch = _decals._data + param_2;   // +0x1f0
     int iVar24 = (batch->maxX - batch->minX) + 1; // width
     int iVar28 = (batch->maxY - batch->minY) + 1; // height
 
@@ -296,7 +296,7 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* param_1, int param_2, char p
 
                         // cc10: emit the 4 corner descriptors into descBlock.
                         TessCornerBlock descBlock;
-                        Pf_RoadQuad_cc10(param_1, iVar22, iVar18, descBlock.corner, iVar13,
+                        BuildRoadQuad(iVar22, iVar18, descBlock.corner, iVar13,
                                          batch->field_0x3C);
 
                         // per-tile UV: 4 corners, write short pos pair into descBlock.

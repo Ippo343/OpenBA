@@ -220,7 +220,7 @@ void MoveTo::UpdateFacing() {
     inGrid[2] = 0.0f;
 
     float outWorld[3] = {0.0f, 0.0f, 0.0f};
-    Reimpl_MapGetTerrainPos(grid, outWorld, inGrid, 0, nullptr);   // 0x14009f3e0
+    grid->GetTerrainPos(outWorld, inGrid, 0, nullptr);   // 0x14009f3e0
 
     // dir2 = (worldX - curX, worldY - curY), normalized.
     Math::Vector2 dir2in(outWorld[0] - curX, outWorld[1] - curY);

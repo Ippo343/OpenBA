@@ -30,8 +30,8 @@
 // primary occupant, the occupant (+0x08) the secondary; the first non-null is stored
 // into the out InternalBasePtr (written raw, the slot zeroed first) and returned. If
 // both are null, the empty IBP (the ctor's null store).
-ComponentEntity** PlayerEdit_EntityAtCell_a0280(const Map* map, ComponentEntity** retIBP, int cellIndex) {
-    const MapCell* cell = &map->cells.GetData()[cellIndex];
+ComponentEntity** Map::EntityAtCell(ComponentEntity** retIBP, int cellIndex) const {
+    const MapCell* cell = &cells.GetData()[cellIndex];
     if (cell->blocker != nullptr) {
         *retIBP = nullptr;
         *retIBP = cell->blocker.Get();
@@ -97,7 +97,7 @@ float PlayerEdit_AvgTerrainHeight_101730(void* /*param_1*/, int p2, int p3, int 
             inPos[1] = static_cast<float>(idx / width) - halfW;  // y = row
 
             float outPos[3] = {0.0f, 0.0f, 0.0f};
-            Reimpl_MapGetTerrainPos(mapGrid, outPos, inPos, '\0', nullptr);
+            mapGrid->GetTerrainPos(outPos, inPos, '\0', nullptr);
 
             // scaled = outPos * uvScale ; accum += scaled  (Vector3::operator+= inlined)
             accum[0] += outPos[0] * uvScale;
@@ -240,7 +240,7 @@ uint64_t FencedTool::CalcAnchor(uint32_t* param_2, uint32_t* param_3,
     float in0[3] = {static_cast<float>(idx0 % w0) - half0,
                     static_cast<float>(idx0 / w0) - half0, 0.0f};
     float out0[3] = {0.0f, 0.0f, 0.0f};
-    Reimpl_MapGetTerrainPos(mapGrid, out0, in0, '\0', nullptr);
+    mapGrid->GetTerrainPos(out0, in0, '\0', nullptr);
 
     int w1 = mapGrid->size;
     int idx1 = w1 * static_cast<int>(*param_5) + static_cast<int>(*param_4);
@@ -248,7 +248,7 @@ uint64_t FencedTool::CalcAnchor(uint32_t* param_2, uint32_t* param_3,
     float in1[3] = {static_cast<float>(idx1 % w1) - half1,
                     static_cast<float>(idx1 / w1) - half1, 0.0f};
     float out1[3] = {0.0f, 0.0f, 0.0f};
-    Reimpl_MapGetTerrainPos(mapGrid, out1, in1, '\0', nullptr);
+    mapGrid->GetTerrainPos(out1, in1, '\0', nullptr);
 
     // param_6 = (out1 + out0) * 0.5 ; then param_6.z is overwritten with avgHeight.
     param_6[0] = (out1[0] + out0[0]) * halfCell;

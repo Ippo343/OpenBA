@@ -297,7 +297,7 @@ void Impl_b930(HighlightComponent* hc) {
     centerCell[0] = (float)(centerIdx % g) - bias;
     centerCell[1] = (float)(centerIdx / g) - bias;
     centerCell[2] = 0.0f;
-    Reimpl_MapGetTerrainPos(mapGrid, centerWorld, centerCell, 0, nullptr);
+    mapGrid->GetTerrainPos(centerWorld, centerCell, 0, nullptr);
     float ox = centerWorld[0];
     float oy = centerWorld[1];
 
@@ -317,7 +317,7 @@ void Impl_b930(HighlightComponent* hc) {
         cell[0] = (float)(idx % g) - (float)(g >> 1);
         cell[1] = (float)(idx / g) - (float)(g >> 1);
         cell[2] = 0.0f;
-        Reimpl_MapGetTerrainPos(mapGrid, world, cell, 0, nullptr);
+        mapGrid->GetTerrainPos(world, cell, 0, nullptr);
         RelVec(rel, world, ox, oy);
     };
 

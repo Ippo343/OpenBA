@@ -109,8 +109,6 @@ template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** wal
 
 // ---- citizenai_work_scheduler.cpp
 class WorkScheduler; class WorkComponent; class Work; class Profession;
-extern "C" int CitizenAI_WorkScheduler_Insert(WorkScheduler* sched, Object::InternalPtr<Work>* pWorkIBP, uint32_t code, char fromExisting, int prio);  // 0x1400f88a0
-extern "C" void CitizenAI_WorkScheduler_Rekey(WorkScheduler* sched, uint32_t workId, Profession* oldKey, Profession* newKey);  // 0x1400f8400
 
 // ---- citizenaicomponent.cpp
 class StorageComponent;
@@ -136,7 +134,6 @@ class CropFieldComponent;
 
 // ---- decalcomponent.cpp
 class WorldGeometry;
-void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decalId);  // 0x1400b0d00
 
 // ---- destroycomponent_workerrelease.cpp
 // B4 X3-COMP: WorkPlaceComponent_SetMaxWorkers (0x14012fb00, its one caller calls the
@@ -171,7 +168,6 @@ extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0  // B
 
 // ---- mapcomponent.cpp
 class Minimap;   // Game/Minimap.h
-extern "C" void MapTerrainClear_Reimpl(Minimap* gridPtr, int value, int x, int y, int w, int h);  // 0x1400a4d30
 class MapComponent;
 
 // ---- modelcomponent.cpp
@@ -190,11 +186,9 @@ class PastureComponent;
 class AnimalComponent;
 extern "C" int Pasture_FillAllPastures();  // 0x140060290  // B8: free in retail -- no parameters (0x140060e76, the debug menu, loads none)
 class MapGenerator;   // Game/MapGenerator.h
-extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10
 
 // ---- pasturecomponent_states.cpp
 class Map;   // Game/Map.h
-extern "C" uint64_t MapGrid_StampCellRefs_9f770(Map* grid, int x, int y, int w, int h, void* ref);  // 0x14009f770 (callers: orchard / pasture states only)
 
 // ---- rawmaterialcomponent.cpp
 
@@ -259,7 +253,6 @@ class WorkPlaceComponent;
 struct NamedExternalRef;
 
 // ---- keystone_a_map.cpp (B3R G-Game: read by code/Game/Game/gamegrid_serialize.cpp)
-int CreateNaturalResource_helper_e2c0(Map* map, int cellIndex);  // 0x14009e2c0
 
 // ---- inline bodies (moved from engine/funcs/engine_funcs.h, its "TO MOVE: Component"
 // section; no .cpp. B3R Leftovers. Storage_AddItem, the third body there, had no caller
