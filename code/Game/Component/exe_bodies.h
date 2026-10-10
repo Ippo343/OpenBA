@@ -124,7 +124,6 @@ namespace Math { class Vector3; }
 // ---- cropfieldcomponent.cpp
 struct CropSlot;
 namespace IO { class Serializer; }
-void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B9: stays free -- the template is real, its element step is missing (B9 RT2 reading, row 1230): 0x1400336c0, 0x14001bbf0, 0x140021ba0, 0x14001bcc0 / 0x14001bff0 and the DLL's ExternalPtr array bodies (0x18005d4a0) are ONE body `Serializer::Serialize<T>(int n, T* d, const char* name)`: `TEST EDX,EDX / JLE <ret>`, then per element T's own serialize inlined; R9 (name) is never read (0x14001bcc0 / 0x18005d4a0 only home it) and every inner call passes R8 = 0, so the step is `d[i].Serialize(*this)`. The tree has that member for ExternalPtr<T> only; here T = CropSlot and CropSlot has no Serialize(IO::Serializer&) (CropFieldComponent.h; its body: Serialize(int&) 0x1400336fa / 0x14003370a, InternalPtr<ComponentEntity> 0x140033716 + IsDerivedFrom 0x1401c5d70, InternalPtr<NaturalResourceComponent> 0x14003373e + 0x1401c7b30, Serialize(bool&) 0x14003376b), nor does InternalPtr<T> have the one-argument Serialize (Internal.h takes the type id as a port argument) (B9 RT2)
 
 // ---- cropfieldcomponent_states.cpp
 class CropFieldComponent;

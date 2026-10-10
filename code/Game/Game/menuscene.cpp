@@ -286,8 +286,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
         meshes.SetSize(count38);   // 0x14001baf0: Array<MenuSceneMesh>::SetSize (zero tail: MenuSceneMesh() value-initialises)
     }
     if (count38 > 0) {
-        Reimpl_Array_Serialize_Stride20(&outer, static_cast<uint32_t>(count38),
-                                        meshes.GetData());
+        outer.Serialize(count38, meshes.GetData(), nullptr);   // 0x1400a373c -> 0x14001bbf0, IO::Serializer::Serialize<MenuSceneMesh>
     }
 
     RZ_CHECK("Slot5 after arr30 (stride0x20 instances)");
@@ -299,7 +298,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
         Reimpl_Array_Resize_Stride08(&meshResources, count48);
     }
     if (count48 > 0) {
-        ::Object::SerializeExternalArray<Graphics::GraphicsMesh>(outer, count48, meshResources.GetData());
+        ::Object::SerializeExternalArray<Graphics::GraphicsMesh>(outer, count48, meshResources.GetData());   // B9 RT2: retail 0x14001bcc0 is IO::Serializer::Serialize<ExternalPtr<T>> (R9 homed, never read); stays this call while the holder is a bare T* array (no retail proof to retype it)
     }
 
     RZ_CHECK("Slot5 after arr40 (GraphicsMesh exrefs)");
@@ -367,7 +366,7 @@ bool MenuScene::Serialize(IO::Stream& stream) {
         Reimpl_Array_Resize_Stride08(&particleResources, count68);
     }
     if (count68 > 0) {
-        ::Object::SerializeExternalArray<Graphics::Particle>(outer, count68, particleResources.GetData());
+        ::Object::SerializeExternalArray<Graphics::Particle>(outer, count68, particleResources.GetData());   // B9 RT2: retail 0x14001bff0 is IO::Serializer::Serialize<ExternalPtr<T>> (R9 homed, never read); stays this call while the holder is a bare T* array (no retail proof to retype it)
     }
 
     if (!s_particleLogged.exchange(true)) {

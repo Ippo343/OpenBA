@@ -52,6 +52,14 @@ struct CropSlot {
     Object::InternalPtr<NaturalResourceComponent> resource;  // +0x10 its natural resource
     bool    plantHere;                                       // +0x18 this cell gets a crop
     uint8_t _pad19[7];                                       // +0x19
+
+    // The element step of IO::Serializer::Serialize<CropSlot> (0x1400336c0's
+    // loop body, B9 RT2): cell, state, the two typed InternalPtrs, plantHere.
+    // INLINE, defined in cropfieldcomponent.cpp (the one TU that instantiates the
+    // template): retail inlines it into 0x1400336c0, and the typed InternalPtrs
+    // need ComponentEntity / NaturalResourceComponent complete, which this header
+    // does not include.
+    inline void Serialize(IO::Serializer& s);
 };
 static_assert(sizeof(CropSlot) == 0x20, "CropSlot stride 0x20 (0x1400335b0 MemAlloc(cap*0x20))");
 static_assert(offsetof(CropSlot, cell) == 0x0, "CropSlot::cell");

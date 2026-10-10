@@ -54,6 +54,7 @@
 #ifndef BANISHED_UNIT_TEST
 #include "../system/MemoryAllocator.h"   // B7 D4: the inline rtcoll::MemFree
 #endif
+#include "../io/Stream.h"   // B9 RT2: Array<T>::Serialize reads the stream's direction inline
 
 // The erased node and container types the ported AVL cores take (B.4 R-COLL):
 // `detail::AvlOps<Node, W>` hands a typed `Set<T>` / `Set<T>::Node` to them.
@@ -207,8 +208,12 @@ static_assert(sizeof(AVLCompare) == 1, "policy struct, never stored");
 //     tests today, converted callers in step 2).
 //
 // WHAT IS DELIBERATELY *NOT* ON THE CLASS
-//   * No `Serialize`. None of the 339 registered rows is one; callers serialize
-//     array contents by iterating (COLLECTION_INVENTORY.md §4, hazard 6).
+//   * `Serialize` is the EXE's, not the DLL's (hazard 6, corrected B9 RT2). None
+//     of the DLL's 339 registered rows is one, and DLL callers serialize array
+//     contents by iterating (COLLECTION_INVENTORY.md §4). The exe instantiates
+//     one, always inlined: EntityList's serializer 0x1400c44a0 opens it for its
+//     +0x08 array (0x1400c4542..0x1400c45af) and the template clone 0x140021ba0
+//     runs it per UpdateBucket. See `Array<T>::Serialize` below.
 //   * No `Sort`. The packfile introsort (0x1800264a0) is one hand-transcribed
 //     algorithm whose tie behaviour is save-observable; it stays a free
 //     function (hazard 7).
@@ -385,6 +390,17 @@ public:
 
     // 0x180079c90 — the constant-folded SetSize(0). Buffer and capacity kept.
     void Clear() { SetSize(0); }
+
+    // The exe's Array<T>::Serialize (B9 RT2; inlined at every retail site, no
+    // address of its own). Read in 0x140021ba0's element step and at
+    // 0x1400c4542..0x1400c45af:
+    //     n = _size; Serialize(int&, 0)        0x140021bd0..0x140021be2
+    //     if (stream direction == reading)     0x140021be8 CMP [RAX+0x8],0 (inline)
+    //         SetSize(n)                       0x140021bf8 CALL 0x1400032e0
+    //     Serializer::Serialize<T>(n, _data, 0), inlined: TEST RDI,RDI / JLE
+    // The count is the LOCAL read back (MOVSXD RDI,[RSP+0x48]), the data
+    // pointer is re-read after the SetSize.
+    void Serialize(IO::Serializer& s);
 
     // The two by-value members retail's 8-byte element arrays (Array<InternalPtr<T>>,
     // Array<T*>) share, one COMDAT-folded exe body each (B9 RT, D5):
@@ -576,6 +592,15 @@ template <class T, class Allocator, class SpecPolicy>
 inline void Array<T, Allocator, SpecPolicy>::SetSizeFill(int newSize, const void* fill) {
     rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,   // Array<T> hands its own header to the erased core  // CAST-OK: elem_stride
                         static_cast<const uint8_t*>(fill), Spec());  // CAST-OK: elem_stride
+}
+
+template <class T, class Allocator, class SpecPolicy>
+inline void Array<T, Allocator, SpecPolicy>::Serialize(IO::Serializer& s) {
+    int n = _size;
+    s.Serialize(n, nullptr);
+    if (s._stream->GetDirection() == IO::kReading)
+        SetSize(n);
+    s.Serialize(n, _data, nullptr);
 }
 
 template <class T, class Allocator, class SpecPolicy>
