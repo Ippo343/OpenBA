@@ -94,6 +94,7 @@
 #include "Component/exe_bodies.h"       // 0x14012ec60 / 0x140002cc0
 #include "Entity/componententity_funcs.h"   // 0x1400c3720 / 0x1400c48a0
 #include "Component/CitizenComponent.h"   // B4 S4 RT2: InternalPtr<CitizenComponent>::Get() needs the class complete
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 // TradeCtrlTag lives in TradeComponent.h (the member type needs it).
 using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;
@@ -295,7 +296,7 @@ char TradeComponent::OnMerchantDocked(StateMachine* sm) {
         // Retail copies the owner IBP to a local and passes its ADDRESS (the tile-index
         // helper takes an InternalBasePtr*, not the entity).
         Object::InternalPtr<ComponentEntity> entityIBP(_entity);
-        EventLog_AddEvent(gw->m_eventNotifier, 0xd, 2, &entityIBP);
+        gw->m_eventNotifier->AddEvent(0xd, 2, &entityIBP);
     }
 
     ::ControllerLive::RequestStateTransition(sm, 0x13);

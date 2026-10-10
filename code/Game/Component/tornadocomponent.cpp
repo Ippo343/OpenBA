@@ -91,6 +91,7 @@
 #include "Game/PlayerToolManager.h"
 #include <atomic>
 #include "Component/CharacterGrid.h"   // CharacterGrid::RadiusQuery
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 // "[Tornado] STRUCK a building" trace budget (was a function-local static; B6-5).
 static std::atomic<int> s_tornadoStruckTraced{0};
@@ -758,7 +759,7 @@ void TornadoComponent::Startup() {
     // --- post the warning to the event log, and pause if the setting says so ---
     EventLog* eventLog = gw->m_eventNotifier;
     Object::InternalBasePtr nullIbp(nullptr);
-    EventLog_AddEvent(eventLog, 0x1e, 3, &nullIbp);
+    eventLog->AddEvent(0x1e, 3, &nullIbp);
 
     if (g_gameSettings != nullptr && g_gameSettings->autoSlow != 0) {
         PlayerToolManager* speedObj = gw->m_toolManager;

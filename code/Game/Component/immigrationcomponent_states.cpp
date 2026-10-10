@@ -89,6 +89,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 namespace {
 
@@ -584,7 +585,7 @@ char ImmigrationComponent::EnterAnswer() {
     GameUpdateLoop* gw = GW();
     if (gw) {
         Object::InternalPtr<ComponentEntity> ownerIBP(_entity);
-        EventLog_AddEvent(gw->m_eventNotifier, 0xe, 2, &ownerIBP);
+        gw->m_eventNotifier->AddEvent(0xe, 2, &ownerIBP);
     }
     return 1;
 }

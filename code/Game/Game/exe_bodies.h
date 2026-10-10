@@ -47,7 +47,6 @@ struct EventLogEntry;   // Game/EventLog.h
 class EventLog; struct EventLogEntry; class GameUpdateLoop;
 namespace Object { class InternalBasePtr; }
 // The two below keep their null-log guard (not pure forwarders).
-extern "C" void EventLog_AddEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP);  // 0x140095580 -> EventLog::AddEvent  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int severity, const Object::InternalBasePtr* entityIBP, const System::String* nameStr, const System::String* titleStr, const System::String* extraStr);  // 0x140094e00 -> EventLog::AddCitizenEvent (nameStr: &CitizenComponent::name)  // B8: stays free -- a forwarder that tests its object for null before calling the member; retail's callers call the member with no test (row 1129): deleting it drops a guard (coordinator ruling pending, default kept)
 // The shared leaves the crop-infestation writer (diseasecomponent.cpp) uses.
 

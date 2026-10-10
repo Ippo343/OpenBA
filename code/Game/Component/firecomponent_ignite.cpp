@@ -69,6 +69,7 @@
 #include "Entity/ComponentEntity.h"
 #include "Game/WorkScheduler.h"
 #include "Game/WeatherSimulation.h"
+#include "Game/EventLog.h"   // EventLog::AddEvent (0x140095580)
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp),
 // declared in Game/exe_bodies.h. The three shared SM-state helpers are ported once
@@ -349,7 +350,7 @@ void FireComponent::Ignite() {
     if (grid && grid->field_0x90[6] < 1) {
         EventLog* eventLog = gw->m_eventNotifier;   // +0x138
         Object::InternalPtr<ComponentEntity> entityIbp(_entity);
-        if (eventLog) EventLog_AddEvent(eventLog, 0x1f, 3, &entityIbp);
+        if (eventLog) eventLog->AddEvent(0x1f, 3, &entityIbp);
         // The settings' auto-slow byte (+0x17). Retail 0x1400498e6:
         // MOV RAX,[0x1401c3de0]; CMP byte [RAX+0x17],0 -- the byte of the settings
         // BLOCK (this read indexed the cell pointer, 0xb8 bytes past it).
