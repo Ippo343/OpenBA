@@ -108,7 +108,7 @@ void NomadComponent::MoveTo(Math::Vector3* dest) {
     ComponentEntity* entity = _entity.Get();
     CharacterComponent* chr = entity ? entity->FindComponent<CharacterComponent>() : nullptr;
     if (!chr) return;
-    WorkBase_TaskListCleanup_c5400(&chr->actionStack);   // 0x1400c5400
+    chr->actionStack.Clear();   // 0x1400c5400
     void* mem = System::MemoryAllocator::MemAlloc(0x480, 8);
     Action* act = nullptr;
     if (mem) {

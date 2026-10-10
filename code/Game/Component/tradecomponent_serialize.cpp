@@ -373,7 +373,7 @@ void TradeComponent::Persist(IO::Stream& stream) {
     int32_t nameCount = merchantOrders._size;
     ser.Serialize(nameCount, nullptr);
     if (Loading(ser))
-        TradeMerchantOrders_SetSize(*this, nameCount);
+        merchantOrders.SetSize(nameCount);
     {
         TradeMerchantOrder* elem = merchantOrders._data;
         for (int32_t i = 0; i < nameCount && elem; ++i, ++elem) {
@@ -393,7 +393,7 @@ void TradeComponent::Persist(IO::Stream& stream) {
     int32_t itemCount = buyOrders._size;
     ser.Serialize(itemCount, nullptr);
     if (Loading(ser))
-        TradeBuyOrders_SetSize(*this, itemCount);
+        buyOrders.SetSize(itemCount);
     {
         TradeBuyOrder* elem = buyOrders._data;
         for (int32_t i = 0; i < itemCount && elem; ++i, ++elem) {

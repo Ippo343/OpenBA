@@ -221,7 +221,7 @@ int LocationWork::Cleanup() {
     }
 
     CitizenComponent* targetEntity = _field48.Get();
-    WorkBase_TaskListCleanup_c5400(&targetEntity->character->actionStack);
+    targetEntity->character->actionStack.Clear();
     return 0;
 }
 

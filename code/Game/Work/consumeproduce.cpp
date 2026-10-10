@@ -933,7 +933,7 @@ int ConsumeProduce::Cleanup() {
         CharacterComponent* character = ibpArray[i]->character.Get();
 
         // Call task list cleanup on the character's action list (+0x48)
-        WorkBase_TaskListCleanup_c5400(&character->actionStack);
+        character->actionStack.Clear();
     }
     return 0;
 }

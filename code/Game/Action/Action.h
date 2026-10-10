@@ -118,6 +118,9 @@ struct ActionStack {
     // +0x18 = -1 (0x140109d74). +0x1C is not written.
     ActionStack() : actions(), field_0x10(), current(-1) {}
     ~ActionStack();                                   // 0x1400c5150
+    // Cancels every entry (slot 8 down each chain), DeletePtr's the entries, current = -1,
+    // releases +0x10 (work_base_reimpl.cpp).
+    void Clear();                                     // 0x1400c5400
     ActionStack(const ActionStack&) = delete;
     ActionStack& operator=(const ActionStack&) = delete;
 

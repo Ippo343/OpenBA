@@ -179,7 +179,7 @@ int BuildRoad::Cleanup() {
     if (field_48.Get() == nullptr) return 0;
 
     // The citizen's CharacterComponent (+0x278) action list (+0x48)
-    WorkBase_TaskListCleanup_c5400(&field_48->character->actionStack);
+    field_48->character->actionStack.Clear();
     return 0;
 }
 

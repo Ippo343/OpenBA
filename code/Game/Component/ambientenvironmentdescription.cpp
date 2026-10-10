@@ -56,31 +56,31 @@
 // past capacity: cap = newCount (or newCount*3 when growing by exactly one from a
 // non-empty array), MemAlloc(cap*0x28, 8), copy existing elements, zero-init the new
 // tail with elem+0x20 = 1 default, free the old block. 1:1 port of the exe helper.
-// Registered at 0x140002540 (reg_component_visuals.cpp) and called by
-// ambient_externalptr_serialize.cpp: a free function, not a member.
+// Retail 0x140002540 is Array<AmbientEnvironmentBiome>::SetSize (RCX = the array): B8 (RT)
+// made it that member, an explicit specialization of Array<T>::SetSize.
 // B6 row 570 dropped the one step retail lacked (MemAlloc skipped on a null
 // System::MemoryAllocator::_singleton; 0x140002540 calls it at 0x140002596 with no test).
-// Moving the body onto the erased core is a typing step, not this row. The new tail writes +0x00
+// The new tail writes +0x00
 // (dword), +0x08 / +0x10 / +0x18 (qwords), +0x20 (dword); the two padding dwords stay untouched.
-extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount) {
-    int oldCount = arr->_size;
+template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCount) {   // 0x140002540
+    int oldCount = _size;
     if (newCount == oldCount) return;
 
-    AmbientEnvironmentBiome* oldPtr = arr->_data;
-    arr->_size = newCount;
-    if (arr->_capacity < newCount) {
-        arr->_capacity = newCount;
+    AmbientEnvironmentBiome* oldPtr = _data;
+    _size = newCount;
+    if (_capacity < newCount) {
+        _capacity = newCount;
         if (newCount == oldCount + 1 && oldCount != 0) {
-            arr->_capacity = newCount * 3;
+            _capacity = newCount * 3;
         }
-        arr->_data = static_cast<AmbientEnvironmentBiome*>(
-            ::System::MemoryAllocator::MemAlloc((uint64_t)arr->_capacity * 0x28, 8));
+        _data = static_cast<AmbientEnvironmentBiome*>(
+            ::System::MemoryAllocator::MemAlloc((uint64_t)_capacity * 0x28, 8));
     }
 
     int start = 0;
-    if (oldPtr == arr->_data) start = oldCount;  // grown in place: keep existing
+    if (oldPtr == _data) start = oldCount;  // grown in place: keep existing
 
-    AmbientEnvironmentBiome* base = arr->_data;
+    AmbientEnvironmentBiome* base = _data;
     for (int i = start; i < newCount; ++i) {
         AmbientEnvironmentBiome* dst = base + i;
         if (!dst) continue;
@@ -95,7 +95,7 @@ extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBi
         }
     }
 
-    if (oldPtr != arr->_data && oldPtr) {
+    if (oldPtr != _data && oldPtr) {
         ::System::MemoryAllocator::MemFree(oldPtr);
     }
 }
@@ -124,7 +124,7 @@ bool AmbientEnvironmentDescription::Serialize(IO::Stream& stream) {
 
     // On load: resize the 0x28-byte-element array at +0x20 (0x140002540).
     if (static_cast<int>(ser.GetDirection()) == 0) {
-        AmbientArrayResize_Reimpl(&_entries, count);
+        _entries.SetSize(count);
     }
 
     if (count > 0) {

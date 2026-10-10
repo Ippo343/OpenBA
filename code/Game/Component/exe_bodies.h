@@ -23,15 +23,15 @@ class CitizenComponent;
 // ---- ambient_externalptr_serialize.cpp
 namespace Audio { class SoundEffect; }
 namespace IO { class Serializer; }
-extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0
+extern "C" void AmbientExternalPtrSerialize_Reimpl(Audio::SoundEffect** field, IO::Serializer* serializer);  // 0x1400019a0  // B8: stays free -- DIFFERENT BODY: the relaxed sibling (no IsDerivedFrom test on load; field / serializer / factory null tests), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 
 // ---- ambientemittercomponent.cpp
 struct AmbientEmitterSlot;   // Component/AmbientEmitterComponent.h (Collection.h: via Entity/CitizenBehavior.h)
-extern "C" void AmbientEmitterResize_Reimpl(Collection::Array<AmbientEmitterSlot>* arr, int newCount);  // 0x140001770
+template <> void Collection::Array<AmbientEmitterSlot>::SetSize(int newCount);  // 0x140001770 (the member, specialized: ambientemittercomponent.cpp)
 
 // ---- ambientenvironmentdescription.cpp
 struct AmbientEnvironmentBiome;   // Component/AmbientEnvironmentDescription.h
-extern "C" void AmbientArrayResize_Reimpl(Collection::Array<AmbientEnvironmentBiome>* arr, int newCount);  // 0x140002540
+template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCount);  // 0x140002540 (the member, specialized: ambientenvironmentdescription.cpp)
 
 // ---- attendancecomponent.cpp
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
@@ -146,8 +146,8 @@ namespace Math { class Vector3; }
 struct CropSlot;
 struct CropSlotArray;
 namespace IO { class Serializer; }
-void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize
-void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0
+void CropFieldComponent_ResizeEntityList(CropSlotArray* arr, int newSize);  // 0x1400335b0 Array<CropSlot>::SetSize  // B8: stays free -- its holder is CropSlotArray (COMP-A's header struct: no ctor / dtor), not a Collection::Array<CropSlot>; the member needs CropFieldComponent::slots retyped (adds ~Array to ~CropFieldComponent)
+void CropFieldComponent_SerializeEntityList(IO::Serializer& serializer, int count, CropSlot* entry);  // 0x1400336c0  // B8: stays free -- unclear: RCX is the IO::Serializer and the body is a per-element loop over one element type; IO::Serializer (runtime/types/io) declares no array template to instantiate and the retail symbol is not known
 
 // ---- cropfieldcomponent_states.cpp
 class CropFieldComponent;
@@ -230,7 +230,7 @@ int StorageComponent_QueryAvailable(StorageComponent* storageComp, const Compone
 // ---- toolbardescription.cpp
 #include "collection/Collection.h"   // Collection::Array (the resize's header)
 namespace System { class String; }
-extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount);  // 0x140028860
+extern "C" void ToolbarDescription_StringArrayResize(Collection::Array<System::String>* arr, unsigned newCount);  // 0x140028860  // B8: stays free -- Array<System::String>::SetSize is a runtime instantiation (rtcoll::SetSizeCore over its spec) used across runtime/: specializing it would move every caller onto this body (and this one compares unsigned)
 
 // ---- tradecomponent.cpp
 // B.4 COMP-f: Setup is TradeComponent::Setup; the array helpers are in tradecomponent_funcs.h.

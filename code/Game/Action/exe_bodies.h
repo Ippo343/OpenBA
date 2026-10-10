@@ -46,7 +46,7 @@ class HuntComponent;          // Component/HuntComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 template <class T> struct RawArray;   // Action/PathSearch.h
 bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
-void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110
+void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110  // B8: stays free -- erased core over every 8-byte Array<T*> / Array<InternalPtr<T>> (the typed wrapper below); the member that exists, Array<T>::SetSize(int, const T&), runs rtcoll::SetSizeCore (another body), and a specialization per T would still call this core
 // The typed entry points of the one erased core 0x140003110: every 8-byte-element
 // Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) or Array<InternalPtr<T>>
 // (PastureComponent::animals, MultiObjectComponent::children) is handed to it.
@@ -75,7 +75,7 @@ class CharacterDescription;   // Component/CharacterDescription.h
 class MoveTo;                 // Action/MoveTo.h
 struct ActionStack;           // Action/Action.h
 namespace IO { class Serializer; }
-void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serializer* ser);  // 0x140022970
+void ActMv_ExternalPtrSerialize_22970(CharacterDescription** slot, IO::Serializer* ser);  // 0x140022970  // B8: stays free -- DIFFERENT BODY: its own transcription of ExternalPtr<CharacterDescription>::Serialize (an Encoding null test retail lacks), not Object::ExternalPtr<T>::Serialize's body (External.h): moving the caller is behaviour (known_port_issues 1160)
 void ActMv_UpdateFacing_c8d20(MoveTo* self);  // 0x1400c8d20
 bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void*, ActionStack* param4);  // 0x1400c8c10 (retail returns AL = 1)
 
@@ -114,8 +114,8 @@ static_assert(sizeof(MaterialCount16) == 0x10, "16-byte stride (0x14000da70)");
 static_assert(offsetof(MaterialCount16, material) == 0x0, "MaterialCount16::material");
 static_assert(offsetof(MaterialCount16, count) == 0x8, "MaterialCount16::count");
 static_assert(offsetof(MaterialCount16, pad0C) == 0xC, "MaterialCount16::pad0C");
-void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70
-void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0
+void ActRm_ArrayResize16_da70(RawArray<MaterialCount16>* arr, int newCount);  // 0x14000da70  // B8: stays free -- erased core over several 16-byte holder types (RawArray<MaterialCount16>, TrackerComponent::EntryList, the action / market-work material lists) reached through MaterialArraySetSize<Holder>'s cast; no single Collection::Array<T> to specialize
+void ActRm_VectorClone_d9d0(RawArray<MaterialCount16>* dst, const RawArray<MaterialCount16>* src);  // 0x14000d9d0  // B8: stays free -- erased core (Array<T>::operator=) over the same 16-byte holder types (MaterialArrayAssign's cast); Array<T>::Assign exists over rtcoll::ArrayAssignCore (another body)
 template <class Holder>
 inline void MaterialArraySetSize(Holder* arr, int newCount) {
     static_assert(sizeof(Holder) == 0x10, "an Array<16-byte element> {data, count, capacity}");

@@ -150,7 +150,7 @@ int BuildStructure::Cleanup() {
         // The node's citizen; its CharacterComponent's action list (+0x48)
         CitizenComponent* citizen = node2->element;
 
-        WorkBase_TaskListCleanup_c5400(&citizen->character->actionStack);
+        citizen->character->actionStack.Clear();
     }
 }
 

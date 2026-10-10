@@ -494,7 +494,7 @@ int GatherRawMaterials::Cleanup() {
 
         // Release the citizen's action list: CharacterComponent (+0x278) -> +0x48
         CitizenComponent* citizenEntity = node->element;
-        WorkBase_TaskListCleanup_c5400(&citizenEntity->character->actionStack);
+        citizenEntity->character->actionStack.Clear();
     }
 }
 
