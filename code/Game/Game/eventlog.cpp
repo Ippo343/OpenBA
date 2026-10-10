@@ -238,67 +238,67 @@ static int EventLog_IconIndex(int eventType) {
 // the {2}.. args, exactly as the original passes them.
 void EventLog::AddEventCore(int eventType, int severity, const ::Object::InternalBasePtr* entityIBP,
                             const char* const* extra, int nExtra) {
+    // B8 RES (row 1000): no test of the game world (retail's year / season helpers read
+    // it), of the events table or of the settings / tool manager in the tail; the four
+    // String locals die right after the grow, before the tail.
     GameUpdateLoop* gameWorld = GameUpdateLoop::_singleton;
-    if (!gameWorld) return;
 
-    // --- Build the display text ---
-    System::String templateStr, formatted;
-    System::String yearStr   = EventLog_YearString(gameWorld);
-    System::String seasonStr = EventLog_SeasonString(gameWorld, this);
-
-    const UI::StringTable* eventsTable = events;  // +0x00
-    if (eventsTable) {
-        ::new (&templateStr) System::String(eventsTable->GetText(eventType));
-    } else {
-        templateStr = System::String("Event");
-    }
-
-    // FormatIndexed(fmt=template, %0=season, %1=year, %2..=extra). Args are the
-    // String DATA pointers (char*). Fall back to the raw template if the export
-    // is unresolved.
-    const char* tmplData = templateStr._data;
-    const char* seaData  = seasonStr._data;
-    const char* yrData   = yearStr._data;
-    switch (nExtra) {
-        case 0:
-            formatted = System::String::FormatIndexed(tmplData, seaData, yrData);
-            break;
-        case 1:
-            formatted = System::String::FormatIndexed(tmplData, seaData, yrData,
-                                                      extra[0]);
-            break;
-        default:  // 3 — the citizen variant
-            formatted = System::String::FormatIndexed(tmplData, seaData, yrData,
-                                                      extra[0], extra[1], extra[2]);
-            break;
-    }
-
-    uint32_t color = EventLog_SeverityColor(severity);
-    int popup      = EventLog_PopupIndex(eventType);
-    int iconIndex  = EventLog_IconIndex(eventType);
-    int tileIdx    = EventLog_TileIndex(entityIBP);  // null entity -> -1
-
-    // --- Build the 0x28-byte entry and append ---
-    // Retail 0x140095580 builds it on the stack at RSP+0x48 in this order: color
-    // (0x140095675), the String copy ctor into +0x08 (0x140095686), the five
-    // dwords (0x14009568d..0x14009569e); then the grow (0x1400956b2) and the
-    // entry's ~String (0x1400956bd) right after it, before the autoSlow tail.
-    // The block ends there. The two pads are never written: not by retail's writer, not
-    // by the grow's copy (CopyEventEntry writes the fields only) -- B6 C8, audit F3.
     {
-        const EventLogEntry entry(color, formatted, eventType, severity, tileIdx, iconIndex, popup);   // the pads stay unwritten (audit F3)
-        int count = entries.GetSize();
-        entries.SetSize(count + 1, entry);   // the grow, 0x140019b70
-    }   // ~entry: the text's release, 0x1400956bd
+        // --- Build the display text, in retail's construction order: year (0x1400951d0),
+        // season (0x140095230), the template from GetText on [this+0x0] with no test
+        // (0x1400955d5), the formatted text (0x1400955ea).
+        System::String yearStr   = EventLog_YearString(gameWorld);
+        System::String seasonStr = EventLog_SeasonString(gameWorld, this);
+        System::String templateStr(events->GetText(eventType));
+        System::String formatted;
+
+        // FormatIndexed(fmt=template, %0=season, %1=year, %2..=extra). Args are the
+        // String DATA pointers (char*). Fall back to the raw template if the export
+        // is unresolved.
+        const char* tmplData = templateStr._data;
+        const char* seaData  = seasonStr._data;
+        const char* yrData   = yearStr._data;
+        switch (nExtra) {
+            case 0:
+                formatted = System::String::FormatIndexed(tmplData, seaData, yrData);
+                break;
+            case 1:
+                formatted = System::String::FormatIndexed(tmplData, seaData, yrData,
+                                                          extra[0]);
+                break;
+            default:  // 3 — the citizen variant
+                formatted = System::String::FormatIndexed(tmplData, seaData, yrData,
+                                                          extra[0], extra[1], extra[2]);
+                break;
+        }
+
+        uint32_t color = EventLog_SeverityColor(severity);
+        int popup      = EventLog_PopupIndex(eventType);
+        int iconIndex  = EventLog_IconIndex(eventType);
+        int tileIdx    = EventLog_TileIndex(entityIBP);  // null entity -> -1
+
+        // --- Build the 0x28-byte entry and append ---
+        // Retail 0x140095580 builds it on the stack at RSP+0x48 in this order: color
+        // (0x140095675), the String copy ctor into +0x08 (0x140095686), the five
+        // dwords (0x14009568d..0x14009569e); then the grow (0x1400956b2) and the
+        // entry's ~String (0x1400956bd) right after it, before the autoSlow tail.
+        // The block ends there. The two pads are never written: not by retail's writer, not
+        // by the grow's copy (CopyEventEntry writes the fields only) -- B6 C8, audit F3.
+        {
+            const EventLogEntry entry(color, formatted, eventType, severity, tileIdx, iconIndex, popup);   // the pads stay unwritten (audit F3)
+            int count = entries.GetSize();
+            entries.SetSize(count + 1, entry);   // the grow, 0x140019b70
+        }   // ~entry: the text's release, 0x1400956bd
+    }   // ~formatted, ~template, ~season, ~year: 0x1400956c9 / 0x1400956d5 / 0x1400956e1 / 0x1400956ed
 
     // --- Tail: critical events (0xb/0xc/0x1e/0x1f) drop the game to 1x speed
     // when the settings byte +0x17 ("pause on events") is set. Speed lives in
     // the tool manager (gw+0x120)+0x34. Present in ALL THREE retail writers.
+    // 0x140095705-0x140095720: [0x1401c3de0]+0x17 read, the singleton RE-READ
+    // (0x140095712) and [[+0x120]+0x34] stored, nothing tested.
     if (eventType > 0xa && (eventType < 0xd || (unsigned)(eventType - 0x1e) < 2u)) {
-        if (g_gameSettings != nullptr &&
-            g_gameSettings->autoSlow != 0) {
-            PlayerToolManager* speedObj = gameWorld->m_toolManager;
-            if (speedObj) speedObj->field_0x34 = 1;
+        if (g_gameSettings->autoSlow != 0) {
+            GameUpdateLoop::_singleton->m_toolManager->field_0x34 = 1;
         }
     }
 }
