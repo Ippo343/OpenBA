@@ -923,22 +923,16 @@ void Scene::Pause(int32_t soundType, bool paused) {
 // live calls, all of them the claim being wrong. Retail's spelling is kept
 // here because it is retail's, not because it differs.
 // ============================================================================
-// NOT CONVERTED (0x180050d30, `rtsort::Array16Assign`): `Collection::Array<T>
-// ::operator=` is still the compiler-generated SHALLOW copy (Collection.h's
-// Array banner) — retail's DEEP operator= only becomes this class's own once
-// the last bitwise copier elsewhere is gone. `slot->positions = tmp.positions`
-// would be the wrong (shallow) copy today, so the assign stays a by-address
-// call into the real body.
+// 0x180050d30 is `Collection::Array<EmitterInstance>::operator=`, retail's
+// DEEP assign (Collection.h's `Assign`; stride 0x10, align 4, the four-DWORD
+// element copy: introsort.cpp's PART 2 banner). B9 RT (D4): it was a hand port
+// (`rtsort::Array16Assign`) behind a forwarder here.
 //
 // 0x180051d80 (the dtor) IS converted below: it is a J1 body (array.cpp's
 // J1_ENTRY table), i.e. trivial-destroy `Array<uint8_t>::~Array`, and
 // `EffectSlot::positions` is `Collection::Array<EmitterInstance>`
 // (runtime/types/audio/Audio.h) with `EmitterInstance` a trivially destructible
 // POD, so the trait-derived `~Array()` on the stack temporary IS that body.
-// B3R: called by name (it was an address door behind an atomic slot).
-static void ArrayAssign16(Collection::Array<Audio::Scene::EmitterInstance>* dst, const void* src) {
-    rtsort::Array16Assign(dst, src);
-}
 
 void Scene::StopEffect3D(uint32_t id) {
     uint32_t idx = (id >> 1) & 0xfff;
@@ -973,7 +967,7 @@ void Scene::StopEffect3D(uint32_t id) {
     slot->channelHandle  = 0;
     slot->idTag          = 0;
     slot->baseVolume     = 1.0f;
-    ArrayAssign16(&slot->positions, &tmp.positions);
+    slot->positions = tmp.positions;                // 0x1800df441: CALL 0x180050d30
     // retail 0x180051d80 (`tmp`'s ~Array() tail call) is GONE, not converted to
     // an explicit `.~Array()` call: `tmp` is a local EffectSlot, and now that
     // `Collection::Array<EmitterInstance>` carries a real destructor,
