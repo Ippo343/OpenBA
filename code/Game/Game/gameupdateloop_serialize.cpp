@@ -85,6 +85,7 @@
 #include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
 #include "Game/MapGenerator.h"   // B8 RT2: ::Object::SerializeExternal<MapGenerator> (the downcast needs it complete)
+#include "Game/ClimateGenerator.h"   // B8 RT2: ::Object::SerializeExternal<ClimateGenerator> (the downcast needs it complete)
 #include "Game/TerrainGenerator.h"   // B8 RT2: ::Object::SerializeExternal<TerrainGenerator> (the downcast needs it complete)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
@@ -203,7 +204,7 @@ void WeatherSimulation::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
 
     Reimpl_ExternalPtr_Serialize_EnvironmentDesc(&environment, &ser);   // 0x1400192a0
-    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&climate, &ser);      // 0x1400194a0
+    ::Object::SerializeExternal<ClimateGenerator>(ser, climate);      // 0x1400194a0
 
     ser.Serialize(field_0x10, nullptr);
     ser.Serialize(field_0x14, nullptr);
@@ -645,7 +646,7 @@ void GameUpdateLoop::SerializeAll(IO::Stream& stream, Save::SavedState* p3, int*
         m_userInterface->SaveAllSettings();
     }
 
-    Reimpl_ExternalPtr_Serialize_ClimateGenerator(&m_climateConfig, &ser);   // 0x1400194a0
+    ::Object::SerializeExternal<ClimateGenerator>(ser, m_climateConfig);   // 0x1400194a0
     ::Object::SerializeExternal<MapGenerator>(ser, m_mapConfig);           // 0x140019ec0
     ::Object::SerializeExternal<TerrainGenerator>(ser, m_terrainConfig);   // 0x14001a0c0
 
