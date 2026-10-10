@@ -140,11 +140,6 @@ void SpawnComponent::InitialSpawn() {
     }
 }
 
-// B4 FORWARD: 1 outside caller (Game/starttown.cpp) -> SpawnComponent::InitialSpawn
-void SpawnComponent_InitialSpawn(SpawnComponent* self) {
-    if (!self) return;
-    self->InitialSpawn();
-}
 
 
 // ============================================================

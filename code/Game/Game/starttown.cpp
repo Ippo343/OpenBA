@@ -4805,7 +4805,7 @@ static void SeedInitialSpawn(ComponentEntity* ent, uint32_t tidSpawnComp,
                 "entries=%d array=%p\n", withSpawnComp, sc, sd,
                 sd ? sd->_entries._size : -1,
                 sd ? sd->_entries._data : nullptr);
-    SpawnComponent_InitialSpawn(sc);
+    sc->InitialSpawn();
 }
 
 
