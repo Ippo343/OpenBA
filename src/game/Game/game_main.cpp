@@ -43,7 +43,7 @@
 // Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
 // safe after <windows.h> here.
 #include "video/Device.h"
-#include "src/platform/common/platform_window.h"   // Phase D.4 SDL W1: the shutdown window log
+#include "platform_window.h"   // Phase D.4 SDL W1: the shutdown window log
 #include "Game/game.h"
 #include "Game/exe_bodies.h"   // B3R STORAGE: g_gameSettings
 #include "Game/inputbindings.h"

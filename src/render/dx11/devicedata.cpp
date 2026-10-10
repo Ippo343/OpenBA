@@ -131,7 +131,7 @@
 // B5 DEV-A: the `Video::DeviceData` base `VideoDX11::DeviceData` derives from.
 #include "video/CompanionData.h"
 #include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
-#include "src/platform/common/platform_window.h"   // Phase D.4 SDL W2: the message ids
+#include "platform_window.h"   // Phase D.4 SDL W2: the message ids
 #include <new>
 #include <type_traits>
 

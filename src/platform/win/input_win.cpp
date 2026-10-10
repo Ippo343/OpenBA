@@ -69,7 +69,7 @@
 #include <cstdint>
 #include "application/Application.h"   // ENDGAME B.3.9 ENG: the class static
 #include "input/Input.h"
-#include "src/platform/common/platform_window.h"
+#include "platform_window.h"
 
 // ENDGAME B.3.7 B5: `Device::Update` (input_device_update.cpp) ends in this
 // body exactly as retail's `JMP 0x1800E2130` does, through the MEMBER call

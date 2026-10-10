@@ -10,7 +10,7 @@
 #include <cstddef>
 #include <cstring>
 
-#include "src/platform/common/platform_window.h"
+#include "platform_window.h"
 
 static_assert(sizeof(Platform::Point) == sizeof(POINT), "Platform::Point must be a POINT");
 static_assert(offsetof(Platform::Point, x) == offsetof(POINT, x), "Point::x");

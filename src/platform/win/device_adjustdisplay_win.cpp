@@ -79,7 +79,7 @@
 #include <cstring>
 
 #include "video/Device.h"   // Video::Device, Video::Configuration::_singleton
-#include "src/platform/common/platform_window.h"
+#include "platform_window.h"
 
 // ?AdjustDisplay@Device@Video@@ — B.4 (R-VIDEO): the member itself, on named
 // fields (Device +0x04/+0x08 backBufferWidth/Height, +0x90 windowHandle, +0x9D

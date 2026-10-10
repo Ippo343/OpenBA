@@ -14,7 +14,7 @@
 
 #include "application/Application.h"
 #include "collection/set_avl.h"
-#include "src/platform/common/platform_window.h"
+#include "platform_window.h"
 
 using App = Application::Application;
 using rtsetavl::Node;

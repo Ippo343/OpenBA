@@ -101,7 +101,7 @@
 #include "video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
 #include "application/Application.h"  // ENDGAME B.3.7 callers (K5)
 #include "../collection/set_avl.h"
-#include "src/platform/common/platform_window.h"   // Phase D.4 SDL W2: the message ids
+#include "platform_window.h"   // Phase D.4 SDL W2: the message ids
 
 using Video::Configuration;
 using Video::Device;

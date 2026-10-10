@@ -25,7 +25,7 @@
 #include <cstdint>
 
 #include "video/Device.h"   // Video::Device, Video::Configuration
-#include "src/platform/common/platform_window.h"
+#include "platform_window.h"
 
 // ============================================================================
 // ?SizeWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z   retail 0x1800f7d20, ord 4064
