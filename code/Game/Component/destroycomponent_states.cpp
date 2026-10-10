@@ -674,7 +674,7 @@ char DestroyComponent::State5Tick() {
     //    on the entity we are about to remove.
     WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
     if (wp) {
-        WorkPlaceComponent_LeaveBuilderProfession(wp);
+        wp->LeaveBuilderProfession();
     }
 
     // 3) Trade notify + mark the old entity for removal.
@@ -895,7 +895,7 @@ char DestroyComponent::CancelDemolition(StateMachine* sm) {
     // standing, so the machine goes to the destroyed-building rest state instead.
     if (burning) {
         WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
-        if (wp) WorkPlaceComponent_LeaveBuilderProfession(wp);
+        if (wp) wp->LeaveBuilderProfession();
         ::ControllerLive::RequestStateTransition(sm, 7);
         return 1;
     }
@@ -934,7 +934,7 @@ char DestroyComponent::CancelDemolition(StateMachine* sm) {
 
     // Release the workplace roster AFTER the request on this arm (retail order).
     WorkPlaceComponent* wp = FindOn<WorkPlaceComponent>(entity);
-    if (wp) WorkPlaceComponent_LeaveBuilderProfession(wp);
+    if (wp) wp->LeaveBuilderProfession();
 
     return 1;
 }

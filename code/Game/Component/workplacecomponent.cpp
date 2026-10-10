@@ -617,10 +617,6 @@ char WorkPlaceComponent::EnterDemolish() {
 void WorkPlaceComponent_SetAccepting(WorkPlaceComponent* comp, bool accepting) {
     comp->SetAccepting(accepting);
 }
-extern "C" void WorkPlaceComponent_LeaveBuilderProfession(WorkPlaceComponent* selfP) {
-    if (!selfP) return;
-    selfP->LeaveBuilderProfession();
-}
 
 // ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====
 // (WorkPlaceComponent.h). Before: COMPONENT_INERT_FACTORY expanded by hand (48-slot
