@@ -828,8 +828,7 @@ void MenuDialogLoopT_TickAudio(const System::Time* time) {
 // Runtime factory tree is incomplete → IsDerivedFrom NULL-derefs; same
 // convention as LoadSceneA1's MenuScene load). Playback is started later in
 // StartMusic (the original splits Load from the Startup-time PlayEffect).
-bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self) {
-    if (!self) return false;
+bool MenuDialogLoopT::LoadMusic() {
     if (!::Object::ExternalFactory::_singleton) {
         printf("[MenuDLT::LoadMusic] missing factory/filename helpers — skipping\n");
         return false;
@@ -840,7 +839,7 @@ bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self) {
     Audio::SoundEffect* music =
         ::Object::ExternalFactory::_singleton->FindOrLoadAs<Audio::SoundEffect>(fnBuf);
 
-    self->_music = music;
+    _music = music;
     printf("[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> %p (self+0xb88)\n", (void*)music);
     return music != nullptr;
 }

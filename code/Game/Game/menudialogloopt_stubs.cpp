@@ -720,7 +720,7 @@ void MenuDialogLoopT::Load() {
     // Like DialogLoopT::Load this is a plain refcounted ExternalFactory load,
     // safe to run on the Engine::Loader thread (no scene-graph mutation).
     // Playback is started later from Startup (main thread).
-    MenuDialogLoopT_LoadMusic(this);
+    LoadMusic();
 }
 
 void MenuDialogLoopT::OnVideoError() {

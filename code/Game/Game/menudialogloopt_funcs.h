@@ -165,7 +165,6 @@ void MenuDialogLoopT_TickAudio(const System::Time* time);
 // named no longer exists. The property being asserted is unchanged.)
 //
 // Returns true if the music External loaded (self+0xb88 non-null).
-bool MenuDialogLoopT_LoadMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_StartMusic — mirror the audio block of MenuDLT::Startup (exe
 // 0x14009b930), run AFTER Engine::DialogLoopT::Startup:
