@@ -316,7 +316,7 @@ static_assert(offsetof(FilenameArray, capacity) == 0x0c, "0x180026880: CMP ESI,[
 // *** IT HAS NO VTABLE. *** There is no `??_7FileSystem@IO@@6B@` in the retail
 // export table, no row for it in `standalone/rt_data_mint_tables.inc` and no
 // `deleting_dtor.cpp` row; every exported member is `QEAA`/`QEBA`/`AEBA`. So,
-// like `IO::Serializer`, `IO::Registry` and `IO::Modification`, converting a
+// like `IO::Serializer` and `IO::Modification`, converting a
 // member here cannot change which table any live object wears.
 //
 // *** THIS DECLARATION IS DELIBERATELY PARTIAL, AND SO IS THE CONVERSION. ***

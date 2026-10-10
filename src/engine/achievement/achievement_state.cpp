@@ -71,7 +71,8 @@
 // WHAT THESE TWO TOUCH THAT NOTHING ELSE IN THE NAMESPACE DOES
 // ----------------------------------------------------------------------------
 // `SetAchievementMet` calls `IO::Persistence::Set` + `WriteSettings`, which
-// writes the player's REAL HKCU registry. `ReadAchievements` reads it back.
+// writes the player's REAL settings store (retail: the HKCU registry; this exe:
+// <Documents>\Banished\settings.cfg). `ReadAchievements` reads it back.
 // achievement_manager.cpp's banner cites that as the reason Wave 5 lane B left
 // them alone. It is a reason to be careful with a probe, not a reason not to
 // port: the write is retail's, byte for byte, and `tools/ach_reset.sh` already

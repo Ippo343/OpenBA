@@ -119,7 +119,7 @@ extern "C" void BootState_MarkQuitting();
 //
 // Mirrors steps 1–13 of the stock Shutdown body — write back configuration,
 // platform-shutdown each subsystem, FreeLibrary the renderer plugins, save
-// settings to the registry, close .pkg files. We deliberately stop short of
+// settings (settings.cfg; retail: the registry), close .pkg files. We deliberately stop short of
 // the dtor+free chain (Achievement/Input/Audio/Video/Application dtors,
 // MemoryAllocator::Shutdown, CoUninitialize) because those crash silently
 // in standalone — most likely tripping over leaked dialog/UI objects that

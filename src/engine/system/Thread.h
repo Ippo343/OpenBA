@@ -168,7 +168,7 @@ public:
     void Unlock();
 
     // ---- the 0x28 bytes ----------------------------------------------------
-    // PUBLIC for the same reason `IO::Registry`'s four fields are: unconverted
+    // PUBLIC for the same reason the (deleted) `IO::Registry`'s fields were: unconverted
     // bodies reach the storage through a cast, and `offsetof` on it has to be
     // well formed. The ctor/dtor doors cast this straight to LPCRITICAL_SECTION.
     alignas(8) uint8_t _storage[0x28];

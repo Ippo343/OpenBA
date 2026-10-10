@@ -48,7 +48,7 @@
 
 namespace {
 
-// The retail store IO::Registry's ctor opened (0x1800b9500 builds it with
+// The store retail's IO::Registry ctor opened (0x1800b9500 builds it with
 // Format("Software\\%s\\%s", "Shining Rock Software LLC", "Banished")).
 const wchar_t kLegacyKey[] = L"Software\\Shining Rock Software LLC\\Banished";
 

@@ -98,8 +98,8 @@ void GameSettings::Load() {
             uiScale, autosaveInterval);
     fprintf(stderr, "[GameSettings] Load: StatusIconEnable=%d (settings+0xC) -- 0 hides "
             "EVERY status icon (citizen health, building warnings); it is the Options "
-            "checkbox, persisted as GameStatusIconEnable under "
-            "HKCU/Software/Shining Rock Software LLC/Banished\n",
+            "checkbox, persisted as GameStatusIconEnable in "
+            "<Documents>/Banished/settings.cfg\n",
             (int)statusIconEnable);
     fflush(stderr);
 }

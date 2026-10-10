@@ -134,7 +134,7 @@ void RegisterDefaultInputBindings() {
         keyMap->RegisterInput(b.id, b.deviceType, b.keyCode, b.name, b.flag);
     }
 
-    // Load saved overrides from Persistence (HKCU\...\Banished\Input...).
+    // Load saved overrides from Persistence (settings.cfg's Input... entries).
     // No-op on a fresh install.
     keyMap->Load();
 

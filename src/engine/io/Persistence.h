@@ -15,8 +15,8 @@
 // -------------
 //   +0x00  root pointer of an in-memory Collection::Set<Pair<String,String>>
 //          holding every "section+key" -> "value" entry ever Get/Set this
-//          session (loaded from the registry by ReadSettings, flushed back by
-//          WriteSettings — neither ported by this lane, see the wave doc).
+//          session (loaded by ReadSettings, flushed back by WriteSettings:
+//          retail's registry, this exe's settings.cfg, persistence_settings.cpp).
 //          Pinned by IO::Persistence::Get/Set (retail 0x1800b81e0, 0x1800b8290,
 //          0x1800b80c0, 0x1800b8380), every one of which passes `this` itself
 //          — not `this + N` — as the first argument to the shared internal
@@ -258,8 +258,8 @@ static_assert(offsetof(SaveGameInfo, sortKey) == 0x0, "SaveGameInfo::sortKey");
 // IO::Persistence and the save/load worker it embeds
 // ============================================================================
 //
-// *** NOTE THE POD NAMESPACE IN THIS FILE IS `RtIo`, LOWERCASE o *** (as in
-// `Registry.h`), not `RtIO` as in `FileSystem.h`.
+// *** NOTE THE POD NAMESPACE IN THIS FILE IS `RtIo`, LOWERCASE o ***, not
+// `RtIO` as in `FileSystem.h`.
 //
 // *** IT HAS NO VTABLE OF ITS OWN. *** There is no `??_7Persistence@IO@@6B@`;
 // the only Persistence row of the mint tables is the singleton pointer
