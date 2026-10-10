@@ -170,7 +170,7 @@ static inline void SetCheckState(UI::CheckElement* elem, uint8_t val) {
 // B4: stays free — it reads the GameContainer (game.h, block GAME-a) through its
 // first argument; not a member of a class this block owns.
 void GameContainer::ApplyKeyMapToUI(UI::UserInterface* userInterface) {
-    if (!userInterface) return;
+    // 0x140099260 tests neither RCX (the container) nor RDX (the UI) nor the settings global.
     userInterface->_sounds[2] = beginDragEffect.Get();   // +0xA8 BeginDrag
     userInterface->_sounds[3] = endDragEffect.Get();     // +0xB0 EndDrag
     userInterface->_sounds[4] = buttonDownEffect.Get();  // +0xB8 ButtonDown
@@ -180,8 +180,7 @@ void GameContainer::ApplyKeyMapToUI(UI::UserInterface* userInterface) {
         UI::Sprite sprite = spriteWhite;
         userInterface->SetFullscreenFadeSprite(&sprite);
     }
-    if (g_gameSettings != nullptr)
-        userInterface->_uiScale = (float)g_gameSettings->uiScale / 100.0f;
+    userInterface->_uiScale = (float)g_gameSettings->uiScale / 100.0f;   // [0x1401c3de0], 0x1400992ba
 }
 
 // Helper: get input key name as UI::String (replaces FUN_140099c20)
@@ -830,8 +829,7 @@ void OptionsDialog::ApplyGameSettings() {
     // Apply key map config to UI. Was an inline copy of ApplyKeyMapToUI_Impl's body
     // as a fallback; now just calls it, so the OK path and the two pointer-driven
     // call sites (OnCancel below, GameUpdateLoop::Startup) can never diverge.
-    GameContainer* keyMap = g_gameContainer;
-    if (keyMap) keyMap->ApplyKeyMapToUI(userInterface);
+    g_gameContainer->ApplyKeyMapToUI(userInterface);   // 0x140099260
 
     // Set UI scale: uiScale is a percentage, divide by 100.0f to get the ratio
     userInterface->_uiScale = (float)gs->uiScale / 100.0f;
@@ -1035,9 +1033,7 @@ void OptionsDialog::RestoreVideoSettings() {
         g_gameSettings->lastOption = tabOptions->_activeTab;
 
     // Re-apply keymap config to UI
-    GameContainer* keyMap = g_gameContainer;
-    if (keyMap)
-        keyMap->ApplyKeyMapToUI(_ui);   // 0x140099260
+    g_gameContainer->ApplyKeyMapToUI(_ui);   // 0x140072832: JMP 0x140099260, RCX = [0x1401c3de8] untested
 }
 
 // ============================================================
