@@ -50,8 +50,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include "Component/exe_bodies.h"   // CitizenComp_Storage_GetResourceCount, Storage_GetResourceCount2,
-                                    // CitizenComp_FUN_14012c3f0
+#include "Component/exe_bodies.h"
 #include "Action/exe_bodies.h"      // ActRm_StorageSubtract_d150, ActRm_GetResourceCategory_88f90
 
 // ---- exe helpers, by retail address ----------------------------------------
@@ -78,11 +77,11 @@ char ResidenceComponent::HeatTick(const System::Time* dt) {
     //    (no-food); while it HAS firewood, clear bit 7 (no-firewood / cold).
     //    Faithful to the decompile: FUN_14012c3f0(*finder2f90(owner), bit, 0).
     {
-        if (CitizenComp_Storage_GetResourceCount(this) > 0) {
+        if (GetFoodCount() > 0) {
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();
             if (icon) icon->SetFlag(6, 0);   // 0x14012c3f0
         }
-        if (Storage_GetResourceCount2(this) > 0) {
+        if (GetFuelCount() > 0) {
             StatusIconComponent* icon = _entity->FindComponent<StatusIconComponent>();
             if (icon) icon->SetFlag(7, 0);   // 0x14012c3f0
         }

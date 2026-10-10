@@ -96,7 +96,6 @@ namespace Object { template <class T> class InternalPtr; }
 
 // ---- citizenai_gather.cpp
 class Component;
-extern "C" int Storage_GetResourceCount2(const Component* self);  // 0x14012ab00  // B8: stays free -- passed as a function pointer at citizenai_gather.cpp:521 (HideRenderWorkplaceMesh); retail calls 0x14012ab00 directly from HasSufficientResources2 (0x140115892), no pointer slot
 
 // ---- citizenai_growup.cpp
 
@@ -111,7 +110,6 @@ class WorkScheduler; class WorkComponent; class Work; class Profession;
 
 // ---- citizenaicomponent.cpp
 class StorageComponent;
-int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0  // B8: stays free -- passed as a function pointer at citizenai_gather.cpp:423 (HideRenderWorkplaceMesh); retail calls 0x14012a9d0 directly from HasSufficientResources (0x1401157c2), no pointer slot
 
 // ---- citizencomponent.cpp
 ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)  // B8: free in retail -- RCX dead (0x14008df22: RDX / R8 / R9 loaded, RCX not)

@@ -144,7 +144,7 @@ void CitizenAIComponent::Decide(const System::Time* time) {
         // Hungry: eat at home first when the home has food
         if (citizen->home != nullptr) {
             ResidenceComponent* homeStorage = citizen->home->FindComponent<ResidenceComponent>();
-            int resourceCount = CitizenComp_Storage_GetResourceCount(homeStorage);
+            int resourceCount = homeStorage->GetFoodCount();
 
             if (resourceCount > 0) {
                 citizen->EatFrom(citizen->home.Get());
@@ -311,7 +311,7 @@ void CitizenComponent::SetupElder() {
 // (CitizenComp_StorageComponent_QueryCount, a second port of StorageComponent::QueryCount 0x14012cf10 with a
 // null return retail lacks -- known_port_issues row 551 -- went in B6 once every caller called the member.)
 
-// Reimpl of Storage_GetResourceCount (0x14012a9d0):
+// ResidenceComponent::GetFoodCount (0x14012a9d0):
 // walks to the owner entity's StorageComponent (finder 0x140006270 — NOT the
 // 0x140008090 residence finder; disasm-verified) then sums (count - reserved)
 // of inventory rows whose material has the EDIBLE flag (bit 5 at +0x5c).
@@ -321,10 +321,10 @@ void CitizenComponent::SetupElder() {
 // start-town food seed hacked rows into it. With the real residence state node
 // wired (heat tick bring-up), +0x28 is the node vtable; the exe-faithful path
 // reads the sibling StorageComponent.
-int CitizenComp_Storage_GetResourceCount(const Component* self) {
+int ResidenceComponent::GetFoodCount() const {
     EnsureCallees();
     // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
-    StorageComponent* storage = self->_entity->FindComponent<StorageComponent>();
+    StorageComponent* storage = _entity->FindComponent<StorageComponent>();
     int total = 0;
     if (storage == nullptr) return 0;   // guard: entity without a StorageComponent
     int rowCount = storage->storageSlots._size;

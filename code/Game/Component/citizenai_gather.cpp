@@ -188,18 +188,18 @@ static RawMaterialDescription* FindRawMaterialChild(const ComponentDescription* 
 } // namespace
 
 // ============================================================
-// 0x14012ab00 — Storage_GetResourceCount2  (private helper for Gather2)
+// 0x14012ab00 — ResidenceComponent::GetFuelCount (Gather2, HeatTick, HasSufficientResources2)
 //   Walks the storage component's row entries (entity+0x10 -> Storage; rows at +0x28, count +0x30,
 //   stride 0x10). For each row finds the RawMaterialDescription child; if its +0x5c bit6 set, adds
 //   (row+8 - row+0xc) to the running count. Returns the total. Closure = Entity_FindComponent_Storage
 //   + IsDerivedFrom only -> closure-safe.
 // ============================================================
-//   (B4 P2 CAI-2: param_1 is a Component, only its +0x10 entity is read; the rows are
+//   (B4 P2 CAI-2: RCX is the ResidenceComponent, only its +0x10 entity is read; the rows are
 //    StorageComponent::Item.)
-extern "C" int Storage_GetResourceCount2(const Component* self) {
+int ResidenceComponent::GetFuelCount() const {
     EnsureInit();
     // 0x140006270 (was its WorkBase_FindComponent_6270 forwarder)
-    StorageComponent* stor = self->_entity->FindComponent<StorageComponent>();   // no test
+    StorageComponent* stor = _entity->FindComponent<StorageComponent>();   // no test
     int total = 0;
     int count = stor->storageSlots._size;
     for (int i = 0; i < count; ++i) {
@@ -367,7 +367,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
             // CALL 0x14012a9d0 at 0x14010bf33); at zero, StatusIconComponent::SetFlag(6, 1)
             // inlined (0x14010bf6e finder 0x140002f90, OR [icon+0xf0],0x40 at 0x14010bfa3).
             if (citizen->home != nullptr) {
-                if (CitizenComp_Storage_GetResourceCount(citizen->home->FindComponent<ResidenceComponent>()) == 0)
+                if (citizen->home->FindComponent<ResidenceComponent>()->GetFoodCount() == 0)
                     citizen->home->FindComponent<StatusIconComponent>()->SetFlag(6, 1);   // 0x14012c3f0
             }
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
@@ -470,7 +470,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
             // GatherResources2's twin of the block above: the fuel count (CALL 0x14012ab00 at
             // 0x14010b682); at zero, StatusIconComponent::SetFlag(7, 1) inlined (bit 0x80).
             if (citizen->home != nullptr) {
-                if (Storage_GetResourceCount2(citizen->home->FindComponent<ResidenceComponent>()) == 0)
+                if (citizen->home->FindComponent<ResidenceComponent>()->GetFuelCount() == 0)
                     citizen->home->FindComponent<StatusIconComponent>()->SetFlag(7, 1);   // 0x14012c3f0
             }
             return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;

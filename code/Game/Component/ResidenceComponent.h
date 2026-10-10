@@ -84,6 +84,11 @@ public:
     char     EnterDemolish();                                         // 0x140129920 state 3 enter
     char     HeatTick(const System::Time* dt);                            // 0x140129970 state 2 per-frame (residence_heattick.cpp)
     bool     CheckHeating();                                          // 0x14012ac30 desc +0x28 <= the weather value, or fuel time left (+0x48 > 0)
+    // The owner's StorageComponent units (count - reserved) of one material class; RCX
+    // is the residence (HeatTick 0x140129aab MOV RCX,RSI; the Gather states hand the
+    // 0x140008090 result, 0x14010bf2f).
+    int      GetFoodCount() const;                                    // 0x14012a9d0 RawMaterialDescription::_flags bit 5
+    int      GetFuelCount() const;                                    // 0x14012ab00 RawMaterialDescription::_flags bit 6
 
     // PUBLIC while the ported bodies read them at raw offsets (B38 decision 1).
     StateController _controller;   // +0x28 the embedded controller (D6)
