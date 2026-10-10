@@ -102,7 +102,6 @@ public:
     bool LoadMusic();   // part of Load 0x14009a930 (Game/menudialogloopt.cpp)
     void StartMusic();   // part of Startup 0x14009b930 (Game/menudialogloopt.cpp)
     void StopMusic();   // part of Shutdown 0x14009b280 (call at 0x14009b41a) (Game/menudialogloopt.cpp)
-    void BindUISounds();   // part of 0x140099260 (Game/menudialogloopt.cpp)
     void TickAudioScene(const System::Time* time);   // part of Update 0x14009b6e0 (Game/menudialogloopt.cpp)
 };
 

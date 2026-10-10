@@ -202,8 +202,7 @@ void NaturalResourceComponent::ResetGrowthState() {
 
 // Reimpl of FUN_14011fba0 (GrowthComponent spawn sub-resource onto a nearby tile)
 void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
-    GameUpdateLoop* world = GameUpdateLoop::_singleton;
-    if (!world) return;
+    GameUpdateLoop* world = GameUpdateLoop::_singleton;   // 0x14011fbd5 MOV R15,[0x1401c3dd8]: read unguarded
     Map* map = world->m_game;   // +0xF8
     System::Random* rng = world->m_random;
     // world flag bit 10 must be clear
@@ -213,8 +212,9 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     // 0x14011fc05..0x14011fc1c: CVTDQ2PS [cfg+0x48]; MOVSS XMM2,[0x14017214c] (= 1.0f); DIVSS;
     // COMISS roll,XMM2; JA skip. (Until 2026-10-09 the tree divided 0x140172140 = 0.98f, the
     // UV scale retail passes to the placement test below -- the two constants were confused.)
+    // No zero test: retail divides 1.0f by the float of [cfg+0x48]; a 0 gives +inf and the
+    // COMISS never skips (B8 audit Q1: the port returned on 0 until 2026-10-10).
     int spawnChanceDenom = cfg->_i48;
-    if (spawnChanceDenom == 0) return;
     if (roll > kRdata_14017214c / (float)spawnChanceDenom) return;
 
     MapComponent* res = _entity->FindComponent<MapComponent>();   // 0x140004680

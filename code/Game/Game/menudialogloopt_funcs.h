@@ -181,20 +181,6 @@ void MenuDialogLoopT_TickAudio(const System::Time* time);  // B8: free -- no ret
 // streamed menu music BEFORE the next LoaderLoop's Loader::Load remounts the
 // packages; the body's banner says why that ordering is load-bearing.
 
-// MenuDialogLoopT_BindUISounds — mirror the sound-binding block of
-// OptionsDialog_helper_9260 (exe 0x140099260). Copies five SoundEffect
-// Externals from the KeyMap/PlacementTool container into the embedded
-// UserInterface's sound table (UI = self+0x40), so the element framework's
-// automatic UserInterface::Play calls (button press/click, drag drop) made
-// inside Engine::DialogLoopT::Update produce audible hover/click sounds:
-//   id2=BeginDrag id3=EndDrag id4=ButtonDown id5=ButtonUp id6=Alert.
-//
-// Requires the SoundEffects already loaded into the KeyMap container (via
-// EnsureUISoundsLoaded). Call on the main
-// thread from Startup after Engine::DialogLoopT::Startup has constructed the UI
-// (and after the audio scene is wired at self+0xd0 == UI+0x90, set by
-// StartMusic). No-op if the KeyMap container isn't populated; copying a null
-// slot is harmless (Play ignores null sound entries).
 
 // MenuDialogLoopT_TickAudioScene — mirror the per-frame Audio::Scene::Update of
 // MenuDLT::Update (exe 0x14009b6e0): advance the embedded Audio::Scene (+0xb30)

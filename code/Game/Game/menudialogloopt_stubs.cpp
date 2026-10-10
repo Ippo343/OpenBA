@@ -124,8 +124,8 @@ static void EnsureCursorsLoaded() {
 // on demand exactly like EnsureCursorsLoaded (synchronous ExternalFactory::
 // FindOrLoad, no IsDerivedFrom check — the Runtime factory tree is incomplete).
 //
-// MenuDialogLoopT_BindUISounds then copies five of these (BeginDrag/EndDrag/
-// ButtonDown/ButtonUp/Alert) into the menu UserInterface so the element
+// GameContainer::ApplyKeyMapToUI (0x140099260, called from Startup as retail) then copies five of
+// these (BeginDrag/EndDrag/ButtonDown/ButtonUp/Alert) into the menu UserInterface so the element
 // framework plays hover/press/click sounds automatically. The other four
 // (PlacementMove/Thunk/Error/Warning) are in-game placement-tool sounds —
 // loaded here for completeness/M5 but not bound to the menu UI.
@@ -363,9 +363,15 @@ void MenuDialogLoopT::Startup() {
     StandaloneEnsureSpriteSheetLoaded();
     // Load the UI hover/press/click SoundEffects into the KeyMap container
     // (retail does this in PlacementTool_Ctor via the Loader thread, which
-    // standalone lacks). MenuDialogLoopT_BindUISounds below copies them into
-    // the UserInterface's sound table.
+    // standalone lacks). ApplyKeyMapToUI below copies them into the
+    // UserInterface's sound table.
     EnsureUISoundsLoaded();
+
+    // 0x14009b96b: CALL 0x140099260 = GameContainer::ApplyKeyMapToUI(container, &ui) -- the five UI
+    // sound slots, the fullscreen fade sprite (+0xa8) and the UI scale (+0xdc), RCX = [0x1401c3de8]
+    // untested. (Until 2026-10-10 a partial second port, BindUISounds, copied the five sounds only,
+    // behind a g_gameContainer test retail lacks -- B8 audit F1, known_port_issues row 1206.)
+    g_gameContainer->ApplyKeyMapToUI(&_ui);
 
     UI::UserInterface* ui = &_ui;
     GameContainer* keyMap = (g_gameContainer);
@@ -395,14 +401,6 @@ void MenuDialogLoopT::Startup() {
     // plays Audio/Music/Menu.rsc (loaded into self+0xb88 by Load) on the
     // music channel. Per-frame Audio::Scene::Update (Update) advances it.
     StartMusic();
-
-    // Bind the UI hover/press/click sounds onto the embedded UserInterface
-    // (self+0x40), mirroring OptionsDialog_helper_9260's sound block. Must run
-    // after StartMusic wired the audio scene at self+0xd0 (== UI+0x90) and
-    // after EnsureUISoundsLoaded populated the KeyMap container. The element
-    // framework (ButtonElement/Element::Update, driven by DialogLoopT::Update
-    // in Update) then plays these automatically on hover/click.
-    BindUISounds();
 }
 
 void MenuDialogLoopT::Shutdown() {

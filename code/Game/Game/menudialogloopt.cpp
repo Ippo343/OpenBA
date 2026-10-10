@@ -904,56 +904,6 @@ void MenuDialogLoopT::StopMusic() {
 }
 
 // ============================================================
-// MenuDialogLoopT_BindUISounds — bind UI hover/press/click sound effects
-// ============================================================
-// Mirror of the sound-binding block of OptionsDialog_helper_9260 (exe
-// 0x140099260) — the per-UI setup MenuDLT::Startup invokes right after
-// Engine::DialogLoopT::Startup. It copies five SoundEffect Externals from the
-// GameContainer (populated by PlacementTool_Ctor at 0x140099db0) into the
-// UserInterface's sound table `_sounds` (UI+0x98+id*8).
-//
-// UserInterface::Play(ui, id) (Runtime 0x1801223d0) reads `_sounds[id]` and, if
-// non-null, plays it through the audio scene at UI+0x90. The element framework
-// fires Play automatically — confirmed callers: ButtonElement::Update plays
-// id 4 on press and id 5 on click; Element::Update plays id 3 on drag-drop;
-// Slider/Scroll::Update play their own. All run inside the
-// Engine::DialogLoopT::Update we already invoke each frame, so NO explicit
-// per-element call is needed — only the sound table + audio scene must be set.
-//
-//   soundId 2 (UI+0xa8) <- beginDragEffect  (+0x70) Audio/UI/BeginDragEffect
-//   soundId 3 (UI+0xb0) <- endDragEffect    (+0x78) Audio/UI/EndDragEffect    (drag drop)
-//   soundId 4 (UI+0xb8) <- buttonDownEffect (+0x60) Audio/UI/ButtonDownEffect (press)
-//   soundId 5 (UI+0xc0) <- buttonUpEffect   (+0x68) Audio/UI/ButtonUpEffect   (click)
-//   soundId 6 (UI+0xc8) <- alertEffect      (+0x58) Audio/UI/AlertEffect
-//
-// UI is embedded at MenuDLT+0x40 (DialogLoopT layout), so UI+0x90 == self+0xd0
-// — exactly the field StartMusic sets to the embedded Audio::Scene (+0xb30), so
-// these sounds route through the same scene we tick each frame (TickAudioScene).
-// Copying a null slot is harmless — Play no-ops on a null entry; each slot is an
-// 8-byte ExternalPtr<SoundEffect>, copied by value exactly as helper_9260 does
-// (no SetSound call).
-void MenuDialogLoopT::BindUISounds() {
-    if (g_gameContainer == nullptr) {
-        printf("[MenuDLT::BindUISounds] KeyMap container not populated — UI silent\n");
-        return;
-    }
-    const GameContainer* keyMap = g_gameContainer;
-    UI::UserInterface& ui = _ui;
-
-    ui._sounds[2] = keyMap->beginDragEffect.Get();   // BeginDrag  (id 2)
-    ui._sounds[3] = keyMap->endDragEffect.Get();     // EndDrag    (id 3)
-    ui._sounds[4] = keyMap->buttonDownEffect.Get();  // ButtonDown (id 4)
-    ui._sounds[5] = keyMap->buttonUpEffect.Get();    // ButtonUp   (id 5)
-    ui._sounds[6] = keyMap->alertEffect.Get();       // Alert      (id 6)
-
-    printf("[MenuDLT::BindUISounds] ui=%p beginDrag=%p endDrag=%p btnDown=%p "
-           "btnUp=%p alert=%p\n",
-           (void*)&ui, (void*)ui._sounds[2], (void*)ui._sounds[3],
-           (void*)ui._sounds[4], (void*)ui._sounds[5], (void*)ui._sounds[6]);
-    fflush(stdout);
-}
-
-// ============================================================
 // MenuDialogLoopT_TickAudioScene — per-frame Audio::Scene::Update
 // ============================================================
 // Mirror of the Audio::Scene::Update call in MenuDLT::Update (exe 0x14009b6e0):
