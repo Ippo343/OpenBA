@@ -280,7 +280,7 @@ char BuildComponent::State8Enter(StateMachine* sm) {
             BuildStructure* bsWork = nullptr;
             if (mem) {
                 ComponentEntity* siteEnt = _entity.Get();   // *(BuildComponent+0x10)
-                bsWork = BuildStructure_CreateInPlaceFull(mem, &siteEnt, 0);
+                bsWork = new (mem) BuildStructure(&siteEnt, 0);   // 0x1400e59c0
             }
             if (bsWork) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk

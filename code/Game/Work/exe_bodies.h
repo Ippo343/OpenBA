@@ -26,7 +26,6 @@ extern "C" void BuildStructure_SetupBuildActions(CitizenComponent** citizenRef, 
 class BuildStructure;
 class Work;               // Work/Work.h
 class GatherRawMaterials; // Work/GatherRawMaterials.h
-extern "C" BuildStructure* BuildStructure_CreateInPlaceFull(void* mem, ComponentEntity** entityIBP, bool altAnim);  // 0x1400e59c0 (buildcomponent_state8.cpp, destroycomponent_states.cpp)
 extern "C" BuildStructure* BuildStructure_ConstructForSite(ComponentEntity** buildEntityIBP);  // no retail address (standalone harness entry)
 extern "C" int BuildStructure_ForceDrive(Work* self, CitizenComponent** citizenIBP);  // no retail address (standalone harness entry)
 extern "C" bool BuildStructure_DepsReady();  // no retail address (standalone harness entry)
