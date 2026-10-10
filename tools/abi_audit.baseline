@@ -41,7 +41,6 @@ count	win32_typedef	src/game	16
 count	win32_typedef	tests	2
 count	pragma_pack	src/engine	2
 count	pragma_pack	src/game	2
-count	asm_label	tests	22
 count	va_list	src/app	1
 count	va_list	src/diag	3
 count	va_list	src/engine	6

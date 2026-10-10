@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "abi.h"   // the data model the layouts assume (Phase D.4); RT_ASM_LABEL
 
 // ============================================================
 // System::Time — 8-byte tick counter

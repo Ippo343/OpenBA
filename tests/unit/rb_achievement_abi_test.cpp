@@ -23,6 +23,7 @@
 // here); `InitFields` itself is the REAL body — it is inline.
 // ============================================================================
 #include "unit.h"
+#include "abi.h"   // RT_ASM_LABEL
 #include "dtor_check.h"
 
 #include "achievement/AchievementManager.h"
@@ -40,7 +41,7 @@ extern InternalFactory* g_unitInternalFactory;
 }  // namespace detail
 }  // namespace Object
 
-extern const void* const g_rbAiVtGroup[] __asm__("_ZTVN11Achievement19AchievementInstanceE");
+extern const void* const g_rbAiVtGroup[] RT_ASM_LABEL("_ZTVN11Achievement19AchievementInstanceE");
 
 namespace {
 struct FactoryScope {

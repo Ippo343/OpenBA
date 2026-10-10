@@ -25,6 +25,7 @@
 // pointers to members and links no body).
 // ============================================================================
 #include "unit.h"
+#include "abi.h"   // RT_ASM_LABEL
 #include "dtor_check.h"
 
 #include "engine/UpdateLoop.h"
@@ -37,10 +38,10 @@
 #include <new>
 #include <type_traits>
 
-extern const void* const g_rbUlVtGroup[]  __asm__("_ZTVN6Engine10UpdateLoopE");
-extern const void* const g_rbLlVtGroup[]  __asm__("_ZTVN6Engine10LoaderLoopE");
-extern const void* const g_rbDlVtGroup[]  __asm__("_ZTVN6Engine11DialogLoopTE");
-extern const void* const g_rbDllVtGroup[] __asm__("_ZTVN6Engine17DialogLoaderLoopTE");
+extern const void* const g_rbUlVtGroup[]  RT_ASM_LABEL("_ZTVN6Engine10UpdateLoopE");
+extern const void* const g_rbLlVtGroup[]  RT_ASM_LABEL("_ZTVN6Engine10LoaderLoopE");
+extern const void* const g_rbDlVtGroup[]  RT_ASM_LABEL("_ZTVN6Engine11DialogLoopTE");
+extern const void* const g_rbDllVtGroup[] RT_ASM_LABEL("_ZTVN6Engine17DialogLoaderLoopTE");
 
 namespace {
 
