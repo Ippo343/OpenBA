@@ -158,7 +158,7 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
     }
 
     // Check if the hunt component at +0x20 is ready
-    if (!HuntIsReady(_field20.Get())) {   // 0x140122a80
+    if (!_field20.Get()->IsReady()) {   // 0x140122a80
         return;
     }
 

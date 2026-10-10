@@ -34,8 +34,8 @@
 // description, when a HuntDescription, gives the hunt time (_f20 * DAT_140172234 seconds);
 // returns whether that Time (in raw ticks) is <= the component's huntProgress.
 // ============================================================
-bool HuntIsReady(const HuntComponent* hunt) {
-    Description* obj = hunt->_description;
+bool HuntComponent::IsReady() const {
+    Description* obj = _description;
     const HuntDescription* desc = nullptr;
     if (obj->IsDerivedFrom(HuntDescription::TypeId())) desc = static_cast<const HuntDescription*>(obj);
 
@@ -46,7 +46,7 @@ bool HuntIsReady(const HuntComponent* hunt) {
 
     System::Time time = {};
     RtSystem_Time_Ctor(&time, holdSeconds * scale);   // ??0Time@System@@QEAA@M@Z
-    return time._ticks <= hunt->huntProgress._ticks;
+    return time._ticks <= huntProgress._ticks;
 }
 
 // ============================================================

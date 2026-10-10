@@ -46,7 +46,6 @@ void ShowCitizenTool(CitizenComponent* citizen, int toolId);  // 0x1401173b0
 class HuntComponent;          // Component/HuntComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 template <class T> struct RawArray;   // Action/PathSearch.h
-bool HuntIsReady(const HuntComponent* hunt);  // 0x140122a80
 void QwordArraySetSize(RawArray<void*>* arr, int newCount, void* const* fill);  // 0x140003110
 // The typed entry points of the one erased core 0x140003110: every 8-byte-element
 // Collection::Array<T*> (IBPArray, CitizenPtrList<T>, ...) or Array<InternalPtr<T>>
