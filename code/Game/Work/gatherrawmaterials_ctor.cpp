@@ -108,9 +108,3 @@ GatherRawMaterials::GatherRawMaterials(ComponentEntity* const* buildEntityIBP) :
     }
 
 }
-// The by-address door (0x1400ec710, standalone/reg_gatherrawmaterials_ctor.cpp; also
-// named by buildcomponent_state1.cpp): the real ctor on caller memory (B8-5).
-extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, ComponentEntity* const* buildEntityIBP) {
-    if (!mem) return nullptr;
-    return new (mem) GatherRawMaterials(buildEntityIBP);
-}

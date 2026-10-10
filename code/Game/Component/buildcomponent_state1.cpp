@@ -41,6 +41,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"
+#include "Work/GatherRawMaterials.h"   // B8: the (site) constructor 0x1400ec710
 #include "system/MemoryAllocator.h"
 
 #include "Component/BuildComponent.h"
@@ -55,7 +56,6 @@
 #include "Entity/CitizenBehavior.h"
 #include "Game/ProfessionList.h"
 
-// GatherRawMaterials_Ctor_Impl (0x1400ec710) is declared in Work/exe_bodies.h.
 // town_workplace_registry.cpp — register a workplace into townMgr+0x100 (profession map).
 extern "C" void  TownRegistry_RegisterWorkplace(CitizenBehavior* townMgr, const WorkPlaceComponent* workplaceComp);
 
@@ -273,7 +273,7 @@ int BuildComponent::State1Enter(StateMachine* smNode) {
         Work* work = nullptr;
         if (mem) {
             ComponentEntity* entIbp = _entity.Get();
-            work = GatherRawMaterials_Ctor_Impl(mem, &entIbp);
+            work = new (mem) GatherRawMaterials(&entIbp);   // 0x1400ec710
         }
         ::Object::InternalPtr<Work> workIbp(work);
 

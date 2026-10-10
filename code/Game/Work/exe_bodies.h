@@ -41,7 +41,6 @@ extern "C" bool GatherRawMaterials_DepsReady();  // no retail address (standalon
 
 // ---- gatherrawmaterials_ctor.cpp
 class Work;   // Work/Work.h
-extern "C" Work* GatherRawMaterials_Ctor_Impl(void* mem, ComponentEntity* const* buildEntityIBP);  // 0x1400ec710 (caller buildcomponent_state1.cpp)
 
 // ---- harvestorchard_ctor.cpp
 extern "C" Work* HarvestOrchard_CtorFromEntity(void* mem, ComponentEntity* const* entityIBP);  // no retail address (local extern in orchardcomponent_states.cpp)
