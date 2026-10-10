@@ -35,13 +35,13 @@ template <> void Collection::Array<AmbientEnvironmentBiome>::SetSize(int newCoun
 
 // ---- attendancecomponent.cpp
 class WorkPlaceComponent; namespace Object { template <class T> class InternalPtr; }
-Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, Object::InternalPtr<WorkPlaceComponent>* outPtr);  // 0x140002e10 (returns outPtr)
+Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, Object::InternalPtr<WorkPlaceComponent>* outPtr);  // 0x140002e10 (returns outPtr)  // B8: stays free -- not free in retail: a ComponentEntity::FindComponent<T> instance (0x140002e10 = FindComponent<WorkPlaceComponent>: 0x140043bf1 MOV RCX,[RBX+0x10], the entity); its callers on the inline member template inline it (measured on FloorComponent_FindResData's caller, citizenai_leisure.cpp State_Leisure: DIFF)
 
 // ---- buildcomponent.cpp
-int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550
+int BuildComponent_FindInQueue(const CitizenIbpList<BuildComponent>* list, const Object::InternalPtr<BuildComponent>* key);  // 0x140017550  // B8: stays free -- retail's is Collection::Array<InternalPtr<T>>'s index-of (0x140017550: RCX the array, [RCX+8] the count, RDX the key), a member of RT's Array template
 
 // ---- cemeterycomponent.cpp
-extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0
+extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue);  // 0x140002cc0  // B8: stays free -- the erased Array<T*> remove-by-value (0x140002cc0): retail's is Collection::Array<T*>'s member, RT's template (it has no Remove(value) yet)
 
 // ---- charactercomponent.cpp
 class Action;
@@ -63,7 +63,7 @@ extern "C" CitizenComponent** CitizenEmploy_Strat_c4b0(CitizenBehavior* townMgr,
 extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c3d0
 extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);  // 0x140091130
 extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)
-extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop
+extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop  // B8: harness / port-only -- the headless driver of 0x14007dd10's inner loop (dd10 reads a UI widget the drivers lack); no retail symbol of its own
 
 // ---- citizen_lifeevent.cpp
 
@@ -80,15 +80,15 @@ class CitizenComponent; class Disease;
 // ---- citizenai_actionctors.cpp
 class ComponentEntity;
 class ComponentDescription;
-void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, int param_4, uint8_t param_5, uint32_t param_6);  // 0x1400c1070
-void CitizenAI_PerformWorkCtor5_bd070(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bd070
-void CitizenAI_PerformWorkCtor6_bd420(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, char param_4);  // 0x1400bd420
-void CitizenAI_PerformWorkCtor8_bd790(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3);  // 0x1400bd790
-void CitizenAI_PerformWorkCtor10_bccb0(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bccb0
-void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, ComponentDescription* material, ComponentEntity* const* srcRef, float* param_4, ComponentEntity* const* dstRef, float* param_6);  // 0x1400bc790
-void CitizenAI_Pathfinding_NavigateTo_bda50(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, uint8_t );  // 0x1400bda50
-void CitizenAI_Pathfinding_WalkTowards_bb490(CitizenComponent* const* citizenRef, uint32_t param_2, float* param_3, uint32_t param_4, float param_5, uint32_t param_6);  // 0x1400bb490
-void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, float param_4, uint32_t param_5);  // 0x1400ba6b0
+void CitizenAI_PerformWorkCtor4_c1070(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, int param_4, uint8_t param_5, uint32_t param_6);  // 0x1400c1070  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor5_bd070(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bd070  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor6_bd420(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, char param_4);  // 0x1400bd420  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor8_bd790(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3);  // 0x1400bd790  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor10_bccb0(CitizenComponent* const* citizenRef, ComponentEntity* const* srcRef, float* param_3, ComponentDescription* material);  // 0x1400bccb0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PerformWorkCtor11_bc790(CitizenComponent* const* citizenRef, ComponentDescription* material, ComponentEntity* const* srcRef, float* param_4, ComponentEntity* const* dstRef, float* param_6);  // 0x1400bc790  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_Pathfinding_NavigateTo_bda50(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, uint8_t );  // 0x1400bda50  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_Pathfinding_WalkTowards_bb490(CitizenComponent* const* citizenRef, uint32_t param_2, float* param_3, uint32_t param_4, float param_5, uint32_t param_6);  // 0x1400bb490  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
+void CitizenAI_PlayAnimationCtor4_ba6b0(CitizenComponent* const* citizenRef, ComponentEntity* const* targetRef, float* param_3, float param_4, uint32_t param_5);  // 0x1400ba6b0  // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (verified for the family on 0x1400c1070: 0x1401162e3 LEA RCX,[RBP-0x39]), not an object
 
 // ---- citizenai_executor.cpp
 struct ActionStack;   // Action/Action.h
@@ -104,7 +104,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
 class ComponentEntity;
 class MarketLocationComponent;
 namespace Object { template <class T> class InternalPtr; }
-::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(
+::Object::InternalPtr<MarketLocationComponent>* CitizenAI_sub_78c0(  // B8: stays free -- not free in retail: a ComponentEntity::FindComponent<T> instance (0x14008df62 MOV RCX,[RBP-0x59], the entity); its callers on the inline member template inline it (measured on FloorComponent_FindResData's caller, citizenai_leisure.cpp State_Leisure: DIFF)
     ComponentEntity* param_1, ::Object::InternalPtr<MarketLocationComponent>* param_2);  // 0x1400178c0
 CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentEntity** found, uint32_t param_3, uint32_t param_4, ComponentDescription** param_5, float* param_6, uint32_t param_7);  // 0x14008dd30
 
@@ -118,7 +118,7 @@ extern "C" int Storage_GetResourceCount2(const Component* self);  // 0x14012ab00
 // The AVL rebalance walk over any 0x30 node (links +0x10 / +0x18 / +0x20, int16 balance /
 // height +0x28 / +0x2A; one retail body for every such tree, B13); instantiated per node type
 // in citizenai_housing_idle.cpp.
-template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** walk);  // 0x14000e360
+template <class Node> void CitizenAI_Reg_helper_e360(Node** rootSlot, Node** walk);  // 0x14000e360  // B8: stays free -- already the template over the node type (explicit instantiations in citizenai_housing_idle.cpp); nothing erased
 
 // ---- citizenai_work_scheduler.cpp
 class WorkScheduler; class WorkComponent; class Work; class Profession;
@@ -131,11 +131,11 @@ class StorageComponent;
 int CitizenComp_Storage_GetResourceCount(const Component* self);  // 0x14012a9d0  // B8: stays free -- passed as a function pointer at citizenai_gather.cpp:423 (HideRenderWorkplaceMesh); retail calls 0x14012a9d0 directly from HasSufficientResources (0x1401157c2), no pointer slot
 
 // ---- citizencomponent.cpp
-ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)
+ComponentDescription** CitizenComp_Entity_impl_ef40(const void* param_1, ComponentDescription** param_2, ComponentEntity* const* param_3, int param_4);  // 0x14008ef40 (param_1 unused)  // B8: free in retail -- RCX dead (0x14008df22: RDX / R8 / R9 loaded, RCX not)
 
 // ---- citizencomponent_lifecycle.cpp
 
-void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0
+void CitizenComp_SortByProfession_02a0(ComponentEntity** array, int n, void* );  // 0x1400302a0  // B8: free in retail -- introsort helper: RCX the array base, EDX the count, R8 the compare (0x1401107c0 MOV RCX,R14)
 namespace Math { class Vector3; }
 
 // ---- cropfieldcomponent.cpp
@@ -166,10 +166,10 @@ void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decal
 
 // ---- floorcomponent.cpp
 class MapComponent;
-MapComponent** FloorComponent_FindResData(ComponentEntity* owner, MapComponent** outIBP);  // 0x140004680 (returns outIBP)
+MapComponent** FloorComponent_FindResData(ComponentEntity* owner, MapComponent** outIBP);  // 0x140004680 (returns outIBP)  // B8: stays free -- not free in retail: a ComponentEntity::FindComponent<T> instance (0x140004680 = FindComponent<MapComponent>, RCX the entity); its callers on the inline member template inline it (measured on FloorComponent_FindResData's caller, citizenai_leisure.cpp State_Leisure: DIFF)
 
 // ---- frustumoutlineelement.cpp
-extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0
+extern "C" void FrustumOutline_ProjectCorners(float* out);  // 0x14006c5b0  // B8: free in retail -- RCX is the output corner array (0x14006bf31 LEA RCX,[RBP-0x39])
 
 // ---- growthcomponent.cpp
 
@@ -205,7 +205,7 @@ extern "C" void MapComponent_DetachOccupancy_4750(MapComponent* self);  // 0x140
 class PastureComponent;
 class AnimalComponent;
 extern "C" void Pasture_SpawnLivestock(PastureComponent* pasture, AnimalComponent* const* parentAnimalIBP);  // 0x140128670
-extern "C" int Pasture_FillAllPastures();  // 0x140060290
+extern "C" int Pasture_FillAllPastures();  // 0x140060290  // B8: free in retail -- no parameters (0x140060e76, the debug menu, loads none)
 class MapGenerator;   // Game/MapGenerator.h
 extern "C" int StartTown_SpawnStartingHerd(MapGenerator* sc, const float* centre, ComponentDescription* tmpl);  // 0x1400a0b10
 
