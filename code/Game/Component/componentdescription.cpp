@@ -127,19 +127,19 @@ DEFINE_EXE_TYPE(ComponentDescription, "Object::External")
 // 0x14001b1d0 resolves a by-name ComponentDescription reference (Object/NamedExternalRef.h):
 // the template's name, the ExternalFactory generation it was last resolved at, and the
 // cached result.
-void ResolveExternalByName_Impl(NamedExternalRef* ref) {
+void NamedExternalRef::ResolveDescription() {
     // 0x14001b1ec-0x14001b1f6: the factory singleton is read with no test (B8 RES, row 1064).
     ::Object::ExternalFactory* factory = ::Object::ExternalFactory::_singleton;   // ENDGAME B.3.9 SS2 (merged)
 
     // Check generation counter: if matches, cached value is still valid
-    if (ref->generation == factory->_generation) return;
+    if (generation == factory->_generation) return;
 
     // Convert String to Filename, look up in factory; the Filename dies right after
     // the find (0x14001b223), before the type test.
     // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x1800c6360
     ::Object::External* found;
     {
-        System::Filename filename(ref->name);
+        System::Filename filename(name);
         found = factory->FindAs<::Object::External>(filename);
     }
 
@@ -151,6 +151,6 @@ void ResolveExternalByName_Impl(NamedExternalRef* ref) {
     }
 
     // Cache result, then the generation RE-READ after the find (0x14001b24d).
-    ref->resolved   = result;
-    ref->generation = factory->_generation;
+    resolved   = result;
+    generation = factory->_generation;
 }

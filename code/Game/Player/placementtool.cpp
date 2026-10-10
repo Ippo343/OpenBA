@@ -398,7 +398,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
 
     // Get cost/status strings from the tool group's ToolbarDescription
     ToolbarDescription* costResult = nullptr;
-    DragTool_FindDescription_5160(descriptionPtr, &costResult);
+    costResult = descriptionPtr->FindDescription<ToolbarDescription>();   // 0x140005160
 
     // Build cost string: index into the description's string array (+0x50).
     // Index is 0 (valid) or 1 (invalid), based on tileValid

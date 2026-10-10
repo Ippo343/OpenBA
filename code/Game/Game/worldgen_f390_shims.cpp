@@ -6,7 +6,6 @@
 // All semantics match how rivers.cpp actually calls them (verified at the call sites):
 //   - FUN_140014c30           is only called on a null AVL root (dead path) -> no-op
 //   - TradeComponent_helper_f9e0 copies a stride-4 {data,count,cap} int bucket
-//   - fn_Random_RandFloatTol   advances the engine RNG -> must hit the real Runtime export
 
 #include "system/MemoryAllocator.h"   // System::MemoryAllocator::MemAlloc / MemFree
 #include <cstdint>
@@ -16,13 +15,6 @@
 #include "Action/PathSearch.h"   // RawArray<T>
 
 extern "C" {
-
-// System::Random::RandFloatTol() — Runtime export; advances RNG state, returns ~[-1,1].
-// B4 FORWARD: its callers (Component blocks, founding_spawn, the river pass) hold a
-// System::Random*; the call lines in X6-CW's files are rewired at the close.
-float fn_Random_RandFloatTol(System::Random* self) {
-    return self->RandFloatTol();
-}
 
 // vector<int> bucket deep-copy ({data@+0, count@+8, cap@+0xC}, stride-4 elements).
 // Mirrors Reimpl_TradeComponent_helper_f9e0 in gameupdateloop_load.cpp. Its one

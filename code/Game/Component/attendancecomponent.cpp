@@ -65,8 +65,8 @@ static void AttendanceComponent_ReportMissingWorkplace(AttendanceComponent* self
                     isHost ? (::Object::IsDerivedFromNullSafe(c, tid)
                               ? ",HOST,derived" : ",HOST,NOT-derived") : "");
         }
-        fprintf(stderr, "\n[AttendanceComponent::Update]   jobHost tid(1401c80e0)=%u finder=%p\n",
-                WorkPlaceComponent::TypeId(), (void*)&AttendanceComponent_GetJobHostComponent);
+        fprintf(stderr, "\n[AttendanceComponent::Update]   jobHost tid(1401c80e0)=%u\n",
+                WorkPlaceComponent::TypeId());
     }
     fflush(stderr);
 }
@@ -142,15 +142,6 @@ void CitizenComponent::ReleaseLink230() {
 }
 void CitizenComponent::ReleaseCareBuilding() {
     AttendanceComponent_ReleaseLinkSlot(this, careBuilding);
-}
-
-// ============================================================
-// Reimpl of FUN_140002e10 (find the job-host component (type DWORD_1401c80e0)
-//   on an entity and return it wrapped in an InternalBasePtr via retbuf)
-// Retail returns the return buffer in RAX, as every by-value return does.
-// ============================================================
-::Object::InternalPtr<WorkPlaceComponent>* AttendanceComponent_GetJobHostComponent(ComponentEntity* entity, ::Object::InternalPtr<WorkPlaceComponent>* outPtr) {
-    return new (outPtr) ::Object::InternalPtr<WorkPlaceComponent>(entity->FindComponent<WorkPlaceComponent>());
 }
 
 // ============================================================

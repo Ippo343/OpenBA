@@ -577,7 +577,7 @@ char DestroyComponent::State5Enter() {
             void* mem = ::System::MemoryAllocator::MemAlloc(0x70, 8);
             if (mem) {
                 ComponentEntity* entityIBP = entity;
-                Object::InternalPtr<Work> workIBP(BuildStructure_CreateInPlaceFull(mem, &entityIBP, 1));
+                Object::InternalPtr<Work> workIBP(new (mem) BuildStructure(&entityIBP, 1));   // 0x1400e59c0
                 yard->PostWork(0x2001, 0, &workIBP);
             }
         }

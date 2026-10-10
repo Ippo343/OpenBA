@@ -53,14 +53,14 @@ extern "C" void EventLog_AddCitizenEvent(EventLog* eventLog, int eventType, int 
 
 extern "C" void EventLog_YearString_Reg(GameUpdateLoop* gameWorld, System::String* retStr);  // retail inlines it
 extern "C" void EventLog_SeasonString_Reg(GameUpdateLoop* gameWorld, const EventLog* eventLog, System::String* retStr);
-extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)
+extern "C" int  EventLog_TileIndex_Reg(void* unused, const Object::InternalBasePtr* entityIBP);  // 0x140095030 (RCX dead)  // B8: free in retail -- RCX dead: at 0x1400484b0 it is what the import call [0x140151ee8] before it left
 
 // ---- game.cpp
 // --- Game_TriggerDisasterByType (0x140060110) — REIMPLEMENTED inline ---
 // Iterates ExternalFactory for entities with ComponentDescription (DAT_1401c7318),
 // finds SelectDescription sub-component (DAT_1401c48a8), checks type match,
 // removes matching entity via Game_RemoveEntity.
-void Game_TriggerDisasterByType_Impl(int disasterType);
+void Game_TriggerDisasterByType_Impl(int disasterType);  // B8: free in retail -- first parameter the disaster type (an int), no object
 
 // --- Game_SpawnResources (0x140091660) — REIMPLEMENTED inline ---
 // Spawns 'count' resources into citizen storage buildings.
@@ -241,7 +241,6 @@ extern "C" void MusicPlayer_Update(MusicPlayer* musicPlayer);  // 0x1400a40e0  B
 // ---- w2_takescreenshot.cpp
 
 // ---- weather_particles.cpp
-extern "C" void* WeatherParticle_GeoCtor(void* mem);  // 0x1400d3f10
 class WeatherParticleGeometry;
 class Weather;
 extern "C" void WeatherParticle_Config(WeatherParticleGeometry* geo, Weather* descriptor);  // 0x1400d3f80
@@ -252,12 +251,6 @@ class WeatherSimulation; namespace System { class Time; }
 extern "C" void Weather_ResetTime_Reimpl(WeatherSimulation* weatherSelf, const System::Time* time);  // 0x1400944e0 -> WeatherSimulation::Update (B4 FORWARD)
 
 // ---- worldgen_f390_shims.cpp
-// System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
-// extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
-// the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
-// reused by callers that need the tolerance-range primitive.
-namespace System { class Random; }
-extern "C" float fn_Random_RandFloatTol(System::Random* self);
 
 // ---- worldsetup_reload.cpp
 class MainMenuDialog; namespace Save { class SavedState; }

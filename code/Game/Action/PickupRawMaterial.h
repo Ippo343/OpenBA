@@ -25,6 +25,7 @@ class PickupRawMaterial final : public Action {
 
 public:
     PickupRawMaterial();                                                   // create 0x140022c60
+    PickupRawMaterial(CitizenComponent* const* citizen, ComponentEntity* const* pile);   // 0x1400c9b70 (body in Work/work_base_actionctor.cpp)
 
     ~PickupRawMaterial() override = default;                   // [0] 0x140022cd0
     void Persist(IO::Stream& stream) override;                       // [3] 0x1400c99e0
