@@ -12,3 +12,16 @@ Invariants (B9 close): new game 5683 / 0, tutorial 5773 / 12, typetable `965b527
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | SLOTS | d0-slots (tip `9f1f1038f`) | `570b1ee31` | 0 | 5683 / 0 | 5773 / 12 | `965b527a` | 5/5 PASS (23452937 bytes) | 920 / 0 | 0 / 0 | 2 | tools (placement / road / removal as B9); orchard / stress / disaster run after the ENGTYPES merge (`runs/POSTBLOCKS_*`) | rows 1202 / 1203 / 1204 FIXED, 1270 (no decal race: six port-only early returns in OnAdded) FIXED, 1271 / 1272 LEFT; starttown's 0x100000 pre-sets and MarkBuildingCells gone; slot 12 now paints building minimap dots |
 | ENGTYPES | d0-engtypes (tip `fb5faef68`) | `789295190` (the coordinator's plan-files commit landed mid-merge and became the merge commit; message amended, content = tip + the 4 plans) | 0 | 5683 / 0 | 5773 / 12 | `965b527a` | 5/5 PASS (23452937) | 920 / 0 | 0 / 0 | 2 | tools (placement / road / removal as B9) | engine/types dissolved: 8 forwarders deleted, common.h -> runtime/types/global_types.h (runtime names; accepted deviation), ui/Dialogs.h / Panels.h -> code/Game/Dialog/, 4 loop aliases + their 4 unit CHECKs gone (count 920 unchanged); B11 vs a rebuilt base at 2c1840ad4: 16944 functions IDENTICAL, 934 / 935 objects byte-identical stripped |
+
+**Post-block routes (after ENGTYPES, main `c603c98dd`, `runs/POSTBLOCKS_*`):** orchardpanel exit 0 crash 0 (OrchardDiag
+counts live), disaster exit 0 (2 houses ignited), sa-stress 139 fps / p95 2.42 ms (B9: 139 / 2.42), worldcmp vs B9's
+CLOSE: DIFFERS as row 1203 predicts -- the 8 `[startTown::pickmap] marked` lines are gone (MarkBuildingCells deleted),
+tree / pile cells carry dc20's Obstacle stamp so `[startTown::DIAG] buildable(2)` 73809 -> 49461 and mtnLo 12013 ->
+10974, and 101 fewer scattered resources spawn (25687 -> 25586: cells claimed by AddToMap at RegisterEntity are
+occupied for later pools). `runs/POSTBLOCKS_worldcmp/new.world.txt` (md5 4ff6354d) is the Phase D world baseline.
+B11 base for the moves: `runs/b11base_premove/perf` = main's -O2 objects at `789295190` (ENGTYPES' gate build).
+
+## Move steps (one top-level directory per commit; a pure move: B11 IDENTICAL on every object, names mapped)
+
+| step | move | commit | gate problems | new game | tutorial | typetable | resave | unit | warnings | B11 (vs b11base_premove, names mapped) | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|
