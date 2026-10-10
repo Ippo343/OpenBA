@@ -3,7 +3,7 @@
 Written 2026-10-10 by a read-only survey of main at 4e36b7000. Decision source: `endgame_b/NEXT_SESSION.md` §2.2,
 `ENDGAME.md` §E item 3. Nothing here was built or run; every tree fact is a file:line read. SDL3 / DXVK facts were
 checked online the same day against the SDL wiki, SDL's `main` source and the DXVK repo; each carries a source key
-[S1]..[S22] resolved in §H. The few still unconfirmed are marked **(unverified)**.
+[S1]..[S23] resolved in §H. The few still unconfirmed are marked **(unverified)**.
 
 ## 0. Three corrections to the brief (they change the work)
 
@@ -35,7 +35,7 @@ checked online the same day against the SDL wiki, SDL's `main` source and the DX
 | `CreateCursor` 32x32 AND/XOR, `SetCursor` | `devicedata.cpp:1344-1348` | `SDL_CreateCursor(data,mask,32,32,hx,hy)` + `SDL_SetCursor` [S9] | SDL: data0/mask1 white, data1/mask1 black, data0/mask0 transparent, data1/mask0 inverted; MSB-first, width a multiple of 8 [S9]. Win32 AND=1 → mask 0; XOR=1 (white) → data 0. Unit-test the conversion |
 | `DestroyCursor` (slot 3) | `devicedata.cpp` slot 3 | `SDL_DestroyCursor` | none |
 | `MessageBoxW` (Error::Display) / `MessageBoxA` | `error.cpp:533`, `main.cpp:1352` | `SDL_ShowSimpleMessageBox(flags,title,msg,window)` [S10] (blocks; callable before `SDL_Init`) | the watchdog detects modals by class `#32770` (`boot_state_watchdog.cpp:120-135`). SDL3 tries `TaskDialogIndirect` first and falls back to a `DialogBoxIndirectParam` template with the default dialog class [S11]. Whether a TaskDialog's top window is class `#32770` is **(unverified)**: W6 forces a modal and checks `boot_state.sh` reports it |
-| `ShellExecuteW` (LaunchProcess shell-open arm) | `application_win.cpp:358` | `SDL_OpenURL` for the URL arm; `CreateProcessW` stays with the threads/process seam | out of SDL's core scope; listed so nobody misses it |
+| `LaunchProcess` (zero callers in the tree; ported per "decompile all slots") | `application_win.cpp:318-368` | see §A.6 | see §A.6 |
 
 ### A.2 Pump and window procedure
 
@@ -123,6 +123,16 @@ and a by-value `Audio::Stream` (+0xa00, a `System::Thread` worker with Win32 eve
 | `GetState().BuffersQueued` (vs 3 and 0) | `vtbatch7b_stream_run_win.cpp` | a per-voice count of put-but-unconsumed buffers kept by the backend | none |
 | mastering voice `DestroyVoice` + engine `Release`, inlined in two shutdowns | `game_main.cpp:198-208`, `engine_lifecycle.cpp:735-741` | one `Device::PlatformReleaseEngine()` called from both sites | the fields keep their offsets |
 | reap loop (`flags & 2` → FreeChannelPlatform → onComplete) | `mainloop_frame.cpp:384-396` | unchanged | none |
+| Stream worker's Win32 events + CRITICAL_SECTION: wake event Stream+0x40, buffer event +0x48, lock +0x50 (Device +0xa40/+0xa48/+0xa50, asserted in `Device.h`); `WaitForMultipleObjects(2, …, FALSE, INFINITE)` | `vtbatch7b_stream_run_win.cpp:344,425`, `audio_stream_win.cpp`, `audio_stream_play_win.cpp`, `audio_device.cpp` (FreeChannelPlatform / StopPlatform) | **the THREADS plan's primitives, not SDL's**: `Platform::EventHandle` (8-byte slot, auto/manual reset) with `EventSet/Reset/Wait/WaitAny(2, …)` (lowest index wins, consumes only that one, as Win32's auto-reset WaitAny), and `Platform::LockStorage` (the same in-place 0x28 bytes, recursive) (`phase_d/plans/THREADS.md`) | none: the layout asserts stay. `OnBufferEnd` calls `EventSet` from the SDL audio thread where it called `SetEvent` from XAudio2's |
+
+### A.6 Handed over by the THREADS plan
+
+| Win32 | file:line | replacement | difference |
+|---|---|---|---|
+| `CoInitializeEx(NULL, 0 = MTA)` in `Engine::Startup` (inlined) and `Engine::PlatformStartup` (unreachable export) | `engine_lifecycle_win.cpp:29-35`, `platform_startup_win.cpp:424` | keep on Windows behind `Platform::ComInit()` / `ComUninit()` (the names THREADS.md uses), no-ops elsewhere. Its three consumers: XAudio2's `CoCreateInstance` and `DirectInput8Create` go with Blocks 4 / 2. `ShellExecuteW` becomes `SDL_OpenURL`, which does its own `WIN_CoInitialize` / `CoUninitialize` around `ShellExecuteW` [S23] | after Block 5 nothing in the tree needs COM. Delete the init then, in its own `behaviour:` commit, because retail's MTA init on the main thread is observable by any COM user SDL loads. Whether SDL's STA attempt on an MTA thread tolerates `RPC_E_CHANGED_MODE` is **(unverified)**; test LaunchProcess's open arm once |
+| `ShellExecuteW(NULL, L"open", file, NULL, NULL, 10 = SW_SHOWDEFAULT)`, success = result > 32 | `application_win.cpp:358` | `SDL_OpenURL(url)`. It takes `file:///` URLs "if supported" and directories may open a file manager; main thread only [S23] | SDL passes `SW_SHOWNORMAL`, not SW_SHOWDEFAULT [S23]. A bare path must be turned into a `file:///` URL. Retail's result-code test becomes SDL's bool. Record in known_port_issues |
+| `CreateProcessW(NULL, cmdline≤0x103 chars, …)` + `WaitForSingleObject(INFINITE)`, `hThread` leaked | `application_win.cpp:321-349` | `SDL_CreateProcessWithProperties` with `SDL_PROP_PROCESS_CREATE_CMDLINE_STRING` ("passed directly to CreateProcess on Windows") [S23], then `SDL_WaitProcess(p, true, &code)` + `SDL_DestroyProcess` | the raw command line survives only on Windows. Elsewhere it must be split into `SDL_PROP_PROCESS_CREATE_ARGS_POINTER`, the required property [S23]. The 0x104 truncation stays in our code. The handle leak goes; SDL owns its handles |
+| `EnumDisplaySettingsW(ENUM_CURRENT)` refresh rate | `frame_limiter.cpp:53` | `SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay())->refresh_rate` (already in §A.3; ours, not retail's) | float Hz, 0 when unknown: keep the `<= 1 → 60` fallback |
 
 ## B. Vendoring and build
 
@@ -179,7 +189,7 @@ and a by-value `Audio::Stream` (+0xa00, a `System::Thread` worker with Win32 eve
   above) and the `SDL_Window*` on dxvk-native. DXVK has an `sdl3` WSI next to `sdl2`, `glfw` and `win32`
   (`src/wsi/`) [S20]. Its README says "`HWND`s can become `SDL_Window*`s", and the backend is chosen at run time with
   `DXVK_WSI_DRIVER=SDL3` [S20]. v2.6.1's notes fix "various issues with the SDL3 backend" [S20], but the release that
-  added it is **(unverified)**. Tell the RENDER planner. It is what `Application::_windowHandle` / `Video::Device::windowHandle`
+  added it is **(unverified)**. Tell the RENDER planner. That handle is what `Application::_windowHandle` / `Video::Device::windowHandle`
   hold, so `devicedata.cpp` (`WindowOf`, `OutputWindow`, `MakeWindowAssociation`) is unchanged. The `SDL_Window*` lives
   in `window_sdl.cpp`; no engine field changes type. The `TraceGeom` / `SwapProbe` diagnostics that call
   `GetWindowRect` move to `Platform::Window` too, or stay Windows-only under `src/diag/`.
@@ -276,14 +286,19 @@ Every step: `mingw32-make standalone-debug`, `mingw32-make unit`, `mingw32-make 
   Unit: decode a short xWMA fixture to PCM and compare against a reference produced once by XAudio2 on Windows
   (store the fixture under `tests/unit/data/`, a few KB).
 - A4 `behaviour: SDL one-shot voices` — `audio_sdl.cpp`: PlayPlatform/StopPlatform/FreeChannelPlatform/SetVolumePlatform.
-- A5 `behaviour: SDL music stream` — `audio_stream_sdl.cpp`; the Stream worker's GetState/Submit/OnBufferEnd contract.
+- A5 `behaviour: SDL music stream` — `audio_stream_sdl.cpp`; the Stream worker's GetState/Submit/OnBufferEnd contract,
+  its waits and lock on THREADS' `Platform::EventHandle` / `WaitAny` / `LockStorage` (needs THREADS steps 1-3 landed: primitives, Thread, locks).
   Check: menu music, track change, in-game ambience, 64-voice saturation (a storm/fire route), quit with music playing.
+
+- W7 `behaviour: LaunchProcess over SDL` — §A.6: `SDL_OpenURL` and `SDL_CreateProcessWithProperties`. It has no
+  caller, so test it with a unit-level call from a diag route: open a `file:///` folder, and run `cmd /c exit 3` with wait.
 
 **Block 5** — D1 `cleanup: delete Win32 window/input/audio backends` (`platform_startup_win.cpp`, `input_*_win.cpp`,
 `audio_*_win.cpp`, `vtbatch7b_stream_run_win.cpp`'s XAudio2 half, `device_*_win.cpp`); `-ldinput8 -ldxguid` gone;
 `docs/known_port_issues.md` rows for each recorded difference; `src/engine/input/README.md`, `src/engine/audio/README.md`.
+D2 `behaviour: drop the COM init` once nothing needs it (§A.6).
 
-About 19 commits in 6 blocks.
+About 21 commits in 6 blocks.
 
 ## G. Risks and user questions (only those that change the work)
 
@@ -296,15 +311,49 @@ About 19 commits in 6 blocks.
    and is decoding at play time preferred over a transcode step?**
 2. **SDL3 vs SDL2.** SDL3 everywhere listed (Windows, Linux, macOS, Android). No target needs SDL2 today; do not
    build a dual layer. **Confirm.**
-3. **Mouse delta source.** If SDL's non-relative `xrel` is the accelerated cursor delta, middle-drag rotation speed
-   changes and stops at the screen edge. Options: accept and record; or keep a per-platform raw source (Windows raw
-   input is still Win32). **Ask after I3's measurement, not before.**
-4. **DPI.** Retail is DPI-unaware unless its manifest says otherwise; SDL3 on Windows sets per-monitor DPI awareness.
-   Window and mouse coordinates must stay in PIXELS (`SDL_GetWindowSizeInPixels`, no `SDL_WINDOW_HIGH_PIXEL_DENSITY`).
-   Check the retail exe's manifest before W3 and set `SDL_HINT_WINDOWS_DPI_AWARENESS` **(verify hint name)** to match.
+3. **Mouse delta source (now confirmed from source).** Outside relative mode SDL3's `xrel` is the cursor-position
+   difference [S22]: accelerated by the pointer-speed setting, and zero at the screen edge. DirectInput gives raw
+   mickeys, so middle-drag rotation will feel different. Relative mode (raw, unscaled by default
+   `SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE=0` [S21]) hides and confines the cursor [S21], so it could be enabled only
+   while the middle button is held, which is a behaviour change of its own. Options: (a) accept and record;
+   (b) relative mode during the middle drag; (c) keep a raw-input reader per platform. **I3 measures; then ask.**
+4. **DPI.** SDL3 on Windows declares per-monitor-v2 DPI awareness by default. A string hint
+   `"SDL_WINDOWS_DPI_AWARENESS"` takes `permonitorv2` (the default), `permonitor`, `system` or `unaware` [S13]. It has
+   no `SDL_HINT_` macro, and the wiki page for that name is 404 [S13]. On Windows SDL coordinates "always" are physical
+   pixels [S13]. Retail with no DPI manifest would be bitmap-stretched by Windows on a 150 % display, and the port
+   would render at native size. Read the retail exe's manifest before W3, then set the hint to `unaware` or
+   `system` to match, through `SDL_SetHint` before `SDL_Init`.
 5. **Static linking.** Recommended (one exe, no deploy change). Only changes if the xWMA choice forces a DLL.
 6. **Android** (not a question now): no HWND, no DXGI. The `Platform::*` API above has no Windows type in it, so it
    does not block Android; the renderer route is the open item (NEXT_SESSION §2.2).
-7. **SDL3 API names flagged (verify):** `SDL_SetAudioStreamGain`, `SDL_SetWindowMouseRect`, `SDL_GetWindowBordersSize`,
-   `SDL_SyncWindow`, `SDL_AddEventWatch`'s callback return type, `SDL_PROP_WINDOW_WIN32_HWND_POINTER`, the CMake option
-   names in §B, `SDL_SetAudioStreamGetCallback` semantics (called on the device thread with the stream locked).
+7. **Still unverified:** TaskDialog's window class (§A.1); whether `SDL_DestroyAudioStream` waits for a running
+   callback (§A.5, worked around); the contents of the mingw devel package (§B); which DXVK release added the SDL3
+   WSI (§C). None blocks Block 0.
+
+## H. Sources (fetched 2026-10-10)
+
+| key | URL |
+|---|---|
+| S1 | https://github.com/libsdl-org/SDL/releases |
+| S2 | https://raw.githubusercontent.com/libsdl-org/SDL/main/CMakeLists.txt |
+| S3 | https://github.com/libsdl-org/SDL/blob/main/docs/README-cmake.md |
+| S4 | https://github.com/libsdl-org/SDL/blob/main/docs/README-windows.md |
+| S5 | https://wiki.libsdl.org/SDL3/SDL_SetMainReady |
+| S6 | https://wiki.libsdl.org/SDL3/SDL_GetWindowProperties |
+| S7 | https://wiki.libsdl.org/SDL3/SDL_AddEventWatch , https://wiki.libsdl.org/SDL3/SDL_EventFilter |
+| S8 | https://wiki.libsdl.org/SDL3/SDL_SetWindowMouseRect |
+| S9 | https://wiki.libsdl.org/SDL3/SDL_CreateCursor |
+| S10 | https://wiki.libsdl.org/SDL3/SDL_ShowSimpleMessageBox |
+| S11 | https://raw.githubusercontent.com/libsdl-org/SDL/main/src/video/windows/SDL_windowsmessagebox.c |
+| S12 | https://wiki.libsdl.org/SDL3/SDL_GetWindowBordersSize |
+| S13 | https://raw.githubusercontent.com/libsdl-org/SDL/main/src/video/windows/SDL_windowswindow.c , https://raw.githubusercontent.com/libsdl-org/SDL/main/src/video/windows/SDL_windowsvideo.c , https://wiki.libsdl.org/SDL3/README-highdpi , https://wiki.libsdl.org/SDL3/CategoryHints |
+| S14 | https://wiki.libsdl.org/SDL3/SDL_SyncWindow |
+| S15 | https://wiki.libsdl.org/SDL3/SDL_GetDisplayForRect |
+| S16 | https://wiki.libsdl.org/SDL3/ pages SDL_SetAudioStreamGain, SDL_SetAudioStreamFrequencyRatio, SDL_SetAudioStreamGetCallback, SDL_AudioStreamCallback, SDL_OpenAudioDevice, SDL_OpenAudioDeviceStream, SDL_BindAudioStream, SDL_UnbindAudioStream, SDL_DestroyAudioStream, SDL_GetAudioStreamQueued, SDL_FlushAudioStream, SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES |
+| S17 | https://wiki.libsdl.org/SDL3/SDL_AudioFormat , https://wiki.libsdl.org/SDL3/SDL_LoadWAV_IO |
+| S18 | https://wiki.libsdl.org/SDL3/SDL_StartTextInput , https://wiki.libsdl.org/SDL3/SDL_TextInputEvent |
+| S19 | https://wiki.libsdl.org/SDL3/SDL_GetKeyboardState |
+| S20 | https://github.com/doitsujin/dxvk/blob/master/README.md , https://github.com/doitsujin/dxvk/tree/master/src/wsi , https://github.com/doitsujin/dxvk/releases |
+| S21 | https://wiki.libsdl.org/SDL3/ pages SDL_GetRelativeMouseState, SDL_MouseMotionEvent, SDL_SetWindowRelativeMouseMode, SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, SDL_HINT_WINDOWS_RAW_MOUSE_NOLEGACY, SDL_MouseWheelEvent, SDL_GetGlobalMouseState, SDL_GetMouseState |
+| S22 | https://github.com/libsdl-org/SDL/blob/main/src/video/windows/SDL_windowsevents.c |
+| S23 | https://wiki.libsdl.org/SDL3/SDL_CreateProcessWithProperties , https://wiki.libsdl.org/SDL3/SDL_WaitProcess , https://wiki.libsdl.org/SDL3/SDL_OpenURL , https://raw.githubusercontent.com/libsdl-org/SDL/main/src/misc/windows/SDL_sysurl.c |

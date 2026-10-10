@@ -72,8 +72,12 @@ SDL and SETTINGS seams; where this seam's primitives are consumed there, it is s
 | `CoInitializeEx(NULL, MT)` | platform/win/platform_startup_win.cpp:424 | Engine::PlatformStartup 0x1800a2100 (unreachable) | same |
 | `CoUninitialize` | engine_lifecycle_win.cpp:34 (0x1800db88b); game/Game/game_main.cpp | Engine::Shutdown | |
 
-Replacement: `Platform::OsStartup() / OsShutdown()`; Windows body unchanged; POSIX no-op. It stays
-as long as the Windows build has a COM consumer.
+Replacement: `Platform::ComInit() / ComUninit()` (the name SDL.md uses); Windows body unchanged; POSIX no-op. It stays
+as long as the Windows build has a COM consumer. SDL.md removes all three consumers and then drops
+the init in its own `behaviour:` commit; this seam only provides the wrapper.
+
+**Cross-seam order:** SDL.md step A5 (Audio::Stream over `EventHandle` / `WaitAny` / `LockStorage`)
+needs steps 1-3 below landed first.
 
 ### A.5 Filesystem (paths are `WideString::_data`: UTF-16, `\` delimiters, forced by `Filename::AdjustDelimiters`)
 | Win32 | file:line | retail | semantics | Platform:: |
@@ -148,7 +152,7 @@ src/platform/common/platform_time.h    PerfCounter, PerfFrequency, SleepUntil, N
 src/platform/common/platform_file.h    FileHandle, FileOpenRead/CreateTemp/Read/Write/Seek32/Size/
                                        Close/LastWrite, FileDelete/Move, DirCreate, PathAttributes,
                                        FindFirst/Next/Close, ExecutablePath, FormatLocalDateTime
-src/platform/common/platform_os.h      OsStartup / OsShutdown (COM)
+src/platform/common/platform_os.h      ComInit / ComUninit (COM)
 src/platform/common/event_std.cpp      POSIX events: one process-wide std::mutex + condition_variable,
                                        {signaled, manual} per event; WaitAny scans lowest index first
 src/platform/win/{sync,thread,time,file,os}_win.cpp        one-line Win32 bodies
@@ -224,7 +228,7 @@ One commit each, the gate after each. All are `refactor:` (no behaviour change o
 6. **Directory ops + paths.** FindFirst / Next / Close, PathAttributes, DirCreate, ExecutablePath
    into find, setupdirs, external_path, modification_setupfilesystem. Verify:
    `phase_d/mods_route.sh` (`*.pkm`), resave gate, `sa-run`.
-7. **DateTime + COM.** value_types.cpp -> `FormatLocalDateTime`; `OsStartup / OsShutdown`.
+7. **DateTime + COM.** value_types.cpp -> `FormatLocalDateTime`; `ComInit / ComUninit`.
    Verify: save-list dates through the saveload route, `sa-run`.
 8. **Diag split.** `src/diag/win/` for the Windows-only files (both build globs), the crash handler
    out of app/main.cpp, the watchdog split. Verify: `sa-run`; one deliberate crash through an
