@@ -118,11 +118,9 @@ extern "C" MapDescription** RoadTool_FindMapDescription_6990(const ComponentDesc
 // (count +0x218) with a parallel int array at +0x220 (count +0x228); both grow to
 // `index+1` and the new int slots are zeroed.
 // ============================================================================
-extern "C" void RoadTool_DecalStore_acd90(WorldGeometry* mgr, int index, Object::External* decal) {
-    if (!mgr) return;
-
-    RawArray<Object::External*>& refs = mgr->_batchMaterials;   // +0x210
-    Collection::Array<int32_t>& ints = mgr->_batchCounters;     // +0x220
+void WorldGeometry::StoreBatchMaterial(int index, Object::External* decal) {
+    RawArray<Object::External*>& refs = _batchMaterials;   // +0x210
+    Collection::Array<int32_t>& ints = _batchCounters;     // +0x220
     int oldCount = refs.size;   // +0x218
     int needed   = index + 1;
     if (oldCount < needed) {
@@ -284,7 +282,7 @@ bool RoadTool::CalcPath(int startCell, int endCell) {
     ComponentDescription* const roadDescExtra = roadDesc->_created;
 
     WorldGeometry* decalMgr = gameWorld->m_worldGeometry;
-    RoadTool_DecalStore_acd90(decalMgr, (int)roadType, decal);
+    decalMgr->StoreBatchMaterial((int)roadType, decal);
 
     for (int i = 0; i < pathLen; ++i) {
         mapGrid->PlaceRoadCell((uint32_t)pathBuf[i], roadType,
