@@ -7,7 +7,8 @@
 //
 // Vtable at 0x140163aa0. Three non-trivial overrides:
 //   Persist   (0x1401243e0) — Serializes tile coords as shorts + rotation int
-//   OnAdded   (0x140124370) — Checks the description flag, calls AddToMap
+//   OnAdded   (0x140124370) — AddToMap when MapDescription::_claimOnAdd (+0x30)
+//   OnEvent   (0x1401243c0) — AddToMap on message 1 (ClearArea's state-2 enter)
 //   OnRemove  (0x1401242f0) — Clears the minimap rect + the map occupancy
 //
 // Decompiled from Application-x64.exe using Ghidra.
@@ -16,10 +17,9 @@
 // the tile rect is read through int16 (retail's MOVSX) until the fields take
 // retail's int16 type (a later commit).
 
-#include "Component/mapcomponent_funcs.h"
+#include "Component/MapComponent.h"
 #include "Component/MapDescription.h"
 #include "Entity/ComponentEntity.h"
-#include "options.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
@@ -31,9 +31,14 @@
 #include "Component/exe_bodies.h"
 
 // Helpers, called by name (B3R): Object::Base::IsDerivedFrom (import slot 0x140152a98),
-// MapComponent::AddToMap (0x1401241b0), MapComponent_DetachOccupancy_4750 (0x140124750 —
-// the registered body; keystone_a_map.cpp's CreateNaturalResource_impl_4750 is not),
-// MapTerrainClear_Reimpl (0x1400a4d30, below).
+// MapComponent::AddToMap (0x1401241b0, keystone_a_map.cpp), MapComponent::RemoveFromMap
+// (0x140124750 — the tree's body; keystone_a_map.cpp's CreateNaturalResource_impl_4750 is
+// the second one), Minimap::ClearTerrain (0x1400a4d30, below).
+//
+// Bit 0x100000 of Component::_flags (+0x20) is "this footprint is written into the map":
+// AddToMap skips everything when it is set and sets it after the occupancy write
+// (0x140124297 BTS); RemoveFromMap runs only when it is set and clears it. Nothing else
+// in the tree writes it for a MapComponent (Phase D SLOTS, row 1203).
 
 // ============================================================
 // Reimpl of FUN_1400a4d30 (MapComponent terrain-clear / rect fill)
@@ -62,159 +67,21 @@ void Minimap::ClearTerrain(int value, int x, int y,
 // Helper: the component's MapDescription
 // ============================================================
 // Pattern: IsDerivedFrom(self->_description, MapDescription typeId)
-// Returns the description if the type matches, else nullptr.
+// Returns the description if the type matches, else nullptr. Retail calls IsDerivedFrom
+// on [RCX+0x18] with no test (0x14012438a / 0x14012430a).
 static MapDescription* GetMapDescription(MapComponent* self) {
 
     Description* obj = self->_description;
-    if (!obj) return nullptr;
 
     bool derived = obj->IsDerivedFrom(MapDescription::TypeId());   // slot 0x140152a98
     return derived ? static_cast<MapDescription*>(obj) : nullptr;
 }
 
 
-// ============================================================
-// MapComponent_Draw — retail's slot 6 body (0x140124370)
-// ============================================================
-// Checks the description's +0x30 flag, runs AddToMap if nonzero.
-//
-// Original disassembly:
-//   MOV RBX,[RCX+0x18]              ; the description
-//   MOV EDX,[0x1401c7a18]           ; MapDescription type ID
-//   CALL [0x140152a98]              ; IsDerivedFrom
-//   CMOVNZ RDX,RBX                 ; desc = derived ? obj : nullptr
-//   CMP byte [RDX+0x30],0          ; _claimOnAdd
-//   JZ skip
-//   CALL 0x1401241b0               ; AddToMap
-//
-// LEFT: nothing calls this body. The tree's MapComponent::OnAdded (below) is a
-// DIFFERENT body of the same slot: it paints the minimap rect and writes the
-// occupancy half of AddToMap separately, trusting the linked description (the
-// tree's accommodation for IsDerivedFrom in its partial factory tree). Making the
-// member this body is a behaviour change, not done here.
-void MapComponent_Draw(MapComponent* self) {
-    MapDescription* building = GetMapDescription(self);
-    if (!building) return;
-
-    if (building->_claimOnAdd) {
-        self->AddToMap();   // 0x1401241b0
-    }
-}
-
-
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
 #include "Component/MapComponent.h"
-#include <atomic>
 #include <cstdlib>
-
-// ============================================================
-// GUI Keystone F — minimap OVERLAY paint (tree/stone/building dots)
-// ============================================================
-// Retail: EntityList::RegisterEntity -> ComponentEntity_OnAddedPass dispatches
-// MapComponent vtable+0x30 = MapComponent::Draw (0x140124370), which gates on
-// MapDescription+0x30 and calls AddToMap (0x1401241b0): if desc+0x32 it paints
-// the footprint rect into the minimap overlay pixel array (gameWorld+0x148,
-// array +0x28) with the description's map color (desc+0x34) via helper_4d30
-// (0x1400a4d30 = MapTerrainClear_Reimpl above), setting the minimap dirty
-// flag; GameUpdateLoop::Update "Step 16" then re-uploads the overlay texture.
-// Removal (vtable+0x38, 0x1401242f0) paints the same rect with 0 (transparent).
-//
-// In standalone the inert vtable's +0x30 slot was a stub, so entities never
-// painted onto the minimap: terrain rendered, but no trees/stone/buildings.
-// This wires the PAINT half into slot 6. The occupancy half (41b0 -> dc20)
-// stays collapsed into the spawn sites (starttown.cpp), which pre-set bit
-// 0x100000 — the faithful 41b0 skips EVERYTHING (paint included) on that bit,
-// so the paint here must ignore it. The AddToMap port is not called:
-// its IsDerivedFrom(MapDescription) returns false in standalone's partial
-// factory tree (documented landmine) and it null-derefs; we trust the linked
-// description (mc+0x18), same as MapComponent_DetachOccupancy_4750 below.
-static void MapComponent_PaintMinimapRect(MapComponent* mc, bool clear) {
-    // The tree's accommodation: the linked description is trusted, no IsDerivedFrom.
-    Description* linked = mc->_description;
-    MapDescription* desc = static_cast<MapDescription*>(linked);
-    if (!desc) return;
-    // 41b0's paint gate (and 2f0's clear gate) = desc+0x32; the attach path
-    // additionally has MapComponent::Draw's desc+0x30 gate.
-    if (!desc->_showOnMap) return;
-    if (!clear && !desc->_claimOnAdd) return;
-    if (GameUpdateLoop::_singleton == nullptr) return;
-    Minimap* minimap = GameUpdateLoop::_singleton->m_imageCapture;   // +0x148
-    if (!minimap || !minimap->overlayPixels._data) return;  // overlay array not built yet
-    int width = minimap->size;
-    int x = static_cast<int16_t>(mc->tileX0), y = static_cast<int16_t>(mc->tileY0);
-    int w = static_cast<int16_t>(mc->tileX1), h = static_cast<int16_t>(mc->tileY1);
-    // Unplaced components keep the 0xFFFF ctor sentinel in the tile fields, and
-    // helper_4d30 has no bounds checks — a bad rect would scribble outside the
-    // pixel array. Skip anything not fully inside the grid.
-    if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > width || y + h > width) return;
-    uint32_t color = clear ? 0u : desc->_color._value;
-    minimap->ClearTerrain((int)color, x, y, w, h);
-
-    static bool s_trace = Opt().mapTrace != nullptr;
-    if (s_trace) {
-        static int s_count = 0;
-        if (++s_count <= 20 || (s_count % 500) == 0)
-            printf("[MinimapOverlay] %s #%d rect(%d,%d %dx%d) color=%08x\n",
-                   clear ? "clear" : "paint", s_count, x, y, w, h, color);
-    }
-}
-
-// ============================================================
-// The OCCUPANCY half of AddToMap — cell entity-links + stale-occupant eviction
-// ============================================================
-// `MapComponent::AddToMap` (keystone_a_map.cpp) is a complete port of 0x1401241b0 and
-// `MapComponent_overlay_dc20` a complete port of 0x14009dc20, but nothing calls the
-// pair: AddToMap's `IsDerivedFrom(MapDescription)` returns false in standalone's partial
-// factory tree, leaving `pvVar5` null and the very next line reading `null+0x32`. So
-// the occupancy write has been collapsed into hand-rolled per-site helpers
-// (starttown.cpp) that each creation path must remember to call — and the PLAYER
-// PLACEMENT path never did (measured 2026-07-28: a hand-placed building holds 0 of its
-// 16 footprint cells, so EditTool's cell pick finds nothing and it cannot be selected).
-//
-// This is AddToMap's second half with the one standalone accommodation this file already
-// makes twice (PaintMinimapRect, DetachOccupancy_4750): trust the description linked at
-// mc+0x18 instead of re-deriving it through IsDerivedFrom. The paint half is skipped —
-// slot 6 already ran it at register time.
-//
-// dc20 does MORE than write cells: any existing occupant that is not the new owner and
-// is not already removal-marked (entity+0x40 bit 0x400) is MarkForRemoval'd
-// (0x1400c2ea0) and pushed onto the world removal queue at EntityList+0xd0. That is
-// retail's answer to "a building was placed on top of trees" — the trees are destroyed,
-// not harvested. Calling only the cell-write half would leave those trees standing but
-// absent from the grid, so the eviction is not optional if this runs at all.
-void MapComponent_overlay_dc20(Map* param_1, ComponentEntity* const* owner, uint8_t param_3,
-                               int param_4, int param_5, int param_6, int param_7,
-                               const System::String* footprint, int param_9);   // keystone_a_map.cpp
-
-static void MapComponent_ApplyOccupancy_41b0(MapComponent* mc) {
-    if (!mc || GameUpdateLoop::_singleton == nullptr) return;
-    if ((mc->_flags >> 0x14) & 1) return;                     // occupancy already written
-    // The tree's accommodation: the linked description is trusted, no IsDerivedFrom.
-    Description* linked = mc->_description;
-    MapDescription* desc = static_cast<MapDescription*>(linked);
-    if (!desc) return;
-    if (desc->_noOccupancy) return;                           // description opts out
-    Map* grid = GameUpdateLoop::_singleton->m_game;   // +0xF8
-    if (!grid) return;
-
-    ComponentEntity* owner = mc->_entity.Get();
-    MapComponent_overlay_dc20(grid, &owner, (uint8_t)desc->_cellType,
-                              (int)static_cast<int16_t>(mc->tileX0), (int)static_cast<int16_t>(mc->tileY0),
-                              (int)static_cast<int16_t>(mc->tileX1), (int)static_cast<int16_t>(mc->tileY1),
-                              &desc->_footprint, mc->extraField);
-
-    // AddToMap's tail: arm the removal-side clear (the bit MapComponent_DetachOccupancy_4750
-    // gates on) and, if the low-16 flags changed, RefreshEntityFlags. The BTS never
-    // touches the low 16 bits, so the notify is dead here exactly as it is in retail —
-    // kept for shape.
-    uint32_t before = mc->_flags;
-    uint32_t after  = before | 0x100000u;
-    mc->_flags = after;
-    if (((after ^ before) & 0xffff) != 0 && mc->_entity != nullptr) {
-        mc->_entity->RefreshEntityFlags();   // 0x1400c3470
-    }
-}
 
 // ============================================================
 // Economy brick M-B — grid occupancy UN-mark on entity removal
@@ -224,14 +91,13 @@ static void MapComponent_ApplyOccupancy_41b0(MapComponent* mc) {
 // calls vtable+0x38 on removable components -> MapComponent::OnRemove (0x1401242f0)
 // -> tail-calls 0x140124750 -> dee0 (clear the footprint's cell entity-links +
 // reclassify terrain). Gated on comp+0x20 bit 0x100000 ("occupancy currently
-// written"), set by the spawn-side collapse (starttown.cpp
-// StartTown_PlaceResourceCell) exactly when cell+0x08 was written. Without
+// written"), set by AddToMap exactly when dc20 wrote cell+0x08. Without
 // this, removing a produce-harvested tree leaves the cell grid pointing at the
 // FREED entity (CheckPtr is a release no-op) and any grid reader — the
 // CitizenAI leisure box scan, the forester scan — faults on it.
 //
-// dee0 body: StartTown_UnmarkResourceCellGrid (starttown.cpp) — the verified
-// shape/classify/write logic shared with the spawn-side mark.
+// dee0 body: StartTown_UnmarkResourceCellGrid (starttown.cpp), dee0's shape / classify /
+// write logic.
 // LEFT: a second body of 0x140124750 (keystone_a_map.cpp's CreateNaturalResource_impl_4750,
 // the faithful one) exists; this is the one the tree runs.
 extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* ownerEntity, int tileX,
@@ -282,10 +148,6 @@ void MapComponent::RemoveFromMap() {
 // un-mark; the bit-0x100000 gate means it no-ops unless occupancy was written.
 // ============================================================================
 
-// Diagnostic counters of the BANISHED_MAP_TRACE lines (B6-5: namespace-scope
-// atomics, not function-local statics — OnAdded runs on the loader thread too).
-static std::atomic<int> s_mapSpawnClaimTraceCount{0};
-
 // 0x1401244d0: Component() is the CALL 0x1401188b0; the 0x140163aa0 stamp is
 // the compiler's; `OR EAX,0xffffffff` then four word stores of 0xFFFF into the
 // rect (0x1401244fb-0x14012450a, B6 row 28); flags |= 3 (0x83). Retail does not
@@ -329,54 +191,17 @@ void MapComponent::Persist(IO::Stream& stream) {
     ser.Serialize(extraField, nullptr);
 }
 
-// [6] 0x140124370
+// [6] 0x140124370-0x1401243b0: IsDerivedFrom on [RCX+0x18] (cell 0x1401c7a18), CMOVNZ,
+// `CMP byte [RDX+0x30],0` with no test of the cast, then CALL 0x1401241b0 (AddToMap).
+// Dispatched by ComponentEntity::OnAddedPass at EntityList::RegisterEntity (flags 0x83
+// carry bit 0). _claimOnAdd is the "claim at spawn" switch: natural resources and raw
+// material piles set it and claim their cell at registration (the orchard / forester /
+// pile-scan readers of MapCell::occupant depend on it); a building leaves it clear and
+// claims its footprint at message 1 (OnEvent below).
 void MapComponent::OnAdded() {
-    // slot 6 (+0x30) — dispatched by ComponentEntity_OnAddedPass at register
-    // time (MapComponent flags 0x83 have bit 0 set). Paint the minimap dot.
-    MapComponent_PaintMinimapRect(this, /*clear=*/false);
-
-    // ...and then the SPAWN-TIME CELL CLAIM, the other half of what this slot does.
-    // Retail slot 6 is `MapComponent::Draw` (0x140124370), verified from the decompile:
-    //     if (MapDescription(mc+0x18)->+0x30) AddToMap(mc);
-    // and AddToMap (0x1401241b0) is paint (desc+0x32) AND occupancy (desc+0x31 == 0) under
-    // one bit-0x100000 gate. Our port split the two and wired only the paint, so nothing
-    // wrote the entity into its tile record on any register-time path.
-    //
-    // That is the missing writer behind the orchard bind crash: PlantOrchard ->
-    // CreateNaturalResource spawns the tree, ActCNR_SetupModelAtCell_126540 fills THIS
-    // component's rect (+0x28/+0x2a and 1x1 at +0x2c — 0x140004680 is the MapComponent
-    // finder, not a "position" one), RegisterEntity dispatches slot 6 — and retail claims
-    // the cell right there. OrchardComponent::OnMessage(0) then reads
-    // *(mapGrid+0x80)[tile] + 8 and hands it to a component finder; with no claim that
-    // field is 0 and the faithful deref faults. Find the writer, don't guard the deref.
-    //
-    // desc+0x30 is precisely the "claim at spawn vs claim later" switch: natural resources
-    // set it and take their cell immediately, while a building leaves it clear and claims
-    // its footprint only when its ClearArea finishes (slot 12 / msg 1, see below).
-    // Trust the linked description instead of re-deriving it through IsDerivedFrom — the
-    // same standalone accommodation PaintMinimapRect and DetachOccupancy_4750 already make
-    // (MapDescription is not in standalone's partial factory tree, so retail's cast yields
-    // null and every desc read here would fault).
-    Description* linked = _description;
-    MapDescription* desc = static_cast<MapDescription*>(linked);
-    if (!desc) return;
-    const bool trace = Opt().mapTrace != nullptr;
-    if (trace) {
-        const int s_n = ++s_mapSpawnClaimTraceCount;
-        if (s_n <= 400)
-            fprintf(stderr, "[MapSpawnClaim] #%d comp=%p rect=(%d,%d %dx%d) desc+0x30=%d "
-                    "desc+0x31=%d alreadyWritten=%d -> %s\n",
-                    s_n, static_cast<void*>(this),
-                    (int)static_cast<int16_t>(tileX0), (int)static_cast<int16_t>(tileY0),
-                    (int)static_cast<int16_t>(tileX1), (int)static_cast<int16_t>(tileY1),
-                    (int)desc->_claimOnAdd, (int)desc->_noOccupancy,
-                    (int)((_flags >> 0x14) & 1),
-                    !desc->_claimOnAdd ? "SKIP (desc opts out of spawn-time claim)"
-                                       : "CLAIMING CELLS");
-        fflush(stderr);
+    if (GetMapDescription(this)->_claimOnAdd) {
+        AddToMap();   // 0x1401241b0
     }
-    if (!desc->_claimOnAdd) return;              // retail: MapComponent::Draw's gate
-    MapComponent_ApplyOccupancy_41b0(this);      // AddToMap's occupancy half (+ the 0x100000 bit)
 }
 // ============================================================
 // MapComponent::OnRemove (vtable slot [7], 0x1401242f0)
@@ -398,11 +223,6 @@ void MapComponent::OnAdded() {
 
 // [7] 0x1401242f0
 void MapComponent::OnRemove() {
-    // Retail removal (0x1401242f0) first clears the minimap overlay rect via
-    // helper_4d30(minimap, 0, ...) when desc+0x32. The same branch below is dead in
-    // standalone (IsDerivedFrom landmine), so do it here trusting the linked description.
-    MapComponent_PaintMinimapRect(this, /*clear=*/true);
-
     // B.3.8 CB1b: the ported retail removal body (0x1401242f0).
     MapDescription* building = GetMapDescription(this);
     if (building) {
@@ -441,25 +261,12 @@ void MapComponent::OnRemove() {
 // and blocks navigation — and it is what makes dc20's stale-occupant eviction safe: by the
 // time it runs, the trees have been harvested by citizens, so it only sweeps stragglers.
 //
-// Measured 2026-07-28: standalone ports the state-2 handler and does broadcast event 1, but
-// this slot was an unwired stub, so the message landed on nothing and no player-placed
-// building ever registered its cells.
+// Retail 0x1401243c3 JZ's straight into AddToMap, paint included: a building's minimap
+// dot and its cell claim both appear when its ClearArea finishes.
 void MapComponent::OnEvent(int msgId) {
-    // [diag] BANISHED_MAP_TRACE — this is the only observable point for "the building just
-    // became solid". dc20 itself logs nothing on clear ground (it only reports evictions),
-    // so without this line a successful solidify is indistinguishable from a no-op.
-    const bool trace = Opt().mapTrace != nullptr;
-    if (trace && msgId == 1) {
-        bool already = (_flags >> 0x14) & 1;
-        fprintf(stderr, "[MapSolidify] slot12 msg=1 comp=%p rect=(%d,%d %dx%d) alreadyWritten=%d -> %s\n",
-                static_cast<void*>(this),
-                (int)static_cast<int16_t>(tileX0), (int)static_cast<int16_t>(tileY0),
-                (int)static_cast<int16_t>(tileX1), (int)static_cast<int16_t>(tileY1), (int)already,
-                already ? "SKIP (bit already set)" : "REGISTERING CELLS");
-        fflush(stderr);
+    if (msgId == 1) {
+        AddToMap();   // 0x1401241b0
     }
-    if (msgId != 1) return;                       // retail: CMP EDX,1 / JZ / RET
-    MapComponent_ApplyOccupancy_41b0(this);
 }
 
 // create 0x140035700: MemAlloc(0x38, 8), then the ctor.

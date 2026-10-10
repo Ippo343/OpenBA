@@ -394,29 +394,8 @@ void NaturalResourceComponent::RemoveResource(ComponentEntity* const* citizenIBP
     gameWorld->m_entityList->RegisterEntity(&listIBP,   // 0x1400c48a0
                    static_cast<int>(d->_building->_category));
 
-    // ── GRID CLAIM (dc20's net effect, scoped to this pile) ──────────────────
-    // Retail claims the cell via c48a0 -> ComponentEntity_OnAddedPass -> the pile
-    // MapComponent's vtable+0x30 (MapComponent::Draw 0x140124370) -> sub_41b0
-    // (0x1401241b0) -> dc20 (0x14009dc20), whose net effect is MapCell::occupant = the
-    // entity plus the component's _flags bit 0x100000. Standalone's MapComponent is inert,
-    // so the pile spawned with the occupant still null — and GetTilesInArea
-    // (FUN_14009fc00) only reports a cell whose occupant is non-null, so the pile was
-    // invisible to every tile scan (the ClearArea::Execute Phase 3 haul gather). The same
-    // spawn-site collapse starttown.cpp applies to worldgen resources, kept SCOPED to the
-    // pile (1260f0 marked the tree at its top via c2ea0, which nulls the occupant first).
-    // Bit 0x100000 is set so the removal-side un-mark stays symmetric.
-    if (newEntity != nullptr) {
-        MapComponent* mc = newEntity->FindComponent<MapComponent>();   // 0x140004680
-        Map* map = gameWorld->m_game;
-        MapCell* cells = map ? map->cells.GetData() : nullptr;
-        const int dim = map ? map->size : 0;
-        // 41b0's own gate: skip when occupancy is already written for this component.
-        if (mc && cells && dim > 0 && cell >= 0 && cell < dim * dim &&
-            ((mc->_flags >> 20) & 1) == 0) {
-            cells[cell].occupant = newEntity;
-            mc->_flags |= 0x100000u;
-        }
-    }
+    // The pile's cell claim ran inside RegisterEntity: MapComponent::OnAdded -> AddToMap
+    // (every RawMaterial template sets _addOnCreate), as retail.
 
     if ((harvestFlag != 0) && (*citizenIBP != nullptr)) {
         AutoPickupComponent* out = (*citizenIBP)->FindComponent<AutoPickupComponent>();   // 0x140022520

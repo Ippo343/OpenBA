@@ -31,15 +31,6 @@ GAME_SRC_SRCS = $(wildcard code/Game/*/*.cpp)
 # Runtime-x64.dll reimplementation sources
 RUNTIME_FUNC_SRCS = $(wildcard runtime/funcs/*.cpp)
 RUNTIME_SRC_SRCS = $(wildcard runtime/src/*/*.cpp)
-# Directory names under runtime/src that hold sources (io, ui, math, ...). Used
-# to generate one compile rule each — see RUNTIME_SRC_RULE below.
-RUNTIME_SRC_DIRS = $(sort $(notdir $(patsubst %/,%,$(dir $(RUNTIME_SRC_SRCS)))))
-
-define RUNTIME_SRC_RULE
-$$(SA_OBJ_DIR)/runtime__src__$(1)__%.o: runtime/src/$(1)/%.cpp | $$(SA_OBJ_DIR)
-	$$(CXX) $$(SA_CXXFLAGS) $$(SA_INCLUDES) -c $$< -o $$@
-endef
-
 # VideoDX11-x64.dll reimplementation sources (see dx11/README.md)
 DX11_FUNC_SRCS = $(wildcard dx11/funcs/*.cpp)
 DX11_SRC_SRCS = $(wildcard dx11/src/*.cpp)
@@ -230,54 +221,17 @@ $(SA_BUILD_DIR):
 $(SA_OBJ_DIR):
 	mkdir -p $(SA_OBJ_DIR)
 
-# Standalone compile rules — one per source directory
-$(SA_OBJ_DIR)/code__Game__Action__%.o: code/Game/Action/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Component__%.o: code/Game/Component/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Dialog__%.o: code/Game/Dialog/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Entity__%.o: code/Game/Entity/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Game__%.o: code/Game/Game/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Goal__%.o: code/Game/Goal/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Object__%.o: code/Game/Object/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Player__%.o: code/Game/Player/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Tutorial__%.o: code/Game/Tutorial/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/code__Game__Work__%.o: code/Game/Work/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/runtime__funcs__%.o: runtime/funcs/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-# One compile rule per runtime/src subdirectory, generated from RUNTIME_SRC_DIRS
-# (itself derived from what is on disk). The Runtime port adds directories as it
-# works down the wave order; without this a new directory silently produced "no
-# rule to make target" instead of building.
-$(foreach d,$(RUNTIME_SRC_DIRS),$(eval $(call RUNTIME_SRC_RULE,$(d))))
-
-$(SA_OBJ_DIR)/dx11__funcs__%.o: dx11/funcs/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/dx11__src__%.o: dx11/src/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
-
-$(SA_OBJ_DIR)/standalone__%.o: standalone/%.cpp | $(SA_OBJ_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+# Standalone compile rules: ONE pattern rule per source directory, generated from the
+# source list itself (SA_SRC_DIRS). Object names flatten the path with "__" exactly as
+# SA_OBJECTS spells them. A new directory anywhere under the source roots builds with no
+# edit here (the old hand-written per-directory rules silently produced "no rule to make
+# target" for a directory nobody had added).
+SA_SRC_DIRS = $(sort $(patsubst %/,%,$(dir $(SA_SRCS))))
+define SA_SRC_RULE
+$$(SA_OBJ_DIR)/$(subst /,__,$(1))__%.o: $(1)/%.cpp | $$(SA_OBJ_DIR)
+	$$(CXX) $$(SA_CXXFLAGS) $$(SA_INCLUDES) -c $$< -o $$@
+endef
+$(foreach d,$(SA_SRC_DIRS),$(eval $(call SA_SRC_RULE,$(d))))
 
 # Exe icon resource (windres compiles .rc -> COFF object)
 $(SA_RC_OBJ): $(SA_RC) ba_icon.ico | $(SA_OBJ_DIR)

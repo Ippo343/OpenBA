@@ -181,7 +181,7 @@ void ZoneComponent::OnAdded() {
     // Retail gates the description through IsDerivedFrom(DAT_1401c7a18); in
     // standalone's partial factory tree that check rejects valid descriptions
     // (the documented FUN_1401253d0-class landmine, same accommodation as
-    // MapComponent_PaintMinimapRect) and d360 would then deref (null+0x28).
+    // the deleted MapComponent_PaintMinimapRect; see row 991) and d360 would then deref (null+0x28).
     // Trust the linked description — it comes straight from the entity template.
     Description* desc = mapIBP->_description;
     if (!desc) {

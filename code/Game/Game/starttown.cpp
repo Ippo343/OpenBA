@@ -233,118 +233,13 @@ static T* FindDescriptionOnTemplate(const ComponentDescription* tmpl, uint32_t t
 }
 
 
-// GUI click-to-select: mark a building's footprint cells as occupied by the building ENTITY
-// (cell+0x08), reproducing the net effect of the real game's MapComponent::Draw ->
-// FUN_14009dc20. The region-map cell array lives at Game+0x80 (0x30 bytes/cell, dim from
-// Game+0x00); the reader FUN_1400a0280 returns cell+0x00 then cell+0x08. Standalone's
-// MapComponent is inert so Draw never fires and buildings are ABSENT from this array — which
-// is what EditTool's click-pick reads to resolve the entity under the cursor. Without this,
-// clicking a building finds nothing. Mirrors the resource path's identical write (~L1724).
-// Also makes footprints navigation-blocking (faithful).
-// Forward decl (defined near the resource-marking pass below).
-
-static void StartTown_MarkBuildingCells(Map* game, int tileX, int tileY, int fpW, int fpH,
-                                        ComponentEntity* entity, int rot) {
-    if (!game || !entity) return;
-    MapCell* cells = game->cells.GetData();
-    int dim = game->size;
-    if (!cells || dim <= 0) return;
-
-    // Faithful dc20 (FUN_14009dc20) per-cell footprint, replacing the old blanket
-    // fpW x fpH mark. The MapDescription carries a per-cell character map:
-    //   '.' = free ground   (cell+0x08 cleared, terrain class untouched)
-    //   '#' = obstructed    (cell+0x08 = entity, cell+0x29 = desc+0x20 class)
-    //   '_' = road strip    (cell+0x08 = entity, cell+0x29 = 2 = road class)
-    // Blanket-marking the whole rect stamped the '.'/'_' cells in FRONT of every
-    // start-town building as building-occupied, which BuildRoad_Execute (cell+0x08
-    // read at buildroad.cpp ~:445) refuses forever — road segments across house
-    // fronts never built. The caller chain is MapComponent::Draw -> sub_41b0 -> dc20:
-    //   desc+0x20 = terrain class for '#' cells, desc+0x28 = the char-map String,
-    //   desc+0x31 = skip-occupancy flag, rot from MapComponent+0x30.
-    const MapDescription* desc = nullptr;
-    {
-        MapComponent* mapComp = FindComponentOnEntity<MapComponent>(entity, MapComponent::TypeId());
-        if (mapComp) {
-            const Description* linked = mapComp->_description;
-            desc = static_cast<const MapDescription*>(linked);
-        }
-        // (No IsDerivedFrom validation: standalone's partial factory tree makes it a
-        // false-negative landmine — same rationale as the resource path at ~L3100.)
-    }
-    if (desc && desc->_noOccupancy != 0) return;   // 41b0: description opts out of occupancy
-
-    const char* shape = desc ? desc->_footprint._data : nullptr;
-    const int shapeLen = shape ? desc->_footprint.GetLength() : 0;   // length-prefixed String
-    const uint8_t classByte = desc ? static_cast<uint8_t>(desc->_cellType) : 0;
-
-    // Unrotated string-grid dims (the .rsc footprint is authored unrotated; the
-    // spawn already axis-swapped fpW/fpH for 90/270).
-    const bool swapped = (rot == 0x5a || rot == 0x10e);
-    const int w0 = swapped ? fpH : fpW;
-    const int h0 = swapped ? fpW : fpH;
-
-    int marked = 0, freed = 0, roadCells = 0;
-    for (int iy = 0; iy < fpH; ++iy)
-        for (int ix = 0; ix < fpW; ++ix) {
-            int cx = tileX + ix, cy = tileY + iy;
-            if (cx < 0 || cx >= dim || cy < 0 || cy >= dim) continue;
-            int idx = dim * cy + cx;
-            MapCell* cell = &cells[idx];
-
-            // dc20's char lookup (row stride w0+1, rows authored top-first).
-            bool stampClass = true;          // '#'/'_' or no shape -> class stamp
-            bool occupy     = true;          // anything but '.' -> entity in +0x08
-            uint8_t cls     = classByte;
-            if (shape && shapeLen != 0) {
-                int gx, gy;
-                if (rot == 0x5a)       { gy = ix;            gx = iy; }
-                else if (rot == 0xb4)  { gy = iy;            gx = (w0 - 1) - ix; }
-                else if (rot == 0x10e) { gy = (h0 - 1) - ix; gx = (w0 - 1) - iy; }
-                else                   { gy = (h0 - 1) - iy; gx = ix; }
-                const long sidx = (long)gy * (w0 + 1) + gx;
-                const char c = (sidx >= 0 && sidx < shapeLen) ? shape[sidx] : 0;
-                stampClass = (c == '#' || c == '_');
-                occupy     = (c != '.');
-                if (c == '_') cls = 2;       // road strip
-                // Mirror of dc20's BANISHED_LIVE_WALKWAY_DROPCELLS deviation — this path
-                // marks START-TOWN and demo-spawned buildings, so honouring it only in
-                // dc20 would leave those buildings' walkway cells claimed anyway.
-                if (c == '_') occupy = false;
-            }
-
-            if (stampClass) game->SetTerrainType(idx, cls);   // 0x14009f2f0
-            cell->occupant = occupy ? entity : nullptr;
-            if (occupy) marked++; else freed++;
-            if (stampClass && cls == 2) roadCells++;
-        }
-
-    // ARM THE REMOVAL-SIDE CLEAR (M-B parity with the resource path @ ~L2684).
-    // We just wrote the building entity into cell+0x08 for click-picking, bypassing
-    // the (inert) MapComponent. On removal, FUN_1400c2ea0 broadcasts vtable+0x38 to
-    // the entity's removable components -> MapComponent_DetachVSlot ->
-    // MapComponent_DetachOccupancy_4750, which nulls cell+0x08 over the +0x28..+0x2e
-    // footprint but is GATED on the "occupancy-written" bit 0x100000 of comp+0x20.
-    // Placement already stamps the footprint tile fields, but nothing set that bit for
-    // buildings, so the detach no-oped and the upgraded/demolished building's cell+0x08
-    // kept pointing at the FREED entity -> the CitizenAI leisure box scan (and forester
-    // scan) faulted on it (FloorComponent_FindResData READ of freed compArray, crash
-    // 2026-07-21). Record the footprint we actually marked and set the bit here, so the
-    // invariant "cell+0x08 written <=> bit set" holds exactly, same as the resource path.
-    MapComponent* mapComp = FindComponentOnEntity<MapComponent>(entity, MapComponent::TypeId());
-    if (mapComp) {
-        mapComp->tileX0 = (int16_t)tileX;
-        mapComp->tileY0 = (int16_t)tileY;
-        mapComp->tileX1 = (int16_t)fpW;
-        mapComp->tileY1 = (int16_t)fpH;
-        mapComp->_flags |= 0x100000u;   // detach-clear armed
-    }
-
-    fprintf(stderr, "[startTown::pickmap] marked %d cells (%d free, %d road) @ (%d,%d) %dx%d rot=%d "
-            "shape=%s entity=%p mc=%p\n",
-            marked, freed, roadCells, tileX, tileY, fpW, fpH, rot,
-            (shape && shapeLen) ? "yes" : "NONE(blanket)", entity, mapComp);
-    fflush(stderr);
-}
+// A building's footprint is written into the map by MapComponent::AddToMap (0x1401241b0)
+// when its ClearArea reaches state 2 (message 1, MapComponent::OnEvent): for a start-town
+// building that is inside RegisterEntity's instant-build bracket, for a placed or
+// upgraded one when its clearing finishes. AddToMap paints the minimap dot, runs dc20
+// (cell+0x08 = the entity, the class stamp, the stale-occupant eviction) and sets bit
+// 0x100000 (Phase D SLOTS, row 1203: the spawn-site collapse StartTown_MarkBuildingCells
+// and its bit pre-set are gone).
 
 // MESH-PRECISE BUILDING PICKING. Retail lets you click anywhere on a building because
 // picking ray-tests the 3D model mesh via Picking::Scene; in standalone that mesh is
@@ -365,17 +260,10 @@ static void StartTown_PickMeshProbe(ComponentEntity* entity) {
 // start-town spawn — today the upgrade replacement (DestroyComponent state-5 tick
 // 0x14011c120 clones the target template and RegisterEntity's it).
 //
-// Retail gets both halves for free during RegisterEntity: the add-broadcast
-// (FUN_1400c2f60) calls MapComponent's vtable+0x30 (Draw -> 41b0 -> dc20, the cell
-// occupancy write) and PickingComponent's (OnAdded, the pick-mesh registration).
-// Standalone's MapComponent slot 6 only paints the minimap and its PickingComponent
-// registers no mesh, so both are collapsed into the spawn sites — this is the entry
-// point for the runtime ones. Reads the footprint the caller already stamped into the
-// entity's MapComponent (+0x28 x, +0x2a y, +0x2c w, +0x2e h).
-//
-// Consequences of skipping it (observed): the new building is unclickable (EditTool's
-// pick finds nothing in the region-map cell array), does not block navigation, and its
-// removal-side cell clear stays disarmed (bit 0x100000).
+// Retail registers the pick mesh from PickingComponent's OnAdded during RegisterEntity;
+// the standalone drives it here (StartTown_PickMeshProbe). The footprint's map write is
+// NOT done here: the replacement is a foundation, and it claims its cells through
+// MapComponent::OnEvent(1) when its ClearArea finishes, as retail (row 1203).
 // decalcomponent.cpp — retail DecalComponent Slot12(msg=1): ramp a completed
 // building's footprint decal from _initialAlpha to full opacity.
 extern "C" void DecalComponent_MarkOwnerBuilt(ComponentEntity* entity);
@@ -392,14 +280,12 @@ extern "C" void StartTown_RegisterRuntimeBuilding(ComponentEntity* entity) {
     }
     int tileX = mapComp->tileX0, tileY = mapComp->tileY0;
     int fpW   = mapComp->tileX1, fpH   = mapComp->tileY1;
-    int rot   = mapComp->extraField;
     if (fpW <= 0 || fpH <= 0) {
         fprintf(stderr, "[Upgrade] RegisterRuntimeBuilding: entity=%p has no footprint "
                 "(%d,%d %dx%d) — cells not marked\n", entity, tileX, tileY, fpW, fpH);
         fflush(stderr);
         return;
     }
-    StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entity, rot);
     StartTown_PickMeshProbe(entity);
 }
 
@@ -1847,10 +1733,9 @@ static int StartTown_SpawnStructures(MapGenerator* startConfig, EntityList* enti
         // once more in case any intervening CheckPtr moved it.
         StartTown_RunOnCreatePass(entIBP.Get());
 
-        // Click-to-select: register this building's footprint in the region-map cell array so
-        // EditTool's click-pick (FUN_1400a0280) resolves it under the cursor -> opens its info
-        // dialog. (Inert MapComponent never marks it; standalone-only, DLL uses the real dc20.)
-        StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP.Get(), rot);
+        // The footprint's cells were claimed inside RegisterEntity (ClearArea state 2 ->
+        // MapComponent::OnEvent(1) -> AddToMap); EditTool's click-pick (FUN_1400a0280)
+        // reads them.
         StartTown_PickMeshProbe(entIBP.Get());
 
         if (isDemoFoundation) {
@@ -4466,8 +4351,8 @@ static float ResYawScale() {
 //
 // dee0 sets the cell TERRAIN-TYPE/walkability (the real "a tree-type cell exists
 // here" marking that pathfinding + harvest-search read) and CLEARS cell+0x08; it
-// does NOT store the entity in cell+0x08 (that is the building path, FUN_14009dc20).
-// A natural resource is non-blocking — citizens walk to it to harvest.
+// does NOT store the entity in cell+0x08: the mark is dc20 (FUN_14009dc20), run by
+// MapComponent::AddToMap for every entity, natural resources included.
 
 // e2c0 classifier thresholds (exe .rdata, identical to maptilegrid.cpp).
 static constexpr float kClassBuildableMax = 0.75f;   // DAT_140172124
@@ -4498,91 +4383,6 @@ static int StartTown_ClassifyCell(Map* game, int dim, int idx) {
 // The region graph (+0x70) and the pathfinder (+0x68) are seeded before the start town
 // (gameupdateloop_load.cpp: Pathfinder_Seed, Region_Seed), so the member is called as is.
 
-// G3 — the resource entity is written into its map cell (cell+0x08) so the
-// ForesterWork harvest scan can find it. See the long note at the cell+0x08 write
-// below for the dee0/dc20 two-pass rationale.
-
-// CreateNaturalResource_impl_dee0 — mark the (w x h) footprint at (tileX,tileY) on
-// the Game cell grid for this natural resource. `ownerEntity` = the spawned
-// resource entity (compared against cell+0x00 for the type-2 override). `shape` =
-// the MapDescription+0x28 char-grid String buffer (null/empty for a 1x1 resource).
-static void StartTown_MarkResourceCellGrid(Map* game, ComponentEntity* ownerEntity, int tileX,
-                                           int tileY, int w, int h, const char* shape, int rot) {
-    if (!game || w <= 0 || h <= 0) return;
-    const int dim = game->size;
-    MapCell* cells = game->cells.GetData();
-    if (dim <= 0 || !cells) return;
-    // shape length header sits at shape-8 (length-prefixed buffer); 0 => no shape.
-    const int shapeLen = shape ? RtSystem::StringLength(shape) : 0;
-
-    for (int iy = 0; iy < h; ++iy) {
-        for (int ix = 0; ix < w; ++ix) {
-            const int cx = ix + tileX, cy = iy + tileY;
-            if (cx < 0 || cy < 0 || cx >= dim || cy >= dim) continue;  // OOB guard (std-safe)
-            const int cellIdx = cy * dim + cx;
-
-            // Occupancy from the rot-aware shape grid (dee0). No shape => all cells.
-            bool occupied;
-            if (!shape || shapeLen == 0) {
-                occupied = true;
-            } else {
-                // dee0's index math, verified against the retail instructions at
-                // 0x14009dd84-0x14009ddda (dc20 uses the identical form). The shape
-                // string is in UNROTATED description space, first row = LAST tile row,
-                // stride = unrotatedW+1 (the newline). The old math here was mirrored
-                // in all four rotations — latent because resources are almost all 1x1.
-                const bool sw = (rot == 0x5a || rot == 0x10e);
-                const int w0 = sw ? h : w;   // unrotated shape-grid width
-                const int h0 = sw ? w : h;
-                int gx, gy;
-                if (rot == 0x5a)          { gy = ix;            gx = iy; }
-                else if (rot == 0xb4)     { gy = iy;            gx = (w0 - 1) - ix; }
-                else if (rot == 0x10e)    { gy = (h0 - 1) - ix; gx = (w0 - 1) - iy; }
-                else                      { gy = (h0 - 1) - iy; gx = ix; }
-                const long sidx = (long)gy * (w0 + 1) + gx;
-                const char c = (sidx >= 0 && sidx < shapeLen) ? shape[sidx] : 0;
-                occupied = (c == '#' || c == '_');
-            }
-
-            MapCell* cell = &cells[cellIdx];
-            if (occupied) {
-                uint8_t t = (uint8_t)StartTown_ClassifyCell(game, dim, cellIdx);
-                // override to buildable(2) only if the natural type is water/mountain
-                // AND the cell already holds a *different* owner (cell+0x00).
-                ComponentEntity* cellOwner = cell->blocker.Get();   // cell+0x00
-                if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
-                    t = 2;
-                game->SetTerrainType(cellIdx, t);   // 0x14009f2f0
-            }
-            // Cell entity-link (cell+0x08).
-            //
-            // The real game writes occupancy in TWO passes: MapComponent::OnCreate runs
-            // dee0 (which CLEARS cell+0x08), then MapComponent::Draw lazily runs
-            // sub_41b0 -> dc20 (FUN_14009dc20), which writes cell+0x08 = the owner entity
-            // (for an occupied/shape-'#' cell). The NET end-state is cell+0x08 = entity.
-            // In standalone MapComponent is inert, so Draw never fires and the occupancy
-            // is never written -> the ForesterWork harvest scan finds no tree at cell+0x08
-            // (foresterwork.cpp:745) and idles. We collapse the two passes into this one:
-            // when occupancy is enabled, write the entity (dc20's net effect) instead of
-            // clearing. We deliberately KEEP dee0's classified buildable(2) terrain type
-            // (set above) rather than dc20's MapDescription+0x20 stamp — both are non-0x1e0
-            // and passable, so the forester pre-check + zone gate behave identically, and
-            // dee0's classification is the value already proven safe in standalone. We
-            // cannot call the ported sub_41b0/dc20 directly: their IsDerivedFrom(MapDesc)
-            // returns FALSE in standalone's partial factory tree -> null-deref (the same
-            // landmine documented for FUN_1401253d0); here we trust the linked entity.
-            if (occupied && ownerEntity) {
-                ::Object::InternalPtr<ComponentEntity> entIBP(ownerEntity);
-                cell->occupant = entIBP.Get();   // dc20: *(cell+8) = owner entity
-            } else {
-                // dee0's clear (occupancy disabled, or non-occupied footprint cell).
-                ::Object::InternalPtr<ComponentEntity> nullIBP(nullptr);
-                cell->occupant = nullIBP.Get();
-            }
-        }
-    }
-}
-
 // CreateNaturalResource_impl_dee0 — UN-mark (economy brick M-B). Faithful port of the
 // dee0 semantics the REMOVAL path needs: for each footprint cell, reclassify the
 // terrain type back to its natural class (occupied/shape cells only, with dee0's
@@ -4609,7 +4409,7 @@ extern "C" void StartTown_UnmarkResourceCellGrid(Map* game, ComponentEntity* own
 
             // Occupancy from the rot-aware shape grid (same verified math as the mark —
             // dee0/dc20 form, retail instructions 0x14009dd84-0x14009ddda; must stay in
-            // lockstep with StartTown_MarkResourceCellGrid or mark/unmark desync).
+            // the form dc20 marks with, so mark and unmark agree).
             bool occupied;
             if (!shape || shapeLen == 0) {
                 occupied = true;
@@ -4667,24 +4467,8 @@ static void StartTown_PlaceResourceCell(ComponentEntity* entity, int cellIdx, Ma
             mc->tileY1 = 1;
             mc->extraField = 0;
 
-            // CreateNaturalResource_impl_dee0 — mark this cell's terrain TYPE on the
-            // Game grid so pathfinding + harvest-search know a resource sits here.
-            // The real game runs this from MapComponent::OnCreate (inert/unregistered
-            // in standalone); we invoke it here, right after the tile fields are set.
-            // shape = MapDescription(mc+0x18)+0x28 String buffer (null for a 1x1
-            // resource -> dee0 treats the single cell as occupied). rot=0 (1x1).
-            const char* shape = nullptr;
-            const Description* linked = mc->_description;
-            const MapDescription* mapDesc = static_cast<const MapDescription*>(linked);
-            if (mapDesc) shape = mapDesc->_footprint._data;  // String char*
-            StartTown_MarkResourceCellGrid(game, entity, tileX, tileY, /*w*/1, /*h*/1,
-                                           shape, /*rot*/0);
-
-            // M-B: mirror MapComponent_Slot12's post-write flag — bit 0x100000 of
-            // comp+0x20 = "occupancy currently written on the grid". The removal path
-            // (c2ea0 -> vtable+0x38 -> impl_4750) gates the grid UN-mark on this bit,
-            // so it must be set exactly when the collapse above wrote cell+0x08.
-            mc->_flags |= 0x100000u;
+            // The cell claim is MapComponent::OnAdded -> AddToMap at RegisterEntity
+            // (NaturalResource templates set _addOnCreate), as retail's 6540 leaves it.
         }
     }
 
