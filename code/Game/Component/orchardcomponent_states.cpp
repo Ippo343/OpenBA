@@ -89,6 +89,7 @@
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include "Component/clearareacomponent_funcs.h"   // ClearAreaCtrl_IsDone / _BuildWork
 #include "Work/ClearArea.h"
+#include "Work/TendArea.h"   // B8: the (entity, kind) constructor
 #include "Component/FruitComponent.h"   // B4 S4 RT2: InternalPtr<FruitComponent>::Get() needs the class complete
 #include "Component/NaturalResourceComponent.h"   // B4 S4 RT2: InternalPtr<NaturalResourceComponent>::Get() needs the class complete
 
@@ -386,7 +387,7 @@ void OrchardPostTendArea(ComponentEntity* entity) {
         void* mem = System::MemoryAllocator::MemAlloc(0x60, 8);
         if (mem) {
             ComponentEntity* entityLocal = entity;
-            work = TendArea_CtorFromEntity(mem, &entityLocal, 1);
+            work = new (mem) TendArea(&entityLocal, 1);   // 0x1400f5a80
         }
     }
     Object::InternalPtr<Work> workIBP = work;   // the InternalPtr ctor is a plain store
