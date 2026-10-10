@@ -63,7 +63,6 @@ inline void QwordArraySetSize(Collection::Array<E, A, S>* arr, int newCount, con
                   "an 8-byte T* / InternalPtr<T> slot array, filled with an InternalPtr<T>");
     QwordArraySetSize(reinterpret_cast<RawArray<void*>*>(arr), newCount, reinterpret_cast<void* const*>(fill));  // CAST-OK: elem_stride
 }
-void MarkEntityForRemoval(ComponentEntity* entity);  // 0x1400c2ea0
 
 // ---- action_base_move.cpp
 class CharacterComponent;     // Component/CharacterComponent.h
@@ -184,7 +183,6 @@ struct Vector3Slot {
 static_assert(sizeof(Vector3Slot) == sizeof(Math::Vector3), "Vector3Slot is exactly a Vector3");
 Math::Vector3* InteractNodePosition(const InteractComponent* self, Math::Vector3* out, int kind, int index, float* heading);  // 0x140122e20
 int EntityAnchorCell(ComponentEntity* const* entityIBP, float* outPos);  // 0x140087fb0
-int Pf_EntityAnchorCell_7fb0(ComponentEntity* const* param_1IBP, float* param_2);  // 0x140087fb0 B4 FORWARD -> EntityAnchorCell
 
 // ---- action_pf_roots_drop.cpp
 class AnimalDescription;      // Component/AnimalDescription.h

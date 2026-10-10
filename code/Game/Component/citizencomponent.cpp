@@ -511,7 +511,7 @@ void CitizenComponent::Update(const System::Time* timeArg) {
                 if (ty < 0) ty = 0; if (ty >= mapW) ty = mapW - 1;
                 uint32_t czCell = (uint32_t)(mapW * ty + tx);
                 ComponentEntity* homeIBP = workplaceRef;
-                int homeCell = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
+                int homeCell = EntityAnchorCell(&homeIBP, nullptr);
                 unsigned sk = 0, sr = 0, dk = 0, dr = 0;
                 if (tiles && mapW > 0) {
                     const MapCell* ts = tiles + (size_t)czCell;
@@ -1766,7 +1766,7 @@ char CitizenComponent::CanReach(ComponentEntity* target) {
     if (mapW <= tileY) tileY = mapW - 1;
 
     ComponentEntity* ibpVal = target;
-    int regionId = Pf_EntityAnchorCell_7fb0(&ibpVal, nullptr);
+    int regionId = EntityAnchorCell(&ibpVal, nullptr);
     uint32_t cellIdx = static_cast<uint32_t>(mapW * tileY + tileX);
     char res = static_cast<char>(static_cast<uint8_t>(WorkBase_ValidateCell_a00f0(
         map, 0xe1f, cellIdx, regionId)));
@@ -1949,7 +1949,7 @@ void CitizenComponent::UpdateHappiness() {
     ComponentEntity* wpIBP = home.Get();
     if (wpIBP != nullptr) {
         Map* mapInfo = gw->m_game;
-        int region = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
+        int region = EntityAnchorCell(&wpIBP, nullptr);
         const MapCell* tile = mapInfo->cells.GetData() + (int64_t)region;
         int climate = ((tile->field_0x1C[4] != 0) +    // +0x20
                        (tile->field_0x1C[3] != 0) +    // +0x1f
@@ -2085,7 +2085,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
     uint32_t srcRegion = 0xffffffff;
     if (srcWp != nullptr) {
         ComponentEntity* srcIBP = srcWp;
-        srcRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&srcIBP, nullptr));
+        srcRegion = (uint32_t)(EntityAnchorCell(&srcIBP, nullptr));
     }
 
     for (int i = 0; i < count; i++) {
@@ -2110,7 +2110,7 @@ AttendanceComponent* CitizenComponent::FindAttendance(AttendanceComponent* exclu
         ++g_sub1930_accepted;
 
         ComponentEntity* candSubIBP = cand->_entity.Get();
-        uint32_t dstRegion = (uint32_t)(Pf_EntityAnchorCell_7fb0(&candSubIBP, nullptr));
+        uint32_t dstRegion = (uint32_t)(EntityAnchorCell(&candSubIBP, nullptr));
         int cost = 1;
         if ((int)srcRegion >= 0) {
             Map* mapInfo = GameUpdateLoop::_singleton->m_game;

@@ -110,7 +110,7 @@ char AbsorbResourceComponent::State0Tick() {
 
             EntityList* const entityList = GameUpdateLoop::_singleton->m_entityList;
             if (((cellEntity->_entityFlags >> 10) & 1) != 0) continue;
-            MarkEntityForRemoval(cellEntity);
+            cellEntity->MarkForRemoval();
             // exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
             entityList->removalList
                 .SetSize(entityList->removalList._size + 1, cellEntity);

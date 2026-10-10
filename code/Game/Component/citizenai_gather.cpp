@@ -404,7 +404,7 @@ uint64_t CitizenAIComponent::State_GatherResources() {
             bGoal = 0xffffffff;
         } else {
             ComponentEntity* wp = citizen->home.Get();
-            bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
+            bGoal = EntityAnchorCell(&wp, nullptr);
         }
 
         // dd30 find carry target
@@ -502,7 +502,7 @@ uint64_t CitizenAIComponent::State_GatherResources2() {
             bGoal = 0xffffffff;
         } else {
             ComponentEntity* wp = citizen->home.Get();
-            bGoal = Pf_EntityAnchorCell_7fb0(&wp, nullptr);
+            bGoal = EntityAnchorCell(&wp, nullptr);
         }
 
         // dd30 find carry target (category arg = 1 here, vs 0 in Gather)

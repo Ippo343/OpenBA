@@ -240,7 +240,7 @@ uint64_t CitizenAIComponent::State_AdultTransition() {
             Map* mg = MapGrid();
             uint32_t bGoal;
             if (citizen->home == nullptr) bGoal = 0xffffffff;
-            else { ComponentEntity* wpIBP = citizen->home.Get(); bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr); }
+            else { ComponentEntity* wpIBP = citizen->home.Get(); bGoal = EntityAnchorCell(&wpIBP, nullptr); }
             const ModelComponent* model = CitizenModel(citizen.Get());
             uint32_t cell = ModelCell(model, mg);
             ComponentDescription* outComp = nullptr;  // local_res18

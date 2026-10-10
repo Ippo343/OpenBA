@@ -165,7 +165,7 @@ uint64_t CitizenAIComponent::State_Education() {
         bGoal = 0xffffffff;
     } else {
         ComponentEntity* wpIBP = citizen->home.Get();
-        bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
+        bGoal = EntityAnchorCell(&wpIBP, nullptr);
     }
 
     ComponentEntity* outBest = nullptr;
@@ -229,7 +229,7 @@ uint64_t CitizenAIComponent::State_SeekHappiness() {
         bGoal = 0xffffffff;
     } else {
         ComponentEntity* wpIBP = citizen->home.Get();
-        bGoal = Pf_EntityAnchorCell_7fb0(&wpIBP, nullptr);
+        bGoal = EntityAnchorCell(&wpIBP, nullptr);
     }
 
     ComponentEntity* outBest = nullptr;

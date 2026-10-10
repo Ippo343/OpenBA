@@ -1030,7 +1030,7 @@ int MarketWork::Execute(CitizenComponent** citizenSlot, System::Time* ctx) {
 
         // 0x1400f1013: the candidate's anchor cell index.
         ComponentEntity* anchorIBP = townEntities[e].Get();
-        const int candCell = Pf_EntityAnchorCell_7fb0(&anchorIBP, nullptr);
+        const int candCell = EntityAnchorCell(&anchorIBP, nullptr);
 
         ConsumeProduceComponent* candCP = townEntities[e]->FindComponent<ConsumeProduceComponent>();
 

@@ -214,7 +214,7 @@ void EntityList::Shutdown() {
         Object::InternalPtr<ComponentEntity>* slot = &masterArray._data[i];
         ComponentEntity* entity = slot->Get();
         if ((entity->_entityFlags >> 10 & 1) == 0) {
-            MarkEntityForRemoval(slot->Get());   // 0x1400c2ea0
+            slot->Get()->MarkForRemoval();   // 0x1400c2ea0
         }
         if (bracket && !bracketFired) {
             if (void* bad = RedzoneAlloc_FindCorruptBlockNative()) {

@@ -353,7 +353,7 @@ uint64_t CitizenAIComponent::State_Leisure() {
         uVar14 = 0xffffffff;
     } else {
         ComponentEntity* homeIBP = citizen->home.Get();
-        uVar14 = Pf_EntityAnchorCell_7fb0(&homeIBP, nullptr);
+        uVar14 = EntityAnchorCell(&homeIBP, nullptr);
     }
 
     int64_t local_a8 = static_cast<int64_t>(static_cast<int>(uVar37));   // srcCell index (retail: its byte offset, *0x30)

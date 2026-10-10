@@ -304,7 +304,7 @@ int ForesterWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
 
     // Get entity's grid cell for distance calculations
     ComponentEntity* entityIBPBuf[2] = { field_10.Get(), nullptr };
-    uint32_t entityGridCell = Pf_EntityAnchorCell_7fb0(entityIBPBuf, nullptr);
+    uint32_t entityGridCell = EntityAnchorCell(entityIBPBuf, nullptr);
 
     // -------------------------------------------------------
     // Step 5: Random search for tree spots

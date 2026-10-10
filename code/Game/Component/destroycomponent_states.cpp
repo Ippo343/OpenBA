@@ -431,7 +431,7 @@ static void Destroy_MarkAndPushRemoval(ComponentEntity* entity) {
     EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;
     if (!entityList) return;
     if (((entity->_entityFlags >> 10) & 1) != 0) return;
-    MarkEntityForRemoval(entity);
+    entity->MarkForRemoval();
     entityList->removalList
         .SetSize(entityList->removalList._size + 1, entity);
 }

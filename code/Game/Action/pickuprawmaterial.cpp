@@ -120,7 +120,7 @@ int  PickupRawMaterial::AbstractImpl(ActionStack* actionStack) {
         uint32_t flags = localEntity->_entityFlags;
         if (((flags >> 10) & 1) == 0) {
             // Not yet flagged -- flag it and queue it on the removal list
-            MarkEntityForRemoval(localEntity);   // 0x1400c2ea0
+            localEntity->MarkForRemoval();   // 0x1400c2ea0
 
             // Append to EntityList::removalList (+0xD0) through 0x140003110 (Array SetSize(n, fill))
             QwordArraySetSize(&worldList->removalList,   // 0x140003110

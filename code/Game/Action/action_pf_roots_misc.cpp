@@ -400,7 +400,7 @@ void HerdStartMigration(HerdComponent* herd) {
                 EntityList* list = GameUpdateLoop::_singleton->m_entityList;
                 if (local_res8 != nullptr) {
                     if ((local_res8->_entityFlags >> 10 & 1) == 0) {
-                        MarkEntityForRemoval(local_res8);   // 0x1400c2ea0
+                        local_res8->MarkForRemoval();   // 0x1400c2ea0
                         QwordArraySetSize(&list->removalList,   // 0x140003110
                                  list->removalList._size + 1, &local_res8);
                     }

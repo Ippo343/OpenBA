@@ -345,7 +345,7 @@ uint64_t CitizenComponent::HandleLifeEvent(int eventType, const char* strParam) 
     EntityList* loop = world->m_entityList;   // [gw+0xe8], no test
     if (entIBP != nullptr) {
         if ((entIBP->_entityFlags >> 10 & 1) == 0) {
-            MarkEntityForRemoval(entIBP);   // 0x1400c2ea0
+            entIBP->MarkForRemoval();   // 0x1400c2ea0
             loop->removalList
                 .SetSize(loop->removalList._size + 1, entIBP);   // +0xd0 / +0xd8
         }

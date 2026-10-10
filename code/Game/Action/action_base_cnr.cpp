@@ -310,7 +310,7 @@ void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* 
     // Mark the entity for removal unless already marked (bit 10 of its flags).
     if (parent != nullptr) {
         if (((parent->_entityFlags >> 10) & 1) == 0) {
-            MarkEntityForRemoval(parent);   // 0x1400c2ea0
+            parent->MarkForRemoval();   // 0x1400c2ea0
             QwordArraySetSize(&entityList->removalList,   // 0x140003110
                                           entityList->removalList._size + 1, &parent);
         }

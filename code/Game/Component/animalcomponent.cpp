@@ -472,7 +472,7 @@ void AnimalComponent::Update(const System::Time* time) {
 
         if ((entity->_entityFlags >> 10) & 1) return;
 
-        MarkEntityForRemoval(entity);
+        entity->MarkForRemoval();
         if (corpseOwner) {
             const int newCount = corpseOwner->removalList._size + 1;
             corpseOwner->removalList

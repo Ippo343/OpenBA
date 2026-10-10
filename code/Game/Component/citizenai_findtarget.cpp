@@ -157,7 +157,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
         do {
             ComponentEntity* local_a0 = list->field_0x10._data[iVar20].Get();                // candidate entity
             ComponentEntity* local_90 = local_a0;                                // IBP scratch
-            uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_90, nullptr);        // entity -> cell idx
+            uint32_t cell = EntityAnchorCell(&local_90, nullptr);        // entity -> cell idx
 
             // -- find RadiusDescription (DWORD_1401c4870) in candidate component-list2 (+0x28) --
             ComponentDescription* lVar16 = local_a0->_description;
@@ -243,7 +243,7 @@ CitizenBehavior* CitizenAI_FindBestTarget_dd30(CitizenBehavior* list, ComponentE
         do {
             ComponentEntity* local_a0 = list->field_0x00._data[iVar20].Get();               // candidate entity
             ComponentEntity* local_58 = local_a0;                               // IBP scratch
-            uint32_t cell = Pf_EntityAnchorCell_7fb0(&local_58, nullptr);
+            uint32_t cell = EntityAnchorCell(&local_58, nullptr);
 
             // path cost candidate -> param_3
             int iVar8 = local_80->PathDistance(cell, param_3, '\x01');

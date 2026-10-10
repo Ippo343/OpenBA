@@ -293,7 +293,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
     if (preferred != nullptr) {
         float vec[4] = {0, 0, 0, 0};
         ComponentEntity* candIBP = preferred;
-        uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, vec));
+        uint32_t cell = static_cast<uint32_t>(EntityAnchorCell(&candIBP, vec));
         uint64_t valid = WorkBase_ValidateCell_a00f0(mapGrid, 0xe1f, param_3, static_cast<int>(cell));
         if (static_cast<char>(valid) != '\0') {
             int dist = WorkBase_CalcDistance_8830(mapGrid, cell, param_3);
@@ -316,7 +316,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
         do {
             ComponentEntity* cand = list->field_0x10._data[i].Get();
             ComponentEntity* candIBP = cand;
-            uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
+            uint32_t cell = static_cast<uint32_t>(EntityAnchorCell(&candIBP, nullptr));
             int cost = CellCost(map, cell, param_3);
             if (cost < best) {
                 ComponentEntity* candE = cand;
@@ -350,7 +350,7 @@ ComponentEntity** CitizenAI_helper_e370(CitizenBehavior* list, ComponentEntity**
         do {
             ComponentEntity* cand = list->field_0x00._data[i].Get();
             ComponentEntity* candIBP = cand;
-            uint32_t cell = static_cast<uint32_t>(Pf_EntityAnchorCell_7fb0(&candIBP, nullptr));
+            uint32_t cell = static_cast<uint32_t>(EntityAnchorCell(&candIBP, nullptr));
             int cost = CellCost(map, cell, param_3);
             if (cost < best) {
                 ComponentEntity* candE = cand;

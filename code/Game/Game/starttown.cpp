@@ -1411,7 +1411,7 @@ static int StartTown_StressSpawnStructures(Map* game, int cx, int cy) {
         // the door notch walkable in occ so every later pocket test sees it as ground.
         {
             ComponentEntity* entIBP = ent;
-            const int cell = Pf_EntityAnchorCell_7fb0(&entIBP, nullptr);   // 0x140087fb0
+            const int cell = EntityAnchorCell(&entIBP, nullptr);   // 0x140087fb0
             if (cell >= 0) {
                 const int ddx = cell % mapW - bestX, ddy = cell / mapW - bestY;
                 occ[(size_t)cell] = 0;

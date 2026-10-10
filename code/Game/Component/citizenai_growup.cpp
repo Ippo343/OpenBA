@@ -487,7 +487,7 @@ uint64_t CitizenAIComponent::State_GrowUp() {
         bGoal = 0xffffffff;
     } else {
         ComponentEntity* resIBP = resEntity;
-        bGoal = Pf_EntityAnchorCell_7fb0(&resIBP, nullptr);
+        bGoal = EntityAnchorCell(&resIBP, nullptr);
     }
 
     ComponentEntity* found = nullptr;          // local_b0

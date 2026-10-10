@@ -64,7 +64,7 @@ extern "C" CitizenComponent** CitizenEmploy_Strat_c5f0(CitizenBehavior* townMgr,
 extern "C" CitizenComponent** CitizenEmploy_Strat_c4b0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c4b0
 extern "C" CitizenComponent** CitizenList_AssignWorker_c3d0(CitizenBehavior* townMgr, CitizenComponent** out, ComponentEntity** availPtr, Profession* profKey);  // 0x14008c3d0
 extern "C" void CitizenList_AddWorker_91130(CitizenBehavior* townMgr, Profession* profession);  // 0x140091130
-extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)
+extern "C" void TownRegistry_RegisterResidence(ComponentEntity* houseEntityIBP);  // the append inside ResidenceComponent's state-2 enter 0x140129de0 (townMgr+0x20)  // B8: stays free -- not a ComponentEntity member: no retail body of its own; it is the append inside ResidenceComponent::EnterBuilt (0x140129de0, RCX the ResidenceComponent), its one caller -- folding it back is ResidenceComponent's (COMP-B), and its four port-only guards (entity, GameUpdateLoop, townMgr, the count check) go with that
 extern "C" int CitizenEmploy_SeatWorkers(CitizenBehavior* town, Profession* profKey, int count);  // no retail address: the headless driver of dd10's (0x14007dd10) inner loop
 
 // ---- citizen_lifeevent.cpp

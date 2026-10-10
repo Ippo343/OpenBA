@@ -259,7 +259,7 @@ int HuntWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context*/) 
 
     // Get workplace entity's grid cell for distance check
     ComponentEntity* entityIBPBuf[2] = { field_10.Get(), nullptr };
-    uint32_t entityGridCell = Pf_EntityAnchorCell_7fb0(entityIBPBuf, nullptr);
+    uint32_t entityGridCell = EntityAnchorCell(entityIBPBuf, nullptr);
 
     // -------------------------------------------------------
     // Step 8: Validate cell — terrain, distance, entity, passability

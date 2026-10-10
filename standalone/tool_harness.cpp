@@ -1034,8 +1034,7 @@ void FireMarkRemoval() {
 
     // The two backend primitives: ActHunt_MarkEntityRemoval_c2ea0 (0x1400c2ea0) and
     // ActHunt_DynArraySetCount_3110 (0x140003110).
-    fprintf(stderr, "[MarkRemoval] MarkForRemoval(c2ea0)=%p ArrayPush(3110)=%p\n",
-            reinterpret_cast<void*>(&MarkEntityForRemoval),
+    fprintf(stderr, "[MarkRemoval] ArrayPush(3110)=%p\n",
             reinterpret_cast<void*>(kArrayPush));
 
     // Scan a rectangle near map centre for the first markable entity (either cell slot).
@@ -1064,7 +1063,7 @@ void FireMarkRemoval() {
                        row, col, cell, slot, local, flags, compCnt, tid);
 
                 // --- Step 1: MarkForRemoval (sets flag 0x400, notifies components) ---
-                MarkEntityForRemoval(local);
+                local->MarkForRemoval();
                 uint32_t flagsAfter = local->_entityFlags;
 
                 // --- Step 2: push onto EntityList removalList (+0xD0) ---
@@ -1160,12 +1159,12 @@ void FirePinPanel(PlayerToolManager* entityUI) {
     EntityList* entityList = gw ? gw->m_entityList : nullptr;
     ComponentEntity* local = house;
     if (!local || !entityList) {
-        fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p c2ea0=%p push=%p el=%p)\n",
-               local, reinterpret_cast<void*>(&MarkEntityForRemoval),
+        fprintf(stderr, "[PinPanel] mark preconditions missing (local=%p push=%p el=%p)\n",
+               local,
                reinterpret_cast<void*>(kArrayPush), entityList);
         return;
     }
-    MarkEntityForRemoval(local);                                   // 0x1400c2ea0
+    local->MarkForRemoval();                                   // 0x1400c2ea0
     IBPArray* rl = &entityList->removalList;
     int cntBefore = rl->_size;
     QwordArraySetSize(rl, cntBefore + 1, &local);   // 0x140003110
