@@ -246,11 +246,11 @@ void FireComponent::Extinguish() {
         part->FadeOutEmitter(desc->particleEmitter);   // 0x140053720
     }
 
-    // DestroyComponent: leave the BURNING state. (The tree's null test on the
-    // DestroyComponent stays in the B4 FORWARD body it calls.)
+    // DestroyComponent: leave the BURNING state (retail 0x14004953a-0x14004954f hands
+    // the FindComponent result to 0x14011ea10 untested).
     {
         DestroyComponent* dest = _entity->FindComponent<DestroyComponent>();   // 0x140005780
-        FireComponent_StopBurning_11ea10(dest);
+        dest->StopBurning();
     }
 
     // WorkComponent: release the firefighting work slot (this is what retires the
