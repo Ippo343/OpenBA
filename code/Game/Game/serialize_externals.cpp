@@ -189,8 +189,4 @@ void ExternalPtrSerialize_ComponentDescription(::Object::External*& ref, IO::Ser
 // 0x140018020 -- ExternalPtr<Profession>: MOV EDX,[0x1401c5a98].
 void ExternalPtrSerialize_Profession(::Object::External*& ref, IO::Serializer& serializer) {
     SerializeExternalRefChecked(ref, serializer, Profession::TypeId(), "Profession", "ExternalPtr::Serialize");
-}
-// 0x14000bd30 -- ExternalPtr<UI::SpriteSheet>: import slot 0x140151480.
-void ExternalPtrSerialize_SpriteSheet(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, UI::SpriteSheet::TypeId(), "SpriteSheet", "ExternalPtr::Serialize");
 }

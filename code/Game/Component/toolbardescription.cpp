@@ -53,6 +53,7 @@
 #include <cstdint>
 #include <new>
 #include "Component/exe_bodies.h"
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
 
 // FUN_140028860 — System::String dynamic-array resize.
 // Header layout: +0x00 String* buffer, +0x08 int count, +0x0c int capacity; each
@@ -130,7 +131,7 @@ bool ToolbarDescription::Serialize(IO::Stream& stream) {
     // FUN_14000bf40 (ExternalPtr<UI::StringTable>). Both have a byte-identical stream
     // layout (only the validated typeId differs, trusted in standalone). Use the
     // registered Serialize2 for both.
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);   // 1. _spriteSheet
+    ::Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // 1. _spriteSheet
     _name.Serialize(ser);                        // 2. _name
     Reimpl_ExternalPtr_Serialize_StringTable(&_stringTable, &ser);   // 3. _stringTable
     _str1.Serialize(ser);                        // 4.

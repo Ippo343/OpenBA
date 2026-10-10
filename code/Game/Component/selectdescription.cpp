@@ -36,6 +36,7 @@
 #include "Game/exe_bodies.h"
 #include <cstdint>
 #include <new>
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
 
 // ctor (inlined into create 0x14000bb90 / createInPlace 0x14000bc00):
 // `??0External@Object@@` (Description()), the stamps (the compiler's), then
@@ -49,7 +50,7 @@ SelectDescription::SelectDescription()
 // [5] 0x140055630: stream order as retail.
 bool SelectDescription::Serialize(IO::Stream& stream) {
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_ref20, &ser);
+    ::Object::SerializeExternal<UI::SpriteSheet>(ser, _ref20);
     _s28.Serialize(ser);
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref30, &ser);
     _s38.Serialize(ser);

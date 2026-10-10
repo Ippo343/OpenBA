@@ -44,6 +44,7 @@
 #include <cstring>
 #include <cstdint>
 #include <new>
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -169,7 +170,7 @@ bool TradeDescription::Serialize(IO::Stream& stream) {
         }
     }
 
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_ref20, &ser);   // ExternalPtr +0x20
+    ::Object::SerializeExternal<UI::SpriteSheet>(ser, _ref20);   // ExternalPtr +0x20
     Reimpl_ExternalPtr_Serialize_StringTable(&_ref28, &ser);   // ExternalPtr +0x28
 
     // goods-category array @ +0x38 (count @ +0x40)

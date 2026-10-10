@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <new>
 #include "Game/exe_bodies.h"
+#include "ui/SpriteSheet.h"   // B8 RT2: ::Object::SerializeExternal<UI::SpriteSheet> (the downcast needs it complete)
 
 // 0x140079230: ElementDescription() is `??0ElementDescription@UI@@`; the
 // 0x14015d4a0 stamp is the compiler's; +0x68 = 0, +0x70 = String() (null).
@@ -54,7 +55,7 @@ int32_t CaptureBoxDescription::GetFileVersion() const {
 bool CaptureBoxDescription::Serialize(IO::Stream& stream) {
     UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
     IO::Serializer ser(stream, 0);
-    Reimpl_ExternalPtr_Serialize_SpriteSheet(&_spriteSheet, &ser);   // ExternalPtr +0x68
+    ::Object::SerializeExternal<UI::SpriteSheet>(ser, _spriteSheet);   // ExternalPtr +0x68
     _spriteName.Serialize(ser);                                      // String      +0x70
     return true;
 }
