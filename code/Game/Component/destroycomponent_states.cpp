@@ -724,7 +724,7 @@ char DestroyComponent::State5Tick() {
                     ModelComponent* npq = FindOn<ModelComponent>(newEntity);
                     if (npq) {
                         npq->SetTransformFromYaw(&tf, yaw);   // 0x140003870
-                        ModelSelectMesh(npq, orient, 0);       // 0x1401253d0
+                        npq->SelectMesh(orient, 0);       // 0x1401253d0
                     }
 
                     EntityList* entityList = GameUpdateLoop::_singleton->m_entityList;

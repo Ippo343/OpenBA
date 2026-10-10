@@ -180,15 +180,15 @@ int  CreateNaturalResource::AbstractImpl(ActionStack* actionStack) {
     // Find the ModelComponent and randomize its mesh variant
     System::Random* random = gameWorld->m_random;
 
-    uint32_t variantCount = ModelMeshGroupCount(entityIBP->FindComponent<ModelComponent>());   // 0x140003f60, 0x1401252f0
+    uint32_t variantCount = entityIBP->FindComponent<ModelComponent>()->MeshGroupCount();   // 0x140003f60, 0x1401252f0
     uint32_t variant = random->Rand(variantCount);
 
     ModelComponent* model = entityIBP->FindComponent<ModelComponent>();      // 0x140003f60
     ModelComponent* modelSet = entityIBP->FindComponent<ModelComponent>();   // 0x140003f60
 
-    uint32_t subVariantCount = ModelMeshCount(model, (int)variant);   // 0x140125320
+    uint32_t subVariantCount = model->MeshCount((int)variant);   // 0x140125320
     uint32_t subVariant = random->Rand(subVariantCount);
-    ModelSelectMesh(modelSet, (uint16_t)variant, (int16_t)subVariant);   // 0x1401253d0
+    modelSet->SelectMesh((uint16_t)variant, (int16_t)subVariant);   // 0x1401253d0
 
     // Register entity with the entity list
     Object::InternalPtr<ComponentEntity> entityRef = entityIBP;

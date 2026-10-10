@@ -317,7 +317,7 @@ void AnimalComponent::SetWanderTimer(uint32_t animId, float seconds) {
 
     if (model && charDesc) {
         // ActMvDep_AnimHelper_50f0 is a forwarder: its body is PlayModelAnimation.
-        PlayModelAnimation(model, animId, 0.0f,
+        model->PlayAnimation(animId, 0.0f,
                            charDesc->_turnFilter, ScaleMax());   // 0x1401250f0
     }
 

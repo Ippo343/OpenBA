@@ -26,9 +26,6 @@ class ModelComponent;         // Component/ModelComponent.h
 class NaturalResourceComponent;   // Component/NaturalResourceComponent.h
 class ComponentEntity;        // Entity/ComponentEntity.h
 uint64_t CheckCellTerrain(const Map* map, int cellIndex);  // 0x14009cb00
-uint32_t ModelMeshGroupCount(const ModelComponent* model);  // 0x1401252f0
-uint32_t ModelMeshCount(const ModelComponent* model, int group);  // 0x140125320
-void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant);  // 0x1401253d0
 void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animIdx);  // 0x140126440
 uint64_t NaturalResourcePlaceAtCell(NaturalResourceComponent* self, int cellIndex);  // 0x140126540
 void RemoveNaturalResourceCore(NaturalResourceComponent* self, ComponentEntity* const* citizenIBP, char harvestFlag);  // 0x1401260f0
@@ -86,7 +83,6 @@ bool ActMv_PathSetup_c8c10(MoveTo* self, const float* worldPos, void*, ActionSta
 class ModelComponent;         // Component/ModelComponent.h
 namespace System { class Time; class Random; }
 bool BreakTimeCheck(System::Time* time, const float* pair, System::Random* rng);  // 0x1400a9290
-void PlayModelAnimation(ModelComponent* model, uint32_t animId, float p3, float p4, float p5);  // 0x1401250f0
 
 // ---- action_base_rawmat.cpp
 class AutoPickupComponent;    // Component/AutoPickupComponent.h

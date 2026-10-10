@@ -168,8 +168,8 @@ void GrowthComponent::SetProgress(float progress) {
 // Reimpl of CreateNaturalResource_helper_52f0 (FUN_1401252f0) — the model's mesh-group
 // count: the ModelDescription (type-gated) _meshGroupCount.
 // ============================================================
-uint32_t ModelMeshGroupCount(const ModelComponent* model) {
-    Description* desc = model->_description;
+uint32_t ModelComponent::MeshGroupCount() const {
+    Description* desc = _description;
     const ModelDescription* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId()))
                                     ? static_cast<const ModelDescription*>(desc) : nullptr;
     return static_cast<uint32_t>(d->_meshGroupCount);
@@ -178,8 +178,8 @@ uint32_t ModelMeshGroupCount(const ModelComponent* model) {
 // ============================================================
 // Reimpl of FUN_140125320 — the mesh count of mesh group `group`.
 // ============================================================
-uint32_t ModelMeshCount(const ModelComponent* model, int group) {
-    Description* desc = model->_description;
+uint32_t ModelComponent::MeshCount(int group) const {
+    Description* desc = _description;
     const ModelDescription* d = (::Object::IsDerivedFromNullSafe(desc, ModelDescription::TypeId()))
                                     ? static_cast<const ModelDescription*>(desc) : nullptr;
     return static_cast<uint32_t>(d->_meshGroups[group].meshCount);
@@ -191,26 +191,26 @@ uint32_t ModelMeshCount(const ModelComponent* model, int group) {
 // (hide) when an old index was active; sets the mesh + slot 6 (show) when the new index is
 // valid; finally notifies the entity (0x1400c2b70, 0).
 // ============================================================
-void ModelSelectMesh(ModelComponent* model, uint16_t variant, int16_t subVariant) {
+void ModelComponent::SelectMesh(uint16_t variant, int16_t subVariant) {
     // type-gate the description; the result is unused here.
-    ::Object::IsDerivedFromNullSafe(model->_description, ModelDescription::TypeId());
+    ::Object::IsDerivedFromNullSafe(_description, ModelDescription::TypeId());
 
-    model->meshGroup = static_cast<int16_t>(variant);
-    if (model->meshIndex >= 0) {
-        model->OnRemove();   // slot 7
+    meshGroup = static_cast<int16_t>(variant);
+    if (meshIndex >= 0) {
+        OnRemove();   // slot 7
     }
-    model->meshIndex = subVariant;
+    meshIndex = subVariant;
     if (subVariant >= 0) {
-        Description* descMesh = model->_description;
+        Description* descMesh = _description;
         const ModelDescription* d = (::Object::IsDerivedFromNullSafe(descMesh, ModelDescription::TypeId()))
                                         ? static_cast<const ModelDescription*>(descMesh) : nullptr;
-        int16_t sub = model->meshIndex;
-        int16_t var = model->meshGroup;
+        int16_t sub = meshIndex;
+        int16_t var = meshGroup;
         Graphics::GraphicsMesh* mesh = d->_meshGroups[var].meshes[sub];
-        model->meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
-        model->OnAdded();   // slot 6
+        meshInstance.SetMesh(Object::ExternalPtr<Graphics::GraphicsMesh>(mesh));
+        OnAdded();   // slot 6
     }
-    model->_entity->SendEvent(0);   // 0x1400c2b70
+    _entity->SendEvent(0);   // 0x1400c2b70
 }
 
 // ============================================================
@@ -234,7 +234,7 @@ void NaturalResourceSetAnimation(NaturalResourceComponent* self, uint32_t animId
     } else {
         ModelComponent* model = self->_entity->FindComponent<ModelComponent>();   // 0x140003f60
         float uvScale = kRdata_14017214c;
-        PlayModelAnimation(model, animIdx, 0.0f, 0.0f, uvScale);   // 0x1401250f0
+        model->PlayAnimation(animIdx, 0.0f, 0.0f, uvScale);   // 0x1401250f0
         uint32_t flagsOld = self->_flags;
         uint32_t flagsNew = flagsOld | 4;
         self->_flags = flagsNew;

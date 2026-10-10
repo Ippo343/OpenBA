@@ -259,11 +259,11 @@ void GrowthComponent::SpawnSubResource(GrowthDescription* cfg) {
     ModelComponent* variantTarget = newEnt->FindComponent<ModelComponent>();   // 0x14011fde3 (0x140003f60)
     ModelComponent* variantWrite = newEnt->FindComponent<ModelComponent>();    // 0x14011fe09 (0x140003f60)
 
-    uint32_t range = ModelMeshCount(variantTarget, (int)variantSeed);   // 0x140125320
+    uint32_t range = variantTarget->MeshCount((int)variantSeed);   // 0x140125320
     // Retail's call site (FUN_14011fba0 at 0x14011fe2c) is `CALL [0x1401512e8]`,
     // the import slot for ?Rand@Random@System@@QEAAII@Z — the uint overload.
     uint32_t roll2 = rng->Rand(static_cast<uint32_t>(range));
-    ModelSelectMesh(variantWrite,   // 0x1401253d0
+    variantWrite->SelectMesh(// 0x1401253d0
                     static_cast<uint16_t>(variantSeed), (short)roll2);
 
     ::Object::InternalPtr<ComponentEntity> regArg = newIBP;

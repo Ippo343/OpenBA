@@ -63,6 +63,10 @@ public:
     // destroycomponent_state6.cpp, B4 COMP-c).
     void SetMaterialSet(int materialSetIdx);                      // 0x140125020
     void SetTransformFromYaw(const Math::Vector3* offset, float yaw);   // 0x140003870 (B4 PLAYER; body in Player/tool_base_tile.cpp)
+    void PlayAnimation(uint32_t animId, float p3, float p4, float p5);   // 0x1401250f0
+    uint32_t MeshGroupCount() const;                              // 0x1401252f0
+    uint32_t MeshCount(int group) const;                          // 0x140125320
+    void SelectMesh(uint16_t variant, int16_t subVariant);        // 0x1401253d0
 
     // PUBLIC while the ported bodies read them (B38 decision 1).
     Graphics::MeshInstance meshInstance; // +0x28

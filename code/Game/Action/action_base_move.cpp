@@ -283,7 +283,7 @@ void ActMv_UpdateFacing_c8d20(MoveTo* self) {
 void SetAnimation(CharacterComponent* character, uint32_t animId, float p3, float p4) {
     const CharacterDescription* desc = character->characterDescription;
     // 5th arg (p3) is a float passed on the stack in the original (MOVSS [RSP+0x20]).
-    PlayModelAnimation(character->modelComponent.Get(), animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
+    character->modelComponent.Get()->PlayAnimation(animId, 0.0f, desc->_turnFilter, p3);   // 0x1401250f0
     // ModelComponent +0x13c is the embedded MeshInstance's (+0x28) +0x114: _color[2]
     // (Mesh.h's guess name for the four floats the ctor seeds with 1.0).
     character->field_0x38 = character->modelComponent->meshInstance._color[2] * p4;
