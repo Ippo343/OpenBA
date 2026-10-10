@@ -44,6 +44,7 @@
 #include <new>
 #include "Game/exe_bodies.h"
 #include "system/MemoryAllocator.h"
+#include "Game/Weather.h"   // B8 RT2: ::Object::SerializeExternal<Weather> (the downcast needs it complete)
 
 namespace {
 // The retail ctor stores raw IEEE bit patterns; this keeps them exact.
@@ -88,7 +89,7 @@ bool EnvironmentDescription::Serialize(IO::Stream& stream) {
     }
 
     for (uint32_t i = 0; i < static_cast<uint32_t>(count); ++i) {
-        Reimpl_ExternalPtr_Serialize_Weather(&_weatherArray[i].weather, &ser);
+        ::Object::SerializeExternal<Weather>(ser, _weatherArray[i].weather);
         Reimpl_ExternalPtr_Serialize_ComponentDescription(&_weatherArray[i].description, &ser);
     }
 

@@ -176,10 +176,6 @@ void ExternalPtrSerialize_GraphicsMesh(::Object::External*& ref, IO::Serializer&
     SerializeExternalRefChecked(ref, serializer, Graphics::GraphicsMesh::TypeId(), "Graphics::GraphicsMesh", "ExternalPtr::Serialize");
 }
 
-void ExternalPtrSerialize_Weather(::Object::External*& ref, IO::Serializer& serializer) {
-    SerializeExternalRefChecked(ref, serializer, Weather::TypeId(), "Weather", "ExternalPtr::Serialize");
-}
-
 // 0x14000bf40 -- ExternalPtr<UI::StringTable>::Serialize (the import ?_typeInfo@StringTable@UI@@,
 // slot 0x140151488). B7 LX (row 992): it serves THAT instantiation only; the four other
 // retail bodies it used to stand for test other types and have their own cores below.
