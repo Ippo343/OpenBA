@@ -20,7 +20,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/residencecomponent_funcs.h"
+#include "Component/ResidenceComponent.h"
+#include <cstdint>
 #include "Component/CitizenComponent.h"
 #include "Component/ResidenceDescription.h"
 #include "Component/StatusIconComponent.h"
@@ -37,7 +38,6 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "math/Math.h"
 #include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>   // qsort
 #include <new>
@@ -484,7 +484,6 @@ void ResidenceComponent::AddResident(int family, Object::InternalPtr<CitizenComp
 // manual append is removed to avoid double-registration.
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
-#include "Component/ResidenceComponent.h"
 #include <atomic>
 #include <cstring>
 

@@ -27,7 +27,6 @@
 // code/Game/Work/gatherrawmaterials.cpp (which we do NOT modify).
 
 #include "Work/GatherRawMaterials.h"
-#include "Work/gatherrawmaterials_funcs.h"
 #include <new>
 #include "object/TypeInfo.h"
 #include "Dialog/dialog_exe_helpers.h"   // B3R: Dialog_FindComponent_d6c0

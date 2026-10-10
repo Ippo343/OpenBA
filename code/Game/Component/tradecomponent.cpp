@@ -17,12 +17,12 @@
 #include "Component/WorkPlaceComponent.h"
 #include "Entity/ComponentEntity.h"   // ComponentEntity::FindComponent<T>
 #include "Entity/CitizenBehavior.h"
-#include "Work/tradework_funcs.h"
+#include "Work/TradeWork.h"
+#include <cstdint>
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "system/String.h"
-#include <cstdint>
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B

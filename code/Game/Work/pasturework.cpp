@@ -20,7 +20,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/PastureWork.h"
-#include "Work/pasturework_funcs.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"

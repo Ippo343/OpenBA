@@ -10,11 +10,11 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/fishingcomponent_funcs.h"
+#include "Component/FishingComponent.h"
+#include <cstdint>
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <new>
 

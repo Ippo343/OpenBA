@@ -9,13 +9,13 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/workcomponent_funcs.h"
+#include "Component/WorkComponent.h"
+#include <cstdint>
 #include "object/TypeInfo.h"
 #include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Component/WorkDescription.h"   // ENDGAME B.3.9 TR
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
@@ -137,7 +137,6 @@ void WorkComponent::CancelWork() {
 // (B38_RULES D1, D2); slot bodies are the ones the old table installed.
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/WorkComponent.h"
 
 // 0x14012e820. These seeds are load-bearing for the slot-7 hook: workId 0 is a
 // VALID work id, so an unseeded component would ask the goals tree to cancel

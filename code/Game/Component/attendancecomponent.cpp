@@ -13,7 +13,6 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/attendancecomponent_funcs.h"
 #include "Component/AttendanceComponent.h"
 #include "Component/StatusIconComponent.h"
 #include "object/TypeInfo.h"

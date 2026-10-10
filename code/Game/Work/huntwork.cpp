@@ -14,7 +14,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/HuntWork.h"
-#include "Work/huntwork_funcs.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"

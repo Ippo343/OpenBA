@@ -17,7 +17,6 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/growthcomponent_funcs.h"
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
 #include <new>
 #include "object/TypeInfo.h"

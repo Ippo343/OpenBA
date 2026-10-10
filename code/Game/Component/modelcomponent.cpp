@@ -16,7 +16,8 @@
 
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
-#include "Component/modelcomponent_funcs.h"
+#include "Component/ModelComponent.h"
+#include <cstdint>
 #include "scene_watch.h"
 #include "Object/internal_factory_audit.h"
 #include "object/External.h"
@@ -29,7 +30,6 @@
 #include "Entity/ComponentEntity.h"
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -114,7 +114,6 @@ static Graphics::GraphicsMesh* GetMeshFromDescription(const ModelDescription* de
 // registers the geometry in Graphics::Scene).
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/ModelComponent.h"
 
 // 0x140124d20: Component() is the CALL 0x1401188b0 (the Object::Internal base
 // registers the object — the dtor's ~Internal must match it); the 0x140163ba0

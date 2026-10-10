@@ -23,7 +23,6 @@
 // passing &entityIBP straight through would hand it the caller's storage.
 
 #include "Work/PlantOrchard.h"
-#include "plantorchard_funcs.h"
 #include <new>
 #include "object/TypeInfo.h"
 #include "Component/exe_bodies.h"   // B3R: OrchardComponent_ValidateRefs

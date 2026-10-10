@@ -87,7 +87,6 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
-#include "Component/clearareacomponent_funcs.h"   // ClearAreaCtrl_IsDone / _BuildWork
 #include "Work/ClearArea.h"
 #include "Work/TendArea.h"   // B8: the (entity, kind) constructor
 #include "Component/FruitComponent.h"   // B4 S4 RT2: InternalPtr<FruitComponent>::Get() needs the class complete

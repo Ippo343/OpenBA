@@ -27,7 +27,8 @@
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Mesh.h"
-#include "Component/herdcomponent_funcs.h"
+#include "Component/HerdComponent.h"
+#include <cstdint>
 #include <new>
 #include "object/External.h"
 #include "object/TypeInfo.h"
@@ -44,7 +45,6 @@
 #include "Entity/CitizenBehavior.h"       // CitizenBehavior::herds (GameUpdateLoop::m_citizenList)
 #include "Game/exe_constants.h"           // kRdata_*
 #include "math/Math.h"                    // Math::Vector3
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -577,7 +577,6 @@ static bool IsTileValid(HerdComponent* self) {
 // D2). A live herd does nothing on its own — PopulationComponent's Startup is
 // what creates herd entities and calls Populate.
 #include "Object/factory_registration.h"
-#include "Component/HerdComponent.h"
 
 
 // 0x140122150. Component() is the CALL 0x1401188b0; the 0x140163680 stamp is

@@ -12,12 +12,12 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/happinesscomponent_funcs.h"
+#include "Component/HappinessComponent.h"
+#include <cstdint>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Work/exe_bodies.h"   // WorkBase_FindComponent_6270
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -369,7 +369,6 @@ static char Happiness_StateDemolishEnter(HappinessComponent* c, StateMachine* /*
 // chain, the controller a member object (B38_RULES D1, D2, D6).
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/HappinessComponent.h"
 #include "Component/controller_state_table.h"
 
 using HappinessCtrlDispatch = ::ControllerLive::Dispatcher<HappinessCtrlTag>;

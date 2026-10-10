@@ -9,7 +9,8 @@
 // Original: 0x140122740
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/huntcomponent_funcs.h"
+#include "Component/HuntComponent.h"
+#include <cstdint>
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Component/WorkComponent.h"
@@ -17,7 +18,6 @@
 #include "Entity/ComponentEntity.h"
 #include "Tutorial/exe_bodies.h"    // (WorkComponent_CalcMaxWorkers went in B6: the member is called)
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch

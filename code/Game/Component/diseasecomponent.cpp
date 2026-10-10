@@ -97,7 +97,6 @@
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "system/MemoryAllocator.h"
 #include "Component/exe_bodies.h"
-#include "Component/particlecomponent_funcs.h"
 #include "Work/exe_bodies.h"
 #include "Action/exe_bodies.h"
 #include "Player/exe_bodies.h"

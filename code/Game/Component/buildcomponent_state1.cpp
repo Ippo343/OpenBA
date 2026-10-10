@@ -37,7 +37,6 @@
 
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"   // ControllerLive::RequestStateTransition
-#include "Component/clearareacomponent_funcs.h" // ClearArea_Finalize8270 (port of ModelComponent_impl_8270)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "Component/exe_bodies.h"
 #include "Work/exe_bodies.h"

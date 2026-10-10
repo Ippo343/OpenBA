@@ -10,7 +10,6 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/ambientemittercomponent_funcs.h"
 #include "Component/AmbientEmitterDescription.h"   // B.3.8 CB1a (TypeId)
 #include "system/Value.h"
 #include "object/Internal.h"

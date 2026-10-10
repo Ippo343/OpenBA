@@ -10,7 +10,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/clearareacomponent_funcs.h"
+#include "Component/ClearAreaComponent.h"
+#include <cstdint>
 #include "Component/MapComponent.h"
 #include "Game/Map.h"
 #include "Entity/EntityList.h"
@@ -20,7 +21,6 @@
 #include "Entity/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <new>
 #include "Action/exe_bodies.h"
@@ -104,7 +104,6 @@ int ClearAreaComponent::FootprintSweep() {
 // chain, the controller a member object (B38_RULES D1, D2, D6).
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/ClearAreaComponent.h"
 #include <cstring>
 #include <cstdio>
 

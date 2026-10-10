@@ -14,7 +14,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/Pickup.h"
-#include "Work/pickup_funcs.h"
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "math/Math.h"

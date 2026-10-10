@@ -17,7 +17,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/floorcomponent_funcs.h"
+#include "Component/FloorComponent.h"
+#include <cstdint>
 #include "Component/MapComponent.h"   // B.3.8 CB1a (TypeId)
 #include "Component/FloorDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/ModelComponent.h"   // B.3.8 CB1a (TypeId)
@@ -27,7 +28,6 @@
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"          // GetTypeIdByName
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -254,7 +254,6 @@ void FloorComponent::PlaceFloor() {
 // 48-slot FloorComponent_LiveVtable, its per-create fill and InitBody patch are
 // gone; the compiler's 16-slot vtable carries the slots above.
 #include "Object/factory_registration.h"
-#include "Component/FloorComponent.h"
 
 // 0x14011f600: Component() is the CALL 0x1401188b0; the 0x140163360 stamp is
 // the compiler's; +0x28 = 0, +0x2c = -1 (0x14011f62f), flags |= 0x43.

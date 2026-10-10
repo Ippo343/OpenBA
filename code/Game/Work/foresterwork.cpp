@@ -13,7 +13,6 @@
 
 #include "Work/exe_bodies.h"
 #include "Work/ForesterWork.h"
-#include "Work/foresterwork_funcs.h"
 #include "options.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"

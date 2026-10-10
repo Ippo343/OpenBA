@@ -19,7 +19,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/citizenaicomponent_funcs.h"
+#include "Component/CitizenAIComponent.h"
+#include <cstdint>
 #include "Component/RawMaterialDescription.h"   // B.3.8 CB1a (TypeId)
 #include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
 #include "Component/CitizenDescription.h" // B.4 W1 COMP-b: description fields by name
@@ -32,7 +33,6 @@
 #include <new>
 #include "object/TypeInfo.h"
 #include <atomic>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -491,7 +491,6 @@ static CitizenComponent* CitizenAI_FindSiblingCitizen(ComponentEntity* ownerEnti
 // by construction: a class's table cannot lose its serializer.
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/CitizenAIComponent.h"
 
 // The private type-id cells CitizenAIComponent::Update repoints its lookups at.
 static uint32_t s_caiTidResidence = 0;

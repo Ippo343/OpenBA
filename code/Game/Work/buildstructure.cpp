@@ -21,7 +21,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/BuildStructure.h"
-#include "Work/buildstructure_funcs.h"
 #include "object/TypeInfo.h"
 #include "Game/exe_bodies.h"
 #include "Tutorial/exe_bodies.h"

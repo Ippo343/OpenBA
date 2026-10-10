@@ -9,11 +9,11 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/forestercomponent_funcs.h"
+#include "Component/ForesterComponent.h"
+#include <cstdint>
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
 #include <cstdio>
 #include <new>
 

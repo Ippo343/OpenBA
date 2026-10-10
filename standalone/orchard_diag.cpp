@@ -51,7 +51,6 @@
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Object/factory_registration.h"     // ::Object::GetTypeIdByName
-#include "Component/orchardcomponent_funcs.h" // extern OrchardComponent_GetGrowth (do not modify that file)
 #include "options.h"
 #include <cstdint>
 #include <cstdio>

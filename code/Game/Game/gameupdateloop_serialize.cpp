@@ -82,7 +82,6 @@
 #include "Action/exe_bodies.h"         // ActHunt_DynArraySetCount_3110
 #include "Dialog/exe_bodies.h"         // Avl38SetInsert (0x140014890)
 #include "Player/exe_bodies.h"         // Avl38Retrace (0x140025920)
-#include "Entity/entitylist_funcs.h"   // EntityList_Serialize
 #include "system/Filename.h"
 #include "Game/MapGenerator.h"   // B8 RT2: ::Object::SerializeExternal<MapGenerator> (the downcast needs it complete)
 #include "Component/ComponentDescription.h"   // B8 RT2: ::Object::SerializeExternal<ComponentDescription> (the downcast needs it complete)

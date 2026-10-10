@@ -17,7 +17,8 @@
 #include "graphics/Mesh.h"
 #include "graphics/GraphicsMesh.h"
 #include <new>
-#include "Component/particlecomponent_funcs.h"
+#include "Component/ParticleComponent.h"
+#include <cstdint>
 #include "Component/ModelComponent.h"
 #include "Component/MapComponent.h"
 #include "Entity/ComponentEntity.h"
@@ -36,7 +37,6 @@
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -418,7 +418,6 @@ void ParticleComponent::Setup() {
 // Inert_ScalarDtor slot 0 are gone; the compiler's 16-slot vtable carries the
 // slots above, with a real ctor/dtor chain (B38_RULES D1, D2).
 #include "Object/factory_registration.h"
-#include "Component/ParticleComponent.h"
 
 // ---- Per-frame frame-index un-stamp (Runtime-semantics fix, NOT a tick driver) ----
 // The tick itself is now driven faithfully by the EntityList tree walk: StartEmitter's

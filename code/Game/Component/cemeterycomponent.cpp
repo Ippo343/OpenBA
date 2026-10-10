@@ -11,12 +11,12 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/cemeterycomponent_funcs.h"
+#include "Component/CemeteryComponent.h"
+#include <cstdint>
 #include "object/TypeInfo.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "perf_terrain.h"
 #include <atomic>
-#include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -272,7 +272,6 @@ char CemeteryComponent::EnterDemolish() {
 // chain, the controller a member object (B38_RULES D1, D2, D6).
 // ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/CemeteryComponent.h"
 #include "Component/controller_state_table.h"
 
 using CemeteryCtrlDispatch = ::ControllerLive::Dispatcher<CemeteryCtrlTag>;

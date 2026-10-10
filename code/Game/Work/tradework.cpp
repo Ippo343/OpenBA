@@ -13,7 +13,6 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/TradeWork.h"
-#include "Work/tradework_funcs.h"
 #include "object/Internal.h"
 #include "object/TypeInfo.h"
 #include "Tutorial/exe_bodies.h"
