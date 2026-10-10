@@ -106,7 +106,7 @@ void PlacementTool::Shutdown() {
     if (radiusDisplayIdx >= 0) {
         WorldGeometry* highlightMgr = gameWorld->m_worldGeometry;
         if (highlightMgr) {
-            DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
+            highlightMgr->RemoveDecal(radiusDisplayIdx);
         }
     }
 
@@ -280,7 +280,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
         if (radiusDisplayIdx >= 0) {
             WorldGeometry* highlightMgr = gameWorld->m_worldGeometry;
             if (highlightMgr) {
-                DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
+                highlightMgr->RemoveDecal(radiusDisplayIdx);
             }
             radiusDisplayIdx = -1;
         }
@@ -302,7 +302,7 @@ void PlacementTool::Update(const System::Time* /*param2*/, char param3) {
             if (radiusDisplayIdx >= 0) {
                 WorldGeometry* highlightMgr = gameWorld->m_worldGeometry;
                 if (highlightMgr) {
-                    DecalComponent_TerrainDecalRemove(highlightMgr, radiusDisplayIdx);
+                    highlightMgr->RemoveDecal(radiusDisplayIdx);
                 }
             }
             // Add new highlight

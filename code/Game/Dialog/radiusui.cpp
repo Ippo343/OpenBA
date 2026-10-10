@@ -13,6 +13,7 @@
 #include "Dialog/exe_bodies.h"
 #include "Game/GameUpdateLoop.h"   // B3R STORAGE: GameUpdateLoop::_singleton
 #include "Game/Map.h"
+#include "Game/WorldGeometry.h"   // WorldGeometry::RemoveDecal (0x1400b0d00)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -131,7 +132,7 @@ void RadiusUI::OnClosed() {
         WorldGeometry* radiusMgr = GameUpdateLoop::_singleton->m_worldGeometry;
         // The door was named fn_RadiusDisplay_Remove; it is bound to 0x1400b0d00
         // DecalComponent_TerrainDecalRemove (B3R: the binding decides).
-        DecalComponent_TerrainDecalRemove(radiusMgr, this->highlightIndex);
+        radiusMgr->RemoveDecal(this->highlightIndex);
     }
     this->highlightIndex = -1;
 }

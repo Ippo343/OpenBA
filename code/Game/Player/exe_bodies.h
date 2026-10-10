@@ -91,15 +91,9 @@ DecalVertexNode** DecalVertexSetInsert(AvlTreeHead<DecalVertexNode>* set, DecalV
 DecalVertexNode* DecalVertexSetFind(const AvlTreeHead<DecalVertexNode>* set, const GeometryBatchVertex* key);  // 0x14001fc00 (0x1400ace40 passes the corner record itself)
 
 namespace Graphics { class MaterialInstance; }
-int AddDecal(WorldGeometry* geom, int param_2, int param_3, int param_4,
-             int param_5, uint8_t param_6, uint32_t param_7, Graphics::MaterialInstance* material,
-             bool param_9, float param_10, float param_11,
-             float param_12, float param_13, float param_14,
-             char param_15, int param_16, int param_17, bool param_19);  // 0x1400b0d80 (a WorldGeometry member in retail; param_18 is dead)
 int Player_HighlightAdd_55430(const RadiusDescription* param_1, int param_2);  // 0x140055430
 
 // ---- tool_base_highlight_tess.cpp
-extern "C" void TradeWork_impl_ace40(WorldGeometry* geometry, int param_2, char param_3, int param_4, int param_5);  // 0x1400ace40
 
 // ---- tool_base_path.cpp
 // 0x140104670 / 0x140104770 / 0x1401048a0 are RemovalTool::CanRemoveBuilding / CanRemoveRoad / CanRemoveField (RemovalTool.h).
@@ -108,7 +102,6 @@ extern "C" void TradeWork_impl_ace40(WorldGeometry* geometry, int param_2, char 
 // 0x1400fd960 is PlacementTool::FlipVariant (PlacementTool.h).
 
 // ---- tool_base_ray.cpp
-extern "C" uint8_t PlayerRay_TerrainMarch_aa530(WorldGeometry* param_1, float* param_2, float* param_3, float* param_4, float* param_5, float* param_6);  // 0x1400aa530
 extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(const void* /*never read*/, float* outOrigin, float* outDir);  // 0x1401005a0
 extern "C" int PlayerRay_ScreenToCell_101270(const void* /*never read*/);  // 0x140101270
 // 0x1400fda00 is PlacementTool::GetPlacement (PlacementTool.h).

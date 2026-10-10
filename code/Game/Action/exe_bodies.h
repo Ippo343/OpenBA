@@ -177,9 +177,6 @@ struct GeometryBatchVertex;   // Game/WorldGeometryElements.h
 
 // ---- action_pf_road.cpp
 class WorldGeometry;
-void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend);  // 0x1400acc10
-int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin, const float* maxT, float* outHit, float* outT, float* outNormal);  // 0x1400aaa20 (body: RayTestCell, action_pf_road.cpp)
-float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal);  // 0x1400b0f90 (body: TerrainHeightUnder, action_pf_road.cpp)
 // The caller's slot for a by-value Math::Vector3 result that retail leaves UNCONSTRUCTED.
 // 0x140122e20 returns a Vector3 through the hidden return slot (RDX) and writes x, y, z on
 // every path, so its retail callers hand it bare stack (e.g. 0x14010d9ab, 0x1400e52d3). A

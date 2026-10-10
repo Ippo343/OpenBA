@@ -186,7 +186,7 @@ static void FillRoadVertex(WorldGeometry* geo, int x, int y, RoadVertexScratch* 
 // The 4 corners are (x,y),(x+1,y),(x+1,y+1),(x,y+1); each filled via caa0 into a local
 // vertex, then scattered into quad[i] (the normal bytes move from +0x0C to +0x10). After the
 // 4th, the corners' mask-atlas coordinates come from the (DAT_1401c23d0 + shape*8) table.
-void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend) {
+void WorldGeometry::BuildRoadQuad(int x, int y, GeometryBatchVertex* quad, int dirIdx, uint8_t blend) {
     RoadVertexScratch localVtx;   // caa0 writes a full 0x14-byte vertex here (local_38..)
 
     int iVar5 = 0;
@@ -197,7 +197,7 @@ void Pf_RoadQuad_cc10(WorldGeometry* geo, int x, int y, GeometryBatchVertex* qua
         else if (iVar5 == 2) { iVar3 = y + 1; iVar2 = x + 1; }
         else if (iVar5 == 3) { iVar3 = y + 1; }
         // iVar5 == 0 -> (x,y)
-        FillRoadVertex(geo, iVar2, iVar3, &localVtx, blend);   // 0x1400acaa0
+        FillRoadVertex(this, iVar2, iVar3, &localVtx, blend);   // 0x1400acaa0
 
         // Scatter the local vertex into quad[iVar5], in retail's store order.
         GeometryBatchVertex& v = quad[iVar5];
@@ -802,7 +802,7 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
                                     // build the quad (cc10) into the local scratch (local_98).
                                     GeometryBatchVertex quad[4];
-                                    Pf_RoadQuad_cc10(this, fineCol + vtxOff, fineRow + vtxOff,
+                                    BuildRoadQuad(fineCol + vtxOff, fineRow + vtxOff,
                                                   quad, blendVal, blendId);   // 0x1400acc10
 
                                     GeometryBatch& rec = batches._data[batchId];
@@ -873,13 +873,13 @@ void WorldGeometry::RebuildRoadMesh(Map* map) {
 
 // The exported names of the two file-static bodies (callers: Component/quarrycomponent_deform.cpp,
 // Player/tool_base_ray.cpp; Player/tool_base_tilerender.cpp).
-int Pf_CellQuadRay_aa20(WorldGeometry* geo, int x, int y, const float* dir, const float* origin,
+int WorldGeometry::CellQuadRay(int x, int y, const float* dir, const float* origin,
                         const float* maxT, float* outHit, float* outT, float* outNormal) {
-    return RayTestCell(geo, x, y, dir, origin, maxT, outHit, outT, outNormal);
+    return RayTestCell(this, x, y, dir, origin, maxT, outHit, outT, outNormal);
 }
 
-float Pf_CellQuadRayWrap_0f90(WorldGeometry* geo, const float* point, float* outNormal) {
-    return TerrainHeightUnder(geo, point, outNormal);
+float WorldGeometry::HeightUnderPoint(const float* point, float* outNormal) {
+    return TerrainHeightUnder(this, point, outNormal);
 }
 
 // (Pf_EntityResolvePos_2e20, the void* forwarder to InteractNodePosition, went in B6 once its

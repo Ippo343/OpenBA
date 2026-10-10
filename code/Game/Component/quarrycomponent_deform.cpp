@@ -309,7 +309,7 @@ void QuarryComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0
                 // "improve" this into a hit check.
                 float probe[3]  = { 0.0f, 0.0f, 0.0f };
 
-                Pf_CellQuadRay_aa20(terrainGrid, cellX, cellY,
+                terrainGrid->CellQuadRay(cellX, cellY,
                                     dir, origin, &maxT, outHit, &outT, probe);
 
                 if (!(probe[2] < s_slopeCut)) continue;

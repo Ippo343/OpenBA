@@ -161,7 +161,6 @@ extern "C" float CropFieldComponent_Maturity(CropFieldComponent* comp);  // 0x14
 
 // ---- decalcomponent.cpp
 class WorldGeometry;
-void DecalComponent_TerrainDecalRemove(WorldGeometry* terrainDecalSys, int decalId);  // 0x1400b0d00
 
 // ---- destroycomponent_workerrelease.cpp
 // B4 X3-COMP: WorkPlaceComponent_SetMaxWorkers (0x14012fb00, its one caller calls the
