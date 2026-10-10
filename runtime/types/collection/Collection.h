@@ -470,13 +470,56 @@ void  MemFree(void* p);
 void  SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
                   const ArraySpec* spec);
 
-// retail 0x18001cdf0 and its ten twins — `Array<T>::operator=`, defined in
-// runtime/src/collection/array_destroy.cpp and unchanged by the closing pass.
+// retail 0x18001cdf0 and its ten twins — `Array<T>::operator=`.
 // `clear` is the destroy-and-free half; `Collection::Array<T>::ClearCallback`
-// is what the template hands it.
+// is what the template hands it. array_destroy.cpp's "The generic J4" banner
+// reads the body out of 0x180014c70 / 0x180005770 / 0x180033f30:
+//     if (this == &src) return this;          CMP RCX,RDX / JZ
+//     <clear>(this);                          CALL — leaves _size = 0
+//     _size = src._size;
+//     if (_size > _capacity) { grow; MemAlloc(cap * stride, align); }
+//     for (i = 0; i < _size; ++i) assign(data + i*stride, src.data + i*stride);
+//     return this;
+// The `_capacity = n*3` branch is DEAD (it needs oldSize != 0 and the clear has
+// just zeroed it) and is reproduced anyway. NO OLD-BUFFER FREE AFTER THE COPY:
+// the clear already freed it.
+// Header-inline (B9 RT2, the B7 D4 shape ~Array / ArrayDtorImpl took): retail
+// open-codes the assign at its callers (Audio::Scene::Update 0x1800dfd10 ends
+// its empty source with two bare zero stores, 0x1800dfd19 / 0x1800dfd1d, the
+// free elided), which GCC can only do when it sees this body: out of line,
+// `&src` escaped and the source's ~Array kept its null test and MemFree call.
+// FORCED inline, as ArrayDtorImpl is. The same reads and stores as the
+// array_destroy.cpp body it was; that body's two dead locals (a `realloced`
+// flag and a `copied` count, read by nothing) are not carried.
 using ArrayClearFn = void (*)(ArrayHdr*);
-void* ArrayAssignCore(ArrayHdr* a, const ArrayHdr* s, const ArraySpec* spec,
-                      ArrayClearFn clear);
+[[gnu::always_inline]] inline void* ArrayAssignCore(ArrayHdr* a, const ArrayHdr* s,
+                                                    const ArraySpec* spec,
+                                                    ArrayClearFn clear) {
+    if (a == s) return a;
+
+    clear(a);
+
+    const int32_t newSize = s->_size;
+    const int32_t oldSize = a->_size;          // always 0; clear zeroed it
+    a->_size = newSize;
+
+    if (newSize > a->_capacity) {
+        a->_capacity = newSize;
+        if (newSize == static_cast<int32_t>(oldSize + 1) && oldSize != 0)
+            a->_capacity = static_cast<int32_t>(newSize * 3);   // dead; faithful
+        a->_data = static_cast<uint8_t*>(
+            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity)) * spec->stride,
+                     spec->align));
+    }
+
+    for (int32_t i = 0; i < a->_size; ++i) {
+        uint8_t* p = a->_data + static_cast<int64_t>(i) * spec->stride;
+        if (p == nullptr) continue;            // retail tests the COMPUTED address
+        spec->assign(p, s->_data + static_cast<int64_t>(i) * spec->stride);
+    }
+
+    return a;
+}
 
 // exe 0x140017550 / 0x140002cc0 — `Array<T>::Find` / `Remove` over an 8-byte
 // element, defined in runtime/src/collection/array.cpp. `key` is the element.

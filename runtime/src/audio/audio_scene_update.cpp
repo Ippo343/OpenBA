@@ -588,14 +588,13 @@ bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
                         // stores); its life ends right after the call, where
                         // retail stores the two zeros again (0x1800dfd19 /
                         // 0x1800dfd1d) with the free elided.
-                        // B9: LEFT -- measured B9 RT (-O2): GCC keeps `empty`'s
-                        // ~Array test after the call (`mov 0x70(%rsp),%rcx;
-                        // test; je; call System::MemoryAllocator::MemFree`,
-                        // never taken: `_data` is null) where retail has the two
-                        // bare stores. `Assign` is inline but its core,
-                        // rtcoll::ArrayAssignCore (array_destroy.cpp), is not, so
-                        // `&empty` still escapes; the prerequisite is that core
-                        // inline, not the spelling here.
+                        // B9 RT2: rtcoll::ArrayAssignCore is header-inline
+                        // (Collection.h), so `&empty` no longer escapes into an
+                        // out-of-line call. Measured -O2: `empty`'s ~Array test
+                        // and MemFree call after the assign are GONE (GCC drops
+                        // the local whole: no stack stores, where retail keeps
+                        // its two dead zero stores). The assign itself is now
+                        // inline here; retail CALLs it (0x1800dfd10 -> 0x180050d30).
                         {
                             const Collection::Array<EmitterInstance> empty;
                             slot->positions = empty;                       // 1800dfd10
