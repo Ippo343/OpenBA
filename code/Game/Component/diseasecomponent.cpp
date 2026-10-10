@@ -484,7 +484,7 @@ void DiseaseComponent::Infect() {
     if (particle) {
         emitters = particle->emitters._size;
         for (int i = 0; i < emitters; ++i)
-            ParticleComponent_StartEmitterFade(particle, i);
+            particle->StartEmitterFade(i);
     }
 
     // ---- Arm the timers. Retail takes the description through IsDerivedFrom

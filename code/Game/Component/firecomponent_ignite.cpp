@@ -307,7 +307,7 @@ void FireComponent::Ignite() {
     // ParticleComponent: fade the flames in.
     {
         ParticleComponent* part = _entity->FindComponent<ParticleComponent>();   // 0x140005200
-        ParticleComponent_StartEmitterFade(part, desc->particleEmitter);
+        part->StartEmitterFade(desc->particleEmitter);
     }
 
     // --- MINT the FireWork and POST it to the reservation ledger ---
