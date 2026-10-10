@@ -139,7 +139,7 @@ STORAGE (10), what each cell really is:
   the arity check compares typedef and body parameter counts. Read the 32 member-target rows by hand
   for by-value returns. A retslot typedef whose parameter is named otherwise would be missed.
 - **Includes** are resolved with the Makefile's `SA_INCLUDES` order; `#include <…>` is not followed.
-  Only one header includes `engine_funcs.h` (`code/Game/Dialog/citizen_icon_helpers.h`), so direct
+  Only one header includes `engine_funcs.h` (`src/game/Dialog/citizen_icon_helpers.h`), so direct
   includers ≈ translation units.
 - **Name collisions** handled by the shadow rule: `FindComponentByTypeId` (the header's 2-argument
   inline vs a 3-argument overload in ~10 files), `g_fUVScale` (a local `const float` in
@@ -237,7 +237,7 @@ IMPLEMENTED stub set comes from here and leaves with the row (question 6). Its t
 | `types/TornadoComponent.h` | 58 | 1 | layout |
 | `types/RawMaterialDescription.h` | 70 | 1 (tests) | layout |
 | `types/{DialogLoaderLoopT,GameUpdateLoop,LoaderLoop,MainLoop,UpdateLoop}.h` | 10-11 each | 1 each (tests) | `using` aliases / forwarders (B.3.8) |
-| `types/{ClimateGenerator,MapGenerator,MenuScene,Profession,ProfessionList,TerrainGenerator,Toolbar,Weather}.h` | 7-9 each | **0** | forwarders to `code/Game/Game/*.h`, unused |
+| `types/{ClimateGenerator,MapGenerator,MenuScene,Profession,ProfessionList,TerrainGenerator,Toolbar,Weather}.h` | 7-9 each | **0** | forwarders to `src/game/Game/*.h`, unused |
 | `types/Configuration.h` | 102 | **0** | unused (the includers resolve to `runtime/types`) |
 | `types/Modification.h` | 120 | **0** | unused |
 | `types/io_serializer.h` | 203 | **0** | unused |
@@ -272,11 +272,11 @@ touch `address_registry.cpp` (coordinate with inventories A/C).
 
 | block | files it owns | files | rows touched, extern use lines |
 |---|---|---:|---:|
-| E1 | `code/Game/Component/` | 163 | 40 externs / 50 rows, 1,474 lines |
-| E2 | `code/Game/Dialog/` | 62 | 109 / 164, 992 lines |
-| E3 | `code/Game/Game/`, `Entity/`, `Goal/` | 70 | 71 / 78, 966 lines |
-| E4 | `code/Game/Work/`, `Action/` | 83 | 57 / 64, 818 lines |
-| E5 | `code/Game/Player/`, `Tutorial/` | 51 | 44 / 56, 481 lines |
+| E1 | `src/game/Component/` | 163 | 40 externs / 50 rows, 1,474 lines |
+| E2 | `src/game/Dialog/` | 62 | 109 / 164, 992 lines |
+| E3 | `src/game/Game/`, `Entity/`, `Goal/` | 70 | 71 / 78, 966 lines |
+| E4 | `src/game/Work/`, `Action/` | 83 | 57 / 64, 818 lines |
+| E5 | `src/game/Player/`, `Tutorial/` | 51 | 44 / 56, 481 lines |
 | E6 | `standalone/` (incl. `redzone_alloc.cpp`, `main.cpp`) | 29 | 17 / 20, 135 lines |
 
 E1 is the largest by files but mostly the ten heavy rows (mechanical); E2 has the most distinct

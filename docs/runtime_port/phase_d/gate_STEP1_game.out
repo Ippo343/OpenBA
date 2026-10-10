@@ -1,0 +1,83 @@
+== gate STEP1_game @ 18faf3ff1 16:08:09 mode=full
+build standalone-debug: exit 0
+build standalone: exit 0
+build standalone-perf: exit 0
+build unit: exit 0
+  note: release target compiled 0 files (shared obj dir; perf is the real NDEBUG build)
+  new warnings (debug, vs clean-rebuild baseline set): 19
+src/game/Component/buildcomponent_state8.cpp: warning: 'g_pBuildStructureWork' initialized and declared 'extern'
+src/game/Component/citizenai_gather.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizenai_growup.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizenai_handlers3.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizenai_housing_idle.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizenai_leisure.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizencomponent.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/cropfieldcomponent_states.cpp: warning: 'g_pCropPlantWork' initialized and declared 'extern'
+src/game/Component/keystone_a_restree.cpp: warning: multi-line comment [-Wcomment]
+src/game/Component/pasturecomponent.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Dialog/edittool_select.cpp: warning: 'g_LastSelectStore' initialized and declared 'extern'
+src/game/Dialog/edittool_select.cpp: warning: 'g_LastSelectStoreIdx' initialized and declared 'extern'
+src/game/Dialog/radiusui_promote.cpp: warning: multi-line comment [-Wcomment]
+src/game/Dialog/residenceui.cpp: warning: unused variable 'endRow' [-Wunused-variable]
+src/game/Dialog/saveloaddialog.cpp: warning: unused parameter 'element' [-Wunused-parameter]
+  ... 4 more in runs/STEP1_game/warn_new_debug.txt (in 16 files)
+  !! new warnings in debug build
+  new warnings (perf, vs clean-rebuild baseline set): 45
+src/game/Component/buildcomponent_state8.cpp: warning: 'g_pBuildStructureWork' initialized and declared 'extern'
+src/game/Component/citizenai_gather.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizenai_growup.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizenai_handlers3.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizenai_housing_idle.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizenai_leisure.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/citizencomponent.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Component/cropfieldcomponent_states.cpp: warning: 'g_pCropPlantWork' initialized and declared 'extern'
+src/game/Component/diseasecomponent.cpp: warning: variable 'killed' set but not used [-Wunused-but-set-variable]
+src/game/Component/diseasecomponent.cpp: warning: variable 'outcome' set but not used [-Wunused-but-set-variable]
+src/game/Component/keystone_a_restree.cpp: warning: multi-line comment [-Wcomment]
+src/game/Component/pasturecomponent.cpp: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+src/game/Dialog/edittool_select.cpp: warning: 'g_LastSelectStore' initialized and declared 'extern'
+src/game/Dialog/edittool_select.cpp: warning: 'g_LastSelectStoreIdx' initialized and declared 'extern'
+src/game/Dialog/radiusui_promote.cpp: warning: multi-line comment [-Wcomment]
+  ... 30 more in runs/STEP1_game/warn_new_perf.txt (in 25 files)
+  !! new warnings in perf build
+unit: 920 tests, 0 failures
+[gamelock] ACQUIRED by coord
+[gamelock] GRANT coord
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame: exit 0 crashlog=0 hang=no (31s)
+  RtUnresolved=0  
+  loader: calls=5683 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+  [GameMain] Post-Startup _firstTypeInfo: 414 entries, 414 have non-FF typeId
+  
+  typetable: 418 lines md5 965b527a
+  typetable == baseline minus 10 lazy by-name lookup line(s) (now X::TypeId())
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route tutorial: exit 0 crashlog=0 hang=no (21s)
+  RtUnresolved=0  
+  loader: calls=5773 openFileFail=12 openCompFail=0 retNull=12
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtUnresolved=0  
+  loader: calls=3421 openFileFail=0 openCompFail=0 retNull=0
+  registry: 
+  stub set: 0 address(es); new: none; gone: none
+[TradeCtrl] table built: 3 states (2, 0x12, 0x13)
+[Pasture] state table populated: 2 states (2=operational, 3=teardown)
+[BoatCtrl] table built: 5 states (0..4)
+route newgame_perf (-O2 exe): exit 0 crashlog=0 (24s)
+resave 1: PASS (23452937 bytes)
+resave 2: PASS (23452937 bytes)
+resave 3: PASS (23452937 bytes)
+resave: 3/3 PASS, trailing consecutive PASS streak = 3 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 2 problem(s)   16:14:17
+[gamelock] released by coord

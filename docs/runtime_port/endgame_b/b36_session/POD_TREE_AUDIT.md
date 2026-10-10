@@ -43,7 +43,7 @@ lower bound, subclass start is the upper bound). Step 6 can add the assert with 
 
 Vtable slot offsets: runtime pins `+0x10 GetTypeId, +0x38 OnUpdateLayout, +0x40 OnUpdate,
 +0x48 OnElementEvent` (`DialogInstance.h:196-201`). The engine tree has no slot table in the
-header; `code/Game/Dialog/dialog_controller_vtable.h:42,48-49` speaks of "slot 8 `OnUpdate`"
+header; `src/game/Dialog/dialog_controller_vtable.h:42,48-49` speaks of "slot 8 `OnUpdate`"
 and slots 0/1/2 (slot 8 = +0x40, consistent). Not a disagreement.
 
 Header-comment addresses (NOT evidence, listed as a flag only): engine names ctor 0x1800cd320 /
@@ -114,7 +114,7 @@ Three definitions, all 0x10, same offsets, different member names:
 
 Engine-side embeddings: `Elements.h:111,124` `uint8_t sprite[0x10]` @0xC0 — AGREE.
 **`Dialogs.h:379` `uint8_t sprite[0x20]` @0xD0 "UI::Sprite sub-object" — DISAGREES with 0x10.**
-`code/Game/Dialog/saveloaddialog.cpp:1305` says "+0xD0 sprite default-ctor, loader/engine ptrs at
+`src/game/Dialog/saveloaddialog.cpp:1305` says "+0xD0 sprite default-ctor, loader/engine ptrs at
 +0xE0/+0xE8", so the 0x20 blob is Sprite + two pointers mislabelled as one sub-object.
 
 ### 1.5 `UI::ElementDescription` prefix
@@ -256,7 +256,7 @@ Only two are UI: `CaptureBoxDescription` 0x78 (l.313-319) and `FrustumOutlineDes
 (`CreatePathDescription` … `EnvironmentDescription`, l.30-300) are `vtable + _extBase[0x18]` =
 `Object::External` (0x20); not UI. `ToolbarDescription` (l.222-236) is 0x68 — the same size as
 `UI::ElementDescription` — but is declared External-based; not checked here, flag for the block
-that owns toolbars (`code/Game/Component/toolbardescription.cpp`). **Zero includers** (§3.1).
+that owns toolbars (`src/game/Component/toolbardescription.cpp`). **Zero includers** (§3.1).
 
 ### 2.5 `engine/types/DialogLoaderLoopT.h`, `DialogLoopT.h` — see §5.
 
@@ -268,33 +268,33 @@ that owns toolbars (`code/Game/Component/toolbardescription.cpp`). **Zero includ
 
 | header | direct includers |
 |---|---|
-| `engine/types/ui/DialogController.h` | `engine/types/ui/Panels.h:14`, `code/Game/Dialog/ui_panels.h:6` |
+| `engine/types/ui/DialogController.h` | `engine/types/ui/Panels.h:14`, `src/game/Dialog/ui_panels.h:6` |
 | `engine/types/ui/DialogInstance.h` | `engine/types/ui/Dialogs.h:14` only |
-| `engine/types/ui/Dialogs.h` | `code/Game/Dialog/ui_dialogs.h:5`, `code/Game/Dialog/moddialog.cpp:39`, `optioninputbinddialog.cpp:234`, `saveloaddialog.cpp:44`, `standalone/modal_driver.cpp:109` |
-| `engine/types/ui/Panels.h` | `code/Game/Dialog/ui_panels.h:5`, `spritecaptureui.cpp:16`, `townhallui.cpp:16` |
+| `engine/types/ui/Dialogs.h` | `src/game/Dialog/ui_dialogs.h:5`, `src/game/Dialog/moddialog.cpp:39`, `optioninputbinddialog.cpp:234`, `saveloaddialog.cpp:44`, `standalone/modal_driver.cpp:109` |
+| `engine/types/ui/Panels.h` | `src/game/Dialog/ui_panels.h:5`, `spritecaptureui.cpp:16`, `townhallui.cpp:16` |
 | `engine/types/ui/Elements.h` | **none** |
 | `engine/types/Descriptions.h` | **none** |
-| `engine/types/DialogLoaderLoopT.h` | `code/Game/Game/dialogloaderloop.h:2`, `standalone/splash_loop_stubs.cpp:30` |
+| `engine/types/DialogLoaderLoopT.h` | `src/game/Game/dialogloaderloop.h:2`, `standalone/splash_loop_stubs.cpp:30` |
 | `engine/types/DialogLoopT.h` | **none** (`standalone/menudialogloopt_stubs.cpp:273,322` reads the loop with raw `self+0x30/+0x38` instead) |
 | `engine/types/Dialogs.h` (non-ui, third tree) | **none** |
-| `engine/types/TutorialSetups.h` | `code/Game/Tutorial/tutorialsetup{,camera,gamespeed,restrictplayer}_funcs.h:5` → `tutorialsetup.cpp:15`, `tutorialsetupcamera.cpp:20`, `tutorialsetupgamespeed.cpp:17`, `tutorialsetuprestrictplayer.cpp:22` |
+| `engine/types/TutorialSetups.h` | `src/game/Tutorial/tutorialsetup{,camera,gamespeed,restrictplayer}_funcs.h:5` → `tutorialsetup.cpp:15`, `tutorialsetupcamera.cpp:20`, `tutorialsetupgamespeed.cpp:17`, `tutorialsetuprestrictplayer.cpp:22` |
 
 ### 3.2 Transitive fan-out of the two wrapper headers (the real blast radius)
 
-`code/Game/Dialog/ui_dialogs.h` (→ `ui/Dialogs.h` → `ui/DialogInstance.h`): 24 TUs —
-`code/Game/Dialog/{achievementdialog,autosavedialog,eventnotifydialog,eventpopupdialog,followdialog,
+`src/game/Dialog/ui_dialogs.h` (→ `ui/Dialogs.h` → `ui/DialogInstance.h`): 24 TUs —
+`src/game/Dialog/{achievementdialog,autosavedialog,eventnotifydialog,eventpopupdialog,followdialog,
 goaldialog,loaderdialog,mainmenudialog,mapparamsdialog,menu_dialog_standalone_vtables,messagedialog,
 moddetailsdialog,moddialog,mod_dialog_vtables,newgamedialog,optioninputbinddialog,optionsdialog,
 saveloaddialog,scenariodialog,toolbardialog,toolbar_vtable_standalone,unreg_lane2_mapparamsdialog_ctor}.cpp`,
-`code/Game/Tutorial/{tutorialhighlightdialog,tutorialsetupdialog,tutorial_dialog_vtables}.cpp`,
+`src/game/Tutorial/{tutorialhighlightdialog,tutorialsetupdialog,tutorial_dialog_vtables}.cpp`,
 `standalone/reg_autosave.cpp:22`.
 
-`code/Game/Dialog/ui_panels.h` (→ `ui/Panels.h` + `ui/DialogController.h`): 42 TUs — every
-`code/Game/Dialog/*ui*.cpp` panel (`attendanceui … workplaceui`, incl. `cropui_promote`,
-`radiusui_promote`, `tradeui_checkout`, `selectresourceui`), `code/Game/Tutorial/tutorialui.cpp:9`,
+`src/game/Dialog/ui_panels.h` (→ `ui/Panels.h` + `ui/DialogController.h`): 42 TUs — every
+`src/game/Dialog/*ui*.cpp` panel (`attendanceui … workplaceui`, incl. `cropui_promote`,
+`radiusui_promote`, `tradeui_checkout`, `selectresourceui`), `src/game/Tutorial/tutorialui.cpp:9`,
 `tutorial_dialog_vtables.cpp:59`, `standalone/disaster_harness.cpp:110`, `standalone/reg_debugmenu.cpp:30`.
 
-`code/Game/Game/dialogloaderloop.h` (→ `DialogLoaderLoopT.h`): `dialogloaderloop.cpp:19`,
+`src/game/Game/dialogloaderloop.h` (→ `DialogLoaderLoopT.h`): `dialogloaderloop.cpp:19`,
 `standalone/splash_loop_stubs.cpp:37`.
 
 ### 3.3 TUs holding both an engine-side and a runtime-side definition of one class
@@ -384,8 +384,8 @@ UI types touched: `UI::DialogInstance*` (as `void*`), `Object::External*`, `UI::
 
 Users of the engine PODs (field access, not just the name): `standalone/splash_loop_stubs.cpp`
 reads/writes `m_dialogInstance` (l.70,80), `m_nextLoop` (147,385,414-417,468), `m_dialogExternal`
-(149-202,532,544), `m_elapsedTicks`/`m_delayTicks` (271-486); `code/Game/Game/dialogloaderloop.cpp:24,41,53`
-(`m_elapsedTicks`), declared in `dialogloaderloop.h:5`. `code/Game/Tutorial/tutorial_next_scenario.cpp:148`
+(149-202,532,544), `m_elapsedTicks`/`m_delayTicks` (271-486); `src/game/Game/dialogloaderloop.cpp:24,41,53`
+(`m_elapsedTicks`), declared in `dialogloaderloop.h:5`. `src/game/Tutorial/tutorial_next_scenario.cpp:148`
 only names the ctor door. `DialogLoopT.h`: no user. Runtime users: `runtime/src/engine/loops.cpp:135-136`
 `using RtEngine::…`, bodies l.462-1281, exports l.1525-1655.
 
@@ -398,7 +398,7 @@ namespace only where it must survive; delete dead views)
 |---|---|---|
 | `UI::DialogController` | `runtime/types/ui/DialogController.h` (split out of `DialogInstance.h`, `namespace UI`, ADD `static_assert(sizeof==0x30)` citing the 38 `Panels.h` +0x30 starts) | `engine/types/ui/DialogController.h` → `using DialogController = UI::DialogController;` after the 4 field names are unified; the engine POD's `data10..data28` have zero readers by name (all 38 panels reach base fields via `base.` or raw offsets — verify with a grep of `\.data(10|18|20|28)\b` before deleting) |
 | `UI::DialogInstance` | `runtime/types/ui/DialogInstance.h`, `namespace UI`; keep 0xB8, cite the 20 `Dialogs.h` +0xB8 starts as the size proof and drop the "0xC0 upper bound" hedge (l.34-36) | `engine/types/ui/DialogInstance.h` → alias. Its two false claims (0x30 unwritten, 0xB0 padding, §1.2) die with it |
-| `UI::Element` | `runtime/types/ui/Element.h` (already `namespace UI`) | `Elements.h` dead (0 includers): delete, or rewrite `CaptureBoxElement`/`FrustumOutlineElement` as `UI::Element` subclasses in `code/Game/…` when that block ports them. Runtime `ImageElement.h:43`/`LabelElement.h:57` prefixes → re-cut as `struct ImageElement : Element` / `LabelElement : TextElement` (LabelElement needs the corrected TextElement layout first, §1.8) |
+| `UI::Element` | `runtime/types/ui/Element.h` (already `namespace UI`) | `Elements.h` dead (0 includers): delete, or rewrite `CaptureBoxElement`/`FrustumOutlineElement` as `UI::Element` subclasses in `src/game/…` when that block ports them. Runtime `ImageElement.h:43`/`LabelElement.h:57` prefixes → re-cut as `struct ImageElement : Element` / `LabelElement : TextElement` (LabelElement needs the corrected TextElement layout first, §1.8) |
 | `UI::Sprite` | ONE: `runtime/types/ui/Sprite.h` moved into `namespace UI` with the `Sprite.h` names (`spriteSheet`, `spriteIndex`) | delete `UI::Sprite` from `ImageElement.h:26-39` (include `Sprite.h`); `RtSave::Sprite` (`SaveLoad.h:59`) → `using Sprite = UI::Sprite;`; fix `Dialogs.h:379` `sprite[0x20]` → `UI::Sprite sprite; void* loader; void* engine;` per `saveloaddialog.cpp:1305` |
 | `UI::ElementDescription` + all `*Description` | `runtime/types/ui/ElementDescription.h`, `DescriptionsBatch1.h`, `GroupDescription.h` → `namespace UI` | `engine/types/Descriptions.h` dead (0 includers): delete the file, or keep only if a block ports `CaptureBoxDescription`/`FrustumOutlineDescription` — then those two become `struct X : UI::ElementDescription` in `code/Game` |
 | `UI::UserInterface` | `runtime/types/ui/UserInterface.h` | `DialogLoaderLoopT.h:178`/`DialogLoopT.h:230` byte arrays → `UI::UserInterface _ui` via the alias below |

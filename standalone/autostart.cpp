@@ -12,12 +12,12 @@
 #include <cstring>
 #include "save/SaveLoad.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 
-// Captured by MainMenuDialog::OpenNewGame (code/Game/Dialog/mainmenudialog.cpp).
+// Captured by MainMenuDialog::OpenNewGame (src/game/Dialog/mainmenudialog.cpp).
 class NewGameDialog;    // Dialog/NewGameDialog.h
 extern "C" {
     NewGameDialog* g_StandaloneNewGameDialog = nullptr;
 }
-// Captured by MainMenuDialog_OpenLoad (code/Game/Dialog/mainmenudialog.cpp; its local
+// Captured by MainMenuDialog_OpenLoad (src/game/Dialog/mainmenudialog.cpp; its local
 // declaration still spells the pointer void*: the same symbol, the stored value is the
 // dialog it creates).
 class SaveLoadDialog;   // Dialog/SaveLoadDialog.h
@@ -38,7 +38,7 @@ ScenarioDialog* g_StandaloneScenarioDialog = nullptr;
 #include "Dialog/NewGameDialog.h"     // B4: NewGameDialog::buttonOk
 #include "Dialog/ModDetailsDialog.h"  // B4: ModDetailsDialog is-a UI::DialogInstance (InjectClick)
 
-// code/Game/Dialog/mod_dialog_vtables.cpp -- targets for BANISHED_AUTOMENU_CLICKS
+// src/game/Dialog/mod_dialog_vtables.cpp -- targets for BANISHED_AUTOMENU_CLICKS
 class ModDetailsDialog;
 extern "C" ModDialog*        ModDialog_LastOpened();
 extern "C" ModDetailsDialog* ModDetailsDialog_LastOpened();

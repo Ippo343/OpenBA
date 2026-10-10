@@ -41,6 +41,6 @@ void TickMenu(MenuDialogLoopT* menuDLT);
 // Set by the standalone NewGameDialog ctor (newgamedialog.cpp) so the driver
 // can locate the dialog it just opened and fire its Start handler once setup
 // (Slot4) has populated the combos + OK button. Null until OpenNewGame runs.
-class NewGameDialog;   // code/Game/Dialog/NewGameDialog.h
+class NewGameDialog;   // src/game/Dialog/NewGameDialog.h
 extern "C" NewGameDialog* g_StandaloneNewGameDialog;
 

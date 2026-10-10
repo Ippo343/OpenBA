@@ -577,7 +577,7 @@ static_assert(std::is_trivially_destructible<ExternalPtr<External> >::value,
 // the DLL-era residue traces resolved that exact mangled string to it
 // (docs/runtime_port/wave9_lanes.txt:263, wave9_residue_*.txt). The tree has
 // carried the name since Wave 9 lane Y — runtime/src/object/external.cpp
-// registers it by name AND at 0x1800066e0, and code/Game/Goal/
+// registers it by name AND at 0x1800066e0, and src/game/Goal/
 // goal_exe_helpers.cpp:218 resolves it by name. Renaming it `Slot4()` would
 // throw away a measured export name and contradict decision 5 ("names are the
 // original ones"), so the retail name is kept and §1.4 is what needs the

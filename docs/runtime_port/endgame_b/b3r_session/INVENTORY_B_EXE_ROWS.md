@@ -19,7 +19,7 @@ retail exe's PE import and section tables through `pefile`, read-only, like
   are exe functions, 252 (69) are `.rdata`/`.data` cells, and only **162 (59) are PE import slots**
   (Runtime symbols). Import slots are 6.8 % of the readers, not the majority.
 - DIRECT exe_fn rows: 588 rows → 584 distinct C++ bodies, all extern-linkage free functions defined in
-  `code/Game/*`; **547 of them are declared in no header** (their only prototypes are `extern` lines in
+  `src/game/*`; **547 of them are declared in no header** (their only prototypes are `extern` lines in
   `standalone/reg_*.cpp` and the readers' `fn_…_t` typedefs). 526 have a reader outside the defining file.
 
 ## 2. How the table was built
@@ -83,9 +83,9 @@ Rows by class and registration directory:
 | reg dir | DEAD | DIRECT | STORAGE | STUB | CALLBACK | total |
 |---|---:|---:|---:|---:|---:|---:|
 | standalone (address_registry.cpp + 121 reg_*.cpp) | 24 | 598 | 61 | 0 | 17 | 700 |
-| code/Game/Game (10 files) | 21 | 18 | 2 | 0 | 0 | 41 |
-| code/Game/Component (6 files) | 0 | 11 | 0 | 0 | 0 | 11 |
-| code/Game/Dialog (5) / Player (1) / Tutorial (1) / Work (1) | 0 | 8 | 0 | 0 | 0 | 8 |
+| src/game/Game (10 files) | 21 | 18 | 2 | 0 | 0 | 41 |
+| src/game/Component (6 files) | 0 | 11 | 0 | 0 | 0 | 11 |
+| src/game/Dialog (5) / Player (1) / Tutorial (1) / Work (1) | 0 | 8 | 0 | 0 | 0 | 8 |
 | unregistered (read only) | 0 | 0 | 0 | 18 | 0 | 18 |
 | **total** | **45** | **635** | **63** | **18** | **17** | **778** |
 
@@ -100,17 +100,17 @@ kind, RA door then helper door):
 
 | dir | RA lines | helper | addrs slot/fn/data | RA occ slot/fn/data | helper occ slot/fn/data |
 |---|---:|---:|---|---|---|
-| code/Game/Component | 883 | 126 | 26/289/48 | 50/710/123 | 21/89/19 |
-| code/Game/Work | 538 | 16 | 11/132/14 | 36/462/40 | 2/14/0 |
-| code/Game/Action | 234 | 36 | 8/137/27 | 3/190/41 | 6/25/5 |
+| src/game/Component | 883 | 126 | 26/289/48 | 50/710/123 | 21/89/19 |
+| src/game/Work | 538 | 16 | 11/132/14 | 36/462/40 | 2/14/0 |
+| src/game/Action | 234 | 36 | 8/137/27 | 3/190/41 | 6/25/5 |
 | engine (engine_funcs.cpp only) | 195 | 0 | 8/162/6 | 8/179/8 | 0/0/0 |
-| code/Game/Player | 138 | 17 | 12/82/2 | 1/134/3 | 17/0/0 |
-| code/Game/Game | 89 | 26 | 10/83/7 | 1/81/7 | 10/16/0 |
-| code/Game/Tutorial | 23 | 3 | 0/20/0 | 0/23/0 | 0/3/0 |
+| src/game/Player | 138 | 17 | 12/82/2 | 1/134/3 | 17/0/0 |
+| src/game/Game | 89 | 26 | 10/83/7 | 1/81/7 | 10/16/0 |
+| src/game/Tutorial | 23 | 3 | 0/20/0 | 0/23/0 | 0/3/0 |
 | standalone (harnesses, redzone_alloc) | 22 | 0 | 3/11/2 | 3/17/2 | 0/0/0 |
-| code/Game/Dialog | 14 | 0 | 2/11/0 | 2/12/0 | 0/0/0 |
-| code/Game/Entity | 8 | 0 | 0/6/2 | 0/6/2 | 0/0/0 |
-| code/Game/Goal | 2 | 0 | 0/0/2 | 0/0/2 | 0/0/0 |
+| src/game/Dialog | 14 | 0 | 2/11/0 | 2/12/0 | 0/0/0 |
+| src/game/Entity | 8 | 0 | 0/6/2 | 0/6/2 | 0/0/0 |
+| src/game/Goal | 2 | 0 | 0/0/2 | 0/0/2 | 0/0/0 |
 | runtime/src/collection (alloc_door.cpp) | 0 | 2 | 2/0/0 | 0/0/0 | 2/0/0 |
 | **total** | **2,146** | **229** | 59/650/69 (tree) | 104/1,814/228 | 58/147/24 |
 
@@ -241,7 +241,7 @@ The 18 read-but-unregistered addresses (STUB, or a latent bug):
    CitizenAIComponent [6] 0x14010f880 → `JMP 0x14010f890` (`CitizenComp_CitizenAIComponent_CheckAge`,
    `reg_component_people.cpp:79`), PickingComponent [11] 0x140128ba0 → `JMP 0x140128f50`
    (`PickingComponent_RegisterMesh`, `reg_closeout_lane_d.cpp:60`). The gap may be one line each.
-9. 21 of the 45 DEAD rows are in `code/Game/Game/*_serialize.cpp`/`gameupdateloop_teardown.cpp`/
+9. 21 of the 45 DEAD rows are in `src/game/Game/*_serialize.cpp`/`gameupdateloop_teardown.cpp`/
    `terraingenerator.cpp` Register functions — the "serialize helper" batches registered bodies whose
    readers were later converted to direct calls, and the rows stayed.
 10. 0x140115e60 (CitizenAI LongTermPlan) is both a switch row (CALLBACK) and read directly by 12 readers
@@ -256,7 +256,7 @@ conversion changes static-init order.
 
 **P0 — declarations first (serial, new files only).** 547 DIRECT bodies have no header; 584 distinct
 bodies are the targets. One owner writes one new declaration header per defining module
-(`code/Game/<Module>/<module>_exe_bodies.h` or similar: Action 142 bodies, Component 176, Game 74, Work
+(`src/game/<Module>/<module>_exe_bodies.h` or similar: Action 142 bodies, Component 176, Game 74, Work
 74, Player 51, Dialog 42, Tutorial 17, Entity 10, Goal 1, standalone 1), copying each prototype from its
 DEFINITION (linkage included: 321 of the reg files' prototypes are `extern "C"`). Also declares the 63
 STORAGE objects (they live today as file-statics in 18 registering files, 22 of them in the float table; making
@@ -284,7 +284,7 @@ directory's R block; their ROWS stay until Z.)
 **Z0 — DEAD rows (can run in parallel with the reader blocks):** the 24 DEAD rows in 8 standalone files
 (`address_registry.cpp` 5, `reg_citizenai_housing_idle.cpp` 7, `reg_citizenai_leisure.cpp` 3,
 `reg_rdata_float_consts.cpp` 3, `reg_code_lane4.cpp` 2, `reg_animal_serialize.cpp`, `reg_component_people.cpp`,
-`reg_herd_live.cpp`, `reg_immigration.cpp` 1 each). The 21 DEAD rows in `code/Game/Game` go with R-Game
+`reg_herd_live.cpp`, `reg_immigration.cpp` 1 each). The 21 DEAD rows in `src/game/Game` go with R-Game
 (same files). Behaviour-neutral: no reader, so no resolve changes.
 
 **Z — row deletion (serial, last, one owner, after every R block merged):** the remaining 715 rows

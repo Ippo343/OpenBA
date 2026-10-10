@@ -2,7 +2,7 @@
 // tests/unit/mib_abi_test.cpp — ENDGAME B.3.8 block MI-B (B38_RULES.md B8-14)
 //
 // The ABI claims block MI-B makes for its production/trade classes, measured on
-// the SHIPPED HEADERS (code/Game/Component/<Class>.h):
+// the SHIPPED HEADERS (src/game/Component/<Class>.h):
 //
 // PART A — LAYOUT. sizeof / alignof against each retail create function's
 //   MemAlloc (B38_RULES §1.3), the controller member at retail's offset

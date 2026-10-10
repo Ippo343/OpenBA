@@ -34,7 +34,7 @@
 #include "engine/MainLoop.h"   // ENDGAME B.3.9 SS2: Engine::MainLoop::_singleton
 // WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
 
-// Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
+// Wave 9 lane N's work-scheduler probe tally (src/game/Action/action_base_complete.cpp).
 // Declared here rather than in a header: it has exactly one caller, the crash handler.
 #include <cstdio>
 #include <cstdint>
@@ -1262,7 +1262,7 @@ static bool Init() {
 
     // 5./6. (were the two DumpFirstTypeInfo probes around InvokeAllRegistrations)
     //    The exe type records are real Object::BaseTypeInfo statics linked into
-    //    _firstTypeInfo at CRT init (ENDGAME B.3.9 RF, code/Game/Object/exe_type.h);
+    //    _firstTypeInfo at CRT init (ENDGAME B.3.9 RF, src/game/Object/exe_type.h);
     //    there is nothing to drain. Engine::Engine::Startup ->
     //    Object::Factory::Startup walks the chain and populates the typeId tree;
     //    RunGameMain dumps the whole table, order-free, right after it.

@@ -39,7 +39,7 @@ class AchievementInstance;
 // Achievement::Achievement — an Object::External subclass, 0x58 bytes. NINE
 // slots. RULE B7-3: POLYMORPHIC (the inventory missed it — its vftable is
 // mangled with the back-reference `??_7Achievement@0@6B@`, B7-11), and the exe
-// builds `Scenario` on it (code/Game/Game/scenario.cpp, a C++ subclass whose
+// builds `Scenario` on it (src/game/Game/scenario.cpp, a C++ subclass whose
 // ctor chains this class's real one). ENDGAME B.3.9 ENG (B39_RULES D1/D2):
 // CONCRETE -- retail's own slot 0 and public real ctor, the factory pair the
 // class's own; the minted row, its RT_DELDTOR row, the ??0 / ??1 doors and the

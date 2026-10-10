@@ -19,7 +19,7 @@
 // write-up). Nothing here is inferred from the profile build.
 //
 // HELD BY VALUE (B37_RULES 2.4 and its addendum): the exe's Game object (built
-// by 0x14009ee70, `code/Game/Game/gameupdateloop_load.cpp`) embeds one at +0x8
+// by 0x14009ee70, `src/game/Game/gameupdateloop_load.cpp`) embeds one at +0x8
 // and GameUpdateLoop allocates another (`MemAlloc(0x60,8)` at 0x140097093); both
 // holders are unconverted exe PODs that construct in place through
 // `RtPicking_Scene_Ctor`, which runs the C++ default constructor `Scene()`

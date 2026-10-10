@@ -2,7 +2,7 @@
 // tests/unit/loop_abi_test.cpp — ENDGAME B.3.8 block LOOP (B38_RULES.md B8-14)
 //
 // The ABI claims block LOOP makes for its classes, measured on the SHIPPED
-// HEADERS (code/Game/Game/<Class>.h):
+// HEADERS (src/game/Game/<Class>.h):
 //
 // PART A — LAYOUT. sizeof / alignof against each retail create site's MemAlloc
 //   and the member offsets the ported bodies read.

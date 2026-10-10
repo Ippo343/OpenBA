@@ -853,7 +853,7 @@ void SunLight::Draw(Video::Context& context, const Camera& camera,
 // and ZERO address doors.
 //
 // The `renderer->+0x3c` / `+0x48` gate is INDEPENDENTLY CORROBORATED: this
-// lane read it out of the bytes, and `code/Game/Game/gameupdateloop.cpp:2171`
+// lane read it out of the bytes, and `src/game/Game/gameupdateloop.cpp:2171`
 // already records `renderer+0x3c != 0` as SunLight's shadow gate from the
 // caller's side. Two unrelated readings, one conclusion.
 //

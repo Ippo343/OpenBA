@@ -315,7 +315,7 @@ public:
     // ??0GraphicsInterface@Device@Video@@QEAA@XZ (0x18000cd90) zeroes exactly three
     // qwords. GetInterface (0x18000d3c0) strides by 0x18. ValidateConfiguration
     // reads the adapter array at +0x08/+0x10, and
-    // code/Game/Dialog/optionsdialog.cpp (PopulateVideoComboBoxes) shows `name`.
+    // src/game/Dialog/optionsdialog.cpp (PopulateVideoComboBoxes) shows `name`.
     //
     // LIFECYCLE — REAL MEMBERS since ENDGAME B5 DEV-B (bodies in
     // device_enum_types.cpp; see Adapter above for the String member):
@@ -589,7 +589,7 @@ public:
     int32_t           lockRecursionCount;  // +0x8C  ditto
     void*             windowHandle;        // +0x90  HWND, copied from Application::_singleton[0] by Startup
     int32_t           maxAnisotropy;       // +0x98  max anisotropic filter level; read by
-                                           //        code/Game/Dialog/optionsdialog.cpp:359 as
+                                           //        src/game/Dialog/optionsdialog.cpp:359 as
                                            //        `*(int*)(vidDev + 0x98)`. Not written by the
                                            //        ctor — adapter enumeration fills it.
     uint8_t           settingsChanged;     // +0x9C  ApplyChangedSettings sets it to 1
@@ -755,7 +755,7 @@ public:
 // (0x1800f4320), which fills the intrusive list links and the platform object.
 // Create (0x1800f3f10) writes +0x00, +0x08, +0x10 and +0x14 then tail-calls
 // slot 1 of the object at +0x28. The size is confirmed independently by
-// code/Game/Game/minimap_paint.cpp:193, which MemAllocs exactly 0x30 bytes for
+// src/game/Game/minimap_paint.cpp:193, which MemAllocs exactly 0x30 bytes for
 // one and then calls the retail ctor on it.
 //
 // +0x18/+0x20 are next/prev of a CIRCULAR doubly linked list of every live

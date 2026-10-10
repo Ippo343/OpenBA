@@ -80,7 +80,7 @@ existing descriptions collapse INTO it:
 - `RtObject::BaseTypeInfo` (`runtime/types/object/TypeInfo.h:77-129`) — the 0x38-byte layout,
   pinned field by field. Becomes the real class, under the retail name, with the seven offset
   asserts and the `sizeof == 0x38` assert kept verbatim.
-- `Object::FactoryRegistration::BaseTypeInfoStorage` (`code/Game/Object/factory_registration.h:41-43`,
+- `Object::FactoryRegistration::BaseTypeInfoStorage` (`src/game/Object/factory_registration.h:41-43`,
   `uint8_t bytes[0x38]`) — **deleted**, not asserted against. It exists only as a staging
   buffer, and the reason it exists is gone.
 
@@ -201,7 +201,7 @@ Seven tests, all passing. What they establish, as rules:
    then calls the wrong function.
 3. **A copied compiler vtable is interchangeable with the compiler's own**, including patching
    individual slots — which is what `tools/rt_mint_gen.py` produced and what
-   `code/Game/Game/tornado.cpp:622-640` still does at runtime. So a converted class may be
+   `src/game/Game/tornado.cpp:622-640` still does at runtime. So a converted class may be
    handed to unconverted vtable-minting code and vice versa.
 4. **Two non-virtual polymorphic bases put the second vptr at +0x28** for the
    `Component`(0x28) + controller shape, the compiler emits the this-adjusting thunk retail
@@ -219,12 +219,12 @@ Seven tests, all passing. What they establish, as rules:
 
 ## 5. Question 5 — every site that reads a vptr for identity
 
-Swept across `runtime/`, `code/Game/`, `standalone/`, `dx11/`, `engine/`. **Four live sites and
+Swept across `runtime/`, `src/game/`, `standalone/`, `dx11/`, `engine/`. **Four live sites and
 one dead helper.** Each needs its decision landed BEFORE the class it reads is flipped.
 
 | site | what it compares | decision, and when |
 |---|---|---|
-| `code/Game/Game/tornado.cpp:627` `if (vt == s_tornadoVtable) return;` | re-entry guard: is this object already wearing the patched copy? Both sides are LOCALLY built arrays (`s_tornadoVtable` is a copy of the live `Graphics::ParticleSystem` table with 8 slots patched, :622-640). | Survives `Object::Base` flipping unchanged — it never names a compiler-generated table. It dies with `Graphics::ParticleSystem`'s own conversion (B.3 step 5), not here. Leave it; do not "tidy" it into a type-id check while the patched copy still exists. |
+| `src/game/Game/tornado.cpp:627` `if (vt == s_tornadoVtable) return;` | re-entry guard: is this object already wearing the patched copy? Both sides are LOCALLY built arrays (`s_tornadoVtable` is a copy of the live `Graphics::ParticleSystem` table with 8 slots patched, :622-640). | Survives `Object::Base` flipping unchanged — it never names a compiler-generated table. It dies with `Graphics::ParticleSystem`'s own conversion (B.3 step 5), not here. Leave it; do not "tidy" it into a type-id check while the patched copy still exists. |
 | `standalone/pausemenu_harness.cpp:237, :250` `*(void**)s_dialog == s_vtable` | liveness: "was the dialog destroyed under us?" Both sides come from the SAME live object at two times. | Survives: a converted `UI::Dialog`'s destructor still re-stamps the base vptr, so the value still changes on destruction. When `UI::Dialog` converts, restate it as `s_dialog->Type() == s_dialogTypeId` — a harness, so it may lag one step. |
 | `standalone/stress_harness.cpp:568-575` | uses the vptr as a HASH KEY into a profiler slot table, then reads `vt[2]` as `GetTypeId`. | The key use survives (any stable pointer works). **The hard-coded `vt[2]` becomes `comp->Type()` in the same commit that gives `Component` a real class**, NOT with Base's (re-confirmed at step 4): the object is a `Component` POD, so `Base*` would assert a relationship that does not exist, and since `p->Type()` emits the same `(*(void***)p)[2](p)` there is no behaviour to gain by moving early — only an over-stated claim. |
 | `runtime/src/io/file_stream.cpp:393` `if (vptr == ours)` in `NoteSlotDispatch` | attendance counter: did this dispatch arrive through OUR minted `BinaryFileStream` table? | Becomes meaningless the moment `IO::BinaryFileStream` is a real class — that is B.3 step 4, not B.3.3. Delete the counter with that class; do not leave it silently counting zero. |
@@ -460,7 +460,7 @@ merge cleanly.
    `InternalFactory`, `BaseTypeInfo` — none. Every name is a game/engine type that stays a
    POD until B.3 steps 5-8: `CitizenComponent` 18, `RawMaterialDescription` 13,
    `ModelComponent` 12, `StorageComponent`/`OrchardComponent`/`CitizenDescription`/
-   `MapComponent` 9 each, and a 287-name tail. By directory: `code/Game/Component` 207,
+   `MapComponent` 9 each, and a 287-name tail. By directory: `src/game/Component` 207,
    `standalone` 119, `Dialog` 62, `Work` 37, `Action` 36, `Game` 32, `Player` 21,
    `Tutorial` 21, `Goal` 6, `Entity` 4.
    **`X::TypeId()` cannot exist for a class that does not exist**, so there is no sweep to
@@ -542,7 +542,7 @@ merge cleanly.
    judgement:
    - **A. EXTERNAL-CALLERS (opus, alone, first).** `fn_External_*` (409) +
      `fn_ExternalFactory_*` (177) + `fn_ExternalList_*` (23) = **609 sites**, in
-     `code/Game/{Component,Dialog,Game,Tutorial,Action,Player,Goal,Work}` and `standalone/`.
+     `src/game/{Component,Dialog,Game,Tutorial,Action,Player,Goal,Work}` and `standalone/`.
      Opus because every signature must be checked against the class: two of these
      (`fn_External_External`, `fn_ExternalFactory_FindOrLoad`) are the shapes where Ghidra
      historically dropped an argument on a register-passthrough forwarder, and a hidden
@@ -556,7 +556,7 @@ merge cleanly.
      `Work` 96+24, `Player` 80+2, `Game` 74+11, `Action` 63+23, `Entity` 36+7, `Goal` 34,
      `Tutorial` 26+2, `standalone` 3.
    - **C. FACTORY-CALLERS (sonnet, after A).** `fn_Factory_*` (23) + `fn_BaseTypeInfo_Ctor`
-     (3) = **26 sites**, in `code/Game/{Dialog,Entity,Game,Object,Tutorial}`. Small; can ride
+     (3) = **26 sites**, in `src/game/{Dialog,Entity,Game,Object,Tutorial}`. Small; can ride
      with B.
    - **D. CHECKPTR-DELETE (sonnet, independent of A-C, any time).** Delete the 4,700
      `fn_InternalBasePtr_CheckPtr(...)` call sites, then the macro, the typedef, the extern,
@@ -564,7 +564,7 @@ merge cleanly.
      `BANISHED_CHECKPTR_STATIC_NOP`. **THE ONE RULE:** the macro's non-perf form evaluates its
      argument (`((void)(p))`), so a site whose argument has a SIDE EFFECT must keep the
      expression — audit every argument that is not a plain `&x`, `x`, a cast or a field read,
-     and list them in the report. Touches every `code/Game/<Module>` and `standalone/`, so it
+     and list them in the report. Touches every `src/game/<Module>` and `standalone/`, so it
      must not overlap A-C in time: **run D after B and C have merged**, or hand it the same
      file sets in sequence.
    - **E. serializer callers — NOT SCHEDULED.** The 159 `fn_ExternalPtr_*Serialize*` /
@@ -579,11 +579,11 @@ merge cleanly.
    themselves, where bare names are intended. **The other 18 currently contain no bare
    Object-family type token inside the block — the hazard is latent, and the rule is that it
    stays that way: inside `namespace Object`, always spell the POD `RtObject::X`.** The watch
-   list: `code/Game/Component/{citizenaicomponent,citizencomponent,pickingcomponent}.cpp`,
-   `code/Game/Dialog/{dialog_exe_helpers,toolui}.cpp`,
-   `code/Game/Game/{construction_force_harness,gameupdateloop,professionlist}.cpp`,
-   `code/Game/Object/factory_registration.{h,cpp}`, `code/Game/Player/edittool.cpp`,
-   `code/Game/Work/{gatherrawmaterials,marketwork,work_base_reimpl}.cpp`,
+   list: `src/game/Component/{citizenaicomponent,citizencomponent,pickingcomponent}.cpp`,
+   `src/game/Dialog/{dialog_exe_helpers,toolui}.cpp`,
+   `src/game/Game/{construction_force_harness,gameupdateloop,professionlist}.cpp`,
+   `src/game/Object/factory_registration.{h,cpp}`, `src/game/Player/edittool.cpp`,
+   `src/game/Work/{gatherrawmaterials,marketwork,work_base_reimpl}.cpp`,
    `engine/funcs/engine_funcs.cpp`, `runtime/src/object/external_ptr_serialize.cpp`,
    `runtime/src/object/internal.cpp`,
    `runtime/src/object/internal_ptr_array_serialize.cpp`.

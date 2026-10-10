@@ -36,7 +36,7 @@ namespace RtGraphics {
 
 // ============================================================================
 // Graphics::Particle — 0x48 bytes KNOWN (the base class only; subclasses such
-// as Tornado, which is already ported in code/Game/Game/tornado.cpp, add
+// as Tornado, which is already ported in src/game/Game/tornado.cpp, add
 // their own fields after it -- tornado.cpp's own comment confirms "Tornado
 // (size 0x90) extends Graphics::Particle").
 //

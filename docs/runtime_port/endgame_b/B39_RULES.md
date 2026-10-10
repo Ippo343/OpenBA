@@ -30,7 +30,7 @@ alone is 68 minted classes. Plan on three waves of parallel blocks, not one.
   and `tools/rt_mint_retired/`); `B39_FILEMAP.md` §1 by `b39_session/filemap.py` (1,875 files, 0 unassigned,
   0 twice). Re-run both before a wave is launched; the rules below are the authority, the scripts their form.
 - D6's pre-`Factory::Startup` readers: read statically from the boot path (`standalone/main.cpp:1398-1573`,
-  `code/Game/Game/game_main.cpp:413-454`, `runtime/src/engine/engine_lifecycle.cpp:540-592`); not run (§5).
+  `src/game/Game/game_main.cpp:413-454`, `runtime/src/engine/engine_lifecycle.cpp:540-592`); not run (§5).
 - The pilot (§7) built and unit-tested every mechanism it claims; it did NOT run the game (the coordinator
   gates it).
 
@@ -944,7 +944,7 @@ map, briefs; fast-forwarded to main) → 31 merges, each gated by the coordinato
 | 3 | a1750148 | UI-B (W1): 12 widget pairs |
 | 4 | e564f680 | UI-A (W1): 15 widget pairs |
 | 5 | d0acb883 | IO (W1): encodings, streams, PackageFile |
-| 6 | 96cba89a | C3 (caller batch): code/Game/Work cells |
+| 6 | 96cba89a | C3 (caller batch): src/game/Work cells |
 | 7 | 9e3e765e | ENG (W1): Achievement ×4, Audio, Collision2D, PointList; 9 singletons |
 | 8 | 3557ba2f | C2: Component i–z cells |
 | 9 | a2abb993 | C1: Component a–h cells |
@@ -1011,8 +1011,8 @@ Handed in by the blocks as left:
 - The five non-type-id cells 0x1401c3dd8 / 3de0 / 3de8 (singleton cells) and 0x1401c22d0 / 23d0 (tables): 31 code
   lines, registry teardown.
 - Four `DEFINE_EXE_VTABLE` lines with readers; ~98 retail vtable ADDRESS constants in `engine/types/ui` and
-  `code/Game/*/…Addr` namespaces (documentation, 0 readers).
-- Found at the close, not fixed (not scaffolding): `code/Game/Dialog/spritecaptureui.cpp:200` reads the retail
+  `src/game/*/…Addr` namespaces (documentation, 0 readers).
+- Found at the close, not fixed (not scaffolding): `src/game/Dialog/spritecaptureui.cpp:200` reads the retail
   `.rdata` string at 0x14015d424 as a raw pointer (`".rsc"`) — in the standalone exe that address is our own image;
   the sprite-capture dev tool's save path would read garbage.
 

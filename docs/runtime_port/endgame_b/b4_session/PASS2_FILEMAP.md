@@ -74,108 +74,108 @@ coordinator before editing.
 
 | header | owner | waiting casts (block: n) | blockers |
 |---|---|---|---|
-| `code/Game/Entity/CitizenBehavior.h` | `ENT` | ENT: 62, DLG-3: 21, COMP-8: 20, DLG-2: 13, CIT-4: 11 | NOCLASS:CitizenBehavior bucket tree node (+0x100/+0x160, 0x38 bytes) 37; NOCLASS:PathGraph pair cache (m_pairs / m_bstRoot node: 0x28 BST nodes, int pairs) 33; NOCLASS:CitizenBehavior profession/zone BST node (0x38 bytes, key at [0], L/R at [4]/[5]) 31 |
-| `code/Game/Game/WorkSchedulerNodes.h` | `CAI-4` | CAI-4: 95 | NOCLASS:WorkCandidateTree node (0x30) 95 |
-| `code/Game/Work/ClearArea.h` | `WORK-1` | WORK-1: 85 | FIELD:ClearArea::field_48+field_58 82; FIELD:ClearArea::field_70 3 |
+| `src/game/Entity/CitizenBehavior.h` | `ENT` | ENT: 62, DLG-3: 21, COMP-8: 20, DLG-2: 13, CIT-4: 11 | NOCLASS:CitizenBehavior bucket tree node (+0x100/+0x160, 0x38 bytes) 37; NOCLASS:PathGraph pair cache (m_pairs / m_bstRoot node: 0x28 BST nodes, int pairs) 33; NOCLASS:CitizenBehavior profession/zone BST node (0x38 bytes, key at [0], L/R at [4]/[5]) 31 |
+| `src/game/Game/WorkSchedulerNodes.h` | `CAI-4` | CAI-4: 95 | NOCLASS:WorkCandidateTree node (0x30) 95 |
+| `src/game/Work/ClearArea.h` | `WORK-1` | WORK-1: 85 | FIELD:ClearArea::field_48+field_58 82; FIELD:ClearArea::field_70 3 |
 | `runtime/types/object/TypeInfo.h` | `R-OBJ` | R-OBJ: 50, R-COLL: 7, R-UI-1: 3, R-SYS-2: 1 | NOCLASS:TypeRecord at AVL node +8 18; NOCLASS:Factory/InternalFactory/PathStack AVL set nodes 14; FIELD:RtObject::BaseTypeInfo::factoryFn/inPlaceFactoryFn 8 |
 | `runtime/types/graphics/GraphicsMesh.h` | `R-COLL` | R-COLL: 29, R-GFX-1: 23, R-UI-3: 3, R-GFX-2: 3, R-UI-4: 1 | NOCLASS:GraphicsMesh::TriangleList element (0xb0) 29; FIELD:Video::*::deviceData/platformData 17; FIELD:GraphicsMesh::_detailLevels 10 |
 | `runtime/types/ui/Element.h` | `R-UI-2` | R-UI-2: 20, R-UI-3: 14, R-UI-1: 10, R-UI-4: 5, SA: 5 | FIELD:UI::Element::_border 43; FIELD:UI::Element::_name 5; FIELD:Element::_description 4 |
-| `code/Game/Component/HighlightComponent.h` | `PLAYER` | PLAYER: 54, COMP-4: 1 | FIELD:HighlightComponent::fieldF8 36; H5:HighlightComponent::edgeMeshInstance 18; H5:HighlightComponent::edgeMeshInstance (embedded EdgeMeshInstance raw) 1 |
+| `src/game/Component/HighlightComponent.h` | `PLAYER` | PLAYER: 54, COMP-4: 1 | FIELD:HighlightComponent::fieldF8 36; H5:HighlightComponent::edgeMeshInstance 18; H5:HighlightComponent::edgeMeshInstance (embedded EdgeMeshInstance raw) 1 |
 | `runtime/src/collection/set_avl.h` | `R-COLL` | R-COLL: 51 | NOCLASS:AVL node families (TypeNode 0x50, String-pair 0x30, Filename 0x30) element bytes 51 |
 | `runtime/types/io/Modification.h` | `R-IO` | R-IO: 39, R-COLL: 6 | FIELD:RtIO::ModArray::data 28; H5:Modification::files/bytes/ints arrays 11; NOCLASS:Modification file-record {uint32, External*, Filename} 6 |
 | `runtime/types/ui/UserInterface.h` | `R-UI-4` | R-UI-4: 31, DLG-2: 5, TUT: 4, DLG-1: 1, R-UI-1: 1 | FIELD:UI::DialogInstance::_ui / UserInterface list element 25; FIELD:UserInterface::dialogs list element 10; FIELD:UI::UserInterface::_audioScene 4 |
-| `code/Game/Work/exe_bodies.h` | `GAME-2` | GAME-2: 40 | NOCLASS:work-tree-node 40 |
-| `code/Game/Component/exe_bodies.h` | `CIT-2` | CIT-2: 37 | NOCLASS:QuadtreeWalker records (0x24) 37 |
-| `code/Game/Component/StateMachineComponent.h` | `COMP-3` | COMP-3: 12, COMP-2: 11, COMP-6: 4, COMP-7: 4, COMP-8: 3 | NOCLASS:StateMachine 35 |
-| `code/Game/Game/PlayerController.h` | `GAME-2` | GAME-2: 14, DLG-2: 6, PLAYER: 4, SA: 4, GAME-3: 3 | H5:PlayerController::camera 31 |
-| `code/Game/Player/EditTool.h` | `SA` | SA: 16, PLAYER: 8, DLG-1: 6 | FIELD:EditTool::entityRef 30 |
-| `code/Game/Game/Map.h` | `DLG-1` | DLG-1: 14, WORK-1: 7, COMP-4: 2, ACT-2: 2, GAME-2: 2 | NOCLASS:Map tile AVL node (+0x30 grid) 12; FIELD:Map::regionPairCache 10; H5:Map::pickingScene (embedded Picking::Scene raw bytes) 2 |
+| `src/game/Work/exe_bodies.h` | `GAME-2` | GAME-2: 40 | NOCLASS:work-tree-node 40 |
+| `src/game/Component/exe_bodies.h` | `CIT-2` | CIT-2: 37 | NOCLASS:QuadtreeWalker records (0x24) 37 |
+| `src/game/Component/StateMachineComponent.h` | `COMP-3` | COMP-3: 12, COMP-2: 11, COMP-6: 4, COMP-7: 4, COMP-8: 3 | NOCLASS:StateMachine 35 |
+| `src/game/Game/PlayerController.h` | `GAME-2` | GAME-2: 14, DLG-2: 6, PLAYER: 4, SA: 4, GAME-3: 3 | H5:PlayerController::camera 31 |
+| `src/game/Player/EditTool.h` | `SA` | SA: 16, PLAYER: 8, DLG-1: 6 | FIELD:EditTool::entityRef 30 |
+| `src/game/Game/Map.h` | `DLG-1` | DLG-1: 14, WORK-1: 7, COMP-4: 2, ACT-2: 2, GAME-2: 2 | NOCLASS:Map tile AVL node (+0x30 grid) 12; FIELD:Map::regionPairCache 10; H5:Map::pickingScene (embedded Picking::Scene raw bytes) 2 |
 | `runtime/types/io/Persistence.h` | `R-IO` | R-IO: 18, R-SYS-1: 10, R-SYS-2: 1 | FIELD:Configuration/Persistence::settings map root (void*) 26; H5:Persistence::blockDescData/blockPtrData 2; H5:Persistence::_workerVtable 1 |
 | `runtime/types/ui/DialogInstance.h` | `R-UI-4` | R-UI-4: 27, R-UI-1: 2 | FIELD:UI::DialogInstance::_ui / UserInterface list element 27; FIELD:UI::DialogInstance::_userData 2 |
-| `code/Game/Component/ComponentDescription.h` | `DLG-3` | DLG-3: 16, DLG-1: 11 | FIELD:ComponentDescription::_subDescs 27 |
-| `code/Game/Game/MapGenerator.h` | `GAME-3` | GAME-3: 10, DLG-2: 8, DLG-1: 4, GAME-4: 4, GAME-1: 1 | H5:ExternalRef::strPtr 13; H5:MapGenerator::_field20 12; FIELD:ExternalRef::resolved 2 |
-| `code/Game/Component/CitizenComponent.h` | `CIT-4` | CIT-4: 16, ACT-1: 4, ACT-2: 3, CIT-2: 1, CIT-1: 1 | FIELD:CitizenComponent::Time-members 9; FIELD:CitizenComponent::consumedTypes 9; H5:CitizenComponent::meshInstance 6 |
+| `src/game/Component/ComponentDescription.h` | `DLG-3` | DLG-3: 16, DLG-1: 11 | FIELD:ComponentDescription::_subDescs 27 |
+| `src/game/Game/MapGenerator.h` | `GAME-3` | GAME-3: 10, DLG-2: 8, DLG-1: 4, GAME-4: 4, GAME-1: 1 | H5:ExternalRef::strPtr 13; H5:MapGenerator::_field20 12; FIELD:ExternalRef::resolved 2 |
+| `src/game/Component/CitizenComponent.h` | `CIT-4` | CIT-4: 16, ACT-1: 4, ACT-2: 3, CIT-2: 1, CIT-1: 1 | FIELD:CitizenComponent::Time-members 9; FIELD:CitizenComponent::consumedTypes 9; H5:CitizenComponent::meshInstance 6 |
 | `runtime/types/video/Context.h` | `R-GFX-1` | R-GFX-1: 12, R-GFX-2: 3, R-SYS-2: 3, COMP-7: 2, R-UI-3: 2 | FIELD:Video::Context::void*-members 21; FIELD:Video::Context::_unknown20f0 (uint64_t index cursor) 2 |
-| `code/Game/Component/FireComponent.h` | `COMP-6` | COMP-6: 19, COMP-3: 2, COMP-4: 1 | NOCLASS:fire/ambient audio emitter record (+0x28 pos, +0x38 desc, +0x40 count) 21; NOCLASS:fire speed record (+0x10) 1 |
+| `src/game/Component/FireComponent.h` | `COMP-6` | COMP-6: 19, COMP-3: 2, COMP-4: 1 | NOCLASS:fire/ambient audio emitter record (+0x28 pos, +0x38 desc, +0x40 count) 21; NOCLASS:fire speed record (+0x10) 1 |
 | `runtime/types/ui/SpriteSheet.h` | `R-UI-3` | DLG-2: 13, DLG-1: 5, R-UI-3: 2, COMP-7: 1, R-UI-4: 1 | FIELD:SpriteSheet::m_field30 12; H5:SpriteSheet::m_textureName 6; FIELD:UI::SpriteSheet::m_field30 3 |
-| `code/Game/Dialog/EntityUI.h` | `ENT` | ENT: 21 | NOCLASS:EntityUI controller slots (+0x28 tool, tool+0x30 entity, entity+0x40 flags) 21 |
-| `code/Game/Game/WorkScheduler.h` | `COMP-8` | COMP-8: 13, ACT-1: 5, WORK-2: 1, WORK-3: 1 | NOCLASS:WorkScheduler goals-tree node (+0x08 value IBP, +0x18/+0x20 children) 13; FIELD:WorkSchedulerTree::root 4; FIELD:WorkScheduler::field_0x10 2 |
-| `code/Game/Component/CharacterComponent.h` | `WORK-3` | WORK-3: 15, ACT-1: 2, WORK-1: 2 | FIELD:CharacterComponent::field_0x58 16; FIELD:CharacterComponent::actions 2; FIELD:CharacterActionStack::message 1 |
+| `src/game/Dialog/EntityUI.h` | `ENT` | ENT: 21 | NOCLASS:EntityUI controller slots (+0x28 tool, tool+0x30 entity, entity+0x40 flags) 21 |
+| `src/game/Game/WorkScheduler.h` | `COMP-8` | COMP-8: 13, ACT-1: 5, WORK-2: 1, WORK-3: 1 | NOCLASS:WorkScheduler goals-tree node (+0x08 value IBP, +0x18/+0x20 children) 13; FIELD:WorkSchedulerTree::root 4; FIELD:WorkScheduler::field_0x10 2 |
+| `src/game/Component/CharacterComponent.h` | `WORK-3` | WORK-3: 15, ACT-1: 2, WORK-1: 2 | FIELD:CharacterComponent::field_0x58 16; FIELD:CharacterComponent::actions 2; FIELD:CharacterActionStack::message 1 |
 | `runtime/types/video/Device.h` | `R-GFX-1` | R-GFX-1: 10, R-UI-3: 3, R-GFX-2: 2, R-UI-4: 1, R-SYS-2: 1 | FIELD:Video::*::deviceData/platformData 17; FIELD:Video::Device::gap50 1 |
 | `runtime/types/system/Configuration.h` | `R-SYS-1` | R-SYS-1: 10, R-IO: 8 | FIELD:Configuration/Persistence::settings map root (void*) 18 |
 | `runtime/types/graphics/Geometry.h` | `R-GFX-1` | R-GFX-1: 14, R-GFX-2: 2, COMP-7: 1 | FIELD:RtGraphics::ExternalPtrHandle::p 16; FIELD:Graphics::Geometry transform pair (declared as two Transforms) 1 |
-| `code/Game/Game/WorldGeometry.h` | `GAME-2` | GAME-2: 10, ACT-1: 4, PLAYER: 2, TUT: 1 | H5:WorldGeometry::_arrays 12; FIELD:WorldGeometry::_arrays 3; FIELD:WorldGeometry::_dirtyTreeRoot 1 |
+| `src/game/Game/WorldGeometry.h` | `GAME-2` | GAME-2: 10, ACT-1: 4, PLAYER: 2, TUT: 1 | H5:WorldGeometry::_arrays 12; FIELD:WorldGeometry::_arrays 3; FIELD:WorldGeometry::_dirtyTreeRoot 1 |
 | `runtime/types/video/Buffers.h` | `R-GFX-1` | R-GFX-1: 10, R-UI-3: 3, R-GFX-2: 2, R-UI-4: 1, R-SYS-2: 1 | FIELD:Video::*::deviceData/platformData 17 |
 | `runtime/types/ui/Dialog.h` | `R-UI-3` | R-UI-3: 10, R-UI-2: 3, R-UI-4: 2, R-UI-1: 2 | FIELD:UI::Sprite::spriteSheet 16; FIELD:UI::Dialog::_references 1 |
 | `runtime/types/ui/Sprite.h` | `R-UI-3` | R-UI-3: 10, R-UI-2: 3, R-UI-4: 2, R-UI-1: 1 | FIELD:UI::Sprite::spriteSheet 16 |
 | `runtime/types/ui/SpriteContext.h` | `R-UI-3` | R-UI-3: 10, R-UI-2: 3, R-UI-4: 2, R-UI-1: 1 | FIELD:UI::Sprite::spriteSheet 16 |
 | `runtime/types/engine/UpdateLoop.h` | `R-SYS-1 (no R reader; its namespace block)` | DLG-1: 14 | FIELD:MainLoop::_context 5; FIELD:DialogLoopT::_dialogExternal 5; FIELD:DialogLoaderLoopT::_dialogExternal 4 |
 | `runtime/types/io/Serializer.h` | `R-IO (no R reader; its namespace block)` | ENT: 10, COMP-7: 3 | NOCLASS:IO::Serializer/Stream internal words (+0x24 / +0x8C position walk) 10; NOCLASS:IO::Serializer internal words (+8 direction/state) 3 |
-| `code/Game/Component/TrackerComponent.h` | `DLG-1` | DLG-1: 10, ACT-1: 2 | NOCLASS:Tracker item array (16-byte entries) 10; FIELD:TrackerComponent::displayed+produced 2 |
-| `code/Game/Dialog/TownHallUI.h` | `DLG-2` | DLG-2: 12 | NOCLASS:TownHall row records (RatingGroup/ProfRow/ProdRow/InvEntry) 12 |
-| `code/Game/Game/TerrainGenerator.h` | `GAME-4` | GAME-4: 8, GAME-2: 4 | H5:TerrainGenerator::strings 7; H5:TerrainGenerator::_field80 5 |
+| `src/game/Component/TrackerComponent.h` | `DLG-1` | DLG-1: 10, ACT-1: 2 | NOCLASS:Tracker item array (16-byte entries) 10; FIELD:TrackerComponent::displayed+produced 2 |
+| `src/game/Dialog/TownHallUI.h` | `DLG-2` | DLG-2: 12 | NOCLASS:TownHall row records (RatingGroup/ProfRow/ProdRow/InvEntry) 12 |
+| `src/game/Game/TerrainGenerator.h` | `GAME-4` | GAME-4: 8, GAME-2: 4 | H5:TerrainGenerator::strings 7; H5:TerrainGenerator::_field80 5 |
 | `runtime/types/object/External.h` | `R-OBJ` | R-OBJ: 12 | NOCLASS:External ref/resource sets embedded at self+0x10/+0x20 8; NOCLASS:External dependency record {String,int32,int32} (0x10) 4 |
-| `code/Game/Game/MenuDialogLoopT.h` | `GAME-3` | GAME-3: 10, DLG-1: 1 | H5:MenuDialogLoopT::arrays 8; FIELD:MenuDialogLoopT::_saveLoad 1; FIELD:MenuDialogLoopT::_dlcShip 1 |
-| `code/Game/Game/Toolbar.h` | `GAME-4` | GAME-4: 5, DLG-2: 3, TUT: 2 | FIELD:Toolbar::_field30/_field38 5; H5:Toolbar::strings 5 |
-| `code/Game/Dialog/CitizenUI.h` | `DLG-1` | DLG-1: 10 | H5:CitizenUI icon groups 10 |
+| `src/game/Game/MenuDialogLoopT.h` | `GAME-3` | GAME-3: 10, DLG-1: 1 | H5:MenuDialogLoopT::arrays 8; FIELD:MenuDialogLoopT::_saveLoad 1; FIELD:MenuDialogLoopT::_dlcShip 1 |
+| `src/game/Game/Toolbar.h` | `GAME-4` | GAME-4: 5, DLG-2: 3, TUT: 2 | FIELD:Toolbar::_field30/_field38 5; H5:Toolbar::strings 5 |
+| `src/game/Dialog/CitizenUI.h` | `DLG-1` | DLG-1: 10 | H5:CitizenUI icon groups 10 |
 | `runtime/src/object/external_path_stack.h` | `R-OBJ` | R-OBJ: 10 | NOCLASS:PathStack element {Filename,Filename} 10 |
-| `code/Game/Component/CitizenAIComponent.h` | `CIT-3` | CIT-3: 6, CAI-1: 3 | FIELD:CitizenAIComponent::Time-members 9 |
-| `code/Game/Component/BoatComponent.h` | `COMP-1` | COMP-1: 9 | FIELD:BoatComponent::waypointField (void*, Array<Vector3> header) 9 |
-| `code/Game/Entity/ComponentEntity.h` | `ENT` | ENT: 7, ACT-1: 1, GAME-2: 1 | FIELD:ComponentEntity::_externals (void*, holds a System::Time) 5; FIELD:ComponentEntity::_handle (category byte [3]) 2; FIELD:ComponentEntity::_entityList 2 |
+| `src/game/Component/CitizenAIComponent.h` | `CIT-3` | CIT-3: 6, CAI-1: 3 | FIELD:CitizenAIComponent::Time-members 9 |
+| `src/game/Component/BoatComponent.h` | `COMP-1` | COMP-1: 9 | FIELD:BoatComponent::waypointField (void*, Array<Vector3> header) 9 |
+| `src/game/Entity/ComponentEntity.h` | `ENT` | ENT: 7, ACT-1: 1, GAME-2: 1 | FIELD:ComponentEntity::_externals (void*, holds a System::Time) 5; FIELD:ComponentEntity::_handle (category byte [3]) 2; FIELD:ComponentEntity::_entityList 2 |
 | `runtime/types/graphics/AnimationGroup.h` | `R-COLL` | R-COLL: 5, R-GFX-2: 3, R-GFX-1: 1 | FIELD:AnimationGroup::_tags 5; NOCLASS:AnimationClip event / particle fields 3; FIELD:AnimationGroup::_clips 1 |
-| `code/Game/Component/ModelComponent.h` | `PLAYER` | PLAYER: 4, COMP-5: 2, ACT-1: 2 | FIELD:ModelComponent::_description 4; NOCLASS:Component +0x28 MeshInstance (ModelComponent child) 2; H5:ModelComponent::meshInstance 2 |
+| `src/game/Component/ModelComponent.h` | `PLAYER` | PLAYER: 4, COMP-5: 2, ACT-1: 2 | FIELD:ModelComponent::_description 4; NOCLASS:Component +0x28 MeshInstance (ModelComponent child) 2; H5:ModelComponent::meshInstance 2 |
 | `runtime/types/ui/GraphElement.h` | `R-UI-4` | R-UI-4: 7, R-UI-2: 1 | FIELD:UI::GraphElement::_seriesData 8 |
-| `code/Game/Component/BoatDescription.h` | `COMP-1` | COMP-1: 7 | NOCLASS:BoatDescription route-table entry (name String, +0x08 Vector3, +0x14 yaw) 7 |
+| `src/game/Component/BoatDescription.h` | `COMP-1` | COMP-1: 7 | NOCLASS:BoatDescription route-table entry (name String, +0x08 Vector3, +0x14 yaw) 7 |
 | `runtime/types/graphics/Camera.h` | `R-GFX-2` | R-GFX-2: 4, R-COLL: 3 | NOCLASS:RendererDrawGroup::items (3x Array<RendererDrawItem> at +0x1c0..0x1e0) 3; FIELD:RendererDrawable::_object 2; NOCLASS:RendererDrawGroup::items 2 |
-| `code/Game/Work/BuildRoad.h` | `WORK-1` | WORK-1: 6 | FIELD:BuildRoad::field_50 5; FIELD:BuildRoad::field_5c 1 |
+| `src/game/Work/BuildRoad.h` | `WORK-1` | WORK-1: 6 | FIELD:BuildRoad::field_50 5; FIELD:BuildRoad::field_5c 1 |
 | `runtime/types/ui/ElementDescription.h` | `R-UI-3` | R-UI-3: 6 | FIELD:UI::ElementDescription::InternalPtr<Element> slots 6 |
-| `code/Game/Action/PathSearch.h` | `COMP-2` | COMP-2: 5 | NOCLASS:BST node (int key, +0x18 left, +0x20 right) 5 |
-| `code/Game/Tutorial/TutorialStep.h` | `TUT` | TUT: 5 | H5:TutorialStep Strings/Arrays 5 |
-| `code/Game/Game/PlayerToolManager.h` | `PLAYER` | PLAYER: 5 | FIELD:PlayerToolManager::field_0x08 5 |
-| `code/Game/Game/Weather.h` | `GAME-2` | GAME-2: 3, GAME-1: 2 | NOCLASS:weather-effect-record 3; H5:Weather::emitters 2 |
+| `src/game/Action/PathSearch.h` | `COMP-2` | COMP-2: 5 | NOCLASS:BST node (int key, +0x18 left, +0x20 right) 5 |
+| `src/game/Tutorial/TutorialStep.h` | `TUT` | TUT: 5 | H5:TutorialStep Strings/Arrays 5 |
+| `src/game/Game/PlayerToolManager.h` | `PLAYER` | PLAYER: 5 | FIELD:PlayerToolManager::field_0x08 5 |
+| `src/game/Game/Weather.h` | `GAME-2` | GAME-2: 3, GAME-1: 2 | NOCLASS:weather-effect-record 3; H5:Weather::emitters 2 |
 | `runtime/types/io/FileSystem.h` | `R-IO` | R-IO: 3, R-COLL: 2 | H5:FileSystem::_packfiles 3; NOCLASS:PackageFile priority view (SortByKey70) 2 |
-| `code/Game/Component/DiseaseDescription.h` | `COMP-3` | COMP-3: 4 | NOCLASS:Disease emitter geometry array (0x18 stride, 0x28 desc elems) 4 |
-| `code/Game/Game/Minimap.h` | `GAME-1` | GAME-1: 2, GAME-3: 2 | H5:Minimap::terrainPixels 2; H5:PlayerController::camera 2 |
-| `code/Game/Game/force_work.h` | `GAME-1` | GAME-1: 4 | NOCLASS:ForceWork-record 4 |
-| `code/Game/Game/ClimateGenerator.h` | `GAME-1` | GAME-1: 3, GAME-4: 1 | H5:ClimateGenerator::_field28 2; H5:ClimateGenerator::_climateData 2 |
-| `code/Game/Game/Disease.h` | `GAME-1` | GAME-1: 4 | H5:Disease::_name 4 |
+| `src/game/Component/DiseaseDescription.h` | `COMP-3` | COMP-3: 4 | NOCLASS:Disease emitter geometry array (0x18 stride, 0x28 desc elems) 4 |
+| `src/game/Game/Minimap.h` | `GAME-1` | GAME-1: 2, GAME-3: 2 | H5:Minimap::terrainPixels 2; H5:PlayerController::camera 2 |
+| `src/game/Game/force_work.h` | `GAME-1` | GAME-1: 4 | NOCLASS:ForceWork-record 4 |
+| `src/game/Game/ClimateGenerator.h` | `GAME-1` | GAME-1: 3, GAME-4: 1 | H5:ClimateGenerator::_field28 2; H5:ClimateGenerator::_climateData 2 |
+| `src/game/Game/Disease.h` | `GAME-1` | GAME-1: 4 | H5:Disease::_name 4 |
 | `runtime/types/graphics/Mesh.h` | `R-GFX-1` | R-GFX-1: 2, R-GFX-2: 2 | H5:MeshInstance::_animation 4 |
 | `runtime/types/ui/ComboElement.h` | `R-UI-1` | R-UI-4: 2, R-UI-1: 2 | FIELD:UI::ComboElement::_openDialog 3; H5:ComboElement::_sprites 1 |
 | `runtime/types/engine/MainLoop.h` | `R-SYS-1 (no R reader; its namespace block)` | SA: 4 | FIELD:MainLoopCallback::_func 4 |
-| `code/Game/Component/ParticleComponent.h` | `COMP-7` | COMP-7: 3 | NOCLASS:Tornado ParticleComponent emitter array (instance / +0x7c) 3 |
-| `code/Game/Dialog/EventLogUI.h` | `DLG-1` | DLG-1: 3 | H5:EventLogUI::displayTextData 3 |
-| `code/Game/Tutorial/TutorialSetupDialog.h` | `TUT` | TUT: 3 | H5:TutorialSetupDialog Strings/Arrays 3 |
-| `code/Game/Action/PathAvl.h` | `PLAYER` | PLAYER: 3 | NOCLASS:PathSegment in AvlNode28 element 3 |
-| `code/Game/Component/CreateFencedDescription.h` | `PLAYER` | PLAYER: 3 | FIELD:CreateFencedDescription::_refs 3 |
-| `code/Game/Game/MenuScene.h` | `GAME-3` | GAME-3: 3 | H5:PlayerController::camera 2; FIELD:MenuScene::_sunLight 1 |
+| `src/game/Component/ParticleComponent.h` | `COMP-7` | COMP-7: 3 | NOCLASS:Tornado ParticleComponent emitter array (instance / +0x7c) 3 |
+| `src/game/Dialog/EventLogUI.h` | `DLG-1` | DLG-1: 3 | H5:EventLogUI::displayTextData 3 |
+| `src/game/Tutorial/TutorialSetupDialog.h` | `TUT` | TUT: 3 | H5:TutorialSetupDialog Strings/Arrays 3 |
+| `src/game/Action/PathAvl.h` | `PLAYER` | PLAYER: 3 | NOCLASS:PathSegment in AvlNode28 element 3 |
+| `src/game/Component/CreateFencedDescription.h` | `PLAYER` | PLAYER: 3 | FIELD:CreateFencedDescription::_refs 3 |
+| `src/game/Game/MenuScene.h` | `GAME-3` | GAME-3: 3 | H5:PlayerController::camera 2; FIELD:MenuScene::_sunLight 1 |
 | `runtime/types/collection/Collection.h` | `R-COLL` | R-COLL: 3 | NOCLASS:Set node/key view of erased node element 3 |
 | `runtime/types/ui/String.h` | `R-UI-3` | R-UI-3: 3 | FIELD:UI::String::table 3 |
-| `code/Game/Component/ControllerComponent.h` | `COMP-7` | COMP-7: 2 | FIELD:ControllerComponent::Controller::_data08/_data10 (void*) 2 |
-| `code/Game/Dialog/UpgradeUIConfig.h` | `DLG-3` | DLG-3: 2 | FIELD:UpgradeUIConfig::_target 2 |
+| `src/game/Component/ControllerComponent.h` | `COMP-7` | COMP-7: 2 | FIELD:ControllerComponent::Controller::_data08/_data10 (void*) 2 |
+| `src/game/Dialog/UpgradeUIConfig.h` | `DLG-3` | DLG-3: 2 | FIELD:UpgradeUIConfig::_target 2 |
 | `runtime/types/ui/SpriteCapture.h` | `R-UI-3` | R-UI-3: 2 | H5:SpriteCapture::_sprites 2 |
 | `runtime/types/video/ImageBuffer.h` | `R-GFX-1` | R-GFX-1: 2 | H5:ImageBuffer::levels 2 |
 | `runtime/src/object/external_set.h` | `R-OBJ` | R-OBJ: 2 | NOCLASS:ResourceEntry/ReferenceEntry set node element 2 |
 | `runtime/src/object/reference_set.h` | `R-OBJ` | R-OBJ: 2 | NOCLASS:ResourceEntry/ReferenceEntry set node element 2 |
 | `runtime/types/system/Filename.h` | `R-SYS-1` | R-SYS-1: 2 | H5:Filename-is-String 2 |
-| `code/Game/Dialog/NewGameDialog.h` | `SA` | SA: 2 | FIELD:g_StandaloneNewGameDialog 2 |
-| `code/Game/Component/GrowthComponent.h` | `COMP-4` | COMP-4: 1 | NOCLASS:growth variant accumulator (acc4) 1 |
-| `code/Game/Component/ClearAreaComponent.h` | `COMP-2` | COMP-2: 1 | NOCLASS:ClearArea resource list (+8 count) 1 |
-| `code/Game/Component/RawMaterialComponent.h` | `COMP-6` | COMP-6: 1 | NOCLASS:entity chain walk (void* entity chain) 1 |
-| `code/Game/Component/StatusIconComponent.h` | `COMP-7` | COMP-7: 1 | FIELD:StatusIconComponent::_geometry (billboard vptr test) 1 |
-| `code/Game/Component/FrustumOutlineElement.h` | `COMP-4` | COMP-4: 1 | FIELD:ParticleComponent/FrustumOutline camera (void*) 1 |
-| `code/Game/Work/ConsumeProduce.h` | `WORK-2` | WORK-2: 1 | FIELD:ConsumeProduce::field_48 1 |
-| `code/Game/Work/BuildStructure.h` | `WORK-1` | WORK-1: 1 | FIELD:BuildStructure::field_48 1 |
-| `code/Game/Component/ModelDescription.h` | `ACT-1` | ACT-1: 1 | FIELD:ModelDescription::_meshGroupCount 1 |
-| `code/Game/Component/CitizenDescription.h` | `ACT-1` | ACT-1: 1 | FIELD:CitizenDescription::_refs 1 |
-| `code/Game/Component/AnimalDescription.h` | `ACT-1` | ACT-1: 1 | FIELD:AnimalDescription::_refs 1 |
-| `code/Game/Component/CreateRemovalDescription.h` | `PLAYER` | PLAYER: 1 | FIELD:CreateRemovalDescription::_refs 1 |
-| `code/Game/Player/BridgeTool.h` | `PLAYER` | PLAYER: 1 | NOCLASS:Bridge path SegNode (0x18) 1 |
-| `code/Game/Component/CreateBridgeDescription.h` | `PLAYER` | PLAYER: 1 | FIELD:CreateBridgeDescription::_refs 1 |
-| `code/Game/Tutorial/Tutorial.h` | `TUT` | TUT: 1 | H5:Tutorial steps Array<void*> 1 |
-| `code/Game/Dialog/HelpUI.h` | `DLG-1` | DLG-1: 1 | H5:HelpUI::historyData 1 |
-| `code/Game/Dialog/TitleDescToolTipUI.h` | `DLG-2` | DLG-2: 1 | NOCLASS:tooltip user data (two Strings) 1 |
-| `code/Game/Game/GameUpdateLoop.h` | `GAME-2` | GAME-2: 1 | H5:GameUpdateLoop::field_0x1C 1 |
-| `code/Game/Game/EventLog.h` | `GAME-1` | GAME-1: 1 | H5:EventLogEntry 1 |
+| `src/game/Dialog/NewGameDialog.h` | `SA` | SA: 2 | FIELD:g_StandaloneNewGameDialog 2 |
+| `src/game/Component/GrowthComponent.h` | `COMP-4` | COMP-4: 1 | NOCLASS:growth variant accumulator (acc4) 1 |
+| `src/game/Component/ClearAreaComponent.h` | `COMP-2` | COMP-2: 1 | NOCLASS:ClearArea resource list (+8 count) 1 |
+| `src/game/Component/RawMaterialComponent.h` | `COMP-6` | COMP-6: 1 | NOCLASS:entity chain walk (void* entity chain) 1 |
+| `src/game/Component/StatusIconComponent.h` | `COMP-7` | COMP-7: 1 | FIELD:StatusIconComponent::_geometry (billboard vptr test) 1 |
+| `src/game/Component/FrustumOutlineElement.h` | `COMP-4` | COMP-4: 1 | FIELD:ParticleComponent/FrustumOutline camera (void*) 1 |
+| `src/game/Work/ConsumeProduce.h` | `WORK-2` | WORK-2: 1 | FIELD:ConsumeProduce::field_48 1 |
+| `src/game/Work/BuildStructure.h` | `WORK-1` | WORK-1: 1 | FIELD:BuildStructure::field_48 1 |
+| `src/game/Component/ModelDescription.h` | `ACT-1` | ACT-1: 1 | FIELD:ModelDescription::_meshGroupCount 1 |
+| `src/game/Component/CitizenDescription.h` | `ACT-1` | ACT-1: 1 | FIELD:CitizenDescription::_refs 1 |
+| `src/game/Component/AnimalDescription.h` | `ACT-1` | ACT-1: 1 | FIELD:AnimalDescription::_refs 1 |
+| `src/game/Component/CreateRemovalDescription.h` | `PLAYER` | PLAYER: 1 | FIELD:CreateRemovalDescription::_refs 1 |
+| `src/game/Player/BridgeTool.h` | `PLAYER` | PLAYER: 1 | NOCLASS:Bridge path SegNode (0x18) 1 |
+| `src/game/Component/CreateBridgeDescription.h` | `PLAYER` | PLAYER: 1 | FIELD:CreateBridgeDescription::_refs 1 |
+| `src/game/Tutorial/Tutorial.h` | `TUT` | TUT: 1 | H5:Tutorial steps Array<void*> 1 |
+| `src/game/Dialog/HelpUI.h` | `DLG-1` | DLG-1: 1 | H5:HelpUI::historyData 1 |
+| `src/game/Dialog/TitleDescToolTipUI.h` | `DLG-2` | DLG-2: 1 | NOCLASS:tooltip user data (two Strings) 1 |
+| `src/game/Game/GameUpdateLoop.h` | `GAME-2` | GAME-2: 1 | H5:GameUpdateLoop::field_0x1C 1 |
+| `src/game/Game/EventLog.h` | `GAME-1` | GAME-1: 1 | H5:EventLogEntry 1 |
 | `runtime/types/graphics/Material.h` | `R-COLL` | R-COLL: 1 | H5:MaterialConstant::_head 1 |
 | `runtime/types/graphics/AnimationState.h` | `R-GFX-1` | R-GFX-1: 1 | H5:AnimationState::tmpStorage 1 |
 | `runtime/types/ui/LabelElement.h` | `R-UI-4` | R-UI-4: 1 | FIELD:UI::LabelElement::_paramsData 1 |

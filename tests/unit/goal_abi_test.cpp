@@ -2,7 +2,7 @@
 // tests/unit/goal_abi_test.cpp — ENDGAME B.3.8 block GOAL (B38_RULES D1-D5, D8, B8-14)
 //
 // The ABI claims block GOAL makes for its exe classes, measured on the SHIPPED
-// class headers under code/Game/Goal/, code/Game/Tutorial/ and code/Game/Game/:
+// class headers under src/game/Goal/, src/game/Tutorial/ and src/game/Game/:
 //
 // PART A — LAYOUT. sizeof (= retail's create MemAlloc, B38_RULES section 1.3),
 //   alignof, and the field offsets.

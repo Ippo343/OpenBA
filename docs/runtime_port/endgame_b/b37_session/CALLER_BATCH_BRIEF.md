@@ -52,7 +52,7 @@ class today. Check the header AND that a definition exists (grep `Ns::Class::Mem
   the proved static type. Unproved receiver: leave, list.
 - `Picking` is called through EXE IMPORT SLOTS (`ResolveAddr(Module::Exe, 0x14015…)` + deref,
   mapped through `python tools/dispatch_slot_map.py`) and through `RtAddr<>(0x18…)` hex literals
-  in `code/Game/Component` and `code/Game/Player`: your sweep scans HEX LITERALS against
+  in `src/game/Component` and `src/game/Player`: your sweep scans HEX LITERALS against
   `standalone/rt_export_addrs.inc` and the PE import table from the start (B36_RULES 14.1). A
   name-anchored sweep finds nothing there.
 

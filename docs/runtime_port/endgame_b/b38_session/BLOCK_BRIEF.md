@@ -27,15 +27,15 @@ the two differ, this one wins.
    works), `INVENTORY_B.md` (dialogs, panels, loops, goals, tutorial, player),
    `SEAM_AND_FILEMAP.md` (§1 the RegisterExeAddr seam: which slot-body doors are reached by address
    and so stay; which vtable addresses are read back by address and by whom).
-7. THE PILOT — the worked example you imitate, on main: `code/Game/Object/exe_type.h`,
-   `code/Game/Component/{Component,ControllerComponent,Description,WellComponent,WellDescription}.h`,
+7. THE PILOT — the worked example you imitate, on main: `src/game/Object/exe_type.h`,
+   `src/game/Component/{Component,ControllerComponent,Description,WellComponent,WellDescription}.h`,
    `component.cpp`, `wellcomponent.cpp`, `welldescription.cpp`, `controller_state_table.h`,
    `tests/unit/exe_class_abi_test.cpp`; `B38_RULES.md` §7. The Runtime bases:
    `runtime/types/object/{Base,External,Internal}.h`, and for UI/Engine/Achievement/Graphics bases
    the headers under `runtime/types/<ns>/` (RB gives them real protected ctors, D1).
 
 ## The shape (per class, D10's order)
-1. Header `code/Game/<Dir>/<Class>.h` (the pilot's decision: the header lives with its `.cpp`, named
+1. Header `src/game/<Dir>/<Class>.h` (the pilot's decision: the header lives with its `.cpp`, named
    after the class). `class X : public <proved parent>`; same fields, same order, explicit padding
    kept; every `static_assert(offsetof)` kept, `sizeof` AND `alignof` added. Virtuals in RETAIL slot
    order, one line per slot with the retail address in the comment; `override` where the parent

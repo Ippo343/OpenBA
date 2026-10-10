@@ -136,19 +136,19 @@ Table: `data/E_floor_and_tests.tsv` (one row per file, 967 files). Script:
 |---:|---:|---|---:|---:|---|
 | 80 | 133 | standalone/redzone_alloc.cpp | 5 | 5 | runtime/src/system/allocator_win.cpp |
 | 35 | 119 | standalone/main.cpp (crash handler) | 5 | 24 | runtime/src/system/thread_win.cpp |
-| 28 | 28 | runtime/src/system/allocator.cpp | 5 | 234 | code/Game/Action/action_pf_avl.cpp |
-| 18 | 1003 | code/Game/Dialog/tradeui.cpp | 4 | 4 | runtime/types/system/String.h |
+| 28 | 28 | runtime/src/system/allocator.cpp | 5 | 234 | src/game/Action/action_pf_avl.cpp |
+| 18 | 1003 | src/game/Dialog/tradeui.cpp | 4 | 4 | runtime/types/system/String.h |
 | 18 | 456 | standalone/tool_harness.cpp | 4 | 4 | runtime/src/collection/introsort_msvc.h |
-| 17 | 915 | code/Game/Dialog/townhallui.cpp | 4 | 31 | runtime/src/audio/audio.cpp |
+| 17 | 915 | src/game/Dialog/townhallui.cpp | 4 | 31 | runtime/src/audio/audio.cpp |
 | 16 | 16 | standalone/sampler.cpp | 4 | 91 | runtime/src/graphics/wave27_lane_gfxbig.cpp |
-| 13 | 265 | code/Game/Game/goals_serialize.cpp | 4 | 51 | runtime/src/collection/avl_trees.cpp |
-| 11 | 11 | standalone/hw_watch.cpp | 4 | 136 | code/Game/Entity/componententity.cpp |
-| 11 | 372 | code/Game/Goal/statvaluedispatch.cpp | 3 | 40 | dx11/src/devicedata.cpp |
-| 9 | 71 | code/Game/Game/menuscene.cpp | 3 | 9 | runtime/src/collection/set_avl_pathid.cpp |
+| 13 | 265 | src/game/Game/goals_serialize.cpp | 4 | 51 | runtime/src/collection/avl_trees.cpp |
+| 11 | 11 | standalone/hw_watch.cpp | 4 | 136 | src/game/Entity/componententity.cpp |
+| 11 | 372 | src/game/Goal/statvaluedispatch.cpp | 3 | 40 | dx11/src/devicedata.cpp |
+| 9 | 71 | src/game/Game/menuscene.cpp | 3 | 9 | runtime/src/collection/set_avl_pathid.cpp |
 | 9 | 9 | standalone/loader_loop_stubs.cpp | 3 | 14 | runtime/src/io/filesystem_createfile_win.cpp |
-| 8 | 351 | code/Game/Dialog/professionui.cpp | 3 | 4 | runtime/src/audio/audio_stream_win.cpp |
+| 8 | 351 | src/game/Dialog/professionui.cpp | 3 | 4 | runtime/src/audio/audio_stream_win.cpp |
 | 6 | 18 | runtime/types/collection/Collection.h | 2 | 2 | runtime/src/crt/msvc_stricmp.cpp |
-| 6 | 132 | code/Game/Component/citizenai_actionctors.cpp (float bits) | 1 | 1 | runtime/types/object/VSlot.h |
+| 6 | 132 | src/game/Component/citizenai_actionctors.cpp (float bits) | 1 | 1 | runtime/types/object/VSlot.h |
 
 **Only 14 files are 100 % floor:**
 - runtime: allocator.cpp, allocator_win.cpp, crt/msvc_stricmp.cpp, types/object/VSlot.h,
@@ -367,7 +367,7 @@ Falls by test file:
   the 74 files, 123 casts. Its hand-in states the file's floor from this TSV; after the block, the
   file's count must equal that floor.
 - **standalone/.**
-  - The 4 game-logic files move to `code/Game/Game/` inside the block that owns MenuDialogLoopT and
+  - The 4 game-logic files move to `src/game/Game/` inside the block that owns MenuDialogLoopT and
     the LoaderLoops. The move itself is behaviour-neutral.
   - Each instrument file goes with the class it reads most:
     - tool_harness → the Player tools block.

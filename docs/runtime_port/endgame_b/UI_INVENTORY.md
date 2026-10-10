@@ -189,7 +189,7 @@ No `?_ParentTypeName@` byte-wise read was done this pass (that is step 6's Q2, t
   DialogInstance.h`): "Base class for all 22 Dialog Controllers in the exe" — a rare case where the
   header states the parent relationship in English rather than needing inference. The COUNT "22"
   in that comment is itself INFERRED/unverified by this pass (not cross-checked against
-  `code/Game/Dialog/*` file count).
+  `src/game/Dialog/*` file count).
 - `Dialog`, `DialogController`, `DialogControllerConfig`, `ComboDialog`, `ToolTipDialog` are
   presumed to form a small hierarchy under or beside `DialogInstance` — INFERRED from the "Dialog
   family" grouping in §1.3, not from a read `?_ParentTypeName@` string.
@@ -305,7 +305,7 @@ own resolution — NOT double-counted as a separate caller surface, just the res
 for the doors already listed), `standalone` 25, `code/Game` 16. `code/Game` breakdown (VERIFIED):
 Component 5, Dialog 3, Game 4, Player 2, Tutorial 2. Exactly **one** file caches a UI mangled
 export into a file-local static outside the doors table
-(`code/Game/Dialog/dialog_exe_helpers.cpp`, VERIFIED `grep -rlE "static[^;]*ResolveExport"`) — a
+(`src/game/Dialog/dialog_exe_helpers.cpp`, VERIFIED `grep -rlE "static[^;]*ResolveExport"`) — a
 much smaller file-local-cache population than Video/Graphics's 28 files, consistent with UI
 callers routing overwhelmingly through the `engine_funcs.h` global-door idiom (§3.1) rather than
 the by-name-cache idiom `B35_RULES.md` §7's row (f) measured for Video/Graphics.
@@ -351,26 +351,26 @@ site tree-wide (1,066 such calls exist anywhere in `code/Game`/`engine`/`standal
 | `standalone/reg_element_typeids.cpp` | 17 |
 | `standalone/address_registry.cpp` | 17 |
 | `standalone/reg_unreg_lane2.cpp` | 14 |
-| `code/Game/Dialog/tradeui.cpp` | 5 |
-| `code/Game/Dialog/toolbar_vtable_standalone.cpp` | 4 |
-| `code/Game/Dialog/helpui.cpp` | 4 |
-| `code/Game/Tutorial/tutorial_wave.cpp` | 3 |
-| `code/Game/Dialog/productionui.cpp` | 2 |
-| `code/Game/Dialog/optionsdialog.cpp` | 2 |
-| `code/Game/Dialog/controlui.cpp` | 2 |
-| `code/Game/Dialog/buildui.cpp` | 2 |
-| `code/Game/Component/nomadcomponent.cpp` | 2 |
+| `src/game/Dialog/tradeui.cpp` | 5 |
+| `src/game/Dialog/toolbar_vtable_standalone.cpp` | 4 |
+| `src/game/Dialog/helpui.cpp` | 4 |
+| `src/game/Tutorial/tutorial_wave.cpp` | 3 |
+| `src/game/Dialog/productionui.cpp` | 2 |
+| `src/game/Dialog/optionsdialog.cpp` | 2 |
+| `src/game/Dialog/controlui.cpp` | 2 |
+| `src/game/Dialog/buildui.cpp` | 2 |
+| `src/game/Component/nomadcomponent.cpp` | 2 |
 | (7 more files) | 1 each |
 
 **This confirms the task brief's prediction exactly**: exe-dispatch-slot resolution is a real,
-sizeable, code/Game/Dialog-concentrated caller idiom for UI that is invisible to any sweep
+sizeable, src/game/Dialog-concentrated caller idiom for UI that is invisible to any sweep
 anchored on the mangled-name string or on `fn_UI_`-prefixed globals. A step-6 caller batch over
-`code/Game/Dialog/*` MUST grep for `ResolveAddr(Module::Exe,` with hex literals, not just for
+`src/game/Dialog/*` MUST grep for `ResolveAddr(Module::Exe,` with hex literals, not just for
 `@UI@@` name strings.
 
 ### 3.6 (f) hand-inlined `(*(void***)p)[N]` vtable-slot calls — the largest raw hazard surface
 
-VERIFIED, scoped tightly to `code/Game/Dialog/*` (a directory that is uniformly UI-consuming, so
+VERIFIED, scoped tightly to `src/game/Dialog/*` (a directory that is uniformly UI-consuming, so
 this count does not carry step 5's "keyword-noisy, over-broad" caveat): **417 occurrences across
 39 files.** Top files:
 
@@ -392,7 +392,7 @@ single riskiest files for a hand-inlined-vtable hazard in the entire UI namespac
 Video/Graphics's entire (noisy, unanchored) 91-file estimate concentrated into two files here.
 **NOT VERIFIED** which specific UI vtable(s) each call targets (would need per-call-site reading,
 the way `B35_RULES.md`'s slot tables were built from actual bytes) — flagged as the single most
-valuable follow-up read before a `code/Game/Dialog` caller batch is sized.
+valuable follow-up read before a `src/game/Dialog` caller batch is sized.
 
 ### 3.7 Top-20 doors, combined ranking
 
@@ -401,9 +401,9 @@ individual-symbol counts for those two):
 
 1. `fn_Element_SetFlagsOnOff` — 144 calls
 2. `fn_Element_SetElementId` — 130 calls
-3. `code/Game/Dialog/tradeui.cpp` — 150 hand-inlined slot calls (file-level)
+3. `src/game/Dialog/tradeui.cpp` — 150 hand-inlined slot calls (file-level)
 4. `fn_Element_Child` — 90 calls
-5. `code/Game/Dialog/townhallui.cpp` — 95 hand-inlined slot calls (file-level)
+5. `src/game/Dialog/townhallui.cpp` — 95 hand-inlined slot calls (file-level)
 6. `fn_DialogInstance_FindElement` — 79 calls
 7. `fn_FindElement` — 73 calls
 8. `fn_TextElement_SetParameter` — 71 calls
@@ -415,7 +415,7 @@ individual-symbol counts for those two):
 14. `fn_Element_ChildCount` — 34 calls
 15. `fn_UIString_ToSystemString` — 28 calls
 16. `fn_Sprite_Ctor` — 26 calls
-17. `code/Game/Dialog/statusbarui.cpp` — 20 hand-inlined slot calls (file-level)
+17. `src/game/Dialog/statusbarui.cpp` — 20 hand-inlined slot calls (file-level)
 18. `fn_ComboElement_AddItem` — 24 calls
 19. `fn_LabelElement_SetSprite` — 22 calls
 20. `fn_FindComponent_Building` — 22 calls
@@ -431,16 +431,16 @@ fit the per-symbol ranking at all — a step-6 planner needs both views, not jus
 
 Only **one** confirmed live hex-literal vtable canonicalization was found this pass (VERIFIED,
 `grep -rnE "0x18015[0-9a-f]{4}|0x18016[0-9a-f]{4}"` across `code/Game`/`engine`/`standalone`,
-excluding binaries and `cutover_manifest.inc` data rows): `code/Game/Player/tool_base_toolui.cpp:
+excluding binaries and `cutover_manifest.inc` data rows): `src/game/Player/tool_base_toolui.cpp:
 136-142` — `ResolveAddr(Module::Runtime, 0x180156d70)` canonicalizes a `DialogInstance` vtable
-(the same site the step-5 brief already named). `code/Game/Component/statusicon_geometry.cpp:266`
+(the same site the step-5 brief already named). `src/game/Component/statusicon_geometry.cpp:266`
 also names a hex VA in this range but it is `Geometry`'s (Graphics namespace), not UI's, and is a
 comment, not a live call.
 
-This single hit is almost certainly an UNDER-count: §3.6 found 39 `code/Game/Dialog/*` files that
+This single hit is almost certainly an UNDER-count: §3.6 found 39 `src/game/Dialog/*` files that
 hand-build vtables via `(*(void***)p)[N]`, and the duplicate-POD grep in §6.1 below found explicit
 files named `dialog_controller_vtable.cpp`/`.h` and `mod_dialog_vtables.cpp` in
-`code/Game/Dialog/` — these almost certainly canonicalize or construct UI vtables **without** a
+`src/game/Dialog/` — these almost certainly canonicalize or construct UI vtables **without** a
 bare hex literal (e.g. via `ResolveExport`/`ResolveAddr` with a symbolic name, or via a constant
 defined elsewhere). **NOT VERIFIED** — a step-6 pass must read
 `dialog_controller_vtable.cpp/.h` and `mod_dialog_vtables.cpp` directly rather than trust a
@@ -474,8 +474,8 @@ dtor — but it was NOT enumerated file-by-file this pass.
    did for `dx11_backend_access.h`: check every field, not just one `sizeof`, before assuming the
    two trees can be collapsed or must both survive.
 2. **72 files** under `engine/types`, `code/Game`, `dx11` reference a `@UI@@` mangled name or a
-   `UI::*` type by name (VERIFIED, `grep -rl`) — concentrated in `code/Game/Dialog/*` and
-   `code/Game/Component/*`. This is the raw population a full caller sweep must eventually cover;
+   `UI::*` type by name (VERIFIED, `grep -rl`) — concentrated in `src/game/Dialog/*` and
+   `src/game/Component/*`. This is the raw population a full caller sweep must eventually cover;
    §3 above measured bindings, this is files-that-mention-UI-at-all (a looser, larger superset).
 3. **`UI::String.h` declares `struct UIString`, not `struct String`** (VERIFIED read) — the
    existing project memory `feedback_uistring_vs_sysstring.md` already documents this distinction
@@ -526,7 +526,7 @@ dtor — but it was NOT enumerated file-by-file this pass.
    UI files show them.
 10. **The retail-cited "22 Dialog Controllers in the exe"** (`DialogInstance.h`'s own banner, §1.5,
     §4) is the single biggest constraint candidate on which UI base classes may become abstract —
-    **NOT enumerated** file-by-file against `code/Game/Dialog/*` this pass (there are far more than
+    **NOT enumerated** file-by-file against `src/game/Dialog/*` this pass (there are far more than
     22 `*.cpp` files in that directory; which ones are genuine `DialogController` subclasses vs.
     plain dialog-content helper files was not sorted out).
 11. **Stale-README risk**: `runtime/src/ui/README.md`'s own status claims were NOT checked against
@@ -565,13 +565,13 @@ and (per §1.3) all 68 classes uniformly have a typeInfo row, unlike Video/Graph
 
 | block | scope | rationale |
 |---|---|---|
-| **0 — question pass (serial, one owner)** | retail-bytes read of all 68 vtables (slots, sizeof, `_ParentTypeName`) the way `B35_RULES.md` §0/§2 did; resolve the engine/types/ui duplicate-tree question (hazard 1); enumerate the 22 (INFERRED) exe `DialogController` subclasses in `code/Game/Dialog/*`; resolve the `widgets_layout.cpp`/`sprite.cpp` export/addr mismatch; the multiple-inheritance and threading checks (hazards 7, 8) | UI has had NO Q1-Q6-equivalent pass yet, unlike Video/Graphics when `B35_RULES.md` was written — this step starts one level further back |
+| **0 — question pass (serial, one owner)** | retail-bytes read of all 68 vtables (slots, sizeof, `_ParentTypeName`) the way `B35_RULES.md` §0/§2 did; resolve the engine/types/ui duplicate-tree question (hazard 1); enumerate the 22 (INFERRED) exe `DialogController` subclasses in `src/game/Dialog/*`; resolve the `widgets_layout.cpp`/`sprite.cpp` export/addr mismatch; the multiple-inheritance and threading checks (hazards 7, 8) | UI has had NO Q1-Q6-equivalent pass yet, unlike Video/Graphics when `B35_RULES.md` was written — this step starts one level further back |
 | **1 — `Element` + `ElementDescription` (the base pair, serial)** | `runtime/types/ui/{Element.h,ElementDescription.h}`, `runtime/src/ui/{element.cpp,element_bodies_b5.cpp,element_vtable.cpp,element_common.h,elementdescription_serialize.cpp,ui_operator_delete.cpp}` | highest caller-touching classes by far (§3.7: 398 calls on 4 doors alone); every leaf pair depends on this shape; must land before any leaf pair converts |
-| **2 — `Dialog`/`DialogInstance`/`DialogController`/`DialogControllerConfig` (serial, needs block 0's exe-subclass enumeration)** | `runtime/types/ui/{Dialog.h,DialogInstance.h}`, `runtime/src/ui/{dialog*.cpp,dialogcontrollerconfig.cpp,combodialog*.cpp,tooltipdialog.cpp}`, cross-check against `engine/types/ui/{DialogController.h,DialogInstance.h,Dialogs.h}` and every `code/Game/Dialog/*` file block 0 identifies as an exe subclass | `DialogInstance` is a stated base for ~22 exe subclasses (§4) — the single highest blast-radius class in the namespace if its layout moves |
+| **2 — `Dialog`/`DialogInstance`/`DialogController`/`DialogControllerConfig` (serial, needs block 0's exe-subclass enumeration)** | `runtime/types/ui/{Dialog.h,DialogInstance.h}`, `runtime/src/ui/{dialog*.cpp,dialogcontrollerconfig.cpp,combodialog*.cpp,tooltipdialog.cpp}`, cross-check against `engine/types/ui/{DialogController.h,DialogInstance.h,Dialogs.h}` and every `src/game/Dialog/*` file block 0 identifies as an exe subclass | `DialogInstance` is a stated base for ~22 exe subclasses (§4) — the single highest blast-radius class in the namespace if its layout moves |
 | **3 — the 27 leaf Description/Element pairs (fully parallel, one agent per pair or small cluster)** | e.g. `{border,button,check,clipregion,combo,container,documenttext,edit,graph,group,image,label,layout,list,number,numberedit,page,progress,radio,ribbon,scroll,slider,spinner,tab,table,text}{description,element}.{h,cpp}` | each pair has its own header, its own `.cpp` file(s), its own `?_typeInfo@` row, and (per §1.3) a uniform 100% typeInfo/vtable ratio — the cleanest, most parallel block this endgame has seen; `ComboElement`/`AnimatedImageElement` may need to travel with their `*Description` sibling if either one is split across an extra file (`comboelement.cpp` + no separate combo description file — VERIFY) |
 | **4 — Sprite/Font/text-layout family** | `runtime/types/ui/{Sprite.h,SpriteCapture.h,SpriteContext.h,SpriteSheet.h,String.h,StringTable.h,Font.h}`, `runtime/src/ui/{sprite*.cpp,font.cpp,characterset.cpp,cursor.cpp,stringtable_*.cpp,textelement_cachetext.cpp}` | `UIString` (bare, no namespace — hazard 3) and the four other bare-struct headers live here; needs its own base-class read since none of these are confirmed `Object::External` the way the Description/Element family likely is |
 | **5 — `UserInterface` + widgets (owner-retained, non-polymorphic root)** | `runtime/types/ui/UserInterface.h`, `runtime/src/ui/{userinterface*.cpp,widgets_input.cpp,widgets_layout.cpp,widget_common.h}` | the closest UI analogue of Video's `Device`/`Context` — a big non-polymorphic singleton-shaped root with many satellite files; likely the highest caller-traffic single class by `engine_funcs.h` calls (`fn_UI_CloseDialog` alone is 42; `UserInterface::Update`/`Draw` are on the main-loop hot path per their own comments in `engine_funcs.cpp`) |
-| **6 — Caller batches, by directory, AFTER blocks 1-5** | `code/Game/Dialog/*` split by the §3.6 hand-inlined-vtable-call ranking (`tradeui.cpp`+`townhallui.cpp` alone are 59% of the raw hazard surface and should probably be their OWN batch, not bundled with the 37 smaller files); then `code/Game/Component/*`, `code/Game/Player/*`, `code/Game/Tutorial/*` | mirrors `B35_RULES.md` §7's directory-partition approach; UI callers are dominated by the `engine_funcs.h` global-door idiom (§3.1, unlike Video/Graphics's by-name-cache idiom) AND by exe-dispatch-slot resolution (§3.5) AND by hand-inlined vtable calls (§3.6) simultaneously — three different mechanical conversion shapes in the SAME directory, which is new for this endgame |
+| **6 — Caller batches, by directory, AFTER blocks 1-5** | `src/game/Dialog/*` split by the §3.6 hand-inlined-vtable-call ranking (`tradeui.cpp`+`townhallui.cpp` alone are 59% of the raw hazard surface and should probably be their OWN batch, not bundled with the 37 smaller files); then `src/game/Component/*`, `src/game/Player/*`, `src/game/Tutorial/*` | mirrors `B35_RULES.md` §7's directory-partition approach; UI callers are dominated by the `engine_funcs.h` global-door idiom (§3.1, unlike Video/Graphics's by-name-cache idiom) AND by exe-dispatch-slot resolution (§3.5) AND by hand-inlined vtable calls (§3.6) simultaneously — three different mechanical conversion shapes in the SAME directory, which is new for this endgame |
 
 Blocks 1-5 are **not** confirmed disjoint by file (block 0's job, same caveat `B35_RULES.md` §12
 states for Video/Graphics) — in particular the `engine/types/ui/` duplicate tree (hazard 1) may
@@ -593,7 +593,7 @@ confirmed via `git status` that it wrote nothing); all `engine_funcs.h` UI door 
 counts and per-directory breakdowns; the 205-slot UI dispatch-slot set via
 `tools/dispatch_slot_map.py` (read-only, uses `pefile` against the retail exe) and its intersection
 with 1,066 tree-wide `ResolveAddr(Module::Exe,...)` sites; the 417-occurrence hand-inlined-vtable
-count scoped to `code/Game/Dialog/*`; the one live hex-literal UI vtable canonicalization site
+count scoped to `src/game/Dialog/*`; the one live hex-literal UI vtable canonicalization site
 (`tool_base_toolui.cpp:136-142`); the `DialogInstance.h` "22 Dialog Controllers" banner claim (read
 as a quoted comment, not independently counted); the `engine/types/ui/DialogInstance.h` vs.
 `runtime/types/ui/DialogInstance.h` `sizeof` agreement (0xB8 both); the absence of a
@@ -604,7 +604,7 @@ retslot exports being virtual.
 relationship except the one `DialogInstance.h` states in English; whether the "53" class count in
 `ENDGAME.md` reconciles with this pass's 56 (Description+Element) or 68 (all vtable classes)
 figures; whether the `engine/types/ui/` duplicate tree agrees with `runtime/types/ui/` beyond the
-one `DialogInstance` `sizeof` spot-check; the exact set of `code/Game/Dialog/*` files that are
+one `DialogInstance` `sizeof` spot-check; the exact set of `src/game/Dialog/*` files that are
 genuine exe `DialogController` subclasses (the "22" count); multiple inheritance / secondary
 vptrs (not investigated at all); threading and device/loader-thread-equivalent hazards (not
 investigated at all); the precise target of any of the 417 hand-inlined vtable-slot calls; the

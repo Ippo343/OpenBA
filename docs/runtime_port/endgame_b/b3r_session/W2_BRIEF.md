@@ -8,7 +8,7 @@ check as much of it as they can.
 ## Order (serial merges; each gated alone)
 | block | content | after |
 |---|---|---|
-| **W2-EZ** | `engine/funcs/engine_funcs.{h,cpp}`, `EngineFuncsInit()` and its call, the remaining `engine/types` aliases; the bodies that live in `engine_funcs.cpp` MOVE to their module (`fn_ModDialog_ArrayPush58_CppImpl` -> `code/Game/Dialog/`, `Entity_FindComponentByExeTypeId` -> `code/Game/Entity/`), the dead IBPTree functions go | STORAGE |
+| **W2-EZ** | `engine/funcs/engine_funcs.{h,cpp}`, `EngineFuncsInit()` and its call, the remaining `engine/types` aliases; the bodies that live in `engine_funcs.cpp` MOVE to their module (`fn_ModDialog_ArrayPush58_CppImpl` -> `src/game/Dialog/`, `Entity_FindComponentByExeTypeId` -> `src/game/Entity/`), the dead IBPTree functions go | STORAGE |
 | **W2-RT** | every `RegisterRuntimeExport` / `RegisterRuntimeAddr` line in `runtime/` and `dx11/`, the register functions, the `*PortInit()` functions that only register, `RuntimePortInit()`'s calls to them, `standalone/reg_rt_mirror16.cpp` | STORAGE (parallel with W2-EZ: disjoint files) |
 | **W2-EXE** | `standalone/reg_*.cpp`, `standalone/address_registry.{cpp,h}`, the `code/Game` Register functions, the dispatch slot cells, `tools/dispatch_slot_map.py` and its gate line | W2-EZ, W2-RT |
 | **W2-RES** | `standalone/resolve.h`, `resolve_standalone.cpp`, `runtime/funcs/rt_resolve_cache.cpp` (create `b3r_session/RESOLVE_CACHE_GONE` in the same commit), `RegisterRuntime*` / `RtPortLookup*` in `runtime/funcs/rt_port.h`, the registry instruments (`dlgctrl_route.cpp`, `scene_watch.cpp`'s probe, `[UnregCensus]`, `TraceExeBegin/End`), the per-file `enum class Module` copies, `runtime/src/collection/alloc_door.cpp`, `tests/unit/rt_port_stub.cpp`, the old REDZONE / ALLOC_STATS seats | W2-EXE |
@@ -80,7 +80,7 @@ check as much of it as they can.
   the slot wrappers OWN the cell storage. Each such function keeps its non-registering statements
   (renamed for what it now does if "Register" is no longer true), in the same place in the init order.
 - **Dead constants (R3) owed by W1**, deleted by the W2 block named: M1 113 unused `XAddr` constants
-  in 23 `code/Game/Work/*.h` headers and M2 12 in 10 `code/Game/Player/*.h` headers (W2-EXE;
+  in 23 `src/game/Work/*.h` headers and M2 12 in 10 `src/game/Player/*.h` headers (W2-EXE;
   `BuildRoadAddr::CtorParams` is a live row key until its row goes); M3 138 in
   `engine/types/ui/Panels.h` and `Dialogs.h` (W2-EZ); M4 the caller-less
   `AmbientEnvironmentComponent_InitFuncs()` and its declaration (W2-EXE).

@@ -109,7 +109,7 @@ aborts. First run: `[Dx11Seam] 84/84 slots ours, in 12 exe-owned vtables`.
 **No per-slot flags.** Every slot is unconditionally ours. While the DLL was
 mapped each registration carried a `BANISHED_DX11_*` name and a `defaultOn` bool,
 following the project's kill-switch convention (`the default-on table` in
-`code/Game/Component/component_factory_base.cpp`): a new slot started opt-in and
+`src/game/Component/component_factory_base.cpp`): a new slot started opt-in and
 graduated to default-on once verified in-game, after which the var was a `=0`
 kill switch. That convention needs somewhere to fall back *to*. With the original
 gone a declined registration would just be a null vtable entry, so the flags were

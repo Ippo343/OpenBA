@@ -360,7 +360,7 @@ Every other hit of that constant is a comment (`audio_stream_win.cpp` ×5,
 
 | site | what it builds | derived table stamped right after |
 |---|---|---|
-| `code/Game/Game/pathfinder_seed.cpp:142-148` | the pathfinder's Thread subclass, 0x1f8 bytes | exe **0x14015ef18**, by address (`ResolveAddr(Module::Exe, …)`, also read at `keystone_a_gamedtor.cpp:338`) |
+| `src/game/Game/pathfinder_seed.cpp:142-148` | the pathfinder's Thread subclass, 0x1f8 bytes | exe **0x14015ef18**, by address (`ResolveAddr(Module::Exe, …)`, also read at `keystone_a_gamedtor.cpp:338`) |
 | `runtime/src/engine/singleton_ctors.cpp:448-450` (`Ctor_Persistence`, retail 0x1800b8020) | the `System::Thread` **embedded at `IO::Persistence`+0x10** | **0x180155860**, by address, written over `this+0x10` |
 | `standalone/rt_data_mint.cpp:434-461` (`ConstructLoader`) | `Engine::Loader`'s static `_loader` | `??_7Loader@Engine@@6B@`, by NAME out of the mint table |
 | `runtime/src/audio/audio_stream_win.cpp:303-341` | `Audio::Stream`, a Thread subclass | its own, after the base stamp |
@@ -577,7 +577,7 @@ ordered IO. The one class where the receiver conversion alone rewrites callers i
 `keystone_a_zone`, `keystone_a_gamedtor`, `pathfinder_seed`, and `tornado.cpp` — which the
 inventory correctly deletes from the list, verified: **zero** `Thread@System@@` /
 `CriticalSection@System@@` hits in `tornado.cpp` today) reach it only through shape (2). Those
-files are `code/Game/**` and are **`b34-closing`'s until it lands**.
+files are `src/game/**` and are **`b34-closing`'s until it lands**.
 
 ---
 
@@ -710,7 +710,7 @@ argues the other way. **The decision is the coordinator's.**
 ## 7. Order of work for 4b, and what each commit may touch
 
 Receiver-side only until `b34-closing` reports the 4a closing pass merged. Until then
-`code/Game/**`, `engine/**`, `standalone/**` and `runtime/src/io/**` are **off limits**.
+`src/game/**`, `engine/**`, `standalone/**` and `runtime/src/io/**` are **off limits**.
 
 | # | commit | files |
 |---|---|---|

@@ -223,10 +223,10 @@ SaveLoad* RtSave_SaveLoad_Ctor(SaveLoad* self) {
 // `fn_MemFreeStatic` of the same pointer — i.e. these are real deletes of a
 // heap object, not a process-exit formality:
 //
-//   code/Game/Dialog/mainmenudialog.cpp:218  MainMenuDialog_ReturnToMenu, the
-//   code/Game/Dialog/mainmenudialog.cpp:226    no-game and in-game branches
-//   code/Game/Game/gameupdateloop.cpp:3140   GameUpdateLoop::Shutdown
-//   code/Game/Tutorial/tutorialui.cpp:81     tutorial teardown
+//   src/game/Dialog/mainmenudialog.cpp:218  MainMenuDialog_ReturnToMenu, the
+//   src/game/Dialog/mainmenudialog.cpp:226    no-game and in-game branches
+//   src/game/Game/gameupdateloop.cpp:3140   GameUpdateLoop::Shutdown
+//   src/game/Tutorial/tutorialui.cpp:81     tutorial teardown
 //
 // Quit-to-menu runs this. So at cutover it is not a symbol that "might" be
 // asked for -- attempt 14 recorded it as asked

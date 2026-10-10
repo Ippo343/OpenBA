@@ -5,7 +5,7 @@
 > [`docs/history/runtime_port/survey_exe_census.md`](../docs/history/runtime_port/survey_exe_census.md).
 
 ## Status Legend
-- `R` = Fully reimplemented in `engine/src/` or `code/Game/` (clean C++, registered in the standalone exe)
+- `R` = Fully reimplemented in `engine/src/` or `src/game/` (clean C++, registered in the standalone exe)
 - `~` = Partially decompiled / not yet reimplemented for standalone
 - `P` = Partially reimplemented (some methods ported, others not)
 - `-` = Not hooked (too small, abstract, or no need)

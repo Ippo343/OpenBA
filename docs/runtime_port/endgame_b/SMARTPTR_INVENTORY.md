@@ -124,10 +124,10 @@ Counts are file-level `grep -rl` hits (a rough vocabulary-reach proxy, not call
 counts) except the `fn_*` row, which counts occurrences of the identifiers.
 `code/` never touches `ExternalPtr<T>`/`InternalPtr<T>` as a live C++ type — every
 hit there is a **mangled-name string literal** passed to `ResolveExport`
-(`code/Game/Action/action_base_movedeps.cpp:98`,
-`code/Game/Dialog/dialog_exe_helpers.cpp:224`,
-`code/Game/Game/gameupdateloop.cpp:641,659`,
-`code/Game/Game/gameupdateloop_load.cpp:73,827`) — i.e. exe code calls a retail
+(`src/game/Action/action_base_movedeps.cpp:98`,
+`src/game/Dialog/dialog_exe_helpers.cpp:224`,
+`src/game/Game/gameupdateloop.cpp:641,659`,
+`src/game/Game/gameupdateloop_load.cpp:73,827`) — i.e. exe code calls a retail
 Runtime method whose PARAMETER happens to be `ExternalPtr<T>`, passed as 8 raw
 bytes; `code/` never constructs, copies, or destroys one. `engine_funcs.h` defines
 9+ distinct `fn_ExternalPtr_Serialize*` typedefs, one per resolved instantiation

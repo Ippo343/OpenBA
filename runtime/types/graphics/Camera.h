@@ -273,7 +273,7 @@
 //
 // RULE B5-7: nothing below adds a static initialiser, a lazy singleton or a
 // non-atomic first-call cache. `Camera`, `Renderer` and `Scene` are constructed
-// on the `Engine::Loader` thread (`code/Game/Game/gameupdateloop_load.cpp:570`,
+// on the `Engine::Loader` thread (`src/game/Game/gameupdateloop_load.cpp:570`,
 // `:986`, `:1090`) while the main thread is inside `Draw`.
 // ############################################################################
 

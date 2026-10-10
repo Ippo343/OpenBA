@@ -2,7 +2,7 @@
 // tests/unit/act_abi_test.cpp — ENDGAME B.3.8 block ACT (B38_RULES.md B8-14)
 //
 // The ABI claims of the Action family, measured on the SHIPPED HEADERS
-// (code/Game/Action/*.h):
+// (src/game/Action/*.h):
 //   PART A — layout: sizeof / alignof, every field offset the bodies read raw.
 //   PART B — slot order, read off pointers to VIRTUAL members (Itanium PMF =
 //            1 + vtable byte offset; adjustment 0 = single inheritance):

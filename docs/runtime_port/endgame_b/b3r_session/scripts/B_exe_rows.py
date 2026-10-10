@@ -57,8 +57,8 @@ HELPERS = {
 }
 # Addresses that reach a resolver from DATA (a table / switch row), read by hand.
 DATA_READERS = {
-    'code/Game/Tutorial/tutorialstep.cpp': 'table of exe serialize-helper addresses, resolved by index',
-    'code/Game/Component/citizenai_candidatelist.cpp': 'switch(state) -> addr -> ResolveAddr(Module::Exe, addr)',
+    'src/game/Tutorial/tutorialstep.cpp': 'table of exe serialize-helper addresses, resolved by index',
+    'src/game/Component/citizenai_candidatelist.cpp': 'switch(state) -> addr -> ResolveAddr(Module::Exe, addr)',
 }
 NOT_READERS = {  # image-base arithmetic / diagnostics / a test compare: not a door
     'standalone/redzone_alloc.cpp', 'standalone/sampler.cpp', 'standalone/resolve_standalone.cpp',

@@ -122,7 +122,7 @@ All 68 slot lists are in `B36_SLOTS.md` §1. The shapes:
    and `Construct` (B5-16's `ParticleSystem` trap, 27 times over).
 2. **`DialogInstance` and `DialogController` number the same-named virtuals DIFFERENTLY**:
    `OnOpened` is slot 4 on DialogInstance and slot 5 on DialogController (Controller has
-   `OnCreated` at 4). `code/Game/Dialog/dialog_controller_vtable.cpp`'s `kBaseSlots` (4..10) is
+   `OnCreated` at 4). `src/game/Dialog/dialog_controller_vtable.cpp`'s `kBaseSlots` (4..10) is
    the Controller numbering; `mod_dialog_vtables.cpp`'s comments (+0x20 OnOpened …) are the
    Instance numbering. Never copy one class's slot comments onto the other.
 3. `Element`'s slot 4 `ComputeSize` is PURE; every one of the 27 subclasses either overrides it
@@ -298,7 +298,7 @@ Report: `b36_session/POD_TREE_AUDIT.md`. Measured:
   `standalone/mouse_inject.cpp:128-130`). Four engine headers have ZERO includers:
   `engine/types/ui/Elements.h`, `engine/types/Descriptions.h`, `engine/types/DialogLoopT.h`,
   `engine/types/Dialogs.h` (the non-ui one, which duplicates 12 global names with different
-  members). `code/Game/Dialog/ui_dialogs.h` (24 TUs) and `ui_panels.h` (42 TUs) are the only live
+  members). `src/game/Dialog/ui_dialogs.h` (24 TUs) and `ui_panels.h` (42 TUs) are the only live
   doors to the engine-side dialog/panel PODs.
 - Inside `runtime/types/ui` three definitions of `Sprite` exist (`Sprite.h` bare, `ImageElement.h`
   `UI::Sprite`, `runtime/types/save/SaveLoad.h` `RtSave::Sprite` — same offsets, different names)
@@ -349,7 +349,7 @@ Report: `b36_session/POD_TREE_AUDIT.md`. Measured:
 
 ## 5. Q5 — THREADING
 
-- **The loader thread constructs UI.** `code/Game/Game/gameupdateloop_load.cpp:1009-1013`
+- **The loader thread constructs UI.** `src/game/Game/gameupdateloop_load.cpp:1009-1013`
   (`GameUpdateLoop_Load`, the `Engine::Loader` thread per B35_RULES §5.2) allocates 0x128 and
   calls `??0UserInterface@UI@@QEAA@XZ`; the same thread's resource loads construct every UI
   `External` (`Dialog`, `SpriteSheet`, `Font`, `StringTable`, `Cursor`, `CharacterSet`,
@@ -374,8 +374,8 @@ namespace, resolve it at global scope in the class's `.cpp` at registration time
 | (b) `ResolveExport("…@UI@@…")` | 155 | engine 114 (the globals' initialisers), standalone 25, code/Game 16 |
 | (c) `RT_EXPORT_ONCE("…@UI@@…")` | 184 | all inside `runtime/src/ui` (class blocks) |
 | (d) `ResolveAddr(Module::Runtime, 0x18…)` onto a UI address | 5 of 51 | — |
-| (e) exe dispatch slots: 205 exe import slots resolve to a UI export; `ResolveAddr(Module::Exe, 0x14015…)` hits | 49 | `engine_funcs.cpp` 45 (the same globals), `reg_element_typeids.cpp` 17, `address_registry.cpp` 17, `reg_unreg_lane2.cpp` 14, then `code/Game/Dialog` |
-| (f) hand-inlined `(*(void***)p)[N]` in `code/Game/Dialog` | **417** in 39 files | `tradeui.cpp` 150, `townhallui.cpp` 95 |
+| (e) exe dispatch slots: 205 exe import slots resolve to a UI export; `ResolveAddr(Module::Exe, 0x14015…)` hits | 49 | `engine_funcs.cpp` 45 (the same globals), `reg_element_typeids.cpp` 17, `address_registry.cpp` 17, `reg_unreg_lane2.cpp` 14, then `src/game/Dialog` |
+| (f) hand-inlined `(*(void***)p)[N]` in `src/game/Dialog` | **417** in 39 files | `tradeui.cpp` 150, `townhallui.cpp` 95 |
 
 **RULE B6-6.** UI callers are dominated by spelling (a) — the opposite of Video/Graphics. The
 caller batches therefore START from `engine/funcs/engine_funcs.cpp`'s 118 initialisers (find
@@ -431,7 +431,7 @@ Waves, because the leaves derive from the bases and `UserInterface` calls everyt
 | 2 | **C5** | `DocumentText`, `Graph`, `Progress`, `Ribbon`, `Slider`, `Spinner`, `Tab` | the fourteen pair files + `documenttext.cpp` + `tabelement_addtab.cpp` | — |
 | 2 | **E** | `UserInterface` | `runtime/types/ui/UserInterface.h`; `runtime/src/ui/{userinterface.cpp, userinterface_close.cpp, userinterface_dragstart.cpp, userinterface_draw.cpp, userinterface_frame.cpp, userinterface_hover.cpp, userinterface_showdialog.cpp, userinterface_standalone.cpp}` | B6-4.5 (by-value holder), B6-5 |
 | 3 | **fragments** | bodies of converted classes living in another block's file | `dialog.cpp` (ElementDescription ×6), `element.cpp` (ContainerElement), `tooltipdialog.cpp` (Element), `userinterface_hover.cpp` (DialogInstance), `widgets_layout.cpp` (Element + 8 leaves), `widgets_input.cpp` (8 leaves), `element_bodies_b5.cpp` (9 leaves), `ui_factory_wave28.cpp` (34 classes), `spritesheet_new.cpp`, `DescriptionsBatch1.h` (ten PODs → aliases) | one owner per side |
-| 4 | **callers** | round 1 by directory (`code/Game/Dialog` ×3, `tradeui.cpp`+`townhallui.cpp`, rest of `code/`, `engine`+`standalone`, `runtime/src` outside `ui`), round 2 | | B6-6 |
+| 4 | **callers** | round 1 by directory (`src/game/Dialog` ×3, `tradeui.cpp`+`townhallui.cpp`, rest of `code/`, `engine`+`standalone`, `runtime/src` outside `ui`), round 2 | | B6-6 |
 | 5 | **close** | `engine_funcs` zero-caller sweep by BINDING, dead caches, numbers, the step-close gate with the five dialog routes | | |
 
 Not a block's: `standalone/{reg_element_typeids,reg_unreg_lane2,address_registry}.cpp`,
@@ -566,7 +566,7 @@ Every block ran on its own worktree branch under `b36_session/BLOCK_BRIEF.md` (c
 | 2 | C1–C5, E | `b36-C1`…`b36-C5`, `b36-E` | the 27 leaf Element/Description pairs in B6-9 order; `UserInterface` (0x128, non-polymorphic, not trivially copyable) |
 | 3 | fragment F2 | `b36-F2` (4 commits) | `ElementDescription` members defined in `dialog.cpp` and its by-address `CreateInstance` callers made qualified member calls; `ContainerElement::SetOffsets` and `Element::GetToolTipString` defined in place; eight (then the last two) `DescriptionsBatch1.h` PODs made aliases of their classes (B6-4.4); C5's seven `CreateInstance` callers |
 | 3 | fragment F1 | `b36-F1` (2 commits) | the `widgets_input.cpp` / `widgets_layout.cpp` / `element_bodies_b5.cpp` door bodies became members of their classes; the TextDescription applier calls `ElementDescription::CreateInstance` as a member |
-| 4 | callers round 1 | `b36-K1` (townhallui, tradeui + helpers), `b36-K2` (the ~20 exe dialogs), `b36-K3` (the ~45 panel UIs in `code/Game/Dialog`), `b36-K4` (Tutorial, Player, Component, Entity, Game, standalone, `runtime/src/{engine,save}`) | `engine_funcs` door calls, `ResolveExport`/exe-slot/hand-inlined vtable calls onto UI members converted to member calls, each receiver a `// B.3.6 bridge` |
+| 4 | callers round 1 | `b36-K1` (townhallui, tradeui + helpers), `b36-K2` (the ~20 exe dialogs), `b36-K3` (the ~45 panel UIs in `src/game/Dialog`), `b36-K4` (Tutorial, Player, Component, Entity, Game, standalone, `runtime/src/{engine,save}`) | `engine_funcs` door calls, `ResolveExport`/exe-slot/hand-inlined vtable calls onto UI members converted to member calls, each receiver a `// B.3.6 bridge` |
 | 4 | callers round 2 | `b36-K1r2` (townhallui, tradeui), `b36-K3r2` (the K3 files again), K4's two follow-ups | the sites round 1 left for members that were defined on main only after that round's launch |
 | 5 | close | `b36-close` (this pass, commits 1–7) | below |
 

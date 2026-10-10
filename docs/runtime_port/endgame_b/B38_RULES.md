@@ -607,7 +607,7 @@ A compiler vtable has exactly the declared virtuals, so:
 
 ### D4 — Reflection: `DECLARE_EXE_TYPE` / `DEFINE_EXE_TYPE` over the FactoryRegistration list
 
-**Ruling (pilot, `code/Game/Object/exe_type.h`).** Step 8 does NOT move the exe classes to the Runtime's
+**Ruling (pilot, `src/game/Object/exe_type.h`).** Step 8 does NOT move the exe classes to the Runtime's
 `DECLARE_TYPE`/`DEFINE_TYPE` (a CRT-init `BaseTypeInfo` static): that would change WHEN and in WHAT ORDER each record
 enters `BaseTypeInfo::_firstTypeInfo`, which the pointer-free type table observes. Instead the class OWNS its
 `Object::FactoryRegistration` (`DEFINE_EXE_TYPE(Class, "Parent")` placed where the file's `REGISTER_TYPE` line was:
@@ -724,7 +724,7 @@ most of the B6-5 surface. Per-class state tables are built at static init (D6). 
 
 | # | bug (retail evidence) | owner |
 |---|---|---|
-| 1 | **LIVE WRONG STAMP.** `code/Game/Action/createnaturalresource.cpp:155` and `createrawmaterial.cpp:226` stamp `ResolveAddr(Exe, 0x14015f700)` as "the Action base vtable" in their scalar dtors; 0x14015f700 is slot 6 of `ResidenceUI`'s table 0x14015f6d0. Retail stamps **0x14015faa0** (`CreateNaturalResource_ScalarDtor` 0x140022240 store at 0x14002226e; `CreateRawMaterial_ScalarDtor` 0x140022350 at 0x14002237e). The compiler dtor chain fixes it; if ACT lands the fix before converting, it is `Action::Vtable()` / 0x14015faa0 | ACT, first commit |
+| 1 | **LIVE WRONG STAMP.** `src/game/Action/createnaturalresource.cpp:155` and `createrawmaterial.cpp:226` stamp `ResolveAddr(Exe, 0x14015f700)` as "the Action base vtable" in their scalar dtors; 0x14015f700 is slot 6 of `ResidenceUI`'s table 0x14015f6d0. Retail stamps **0x14015faa0** (`CreateNaturalResource_ScalarDtor` 0x140022240 store at 0x14002226e; `CreateRawMaterial_ScalarDtor` 0x140022350 at 0x14002237e). The compiler dtor chain fixes it; if ACT lands the fix before converting, it is `Action::Vtable()` / 0x14015faa0 | ACT, first commit |
 | 2 | `0x14015faa0` (the `Action` base table) is registered to `&g_ComponentEntity_StandaloneVtable[5]` (address_registry.cpp:909): only 7 of Action's 10 slots exist there and slot 2 answers ComponentEntity's type id; 19 files stamp it into fresh actions | ACT (register `Action::Vtable()`), K1 (ComponentEntity's own 4-slot table) |
 | 3 | `Tool` 0x140161f10 and `DragTool` 0x140161c10 are UNREGISTERED: every tool dtor's base restamp writes a NULL vptr (9 + 6 sites) | TOOL (the compiler chain) |
 | 4 | `EditTool`/`PathTool` tables are 13 slots; retail 14 | TOOL |
@@ -774,7 +774,7 @@ subclasses → exe vtable registrations → `g_tid_*` → mint vt rows → `RT_D
 | B8-1 | Exe classes get REAL ctors (public on concrete, protected on abstract): retail's body minus vptr stores; the base's real ctor in the init list. A Runtime base with a door gets `X() { InitFields(); }` sharing ONE body with its door (RB does this once per base); a converted object is never built through a door | D1 |
 | B8-2 | Slot 0 is `Object::Base* DeletingDtor(unsigned) override` on every exe class with a retail slot-0 body: `~X()` (protected, non-virtual) then `InternalMemFree` on `&1`. No `virtual ~T()`. `Object::Destroy(p)` replaces `CallSlot0(p,1)` | D2 |
 | B8-3 | A class whose tree slot 0 skipped a NON-EMPTY base dtor (list D2), whose null/nop slots become retail's base bodies (D3.1, D3.4), whose reflected factory changes from a stub to the real class (D4), or whose PORT GAP body is transcribed: each is its OWN commit titled `… (behaviour: …)`, gated with resave ×5 | D2-D4, D9 |
-| B8-4 | One definition per name: the `engine/types` POD of a converted class becomes a forwarder to `code/Game/<Dir>/<Class>.h` in the same commit (pilot: `Component.h`, `ControllerComponent.h`, `WellComponent.h`); shared POD headers (`Dialogs.h`, `Panels.h`, `ui/DialogInstance.h`, `ui/DialogController.h`) are coordinator-owned: a leaf block authors the per-class header and removes ITS struct from the shared header in a coordinator-applied hunk (B6-4.4) | §5, D10 |
+| B8-4 | One definition per name: the `engine/types` POD of a converted class becomes a forwarder to `src/game/<Dir>/<Class>.h` in the same commit (pilot: `Component.h`, `ControllerComponent.h`, `WellComponent.h`); shared POD headers (`Dialogs.h`, `Panels.h`, `ui/DialogInstance.h`, `ui/DialogController.h`) are coordinator-owned: a leaf block authors the per-class header and removes ITS struct from the shared header in a coordinator-applied hunk (B6-4.4) | §5, D10 |
 | B8-5 | A by-address reader that still stamps a converted class's table (`X::Vtable()` served at the exe address, D5) must build the same bytes the class's ctor builds, including the `Object::Internal` table entry; the converting block checks each of its classes' readers (0D §1.3) | D1, D5 |
 | B8-6 | Slot lists come from `B38_SLOTS.md` §6, names of slots ≥4 from the tree; inherit every `= parent` slot; declare past-retail slots nowhere; grep for dispatches past retail's count before deleting padding | D3 |
 | B8-7 | `DECLARE_EXE_TYPE`/`DEFINE_EXE_TYPE` (exe_type.h), placed where `REGISTER_TYPE` was; literals from §1.3 EXACTLY; abstract bases keep `REGISTER_ABSTRACT_FACTORY` this step | D4 |
@@ -851,10 +851,10 @@ merge — game dir starves past three parties); forbidden: `git stash`/amend/reb
 
 **Classes.** `Component` (16), `ControllerComponent` (18) + `ControllerComponent::Controller` (9, the interface),
 `Description` (9), `WellComponent` (18, controller member at +0x28, 0x48), `WellDescription` (10, 0x20). Headers in
-`code/Game/Component/` (the tree mirrors the exe's own directory layout: the header lives with its `.cpp`, named
+`src/game/Component/` (the tree mirrors the exe's own directory layout: the header lives with its `.cpp`, named
 after the class — decided here; the `engine/types` POD becomes a forwarder, B8-4). Members of the two bases in
-`code/Game/Component/component.cpp`; `Description`'s in `welldescription.cpp` until K1 gives it `description.cpp`.
-`code/Game/Object/exe_type.h`: `DECLARE_EXE_TYPE`, `DEFINE_EXE_TYPE`, `DEFINE_EXE_VTABLE`.
+`src/game/Component/component.cpp`; `Description`'s in `welldescription.cpp` until K1 gives it `description.cpp`.
+`src/game/Object/exe_type.h`: `DECLARE_EXE_TYPE`, `DEFINE_EXE_TYPE`, `DEFINE_EXE_VTABLE`.
 `controller_state_table.h`: `ControllerLive::TableController<Tag>`.
 
 **Deleted:** `WellComponent_LiveVtable[48]`, its `FinishLiveVtable`/`ShutdownVSlot`/`OnRemoveVSlot`/

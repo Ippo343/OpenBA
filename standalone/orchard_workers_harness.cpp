@@ -28,7 +28,7 @@
 //   WorkPlaceComponent+0x50 accepting/on, +0x18 description, desc+0x20 profession key,
 //   +0x60 live roster count
 //
-// Do NOT touch code/Game/Component/orchardcomponent*.cpp from here — this file only pokes
+// Do NOT touch src/game/Component/orchardcomponent*.cpp from here — this file only pokes
 // already-published entry points.
 
 #include "object/TypeInfo.h"
@@ -47,7 +47,7 @@
 #include "Entity/ComponentEntity.h"           // B4: components by name, FindComponent<T>
 #include "Entity/EntityList.h"                // B4: GameUpdateLoop::m_entityList
 
-// The seat cascade (code/Game/Component/citizen_employ.cpp) — the headless equivalent of
+// The seat cascade (src/game/Component/citizen_employ.cpp) — the headless equivalent of
 // the per-worker inner loop of CitizenComponent_impl_dd10.
 
 namespace {

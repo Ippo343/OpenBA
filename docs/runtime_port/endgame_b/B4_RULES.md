@@ -147,7 +147,7 @@ Blocks own CLASSES' headers plus the files that define their members; file sets 
 |---|---|---|
 | **W0** | `R0-RT` dead runtime bodies · `R0-EXE` dead exe bodies + the four grab-bag files split (`ui_panels.h`, `action_pf_ctors.cpp`, `action_child_ctors*.cpp`) · `E0` tier-R markers in the 13 unowned floor files, tier-I shapes in `castmetric.py`, `acceptance.sh` · `W0-H1` / `W0-H2` the twelve headers + the two structs · `W0-RH` runtime headers code/Game reads, `FileInfo::winHandle`, dx11 COM field types | full gate each |
 | **W1** | exe: `T` templates + `ComponentEntity::FindComponent<T>` (FIRST, alone) → `CIT` `TRADE` `DLG-a/b/c` `COMP-a/b/c/d` `WORK` `ACT` `GAME` `PLAYER`; runtime: `R-UI` `R-GFX` `R-VIDEO` `R-IO` `R-ENG` `R-CORE`; `U` the unattributed families get a class first (Ghidra), then join a block | full gate each; `uiroutes.sh` on Dialog / UI; `toolroutes.sh` on Player / Action; `devlost.sh` on Video / Graphics / dx11 |
-| **W2** | `STANDALONE` (the four game-logic files move to `code/Game/Game/`; harnesses follow their class or are retired) · `TESTS` (the ~200 casts that fall) | full gate |
+| **W2** | `STANDALONE` (the four game-logic files move to `src/game/Game/`; harnesses follow their class or are retired) · `TESTS` (the ~200 casts that fall) | full gate |
 | **AUDIT** | independent, read-only, BEFORE the C declarations' headers are deleted | — |
 | **CLOSE** | `exe_bodies.h` hold only what has no class; numbers; `stepclose.sh` | step close |
 
@@ -160,7 +160,7 @@ Runs at most ~5 agents at once, agents build at `-j3`, the gate at `-j4`; agents
 2. No offset-helper definition or call remains (`accessor` column 0); `pun` column 0 outside
    `CAST-OK: byte_io` / `float_bits` lines.
 3. Bridge markers 0 outside `CAST-OK: dx11_seam` lines.
-4. Every declaration left in a `code/Game/<Module>/exe_bodies.h` / `*_funcs.h` is listed by name
+4. Every declaration left in a `src/game/<Module>/exe_bodies.h` / `*_funcs.h` is listed by name
    with its reason in `b4_session/LEFT_FREE.md`; `void*` first parameters in `code/Game` are only on
    those.
 5. Every class header asserts every field; no `Rt<Ns>::` POD mirror of a real class remains.

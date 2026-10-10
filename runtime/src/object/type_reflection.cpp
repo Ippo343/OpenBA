@@ -172,7 +172,7 @@ uint32_t TypeNameCRC(const char* name) {
 // where the port registry does not exist yet, so it cannot RESOLVE a cell — it
 // must own one. Zero-initialised before any dynamic initialiser runs, which is
 // what makes static-init order across translation units a non-issue and is the
-// whole reason the exe-side staging list in code/Game/Object/factory_registration.h
+// whole reason the exe-side staging list in src/game/Object/factory_registration.h
 // existed (B33_RULES §2). standalone/rt_data_mint.cpp routes the minted row's
 // two doors (name and address 0x1801fc6e0) here, so there is exactly ONE cell.
 BaseTypeInfo* BaseTypeInfo::_firstTypeInfo = nullptr;

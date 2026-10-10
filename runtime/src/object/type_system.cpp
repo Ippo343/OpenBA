@@ -143,7 +143,7 @@ uint32_t TypeIdFromName(const char* name) { return TypeNameCRC(name); }
 // kept because it is what the disassembly says.
 //
 // This is by far the hottest function in lane A — several hundred call sites
-// in code/Game/Action alone go through `fn_IsDerivedFrom`.
+// in src/game/Action alone go through `fn_IsDerivedFrom`.
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================

@@ -437,7 +437,7 @@ sets, so the OWNER handles them, not a block (addresses grepped from the tree th
 - `runtime/src/graphics/mesh.cpp` — EdgeMesh, EdgeMeshInstance, MeshInstance
 - `runtime/src/graphics/renderer.cpp` + `wave24_lane_gfxmat.cpp` — MaterialInstance
 - `runtime/src/graphics/closure_batch2b.cpp` + `scene.cpp` — Geometry
-- `code/Game/Component/statusicon_geometry.cpp` — **a GAME file that names `Geometry`'s vtable
+- `src/game/Component/statusicon_geometry.cpp` — **a GAME file that names `Geometry`'s vtable
   address 0x180154e60**; the only cross-tree vtable reference found
 - `standalone/reg_mint_promoted.cpp` — MaterialInstance, AnimationEvent, Geometry, ImageBuffer
 
@@ -476,7 +476,7 @@ and joined by `WaitForEngineLoader()` / `LoaderLoopShutdownWait()`. `standalone/
 a second loader — was DELETED in `96c17f47`; `Engine::Loader` is now the sole dispatcher, which is
 the fix the two unreproduced open defects (a)/(b) are attributed to.
 
-That thread constructs Graphics objects directly, in `code/Game/Game/gameupdateloop_load.cpp`:
+That thread constructs Graphics objects directly, in `src/game/Game/gameupdateloop_load.cpp`:
 `Camera` ctor (:570), `MeshInstance` ctor + `SetMesh` (:802), `Renderer` ctor (:986), `Scene` ctor
 (:1090), `SunLight` ctor + `Set` (:1136), `Scene::AddGlobalObject` (:1654). The main thread's
 `Draw` reads `std::atomic<void*> s_worldBuiltLoop` (:885) to avoid rendering a half-built world.
@@ -675,7 +675,7 @@ found no other `void` port.
   §B.1.7 puts SEH last. Leave the file's exception structure alone in step 5.
 - **`StatusIconComponent` slot 11 calls `Scene::AddObject` BEFORE `Geometry::SetTransform`**, and
   `Geometry::Clean` is two-phase (`docs/retail_bugs.md:18-23`). Both are retail ordering to
-  PRESERVE. `code/Game/Component/statusicon_geometry.cpp` is also the one game file naming a
+  PRESERVE. `src/game/Component/statusicon_geometry.cpp` is also the one game file naming a
   Runtime vtable by address (§4).
 - **`runtime/src/graphics/README.md` says "Ported here: nothing yet" and `dx11/src/README.md`
   lists files "still to come" that already exist.** Both are STALE. Fix them in the block that
@@ -715,9 +715,9 @@ Python regexes over 4,948 files; §7.1 is this pass's own correction to them.
   `gameupdateloop_load.cpp` 12, `gameupdateloop.cpp` 11, `tornado.cpp` 7,
   `statusicon_geometry.cpp` 6, then a long tail of 3-5.
 - Heaviest file-local caches: `runtime/src/collection/array.cpp` 26 (26 distinct `Array<T>`
-  helper addresses — legitimate), `code/Game/Game/gameupdateloop.cpp` 9,
-  `code/Game/Component/statusicon_geometry.cpp` 6, `runtime/src/graphics/wave27_lane_gfxpart.cpp` 5,
-  `code/Game/Player/tool_base_tilerender.cpp` 5.
+  helper addresses — legitimate), `src/game/Game/gameupdateloop.cpp` 9,
+  `src/game/Component/statusicon_geometry.cpp` 6, `runtime/src/graphics/wave27_lane_gfxpart.cpp` 5,
+  `src/game/Player/tool_base_tilerender.cpp` 5.
 
 ### 7.1 A NINTH caller spelling: dx11's table-driven import struct
 
@@ -856,7 +856,7 @@ Not in the manifest and therefore NOT protected by the manifest gate, but load-b
 11. `Material` + `MaterialInstance`; `GraphicsMesh` + `EdgeMesh`; `Scene`.
 12. `Particle` + `ParticleSystem` + the two instances (B5-16's slot trap).
 13. `Animation` + `AnimationGroup` + `AnimationState` + `AnimationManager` + `AnimationEvent`.
-14. Caller batches by directory, `code/Game/Game` first (the four heaviest files are there).
+14. Caller batches by directory, `src/game/Game` first (the four heaviest files are there).
 15. The dx11 caller batch (76 literals, B5-14) — after every Runtime class it names is real.
 16. The cross-cutting files (§4) and the two stale READMEs — the owner, at the close.
 
@@ -886,7 +886,7 @@ Not in the manifest and therefore NOT protected by the manifest gate, but load-b
 | **F** | `Camera`, `Renderer`, `Scene` | heavy (`gameupdateloop*`, `minimap_paint`) | one commit for Camera+Renderer (B5-4) |
 | **G** | `Material`, `MaterialInstance`, `GraphicsMesh`, `EdgeMesh` | moderate | `wave24_lane_gfxmat.cpp` overlaps E's `renderer.cpp` — coordinate |
 | **H** | `Particle`, `ParticleSystem`, `Animation`, `AnimationGroup`, `AnimationState`, `AnimationManager`, `AnimationEvent` | moderate | absorbs the wave-lane files; B5-16's slot trap; needs E's `ParticleInstance` first |
-| **I** | caller batches by directory: `code/Game/Game` (188 outside-runtime bindings, heaviest four files), then `code/Game/{Component,Player,Dialog,Action,Entity,Tutorial}`, then `engine` (74), then `standalone` (36) | — | after the class blocks the batch names |
+| **I** | caller batches by directory: `src/game/Game` (188 outside-runtime bindings, heaviest four files), then `src/game/{Component,Player,Dialog,Action,Entity,Tutorial}`, then `engine` (74), then `standalone` (36) | — | after the class blocks the batch names |
 | **J** | the dx11 caller batch — 76 literals (B5-14) | — | LAST; every Runtime class it names must be real |
 
 Blocks B and C are parallel after A. D, E parallel after A. F after E. G, H after E.

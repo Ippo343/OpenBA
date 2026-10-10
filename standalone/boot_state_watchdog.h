@@ -35,7 +35,7 @@ extern "C" void BootState_MarkFrame();
 
 // MainLoop::Run has returned and teardown has begun. Teardown legitimately
 // renders no frames, so it gets its own (longer) budget measured from this
-// moment. Called from code/Game/Game/game_main.cpp right after Run returns,
+// moment. Called from src/game/Game/game_main.cpp right after Run returns,
 // before Engine shutdown.
 extern "C" void BootState_MarkQuitting();
 

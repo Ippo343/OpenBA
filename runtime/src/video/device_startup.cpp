@@ -23,7 +23,7 @@
 //     1800f7280: JMP 0x1800f83f0
 //
 // so one body closes two rows each. Their live callers are
-// code/Game/Dialog/optionsdialog.cpp:1138/1168 (applying video settings).
+// src/game/Dialog/optionsdialog.cpp:1138/1168 (applying video settings).
 //
 // THREE RECORDED BLOCKERS FOR THIS CLUSTER WERE FALSE, AND ALL THREE WERE
 // RE-CHECKED AGAINST THE DISASSEMBLY RATHER THAN INHERITED

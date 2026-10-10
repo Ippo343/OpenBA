@@ -2,7 +2,7 @@
 // tests/unit/dlg_abi_test.cpp — ENDGAME B.3.8 block DLG (B38_RULES D1-D5, B8-14)
 //
 // The ABI claims block DLG makes for the exe `UI::DialogInstance` subclasses,
-// measured on the SHIPPED class headers under code/Game/Dialog/:
+// measured on the SHIPPED class headers under src/game/Dialog/:
 //
 // PART A — LAYOUT. sizeof (= retail's create MemAlloc, B38_RULES section 1.3)
 //   and alignof of every class, and the offsets of the fields past +0xb8.

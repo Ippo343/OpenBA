@@ -142,8 +142,8 @@ hands the regexes in; the coordinator edits the script). Its numbers only fall.
 | R-GFX | `runtime/src/graphics/`, `runtime/src/video/`, `runtime/types/video/`, `runtime/types/graphics/` | 310 |
 | R-IO | `runtime/src/io/`, `object/`, `system/`, `save/`, `math/`, `collection/`, `runtime/types/io/`, `runtime/types/object/` | 235 |
 | R-REST | `runtime/src/` audio, achievement, collision2d, engine, input, pathfinding, picking; `engine/`; `standalone/`; `dx11/` (2 MEMBER rows only) | 250 |
-| G-A | `code/Game/Component/`, `Entity/`, `Action/` | 94 |
-| G-B | every other `code/Game/` directory | 110 |
+| G-A | `src/game/Component/`, `Entity/`, `Action/` | 94 |
+| G-B | every other `src/game/` directory | 110 |
 
 ### W1
 One owner: `b3x_session/flip.py` (driven by `classes.py`), the root `operator delete` TU, the product

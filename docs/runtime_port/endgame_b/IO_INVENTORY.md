@@ -321,7 +321,7 @@ comments describing it, none in `code/Game`, `standalone` or `engine`):
   policy ("stays on `RtObject::SerializerLite`... until then").
 
 **Total: 15 hits, ALL in `runtime/src/object/` and `runtime/types/object/`** — zero in
-`code/Game/`, `standalone/`, or `engine/`. So `SerializerLite`'s blast radius for this step
+`src/game/`, `standalone/`, or `engine/`. So `SerializerLite`'s blast radius for this step
 is confined to the Object family's Serialize bodies, not spread across the game logic —
 good news for scoping B.3.4 step 4's coexistence proof.
 
@@ -476,8 +476,8 @@ C++ `throw`/`try` anywhere in `code/`, `runtime/`, `standalone/`, `engine/`, or 
   setjmp/longjmp call exists in the tree today.
 - `__builtin_setjmp`: 0 hits.
 - `__try`/`__except`: 5 hits, all in comments explaining that MinGW/GCC on x64 has no
-  usable `__try`/`__except` and so retail's SEH could not be reproduced — `code/Game/
-  Dialog/residenceui.cpp:38`, `code/Game/Dialog/storageui.cpp:618`, `runtime/src/video/
+  usable `__try`/`__except` and so retail's SEH could not be reproduced — `src/game/
+  Dialog/residenceui.cpp:38`, `src/game/Dialog/storageui.cpp:618`, `runtime/src/video/
   enumerate_video_modes.cpp:57,70`, `standalone/main.cpp:464`.
 - `RaiseException`/`AddVectoredExceptionHandler`: 1 real call —
   `standalone/main.cpp:1329` `AddVectoredExceptionHandler(1, FirstChanceFailFast)`, the

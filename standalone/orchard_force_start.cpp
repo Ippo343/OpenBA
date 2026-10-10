@@ -1,7 +1,7 @@
 // standalone/orchard_force_start.cpp
 // One-shot harness that forces a demo orchard's master switch on and gives it a
 // real tree type, so the state-2 -> state-9 transition (see
-// code/Game/Component/orchardcomponent*.cpp — NOT touched by this file) has
+// src/game/Component/orchardcomponent*.cpp — NOT touched by this file) has
 // something to prove. Env-gated, default OFF, byte-unchanged when unset.
 //
 // Background (from the live-porting pass): OrchardComponent's state-2 per-frame
@@ -15,7 +15,7 @@
 // Env:
 //   BANISHED_ORCHARD_FORCE_START=1   enable; fires once ~180 ticks after start
 //
-// Do NOT touch code/Game/Component/orchardcomponent*.cpp — actively owned by
+// Do NOT touch src/game/Component/orchardcomponent*.cpp — actively owned by
 // the porting pass. This file only pokes already-published fields/paths.
 
 #include <windows.h>

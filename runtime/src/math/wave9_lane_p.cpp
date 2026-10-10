@@ -153,7 +153,7 @@ Math::Transform3 Math::Transform::AsTransform3() const {
     const Transform* const self = this;
 
     // *** `ret` CAN BE THE SAME BUFFER AS `self`, AND AT LEAST ONE CALL SITE
-    // *** RELIES ON IT. code/Game/Game/gameupdateloop.cpp:1496, the per-frame
+    // *** RELIES ON IT. src/game/Game/gameupdateloop.cpp:1496, the per-frame
     // camera update:
     //
     //     uint8_t transform3[44];

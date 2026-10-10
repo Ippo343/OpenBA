@@ -36,7 +36,7 @@ namespace IO { class Serializer; }
 // ============================================================================
 // Graphics::AnimationEvent — 0x20 bytes (the base class only; subclasses such
 // as AnimAudioEvent, which is already ported in
-// code/Game/Component/animaudioevent.cpp, add their own fields after it).
+// src/game/Component/animaudioevent.cpp, add their own fields after it).
 //
 // Pinned by the ctor (retail 0x1800a2150, disassembled): three instructions
 // stamp intermediate Object::Base / Object::External vtables (0x180154788,
@@ -195,7 +195,7 @@ namespace Graphics {
 //
 // NO REAL CONSTRUCTOR (B4b-2 / ENDGAME section B.1 decision 3). `??0Animation
 // Event@Graphics@@QEAA@XZ` is called on RAW MEMORY by
-// `code/Game/Component/animaudioevent.cpp:45`, which then stamps its own
+// `src/game/Component/animaudioevent.cpp:45`, which then stamps its own
 // subclass vtable; a member constructor there would stamp GCC's table on an
 // object the rest of the tree expects to be wearing the minted one. The door in
 // animation.cpp stays a free function and is NOT a delegation.

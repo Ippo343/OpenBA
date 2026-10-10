@@ -298,9 +298,9 @@ inline void MemFreeStatic(void* p) {
 // ============================================================================
 // The DLL-absent boot asks for four `DialogInstance` virtuals, all four from
 // ONE exe-side site (0x7ff71e05a0dc, four times each): the derived-dialog vtable
-// builders in code/Game/Dialog/mod_dialog_vtables.cpp,
-// code/Game/Dialog/toolbar_vtable_standalone.cpp and
-// code/Game/Player/tool_base_toolui.cpp, which copy the base class's slots into
+// builders in src/game/Dialog/mod_dialog_vtables.cpp,
+// src/game/Dialog/toolbar_vtable_standalone.cpp and
+// src/game/Player/tool_base_toolui.cpp, which copy the base class's slots into
 // each derived table. With no DLL those copies are nulls STAMPED INTO A LIVE
 // VTABLE — an EXEC-of-0 on the first virtual call, several frames from anything
 // naming `DialogInstance`.

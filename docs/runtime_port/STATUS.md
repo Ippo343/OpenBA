@@ -200,7 +200,7 @@ built them wrong, and callbacks stored in data.
   `rt_resolve_cache.cpp`, `rt_export_addrs.inc` (4,926 rows), the mint and its generator, `engine/funcs/`
   (227 externs, `EngineFuncsInit`), the 51 dispatch slot cells, every `X_ResolveFuncs`, the registry
   instruments and their three flags, ten registry-only tools. A call is a C++ call through the declaring
-  header (`code/Game/<Module>/exe_bodies.h` for the C bodies, with their retail address); a thing with no
+  header (`src/game/<Module>/exe_bodies.h` for the C bodies, with their retail address); a thing with no
   body is a `// PORT GAP 0x…` comment at its call site (189); the singleton cells are named objects
   (`GameUpdateLoop::_singleton`, `g_gameSettings`, `g_gameContainer`,
   `Input::Configuration::_singleton->_keyMap`); `System::MemoryAllocator` is a real class with one API and
@@ -366,7 +366,7 @@ built them wrong, and callbacks stored in data.
   real: 310 of 310 reflected exe classes (components, descriptions, actions, works, tools, dialogs, panels,
   goals, scenario, tutorial, world externals) + the five loops, the controller members, the exe Geometry /
   Particle / Thread subclasses — each with a real ctor, `DeletingDtor(unsigned)` + protected dtor chaining
-  its base, `DEFINE_EXE_TYPE` (literals exact), header `code/Game/<Dir>/<Class>.h`, all agreeing with the
+  its base, `DEFINE_EXE_TYPE` (literals exact), header `src/game/<Dir>/<Class>.h`, all agreeing with the
   retail dump (parent, sizeof, slot count). **Hand-built vtables 306 → 3, none serving an exe class.** Rule
   sheet `endgame_b/B38_RULES.md` (D1-D10, B8-1..14, corrections §8/§11, run log §9, what stays §10), retail
   dump `B38_SLOTS.md`, file map `B38_FILEMAP.md`, kit `endgame_b/b38_session/` (BLOCK_BRIEF,
@@ -439,7 +439,7 @@ built them wrong, and callbacks stored in data.
   + caller-surface report (12 exe classes on 14 tables, 25 qualified-call sites, 451 call sites by
   binding); wave 1 blocks B1 Engine+Application, B2 Save, B3 Achievement (+ the exe Goal family's
   qualified calls), B6 Pathfinding+Picking; wave 2 B4 Audio, B5 Input, fragment F; caller round 1
-  K1 (code/Game/Dialog), K2 (rest of code/Game) for the merged namespaces, round 2 K3 (Input),
+  K1 (src/game/Dialog), K2 (rest of code/Game) for the merged namespaces, round 2 K3 (Input),
   K4 (Audio), K5 (standalone/engine/runtime leftovers/dx11); one closing owner.
   **Numbers** (`CLOSE_NUMBERS.md`). `engine_funcs`: 92 globals bound to the eight namespaces BY
   INITIALISER (82 doors + 10 storage; the inventory's 63 was name-anchored) -> 17 (8 ctor/dtor
@@ -522,7 +522,7 @@ built them wrong, and callbacks stored in data.
   `SpriteContext`); wave 2 the 27 leaf Description/Element pairs in five clusters C1-C5 (intermediate
   leaves first) and E (`UserInterface`); two fragment passes F2 (dialog side) and F1 (widget side);
   caller batches K1 (townhall/trade), K2 (the exe dialogs), K3 (the panel UIs), K4 (everything
-  outside `code/Game/Dialog`), then round 2 (K1r2, K3r2) after the fragment passes defined the last
+  outside `src/game/Dialog`), then round 2 (K1r2, K3r2) after the fragment passes defined the last
   members; one closing owner. Every merge gated by the coordinator: 17 gates + the close, each
   0 problems (table in `B36_RULES.md` section 11).
   **Numbers** (`CLOSE_NUMBERS.md`, every unit stated there). `engine_funcs`: 155 globals bound a
@@ -532,7 +532,7 @@ built them wrong, and callbacks stored in data.
   type-info globals. Door calls through `engine_funcs` in `code/Game` 1,472 -> 65 (61 code-only,
   all ctor/dtor); `ResolveExport("…@UI@@…")` sites 185 -> 41 (registry rows, `_typeInfo`/`??_7`
   reads, ctor/dtor doors); `RT_EXPORT_ONCE` 79 -> 11; `RT_DATA_SLOT` 147 -> 70; exe import slots
-  onto UI 59 -> 29; exact hand-inlined vtable calls in `code/Game/Dialog` 14 -> 9 (diagnostic slot
+  onto UI 59 -> 29; exact hand-inlined vtable calls in `src/game/Dialog` 14 -> 9 (diagnostic slot
   reads, not calls). 2,083 `// B.3.6 bridge` casts (code 1,492, runtime 559). Census UI
   1625 total / 134 called / 78 ported (was 329 / 214: `called` counts what still resolves by name
   or address; member calls resolve nothing). Unit tests 358 -> 462, 0 failures. B.4 cast metric
@@ -836,7 +836,7 @@ built them wrong, and callbacks stored in data.
   template allocations are visible to `BANISHED_REDZONE`); the width-8 `AvlOps`
   specialisation the `Set<System::Filename>` path set needs; the deep
   `Array::operator=` (`rtcoll::ArrayAssignCore`); `Set::InsertInPlace`/`Emplace`;
-  and one game-side bridge header — `code/Game/Component/coll_bridge.h` — with
+  and one game-side bridge header — `src/game/Component/coll_bridge.h` — with
   `Dialog/dialog_array_bridge.h` deleted.
   **Deleted here:** 14 `fn_*Array*`/`fn_*Set*`/LinkedList pointers in
   `engine/funcs/engine_funcs.{h,cpp}` with zero callers tree-wide, taking 5 typedefs,
@@ -1214,7 +1214,7 @@ built them wrong, and callbacks stored in data.
 - **CLOSED (2026-09-13):** the stress-town teardown crash/hang was `FishingWork::OnCancel`
   ported with three parameters where retail forwards a fourth (the packed slot word) by
   register passthrough — Slot6 then stored a `2` and a null past two 4-entry arrays on every
-  cancelled fishing action. One-line fix in `code/Game/Work/fishingwork.cpp`; root cause,
+  cancelled fishing action. One-line fix in `src/game/Work/fishingwork.cpp`; root cause,
   measurement and what the earlier analysis got wrong: `TEARDOWN_WILD_WRITE.md` §0. Verified:
   debug exe reproduced 1/1 before the fix with the writer named, 0/2 after (both teardown
   brackets clean, clean exit). The loader race in `ExternalFactory::Add` was not reached.
@@ -1314,7 +1314,7 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
     `BANISHED_MOUSE_DRAGSKEW` (existed only to skew what the A.4-deleted diff oracle could
     see), `BANISHED_AUTOSAVE_TRACE`, `BANISHED_LANE4_TRACE`, `BANISHED_W2LANE3_TRACE` (wave
     traces), and a dead `EnvOn` in `rt_data_mint.cpp`. Nothing else was deleted: the
-    gameplay harnesses are wired into `code/Game/Game/gameupdateloop.cpp`, `starttown.cpp`
+    gameplay harnesses are wired into `src/game/Game/gameupdateloop.cpp`, `starttown.cpp`
     and a dozen components, so retiring them belongs with the `code/` pass, not this one.
   - Verified: `standalone-debug` and `standalone-perf` both build clean, and all three
     routes exit 0 with an empty `standalone_crash.log` — `sa-run` with

@@ -1,4 +1,4 @@
-# C_work_action blockers (code/Game/Work + code/Game/Action): 1,301 casts, 86 files
+# C_work_action blockers (src/game/Work + src/game/Action): 1,301 casts, 86 files
 
 Method: every cast classified by snippet + source read at the site + class header check; splits inside a file
 are estimates (sum = file count). Totals by family: SIG 606, FWD 248, FIELD 158, LOCAL 153, NOCLASS 81, ERASED 23, H5 11, OTHER 12, POD 8, CONST 2, FLOOR 1.

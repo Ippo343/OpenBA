@@ -395,7 +395,7 @@ Vector3 Transform3::Rotate(const Vector3& v) const {
 // ----------------------------------------------------------------------------
 // WAVE 9 LANE SAVE2. Wave 1 ported every Matrix operator but not this ctor,
 // because nothing in runtime/ calls it — the one caller in the whole tree is
-// `code/Game/Game/weather_particle_draw.cpp`, which reached it BY ADDRESS
+// `src/game/Game/weather_particle_draw.cpp`, which reached it BY ADDRESS
 // (`ResolveAddr(Module::Runtime, 0x18001e540)`) under a comment saying there
 // was "no verified mangled name to hand". There is: the name above is in the
 // shipped export table at that exact RVA, checked with pefile before this line

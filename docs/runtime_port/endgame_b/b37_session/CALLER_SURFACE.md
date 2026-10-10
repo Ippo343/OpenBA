@@ -67,25 +67,25 @@ not caller-surface. `tests/`: zero hits in every spelling.
 
 | namespace | directories, by CALL sites |
 |---|---|
-| Engine | standalone 12 · code/Game/Game 15 (8 a + 7 L) · code/Game/Dialog 10 · runtime/src/engine 14 (8 L + 6 c) · code/Game/Tutorial 5 · code/Game/Goal 1 · engine 1 (`engine_funcs.h:2603`) |
-| Save | code/Game/Dialog 40 · runtime/src/save 28 (14 L + 14 c) · code/Game/Game 8 · code/Game/Tutorial 7 · standalone 5 · runtime/src/engine 2 |
-| Achievement | code/Game/Game 20 · code/Game/Dialog 18 · code/Game/Goal 17 · code/Game/Tutorial 6 · runtime/src/achievement 4 · runtime/src/engine 4 · runtime/src/object 2 |
-| Audio | code/Game/Component 23 · runtime/src/engine 21 · code/Game/Game 15 · code/Game/Dialog 11 · runtime/src/audio 10 · code/Game/Player 3 · code/Game/Tutorial 1 · runtime/src/ui 1 · engine 1 |
-| Input | code/Game/Dialog 32 · code/Game/Game 24 · runtime/src/engine 20 · code/Game/Player 17 · runtime/src/input 5 · code/Game/Tutorial 4 · runtime/src/ui 2 |
-| Picking | code/Game/Component 10 · code/Game/Player 7 · code/Game/Game 5 |
-| Application | runtime/src/engine 10 · runtime/src/input 4 · code/Game/Game 2 · code/Game/Dialog 2 · code/Game/Action 1 · code/Game/Player 1 · (dx11 4 import rows) |
+| Engine | standalone 12 · src/game/Game 15 (8 a + 7 L) · src/game/Dialog 10 · runtime/src/engine 14 (8 L + 6 c) · src/game/Tutorial 5 · src/game/Goal 1 · engine 1 (`engine_funcs.h:2603`) |
+| Save | src/game/Dialog 40 · runtime/src/save 28 (14 L + 14 c) · src/game/Game 8 · src/game/Tutorial 7 · standalone 5 · runtime/src/engine 2 |
+| Achievement | src/game/Game 20 · src/game/Dialog 18 · src/game/Goal 17 · src/game/Tutorial 6 · runtime/src/achievement 4 · runtime/src/engine 4 · runtime/src/object 2 |
+| Audio | src/game/Component 23 · runtime/src/engine 21 · src/game/Game 15 · src/game/Dialog 11 · runtime/src/audio 10 · src/game/Player 3 · src/game/Tutorial 1 · runtime/src/ui 1 · engine 1 |
+| Input | src/game/Dialog 32 · src/game/Game 24 · runtime/src/engine 20 · src/game/Player 17 · runtime/src/input 5 · src/game/Tutorial 4 · runtime/src/ui 2 |
+| Picking | src/game/Component 10 · src/game/Player 7 · src/game/Game 5 |
+| Application | runtime/src/engine 10 · runtime/src/input 4 · src/game/Game 2 · src/game/Dialog 2 · src/game/Action 1 · src/game/Player 1 · (dx11 4 import rows) |
 
 **Batch cut.** Engine: the loop callers are the five subclass files (block 1 owns them,
-`EXE_SUBCLASSES.md`) plus the seven loop-CONSTRUCTION sites in `code/Game/{Dialog,Game,Tutorial}`,
+`EXE_SUBCLASSES.md`) plus the seven loop-CONSTRUCTION sites in `src/game/{Dialog,Game,Tutorial}`,
 which are ctor doors that STAY (B36_RULES 7) — so Engine's caller batch is small: `MainLoop`
 members (`SetNextLoop` ×5, `OnVideoError/Restart` in `optionsdialog.cpp`, `game_main.cpp`'s
-`MainLoop`/`Engine` by-address doors). Save: one batch, `code/Game/Dialog`
-(`saveloaddialog.cpp` dominates) + `code/Game/Game/gameupdateloop*` + `code/Game/Tutorial`.
-Achievement: `code/Game/Game` + `code/Game/Dialog` in one batch; `code/Game/Goal` + the two
-`code/Game/Tutorial/finishtutorial*.cpp` files go with block 3 (they are the exe subclasses).
-Audio: `code/Game/Component` (citizen emitters) and `code/Game/{Game,Dialog,Player,Tutorial}`.
-Input: `code/Game/Dialog` + `code/Game/Tutorial`, then `code/Game/{Game,Player}`. Picking:
-`code/Game/{Player,Component,Game}` in one batch — hex literals and names both. Application:
+`MainLoop`/`Engine` by-address doors). Save: one batch, `src/game/Dialog`
+(`saveloaddialog.cpp` dominates) + `src/game/Game/gameupdateloop*` + `src/game/Tutorial`.
+Achievement: `src/game/Game` + `src/game/Dialog` in one batch; `src/game/Goal` + the two
+`src/game/Tutorial/finishtutorial*.cpp` files go with block 3 (they are the exe subclasses).
+Audio: `src/game/Component` (citizen emitters) and `src/game/{Game,Dialog,Player,Tutorial}`.
+Input: `src/game/Dialog` + `src/game/Tutorial`, then `src/game/{Game,Player}`. Picking:
+`src/game/{Player,Component,Game}` in one batch — hex literals and names both. Application:
 `dx11/` (the four rows) and the `code/Game` YieldToThreads/IsPaused/Quit sites. The
 `runtime/src/engine` callers of Audio/Input/Application (21 + 20 + 10) belong to block 1's files
 (`singleton_ctors.cpp`, `mainloop_run.cpp`, `engine.cpp`), not to a caller batch.
@@ -272,8 +272,8 @@ Tokens swept: `(*(void***)`, `(*(uintptr_t**)`, `*reinterpret_cast<void***>(`,
 
 | site | receiver | proof | slot |
 |---|---|---|---|
-| code/Game/Dialog/moddialog.cpp:733 | `Engine::UpdateLoop` | `inner = *(MainLoop + 0x20)`; `g_pEngineSingleton` is bound to `?_singleton@MainLoop@Engine@@` (exe slot 0x140151440, engine_funcs.cpp:1261-1263); +0x20 is `MainLoop::_currentLoop` (runtime/types/engine/MainLoop.h:233, :275) | +0x38 = 7 `SaveRestore(bool, SavedState*)`, args `(inner, true, statePtr)` match |
-| code/Game/Dialog/mod_dialog_vtables.cpp:440 | same | same (:435-441) | same |
+| src/game/Dialog/moddialog.cpp:733 | `Engine::UpdateLoop` | `inner = *(MainLoop + 0x20)`; `g_pEngineSingleton` is bound to `?_singleton@MainLoop@Engine@@` (exe slot 0x140151440, engine_funcs.cpp:1261-1263); +0x20 is `MainLoop::_currentLoop` (runtime/types/engine/MainLoop.h:233, :275) | +0x38 = 7 `SaveRestore(bool, SavedState*)`, args `(inner, true, statePtr)` match |
+| src/game/Dialog/mod_dialog_vtables.cpp:440 | same | same (:435-441) | same |
 
 These are ordinary virtual calls (not in a subclass slot body): after conversion
 `reinterpret_cast<Engine::UpdateLoop*>(inner)->SaveRestore(true, state)`, unqualified.
@@ -304,7 +304,7 @@ and no tree file resolves that slot.
 read-only): slot 0x140151448 is read only by `FUN_14000ab20` (0x14000ab85, 0x14000ace4), the
 exe's `ExternalPtr<Pathfinding::PointList>::Serialize` (FindOrLoad + `IsDerivedFrom(PointList)`).
 Its callers are `FUN_140053460` and `FUN_140123500`. `FUN_140123500` is
-**`InteractDescription::Serialize`**, ported as `code/Game/Component/interactdescription.cpp:82`:
+**`InteractDescription::Serialize`**, ported as `src/game/Component/interactdescription.cpp:82`:
 it loads the ExternalPtr at +0x20 through the generic `fn_ExternalPtr_Serialize2` (:91 — no
 PointList type check) and then reads the PointList's fields RAW — `ext + 0x30` (named point
 array) and `ext + 0x38` (count), :100-125, building the use/build/create nodes every building's
@@ -325,10 +325,10 @@ exports (`Scene`, `IPathInfo`, the path solver) has **no caller on any route**:
 1. **`fn_KeyMap_Released` is always null.** Its only initialiser is exe slot 0x1401528f0
    (engine_funcs.cpp:1855-1857), which nothing registers (`grep -n 0x1401528f0 standalone/`
    finds only the comment reg_unreg_lane2.cpp:129, which wrongly says the global "resolves by
-   ResolveExport"). Both callers, code/Game/Player/dragtool.cpp:255 and :401, therefore never
+   ResolveExport"). Both callers, src/game/Player/dragtool.cpp:255 and :401, therefore never
    see a key release. Candidate carry-over; the fix is a `ResolveExport` initialiser (the door is
    `?Released@KeyMap@Input@@QEBA_NHH@Z`).
-2. **code/Game/Tutorial/finishtutorialinstance.cpp:72 resolves exe slot 0x140151c08 as
+2. **src/game/Tutorial/finishtutorialinstance.cpp:72 resolves exe slot 0x140151c08 as
    "IsDerivedFrom"; the PE import table says that slot is `?Save@Configuration@Audio@@QEAAXXZ`.**
    The slot is unregistered, so the pointer stays null and the TutorialInstance type check at
    :85-88 is silently skipped (it would otherwise call `Audio::Configuration::Save` with two
@@ -364,10 +364,10 @@ exports (`Scene`, `IPathInfo`, the path solver) has **no caller on any route**:
 | exe-slot hits Ach 11, Audio 3, Input 5, Pick 8, App 0 (3.4) | **13** (8 + 5 init), **8** (6 + 2), **7** (3 + 4), **11**, **1** | `sites.tsv` |
 | "Picking is called EXCLUSIVELY through" exe slots (3.4) | false: 7 by-name + 4 by-hex resolution sites too (§3) | `sites.tsv` |
 | by-address Runtime hits: 8 total; Input 0, Achievement 0, Application 0 (3.5) | **19**: Engine 5, Achievement 4 (scenario.cpp:75-81), Audio 3, Input 3, Picking 4, Application 2 — plus 26 dead hex constants in `engine/types/MainLoop.h` | `sites.tsv` |
-| hand-inlined vtable calls: 2, in `code/Game/Component`, targets unverified (3.6) | full sweep: **2 proved** (UpdateLoop slot 7, moddialog.cpp:733, mod_dialog_vtables.cpp:440) + 4 own-slot-0 in Goal/Scenario bodies; the two Component hits are DecalComponent (not these namespaces) | §4 |
+| hand-inlined vtable calls: 2, in `src/game/Component`, targets unverified (3.6) | full sweep: **2 proved** (UpdateLoop slot 7, moddialog.cpp:733, mod_dialog_vtables.cpp:440) + 4 own-slot-0 in Goal/Scenario bodies; the two Component hits are DecalComponent (not these namespaces) | §4 |
 | `GameUpdateLoop` 22 slots (4.1) | **12** | standalone/gameupdateloop_stubs.cpp:149 |
 | five exe-side loop subclasses; only GameUpdateLoop not a standalone stub (4.1) | five loop tables confirmed, but GameUpdateLoop's TABLE is also in `standalone/` (gameupdateloop_stubs.cpp:149); plus **Scenario : Achievement::Achievement** (scenario.cpp:277) and the exe `AchievementInstance` (0x14015e350) the inventory missed | `EXE_SUBCLASSES.md` §1 |
-| Goal family "zero hand-inlined calls", all in `code/Game/Goal` (4.2) | 3 own-slot-0 calls (statgoal.cpp:167, timegoal.cpp:78, goal_exe_helpers.cpp:205); FinishTutorialGoal/Instance live in `code/Game/Tutorial/` | `EXE_SUBCLASSES.md` §1B, §3D |
+| Goal family "zero hand-inlined calls", all in `src/game/Goal` (4.2) | 3 own-slot-0 calls (statgoal.cpp:167, timegoal.cpp:78, goal_exe_helpers.cpp:205); FinishTutorialGoal/Instance live in `src/game/Tutorial/` | `EXE_SUBCLASSES.md` §1B, §3D |
 | two `engine/types` mirror PODs, 204 lines (4.2, 4.8) | the loop PODs survive too: `engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,GameUpdateLoop,MainLoop}.h`, plus `TutorialGoals.h` (an External family) | `ls engine/types` |
 | `PickingComponent` a Picking mirror POD (4.2) | an exe **`Component`** subclass holding an int id (PickingComponent.h:6, :29) | `engine/types/PickingComponent.h` |
 | Pathfinding: 0 called, mod-tool only (2) | `PointList` is LIVE via `InteractDescription` (§5) | Ghidra xrefs to 0x140151448 |
@@ -386,96 +386,96 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 ---------------------------------------------------------------------------------------------------
 ## Appendix A — CALL sites of every `engine_funcs` door (code-only)
 
-- `fn_Achievement_GetTitle` (Achievement): code/Game/Dialog/achievementdialog.cpp:141, code/Game/Dialog/goaldialog.cpp:190, code/Game/Dialog/scenariodialog.cpp:230, code/Game/Game/eventlog_achievement.cpp:80, code/Game/Game/gameupdateloop.cpp:2753
-- `fn_Goal_BaseCtor` (Achievement): code/Game/Goal/buildinggoal.cpp:171, code/Game/Goal/populationgoal.cpp:101, code/Game/Tutorial/finishtutorialgoal.cpp:105
-- `fn_Goal_BaseDtor` (Achievement): code/Game/Goal/buildinggoal.cpp:71, code/Game/Goal/populationgoal.cpp:47, code/Game/Tutorial/finishtutorialgoal.cpp:48
-- `fn_Goal_BaseSerialize` (Achievement): code/Game/Goal/buildinggoal.cpp:99, code/Game/Goal/populationgoal.cpp:70, code/Game/Tutorial/finishtutorialgoal.cpp:72
-- `fn_AchievementManager_GetAchievement` (Achievement): code/Game/Dialog/achievementdialog.cpp:125, code/Game/Game/eventlog_achievement.cpp:74
-- `fn_AchievementManager_GetAchievementCount` (Achievement): code/Game/Dialog/achievementdialog.cpp:67, code/Game/Dialog/dialog_exe_helpers.cpp:221
-- `fn_Achievement_GetDescription` (Achievement): code/Game/Dialog/achievementdialog.cpp:149, code/Game/Dialog/scenariodialog.cpp:246
-- `fn_Achievement_GetSpriteName` (Achievement): code/Game/Dialog/achievementdialog.cpp:130, code/Game/Dialog/scenariodialog.cpp:214
-- `fn_GoalList_GetGoal` (Achievement): code/Game/Dialog/goaldialog.cpp:134, code/Game/Dialog/goaldialog.cpp:242
-- `fn_AchievementManager_IsAchievementAwarded` (Achievement): code/Game/Dialog/achievementdialog.cpp:213
-- `fn_GoalInstance_BaseDtor` (Achievement): code/Game/Tutorial/finishtutorialgoal.cpp:212
-- `fn_GoalInstance_HasFailed` (Achievement): code/Game/Dialog/goaldialog.cpp:246
-- `fn_GoalInstance_IsMet` (Achievement): code/Game/Dialog/goaldialog.cpp:245
-- `fn_GoalInstance_Persist` (Achievement): code/Game/Tutorial/finishtutorialinstance.cpp:51
-- `fn_GoalList_GetGoalCount` (Achievement): code/Game/Dialog/goaldialog.cpp:78
-- `fn_Goal_GetText` (Achievement): code/Game/Dialog/goaldialog.cpp:142
-- `fn_App_Quit` (Application): code/Game/Dialog/mainmenudialog.cpp:753, code/Game/Dialog/mainmenudialog.cpp:969
-- `fn_Audio_Scene_Pause` (Audio): code/Game/Dialog/mainmenudialog.cpp:649, code/Game/Dialog/mainmenudialog.cpp:650, code/Game/Dialog/mainmenudialog.cpp:651, code/Game/Dialog/mainmenudialog.cpp:697, code/Game/Dialog/mainmenudialog.cpp:698, code/Game/Dialog/mainmenudialog.cpp:699, code/Game/Game/gameupdateloop_load.cpp:1699, code/Game/Game/gameupdateloop_load.cpp:1700, code/Game/Game/gameupdateloop_load.cpp:1701
-- `fn_Audio_Scene_PlayEffect` (Audio): code/Game/Dialog/eventnotifydialog.cpp:555, code/Game/Game/menudialogloopt.cpp:1206, code/Game/Game/unreg_lane5_musicplayer.cpp:271, code/Game/Player/tool_base_drag.cpp:122, code/Game/Player/tool_base_drag.cpp:152, code/Game/Player/tool_base_drag.cpp:172
-- `fn_Audio_Scene_AddEmitter` (Audio): code/Game/Component/ambientemittercomponent.cpp:241, code/Game/Component/ambientenvironmentcomponent.cpp:117, code/Game/Component/firecomponent_ignite.cpp:268
-- `fn_Audio_Scene_FindEffect3D` (Audio): code/Game/Component/ambientemittercomponent.cpp:233, code/Game/Component/ambientenvironmentcomponent.cpp:107, code/Game/Component/firecomponent_ignite.cpp:260
-- `fn_Audio_Scene_PlayEffect3D` (Audio): code/Game/Component/ambientemittercomponent.cpp:238, code/Game/Component/ambientenvironmentcomponent.cpp:112, code/Game/Component/firecomponent_ignite.cpp:265
-- `fn_Audio_Scene_SetEmitterVolume` (Audio): code/Game/Component/ambientenvironmentcomponent.cpp:176, code/Game/Component/tornadocomponent.cpp:957, code/Game/Dialog/debugui.cpp:343
-- `fn_AudioScene_Ctor` (Audio): code/Game/Game/gameupdateloop_load.cpp:1113, engine/funcs/engine_funcs.h:2610
-- `fn_Audio_Scene_GetEmitterCount` (Audio): code/Game/Component/ambientenvironmentcomponent.cpp:161, code/Game/Component/firecomponent_ignite.cpp:355
-- `fn_Audio_Scene_MoveEmitter` (Audio): code/Game/Component/tornadocomponent.cpp:1053, code/Game/Dialog/debugui.cpp:318
-- `fn_Audio_Scene_RemoveEmitter` (Audio): code/Game/Component/ambientenvironmentcomponent.cpp:160, code/Game/Component/firecomponent_ignite.cpp:353
-- `fn_Audio_Scene_StopEffect3D` (Audio): code/Game/Component/ambientenvironmentcomponent.cpp:162, code/Game/Component/firecomponent_ignite.cpp:357
-- `fn_AudioConfig_Save` (Audio): code/Game/Dialog/optionsdialog.cpp:1163
-- `fn_AudioConfig_Startup` (Audio): code/Game/Dialog/optionsdialog.cpp:1220
-- `fn_AudioDevice_Update` (Audio): code/Game/Game/menudialogloopt.cpp:1139
-- `fn_Audio_Scene_Update` (Audio): code/Game/Game/menudialogloopt.cpp:1334
-- `fn_DialogLoaderLoopT_Ctor` (Engine): code/Game/Dialog/mainmenudialog.cpp:259, code/Game/Dialog/newgamedialog.cpp:877, code/Game/Dialog/saveloaddialog.cpp:811, code/Game/Game/game_main.cpp:723, code/Game/Game/worldsetup_reload.cpp:116, code/Game/Tutorial/tutorialui.cpp:110, code/Game/Tutorial/tutorial_next_scenario.cpp:115
-- `fn_LoaderLoop_Ctor` (Engine): code/Game/Dialog/mainmenudialog.cpp:276, code/Game/Dialog/newgamedialog.cpp:894, code/Game/Dialog/saveloaddialog.cpp:834, code/Game/Game/game_main.cpp:815, code/Game/Game/worldsetup_reload.cpp:134, code/Game/Tutorial/tutorialui.cpp:134, code/Game/Tutorial/tutorial_next_scenario.cpp:132
-- `fn_MainLoop_SetNextLoop` (Engine): code/Game/Game/gameupdateloop.cpp:1630, standalone/loader_loop_stubs.cpp:169, standalone/loader_loop_stubs.cpp:282, standalone/menudialogloopt_stubs.cpp:525, standalone/splash_loop_stubs.cpp:482
-- `fn_DialogLoaderLoopT_Load` (Engine): code/Game/Game/game_main.cpp:765, code/Game/Game/game_main.cpp:769, standalone/splash_loop_stubs.cpp:173, standalone/splash_loop_stubs.cpp:549
-- `fn_UpdateLoop_Ctor` (Engine): code/Game/Dialog/newgamedialog.cpp:829, code/Game/Dialog/saveloaddialog.cpp:764, code/Game/Game/worldsetup_reload.cpp:76, code/Game/Tutorial/tutorial_next_scenario.cpp:77
+- `fn_Achievement_GetTitle` (Achievement): src/game/Dialog/achievementdialog.cpp:141, src/game/Dialog/goaldialog.cpp:190, src/game/Dialog/scenariodialog.cpp:230, src/game/Game/eventlog_achievement.cpp:80, src/game/Game/gameupdateloop.cpp:2753
+- `fn_Goal_BaseCtor` (Achievement): src/game/Goal/buildinggoal.cpp:171, src/game/Goal/populationgoal.cpp:101, src/game/Tutorial/finishtutorialgoal.cpp:105
+- `fn_Goal_BaseDtor` (Achievement): src/game/Goal/buildinggoal.cpp:71, src/game/Goal/populationgoal.cpp:47, src/game/Tutorial/finishtutorialgoal.cpp:48
+- `fn_Goal_BaseSerialize` (Achievement): src/game/Goal/buildinggoal.cpp:99, src/game/Goal/populationgoal.cpp:70, src/game/Tutorial/finishtutorialgoal.cpp:72
+- `fn_AchievementManager_GetAchievement` (Achievement): src/game/Dialog/achievementdialog.cpp:125, src/game/Game/eventlog_achievement.cpp:74
+- `fn_AchievementManager_GetAchievementCount` (Achievement): src/game/Dialog/achievementdialog.cpp:67, src/game/Dialog/dialog_exe_helpers.cpp:221
+- `fn_Achievement_GetDescription` (Achievement): src/game/Dialog/achievementdialog.cpp:149, src/game/Dialog/scenariodialog.cpp:246
+- `fn_Achievement_GetSpriteName` (Achievement): src/game/Dialog/achievementdialog.cpp:130, src/game/Dialog/scenariodialog.cpp:214
+- `fn_GoalList_GetGoal` (Achievement): src/game/Dialog/goaldialog.cpp:134, src/game/Dialog/goaldialog.cpp:242
+- `fn_AchievementManager_IsAchievementAwarded` (Achievement): src/game/Dialog/achievementdialog.cpp:213
+- `fn_GoalInstance_BaseDtor` (Achievement): src/game/Tutorial/finishtutorialgoal.cpp:212
+- `fn_GoalInstance_HasFailed` (Achievement): src/game/Dialog/goaldialog.cpp:246
+- `fn_GoalInstance_IsMet` (Achievement): src/game/Dialog/goaldialog.cpp:245
+- `fn_GoalInstance_Persist` (Achievement): src/game/Tutorial/finishtutorialinstance.cpp:51
+- `fn_GoalList_GetGoalCount` (Achievement): src/game/Dialog/goaldialog.cpp:78
+- `fn_Goal_GetText` (Achievement): src/game/Dialog/goaldialog.cpp:142
+- `fn_App_Quit` (Application): src/game/Dialog/mainmenudialog.cpp:753, src/game/Dialog/mainmenudialog.cpp:969
+- `fn_Audio_Scene_Pause` (Audio): src/game/Dialog/mainmenudialog.cpp:649, src/game/Dialog/mainmenudialog.cpp:650, src/game/Dialog/mainmenudialog.cpp:651, src/game/Dialog/mainmenudialog.cpp:697, src/game/Dialog/mainmenudialog.cpp:698, src/game/Dialog/mainmenudialog.cpp:699, src/game/Game/gameupdateloop_load.cpp:1699, src/game/Game/gameupdateloop_load.cpp:1700, src/game/Game/gameupdateloop_load.cpp:1701
+- `fn_Audio_Scene_PlayEffect` (Audio): src/game/Dialog/eventnotifydialog.cpp:555, src/game/Game/menudialogloopt.cpp:1206, src/game/Game/unreg_lane5_musicplayer.cpp:271, src/game/Player/tool_base_drag.cpp:122, src/game/Player/tool_base_drag.cpp:152, src/game/Player/tool_base_drag.cpp:172
+- `fn_Audio_Scene_AddEmitter` (Audio): src/game/Component/ambientemittercomponent.cpp:241, src/game/Component/ambientenvironmentcomponent.cpp:117, src/game/Component/firecomponent_ignite.cpp:268
+- `fn_Audio_Scene_FindEffect3D` (Audio): src/game/Component/ambientemittercomponent.cpp:233, src/game/Component/ambientenvironmentcomponent.cpp:107, src/game/Component/firecomponent_ignite.cpp:260
+- `fn_Audio_Scene_PlayEffect3D` (Audio): src/game/Component/ambientemittercomponent.cpp:238, src/game/Component/ambientenvironmentcomponent.cpp:112, src/game/Component/firecomponent_ignite.cpp:265
+- `fn_Audio_Scene_SetEmitterVolume` (Audio): src/game/Component/ambientenvironmentcomponent.cpp:176, src/game/Component/tornadocomponent.cpp:957, src/game/Dialog/debugui.cpp:343
+- `fn_AudioScene_Ctor` (Audio): src/game/Game/gameupdateloop_load.cpp:1113, engine/funcs/engine_funcs.h:2610
+- `fn_Audio_Scene_GetEmitterCount` (Audio): src/game/Component/ambientenvironmentcomponent.cpp:161, src/game/Component/firecomponent_ignite.cpp:355
+- `fn_Audio_Scene_MoveEmitter` (Audio): src/game/Component/tornadocomponent.cpp:1053, src/game/Dialog/debugui.cpp:318
+- `fn_Audio_Scene_RemoveEmitter` (Audio): src/game/Component/ambientenvironmentcomponent.cpp:160, src/game/Component/firecomponent_ignite.cpp:353
+- `fn_Audio_Scene_StopEffect3D` (Audio): src/game/Component/ambientenvironmentcomponent.cpp:162, src/game/Component/firecomponent_ignite.cpp:357
+- `fn_AudioConfig_Save` (Audio): src/game/Dialog/optionsdialog.cpp:1163
+- `fn_AudioConfig_Startup` (Audio): src/game/Dialog/optionsdialog.cpp:1220
+- `fn_AudioDevice_Update` (Audio): src/game/Game/menudialogloopt.cpp:1139
+- `fn_Audio_Scene_Update` (Audio): src/game/Game/menudialogloopt.cpp:1334
+- `fn_DialogLoaderLoopT_Ctor` (Engine): src/game/Dialog/mainmenudialog.cpp:259, src/game/Dialog/newgamedialog.cpp:877, src/game/Dialog/saveloaddialog.cpp:811, src/game/Game/game_main.cpp:723, src/game/Game/worldsetup_reload.cpp:116, src/game/Tutorial/tutorialui.cpp:110, src/game/Tutorial/tutorial_next_scenario.cpp:115
+- `fn_LoaderLoop_Ctor` (Engine): src/game/Dialog/mainmenudialog.cpp:276, src/game/Dialog/newgamedialog.cpp:894, src/game/Dialog/saveloaddialog.cpp:834, src/game/Game/game_main.cpp:815, src/game/Game/worldsetup_reload.cpp:134, src/game/Tutorial/tutorialui.cpp:134, src/game/Tutorial/tutorial_next_scenario.cpp:132
+- `fn_MainLoop_SetNextLoop` (Engine): src/game/Game/gameupdateloop.cpp:1630, standalone/loader_loop_stubs.cpp:169, standalone/loader_loop_stubs.cpp:282, standalone/menudialogloopt_stubs.cpp:525, standalone/splash_loop_stubs.cpp:482
+- `fn_DialogLoaderLoopT_Load` (Engine): src/game/Game/game_main.cpp:765, src/game/Game/game_main.cpp:769, standalone/splash_loop_stubs.cpp:173, standalone/splash_loop_stubs.cpp:549
+- `fn_UpdateLoop_Ctor` (Engine): src/game/Dialog/newgamedialog.cpp:829, src/game/Dialog/saveloaddialog.cpp:764, src/game/Game/worldsetup_reload.cpp:76, src/game/Tutorial/tutorial_next_scenario.cpp:77
 - `fn_Loader_Load` (Engine): standalone/loader_loop_stubs.cpp:144, standalone/loader_loop_stubs.cpp:260
 - `fn_DialogLoaderLoopT_Startup` (Engine): standalone/splash_loop_stubs.cpp:199
 - `fn_DialogLoopT_Ctor` (Engine): engine/funcs/engine_funcs.h:2603
 - `fn_DialogLoopT_Load` (Engine): standalone/menudialogloopt_stubs.cpp:669
 - `fn_DialogLoopT_Startup` (Engine): standalone/menudialogloopt_stubs.cpp:318
 - `fn_DialogLoopT_Update` (Engine): standalone/menudialogloopt_stubs.cpp:551
-- `fn_IsRunning` (Engine): code/Game/Goal/populationgoal.cpp:137
-- `fn_MainLoop_OnVideoError` (Engine): code/Game/Dialog/optionsdialog.cpp:1064
-- `fn_MainLoop_OnVideoRestart` (Engine): code/Game/Dialog/optionsdialog.cpp:1100
-- `fn_KeyMap_GetValue` (Input): code/Game/Dialog/entityui.cpp:521, code/Game/Dialog/entityui.cpp:527, code/Game/Dialog/toolui.cpp:419, code/Game/Dialog/toolui.cpp:424, code/Game/Dialog/toolui.cpp:447, code/Game/Dialog/toolui.cpp:460, code/Game/Dialog/toolui.cpp:464, code/Game/Dialog/toolui.cpp:522, code/Game/Game/camera_input.cpp:137, code/Game/Game/camera_input.cpp:138, code/Game/Game/camera_input.cpp:139, code/Game/Game/camera_input.cpp:140, code/Game/Game/camera_input.cpp:149, code/Game/Game/camera_input.cpp:150, code/Game/Game/camera_input.cpp:156, code/Game/Game/camera_input.cpp:157, code/Game/Game/camera_input.cpp:158, code/Game/Game/camera_input.cpp:159, code/Game/Game/camera_input.cpp:165, code/Game/Player/dragtool.cpp:403, code/Game/Player/roadtool.cpp:246, code/Game/Player/tool_base_ray.cpp:233, code/Game/Player/tool_base_ray.cpp:234
-- `fn_KeyMap_Pressed` (Input): code/Game/Dialog/entityui.cpp:557, code/Game/Dialog/followdialog.cpp:337, code/Game/Game/camera_input.cpp:168, code/Game/Game/camera_input.cpp:170, code/Game/Game/camera_input.cpp:177, code/Game/Game/camera_input.cpp:179, code/Game/Game/camera_input.cpp:348, code/Game/Game/camera_input.cpp:357, code/Game/Game/gameupdateloop.cpp:1524, code/Game/Game/gameupdateloop.cpp:1555, code/Game/Player/dragtool.cpp:264, code/Game/Player/dragtool.cpp:374, code/Game/Player/fencedtool.cpp:161, code/Game/Player/fencedtool.cpp:176, code/Game/Player/tool_activation_standalone.cpp:393
-- `fn_Input_Device_GetValue` (Input): code/Game/Dialog/spritecaptureui.cpp:121, code/Game/Dialog/spritecaptureui.cpp:130, code/Game/Dialog/spritecaptureui.cpp:131, code/Game/Dialog/spritecaptureui.cpp:139, code/Game/Dialog/spritecaptureui.cpp:141, code/Game/Dialog/spritecaptureui.cpp:142
-- `fn_KeyMap_GetDeviceForId` (Input): code/Game/Dialog/hotkeytooltipui.cpp:106, code/Game/Dialog/optionsdialog.cpp:1441, code/Game/Tutorial/tutorialimagehotkey.cpp:263, code/Game/Tutorial/tutorialimageinputkey.cpp:246
-- `fn_KeyMap_GetInputForId` (Input): code/Game/Dialog/hotkeytooltipui.cpp:105, code/Game/Dialog/optionsdialog.cpp:1442, code/Game/Tutorial/tutorialimagehotkey.cpp:272, code/Game/Tutorial/tutorialimageinputkey.cpp:250
-- `fn_InputDevice_EnableMouseClipping` (Input): code/Game/Dialog/optionsdialog.cpp:844, code/Game/Dialog/optionsdialog.cpp:1211
-- `fn_Input_Device_Released` (Input): code/Game/Dialog/optioninputbinddialog.cpp:81, code/Game/Dialog/optioninputbinddialog.cpp:94
-- `fn_KeyMap_Released` (Input): code/Game/Player/dragtool.cpp:255, code/Game/Player/dragtool.cpp:401
-- `fn_InputConfig_Load` (Input): code/Game/Dialog/optionsdialog.cpp:1204
-- `fn_InputConfig_Save` (Input): code/Game/Dialog/optionsdialog.cpp:848
-- `fn_InputDevice_ResetState` (Input): code/Game/Dialog/optionsdialog.cpp:1647
-- `fn_Input_Device_Pressed` (Input): code/Game/Dialog/spritecaptureui.cpp:138
-- `fn_KeyMap_ClearAll` (Input): code/Game/Game/inputbindings.cpp:142
-- `fn_KeyMap_ClearInput2` (Input): code/Game/Dialog/optionsdialog.cpp:1538
-- `fn_KeyMap_ClearInput3` (Input): code/Game/Dialog/optionsdialog.cpp:1635
-- `fn_KeyMap_GetIdForDeviceInput` (Input): code/Game/Dialog/optionsdialog.cpp:1531
-- `fn_KeyMap_Load` (Input): code/Game/Game/inputbindings.cpp:151
-- `fn_KeyMap_RegisterInput` (Input): code/Game/Game/inputbindings.cpp:145
-- `fn_KeyMap_SetInput` (Input): code/Game/Dialog/optionsdialog.cpp:1646
-- `fn_SaveLoad_GetOperation` (Save): code/Game/Dialog/autosavedialog.cpp:139, code/Game/Dialog/dialog_exe_helpers.cpp:117, code/Game/Dialog/saveloaddialog.cpp:524, code/Game/Dialog/saveloaddialog.cpp:706, code/Game/Dialog/saveloaddialog.cpp:713, code/Game/Dialog/scenariodialog.cpp:466, code/Game/Dialog/scenariodialog.cpp:473, code/Game/Tutorial/tutorial_next_scenario.cpp:304, code/Game/Tutorial/tutorial_next_scenario.cpp:310, standalone/saveload_harness.cpp:122, standalone/saveload_harness.cpp:132
-- `fn_SaveLoad_GetSaveInfo` (Save): code/Game/Dialog/saveloaddialog.cpp:191, code/Game/Dialog/saveloaddialog.cpp:542, code/Game/Dialog/saveloaddialog.cpp:575, code/Game/Dialog/saveloaddialog.cpp:972, code/Game/Dialog/saveloaddialog.cpp:1025, code/Game/Dialog/saveloaddialog.cpp:1049, code/Game/Dialog/saveloaddialog.cpp:1074, code/Game/Dialog/saveloaddialog.cpp:1130, standalone/autostart.cpp:421
-- `fn_SaveLoad_SetOperation` (Save): code/Game/Dialog/dialog_exe_helpers.cpp:142, code/Game/Dialog/saveloaddialog.cpp:486, code/Game/Dialog/saveloaddialog.cpp:722, code/Game/Dialog/saveloaddialog.cpp:947, code/Game/Dialog/saveloaddialog.cpp:991, code/Game/Dialog/saveloaddialog.cpp:1165, code/Game/Dialog/scenariodialog.cpp:425, code/Game/Tutorial/tutorial_next_scenario.cpp:279
-- `fn_SaveLoad_Dtor` (Save): code/Game/Dialog/mainmenudialog.cpp:230, code/Game/Dialog/mainmenudialog.cpp:238, code/Game/Game/gameupdateloop.cpp:2658, code/Game/Tutorial/tutorialui.cpp:85
-- `fn_SaveLoad_SetMinOperationTime` (Save): code/Game/Dialog/dialog_exe_helpers.cpp:123, code/Game/Dialog/saveloaddialog.cpp:481, code/Game/Dialog/saveloaddialog.cpp:968, code/Game/Dialog/saveloaddialog.cpp:1015
-- `fn_SaveLoad_SetSaveName` (Save): code/Game/Dialog/dialog_exe_helpers.cpp:138, code/Game/Dialog/saveloaddialog.cpp:988, code/Game/Dialog/scenariodialog.cpp:426, code/Game/Tutorial/tutorial_next_scenario.cpp:280
-- `fn_SaveLoad_Update` (Save): code/Game/Dialog/scenariodialog.cpp:472, code/Game/Game/gameupdateloop.cpp:1565, code/Game/Tutorial/tutorial_next_scenario.cpp:309, standalone/menudialogloopt_stubs.cpp:426
-- `fn_SaveLoad_GetSaveState` (Save): code/Game/Dialog/saveloaddialog.cpp:762, code/Game/Dialog/scenariodialog.cpp:497, code/Game/Tutorial/tutorial_next_scenario.cpp:319
-- `fn_SaveLoad_SetSaveSprite` (Save): code/Game/Dialog/dialog_exe_helpers.cpp:131, code/Game/Dialog/saveloaddialog.cpp:476
-- `fn_SavedState_Ctor` (Save): code/Game/Dialog/moddialog.cpp:723, code/Game/Dialog/mod_dialog_vtables.cpp:431
-- `fn_SaveLoad_CheckMod` (Save): code/Game/Dialog/saveloaddialog.cpp:1047
-- `fn_SaveLoad_GetSaveCount` (Save): code/Game/Dialog/saveloaddialog.cpp:728
+- `fn_IsRunning` (Engine): src/game/Goal/populationgoal.cpp:137
+- `fn_MainLoop_OnVideoError` (Engine): src/game/Dialog/optionsdialog.cpp:1064
+- `fn_MainLoop_OnVideoRestart` (Engine): src/game/Dialog/optionsdialog.cpp:1100
+- `fn_KeyMap_GetValue` (Input): src/game/Dialog/entityui.cpp:521, src/game/Dialog/entityui.cpp:527, src/game/Dialog/toolui.cpp:419, src/game/Dialog/toolui.cpp:424, src/game/Dialog/toolui.cpp:447, src/game/Dialog/toolui.cpp:460, src/game/Dialog/toolui.cpp:464, src/game/Dialog/toolui.cpp:522, src/game/Game/camera_input.cpp:137, src/game/Game/camera_input.cpp:138, src/game/Game/camera_input.cpp:139, src/game/Game/camera_input.cpp:140, src/game/Game/camera_input.cpp:149, src/game/Game/camera_input.cpp:150, src/game/Game/camera_input.cpp:156, src/game/Game/camera_input.cpp:157, src/game/Game/camera_input.cpp:158, src/game/Game/camera_input.cpp:159, src/game/Game/camera_input.cpp:165, src/game/Player/dragtool.cpp:403, src/game/Player/roadtool.cpp:246, src/game/Player/tool_base_ray.cpp:233, src/game/Player/tool_base_ray.cpp:234
+- `fn_KeyMap_Pressed` (Input): src/game/Dialog/entityui.cpp:557, src/game/Dialog/followdialog.cpp:337, src/game/Game/camera_input.cpp:168, src/game/Game/camera_input.cpp:170, src/game/Game/camera_input.cpp:177, src/game/Game/camera_input.cpp:179, src/game/Game/camera_input.cpp:348, src/game/Game/camera_input.cpp:357, src/game/Game/gameupdateloop.cpp:1524, src/game/Game/gameupdateloop.cpp:1555, src/game/Player/dragtool.cpp:264, src/game/Player/dragtool.cpp:374, src/game/Player/fencedtool.cpp:161, src/game/Player/fencedtool.cpp:176, src/game/Player/tool_activation_standalone.cpp:393
+- `fn_Input_Device_GetValue` (Input): src/game/Dialog/spritecaptureui.cpp:121, src/game/Dialog/spritecaptureui.cpp:130, src/game/Dialog/spritecaptureui.cpp:131, src/game/Dialog/spritecaptureui.cpp:139, src/game/Dialog/spritecaptureui.cpp:141, src/game/Dialog/spritecaptureui.cpp:142
+- `fn_KeyMap_GetDeviceForId` (Input): src/game/Dialog/hotkeytooltipui.cpp:106, src/game/Dialog/optionsdialog.cpp:1441, src/game/Tutorial/tutorialimagehotkey.cpp:263, src/game/Tutorial/tutorialimageinputkey.cpp:246
+- `fn_KeyMap_GetInputForId` (Input): src/game/Dialog/hotkeytooltipui.cpp:105, src/game/Dialog/optionsdialog.cpp:1442, src/game/Tutorial/tutorialimagehotkey.cpp:272, src/game/Tutorial/tutorialimageinputkey.cpp:250
+- `fn_InputDevice_EnableMouseClipping` (Input): src/game/Dialog/optionsdialog.cpp:844, src/game/Dialog/optionsdialog.cpp:1211
+- `fn_Input_Device_Released` (Input): src/game/Dialog/optioninputbinddialog.cpp:81, src/game/Dialog/optioninputbinddialog.cpp:94
+- `fn_KeyMap_Released` (Input): src/game/Player/dragtool.cpp:255, src/game/Player/dragtool.cpp:401
+- `fn_InputConfig_Load` (Input): src/game/Dialog/optionsdialog.cpp:1204
+- `fn_InputConfig_Save` (Input): src/game/Dialog/optionsdialog.cpp:848
+- `fn_InputDevice_ResetState` (Input): src/game/Dialog/optionsdialog.cpp:1647
+- `fn_Input_Device_Pressed` (Input): src/game/Dialog/spritecaptureui.cpp:138
+- `fn_KeyMap_ClearAll` (Input): src/game/Game/inputbindings.cpp:142
+- `fn_KeyMap_ClearInput2` (Input): src/game/Dialog/optionsdialog.cpp:1538
+- `fn_KeyMap_ClearInput3` (Input): src/game/Dialog/optionsdialog.cpp:1635
+- `fn_KeyMap_GetIdForDeviceInput` (Input): src/game/Dialog/optionsdialog.cpp:1531
+- `fn_KeyMap_Load` (Input): src/game/Game/inputbindings.cpp:151
+- `fn_KeyMap_RegisterInput` (Input): src/game/Game/inputbindings.cpp:145
+- `fn_KeyMap_SetInput` (Input): src/game/Dialog/optionsdialog.cpp:1646
+- `fn_SaveLoad_GetOperation` (Save): src/game/Dialog/autosavedialog.cpp:139, src/game/Dialog/dialog_exe_helpers.cpp:117, src/game/Dialog/saveloaddialog.cpp:524, src/game/Dialog/saveloaddialog.cpp:706, src/game/Dialog/saveloaddialog.cpp:713, src/game/Dialog/scenariodialog.cpp:466, src/game/Dialog/scenariodialog.cpp:473, src/game/Tutorial/tutorial_next_scenario.cpp:304, src/game/Tutorial/tutorial_next_scenario.cpp:310, standalone/saveload_harness.cpp:122, standalone/saveload_harness.cpp:132
+- `fn_SaveLoad_GetSaveInfo` (Save): src/game/Dialog/saveloaddialog.cpp:191, src/game/Dialog/saveloaddialog.cpp:542, src/game/Dialog/saveloaddialog.cpp:575, src/game/Dialog/saveloaddialog.cpp:972, src/game/Dialog/saveloaddialog.cpp:1025, src/game/Dialog/saveloaddialog.cpp:1049, src/game/Dialog/saveloaddialog.cpp:1074, src/game/Dialog/saveloaddialog.cpp:1130, standalone/autostart.cpp:421
+- `fn_SaveLoad_SetOperation` (Save): src/game/Dialog/dialog_exe_helpers.cpp:142, src/game/Dialog/saveloaddialog.cpp:486, src/game/Dialog/saveloaddialog.cpp:722, src/game/Dialog/saveloaddialog.cpp:947, src/game/Dialog/saveloaddialog.cpp:991, src/game/Dialog/saveloaddialog.cpp:1165, src/game/Dialog/scenariodialog.cpp:425, src/game/Tutorial/tutorial_next_scenario.cpp:279
+- `fn_SaveLoad_Dtor` (Save): src/game/Dialog/mainmenudialog.cpp:230, src/game/Dialog/mainmenudialog.cpp:238, src/game/Game/gameupdateloop.cpp:2658, src/game/Tutorial/tutorialui.cpp:85
+- `fn_SaveLoad_SetMinOperationTime` (Save): src/game/Dialog/dialog_exe_helpers.cpp:123, src/game/Dialog/saveloaddialog.cpp:481, src/game/Dialog/saveloaddialog.cpp:968, src/game/Dialog/saveloaddialog.cpp:1015
+- `fn_SaveLoad_SetSaveName` (Save): src/game/Dialog/dialog_exe_helpers.cpp:138, src/game/Dialog/saveloaddialog.cpp:988, src/game/Dialog/scenariodialog.cpp:426, src/game/Tutorial/tutorial_next_scenario.cpp:280
+- `fn_SaveLoad_Update` (Save): src/game/Dialog/scenariodialog.cpp:472, src/game/Game/gameupdateloop.cpp:1565, src/game/Tutorial/tutorial_next_scenario.cpp:309, standalone/menudialogloopt_stubs.cpp:426
+- `fn_SaveLoad_GetSaveState` (Save): src/game/Dialog/saveloaddialog.cpp:762, src/game/Dialog/scenariodialog.cpp:497, src/game/Tutorial/tutorial_next_scenario.cpp:319
+- `fn_SaveLoad_SetSaveSprite` (Save): src/game/Dialog/dialog_exe_helpers.cpp:131, src/game/Dialog/saveloaddialog.cpp:476
+- `fn_SavedState_Ctor` (Save): src/game/Dialog/moddialog.cpp:723, src/game/Dialog/mod_dialog_vtables.cpp:431
+- `fn_SaveLoad_CheckMod` (Save): src/game/Dialog/saveloaddialog.cpp:1047
+- `fn_SaveLoad_GetSaveCount` (Save): src/game/Dialog/saveloaddialog.cpp:728
 
 ## Appendix B — resolution sites outside engine_funcs.cpp (b, b2, c, d, e, g)
 
 | ns | site | spelling | symbol |
 |---|---|---|---|
-| Achievement | code/Game/Game/gameupdateloop.cpp:536 | exehex via `ResolveAddr` | `?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop.cpp:541 | exehex via `ResolveAddr` | `?IsMet@AchievementInstance@Achievement@@QEBA_NXZ` |
-| Achievement | code/Game/Game/gameupdateloop.cpp:546 | exehex via `ResolveAddr` | `?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ` |
-| Achievement | code/Game/Goal/statgoal.cpp:66 | exehex via `ResolveAddr` | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Goal/timegoal.cpp:34 | exehex via `ResolveAddr` | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Goal/timegoalinstance.cpp:58 | exehex via `ResolveAddr` | `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Goal/timegoalinstance.cpp:64 | exehex via `ResolveAddr` | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
-| Achievement | code/Game/Goal/timegoalinstance.cpp:67 | exehex via `ResolveAddr` | `?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z` |
+| Achievement | src/game/Game/gameupdateloop.cpp:536 | exehex via `ResolveAddr` | `?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z` |
+| Achievement | src/game/Game/gameupdateloop.cpp:541 | exehex via `ResolveAddr` | `?IsMet@AchievementInstance@Achievement@@QEBA_NXZ` |
+| Achievement | src/game/Game/gameupdateloop.cpp:546 | exehex via `ResolveAddr` | `?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ` |
+| Achievement | src/game/Goal/statgoal.cpp:66 | exehex via `ResolveAddr` | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
+| Achievement | src/game/Goal/timegoal.cpp:34 | exehex via `ResolveAddr` | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
+| Achievement | src/game/Goal/timegoalinstance.cpp:58 | exehex via `ResolveAddr` | `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` |
+| Achievement | src/game/Goal/timegoalinstance.cpp:64 | exehex via `ResolveAddr` | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
+| Achievement | src/game/Goal/timegoalinstance.cpp:67 | exehex via `ResolveAddr` | `?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z` |
 | Achievement | runtime/src/achievement/achievement_manager.cpp:266 | lit via `RT_DATA_SLOT` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
 | Achievement | runtime/src/achievement/achievement_manager.cpp:276 | lit via `RT_DATA_SLOT` | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
 | Achievement | runtime/src/achievement/achievement_state.cpp:144 | lit via `RT_DATA_SLOT` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
@@ -491,28 +491,28 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Achievement | runtime/src/engine/engine_lifecycle.cpp:751 | lit via `RT_EXPORT_ONCE` | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
 | Achievement | runtime/src/engine/engine_lifecycle.cpp:846 | lit via `RT_EXPORT_ONCE` | `??1AchievementManager@Achievement@@QEAA@XZ` |
 | Achievement | runtime/src/object/deleting_dtor_leaves.cpp:153 | lit via `RT_EXPORT_ONCE` | `??1GoalList@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Dialog/dialog_exe_helpers.cpp:214 | lit via `ResolveExport` | `?SetAchievements@AchievementManager@Achievement@@QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop.cpp:529 | lit via `ResolveExport` | `?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop.cpp:531 | lit via `ResolveExport` | `?IsMet@AchievementInstance@Achievement@@QEBA_NXZ` |
-| Achievement | code/Game/Game/gameupdateloop.cpp:533 | lit via `ResolveExport` | `?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ` |
-| Achievement | code/Game/Game/gameupdateloop.cpp:647 | lit via `ResolveExport` | `?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop.cpp:649 | lit via `ResolveExport` | `?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp:1280 | lit via `ResolveExport` | `?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp:1325 | lit via `ResolveExport` | `?Reset@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp:88 | lit via `ResolveExport` | `??0AchievementInstance@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp:90 | lit via `ResolveExport` | `?SetAchievement@AchievementInstance@Achievement@@QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp:93 | lit via `ResolveExport` | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
-| Achievement | code/Game/Game/gameupdateloop_serialize.cpp:157 | lit via `ResolveExport` | `?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop_serialize.cpp:179 | lit via `ResolveExport` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | code/Game/Game/gameupdateloop_serialize.cpp:181 | lit via `ResolveExport` | `?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | code/Game/Goal/goal_exe_helpers.cpp:223 | lit via `ResolveExport` | `?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ` |
-| Achievement | code/Game/Goal/statgoal.cpp:356 | lit via `ResolveExport` | `??1Goal@Achievement@@UEAA@XZ` |
-| Achievement | code/Game/Goal/statgoal.cpp:465 | lit via `ResolveExport` | `??0Goal@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Goal/timegoal.cpp:130 | lit via `ResolveExport` | `??1GoalInstance@Achievement@@UEAA@XZ` |
-| Achievement | code/Game/Goal/timegoal.cpp:166 | lit via `ResolveExport` | `??1Goal@Achievement@@UEAA@XZ` |
-| Achievement | code/Game/Goal/timegoal.cpp:258 | lit via `ResolveExport` | `??0Goal@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Goal/timegoalinstance.cpp:224 | lit via `ResolveExport` | `??0GoalInstance@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Tutorial/finishtutorialinstance.cpp:302 | lit via `ResolveExport` | `??0GoalInstance@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Dialog/dialog_exe_helpers.cpp:214 | lit via `ResolveExport` | `?SetAchievements@AchievementManager@Achievement@@QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z` |
+| Achievement | src/game/Game/gameupdateloop.cpp:529 | lit via `ResolveExport` | `?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z` |
+| Achievement | src/game/Game/gameupdateloop.cpp:531 | lit via `ResolveExport` | `?IsMet@AchievementInstance@Achievement@@QEBA_NXZ` |
+| Achievement | src/game/Game/gameupdateloop.cpp:533 | lit via `ResolveExport` | `?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ` |
+| Achievement | src/game/Game/gameupdateloop.cpp:647 | lit via `ResolveExport` | `?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z` |
+| Achievement | src/game/Game/gameupdateloop.cpp:649 | lit via `ResolveExport` | `?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp:1280 | lit via `ResolveExport` | `?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp:1325 | lit via `ResolveExport` | `?Reset@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp:88 | lit via `ResolveExport` | `??0AchievementInstance@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp:90 | lit via `ResolveExport` | `?SetAchievement@AchievementInstance@Achievement@@QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp:93 | lit via `ResolveExport` | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/game/Game/gameupdateloop_serialize.cpp:157 | lit via `ResolveExport` | `?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z` |
+| Achievement | src/game/Game/gameupdateloop_serialize.cpp:179 | lit via `ResolveExport` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
+| Achievement | src/game/Game/gameupdateloop_serialize.cpp:181 | lit via `ResolveExport` | `?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/game/Goal/goal_exe_helpers.cpp:223 | lit via `ResolveExport` | `?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ` |
+| Achievement | src/game/Goal/statgoal.cpp:356 | lit via `ResolveExport` | `??1Goal@Achievement@@UEAA@XZ` |
+| Achievement | src/game/Goal/statgoal.cpp:465 | lit via `ResolveExport` | `??0Goal@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Goal/timegoal.cpp:130 | lit via `ResolveExport` | `??1GoalInstance@Achievement@@UEAA@XZ` |
+| Achievement | src/game/Goal/timegoal.cpp:166 | lit via `ResolveExport` | `??1Goal@Achievement@@UEAA@XZ` |
+| Achievement | src/game/Goal/timegoal.cpp:258 | lit via `ResolveExport` | `??0Goal@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Goal/timegoalinstance.cpp:224 | lit via `ResolveExport` | `??0GoalInstance@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Tutorial/finishtutorialinstance.cpp:302 | lit via `ResolveExport` | `??0GoalInstance@Achievement@@QEAA@XZ` |
 | Achievement | runtime/src/achievement/achievement_manager.cpp:173 | lit via `ResolveExport` | `?ReadAchievements@AchievementManager@Achievement@@QEAAXXZ` |
 | Achievement | runtime/src/achievement/achievement_manager.cpp:178 | lit via `ResolveExport` | `?SetAchievementMet@AchievementManager@Achievement@@QEAA_NH@Z` |
 | Achievement | runtime/src/achievement/achievement_manager.cpp:190 | lit via `ResolveExport` | `?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@Achievement@@@Object@@XZ` |
@@ -527,11 +527,11 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Achievement | standalone/reg_goal.cpp:80 | lit via `ResolveExport` | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
 | Achievement | standalone/reg_goal.cpp:82 | lit via `ResolveExport` | `?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z` |
 | Achievement | standalone/reg_unreg_lane1.cpp:212 | lit via `ResolveExport` | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | code/Game/Game/game_main.cpp:270 | lit via `ResolveFn` | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | code/Game/Game/scenario.cpp:75 | rthex via `ResolveAddr` | `??0Achievement@0@QEAA@XZ` |
-| Achievement | code/Game/Game/scenario.cpp:77 | rthex via `ResolveAddr` | `??1Achievement@0@UEAA@XZ` |
-| Achievement | code/Game/Game/scenario.cpp:79 | rthex via `ResolveAddr` | `?GetFileVersion@Achievement@1@UEBAHXZ` |
-| Achievement | code/Game/Game/scenario.cpp:81 | rthex via `ResolveAddr` | `?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z` |
+| Achievement | src/game/Game/game_main.cpp:270 | lit via `ResolveFn` | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/game/Game/scenario.cpp:75 | rthex via `ResolveAddr` | `??0Achievement@0@QEAA@XZ` |
+| Achievement | src/game/Game/scenario.cpp:77 | rthex via `ResolveAddr` | `??1Achievement@0@UEAA@XZ` |
+| Achievement | src/game/Game/scenario.cpp:79 | rthex via `ResolveAddr` | `?GetFileVersion@Achievement@1@UEBAHXZ` |
+| Achievement | src/game/Game/scenario.cpp:81 | rthex via `ResolveAddr` | `?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z` |
 | Application | runtime/src/application/application_accessors.cpp:48 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | runtime/src/application/platform_startup_win.cpp:113 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | runtime/src/engine/singleton_ctors.cpp:161 | lit via `RT_DATA_SLOT` | `?_singleton@Application@1@0PEAV11@EA` |
@@ -546,22 +546,22 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Application | runtime/src/engine/engine_lifecycle.cpp:885 | lit via `RT_EXPORT_ONCE` | `??1Application@0@QEAA@XZ` |
 | Application | runtime/src/input/input_platform_shutdown_win.cpp:216 | lit via `RT_EXPORT_ONCE` | `?UnregisterMessageCallback@Application@1@QEAAXI@Z` |
 | Application | runtime/src/input/input_platform_startup_win.cpp:132 | lit via `RT_EXPORT_ONCE` | `?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z` |
-| Application | code/Game/Action/keystone_a_zone.cpp:69 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
-| Application | code/Game/Game/gameupdateloop.cpp:653 | lit via `ResolveExport` | `?IsPaused@Application@1@QEAA_NXZ` |
-| Application | code/Game/Game/keystone_a_gamedtor.cpp:91 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
-| Application | code/Game/Player/pathtool_setselected.cpp:87 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
+| Application | src/game/Action/keystone_a_zone.cpp:69 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
+| Application | src/game/Game/gameupdateloop.cpp:653 | lit via `ResolveExport` | `?IsPaused@Application@1@QEAA_NXZ` |
+| Application | src/game/Game/keystone_a_gamedtor.cpp:91 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
+| Application | src/game/Player/pathtool_setselected.cpp:87 | lit via `ResolveExport` | `?YieldToThreads@Application@1@QEAAXXZ` |
 | Application | runtime/src/engine/loops.cpp:1061 | lit via `ResolveExport` | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | runtime/src/engine/loops.cpp:1070 | lit via `ResolveExport` | `?SleepThread@Application@1@QEAAXH@Z` |
-| Application | code/Game/Game/game_main.cpp:364 | lit via `ResolveFn` | `?PlatformShutdown@Application@1@AEAAXXZ` |
+| Application | src/game/Game/game_main.cpp:364 | lit via `ResolveFn` | `?PlatformShutdown@Application@1@AEAAXXZ` |
 | Application | runtime/src/ui/userinterface.cpp:299 | lit via `rtuielem::AtomicExport` | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | runtime/src/engine/mainloop_run.cpp:284 | rthex via `ResolveAddr` | `?PlatformUpdate@Application@1@AEAA_NXZ` |
 | Application | standalone/address_registry.cpp:1544 | rthex via `ResolveAddr` | `?_singleton@Application@1@0PEAV11@EA` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp:133 | exehex via `RSlot` | `?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp:134 | exehex via `RSlot` | `?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp:135 | exehex via `RSlot` | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp:136 | exehex via `RSlot` | `?GetEmitterCount@Scene@Audio@@QEBAHI@Z` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp:137 | exehex via `RSlot` | `?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z` |
-| Audio | code/Game/Tutorial/finishtutorialinstance.cpp:72 | exehex via `ResolveAddr` | `?Save@Configuration@Audio@@QEAAXXZ` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp:133 | exehex via `RSlot` | `?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp:134 | exehex via `RSlot` | `?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp:135 | exehex via `RSlot` | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp:136 | exehex via `RSlot` | `?GetEmitterCount@Scene@Audio@@QEBAHI@Z` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp:137 | exehex via `RSlot` | `?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z` |
+| Audio | src/game/Tutorial/finishtutorialinstance.cpp:72 | exehex via `ResolveAddr` | `?Save@Configuration@Audio@@QEAAXXZ` |
 | Audio | runtime/src/audio/audio.cpp:1204 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
 | Audio | runtime/src/audio/audio.cpp:824 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
 | Audio | runtime/src/audio/audio_scene_update.cpp:288 | lit via `RT_DATA_SLOT` | `?_singleton@Device@Audio@@0PEAV12@EA` |
@@ -589,19 +589,19 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Audio | runtime/src/engine/engine_platform.cpp:284 | lit via `RT_EXPORT_ONCE` | `?Startup@Configuration@Audio@@QEAA_NXZ` |
 | Audio | runtime/src/engine/mainloop_frame.cpp:417 | lit via `RT_EXPORT_ONCE` | `?FreeChannelPlatform@Device@Audio@@AEAAXH@Z` |
 | Audio | runtime/src/engine/singleton_ctors.cpp:760 | lit via `RT_EXPORT_ONCE` | `??0Stream@Audio@@QEAA@XZ` |
-| Audio | code/Game/Game/gameupdateloop.cpp:629 | lit via `ResolveExport` | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
-| Audio | code/Game/Game/gameupdateloop.cpp:631 | lit via `ResolveExport` | `?StopAll@Scene@Audio@@QEAAXXZ` |
-| Audio | code/Game/Game/gameupdateloop.cpp:641 | lit via `ResolveExport` | `??1Scene@Audio@@QEAA@XZ` |
-| Audio | code/Game/Game/gameupdateloop_serialize.cpp:159 | lit via `ResolveExport` | `?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z` |
-| Audio | code/Game/Game/menudialogloopt.cpp:1241 | lit via `ResolveExport` | `?StopAll@Scene@Audio@@QEAAXXZ` |
-| Audio | code/Game/Game/unreg_lane5_musicplayer.cpp:127 | lit via `ResolveExport` | `?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z` |
+| Audio | src/game/Game/gameupdateloop.cpp:629 | lit via `ResolveExport` | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
+| Audio | src/game/Game/gameupdateloop.cpp:631 | lit via `ResolveExport` | `?StopAll@Scene@Audio@@QEAAXXZ` |
+| Audio | src/game/Game/gameupdateloop.cpp:641 | lit via `ResolveExport` | `??1Scene@Audio@@QEAA@XZ` |
+| Audio | src/game/Game/gameupdateloop_serialize.cpp:159 | lit via `ResolveExport` | `?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z` |
+| Audio | src/game/Game/menudialogloopt.cpp:1241 | lit via `ResolveExport` | `?StopAll@Scene@Audio@@QEAAXXZ` |
+| Audio | src/game/Game/unreg_lane5_musicplayer.cpp:127 | lit via `ResolveExport` | `?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z` |
 | Audio | runtime/src/audio/audio_play_platform.cpp:473 | lit via `ResolveExport` | `?Play@Stream@Audio@@QEAAXHH@Z` |
 | Audio | runtime/src/audio/audio_scene_update.cpp:391 | lit via `ResolveExport` | `?GetAttenuatedVolume@Scene@Audio@@AEBAMAEBUAttenutedEffect@12@AEBVVector3@Math@@M@Z` |
 | Audio | runtime/src/audio/audio_scene_update.cpp:393 | lit via `ResolveExport` | `?StopEffect@Scene@Audio@@QEAAXI@Z` |
 | Audio | runtime/src/audio/audio_scene_update.cpp:395 | lit via `ResolveExport` | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
 | Audio | runtime/src/audio/audio_scene_update.cpp:397 | lit via `ResolveExport` | `?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z` |
 | Audio | runtime/src/audio/audio_scene_update.cpp:504 | lit via `ResolveExport` | `?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z` |
-| Audio | code/Game/Game/game_main.cpp:307 | lit via `ResolveFn` | `?Save@Configuration@Audio@@QEAAXXZ` |
+| Audio | src/game/Game/game_main.cpp:307 | lit via `ResolveFn` | `?Save@Configuration@Audio@@QEAAXXZ` |
 | Audio | runtime/src/ui/userinterface_standalone.cpp:153 | lit via `rtuielem::AtomicExport` | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
 | Audio | runtime/src/audio/audio_stream_win.cpp:296 | rthex via `ResolveAddr` | `??_7Stream@Audio@@6B@` |
 | Audio | runtime/src/engine/mainloop_run.cpp:282 | rthex via `ResolveAddr` | `?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z` |
@@ -620,11 +620,11 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Engine | runtime/src/engine/engine_lifecycle.cpp:663 | lit via `RT_EXPORT_ONCE` | `?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z` |
 | Engine | runtime/src/engine/mainloop_frame.cpp:521 | lit via `RT_EXPORT_ONCE` | `?Draw@MainLoop@Engine@@QEAAXM@Z` |
 | Engine | runtime/src/engine/mainloop_run.cpp:319 | lit via `RT_EXPORT_ONCE` | `?Frame@MainLoop@Engine@@QEAA_N_N@Z` |
-| Engine | code/Game/Game/game_main.cpp:174 | lit via `ResolveExport` | `??0Engine@0@QEAA@PEAX@Z` |
-| Engine | code/Game/Game/game_main.cpp:176 | lit via `ResolveExport` | `??1Engine@0@QEAA@XZ` |
-| Engine | code/Game/Game/game_main.cpp:178 | lit via `ResolveExport` | `?Startup@Engine@1@QEAAIPEBDII_N@Z` |
-| Engine | code/Game/Game/game_main.cpp:180 | lit via `ResolveExport` | `?Shutdown@Engine@1@QEAAXXZ` |
-| Engine | code/Game/Game/gameupdateloop.cpp:2806 | lit via `ResolveExport` | `??1UpdateLoop@Engine@@UEAA@XZ` |
+| Engine | src/game/Game/game_main.cpp:174 | lit via `ResolveExport` | `??0Engine@0@QEAA@PEAX@Z` |
+| Engine | src/game/Game/game_main.cpp:176 | lit via `ResolveExport` | `??1Engine@0@QEAA@XZ` |
+| Engine | src/game/Game/game_main.cpp:178 | lit via `ResolveExport` | `?Startup@Engine@1@QEAAIPEBDII_N@Z` |
+| Engine | src/game/Game/game_main.cpp:180 | lit via `ResolveExport` | `?Shutdown@Engine@1@QEAAXXZ` |
+| Engine | src/game/Game/gameupdateloop.cpp:2806 | lit via `ResolveExport` | `??1UpdateLoop@Engine@@UEAA@XZ` |
 | Engine | runtime/src/engine/loops.cpp:1025 | lit via `ResolveExport` | `?_loader@LoaderLoop@Engine@@1VLoader@2@A` |
 | Engine | runtime/src/engine/loops.cpp:1109 | lit via `ResolveExport` | `?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
 | Engine | runtime/src/engine/loops.cpp:1311 | lit via `ResolveExport` | `?_singleton@Engine@1@0PEAV11@EA` |
@@ -638,13 +638,13 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Engine | standalone/reg_unreg_lane1.cpp:196 | lit via `ResolveExport` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
 | Engine | standalone/reg_unreg_lane3.cpp:136 | lit via `ResolveExport` | `?IsRunning@UpdateLoop@Engine@@QEBA_NXZ` |
 | Engine | runtime/src/save/saveload_update.cpp:1117 | lit via `RtDataExport` | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
-| Engine | code/Game/Game/game_main.cpp:184 | rthex via `ResolveAddr` | `??0MainLoop@Engine@@QEAA@PEAV11@@Z` |
-| Engine | code/Game/Game/game_main.cpp:186 | rthex via `ResolveAddr` | `??1MainLoop@Engine@@QEAA@XZ` |
-| Engine | code/Game/Game/game_main.cpp:188 | rthex via `ResolveAddr` | `?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
+| Engine | src/game/Game/game_main.cpp:184 | rthex via `ResolveAddr` | `??0MainLoop@Engine@@QEAA@PEAV11@@Z` |
+| Engine | src/game/Game/game_main.cpp:186 | rthex via `ResolveAddr` | `??1MainLoop@Engine@@QEAA@XZ` |
+| Engine | src/game/Game/game_main.cpp:188 | rthex via `ResolveAddr` | `?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
 | Engine | runtime/src/engine/mainloop_video.cpp:717 | rthex via `ResolveAddr` | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
-| Input | code/Game/Player/pathtool.cpp:117 | exehex via `ResolveAddr` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | code/Game/Player/edittool.cpp:212 | exehex via `resolveIAT` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | code/Game/Player/placementtool.cpp:146 | exehex via `resolveIAT` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/game/Player/pathtool.cpp:117 | exehex via `ResolveAddr` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/game/Player/edittool.cpp:212 | exehex via `resolveIAT` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/game/Player/placementtool.cpp:146 | exehex via `resolveIAT` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
 | Input | runtime/src/ui/editelement.cpp:89 | lit via `AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
 | Input | runtime/src/ui/editelement.cpp:93 | lit via `AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
 | Input | runtime/src/engine/engine_platform.cpp:144 | lit via `RT_DATA_SLOT` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
@@ -669,8 +669,8 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Input | runtime/src/input/input_config_startup.cpp:147 | lit via `RT_EXPORT_ONCE` | `?Load@KeyMap@Input@@QEAAXXZ` |
 | Input | runtime/src/input/input_platform_startup_win.cpp:123 | lit via `RT_EXPORT_ONCE` | `?PlatformUpdate@Device@Input@@AEAAXXZ` |
 | Input | standalone/mouse_inject.cpp:350 | lit via `ResolveExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
-| Input | code/Game/Game/game_main.cpp:277 | lit via `ResolveFn` | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
-| Input | code/Game/Game/game_main.cpp:284 | lit via `ResolveFn` | `?Save@Configuration@Input@@QEAAXXZ` |
+| Input | src/game/Game/game_main.cpp:277 | lit via `ResolveFn` | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
+| Input | src/game/Game/game_main.cpp:284 | lit via `ResolveFn` | `?Save@Configuration@Input@@QEAAXXZ` |
 | Input | runtime/src/ui/element_bodies_b5.cpp:203 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
 | Input | runtime/src/ui/userinterface.cpp:303 | lit via `rtuielem::AtomicExport` | `?_singleton@Configuration@Input@@0PEAV12@EA` |
 | Input | runtime/src/ui/userinterface_draw.cpp:175 | lit via `rtuielem::AtomicExport` | `?_singleton@Device@Input@@0PEAV12@EA` |
@@ -682,35 +682,35 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Input | runtime/src/ui/checkelement.cpp:148 | rthex via `RtAddr` | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
 | Pathfinding | runtime/src/pathfinding/pointlist.cpp:103 | lit via `RT_DATA_SLOT` | `??_7PointList@Pathfinding@@6B@` |
 | Pathfinding | runtime/src/pathfinding/pointlist.cpp:105 | lit via `RT_DATA_SLOT` | `?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A` |
-| Picking | code/Game/Component/pickingcomponent.cpp:314 | exehex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
-| Picking | code/Game/Component/quarrycomponent_deform.cpp:93 | exehex via `ResolveAddr` | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
-| Picking | code/Game/Component/terraformcomponent.cpp:307 | exehex via `ResolveAddr` | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
-| Picking | code/Game/Game/mapquery.cpp:154 | exehex via `ResolveAddr` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
-| Picking | code/Game/Player/bridgetool_calcpath.cpp:226 | exehex via `ResolveAddr` | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
-| Picking | code/Game/Player/fencedtool_calcpath.cpp:92 | exehex via `ResolveAddr` | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
-| Picking | code/Game/Player/pathtool.cpp:109 | exehex via `ResolveAddr` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
-| Picking | code/Game/Player/pathtool.cpp:113 | exehex via `ResolveAddr` | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
-| Picking | code/Game/Component/citizenai_executor.cpp:369 | exehex via `ResolveSlot` | `?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z` |
-| Picking | code/Game/Player/edittool.cpp:213 | exehex via `resolveIAT` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
-| Picking | code/Game/Player/edittool.cpp:214 | exehex via `resolveIAT` | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
+| Picking | src/game/Component/pickingcomponent.cpp:314 | exehex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
+| Picking | src/game/Component/quarrycomponent_deform.cpp:93 | exehex via `ResolveAddr` | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
+| Picking | src/game/Component/terraformcomponent.cpp:307 | exehex via `ResolveAddr` | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
+| Picking | src/game/Game/mapquery.cpp:154 | exehex via `ResolveAddr` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
+| Picking | src/game/Player/bridgetool_calcpath.cpp:226 | exehex via `ResolveAddr` | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
+| Picking | src/game/Player/fencedtool_calcpath.cpp:92 | exehex via `ResolveAddr` | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
+| Picking | src/game/Player/pathtool.cpp:109 | exehex via `ResolveAddr` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
+| Picking | src/game/Player/pathtool.cpp:113 | exehex via `ResolveAddr` | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
+| Picking | src/game/Component/citizenai_executor.cpp:369 | exehex via `ResolveSlot` | `?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z` |
+| Picking | src/game/Player/edittool.cpp:213 | exehex via `resolveIAT` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
+| Picking | src/game/Player/edittool.cpp:214 | exehex via `resolveIAT` | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
 | Picking | runtime/src/picking/pickingmesh.cpp:103 | lit via `RT_DATA_SLOT` | `??_7PickingMesh@Picking@@6B@` |
 | Picking | runtime/src/picking/pickingmesh.cpp:105 | lit via `RT_DATA_SLOT` | `?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A` |
-| Picking | code/Game/Component/pickingcomponent.cpp:147 | lit via `ResolveExport` | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
-| Picking | code/Game/Game/gameupdateloop.cpp:643 | lit via `ResolveExport` | `??1Scene@Picking@@QEAA@XZ` |
-| Picking | code/Game/Game/gameupdateloop_load.cpp:340 | lit via `ResolveExport` | `??0Scene@Picking@@QEAA@XZ` |
-| Picking | code/Game/Game/keystone_a_gamedtor.cpp:94 | lit via `ResolveExport` | `??1Scene@Picking@@QEAA@XZ` |
-| Picking | code/Game/Game/mapquery.cpp:158 | lit via `ResolveExport` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
-| Picking | code/Game/Player/edittool.cpp:243 | lit via `ResolveExport` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
-| Picking | code/Game/Player/edittool.cpp:246 | lit via `ResolveExport` | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
+| Picking | src/game/Component/pickingcomponent.cpp:147 | lit via `ResolveExport` | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
+| Picking | src/game/Game/gameupdateloop.cpp:643 | lit via `ResolveExport` | `??1Scene@Picking@@QEAA@XZ` |
+| Picking | src/game/Game/gameupdateloop_load.cpp:340 | lit via `ResolveExport` | `??0Scene@Picking@@QEAA@XZ` |
+| Picking | src/game/Game/keystone_a_gamedtor.cpp:94 | lit via `ResolveExport` | `??1Scene@Picking@@QEAA@XZ` |
+| Picking | src/game/Game/mapquery.cpp:158 | lit via `ResolveExport` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
+| Picking | src/game/Player/edittool.cpp:243 | lit via `ResolveExport` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
+| Picking | src/game/Player/edittool.cpp:246 | lit via `ResolveExport` | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
 | Picking | standalone/address_registry.cpp:1473 | lit via `ResolveExport` | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
 | Picking | standalone/address_registry.cpp:1483 | lit via `ResolveExport` | `?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z` |
 | Picking | standalone/address_registry.cpp:1493 | lit via `ResolveExport` | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
 | Picking | standalone/address_registry.cpp:1499 | lit via `ResolveExport` | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
 | Picking | standalone/address_registry.cpp:1507 | lit via `ResolveExport` | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
-| Picking | code/Game/Component/citizenai_executor.cpp:372 | rthex via `ResolveAddr` | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
-| Picking | code/Game/Component/floorcomponent.cpp:249 | rthex via `ResolveAddr` | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
-| Picking | code/Game/Component/floorcomponent.cpp:254 | rthex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
-| Picking | code/Game/Component/pickingcomponent.cpp:312 | rthex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
+| Picking | src/game/Component/citizenai_executor.cpp:372 | rthex via `ResolveAddr` | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
+| Picking | src/game/Component/floorcomponent.cpp:249 | rthex via `ResolveAddr` | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
+| Picking | src/game/Component/floorcomponent.cpp:254 | rthex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
+| Picking | src/game/Component/pickingcomponent.cpp:312 | rthex via `ResolveAddr` | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
 | Save | runtime/src/engine/mainloop_video.cpp:355 | lit via `RT_DATA_SLOT` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
 | Save | runtime/src/save/saveload_internal.h:113 | lit via `RT_DATA_SLOT` | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
 | Save | runtime/src/engine/mainloop_video.cpp:725 | lit via `RT_EXPORT_ONCE` | `?OnVideoRestart@SaveLoad@Save@@QEAAXXZ` |
@@ -728,11 +728,11 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Save | runtime/src/save/saveload_update.cpp:1924 | lit via `RT_EXPORT_ONCE` | `?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z` |
 | Save | runtime/src/save/saveload_update.cpp:438 | lit via `RT_EXPORT_ONCE` | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
 | Save | runtime/src/save/saveload_update.cpp:912 | lit via `RT_EXPORT_ONCE` | `?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ` |
-| Save | code/Game/Game/gameupdateloop.cpp:637 | lit via `ResolveExport` | `?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z` |
-| Save | code/Game/Game/gameupdateloop_load.cpp:343 | lit via `ResolveExport` | `??0SaveLoad@Save@@QEAA@XZ` |
-| Save | code/Game/Game/gameupdateloop_load.cpp:344 | lit via `ResolveExport` | `??1SavedState@Save@@QEAA@XZ` |
-| Save | code/Game/Game/gameupdateloop_serialize.cpp:173 | lit via `ResolveExport` | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
-| Save | code/Game/Game/gameupdateloop_serialize.cpp:175 | lit via `ResolveExport` | `?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
+| Save | src/game/Game/gameupdateloop.cpp:637 | lit via `ResolveExport` | `?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z` |
+| Save | src/game/Game/gameupdateloop_load.cpp:343 | lit via `ResolveExport` | `??0SaveLoad@Save@@QEAA@XZ` |
+| Save | src/game/Game/gameupdateloop_load.cpp:344 | lit via `ResolveExport` | `??1SavedState@Save@@QEAA@XZ` |
+| Save | src/game/Game/gameupdateloop_serialize.cpp:173 | lit via `ResolveExport` | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
+| Save | src/game/Game/gameupdateloop_serialize.cpp:175 | lit via `ResolveExport` | `?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
 | Save | standalone/address_registry.cpp:1426 | lit via `ResolveExport` | `?CheckMod@SaveLoad@Save@@QEBAHHH@Z` |
 | Save | standalone/address_registry.cpp:1428 | lit via `ResolveExport` | `?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z` |
 | Save | standalone/menudialogloopt_stubs.cpp:261 | lit via `ResolveExport` | `??0SaveLoad@Save@@QEAA@XZ` |
@@ -743,38 +743,38 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 
 | ns | file | kind | n | lines | symbol |
 |---|---|---|---:|---|---|
-| Achievement | code/Game/Dialog/dialog_exe_helpers.cpp | call | 1 | 216 | `?SetAchievements@AchievementManager@Achievement@@QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z` |
-| Achievement | code/Game/Game/game_main.cpp | call | 1 | 271 | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | code/Game/Game/gameupdateloop.cpp | call | 1 | 1231 | `?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop.cpp | call | 1 | 1238 | `?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ` |
-| Achievement | code/Game/Game/gameupdateloop.cpp | call | 1 | 1347 | `?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop.cpp | call | 1 | 2418 | `?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z` |
-| Achievement | code/Game/Game/gameupdateloop.cpp | call | 3 | 1234,2740,2772 | `?IsMet@AchievementInstance@Achievement@@QEBA_NXZ` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp | call | 1 | 1284 | `?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp | call | 1 | 1329 | `?Reset@AchievementManager@Achievement@@QEAAXXZ` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp | call | 1 | 1626 | `??0AchievementInstance@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp | call | 1 | 1662 | `?SetAchievement@AchievementInstance@Achievement@@QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop_load.cpp | data | 3 | 1653,1654,1660 | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
-| Achievement | code/Game/Game/gameupdateloop_serialize.cpp | call | 1 | 860 | `?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Game/gameupdateloop_serialize.cpp | data | 1 | 844 | `?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
-| Achievement | code/Game/Game/gameupdateloop_serialize.cpp | data | 2 | 859,860 | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Achievement | code/Game/Game/scenario.cpp | call | 1 | 112 | `??1Achievement@0@UEAA@XZ` |
-| Achievement | code/Game/Game/scenario.cpp | call | 1 | 134 | `?GetFileVersion@Achievement@1@UEBAHXZ` |
-| Achievement | code/Game/Game/scenario.cpp | call | 1 | 153 | `?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Game/scenario.cpp | call | 1 | 219 | `??0Achievement@0@QEAA@XZ` |
-| Achievement | code/Game/Goal/goal_exe_helpers.cpp:223 | resolved, never used or a registration | 0 | ResolveExport | `?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ` |
-| Achievement | code/Game/Goal/statgoal.cpp | call | 1 | 360 | `??1Goal@Achievement@@UEAA@XZ` |
-| Achievement | code/Game/Goal/statgoal.cpp | call | 1 | 469 | `??0Goal@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Goal/statgoal.cpp | call | 1 | 88 | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Goal/timegoal.cpp | call | 1 | 134 | `??1GoalInstance@Achievement@@UEAA@XZ` |
-| Achievement | code/Game/Goal/timegoal.cpp | call | 1 | 170 | `??1Goal@Achievement@@UEAA@XZ` |
-| Achievement | code/Game/Goal/timegoal.cpp | call | 1 | 262 | `??0Goal@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Goal/timegoal.cpp | call | 1 | 52 | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Goal/timegoalinstance.cpp | call | 1 | 100 | `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` |
-| Achievement | code/Game/Goal/timegoalinstance.cpp | call | 1 | 152 | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
-| Achievement | code/Game/Goal/timegoalinstance.cpp | call | 1 | 161 | `?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z` |
-| Achievement | code/Game/Goal/timegoalinstance.cpp | call | 1 | 228 | `??0GoalInstance@Achievement@@QEAA@XZ` |
-| Achievement | code/Game/Tutorial/finishtutorialinstance.cpp | call | 1 | 306 | `??0GoalInstance@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Dialog/dialog_exe_helpers.cpp | call | 1 | 216 | `?SetAchievements@AchievementManager@Achievement@@QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z` |
+| Achievement | src/game/Game/game_main.cpp | call | 1 | 271 | `?RemoveAll@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/game/Game/gameupdateloop.cpp | call | 1 | 1231 | `?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z` |
+| Achievement | src/game/Game/gameupdateloop.cpp | call | 1 | 1238 | `?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ` |
+| Achievement | src/game/Game/gameupdateloop.cpp | call | 1 | 1347 | `?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z` |
+| Achievement | src/game/Game/gameupdateloop.cpp | call | 1 | 2418 | `?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z` |
+| Achievement | src/game/Game/gameupdateloop.cpp | call | 3 | 1234,2740,2772 | `?IsMet@AchievementInstance@Achievement@@QEBA_NXZ` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp | call | 1 | 1284 | `?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp | call | 1 | 1329 | `?Reset@AchievementManager@Achievement@@QEAAXXZ` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp | call | 1 | 1626 | `??0AchievementInstance@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp | call | 1 | 1662 | `?SetAchievement@AchievementInstance@Achievement@@QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z` |
+| Achievement | src/game/Game/gameupdateloop_load.cpp | data | 3 | 1653,1654,1660 | `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/game/Game/gameupdateloop_serialize.cpp | call | 1 | 860 | `?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z` |
+| Achievement | src/game/Game/gameupdateloop_serialize.cpp | data | 1 | 844 | `?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A` |
+| Achievement | src/game/Game/gameupdateloop_serialize.cpp | data | 2 | 859,860 | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
+| Achievement | src/game/Game/scenario.cpp | call | 1 | 112 | `??1Achievement@0@UEAA@XZ` |
+| Achievement | src/game/Game/scenario.cpp | call | 1 | 134 | `?GetFileVersion@Achievement@1@UEBAHXZ` |
+| Achievement | src/game/Game/scenario.cpp | call | 1 | 153 | `?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z` |
+| Achievement | src/game/Game/scenario.cpp | call | 1 | 219 | `??0Achievement@0@QEAA@XZ` |
+| Achievement | src/game/Goal/goal_exe_helpers.cpp:223 | resolved, never used or a registration | 0 | ResolveExport | `?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ` |
+| Achievement | src/game/Goal/statgoal.cpp | call | 1 | 360 | `??1Goal@Achievement@@UEAA@XZ` |
+| Achievement | src/game/Goal/statgoal.cpp | call | 1 | 469 | `??0Goal@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Goal/statgoal.cpp | call | 1 | 88 | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
+| Achievement | src/game/Goal/timegoal.cpp | call | 1 | 134 | `??1GoalInstance@Achievement@@UEAA@XZ` |
+| Achievement | src/game/Goal/timegoal.cpp | call | 1 | 170 | `??1Goal@Achievement@@UEAA@XZ` |
+| Achievement | src/game/Goal/timegoal.cpp | call | 1 | 262 | `??0Goal@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Goal/timegoal.cpp | call | 1 | 52 | `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` |
+| Achievement | src/game/Goal/timegoalinstance.cpp | call | 1 | 100 | `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` |
+| Achievement | src/game/Goal/timegoalinstance.cpp | call | 1 | 152 | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
+| Achievement | src/game/Goal/timegoalinstance.cpp | call | 1 | 161 | `?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z` |
+| Achievement | src/game/Goal/timegoalinstance.cpp | call | 1 | 228 | `??0GoalInstance@Achievement@@QEAA@XZ` |
+| Achievement | src/game/Tutorial/finishtutorialinstance.cpp | call | 1 | 306 | `??0GoalInstance@Achievement@@QEAA@XZ` |
 | Achievement | runtime/src/achievement/achievement_manager.cpp | data | 1 | 256 | `??_7Achievement@0@6B@` |
 | Achievement | runtime/src/achievement/achievement_manager.cpp | data | 1 | 267 | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
 | Achievement | runtime/src/achievement/achievement_manager.cpp | data | 1 | 528 | `??_7AchievementInstance@Achievement@@6B@` |
@@ -804,11 +804,11 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Achievement | standalone/reg_goal.cpp:80 | resolved, never used or a registration | 0 | ResolveExport | `?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z` |
 | Achievement | standalone/reg_goal.cpp:82 | resolved, never used or a registration | 0 | ResolveExport | `?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z` |
 | Achievement | standalone/reg_unreg_lane1.cpp:212 | resolved, never used or a registration | 0 | ResolveExport | `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` |
-| Application | code/Game/Action/keystone_a_zone.cpp | call | 1 | 159 | `?YieldToThreads@Application@1@QEAAXXZ` |
-| Application | code/Game/Game/game_main.cpp | call | 1 | 365 | `?PlatformShutdown@Application@1@AEAAXXZ` |
-| Application | code/Game/Game/gameupdateloop.cpp:653 | resolved, never used or a registration | 0 | ResolveExport | `?IsPaused@Application@1@QEAA_NXZ` |
-| Application | code/Game/Game/keystone_a_gamedtor.cpp | call | 1 | 382 | `?YieldToThreads@Application@1@QEAAXXZ` |
-| Application | code/Game/Player/pathtool_setselected.cpp | call | 1 | 565 | `?YieldToThreads@Application@1@QEAAXXZ` |
+| Application | src/game/Action/keystone_a_zone.cpp | call | 1 | 159 | `?YieldToThreads@Application@1@QEAAXXZ` |
+| Application | src/game/Game/game_main.cpp | call | 1 | 365 | `?PlatformShutdown@Application@1@AEAAXXZ` |
+| Application | src/game/Game/gameupdateloop.cpp:653 | resolved, never used or a registration | 0 | ResolveExport | `?IsPaused@Application@1@QEAA_NXZ` |
+| Application | src/game/Game/keystone_a_gamedtor.cpp | call | 1 | 382 | `?YieldToThreads@Application@1@QEAAXXZ` |
+| Application | src/game/Player/pathtool_setselected.cpp | call | 1 | 565 | `?YieldToThreads@Application@1@QEAAXXZ` |
 | Application | runtime/src/application/application_accessors.cpp | data | 1 | 49 | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | runtime/src/application/platform_startup_win.cpp:113 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 587 | `??0Application@0@QEAA@PEAX@Z` |
@@ -828,19 +828,19 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Application | runtime/src/ui/userinterface.cpp:299 | resolved, never used or a registration | 0 | rtuielem::AtomicExport | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | runtime/src/video/device_startup.cpp:159 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Application@1@0PEAV11@EA` |
 | Application | standalone/address_registry.cpp:1544 | resolved, never used or a registration | 0 | ResolveAddr | `?_singleton@Application@1@0PEAV11@EA` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp | call | 1 | 268 | `?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp | call | 1 | 269 | `?GetEmitterCount@Scene@Audio@@QEBAHI@Z` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp | call | 1 | 270 | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp | call | 1 | 324 | `?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z` |
-| Audio | code/Game/Component/citizen_assignworkplace.cpp | call | 1 | 340 | `?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z` |
-| Audio | code/Game/Game/game_main.cpp | call | 1 | 308 | `?Save@Configuration@Audio@@QEAAXXZ` |
-| Audio | code/Game/Game/gameupdateloop.cpp | call | 1 | 1510 | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
-| Audio | code/Game/Game/gameupdateloop.cpp | call | 1 | 2439 | `?StopAll@Scene@Audio@@QEAAXXZ` |
-| Audio | code/Game/Game/gameupdateloop.cpp | call | 1 | 2610 | `??1Scene@Audio@@QEAA@XZ` |
-| Audio | code/Game/Game/gameupdateloop_serialize.cpp | call | 1 | 868 | `?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z` |
-| Audio | code/Game/Game/menudialogloopt.cpp | call | 1 | 1244 | `?StopAll@Scene@Audio@@QEAAXXZ` |
-| Audio | code/Game/Game/unreg_lane5_musicplayer.cpp | call | 1 | 190 | `?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z` |
-| Audio | code/Game/Tutorial/finishtutorialinstance.cpp | call | 1 | 85 | `?Save@Configuration@Audio@@QEAAXXZ` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp | call | 1 | 268 | `?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp | call | 1 | 269 | `?GetEmitterCount@Scene@Audio@@QEBAHI@Z` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp | call | 1 | 270 | `?StopEffect3D@Scene@Audio@@QEAAXI@Z` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp | call | 1 | 324 | `?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z` |
+| Audio | src/game/Component/citizen_assignworkplace.cpp | call | 1 | 340 | `?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z` |
+| Audio | src/game/Game/game_main.cpp | call | 1 | 308 | `?Save@Configuration@Audio@@QEAAXXZ` |
+| Audio | src/game/Game/gameupdateloop.cpp | call | 1 | 1510 | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
+| Audio | src/game/Game/gameupdateloop.cpp | call | 1 | 2439 | `?StopAll@Scene@Audio@@QEAAXXZ` |
+| Audio | src/game/Game/gameupdateloop.cpp | call | 1 | 2610 | `??1Scene@Audio@@QEAA@XZ` |
+| Audio | src/game/Game/gameupdateloop_serialize.cpp | call | 1 | 868 | `?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z` |
+| Audio | src/game/Game/menudialogloopt.cpp | call | 1 | 1244 | `?StopAll@Scene@Audio@@QEAAXXZ` |
+| Audio | src/game/Game/unreg_lane5_musicplayer.cpp | call | 1 | 190 | `?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z` |
+| Audio | src/game/Tutorial/finishtutorialinstance.cpp | call | 1 | 85 | `?Save@Configuration@Audio@@QEAAXXZ` |
 | Audio | runtime/src/audio/audio.cpp | call | 1 | 844 | `?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z` |
 | Audio | runtime/src/audio/audio.cpp | data | 1 | 825 | `?_singleton@Device@Audio@@0PEAV12@EA` |
 | Audio | runtime/src/audio/audio.cpp:1204 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
@@ -877,14 +877,14 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Audio | runtime/src/engine/singleton_ctors.cpp:164 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Device@Audio@@0PEAV12@EA` |
 | Audio | runtime/src/engine/singleton_ctors.cpp:165 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@Configuration@Audio@@0PEAV12@EA` |
 | Audio | runtime/src/ui/userinterface_standalone.cpp | call | 1 | 152 | `?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z` |
-| Engine | code/Game/Game/game_main.cpp | call | 1 | 446 | `??0Engine@0@QEAA@PEAX@Z` |
-| Engine | code/Game/Game/game_main.cpp | call | 1 | 461 | `?Startup@Engine@1@QEAAIPEBDII_N@Z` |
-| Engine | code/Game/Game/game_main.cpp | call | 1 | 588 | `??0MainLoop@Engine@@QEAA@PEAV11@@Z` |
-| Engine | code/Game/Game/game_main.cpp | call | 1 | 845 | `?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
-| Engine | code/Game/Game/game_main.cpp | call | 1 | 888 | `??1MainLoop@Engine@@QEAA@XZ` |
-| Engine | code/Game/Game/game_main.cpp | call | 1 | 905 | `??1Engine@0@QEAA@XZ` |
-| Engine | code/Game/Game/game_main.cpp:180 | resolved, never used or a registration | 0 | ResolveExport | `?Shutdown@Engine@1@QEAAXXZ` |
-| Engine | code/Game/Game/gameupdateloop.cpp | call | 1 | 2822 | `??1UpdateLoop@Engine@@UEAA@XZ` |
+| Engine | src/game/Game/game_main.cpp | call | 1 | 446 | `??0Engine@0@QEAA@PEAX@Z` |
+| Engine | src/game/Game/game_main.cpp | call | 1 | 461 | `?Startup@Engine@1@QEAAIPEBDII_N@Z` |
+| Engine | src/game/Game/game_main.cpp | call | 1 | 588 | `??0MainLoop@Engine@@QEAA@PEAV11@@Z` |
+| Engine | src/game/Game/game_main.cpp | call | 1 | 845 | `?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z` |
+| Engine | src/game/Game/game_main.cpp | call | 1 | 888 | `??1MainLoop@Engine@@QEAA@XZ` |
+| Engine | src/game/Game/game_main.cpp | call | 1 | 905 | `??1Engine@0@QEAA@XZ` |
+| Engine | src/game/Game/game_main.cpp:180 | resolved, never used or a registration | 0 | ResolveExport | `?Shutdown@Engine@1@QEAAXXZ` |
+| Engine | src/game/Game/gameupdateloop.cpp | call | 1 | 2822 | `??1UpdateLoop@Engine@@UEAA@XZ` |
 | Engine | runtime/src/engine/engine.cpp | call | 1 | 556 | `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` |
 | Engine | runtime/src/engine/engine.cpp | data | 1 | 231 | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
 | Engine | runtime/src/engine/engine.cpp:433 | resolved, never used or a registration | 0 | CallVideoCallback | `?OnVideoError@MainLoop@Engine@@QEAAXXZ` |
@@ -912,11 +912,11 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Engine | runtime/src/ui/userinterface_showdialog.cpp:214 | resolved, never used or a registration | 0 | AtomicByName | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
 | Engine | standalone/reg_unreg_lane1.cpp:196 | resolved, never used or a registration | 0 | ResolveExport | `?_singleton@MainLoop@Engine@@1PEAV12@EA` |
 | Engine | standalone/reg_unreg_lane3.cpp:136 | resolved, never used or a registration | 0 | ResolveExport | `?IsRunning@UpdateLoop@Engine@@QEBA_NXZ` |
-| Input | code/Game/Game/game_main.cpp | call | 1 | 278 | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
-| Input | code/Game/Game/game_main.cpp | call | 1 | 285 | `?Save@Configuration@Input@@QEAAXXZ` |
-| Input | code/Game/Player/edittool.cpp | call | 1 | 711 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | code/Game/Player/pathtool.cpp | call | 1 | 196 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
-| Input | code/Game/Player/placementtool.cpp | call | 4 | 371,386,400,411 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/game/Game/game_main.cpp | call | 1 | 278 | `?PlatformShutdown@Device@Input@@AEAAXXZ` |
+| Input | src/game/Game/game_main.cpp | call | 1 | 285 | `?Save@Configuration@Input@@QEAAXXZ` |
+| Input | src/game/Player/edittool.cpp | call | 1 | 711 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/game/Player/pathtool.cpp | call | 1 | 196 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
+| Input | src/game/Player/placementtool.cpp | call | 4 | 371,386,400,411 | `?Pressed@KeyMap@Input@@QEBA_NHH@Z` |
 | Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 647 | `??0Configuration@Input@@QEAA@XZ` |
 | Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 650 | `?Startup@Configuration@Input@@QEAA_NXZ` |
 | Input | runtime/src/engine/engine_lifecycle.cpp | call | 1 | 691 | `??0Device@Input@@QEAA@XZ` |
@@ -952,24 +952,24 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Input | standalone/mouse_inject.cpp | data | 3 | 348,351,352 | `?_singleton@Device@Input@@0PEAV12@EA` |
 | Pathfinding | runtime/src/pathfinding/pointlist.cpp:103 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7PointList@Pathfinding@@6B@` |
 | Pathfinding | runtime/src/pathfinding/pointlist.cpp:105 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A` |
-| Picking | code/Game/Component/citizenai_executor.cpp | call | 1 | 427 | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
-| Picking | code/Game/Component/citizenai_executor.cpp | call | 1 | 687 | `?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z` |
-| Picking | code/Game/Component/floorcomponent.cpp | call | 1 | 301 | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
-| Picking | code/Game/Component/floorcomponent.cpp | call | 1 | 396 | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
-| Picking | code/Game/Component/pickingcomponent.cpp | call | 1 | 215 | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
-| Picking | code/Game/Component/pickingcomponent.cpp | call | 1 | 81 | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
-| Picking | code/Game/Component/quarrycomponent_deform.cpp | call | 2 | 230,236 | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
-| Picking | code/Game/Component/terraformcomponent.cpp | call | 2 | 435,441 | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
-| Picking | code/Game/Game/gameupdateloop.cpp | call | 1 | 2617 | `??1Scene@Picking@@QEAA@XZ` |
-| Picking | code/Game/Game/gameupdateloop_load.cpp | call | 2 | 641,1120 | `??0Scene@Picking@@QEAA@XZ` |
-| Picking | code/Game/Game/keystone_a_gamedtor.cpp | call | 1 | 452 | `??1Scene@Picking@@QEAA@XZ` |
-| Picking | code/Game/Game/mapquery.cpp | call | 1 | 224 | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
-| Picking | code/Game/Player/bridgetool_calcpath.cpp | call | 1 | 232 | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
-| Picking | code/Game/Player/edittool.cpp | call | 1 | 810 | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
-| Picking | code/Game/Player/edittool.cpp | call | 2 | 815,1058 | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
-| Picking | code/Game/Player/fencedtool_calcpath.cpp | call | 1 | 145 | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
-| Picking | code/Game/Player/pathtool.cpp | call | 1 | 247 | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
-| Picking | code/Game/Player/pathtool.cpp | call | 1 | 250 | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
+| Picking | src/game/Component/citizenai_executor.cpp | call | 1 | 427 | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
+| Picking | src/game/Component/citizenai_executor.cpp | call | 1 | 687 | `?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z` |
+| Picking | src/game/Component/floorcomponent.cpp | call | 1 | 301 | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
+| Picking | src/game/Component/floorcomponent.cpp | call | 1 | 396 | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
+| Picking | src/game/Component/pickingcomponent.cpp | call | 1 | 215 | `?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z` |
+| Picking | src/game/Component/pickingcomponent.cpp | call | 1 | 81 | `?RemoveMesh@Scene@Picking@@QEAAXI@Z` |
+| Picking | src/game/Component/quarrycomponent_deform.cpp | call | 2 | 230,236 | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
+| Picking | src/game/Component/terraformcomponent.cpp | call | 2 | 435,441 | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
+| Picking | src/game/Game/gameupdateloop.cpp | call | 1 | 2617 | `??1Scene@Picking@@QEAA@XZ` |
+| Picking | src/game/Game/gameupdateloop_load.cpp | call | 2 | 641,1120 | `??0Scene@Picking@@QEAA@XZ` |
+| Picking | src/game/Game/keystone_a_gamedtor.cpp | call | 1 | 452 | `??1Scene@Picking@@QEAA@XZ` |
+| Picking | src/game/Game/mapquery.cpp | call | 1 | 224 | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
+| Picking | src/game/Player/bridgetool_calcpath.cpp | call | 1 | 232 | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
+| Picking | src/game/Player/edittool.cpp | call | 1 | 810 | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
+| Picking | src/game/Player/edittool.cpp | call | 2 | 815,1058 | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
+| Picking | src/game/Player/fencedtool_calcpath.cpp | call | 1 | 145 | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
+| Picking | src/game/Player/pathtool.cpp | call | 1 | 247 | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
+| Picking | src/game/Player/pathtool.cpp | call | 1 | 250 | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
 | Picking | runtime/src/picking/pickingmesh.cpp:103 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `??_7PickingMesh@Picking@@6B@` |
 | Picking | runtime/src/picking/pickingmesh.cpp:105 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A` |
 | Picking | standalone/address_registry.cpp:1473 | resolved, never used or a registration | 0 | ResolveExport | `?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z` |
@@ -977,11 +977,11 @@ Outputs: `globals.tsv` (every binding), `gsweep.txt` (every use of every global,
 | Picking | standalone/address_registry.cpp:1493 | resolved, never used or a registration | 0 | ResolveExport | `?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z` |
 | Picking | standalone/address_registry.cpp:1499 | resolved, never used or a registration | 0 | ResolveExport | `?GetUserData@Scene@Picking@@QEBAPEAXI@Z` |
 | Picking | standalone/address_registry.cpp:1507 | resolved, never used or a registration | 0 | ResolveExport | `?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z` |
-| Save | code/Game/Game/gameupdateloop.cpp | call | 1 | 1878 | `?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z` |
-| Save | code/Game/Game/gameupdateloop_load.cpp | call | 1 | 1175 | `??0SaveLoad@Save@@QEAA@XZ` |
-| Save | code/Game/Game/gameupdateloop_load.cpp | call | 1 | 1533 | `??1SavedState@Save@@QEAA@XZ` |
-| Save | code/Game/Game/gameupdateloop_serialize.cpp | call | 1 | 936 | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
-| Save | code/Game/Game/gameupdateloop_serialize.cpp | call | 2 | 928,968 | `?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
+| Save | src/game/Game/gameupdateloop.cpp | call | 1 | 1878 | `?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z` |
+| Save | src/game/Game/gameupdateloop_load.cpp | call | 1 | 1175 | `??0SaveLoad@Save@@QEAA@XZ` |
+| Save | src/game/Game/gameupdateloop_load.cpp | call | 1 | 1533 | `??1SavedState@Save@@QEAA@XZ` |
+| Save | src/game/Game/gameupdateloop_serialize.cpp | call | 1 | 936 | `?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
+| Save | src/game/Game/gameupdateloop_serialize.cpp | call | 2 | 928,968 | `?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z` |
 | Save | runtime/src/engine/mainloop_video.cpp | call | 1 | 726 | `?OnVideoRestart@SaveLoad@Save@@QEAAXXZ` |
 | Save | runtime/src/engine/mainloop_video.cpp:355 | resolved, never used or a registration | 0 | RT_DATA_SLOT | `?_singleton@SaveLoad@Save@@0PEAV12@EA` |
 | Save | runtime/src/save/saveload.cpp | call | 1 | 846 | `?UpdateList@SaveLoad@Save@@QEAAXXZ` |

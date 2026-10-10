@@ -17,7 +17,7 @@
 //   standalone/resolve_standalone.cpp:886          -> 2990 is this mangled name
 //
 // It was reached by ORDINAL from two exe call sites
-// (code/Game/Component/buildcomponent.cpp, residencecomponent.cpp) and by
+// (src/game/Component/buildcomponent.cpp, residencecomponent.cpp) and by
 // ADDRESS from nowhere. It IS an export, so it gets a NAME registration — the
 // door that survives a rebase and the one the census counts — plus the address
 // door, because the mint and the ordinal table both reach it.

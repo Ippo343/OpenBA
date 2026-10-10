@@ -492,7 +492,7 @@ bool Video::VertexBuffer::Set(int sizeBytes, int offsetBytes, void* data) {
 
 // ============================================================================
 // HELD BACK: Video::ImageBuffer::SaveImageToFile (static) — 0x1800f2840,
-// ordinal 3608. One caller (code/Game/Game/w2_takescreenshot.cpp, the
+// ordinal 3608. One caller (src/game/Game/w2_takescreenshot.cpp, the
 // screenshot path).
 //
 // Not ported. Reasons:

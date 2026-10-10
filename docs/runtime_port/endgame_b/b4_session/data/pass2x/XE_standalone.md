@@ -5,8 +5,8 @@ By class: SIG 33, LOCAL 29, FIELD 11, OTHER 9, FLOOR 8, H5 6, SLOT 1.
 `XE_standalone_families.tsv`: 11 SIG / SLOT families, each with all callers across the tree.
 
 ## Families by casts
-1. SIG:CitizenEmploy_SeatWorkers(int64_t town, uint64_t profession, int) 6 — defined code/Game/Component/citizen_employ_cascade.cpp:411; callers starttown.cpp, three harnesses (local externs). Typed: `TownManager*`, `const ProfessionDesc*`.
-2. SIG:PerfX::PickCullSkip / ModelCulled(void* model) 6 — perf_experimental.cpp; callers also code/Game/Component/citizenai_executor.cpp, statusiconcomponent.cpp.
+1. SIG:CitizenEmploy_SeatWorkers(int64_t town, uint64_t profession, int) 6 — defined src/game/Component/citizen_employ_cascade.cpp:411; callers starttown.cpp, three harnesses (local externs). Typed: `TownManager*`, `const ProfessionDesc*`.
+2. SIG:PerfX::PickCullSkip / ModelCulled(void* model) 6 — perf_experimental.cpp; callers also src/game/Component/citizenai_executor.cpp, statusiconcomponent.cpp.
 3. SIG:EntityUI_SetEditMode_Impl(uint64_t mode) 5 — entityui.cpp:172, exe_bodies.h:47, edittool.cpp (local extern), food_panel_harness, tool_harness (4 sites).
 4. SIG:ModDialog_LastOpened / ModDetailsDialog_LastOpened (void* return) 4 — mod_dialog_vtables.cpp:327-328; local externs in autostart.cpp and pausemenu_harness.cpp. Same dialog-as-void* theme as `g_StandaloneNewGameDialog` (FIELD, 2) and `EntityUI_OpenPauseMenu` (SIG, 1).
 5. SIG:CompProf_BeginKind(void* comp) 3, SIG:RemovalTool/PlacementTool_Factory_SA (void* return, pure forwarders to `CreateNewObject`) 3, SIG:CitizenList_AddWorker_91130 2, SIG:EditTool_CloseInfoDialog(uintptr_t) 2, SIG:ToolbarUtility_HarnessOpen(uint64_t) 1.

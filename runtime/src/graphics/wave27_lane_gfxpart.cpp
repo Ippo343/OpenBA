@@ -45,7 +45,7 @@
 // `ParticleInstance::SetParticle` DRAWS FROM IT, and retail INLINES the draw —
 // the tempering, the index advance and the 0x270 wrap are in SetParticle's own
 // bytes, not behind a call. So this port must read and write THAT OBJECT, at
-// that address, through the same door `code/Game/Game/tornado.cpp:253` already
+// that address, through the same door `src/game/Game/tornado.cpp:253` already
 // uses. Constructing our own generator would compile, run, look right, and
 // desync every particle placement from the DLL's other consumers — a divergence
 // that would not look like a port bug.

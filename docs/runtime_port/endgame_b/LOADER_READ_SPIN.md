@@ -123,7 +123,7 @@ baseline**; `retNull > 3` is the defect.
 
 There is **none**. A full grep of `runtime/src/io/`, `runtime/src/object/`,
 `runtime/src/engine/`, `runtime/src/system/`, `standalone/rt_data_mint.cpp` and
-`code/Game/Game/gameupdateloop_load.cpp` for `CriticalSection`, `EnterCriticalSection`,
+`src/game/Game/gameupdateloop_load.cpp` for `CriticalSection`, `EnterCriticalSection`,
 `Lock(`/`Unlock(`, `std::mutex`, `SRWLOCK`, `Interlocked`, `std::atomic` returns:
 
 | what | where | guards |
@@ -131,8 +131,8 @@ There is **none**. A full grep of `runtime/src/io/`, `runtime/src/object/`,
 | `System::CriticalSection` ctor/dtor/Lock/Unlock — the primitive itself | `runtime/src/system/thread_win.cpp:57-82` (registered `:312-315`) | **nothing in `runtime/src/io/` or `runtime/src/object/` calls it.** Zero callers on the load path. |
 | the allocator's heap lock (`_singleton+0x640`) | described in comments at `runtime/src/io/compressed_stream_write.cpp:209-210`, `compressedstream.cpp:473-474`, `file_stream.cpp:279-280`, and ~12 more | the heap only. Not resource state. |
 | `Persistence` worker events | `runtime/src/io/persistence_worker_win.cpp:309-310, 592-597` | the save/load worker thread's lifetime. Not the package read path. |
-| `std::atomic<void*> s_loadingLoop` | `code/Game/Game/gameupdateloop_load.cpp:915` | **the world BUILD only** — see §2.3. |
-| `std::atomic<void*> s_worldBuiltLoop` | `code/Game/Game/gameupdateloop_load.cpp:889` | the loading-screen completion flag. |
+| `std::atomic<void*> s_loadingLoop` | `src/game/Game/gameupdateloop_load.cpp:915` | **the world BUILD only** — see §2.3. |
+| `std::atomic<void*> s_worldBuiltLoop` | `src/game/Game/gameupdateloop_load.cpp:889` | the loading-screen completion flag. |
 
 ### 2.2 The shared state two concurrent loads touch
 
@@ -155,7 +155,7 @@ diagnostic counter.
 
 ### 2.3 What `[GUL::Load] redundant dispatch` actually rejects — and what still gets through
 
-`code/Game/Game/gameupdateloop_load.cpp:894-912` records the fact in full: the loop's
+`src/game/Game/gameupdateloop_load.cpp:894-912` records the fact in full: the loop's
 `Load` (+0x30) is dispatched **twice, concurrently, on the same `GameUpdateLoop`, by two
 distinct tids** — (1) our standalone `AsyncLoader` worker, (2) the Runtime
 `Engine::Loader` thread spawned inside `fn_DialogLoaderLoopT_Startup`. The guard at `:915`
@@ -454,15 +454,15 @@ All in `standalone/`:
    file. No script, Makefile target or `.claude/` file set it (swept). No new flags: the fix
    is unconditional.
 
-**Nothing under `code/Game/` was touched at all** — the B.3.4 caller batches were live
+**Nothing under `src/game/` was touched at all** — the B.3.4 caller batches were live
 there. Two comments in that tree are now stale and want a closing pass:
 
-* `code/Game/Game/gameupdateloop_load.cpp` (the `s_loadingLoop` guard region, ~896-924)
+* `src/game/Game/gameupdateloop_load.cpp` (the `s_loadingLoop` guard region, ~896-924)
   still describes dispatcher (1) as "our standalone AsyncLoader worker". That guard is now
   an **assertion rather than a fix**: with one dispatcher it can never fire, so a
   `[GUL::Load] redundant dispatch` line reappearing in a log means a second dispatcher has
   come back. **That line count is the cheapest regression signal for this fix.**
-* `code/Game/Game/menudialogloopt_funcs.h:157` says `MenuDialogLoopT_LoadMusic` is "safe to
+* `src/game/Game/menudialogloopt_funcs.h:157` says `MenuDialogLoopT_LoadMusic` is "safe to
   call on the AsyncLoader worker thread"; it now runs on the `Engine::Loader` thread.
 
 The equivalent stale comments inside `standalone/` (`menudialogloopt_stubs.cpp`,

@@ -31,7 +31,7 @@ a clean `Engine::Shutdown`. A crash leaves `standalone_crash.log` and the script
 
 ## What the town is
 
-Built by `StartTown_StressSpawnStructures` (`code/Game/Game/starttown.cpp`) on top of the
+Built by `StartTown_StressSpawnStructures` (`src/game/Game/starttown.cpp`) on top of the
 normal Easy founding town, on a **medium (384) map**, seed 31337 (12345's town area is a
 ~11k-cell pocket between river and mountains; 31337 has ~27k connected cells):
 
@@ -209,7 +209,7 @@ left alone. Reaching 50% would mean doing less than retail does per tick.
 
 ## 50x game speed (2026-09-05)
 
-The speed table in `ToolbarDialog` (`code/Game/Dialog/toolbardialog.cpp`, step 9 of the
+The speed table in `ToolbarDialog` (`src/game/Dialog/toolbardialog.cpp`, step 9 of the
 ctor) is `{1, 2, 5, 10, 20, 50}` -- retail stops at 10. 20x and 50x are NON-RETAIL; the
 speed-up/down buttons and `BANISHED_STRESS_SPEED` / `BANISHED_FORCE_SPEED` are table-driven
 so nothing else changed. Results, 800x50, PerfX on, same build as the 10x numbers:

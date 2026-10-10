@@ -114,7 +114,7 @@ int Video::Device::GetInterfaceCount() const {
 //
 // Returns a reference, i.e. an interior pointer into the Array's storage. No
 // bounds check: retail indexes straight off Array::_data, and
-// code/Game/Dialog/optionsdialog.cpp relies on that (it feeds the result of
+// src/game/Dialog/optionsdialog.cpp relies on that (it feeds the result of
 // GetInterfaceCount straight back in). A guard here would not be faithful and
 // would not help — see CLAUDE.md "Don't 'fix' a faithful crash with a null
 // check".
@@ -172,7 +172,7 @@ bool Video::Device::IsMultisampleModeSupported(int mode) const {
 //     leaves *refreshNum / *refreshDen ALONE and skips the ratio fallback
 //     entirely.
 //
-// CALLER NOTE: code/Game/Dialog/optionsdialog.cpp:315 passes `&savedAdapter`
+// CALLER NOTE: src/game/Dialog/optionsdialog.cpp:315 passes `&savedAdapter`
 // as BOTH the 2nd and the 8th argument (retail does the same at exe
 // 0x140072eb0). The diff harness below therefore rebuilds the caller's aliasing
 // exactly rather than assuming eight distinct slots — with eight distinct

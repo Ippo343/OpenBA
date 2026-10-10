@@ -127,7 +127,7 @@
 // AddObject (0x1800c00c0, `SetSize(_objects, _size + 1, &obj)`), RemoveObject
 // (0x1800c0110, `table[i] = table[last]` off +0x00 with the count at +0x08),
 // and the exe-side audit that has been walking it for months
-// (code/Game/Object/internal_factory_audit.h).
+// (src/game/Object/internal_factory_audit.h).
 //
 // _persistIds is pinned by ClearPersistState (0x1800bfe30 — retail inlines
 // `Free(_data); _data = 0; *(u64*)(this+0x18) = 0`, and the PROFILE build,
@@ -630,7 +630,7 @@ public:
     System::Random&                     GetRandom()           { return _random; }
 
     // PUBLIC for the same reason `Object::Factory::_types` is: the unconverted
-    // C bodies and the exe-side audit (code/Game/Object/internal_factory_audit.h)
+    // C bodies and the exe-side audit (src/game/Object/internal_factory_audit.h)
     // reach these directly, and `offsetof` on them has to be well formed.
     Collection::Array<Internal*> _objects;      // +0x00
     Collection::Array<int32_t>   _persistIds;   // +0x10

@@ -319,8 +319,8 @@ LOADER_REACH = ('runtime/src/ui', 'runtime/src/graphics', 'runtime/src/io', 'run
                 'runtime/src/collection', 'runtime/src/video', 'runtime/src/save', 'dx11/',
                 # GameUpdateLoop::Load runs SaveRestoreOut (every component / action / work
                 # Serialize, every factory CreateNewObject) and the new-game world build here:
-                'code/Game/Action', 'code/Game/Component', 'code/Game/Work', 'code/Game/Entity',
-                'code/Game/Game', 'code/Game/Tutorial', 'code/Game/Goal')
+                'src/game/Action', 'src/game/Component', 'src/game/Work', 'src/game/Entity',
+                'src/game/Game', 'src/game/Tutorial', 'src/game/Goal')
 
 
 def registry_rows(files):
@@ -471,7 +471,7 @@ def scan_caches(files, wrapper_names):
 #  thread, note, keys(None=from anchor table)) -- every entry was read by hand.
 CURATED = [
     # ---- tables whose element reaches a resolver (true data flow) ------------------------
-    ('code/Game/Tutorial/tutorialstep.cpp', r'const ArrayLeg legs\[3\]', 'addr_table', 'exe', None,
+    ('src/game/Tutorial/tutorialstep.cpp', r'const ArrayLeg legs\[3\]', 'addr_table', 'exe', None,
      'const ArrayLeg legs[3] initialiser (3 ExternalPtrArray<...>::Serialize addrs) -> SerializePtrArrayFn(leg.serializeAddr) -> ResolveAddr(Exe)',
      None, 'loader',
      'TutorialStep::Serialize; runs on the loader thread on a save load. DIRECT: the three ExternalPtrArray<T>::Serialize bodies are nameable (template instances)'),
@@ -497,11 +497,11 @@ CURATED = [
      'literal 0x180100f20 -> RtPortLookupAddr; cached in function-local s_addDrawItemsOurs; compared with the object vtable slot of Geometry::AddDrawItems (IsMeshInstance)',
      None, 'main',
      'identity token, not a call. The comment says the body is not registered but runtime/src/graphics/mesh.cpp registers RtGraphics_MeshInstance_AddDrawItems at this address. DIRECT: compare with &RtGraphics_MeshInstance_AddDrawItems / MeshInstance vtable'),
-    ('code/Game/Component/citizenai_candidatelist.cpp', r'int CitizenAI_ValidateAndEnterState\(void\* selfV, int state\) \{', 'addr_table', 'exe', None,
+    ('src/game/Component/citizenai_candidatelist.cpp', r'int CitizenAI_ValidateAndEnterState\(void\* selfV, int state\) \{', 'addr_table', 'exe', None,
      'STATE-MACHINE table: switch(state) assigns one of the CitizenAI state-handler addresses to a local, then ResolveAddr(Module::Exe, addr) and calls it (a null skips the state)',
      None, 'main',
      'the only behaviour-table dispatch through the registry; every case names a CitizenAIComponent state handler -> DIRECT (a switch of direct calls). A handler still unregistered is a live null-skip: converting it changes behaviour (titled commit)'),
-    ('code/Game/Game/geometry_serialize.cpp', r'constexpr uintptr_t kSlot_Vector2Ser\s*=', 'addr_table', 'exe', 1,
+    ('src/game/Game/geometry_serialize.cpp', r'constexpr uintptr_t kSlot_Vector2Ser\s*=', 'addr_table', 'exe', 1,
      'named constant kSlot_Vector2Ser (PE import slot 0x1401526b8, Math::Vector2::Serialize) -> ResolveSlot(kSlot, cache, tried, tag) -> *(fn*)ResolveAddr(Exe)',
      None, 'loader', 'Geometry::Serialize on a save load. DIRECT: Math::Vector2::Serialize is a member'),
     ('runtime/src/graphics/wave24_lane_gfxmat.cpp', r'RT_GFXMAT_CORRUPT\(1\)\s*\?\s*0x1800616c0', 'addr_table', 'runtime', 2,
@@ -528,14 +528,14 @@ CURATED = [
      '228 extern fn-pointer globals bound by INITIALISER at EngineFuncsInit (literal keys) and called everywhere',
      None, 'main', 'bound once on the main thread before any other thread exists: no race; freezes the answer at boot (after AddressRegistryInit). Inventory owner of question 5 counts the rows'),
     # ---- DEFINE_EXE_VTABLE (no retail address at all) -------------------------------------
-    ('code/Game/Game/gameupdateloop.cpp', r'DEFINE_EXE_VTABLE\(GameUpdateLoop', 'vtable_define', 'exe', 0,
+    ('src/game/Game/gameupdateloop.cpp', r'DEFINE_EXE_VTABLE\(GameUpdateLoop', 'vtable_define', 'exe', 0,
      'asm label _ZTV14GameUpdateLoop (compiler vtable group); readers: splash_loop_stubs.cpp vptr identity compare, newgamedialog.cpp printf', 0, 'main',
      'keeps NO registry row: the macro binds the compiler symbol, not a retail address (0x14015e2f0 is registered nowhere)'),
     ('standalone/menudialogloopt_stubs.cpp', r'DEFINE_EXE_VTABLE\(MenuDialogLoopT', 'vtable_define', 'exe', 0,
      'asm label _ZTV15MenuDialogLoopT; reader: game_main.cpp printf only', 0, 'main', 'keeps NO registry row'),
     ('standalone/splash_loop_stubs.cpp', r'DEFINE_EXE_VTABLE\(GameLoadDialogLoopT', 'vtable_define', 'exe', 0,
      'asm label _ZTV19GameLoadDialogLoopT; reader: game_main.cpp printf only', 0, 'main', 'keeps NO registry row (0x140158800 registered nowhere)'),
-    ('code/Game/Goal/statgoal.cpp', r'DEFINE_EXE_VTABLE\(StatGoal', 'vtable_define', 'exe', 0,
+    ('src/game/Goal/statgoal.cpp', r'DEFINE_EXE_VTABLE\(StatGoal', 'vtable_define', 'exe', 0,
      'asm label _ZTV8StatGoal; reader: main.cpp RunFactorySelfTest', 0, 'main', 'keeps NO registry row'),
     ('standalone/splash_loop_stubs.cpp', r'== GameUpdateLoop::Vtable\(\)', 'identity_compare', 'exe', 0,
      'vptr compared with GameUpdateLoop::Vtable() (compiler table)', 0, 'main', 'no registry row; already a direct reference'),
@@ -552,13 +552,13 @@ CURATED = [
     ('standalone/rt_data_mint.cpp', r'RegisterRuntimeAddr\(\(uintptr_t\)s\.dllVa', 'addr_table', 'runtime', 2,
      'kMintStorage[] (generated rt_data_mint_tables.inc) registered by a loop: symbol -> name door, dllVa -> address door', 2, 'main',
      'REGISTRATION side: the 2 minted storage rows (MemoryAllocator::_singleton, Debug::_disableHandler)'),
-    ('code/Game/Work/buildroad.cpp', r'RegisterExeAddr\(BuildRoadAddr::CtorParams', 'addr_table', 'exe', 1,
+    ('src/game/Work/buildroad.cpp', r'RegisterExeAddr\(BuildRoadAddr::CtorParams', 'addr_table', 'exe', 1,
      'named constant BuildRoadAddr::CtorParams as the registration key', 1, 'main', 'REGISTRATION side keyed by a named constant'),
     # ---- tables that DO NOT reach a resolver (listed so nobody re-counts them) ---------------
     ('dx11/funcs/dx11_seam.cpp', r'static const VtDesc kVtables\[', 'diagnostic', 'runtime', None,
      'VtDesc[12] ghidra field = VideoDX11-x64.dll vtable addresses (0x1800185xx..0x180018bb0), printed in the seam report only', 0, 'main',
      'NOT Runtime addresses: VideoDX11 shares the 0x180000000 preferred base. Resolves nothing; keeps no row'),
-    ('code/Game/Dialog/tradeui.cpp', r'const Dep deps\[\] = \{', 'diagnostic', 'exe', None,
+    ('src/game/Dialog/tradeui.cpp', r'const Dep deps\[\] = \{', 'diagnostic', 'exe', None,
      'Dep{name string,fn} over engine_funcs globals; the addresses are inside strings, printed when a global is null', 0, 'main',
      'resolves nothing itself; the fn_ globals are engine_funcs initialiser bindings (question 5)'),
 ]
@@ -685,8 +685,8 @@ def main():
 
     # wrappers fed by DATA (non-parameter, non-literal keys) that the curated list does not cover
     curated_files = {'standalone/dlgctrl_route.cpp', 'standalone/modal_driver.cpp', 'runtime/src/ui/dialog.cpp',
-                     'code/Game/Tutorial/tutorialstep.cpp', 'code/Game/Component/citizenai_candidatelist.cpp',
-                     'code/Game/Game/geometry_serialize.cpp', 'runtime/src/graphics/wave24_lane_gfxmat.cpp'}
+                     'src/game/Tutorial/tutorialstep.cpp', 'src/game/Component/citizenai_candidatelist.cpp',
+                     'src/game/Game/geometry_serialize.cpp', 'runtime/src/graphics/wave24_lane_gfxmat.cpp'}
     for p, ln, callee, arg in data_sites:
         if p in ('standalone/resolve.h', 'runtime/funcs/rt_resolve_cache.cpp', 'tests/unit/rt_port_stub.cpp')                 or p in curated_files:
             continue                              # the doors' own internals / hand-read above

@@ -2332,9 +2332,9 @@ VideoDX11-x64.dll's own IAT slots (see B37_RULES §4).
 
 ```
 Engine: RT_DELDTOR row 4, by-address resolve 7, named constant 67, registration 52
-    code/Game/Game/game_main.cpp:184  0x1800dd6b0  ??0MainLoop@Engine@@QEAA@PEAV11@@Z
-    code/Game/Game/game_main.cpp:186  0x1800dd640  ??1MainLoop@Engine@@QEAA@XZ
-    code/Game/Game/game_main.cpp:188  0x1800dd3c0  ?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z
+    src/game/Game/game_main.cpp:184  0x1800dd6b0  ??0MainLoop@Engine@@QEAA@PEAV11@@Z
+    src/game/Game/game_main.cpp:186  0x1800dd640  ??1MainLoop@Engine@@QEAA@XZ
+    src/game/Game/game_main.cpp:188  0x1800dd3c0  ?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z
     engine/funcs/engine_funcs.cpp:1262  0x140151440  ?_singleton@MainLoop@Engine@@1PEAV12@EA
     engine/funcs/engine_funcs.cpp:2404  0x1801fe7b8  ?_loader@LoaderLoop@Engine@@1VLoader@2@A
     engine/funcs/engine_funcs.cpp:2843  0x140152850  ?IsRunning@UpdateLoop@Engine@@QEBA_NXZ
@@ -2346,39 +2346,39 @@ Save: by-address resolve 5, registration 21
     engine/funcs/engine_funcs.cpp:2679  0x140152738  ?CheckMod@SaveLoad@Save@@QEBAHHH@Z
     engine/funcs/engine_funcs.cpp:2692  0x140151650  ?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z
 Achievement: RT_DELDTOR row 4, by-address resolve 17, comment/string/other 1, named constant 7, registration 50
-    code/Game/Game/gameupdateloop.cpp:536  0x140152058  ?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z
-    code/Game/Game/gameupdateloop.cpp:541  0x140152048  ?IsMet@AchievementInstance@Achievement@@QEBA_NXZ
-    code/Game/Game/gameupdateloop.cpp:546  0x140152060  ?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ
-    code/Game/Game/scenario.cpp:75  0x18009e240  ??0Achievement@0@QEAA@XZ
-    code/Game/Game/scenario.cpp:77  0x18009e180  ??1Achievement@0@UEAA@XZ
-    code/Game/Game/scenario.cpp:79  0x18009e170  ?GetFileVersion@Achievement@1@UEBAHXZ
-    code/Game/Game/scenario.cpp:81  0x18009e070  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z
-    code/Game/Goal/statgoal.cpp:66  0x140152840  ?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z
-    code/Game/Goal/timegoal.cpp:34  0x140152840  ?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z
-    code/Game/Goal/timegoalinstance.cpp:58  0x140152868  ?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
-    code/Game/Goal/timegoalinstance.cpp:64  0x140152878  ?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z
-    code/Game/Goal/timegoalinstance.cpp:67  0x140152880  ?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z
+    src/game/Game/gameupdateloop.cpp:536  0x140152058  ?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z
+    src/game/Game/gameupdateloop.cpp:541  0x140152048  ?IsMet@AchievementInstance@Achievement@@QEBA_NXZ
+    src/game/Game/gameupdateloop.cpp:546  0x140152060  ?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ
+    src/game/Game/scenario.cpp:75  0x18009e240  ??0Achievement@0@QEAA@XZ
+    src/game/Game/scenario.cpp:77  0x18009e180  ??1Achievement@0@UEAA@XZ
+    src/game/Game/scenario.cpp:79  0x18009e170  ?GetFileVersion@Achievement@1@UEBAHXZ
+    src/game/Game/scenario.cpp:81  0x18009e070  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z
+    src/game/Goal/statgoal.cpp:66  0x140152840  ?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z
+    src/game/Goal/timegoal.cpp:34  0x140152840  ?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z
+    src/game/Goal/timegoalinstance.cpp:58  0x140152868  ?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
+    src/game/Goal/timegoalinstance.cpp:64  0x140152878  ?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z
+    src/game/Goal/timegoalinstance.cpp:67  0x140152880  ?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z
     engine/funcs/engine_funcs.cpp:1459  0x1401514f0  ?_singleton@AchievementManager@Achievement@@0PEAV12@EA
     engine/funcs/engine_funcs.cpp:1533  0x140151598  ?GetTitle@Achievement@1@QEBA?AVString@System@@XZ
     engine/funcs/engine_funcs.cpp:1539  0x140151590  ?GetDescription@Achievement@1@QEBA?AVString@System@@XZ
     engine/funcs/engine_funcs.cpp:1545  0x1401515a0  ?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ
     engine/funcs/engine_funcs.cpp:2827  0x140152840  ?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z
 Audio: RT_DELDTOR row 2, by-address resolve 11, comment/string/other 1, registration 14
-    code/Game/Component/citizen_assignworkplace.cpp:133  0x140152a00  ?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z
-    code/Game/Component/citizen_assignworkplace.cpp:134  0x140152a08  ?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z
-    code/Game/Component/citizen_assignworkplace.cpp:135  0x140152a10  ?StopEffect3D@Scene@Audio@@QEAAXI@Z
-    code/Game/Component/citizen_assignworkplace.cpp:136  0x140152a18  ?GetEmitterCount@Scene@Audio@@QEBAHI@Z
-    code/Game/Component/citizen_assignworkplace.cpp:137  0x140152a20  ?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z
-    code/Game/Tutorial/finishtutorialinstance.cpp:72  0x140151c08  ?Save@Configuration@Audio@@QEAAXXZ
+    src/game/Component/citizen_assignworkplace.cpp:133  0x140152a00  ?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z
+    src/game/Component/citizen_assignworkplace.cpp:134  0x140152a08  ?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z
+    src/game/Component/citizen_assignworkplace.cpp:135  0x140152a10  ?StopEffect3D@Scene@Audio@@QEAAXI@Z
+    src/game/Component/citizen_assignworkplace.cpp:136  0x140152a18  ?GetEmitterCount@Scene@Audio@@QEBAHI@Z
+    src/game/Component/citizen_assignworkplace.cpp:137  0x140152a20  ?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z
+    src/game/Tutorial/finishtutorialinstance.cpp:72  0x140151c08  ?Save@Configuration@Audio@@QEAAXXZ
     engine/funcs/engine_funcs.cpp:1403  0x140152030  ?Pause@Scene@Audio@@QEAAXH_N@Z
     engine/funcs/engine_funcs.cpp:1697  0x140151b78  ?_singleton@Configuration@Audio@@0PEAV12@EA
     engine/funcs/engine_funcs.cpp:1708  0x1801fe758  ?_singleton@Configuration@Audio@@0PEAV12@EA
     runtime/src/audio/audio_stream_win.cpp:296  0x180154950  ??_7Stream@Audio@@6B@
     runtime/src/engine/mainloop_run.cpp:282  0x1800de520  ?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z
 Input: by-address resolve 8, comment/string/other 2, registration 32
-    code/Game/Player/edittool.cpp:212  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
-    code/Game/Player/pathtool.cpp:117  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
-    code/Game/Player/placementtool.cpp:146  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
+    src/game/Player/edittool.cpp:212  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
+    src/game/Player/pathtool.cpp:117  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
+    src/game/Player/placementtool.cpp:146  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
     engine/funcs/engine_funcs.cpp:1259  0x140151738  ?_singleton@Configuration@Input@@0PEAV12@EA
     engine/funcs/engine_funcs.cpp:1386  0x140151b80  ?_singleton@Device@Input@@0PEAV12@EA
     engine/funcs/engine_funcs.cpp:1470  0x140151758  ?Pressed@KeyMap@Input@@QEBA_NHH@Z
@@ -2386,21 +2386,21 @@ Input: by-address resolve 8, comment/string/other 2, registration 32
     runtime/src/input/input.cpp:559  0x1800a7520  ?Save@KeyMap@Input@@QEAAXXZ
 Pathfinding: RT_DELDTOR row 1
 Picking: RT_DELDTOR row 1, by-address resolve 15, comment/string/other 2, registration 14
-    code/Game/Component/citizenai_executor.cpp:369  0x1401529a8  ?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z
-    code/Game/Component/citizenai_executor.cpp:372  0x1801252e0  ?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z
-    code/Game/Component/floorcomponent.cpp:249  0x1801252e0  ?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z
-    code/Game/Component/floorcomponent.cpp:254  0x180125290  ?RemoveMesh@Scene@Picking@@QEAAXI@Z
-    code/Game/Component/pickingcomponent.cpp:312  0x180125290  ?RemoveMesh@Scene@Picking@@QEAAXI@Z
-    code/Game/Component/pickingcomponent.cpp:314  0x140152438  ?RemoveMesh@Scene@Picking@@QEAAXI@Z
-    code/Game/Component/quarrycomponent_deform.cpp:93  0x140151478  ?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z
-    code/Game/Component/terraformcomponent.cpp:307  0x140151478  ?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z
-    code/Game/Game/mapquery.cpp:154  0x140152428  ?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z
-    code/Game/Player/bridgetool_calcpath.cpp:226  0x1401529a0  ?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z
-    code/Game/Player/edittool.cpp:213  0x140152428  ?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z
-    code/Game/Player/edittool.cpp:214  0x140152890  ?GetUserData@Scene@Picking@@QEBAPEAXI@Z
-    code/Game/Player/fencedtool_calcpath.cpp:92  0x1401529a0  ?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z
-    code/Game/Player/pathtool.cpp:109  0x140152428  ?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z
-    code/Game/Player/pathtool.cpp:113  0x140152890  ?GetUserData@Scene@Picking@@QEBAPEAXI@Z
+    src/game/Component/citizenai_executor.cpp:369  0x1401529a8  ?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z
+    src/game/Component/citizenai_executor.cpp:372  0x1801252e0  ?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z
+    src/game/Component/floorcomponent.cpp:249  0x1801252e0  ?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z
+    src/game/Component/floorcomponent.cpp:254  0x180125290  ?RemoveMesh@Scene@Picking@@QEAAXI@Z
+    src/game/Component/pickingcomponent.cpp:312  0x180125290  ?RemoveMesh@Scene@Picking@@QEAAXI@Z
+    src/game/Component/pickingcomponent.cpp:314  0x140152438  ?RemoveMesh@Scene@Picking@@QEAAXI@Z
+    src/game/Component/quarrycomponent_deform.cpp:93  0x140151478  ?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z
+    src/game/Component/terraformcomponent.cpp:307  0x140151478  ?Vertices@PickingMesh@Picking@@QEBAAEBV?$Array@VVector3@Math@@@Collection@@H@Z
+    src/game/Game/mapquery.cpp:154  0x140152428  ?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z
+    src/game/Player/bridgetool_calcpath.cpp:226  0x1401529a0  ?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z
+    src/game/Player/edittool.cpp:213  0x140152428  ?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z
+    src/game/Player/edittool.cpp:214  0x140152890  ?GetUserData@Scene@Picking@@QEBAPEAXI@Z
+    src/game/Player/fencedtool_calcpath.cpp:92  0x1401529a0  ?SetMeshUserData@Scene@Picking@@QEAAXIPEAXHHP6AX0HHAEBVVector3@Math@@11@Z@Z
+    src/game/Player/pathtool.cpp:109  0x140152428  ?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z
+    src/game/Player/pathtool.cpp:113  0x140152890  ?GetUserData@Scene@Picking@@QEBAPEAXI@Z
 Application: by-address resolve 3, registration 26
     engine/funcs/engine_funcs.cpp:2411  0x140152368  ?_singleton@Application@1@0PEAV11@EA
     standalone/address_registry.cpp:1544  0x1801fc678  ?_singleton@Application@1@0PEAV11@EA

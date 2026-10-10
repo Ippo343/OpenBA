@@ -116,7 +116,7 @@
 // (standalone/rt_data_mint_tables.inc kVSlots29[8] == RT_MINT_PURECALL, address
 // 0x18007ec28). That is not a decode error: `Achievement::Goal` declares
 // CheckGoalState pure and the EXE's subclasses (StatGoal, TimeGoal,
-// PopulationGoal, BuildingGoal, FinishTutorialGoal, … in code/Game/Goal/)
+// PopulationGoal, BuildingGoal, FinishTutorialGoal, … in src/game/Goal/)
 // override it. So the object this body dispatches on is never a bare
 // `Achievement::Goal` at runtime, and the call lands in the exe.
 //

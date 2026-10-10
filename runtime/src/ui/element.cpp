@@ -98,7 +98,7 @@
 // a replay destroys every child a second time, and a shadow predicate can only
 // observe that the array ended up empty, which is true whether or not the
 // children were correctly destroyed. Its live caller is `fn_Element_RemoveChildren`
-// (nine sites under code/Game/Dialog/), so this is a real, deliberate cost:
+// (nine sites under src/game/Dialog/), so this is a real, deliberate cost:
 // nine call sites keep going to the DLL. An unverified port that frees objects
 // is a worse outcome than a hold-back (WAVE2 allocator verdict).
 //

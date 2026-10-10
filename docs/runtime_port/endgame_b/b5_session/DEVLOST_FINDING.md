@@ -16,7 +16,7 @@ finally every frame (0-1 frames between trips). The code does not distinguish RE
 REMOVED (retail's `Finish` treats both identically and never asks `GetDeviceRemovedReason` for
 either), never logs the removal reason, and — the one defect the tree already names — the game's
 half of the recovery, `GameUpdateLoop::OnVideoError` / `OnVideoRestart` (retail 0x140095970 /
-0x140095930), is a no-op `PORT GAP` (code/Game/Game/gameupdateloop.cpp:2345-2352), so every
+0x140095930), is a no-op `PORT GAP` (src/game/Game/gameupdateloop.cpp:2345-2352), so every
 game-owned static vertex/index buffer and generated texture keeps a companion created on a device
 that no longer exists and is bound to the new context on the next frame. That cross-device use
 is the leading hypothesis for the recurring removal, and it predicts the measured degradation
@@ -182,7 +182,7 @@ allocations reclaimed by the kernel; ours keeps them alive (see §3, suspect 1).
 H1 (leading): **cross-device resource use through the GameUpdateLoop PORT GAP.** READ:
 `GameUpdateLoop::OnVideoError()` and `OnVideoRestart()` are empty bodies; the comment says
 retail's 0x140095970 "releases the loop's GPU buffers on a D3D device-lost event" and 0x140095930
-"recreates them after device-restored" (code/Game/Game/gameupdateloop.cpp:2345-2352). Nothing
+"recreates them after device-restored" (src/game/Game/gameupdateloop.cpp:2345-2352). Nothing
 else releases a game-owned `Video::VertexBuffer`/`IndexBuffer` that is not `dynamic`, or a
 game-owned `ImageBuffer` that is neither an External nor of kind 0/1/3/4/5 (the `ReleaseDynamic`
 walkers test exactly `p->dynamic` and `ImageBufferIsDynamicResource`,

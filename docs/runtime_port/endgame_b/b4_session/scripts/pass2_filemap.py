@@ -45,7 +45,7 @@ for r in REGIONS:
         d['file'] = d['file'].replace('\\', '/')
         if '/' not in d['file']:      # two inventories wrote bare file names
             cands = [p + d['file'] for p in (('standalone/',) if r == 'G_standalone' else
-                                             ('code/Game/Game/', 'code/Game/Object/'))]
+                                             ('src/game/Game/', 'src/game/Object/'))]
             hit = [c for c in cands if os.path.exists(c)]
             assert hit, (r, d['file'])
             d['file'] = hit[0]
@@ -79,7 +79,7 @@ def group(path):
         return 'R', big.get(ns, 'R-SYS')
     if path.startswith('standalone/'):
         return 'L', 'SA'
-    m = re.match(r'code/Game/([A-Za-z]+)/', path)
+    m = re.match(r'src/game/([A-Za-z]+)/', path)
     d = m.group(1) if m else 'misc'
     if d == 'Component':
         f = family(path)

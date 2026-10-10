@@ -28,7 +28,7 @@ of the NAME, so the name spelling is the ABI and the order is not. Nothing persi
 
 **What in the gate sees order:** the pointer-free type table (`b38_session/gate.sh:126-127`, `sort -u`)
 contains the `[GameMain]   typeId=… name=…` lines, which print the FIRST TEN chain records
-(`code/Game/Game/game_main.cpp:499-503`). Sorting hides their order but not their MEMBERSHIP: reversing
+(`src/game/Game/game_main.cpp:499-503`). Sorting hides their order but not their MEMBERSHIP: reversing
 the exe list replaces those ten lines. That is a log artefact, not a behaviour. `[Probe … ] #n` lines
 (`standalone/main.cpp:669-690`, first five, with indices) also show order but are not in the table.
 
@@ -83,7 +83,7 @@ the exe list replaces those ten lines. That is a log artefact, not a behaviour. 
 | 0x1401c4288 | FruitDescription | g_tid_FruitDescription | - | standalone/reg_component_fruit.cpp:70 | 3 (Component:2 Work:1) | 0 | FruitDescription::TypeId() |
 | 0x1401c42c0 | HappinessComponent | - | - | **none (unregistered: ResolveAddr answers 0)** | 2 (Component:1 Game:1) | 0 | HappinessComponent::TypeId() |
 | 0x1401c42f8 | HappinessDescription | g_tid_HappinessDescription | - | standalone/reg_town_services.cpp:69 | 2 (Component:2) | 0 | HappinessDescription::TypeId() |
-| 0x1401c4330 | HealerComponent | g_tid_HealerComponent | - | code/Game/Game/citizenlist_serialize.cpp:864 | 0 () | 0 | HealerComponent::TypeId() |
+| 0x1401c4330 | HealerComponent | g_tid_HealerComponent | - | src/game/Game/citizenlist_serialize.cpp:864 | 0 () | 0 | HealerComponent::TypeId() |
 | 0x1401c43a0 | HerbalistComponent | - | - | standalone/reg_food_typeid.cpp:57 | 1 (Work:1) | 0 | HerbalistComponent::TypeId() |
 | 0x1401c43d8 | HerbalistDescription | - | - | standalone/reg_food_typeid.cpp:58 | 1 (Work:1) | 0 | HerbalistDescription::TypeId() |
 | 0x1401c4480 | ImmigrationComponent | - | g_TypeId_ImmigrationComponent | standalone/reg_unreg_lane4.cpp:111 | 1 (engine:1) | 4 | ImmigrationComponent::TypeId() |
@@ -105,7 +105,7 @@ the exe list replaces those ten lines. That is a log artefact, not a behaviour. 
 | 0x1401c4b80 | TradeComponent | g_tid_TradeComponent | g_TypeId_TradeComponent_FC | standalone/reg_tradeui_typeids.cpp:124 | 2 (Work:1 engine:1) | 5 | TradeComponent::TypeId() |
 | 0x1401c4bb8 | TradeDescription | g_tid_TradeDescription | - | standalone/reg_tradeui_typeids.cpp:125 | 3 (Component:1 Dialog:1 engine:1) | 0 | TradeDescription::TypeId() |
 | 0x1401c4bf0 | ValueDescription | g_tid_ValueDescription | - | standalone/reg_tradeui_typeids.cpp:126 | 1 (engine:1) | 0 | ValueDescription::TypeId() |
-| 0x1401c4c28 | WellComponent | g_tid_WellComponent | - | code/Game/Game/citizenlist_serialize.cpp:865 | 0 () | 0 | WellComponent::TypeId() |
+| 0x1401c4c28 | WellComponent | g_tid_WellComponent | - | src/game/Game/citizenlist_serialize.cpp:865 | 0 () | 0 | WellComponent::TypeId() |
 | 0x1401c4d08 | AutoSaveDialog | g_tid_AutoSaveDialog | g_TypeId_AutoSaveDialogType | standalone/reg_autosave.cpp:47 | 1 (engine:1) | 3 | AutoSaveDialog::TypeId() |
 | 0x1401c4e20 | ControlUIConfig | g_tid_ControlUIConfig | g_TypeId_ControlComponent | standalone/reg_controlui.cpp:45 | 1 (engine:1) | 9 | ControlUIConfig::TypeId() |
 | 0x1401c4f00 | EntityUI | - | g_TypeId_PageToggleUI | standalone/reg_unreg_lane4.cpp:122 | 4 (Dialog:1 Player:1 engine:2) | 0 | EntityUI::TypeId() |
@@ -142,7 +142,7 @@ the exe list replaces those ten lines. That is a log artefact, not a behaviour. 
 | 0x1401c6668 | TutorialInstance | g_tid_TutorialInstance | - | standalone/reg_tutorial_typeid.cpp:83 | 1 (Tutorial:1) | 0 | TutorialInstance::TypeId() |
 | 0x1401c6860 | BuildRoad | g_tid_BuildRoad | - | standalone/reg_economy_typeids.cpp:328 | 2 (Player:1 Work:1) | 0 | BuildRoad::TypeId() |
 | 0x1401c6be0 | Pickup | - | - | **none (unregistered: ResolveAddr answers 0)** | 1 (Work:1) | 0 | Pickup::TypeId() |
-| 0x1401c6cf8 | Work | g_tid_Work | - | code/Game/Game/goals_serialize.cpp:877 | 0 () | 0 | NONE today: Work is REGISTER_ABSTRACT_FACTORY (needs a static; D4) |
+| 0x1401c6cf8 | Work | g_tid_Work | - | src/game/Game/goals_serialize.cpp:877 | 0 () | 0 | NONE today: Work is REGISTER_ABSTRACT_FACTORY (needs a static; D4) |
 | 0x1401c6dd8 | EditTool | - | g_TypeId_EditTool | standalone/reg_unreg_lane4.cpp:221 | 1 (engine:1) | 9 | EditTool::TypeId() |
 | 0x1401c6eb8 | Tool | - | g_TypeId_ToolController | standalone/reg_unreg_lane4.cpp:227 | 2 (Component:1 engine:1) | 3 | NONE today: Tool is REGISTER_ABSTRACT_FACTORY (needs a static; D4) |
 | 0x1401c6ef0 | ToolSetting | - | g_TypeId_ToolSetting | standalone/reg_unreg_lane4.cpp:230 | 2 (Component:1 engine:1) | 3 | NONE today: ToolSetting is REGISTER_ABSTRACT_FACTORY (needs a static; D4) |
@@ -223,9 +223,9 @@ the exe list replaces those ten lines. That is a log artefact, not a behaviour. 
 ### Notes on Table 1
 
 - **Writer.** Every registered cell is `RegisterExeAddr(cell, &storage)` in a `standalone/reg_*.cpp`
-  (or `code/Game/Game/{citizenlist,goals}_serialize.cpp`, or a registrar table: `reg_unreg_lane4.cpp` 30
+  (or `src/game/Game/{citizenlist,goals}_serialize.cpp`, or a registrar table: `reg_unreg_lane4.cpp` 30
   rows `{addr,"Name",0}`, `reg_food_typeid.cpp` 8, `reg_tutorial_typeid.cpp` 4) at `AddressRegistryInit`;
-  the VALUE is written after `Engine::Startup` by the `Fill*` calls at `code/Game/Game/game_main.cpp:511-542`
+  the VALUE is written after `Engine::Startup` by the `Fill*` calls at `src/game/Game/game_main.cpp:511-542`
   (`g_tid_X = X::TypeId()` or `GetTypeIdByName("X")`). Nothing writes a cell in `Factory::Startup` — in
   retail the cell IS the class's `BaseTypeInfo` record and Startup writes its +0; in the tree the cell is a
   standalone copy of the record's id. The class column is retail's (the `BaseTypeInfo` ctor call in the
@@ -242,7 +242,7 @@ the exe list replaces those ten lines. That is a log artefact, not a behaviour. 
 - **Replacement.** `X::TypeId()` exists for 297 classes (`DECLARE_EXE_TYPE`). Seven cells have no static:
   the abstract bases `Action` 0x1401c5da8, `Work` 0x1401c6cf8, `Tool` 0x1401c6eb8, `ToolSetting` 0x1401c6ef0,
   `Component` 0x1401c72a8, `Description` 0x1401c72e0, `ControllerComponent` 0x1401c73c0 (they are
-  `REGISTER_ABSTRACT_FACTORY`, `code/Game/Object/factory_registrations_bulk.cpp:94-192`; their `Type()` is
+  `REGISTER_ABSTRACT_FACTORY`, `src/game/Object/factory_registrations_bulk.cpp:94-192`; their `Type()` is
   `GetTypeIdByName("X")`). The fold must give the 13 abstract bases the same static (§B.4) before those
   cells can go.
 - **Unregistered cells with readers (13 type-id cells, 26 sites)** answer 0 / a null pointer today where
@@ -252,7 +252,7 @@ the exe list replaces those ten lines. That is a log artefact, not a behaviour. 
   `SendComponentMessage` action ctors start carrying a real target type): each is its own titled commit,
   gated with resave ×5.
 - **`+8` readers (6 cells, 8 sites) are not type ids.** 0x1401c5f38/5f70/5fe0/6088/60c0 (`DropOffRawMaterial`,
-  `HuntAnimal` ×2 names, `PerformWork`, `RemoveAnimal`, `RemoveNaturalResource` — `code/Game/Action/*.cpp`,
+  `HuntAnimal` ×2 names, `PerformWork`, `RemoveAnimal`, `RemoveNaturalResource` — `src/game/Action/*.cpp`,
   named `s_typeInfo_X` / `s_dat_VectorDtorReturn`) and 0x1401c72e8 (`Description`+8, called
   "TypeInfo_ComponentEntity" in `multiobjectcomponent.cpp:91`, `nomadcomponent.cpp:447`,
   `pickingcomponent.cpp:217`) are the record's NAME pointer. Retail's only xrefs are the class's slot 1
@@ -269,156 +269,156 @@ their 821 reads are Table 3.
 
 | file | sites | cells read | forms |
 |---|---:|---|---|
-| code/Game/Action/action_base_cnr.cpp | 4 | c77b0 c7a50 c7a88 c7b68 | wrapper R×4 |
-| code/Game/Action/action_base_complete.cpp | 2 | c7a88 c7cb8 | ResolveAddr(Exe)×2 |
-| code/Game/Action/action_base_hunt.cpp | 3 | c6f98 c78c8 c8000 | ResolveAddr(Exe)×3 |
-| code/Game/Action/action_base_move.cpp | 2 | c7078 c70b0 | ResolveAddr(Exe)×2 |
-| code/Game/Action/action_base_rawmat.cpp | 3 | c4b10 c7c80 c7cb8 | ResolveAddr(Exe)×3 |
-| code/Game/Action/action_child_ctors2.cpp | 2 | c7350 c7cb8 | ResolveAddr(Exe)×2 |
-| code/Game/Action/action_pf_ctors.cpp | 4 | c70b0 c7190 c7938 c7cb8 | ResolveAddr(Exe)×4 |
-| code/Game/Action/action_pf_geom.cpp | 1 | c22d0 | ResolveAddr(Exe)×1 |
-| code/Game/Action/action_pf_road.cpp | 2 | c23d0 c7938 | ResolveAddr(Exe)×2 |
-| code/Game/Action/action_pf_roots_drop.cpp | 1 | c70e8 | ResolveAddr(Exe)×1 |
-| code/Game/Action/action_pf_roots_misc.cpp | 2 | c6f98 c7858 | wrapper R×2 |
-| code/Game/Action/animatenaturalresource.cpp | 1 | c5d70 | ResolveAddr(Exe)×1 |
-| code/Game/Action/completeroad.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
-| code/Game/Action/completetask.cpp | 3 | c3dd8 c5d70 c7158 | ResolveAddr(Exe)×3 |
-| code/Game/Action/createnaturalresource.cpp | 2 | c5d70 c77b0 | ResolveAddr(Exe)×2 |
-| code/Game/Action/createrawmaterial.cpp | 5 | c5d70 c7158 c7c80 c7cb8 c8118 | ResolveAddr(Exe)×5 |
-| code/Game/Action/dropoffrawmaterial.cpp | 2 | c5f38 c7158 | ResolveAddr(Exe)×2 |
-| code/Game/Action/huntanimal.cpp | 6 | c5f68 c5f70 c6fd0 c7158 c7890 c8000 | ResolveAddr(Exe)×6 |
-| code/Game/Action/moveto.cpp | 2 | c4790 c7078 | ResolveAddr(Exe)×2 |
-| code/Game/Action/performwork.cpp | 1 | c5fe0 | ResolveAddr(Exe)×1 |
-| code/Game/Action/pickuprawmaterial.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
-| code/Game/Action/pickupstoredrawmaterial.cpp | 3 | c7158 c7cb8 c7e78 | ResolveAddr(Exe)×3 |
-| code/Game/Action/playanimation.cpp | 1 | c5d70 | ResolveAddr(Exe)×1 |
-| code/Game/Action/removeanimal.cpp | 3 | c4218 c6080 c6088 | ResolveAddr(Exe)×3 |
-| code/Game/Action/removenaturalresource.cpp | 3 | c60c0 c7158 c7b68 | ResolveAddr(Exe)×3 |
-| code/Game/Action/sendcomponentmessage.cpp | 1 | c5d70 | ResolveAddr(Exe)×1 |
-| code/Game/Action/showtool.cpp | 3 | c7158 c7a88 c7cb8 | ResolveAddr(Exe)×3 |
-| code/Game/Component/absorbresourcecomponent.cpp | 1 | c7c80 | ResolveAddr(Exe)×1 |
-| code/Game/Component/animalcomponent.cpp | 2 | c6fd0 c70b0 | ResolveAddr(Exe)×2 |
-| code/Game/Component/animalwave_serialize.cpp | 5 | c4790 c47c8 c5d70 c7ba0 c8000 | ResolveAddr(Exe)×5 |
-| code/Game/Component/attendancecomponent.cpp | 2 | c7158 c80e0 | ResolveAddr(Exe)×2 |
-| code/Game/Component/attendancecomponent_states.cpp | 1 | c3f78 | ResolveAddr(Exe)×1 |
-| code/Game/Component/autopickupcomponent.cpp | 1 | c3fe8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/boatcomponent_route.cpp | 3 | c4020 c7938 c7a50 | ResolveAddr(Exe)×3 |
-| code/Game/Component/buildcomponent.cpp | 4 | c7a50 c7a88 c7ac0 c7c10 | ResolveAddr(Exe)×4 |
-| code/Game/Component/cemeterycomponent.cpp | 2 | c3dd8 c4a30 | ResolveAddr(Exe)×2 |
-| code/Game/Component/charactercomponent_serialize.cpp | 4 | c5da8 c70b0 c7a50 c7c10 | ResolveAddr(Exe)×4 |
-| code/Game/Component/citizen_lifeevent_handler.cpp | 3 | c40c8 c4a30 c7900 | ResolveAddr(Exe)×3 |
-| code/Game/Component/citizen_reassign_workers.cpp | 2 | c7cf0 c7e78 | wrapper RExe×2 |
-| code/Game/Component/citizenai_actionctors.cpp | 4 | c42c0 c70e8 c7158 c7cb8 | ResolveAddr(Exe)×4 |
-| code/Game/Component/citizenai_handlers.cpp | 1 | c70e8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/citizenaicomponent.cpp | 3 | c7cb8 c7cf0 c7e78 | ResolveAddr(Exe)×3 |
-| code/Game/Component/citizencomponent.cpp | 8 | c3f78 c7158 c7900 c7cb8 c7cf0 c7d28 c8070 c80e0 | ResolveAddr(Exe)×8 |
-| code/Game/Component/citizencomponent_lifecycle.cpp | 1 | c8070 | ResolveAddr(Exe)×1 |
-| code/Game/Component/citizencomponent_serialize.cpp | 16 | c3f40 c5948 c5a98 c5d70 c7078 c7158 c7190 c7e08 | ResolveAddr(Exe)×4, wrapper ?×12 |
-| code/Game/Component/clearareacomponent_states.cpp | 5 | c7200 c7b30 c7b68 c7cb8 | wrapper DerefTid×5 |
-| code/Game/Component/component.cpp | 1 | c72e0 | ResolveAddr(Exe)×1 |
-| code/Game/Component/consumeproducecomponent.cpp | 1 | c7388 | ResolveAddr(Exe)×1 |
-| code/Game/Component/cropfieldcomponent.cpp | 3 | c5d70 c7548 c7b30 | ResolveAddr(Exe)×3 |
-| code/Game/Component/cropfieldcomponent_states.cpp | 2 | c7b68 c7cb8 | ResolveAddr(Exe)×2 |
-| code/Game/Component/decalcomponent.cpp | 3 | c3dd8 c75b8 | ResolveAddr(Exe)×3 |
-| code/Game/Component/destroycomponent_state6.cpp | 3 | c7580 c7628 c7a88 | ResolveAddr(Exe)×3 |
-| code/Game/Component/destroycomponent_states.cpp | 4 | c7040 c7628 c7a88 c7cb8 | ResolveAddr(Exe)×4 |
-| code/Game/Component/entity_finders_disaster.cpp | 3 | c3e60 c41e0 c7158 | wrapper ResolveTid×3 |
-| code/Game/Component/fishingcomponent_produce.cpp | 2 | c4870 c7698 | ResolveAddr(Exe)×2 |
-| code/Game/Component/floorcomponent.cpp | 3 | c3dd8 c7708 c79e0 | ResolveAddr(Exe)×3 |
-| code/Game/Component/fruitcomponent.cpp | 2 | c3dd8 c4288 | ResolveAddr(Exe)×2 |
-| code/Game/Component/fruitcomponent_serialize.cpp | 1 | c7b30 | ResolveAddr(Exe)×1 |
-| code/Game/Component/growthcomponent.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/growthcomponent_serialize.cpp | 2 | c7a50 c7b30 | ResolveAddr(Exe)×2 |
-| code/Game/Component/happinesscomponent.cpp | 5 | c3dd8 c42f8 c4870 c7cb8 | ResolveAddr(Exe)×5 |
-| code/Game/Component/herdcomponent.cpp | 7 | c3dd8 c6f98 c6fd0 c7078 c7858 c7a88 c8000 | ResolveAddr(Exe)×7 |
-| code/Game/Component/interactcomponent.cpp | 2 | c7900 c7ac0 | ResolveAddr(Exe)×2 |
-| code/Game/Component/livestockcomponent.cpp | 1 | c79a8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/mapcomponent.cpp | 1 | c7a18 | ResolveAddr(Exe)×1 |
-| code/Game/Component/modelcomponent.cpp | 1 | c7a88 | ResolveAddr(Exe)×1 |
-| code/Game/Component/multiobjectcomponent.cpp | 2 | c3dd8 c72e8 | ResolveAddr(Exe)×2 |
-| code/Game/Component/nomadcomponent.cpp | 4 | c3dd8 c6eb8 c6ef0 c72e8 | ResolveAddr(Exe)×4 |
-| code/Game/Component/orchardcomponent.cpp | 6 | c3dd8 c4250 c4288 c46e8 c5d70 c7b30 | ResolveAddr(Exe)×6 |
-| code/Game/Component/particlecomponent.cpp | 1 | c4758 | ResolveAddr(Exe)×1 |
-| code/Game/Component/pasturecomponent.cpp | 3 | c6f98 c6fd0 c7970 | ResolveAddr(Exe)×3 |
-| code/Game/Component/pasturecomponent_spawn.cpp | 2 | c6f98 c7970 | ResolveAddr(Exe)×2 |
-| code/Game/Component/pasturecomponent_states.cpp | 4 | c3fb0 c6f98 c79a8 c7c80 | wrapper Tid×4 |
-| code/Game/Component/pickingcomponent.cpp | 1 | c72e8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/populationcomponent.cpp | 4 | c3dd8 c47c8 c7820 c7858 | ResolveAddr(Exe)×1, wrapper PopulationTypeId×3 |
-| code/Game/Component/rawmaterialcomponent.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/residence_heattick.cpp | 1 | c7d28 | ResolveAddr(Exe)×1 |
-| code/Game/Component/residencecomponent.cpp | 2 | c7158 c7d28 | ResolveAddr(Exe)×2 |
-| code/Game/Component/spawncomponent.cpp | 2 | c4918 c77e8 | ResolveAddr(Exe)×2 |
-| code/Game/Component/statemachinecomponent.cpp | 1 | c73c0 | ResolveAddr(Exe)×1 |
-| code/Game/Component/statusiconcomponent.cpp | 1 | c7e40 | ResolveAddr(Exe)×1 |
-| code/Game/Component/storagecomponent.cpp | 1 | c7eb0 | ResolveAddr(Exe)×1 |
-| code/Game/Component/storagedisplaycomponent.cpp | 2 | c3dd8 c7a88 | ResolveAddr(Exe)×2 |
-| code/Game/Component/storagelocationcomponent.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/terraformcomponent.cpp | 1 | c49f8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/tombstonecomponent.cpp | 2 | c3dd8 c4a68 | ResolveAddr(Exe)×2 |
-| code/Game/Component/tradecomponent.cpp | 1 | c4bb8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/tradecomponent_livestock.cpp | 1 | c6f98 | ResolveAddr(Exe)×1 |
-| code/Game/Component/wellcomponent.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
-| code/Game/Component/wildanimalcomponent.cpp | 1 | c7820 | ResolveAddr(Exe)×1 |
-| code/Game/Component/workplacecomponent.cpp | 3 | c7158 c80e0 c8118 | ResolveAddr(Exe)×3 |
-| code/Game/Component/zonecomponent.cpp | 2 | c3dd8 c7a18 | ResolveAddr(Exe)×2 |
-| code/Game/Dialog/dialog_exe_helpers.cpp | 1 | c7008 | ResolveAddr(Exe)×1 |
-| code/Game/Dialog/edittool_select.cpp | 4 | c4f00 c5788 c7f90 c7fc8 | wrapper ResolveTypeId×4 |
-| code/Game/Dialog/tradeui_checkout.cpp | 4 | c4bb8 c79a8 c7b68 c7cb8 | ResolveAddr(Exe)×4 |
-| code/Game/Game/citizenlist_serialize.cpp | 7 | c4170 c42c0 c4790 c7008 c7820 c7970 c79e0 | ResolveAddr(Exe)×7 |
-| code/Game/Game/gameupdateloop.cpp | 2 | c3de0 c4138 | ResolveAddr(Exe)×2 |
-| code/Game/Game/professionlist.cpp | 1 | c5a98 | ResolveAddr(Exe)×1 |
-| code/Game/Game/starttown.cpp | 1 | c8000 | ResolveAddr(Exe)×1 |
-| code/Game/Game/town_storage_seed.cpp | 4 | c79e0 c7cb8 c7e78 c7eb0 | wrapper Tid×4 |
-| code/Game/Game/unreg_lane5_musicplayer.cpp | 1 | c7190 | ResolveAddr(Exe)×1 |
-| code/Game/Goal/statvaluedispatch.cpp | 16 | c48a8 c4a30 c4b10 c5910 c5a98 c5b40 c7008 c7040 c7318 c75f0 c79e0 c7cb8 c7d98 c7e78 c80e0 c8118 | ResolveAddr(Exe)×16 |
-| code/Game/Player/edittool.cpp | 2 | c4f00 c5788 | ResolveAddr(Exe)×2 |
-| code/Game/Player/fencedtool.cpp | 1 | c63c8 | ResolveAddr(Exe)×1 |
-| code/Game/Player/keystone_a_removalcalcpath.cpp | 5 | c6860 c7430 c75f0 c79e0 c8070 | ResolveAddr(Exe)×5 |
-| code/Game/Player/placementtool.cpp | 1 | c63c8 | ResolveAddr(Exe)×1 |
-| code/Game/Player/roadtool.cpp | 2 | c74d8 c75b8 | ResolveAddr(Exe)×2 |
-| code/Game/Player/tool_base_path.cpp | 3 | c7430 c75f0 c7d98 | ResolveAddr(Exe)×3 |
-| code/Game/Player/tool_base_tile.cpp | 1 | c7a88 | ResolveAddr(Exe)×1 |
-| code/Game/Player/tool_base_toolui.cpp | 1 | c7f58 | ResolveAddr(Exe)×1 |
-| code/Game/Player/tool_base_trade.cpp | 1 | c5788 | ResolveAddr(Exe)×1 |
-| code/Game/Tutorial/finishtutorialinstance.cpp | 1 | c6668 | ResolveAddr(Exe)×1 |
-| code/Game/Tutorial/tutorialgoalcount.cpp | 2 | c5a98 c7318 | ResolveAddr(Exe)×2 |
-| code/Game/Work/BuildRoad.h | 1 | c6860 | named constexpr×1 |
-| code/Game/Work/build_actions.cpp | 3 | c7008 c70e8 c75f0 | wrapper rd×3 |
-| code/Game/Work/buildroad.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
-| code/Game/Work/buildstructure.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
-| code/Game/Work/cleararea.cpp | 1 | c7c80 | engine_funcs g_TypeId_ initialiser×1 |
-| code/Game/Work/consumeproduce.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
-| code/Game/Work/firework.cpp | 2 | c7190 c7938 | ResolveAddr(Exe)×2 |
-| code/Game/Work/firework_search.cpp | 1 | c7900 | ResolveAddr(Exe)×1 |
-| code/Game/Work/fishingwork.cpp | 6 | c4870 c7158 c7660 c7698 c7e78 c8070 | ResolveAddr(Exe)×6 |
-| code/Game/Work/foresterwork.cpp | 8 | c4870 c7740 c7778 c77e8 c7b30 c7b68 c7cb8 c80a8 | ResolveAddr(Exe)×8 |
-| code/Game/Work/gatherrawmaterials.cpp | 3 | c7040 c7938 c7cb8 | ResolveAddr(Exe)×3 |
-| code/Game/Work/harvestarea.cpp | 1 | c7548 | ResolveAddr(Exe)×1 |
-| code/Game/Work/harvestorchard.cpp | 2 | c4288 c46e8 | ResolveAddr(Exe)×2 |
-| code/Game/Work/herbalistwork.cpp | 3 | c43a0 c43d8 c4870 | ResolveAddr(Exe)×3 |
-| code/Game/Work/huntwork.cpp | 1 | c78c8 | ResolveAddr(Exe)×1 |
-| code/Game/Work/locationwork.cpp | 2 | c7158 c7938 | ResolveAddr(Exe)×2 |
-| code/Game/Work/marketwork.cpp | 10 | c3dd8 c44f0 c4528 c7350 c7900 c7938 c79e0 c7cb8 c7e78 c7ee8 | ResolveAddr(Exe)×1, wrapper ?×9 |
-| code/Game/Work/marketwork_bst_b290.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
-| code/Game/Work/pasturework.cpp | 3 | c6fd0 c7ba0 c7bd8 | ResolveAddr(Exe)×3 |
-| code/Game/Work/pickup.cpp | 3 | c6be0 c7158 c7cb8 | ResolveAddr(Exe)×3 |
-| code/Game/Work/pickup_gate.cpp | 4 | c7cb8 c7e78 c7ee8 c7f20 | ResolveAddr(Exe)×4 |
-| code/Game/Work/plantarea.cpp | 1 | c7510 | ResolveAddr(Exe)×1 |
-| code/Game/Work/plantorchard.cpp | 1 | c46b0 | ResolveAddr(Exe)×1 |
-| code/Game/Work/tendarea.cpp | 2 | c46b0 c7510 | ResolveAddr(Exe)×2 |
-| code/Game/Work/tradework.cpp | 3 | c7938 c7cb8 c7e78 | ResolveAddr(Exe)×3 |
-| code/Game/Work/work_act_clear.cpp | 2 | c70e8 c7b68 | ResolveAddr(Exe)×2 |
-| code/Game/Work/work_act_consume.cpp | 2 | c70e8 c7388 | ResolveAddr(Exe)×2 |
-| code/Game/Work/work_act_hunt.cpp | 1 | c70e8 | ResolveAddr(Exe)×1 |
-| code/Game/Work/work_act_path.cpp | 2 | c70e8 c7158 | ResolveAddr(Exe)×2 |
-| code/Game/Work/work_act_perform.cpp | 2 | c41e0 c70e8 | ResolveAddr(Exe)×2 |
-| code/Game/Work/work_act_rawmat.cpp | 3 | c46b0 c70e8 c7660 | ResolveAddr(Exe)×3 |
-| code/Game/Work/work_base_accessor.cpp | 4 | c3fb0 c46b0 c7510 c7cb8 | ResolveAddr(Exe)×4 |
-| code/Game/Work/work_base_actionctor.cpp | 2 | c70e8 c7b68 | ResolveAddr(Exe)×2 |
-| code/Game/Work/work_base_reimpl.cpp | 7 | c4b80 c5e50 c7900 c7b30 c7e08 c7e78 c8070 | ResolveAddr(Exe)×7 |
-| code/Game/Work/work_base_walkpos.cpp | 2 | c7190 c7938 | ResolveAddr(Exe)×2 |
-| code/Game/Work/work_leaf_gather.cpp | 2 | c77e8 | ResolveAddr(Exe)×2 |
-| code/Game/Work/work_leaf_hunt.cpp | 7 | c4250 c4870 c6f98 c6fd0 c7388 c7890 c7ba0 | ResolveAddr(Exe)×7 |
+| src/game/Action/action_base_cnr.cpp | 4 | c77b0 c7a50 c7a88 c7b68 | wrapper R×4 |
+| src/game/Action/action_base_complete.cpp | 2 | c7a88 c7cb8 | ResolveAddr(Exe)×2 |
+| src/game/Action/action_base_hunt.cpp | 3 | c6f98 c78c8 c8000 | ResolveAddr(Exe)×3 |
+| src/game/Action/action_base_move.cpp | 2 | c7078 c70b0 | ResolveAddr(Exe)×2 |
+| src/game/Action/action_base_rawmat.cpp | 3 | c4b10 c7c80 c7cb8 | ResolveAddr(Exe)×3 |
+| src/game/Action/action_child_ctors2.cpp | 2 | c7350 c7cb8 | ResolveAddr(Exe)×2 |
+| src/game/Action/action_pf_ctors.cpp | 4 | c70b0 c7190 c7938 c7cb8 | ResolveAddr(Exe)×4 |
+| src/game/Action/action_pf_geom.cpp | 1 | c22d0 | ResolveAddr(Exe)×1 |
+| src/game/Action/action_pf_road.cpp | 2 | c23d0 c7938 | ResolveAddr(Exe)×2 |
+| src/game/Action/action_pf_roots_drop.cpp | 1 | c70e8 | ResolveAddr(Exe)×1 |
+| src/game/Action/action_pf_roots_misc.cpp | 2 | c6f98 c7858 | wrapper R×2 |
+| src/game/Action/animatenaturalresource.cpp | 1 | c5d70 | ResolveAddr(Exe)×1 |
+| src/game/Action/completeroad.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
+| src/game/Action/completetask.cpp | 3 | c3dd8 c5d70 c7158 | ResolveAddr(Exe)×3 |
+| src/game/Action/createnaturalresource.cpp | 2 | c5d70 c77b0 | ResolveAddr(Exe)×2 |
+| src/game/Action/createrawmaterial.cpp | 5 | c5d70 c7158 c7c80 c7cb8 c8118 | ResolveAddr(Exe)×5 |
+| src/game/Action/dropoffrawmaterial.cpp | 2 | c5f38 c7158 | ResolveAddr(Exe)×2 |
+| src/game/Action/huntanimal.cpp | 6 | c5f68 c5f70 c6fd0 c7158 c7890 c8000 | ResolveAddr(Exe)×6 |
+| src/game/Action/moveto.cpp | 2 | c4790 c7078 | ResolveAddr(Exe)×2 |
+| src/game/Action/performwork.cpp | 1 | c5fe0 | ResolveAddr(Exe)×1 |
+| src/game/Action/pickuprawmaterial.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
+| src/game/Action/pickupstoredrawmaterial.cpp | 3 | c7158 c7cb8 c7e78 | ResolveAddr(Exe)×3 |
+| src/game/Action/playanimation.cpp | 1 | c5d70 | ResolveAddr(Exe)×1 |
+| src/game/Action/removeanimal.cpp | 3 | c4218 c6080 c6088 | ResolveAddr(Exe)×3 |
+| src/game/Action/removenaturalresource.cpp | 3 | c60c0 c7158 c7b68 | ResolveAddr(Exe)×3 |
+| src/game/Action/sendcomponentmessage.cpp | 1 | c5d70 | ResolveAddr(Exe)×1 |
+| src/game/Action/showtool.cpp | 3 | c7158 c7a88 c7cb8 | ResolveAddr(Exe)×3 |
+| src/game/Component/absorbresourcecomponent.cpp | 1 | c7c80 | ResolveAddr(Exe)×1 |
+| src/game/Component/animalcomponent.cpp | 2 | c6fd0 c70b0 | ResolveAddr(Exe)×2 |
+| src/game/Component/animalwave_serialize.cpp | 5 | c4790 c47c8 c5d70 c7ba0 c8000 | ResolveAddr(Exe)×5 |
+| src/game/Component/attendancecomponent.cpp | 2 | c7158 c80e0 | ResolveAddr(Exe)×2 |
+| src/game/Component/attendancecomponent_states.cpp | 1 | c3f78 | ResolveAddr(Exe)×1 |
+| src/game/Component/autopickupcomponent.cpp | 1 | c3fe8 | ResolveAddr(Exe)×1 |
+| src/game/Component/boatcomponent_route.cpp | 3 | c4020 c7938 c7a50 | ResolveAddr(Exe)×3 |
+| src/game/Component/buildcomponent.cpp | 4 | c7a50 c7a88 c7ac0 c7c10 | ResolveAddr(Exe)×4 |
+| src/game/Component/cemeterycomponent.cpp | 2 | c3dd8 c4a30 | ResolveAddr(Exe)×2 |
+| src/game/Component/charactercomponent_serialize.cpp | 4 | c5da8 c70b0 c7a50 c7c10 | ResolveAddr(Exe)×4 |
+| src/game/Component/citizen_lifeevent_handler.cpp | 3 | c40c8 c4a30 c7900 | ResolveAddr(Exe)×3 |
+| src/game/Component/citizen_reassign_workers.cpp | 2 | c7cf0 c7e78 | wrapper RExe×2 |
+| src/game/Component/citizenai_actionctors.cpp | 4 | c42c0 c70e8 c7158 c7cb8 | ResolveAddr(Exe)×4 |
+| src/game/Component/citizenai_handlers.cpp | 1 | c70e8 | ResolveAddr(Exe)×1 |
+| src/game/Component/citizenaicomponent.cpp | 3 | c7cb8 c7cf0 c7e78 | ResolveAddr(Exe)×3 |
+| src/game/Component/citizencomponent.cpp | 8 | c3f78 c7158 c7900 c7cb8 c7cf0 c7d28 c8070 c80e0 | ResolveAddr(Exe)×8 |
+| src/game/Component/citizencomponent_lifecycle.cpp | 1 | c8070 | ResolveAddr(Exe)×1 |
+| src/game/Component/citizencomponent_serialize.cpp | 16 | c3f40 c5948 c5a98 c5d70 c7078 c7158 c7190 c7e08 | ResolveAddr(Exe)×4, wrapper ?×12 |
+| src/game/Component/clearareacomponent_states.cpp | 5 | c7200 c7b30 c7b68 c7cb8 | wrapper DerefTid×5 |
+| src/game/Component/component.cpp | 1 | c72e0 | ResolveAddr(Exe)×1 |
+| src/game/Component/consumeproducecomponent.cpp | 1 | c7388 | ResolveAddr(Exe)×1 |
+| src/game/Component/cropfieldcomponent.cpp | 3 | c5d70 c7548 c7b30 | ResolveAddr(Exe)×3 |
+| src/game/Component/cropfieldcomponent_states.cpp | 2 | c7b68 c7cb8 | ResolveAddr(Exe)×2 |
+| src/game/Component/decalcomponent.cpp | 3 | c3dd8 c75b8 | ResolveAddr(Exe)×3 |
+| src/game/Component/destroycomponent_state6.cpp | 3 | c7580 c7628 c7a88 | ResolveAddr(Exe)×3 |
+| src/game/Component/destroycomponent_states.cpp | 4 | c7040 c7628 c7a88 c7cb8 | ResolveAddr(Exe)×4 |
+| src/game/Component/entity_finders_disaster.cpp | 3 | c3e60 c41e0 c7158 | wrapper ResolveTid×3 |
+| src/game/Component/fishingcomponent_produce.cpp | 2 | c4870 c7698 | ResolveAddr(Exe)×2 |
+| src/game/Component/floorcomponent.cpp | 3 | c3dd8 c7708 c79e0 | ResolveAddr(Exe)×3 |
+| src/game/Component/fruitcomponent.cpp | 2 | c3dd8 c4288 | ResolveAddr(Exe)×2 |
+| src/game/Component/fruitcomponent_serialize.cpp | 1 | c7b30 | ResolveAddr(Exe)×1 |
+| src/game/Component/growthcomponent.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
+| src/game/Component/growthcomponent_serialize.cpp | 2 | c7a50 c7b30 | ResolveAddr(Exe)×2 |
+| src/game/Component/happinesscomponent.cpp | 5 | c3dd8 c42f8 c4870 c7cb8 | ResolveAddr(Exe)×5 |
+| src/game/Component/herdcomponent.cpp | 7 | c3dd8 c6f98 c6fd0 c7078 c7858 c7a88 c8000 | ResolveAddr(Exe)×7 |
+| src/game/Component/interactcomponent.cpp | 2 | c7900 c7ac0 | ResolveAddr(Exe)×2 |
+| src/game/Component/livestockcomponent.cpp | 1 | c79a8 | ResolveAddr(Exe)×1 |
+| src/game/Component/mapcomponent.cpp | 1 | c7a18 | ResolveAddr(Exe)×1 |
+| src/game/Component/modelcomponent.cpp | 1 | c7a88 | ResolveAddr(Exe)×1 |
+| src/game/Component/multiobjectcomponent.cpp | 2 | c3dd8 c72e8 | ResolveAddr(Exe)×2 |
+| src/game/Component/nomadcomponent.cpp | 4 | c3dd8 c6eb8 c6ef0 c72e8 | ResolveAddr(Exe)×4 |
+| src/game/Component/orchardcomponent.cpp | 6 | c3dd8 c4250 c4288 c46e8 c5d70 c7b30 | ResolveAddr(Exe)×6 |
+| src/game/Component/particlecomponent.cpp | 1 | c4758 | ResolveAddr(Exe)×1 |
+| src/game/Component/pasturecomponent.cpp | 3 | c6f98 c6fd0 c7970 | ResolveAddr(Exe)×3 |
+| src/game/Component/pasturecomponent_spawn.cpp | 2 | c6f98 c7970 | ResolveAddr(Exe)×2 |
+| src/game/Component/pasturecomponent_states.cpp | 4 | c3fb0 c6f98 c79a8 c7c80 | wrapper Tid×4 |
+| src/game/Component/pickingcomponent.cpp | 1 | c72e8 | ResolveAddr(Exe)×1 |
+| src/game/Component/populationcomponent.cpp | 4 | c3dd8 c47c8 c7820 c7858 | ResolveAddr(Exe)×1, wrapper PopulationTypeId×3 |
+| src/game/Component/rawmaterialcomponent.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
+| src/game/Component/residence_heattick.cpp | 1 | c7d28 | ResolveAddr(Exe)×1 |
+| src/game/Component/residencecomponent.cpp | 2 | c7158 c7d28 | ResolveAddr(Exe)×2 |
+| src/game/Component/spawncomponent.cpp | 2 | c4918 c77e8 | ResolveAddr(Exe)×2 |
+| src/game/Component/statemachinecomponent.cpp | 1 | c73c0 | ResolveAddr(Exe)×1 |
+| src/game/Component/statusiconcomponent.cpp | 1 | c7e40 | ResolveAddr(Exe)×1 |
+| src/game/Component/storagecomponent.cpp | 1 | c7eb0 | ResolveAddr(Exe)×1 |
+| src/game/Component/storagedisplaycomponent.cpp | 2 | c3dd8 c7a88 | ResolveAddr(Exe)×2 |
+| src/game/Component/storagelocationcomponent.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
+| src/game/Component/terraformcomponent.cpp | 1 | c49f8 | ResolveAddr(Exe)×1 |
+| src/game/Component/tombstonecomponent.cpp | 2 | c3dd8 c4a68 | ResolveAddr(Exe)×2 |
+| src/game/Component/tradecomponent.cpp | 1 | c4bb8 | ResolveAddr(Exe)×1 |
+| src/game/Component/tradecomponent_livestock.cpp | 1 | c6f98 | ResolveAddr(Exe)×1 |
+| src/game/Component/wellcomponent.cpp | 1 | c3dd8 | ResolveAddr(Exe)×1 |
+| src/game/Component/wildanimalcomponent.cpp | 1 | c7820 | ResolveAddr(Exe)×1 |
+| src/game/Component/workplacecomponent.cpp | 3 | c7158 c80e0 c8118 | ResolveAddr(Exe)×3 |
+| src/game/Component/zonecomponent.cpp | 2 | c3dd8 c7a18 | ResolveAddr(Exe)×2 |
+| src/game/Dialog/dialog_exe_helpers.cpp | 1 | c7008 | ResolveAddr(Exe)×1 |
+| src/game/Dialog/edittool_select.cpp | 4 | c4f00 c5788 c7f90 c7fc8 | wrapper ResolveTypeId×4 |
+| src/game/Dialog/tradeui_checkout.cpp | 4 | c4bb8 c79a8 c7b68 c7cb8 | ResolveAddr(Exe)×4 |
+| src/game/Game/citizenlist_serialize.cpp | 7 | c4170 c42c0 c4790 c7008 c7820 c7970 c79e0 | ResolveAddr(Exe)×7 |
+| src/game/Game/gameupdateloop.cpp | 2 | c3de0 c4138 | ResolveAddr(Exe)×2 |
+| src/game/Game/professionlist.cpp | 1 | c5a98 | ResolveAddr(Exe)×1 |
+| src/game/Game/starttown.cpp | 1 | c8000 | ResolveAddr(Exe)×1 |
+| src/game/Game/town_storage_seed.cpp | 4 | c79e0 c7cb8 c7e78 c7eb0 | wrapper Tid×4 |
+| src/game/Game/unreg_lane5_musicplayer.cpp | 1 | c7190 | ResolveAddr(Exe)×1 |
+| src/game/Goal/statvaluedispatch.cpp | 16 | c48a8 c4a30 c4b10 c5910 c5a98 c5b40 c7008 c7040 c7318 c75f0 c79e0 c7cb8 c7d98 c7e78 c80e0 c8118 | ResolveAddr(Exe)×16 |
+| src/game/Player/edittool.cpp | 2 | c4f00 c5788 | ResolveAddr(Exe)×2 |
+| src/game/Player/fencedtool.cpp | 1 | c63c8 | ResolveAddr(Exe)×1 |
+| src/game/Player/keystone_a_removalcalcpath.cpp | 5 | c6860 c7430 c75f0 c79e0 c8070 | ResolveAddr(Exe)×5 |
+| src/game/Player/placementtool.cpp | 1 | c63c8 | ResolveAddr(Exe)×1 |
+| src/game/Player/roadtool.cpp | 2 | c74d8 c75b8 | ResolveAddr(Exe)×2 |
+| src/game/Player/tool_base_path.cpp | 3 | c7430 c75f0 c7d98 | ResolveAddr(Exe)×3 |
+| src/game/Player/tool_base_tile.cpp | 1 | c7a88 | ResolveAddr(Exe)×1 |
+| src/game/Player/tool_base_toolui.cpp | 1 | c7f58 | ResolveAddr(Exe)×1 |
+| src/game/Player/tool_base_trade.cpp | 1 | c5788 | ResolveAddr(Exe)×1 |
+| src/game/Tutorial/finishtutorialinstance.cpp | 1 | c6668 | ResolveAddr(Exe)×1 |
+| src/game/Tutorial/tutorialgoalcount.cpp | 2 | c5a98 c7318 | ResolveAddr(Exe)×2 |
+| src/game/Work/BuildRoad.h | 1 | c6860 | named constexpr×1 |
+| src/game/Work/build_actions.cpp | 3 | c7008 c70e8 c75f0 | wrapper rd×3 |
+| src/game/Work/buildroad.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
+| src/game/Work/buildstructure.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
+| src/game/Work/cleararea.cpp | 1 | c7c80 | engine_funcs g_TypeId_ initialiser×1 |
+| src/game/Work/consumeproduce.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
+| src/game/Work/firework.cpp | 2 | c7190 c7938 | ResolveAddr(Exe)×2 |
+| src/game/Work/firework_search.cpp | 1 | c7900 | ResolveAddr(Exe)×1 |
+| src/game/Work/fishingwork.cpp | 6 | c4870 c7158 c7660 c7698 c7e78 c8070 | ResolveAddr(Exe)×6 |
+| src/game/Work/foresterwork.cpp | 8 | c4870 c7740 c7778 c77e8 c7b30 c7b68 c7cb8 c80a8 | ResolveAddr(Exe)×8 |
+| src/game/Work/gatherrawmaterials.cpp | 3 | c7040 c7938 c7cb8 | ResolveAddr(Exe)×3 |
+| src/game/Work/harvestarea.cpp | 1 | c7548 | ResolveAddr(Exe)×1 |
+| src/game/Work/harvestorchard.cpp | 2 | c4288 c46e8 | ResolveAddr(Exe)×2 |
+| src/game/Work/herbalistwork.cpp | 3 | c43a0 c43d8 c4870 | ResolveAddr(Exe)×3 |
+| src/game/Work/huntwork.cpp | 1 | c78c8 | ResolveAddr(Exe)×1 |
+| src/game/Work/locationwork.cpp | 2 | c7158 c7938 | ResolveAddr(Exe)×2 |
+| src/game/Work/marketwork.cpp | 10 | c3dd8 c44f0 c4528 c7350 c7900 c7938 c79e0 c7cb8 c7e78 c7ee8 | ResolveAddr(Exe)×1, wrapper ?×9 |
+| src/game/Work/marketwork_bst_b290.cpp | 1 | c7158 | ResolveAddr(Exe)×1 |
+| src/game/Work/pasturework.cpp | 3 | c6fd0 c7ba0 c7bd8 | ResolveAddr(Exe)×3 |
+| src/game/Work/pickup.cpp | 3 | c6be0 c7158 c7cb8 | ResolveAddr(Exe)×3 |
+| src/game/Work/pickup_gate.cpp | 4 | c7cb8 c7e78 c7ee8 c7f20 | ResolveAddr(Exe)×4 |
+| src/game/Work/plantarea.cpp | 1 | c7510 | ResolveAddr(Exe)×1 |
+| src/game/Work/plantorchard.cpp | 1 | c46b0 | ResolveAddr(Exe)×1 |
+| src/game/Work/tendarea.cpp | 2 | c46b0 c7510 | ResolveAddr(Exe)×2 |
+| src/game/Work/tradework.cpp | 3 | c7938 c7cb8 c7e78 | ResolveAddr(Exe)×3 |
+| src/game/Work/work_act_clear.cpp | 2 | c70e8 c7b68 | ResolveAddr(Exe)×2 |
+| src/game/Work/work_act_consume.cpp | 2 | c70e8 c7388 | ResolveAddr(Exe)×2 |
+| src/game/Work/work_act_hunt.cpp | 1 | c70e8 | ResolveAddr(Exe)×1 |
+| src/game/Work/work_act_path.cpp | 2 | c70e8 c7158 | ResolveAddr(Exe)×2 |
+| src/game/Work/work_act_perform.cpp | 2 | c41e0 c70e8 | ResolveAddr(Exe)×2 |
+| src/game/Work/work_act_rawmat.cpp | 3 | c46b0 c70e8 c7660 | ResolveAddr(Exe)×3 |
+| src/game/Work/work_base_accessor.cpp | 4 | c3fb0 c46b0 c7510 c7cb8 | ResolveAddr(Exe)×4 |
+| src/game/Work/work_base_actionctor.cpp | 2 | c70e8 c7b68 | ResolveAddr(Exe)×2 |
+| src/game/Work/work_base_reimpl.cpp | 7 | c4b80 c5e50 c7900 c7b30 c7e08 c7e78 c8070 | ResolveAddr(Exe)×7 |
+| src/game/Work/work_base_walkpos.cpp | 2 | c7190 c7938 | ResolveAddr(Exe)×2 |
+| src/game/Work/work_leaf_gather.cpp | 2 | c77e8 | ResolveAddr(Exe)×2 |
+| src/game/Work/work_leaf_hunt.cpp | 7 | c4250 c4870 c6f98 c6fd0 c7388 c7890 c7ba0 | ResolveAddr(Exe)×7 |
 | engine/funcs/engine_funcs.cpp | 83 | c3dd8 c3de0 c3de8 c3f40 c3f78 c4090 c4100 c41e0 c4480 c46b0 c47c8 c4870 c48a8 c4a30 c4b10 c4b80 c4bb8 c4bf0 c4d08 c4e20 c4f00 c5210 c5520 c5638 c56e0 c5788 c5868 c5910 c5948 c59b8 c5a60 c5a98 c5b08 c5b40 c5d38 c5d70 c6128 c6198 c6240 c6dd8 c6eb8 c6ef0 c6fd0 c7008 c7040 c70e8 c7158 c7190 c71c8 c72a8 c7318 c7350 c7388 c73f8 c7430 c7468 c74a0 c75f0 c7628 c7900 c7938 c79e0 c7a18 c7a50 c7a88 c7ac0 c7ba0 c7c10 c7cb8 c7cf0 c7d98 c7e08 c7e40 c7e78 c7ee8 c7f58 c7f90 c8070 c80a8 c80e0 | engine_funcs g_TypeId_ initialiser×75, ResolveAddr(Exe)×8 |
 | engine/funcs/engine_funcs.h | 1 | c4f00 | wrapper ResolveExeTypeId×1 |
 
@@ -567,8 +567,8 @@ their 821 reads are Table 3.
 | g_tid_DiseaseDescription | standalone/reg_component_cropdisease.cpp:2 |
 | g_tid_FinishTutorialGoal | standalone/reg_tutorial_typeid.cpp:2 |
 | g_tid_FinishTutorialInstance | standalone/reg_tutorial_typeid.cpp:2 |
-| g_tid_FireComponent | code/Game/Component/firecomponent_ignite.cpp:2 standalone/reg_fire.cpp:1 |
-| g_tid_FireDescription | code/Game/Component/firecomponent.cpp:1 code/Game/Component/firecomponent_ignite.cpp:3 standalone/reg_fire.cpp:1 |
+| g_tid_FireComponent | src/game/Component/firecomponent_ignite.cpp:2 standalone/reg_fire.cpp:1 |
+| g_tid_FireDescription | src/game/Component/firecomponent.cpp:1 src/game/Component/firecomponent_ignite.cpp:3 standalone/reg_fire.cpp:1 |
 | g_tid_ForesterComponent | standalone/reg_economy_typeids.cpp:2 |
 | g_tid_ForesterDescription | standalone/reg_economy_typeids.cpp:2 |
 | g_tid_FruitComponent | standalone/reg_component_fruit.cpp:2 |
@@ -577,7 +577,7 @@ their 821 reads are Table 3.
 | g_tid_GrowthDescription | standalone/reg_component_spawn.cpp:2 |
 | g_tid_HappinessComponent | standalone/reg_citizenai_typeids.cpp:2 |
 | g_tid_HappinessDescription | standalone/reg_town_services.cpp:2 |
-| g_tid_HealerComponent | code/Game/Game/citizenlist_serialize.cpp:2 |
+| g_tid_HealerComponent | src/game/Game/citizenlist_serialize.cpp:2 |
 | g_tid_HerdComponent | standalone/reg_component_animal.cpp:2 |
 | g_tid_HerdDescription | standalone/reg_component_animal.cpp:2 |
 | g_tid_InteractComponent | standalone/reg_work_tail_fire.cpp:2 |
@@ -623,12 +623,12 @@ their 821 reads are Table 3.
 | g_tid_TrackerComponent | standalone/reg_tracker_typeid.cpp:5 |
 | g_tid_TradeComponent | standalone/reg_tradeui_typeids.cpp:3 |
 | g_tid_TradeDescription | standalone/reg_tradeui_typeids.cpp:3 |
-| g_tid_TradeWork_CitizenComponent | code/Game/Work/tradework_serialize.cpp:4 standalone/reg_work_tail_trade.cpp:1 |
+| g_tid_TradeWork_CitizenComponent | src/game/Work/tradework_serialize.cpp:4 standalone/reg_work_tail_trade.cpp:1 |
 | g_tid_TutorialInstance | standalone/reg_tutorial_typeid.cpp:2 |
 | g_tid_ValueDescription | standalone/reg_tradeui_typeids.cpp:3 |
-| g_tid_WellComponent | code/Game/Game/citizenlist_serialize.cpp:2 |
+| g_tid_WellComponent | src/game/Game/citizenlist_serialize.cpp:2 |
 | g_tid_WildAnimalComponent | standalone/reg_component_animal.cpp:2 |
-| g_tid_Work | code/Game/Game/goals_serialize.cpp:7 |
+| g_tid_Work | src/game/Game/goals_serialize.cpp:7 |
 | g_tid_WorkComponent | standalone/reg_economy_typeids.cpp:2 |
 | g_tid_WorkDescription | standalone/reg_economy_typeids.cpp:2 |
 | g_tid_WorkPlaceComponent | standalone/reg_economy_typeids.cpp:2 |
@@ -638,8 +638,8 @@ their 821 reads are Table 3.
 
 | Runtime record | refs | by dir | code/Game + engine sites (file:line form) |
 |---|---:|---|---|
-| `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` | 6 | Game:1 runtime:3 standalone:2 | code/Game/Game/gameupdateloop_load.cpp:85 name ResolveExport |
-| `AchievementInstance::Achievement` | 3 | Game:1 runtime:2 | code/Game/Game/gameupdateloop_serialize.cpp:177 name ResolveExport |
+| `?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A` | 6 | Game:1 runtime:3 standalone:2 | src/game/Game/gameupdateloop_load.cpp:85 name ResolveExport |
+| `AchievementInstance::Achievement` | 3 | Game:1 runtime:2 | src/game/Game/gameupdateloop_serialize.cpp:177 name ResolveExport |
 | `AnimatedImageDescription::UI` | 1 | runtime:1 |  |
 | `AnimatedImageElement::UI` | 1 | runtime:1 |  |
 | `AnimationEvent::Graphics` | 2 | runtime:2 |  |
@@ -647,7 +647,7 @@ their 821 reads are Table 3.
 | `BorderDescription::UI` | 1 | runtime:1 |  |
 | `BorderElement::UI` | 3 | runtime:1 standalone:2 |  |
 | `ButtonDescription::UI` | 1 | runtime:1 |  |
-| `ButtonElement::UI` | 8 | Dialog:1 engine:3 runtime:2 standalone:2 | code/Game/Dialog/helpui.cpp:223 name ?<br>engine/funcs/engine_funcs.cpp:1032 IAT read<br>engine/funcs/engine_funcs.cpp:1429 IAT read<br>engine/funcs/engine_funcs.cpp:1717 IAT read |
+| `ButtonElement::UI` | 8 | Dialog:1 engine:3 runtime:2 standalone:2 | src/game/Dialog/helpui.cpp:223 name ?<br>engine/funcs/engine_funcs.cpp:1032 IAT read<br>engine/funcs/engine_funcs.cpp:1429 IAT read<br>engine/funcs/engine_funcs.cpp:1717 IAT read |
 | `CharacterSet::UI` | 2 | runtime:2 |  |
 | `CheckDescription::UI` | 1 | runtime:1 |  |
 | `CheckElement::UI` | 8 | engine:2 runtime:2 standalone:4 | engine/funcs/engine_funcs.cpp:1025 IAT read<br>engine/funcs/engine_funcs.cpp:1295 IAT read |
@@ -656,26 +656,26 @@ their 821 reads are Table 3.
 | `CollisionMesh::Collision2D` | 1 | runtime:1 |  |
 | `ComboDescription::UI` | 1 | runtime:1 |  |
 | `ComboDialog::UI` | 1 | runtime:1 |  |
-| `ComboElement::UI` | 6 | Dialog:1 engine:2 runtime:1 standalone:2 | code/Game/Dialog/helpui.cpp:220 name ?<br>engine/funcs/engine_funcs.cpp:1305 IAT read<br>engine/funcs/engine_funcs.cpp:1426 IAT read |
+| `ComboElement::UI` | 6 | Dialog:1 engine:2 runtime:1 standalone:2 | src/game/Dialog/helpui.cpp:220 name ?<br>engine/funcs/engine_funcs.cpp:1305 IAT read<br>engine/funcs/engine_funcs.cpp:1426 IAT read |
 | `CompiledExternal::Object` | 3 | runtime:2 standalone:1 |  |
 | `ContainerDescription::UI` | 1 | runtime:1 |  |
-| `ContainerElement::UI` | 6 | Dialog:1 engine:1 runtime:2 standalone:2 | code/Game/Dialog/helpui.cpp:222 name ?<br>engine/funcs/engine_funcs.cpp:1428 IAT read |
+| `ContainerElement::UI` | 6 | Dialog:1 engine:1 runtime:2 standalone:2 | src/game/Dialog/helpui.cpp:222 name ?<br>engine/funcs/engine_funcs.cpp:1428 IAT read |
 | `Cursor::UI` | 1 | runtime:1 |  |
-| `Dialog::UI` | 9 | Dialog:2 engine:1 runtime:3 standalone:3 | code/Game/Dialog/mainmenudialog.cpp:89 IAT read<br>code/Game/Dialog/mod_dialog_vtables.cpp:103 IAT read<br>engine/funcs/engine_funcs.cpp:896 Runtime addr |
+| `Dialog::UI` | 9 | Dialog:2 engine:1 runtime:3 standalone:3 | src/game/Dialog/mainmenudialog.cpp:89 IAT read<br>src/game/Dialog/mod_dialog_vtables.cpp:103 IAT read<br>engine/funcs/engine_funcs.cpp:896 Runtime addr |
 | `DialogController::UI` | 4 | runtime:2 standalone:2 |  |
 | `DialogControllerConfig::UI` | 2 | runtime:2 |  |
 | `DialogInstance::UI` | 3 | runtime:1 standalone:2 |  |
 | `DocumentTextDescription::UI` | 1 | runtime:1 |  |
-| `DocumentTextElement::UI` | 5 | Dialog:1 engine:1 runtime:1 standalone:2 | code/Game/Dialog/helpui.cpp:221 name ?<br>engine/funcs/engine_funcs.cpp:1427 IAT read |
+| `DocumentTextElement::UI` | 5 | Dialog:1 engine:1 runtime:1 standalone:2 | src/game/Dialog/helpui.cpp:221 name ?<br>engine/funcs/engine_funcs.cpp:1427 IAT read |
 | `EdgeMesh::Graphics` | 4 | runtime:2 standalone:2 |  |
 | `EditDescription::UI` | 1 | runtime:1 |  |
 | `EditElement::UI` | 4 | engine:1 runtime:1 standalone:2 | engine/funcs/engine_funcs.cpp:1709 IAT read |
 | `Element::UI` | 6 | engine:1 runtime:1 standalone:4 | engine/funcs/engine_funcs.cpp:1039 IAT read |
 | `ElementDescription::UI` | 3 | runtime:3 |  |
 | `ExtensionCompiler::Object` | 1 | runtime:1 |  |
-| `External::Object` | 11 | Goal:1 runtime:6 standalone:4 | code/Game/Goal/goal_exe_helpers.cpp:97 IAT read |
+| `External::Object` | 11 | Goal:1 runtime:6 standalone:4 | src/game/Goal/goal_exe_helpers.cpp:97 IAT read |
 | `ExternalCompiler::Object` | 1 | runtime:1 |  |
-| `ExternalList::Object` | 8 | Game:2 runtime:4 standalone:2 | code/Game/Game/gameupdateloop_load.cpp:231 name ?<br>code/Game/Game/gameupdateloop_load.cpp:287 name ? |
+| `ExternalList::Object` | 8 | Game:2 runtime:4 standalone:2 | src/game/Game/gameupdateloop_load.cpp:231 name ?<br>src/game/Game/gameupdateloop_load.cpp:287 name ? |
 | `Font::UI` | 3 | runtime:3 |  |
 | `FrameCopyImageBuffer::Graphics` | 4 | runtime:2 standalone:2 |  |
 | `GeneratedImageBuffer::Graphics` | 4 | runtime:2 standalone:2 |  |
@@ -688,7 +688,7 @@ their 821 reads are Table 3.
 | `GroupElement::UI` | 2 | runtime:2 |  |
 | `ImageBuffer::Video` | 5 | runtime:3 standalone:2 |  |
 | `ImageDescription::UI` | 1 | runtime:1 |  |
-| `ImageElement::UI` | 8 | Player:2 engine:1 runtime:1 standalone:4 | code/Game/Player/tool_base_createbar.cpp:118 IAT read<br>code/Game/Player/tool_base_createbar.cpp:121 name ResolveExport<br>engine/funcs/engine_funcs.cpp:1046 IAT read |
+| `ImageElement::UI` | 8 | Player:2 engine:1 runtime:1 standalone:4 | src/game/Player/tool_base_createbar.cpp:118 IAT read<br>src/game/Player/tool_base_createbar.cpp:121 name ResolveExport<br>engine/funcs/engine_funcs.cpp:1046 IAT read |
 | `Internal::Object` | 3 | runtime:2 standalone:1 |  |
 | `LabelDescription::UI` | 1 | runtime:1 |  |
 | `LabelElement::UI` | 7 | engine:1 runtime:2 standalone:4 | engine/funcs/engine_funcs.cpp:1762 IAT read |
@@ -696,7 +696,7 @@ their 821 reads are Table 3.
 | `LayoutElement::UI` | 1 | runtime:1 |  |
 | `ListDescription::UI` | 1 | runtime:1 |  |
 | `ListElement::UI` | 3 | runtime:3 |  |
-| `Material::Graphics` | 8 | Game:1 engine:1 runtime:2 standalone:4 | code/Game/Game/gameupdateloop_load.cpp:201 name ?<br>engine/funcs/engine_funcs.cpp:1818 IAT read |
+| `Material::Graphics` | 8 | Game:1 engine:1 runtime:2 standalone:4 | src/game/Game/gameupdateloop_load.cpp:201 name ?<br>engine/funcs/engine_funcs.cpp:1818 IAT read |
 | `MaterialInstance::Graphics` | 6 | engine:1 runtime:3 standalone:2 | engine/funcs/engine_funcs.cpp:2511 IAT read |
 | `NumberDescription::UI` | 1 | runtime:1 |  |
 | `NumberEditDescription::UI` | 1 | runtime:1 |  |
@@ -719,7 +719,7 @@ their 821 reads are Table 3.
 | `RibbonDescription::UI` | 1 | runtime:1 |  |
 | `RibbonElement::UI` | 4 | runtime:2 standalone:2 |  |
 | `ScrollDescription::UI` | 1 | runtime:1 |  |
-| `ScrollElement::UI` | 9 | Dialog:1 engine:1 runtime:3 standalone:4 | code/Game/Dialog/helpui.cpp:219 name ?<br>engine/funcs/engine_funcs.cpp:1425 IAT read |
+| `ScrollElement::UI` | 9 | Dialog:1 engine:1 runtime:3 standalone:4 | src/game/Dialog/helpui.cpp:219 name ?<br>engine/funcs/engine_funcs.cpp:1425 IAT read |
 | `ShaderProgram::Video` | 1 | runtime:1 |  |
 | `SliderDescription::UI` | 1 | runtime:1 |  |
 | `SliderElement::UI` | 3 | runtime:1 standalone:2 |  |
@@ -729,7 +729,7 @@ their 821 reads are Table 3.
 | `SpinnerElement::UI` | 4 | engine:1 runtime:1 standalone:2 | engine/funcs/engine_funcs.cpp:1772 IAT read |
 | `SpriteCapture::UI` | 3 | runtime:3 |  |
 | `SpriteSheet::UI` | 5 | runtime:3 standalone:2 |  |
-| `StringTable::UI` | 4 | Dialog:1 engine:1 runtime:2 | code/Game/Dialog/helpui.cpp:224 name ?<br>engine/funcs/engine_funcs.cpp:1412 IAT read |
+| `StringTable::UI` | 4 | Dialog:1 engine:1 runtime:2 | src/game/Dialog/helpui.cpp:224 name ?<br>engine/funcs/engine_funcs.cpp:1412 IAT read |
 | `Surface::Collision2D` | 3 | runtime:3 |  |
 | `TabDescription::UI` | 1 | runtime:1 |  |
 | `TabElement::UI` | 4 | engine:1 runtime:1 standalone:2 | engine/funcs/engine_funcs.cpp:1644 IAT read |
@@ -744,7 +744,7 @@ their 821 reads are Table 3.
 
 ## Table 6 — by-name type lookups left in `code/Game` (`GetTypeIdByName` / `ResolveTypeIdByNameLazy`)
 
-`GetTypeIdByName` walks the EXE list only (`code/Game/Object/factory_registration.cpp:52-70`); the lazy one
+`GetTypeIdByName` walks the EXE list only (`src/game/Object/factory_registration.cpp:52-70`); the lazy one
 asks the live Factory, then the exe list (`:130-191`). Code-only call sites in `code/Game`, 23 lines
 (the brief's 17 is not reproduced; the difference is the 2 inside `factory_registration.{h,cpp}` and how
 the 6 dynamic-name helpers are counted):
@@ -766,7 +766,7 @@ Runtime fold (Table 5), not with the exe cells.
 ## B. Reflection today
 
 ### B(i) exe classes — `DEFINE_EXE_TYPE` over the FactoryRegistration list
-1. `DECLARE_EXE_TYPE(X)` (`code/Game/Object/exe_type.h:53-69`): slot 1 `TypeName()` →
+1. `DECLARE_EXE_TYPE(X)` (`src/game/Object/exe_type.h:53-69`): slot 1 `TypeName()` →
    `_registration.typeName`; slot 2 `Type()` → `TypeId()` = first dword of `_registration.storage`;
    `CreateNewObject`/`CreateInPlaceObject`/`Vtable()` declared; `static FactoryRegistration _registration`.
 2. `DEFINE_EXE_TYPE(X, "Parent")` (`:71-77`) defines `_registration` → the ctor
@@ -822,7 +822,7 @@ parent's `children` (inlined `Array::SetSize`). The name→id map is not a tree 
 (`:492`, retail 0x1800c0580) CRCs the name and answers it iff the id is in the set.
 
 ### B(iv) the remaining registration macros
-- `REGISTER_TYPE`: ONE use left, `code/Game/Object/factory_registration.cpp:245`
+- `REGISTER_TYPE`: ONE use left, `src/game/Object/factory_registration.cpp:245`
   (`StandaloneFactoryTest`, parent null, not a retail type). The other "uses" are the macro definitions in
   `factory_registration.h:176-188` and `factory_registrations_bulk.cpp:64-73` (`REGISTER_NULL_FACTORY{,_FULL}`
   are defined and UNUSED).
@@ -870,14 +870,14 @@ Use the Runtime's macro as it stands (`runtime/types/object/TypeInfo.h:638-668`)
 
 Patches (unified diffs against HEAD 3fc6d9f6, CRLF-exact, each `git apply --check` rc=0 on the clean tree;
 **NOT compiled** — block 0 builds nothing). All live in `C:/Users/USPC/AppData/Local/Temp/claude/b39/0C/`.
-Each contains the same pointer-free DUMP hunk in `code/Game/Game/game_main.cpp` (after the first-ten dump):
+Each contains the same pointer-free DUMP hunk in `src/game/Game/game_main.cpp` (after the first-ten dump):
 per chain record `[OrderProbe] id=… name=… parent=… winner=self|other children=n: ids…` (the tree's answer,
 children in the tree's own array order) and `[OrderProbeChain] #nnn name` (walk order). Apply ONE at a time.
 
 | file | change | what it isolates |
 |---|---|---|
 | `order_probe_dump.patch` | dump only | the BASELINE run |
-| `order_probe.patch` (A) | `InvokeAllRegistrations` drains `g_pending` in reverse (`code/Game/Object/factory_registration.cpp`) | exe registration order (the 311) |
+| `order_probe.patch` (A) | `InvokeAllRegistrations` drains `g_pending` in reverse (`src/game/Object/factory_registration.cpp`) | exe registration order (the 311) |
 | `order_probe_mint.patch` (B) | `MintTypeInfos` head-inserts forward → the 104 minted walk CHILDREN-FIRST (`standalone/rt_data_mint.cpp`) | minted record order |
 | `order_probe_dup.patch` (C) | `MintStorage` APPENDS the minted chain after the CRT-init records instead of splicing in front | the one duplicate (`Internal`): which record wins |
 
@@ -910,7 +910,7 @@ Expected, and what each outcome means for the fold:
 storage and fill lines (re-grep Table 4 first: a `g_tid_` read by name counts); the 7 zero-reader
 `g_TypeId_` globals (`DialogController`, `ModelComponent`, `PageToggleUI`, `PickingComponent`,
 `ProfessionDescription`, `StateMachineComponent`, `StorageComponent`) with their initialisers;
-`BuildRoadAddr::TypeInfo` (`code/Game/Work/BuildRoad.h:42`, no reader); the dead `ImageElement` fallback
+`BuildRoadAddr::TypeInfo` (`src/game/Work/BuildRoad.h:42`, no reader); the dead `ImageElement` fallback
 (`tool_base_createbar.cpp:124`).
 
 **Needs a conversion first:** the 415 reader sites on the 135 registered type-id cells (Table 2, by

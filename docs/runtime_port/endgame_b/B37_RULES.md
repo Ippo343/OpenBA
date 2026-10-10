@@ -360,9 +360,9 @@ identity (the minted tables' slots and the exe's import slots both point at them
 
 | exe table | base | slots | where built |
 |---|---|---|---|
-| 0x14015f020 ("Scenario") | **`Achievement::Achievement`** | 9: overrides 0,1,2,3,5,6,7,8; 4 `Compile` via stub | `Scenario_Factory`; tree `code/Game/Game/scenario.cpp` calls `??0Achievement` (0x18009e240), `??1Achievement` (0x18009e180), **`GetFileVersion` (slot 3, 0x18009e170) and `Serialize` (slot 5, 0x18009e070) BY ADDRESS** (`scenario.cpp:75-81`) — both VIRTUAL on the base: QUALIFIED calls after conversion (B6-3) |
+| 0x14015f020 ("Scenario") | **`Achievement::Achievement`** | 9: overrides 0,1,2,3,5,6,7,8; 4 `Compile` via stub | `Scenario_Factory`; tree `src/game/Game/scenario.cpp` calls `??0Achievement` (0x18009e240), `??1Achievement` (0x18009e180), **`GetFileVersion` (slot 3, 0x18009e170) and `Serialize` (slot 5, 0x18009e070) BY ADDRESS** (`scenario.cpp:75-81`) — both VIRTUAL on the base: QUALIFIED calls after conversion (B6-3) |
 | 0x14015e350 | `Achievement::AchievementInstance` | 4: 0 exe, 1–3 inherited | GameUpdateLoop's slot-6 `Load` body (0x140096b00) — constructed on the LOADER thread |
-| 0x140160300 `BuildingGoal`, 0x140160370 `PopulationGoal`, 0x1401604c0 `StatGoal`, 0x140160540 `TimeGoal`, 0x140160420 `FinishTutorialGoal` | `Achievement::Goal` | **11** — slot 10 is an EXE-introduced virtual (Goal has 10) | factories in `code/Game/Goal/`; 4 `Compile` via stub; 9 via stub on Building/Population/Stat, exe body on Time/FinishTutorial (B7-4) |
+| 0x140160300 `BuildingGoal`, 0x140160370 `PopulationGoal`, 0x1401604c0 `StatGoal`, 0x140160540 `TimeGoal`, 0x140160420 `FinishTutorialGoal` | `Achievement::Goal` | **11** — slot 10 is an EXE-introduced virtual (Goal has 10) | factories in `src/game/Goal/`; 4 `Compile` via stub; 9 via stub on Building/Population/Stat, exe body on Time/FinishTutorial (B7-4) |
 | 0x140160478 `FinishTutorialInstance`, 0x140160598 `TimeGoalInstance` | `Achievement::GoalInstance` | 7, all exe bodies | factories |
 
 Exe ctor/dtor import call counts (`B37_SLOTS.md` §E2): `??0Goal` 17, `??1Goal` 25, `??0GoalInstance` 4,
@@ -387,14 +387,14 @@ ctor door).
 
 | header | what it is | includers (by basename) | verdict |
 |---|---|---|---|
-| `engine/types/UpdateLoop.h` (66 l.) | global `::UpdateLoop` POD 0x28 + `UpdateLoopVtable` (12 slots) | `game_main.cpp`, the three `standalone/*_stubs.cpp`, and three engine headers | **alias-of-RtNs-POD**: `using UpdateLoop = RtEngine::UpdateLoop;` — `Engine::UpdateLoop` is ABSTRACT, so it cannot be the alias target where a POD is expected (B6-4 correction). Field names differ (`m_resourceList` vs `_resourceList` …): the `m_` names are used at **107 sites in 15 files** (`code/Game/{Dialog,Game,Goal,Tutorial}`, `standalone/{autostart,loader_loop_stubs,menudialogloopt_stubs,splash_loop_stubs}.cpp`, `engine/funcs/engine_funcs.h`) — the rename is the aliasing commit's work. `UpdateLoopVtable` stays until the five hand-built tables go (step 8) |
+| `engine/types/UpdateLoop.h` (66 l.) | global `::UpdateLoop` POD 0x28 + `UpdateLoopVtable` (12 slots) | `game_main.cpp`, the three `standalone/*_stubs.cpp`, and three engine headers | **alias-of-RtNs-POD**: `using UpdateLoop = RtEngine::UpdateLoop;` — `Engine::UpdateLoop` is ABSTRACT, so it cannot be the alias target where a POD is expected (B6-4 correction). Field names differ (`m_resourceList` vs `_resourceList` …): the `m_` names are used at **107 sites in 15 files** (`src/game/{Dialog,Game,Goal,Tutorial}`, `standalone/{autostart,loader_loop_stubs,menudialogloopt_stubs,splash_loop_stubs}.cpp`, `engine/funcs/engine_funcs.h`) — the rename is the aliasing commit's work. `UpdateLoopVtable` stays until the five hand-built tables go (step 8) |
 | `engine/types/LoaderLoop.h` (49 l.) | `::LoaderLoop` POD 0x48, base fields spelled inline | `DialogLoaderLoopT.h`, `standalone/loader_loop_stubs.cpp` | alias-of-RtNs-POD (`RtEngine::LoaderLoop`), same rename set |
-| `engine/types/DialogLoaderLoopT.h` (57 l.) | `::DialogLoaderLoopT` POD 0x188, `UserInterface` as `uint8_t[0x128]` | `code/Game/Game/dialogloaderloop.h`, `standalone/splash_loop_stubs.cpp` | alias-of-RtNs-POD (`RtEngine::DialogLoaderLoopT`, which holds `UI::UserInterface` by value) |
-| `engine/types/MainLoop.h` (148 l.) | `::MainLoop` POD 0xA0 + `MainLoopAddr` constants | `code/Game/Game/dialogloaderloop.cpp`, `standalone/splash_loop_stubs.cpp` | **alias-of-class** (`using MainLoop = Engine::MainLoop;`): MainLoop is NOT abstract, NOT polymorphic, and nothing embeds it. Its `m_` field names are used in about 12 files (the `m_nextLoop` spelling is shared with LoaderLoop; count by receiver). The `MainLoopAddr` constants (`engine/types/MainLoop.h:42-74`) are most of the Engine "named constant" hex hits of `B37_SLOTS.md` §T and die with it |
+| `engine/types/DialogLoaderLoopT.h` (57 l.) | `::DialogLoaderLoopT` POD 0x188, `UserInterface` as `uint8_t[0x128]` | `src/game/Game/dialogloaderloop.h`, `standalone/splash_loop_stubs.cpp` | alias-of-RtNs-POD (`RtEngine::DialogLoaderLoopT`, which holds `UI::UserInterface` by value) |
+| `engine/types/MainLoop.h` (148 l.) | `::MainLoop` POD 0xA0 + `MainLoopAddr` constants | `src/game/Game/dialogloaderloop.cpp`, `standalone/splash_loop_stubs.cpp` | **alias-of-class** (`using MainLoop = Engine::MainLoop;`): MainLoop is NOT abstract, NOT polymorphic, and nothing embeds it. Its `m_` field names are used in about 12 files (the `m_nextLoop` spelling is shared with LoaderLoop; count by receiver). The `MainLoopAddr` constants (`engine/types/MainLoop.h:42-74`) are most of the Engine "named constant" hex hits of `B37_SLOTS.md` §T and die with it |
 | `engine/types/GameUpdateLoop.h` (166 l.) | exe `GameUpdateLoop` 0x160 | `gameupdateloop.cpp`, `gameupdateloop_load.cpp` | STAYS (exe subclass, step 8); cross-assert its base prefix against `RtEngine::UpdateLoop` |
-| `engine/types/AchievementGoals.h` (165 l.) | seven exe `Goal`/`GoalInstance` subclasses; Goal base as `uint8_t _goalBase[0x28]` | six `code/Game/{Goal,Tutorial}/*_funcs.h` | STAYS (exe subclasses, step 8) — the blob keeps its layout; no Runtime POD is embedded |
-| `engine/types/TutorialGoals.h` (109 l.) | exe tutorial-goal classes | four `code/Game/Tutorial/*_funcs.h` | STAYS (exe, step 8); not a Runtime mirror |
-| `engine/types/PickingComponent.h` (39 l.) | exe `PickingComponent` (a Component, vtable 0x140164040) | `code/Game/Component/pickingcomponent_funcs.h` | STAYS — NOT a `Picking::*` mirror at all (the inventory's "mirror POD" reading is wrong) |
+| `engine/types/AchievementGoals.h` (165 l.) | seven exe `Goal`/`GoalInstance` subclasses; Goal base as `uint8_t _goalBase[0x28]` | six `src/game/{Goal,Tutorial}/*_funcs.h` | STAYS (exe subclasses, step 8) — the blob keeps its layout; no Runtime POD is embedded |
+| `engine/types/TutorialGoals.h` (109 l.) | exe tutorial-goal classes | four `src/game/Tutorial/*_funcs.h` | STAYS (exe, step 8); not a Runtime mirror |
+| `engine/types/PickingComponent.h` (39 l.) | exe `PickingComponent` (a Component, vtable 0x140164040) | `src/game/Component/pickingcomponent_funcs.h` | STAYS — NOT a `Picking::*` mirror at all (the inventory's "mirror POD" reading is wrong) |
 
 **Inside `runtime/types/`: two definitions of `Achievement::GoalList`** — `AchievementManager.h:52`
 `GoalListView` (its own banner says it waits for "a real GoalList") and `Goal.h:175` `GoalList`. RULE B6-4
@@ -498,7 +498,7 @@ used on main).
 - **Tree side.** `@Pathfinding@@` names appear only in `runtime/src/pathfinding/`, `standalone/
   rt_export_addrs.inc`/`rt_data_mint_tables.inc` and `resolve_standalone.cpp:291-295` (registration).
   The hex-literal sweep finds ONE Pathfinding literal outside the tables (the `RT_DELDTOR` row). But
-  `code/Game/Component/interactdescription.cpp` walks the resolved PointList's `+0x30`/`+0x38` array
+  `src/game/Component/interactdescription.cpp` walks the resolved PointList's `+0x30`/`+0x38` array
   (`Points()` is `LEA RAX,[RCX+0x30]`, 0x180071190) by RAW OFFSET — a live layout reader with no binding
   any sweep sees. Its banner calls `+0x20` "`_descRef` ExternalPtr (Description)" and
   `particledescription.cpp:9` calls it "`materialRef`": **both are `ExternalPtr<Pathfinding::PointList>`**
@@ -617,7 +617,7 @@ each block carries.
 |---|---|---|---|---|
 | 1 | **B1 Engine + Application** (serial owner) | `UpdateLoop`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`, `Loader`, `MainLoop`, `Engine`, `Application` | 37: `runtime/types/{engine/*,application/Application}.h`, `runtime/src/engine/*` (14 + `mainloop_internal.h`), `runtime/src/application/*` (8), `engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,MainLoop,GameUpdateLoop}.h`, `standalone/{loader_loop,splash_loop,menudialogloopt,gameupdateloop}_stubs.cpp`, `runtime/src/video/context_ctor.cpp` | B7-1, B7-6 (loop aliases + the `m_` rename), B7-7.1 (four `loops.cpp` caches), B7-10 (dx11's three rows follow in the caller round or here), B7-13 and the seven loop QUALIFIED sites of §3.0; owns `singleton_ctors.cpp`; `Loader` derives from the real `System::Thread`; carry-over 11 (MenuDLT `Shutdown`) is decided here |
 | 1 | **B2 Save** (parallel with B1) | `SaveLoad`, `SaveInfo`, `ModInfo`, `SavedState` | 11: `runtime/types/save/SaveLoad.h`, `runtime/src/save/*` | B7-5 (`SaveMetaData`'s String and `SetSaveSprite`'s Sprite by hidden pointer; read `Draw`'s ExternalPtr, §13.1), B7-8 (`SaveInfo`); resave ×5 at its gate; `SaveLoad::_singleton` stays a slot |
-| 2 | **B3 Achievement** | `Achievement`, `AchievementInstance`, `AchievementManager`, `Goal`, `GoalInstance`, `GoalList` | 29: `runtime/types/achievement/*`, `runtime/src/achievement/*` (11 + `.inc`), `engine/types/AchievementGoals.h`, `code/Game/Goal/*` (14) | B7-3, B7-4 (+ unit test), B7-5, B7-8 (`GoalList`), B7-6 (`GoalListView`); the 15 Goal-family QUALIFIED sites; `code/Game/Tutorial/finishtutorial*` are NOT its files (the Scenario and FinishTutorial sites go to a caller batch) |
+| 2 | **B3 Achievement** | `Achievement`, `AchievementInstance`, `AchievementManager`, `Goal`, `GoalInstance`, `GoalList` | 29: `runtime/types/achievement/*`, `runtime/src/achievement/*` (11 + `.inc`), `engine/types/AchievementGoals.h`, `src/game/Goal/*` (14) | B7-3, B7-4 (+ unit test), B7-5, B7-8 (`GoalList`), B7-6 (`GoalListView`); the 15 Goal-family QUALIFIED sites; `src/game/Tutorial/finishtutorial*` are NOT its files (the Scenario and FinishTutorial sites go to a caller batch) |
 | 2 | **B4 Audio** (after B1) | `SoundBuffer`, `SoundEffect`, `Stream`, `Scene` (+ `Channel`, `EmitterInstance`, `EffectSlot`), `Configuration`, `Device` | 17: `runtime/types/audio/Audio.h`, `runtime/src/audio/*` (15 + `.inc`) | B7-7, B7-12; `SoundBuffer` is CompiledExternal; the exe's by-value `Audio::Scene` in MenuDLT needs its ctor door kept |
 | 2 | **B5 Input** (after B1) | `KeyMap`, `Binding`, `BindingNode`, `Device`, `State`, `Configuration` | 10: `runtime/types/input/Input.h`, `runtime/src/input/*` | the two missing size asserts; `input_platform_shutdown_win.cpp` includes B1's `Application.h` |
 | 2 | **B6 Pathfinding + Picking** | `PointList` (real), `IPathInfo`/`Pathfinding::Scene` (declarations), `Picking::Scene`, `PickingMesh` (+ `SubMesh`, `Entry`, `Cell`, `Link`) | 12: `runtime/types/picking/Scene.h`, `runtime/src/pathfinding/*`, `runtime/src/picking/*` | B7-9; the `PickingMesh` size assert and the `pickingmesh.cpp:87` duplicate folded (B7-6) |
@@ -705,7 +705,7 @@ landed with **0 problems**. The coordinator's per-merge gate table is below.
 | 2 | F (fragment) | `AchievementManager::PlatformStartup` in `platform_startup_win.cpp` |
 | 2 | B5 Input | `KeyMap` (0x18), `Binding`, `BindingNode`, `Input::Device` (0x1200), `Input::Configuration` (0x10) |
 | 2 | B4 Audio | `SoundBuffer` (CompiledExternal), `SoundEffect`, `Stream` (Thread subclass, 0x88), `Audio::Scene`, `Audio::Configuration`, `Audio::Device` (0x1298, first header) + `AudioChannel` / `PlatformChannel` |
-| 3 | K1 (`code/Game/Dialog`, round 1), K2 (the rest of `code/Game`, round 1) | `engine_funcs` door calls, `ResolveExport` / exe-slot / hex / hand-inlined vtable calls onto the eight namespaces made member calls, each receiver a `// B.3.7 bridge` |
+| 3 | K1 (`src/game/Dialog`, round 1), K2 (the rest of `code/Game`, round 1) | `engine_funcs` door calls, `ResolveExport` / exe-slot / hex / hand-inlined vtable calls onto the eight namespaces made member calls, each receiver a `// B.3.7 bridge` |
 | 4 | K5 (standalone / engine / runtime / dx11, round 2), K4 (Audio callers, round 2, the emitter slots live), K3 (Input callers, round 2, dead caches) | the sites round 1 left for members defined on main only after its launch; dx11's three `Application` rows |
 | 5 | close (`b37-close`, commits 1–4, 6, 7) | below |
 
@@ -736,7 +736,7 @@ a clean-rebuild baseline, unit, `dispatch_slot_map --check`, cutover manifest, `
 | B2 (Save) 38c57c59 | 491 | 0 problems, resave 5/5 |
 | B1 (Engine+Application) bea919a2 | 501 | 0 problems (2 warning rows were the pre-existing CallbackPresent unused fn with its type respelled) |
 | F (fragment PlatformStartup) c24bb4ca | 501 | 0 problems |
-| K1 (code/Game/Dialog callers r1) 049e03f6 | 501 | 0 problems |
+| K1 (src/game/Dialog callers r1) 049e03f6 | 501 | 0 problems |
 | B5 (Input) a026c2fb | 504 | 0 problems |
 | K2 (code/Game rest callers r1) 01dd683a | 504 | 0 problems |
 | B4 (Audio) 53782e1d | 516 | 0 problems |

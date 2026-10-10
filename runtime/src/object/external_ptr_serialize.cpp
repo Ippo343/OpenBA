@@ -297,7 +297,7 @@ bool ExternalPtrSerializeBody(External* cur, IO::Serializer& ser,
         if (found != nullptr && found->IsDerivedFrom(typeInfo.typeId)) {
             // CMOVNE: the loaded object survives only if it IS a T. A resource
             // of the wrong type is dropped, not kept — this is the check the
-            // exe-side sibling in code/Game/Component/ambient_externalptr_serialize.cpp
+            // exe-side sibling in src/game/Component/ambient_externalptr_serialize.cpp
             // deliberately relaxes, and this one must not. `FindOrLoad` is
             // retail's `QEAAPEBV` (const result); FindOrLoadAs drops it once.
             result = found;

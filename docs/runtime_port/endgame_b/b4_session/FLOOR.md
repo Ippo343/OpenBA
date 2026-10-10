@@ -57,7 +57,7 @@ Coordinator rulings on the 18 floor candidates and the hand-in proposals (marker
 - DEFERRED, not floor: `pickup.cpp:514` (a tree-only vptr guard: retail-difference task), the two harness puns
   (`clearareacomponent.cpp:191`, `citizenaicomponent.cpp:620`: the harness decision), `componententity.cpp:511`
   (row 820), `citizenlist_serialize.cpp:431` (row 810), `set_clear.cpp:210` (H5, the SettingsMap member).
-- `Vector3Slot` (`code/Game/Action/exe_bodies.h`): a struct holding a single-member union over `Math::Vector3`
+- `Vector3Slot` (`src/game/Action/exe_bodies.h`): a struct holding a single-member union over `Math::Vector3`
   with an empty ctor, used where retail's caller leaves the 12-byte return slot of `InteractNodePosition`
   (0x140122e20) unconstructed. RULED acceptable: M5 forbids replacing a reinterpretation by a union; this
   union has one member and reinterprets nothing, it only withholds the zeroing ctor. Not for any other use.
@@ -143,31 +143,31 @@ estimate with its measured number in its hand-in.
 | `standalone/main.cpp` (the rest: registry guard, memory probe, window hook) | crash_walk 3, win32 9 | E0 estimate, for the STANDALONE block: :127 :213 :219 :229 `BYTE*` registry buffers, :1076 :1078 (2) `HBRUSH` / `LONG_PTR`, :1088 :1105 `LPARAM` structs (win32); :172 :173 the VirtualQuery probe, :809 `(LPCSTR)vtbl` module lookup (crash_walk) |
 | `standalone/redzone_alloc.cpp` | alloc_header 26, crash_walk 26, ptr_int 4, win32 2 | marked (E0) |
 | `standalone/sampler.cpp` | crash_walk 3, pe_walk 12 | marked (E0) |
-| `code/Game/Action/action_pf_road.cpp` | float_bits 1 | E estimate |
-| `code/Game/Action/action_pf_roots_misc.cpp` | float_bits 2 | E estimate |
-| `code/Game/Action/action_pf_roots_road.cpp` | float_bits 1 | E estimate |
-| `code/Game/Component/citizenai_actionctors.cpp` | float_bits 6 | E estimate |
-| `code/Game/Component/citizencomponent.cpp` | float_bits 1 | E estimate |
-| `code/Game/Component/decalcomponent.cpp` | float_bits 4 | E estimate |
-| `code/Game/Component/destroycomponent_workerrelease.cpp` | ptr_int 1 | E estimate |
-| `code/Game/Component/storagedisplaycomponent.cpp` | float_bits 1 | E estimate |
-| `code/Game/Component/terraformcomponent.cpp` | gpu_map 1 | E estimate |
-| `code/Game/Component/tornadocomponent.cpp` | float_bits 3 | E estimate |
-| `code/Game/Dialog/destroyui.cpp` | ptr_int 1 | E estimate |
-| `code/Game/Dialog/optionsdialog.cpp` | ptr_int 4 | E estimate |
-| `code/Game/Dialog/professionui.cpp` | ptr_int 6 | E estimate |
-| `code/Game/Dialog/townhallui.cpp` | ptr_int 2 | E estimate |
-| `code/Game/Game/gameupdateloop.cpp` | float_bits 1 | E estimate |
-| `code/Game/Game/menuscene.cpp` | ptr_int 4 | E estimate |
-| `code/Game/Game/water_contour_mesh.cpp` | byte_io 1 | E estimate |
-| `code/Game/Game/worldsetup_reload.cpp` | ptr_int 1 | E estimate |
-| `code/Game/Goal/statvaluedispatch.cpp` | ptr_int 8 | E estimate |
-| `code/Game/Player/fencedtool_calcpath.cpp` | float_bits 1 | E estimate |
-| `code/Game/Player/tool_base_highlight.cpp` | float_bits 1, ptr_int 1 | E estimate |
-| `code/Game/Player/tool_base_highlight_tess.cpp` | ptr_int 1 | E estimate |
-| `code/Game/Player/tool_base_path.cpp` | ptr_int 3 | E estimate |
-| `code/Game/Work/plantarea.cpp` | float_bits 1 | E estimate |
-| `code/Game/Work/work_act_hunt.cpp` | ptr_int 1 | E estimate |
+| `src/game/Action/action_pf_road.cpp` | float_bits 1 | E estimate |
+| `src/game/Action/action_pf_roots_misc.cpp` | float_bits 2 | E estimate |
+| `src/game/Action/action_pf_roots_road.cpp` | float_bits 1 | E estimate |
+| `src/game/Component/citizenai_actionctors.cpp` | float_bits 6 | E estimate |
+| `src/game/Component/citizencomponent.cpp` | float_bits 1 | E estimate |
+| `src/game/Component/decalcomponent.cpp` | float_bits 4 | E estimate |
+| `src/game/Component/destroycomponent_workerrelease.cpp` | ptr_int 1 | E estimate |
+| `src/game/Component/storagedisplaycomponent.cpp` | float_bits 1 | E estimate |
+| `src/game/Component/terraformcomponent.cpp` | gpu_map 1 | E estimate |
+| `src/game/Component/tornadocomponent.cpp` | float_bits 3 | E estimate |
+| `src/game/Dialog/destroyui.cpp` | ptr_int 1 | E estimate |
+| `src/game/Dialog/optionsdialog.cpp` | ptr_int 4 | E estimate |
+| `src/game/Dialog/professionui.cpp` | ptr_int 6 | E estimate |
+| `src/game/Dialog/townhallui.cpp` | ptr_int 2 | E estimate |
+| `src/game/Game/gameupdateloop.cpp` | float_bits 1 | E estimate |
+| `src/game/Game/menuscene.cpp` | ptr_int 4 | E estimate |
+| `src/game/Game/water_contour_mesh.cpp` | byte_io 1 | E estimate |
+| `src/game/Game/worldsetup_reload.cpp` | ptr_int 1 | E estimate |
+| `src/game/Goal/statvaluedispatch.cpp` | ptr_int 8 | E estimate |
+| `src/game/Player/fencedtool_calcpath.cpp` | float_bits 1 | E estimate |
+| `src/game/Player/tool_base_highlight.cpp` | float_bits 1, ptr_int 1 | E estimate |
+| `src/game/Player/tool_base_highlight_tess.cpp` | ptr_int 1 | E estimate |
+| `src/game/Player/tool_base_path.cpp` | ptr_int 3 | E estimate |
+| `src/game/Work/plantarea.cpp` | float_bits 1 | E estimate |
+| `src/game/Work/work_act_hunt.cpp` | ptr_int 1 | E estimate |
 | `dx11/src/buffers.cpp` | gpu_map 1 | B5 measured |
 | `dx11/src/contextdata.cpp` | com_iid 1, gpu_map 3 | B5 measured |
 | `dx11/src/devicedata.cpp` | win32 4 | B5 measured (the IID out-param became a typed function pointer) |
@@ -215,7 +215,7 @@ the field's name.
 
 1. **`placement_new`**: `new (static_cast<void*>(x)) T(...)`, `::new (static_cast<void*>(x))`,
    `new ((void*)x) T(...)`: the cast is the whole placement argument.
-   `code/Game/Entity/componententity.cpp:258`:
+   `src/game/Entity/componententity.cpp:258`:
    `new ((void*)ibpAddr) ::Object::InternalBasePtr(nullptr);`
    (`static_cast<void*>(x)` of a typed `x` is not counted by the metric at all; the shape
    matters for `(void*)x` of an integer or an unknown.)

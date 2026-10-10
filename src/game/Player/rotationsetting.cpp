@@ -1,0 +1,41 @@
+// src/game/Player/rotationsetting.cpp — ENDGAME B.3.8 TOOL
+// The members of `ToolSetting` and `RotationSetting` (ToolSetting.h,
+// RotationSetting.h). Retail addresses on every body.
+//
+// History kept from the hand-built table this replaces: the old slot 0 once
+// shared a generic Tool dtor that DeletePtr'd an "owner IBP" at +0x10. For a
+// RotationSetting +0x10 is the rotation VALUE (0..3), so once the player had
+// rotated a placement that dtor dereferenced 0x1/0x2 during an in-game Load.
+// Retail's dtor (0x1400dea40) never touches +0x10, and neither does the
+// compiler chain below.
+
+#include "Player/RotationSetting.h"
+#include "Object/factory_registration.h"
+#include <new>
+#include "Object/exe_type.h"   // DEFINE_EXE_ABSTRACT_TYPE
+
+// ============================================================================
+// ToolSetting
+// ============================================================================
+
+// [1] TypeName / [2] Type, the record and retail's abstract factory (create =
+// the logging stub, in-place = null): ENDGAME B.3.9 RF.
+DEFINE_EXE_ABSTRACT_TYPE(ToolSetting, "Object::Internal")
+
+// ============================================================================
+// RotationSetting
+// ============================================================================
+
+// create 0x140026d20: MemAlloc(0x18, 8), then the (inlined) ctor.
+::Object::Base* RotationSetting::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RotationSetting), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) RotationSetting());
+}
+// createInPlace 0x140026d80: the ctor on `storage`.
+::Object::Base* RotationSetting::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) RotationSetting());
+}
+
+DEFINE_EXE_TYPE(RotationSetting, "ToolSetting")

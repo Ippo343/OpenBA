@@ -26,7 +26,7 @@
 // mangling), so each has an RDX hidden-return-slot argument. Checked against
 // both the existing central engine_funcs.h typedefs (`fn_FileSystem_Get*Directory_t`,
 // already `(self, retval)` — correct) and the local one in
-// code/Game/Game/w2_takescreenshot.cpp (`FS_GetSaveDirectory_t`, also correct).
+// src/game/Game/w2_takescreenshot.cpp (`FS_GetSaveDirectory_t`, also correct).
 // No wild-write defect exists in this family. See WAVE4_LANE_D.md §2 for the
 // tools/abi_retslot_audit.py run.
 //

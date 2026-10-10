@@ -48,7 +48,7 @@ changed while every path did. Proposed shape (confirm the names at the start):
 
 | today | lines | becomes |
 |---|---:|---|
-| `code/Game/` | 211k | `src/game/` (the exe's logic; `engine/types/`'s 15 headers dissolved into it — the only `engine/` left) |
+| `src/game/` | 211k | `src/game/` (the exe's logic; `engine/types/`'s 15 headers dissolved into it — the only `engine/` left) |
 | `runtime/` | 181k | `src/engine/` (the Runtime DLL's classes; `runtime/types` + `runtime/src` folded per namespace) |
 | `runtime/src/**/*_win.cpp` (35 files) + the harness's platform bits | | `src/platform/win/` (the seam retail already had: filesystem, registry persistence, audio stream / voice, input, window, lifecycle, package read) |
 | `standalone/` (74 files, 20k) | | split: `src/app/` (the launcher: `main`, options, boot) vs `src/diag/` (crash / hang / fail-fast handlers, watchdog, hw_watch, redzone, the AUTOSTART / menu-driver / tool / disaster harnesses) |
@@ -161,5 +161,5 @@ deferral; `devlost.sh` keeps `DLMAX=5`. The renderer decision (DXVK) may change 
   route's shape). Run them on any merge touching dialogs, trade, orchards or the disaster harness.
 - For the restructure: a move commit is ONE top-level directory, include paths rewritten by script, the gate after it;
   the kit scripts (`gate.sh`, `mergegate.sh`, `stepclose.sh`, the routes) hard-code `standalone/build/...` and
-  `code/Game/...` and must move with the tree in the same commit.
+  `src/game/...` and must move with the tree in the same commit.
 - Kill an orphaned exe BY PID (`taskkill //F //PID`), never `/IM`; the lock's `exe_pids=` line names it.

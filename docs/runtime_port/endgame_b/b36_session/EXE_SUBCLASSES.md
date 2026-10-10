@@ -1,7 +1,7 @@
 # B.3 step 6 — exe-phase subclasses of Runtime `UI::` classes (hand-built vtables)
 
 Read-only enumeration, 2026-09-25, main @ dc647869. Every claim carries file:line.
-Scope: `code/Game/**`, `standalone/**`, `engine/**`. Excluded: build dirs, worktrees, `runtime/`
+Scope: `src/game/**`, `standalone/**`, `engine/**`. Excluded: build dirs, worktrees, `runtime/`
 (the runtime's own struct-embedding subclasses are listed only in §6 where they decide by-value).
 
 Conventions used below

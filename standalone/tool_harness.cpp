@@ -77,7 +77,7 @@
 #include "Component/BuildDescription.h"
 #include "Component/CreateBridgeDescription.h"
 
-// Standalone factory from code/Game/Player/removaltool.cpp (extern "C";
+// Standalone factory from src/game/Player/removaltool.cpp (extern "C";
 // Player/edittool_funcs.h). Returns a freshly MemAlloc'd RemovalTool (0x40 bytes)
 // with its standalone vtable installed and drag-cell defaults
 // (startCell/endCell/lastEndCell = -1).
@@ -129,7 +129,7 @@ extern "C" ComponentEntity* StartTown_GetFoundingHouseEntity(int index);
 extern "C" int   StartTown_GetFoundingHouseCount();
 
 // Track A: run the ClearAreaComponent footprint sweep (0x140117d60 port) on a
-// building entity — marks its footprint resources for removal. code/Game/Component/clearareacomponent.cpp
+// building entity — marks its footprint resources for removal. src/game/Component/clearareacomponent.cpp
 class ClearAreaComponent;
 extern "C" int ClearAreaComponent_HarnessSweep(ComponentEntity* ownerEntity);
 extern "C" ClearAreaComponent* ClearAreaComponent_HarnessFind(ComponentEntity* entity, uint32_t* outFlags);
@@ -535,7 +535,7 @@ void FireRoadTool(PlayerToolManager* entityUI) {
         if (run < 3) fprintf(stderr, "[ToolHarness][road] drag span: row=%d col=%d..%d startCell=%d endCell=%d\n",
                foundRow, foundCol, foundCol + kRun, startCell, endCell);
 
-        // The tool at EntityUI+0x28 is the RoadTool: a DragTool (code/Game/Player).
+        // The tool at EntityUI+0x28 is the RoadTool: a DragTool (src/game/Player).
         // Dispatched through DragTool (not the final RoadTool): the slots stay virtual.
         DragTool* drag = static_cast<DragTool*>(tool);
 
@@ -1203,7 +1203,7 @@ void FirePinPanel(PlayerToolManager* entityUI) {
 // and `_userFlags` (+0xb0) are pure ctor arguments
 // (runtime/src/ui/dialog_create.cpp:781). Of the sixteen exe-side
 // `fn_DialogInstance_Ctor` call sites, FIFTEEN pass `nullptr, 0`. Exactly one
-// passes a real buffer - code/Game/Dialog/edittool_select.cpp:233:
+// passes a real buffer - src/game/Dialog/edittool_select.cpp:233:
 //
 //     ctrlCount = *(uint32_t*)(uiCompIBP + 0x30);
 //     ctrlData  = *(void**)  (uiCompIBP + 0x28);
@@ -1212,7 +1212,7 @@ void FirePinPanel(PlayerToolManager* entityUI) {
 //
 // So `_userData` is the SELECTED ENTITY'S UIComponent settings buffer -
 // UIComponent+0x28..+0x37 is a growable byte array (data@0x28, count@0x30,
-// cap@0x34) that code/Game/Component/uicomponent.cpp:127 already identifies as
+// cap@0x34) that src/game/Component/uicomponent.cpp:127 already identifies as
 // real, serialized state. That is why `housepanel` gave DLGV entries but never a
 // buffer: the EditTool route is the right one, and the buffer on the other end
 // of it is empty because nothing in our standalone ever grows it.
@@ -1246,7 +1246,7 @@ static void DlgSettings_InstallBuffer(ComponentEntity* entity, int idx) {
     int bytes = std::atoi(e);
     if (bytes <= 1) bytes = 256;
 
-    // The same walk code/Game/Dialog/edittool_select.cpp:93 does. It lives in an
+    // The same walk src/game/Dialog/edittool_select.cpp:93 does. It lives in an
     // ANONYMOUS namespace there, so it cannot be linked against; the loop is
     // repeated here rather than de-anonymising a file this lane does not own.
     // Entity+0x30 is the component-IBP array, +0x38 the count; a component's
@@ -1375,7 +1375,7 @@ void FireHousePanel(PlayerToolManager* entityUI) {
 //
 // `_userData` is a DialogInstance CTOR ARGUMENT, and exactly one of the sixteen
 // exe-side ctor call sites passes anything but `nullptr, 0`:
-// code/Game/Dialog/edittool_select.cpp:233, which passes the SELECTED ENTITY'S
+// src/game/Dialog/edittool_select.cpp:233, which passes the SELECTED ENTITY'S
 // UIComponent buffer (+0x28) and count (+0x30). So the first gate is not
 // "controllers" at all — it is "does the entity have a UIComponent". Nothing
 // downstream can run for an entity that has none.
@@ -1706,7 +1706,7 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
 // for a TradeUI among the resulting dialog's controllers.
 //
 // Needs a trading post in the world: BANISHED_BUILD_DEMO_TRADINGPOST=1
-// (code/Game/Game/starttown.cpp). Prints on every failure branch, so a silent log
+// (src/game/Game/starttown.cpp). Prints on every failure branch, so a silent log
 // means this never ran rather than that the panel opened.
 // ============================================================
 // ============================================================
@@ -1722,7 +1722,7 @@ void FirePasturePanel(PlayerToolManager* entityUI) {
 // component's own vtable+0x10 GetTypeId rather than trusting a .rdata type-id slot.
 //
 // Needs an orchard in the world: BANISHED_BUILD_DEMO_ORCHARD=1
-// (code/Game/Game/starttown.cpp). Prints on every failure branch, so a silent log
+// (src/game/Game/starttown.cpp). Prints on every failure branch, so a silent log
 // means this never ran rather than that the panel opened.
 // ============================================================
 void FireOrchardPanel(PlayerToolManager* entityUI) {

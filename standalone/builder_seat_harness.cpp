@@ -20,7 +20,7 @@
 // AssignWorker cascade, and retail deliberately lets a NULL "available building"
 // through it — c5f0/c4b0 only ever STORE the pointer, so the citizen's profession
 // flips with no roster attach (see the note on Strat_c5f0 in
-// code/Game/Component/citizen_employ_cascade.cpp). That is what makes a builder
+// src/game/Component/citizen_employ_cascade.cpp). That is what makes a builder
 // possible in a town whose only pending work is a road: there is no building to
 // attach to, and retail does not require one.
 //

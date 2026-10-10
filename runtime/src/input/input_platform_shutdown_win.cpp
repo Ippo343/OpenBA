@@ -17,7 +17,7 @@
 // assumed: the name is in the shipped export directory at ordinal 3395, and our
 // own tree already reaches it BY NAME —
 // `runtime/src/engine/engine_lifecycle.cpp:847` and
-// `code/Game/Game/game_main.cpp:265` both spell the mangled name. So the name
+// `src/game/Game/game_main.cpp:265` both spell the mangled name. So the name
 // door is the primary one and the address door is the belt-and-braces second.
 //
 // ---------------------------------------------------------------------------

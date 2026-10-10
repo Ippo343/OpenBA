@@ -43,7 +43,7 @@ INC_DIRS = ['.', 'engine/types', 'engine/funcs', 'code/Game', 'runtime/types', '
 
 
 def dir_bucket(p):
-    if p.startswith('code/Game/'): return 'code_game'
+    if p.startswith('src/game/'): return 'code_game'
     if p.startswith('runtime/'): return 'runtime'
     if p.startswith('standalone/'): return 'standalone'
     if p.startswith('engine/'): return 'engine'

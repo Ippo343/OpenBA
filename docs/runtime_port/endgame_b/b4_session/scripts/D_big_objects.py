@@ -12,7 +12,7 @@ four objects:
                    (GW(), GameWorld(), World(), ...) and local aliases of either
   CitizenComponent the receiver of functions named CitizenComponent_* /
                    CitizenComp_* / CitizenComponent::* (its first parameter, or
-                   `this`), and local aliases of it, in code/Game/Component/citizen*
+                   `this`), and local aliases of it, in src/game/Component/citizen*
   GameSettings     g_gameSettings (int32_t*: `[i]` and un-cast `+ n` scale by 4)
   GameContainer    g_gameContainer, its getters and aliases
 
@@ -44,8 +44,8 @@ RETAIL = os.path.join(DATA, 'D_retail_layouts.tsv')
 OUT = os.path.join(DATA, 'D_big_objects.tsv')
 
 HEADERS = {
-    'GameUpdateLoop': ('code/Game/Game/GameUpdateLoop.h', 'GameUpdateLoop'),
-    'CitizenComponent': ('code/Game/Component/CitizenComponent.h', 'CitizenComponent'),
+    'GameUpdateLoop': ('src/game/Game/GameUpdateLoop.h', 'GameUpdateLoop'),
+    'CitizenComponent': ('src/game/Component/CitizenComponent.h', 'CitizenComponent'),
     'GameSettings': (None, None),
     'GameContainer': (None, None),
 }
@@ -222,7 +222,7 @@ def is_pure_copy(rhs, rx):
 
 def scan_file(path, src, W):
     lines = [blank_strings(x) for x in strip(src).split('\n')]
-    is_cit_file = re.search(r'code/Game/Component/(citizen_|citizencomponent)', path) is not None
+    is_cit_file = re.search(r'src/game/Component/(citizen_|citizencomponent)', path) is not None
 
     # ---- file-local helpers returning a root
     helpers = {}   # name -> obj

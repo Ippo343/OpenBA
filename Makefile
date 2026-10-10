@@ -26,7 +26,7 @@ CC = ccache gcc
 BANISHED_DIR = C:/GOG Games/Banished
 
 # Auto-discover clean game logic files (mirrors original source tree)
-GAME_SRC_SRCS = $(wildcard code/Game/*/*.cpp)
+GAME_SRC_SRCS = $(wildcard src/game/*/*.cpp)
 
 # Runtime-x64.dll reimplementation sources
 RUNTIME_FUNC_SRCS = $(wildcard runtime/funcs/*.cpp)
@@ -69,7 +69,7 @@ SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 # CoUninitialize, as retail's does. A lane verifying with -fsyntax-only
 # cannot see a missing import library at all -- this failed only at link.
 SA_LIBS = -luser32 -ldbghelp -lshell32 -lole32 -ldinput8 -ldxguid
-SA_INCLUDES = -I. -Icode/Game \
+SA_INCLUDES = -I. -Isrc/game \
               -Iruntime/types -Iruntime/funcs \
               -Idx11/types -Istandalone
 

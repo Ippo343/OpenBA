@@ -319,7 +319,7 @@ Renderer::~Renderer() {}
 //      no derived ctor whose later stamp we could be racing, which is the
 //      failure mode a half-ported class hits.
 //   3. Our own two subclass-like users are unaffected because they stamp AFTER
-//      construction, not during it. code/Game/Dialog/thumb_vtables.cpp:66-82
+//      construction, not during it. src/game/Dialog/thumb_vtables.cpp:66-82
 //      copies slots 1..8 out of whatever the ctor installed and plants its own
 //      slot 0 so the exe controls the free; that mirroring reads the same table
 //      whether this port or the DLL put it there. (Worth stating plainly: that
@@ -327,7 +327,7 @@ Renderer::~Renderer() {}
 //      DIFFERENT slot 0. PLAN §2.2 D lists MaterialInstance under "the mirroring
 //      workaround was never necessary"; for thumb_vtables that reading is wrong,
 //      and the correction is in WAVE6_LANE_F.md.)
-//      code/Game/Component/statusicon_geometry.cpp:328 builds a Geometry vtable,
+//      src/game/Component/statusicon_geometry.cpp:328 builds a Geometry vtable,
 //      not a MaterialInstance one, and is not affected by this port at all.
 //   4. The ctor allocates nothing and installs nothing global, so a
 //      RT_GFXRENDER=0 run and a default run produce the same object.

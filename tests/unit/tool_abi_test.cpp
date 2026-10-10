@@ -2,7 +2,7 @@
 // tests/unit/tool_abi_test.cpp — ENDGAME B.3.8 block TOOL (B38_RULES.md B8-14)
 //
 // The ABI claims block TOOL makes about the exe Tool family, measured on the
-// SHIPPED HEADERS (code/Game/Player/*.h):
+// SHIPPED HEADERS (src/game/Player/*.h):
 //   PART A — LAYOUT: sizeof / alignof / member offsets against retail's create
 //            MemAlloc sizes and ctor stores (B38_SLOTS.md §6).
 //   PART B — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =

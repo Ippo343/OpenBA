@@ -1,7 +1,7 @@
 # B.3.8 caller + fold batch brief (coordinator, 2026-09-26)
 
 Step 8's class blocks made ~330 exe classes real C++ classes with compiler vtables (headers
-`code/Game/<Dir>/<Class>.h`; rules `B38_RULES.md`; the per-block reports are summarised in the merge
+`src/game/<Dir>/<Class>.h`; rules `B38_RULES.md`; the per-block reports are summarised in the merge
 commits `git log --merges --oneline main`). Two kinds of work were left, and your batch does BOTH for
 its directories, measured in `b38_session/CALLER_SURFACE.md` (read it first; its appendices list every
 site with file:line for your batch):
@@ -32,7 +32,7 @@ caller's storage exactly once" shape: LEAVE and list.
 
 ## Rules (all of BLOCK_BRIEF.md's hard and process rules hold; the additions)
 - Your DIRECTORIES are in your prompt; edit nothing else (outside: minimum, listed). Files in block
-  LOOP's set (`code/Game/Game/**`, `entitylist*`, the `standalone/*_stubs.cpp` loop files) are HELD:
+  LOOP's set (`src/game/Game/**`, `entitylist*`, the `standalone/*_stubs.cpp` loop files) are HELD:
   do not touch them.
 - Retail-faithful: a fold moves code, it does not change it. If you find a port bug on the way, fix it
   in its OWN commit titled `… (behaviour: …)` with the retail evidence, or list it. CALLER_SURFACE §9

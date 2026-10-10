@@ -1,0 +1,80 @@
+#pragma once
+// ============================================================================
+// src/game/Game/PlayerController.h — ENDGAME B.4 W0-H2
+//
+// The 0x10C-byte in-game camera controller at GameUpdateLoop+0xE0. Load builds
+// it with MemAlloc(0x10c, 4) + ctor 0x1400985b0(this, frustum, yaw, pitch,
+// distance) (Load passes 0, -40, 25).
+//
+// CLASS NAME NOT SETTLED (the tree's name; the profile exe was not open).
+// No vtable: a plain struct built in raw memory.
+//
+// FIELDS (retail ctor 0x1400985b0, helper 0x1400983f0):
+//   +0x00 Math::Transform  Transform::Transform(+0); 0x1400983f0 writes it from
+//                          Transform::FromLookAt(target - dir(yaw,pitch) * distance)
+//                          — a Math::Transform member (B.4 GAME-b: both ctors
+//                          ran Transform::Transform on it by hand before)
+//   +0x1C float[3] target  the look-at point (ctor 0; Load's start-town step
+//                          writes the spawn tile's position here)
+//   +0x28 float yaw        Vector3::FromYawPitch(+0x28, +0x2C) in 0x1400983f0
+//   +0x2C float pitch
+//   +0x30 float distance   the eye's distance back from the target
+//   +0x34 Graphics::Camera Camera::Camera(+0x34, frustum, transform, true) — a
+//                          Graphics::Camera member (B.4 X5-GAME, behaviour:): both
+//                          ctors build it LAST (0x140098625 / 0x14009889f), the
+//                          init list's last entry; no dtor (Shutdown 0x14009798d
+//                          MemFrees +0xE0 with no destructor call; Camera is
+//                          trivially destructible)
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "math/Math.h"   // Math::Transform (CalcTransform's by-value return)
+#include "graphics/Camera.h"   // Graphics::Camera (+0x34)
+#include <type_traits>
+
+struct Frustum;   // ::Frustum (volume/Volume.h)
+namespace IO { class Stream; }
+
+class PlayerController {
+public:
+    // 0x1400985b0 — the ctor Load runs in the MemAlloc(0x10c, 4) block. Builds
+    // the transform, the scalars and then the camera, in member order (body in
+    // gameupdateloop_load.cpp).
+    PlayerController(const ::Frustum& frustum, float yaw, float pitch, float distance);
+    // 0x140098800 — the default ctor (MenuScene +0x88, the menu loop's +0xbb8):
+    // Transform(), the target zeroed, the camera built over the 1 / 100 / 90 / 90
+    // perspective frustum and the identity transform (menuscene.cpp, GAME-b).
+    PlayerController();
+    // 0x1400988c0 — Serializer(stream, 0): the transform, the target, yaw, pitch,
+    // distance (serialize_arrays.cpp, GAME-b).
+    void Serialize(IO::Stream& stream);
+
+    // 0x1400983f0 — the look-at transform from (target, yaw, pitch, distance):
+    // stored into +0x00 and returned (retail's hidden return slot).
+    Math::Transform CalcTransform();
+    // 0x140098660 — rebuilds the camera's perspective frustum from the back
+    // buffer's aspect (Load step 33, Draw).
+    void UpdateCamera(float fovY, float nearZ, float farZ);
+
+    Math::Transform transform;   // +0x00 (both ctors run Transform::Transform first, as retail's do)
+    Math::Vector3 target;        // +0x1C look-at target (Serialize 0x1400988c0: Vector3::Serialize)
+    float   yaw;                 // +0x28
+    float   pitch;               // +0x2C
+    float   distance;            // +0x30
+    Graphics::Camera camera;     // +0x34 Camera(frustum, CalcTransform / Identity, true), built last
+    uint8_t WorldToScreen(const Math::Vector3* param_2, float* param_3);   // 0x140098210 (Player/tool_base_screenrect.cpp)
+};
+
+static_assert(std::is_trivially_destructible<PlayerController>::value,
+              "retail MemFrees the controller with no destructor (Shutdown)");
+static_assert(sizeof(PlayerController) == 0x10C, "PlayerController is 0x10C (Load MemAlloc(0x10c, 4))");
+static_assert(alignof(PlayerController) == 4, "PlayerController is dword-aligned");
+static_assert(offsetof(PlayerController, transform) == 0x00, "PlayerController::transform @ +0x00");
+static_assert(offsetof(PlayerController, target) == 0x1C, "PlayerController::target @ +0x1C");
+static_assert(offsetof(PlayerController, target.y) == 0x20, "PlayerController::target.y @ +0x20");
+static_assert(offsetof(PlayerController, target.z) == 0x24, "PlayerController::target.z @ +0x24");
+static_assert(offsetof(PlayerController, yaw) == 0x28, "PlayerController::yaw @ +0x28");
+static_assert(offsetof(PlayerController, pitch) == 0x2C, "PlayerController::pitch @ +0x2C");
+static_assert(offsetof(PlayerController, distance) == 0x30, "PlayerController::distance @ +0x30");
+static_assert(offsetof(PlayerController, camera) == 0x34, "PlayerController::camera @ +0x34");

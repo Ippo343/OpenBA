@@ -5,8 +5,8 @@ Run from the repo root with no arguments:
     python docs/runtime_port/endgame_b/b4_session/scripts/A_exe_bodies.py
 It rewrites docs/runtime_port/endgame_b/b4_session/data/A_exe_bodies.tsv.
 
-Scope (the C-body headers of code/Game): the nine code/Game/<Module>/exe_bodies.h, every
-code/Game/**/*_funcs.h, code/Game/Work/marketwork_bst_*.h and the helper headers in EXTRA_HEADERS.
+Scope (the C-body headers of code/Game): the nine src/game/<Module>/exe_bodies.h, every
+src/game/**/*_funcs.h, src/game/Work/marketwork_bst_*.h and the helper headers in EXTRA_HEADERS.
 A declaration is a top-level (namespace scope) function declaration or inline definition.
 
 Tree evidence is recomputed on every run (comments stripped with b4_session/codegrep.py).
@@ -28,10 +28,10 @@ PROD = ('code', 'runtime', 'standalone', 'dx11', 'engine')
 EXCL = ('standalone/build', 'tests/unit/build', '.claude/worktrees', '/build/', '/build-')
 EXTS = ('.cpp', '.h', '.hpp', '.inc', '.c')
 EXTRA_HEADERS = [
-    'code/Game/Dialog/ui_dialogs.h', 'code/Game/Dialog/ui_panels.h',
-    'code/Game/Dialog/dialog_exe_helpers.h', 'code/Game/Dialog/citizen_icon_helpers.h',
-    'code/Game/Goal/goal_exe_helpers.h', 'code/Game/Goal/statvaluedispatch.h',
-    'code/Game/Game/game.h', 'code/Game/Component/controller_state_table.h',
+    'src/game/Dialog/ui_dialogs.h', 'src/game/Dialog/ui_panels.h',
+    'src/game/Dialog/dialog_exe_helpers.h', 'src/game/Dialog/citizen_icon_helpers.h',
+    'src/game/Goal/goal_exe_helpers.h', 'src/game/Goal/statvaluedispatch.h',
+    'src/game/Game/game.h', 'src/game/Component/controller_state_table.h',
 ]
 COLS = ['addr', 'name', 'module', 'defining_file', 'class', 'class_header', 'member_declared',
         'member_defined', 'static_or_member', 'callers', 'confidence', 'note',
@@ -73,9 +73,9 @@ def code_of(path):
 
 
 def scope_headers():
-    hs = sorted(glob.glob(os.path.join(ROOT, 'code/Game/*/exe_bodies.h')))
-    hs += sorted(glob.glob(os.path.join(ROOT, 'code/Game/**/*_funcs.h'), recursive=True))
-    hs += sorted(glob.glob(os.path.join(ROOT, 'code/Game/Work/marketwork_bst_*.h')))
+    hs = sorted(glob.glob(os.path.join(ROOT, 'src/game/*/exe_bodies.h')))
+    hs += sorted(glob.glob(os.path.join(ROOT, 'src/game/**/*_funcs.h'), recursive=True))
+    hs += sorted(glob.glob(os.path.join(ROOT, 'src/game/Work/marketwork_bst_*.h')))
     hs += [os.path.join(ROOT, h) for h in EXTRA_HEADERS if os.path.exists(os.path.join(ROOT, h))]
     return [h for h in dict.fromkeys(os.path.normpath(h) for h in hs)]
 

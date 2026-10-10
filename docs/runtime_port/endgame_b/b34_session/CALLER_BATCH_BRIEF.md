@@ -1,7 +1,7 @@
 # B.3.4 caller batch brief (batches B, C, D) — coordinator, 2026-09-19
 
 You convert every call through an IO::Serializer DOOR in YOUR directories into a member call on the
-real class `IO::Serializer` (runtime/types/io/Serializer.h). Batch A (code/Game/Component, commit
+real class `IO::Serializer` (runtime/types/io/Serializer.h). Batch A (src/game/Component, commit
 e7498818 on branch b34-callers-a) is the reference: read `git log -1 --format=%B e7498818` IN FULL
 first — its per-door table, worked example per call shape, removed-line scan and TRAPS section are
 your recipe. Then read docs/runtime_port/endgame_b/B34_RULES.md §1.2, §6.4, §6.5, §7.2, §7.3 (same

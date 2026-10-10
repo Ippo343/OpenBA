@@ -5,7 +5,7 @@ no run. Scripts in `C:/Users/USPC/AppData/Local/Temp/claude/b38/0K/` (not in the
 `b37_session/CALLER_SURFACE.md`: sites by binding, comments stripped before counting, string contents blanked
 except where a string IS the binding (§6). Build dirs (`standalone/build*/`, `tests/unit/build/`) excluded.
 
-**The converted set** = every class with a real definition `class X [final] : public P` under `code/Game/**.h`
+**The converted set** = every class with a real definition `class X [final] : public P` under `src/game/**.h`
 AND a row in `B38_RULES.md` §1.3 outside block LOOP: **298 reflected classes** (310 minus LOOP's 12 world
 externals — `ClimateGenerator`, `Disease`, `MapGenerator`, `MenuScene`, `MusicList`, `NameDatabase`,
 `Profession`, `ProfessionList`, `TerrainGenerator`, `Toolbar`, `Tornado`, `Weather`) **+ 3 helper classes**
@@ -74,18 +74,18 @@ lookup (`object_typeinfo_test.cpp`, a name test — stays).
 
 | directory | (1) proved | (1) cand. | (2) | (3) | (3r) rows / dead | (4) readers / rows | (5) | (5x) | (6) delegating |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| code/Game/Component | 81 | 44 | 3 | 53 + 5 ef | 2 / 1 | 11 / 1 | 166 | 168 | 182 |
-| code/Game/Dialog | 53 | 17 | 7 | 0 | 0 | 2 / 8 | 64 | 9 | 114 |
-| code/Game/Tutorial | 2 | 10 | 0 | 0 | 0 | 0 / 0 | 1 | 2 | 0 |
-| code/Game/Goal | 0 | 0 | 0 | 0 | 0 | 0 / 1 | 0 | 13 | 0 |
-| code/Game/Work | 47 | 18 | 0 | 2 | 0 | 15 / 16 | 27 | 100 | 0 |
-| code/Game/Action | 7 | 2 | 0 | 0 | 0 | 0 / 7 | 19 | 55 | 67 |
-| code/Game/Player | 20 | 5 | 3 | 1 | 0 | 0 / 0 | 41 | 25 | 38 |
-| code/Game/Entity (non-LOOP) | 11 | 4 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 |
-| code/Game/Object | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| src/game/Component | 81 | 44 | 3 | 53 + 5 ef | 2 / 1 | 11 / 1 | 166 | 168 | 182 |
+| src/game/Dialog | 53 | 17 | 7 | 0 | 0 | 2 / 8 | 64 | 9 | 114 |
+| src/game/Tutorial | 2 | 10 | 0 | 0 | 0 | 0 / 0 | 1 | 2 | 0 |
+| src/game/Goal | 0 | 0 | 0 | 0 | 0 | 0 / 1 | 0 | 13 | 0 |
+| src/game/Work | 47 | 18 | 0 | 2 | 0 | 15 / 16 | 27 | 100 | 0 |
+| src/game/Action | 7 | 2 | 0 | 0 | 0 | 0 / 7 | 19 | 55 | 67 |
+| src/game/Player | 20 | 5 | 3 | 1 | 0 | 0 / 0 | 41 | 25 | 38 |
+| src/game/Entity (non-LOOP) | 11 | 4 | 0 | 0 | 0 | 0 / 0 | 0 | 0 | 0 |
+| src/game/Object | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | engine | 7 | 0 | 0 | 0 (+5 dead globals) | 0 | 1 (g_FollowDialog_Vtable, used in Dialog) / 0 | 1 | 75 | 0 |
 | standalone | 38 | 61 | 11 | 1 | 83 / 76 | 0 / 4 | 156 | 41 | 0 |
-| **LOOP-held** (code/Game/Game 91 files + entitylist.cpp) | 7 | 13 | 3 | 0 | 0 | 0 | 67 | 14 | 0 |
+| **LOOP-held** (src/game/Game 91 files + entitylist.cpp) | 7 | 13 | 3 | 0 | 0 | 0 | 67 | 14 | 0 |
 | tests | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 |
 
 (3) "ef" = `engine_funcs` door CALLs. (6) is counted where the MEMBER is defined (that is where the fold-in
@@ -97,18 +97,18 @@ DLG (but one) moved their bodies — **0 delegates**.
 
 | batch | directories | (1) proved + cand. | (2) | (3) | (3r) dead rows | (4) readers / rows | (5) | (6) fold-in: members / lines |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| **CB1** | code/Game/Component | 81 + 44 | 3 | 58 | 1 | 11 / 1 | 166 | 182 / ~7,550 |
-| **CB2** | code/Game/Dialog, code/Game/Tutorial, code/Game/Goal | 55 + 27 | 7 | 0 | 0 | 2 (+ citizenui:662) / 9 | 65 | 114 / ~1,140 |
-| **CB3** | code/Game/Work, code/Game/Action | 54 + 20 | 0 | 2 | 0 | 15 / 23 | 46 | 67 / ~2,820 |
-| **CB4** | code/Game/Player, code/Game/Entity (non-LOOP), code/Game/Object, engine, tests | 38 + 9 | 3 | 1 | 0 | 1 / 0 | 43 | 38 / ~3,430 |
+| **CB1** | src/game/Component | 81 + 44 | 3 | 58 | 1 | 11 / 1 | 166 | 182 / ~7,550 |
+| **CB2** | src/game/Dialog, src/game/Tutorial, src/game/Goal | 55 + 27 | 7 | 0 | 0 | 2 (+ citizenui:662) / 9 | 65 | 114 / ~1,140 |
+| **CB3** | src/game/Work, src/game/Action | 54 + 20 | 0 | 2 | 0 | 15 / 23 | 46 | 67 / ~2,820 |
+| **CB4** | src/game/Player, src/game/Entity (non-LOOP), src/game/Object, engine, tests | 38 + 9 | 3 | 1 | 0 | 1 / 0 | 43 | 38 / ~3,430 |
 | **CB5** | standalone | 38 + 61 | 11 | 1 | 76 | 0 / 4 | 156 | 0 |
-| HELD | the LOOP file set (`code/Game/Game`, `entitylist.cpp`) | 7 + 13 | 3 | 0 | 0 | 0 | 67 | 0 |
+| HELD | the LOOP file set (`src/game/Game`, `entitylist.cpp`) | 7 + 13 | 3 | 0 | 0 | 0 | 67 | 0 |
 
 - CB1 is the heaviest by far; if it needs splitting, split by the B38_FILEMAP block file sets inside
-  `code/Game/Component` (CIT / VIS / MI-A+MI-B / K1 descriptions), not by spelling — the (3) sites and the
+  `src/game/Component` (CIT / VIS / MI-A+MI-B / K1 descriptions), not by spelling — the (3) sites and the
   delegate bodies of one class live in the same files.
 - (6) fold-in lines by block: CIT 3,188 · TOOL 3,434 · ACT 2,823 · VIS 1,962 · MI-B 1,616 · PNL 1,122 ·
-  MI-A 790 · helpers 164 · pilot 22 · DLG 17. TOOL's 3,434 is `code/Game/Player` (CB4).
+  MI-A 790 · helpers 164 · pilot 22 · DLG 17. TOOL's 3,434 is `src/game/Player` (CB4).
 - HELD waits for `b38-LOOP` to merge (its files are being rewritten there); then it joins CB4 or runs alone.
 - The engine_funcs dead globals and the reader-less rows (§8) are the coordinator's closing items, not a
   batch's: deleting a row is safe only after the batch that converts its LAST reader has merged.
@@ -132,7 +132,7 @@ DLG (but one) moved their bodies — **0 delegates**.
 
 **Proved total 273, candidates 174.** A.3's producer column is the evidence; the batch re-reads each
 candidate. Two traps seen while reading:
-- `code/Game/Work/foresterwork.cpp:416` `FindSubComponentInList` calls slot 2 with **no argument**
+- `src/game/Work/foresterwork.cpp:416` `FindSubComponentInList` calls slot 2 with **no argument**
   (`typedef uint32_t (*GetTypeId_t)(); getTypeId()`) — it works only because `DECLARE_EXE_TYPE`'s `Type()`
   never reads `this`. Converting to `p->Type()` fixes it; do not copy the typedef.
 - SELF sites name slots by the tree's old names: `cleararea.cpp:266` calls `vtable[6]` through a 2-argument
@@ -193,7 +193,7 @@ controller interface; `reg_w2_lane2.cpp:92` `g_TutorialInstance_Vtable_SA` at `0
 `work_base_actionctor.cpp`), `PerformWork` ×4, `PlayAnimation` ×3, `ShowTool` ×2, `CreateNaturalResource`,
 `PickupRawMaterial`, `RemoveNaturalResource`, `Work` ×2 (`clearareacomponent_states.cpp:342`,
 `work_base_reimpl.cpp:160`), `ClearArea`, `ClearStorage`, `FireWork`, `LocationWork`, `Pickup` (one each, in
-`code/Game/Component`), `MessageDialog` ×2 (`saveloaddialog.cpp:922/1103` through `MessageDialogAddr::Vtable`),
+`src/game/Component`), `MessageDialog` ×2 (`saveloaddialog.cpp:922/1103` through `MessageDialogAddr::Vtable`),
 `StatGoal` (the `standalone/main.cpp:952` factory self-test compares against it), `FollowDialog`
 (`citizenui.cpp:662` through `g_FollowDialog_Vtable` — **no row: reads 0**, falls back to
 `FollowDialog_GetStandaloneVtable()`). B8-5: a stamp becomes the real ctor (`new (p) X(...)`) where the reader
@@ -246,7 +246,7 @@ row — the reader-less ones (§8) can go first, which frees the body to move.
 
 | # | item | count | where |
 |---|---|---:|---|
-| G.1 | empty `Register*Vtable()` stubs (body empty after comments) + their ONE call each in `address_registry.cpp:1709-1758` + their declarations at `address_registry.cpp:54-122` | 13 | 11 in `code/Game/Action` (AnimateNaturalResource, CompleteRoad, CompleteTask, ConsumeRawMaterial, CreateRawMaterial, DropOffRawMaterial, HuntAnimal, MoveTo, PickupStoredRawMaterial, RemoveAnimal, SendComponentMessage), `animaudioevent.cpp:92`, `captureboxdescription.cpp:115` |
+| G.1 | empty `Register*Vtable()` stubs (body empty after comments) + their ONE call each in `address_registry.cpp:1709-1758` + their declarations at `address_registry.cpp:54-122` | 13 | 11 in `src/game/Action` (AnimateNaturalResource, CompleteRoad, CompleteTask, ConsumeRawMaterial, CreateRawMaterial, DropOffRawMaterial, HuntAnimal, MoveTo, PickupStoredRawMaterial, RemoveAnimal, SendComponentMessage), `animaudioevent.cpp:92`, `captureboxdescription.cpp:115` |
 | G.2 | `struct X;` forward declarations of converted classes | 27 | 20 standalone, 3 Component, 2 `engine_funcs.h` (732 `SaveLoadDialog`, 1672 `TownHallUI`), 1 Dialog, 1 Game (LOOP) — list in Appendix G.2; check each is at namespace scope before changing |
 | G.3 | dead `engine_funcs` globals (zero code uses; `extern` + definition + initialiser each) | 12 | vtable: `g_AchievementDialog_Vtable`, `g_GoalDialog_Vtable`, `g_ModDetailsDialog_Vtable`, `g_ModUpdateDialog_Vtable`, `g_PauseDialog_Vtable`, `g_ReloadDialog_Vtable`, `g_ToolbarDialog_Vtable`, `g_TutorialInstanceVtable` (printf only, `engine_funcs.cpp:2473`); member: `fn_ConsumeProduceUI_Slot4`, `fn_DragTool_OnKey`, `fn_DragTool_Shutdown`, `fn_Work_SerializeBase`. NOT dead: `g_FollowDialog_Vtable` (citizenui.cpp:662), `fn_ComponentBase_Serialize` (5 CALLs) |
 | G.4 | the `UI_DIALOG_STUB` macro and its helpers `StubNop`, `kStubVtableSlots`, `StubVtableInit` (`ui_dialog_stub_factories.cpp:67-133`) — **zero expansions** left | 1 block | the anonymous namespace + the `#define` |
@@ -289,243 +289,243 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | site | fn | receiver | slot | producer |
 |---|---|---|---:|---|
-| code/Game/Action/moveto.cpp:495 | MoveTo_Execute_Impl | `s` | 4 | (uint8_t*)self |
-| code/Game/Component/attendancecomponent_states.cpp:244 | Attendance_State3Enter | `selfP` | 7 |  |
-| code/Game/Component/modelcomponent.cpp:267 | ModelComponent_Shutdown | `s` | 6 | (uintptr_t)self |
-| code/Game/Component/populationcomponent.cpp:438 | PopulationComponent_Startup | `self` | 11 | reinterpret_cast<uint8_t*>(selfC) |
-| code/Game/Component/statusiconcomponent.cpp:327 | StatusIconComponent_OnUpdate2 | `s` | 8 | (uintptr_t)self |
-| code/Game/Player/tool_base_render.cpp:730 | ReportBadSelectionRef | `self` | 2 |  |
-| code/Game/Player/tool_base_render.cpp:731 | ReportBadSelectionRef | `self` | 2 |  |
-| code/Game/Work/buildstructure.cpp:518 | BuildStructure::Execute | `this` | 10 |  |
-| code/Game/Work/cleararea.cpp:266 | ClearArea::OnCancel | `this` | 6 |  |
-| code/Game/Work/cleararea.cpp:743 | ClearArea::Execute | `this` | 10 |  |
-| code/Game/Work/cleararea.cpp:848 | ClearArea::Execute | `this` | 10 |  |
-| code/Game/Work/clearstorage.cpp:312 | ClearStorage::Execute | `this` | 10 |  |
-| code/Game/Work/consumeproduce.cpp:1107 | ConsumeProduce::OnCancel | `this` | 6 |  |
-| code/Game/Work/firework.cpp:318 | FireWork::Execute | `this` | 10 |  |
-| code/Game/Work/fishingwork.cpp:474 | FishingWork::Execute | `this` | 10 |  |
-| code/Game/Work/fishingwork.cpp:502 | FishingWork::Execute | `this` | 10 |  |
-| code/Game/Work/fishingwork.cpp:606 | FishingWork::Execute | `this` | 2 |  |
-| code/Game/Work/fishingwork.cpp:963 | FishingWork::OnCancel | `this` | 6 |  |
-| code/Game/Work/foresterwork.cpp:918 | ForesterWork::Execute | `this` | 10 |  |
-| code/Game/Work/gatherrawmaterials.cpp:660 | GatherRawMaterials::Execute | `this` | 10 |  |
-| code/Game/Work/gatherrawmaterials.cpp:911 | GatherRawMaterials::Validate | `this` | 8 |  |
-| code/Game/Work/harvestarea.cpp:513 | HarvestArea::Execute | `this` | 10 |  |
-| code/Game/Work/harvestorchard.cpp:491 | HarvestOrchard::Execute | `this` | 10 |  |
-| code/Game/Work/herbalistwork.cpp:657 | HerbalistWork::Execute | `this` | 10 |  |
-| code/Game/Work/huntwork.cpp:505 | HuntWork::Execute | `this` | 10 |  |
-| code/Game/Work/locationwork.cpp:325 | LocationWork::Execute | `this` | 10 |  |
-| code/Game/Work/marketwork.cpp:1390 | MarketWork::Execute | `this` | 10 |  |
-| code/Game/Work/marketwork.cpp:1745 | MarketWork::Execute | `this` | 10 |  |
-| code/Game/Work/pasturework.cpp:524 | PastureWork::Execute | `this` | 10 |  |
-| code/Game/Work/pasturework.cpp:668 | PastureWork::Execute | `this` | 10 |  |
-| code/Game/Work/pickup.cpp:676 | Pickup_Execute_Port | `S` | 10 | reinterpret_cast<uintptr_t>(self) |
-| code/Game/Work/pickup.cpp:750 | Pickup::Slot5 | `this` | 4 |  |
-| code/Game/Work/plantarea.cpp:416 | PlantArea::Execute | `this` | 10 |  |
-| code/Game/Work/plantorchard.cpp:370 | PlantOrchard::Execute | `this` | 10 |  |
-| code/Game/Work/tendarea.cpp:380 | TendArea::Execute | `this` | 10 |  |
+| src/game/Action/moveto.cpp:495 | MoveTo_Execute_Impl | `s` | 4 | (uint8_t*)self |
+| src/game/Component/attendancecomponent_states.cpp:244 | Attendance_State3Enter | `selfP` | 7 |  |
+| src/game/Component/modelcomponent.cpp:267 | ModelComponent_Shutdown | `s` | 6 | (uintptr_t)self |
+| src/game/Component/populationcomponent.cpp:438 | PopulationComponent_Startup | `self` | 11 | reinterpret_cast<uint8_t*>(selfC) |
+| src/game/Component/statusiconcomponent.cpp:327 | StatusIconComponent_OnUpdate2 | `s` | 8 | (uintptr_t)self |
+| src/game/Player/tool_base_render.cpp:730 | ReportBadSelectionRef | `self` | 2 |  |
+| src/game/Player/tool_base_render.cpp:731 | ReportBadSelectionRef | `self` | 2 |  |
+| src/game/Work/buildstructure.cpp:518 | BuildStructure::Execute | `this` | 10 |  |
+| src/game/Work/cleararea.cpp:266 | ClearArea::OnCancel | `this` | 6 |  |
+| src/game/Work/cleararea.cpp:743 | ClearArea::Execute | `this` | 10 |  |
+| src/game/Work/cleararea.cpp:848 | ClearArea::Execute | `this` | 10 |  |
+| src/game/Work/clearstorage.cpp:312 | ClearStorage::Execute | `this` | 10 |  |
+| src/game/Work/consumeproduce.cpp:1107 | ConsumeProduce::OnCancel | `this` | 6 |  |
+| src/game/Work/firework.cpp:318 | FireWork::Execute | `this` | 10 |  |
+| src/game/Work/fishingwork.cpp:474 | FishingWork::Execute | `this` | 10 |  |
+| src/game/Work/fishingwork.cpp:502 | FishingWork::Execute | `this` | 10 |  |
+| src/game/Work/fishingwork.cpp:606 | FishingWork::Execute | `this` | 2 |  |
+| src/game/Work/fishingwork.cpp:963 | FishingWork::OnCancel | `this` | 6 |  |
+| src/game/Work/foresterwork.cpp:918 | ForesterWork::Execute | `this` | 10 |  |
+| src/game/Work/gatherrawmaterials.cpp:660 | GatherRawMaterials::Execute | `this` | 10 |  |
+| src/game/Work/gatherrawmaterials.cpp:911 | GatherRawMaterials::Validate | `this` | 8 |  |
+| src/game/Work/harvestarea.cpp:513 | HarvestArea::Execute | `this` | 10 |  |
+| src/game/Work/harvestorchard.cpp:491 | HarvestOrchard::Execute | `this` | 10 |  |
+| src/game/Work/herbalistwork.cpp:657 | HerbalistWork::Execute | `this` | 10 |  |
+| src/game/Work/huntwork.cpp:505 | HuntWork::Execute | `this` | 10 |  |
+| src/game/Work/locationwork.cpp:325 | LocationWork::Execute | `this` | 10 |  |
+| src/game/Work/marketwork.cpp:1390 | MarketWork::Execute | `this` | 10 |  |
+| src/game/Work/marketwork.cpp:1745 | MarketWork::Execute | `this` | 10 |  |
+| src/game/Work/pasturework.cpp:524 | PastureWork::Execute | `this` | 10 |  |
+| src/game/Work/pasturework.cpp:668 | PastureWork::Execute | `this` | 10 |  |
+| src/game/Work/pickup.cpp:676 | Pickup_Execute_Port | `S` | 10 | reinterpret_cast<uintptr_t>(self) |
+| src/game/Work/pickup.cpp:750 | Pickup::Slot5 | `this` | 4 |  |
+| src/game/Work/plantarea.cpp:416 | PlantArea::Execute | `this` | 10 |  |
+| src/game/Work/plantorchard.cpp:370 | PlantOrchard::Execute | `this` | 10 |  |
+| src/game/Work/tendarea.cpp:380 | TendArea::Execute | `this` | 10 |  |
 
 ### A.2 DECL — receiver declared as a converted class pointer (proved) — 17
 
 | site | fn | receiver | slot | producer |
 |---|---|---|---:|---|
-| code/Game/Component/diseasecomponent.cpp:926 | CDTrace | `self` | 6 |  |
-| code/Game/Component/storagedisplaycomponent.cpp:485 | StorageDisplayComponent_OnUpdate2 | `self` | 6 |  |
-| code/Game/Dialog/cropui.cpp:70 | CropUI_IterateResources | `self` | 96 |  |
-| code/Game/Dialog/cropui.cpp:77 | CropUI_IterateResources | `self` | 104 |  |
-| code/Game/Dialog/pastureui.cpp:329 | PastureUI_Slot9 | `self` | 11 |  |
-| code/Game/Dialog/professionui.cpp:535 | ProfessionUI_Slot5 | `self` | 8 |  |
-| code/Game/Dialog/professionui.cpp:835 | ProfessionUI_HandleSpinner | `self` | 8 |  |
-| code/Game/Dialog/storageui.cpp:173 | StorageUI_Serialize | `self` | 7 |  |
-| code/Game/Player/dragplacementtool.cpp:539 | DragPlacementTool_CalcPath | `self` | 14 |  |
-| code/Game/Player/dragtool.cpp:284 | DragTool_OnKey | `self` | 14 |  |
-| code/Game/Player/dragtool.cpp:355 | DragTool_OnKey | `self` | 13 |  |
-| code/Game/Player/dragtool.cpp:394 | DragTool_OnKey | `self` | 13 |  |
-| code/Game/Player/fencedtool_calcpath.cpp:337 | EdgeRun_db8c0 | `self` | 14 |  |
-| code/Game/Work/buildroad.cpp:284 | FinalizeAction | `self` | 10 |  |
-| code/Game/Work/consumeproduce.cpp:381 | FinalizeAction | `self` | 10 |  |
-| code/Game/Work/foresterwork.cpp:440 | AssignWorkToEntity | `self` | 10 |  |
-| code/Game/Work/herbalistwork.cpp:339 | AssignWorkToEntity | `self` | 10 |  |
+| src/game/Component/diseasecomponent.cpp:926 | CDTrace | `self` | 6 |  |
+| src/game/Component/storagedisplaycomponent.cpp:485 | StorageDisplayComponent_OnUpdate2 | `self` | 6 |  |
+| src/game/Dialog/cropui.cpp:70 | CropUI_IterateResources | `self` | 96 |  |
+| src/game/Dialog/cropui.cpp:77 | CropUI_IterateResources | `self` | 104 |  |
+| src/game/Dialog/pastureui.cpp:329 | PastureUI_Slot9 | `self` | 11 |  |
+| src/game/Dialog/professionui.cpp:535 | ProfessionUI_Slot5 | `self` | 8 |  |
+| src/game/Dialog/professionui.cpp:835 | ProfessionUI_HandleSpinner | `self` | 8 |  |
+| src/game/Dialog/storageui.cpp:173 | StorageUI_Serialize | `self` | 7 |  |
+| src/game/Player/dragplacementtool.cpp:539 | DragPlacementTool_CalcPath | `self` | 14 |  |
+| src/game/Player/dragtool.cpp:284 | DragTool_OnKey | `self` | 14 |  |
+| src/game/Player/dragtool.cpp:355 | DragTool_OnKey | `self` | 13 |  |
+| src/game/Player/dragtool.cpp:394 | DragTool_OnKey | `self` | 13 |  |
+| src/game/Player/fencedtool_calcpath.cpp:337 | EdgeRun_db8c0 | `self` | 14 |  |
+| src/game/Work/buildroad.cpp:284 | FinalizeAction | `self` | 10 |  |
+| src/game/Work/consumeproduce.cpp:381 | FinalizeAction | `self` | 10 |  |
+| src/game/Work/foresterwork.cpp:440 | AssignWorkToEntity | `self` | 10 |  |
+| src/game/Work/herbalistwork.cpp:339 | AssignWorkToEntity | `self` | 10 |  |
 
 ### A.3 TYPE-ARRAY — slot 2 `Type()` on an element of a component / description array (proved Object::Base-derived exe object; the scan is Type()==tid then IsDerivedFrom) — 220
 
 | site | fn | receiver | slot | producer |
 |---|---|---|---:|---|
-| code/Game/Action/action_pf_road.cpp:672 | Pf_EntityResolvePos_2e20 | `c` | 2 | *reinterpret_cast<void**>(arr + (int64_t)k * 8) |
-| code/Game/Action/createrawmaterial.cpp:180 | FindRawMaterialDesc | `comp` | 2 | *(void**)(compArray + (int64_t)i * 8) |
-| code/Game/Action/createrawmaterial.cpp:207 | FindComponentOnEntity | `comp` | 2 | *(void**)compIBP |
-| code/Game/Action/createrawmaterial.cpp:446 | CreateRawMaterial_AbstractImpl_Impl | `secComp` | 2 | *(void**)(*(uintptr_t*)(secDesc + 0x28) + (int64_t)i * 8) |
-| code/Game/Action/pickupstoredrawmaterial.cpp:134 | FindComponentByTypeId | `comp` | 2 | *compIBP |
-| code/Game/Action/sendcomponentmessage.cpp:195 | SendComponentMessage_AbstractImpl_Impl | `comp` | 2 | *(uintptr_t*)compIBP |
-| code/Game/Component/ambientenvironmentcomponent.cpp:201 | FindSiblingEmitter | `comp` | 2 | *ibp |
-| code/Game/Component/attendancecomponent.cpp:109 | AttendanceComponent_ReportMissingWorkplace | `c` | 2 | comps[i] |
-| code/Game/Component/attendancecomponent.cpp:262 | AttendanceComponent_GetJobHostComponent | `comp` | 2 | (void*)*slot |
-| code/Game/Component/boatcomponent_route.cpp:186 | ResolveOnce | `obj` | 2 | *reinterpret_cast<uintptr_t*>(slot) |
-| code/Game/Component/boatcomponent_route.cpp:251 | ResolveOnce | `obj` | 2 | *reinterpret_cast<uintptr_t*>(slot) |
-| code/Game/Component/buildcomponent.cpp:332 | BC_FindComponentByType | `comp` | 2 | (void*)*slot |
-| code/Game/Component/buildcomponent.cpp:510 | BuildComponent_FindStorage26a30 | `comp` | 2 | (void*)*slot |
-| code/Game/Component/buildcomponent_state1.cpp:84 | BCS1_FindRawMatDesc | `comp` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Component/buildcomponent_state1.cpp:128 | BCS1_IsModelComplete | `comp` | 2 | *slot |
-| code/Game/Component/buildcomponent_state8.cpp:600 | BuildComponent_State8Finalize | `c` | 2 | *reinterpret_cast<void**>(carr + (int64_t)i * 8) |
-| code/Game/Component/cemeterycomponent.cpp:400 | CemeteryComponent_InitFuncs | `c` | 2 | *slot |
-| code/Game/Component/charactercomponent.cpp:152 | CharComp_FindSiblingByName | `comp` | 2 | *ibp |
-| code/Game/Component/citizen_employ_cascade.cpp:98 | FindResidenceComp | `comp` | 2 | *reinterpret_cast<void**>(elem) |
-| code/Game/Component/citizen_lifeevent_handler.cpp:114 | CompTypeId | `comp` | 2 |  |
-| code/Game/Component/citizen_reassign_workers.cpp:130 | FindComponentDerived | `comp` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Component/citizen_reassign_workers.cpp:164 | FindComponentDerived | `param_3` | 2 |  |
-| code/Game/Component/citizen_updatehealth.cpp:677 | PlagueBootReport | `slot` | 2 | (void*)(found.data + (uintptr_t)i * 8) |
-| code/Game/Component/citizenai_findhelpers.cpp:140 | CompTypeId | `comp` | 2 |  |
-| code/Game/Component/citizenai_findtarget.cpp:103 | CompTypeId | `comp` | 2 |  |
-| code/Game/Component/citizenai_leisure.cpp:162 | VGetTypeId | `obj` | 2 | = nullptr) return 0xffffffff |
-| code/Game/Component/citizenaicomponent.cpp:713 | CitizenAI_FindSiblingCitizen | `comp` | 2 | *ibp |
-| code/Game/Component/citizencomponent.cpp:1249 | CitizenComponent_ShouldSwitchWorkplace | `comp` | 2 | *compSlot |
-| code/Game/Component/citizencomponent.cpp:2026 | StandaloneFindStorageComp | `comp` | 2 | *reinterpret_cast<void**>(arr + (uintptr_t)i * 8) |
-| code/Game/Component/citizencomponent.cpp:2994 | CitizenComp_FindSiblingByName | `comp` | 2 | *ibp |
-| code/Game/Component/clearareacomponent.cpp:237 | ClearAreaComponent::Persist | `c` | 2 | comps[i] |
-| code/Game/Component/clearareacomponent.cpp:238 | ClearAreaComponent::Persist | `c` | 2 | comps[i] |
-| code/Game/Component/clearareacomponent_states.cpp:164 | EntityHasNatResComp | `comp` | 2 | *slot |
-| code/Game/Component/clearareacomponent_states.cpp:165 | EntityHasNatResComp | `comp` | 2 | *slot |
-| code/Game/Component/clearareacomponent_states.cpp:296 | ClearArea_ScanKindFlags | `sub` | 2 | *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8) |
-| code/Game/Component/clearareacomponent_states.cpp:297 | ClearArea_ScanKindFlags | `sub` | 2 | *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8) |
-| code/Game/Component/clearareacomponent_states.cpp:313 | ClearArea_ScanKindFlags | `sub` | 2 | *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8) |
-| code/Game/Component/clearareacomponent_states.cpp:313 | ClearArea_ScanKindFlags | `rm` | 2 | *reinterpret_cast<void**>(rArr + static_cast<uintptr_t>(k) * 8) |
-| code/Game/Component/clearareacomponent_states.cpp:314 | ClearArea_ScanKindFlags | `sub` | 2 | *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8) |
-| code/Game/Component/clearareacomponent_states.cpp:314 | ClearArea_ScanKindFlags | `rm` | 2 | *reinterpret_cast<void**>(rArr + static_cast<uintptr_t>(k) * 8) |
-| code/Game/Component/consumeproduce_recipe_dump.cpp:82 | DescribeMaterial | `c` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8) |
-| code/Game/Component/consumeproducecomponent.cpp:180 | ConsumeProduceComponent_Serialize | `comp` | 2 | compArray[i] |
-| code/Game/Component/cropfieldcomponent.cpp:511 | CropFieldComponent_InitFuncs | `node` | 2 | *reinterpret_cast<void**>(sm) |
-| code/Game/Component/cropfieldcomponent.cpp:514 | CropFieldComponent_InitFuncs | `node` | 2 | *reinterpret_cast<void**>(sm) |
-| code/Game/Component/decalcomponent.cpp:232 | FindModelComponentOnOwner | `comp` | 2 | *slot |
-| code/Game/Component/decalcomponent.cpp:515 | DecalComponent::OnEvent | `comp` | 2 | *slot |
-| code/Game/Component/diseasecomponent.cpp:366 | CDTrace | `comp` | 2 | *slot |
-| code/Game/Component/firecomponent_ignite.cpp:571 | FireDesc | `*slot` | 2 |  |
-| code/Game/Component/floorcomponent.cpp:266 | FloorComponent_FindResData | `comp` | 2 | *slot |
-| code/Game/Component/floorcomponent.cpp:348 | FloorComponent_SubF390 | `c` | 2 | *reinterpret_cast<void**>(arr + (uintptr_t)k * 8) |
-| code/Game/Component/happinesscomponent.cpp:273 | FishingComponent_NotifyTile | `comp` | 2 | *(void**)(arr + (int64_t)i * 8) |
-| code/Game/Component/happinesscomponent.cpp:396 | HappinessComponent_InitFuncs | `c` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8) |
-| code/Game/Component/immigrationcomponent_states.cpp:180 | FindComponentByTid | `c` | 2 | *slot |
-| code/Game/Component/interactcomponent.cpp:176 | InteractComponent_FindWorkplaceComponent | `comp` | 2 | (void*)*slot |
-| code/Game/Component/interactcomponent.cpp:221 | InteractComponent_Draw | `comp` | 2 | (void*)*slot |
-| code/Game/Component/multiobjectcomponent.cpp:252 | MultiObject_FindComponent | `c` | 2 | *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Component/naturalresourcecomponent.cpp:152 | NaturalResourceComponent_FindComponentByType | `comp` | 2 | *slot |
-| code/Game/Component/nomadcomponent_states.cpp:98 | FindCharacter | `c` | 2 | *slot |
-| code/Game/Component/orchardcomponent.cpp:753 | TraceCanCommand | `node` | 2 | *reinterpret_cast<void**>(sm) |
-| code/Game/Component/orchardcomponent.cpp:755 | TraceCanCommand | `node` | 2 | *reinterpret_cast<void**>(sm) |
-| code/Game/Component/pasturecomponent_states.cpp:211 | FindCompOnEntity | `comp` | 2 | *slot |
-| code/Game/Component/pasturecomponent_states.cpp:227 | FindDescOnTemplate | `d` | 2 | *reinterpret_cast<void**>(arr + (uintptr_t)i * 8) |
-| code/Game/Component/pickingcomponent.cpp:128 | PC_FindModelComponent | `comp` | 2 | *slot |
-| code/Game/Component/pickingcomponent.cpp:227 | PickingComponent_RegisterMesh | `c` | 2 | *slot |
-| code/Game/Component/pickingcomponent.cpp:270 | PickingComponent_RegisterMeshForEntity | `comp` | 2 | *slot |
-| code/Game/Component/residence_heattick.cpp:153 | EnsureFns | `comp` | 2 | *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(j) * 8) |
-| code/Game/Component/resourceproduce_creatework.cpp:354 | WrapIBP | `c` | 2 | arr[i] |
-| code/Game/Component/resourceproducecomponent_states.cpp:308 | ResourceProduceComponent::Command | `node` | 2 | *reinterpret_cast<void**>(sm) |
-| code/Game/Component/resourceproducecomponent_states.cpp:310 | ResourceProduceComponent::Command | `node` | 2 | *reinterpret_cast<void**>(sm) |
-| code/Game/Component/spawncomponent.cpp:160 | SpawnComponent_Update | `comp` | 2 | *(void**)(*(uintptr_t*)(templateData + 0x28) + (uintptr_t)j * 8) |
-| code/Game/Component/spawncomponent.cpp:268 | SpawnComponent_InitialSpawn | `c` | 2 | *(void**)(compArr + (int64_t)j * 8) |
-| code/Game/Component/spawncomponent.cpp:512 | SpawnComponent_DoSpawn | `comp` | 2 | *(void**)(arr + (int64_t)i * 8) |
-| code/Game/Component/statemachinecomponent.cpp:572 | StateMachineComponent_LinkControllers_Standalone | `comp` | 2 | *ibp |
-| code/Game/Component/statusiconcomponent.cpp:581 | StatusIcon_FindCompByName | `comp` | 2 | *ibp |
-| code/Game/Component/storagecomponent.cpp:305 | FindRawMatDescription | `comp` | 2 | *(void**)(compArray + (uintptr_t)i * 8) |
-| code/Game/Component/storagedisplaycomponent.cpp:417 | StorageDisplayComponent_Update | `comp` | 2 | *(void**)(compArray + (uintptr_t)c * 8) |
-| code/Game/Component/tornadocomponent.cpp:660 | Tornado_StrikeEntityCounted | `slot` | 2 | reinterpret_cast<void*>(found.data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Component/tradecomponent_dock.cpp:817 | IntArrayPush | `node` | 2 | machine ? *reinterpret_cast<uintptr_t*>(machine) : 0 |
-| code/Game/Component/wellcomponent.cpp:350 | WellComp_RegisterEntity_91cb0 | `comp` | 2 | *reinterpret_cast<void**>(slot) |
-| code/Game/Component/wellcomponent.cpp:351 | WellComp_RegisterEntity_91cb0 | `comp` | 2 | *reinterpret_cast<void**>(slot) |
-| code/Game/Component/workplacecomponent.cpp:124 | WPC_FindJobHostComponent | `comp` | 2 | (void*)*slot |
-| code/Game/Dialog/buildrequirementui.cpp:75 | FindCompInDesc | `comp` | 2 | *(void**)(array + (uintptr_t)i * 8) |
-| code/Game/Dialog/buildrequirementui.cpp:77 | FindCompInDesc | `comp` | 2 | *(void**)(array + (uintptr_t)i * 8) |
-| code/Game/Dialog/buildui.cpp:238 | BuildUI_Slot4 | `comp` | 2 | *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8) |
-| code/Game/Dialog/cemeteryui.cpp:73 | CemeteryGetBurialCount_Impl | `comp` | 2 | (void*)compIPtr |
-| code/Game/Dialog/consumeproduceui.cpp:142 | ConsumeProduceUI_Slot4 | `subEntry` | 2 | *(void**)(subArray + (uintptr_t)j * 8) |
-| code/Game/Dialog/cropui.cpp:106 | CropUI_IterateResources | `subComp` | 16 | *(uintptr_t*)(subArray + (uintptr_t)j * 8) |
-| code/Game/Dialog/debugui.cpp:396 | Game_DestroyAllRawMaterials_Impl | `comp` | 2 | compArray[i] |
-| code/Game/Dialog/debugui.cpp:488 | Game_SpawnCitizens_Impl | `comp` | 2 | *pComp |
-| code/Game/Dialog/debugui.cpp:604 | Game_SpawnCitizens_Impl | `comp` | 2 | *pComp |
-| code/Game/Dialog/destroyui.cpp:134 | DestroyComp_CallBuildStateAction | `smPtr` | 2 | *(uintptr_t*)smPtrAddr |
-| code/Game/Dialog/destroyui.cpp:152 | DestroyComponent_Reclaim_Impl | `smPtr` | 2 | *(uintptr_t*)smPtrAddr |
-| code/Game/Dialog/destroyui.cpp:173 | DestroyComponent_Rebuild_Impl | `smPtr` | 2 | *(uintptr_t*)smPtrAddr |
-| code/Game/Dialog/destroyui.cpp:189 | DestroyComponent_Destroy_Impl | `smPtr` | 2 | *(uintptr_t*)smPtrAddr |
-| code/Game/Dialog/edittool_select.cpp:109 | EntityFindUIComponent | `comp` | 2 | *reinterpret_cast<void**>(slot) |
-| code/Game/Dialog/edittool_select.cpp:202 | EntityFindUIComponent | `item` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<uintptr_t |
-| code/Game/Dialog/entityui.cpp:79 | GetDescPage_Impl | `comp` | 2 | compArray ? compArray[i] : nullptr |
-| code/Game/Dialog/pastureui.cpp:69 | PastureCalcMaxCount_Impl | `comp` | 2 | (void*)compIPtr |
-| code/Game/Dialog/productionui.cpp:303 | UpdateProductionList | `subEntry` | 2 | *(void**)(subArray + (uintptr_t)j * 8) |
-| code/Game/Dialog/professionui.cpp:673 | ProfessionUI_Slot8 | `comp` | 2 | *(uintptr_t*)compIBP |
-| code/Game/Dialog/professionui.cpp:704 | ProfessionUI_Slot8 | `comp` | 2 | *(uintptr_t*)compIBP |
-| code/Game/Dialog/radiusui.cpp:68 | RadiusUI_Slot5 | `comp` | 2 | (void*)*(uint64_t*)(arrayBase + (uint64_t)i * 8) |
-| code/Game/Dialog/selectresourceui.cpp:118 | SelectResourceUI_IterateResources | `subComp` | 16 | *(uintptr_t*)(subArray + (uintptr_t)j * 8) |
-| code/Game/Dialog/statusbarui.cpp:238 | StatusBarUI_Startup | `comp` | 2 | compArray[j] |
-| code/Game/Dialog/statusbarui.cpp:534 | StatusBarUI_StatusIconHandler_Impl | `comp` | 2 | compArray[i] |
-| code/Game/Dialog/statusiconui.cpp:266 | StatusIconUI_FindStatusIconComp | `comp` | 2 | *ibp |
-| code/Game/Dialog/storageui.cpp:235 | StorageUI_Startup | `comp` | 2 | *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8) |
-| code/Game/Dialog/toolbardialog.cpp:200 | ToolbarDialog_UpdateButtons_Impl | `subItem` | 2 | *(void**)(*(uintptr_t*)(subData + 0x28) + (int64_t)j * 8) |
-| code/Game/Dialog/toolbardialog.cpp:390 | Toolbar_ShowGroup_Impl | `subItem` | 2 | *(void**)(*(uintptr_t*)(groupData + 0x28) + (uintptr_t)i * 8) |
-| code/Game/Dialog/toolbardialog.cpp:614 | Toolbar_Utility_Impl | `subItem` | 2 | *(void**)(*(uintptr_t*)(param + 0x28) + (int64_t)i * 8) |
-| code/Game/Dialog/toolbardialog.cpp:800 | HarnessDumpElemTree | `c` | 2 | ctrlArr[i] |
-| code/Game/Dialog/toolbardialog.cpp:1294 | DynArray4_Push | `subItem` | 2 | *(void**)(*(uintptr_t*)(entityDesc + 0x28) + (int64_t)j * 8) |
-| code/Game/Dialog/toolui.cpp:271 | ToolUI_Slot4 | `entry` | 2 | *(void**)(descArray + (uintptr_t)i * 8) |
-| code/Game/Dialog/toolui.cpp:335 | ToolUI_Slot4 | `entry` | 2 | *(void**)(descArray + (uintptr_t)i * 8) |
-| code/Game/Dialog/townhall_helpers.cpp:409 | FindWorkPlaceComp | `comp` | 2 | *(void**)slot |
-| code/Game/Dialog/townhallui.cpp:699 | TownHallUI_InitAgriculture | `subComp` | 2 | *(uintptr_t*)(subArray + (uintptr_t)j * 8) |
-| code/Game/Dialog/townhallui.cpp:1263 | TownHall_FindComponentByTypeId | `comp` | 2 | compArray[i] |
-| code/Game/Dialog/townhallui.cpp:1301 | TownHall_FindComponentByTypeId_CE | `comp` | 2 | *(void**)ibpSlot |
-| code/Game/Dialog/tradeui.cpp:205 | FindDescComponent | `comp` | 2 | arr[i] |
-| code/Game/Dialog/tradeui.cpp:341 | TradeUI_RefreshSellTable | `comp` | 2 | descArray[d] |
-| code/Game/Dialog/tradeui.cpp:353 | TradeUI_RefreshSellTable | `comp` | 2 | descArray[d] |
-| code/Game/Dialog/tradeui.cpp:393 | TradeUI_RefreshSellTable | `comp` | 2 | compArr[i] |
-| code/Game/Dialog/tradeui.cpp:1062 | TradeUI_Serialize | `comp` | 2 | compArray[c] |
-| code/Game/Dialog/tradeui.cpp:1332 | FindResourceValue | `comp` | 2 | compArray[k] |
-| code/Game/Dialog/tradeui.cpp:2400 | FindDescSubObject | `comp` | 2 | compArray[i] |
-| code/Game/Dialog/tradeui_buyentries.cpp:125 | FindComp | `comp` | 2 | arr[i] |
-| code/Game/Dialog/tradeui_price.cpp:76 | PriceFindComponentByTypeId | `comp` | 2 | arr[i] |
-| code/Game/Dialog/upgradeui.cpp:88 | UpgradeUI_Serialize | `comp` | 2 | *(void**)(compArray + (uintptr_t)i * 8) |
-| code/Game/Entity/citizenbehavior.cpp:916 | CitizenBehavior_CountResources | `comp` | 2 | compArray[i] |
-| code/Game/Entity/citizenbehavior.cpp:1048 | CitizenBehavior_CountResources | `comp` | 2 | compArray[i] |
-| code/Game/Entity/citizenbehavior.cpp:1048 | CitizenBehavior_CountResources | `subComp` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<i |
-| code/Game/Entity/citizenbehavior.cpp:1136 | CitizenBehavior_CountResources | `comp` | 2 | compArray[i] |
-| code/Game/Entity/citizenbehavior.cpp:1136 | CitizenBehavior_CountResources | `subComp` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<i |
-| code/Game/Entity/citizenbehavior.cpp:1705 | CitizenBehavior_FindIdle | `comp` | 2 | (uintptr_t)compIBP |
-| code/Game/Entity/citizenbehavior.cpp:1938 | CitizenBehavior_FindStudent | `comp` | 2 | (uintptr_t)compIBP |
-| code/Game/Entity/citizenbehavior.cpp:2021 | CitizenBehavior_FindStudent | `comp` | 2 | (uintptr_t)compIBP |
-| code/Game/Entity/componententity.cpp:487 | ComponentEntity::Persist | `c` | 2 | *(void**)ibpAddr |
-| code/Game/Entity/componententity.cpp:617 | ComponentEntity::Persist | `existComp` | 2 | *(uintptr_t*)existIBPAddr |
-| L code/Game/Game/citizenlist_serialize.cpp:830 | DWORD_1401c79e0_TypeId | `cand` | 2 | *slotPtr |
-| L code/Game/Game/founding_spawn.cpp:142 | FoundingSpawn_FindCitizenComp | `comp` | 2 | *slot |
-| L code/Game/Game/founding_spawn.cpp:173 | FoundingSpawn_FindCitizenComp | `desc` | 2 | *reinterpret_cast<void**>(arr + (uintptr_t)i * 8) |
-| L code/Game/Game/starttown.cpp:757 | FindComponentOnEntity | `comp` | 2 | *slot |
-| L code/Game/Game/starttown.cpp:776 | FindDescriptionOnTemplate | `desc` | 2 | *(void**)(arr + (uintptr_t)i * 8) |
-| L code/Game/Game/starttown.cpp:838 | StartTown_RunOnCreatePass | `comp` | 2 | *slot |
-| L code/Game/Game/town_workplace_registry.cpp:72 | FindComponentByTypeId | `comp` | 2 | = nullptr) { ++i |
-| code/Game/Player/bridgetool.cpp:73 | BridgeTool_Startup | `comp` | 2 | components[i] |
-| code/Game/Player/bridgetool_calcpath.cpp:120 | FindComponentOn | `comp` | 2 | *reinterpret_cast<void**>(slot) |
-| code/Game/Player/dragplacementtool.cpp:63 | FindComponentByTypeId | `comp` | 2 | components[i] |
-| code/Game/Player/edittool.cpp:257 | TryProjectEntityModelPos | `comp` | 2 | *(void**)slot |
-| code/Game/Player/fencedtool.cpp:784 | FencedFindComponent | `comp` | 2 | components[i] |
-| code/Game/Player/placementtool.cpp:941 | PlacementTool_Startup_Impl | `comp` | 2 | components[i] |
-| code/Game/Player/placementtool.cpp:1152 | PlacementTool::CreateInPlaceObject | `c` | 2 | comps[i] |
-| code/Game/Player/removaltool.cpp:71 | RemovalTool_Startup | `comp` | 2 | components[i] |
-| code/Game/Player/roadtool.cpp:163 | RoadTool_Startup | `comp` | 2 | components[i] |
-| code/Game/Player/roadtool_calcpath.cpp:107 | FindComponentByTypeId | `comp` | 2 | comps[i] |
-| code/Game/Player/tool_base_render.cpp:185 | Sub7080 | `comp` | 2 | *reinterpret_cast<void**>(slot) |
-| code/Game/Player/tool_base_render.cpp:218 | FindModelComp | `comp` | 2 | *reinterpret_cast<void**>(slot) |
-| code/Game/Player/tool_base_tile.cpp:215 | ToolTile_FindModelComponentScoped | `c` | 2 | *reinterpret_cast<void**>(arr + static_cast<long long>(k) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:761 | BstFind | `obj` | 2 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorialimagetoolbaricon.cpp:219 | TutorialImageToolbarIcon::CreateElement | `comp` | 2 | *(void**)(arrayData + i * 8) |
-| code/Game/Work/clearstorage.cpp:159 | ClearStorage::Execute | `comp` | 2 | *(void**)(compArray + (uintptr_t)j * 8) |
-| code/Game/Work/clearstorage.cpp:182 | ClearStorage::Execute | `comp` | 2 | *(void**)compIBP |
-| code/Game/Work/fishingwork.cpp:197 | FindComponentOnEntity | `comp` | 2 | *ibpSlot |
-| code/Game/Work/fishingwork.cpp:222 | FindComponentOnSubObject | `comp` | 2 | *(uintptr_t*)(arrayPtr + (uintptr_t)i * 8) |
-| code/Game/Work/fishingwork.cpp:606 | FishingWork::Execute | `comp` | 2 | *ibpSlot |
-| code/Game/Work/foresterwork.cpp:393 | FindComponentInList | `obj` | 2 | *ibpPtr |
-| code/Game/Work/foresterwork.cpp:416 | FindSubComponentInList | `obj` | 2 | *(uintptr_t*)(listBase + (uintptr_t)i * 8) |
-| code/Game/Work/gatherrawmaterials.cpp:312 | FindRawMaterialInList | `obj` | 2 | *(uintptr_t*)(arr + (uintptr_t)i * 8) |
-| code/Game/Work/herbalistwork.cpp:293 | FindComponentInList | `obj` | 2 | *ibpPtr |
-| code/Game/Work/herbalistwork.cpp:317 | FindSubComponentInList | `obj` | 2 | *(uintptr_t*)(listBase + (uintptr_t)i * 8) |
-| code/Game/Work/marketwork.cpp:700 | MW_FindComponentByTypeId | `comp` | 2 | *slot |
-| code/Game/Work/marketwork.cpp:825 | MW_FindChildByTypeId | `child` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<uintptr_t*>(o |
-| code/Game/Work/pickup_gate.cpp:89 | PG_FindCompByTid | `comp` | 2 | *slot |
-| code/Game/Work/pickup_gate.cpp:107 | PG_FindDescByTid | `d` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Work/work_act_hunt.cpp:252 | WorkAct_HuntWorkCtor_bbbc0 | `slot` | 2 | reinterpret_cast<void*>(arrBase + static_cast<intptr_t>(idx) * 8) |
+| src/game/Action/action_pf_road.cpp:672 | Pf_EntityResolvePos_2e20 | `c` | 2 | *reinterpret_cast<void**>(arr + (int64_t)k * 8) |
+| src/game/Action/createrawmaterial.cpp:180 | FindRawMaterialDesc | `comp` | 2 | *(void**)(compArray + (int64_t)i * 8) |
+| src/game/Action/createrawmaterial.cpp:207 | FindComponentOnEntity | `comp` | 2 | *(void**)compIBP |
+| src/game/Action/createrawmaterial.cpp:446 | CreateRawMaterial_AbstractImpl_Impl | `secComp` | 2 | *(void**)(*(uintptr_t*)(secDesc + 0x28) + (int64_t)i * 8) |
+| src/game/Action/pickupstoredrawmaterial.cpp:134 | FindComponentByTypeId | `comp` | 2 | *compIBP |
+| src/game/Action/sendcomponentmessage.cpp:195 | SendComponentMessage_AbstractImpl_Impl | `comp` | 2 | *(uintptr_t*)compIBP |
+| src/game/Component/ambientenvironmentcomponent.cpp:201 | FindSiblingEmitter | `comp` | 2 | *ibp |
+| src/game/Component/attendancecomponent.cpp:109 | AttendanceComponent_ReportMissingWorkplace | `c` | 2 | comps[i] |
+| src/game/Component/attendancecomponent.cpp:262 | AttendanceComponent_GetJobHostComponent | `comp` | 2 | (void*)*slot |
+| src/game/Component/boatcomponent_route.cpp:186 | ResolveOnce | `obj` | 2 | *reinterpret_cast<uintptr_t*>(slot) |
+| src/game/Component/boatcomponent_route.cpp:251 | ResolveOnce | `obj` | 2 | *reinterpret_cast<uintptr_t*>(slot) |
+| src/game/Component/buildcomponent.cpp:332 | BC_FindComponentByType | `comp` | 2 | (void*)*slot |
+| src/game/Component/buildcomponent.cpp:510 | BuildComponent_FindStorage26a30 | `comp` | 2 | (void*)*slot |
+| src/game/Component/buildcomponent_state1.cpp:84 | BCS1_FindRawMatDesc | `comp` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8) |
+| src/game/Component/buildcomponent_state1.cpp:128 | BCS1_IsModelComplete | `comp` | 2 | *slot |
+| src/game/Component/buildcomponent_state8.cpp:600 | BuildComponent_State8Finalize | `c` | 2 | *reinterpret_cast<void**>(carr + (int64_t)i * 8) |
+| src/game/Component/cemeterycomponent.cpp:400 | CemeteryComponent_InitFuncs | `c` | 2 | *slot |
+| src/game/Component/charactercomponent.cpp:152 | CharComp_FindSiblingByName | `comp` | 2 | *ibp |
+| src/game/Component/citizen_employ_cascade.cpp:98 | FindResidenceComp | `comp` | 2 | *reinterpret_cast<void**>(elem) |
+| src/game/Component/citizen_lifeevent_handler.cpp:114 | CompTypeId | `comp` | 2 |  |
+| src/game/Component/citizen_reassign_workers.cpp:130 | FindComponentDerived | `comp` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8) |
+| src/game/Component/citizen_reassign_workers.cpp:164 | FindComponentDerived | `param_3` | 2 |  |
+| src/game/Component/citizen_updatehealth.cpp:677 | PlagueBootReport | `slot` | 2 | (void*)(found.data + (uintptr_t)i * 8) |
+| src/game/Component/citizenai_findhelpers.cpp:140 | CompTypeId | `comp` | 2 |  |
+| src/game/Component/citizenai_findtarget.cpp:103 | CompTypeId | `comp` | 2 |  |
+| src/game/Component/citizenai_leisure.cpp:162 | VGetTypeId | `obj` | 2 | = nullptr) return 0xffffffff |
+| src/game/Component/citizenaicomponent.cpp:713 | CitizenAI_FindSiblingCitizen | `comp` | 2 | *ibp |
+| src/game/Component/citizencomponent.cpp:1249 | CitizenComponent_ShouldSwitchWorkplace | `comp` | 2 | *compSlot |
+| src/game/Component/citizencomponent.cpp:2026 | StandaloneFindStorageComp | `comp` | 2 | *reinterpret_cast<void**>(arr + (uintptr_t)i * 8) |
+| src/game/Component/citizencomponent.cpp:2994 | CitizenComp_FindSiblingByName | `comp` | 2 | *ibp |
+| src/game/Component/clearareacomponent.cpp:237 | ClearAreaComponent::Persist | `c` | 2 | comps[i] |
+| src/game/Component/clearareacomponent.cpp:238 | ClearAreaComponent::Persist | `c` | 2 | comps[i] |
+| src/game/Component/clearareacomponent_states.cpp:164 | EntityHasNatResComp | `comp` | 2 | *slot |
+| src/game/Component/clearareacomponent_states.cpp:165 | EntityHasNatResComp | `comp` | 2 | *slot |
+| src/game/Component/clearareacomponent_states.cpp:296 | ClearArea_ScanKindFlags | `sub` | 2 | *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8) |
+| src/game/Component/clearareacomponent_states.cpp:297 | ClearArea_ScanKindFlags | `sub` | 2 | *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8) |
+| src/game/Component/clearareacomponent_states.cpp:313 | ClearArea_ScanKindFlags | `sub` | 2 | *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8) |
+| src/game/Component/clearareacomponent_states.cpp:313 | ClearArea_ScanKindFlags | `rm` | 2 | *reinterpret_cast<void**>(rArr + static_cast<uintptr_t>(k) * 8) |
+| src/game/Component/clearareacomponent_states.cpp:314 | ClearArea_ScanKindFlags | `sub` | 2 | *reinterpret_cast<void**>(subArr + static_cast<uintptr_t>(j) * 8) |
+| src/game/Component/clearareacomponent_states.cpp:314 | ClearArea_ScanKindFlags | `rm` | 2 | *reinterpret_cast<void**>(rArr + static_cast<uintptr_t>(k) * 8) |
+| src/game/Component/consumeproduce_recipe_dump.cpp:82 | DescribeMaterial | `c` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8) |
+| src/game/Component/consumeproducecomponent.cpp:180 | ConsumeProduceComponent_Serialize | `comp` | 2 | compArray[i] |
+| src/game/Component/cropfieldcomponent.cpp:511 | CropFieldComponent_InitFuncs | `node` | 2 | *reinterpret_cast<void**>(sm) |
+| src/game/Component/cropfieldcomponent.cpp:514 | CropFieldComponent_InitFuncs | `node` | 2 | *reinterpret_cast<void**>(sm) |
+| src/game/Component/decalcomponent.cpp:232 | FindModelComponentOnOwner | `comp` | 2 | *slot |
+| src/game/Component/decalcomponent.cpp:515 | DecalComponent::OnEvent | `comp` | 2 | *slot |
+| src/game/Component/diseasecomponent.cpp:366 | CDTrace | `comp` | 2 | *slot |
+| src/game/Component/firecomponent_ignite.cpp:571 | FireDesc | `*slot` | 2 |  |
+| src/game/Component/floorcomponent.cpp:266 | FloorComponent_FindResData | `comp` | 2 | *slot |
+| src/game/Component/floorcomponent.cpp:348 | FloorComponent_SubF390 | `c` | 2 | *reinterpret_cast<void**>(arr + (uintptr_t)k * 8) |
+| src/game/Component/happinesscomponent.cpp:273 | FishingComponent_NotifyTile | `comp` | 2 | *(void**)(arr + (int64_t)i * 8) |
+| src/game/Component/happinesscomponent.cpp:396 | HappinessComponent_InitFuncs | `c` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(j) * 8) |
+| src/game/Component/immigrationcomponent_states.cpp:180 | FindComponentByTid | `c` | 2 | *slot |
+| src/game/Component/interactcomponent.cpp:176 | InteractComponent_FindWorkplaceComponent | `comp` | 2 | (void*)*slot |
+| src/game/Component/interactcomponent.cpp:221 | InteractComponent_Draw | `comp` | 2 | (void*)*slot |
+| src/game/Component/multiobjectcomponent.cpp:252 | MultiObject_FindComponent | `c` | 2 | *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(i) * 8) |
+| src/game/Component/naturalresourcecomponent.cpp:152 | NaturalResourceComponent_FindComponentByType | `comp` | 2 | *slot |
+| src/game/Component/nomadcomponent_states.cpp:98 | FindCharacter | `c` | 2 | *slot |
+| src/game/Component/orchardcomponent.cpp:753 | TraceCanCommand | `node` | 2 | *reinterpret_cast<void**>(sm) |
+| src/game/Component/orchardcomponent.cpp:755 | TraceCanCommand | `node` | 2 | *reinterpret_cast<void**>(sm) |
+| src/game/Component/pasturecomponent_states.cpp:211 | FindCompOnEntity | `comp` | 2 | *slot |
+| src/game/Component/pasturecomponent_states.cpp:227 | FindDescOnTemplate | `d` | 2 | *reinterpret_cast<void**>(arr + (uintptr_t)i * 8) |
+| src/game/Component/pickingcomponent.cpp:128 | PC_FindModelComponent | `comp` | 2 | *slot |
+| src/game/Component/pickingcomponent.cpp:227 | PickingComponent_RegisterMesh | `c` | 2 | *slot |
+| src/game/Component/pickingcomponent.cpp:270 | PickingComponent_RegisterMeshForEntity | `comp` | 2 | *slot |
+| src/game/Component/residence_heattick.cpp:153 | EnsureFns | `comp` | 2 | *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(j) * 8) |
+| src/game/Component/resourceproduce_creatework.cpp:354 | WrapIBP | `c` | 2 | arr[i] |
+| src/game/Component/resourceproducecomponent_states.cpp:308 | ResourceProduceComponent::Command | `node` | 2 | *reinterpret_cast<void**>(sm) |
+| src/game/Component/resourceproducecomponent_states.cpp:310 | ResourceProduceComponent::Command | `node` | 2 | *reinterpret_cast<void**>(sm) |
+| src/game/Component/spawncomponent.cpp:160 | SpawnComponent_Update | `comp` | 2 | *(void**)(*(uintptr_t*)(templateData + 0x28) + (uintptr_t)j * 8) |
+| src/game/Component/spawncomponent.cpp:268 | SpawnComponent_InitialSpawn | `c` | 2 | *(void**)(compArr + (int64_t)j * 8) |
+| src/game/Component/spawncomponent.cpp:512 | SpawnComponent_DoSpawn | `comp` | 2 | *(void**)(arr + (int64_t)i * 8) |
+| src/game/Component/statemachinecomponent.cpp:572 | StateMachineComponent_LinkControllers_Standalone | `comp` | 2 | *ibp |
+| src/game/Component/statusiconcomponent.cpp:581 | StatusIcon_FindCompByName | `comp` | 2 | *ibp |
+| src/game/Component/storagecomponent.cpp:305 | FindRawMatDescription | `comp` | 2 | *(void**)(compArray + (uintptr_t)i * 8) |
+| src/game/Component/storagedisplaycomponent.cpp:417 | StorageDisplayComponent_Update | `comp` | 2 | *(void**)(compArray + (uintptr_t)c * 8) |
+| src/game/Component/tornadocomponent.cpp:660 | Tornado_StrikeEntityCounted | `slot` | 2 | reinterpret_cast<void*>(found.data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Component/tradecomponent_dock.cpp:817 | IntArrayPush | `node` | 2 | machine ? *reinterpret_cast<uintptr_t*>(machine) : 0 |
+| src/game/Component/wellcomponent.cpp:350 | WellComp_RegisterEntity_91cb0 | `comp` | 2 | *reinterpret_cast<void**>(slot) |
+| src/game/Component/wellcomponent.cpp:351 | WellComp_RegisterEntity_91cb0 | `comp` | 2 | *reinterpret_cast<void**>(slot) |
+| src/game/Component/workplacecomponent.cpp:124 | WPC_FindJobHostComponent | `comp` | 2 | (void*)*slot |
+| src/game/Dialog/buildrequirementui.cpp:75 | FindCompInDesc | `comp` | 2 | *(void**)(array + (uintptr_t)i * 8) |
+| src/game/Dialog/buildrequirementui.cpp:77 | FindCompInDesc | `comp` | 2 | *(void**)(array + (uintptr_t)i * 8) |
+| src/game/Dialog/buildui.cpp:238 | BuildUI_Slot4 | `comp` | 2 | *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8) |
+| src/game/Dialog/cemeteryui.cpp:73 | CemeteryGetBurialCount_Impl | `comp` | 2 | (void*)compIPtr |
+| src/game/Dialog/consumeproduceui.cpp:142 | ConsumeProduceUI_Slot4 | `subEntry` | 2 | *(void**)(subArray + (uintptr_t)j * 8) |
+| src/game/Dialog/cropui.cpp:106 | CropUI_IterateResources | `subComp` | 16 | *(uintptr_t*)(subArray + (uintptr_t)j * 8) |
+| src/game/Dialog/debugui.cpp:396 | Game_DestroyAllRawMaterials_Impl | `comp` | 2 | compArray[i] |
+| src/game/Dialog/debugui.cpp:488 | Game_SpawnCitizens_Impl | `comp` | 2 | *pComp |
+| src/game/Dialog/debugui.cpp:604 | Game_SpawnCitizens_Impl | `comp` | 2 | *pComp |
+| src/game/Dialog/destroyui.cpp:134 | DestroyComp_CallBuildStateAction | `smPtr` | 2 | *(uintptr_t*)smPtrAddr |
+| src/game/Dialog/destroyui.cpp:152 | DestroyComponent_Reclaim_Impl | `smPtr` | 2 | *(uintptr_t*)smPtrAddr |
+| src/game/Dialog/destroyui.cpp:173 | DestroyComponent_Rebuild_Impl | `smPtr` | 2 | *(uintptr_t*)smPtrAddr |
+| src/game/Dialog/destroyui.cpp:189 | DestroyComponent_Destroy_Impl | `smPtr` | 2 | *(uintptr_t*)smPtrAddr |
+| src/game/Dialog/edittool_select.cpp:109 | EntityFindUIComponent | `comp` | 2 | *reinterpret_cast<void**>(slot) |
+| src/game/Dialog/edittool_select.cpp:202 | EntityFindUIComponent | `item` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<uintptr_t |
+| src/game/Dialog/entityui.cpp:79 | GetDescPage_Impl | `comp` | 2 | compArray ? compArray[i] : nullptr |
+| src/game/Dialog/pastureui.cpp:69 | PastureCalcMaxCount_Impl | `comp` | 2 | (void*)compIPtr |
+| src/game/Dialog/productionui.cpp:303 | UpdateProductionList | `subEntry` | 2 | *(void**)(subArray + (uintptr_t)j * 8) |
+| src/game/Dialog/professionui.cpp:673 | ProfessionUI_Slot8 | `comp` | 2 | *(uintptr_t*)compIBP |
+| src/game/Dialog/professionui.cpp:704 | ProfessionUI_Slot8 | `comp` | 2 | *(uintptr_t*)compIBP |
+| src/game/Dialog/radiusui.cpp:68 | RadiusUI_Slot5 | `comp` | 2 | (void*)*(uint64_t*)(arrayBase + (uint64_t)i * 8) |
+| src/game/Dialog/selectresourceui.cpp:118 | SelectResourceUI_IterateResources | `subComp` | 16 | *(uintptr_t*)(subArray + (uintptr_t)j * 8) |
+| src/game/Dialog/statusbarui.cpp:238 | StatusBarUI_Startup | `comp` | 2 | compArray[j] |
+| src/game/Dialog/statusbarui.cpp:534 | StatusBarUI_StatusIconHandler_Impl | `comp` | 2 | compArray[i] |
+| src/game/Dialog/statusiconui.cpp:266 | StatusIconUI_FindStatusIconComp | `comp` | 2 | *ibp |
+| src/game/Dialog/storageui.cpp:235 | StorageUI_Startup | `comp` | 2 | *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8) |
+| src/game/Dialog/toolbardialog.cpp:200 | ToolbarDialog_UpdateButtons_Impl | `subItem` | 2 | *(void**)(*(uintptr_t*)(subData + 0x28) + (int64_t)j * 8) |
+| src/game/Dialog/toolbardialog.cpp:390 | Toolbar_ShowGroup_Impl | `subItem` | 2 | *(void**)(*(uintptr_t*)(groupData + 0x28) + (uintptr_t)i * 8) |
+| src/game/Dialog/toolbardialog.cpp:614 | Toolbar_Utility_Impl | `subItem` | 2 | *(void**)(*(uintptr_t*)(param + 0x28) + (int64_t)i * 8) |
+| src/game/Dialog/toolbardialog.cpp:800 | HarnessDumpElemTree | `c` | 2 | ctrlArr[i] |
+| src/game/Dialog/toolbardialog.cpp:1294 | DynArray4_Push | `subItem` | 2 | *(void**)(*(uintptr_t*)(entityDesc + 0x28) + (int64_t)j * 8) |
+| src/game/Dialog/toolui.cpp:271 | ToolUI_Slot4 | `entry` | 2 | *(void**)(descArray + (uintptr_t)i * 8) |
+| src/game/Dialog/toolui.cpp:335 | ToolUI_Slot4 | `entry` | 2 | *(void**)(descArray + (uintptr_t)i * 8) |
+| src/game/Dialog/townhall_helpers.cpp:409 | FindWorkPlaceComp | `comp` | 2 | *(void**)slot |
+| src/game/Dialog/townhallui.cpp:699 | TownHallUI_InitAgriculture | `subComp` | 2 | *(uintptr_t*)(subArray + (uintptr_t)j * 8) |
+| src/game/Dialog/townhallui.cpp:1263 | TownHall_FindComponentByTypeId | `comp` | 2 | compArray[i] |
+| src/game/Dialog/townhallui.cpp:1301 | TownHall_FindComponentByTypeId_CE | `comp` | 2 | *(void**)ibpSlot |
+| src/game/Dialog/tradeui.cpp:205 | FindDescComponent | `comp` | 2 | arr[i] |
+| src/game/Dialog/tradeui.cpp:341 | TradeUI_RefreshSellTable | `comp` | 2 | descArray[d] |
+| src/game/Dialog/tradeui.cpp:353 | TradeUI_RefreshSellTable | `comp` | 2 | descArray[d] |
+| src/game/Dialog/tradeui.cpp:393 | TradeUI_RefreshSellTable | `comp` | 2 | compArr[i] |
+| src/game/Dialog/tradeui.cpp:1062 | TradeUI_Serialize | `comp` | 2 | compArray[c] |
+| src/game/Dialog/tradeui.cpp:1332 | FindResourceValue | `comp` | 2 | compArray[k] |
+| src/game/Dialog/tradeui.cpp:2400 | FindDescSubObject | `comp` | 2 | compArray[i] |
+| src/game/Dialog/tradeui_buyentries.cpp:125 | FindComp | `comp` | 2 | arr[i] |
+| src/game/Dialog/tradeui_price.cpp:76 | PriceFindComponentByTypeId | `comp` | 2 | arr[i] |
+| src/game/Dialog/upgradeui.cpp:88 | UpgradeUI_Serialize | `comp` | 2 | *(void**)(compArray + (uintptr_t)i * 8) |
+| src/game/Entity/citizenbehavior.cpp:916 | CitizenBehavior_CountResources | `comp` | 2 | compArray[i] |
+| src/game/Entity/citizenbehavior.cpp:1048 | CitizenBehavior_CountResources | `comp` | 2 | compArray[i] |
+| src/game/Entity/citizenbehavior.cpp:1048 | CitizenBehavior_CountResources | `subComp` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<i |
+| src/game/Entity/citizenbehavior.cpp:1136 | CitizenBehavior_CountResources | `comp` | 2 | compArray[i] |
+| src/game/Entity/citizenbehavior.cpp:1136 | CitizenBehavior_CountResources | `subComp` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<i |
+| src/game/Entity/citizenbehavior.cpp:1705 | CitizenBehavior_FindIdle | `comp` | 2 | (uintptr_t)compIBP |
+| src/game/Entity/citizenbehavior.cpp:1938 | CitizenBehavior_FindStudent | `comp` | 2 | (uintptr_t)compIBP |
+| src/game/Entity/citizenbehavior.cpp:2021 | CitizenBehavior_FindStudent | `comp` | 2 | (uintptr_t)compIBP |
+| src/game/Entity/componententity.cpp:487 | ComponentEntity::Persist | `c` | 2 | *(void**)ibpAddr |
+| src/game/Entity/componententity.cpp:617 | ComponentEntity::Persist | `existComp` | 2 | *(uintptr_t*)existIBPAddr |
+| L src/game/Game/citizenlist_serialize.cpp:830 | DWORD_1401c79e0_TypeId | `cand` | 2 | *slotPtr |
+| L src/game/Game/founding_spawn.cpp:142 | FoundingSpawn_FindCitizenComp | `comp` | 2 | *slot |
+| L src/game/Game/founding_spawn.cpp:173 | FoundingSpawn_FindCitizenComp | `desc` | 2 | *reinterpret_cast<void**>(arr + (uintptr_t)i * 8) |
+| L src/game/Game/starttown.cpp:757 | FindComponentOnEntity | `comp` | 2 | *slot |
+| L src/game/Game/starttown.cpp:776 | FindDescriptionOnTemplate | `desc` | 2 | *(void**)(arr + (uintptr_t)i * 8) |
+| L src/game/Game/starttown.cpp:838 | StartTown_RunOnCreatePass | `comp` | 2 | *slot |
+| L src/game/Game/town_workplace_registry.cpp:72 | FindComponentByTypeId | `comp` | 2 | = nullptr) { ++i |
+| src/game/Player/bridgetool.cpp:73 | BridgeTool_Startup | `comp` | 2 | components[i] |
+| src/game/Player/bridgetool_calcpath.cpp:120 | FindComponentOn | `comp` | 2 | *reinterpret_cast<void**>(slot) |
+| src/game/Player/dragplacementtool.cpp:63 | FindComponentByTypeId | `comp` | 2 | components[i] |
+| src/game/Player/edittool.cpp:257 | TryProjectEntityModelPos | `comp` | 2 | *(void**)slot |
+| src/game/Player/fencedtool.cpp:784 | FencedFindComponent | `comp` | 2 | components[i] |
+| src/game/Player/placementtool.cpp:941 | PlacementTool_Startup_Impl | `comp` | 2 | components[i] |
+| src/game/Player/placementtool.cpp:1152 | PlacementTool::CreateInPlaceObject | `c` | 2 | comps[i] |
+| src/game/Player/removaltool.cpp:71 | RemovalTool_Startup | `comp` | 2 | components[i] |
+| src/game/Player/roadtool.cpp:163 | RoadTool_Startup | `comp` | 2 | components[i] |
+| src/game/Player/roadtool_calcpath.cpp:107 | FindComponentByTypeId | `comp` | 2 | comps[i] |
+| src/game/Player/tool_base_render.cpp:185 | Sub7080 | `comp` | 2 | *reinterpret_cast<void**>(slot) |
+| src/game/Player/tool_base_render.cpp:218 | FindModelComp | `comp` | 2 | *reinterpret_cast<void**>(slot) |
+| src/game/Player/tool_base_tile.cpp:215 | ToolTile_FindModelComponentScoped | `c` | 2 | *reinterpret_cast<void**>(arr + static_cast<long long>(k) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:761 | BstFind | `obj` | 2 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorialimagetoolbaricon.cpp:219 | TutorialImageToolbarIcon::CreateElement | `comp` | 2 | *(void**)(arrayData + i * 8) |
+| src/game/Work/clearstorage.cpp:159 | ClearStorage::Execute | `comp` | 2 | *(void**)(compArray + (uintptr_t)j * 8) |
+| src/game/Work/clearstorage.cpp:182 | ClearStorage::Execute | `comp` | 2 | *(void**)compIBP |
+| src/game/Work/fishingwork.cpp:197 | FindComponentOnEntity | `comp` | 2 | *ibpSlot |
+| src/game/Work/fishingwork.cpp:222 | FindComponentOnSubObject | `comp` | 2 | *(uintptr_t*)(arrayPtr + (uintptr_t)i * 8) |
+| src/game/Work/fishingwork.cpp:606 | FishingWork::Execute | `comp` | 2 | *ibpSlot |
+| src/game/Work/foresterwork.cpp:393 | FindComponentInList | `obj` | 2 | *ibpPtr |
+| src/game/Work/foresterwork.cpp:416 | FindSubComponentInList | `obj` | 2 | *(uintptr_t*)(listBase + (uintptr_t)i * 8) |
+| src/game/Work/gatherrawmaterials.cpp:312 | FindRawMaterialInList | `obj` | 2 | *(uintptr_t*)(arr + (uintptr_t)i * 8) |
+| src/game/Work/herbalistwork.cpp:293 | FindComponentInList | `obj` | 2 | *ibpPtr |
+| src/game/Work/herbalistwork.cpp:317 | FindSubComponentInList | `obj` | 2 | *(uintptr_t*)(listBase + (uintptr_t)i * 8) |
+| src/game/Work/marketwork.cpp:700 | MW_FindComponentByTypeId | `comp` | 2 | *slot |
+| src/game/Work/marketwork.cpp:825 | MW_FindChildByTypeId | `child` | 2 | *reinterpret_cast<void**>( *reinterpret_cast<uintptr_t*>(o |
+| src/game/Work/pickup_gate.cpp:89 | PG_FindCompByTid | `comp` | 2 | *slot |
+| src/game/Work/pickup_gate.cpp:107 | PG_FindDescByTid | `d` | 2 | *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8) |
+| src/game/Work/work_act_hunt.cpp:252 | WorkAct_HuntWorkCtor_bbbc0 | `slot` | 2 | reinterpret_cast<void*>(arrBase + static_cast<intptr_t>(idx) * 8) |
 | engine/funcs/engine_funcs.cpp:770 | Entity_FindComponentByExeTypeId | `comp` | 2 | compArray[i] |
 | engine/funcs/engine_funcs.h:602 | fn_StorageComponent_QueryCount | `comp` | 2 | *(void**)(compArray + (uintptr_t)j * 8) |
 | engine/funcs/engine_funcs.h:681 | FindComponentByTypeId | `compPtr` | 2 | *(void**)(arr + (uintptr_t)i * 8) |
@@ -576,30 +576,30 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | site | fn | receiver | slot | producer |
 |---|---|---|---:|---|
-| code/Game/Component/boatcomponent_route.cpp:413 | TileInMap | `owner` | 2 | *ownerSlot |
-| code/Game/Component/boatcomponent_states.cpp:275 | PostEventToDestination | `node` | 2 | *reinterpret_cast<void**>(smc + 0x48) |
-| code/Game/Component/boatcomponent_states.cpp:278 | PostEventToDestination | `node` | 2 | *reinterpret_cast<void**>(smc + 0x48) |
-| code/Game/Component/citizen_updatehealth.cpp:422 | PlagueBootReport | `comp` | 2 | *(uintptr_t*)compSlot |
-| code/Game/Component/consumeproduce_recipe_dump.cpp:58 | IsRawMat | `c` | 2 |  |
-| code/Game/Component/immigrationcomponent_states.cpp:200 | PostEventToEntity | `node` | 2 | *reinterpret_cast<void**>(smc + 0x48) |
-| code/Game/Component/nomadcomponent_states.cpp:185 | Idle | `node` | 2 | *reinterpret_cast<void**>(smc + 0x48) |
-| code/Game/Dialog/immigrationui.cpp:215 | ImmigrationUI_Slot9 | `smObj` | 2 | *(void**)(bsPtr + 0x48) |
-| code/Game/Dialog/tradeui.cpp:2011 | TradeUI_OnDismissButton | `obj` | 2 | *(void**)(buildState + 0x48) |
-| L code/Game/Game/force_work.cpp:89 | SafeGetTypeId | `obj` | 2 |  |
-| L code/Game/Game/force_work.cpp:90 | SafeGetTypeId | `obj` | 2 |  |
-| L code/Game/Game/town_storage_seed.cpp:125 | GetTypeIdOf | `obj` | 2 |  |
-| code/Game/Tutorial/tutorialhighlightdialog.cpp:301 | TutHLDiag | `obj` | 2 |  |
-| code/Game/Work/work_act_clear.cpp:227 | WorkAct_HarvestAreaCtor_c1530 | `param_4` | 2 |  |
-| code/Game/Work/work_act_clear.cpp:256 | WorkAct_HarvestAreaCtor_c1530 | `param_1` | 2 |  |
-| code/Game/Work/work_act_clear.cpp:298 | WorkAct_HarvestAreaCtor_c1530 | `param_4` | 2 |  |
-| code/Game/Work/work_act_clear.cpp:384 | WorkAct_HarvestAreaCtor_c1530 | `param_1` | 2 |  |
-| code/Game/Work/work_act_consume.cpp:275 | WorkAct_ConsumeProduceCtor_bef70 | `param_1` | 2 |  |
-| code/Game/Work/work_act_consume.cpp:303 | WorkAct_ConsumeProduceCtor_bef70 | `param_1` | 2 |  |
-| code/Game/Work/work_act_consume.cpp:446 | WorkAct_ConsumeProduceCtor_bef70 | `param_1` | 2 |  |
-| code/Game/Work/work_act_path.cpp:225 | WAP2_MakeTime | `entity` | 2 |  |
-| code/Game/Work/work_act_path.cpp:246 | WAP2_MakeTime | `entity` | 2 |  |
-| code/Game/Work/work_act_path.cpp:366 | WAP2_MakeTime | `entity` | 2 |  |
-| code/Game/Work/work_act_path.cpp:476 | WAP2_MakeTime | `entity` | 2 |  |
+| src/game/Component/boatcomponent_route.cpp:413 | TileInMap | `owner` | 2 | *ownerSlot |
+| src/game/Component/boatcomponent_states.cpp:275 | PostEventToDestination | `node` | 2 | *reinterpret_cast<void**>(smc + 0x48) |
+| src/game/Component/boatcomponent_states.cpp:278 | PostEventToDestination | `node` | 2 | *reinterpret_cast<void**>(smc + 0x48) |
+| src/game/Component/citizen_updatehealth.cpp:422 | PlagueBootReport | `comp` | 2 | *(uintptr_t*)compSlot |
+| src/game/Component/consumeproduce_recipe_dump.cpp:58 | IsRawMat | `c` | 2 |  |
+| src/game/Component/immigrationcomponent_states.cpp:200 | PostEventToEntity | `node` | 2 | *reinterpret_cast<void**>(smc + 0x48) |
+| src/game/Component/nomadcomponent_states.cpp:185 | Idle | `node` | 2 | *reinterpret_cast<void**>(smc + 0x48) |
+| src/game/Dialog/immigrationui.cpp:215 | ImmigrationUI_Slot9 | `smObj` | 2 | *(void**)(bsPtr + 0x48) |
+| src/game/Dialog/tradeui.cpp:2011 | TradeUI_OnDismissButton | `obj` | 2 | *(void**)(buildState + 0x48) |
+| L src/game/Game/force_work.cpp:89 | SafeGetTypeId | `obj` | 2 |  |
+| L src/game/Game/force_work.cpp:90 | SafeGetTypeId | `obj` | 2 |  |
+| L src/game/Game/town_storage_seed.cpp:125 | GetTypeIdOf | `obj` | 2 |  |
+| src/game/Tutorial/tutorialhighlightdialog.cpp:301 | TutHLDiag | `obj` | 2 |  |
+| src/game/Work/work_act_clear.cpp:227 | WorkAct_HarvestAreaCtor_c1530 | `param_4` | 2 |  |
+| src/game/Work/work_act_clear.cpp:256 | WorkAct_HarvestAreaCtor_c1530 | `param_1` | 2 |  |
+| src/game/Work/work_act_clear.cpp:298 | WorkAct_HarvestAreaCtor_c1530 | `param_4` | 2 |  |
+| src/game/Work/work_act_clear.cpp:384 | WorkAct_HarvestAreaCtor_c1530 | `param_1` | 2 |  |
+| src/game/Work/work_act_consume.cpp:275 | WorkAct_ConsumeProduceCtor_bef70 | `param_1` | 2 |  |
+| src/game/Work/work_act_consume.cpp:303 | WorkAct_ConsumeProduceCtor_bef70 | `param_1` | 2 |  |
+| src/game/Work/work_act_consume.cpp:446 | WorkAct_ConsumeProduceCtor_bef70 | `param_1` | 2 |  |
+| src/game/Work/work_act_path.cpp:225 | WAP2_MakeTime | `entity` | 2 |  |
+| src/game/Work/work_act_path.cpp:246 | WAP2_MakeTime | `entity` | 2 |  |
+| src/game/Work/work_act_path.cpp:366 | WAP2_MakeTime | `entity` | 2 |  |
+| src/game/Work/work_act_path.cpp:476 | WAP2_MakeTime | `entity` | 2 |  |
 | standalone/cropfield_force_start.cpp:87 | PostNodeEvent | `node` | 2 | *reinterpret_cast<void**>(sm) |
 | standalone/cropfield_force_start.cpp:89 | PostNodeEvent | `node` | 2 | *reinterpret_cast<void**>(sm) |
 | standalone/entity_comp_validator.cpp:89 | TypeNameOf | `obj` | 2 |  |
@@ -629,13 +629,13 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | site | fn | receiver | slot | producer |
 |---|---|---|---:|---|
-| code/Game/Dialog/toolbardialog.cpp:887 | HarnessDumpElemTree | `toolCtrl` | 9 | *(void**)(gs + 0x28) |
-| L code/Game/Game/gameupdateloop.cpp:1882 | GameUpdateLoop_Draw | `tool` | 8 | *(void**)(entityUI + 0x28) |
-| code/Game/Player/tool_activation_standalone.cpp:373 | Tree_Insert | `tool` | 6 | *(void**)toolSlot |
-| code/Game/Player/tool_activation_standalone.cpp:397 | Tree_Insert | `t2` | 9 | *(void**)toolSlot |
-| code/Game/Player/tool_activation_standalone.cpp:412 | Tree_Insert | `tool` | 7 | *(void**)toolSlot |
-| code/Game/Player/tool_activation_standalone.cpp:421 | Tree_Insert | `tool` | 12 | *(void**)toolSlot |
-| code/Game/Player/tool_activation_standalone.cpp:437 | Tree_Insert | `tool` | 8 | *(void**)toolSlot |
+| src/game/Dialog/toolbardialog.cpp:887 | HarnessDumpElemTree | `toolCtrl` | 9 | *(void**)(gs + 0x28) |
+| L src/game/Game/gameupdateloop.cpp:1882 | GameUpdateLoop_Draw | `tool` | 8 | *(void**)(entityUI + 0x28) |
+| src/game/Player/tool_activation_standalone.cpp:373 | Tree_Insert | `tool` | 6 | *(void**)toolSlot |
+| src/game/Player/tool_activation_standalone.cpp:397 | Tree_Insert | `t2` | 9 | *(void**)toolSlot |
+| src/game/Player/tool_activation_standalone.cpp:412 | Tree_Insert | `tool` | 7 | *(void**)toolSlot |
+| src/game/Player/tool_activation_standalone.cpp:421 | Tree_Insert | `tool` | 12 | *(void**)toolSlot |
+| src/game/Player/tool_activation_standalone.cpp:437 | Tree_Insert | `tool` | 8 | *(void**)toolSlot |
 | standalone/tool_harness.cpp:165 | FireRemovalTool | `tool` | kSlot_Startup | RemovalTool_Factory_SA() |
 | standalone/tool_harness.cpp:174 | FireRemovalTool | `tool` | kSlot_CalcCost | RemovalTool_Factory_SA() |
 | standalone/tool_harness.cpp:190 | FireRemovalTool | `tool` | kSlot_CalcPath | RemovalTool_Factory_SA() |
@@ -651,93 +651,93 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | site | fn | receiver | slot | producer |
 |---|---|---|---:|---|
-| code/Game/Component/firecomponent_smstate.cpp:110 | ForceSMState | `n` | 1 | *node |
-| code/Game/Component/orchardcomponent_states.cpp:200 | OrchardRequestState | `chainHead` | 1 | *reinterpret_cast<void**>(sm) |
-| code/Game/Component/orchardcomponent_states.cpp:202 | OrchardRequestState | `chainHead` | 1 | *reinterpret_cast<void**>(sm) |
-| code/Game/Component/resourceproducecomponent_states.cpp:317 | ResourceProduceComponent::Command | `smcIbp` | 8 | 0 |
-| code/Game/Component/resourceproducecomponent_states.cpp:320 | ResourceProduceComponent::Command | `smcIbp` | 8 | 0 |
-| code/Game/Component/statemachinecomponent.cpp:144 | StateMachineComponent_Serialize | `ibpValue` | 16 | nullptr |
-| code/Game/Component/statemachinecomponent.cpp:154 | StateMachineComponent_Serialize | `ibpValue` | 17 | nullptr |
-| code/Game/Component/statemachinecomponent.cpp:252 | StateMachineComponent_OnUpdate2 | `ibpValue` | 17 | nullptr |
-| code/Game/Component/statemachinecomponent.cpp:624 | StateMachineComponent_LinkControllers_Standalone | `node` | 0 | cs ? cs(comp) : nullptr |
-| code/Game/Work/work_act_clear.cpp:202 | WAC_AppendInline | `node` | 56 | reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(plVar15))[*rein |
-| code/Game/Work/work_act_consume.cpp:223 | WCP_AppendInline | `node` | 7 | *reinterpret_cast<uintptr_t*>(base + static_cast<uintptr_t>(count) * 8 |
-| code/Game/Work/work_leaf_hunt.cpp:332 | WorkLeaf_ConsumeProduce_b310 | `sm` | 1 | *reinterpret_cast<void**>(ent + 0x48) |
+| src/game/Component/firecomponent_smstate.cpp:110 | ForceSMState | `n` | 1 | *node |
+| src/game/Component/orchardcomponent_states.cpp:200 | OrchardRequestState | `chainHead` | 1 | *reinterpret_cast<void**>(sm) |
+| src/game/Component/orchardcomponent_states.cpp:202 | OrchardRequestState | `chainHead` | 1 | *reinterpret_cast<void**>(sm) |
+| src/game/Component/resourceproducecomponent_states.cpp:317 | ResourceProduceComponent::Command | `smcIbp` | 8 | 0 |
+| src/game/Component/resourceproducecomponent_states.cpp:320 | ResourceProduceComponent::Command | `smcIbp` | 8 | 0 |
+| src/game/Component/statemachinecomponent.cpp:144 | StateMachineComponent_Serialize | `ibpValue` | 16 | nullptr |
+| src/game/Component/statemachinecomponent.cpp:154 | StateMachineComponent_Serialize | `ibpValue` | 17 | nullptr |
+| src/game/Component/statemachinecomponent.cpp:252 | StateMachineComponent_OnUpdate2 | `ibpValue` | 17 | nullptr |
+| src/game/Component/statemachinecomponent.cpp:624 | StateMachineComponent_LinkControllers_Standalone | `node` | 0 | cs ? cs(comp) : nullptr |
+| src/game/Work/work_act_clear.cpp:202 | WAC_AppendInline | `node` | 56 | reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(plVar15))[*rein |
+| src/game/Work/work_act_consume.cpp:223 | WCP_AppendInline | `node` | 7 | *reinterpret_cast<uintptr_t*>(base + static_cast<uintptr_t>(count) * 8 |
+| src/game/Work/work_leaf_hunt.cpp:332 | WorkLeaf_ConsumeProduce_b310 | `sm` | 1 | *reinterpret_cast<void**>(ent + 0x48) |
 
 ### A.7 NAMED — receiver named like a converted class (prove per site) — 97
 
 | site | fn | receiver | slot | producer |
 |---|---|---|---:|---|
-| code/Game/Action/sendcomponentmessage.cpp:243 | SendComponentMessage_AbstractImpl_Impl | `comp` | 15 | *(uintptr_t*)compIBP |
-| code/Game/Action/sendcomponentmessage.cpp:243 | SendComponentMessage_AbstractImpl_Impl | `compObj` | 15 | foundComp |
-| code/Game/Component/buildcomponent_sub8630.cpp:99 | BC8630_BuildDescTypeId | `storage + 0x28` | s * 2 | 0 |
-| code/Game/Component/buildcomponent_sub8630.cpp:100 | BC8630_BuildDescTypeId | `storage + 0x28` | s * 2 + 1 | 0 |
-| code/Game/Component/citizenai_housing_idle.cpp:509 | Helper_sub_7b60 | `payload` | 72 | *reinterpret_cast<int64_t*>(cur) |
-| code/Game/Component/citizenai_housing_idle.cpp:514 | Helper_sub_7b60 | `payload` | 32 | *reinterpret_cast<int64_t*>(cur) |
-| code/Game/Component/citizenai_work_scheduler.cpp:412 | WS_cb50 | `wobj` | 10 | *reinterpret_cast<uint8_t**>(pWorkIBP) |
-| code/Game/Component/citizenai_work_scheduler.cpp:430 | WS_cb50 | `wobj2` | 10 | *reinterpret_cast<void**>(pWorkIBP) |
-| code/Game/Component/cropfieldcomponent.cpp:419 | CropFieldComponent_InitFuncs | `growth` | 9 | 0 |
-| code/Game/Component/cropfieldcomponent.cpp:420 | CropFieldComponent_InitFuncs | `growth` | 9 | 0 |
-| code/Game/Component/destroycomponent_state6.cpp:217 | FindOn | `act` | idx |  |
-| code/Game/Component/destroycomponent_state6.cpp:414 | MeshFromModelDesc | `mc` | 7 | reinterpret_cast<uintptr_t>(modelComp) |
-| code/Game/Component/destroycomponent_state6.cpp:423 | MeshFromModelDesc | `mc` | 6 | reinterpret_cast<uintptr_t>(modelComp) |
-| code/Game/Component/destroycomponent_state6.cpp:468 | MeshFromModelDesc | `mc` | 7 | reinterpret_cast<uintptr_t>(modelComp) |
-| code/Game/Component/destroycomponent_state6.cpp:468 | MeshFromModelDesc | `dc` | 7 | reinterpret_cast<uintptr_t>(decalIbp) |
-| code/Game/Component/destroycomponent_state6.cpp:469 | MeshFromModelDesc | `mc` | 6 | reinterpret_cast<uintptr_t>(modelComp) |
-| code/Game/Component/destroycomponent_state6.cpp:469 | MeshFromModelDesc | `dc` | 6 | reinterpret_cast<uintptr_t>(decalIbp) |
-| code/Game/Component/multiobjectcomponent.cpp:220 | MultiObjectComponent_InitFuncs | `comp` | 12 | *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(k) * 8) |
-| code/Game/Component/particlecomponent.cpp:643 | PC_GeoArrayResize | `res` | 8 | *(void**)(emArr + (size_t)i * 0x28) |
-| code/Game/Component/particlecomponent.cpp:645 | PC_GeoArrayResize | `res` | 8 | *(void**)(emArr + (size_t)i * 0x28) |
-| code/Game/Component/pasturecomponent_spawn.cpp:343 | PastureCap | `pasture` | 14 | reinterpret_cast<void*>(pastureIBP) |
-| code/Game/Component/pasturecomponent_states.cpp:819 | PastureCtrl_PopulateTable | `pasture` | 13 |  |
-| code/Game/Component/pasturecomponent_states.cpp:820 | PastureCtrl_PopulateTable | `pasture` | 13 |  |
-| code/Game/Component/quarrycomponent_deform.cpp:168 | QuarryDecalSuspend | `decal` | 7 | QuarryFindComp(s_fn_FindComp_Decal, entity) |
-| code/Game/Component/quarrycomponent_deform.cpp:177 | QuarryDecalResume | `decal` | 6 |  |
-| code/Game/Component/resourceproduce_creatework.cpp:124 | WrapIBP | `w + 0x58` | i | reinterpret_cast<uintptr_t>(mem) |
-| code/Game/Component/resourceproduce_creatework.cpp:321 | WrapIBP | `w + 0x68` | i | reinterpret_cast<uintptr_t>(mem) |
-| code/Game/Component/statemachinecomponent.cpp:585 | StateMachineComponent_LinkControllers_Standalone | `comp` | 17 | *ibp |
-| code/Game/Component/statemachinecomponent.cpp:598 | StateMachineComponent_LinkControllers_Standalone | `comp` | 16 | *ibp |
-| code/Game/Component/statusiconcomponent.cpp:782 | StatusIcon_Toggle | `c` | 8 | (uintptr_t)selfC |
-| code/Game/Dialog/controlui.cpp:127 | ControlUI_Slot4 | `subCompPtr` | 13 | (void*)*(uint64_t*)(s + 0x38) |
-| code/Game/Dialog/controlui.cpp:165 | ControlUI_Slot7 | `subCompPtr` | 13 | (void*)*(uint64_t*)(s + 0x38) |
-| code/Game/Dialog/controlui.cpp:186 | ControlUI_Slot7 | `subCompPtr` | 13 | (void*)*(uint64_t*)(s + 0x38) |
-| code/Game/Dialog/controlui.cpp:219 | ControlUI_Slot9 | `subCompPtr` | 14 | (void*)*(uint64_t*)(s + 0x38) |
-| code/Game/Dialog/cropui_promote.cpp:103 | CropUI_Slot11 | `comp` | 14 | FindComp(self) |
-| code/Game/Dialog/destroyui.cpp:157 | DestroyComponent_Reclaim_Impl | `destroyComp` | 4 |  |
-| code/Game/Dialog/mod_dialog_vtables.cpp:163 | ModDlg_LoadDialogResource | `obj` | 0 | *reinterpret_cast<void**>(e + off) |
-| code/Game/Dialog/mod_dialog_vtables.cpp:164 | ModDlg_LoadDialogResource | `obj` | 0 | *reinterpret_cast<void**>(e + off) |
-| code/Game/Dialog/toolbardialog.cpp:358 | Toolbar_ShowGroup_Impl | `controller` | 5 | *(void**)(pc + 0x28) |
-| code/Game/Dialog/toolbardialog.cpp:486 | Toolbar_ShowGroup_Impl | `ctrl` | 11 | *(void**)(pc + 0x28) |
-| code/Game/Dialog/toolbardialog.cpp:492 | Toolbar_ShowGroup_Impl | `ctrl` | 11 | *(void**)(pc + 0x28) |
-| code/Game/Dialog/toolbardialog.cpp:522 | Toolbar_ShowGroup_Impl | `ctrl` | 4 | *(void**)(pc + 0x28) |
-| code/Game/Dialog/toolbardialog.cpp:831 | HarnessDumpElemTree | `c` | slotIndex | ctrlArr[i] |
-| code/Game/Dialog/toolbardialog.cpp:831 | HarnessDumpElemTree | `ctrl` | slotIndex | reinterpret_cast<void*>(ctrlBuf[0]) |
-| code/Game/Entity/componententity.cpp:308 | ComponentEntity::ShutdownComponents | `compPtr` | 5 | *(uintptr_t*)ibpAddr |
-| code/Game/Entity/componententity.cpp:338 | ComponentEntity::StartupComponents | `compPtr` | 4 | *(uintptr_t*)ibpAddr |
-| code/Game/Entity/componententity.cpp:669 | ComponentEntity::Persist | `compPtr` | 4 | (void*)newIBP |
-| code/Game/Entity/componententity.cpp:760 | ComponentEntity::OnAddedPass | `compPtr` | 6 | *(uintptr_t*)ibpAddr |
-| L code/Game/Entity/entitylist.cpp:987 | AuditDyingEntity | `c` | 7 | *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8) |
-| L code/Game/Entity/entitylist.cpp:988 | AuditDyingEntity | `c` | 7 | *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8) |
-| L code/Game/Game/game_leaf_helpers.cpp:181 | Game_ImageCaptureDtor | `obj` | 0 | *reinterpret_cast<void**>(b + off) |
-| L code/Game/Game/game_leaf_helpers.cpp:182 | Game_ImageCaptureDtor | `obj` | 0 | *reinterpret_cast<void**>(b + off) |
-| L code/Game/Game/gameupdateloop_serialize.cpp:648 | InitCamView | `comp` | 11 | (uintptr_t)*compSlot |
-| L code/Game/Game/starttown.cpp:878 | StartTown_RunOnCreatePass | `comp` | 7 | *slot |
-| L code/Game/Game/tornado.cpp:598 | Tornado_CreateInstance | `p` | k | fn_MemAlloc(g_pMemAllocSingleton, 0xe0, 8) |
-| L code/Game/Game/tornado.cpp:639 | InstallTornadoVtable | `p` | k |  |
-| L code/Game/Game/tornado.cpp:640 | InstallTornadoVtable | `p` | k |  |
-| code/Game/Tutorial/tutorial_wave.cpp:525 | BstFind | `obj` | 8 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:593 | BstFind | `obj` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:593 | BstFind | `img` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:595 | BstFind | `obj` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:595 | BstFind | `img` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:701 | BstFind | `obj` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:714 | BstFind | `obj` | 8 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:719 | BstFind | `obj` | 8 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Tutorial/tutorial_wave.cpp:768 | BstFind | `obj` | 10 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
-| code/Game/Work/gatherrawmaterials_ctor.cpp:116 | GRMC_BuildDescTypeId | `storage + 0x28` | s * 2 | 0 |
-| code/Game/Work/gatherrawmaterials_ctor.cpp:117 | GRMC_BuildDescTypeId | `storage + 0x28` | s * 2 + 1 | 0 |
-| code/Game/Work/work_act_clear.cpp:232 | WorkAct_HarvestAreaCtor_c1530 | `param_4` | 3 |  |
-| code/Game/Work/work_act_consume.cpp:356 | WorkAct_ConsumeProduceCtor_bef70 | `param_3` | 5 |  |
+| src/game/Action/sendcomponentmessage.cpp:243 | SendComponentMessage_AbstractImpl_Impl | `comp` | 15 | *(uintptr_t*)compIBP |
+| src/game/Action/sendcomponentmessage.cpp:243 | SendComponentMessage_AbstractImpl_Impl | `compObj` | 15 | foundComp |
+| src/game/Component/buildcomponent_sub8630.cpp:99 | BC8630_BuildDescTypeId | `storage + 0x28` | s * 2 | 0 |
+| src/game/Component/buildcomponent_sub8630.cpp:100 | BC8630_BuildDescTypeId | `storage + 0x28` | s * 2 + 1 | 0 |
+| src/game/Component/citizenai_housing_idle.cpp:509 | Helper_sub_7b60 | `payload` | 72 | *reinterpret_cast<int64_t*>(cur) |
+| src/game/Component/citizenai_housing_idle.cpp:514 | Helper_sub_7b60 | `payload` | 32 | *reinterpret_cast<int64_t*>(cur) |
+| src/game/Component/citizenai_work_scheduler.cpp:412 | WS_cb50 | `wobj` | 10 | *reinterpret_cast<uint8_t**>(pWorkIBP) |
+| src/game/Component/citizenai_work_scheduler.cpp:430 | WS_cb50 | `wobj2` | 10 | *reinterpret_cast<void**>(pWorkIBP) |
+| src/game/Component/cropfieldcomponent.cpp:419 | CropFieldComponent_InitFuncs | `growth` | 9 | 0 |
+| src/game/Component/cropfieldcomponent.cpp:420 | CropFieldComponent_InitFuncs | `growth` | 9 | 0 |
+| src/game/Component/destroycomponent_state6.cpp:217 | FindOn | `act` | idx |  |
+| src/game/Component/destroycomponent_state6.cpp:414 | MeshFromModelDesc | `mc` | 7 | reinterpret_cast<uintptr_t>(modelComp) |
+| src/game/Component/destroycomponent_state6.cpp:423 | MeshFromModelDesc | `mc` | 6 | reinterpret_cast<uintptr_t>(modelComp) |
+| src/game/Component/destroycomponent_state6.cpp:468 | MeshFromModelDesc | `mc` | 7 | reinterpret_cast<uintptr_t>(modelComp) |
+| src/game/Component/destroycomponent_state6.cpp:468 | MeshFromModelDesc | `dc` | 7 | reinterpret_cast<uintptr_t>(decalIbp) |
+| src/game/Component/destroycomponent_state6.cpp:469 | MeshFromModelDesc | `mc` | 6 | reinterpret_cast<uintptr_t>(modelComp) |
+| src/game/Component/destroycomponent_state6.cpp:469 | MeshFromModelDesc | `dc` | 6 | reinterpret_cast<uintptr_t>(decalIbp) |
+| src/game/Component/multiobjectcomponent.cpp:220 | MultiObjectComponent_InitFuncs | `comp` | 12 | *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(k) * 8) |
+| src/game/Component/particlecomponent.cpp:643 | PC_GeoArrayResize | `res` | 8 | *(void**)(emArr + (size_t)i * 0x28) |
+| src/game/Component/particlecomponent.cpp:645 | PC_GeoArrayResize | `res` | 8 | *(void**)(emArr + (size_t)i * 0x28) |
+| src/game/Component/pasturecomponent_spawn.cpp:343 | PastureCap | `pasture` | 14 | reinterpret_cast<void*>(pastureIBP) |
+| src/game/Component/pasturecomponent_states.cpp:819 | PastureCtrl_PopulateTable | `pasture` | 13 |  |
+| src/game/Component/pasturecomponent_states.cpp:820 | PastureCtrl_PopulateTable | `pasture` | 13 |  |
+| src/game/Component/quarrycomponent_deform.cpp:168 | QuarryDecalSuspend | `decal` | 7 | QuarryFindComp(s_fn_FindComp_Decal, entity) |
+| src/game/Component/quarrycomponent_deform.cpp:177 | QuarryDecalResume | `decal` | 6 |  |
+| src/game/Component/resourceproduce_creatework.cpp:124 | WrapIBP | `w + 0x58` | i | reinterpret_cast<uintptr_t>(mem) |
+| src/game/Component/resourceproduce_creatework.cpp:321 | WrapIBP | `w + 0x68` | i | reinterpret_cast<uintptr_t>(mem) |
+| src/game/Component/statemachinecomponent.cpp:585 | StateMachineComponent_LinkControllers_Standalone | `comp` | 17 | *ibp |
+| src/game/Component/statemachinecomponent.cpp:598 | StateMachineComponent_LinkControllers_Standalone | `comp` | 16 | *ibp |
+| src/game/Component/statusiconcomponent.cpp:782 | StatusIcon_Toggle | `c` | 8 | (uintptr_t)selfC |
+| src/game/Dialog/controlui.cpp:127 | ControlUI_Slot4 | `subCompPtr` | 13 | (void*)*(uint64_t*)(s + 0x38) |
+| src/game/Dialog/controlui.cpp:165 | ControlUI_Slot7 | `subCompPtr` | 13 | (void*)*(uint64_t*)(s + 0x38) |
+| src/game/Dialog/controlui.cpp:186 | ControlUI_Slot7 | `subCompPtr` | 13 | (void*)*(uint64_t*)(s + 0x38) |
+| src/game/Dialog/controlui.cpp:219 | ControlUI_Slot9 | `subCompPtr` | 14 | (void*)*(uint64_t*)(s + 0x38) |
+| src/game/Dialog/cropui_promote.cpp:103 | CropUI_Slot11 | `comp` | 14 | FindComp(self) |
+| src/game/Dialog/destroyui.cpp:157 | DestroyComponent_Reclaim_Impl | `destroyComp` | 4 |  |
+| src/game/Dialog/mod_dialog_vtables.cpp:163 | ModDlg_LoadDialogResource | `obj` | 0 | *reinterpret_cast<void**>(e + off) |
+| src/game/Dialog/mod_dialog_vtables.cpp:164 | ModDlg_LoadDialogResource | `obj` | 0 | *reinterpret_cast<void**>(e + off) |
+| src/game/Dialog/toolbardialog.cpp:358 | Toolbar_ShowGroup_Impl | `controller` | 5 | *(void**)(pc + 0x28) |
+| src/game/Dialog/toolbardialog.cpp:486 | Toolbar_ShowGroup_Impl | `ctrl` | 11 | *(void**)(pc + 0x28) |
+| src/game/Dialog/toolbardialog.cpp:492 | Toolbar_ShowGroup_Impl | `ctrl` | 11 | *(void**)(pc + 0x28) |
+| src/game/Dialog/toolbardialog.cpp:522 | Toolbar_ShowGroup_Impl | `ctrl` | 4 | *(void**)(pc + 0x28) |
+| src/game/Dialog/toolbardialog.cpp:831 | HarnessDumpElemTree | `c` | slotIndex | ctrlArr[i] |
+| src/game/Dialog/toolbardialog.cpp:831 | HarnessDumpElemTree | `ctrl` | slotIndex | reinterpret_cast<void*>(ctrlBuf[0]) |
+| src/game/Entity/componententity.cpp:308 | ComponentEntity::ShutdownComponents | `compPtr` | 5 | *(uintptr_t*)ibpAddr |
+| src/game/Entity/componententity.cpp:338 | ComponentEntity::StartupComponents | `compPtr` | 4 | *(uintptr_t*)ibpAddr |
+| src/game/Entity/componententity.cpp:669 | ComponentEntity::Persist | `compPtr` | 4 | (void*)newIBP |
+| src/game/Entity/componententity.cpp:760 | ComponentEntity::OnAddedPass | `compPtr` | 6 | *(uintptr_t*)ibpAddr |
+| L src/game/Entity/entitylist.cpp:987 | AuditDyingEntity | `c` | 7 | *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8) |
+| L src/game/Entity/entitylist.cpp:988 | AuditDyingEntity | `c` | 7 | *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8) |
+| L src/game/Game/game_leaf_helpers.cpp:181 | Game_ImageCaptureDtor | `obj` | 0 | *reinterpret_cast<void**>(b + off) |
+| L src/game/Game/game_leaf_helpers.cpp:182 | Game_ImageCaptureDtor | `obj` | 0 | *reinterpret_cast<void**>(b + off) |
+| L src/game/Game/gameupdateloop_serialize.cpp:648 | InitCamView | `comp` | 11 | (uintptr_t)*compSlot |
+| L src/game/Game/starttown.cpp:878 | StartTown_RunOnCreatePass | `comp` | 7 | *slot |
+| L src/game/Game/tornado.cpp:598 | Tornado_CreateInstance | `p` | k | fn_MemAlloc(g_pMemAllocSingleton, 0xe0, 8) |
+| L src/game/Game/tornado.cpp:639 | InstallTornadoVtable | `p` | k |  |
+| L src/game/Game/tornado.cpp:640 | InstallTornadoVtable | `p` | k |  |
+| src/game/Tutorial/tutorial_wave.cpp:525 | BstFind | `obj` | 8 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:593 | BstFind | `obj` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:593 | BstFind | `img` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:595 | BstFind | `obj` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:595 | BstFind | `img` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:701 | BstFind | `obj` | 9 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:714 | BstFind | `obj` | 8 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:719 | BstFind | `obj` | 8 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Tutorial/tutorial_wave.cpp:768 | BstFind | `obj` | 10 | *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8) |
+| src/game/Work/gatherrawmaterials_ctor.cpp:116 | GRMC_BuildDescTypeId | `storage + 0x28` | s * 2 | 0 |
+| src/game/Work/gatherrawmaterials_ctor.cpp:117 | GRMC_BuildDescTypeId | `storage + 0x28` | s * 2 + 1 | 0 |
+| src/game/Work/work_act_clear.cpp:232 | WorkAct_HarvestAreaCtor_c1530 | `param_4` | 3 |  |
+| src/game/Work/work_act_consume.cpp:356 | WorkAct_ConsumeProduceCtor_bef70 | `param_3` | 5 |  |
 | standalone/dlgctrl_route.cpp:263 | Visit | `obj` | j | factory() |
 | standalone/dlgctrl_route.cpp:263 | Visit | `obj` | i | factory() |
 | standalone/dlgctrl_route.cpp:264 | Visit | `obj` | i | factory() |
@@ -770,80 +770,80 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | site | fn | receiver | slot | producer |
 |---|---|---|---:|---|
-| code/Game/Component/buildcomponent_state8.cpp:176 | BC8_ReaddDrawChildren | `h` | 12 | *reinterpret_cast<void**>(arr + (int64_t)k * 8) |
-| code/Game/Component/particlecomponent.cpp:492 | PC_GeoArrayResize | `ge->geo` | 9 | &geoArr[index] |
-| code/Game/Component/particlecomponent.cpp:494 | PC_GeoArrayResize | `ge->geo` | 9 | &geoArr[index] |
-| code/Game/Component/particlecomponent.cpp:503 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[index] |
-| code/Game/Component/particlecomponent.cpp:508 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[index] |
-| code/Game/Component/particlecomponent.cpp:570 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[index] |
-| code/Game/Component/particlecomponent.cpp:572 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[index] |
-| code/Game/Component/particlecomponent.cpp:752 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[i] |
-| code/Game/Component/particlecomponent.cpp:754 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[i] |
-| code/Game/Component/zonecomponent.cpp:111 | ZoneComponent_ZoneMapAdd | `entityPtr` | 5 | entityPtrV |
-| code/Game/Dialog/optionsdialog.cpp:948 | OptionsDialog_ApplyGameSettings | `gameWorld` | 3 | g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr |
-| code/Game/Dialog/optionsdialog.cpp:949 | OptionsDialog_ApplyGameSettings | `gameWorld` | 3 | g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr |
-| code/Game/Entity/componententity.cpp:58 | TemplateComponentType | `compTemplate` | 8 |  |
-| L code/Game/Game/goals_serialize.cpp:683 | LayoutB_Find | `ibpField` | 4 | node + 0x08 |
-| L code/Game/Game/tornado.cpp:614 | Tornado_Recreate | `self` | 0 |  |
-| L code/Game/Game/tornado.cpp:623 | Tornado_Destruct | `self` | 0 |  |
-| code/Game/Object/internal_factory_audit.cpp:74 | IsRegistered | `fb` | idx | reinterpret_cast<uint8_t*>(f) |
-| code/Game/Player/tool_base_render.cpp:253 | SampleTile | `hf + 0xd8` | (int64_t)dim * cb + ca |  |
-| code/Game/Work/pickup_gate.cpp:139 | PickupGate_AcceptMask_12d560 | `ret` | 0x3c | s_pg_FindStorage ? s_pg_FindStorage(*reinterpr |
-| code/Game/Work/plantarea.cpp:771 | PlantArea::GetTarget | `result` | 9 | s_fn_FindSubEntity(entity, subIBP) |
-| code/Game/Work/plantorchard.cpp:624 | PlantOrchard::GetTarget | `result` | 9 | s_fn_FindSubEntity(entity, subIBP) |
+| src/game/Component/buildcomponent_state8.cpp:176 | BC8_ReaddDrawChildren | `h` | 12 | *reinterpret_cast<void**>(arr + (int64_t)k * 8) |
+| src/game/Component/particlecomponent.cpp:492 | PC_GeoArrayResize | `ge->geo` | 9 | &geoArr[index] |
+| src/game/Component/particlecomponent.cpp:494 | PC_GeoArrayResize | `ge->geo` | 9 | &geoArr[index] |
+| src/game/Component/particlecomponent.cpp:503 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[index] |
+| src/game/Component/particlecomponent.cpp:508 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[index] |
+| src/game/Component/particlecomponent.cpp:570 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[index] |
+| src/game/Component/particlecomponent.cpp:572 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[index] |
+| src/game/Component/particlecomponent.cpp:752 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[i] |
+| src/game/Component/particlecomponent.cpp:754 | PC_GeoArrayResize | `ge->geo` | 1 | &geoArr[i] |
+| src/game/Component/zonecomponent.cpp:111 | ZoneComponent_ZoneMapAdd | `entityPtr` | 5 | entityPtrV |
+| src/game/Dialog/optionsdialog.cpp:948 | OptionsDialog_ApplyGameSettings | `gameWorld` | 3 | g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr |
+| src/game/Dialog/optionsdialog.cpp:949 | OptionsDialog_ApplyGameSettings | `gameWorld` | 3 | g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr |
+| src/game/Entity/componententity.cpp:58 | TemplateComponentType | `compTemplate` | 8 |  |
+| L src/game/Game/goals_serialize.cpp:683 | LayoutB_Find | `ibpField` | 4 | node + 0x08 |
+| L src/game/Game/tornado.cpp:614 | Tornado_Recreate | `self` | 0 |  |
+| L src/game/Game/tornado.cpp:623 | Tornado_Destruct | `self` | 0 |  |
+| src/game/Object/internal_factory_audit.cpp:74 | IsRegistered | `fb` | idx | reinterpret_cast<uint8_t*>(f) |
+| src/game/Player/tool_base_render.cpp:253 | SampleTile | `hf + 0xd8` | (int64_t)dim * cb + ca |  |
+| src/game/Work/pickup_gate.cpp:139 | PickupGate_AcceptMask_12d560 | `ret` | 0x3c | s_pg_FindStorage ? s_pg_FindStorage(*reinterpr |
+| src/game/Work/plantarea.cpp:771 | PlantArea::GetTarget | `result` | 9 | s_fn_FindSubEntity(entity, subIBP) |
+| src/game/Work/plantorchard.cpp:624 | PlantOrchard::GetTarget | `result` | 9 | s_fn_FindSubEntity(entity, subIBP) |
 
 ### A.9 Excluded — 142 (RUNTIME: Runtime/Graphics/UI/IO receivers by name or declared type; NOT-VPTR: the `*(T*)(*(uintptr_t*)p + off)` idiom on an IBP / singleton / world pointer, i.e. a double FIELD read)
 
 | file | family | sites |
 |---|---|---:|
-| code/Game/Component/ambient_externalptr_serialize.cpp | RUNTIME | 1 |
-| code/Game/Component/buildcomponent_state8.cpp | RUNTIME | 2 |
-| code/Game/Component/growthcomponent.cpp | NOT-VPTR | 1 |
-| code/Game/Component/herdcomponent.cpp | RUNTIME | 2 |
-| code/Game/Component/orchardcomponent_states.cpp | RUNTIME | 2 |
-| code/Game/Component/workplacecomponent.cpp | RUNTIME | 1 |
-| code/Game/Dialog/eventnotifydialog.cpp | NOT-VPTR | 1 |
-| code/Game/Dialog/moddialog.cpp | RUNTIME | 1 |
-| code/Game/Dialog/residenceui.cpp | RUNTIME | 2 |
-| code/Game/Dialog/saveloaddialog.cpp | RUNTIME | 4 |
-| code/Game/Dialog/spritecaptureui.cpp | RUNTIME | 1 |
-| code/Game/Dialog/toolbardialog.cpp | RUNTIME | 9 |
-| code/Game/Dialog/townhallui.cpp | NOT-VPTR | 17 |
-| code/Game/Dialog/townhallui.cpp | RUNTIME | 2 |
-| code/Game/Dialog/tradeui.cpp | RUNTIME | 2 |
-| code/Game/Dialog/workplaceui.cpp | RUNTIME | 4 |
-| code/Game/Game/citizenlist_serialize.cpp | RUNTIME | 2 |
-| code/Game/Game/dialogloaderloop.cpp | RUNTIME | 1 |
-| code/Game/Game/game_leaf_helpers.cpp | RUNTIME | 2 |
-| code/Game/Game/gameupdateloop.cpp | RUNTIME | 1 |
-| code/Game/Game/menuscene.cpp | RUNTIME | 1 |
-| code/Game/Game/weather_sim.cpp | RUNTIME | 4 |
-| code/Game/Goal/statvaluedispatch.cpp | NOT-VPTR | 1 |
-| code/Game/Player/edittool.cpp | RUNTIME | 1 |
-| code/Game/Player/fencedtool.cpp | NOT-VPTR | 2 |
-| code/Game/Player/fencedtool.cpp | RUNTIME | 1 |
-| code/Game/Player/placementtool.cpp | RUNTIME | 1 |
-| code/Game/Player/tool_base_createbar.cpp | NOT-VPTR | 1 |
-| code/Game/Player/tool_base_render.cpp | RUNTIME | 5 |
-| code/Game/Tutorial/tutorial_next_scenario.cpp | NOT-VPTR | 2 |
-| code/Game/Work/buildroad.cpp | NOT-VPTR | 1 |
-| code/Game/Work/firework.cpp | NOT-VPTR | 1 |
-| code/Game/Work/foresterwork.cpp | NOT-VPTR | 3 |
-| code/Game/Work/gatherrawmaterials.cpp | NOT-VPTR | 1 |
-| code/Game/Work/harvestarea.cpp | NOT-VPTR | 1 |
-| code/Game/Work/harvestorchard.cpp | NOT-VPTR | 1 |
-| code/Game/Work/herbalistwork.cpp | NOT-VPTR | 2 |
-| code/Game/Work/huntwork.cpp | NOT-VPTR | 1 |
-| code/Game/Work/pasturework.cpp | NOT-VPTR | 1 |
-| code/Game/Work/pickup.cpp | NOT-VPTR | 7 |
-| code/Game/Work/work_act_consume.cpp | NOT-VPTR | 1 |
-| code/Game/Work/work_act_consume.cpp | RUNTIME | 1 |
-| code/Game/Work/work_act_hunt.cpp | NOT-VPTR | 4 |
-| code/Game/Work/work_act_perform.cpp | NOT-VPTR | 7 |
-| code/Game/Work/work_act_rawmat.cpp | NOT-VPTR | 9 |
-| code/Game/Work/work_base_actionctor.cpp | NOT-VPTR | 12 |
-| code/Game/Work/work_base_walkpos.cpp | NOT-VPTR | 2 |
-| code/Game/Work/work_leaf_gather.cpp | NOT-VPTR | 1 |
+| src/game/Component/ambient_externalptr_serialize.cpp | RUNTIME | 1 |
+| src/game/Component/buildcomponent_state8.cpp | RUNTIME | 2 |
+| src/game/Component/growthcomponent.cpp | NOT-VPTR | 1 |
+| src/game/Component/herdcomponent.cpp | RUNTIME | 2 |
+| src/game/Component/orchardcomponent_states.cpp | RUNTIME | 2 |
+| src/game/Component/workplacecomponent.cpp | RUNTIME | 1 |
+| src/game/Dialog/eventnotifydialog.cpp | NOT-VPTR | 1 |
+| src/game/Dialog/moddialog.cpp | RUNTIME | 1 |
+| src/game/Dialog/residenceui.cpp | RUNTIME | 2 |
+| src/game/Dialog/saveloaddialog.cpp | RUNTIME | 4 |
+| src/game/Dialog/spritecaptureui.cpp | RUNTIME | 1 |
+| src/game/Dialog/toolbardialog.cpp | RUNTIME | 9 |
+| src/game/Dialog/townhallui.cpp | NOT-VPTR | 17 |
+| src/game/Dialog/townhallui.cpp | RUNTIME | 2 |
+| src/game/Dialog/tradeui.cpp | RUNTIME | 2 |
+| src/game/Dialog/workplaceui.cpp | RUNTIME | 4 |
+| src/game/Game/citizenlist_serialize.cpp | RUNTIME | 2 |
+| src/game/Game/dialogloaderloop.cpp | RUNTIME | 1 |
+| src/game/Game/game_leaf_helpers.cpp | RUNTIME | 2 |
+| src/game/Game/gameupdateloop.cpp | RUNTIME | 1 |
+| src/game/Game/menuscene.cpp | RUNTIME | 1 |
+| src/game/Game/weather_sim.cpp | RUNTIME | 4 |
+| src/game/Goal/statvaluedispatch.cpp | NOT-VPTR | 1 |
+| src/game/Player/edittool.cpp | RUNTIME | 1 |
+| src/game/Player/fencedtool.cpp | NOT-VPTR | 2 |
+| src/game/Player/fencedtool.cpp | RUNTIME | 1 |
+| src/game/Player/placementtool.cpp | RUNTIME | 1 |
+| src/game/Player/tool_base_createbar.cpp | NOT-VPTR | 1 |
+| src/game/Player/tool_base_render.cpp | RUNTIME | 5 |
+| src/game/Tutorial/tutorial_next_scenario.cpp | NOT-VPTR | 2 |
+| src/game/Work/buildroad.cpp | NOT-VPTR | 1 |
+| src/game/Work/firework.cpp | NOT-VPTR | 1 |
+| src/game/Work/foresterwork.cpp | NOT-VPTR | 3 |
+| src/game/Work/gatherrawmaterials.cpp | NOT-VPTR | 1 |
+| src/game/Work/harvestarea.cpp | NOT-VPTR | 1 |
+| src/game/Work/harvestorchard.cpp | NOT-VPTR | 1 |
+| src/game/Work/herbalistwork.cpp | NOT-VPTR | 2 |
+| src/game/Work/huntwork.cpp | NOT-VPTR | 1 |
+| src/game/Work/pasturework.cpp | NOT-VPTR | 1 |
+| src/game/Work/pickup.cpp | NOT-VPTR | 7 |
+| src/game/Work/work_act_consume.cpp | NOT-VPTR | 1 |
+| src/game/Work/work_act_consume.cpp | RUNTIME | 1 |
+| src/game/Work/work_act_hunt.cpp | NOT-VPTR | 4 |
+| src/game/Work/work_act_perform.cpp | NOT-VPTR | 7 |
+| src/game/Work/work_act_rawmat.cpp | NOT-VPTR | 9 |
+| src/game/Work/work_base_actionctor.cpp | NOT-VPTR | 12 |
+| src/game/Work/work_base_walkpos.cpp | NOT-VPTR | 2 |
+| src/game/Work/work_leaf_gather.cpp | NOT-VPTR | 1 |
 | standalone/autostart.cpp | RUNTIME | 3 |
 | standalone/main.cpp | RUNTIME | 3 |
 | standalone/pausemenu_harness.cpp | RUNTIME | 3 |
@@ -852,22 +852,22 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | site | callee | kind | becomes |
 |---|---|---|---|
-| code/Game/Component/charactercomponent_serialize.cpp:109 | `Component_SerializeReimpl` | door | `Component::Persist` |
-| code/Game/Component/citizenaicomponent_serialize.cpp:67 | `Component_SerializeReimpl` | door | `Component::Persist` |
-| code/Game/Component/citizencomponent_serialize.cpp:167 | `Component_SerializeReimpl` | door | `Component::Persist` |
-| code/Game/Dialog/cropui_promote.cpp:188 | `CropUI_Slot7` | delegate-body | `SelectResourceUI::OnUpdateLayout` |
-| code/Game/Dialog/cropui_promote.cpp:200 | `SelectResourceUI_Slot8` | delegate-body | `SelectResourceUI::OnUpdate` |
-| code/Game/Dialog/orchardui.cpp:83 | `SelectResourceUI_Slot4` | delegate-body | `SelectResourceUI::OnCreated` |
-| code/Game/Dialog/orchardui.cpp:302 | `SelectResourceUI_Slot8` | delegate-body | `SelectResourceUI::OnUpdate` |
-| code/Game/Dialog/orchardui.cpp:309 | `SelectResourceUI_Slot9` | delegate-body | `SelectResourceUI::OnElementEvent` |
-| code/Game/Dialog/pastureui.cpp:144 | `SelectResourceUI_Slot4` | delegate-body | `SelectResourceUI::OnCreated` |
-| code/Game/Dialog/pastureui.cpp:424 | `SelectResourceUI_Slot8` | delegate-body | `SelectResourceUI::OnUpdate` |
-| L code/Game/Entity/entitylist.cpp:1316 | `ComponentEntity_RefreshEntityFlags` | door | `ComponentEntity::RefreshEntityFlags` |
-| L code/Game/Game/starttown.cpp:276 | `PickingComponent_RegisterMesh` | delegate-body | `PickingComponent::OnAdded` |
-| L code/Game/Game/starttown.cpp:3677 | `CitizenComponent_OnAdd` | delegate-body | `CitizenComponent::OnAdded` |
-| code/Game/Player/fencedtool.cpp:117 | `DragTool_OnKey` | delegate-body | `DragTool::OnKey` |
-| code/Game/Player/fencedtool.cpp:186 | `DragTool_CancelDrag_Impl` | delegate-body | `DragTool::OnCancel` |
-| code/Game/Player/roadtool.cpp:197 | `DragTool_OnKey` | delegate-body | `DragTool::OnKey` |
+| src/game/Component/charactercomponent_serialize.cpp:109 | `Component_SerializeReimpl` | door | `Component::Persist` |
+| src/game/Component/citizenaicomponent_serialize.cpp:67 | `Component_SerializeReimpl` | door | `Component::Persist` |
+| src/game/Component/citizencomponent_serialize.cpp:167 | `Component_SerializeReimpl` | door | `Component::Persist` |
+| src/game/Dialog/cropui_promote.cpp:188 | `CropUI_Slot7` | delegate-body | `SelectResourceUI::OnUpdateLayout` |
+| src/game/Dialog/cropui_promote.cpp:200 | `SelectResourceUI_Slot8` | delegate-body | `SelectResourceUI::OnUpdate` |
+| src/game/Dialog/orchardui.cpp:83 | `SelectResourceUI_Slot4` | delegate-body | `SelectResourceUI::OnCreated` |
+| src/game/Dialog/orchardui.cpp:302 | `SelectResourceUI_Slot8` | delegate-body | `SelectResourceUI::OnUpdate` |
+| src/game/Dialog/orchardui.cpp:309 | `SelectResourceUI_Slot9` | delegate-body | `SelectResourceUI::OnElementEvent` |
+| src/game/Dialog/pastureui.cpp:144 | `SelectResourceUI_Slot4` | delegate-body | `SelectResourceUI::OnCreated` |
+| src/game/Dialog/pastureui.cpp:424 | `SelectResourceUI_Slot8` | delegate-body | `SelectResourceUI::OnUpdate` |
+| L src/game/Entity/entitylist.cpp:1316 | `ComponentEntity_RefreshEntityFlags` | door | `ComponentEntity::RefreshEntityFlags` |
+| L src/game/Game/starttown.cpp:276 | `PickingComponent_RegisterMesh` | delegate-body | `PickingComponent::OnAdded` |
+| L src/game/Game/starttown.cpp:3677 | `CitizenComponent_OnAdd` | delegate-body | `CitizenComponent::OnAdded` |
+| src/game/Player/fencedtool.cpp:117 | `DragTool_OnKey` | delegate-body | `DragTool::OnKey` |
+| src/game/Player/fencedtool.cpp:186 | `DragTool_CancelDrag_Impl` | delegate-body | `DragTool::OnCancel` |
+| src/game/Player/roadtool.cpp:197 | `DragTool_OnKey` | delegate-body | `DragTool::OnKey` |
 | standalone/food_panel_harness.cpp:540 | `EditTool_CloseInfoDialog` | delegate-body | `EditTool::Shutdown` |
 | standalone/orchard_cut_harness.cpp:91 | `OrchardComponent_CanCommand` | delegate-body | `OrchardComponent::CommandMask` |
 | standalone/orchard_cut_harness.cpp:95 | `OrchardComponent_Command` | delegate-body | `OrchardComponent::Command` |
@@ -886,62 +886,62 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | site | address | member (retail slot) |
 |---|---|---|
-| code/Game/Component/absorbresourcecomponent.cpp:67 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/ambientemittercomponent.cpp:283 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/ambientenvironmentcomponent_serialize.cpp:48 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/animalwave_serialize.cpp:69 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/attendancecomponent.cpp:155 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/autopickupcomponent.cpp:117 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/boatcomponent.cpp:210 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/buildcomponent.cpp:71 | 0x140108d40 | BuildComponent.slot6 |
-| code/Game/Component/cemeterycomponent.cpp:307 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/clearareacomponent.cpp:61 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/clearresourcecomponent.cpp:60 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/cropfieldcomponent.cpp:53 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/decalcomponent.cpp:374 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/decalcomponent.cpp:385 | 0x14011b560 | DecalComponent.slot6 |
-| code/Game/Component/destroycomponent.cpp:49 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/diseasecomponent.cpp:172 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/floorcomponent.cpp:86 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/fruitcomponent_serialize.cpp:49 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/growthcomponent_serialize.cpp:66 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/happinesscomponent.cpp:84 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/healercomponent.cpp:50 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/highlightcomponent.cpp:43 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/immigrationcomponent.cpp:67 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/interactcomponent.cpp:60 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/mapcomponent.cpp:64 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/marketlocationcomponent.cpp:42 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/minecomponent.cpp:52 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/multiobjectcomponent.cpp:163 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/naturalresourcecomponent.cpp:179 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/nomadcomponent.cpp:500 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/orchardcomponent.cpp:279 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/particlecomponent.cpp:792 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/particlecomponent.cpp:806 | 0x140052b30 | ParticleComponent.slot8 |
-| code/Game/Component/pasturecomponent.cpp:73 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/pickingcomponent.cpp:284 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/quarrycomponent.cpp:45 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/rawmaterialcomponent.cpp:93 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/residencecomponent.cpp:64 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/spawncomponent.cpp:301 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/statusiconcomponent.cpp:80 | 0x14012bbd0 | StatusIconComponent.slot8 |
-| code/Game/Component/storagecomponent.cpp:61 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/storagedisplaycomponent.cpp:118 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/storagelocationcomponent.cpp:43 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/terraformcomponent.cpp:192 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/tombstonecomponent.cpp:198 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/tornadocomponent.cpp:211 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/trackercomponent.cpp:112 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/uicomponent_serialize.cpp:53 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/wellcomponent.cpp:215 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/wildanimalcomponent.cpp:67 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/workcomponent.cpp:48 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/workplacecomponent.cpp:69 | 0x1401189b0 | Component.slot3 |
-| code/Game/Component/zonecomponent.cpp:293 | 0x1401189b0 | Component.slot3 |
-| code/Game/Player/removaltool.cpp:497 | 0x1401035e0 | RemovalTool.slot13 |
-| code/Game/Work/pasturework.cpp:246 | 0x1400f2370 | PastureWork.slot4 |
-| code/Game/Work/pickup.cpp:87 | 0x1400f2f00 | Pickup.slot4 |
+| src/game/Component/absorbresourcecomponent.cpp:67 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/ambientemittercomponent.cpp:283 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/ambientenvironmentcomponent_serialize.cpp:48 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/animalwave_serialize.cpp:69 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/attendancecomponent.cpp:155 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/autopickupcomponent.cpp:117 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/boatcomponent.cpp:210 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/buildcomponent.cpp:71 | 0x140108d40 | BuildComponent.slot6 |
+| src/game/Component/cemeterycomponent.cpp:307 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/clearareacomponent.cpp:61 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/clearresourcecomponent.cpp:60 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/cropfieldcomponent.cpp:53 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/decalcomponent.cpp:374 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/decalcomponent.cpp:385 | 0x14011b560 | DecalComponent.slot6 |
+| src/game/Component/destroycomponent.cpp:49 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/diseasecomponent.cpp:172 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/floorcomponent.cpp:86 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/fruitcomponent_serialize.cpp:49 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/growthcomponent_serialize.cpp:66 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/happinesscomponent.cpp:84 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/healercomponent.cpp:50 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/highlightcomponent.cpp:43 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/immigrationcomponent.cpp:67 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/interactcomponent.cpp:60 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/mapcomponent.cpp:64 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/marketlocationcomponent.cpp:42 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/minecomponent.cpp:52 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/multiobjectcomponent.cpp:163 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/naturalresourcecomponent.cpp:179 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/nomadcomponent.cpp:500 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/orchardcomponent.cpp:279 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/particlecomponent.cpp:792 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/particlecomponent.cpp:806 | 0x140052b30 | ParticleComponent.slot8 |
+| src/game/Component/pasturecomponent.cpp:73 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/pickingcomponent.cpp:284 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/quarrycomponent.cpp:45 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/rawmaterialcomponent.cpp:93 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/residencecomponent.cpp:64 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/spawncomponent.cpp:301 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/statusiconcomponent.cpp:80 | 0x14012bbd0 | StatusIconComponent.slot8 |
+| src/game/Component/storagecomponent.cpp:61 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/storagedisplaycomponent.cpp:118 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/storagelocationcomponent.cpp:43 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/terraformcomponent.cpp:192 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/tombstonecomponent.cpp:198 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/tornadocomponent.cpp:211 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/trackercomponent.cpp:112 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/uicomponent_serialize.cpp:53 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/wellcomponent.cpp:215 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/wildanimalcomponent.cpp:67 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/workcomponent.cpp:48 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/workplacecomponent.cpp:69 | 0x1401189b0 | Component.slot3 |
+| src/game/Component/zonecomponent.cpp:293 | 0x1401189b0 | Component.slot3 |
+| src/game/Player/removaltool.cpp:497 | 0x1401035e0 | RemovalTool.slot13 |
+| src/game/Work/pasturework.cpp:246 | 0x1400f2370 | PastureWork.slot4 |
+| src/game/Work/pickup.cpp:87 | 0x1400f2f00 | Pickup.slot4 |
 | standalone/pasture_harness.cpp:40 | 0x140127720 | PastureComponent.slot15 |
 
 ### C.2 `engine_funcs` globals bound to a converted class's member or table (by initialiser)
@@ -967,8 +967,8 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | row | address | member | registered function | live readers |
 |---|---|---|---|---:|
-| code/Game/Component/particlecomponent.cpp:1047 | 0x140052b30 | ParticleComponent.slot8 | `ParticleComponent_UpdateTick` | 1 |
-| code/Game/Component/particlecomponent.cpp:1048 | 0x140053090 | ParticleComponent.slot12 | `ParticleComponent_Event` | 0 |
+| src/game/Component/particlecomponent.cpp:1047 | 0x140052b30 | ParticleComponent.slot8 | `ParticleComponent_UpdateTick` | 1 |
+| src/game/Component/particlecomponent.cpp:1048 | 0x140053090 | ParticleComponent.slot12 | `ParticleComponent_Event` | 0 |
 | standalone/reg_ambientenv_ui_serialize.cpp:21 | 0x1400437e0 | AmbientEnvironmentComponent.slot3 | `AmbientEnvironmentComponent_Serialize` | 0 |
 | standalone/reg_ambientenv_ui_serialize.cpp:22 | 0x14012dd00 | UIComponent.slot3 | `UIComponent_Serialize` | 0 |
 | standalone/reg_animal_serialize.cpp:55 | 0x140121f90 | HerdComponent.slot3 | `HerdComponent_Serialize` | 0 |
@@ -1057,218 +1057,218 @@ recorded in the session; `appendix.md` is the generated half of this file).
 
 | class | retail table | `RegisterExeAddr` row(s) | by-address readers (live) | verdict |
 |---|---|---|---|---|
-| AchievementDialog | 0x14015b020 | code/Game/Dialog/menu_dialog_standalone_vtables.cpp:67 | engine/funcs/engine_funcs.cpp:1563 engine_funcs g_AchievementDialog_V (DEAD) | **reader-less: delete row** |
-| Action | 0x14015faa0 | code/Game/Action/action.cpp:53 | code/Game/Component/citizenai_actionctors.cpp:145 ResolveAddr; code/Game/Component/citizenai_handlers.cpp:80 ResolveAddr; code/Game/Work/work_act_clear.cpp:139 ResolveAddr; code/Game/Work/work_act_hunt.cpp:126 ResolveAddr; code/Game/Work/work_act_path.cpp:154 ResolveAddr; code/Game/Work/work_act_perform.cpp:162 ResolveAddr; code/Game/Work/work_base_actionctor.cpp:161 ResolveAddr | KEEP until the readers convert |
-| ClearArea | 0x140161110 | code/Game/Work/cleararea.cpp:1207 | code/Game/Component/clearareacomponent_states.cpp:82 ResolveAddr | KEEP until the readers convert |
-| ClearStorage | 0x1401611a0 | code/Game/Work/clearstorage.cpp:672 | code/Game/Component/destroycomponent_states.cpp:157 ResolveAddr | KEEP until the readers convert |
-| ConsumeProduce | 0x140161220 | code/Game/Work/consumeproduce.cpp:1295 | — | **reader-less: delete row** |
-| ControlUI | 0x14015b380 | code/Game/Dialog/controlui.cpp:363 | — | **reader-less: delete row** |
-| ControlUIConfig | 0x14015b3e0 | code/Game/Dialog/controluiconfig.cpp:113 | — | **reader-less: delete row** |
+| AchievementDialog | 0x14015b020 | src/game/Dialog/menu_dialog_standalone_vtables.cpp:67 | engine/funcs/engine_funcs.cpp:1563 engine_funcs g_AchievementDialog_V (DEAD) | **reader-less: delete row** |
+| Action | 0x14015faa0 | src/game/Action/action.cpp:53 | src/game/Component/citizenai_actionctors.cpp:145 ResolveAddr; src/game/Component/citizenai_handlers.cpp:80 ResolveAddr; src/game/Work/work_act_clear.cpp:139 ResolveAddr; src/game/Work/work_act_hunt.cpp:126 ResolveAddr; src/game/Work/work_act_path.cpp:154 ResolveAddr; src/game/Work/work_act_perform.cpp:162 ResolveAddr; src/game/Work/work_base_actionctor.cpp:161 ResolveAddr | KEEP until the readers convert |
+| ClearArea | 0x140161110 | src/game/Work/cleararea.cpp:1207 | src/game/Component/clearareacomponent_states.cpp:82 ResolveAddr | KEEP until the readers convert |
+| ClearStorage | 0x1401611a0 | src/game/Work/clearstorage.cpp:672 | src/game/Component/destroycomponent_states.cpp:157 ResolveAddr | KEEP until the readers convert |
+| ConsumeProduce | 0x140161220 | src/game/Work/consumeproduce.cpp:1295 | — | **reader-less: delete row** |
+| ControlUI | 0x14015b380 | src/game/Dialog/controlui.cpp:363 | — | **reader-less: delete row** |
+| ControlUIConfig | 0x14015b3e0 | src/game/Dialog/controluiconfig.cpp:113 | — | **reader-less: delete row** |
 | ControllerComponent::Controller | 0x14015f070 | standalone/reg_w2_lane1.cpp:82 | standalone/reg_w2_lane1.cpp:60 other: "0x14015f070 dispatched)\n" (DEAD) | **reader-less: delete row** |
-| CreateNaturalResource | 0x14015fca0 | code/Game/Action/createnaturalresource.cpp:389 | code/Game/Work/work_act_hunt.cpp:127 ResolveAddr | KEEP until the readers convert |
-| FireWork | 0x1401612a0 | code/Game/Work/firework.cpp:698 | code/Game/Component/firecomponent_ignite.cpp:296 ResolveAddr | KEEP until the readers convert |
-| FishingWork | 0x140161320 | code/Game/Work/fishingwork.cpp:1080 | — | **reader-less: delete row** |
+| CreateNaturalResource | 0x14015fca0 | src/game/Action/createnaturalresource.cpp:389 | src/game/Work/work_act_hunt.cpp:127 ResolveAddr | KEEP until the readers convert |
+| FireWork | 0x1401612a0 | src/game/Work/firework.cpp:698 | src/game/Component/firecomponent_ignite.cpp:296 ResolveAddr | KEEP until the readers convert |
+| FishingWork | 0x140161320 | src/game/Work/fishingwork.cpp:1080 | — | **reader-less: delete row** |
 | FollowDialog | 0x14015be00 | — (no row) | engine/funcs/engine_funcs.cpp:1494 engine_funcs g_FollowDialog_Vtable | reader reads 0 (D9 #15) |
-| ForesterWork | 0x1401613a0 | code/Game/Work/foresterwork.cpp:1246 | — | **reader-less: delete row** |
-| GoalDialog | 0x14015beb0 | code/Game/Dialog/menu_dialog_standalone_vtables.cpp:69 | engine/funcs/engine_funcs.cpp:1565 engine_funcs g_GoalDialog_Vtable (DEAD) | **reader-less: delete row** |
-| HarvestArea | 0x1401614a0 | code/Game/Work/harvestarea.cpp:974 | — | **reader-less: delete row** |
-| HerbalistWork | 0x1401615a0 | code/Game/Work/herbalistwork.cpp:987 | — | **reader-less: delete row** |
-| HuntWork | 0x140161620 | code/Game/Work/huntwork.cpp:824 | — | **reader-less: delete row** |
-| LocationWork | 0x1401616a0 | code/Game/Work/locationwork.cpp:518 | code/Game/Component/attendancecomponent_states.cpp:91 ResolveAddr | KEEP until the readers convert |
-| MainMenuDialog | 0x14015f550 | code/Game/Dialog/mainmenudialog.cpp:1037 | engine/funcs/engine_funcs.cpp:1330 engine_funcs g_PauseDialog_Vtable (DEAD) | **reader-less: delete row** |
-| MarketWork | 0x140161710 | code/Game/Work/marketwork.cpp:1879 | — | **reader-less: delete row** |
-| MessageDialog | 0x14015c480 | code/Game/Dialog/messagedialog.cpp:130 | engine/funcs/engine_funcs.cpp:1742 engine_funcs g_ReloadDialog_Vtable (DEAD); code/Game/Dialog/saveloaddialog.cpp:922 via MessageDialogAddr::Vtable; code/Game/Dialog/saveloaddialog.cpp:1103 via MessageDialogAddr::Vtable | KEEP until the readers convert |
+| ForesterWork | 0x1401613a0 | src/game/Work/foresterwork.cpp:1246 | — | **reader-less: delete row** |
+| GoalDialog | 0x14015beb0 | src/game/Dialog/menu_dialog_standalone_vtables.cpp:69 | engine/funcs/engine_funcs.cpp:1565 engine_funcs g_GoalDialog_Vtable (DEAD) | **reader-less: delete row** |
+| HarvestArea | 0x1401614a0 | src/game/Work/harvestarea.cpp:974 | — | **reader-less: delete row** |
+| HerbalistWork | 0x1401615a0 | src/game/Work/herbalistwork.cpp:987 | — | **reader-less: delete row** |
+| HuntWork | 0x140161620 | src/game/Work/huntwork.cpp:824 | — | **reader-less: delete row** |
+| LocationWork | 0x1401616a0 | src/game/Work/locationwork.cpp:518 | src/game/Component/attendancecomponent_states.cpp:91 ResolveAddr | KEEP until the readers convert |
+| MainMenuDialog | 0x14015f550 | src/game/Dialog/mainmenudialog.cpp:1037 | engine/funcs/engine_funcs.cpp:1330 engine_funcs g_PauseDialog_Vtable (DEAD) | **reader-less: delete row** |
+| MarketWork | 0x140161710 | src/game/Work/marketwork.cpp:1879 | — | **reader-less: delete row** |
+| MessageDialog | 0x14015c480 | src/game/Dialog/messagedialog.cpp:130 | engine/funcs/engine_funcs.cpp:1742 engine_funcs g_ReloadDialog_Vtable (DEAD); src/game/Dialog/saveloaddialog.cpp:922 via MessageDialogAddr::Vtable; src/game/Dialog/saveloaddialog.cpp:1103 via MessageDialogAddr::Vtable | KEEP until the readers convert |
 | ModDetailsDialog | 0x14015c670 | standalone/reg_mods.cpp:77 | engine/funcs/engine_funcs.cpp:1710 engine_funcs g_ModDetailsDialog_Vt (DEAD) | **reader-less: delete row** |
 | ModDialog | 0x14015c870 | standalone/reg_mods.cpp:76 | — | **reader-less: delete row** |
 | ModUploadDialog | 0x14015c6c0 | — (no row) | engine/funcs/engine_funcs.cpp:1249 engine_funcs g_ModUpdateDialog_Vta (DEAD) | dead reader only |
-| PerformWork | 0x14015fea0 | code/Game/Action/performwork.cpp:459 | code/Game/Component/citizenai_actionctors.cpp:146 ResolveAddr; code/Game/Work/work_act_path.cpp:155 ResolveAddr; code/Game/Work/work_act_perform.cpp:163 ResolveAddr; code/Game/Work/work_base_actionctor.cpp:162 ResolveAddr | KEEP until the readers convert |
-| Pickup | 0x140161810 | code/Game/Work/pickup.cpp:932 | code/Game/Component/rawmaterialcomponent.cpp:128 ResolveAddr | KEEP until the readers convert |
-| PickupRawMaterial | 0x14015ff10 | code/Game/Action/pickuprawmaterial.cpp:282 | code/Game/Work/work_base_actionctor.cpp:164 ResolveAddr | KEEP until the readers convert |
-| PlantArea | 0x140161890 | code/Game/Work/plantarea.cpp:923 | — | **reader-less: delete row** |
-| PlayAnimation | 0x140158950 | code/Game/Action/playanimation.cpp:265 | code/Game/Component/citizenai_actionctors.cpp:147 ResolveAddr; code/Game/Component/citizenai_handlers.cpp:81 ResolveAddr; code/Game/Work/work_base_actionctor.cpp:163 ResolveAddr | KEEP until the readers convert |
-| RemoveNaturalResource | 0x140160050 | code/Game/Action/removenaturalresource.cpp:343 | code/Game/Work/work_act_clear.cpp:140 ResolveAddr | KEEP until the readers convert |
-| ResourceLimitUIConfig | 0x14015d250 | code/Game/Dialog/resourcelimituiconfig.cpp:112 | — | **reader-less: delete row** |
-| ShowTool | 0x1401589b0 | code/Game/Action/showtool.cpp:438 | code/Game/Work/work_act_clear.cpp:141 ResolveAddr; code/Game/Work/work_act_hunt.cpp:128 ResolveAddr | KEEP until the readers convert |
-| StatGoal | 0x1401604c0 | code/Game/Goal/statgoal.cpp:274 | standalone/main.cpp:952 other: RunFactorySelfTest("StatGoa (DEAD) | KEEP (standalone/main.cpp:952 RunFactorySelfTest resolves it at :778) |
-| TendArea | 0x140161990 | code/Game/Work/tendarea.cpp:685 | — | **reader-less: delete row** |
+| PerformWork | 0x14015fea0 | src/game/Action/performwork.cpp:459 | src/game/Component/citizenai_actionctors.cpp:146 ResolveAddr; src/game/Work/work_act_path.cpp:155 ResolveAddr; src/game/Work/work_act_perform.cpp:163 ResolveAddr; src/game/Work/work_base_actionctor.cpp:162 ResolveAddr | KEEP until the readers convert |
+| Pickup | 0x140161810 | src/game/Work/pickup.cpp:932 | src/game/Component/rawmaterialcomponent.cpp:128 ResolveAddr | KEEP until the readers convert |
+| PickupRawMaterial | 0x14015ff10 | src/game/Action/pickuprawmaterial.cpp:282 | src/game/Work/work_base_actionctor.cpp:164 ResolveAddr | KEEP until the readers convert |
+| PlantArea | 0x140161890 | src/game/Work/plantarea.cpp:923 | — | **reader-less: delete row** |
+| PlayAnimation | 0x140158950 | src/game/Action/playanimation.cpp:265 | src/game/Component/citizenai_actionctors.cpp:147 ResolveAddr; src/game/Component/citizenai_handlers.cpp:81 ResolveAddr; src/game/Work/work_base_actionctor.cpp:163 ResolveAddr | KEEP until the readers convert |
+| RemoveNaturalResource | 0x140160050 | src/game/Action/removenaturalresource.cpp:343 | src/game/Work/work_act_clear.cpp:140 ResolveAddr | KEEP until the readers convert |
+| ResourceLimitUIConfig | 0x14015d250 | src/game/Dialog/resourcelimituiconfig.cpp:112 | — | **reader-less: delete row** |
+| ShowTool | 0x1401589b0 | src/game/Action/showtool.cpp:438 | src/game/Work/work_act_clear.cpp:141 ResolveAddr; src/game/Work/work_act_hunt.cpp:128 ResolveAddr | KEEP until the readers convert |
+| StatGoal | 0x1401604c0 | src/game/Goal/statgoal.cpp:274 | standalone/main.cpp:952 other: RunFactorySelfTest("StatGoa (DEAD) | KEEP (standalone/main.cpp:952 RunFactorySelfTest resolves it at :778) |
+| TendArea | 0x140161990 | src/game/Work/tendarea.cpp:685 | — | **reader-less: delete row** |
 | ToolbarDialog | 0x14015fa00 | — (no row) | engine/funcs/engine_funcs.cpp:1329 engine_funcs g_ToolbarDialog_Vtabl (DEAD) | dead reader only |
-| TradeWork | 0x140161a10 | code/Game/Work/tradework.cpp:925 | — | **reader-less: delete row** |
+| TradeWork | 0x140161a10 | src/game/Work/tradework.cpp:925 | — | **reader-less: delete row** |
 | TutorialInstance | 0x140160bf8 | standalone/reg_w2_lane2.cpp:92 | engine/funcs/engine_funcs.cpp:2464 engine_funcs g_TutorialInstanceVta (DEAD); standalone/reg_w2_lane2.cpp:94 other: std::fprintf(stderr, "[w2_l (DEAD) | **reader-less: delete row** |
-| UpgradeUIConfig | 0x14015df60 | code/Game/Dialog/upgradeuiconfig.cpp:100 | — | **reader-less: delete row** |
-| WellDescription | 0x14015af20 | code/Game/Component/welldescription.cpp:82 | — | **reader-less: delete row** |
-| Work | 0x140161a80 | code/Game/Work/work_base_standalone.cpp:63 | code/Game/Component/clearareacomponent_states.cpp:342 ResolveAddr; code/Game/Work/work_base_reimpl.cpp:160 ResolveAddr | KEEP until the readers convert |
+| UpgradeUIConfig | 0x14015df60 | src/game/Dialog/upgradeuiconfig.cpp:100 | — | **reader-less: delete row** |
+| WellDescription | 0x14015af20 | src/game/Component/welldescription.cpp:82 | — | **reader-less: delete row** |
+| Work | 0x140161a80 | src/game/Work/work_base_standalone.cpp:63 | src/game/Component/clearareacomponent_states.cpp:342 ResolveAddr; src/game/Work/work_base_reimpl.cpp:160 ResolveAddr | KEEP until the readers convert |
 
 ## Appendix E — (5) by-name type-id lookups of converted (concrete) classes, per file
 
 | file | lookups | classes |
 |---|---:|---|
-| code/Game/Action/action_base_move.cpp | 1 | CharacterComponent |
-| code/Game/Action/action_base_movedeps.cpp | 1 | ModelDescription |
-| code/Game/Action/action_base_rawmat.cpp | 1 | RawMaterialComponent |
-| code/Game/Action/action_pf_ctors.cpp | 2 | CharacterDescription, CitizenComponent |
-| code/Game/Action/action_pf_road.cpp | 1 | ModelComponent |
-| code/Game/Action/action_pf_roots_route.cpp | 5 | MarketLocationComponent, RawMaterialDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
-| code/Game/Action/completetask.cpp | 2 | CitizenComponent, ComponentEntity |
-| code/Game/Action/createnaturalresource.cpp | 1 | GrowthComponent |
-| code/Game/Action/performwork.cpp | 1 | CitizenComponent |
-| code/Game/Action/sendcomponentmessage.cpp | 1 | OrchardComponent |
-| code/Game/Action/showtool.cpp | 3 | CitizenComponent, ModelDescription, RawMaterialDescription |
-| code/Game/Component/absorbresourcedescription.cpp | 1 | AbsorbResourceComponent |
-| code/Game/Component/ambientemittercomponent.cpp | 1 | AmbientEmitterDescription |
-| code/Game/Component/ambientemitterdescription.cpp | 1 | AmbientEmitterComponent |
-| code/Game/Component/ambientenvironmentcomponent.cpp | 3 | AmbientEmitterComponent, AmbientEmitterDescription, AmbientEnvironmentDescription |
-| code/Game/Component/ambientenvironmentdescription.cpp | 1 | AmbientEnvironmentComponent |
-| code/Game/Component/animaldescription.cpp | 1 | AnimalComponent |
-| code/Game/Component/attendancedescription.cpp | 1 | AttendanceComponent |
-| code/Game/Component/autopickupdescription.cpp | 1 | AutoPickupComponent |
-| code/Game/Component/boatdescription.cpp | 1 | BoatComponent |
-| code/Game/Component/buildcomponent.cpp | 4 | ModelComponent, ModelDescription, MultiObjectComponent, PickingComponent |
-| code/Game/Component/buildcomponent_state1.cpp | 3 | BuildDescription, ModelComponent, RawMaterialDescription |
-| code/Game/Component/buildcomponent_state8.cpp | 4 | BuildDescription, MapComponent, ModelDescription, StorageDescription |
-| code/Game/Component/buildcomponent_sub8630.cpp | 1 | BuildDescription |
-| code/Game/Component/builddescription.cpp | 1 | BuildComponent |
-| code/Game/Component/cemeterydescription.cpp | 1 | CemeteryComponent |
-| code/Game/Component/characterdescription.cpp | 1 | CharacterComponent |
-| code/Game/Component/citizen_employ_cascade.cpp | 1 | ResidenceComponent |
-| code/Game/Component/citizen_updatehealth.cpp | 2 | CitizenComponent, WorkPlaceComponent |
-| code/Game/Component/citizenai_executor.cpp | 1 | PickingDescription |
-| code/Game/Component/citizenai_findhelpers.cpp | 7 | InteractComponent, RawMaterialDescription, ResidenceComponent, ResidenceDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
-| code/Game/Component/citizenai_findtarget.cpp | 6 | MarketLocationComponent, RadiusDescription, RawMaterialDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
-| code/Game/Component/citizenai_gather.cpp | 2 | CitizenDescription, RawMaterialDescription |
-| code/Game/Component/citizenai_growup.cpp | 4 | CitizenDescription, RawMaterialDescription, StorageComponent, WorkPlaceComponent |
-| code/Game/Component/citizenai_handlers2.cpp | 2 | CitizenDescription, InteractDescription |
-| code/Game/Component/citizenai_handlers3.cpp | 2 | CitizenDescription, InteractDescription |
-| code/Game/Component/citizenai_leisure.cpp | 5 | CitizenDescription, HappinessComponent, HappinessDescription, InteractComponent, MapComponent |
-| code/Game/Component/citizenaicomponent.cpp | 4 | RawMaterialDescription, ResidenceComponent, StorageComponent |
-| code/Game/Component/citizenaidescription.cpp | 1 | CitizenAIComponent |
-| code/Game/Component/citizencomponent.cpp | 1 | StorageComponent |
-| code/Game/Component/citizendescription.cpp | 1 | CitizenComponent |
-| code/Game/Component/clearareacomponent.cpp | 1 | ClearAreaComponent |
-| code/Game/Component/clearareadescription.cpp | 1 | ClearAreaComponent |
-| code/Game/Component/clearresourcedescription.cpp | 1 | ClearResourceComponent |
-| code/Game/Component/consumeproducedescription.cpp | 1 | ConsumeProduceComponent |
-| code/Game/Component/cropfielddescription.cpp | 1 | CropFieldComponent |
-| code/Game/Component/decalcomponent.cpp | 2 | DecalDescription, ModelComponent |
-| code/Game/Component/decaldescription.cpp | 1 | DecalComponent |
-| code/Game/Component/destroycomponent_state6.cpp | 3 | DecalComponent, DestroyDescription, ModelDescription |
-| code/Game/Component/destroycomponent_states.cpp | 1 | RawMaterialDescription |
-| code/Game/Component/destroydescription.cpp | 1 | DestroyComponent |
-| code/Game/Component/diseasecomponent.cpp | 1 | DiseaseComponent |
-| code/Game/Component/diseasedescription.cpp | 1 | DiseaseComponent |
-| code/Game/Component/entity_finders_disaster.cpp | 3 | AmbientEmitterComponent, CitizenComponent, FireComponent |
-| code/Game/Component/firecomponent_ignite.cpp | 3 | AmbientEmitterDescription, FireComponent, FireDescription |
-| code/Game/Component/firedescription.cpp | 1 | FireComponent |
-| code/Game/Component/fishingdescription.cpp | 1 | FishingComponent |
-| code/Game/Component/floorcomponent.cpp | 4 | FloorDescription, MapComponent, ModelComponent |
-| code/Game/Component/floordescription.cpp | 1 | FloorComponent |
-| code/Game/Component/foresterdescription.cpp | 1 | ForesterComponent |
-| code/Game/Component/fruitdescription.cpp | 1 | FruitComponent |
-| code/Game/Component/growthcomponent.cpp | 1 | ModelComponent |
-| code/Game/Component/growthdescription.cpp | 1 | GrowthComponent |
-| code/Game/Component/happinessdescription.cpp | 1 | HappinessComponent |
-| code/Game/Component/healerdescription.cpp | 1 | HealerComponent |
-| code/Game/Component/herbalistdescription.cpp | 1 | HerbalistComponent |
-| code/Game/Component/herddescription.cpp | 1 | HerdComponent |
-| code/Game/Component/highlightdescription.cpp | 1 | HighlightComponent |
-| code/Game/Component/huntdescription.cpp | 1 | HuntComponent |
-| code/Game/Component/immigrationcomponent_states.cpp | 6 | CitizenDescription, ImmigrationDescription, InteractDescription, NomadComponent, NomadDescription, ResidenceComponent |
-| code/Game/Component/immigrationdescription.cpp | 1 | ImmigrationComponent |
-| code/Game/Component/interactdescription.cpp | 1 | InteractComponent |
-| code/Game/Component/livestockdescription.cpp | 1 | LivestockComponent |
-| code/Game/Component/mapdescription.cpp | 1 | MapComponent |
-| code/Game/Component/marketdescription.cpp | 1 | MarketComponent |
-| code/Game/Component/marketlocationdescription.cpp | 1 | MarketLocationComponent |
-| code/Game/Component/minedescription.cpp | 1 | MineComponent |
-| code/Game/Component/modeldescription.cpp | 1 | ModelComponent |
-| code/Game/Component/multiobjectdescription.cpp | 1 | MultiObjectComponent |
-| code/Game/Component/naturalresourcedescription.cpp | 1 | NaturalResourceComponent |
-| code/Game/Component/nomadcomponent.cpp | 1 | EntityUI |
-| code/Game/Component/nomadcomponent_states.cpp | 1 | CharacterComponent |
-| code/Game/Component/nomaddescription.cpp | 1 | NomadComponent |
-| code/Game/Component/orchardcomponent_states.cpp | 2 | ClearAreaDescription, OrchardDescription |
-| code/Game/Component/orcharddescription.cpp | 1 | OrchardComponent |
-| code/Game/Component/particlecomponent.cpp | 1 | ParticleDescription |
-| code/Game/Component/particledescription.cpp | 1 | ParticleComponent |
-| code/Game/Component/pasturedescription.cpp | 1 | PastureComponent |
-| code/Game/Component/pickingcomponent.cpp | 3 | MapComponent, ModelComponent, PickingComponent |
-| code/Game/Component/pickingdescription.cpp | 1 | PickingComponent |
-| code/Game/Component/populationcomponent.cpp | 3 | HerdComponent, HerdDescription, PopulationDescription |
-| code/Game/Component/populationdescription.cpp | 1 | PopulationComponent |
-| code/Game/Component/quarrycomponent_deform.cpp | 3 | ConsumeProduceDescription, QuarryDescription |
-| code/Game/Component/quarrydescription.cpp | 1 | QuarryComponent |
-| code/Game/Component/rawmaterialdescription.cpp | 1 | RawMaterialComponent |
-| code/Game/Component/residencedescription.cpp | 1 | ResidenceComponent |
-| code/Game/Component/spawndescription.cpp | 1 | SpawnComponent |
-| code/Game/Component/statemachinecomponent.cpp | 1 | DestroyComponent |
-| code/Game/Component/statemachinedescription.cpp | 1 | StateMachineComponent |
-| code/Game/Component/statusicondescription.cpp | 1 | StatusIconComponent |
-| code/Game/Component/storagecomponent.cpp | 2 | RawMaterialDescription, StorageDescription |
-| code/Game/Component/storagedescription.cpp | 1 | StorageComponent |
-| code/Game/Component/storagedisplaycomponent.cpp | 2 | ModelDescription, RawMaterialDescription |
-| code/Game/Component/storagedisplaydescription.cpp | 1 | StorageDisplayComponent |
-| code/Game/Component/storagelocationdescription.cpp | 1 | StorageLocationComponent |
-| code/Game/Component/terraformdescription.cpp | 1 | TerraformComponent |
-| code/Game/Component/tombstonedescription.cpp | 1 | TombstoneComponent |
-| code/Game/Component/tornadocomponent.cpp | 2 | ParticleDescription, TornadoDescription |
-| code/Game/Component/tornadodescription.cpp | 1 | TornadoComponent |
-| code/Game/Component/trackerdescription.cpp | 1 | TrackerComponent |
-| code/Game/Component/tradedescription.cpp | 1 | TradeComponent |
-| code/Game/Component/uidescription.cpp | 1 | UIComponent |
-| code/Game/Component/wellcomponent.cpp | 1 | MapComponent |
-| code/Game/Component/wildanimaldescription.cpp | 1 | WildAnimalComponent |
-| code/Game/Component/workdescription.cpp | 1 | WorkComponent |
-| code/Game/Component/workplacedescription.cpp | 1 | WorkPlaceComponent |
-| code/Game/Component/zonedescription.cpp | 1 | ZoneComponent |
-| code/Game/Dialog/citizenui.cpp | 5 | CitizenAIComponent, CitizenComponent, CitizenDescription, ComponentEntity, EditTool |
-| code/Game/Dialog/debugui.cpp | 1 | CitizenComponent |
-| code/Game/Dialog/destroyui.cpp | 2 | ComponentEntity, DestroyDescription |
-| code/Game/Dialog/dialog_exe_helpers.cpp | 1 | BuildComponent |
-| code/Game/Dialog/edittool_select.cpp | 4 | EntityUI, ToolUI, UIComponent, UIDescription |
-| code/Game/Dialog/entityui.cpp | 6 | ComponentEntity, MapComponent, ModelComponent, MultiObjectComponent, ToolUI, UIDescription |
-| code/Game/Dialog/followdialog.cpp | 1 | ModelComponent |
-| code/Game/Dialog/residenceui.cpp | 2 | ComponentEntity, ResidenceComponent |
-| code/Game/Dialog/selectresourceui.cpp | 2 | ComponentEntity, SelectDescription |
-| code/Game/Dialog/statusbarui.cpp | 2 | CitizenDescription, StatusIconComponent |
-| code/Game/Dialog/statusiconui.cpp | 4 | ComponentEntity, EntityUI, StatusIconComponent, StatusIconUIConfig |
-| code/Game/Dialog/storagecapacityui.cpp | 1 | ComponentEntity |
-| code/Game/Dialog/storageui.cpp | 2 | ComponentEntity, RawMaterialDescription |
-| code/Game/Dialog/toolbar_utility_helpers.cpp | 1 | ToolUI |
-| code/Game/Dialog/toolbar_vtable_standalone.cpp | 1 | ToolbarDescription |
-| code/Game/Dialog/toolbardialog.cpp | 1 | UIDescription |
-| code/Game/Dialog/toolui.cpp | 1 | EntityUI |
-| code/Game/Dialog/ui_dialog_stub_factories.cpp | 23 | AttendanceComponent, AttendanceDescription, BuildComponent, BuildDescription, CemeteryComponent, ClearAreaComponent, ComponentDescription, ComponentEntity, ConsumeProduceDescription, ImmigrationCompon |
-| code/Game/Dialog/upgradeui.cpp | 2 | ComponentEntity, UpgradeUIConfig |
-| code/Game/Dialog/workplaceui.cpp | 2 | ComponentEntity, WorkPlaceComponent |
-| L code/Game/Entity/entitylist.cpp | 3 | EditTool, EntityUI, ModelComponent |
-| L code/Game/Game/construction_force_harness.cpp | 1 | BuildComponent |
-| L code/Game/Game/force_work.cpp | 1 | MapComponent |
-| L code/Game/Game/forester_force_harness.cpp | 2 | ForesterComponent, ForesterDescription |
-| L code/Game/Game/founding_spawn.cpp | 2 | CitizenComponent, CitizenDescription |
-| L code/Game/Game/gameupdateloop_serialize.cpp | 2 | ComponentEntity |
-| L code/Game/Game/serialize_externals.cpp | 1 | EnvironmentDescription |
-| L code/Game/Game/starttown.cpp | 48 | AmbientEnvironmentComponent, BuildComponent, CitizenComponent, CreatePlacedDescription, FishingDescription, GrowthComponent, HerbalistDescription, InteractDescription, MapComponent, ModelComponent, Mo |
-| L code/Game/Game/town_storage_seed.cpp | 4 | MapComponent, RawMaterialDescription, StorageComponent, StorageDescription |
-| L code/Game/Game/town_workplace_registry.cpp | 2 | WorkComponent, WorkPlaceComponent |
-| L code/Game/Game/unreg_lane5_musicplayer.cpp | 1 | CitizenDescription |
-| code/Game/Player/bridgetool_calcpath.cpp | 4 | MapComponent, ModelComponent, MultiObjectComponent, PickingComponent |
-| code/Game/Player/edittool.cpp | 3 | EntityUI, ModelComponent, ToolUI |
-| code/Game/Player/pathtool_setselected.cpp | 1 | HighlightComponent |
-| code/Game/Player/placementtool.cpp | 5 | CreatePlacedDescription, MapDescription, ModelDescription, RadiusDescription, RotationSetting |
-| code/Game/Player/roadtool.cpp | 2 | CreateRoadDescription, DecalDescription |
-| code/Game/Player/roadtool_calcpath.cpp | 2 | DecalDescription, MapDescription |
-| code/Game/Player/tool_activation_standalone.cpp | 16 | BridgeTool, CreateBridgeDescription, CreateDragDescription, CreateFencedDescription, CreatePathDescription, CreatePlacedDescription, CreateRemovalDescription, CreateRoadDescription, DragPlacementTool, |
-| code/Game/Player/tool_base_createbar.cpp | 2 | BuildRequirementUI, ToolbarDescription |
-| code/Game/Player/tool_base_drag.cpp | 1 | ToolbarDescription |
-| code/Game/Player/tool_base_render.cpp | 4 | HighlightComponent, HighlightDescription, ModelComponent |
-| code/Game/Player/tool_base_tile.cpp | 1 | ModelComponent |
-| code/Game/Tutorial/tutorial_base.cpp | 1 | WorkDescription |
-| code/Game/Work/build_actions.cpp | 2 | BuildComponent, DestroyComponent |
-| code/Game/Work/gatherrawmaterials.cpp | 3 | BuildDescription, MapDescription, RawMaterialDescription |
-| code/Game/Work/gatherrawmaterials_ctor.cpp | 1 | BuildDescription |
-| code/Game/Work/marketwork.cpp | 9 | ConsumeProduceComponent, InteractComponent, InteractDescription, MapComponent, MarketComponent, MarketDescription, RawMaterialDescription, StorageComponent, StorageLocationComponent |
-| code/Game/Work/pickup.cpp | 2 | Pickup, RawMaterialDescription |
-| code/Game/Work/pickup_gate.cpp | 4 | RawMaterialDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
-| code/Game/Work/work_base_reimpl.cpp | 6 | CitizenComponent, CompleteTask, InteractComponent, StorageComponent, TradeComponent, WorkComponent |
+| src/game/Action/action_base_move.cpp | 1 | CharacterComponent |
+| src/game/Action/action_base_movedeps.cpp | 1 | ModelDescription |
+| src/game/Action/action_base_rawmat.cpp | 1 | RawMaterialComponent |
+| src/game/Action/action_pf_ctors.cpp | 2 | CharacterDescription, CitizenComponent |
+| src/game/Action/action_pf_road.cpp | 1 | ModelComponent |
+| src/game/Action/action_pf_roots_route.cpp | 5 | MarketLocationComponent, RawMaterialDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
+| src/game/Action/completetask.cpp | 2 | CitizenComponent, ComponentEntity |
+| src/game/Action/createnaturalresource.cpp | 1 | GrowthComponent |
+| src/game/Action/performwork.cpp | 1 | CitizenComponent |
+| src/game/Action/sendcomponentmessage.cpp | 1 | OrchardComponent |
+| src/game/Action/showtool.cpp | 3 | CitizenComponent, ModelDescription, RawMaterialDescription |
+| src/game/Component/absorbresourcedescription.cpp | 1 | AbsorbResourceComponent |
+| src/game/Component/ambientemittercomponent.cpp | 1 | AmbientEmitterDescription |
+| src/game/Component/ambientemitterdescription.cpp | 1 | AmbientEmitterComponent |
+| src/game/Component/ambientenvironmentcomponent.cpp | 3 | AmbientEmitterComponent, AmbientEmitterDescription, AmbientEnvironmentDescription |
+| src/game/Component/ambientenvironmentdescription.cpp | 1 | AmbientEnvironmentComponent |
+| src/game/Component/animaldescription.cpp | 1 | AnimalComponent |
+| src/game/Component/attendancedescription.cpp | 1 | AttendanceComponent |
+| src/game/Component/autopickupdescription.cpp | 1 | AutoPickupComponent |
+| src/game/Component/boatdescription.cpp | 1 | BoatComponent |
+| src/game/Component/buildcomponent.cpp | 4 | ModelComponent, ModelDescription, MultiObjectComponent, PickingComponent |
+| src/game/Component/buildcomponent_state1.cpp | 3 | BuildDescription, ModelComponent, RawMaterialDescription |
+| src/game/Component/buildcomponent_state8.cpp | 4 | BuildDescription, MapComponent, ModelDescription, StorageDescription |
+| src/game/Component/buildcomponent_sub8630.cpp | 1 | BuildDescription |
+| src/game/Component/builddescription.cpp | 1 | BuildComponent |
+| src/game/Component/cemeterydescription.cpp | 1 | CemeteryComponent |
+| src/game/Component/characterdescription.cpp | 1 | CharacterComponent |
+| src/game/Component/citizen_employ_cascade.cpp | 1 | ResidenceComponent |
+| src/game/Component/citizen_updatehealth.cpp | 2 | CitizenComponent, WorkPlaceComponent |
+| src/game/Component/citizenai_executor.cpp | 1 | PickingDescription |
+| src/game/Component/citizenai_findhelpers.cpp | 7 | InteractComponent, RawMaterialDescription, ResidenceComponent, ResidenceDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
+| src/game/Component/citizenai_findtarget.cpp | 6 | MarketLocationComponent, RadiusDescription, RawMaterialDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
+| src/game/Component/citizenai_gather.cpp | 2 | CitizenDescription, RawMaterialDescription |
+| src/game/Component/citizenai_growup.cpp | 4 | CitizenDescription, RawMaterialDescription, StorageComponent, WorkPlaceComponent |
+| src/game/Component/citizenai_handlers2.cpp | 2 | CitizenDescription, InteractDescription |
+| src/game/Component/citizenai_handlers3.cpp | 2 | CitizenDescription, InteractDescription |
+| src/game/Component/citizenai_leisure.cpp | 5 | CitizenDescription, HappinessComponent, HappinessDescription, InteractComponent, MapComponent |
+| src/game/Component/citizenaicomponent.cpp | 4 | RawMaterialDescription, ResidenceComponent, StorageComponent |
+| src/game/Component/citizenaidescription.cpp | 1 | CitizenAIComponent |
+| src/game/Component/citizencomponent.cpp | 1 | StorageComponent |
+| src/game/Component/citizendescription.cpp | 1 | CitizenComponent |
+| src/game/Component/clearareacomponent.cpp | 1 | ClearAreaComponent |
+| src/game/Component/clearareadescription.cpp | 1 | ClearAreaComponent |
+| src/game/Component/clearresourcedescription.cpp | 1 | ClearResourceComponent |
+| src/game/Component/consumeproducedescription.cpp | 1 | ConsumeProduceComponent |
+| src/game/Component/cropfielddescription.cpp | 1 | CropFieldComponent |
+| src/game/Component/decalcomponent.cpp | 2 | DecalDescription, ModelComponent |
+| src/game/Component/decaldescription.cpp | 1 | DecalComponent |
+| src/game/Component/destroycomponent_state6.cpp | 3 | DecalComponent, DestroyDescription, ModelDescription |
+| src/game/Component/destroycomponent_states.cpp | 1 | RawMaterialDescription |
+| src/game/Component/destroydescription.cpp | 1 | DestroyComponent |
+| src/game/Component/diseasecomponent.cpp | 1 | DiseaseComponent |
+| src/game/Component/diseasedescription.cpp | 1 | DiseaseComponent |
+| src/game/Component/entity_finders_disaster.cpp | 3 | AmbientEmitterComponent, CitizenComponent, FireComponent |
+| src/game/Component/firecomponent_ignite.cpp | 3 | AmbientEmitterDescription, FireComponent, FireDescription |
+| src/game/Component/firedescription.cpp | 1 | FireComponent |
+| src/game/Component/fishingdescription.cpp | 1 | FishingComponent |
+| src/game/Component/floorcomponent.cpp | 4 | FloorDescription, MapComponent, ModelComponent |
+| src/game/Component/floordescription.cpp | 1 | FloorComponent |
+| src/game/Component/foresterdescription.cpp | 1 | ForesterComponent |
+| src/game/Component/fruitdescription.cpp | 1 | FruitComponent |
+| src/game/Component/growthcomponent.cpp | 1 | ModelComponent |
+| src/game/Component/growthdescription.cpp | 1 | GrowthComponent |
+| src/game/Component/happinessdescription.cpp | 1 | HappinessComponent |
+| src/game/Component/healerdescription.cpp | 1 | HealerComponent |
+| src/game/Component/herbalistdescription.cpp | 1 | HerbalistComponent |
+| src/game/Component/herddescription.cpp | 1 | HerdComponent |
+| src/game/Component/highlightdescription.cpp | 1 | HighlightComponent |
+| src/game/Component/huntdescription.cpp | 1 | HuntComponent |
+| src/game/Component/immigrationcomponent_states.cpp | 6 | CitizenDescription, ImmigrationDescription, InteractDescription, NomadComponent, NomadDescription, ResidenceComponent |
+| src/game/Component/immigrationdescription.cpp | 1 | ImmigrationComponent |
+| src/game/Component/interactdescription.cpp | 1 | InteractComponent |
+| src/game/Component/livestockdescription.cpp | 1 | LivestockComponent |
+| src/game/Component/mapdescription.cpp | 1 | MapComponent |
+| src/game/Component/marketdescription.cpp | 1 | MarketComponent |
+| src/game/Component/marketlocationdescription.cpp | 1 | MarketLocationComponent |
+| src/game/Component/minedescription.cpp | 1 | MineComponent |
+| src/game/Component/modeldescription.cpp | 1 | ModelComponent |
+| src/game/Component/multiobjectdescription.cpp | 1 | MultiObjectComponent |
+| src/game/Component/naturalresourcedescription.cpp | 1 | NaturalResourceComponent |
+| src/game/Component/nomadcomponent.cpp | 1 | EntityUI |
+| src/game/Component/nomadcomponent_states.cpp | 1 | CharacterComponent |
+| src/game/Component/nomaddescription.cpp | 1 | NomadComponent |
+| src/game/Component/orchardcomponent_states.cpp | 2 | ClearAreaDescription, OrchardDescription |
+| src/game/Component/orcharddescription.cpp | 1 | OrchardComponent |
+| src/game/Component/particlecomponent.cpp | 1 | ParticleDescription |
+| src/game/Component/particledescription.cpp | 1 | ParticleComponent |
+| src/game/Component/pasturedescription.cpp | 1 | PastureComponent |
+| src/game/Component/pickingcomponent.cpp | 3 | MapComponent, ModelComponent, PickingComponent |
+| src/game/Component/pickingdescription.cpp | 1 | PickingComponent |
+| src/game/Component/populationcomponent.cpp | 3 | HerdComponent, HerdDescription, PopulationDescription |
+| src/game/Component/populationdescription.cpp | 1 | PopulationComponent |
+| src/game/Component/quarrycomponent_deform.cpp | 3 | ConsumeProduceDescription, QuarryDescription |
+| src/game/Component/quarrydescription.cpp | 1 | QuarryComponent |
+| src/game/Component/rawmaterialdescription.cpp | 1 | RawMaterialComponent |
+| src/game/Component/residencedescription.cpp | 1 | ResidenceComponent |
+| src/game/Component/spawndescription.cpp | 1 | SpawnComponent |
+| src/game/Component/statemachinecomponent.cpp | 1 | DestroyComponent |
+| src/game/Component/statemachinedescription.cpp | 1 | StateMachineComponent |
+| src/game/Component/statusicondescription.cpp | 1 | StatusIconComponent |
+| src/game/Component/storagecomponent.cpp | 2 | RawMaterialDescription, StorageDescription |
+| src/game/Component/storagedescription.cpp | 1 | StorageComponent |
+| src/game/Component/storagedisplaycomponent.cpp | 2 | ModelDescription, RawMaterialDescription |
+| src/game/Component/storagedisplaydescription.cpp | 1 | StorageDisplayComponent |
+| src/game/Component/storagelocationdescription.cpp | 1 | StorageLocationComponent |
+| src/game/Component/terraformdescription.cpp | 1 | TerraformComponent |
+| src/game/Component/tombstonedescription.cpp | 1 | TombstoneComponent |
+| src/game/Component/tornadocomponent.cpp | 2 | ParticleDescription, TornadoDescription |
+| src/game/Component/tornadodescription.cpp | 1 | TornadoComponent |
+| src/game/Component/trackerdescription.cpp | 1 | TrackerComponent |
+| src/game/Component/tradedescription.cpp | 1 | TradeComponent |
+| src/game/Component/uidescription.cpp | 1 | UIComponent |
+| src/game/Component/wellcomponent.cpp | 1 | MapComponent |
+| src/game/Component/wildanimaldescription.cpp | 1 | WildAnimalComponent |
+| src/game/Component/workdescription.cpp | 1 | WorkComponent |
+| src/game/Component/workplacedescription.cpp | 1 | WorkPlaceComponent |
+| src/game/Component/zonedescription.cpp | 1 | ZoneComponent |
+| src/game/Dialog/citizenui.cpp | 5 | CitizenAIComponent, CitizenComponent, CitizenDescription, ComponentEntity, EditTool |
+| src/game/Dialog/debugui.cpp | 1 | CitizenComponent |
+| src/game/Dialog/destroyui.cpp | 2 | ComponentEntity, DestroyDescription |
+| src/game/Dialog/dialog_exe_helpers.cpp | 1 | BuildComponent |
+| src/game/Dialog/edittool_select.cpp | 4 | EntityUI, ToolUI, UIComponent, UIDescription |
+| src/game/Dialog/entityui.cpp | 6 | ComponentEntity, MapComponent, ModelComponent, MultiObjectComponent, ToolUI, UIDescription |
+| src/game/Dialog/followdialog.cpp | 1 | ModelComponent |
+| src/game/Dialog/residenceui.cpp | 2 | ComponentEntity, ResidenceComponent |
+| src/game/Dialog/selectresourceui.cpp | 2 | ComponentEntity, SelectDescription |
+| src/game/Dialog/statusbarui.cpp | 2 | CitizenDescription, StatusIconComponent |
+| src/game/Dialog/statusiconui.cpp | 4 | ComponentEntity, EntityUI, StatusIconComponent, StatusIconUIConfig |
+| src/game/Dialog/storagecapacityui.cpp | 1 | ComponentEntity |
+| src/game/Dialog/storageui.cpp | 2 | ComponentEntity, RawMaterialDescription |
+| src/game/Dialog/toolbar_utility_helpers.cpp | 1 | ToolUI |
+| src/game/Dialog/toolbar_vtable_standalone.cpp | 1 | ToolbarDescription |
+| src/game/Dialog/toolbardialog.cpp | 1 | UIDescription |
+| src/game/Dialog/toolui.cpp | 1 | EntityUI |
+| src/game/Dialog/ui_dialog_stub_factories.cpp | 23 | AttendanceComponent, AttendanceDescription, BuildComponent, BuildDescription, CemeteryComponent, ClearAreaComponent, ComponentDescription, ComponentEntity, ConsumeProduceDescription, ImmigrationCompon |
+| src/game/Dialog/upgradeui.cpp | 2 | ComponentEntity, UpgradeUIConfig |
+| src/game/Dialog/workplaceui.cpp | 2 | ComponentEntity, WorkPlaceComponent |
+| L src/game/Entity/entitylist.cpp | 3 | EditTool, EntityUI, ModelComponent |
+| L src/game/Game/construction_force_harness.cpp | 1 | BuildComponent |
+| L src/game/Game/force_work.cpp | 1 | MapComponent |
+| L src/game/Game/forester_force_harness.cpp | 2 | ForesterComponent, ForesterDescription |
+| L src/game/Game/founding_spawn.cpp | 2 | CitizenComponent, CitizenDescription |
+| L src/game/Game/gameupdateloop_serialize.cpp | 2 | ComponentEntity |
+| L src/game/Game/serialize_externals.cpp | 1 | EnvironmentDescription |
+| L src/game/Game/starttown.cpp | 48 | AmbientEnvironmentComponent, BuildComponent, CitizenComponent, CreatePlacedDescription, FishingDescription, GrowthComponent, HerbalistDescription, InteractDescription, MapComponent, ModelComponent, Mo |
+| L src/game/Game/town_storage_seed.cpp | 4 | MapComponent, RawMaterialDescription, StorageComponent, StorageDescription |
+| L src/game/Game/town_workplace_registry.cpp | 2 | WorkComponent, WorkPlaceComponent |
+| L src/game/Game/unreg_lane5_musicplayer.cpp | 1 | CitizenDescription |
+| src/game/Player/bridgetool_calcpath.cpp | 4 | MapComponent, ModelComponent, MultiObjectComponent, PickingComponent |
+| src/game/Player/edittool.cpp | 3 | EntityUI, ModelComponent, ToolUI |
+| src/game/Player/pathtool_setselected.cpp | 1 | HighlightComponent |
+| src/game/Player/placementtool.cpp | 5 | CreatePlacedDescription, MapDescription, ModelDescription, RadiusDescription, RotationSetting |
+| src/game/Player/roadtool.cpp | 2 | CreateRoadDescription, DecalDescription |
+| src/game/Player/roadtool_calcpath.cpp | 2 | DecalDescription, MapDescription |
+| src/game/Player/tool_activation_standalone.cpp | 16 | BridgeTool, CreateBridgeDescription, CreateDragDescription, CreateFencedDescription, CreatePathDescription, CreatePlacedDescription, CreateRemovalDescription, CreateRoadDescription, DragPlacementTool, |
+| src/game/Player/tool_base_createbar.cpp | 2 | BuildRequirementUI, ToolbarDescription |
+| src/game/Player/tool_base_drag.cpp | 1 | ToolbarDescription |
+| src/game/Player/tool_base_render.cpp | 4 | HighlightComponent, HighlightDescription, ModelComponent |
+| src/game/Player/tool_base_tile.cpp | 1 | ModelComponent |
+| src/game/Tutorial/tutorial_base.cpp | 1 | WorkDescription |
+| src/game/Work/build_actions.cpp | 2 | BuildComponent, DestroyComponent |
+| src/game/Work/gatherrawmaterials.cpp | 3 | BuildDescription, MapDescription, RawMaterialDescription |
+| src/game/Work/gatherrawmaterials_ctor.cpp | 1 | BuildDescription |
+| src/game/Work/marketwork.cpp | 9 | ConsumeProduceComponent, InteractComponent, InteractDescription, MapComponent, MarketComponent, MarketDescription, RawMaterialDescription, StorageComponent, StorageLocationComponent |
+| src/game/Work/pickup.cpp | 2 | Pickup, RawMaterialDescription |
+| src/game/Work/pickup_gate.cpp | 4 | RawMaterialDescription, StorageComponent, StorageLocationComponent, StorageLocationDescription |
+| src/game/Work/work_base_reimpl.cpp | 6 | CitizenComponent, CompleteTask, InteractComponent, StorageComponent, TradeComponent, WorkComponent |
 | engine/funcs/engine_funcs.h | 1 | EntityUI |
 | standalone/cropfield_force_start.cpp | 3 | CropFieldComponent, NaturalResourceDescription, StateMachineComponent |
 | standalone/finish_builds_harness.cpp | 2 | BuildComponent, StateMachineComponent |
@@ -1315,7 +1315,7 @@ recorded in the session; `appendix.md` is the generated half of this file).
 | standalone/trade_buy_harness.cpp | 3 | StorageComponent, TradeComponent, TradeUI |
 | tests/unit/object_typeinfo_test.cpp | 1 | CitizenComponent |
 
-Abstract bases (no `TypeId()`, D4 keeps the by-name answer): 17 lookups — code/Game/Action/action.cpp:23 Action, code/Game/Component/component.cpp:42 Component, code/Game/Component/component.cpp:113 ControllerComponent, code/Game/Component/description.cpp:22 Description, code/Game/Component/resourceproducecomponent_states.cpp:393 ResourceProduceComponent, code/Game/Dialog/selectresourceui.cpp:308 SelectResourceUI, code/Game/Game/goals_serialize.cpp:115 Work, code/Game/Player/dragtool.cpp:43 DragTool, code/Game/Player/rotationsetting.cpp:30 ToolSetting, code/Game/Player/tool.cpp:19 Tool, code/Game/Player/tool_activation_standalone.cpp:194 Tool, code/Game/Player/tool_activation_standalone.cpp:195 ToolSetting, code/Game/Tutorial/tutorialgoal.cpp:29 TutorialGoal, code/Game/Tutorial/tutorialsetup.cpp:29 TutorialSetup, code/Game/Work/autopickupwork.cpp:35 AutoPickupWork, code/Game/Work/work_base_standalone.cpp:49 Work, standalone/reg_animal_serialize.cpp:50 Component.
+Abstract bases (no `TypeId()`, D4 keeps the by-name answer): 17 lookups — src/game/Action/action.cpp:23 Action, src/game/Component/component.cpp:42 Component, src/game/Component/component.cpp:113 ControllerComponent, src/game/Component/description.cpp:22 Description, src/game/Component/resourceproducecomponent_states.cpp:393 ResourceProduceComponent, src/game/Dialog/selectresourceui.cpp:308 SelectResourceUI, src/game/Game/goals_serialize.cpp:115 Work, src/game/Player/dragtool.cpp:43 DragTool, src/game/Player/rotationsetting.cpp:30 ToolSetting, src/game/Player/tool.cpp:19 Tool, src/game/Player/tool_activation_standalone.cpp:194 Tool, src/game/Player/tool_activation_standalone.cpp:195 ToolSetting, src/game/Tutorial/tutorialgoal.cpp:29 TutorialGoal, src/game/Tutorial/tutorialsetup.cpp:29 TutorialSetup, src/game/Work/autopickupwork.cpp:35 AutoPickupWork, src/game/Work/work_base_standalone.cpp:49 Work, standalone/reg_animal_serialize.cpp:50 Component.
 
 
 ## Appendix F — (6) fold-in sizing per class (members whose body is one call to a free function holding the body)
@@ -1454,29 +1454,29 @@ Abstract bases (no `TypeId()`, D4 keeps the by-name answer): 17 lookups — code
 
 | stub | call |
 |---|---|
-| code/Game/Action/animatenaturalresource.cpp:226 `RegisterAnimateNaturalResourceVtable` | standalone/address_registry.cpp:1744 |
-| code/Game/Action/completeroad.cpp:154 `RegisterCompleteRoadVtable` | standalone/address_registry.cpp:1745 |
-| code/Game/Action/completetask.cpp:293 `RegisterCompleteTaskVtable` | standalone/address_registry.cpp:1746 |
-| code/Game/Action/consumerawmaterial.cpp:387 `RegisterConsumeRawMaterialVtable` | standalone/address_registry.cpp:1747 |
-| code/Game/Action/createrawmaterial.cpp:585 `RegisterCreateRawMaterialVtable` | standalone/address_registry.cpp:1749 |
-| code/Game/Action/dropoffrawmaterial.cpp:392 `RegisterDropOffRawMaterialVtable` | standalone/address_registry.cpp:1750 |
-| code/Game/Action/huntanimal.cpp:533 `RegisterHuntAnimalVtable` | standalone/address_registry.cpp:1751 |
-| code/Game/Action/moveto.cpp:814 `RegisterMoveToVtable` | standalone/address_registry.cpp:1752 |
-| code/Game/Action/pickupstoredrawmaterial.cpp:475 `RegisterPickupStoredRawMaterialVtable` | standalone/address_registry.cpp:1755 |
-| code/Game/Action/removeanimal.cpp:308 `RegisterRemoveAnimalVtable` | standalone/address_registry.cpp:1756 |
-| code/Game/Action/sendcomponentmessage.cpp:314 `RegisterSendComponentMessageVtable` | standalone/address_registry.cpp:1758 |
-| code/Game/Component/animaudioevent.cpp:92 `RegisterAnimAudioEventVtable` | standalone/address_registry.cpp:1717 |
-| code/Game/Component/captureboxdescription.cpp:115 `RegisterCaptureBoxDescriptionVtable` | standalone/address_registry.cpp:1709 |
+| src/game/Action/animatenaturalresource.cpp:226 `RegisterAnimateNaturalResourceVtable` | standalone/address_registry.cpp:1744 |
+| src/game/Action/completeroad.cpp:154 `RegisterCompleteRoadVtable` | standalone/address_registry.cpp:1745 |
+| src/game/Action/completetask.cpp:293 `RegisterCompleteTaskVtable` | standalone/address_registry.cpp:1746 |
+| src/game/Action/consumerawmaterial.cpp:387 `RegisterConsumeRawMaterialVtable` | standalone/address_registry.cpp:1747 |
+| src/game/Action/createrawmaterial.cpp:585 `RegisterCreateRawMaterialVtable` | standalone/address_registry.cpp:1749 |
+| src/game/Action/dropoffrawmaterial.cpp:392 `RegisterDropOffRawMaterialVtable` | standalone/address_registry.cpp:1750 |
+| src/game/Action/huntanimal.cpp:533 `RegisterHuntAnimalVtable` | standalone/address_registry.cpp:1751 |
+| src/game/Action/moveto.cpp:814 `RegisterMoveToVtable` | standalone/address_registry.cpp:1752 |
+| src/game/Action/pickupstoredrawmaterial.cpp:475 `RegisterPickupStoredRawMaterialVtable` | standalone/address_registry.cpp:1755 |
+| src/game/Action/removeanimal.cpp:308 `RegisterRemoveAnimalVtable` | standalone/address_registry.cpp:1756 |
+| src/game/Action/sendcomponentmessage.cpp:314 `RegisterSendComponentMessageVtable` | standalone/address_registry.cpp:1758 |
+| src/game/Component/animaudioevent.cpp:92 `RegisterAnimAudioEventVtable` | standalone/address_registry.cpp:1717 |
+| src/game/Component/captureboxdescription.cpp:115 `RegisterCaptureBoxDescriptionVtable` | standalone/address_registry.cpp:1709 |
 
 ### G.2 `struct X;` forward declarations of converted classes (should be `class X;` or go)
 
 | site | class |
 |---|---|
-| code/Game/Component/citizen_employ_cascade.cpp:38 | CitizenComponent |
-| code/Game/Component/citizencomponent.cpp:113 | StatusIconComponent |
-| code/Game/Component/clearareacomponent_states.cpp:51 | ClearAreaComponent |
-| code/Game/Dialog/townhall_helpers.cpp:38 | CitizenComponent |
-| code/Game/Game/starttown.cpp:327 | CitizenComponent |
+| src/game/Component/citizen_employ_cascade.cpp:38 | CitizenComponent |
+| src/game/Component/citizencomponent.cpp:113 | StatusIconComponent |
+| src/game/Component/clearareacomponent_states.cpp:51 | ClearAreaComponent |
+| src/game/Dialog/townhall_helpers.cpp:38 | CitizenComponent |
+| src/game/Game/starttown.cpp:327 | CitizenComponent |
 | engine/funcs/engine_funcs.h:732 | SaveLoadDialog |
 | engine/funcs/engine_funcs.h:1672 | TownHallUI |
 | standalone/address_registry.cpp:240 | ComponentEntity |
@@ -1504,7 +1504,7 @@ Abstract bases (no `TypeId()`, D4 keeps the by-name answer): 17 lookups — code
 
 | file | rows |
 |---|---:|
-| code/Game/Component/particlecomponent.cpp | 1 |
+| src/game/Component/particlecomponent.cpp | 1 |
 | standalone/reg_ambientenv_ui_serialize.cpp | 2 |
 | standalone/reg_animal_serialize.cpp | 6 |
 | standalone/reg_animal_update.cpp | 3 |

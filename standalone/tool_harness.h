@@ -8,7 +8,7 @@
 // memory project_player_tool_harness.
 #pragma once
 
-class PlayerToolManager;   // code/Game/Game/PlayerToolManager.h
+class PlayerToolManager;   // src/game/Game/PlayerToolManager.h
 
 extern "C" {
 

@@ -253,7 +253,7 @@ extern "C" void* RtGraphics_MaterialInstance_OperatorNew(uint64_t bytes) {
 //   0x180102c90               — occurs only in COMMENTS (three of them, in
 //                               runtime/src/ui/spritecontext_flush.cpp at :95,
 //                               :138 and :260). Both live consumers,
-//                               code/Game/Player/
+//                               src/game/Player/
 //                               tool_base_tilerender.cpp:100 and
 //                               runtime/src/ui/spritecontext_flush.cpp:267,
 //                               resolve it BY NAME.

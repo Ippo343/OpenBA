@@ -30,7 +30,7 @@
 //
 // LIVE (B37_RULES 6.2): the exe imports `?_typeInfo@PointList@Pathfinding@@`
 // and every InteractDescription / ParticleDescription resource loads one
-// through the factory. `code/Game/Component/interactdescription.cpp` reads
+// through the factory. `src/game/Component/interactdescription.cpp` reads
 // `_points` (+0x30/+0x38) by RAW OFFSET — the asserts below are its contract.
 //
 // `??_7PointList@Pathfinding@@6B@` @ 0x180158f50, NINE slots (B37_SLOTS.md):

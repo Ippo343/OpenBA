@@ -29,15 +29,15 @@ flagged row); typedef aliases of containers are NOT VERIFIED.
 
 | area | IN-DELDTOR | IN-DELDTOR-VECTOR | MEMBER-VALUE | POLY-UNQUALIFIED | POLY-QUALIFIED | TEMPLATE | total |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| code/Game/Action | 18 | 0 | 34 | 0 | 0 | 0 | 52 |
-| code/Game/Component | 157 | 0 | 80 | 3 | 0 | 0 | 240 |
-| code/Game/Dialog | 61 | 0 | 9 | 4 | 0 | 0 | 74 |
-| code/Game/Entity | 1 | 0 | 1 | 0 | 0 | 0 | 2 |
-| code/Game/Game | 17 | 0 | 100 | 1 | 0 | 0 | 118 |
-| code/Game/Goal | 5 | 0 | 13 | 0 | 0 | 0 | 18 |
-| code/Game/Player | 12 | 0 | 5 | 0 | 0 | 0 | 17 |
-| code/Game/Tutorial | 21 | 0 | 42 | 0 | 0 | 0 | 63 |
-| code/Game/Work | 23 | 0 | 28 | 0 | 0 | 0 | 51 |
+| src/game/Action | 18 | 0 | 34 | 0 | 0 | 0 | 52 |
+| src/game/Component | 157 | 0 | 80 | 3 | 0 | 0 | 240 |
+| src/game/Dialog | 61 | 0 | 9 | 4 | 0 | 0 | 74 |
+| src/game/Entity | 1 | 0 | 1 | 0 | 0 | 0 | 2 |
+| src/game/Game | 17 | 0 | 100 | 1 | 0 | 0 | 118 |
+| src/game/Goal | 5 | 0 | 13 | 0 | 0 | 0 | 18 |
+| src/game/Player | 12 | 0 | 5 | 0 | 0 | 0 | 17 |
+| src/game/Tutorial | 21 | 0 | 42 | 0 | 0 | 0 | 63 |
+| src/game/Work | 23 | 0 | 28 | 0 | 0 | 0 | 51 |
 | dx11 | 0 | 0 | 2 | 0 | 5 | 0 | 7 |
 | runtime/src | 3 | 3 | 111 | 2 | 0 | 0 | 119 |
 | runtime/types | 133 | 124 | 0 | 0 | 0 | 4 | 261 |
@@ -75,10 +75,10 @@ flagged row); typedef aliases of containers are NOT VERIFIED.
 
 | # | site | code | dynamic type at the site | verdict / post-flip spelling |
 |---|---|---|---|---|
-| 1 | `code/Game/Component/modelcomponent.cpp:242` | `reinterpret_cast<Graphics::MeshInstance*>(meshInstance)->~MeshInstance();` | exactly `Graphics::MeshInstance` — embedded member, placement-new'd in the ctor (`:231`); no subclass of MeshInstance exists | harmless, but retail is a DIRECT `CALL [??1MeshInstance]`: spell `->Graphics::MeshInstance::~MeshInstance()` (no vptr read) |
-| 2,3 | `code/Game/Component/storagedisplaycomponent.cpp:316`, `:323` | `reinterpret_cast<Graphics::MeshInstance*>(p)->~MeshInstance();` | exactly MeshInstance — array elements placement-new'd at `:300/:304`, stride 0x128 = 0x120 + trailing int | same: qualify |
-| 4-7 | `code/Game/Dialog/controluiconfig.cpp:84`, `resourcelimituiconfig.cpp:83`, `statusiconuiconfig.cpp:79`, `upgradeuiconfig.cpp:74` | `this->~ControlUIConfig();` then `return new (this) ControlUIConfig();` (Reconstruct) | all four classes are `final` | harmless (devirtualised); the ONLY 4 Reconstructs spelled with `this->~T()` instead of `DeletingDtor(0)` — keep unqualified like the other 171 (see Part 2) |
-| 8 | `code/Game/Game/keystone_a_gamedtor.cpp:416` | `reinterpret_cast<PathfinderThread*>(queue)->~PathfinderThread();` then `MemFree(queue)` | `System::Thread` hierarchy | **EXEMPT hierarchy** (slot 0 = `Run`, `Thread.h:337` static_asserts no virtual dtor) — unaffected as long as Thread stays exempt |
+| 1 | `src/game/Component/modelcomponent.cpp:242` | `reinterpret_cast<Graphics::MeshInstance*>(meshInstance)->~MeshInstance();` | exactly `Graphics::MeshInstance` — embedded member, placement-new'd in the ctor (`:231`); no subclass of MeshInstance exists | harmless, but retail is a DIRECT `CALL [??1MeshInstance]`: spell `->Graphics::MeshInstance::~MeshInstance()` (no vptr read) |
+| 2,3 | `src/game/Component/storagedisplaycomponent.cpp:316`, `:323` | `reinterpret_cast<Graphics::MeshInstance*>(p)->~MeshInstance();` | exactly MeshInstance — array elements placement-new'd at `:300/:304`, stride 0x128 = 0x120 + trailing int | same: qualify |
+| 4-7 | `src/game/Dialog/controluiconfig.cpp:84`, `resourcelimituiconfig.cpp:83`, `statusiconuiconfig.cpp:79`, `upgradeuiconfig.cpp:74` | `this->~ControlUIConfig();` then `return new (this) ControlUIConfig();` (Reconstruct) | all four classes are `final` | harmless (devirtualised); the ONLY 4 Reconstructs spelled with `this->~T()` instead of `DeletingDtor(0)` — keep unqualified like the other 171 (see Part 2) |
+| 8 | `src/game/Game/keystone_a_gamedtor.cpp:416` | `reinterpret_cast<PathfinderThread*>(queue)->~PathfinderThread();` then `MemFree(queue)` | `System::Thread` hierarchy | **EXEMPT hierarchy** (slot 0 = `Run`, `Thread.h:337` static_asserts no virtual dtor) — unaffected as long as Thread stays exempt |
 | 9 | `runtime/src/engine/engine_lifecycle.cpp:892-893` | `reinterpret_cast< ::Audio::Stream*>(p + 0xa00)->~Stream();` | `Audio::Stream` (Thread subclass) | EXEMPT hierarchy — unaffected |
 | 10 | `runtime/src/io/persistence_saves.cpp:340` | `reinterpret_cast<PersistenceWorker*>(&_workerVtable)->~PersistenceWorker();` | embedded `IO::PersistenceWorker` (Thread subclass) | EXEMPT hierarchy — unaffected |
 
@@ -127,7 +127,7 @@ collision2d 2, achievement/io/object/pathfinding/picking 1 each. Reconstruct: th
 
 ### Destruct / Reconstruct — the pattern and the exact post-flip spelling
 
-`code/Game/Component/firedescription.cpp:78-84`:
+`src/game/Component/firedescription.cpp:78-84`:
 ```cpp
 // [6] 0x140005690: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
 // then the ctor again on `this` (D9 #10).
@@ -155,7 +155,7 @@ returns the NEW-EXPRESSION's pointer.
 `DeletingDtor(0)` does today. It must NOT be qualified (`this->T::~T()`): retail's slot 7 body 0x140001640 is ONE
 body shared by 119 exe tables precisely because it dispatches, and some tables inherit it:
 `TutorialImageHotKey`, `TutorialImageInputKey`, `TutorialImageToolbarIcon` inherit
-`TutorialImage::Destruct() { DeletingDtor(0); }` (`code/Game/Tutorial/tutorialimage.cpp:79`) — a qualified spelling
+`TutorialImage::Destruct() { DeletingDtor(0); }` (`src/game/Tutorial/tutorialimage.cpp:79`) — a qualified spelling
 would skip the subclass destructor. (`GeneratedImageBuffer` also inherits `ImageBuffer::Destruct/Reconstruct`,
 but is abstract.) The 4 `final` Dialog configs may keep `this->~T()` as they are.
 
@@ -179,7 +179,7 @@ All 24 destroy an object placement-new'd on **stack storage** (`alignas(16) uint
 earlier; `placement.py` finds 19 such STACK constructions of flip classes, and every one is destroyed with flag 0,
 **never flag 1** (so no existing stack-object-freed-by-MemFree bug):
 
-- IO streams (qualified): `code/Game/Game/gameupdateloop_serialize.cpp:900/923/928` (`CompressedMemoryStream`),
+- IO streams (qualified): `src/game/Game/gameupdateloop_serialize.cpp:900/923/928` (`CompressedMemoryStream`),
   `runtime/src/audio/vtbatch7b_stream_run_win.cpp:522`, `runtime/src/io/closure_batch2b_win.cpp:252` (`FileStream`),
   `runtime/src/io/modification_refresh.cpp:1023/1029/1178` (`PackageFile`), `package_file_read_win.cpp:811`,
   `saveload_loadmeta.cpp:421`, `saveload_meta.cpp:573` (`CompressedMemoryStream`),
@@ -195,7 +195,7 @@ would also be correct). NEVER `delete p`** — the storage is a stack array.
 
 ### `DeletingDtor(1)` (24) and `Object::Destroy` (2) → `delete p`
 
-`code/Game/Game/gameupdateloop.cpp:2498`, `menuscene.cpp:145` (`WorldGeometry`), `w2_takescreenshot.cpp:294`
+`src/game/Game/gameupdateloop.cpp:2498`, `menuscene.cpp:145` (`WorldGeometry`), `w2_takescreenshot.cpp:294`
 (`FrameCopyImageBuffer`), `runtime/src/engine/mainloop_run.cpp:230/330` (`UpdateLoop`),
 `runtime/src/graphics/imagebuffer_derived.cpp:354/468` (`_depth`), `ui/userinterface.cpp:1051` (`DialogInstance`),
 `ui/userinterface_frame.cpp:526`, `ui/userinterface_hover.cpp:266`, `ui/widgets_layout.cpp:264/606` (`UI::Element`),

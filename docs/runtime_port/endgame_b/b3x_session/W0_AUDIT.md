@@ -103,7 +103,7 @@ COMPILER slot was then taken from GCC itself — a probe TU declaring `const aut
 for every pair, compiled with the project's include flags to assembly, the Itanium PMF word read back
 (slot = (ptr − 1) / 8). Pairs where the extractor mis-read the old offset were settled by hand.
 
-- **157 converted call sites** across code/Game/Component 28, Action 26, Work 24, Dialog 11, Game 11,
+- **157 converted call sites** across src/game/Component 28, Action 26, Work 24, Dialog 11, Game 11,
   Player 10, Entity 1, Tutorial 1; runtime/src/ui 14, graphics 7, video 5, io 4, object 1, save 1,
   audio 1, engine 1; standalone 3; engine/funcs 2 — 50 distinct `Class::Member`s. **157 of 157 agree**
   (151 automatically; 6 by hand: `citizenai_housing_idle.cpp:505` old `vt[0x20/8]` = `Work::Execute` 4;
@@ -162,7 +162,7 @@ Buckets: **EX** exempt class (X1) · **NV** not a vtable · **BN** already by na
 **SM** slot taken from the member (`CompilerSlotOf` / `SlotAddressOf`) · **ID** whole-vptr identity, raw
 dump, or vptr loaded only to print / null-test.
 
-#### `code/Game/Action/action_base_cnr.cpp`
+#### `src/game/Action/action_base_cnr.cpp`
 - :109 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `static inline void* RSlot(uintptr_t slotAddr) {`
 - :140 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_fn_Vec4 = reinterpret_cast<fn_Vec4_t>(RSlot(0x1401529`
 - :141 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_fn_Time = reinterpret_cast<fn_Time_t>(RSlot(0x140152b`
@@ -171,22 +171,22 @@ dump, or vptr loaded only to print / null-test.
 - :566 **NV** array / pointer FIELD load at a data offset (no vptr) — `if (s_fn_c48a0) s_fn_c48a0(*reinterpret_cast<void***>(g`
 - :616 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint32_t v = p ? *reinterpret_cast<uint32_t*>(*reinterp`
 
-#### `code/Game/Action/action_base_complete.cpp`
+#### `src/game/Action/action_base_complete.cpp`
 - :479 **NV** array / pointer FIELD load at a data offset (no vptr) — `meshPtr = **reinterpret_cast<void***>(reinterpret_cast<`
 
-#### `code/Game/Action/action_base_move.cpp`
+#### `src/game/Action/action_base_move.cpp`
 - :118 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `if (enc) encType = (*reinterpret_cast<int(**)(void*)>(*`
 
-#### `code/Game/Action/action_pf_ctors.cpp`
+#### `src/game/Action/action_pf_ctors.cpp`
 - :102 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<char*>(obj + 0x18) != '\0') {`
 - :107 **NV** IBP / owner pointer deref then a FIELD read (no call) — `lVar1 = *reinterpret_cast<int64_t*>(*reinterpret_cast<i`
 - :283 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>`
 
-#### `code/Game/Action/action_pf_geom.cpp`
+#### `src/game/Action/action_pf_geom.cpp`
 - :51 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_memAlloc = reinterpret_cast<fn_MemAllocStatic_t>(slot`
 - :54 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_memFree = reinterpret_cast<fn_MemFreeStatic2_t>(slot(`
 
-#### `code/Game/Action/action_pf_roots_drop.cpp`
+#### `src/game/Action/action_pf_roots_drop.cpp`
 - :268 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** pplVar3 = *reinterpret_cast<void***>(reinterpret`
 - :344 **NV** IBP / owner pointer deref then a FIELD read (no call) — `local_78 = *reinterpret_cast<int64_t*>(*reinterpret_cas`
 - :351 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(lVar3 + 0x58) != 0) {`
@@ -197,83 +197,83 @@ dump, or vptr loaded only to print / null-test.
 - :426 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t uVar4 = *reinterpret_cast<uint64_t*>(*reinterp`
 - :459 **NV** IBP / owner pointer deref then a FIELD read (no call) — `local_res8_v = *reinterpret_cast<int64_t*>(*reinterpret`
 
-#### `code/Game/Action/action_pf_roots_misc.cpp`
+#### `src/game/Action/action_pf_roots_misc.cpp`
 - :103 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_boxisect = reinterpret_cast<fn_BoxIntersect_t>(slot(0`
 
-#### `code/Game/Action/createrawmaterial.cpp`
+#### `src/game/Action/createrawmaterial.cpp`
 - :439 **NV** array / pointer FIELD load at a data offset (no vptr) — `s_fn_RegisterEntity(*(void***)(gameWorld + 0xe8), &enti`
 
-#### `code/Game/Action/moveto.cpp`
+#### `src/game/Action/moveto.cpp`
 - :141 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `if (iat) s_fn_IsDerivedFrom = *reinterpret_cast<bool(**`
 
-#### `code/Game/Action/removenaturalresource.cpp`
+#### `src/game/Action/removenaturalresource.cpp`
 - :259 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* parentEntity = *(void**)(*(uint8_t**)(s + 0x20) +`
 
-#### `code/Game/Action/sendcomponentmessage.cpp`
+#### `src/game/Action/sendcomponentmessage.cpp`
 - :44 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `if (slotTypeSer) s_fn_Type_Serialize = *reinterpret_cas`
 
-#### `code/Game/Action/showtool.cpp`
+#### `src/game/Action/showtool.cpp`
 - :216 **ID** vptr loaded only to print / null-test the object; the call is by name — `void** heldVt = *(void***)(e + 0xb8);`
 - :250 **ID** vptr loaded only to print / null-test the object; the call is by name — `void** meshVt = *(void***)(e + 0xb8);`
 
-#### `code/Game/Component/AnimalComponent.h`
+#### `src/game/Component/AnimalComponent.h`
 - :39 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/BuildComponent.h`
+#### `src/game/Component/BuildComponent.h`
 - :50 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override {}`
 
-#### `code/Game/Component/CitizenComponent.h`
+#### `src/game/Component/CitizenComponent.h`
 - :53 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/Component.h`
+#### `src/game/Component/Component.h`
 - :53 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `virtual void Slot5();`
 - :59 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `virtual void Slot11();`
 
-#### `code/Game/Component/DecalComponent.h`
+#### `src/game/Component/DecalComponent.h`
 - :48 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/FloorComponent.h`
+#### `src/game/Component/FloorComponent.h`
 - :38 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/GrowthComponent.h`
+#### `src/game/Component/GrowthComponent.h`
 - :42 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/ParticleComponent.h`
+#### `src/game/Component/ParticleComponent.h`
 - :45 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/PickingComponent.h`
+#### `src/game/Component/PickingComponent.h`
 - :39 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/PopulationComponent.h`
+#### `src/game/Component/PopulationComponent.h`
 - :43 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/StateMachineComponent.h`
+#### `src/game/Component/StateMachineComponent.h`
 - :77 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/StatusIconComponent.h`
+#### `src/game/Component/StatusIconComponent.h`
 - :80 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/StorageDisplayComponent.h`
+#### `src/game/Component/StorageDisplayComponent.h`
 - :42 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot11() override;`
 
-#### `code/Game/Component/ambient_externalptr_serialize.cpp`
+#### `src/game/Component/ambient_externalptr_serialize.cpp`
 - :42 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `void** vt = *reinterpret_cast<void***>(enc);`
 - :43 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `return reinterpret_cast<int(*)(void*)>(vt[2])(enc);`
 
-#### `code/Game/Component/ambientenvironmentcomponent.cpp`
+#### `src/game/Component/ambientenvironmentcomponent.cpp`
 - :129 **BN** emitter sound slot setter, no vtable — `void SetSlot(void* comp, int slot, uint64_t soundRef, f`
 - :196 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** list = *reinterpret_cast<void***>(reinterpret_ca`
 - :430 **BN** emitter sound slot setter, no vtable — `SetSlot(emitter, 0, daySound, f);`
 - :431 **BN** emitter sound slot setter, no vtable — `SetSlot(emitter, 1, nightSound, unit - f);`
 
-#### `code/Game/Component/animalcomponent.cpp`
+#### `src/game/Component/animalcomponent.cpp`
 - :870 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void AnimalComponent::Slot11() {}`
 
-#### `code/Game/Component/animaldescription.cpp`
+#### `src/game/Component/animaldescription.cpp`
 - :33 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `return *reinterpret_cast<int*>( reinterpret_cast<uint8_`
 - :34 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&s`
 
-#### `code/Game/Component/boatcomponent_route.cpp`
+#### `src/game/Component/boatcomponent_route.cpp`
 - :86 **NV** IAT slot helper (read by hand) — `template <typename T> T SlotFn(uintptr_t slotAddr) {`
 - :87 **NV** IAT slot helper (read by hand) — `T SlotFn(uintptr_t slotAddr) {`
 - :144 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `const int n = table ? *reinterpret_cast<int*>(table + 0`
@@ -281,7 +281,7 @@ dump, or vptr loaded only to print / null-test.
 - :191 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `const uintptr_t entry = *reinterpret_cast<uintptr_t*>(t`
 - :401 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `Release_t release = *reinterpret_cast<Release_t*>(*rein`
 
-#### `code/Game/Component/boatcomponent_states.cpp`
+#### `src/game/Component/boatcomponent_states.cpp`
 - :142 **NV** IAT slot helper — `inline void* Slot(uintptr_t addr) {`
 - :166 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_V3Ctor3f = reinterpret_cast<fn_V3Ctor3f_t>(Slot(0x140`
 - :167 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_V3CtorS = reinterpret_cast<fn_V3CtorS_t>(Slot(0x14015`
@@ -297,39 +297,39 @@ dump, or vptr loaded only to print / null-test.
 - :274 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `if (!vt // !vt[2]) return;`
 - :277 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `reinterpret_cast<PostEvent_t>(vt[2])(node, sm, curIdx, `
 
-#### `code/Game/Component/buildcomponent.cpp`
+#### `src/game/Component/buildcomponent.cpp`
 - :484 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr1 = *(void***)(s + 0x58);`
 - :512 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr2 = *(void***)(s + 0x68);`
 
-#### `code/Game/Component/buildcomponent_state1.cpp`
+#### `src/game/Component/buildcomponent_state1.cpp`
 - :468 **NV** FIELD read/write through an object pointer (no call) — `if (builderMarker != 0) *reinterpret_cast<uint64_t*>(re`
 
-#### `code/Game/Component/charactercomponent.cpp`
+#### `src/game/Component/charactercomponent.cpp`
 - :76 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*`
 - :83 **NV** IBP / owner pointer deref then a FIELD read (no call) — `node = *reinterpret_cast<int64_t*>(*reinterpret_cast<in`
 - :356 **NV** array FIELD load (no vptr) — `void** objArray = *reinterpret_cast<void***>(&data48);`
 
-#### `code/Game/Component/charmanager.cpp`
+#### `src/game/Component/charmanager.cpp`
 - :81 **NV** IBP / owner pointer deref then a FIELD read (no call) — `float r = *reinterpret_cast<float*>( *reinterpret_cast<`
 
-#### `code/Game/Component/citizen_assignworkplace.cpp`
+#### `src/game/Component/citizen_assignworkplace.cpp`
 - :102 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `inline void* RSlot(uintptr_t slotAddr) {`
 - :123 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_slot_Vec3Eq = reinterpret_cast<fn_Vec3Eq_t>(RSlot(0x1`
 
-#### `code/Game/Component/citizen_lifeevent_handler.cpp`
+#### `src/game/Component/citizen_lifeevent_handler.cpp`
 - :116 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** comps = *reinterpret_cast<void***>(entity + 0x30`
 - :312 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int rot = (resIBPp && *reinterpret_cast<int64_t*>(resIB`
 
-#### `code/Game/Component/citizen_reassign_workers.cpp`
+#### `src/game/Component/citizen_reassign_workers.cpp`
 - :164 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* ownerEntity = *reinterpret_cast<void**>( *reinter`
 
-#### `code/Game/Component/citizen_updatehealth.cpp`
+#### `src/game/Component/citizen_updatehealth.cpp`
 - :94 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `static inline void* RSlot(uintptr_t slotAddr) {`
 - :109 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_boxIntersect = reinterpret_cast<fn_BoxIntersect_t>(RS`
 - :321 **NV** FIELD read through an object / IBP pointer (no call) — `if (*(int64_t*)(citizen + 0x68) != 0) return 1;`
 - :672 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entity = *(uintptr_t*)(*(uintptr_t*)slot + 0x`
 
-#### `code/Game/Component/citizenai_actionctors.cpp`
+#### `src/game/Component/citizenai_actionctors.cpp`
 - :204 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*rein`
 - :222 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t entityVal = *reinterpret_cast<int64_t*>(*reinte`
 - :420 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*rein`
@@ -343,7 +343,7 @@ dump, or vptr loaded only to print / null-test.
 - :841 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*rein`
 - :868 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*rein`
 
-#### `code/Game/Component/citizenai_candidatelist.cpp`
+#### `src/game/Component/citizenai_candidatelist.cpp`
 - :403 **NV** FIELD read through an object / IBP pointer (no call) — `if (cz != 0 && *reinterpret_cast<int64_t*>(cz + 0x68) !`
 - :405 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(cz + 0x228) != 0) {`
 - :446 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {`
@@ -360,22 +360,22 @@ dump, or vptr loaded only to print / null-test.
 - :566 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t resv = *reinterpret_cast<int64_t*>( *reinterpre`
 - :583 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {`
 
-#### `code/Game/Component/citizenai_gather.cpp`
+#### `src/game/Component/citizenai_gather.cpp`
 - :239 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int*>(mi + 0xf0) == 0) {`
 - :253 **NV** FIELD read through an object / IBP pointer (no call) — `if (settings && reinterpret_cast<char*>(settings)[0xc] `
 - :269 **NV** FIELD read through an object / IBP pointer (no call) — `if ((changed & 0xffff) != 0 && *reinterpret_cast<int64_`
 
-#### `code/Game/Component/citizenai_handlers.cpp`
+#### `src/game/Component/citizenai_handlers.cpp`
 - :123 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*rein`
 - :145 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t entityIBP = *reinterpret_cast<uint64_t*>(*rein`
 - :166 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t entityVal = *reinterpret_cast<int64_t*>(*reinte`
 
-#### `code/Game/Component/citizenai_handlers2.cpp`
+#### `src/game/Component/citizenai_handlers2.cpp`
 - :295 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int*>(mi + 0xf0) == 0) {`
 - :309 **NV** FIELD read through an object / IBP pointer (no call) — `if (settings && reinterpret_cast<char*>(settings)[0xc] `
 - :326 **NV** FIELD read through an object / IBP pointer (no call) — `if ((changed & 0xffff) != 0 && *reinterpret_cast<int64_`
 
-#### `code/Game/Component/citizenai_housing_idle.cpp`
+#### `src/game/Component/citizenai_housing_idle.cpp`
 - :272 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int sv = *reinterpret_cast<int*>(*reinterpret_cast<int6`
 - :278 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int sv2 = *reinterpret_cast<int*>(*reinterpret_cast<int`
 - :418 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int sv = *reinterpret_cast<int*>(*reinterpret_cast<int6`
@@ -386,13 +386,13 @@ dump, or vptr loaded only to print / null-test.
 - :658 **NV** IBP / owner pointer deref then a FIELD read (no call) — `bool homeless = (*reinterpret_cast<int64_t*>(*reinterpr`
 - :728 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t ownerKey = *reinterpret_cast<uint64_t*>(*reint`
 
-#### `code/Game/Component/citizenaicomponent.cpp`
+#### `src/game/Component/citizenaicomponent.cpp`
 - :591 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t res10 = *reinterpret_cast<int64_t*>(*reinterpre`
 - :598 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t profList = *reinterpret_cast<int64_t*>(*reinter`
 - :622 **NV** FIELD read through an object / IBP pointer (no call) — `if (ageThresh <= age && *reinterpret_cast<int64_t*>(d +`
 - :626 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64`
 
-#### `code/Game/Component/citizencomponent.cpp`
+#### `src/game/Component/citizencomponent.cpp`
 - :620 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int*>(healthCompVal + 0x60) + 1 <`
 - :726 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(partnerComp + 0x238) !=`
 - :753 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (isChildOrStudent // (*reinterpret_cast<int*>(*reint`
@@ -401,38 +401,38 @@ dump, or vptr loaded only to print / null-test.
 - :2157 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>`
 - :2555 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (st && *reinterpret_cast<int*>(*reinterpret_cast<int`
 
-#### `code/Game/Component/citizencomponent_lifecycle.cpp`
+#### `src/game/Component/citizencomponent_lifecycle.cpp`
 - :348 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void CitizenComponent::Slot11() {`
 
-#### `code/Game/Component/clearareacomponent.cpp`
+#### `src/game/Component/clearareacomponent.cpp`
 - :187 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** comps = *reinterpret_cast<void***>(e + 0x30);`
 
-#### `code/Game/Component/component.cpp`
+#### `src/game/Component/component.cpp`
 - :86 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Component::Slot5() {}`
 - :92 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Component::Slot11() {}`
 
-#### `code/Game/Component/componentdescription.cpp`
+#### `src/game/Component/componentdescription.cpp`
 - :38 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `return *reinterpret_cast<int*>( reinterpret_cast<uint8_`
 - :39 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 - :68 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `EncFn getState = reinterpret_cast<EncFn>( *reinterpret_`
 - :69 **EX** IO::Encoding (slot 0 IsBinary; factory CreateReader/Writer +0x18/+0x20, GetKind +0x10) - X1 — `*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(*r`
 
-#### `code/Game/Component/consumeproducecomponent.cpp`
+#### `src/game/Component/consumeproducecomponent.cpp`
 - :227 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *(void***)(descRoot + 0x28);`
 
-#### `code/Game/Component/consumeproducedescription.cpp`
+#### `src/game/Component/consumeproducedescription.cpp`
 - :59 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `return *reinterpret_cast<int*>( reinterpret_cast<uint8_`
 - :60 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&s`
 
-#### `code/Game/Component/controller_state_table.h`
+#### `src/game/Component/controller_state_table.h`
 - :303 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `RT_t rt = *reinterpret_cast<RT_t*>(reinterpret_cast<uin`
 
-#### `code/Game/Component/cropfieldcomponent.cpp`
+#### `src/game/Component/cropfieldcomponent.cpp`
 - :462 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** nvt = *reinterpret_cast<void***>(node);`
 - :463 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `if (!nvt // !nvt[2]) return;`
 - :466 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `reinterpret_cast<char (*)(void*, void*, int, int)>(nvt[`
 
-#### `code/Game/Component/cropfieldcomponent_states.cpp`
+#### `src/game/Component/cropfieldcomponent_states.cpp`
 - :188 **BN** crop-field plot array helpers (data) — `uint8_t* SlotAt(uintptr_t comp, int i) {`
 - :192 **BN** crop-field plot array helpers (data) — `int SlotCount(uintptr_t comp) {`
 - :198 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** items = *reinterpret_cast<void***>(list + 0x28);`
@@ -451,98 +451,98 @@ dump, or vptr loaded only to print / null-test.
 - :565 **BN** crop-field plot array helpers (data) — `if (CountSlots(comp, 2) == total) ::ControllerLive::Req`
 - :611 **BN** crop-field plot array helpers (data) — `if (CountSlots(comp, 2) == SlotCount(comp)) {`
 
-#### `code/Game/Component/decalcomponent.cpp`
+#### `src/game/Component/decalcomponent.cpp`
 - :451 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void DecalComponent::Slot11() {}`
 
-#### `code/Game/Component/destroycomponent_state6.cpp`
+#### `src/game/Component/destroycomponent_state6.cpp`
 - :204 **NV** Collection::Array data pointer (items / material list) — `void** items = *reinterpret_cast<void***>(st);`
 - :320 **NV** Collection::Array data pointer (items / material list) — `void* const* data = *reinterpret_cast<void* const* cons`
 
-#### `code/Game/Component/destroycomponent_states.cpp`
+#### `src/game/Component/destroycomponent_states.cpp`
 - :240 **ID** vptr loaded only to print / null-test the object; the call is by name — `void** vt = *reinterpret_cast<void***>(node);`
 
-#### `code/Game/Component/diseasecomponent.cpp`
+#### `src/game/Component/diseasecomponent.cpp`
 - :147 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `static inline void* RSlot(uintptr_t slotAddr) {`
 
-#### `code/Game/Component/firecomponent_ignite.cpp`
+#### `src/game/Component/firecomponent_ignite.cpp`
 - :443 **NV** FIELD read through an object / IBP pointer (no call) (read by hand) — `if (evt) *reinterpret_cast<uint32_t*>(evt + 0x34) = 1;`
 
-#### `code/Game/Component/firecomponent_smstate.cpp`
+#### `src/game/Component/firecomponent_smstate.cpp`
 - :109 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** vt = *reinterpret_cast<void***>(n);`
 - :110 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `int r = reinterpret_cast<fn_FindTrans_t>(vt[1])( n, sta`
 
-#### `code/Game/Component/fishingcomponent_produce.cpp`
+#### `src/game/Component/fishingcomponent_produce.cpp`
 - :60 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** items = *reinterpret_cast<void***>(list + 0x28);`
 
-#### `code/Game/Component/floorcomponent.cpp`
+#### `src/game/Component/floorcomponent.cpp`
 - :463 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void FloorComponent::Slot11() {`
 
-#### `code/Game/Component/growthcomponent.cpp`
+#### `src/game/Component/growthcomponent.cpp`
 - :822 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void GrowthComponent::Slot11() {}`
 
-#### `code/Game/Component/herbalistdescription.cpp`
+#### `src/game/Component/herbalistdescription.cpp`
 - :32 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `return *reinterpret_cast<int*>( reinterpret_cast<uint8_`
 - :33 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&s`
 
-#### `code/Game/Component/herdcomponent.cpp`
+#### `src/game/Component/herdcomponent.cpp`
 - :551 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t entity = *(uint64_t*)(*(int64_t*)animalIbp + 0`
 
-#### `code/Game/Component/immigrationcomponent_states.cpp`
+#### `src/game/Component/immigrationcomponent_states.cpp`
 - :202 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** vt = *reinterpret_cast<void***>(node);`
 - :204 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `reinterpret_cast<PostEvent_t>(vt[2])(node, reinterpret_`
 
-#### `code/Game/Component/immigrationdescription.cpp`
+#### `src/game/Component/immigrationdescription.cpp`
 - :43 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `return *reinterpret_cast<int*>( reinterpret_cast<uint8_`
 - :44 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&s`
 
-#### `code/Game/Component/keystone_a_restree.cpp`
+#### `src/game/Component/keystone_a_restree.cpp`
 - :63 **NV** IAT slot helper — `inline uintptr_t slot(uintptr_t a) {`
 - :70 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x`
 - :77 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x14`
 
-#### `code/Game/Component/marketdescription.cpp`
+#### `src/game/Component/marketdescription.cpp`
 - :33 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `return *reinterpret_cast<int*>( reinterpret_cast<uint8_`
 - :34 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&s`
 
-#### `code/Game/Component/multiobjectcomponent.cpp`
+#### `src/game/Component/multiobjectcomponent.cpp`
 - :50 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** array = *(void***)((uintptr_t)self + 0x48);`
 
-#### `code/Game/Component/particlecomponent.cpp`
+#### `src/game/Component/particlecomponent.cpp`
 - :473 **NV** string literal text (read by hand) — `"with nullResource==0 means the resource resolved but i`
 - :751 **NV** FIELD read through an object / IBP pointer (no call) — `if (*(float*)(geoObj + 0x7C) != 0.0f) {`
 - :909 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void ParticleComponent::Slot11() {`
 
-#### `code/Game/Component/pasturecomponent.cpp`
+#### `src/game/Component/pasturecomponent.cpp`
 - :266 **NV** FIELD read through an object / IBP pointer (no call) — `if (((newFlags ^ oldFlags) & 0xffff) != 0 && *(int64_t*`
 
-#### `code/Game/Component/pasturecomponent_spawn.cpp`
+#### `src/game/Component/pasturecomponent_spawn.cpp`
 - :194 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t parentOwner = *reinterpret_cast<int64_t*>( *rei`
 
-#### `code/Game/Component/pasturecomponent_states.cpp`
+#### `src/game/Component/pasturecomponent_states.cpp`
 - :708 **NV** IBP / owner pointer deref then a FIELD read (no call) — `const uint32_t v = *reinterpret_cast<uint32_t*>( *reint`
 
-#### `code/Game/Component/pickingcomponent.cpp`
+#### `src/game/Component/pickingcomponent.cpp`
 - :310 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void PickingComponent::Slot11() {}`
 
-#### `code/Game/Component/populationcomponent.cpp`
+#### `src/game/Component/populationcomponent.cpp`
 - :442 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `Slot11();`
 - :617 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void PopulationComponent::Slot11() {}`
 
-#### `code/Game/Component/quarrycomponent_deform.cpp`
+#### `src/game/Component/quarrycomponent_deform.cpp`
 - :254 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `if (!desc) { QuarryBail("Slot12(msg4)", "no QuarryDescr`
 
-#### `code/Game/Component/resourceproduce_creatework.cpp`
+#### `src/game/Component/resourceproduce_creatework.cpp`
 - :353 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** const arr = *reinterpret_cast<void***>(descRoot `
 
-#### `code/Game/Component/spawndescription.cpp`
+#### `src/game/Component/spawndescription.cpp`
 - :36 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `return *reinterpret_cast<int*>( reinterpret_cast<uint8_`
 - :37 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&s`
 
-#### `code/Game/Component/statemachinecomponent.cpp`
+#### `src/game/Component/statemachinecomponent.cpp`
 - :302 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `((VFn_onstate_t)(*(uintptr_t*)(*(int64_t*)sm[0] + 0x28)`
 - :750 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void StateMachineComponent::Slot11() {}`
 
-#### `code/Game/Component/statusicon_geometry.cpp`
+#### `src/game/Component/statusicon_geometry.cpp`
 - :198 **NV** vertex array / buffer named vtx* — `SIVertex vtx[4];`
 - :206 **NV** vertex array / buffer named vtx* — `vtx[1].x = center[0] + right[0] + up[0];`
 - :207 **NV** vertex array / buffer named vtx* — `vtx[1].y = center[1] + right[1] + up[1];`
@@ -557,37 +557,37 @@ dump, or vptr loaded only to print / null-test.
 - :218 **NV** vertex array / buffer named vtx* — `vtx[3].z = center[2] - right[2] - up[2];`
 - :219 **NV** vertex array / buffer named vtx* — `vtx[3].color = 0xffffffffu; vtx[3].u = u0; vtx[3].v = v`
 
-#### `code/Game/Component/statusiconcomponent.cpp`
+#### `src/game/Component/statusiconcomponent.cpp`
 - :659 **NV** string literal text (read by hand) — `"(geom vtable +0x28 == 0, sceneId=%d) � icon refresh sk`
 - :769 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void StatusIconComponent::Slot11() {}`
 
-#### `code/Game/Component/storagedisplaycomponent.cpp`
+#### `src/game/Component/storagedisplaycomponent.cpp`
 - :672 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void StorageDisplayComponent::Slot11() {`
 
-#### `code/Game/Component/tornadocomponent.cpp`
+#### `src/game/Component/tornadocomponent.cpp`
 - :613 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t ownerEntity = *reinterpret_cast<int64_t*>(*rein`
 
-#### `code/Game/Component/tradecomponent_dock.cpp`
+#### `src/game/Component/tradecomponent_dock.cpp`
 - :163 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** objs = *reinterpret_cast<void***>(owner + 0x28);`
 - :396 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** src = *reinterpret_cast<void***>(rec + 0x10);`
 
-#### `code/Game/Component/tradedescription.cpp`
+#### `src/game/Component/tradedescription.cpp`
 - :54 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `return *reinterpret_cast<int*>( reinterpret_cast<uint8_`
 - :55 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&s`
 
-#### `code/Game/Component/zonecomponent.cpp`
+#### `src/game/Component/zonecomponent.cpp`
 - :77 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t key = *reinterpret_cast<uint64_t*>( *reinterpr`
 
-#### `code/Game/Dialog/buildrequirementui.cpp`
+#### `src/game/Dialog/buildrequirementui.cpp`
 - :82 **ID** vptr loaded only to print / null-test the object; the call is by name — `void** vtable = *(void***)comp;`
 - :83 **SM** slot taken from the member (object/VSlot.h) — `if (!SaneHeapPtr(vtable) // Object::SlotAddressOf(comp,`
 
-#### `code/Game/Dialog/controlui.cpp`
+#### `src/game/Dialog/controlui.cpp`
 - :89 **BN** string / trace helper named SlotN — `void TraceSlot7(void* self) {`
 - :276 **BN** string / trace helper named SlotN — `controlui_sa::TraceSlot7(this);`
 - :286 **BN** string / trace helper named SlotN — `if (param3 == 0x12 && param4 == 50000) controlui_sa::Tr`
 
-#### `code/Game/Dialog/debugui.cpp`
+#### `src/game/Dialog/debugui.cpp`
 - :75 **NV** singleton pointer chain (data) — `void** weatherListPtr = *(void***)((uintptr_t)(*g_pGame`
 - :102 **NV** singleton pointer chain (data) — `void** weatherListPtr = *(void***)((uintptr_t)(*g_pGame`
 - :153 **NV** singleton pointer chain (data) — `void** weatherListPtr = *(void***)((uintptr_t)(*g_pGame`
@@ -598,7 +598,7 @@ dump, or vptr loaded only to print / null-test.
 - :1441 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** weatherListPtr = *(void***)((uintptr_t)gameWorld`
 - :1493 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** weatherLive = *(void***)((uintptr_t)gameWorld + `
 
-#### `code/Game/Dialog/destroyui.cpp`
+#### `src/game/Dialog/destroyui.cpp`
 - :134 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** smVtable = *(void***)smPtr;`
 - :137 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `((fn_StateTransition_t)smVtable[2])(smPtr, smPtrAddr, (`
 - :153 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** smVtable = *(void***)smPtr;`
@@ -608,31 +608,31 @@ dump, or vptr loaded only to print / null-test.
 - :188 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** smVtable = *(void***)smPtr;`
 - :190 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `((fn_StateTransition_t)smVtable[2])(smPtr, smPtrAddr, (`
 
-#### `code/Game/Dialog/entityui.cpp`
+#### `src/game/Dialog/entityui.cpp`
 - :80 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *(void***)((uintptr_t)entityDesc + 0`
 - :381 **NV** FIELD read through an object / IBP pointer (no call) — `if (*(uint8_t*)((uintptr_t)toolPtr + 0x40) == 0 && *(ui`
 - :532 **NV** singleton pointer chain (data) — `void* keyMap = ***(void****)g_pInputConfigSingletonExre`
 - :765 **NV** FIELD read through an object / IBP pointer (no call) — `if (pinState == 0 && *(char*)((uintptr_t)toolPtr + 0x41`
 
-#### `code/Game/Dialog/eventnotifydialog.cpp`
+#### `src/game/Dialog/eventnotifydialog.cpp`
 - :554 **NV** singleton pointer chain (data) — `uint64_t soundEffect = *(uint64_t*)(*(uintptr_t*)g_pKey`
 
-#### `code/Game/Dialog/followdialog.cpp`
+#### `src/game/Dialog/followdialog.cpp`
 - :337 **NV** singleton pointer chain (data) — `void* keyMap = g_pInputConfigSingletonExref ? ***(void*`
 
-#### `code/Game/Dialog/immigrationui.cpp`
+#### `src/game/Dialog/immigrationui.cpp`
 - :262 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** smVtable = *(void***)smObj;`
 - :267 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `((fn_RequestAction_t)smVtable[2])(smObj, (void*)(bsPtr `
 
-#### `code/Game/Dialog/moddetailsdialog.cpp`
+#### `src/game/Dialog/moddetailsdialog.cpp`
 - :221 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** conflictArray = *(void***)(m + 0x70);`
 - :282 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** cArray = *(void***)(m + 0x70);`
 
-#### `code/Game/Dialog/moddialog.cpp`
+#### `src/game/Dialog/moddialog.cpp`
 - :249 **NV** IBP / owner pointer deref then a FIELD read (no call) — `*(uint32_t*)(*(uintptr_t*)elemBuf + 0xC0) = 8;`
 - :338 **NV** vertex array / buffer named vtx* — `uint8_t vtChildBuf[8] = {};`
 
-#### `code/Game/Dialog/newgamedialog.cpp`
+#### `src/game/Dialog/newgamedialog.cpp`
 - :108 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ptrArray = *(void***)((uintptr_t)externalList + `
 - :220 **NV** array / pointer FIELD load at a data offset (no vptr) — `int maxVal = *(int*)((uintptr_t)*(void**)editSeedPtr + `
 - :280 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ptrArray = *(void***)((uintptr_t)self->mapGenera`
@@ -641,37 +641,37 @@ dump, or vptr loaded only to print / null-test.
 - :673 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** climatePtrArray = *(void***)((uintptr_t)self->cl`
 - :679 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** terrainPtrArray = *(void***)((uintptr_t)self->te`
 
-#### `code/Game/Dialog/orchardui.cpp`
+#### `src/game/Dialog/orchardui.cpp`
 - :296 **BN** string / trace helper named SlotN — `orchardui_sa::Trace("Slot9(event)", this);`
 
-#### `code/Game/Dialog/pastureui.cpp`
+#### `src/game/Dialog/pastureui.cpp`
 - :221 **NV** FIELD read through an object / IBP pointer (no call) — `bool enableCombo = (itemCount > 0) && (*(int32_t*)(comp`
 - :336 **BN** string / trace helper named SlotN — `pastureui_sa::Trace("Slot9(event)", this);`
 
-#### `code/Game/Dialog/professionui.cpp`
+#### `src/game/Dialog/professionui.cpp`
 - :368 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** factory = *(void***)((uintptr_t)firstChild + 0xB`
 
-#### `code/Game/Dialog/statusbarui.cpp`
+#### `src/game/Dialog/statusbarui.cpp`
 - :93 **NV** FIELD read through an object / IBP pointer (no call) — `if (*(uintptr_t*)(gw + 0x128) == 0) return false;`
 - :94 **NV** FIELD read through an object / IBP pointer (no call) — `if (*(uintptr_t*)(gw + 0x130) == 0) return false;`
 - :336 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *(void***)(entity + 0x30);`
 - :625 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *(void***)(compEntity + 0x30);`
 
-#### `code/Game/Dialog/toolbardialog.cpp`
+#### `src/game/Dialog/toolbardialog.cpp`
 - :245 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** buttonArray = *(void***)(s + 0xC0);`
 - :252 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** buttonArray = *(void***)(s + 0xC0);`
 - :733 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** kids = *reinterpret_cast<void***>(reinterpret_ca`
 - :776 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ctrlArr = *reinterpret_cast<void***>(reinterpret`
 - :1692 **NV** array / pointer FIELD load at a data offset (no vptr) — `void* subRoot2 = *(void**)((uintptr_t)*(void**)subDialo`
 
-#### `code/Game/Dialog/toolui.cpp`
+#### `src/game/Dialog/toolui.cpp`
 - :470 **NV** singleton pointer chain (data) — `void* keyMap = ***(void****)g_pInputConfigSingletonExre`
 - :510 **NV** singleton pointer chain (data) — `void* keyMap = ***(void****)g_pInputConfigSingletonExre`
 
-#### `code/Game/Dialog/townhall_helpers.cpp`
+#### `src/game/Dialog/townhall_helpers.cpp`
 - :480 **NV** FIELD read through an object / IBP pointer (no call) — `if (comp && *(uintptr_t*)((uintptr_t)comp + 0x58) != 0)`
 
-#### `code/Game/Dialog/townhallui.cpp`
+#### `src/game/Dialog/townhallui.cpp`
 - :242 **NV** singleton pointer chain (data) — `uintptr_t profList = *(uintptr_t*)(*(uintptr_t*)g_pGame`
 - :848 **NV** singleton pointer chain (data) — `self->cachedGameTick = *(int*)(*(uintptr_t*)(*(uintptr_`
 - :913 **NV** singleton pointer chain (data) — `uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGame`
@@ -697,7 +697,7 @@ dump, or vptr loaded only to print / null-test.
 - :2046 **NV** FIELD read through an object / IBP pointer (no call) — `if (*(uintptr_t*)(gw + 0x128) == 0) return false;`
 - :2075 **NV** a local diagnostic name/pointer table — `const N fns[] = {`
 
-#### `code/Game/Dialog/tradeui.cpp`
+#### `src/game/Dialog/tradeui.cpp`
 - :322 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr = *(void***)((uintptr_t)descEntity + 0x28);`
 - :371 **BN** VCall_Element_* helpers are by-name UI::Element::Enable / SetColor (B.3.6) — `static inline void VCall_Element_SetEnabled(void* elem,`
 - :382 **BN** VCall_Element_* helpers are by-name UI::Element::Enable / SetColor (B.3.6) — `static inline void VCall_Element_Slot10(void* elem, int`
@@ -734,20 +734,20 @@ dump, or vptr loaded only to print / null-test.
 - :2503 **BN** VCall_Element_* helpers are by-name UI::Element::Enable / SetColor (B.3.6) — `VCall_Element_SetEnabled(*(void**)(uiEntry + 0x08), fal`
 - :2532 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *(void***)((uintptr_t)descEntity + 0`
 
-#### `code/Game/Dialog/tradeui_buyentries.cpp`
+#### `src/game/Dialog/tradeui_buyentries.cpp`
 - :123 **NV** array / pointer FIELD load at a data offset (no vptr) — `void* const* arr = *reinterpret_cast<void* const* const`
 - :162 **NV** array / pointer FIELD load at a data offset (no vptr) — `void* const* goods = *reinterpret_cast<void* const* con`
 
-#### `code/Game/Dialog/tradeui_checkout.cpp`
+#### `src/game/Dialog/tradeui_checkout.cpp`
 - :118 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** objs = *reinterpret_cast<void***>(entity + 0x28)`
 
-#### `code/Game/Dialog/tradeui_price.cpp`
+#### `src/game/Dialog/tradeui_price.cpp`
 - :73 **NV** array / pointer FIELD load at a data offset (no vptr) — `void* const* arr = *reinterpret_cast<void* const* const`
 
-#### `code/Game/Dialog/workplaceui.cpp`
+#### `src/game/Dialog/workplaceui.cpp`
 - :800 **SM** slot taken from the member (object/VSlot.h) — `return b ? Object::SlotAddressOf(b, &UI::Element::Enabl`
 
-#### `code/Game/Entity/citizenbehavior.cpp`
+#### `src/game/Entity/citizenbehavior.cpp`
 - :911 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *reinterpret_cast<void***>(entity + `
 - :1693 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *(void***)(building + 0x30);`
 - :1701 **NV** array / pointer FIELD load at a data offset (no vptr) — `compArray = *(void***)(building + 0x30);`
@@ -756,48 +756,48 @@ dump, or vptr loaded only to print / null-test.
 - :2002 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** compArray = *(void***)(school + 0x30);`
 - :2008 **NV** array / pointer FIELD load at a data offset (no vptr) — `compArray = *(void***)(school + 0x30);`
 
-#### `code/Game/Entity/componententity.cpp`
+#### `src/game/Entity/componententity.cpp`
 - :305 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `reinterpret_cast<Component*>(compPtr)->Slot5();`
 - :741 **NV** FIELD read through an object / IBP pointer (no call) — `const bool armed = (*(uint8_t*)(compPtr + 0x20) & 1) !=`
 
-#### `code/Game/Entity/entitylist.cpp`
+#### `src/game/Entity/entitylist.cpp`
 - :905 **NV** FIELD read through an object / IBP pointer (no call) — `if (((*reinterpret_cast<uint32_t*>(ent + 0x40) >> 10) &`
 - :1247 **NV** IBP / owner pointer deref then a FIELD read (no call) — `*(int32_t*)(*(int64_t*)swappedIBP + 0x18) = entityMaste`
 
-#### `code/Game/Game/force_work.cpp`
+#### `src/game/Game/force_work.cpp`
 - :93 **SM** slot taken from the member (object/VSlot.h) — `const long typeSlot = ::Object::CompilerSlotOf(&::Objec`
 - :96 **SM** slot taken from the member (object/VSlot.h) — `if (!Executable(::Object::SlotAddressOf(obj, &::Object:`
 
-#### `code/Game/Game/game_leaf_helpers.cpp`
+#### `src/game/Game/game_leaf_helpers.cpp`
 - :226 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr = *reinterpret_cast<void***>(b + 0x50);`
 
-#### `code/Game/Game/game_main.cpp`
+#### `src/game/Game/game_main.cpp`
 - :241 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vt = *reinterpret_cast<void***>(sub1);`
 - :242 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<void(*)(void*)>(vt[0x90/8])(sub1);`
 - :246 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `void** vt = *reinterpret_cast<void***>(sub2);`
 - :247 **EX** COM interface (XAudio2 / DirectInput / DXGI swap chain) - not ours — `reinterpret_cast<void(*)(void*)>(vt[0x10/8])(sub2);`
 
-#### `code/Game/Game/gameupdateloop.cpp`
+#### `src/game/Game/gameupdateloop.cpp`
 - :1399 **NV** singleton pointer chain (data) — `void* keyMap = ***(void****)g_pInputConfigSingletonExre`
 - :2321 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** citizenArray = *(void***)(citizenList + 0xa0);`
 
-#### `code/Game/Game/gameupdateloop_load.cpp`
+#### `src/game/Game/gameupdateloop_load.cpp`
 - :673 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr0 = *(void***)(p + 0x50);`
 - :1603 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** data = resList ? *(void***)((uintptr_t)resList +`
 
-#### `code/Game/Game/gameupdateloop_serialize.cpp`
+#### `src/game/Game/gameupdateloop_serialize.cpp`
 - :618 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `reinterpret_cast<Component*>(comp)->Slot11();`
 - :661 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `if (*(int*)((uintptr_t)*(void**)serializer + 8) == 0) {`
 
-#### `code/Game/Game/goals_serialize.cpp`
+#### `src/game/Game/goals_serialize.cpp`
 - :667 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `reinterpret_cast<Work*>(entity)->Slot12(slot12Ver);`
 - :672 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint32_t hi = *reinterpret_cast<uint32_t*>(*reinterpret`
 - :694 **NV** FIELD read/write through an object pointer (no call) — `if (*reinterpret_cast<int64_t*>(reinterpret_cast<uint8_`
 
-#### `code/Game/Game/menudialogloopt.cpp`
+#### `src/game/Game/menudialogloopt.cpp`
 - :600 **NV** array FIELD load (no vptr) — `void** arr = *reinterpret_cast<void***>(Loop(self)->_pa`
 
-#### `code/Game/Game/serialize_arrays.cpp`
+#### `src/game/Game/serialize_arrays.cpp`
 - :466 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int serializerInner = *reinterpret_cast<int*>( reinterp`
 - :467 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 - :486 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
@@ -805,7 +805,7 @@ dump, or vptr loaded only to print / null-test.
 - :510 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
 - :511 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 
-#### `code/Game/Game/serialize_externals.cpp`
+#### `src/game/Game/serialize_externals.cpp`
 - :134 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int serializerInner = *reinterpret_cast<int*>( reinterp`
 - :135 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 - :152 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
@@ -813,7 +813,7 @@ dump, or vptr loaded only to print / null-test.
 - :175 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
 - :176 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 
-#### `code/Game/Game/serialize_externals_typed.cpp`
+#### `src/game/Game/serialize_externals_typed.cpp`
 - :118 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int serializerInner = *reinterpret_cast<int*>( reinterp`
 - :119 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 - :136 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
@@ -821,7 +821,7 @@ dump, or vptr loaded only to print / null-test.
 - :159 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
 - :160 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 
-#### `code/Game/Game/serialize_struct60b_serialize.cpp`
+#### `src/game/Game/serialize_struct60b_serialize.cpp`
 - :149 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
 - :150 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 - :315 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
@@ -833,13 +833,13 @@ dump, or vptr loaded only to print / null-test.
 - :468 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `int innerCheck = *reinterpret_cast<int*>( reinterpret_c`
 - :469 **NV** IO::Serializer +0 is the Stream*; Stream+8 is its direction word (data) — `reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(se`
 
-#### `code/Game/Game/starttown.cpp`
+#### `src/game/Game/starttown.cpp`
 - :632 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr = *(void***)(townMgr + 0x120);`
 - :2473 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `const int aCount = tbl ? *(int32_t*)(tbl + 0x38) : 0;`
 - :2475 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `const uintptr_t e = *(uintptr_t*)(tbl + 0x30) + (uintpt`
 - :3399 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** comps = *(void** const*)((const uint8_t*)owner +`
 
-#### `code/Game/Game/statemachine.cpp`
+#### `src/game/Game/statemachine.cpp`
 - :54 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** vt = (void**)node->vtable;`
 - :55 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `return ((fn_t)vt[0])(node, stateIndex);`
 - :63 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** vt = (void**)node->vtable;`
@@ -853,47 +853,47 @@ dump, or vptr loaded only to print / null-test.
 - :99 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `void** vt = (void**)node->vtable;`
 - :100 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `return ((fn_t)vt[7])(node, ctx, deltaTime) != 0;`
 
-#### `code/Game/Game/town_workplace_registry.cpp`
+#### `src/game/Game/town_workplace_registry.cpp`
 - :296 **NV** IBP / owner pointer deref then a FIELD read (no call) — `accepting = *reinterpret_cast<char*>(*reinterpret_cast<`
 
-#### `code/Game/Game/weather_particle_draw.cpp`
+#### `src/game/Game/weather_particle_draw.cpp`
 - :378 **NV** vertex array / buffer named vtx* — `std::memcpy(vtxCur, staging, vtxBytes);`
 - :379 **NV** vertex array / buffer named vtx* — `vtxCur = reinterpret_cast<uint8_t*>(vtxCur) + vtxBytes;`
 
-#### `code/Game/Game/weather_particles.cpp`
+#### `src/game/Game/weather_particles.cpp`
 - :345 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** activeArray = *reinterpret_cast<void***>(s + 0x5`
 
-#### `code/Game/Game/weather_sim.cpp`
+#### `src/game/Game/weather_sim.cpp`
 - :234 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** activeArray = *reinterpret_cast<void***>(w + 0x5`
 - :311 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr = *reinterpret_cast<void***>(w + 0x50);`
 
-#### `code/Game/Game/weather_sun.cpp`
+#### `src/game/Game/weather_sun.cpp`
 - :154 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `const EnvKeyframe& a = table[kf];`
 - :155 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `const EnvKeyframe& b = table[kfNext];`
 - :182 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** arr = *reinterpret_cast<void***>(ws + 0x50);`
 
-#### `code/Game/Goal/goal_exe_helpers.cpp`
+#### `src/game/Goal/goal_exe_helpers.cpp`
 - :82 **NV** string characters — `++k) normalized[k] = (name[k] == '\\') ? '/' : name[k];`
 
-#### `code/Game/Object/internal_factory_audit.cpp`
+#### `src/game/Object/internal_factory_audit.cpp`
 - :38 **NV** Object factory registration table (data) — `static bool Table(void*** outTable, int* outCount) {`
 - :42 **NV** Object factory registration table (data) — `void** tbl = *reinterpret_cast<void***>(fb);`
 - :65 **NV** Object factory registration table (data) — `void** tbl = *reinterpret_cast<void***>(fb);`
 - :70 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `return tbl[idx] == obj;`
 
-#### `code/Game/Player/bridgetool.cpp`
+#### `src/game/Player/bridgetool.cpp`
 - :65 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** components = *(void***)(entity + 0x28);`
 
-#### `code/Game/Player/dragplacementtool.cpp`
+#### `src/game/Player/dragplacementtool.cpp`
 - :57 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** components = *(void***)(entity + 0x28);`
 
-#### `code/Game/Player/dragtool.cpp`
+#### `src/game/Player/dragtool.cpp`
 - :164 **NV** singleton pointer chain (data) — `return ***(void****)g_pInputConfigSingletonExref;`
 
-#### `code/Game/Player/edittool.cpp`
+#### `src/game/Player/edittool.cpp`
 - :907 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** kids = *(void***)(e + 0xa0);`
 
-#### `code/Game/Player/fencedtool.cpp`
+#### `src/game/Player/fencedtool.cpp`
 - :92 **NV** singleton pointer chain (data) — `return ***(void****)g_pInputConfigSingletonExref;`
 - :395 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityTypeRef = *(uintptr_t*)(*(uintptr_t*)ce`
 - :601 **NV** singleton pointer chain (data) — `startCell = s_fn_GetCursorCell((uint64_t)***(void****)g`
@@ -901,7 +901,7 @@ dump, or vptr loaded only to print / null-test.
 - :745 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** components = *(void***)(entity + 0x28);`
 - :854 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** modelData = *(void***)(modelArray + 0x08);`
 
-#### `code/Game/Player/keystone_a_removalcalcpath.cpp`
+#### `src/game/Player/keystone_a_removalcalcpath.cpp`
 - :120 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `static inline void* SlotFn(uintptr_t slotAddr) {`
 - :144 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_memAlloc = reinterpret_cast<fn_memAllocStatic_t>(Slot`
 - :145 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `s_timeCtor = reinterpret_cast<fn_timeCtor_t>(SlotFn(0x1`
@@ -918,32 +918,32 @@ dump, or vptr loaded only to print / null-test.
 - :460 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `int iVar8 = (*reinterpret_cast<int(**)(int64_t*, int, i`
 - :925 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `(*reinterpret_cast<void(**)(int64_t*, void*, int, int)>`
 
-#### `code/Game/Player/pathtool.cpp`
+#### `src/game/Player/pathtool.cpp`
 - :78 **NV** singleton pointer chain (data) — `return (uint64_t)***(void****)g_pInputConfigSingletonEx`
 
-#### `code/Game/Player/pathtool_setselected.cpp`
+#### `src/game/Player/pathtool_setselected.cpp`
 - :319 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t workplace = *(int64_t*)(*(int64_t*)param_2 + 0x`
 
-#### `code/Game/Player/placementtool.cpp`
+#### `src/game/Player/placementtool.cpp`
 - :182 **NV** singleton pointer chain (data) — `return ***(void****)g_pInputConfigSingletonExref;`
 - :882 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** components = *(void***)(entity + 0x28);`
 - :1063 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** comps = *(void***)(entity + 0x28);`
 
-#### `code/Game/Player/removaltool.cpp`
+#### `src/game/Player/removaltool.cpp`
 - :64 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** components = *(void***)(entity + 0x28);`
 
-#### `code/Game/Player/roadtool.cpp`
+#### `src/game/Player/roadtool.cpp`
 - :128 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** components = *(void***)(entity + 0x28);`
 - :172 **NV** singleton pointer chain (data) — `uint64_t keyMap = (uint64_t)***(void****)g_pInputConfig`
 
-#### `code/Game/Player/roadtool_calcpath.cpp`
+#### `src/game/Player/roadtool_calcpath.cpp`
 - :103 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** comps = *(void***)(entity + 0x28);`
 
-#### `code/Game/Player/tool_base_highlight.cpp`
+#### `src/game/Player/tool_base_highlight.cpp`
 - :57 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x`
 - :60 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x14`
 
-#### `code/Game/Player/tool_base_highlight_tess.cpp`
+#### `src/game/Player/tool_base_highlight_tess.cpp`
 - :69 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x`
 - :72 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x14`
 - :116 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `opVec2Ctor = reinterpret_cast<Vec2Ctor_t>(slot(0x140151`
@@ -953,23 +953,23 @@ dump, or vptr loaded only to print / null-test.
 - :120 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `opT2MulVec = reinterpret_cast<T2MulVec_t>(slot(0x140152`
 - :338 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** ppvVar9 = *reinterpret_cast<void***>(lVar16 + 0x`
 
-#### `code/Game/Player/tool_base_path.cpp`
+#### `src/game/Player/tool_base_path.cpp`
 - :184 **NV** FIELD read through an object / IBP pointer (no call) — `ownOk = (*reinterpret_cast<int64_t*>(owner + 0x28) == p`
 - :237 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(entity + 0x28) != *rein`
 - :279 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(entity + 0x28) == *rein`
 - :357 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (lv == *reinterpret_cast<int64_t*>(*reinterpret_cast`
 
-#### `code/Game/Player/tool_base_ray.cpp`
+#### `src/game/Player/tool_base_ray.cpp`
 - :227 **NV** singleton pointer chain (data) — `void**** p = reinterpret_cast<void****>(g_pInputConfigS`
 
-#### `code/Game/Player/tool_base_render.cpp`
+#### `src/game/Player/tool_base_render.cpp`
 - :249 **NV** a data table named table/tbl (entries, attach points, sprite table, StringTable count) — `return (float)(int)tbl[(int64_t)dim * cb + ca] * hscale`
 - :425 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** oldMesh = *reinterpret_cast<void***>(self + 0xf8`
 - :532 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** m = *reinterpret_cast<void***>(self + 0xf8);`
 - :708 **ID** vptr loaded only to print / null-test the object; the call is by name — `void** vt = *reinterpret_cast<void***>(self);`
 - :730 **SM** slot taken from the member (object/VSlot.h) — `if (vt && ::Object::SlotAddressOf(reinterpret_cast<void`
 
-#### `code/Game/Player/tool_base_tilerender.cpp`
+#### `src/game/Player/tool_base_tilerender.cpp`
 - :277 **NV** vertex array / buffer named vtx* — `float vtx[6];`
 - :278 **NV** vertex array / buffer named vtx* — `vtx[0] = quad[k][0]; vtx[1] = quad[k][1]; vtx[2] = quad`
 - :279 **NV** vertex array / buffer named vtx* — `vtx[3] = ((vt - half) * sinA + (ut - half) * cosA + hal`
@@ -982,115 +982,115 @@ dump, or vptr loaded only to print / null-test.
 - :304 **NV** vertex array / buffer named vtx* — `vtx[4] = ((vt - half) * cosA - (ut - half) * sinA) + ha`
 - :305 **NV** vertex array / buffer named vtx* — `std::memcpy(&vtx[5], &rec[3], 4);`
 
-#### `code/Game/Player/tool_base_trade.cpp`
+#### `src/game/Player/tool_base_trade.cpp`
 - :57 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_memAlloc = reinterpret_cast<MemAllocStatic_t>(slot(0x`
 - :60 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x14`
 
-#### `code/Game/Tutorial/tutorial_base.cpp`
+#### `src/game/Tutorial/tutorial_base.cpp`
 - :133 **NV** string characters — `++k) normalized[k] = (name[k] == '\\') ? '/' : name[k];`
 - :270 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int*>(comp + 0x30) == 0) {`
 
-#### `code/Game/Tutorial/tutorialhighlightdialog.cpp`
+#### `src/game/Tutorial/tutorialhighlightdialog.cpp`
 - :298 **SM** slot taken from the member (object/VSlot.h) — `if (!::Object::SlotAddressOf(reinterpret_cast<void*>(ob`
 
-#### `code/Game/Tutorial/tutorialinstance.cpp`
+#### `src/game/Tutorial/tutorialinstance.cpp`
 - :88 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** stepsArray = *reinterpret_cast<void***>(td + 0x2`
 
-#### `code/Game/Tutorial/tutorialsetupcamera.cpp`
+#### `src/game/Tutorial/tutorialsetupcamera.cpp`
 - :81 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** gridPtr = *reinterpret_cast<void***>(gameWorld +`
 
-#### `code/Game/Tutorial/tutorialsetuprestrictplayer.cpp`
+#### `src/game/Tutorial/tutorialsetuprestrictplayer.cpp`
 - :87 **NV** string characters — `++k) normalized[k] = (name[k] == '\\') ? '/' : name[k];`
 
-#### `code/Game/Work/ConsumeProduce.h`
+#### `src/game/Work/ConsumeProduce.h`
 - :55 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot12(int version) override;`
 
-#### `code/Game/Work/LocationWork.h`
+#### `src/game/Work/LocationWork.h`
 - :57 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Slot12(int version) override;`
 
-#### `code/Game/Work/Pickup.h`
+#### `src/game/Work/Pickup.h`
 - :47 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `int Slot5(void* entityIBP, void* context) override;`
 
-#### `code/Game/Work/Work.h`
+#### `src/game/Work/Work.h`
 - :63 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `virtual int Slot5(void* citizen, void* context);`
 - :80 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `virtual void Slot12(int version);`
 
-#### `code/Game/Work/buildroad.cpp`
+#### `src/game/Work/buildroad.cpp`
 - :288 **NV** FIELD read through an object / IBP pointer (no call) — `if (actionPtr == *(uint64_t*)(citizenEntity + 0x1f0) &&`
 - :417 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t homeEntity = *(uint64_t*)(*(uintptr_t*)entityI`
 - :447 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** citizenList = *(void***)(gameWorld + 0xf0);`
 
-#### `code/Game/Work/buildstructure.cpp`
+#### `src/game/Work/buildstructure.cpp`
 - :525 **NV** FIELD read through an object / IBP pointer (no call) — `if (targetVal == *(uintptr_t*)(bldgEntity + 0x1f0) && p`
 - :612 **NV** FIELD read through an object / IBP pointer (no call) — `if (*(int*)(taskPtr + 0x30) == self->field_20) {`
 
-#### `code/Game/Work/cleararea.cpp`
+#### `src/game/Work/cleararea.cpp`
 - :761 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEntity2 == *(uint64_t*)((uintptr_t)citizenObj +`
 - :860 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEntity2 == *(uint64_t*)((uintptr_t)citizenObj +`
 
-#### `code/Game/Work/clearstorage.cpp`
+#### `src/game/Work/clearstorage.cpp`
 - :317 **NV** FIELD read through an object / IBP pointer (no call) — `if (resultVal == *(uintptr_t*)(citizenPtr + 0x1f0) && p`
 - :355 **NV** FIELD read through an object / IBP pointer (no call) — `while (*(uintptr_t*)(node + 0x10) != 0) {`
 - :413 **NV** FIELD read through an object / IBP pointer (no call) — `while (*(uintptr_t*)(node + 0x10) != 0) {`
 
-#### `code/Game/Work/consumeproduce.cpp`
+#### `src/game/Work/consumeproduce.cpp`
 - :110 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable (read by hand) — `if (iatTypeSer) s_fn_Type_Serialize = *reinterpret_cast`
 - :383 **NV** FIELD read through an object / IBP pointer (no call) — `if (actionPtr == *(uint64_t*)(citizenEntity + 0x1f0) &&`
 - :403 **NV** array / pointer FIELD load at a data offset (no vptr) — `void** worldEntityList = *(void***)(gameWorld + 0xf0);`
 - :1257 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void ConsumeProduce::Slot12(int ) {}`
 
-#### `code/Game/Work/firework.cpp`
+#### `src/game/Work/firework.cpp`
 - :204 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* citizenObj = *(void**)(*(uintptr_t*)citizenIBP + `
 - :321 **NV** FIELD read through an object / IBP pointer (no call) — `if (targetVal == *(uintptr_t*)(citizenVal + 0x1f0) && p`
 
-#### `code/Game/Work/fishingwork.cpp`
+#### `src/game/Work/fishingwork.cpp`
 - :460 **NV** FIELD read through an object / IBP pointer (no call) — `if (actionVal == *(uint64_t*)(ce + 0x1f0) && priority >`
 - :486 **NV** FIELD read through an object / IBP pointer (no call) — `if (actionVal == *(uint64_t*)(ce + 0x1f0) && priority >`
 
-#### `code/Game/Work/foresterwork.cpp`
+#### `src/game/Work/foresterwork.cpp`
 - :417 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEntity == *(uintptr_t*)(citizen + 0x1f0) && pri`
 - :738 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* natResDescObj = *(void**)(*(uintptr_t*)natResComp`
 - :757 **NV** IBP / owner pointer deref then a FIELD read (no call) — `float growth = *(float*)(*(uintptr_t*)natResCompIBP2 + `
 - :761 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint32_t flags20 = *(uint32_t*)(*(uintptr_t*)natResComp`
 - :892 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt2 + 0x1f0) && pr`
 
-#### `code/Game/Work/gatherrawmaterials.cpp`
+#### `src/game/Work/gatherrawmaterials.cpp`
 - :426 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (*(char*)(*(uintptr_t*)wpExtIBP + 0x50) == '\0') {`
 - :639 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEntity == *(uintptr_t*)(citizenFinal + 0x1f0) &`
 
-#### `code/Game/Work/harvestarea.cpp`
+#### `src/game/Work/harvestarea.cpp`
 - :462 **NV** FIELD read through an object / IBP pointer (no call) — `if (natResIBP2 != 0 && (*(uint32_t*)(natResIBP2 + 0x20)`
 - :514 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && pri`
 - :825 **NV** IBP / owner pointer deref then a FIELD read (no call) — `*(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)posCom`
 
-#### `code/Game/Work/harvestorchard.cpp`
+#### `src/game/Work/harvestorchard.cpp`
 - :490 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && pri`
 - :745 **NV** IBP / owner pointer deref then a FIELD read (no call) — `*(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)posCom`
 
-#### `code/Game/Work/herbalistwork.cpp`
+#### `src/game/Work/herbalistwork.cpp`
 - :334 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEntity == *(uintptr_t*)(citizen + 0x1f0) && pri`
 - :550 **NV** IBP / owner pointer deref then a FIELD read (no call) — `float growth = *(float*)(*(uintptr_t*)natResCompIBP2 + `
 - :563 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint32_t flags20 = *(uint32_t*)(*(uintptr_t*)natResComp`
 - :652 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt2 + 0x1f0) && pr`
 
-#### `code/Game/Work/huntwork.cpp`
+#### `src/game/Work/huntwork.cpp`
 - :312 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* herdObj = *(void**)(*(uintptr_t*)herdIBP + 0x18);`
 - :509 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && pri`
 
-#### `code/Game/Work/locationwork.cpp`
+#### `src/game/Work/locationwork.cpp`
 - :321 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEntity == *(uintptr_t*)(citEntPost + 0x1f0) && `
 - :437 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void LocationWork::Slot12(int ) {}`
 
-#### `code/Game/Work/marketwork.cpp`
+#### `src/game/Work/marketwork.cpp`
 - :1348 **NV** FIELD read through an object / IBP pointer (no call) — `if (tgtVal == *reinterpret_cast<int64_t*>(citizen3 + 0x`
 - :1701 **NV** FIELD read through an object / IBP pointer (no call) — `if (tgtVal2 == *reinterpret_cast<int64_t*>(citizen5 + 0`
 
-#### `code/Game/Work/pasturework.cpp`
+#### `src/game/Work/pasturework.cpp`
 - :512 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && pri`
 - :561 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint64_t overflowResult = s_fn_StorageOverflowCheck( st`
 - :654 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && pri`
 
-#### `code/Game/Work/pickup.cpp`
+#### `src/game/Work/pickup.cpp`
 - :302 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_x_memAlloc = reinterpret_cast<PiX_MemAlloc_t>(slot(0x`
 - :305 **NV** IAT / dispatch-slot read (ResolveAddr), not a vtable — `s_x_memFree = reinterpret_cast<PiX_MemFree_t>(slot(0x14`
 - :439 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (!s_x_wantsRes(townMgr, *reinterpret_cast<int64_t*>(`
@@ -1102,24 +1102,24 @@ dump, or vptr loaded only to print / null-test.
 - :682 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `int Pickup::Slot5(void* entityIBP, void* param3) {`
 - :689 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t citizenEntity = *(uintptr_t*)(*(uintptr_t*)en`
 
-#### `code/Game/Work/pickup_gate.cpp`
+#### `src/game/Work/pickup_gate.cpp`
 - :128 **NV** IBP / owner pointer deref then a FIELD read (no call) — `mask = *reinterpret_cast<int*>(*reinterpret_cast<uintpt`
 
-#### `code/Game/Work/plantarea.cpp`
+#### `src/game/Work/plantarea.cpp`
 - :418 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && pri`
 - :764 **NV** IBP / owner pointer deref then a FIELD read (no call) — `*(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)result`
 
-#### `code/Game/Work/plantorchard.cpp`
+#### `src/game/Work/plantorchard.cpp`
 - :372 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && pri`
 - :617 **NV** IBP / owner pointer deref then a FIELD read (no call) — `*(uintptr_t*)outPtr = *(uintptr_t*)(*(uintptr_t*)result`
 
-#### `code/Game/Work/tendarea.cpp`
+#### `src/game/Work/tendarea.cpp`
 - :380 **NV** FIELD read through an object / IBP pointer (no call) — `if (workEnt == *(uintptr_t*)(citEnt + 0x1f0) && priorit`
 
-#### `code/Game/Work/tradework.cpp`
+#### `src/game/Work/tradework.cpp`
 - :318 **NV** FIELD read through an object / IBP pointer (no call) — `if (slot10Ent == *reinterpret_cast<int64_t*>(citizen + `
 
-#### `code/Game/Work/work_act_clear.cpp`
+#### `src/game/Work/work_act_clear.cpp`
 - :218 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t firstEntityInner = *reinterpret_cast<uintptr_`
 - :223 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* targetComp = *reinterpret_cast<void**>(*reinterpr`
 - :247 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
@@ -1127,27 +1127,27 @@ dump, or vptr loaded only to print / null-test.
 - :312 **NV** FIELD read through an object / IBP pointer (no call) — `if (static_cast<uint16_t>(oldFlags ^ newFlags) != 0 && `
 - :370 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 
-#### `code/Game/Work/work_act_consume.cpp`
+#### `src/game/Work/work_act_consume.cpp`
 - :273 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 - :301 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 - :305 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uint32_t uVar1 = *reinterpret_cast<uint32_t*>(*reinterp`
 - :354 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t listBase1 = *reinterpret_cast<uintptr_t*>(*re`
 - :444 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 
-#### `code/Game/Work/work_act_hunt.cpp`
+#### `src/game/Work/work_act_hunt.cpp`
 - :175 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* entityInner = *reinterpret_cast<void**>(*reinterp`
 - :203 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 - :243 **NV** IBP / owner pointer deref then a FIELD read (no call) — `*reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr`
 - :288 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* entityInner = *reinterpret_cast<void**>(*reinterp`
 - :381 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 
-#### `code/Game/Work/work_act_path.cpp`
+#### `src/game/Work/work_act_path.cpp`
 - :216 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* entityInner = *reinterpret_cast<void**>(*reinterp`
 - :237 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* entityInner = *reinterpret_cast<void**>(*reinterp`
 - :346 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>( `
 - :445 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>( `
 
-#### `code/Game/Work/work_act_perform.cpp`
+#### `src/game/Work/work_act_perform.cpp`
 - :218 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* entityInner = *reinterpret_cast<void**>(*reinterp`
 - :310 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 - :360 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
@@ -1156,7 +1156,7 @@ dump, or vptr loaded only to print / null-test.
 - :500 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 - :582 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 
-#### `code/Game/Work/work_act_rawmat.cpp`
+#### `src/game/Work/work_act_rawmat.cpp`
 - :184 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* entityInner = *reinterpret_cast<void**>(*reinterp`
 - :221 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entInner = *reinterpret_cast<uintptr_t*>(*rei`
 - :226 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (storageIBP) p7 = *reinterpret_cast<uint32_t*>(*rein`
@@ -1167,7 +1167,7 @@ dump, or vptr loaded only to print / null-test.
 - :367 **NV** IBP / owner pointer deref then a FIELD read (no call) — `if (storageIBP) p7 = *reinterpret_cast<uint32_t*>(*rein`
 - :412 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entInner = *reinterpret_cast<uintptr_t*>(*rei`
 
-#### `code/Game/Work/work_base_actionctor.cpp`
+#### `src/game/Work/work_base_actionctor.cpp`
 - :216 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* targetComp = *reinterpret_cast<void**>(*reinterpr`
 - :221 **NV** IBP / owner pointer deref then a FIELD read (no call) — `int64_t targetInner = *reinterpret_cast<int64_t*>(*rein`
 - :244 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* entityInner = *reinterpret_cast<void**>(*reinterp`
@@ -1182,20 +1182,20 @@ dump, or vptr loaded only to print / null-test.
 - :807 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* entityInner = *reinterpret_cast<void**>(*reinterp`
 - :881 **NV** IBP / owner pointer deref then a FIELD read (no call) — `uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*`
 
-#### `code/Game/Work/work_base_grid.cpp`
+#### `src/game/Work/work_base_grid.cpp`
 - :93 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `uint64_t assignR = static_cast<uint32_t>(reinterpret_ca`
 
-#### `code/Game/Work/work_base_standalone.cpp`
+#### `src/game/Work/work_base_standalone.cpp`
 - :44 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `DEFINE_EXE_ABSTRACT_TYPE(Work, "") int Work::Slot5(void`
 - :47 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `int Work::Slot5(void*, void*) { return 0; }`
 - :49 **BN** a member NAMED SlotN (Component/Work), called or declared by name — `void Work::Slot12(int ) {}`
 
-#### `code/Game/Work/work_base_walkpos.cpp`
+#### `src/game/Work/work_base_walkpos.cpp`
 - :167 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(target + 0x1f0) != gate`
 - :169 **NV** FIELD read through an object / IBP pointer (no call) — `if (*reinterpret_cast<int64_t*>(target + 0x248) != 0) {`
 - :177 **NV** IBP / owner pointer deref then a FIELD read (no call) — `void* obj = *reinterpret_cast<void**>(*reinterpret_cast`
 
-#### `code/Game/Work/work_leaf_hunt.cpp`
+#### `src/game/Work/work_leaf_hunt.cpp`
 - :325 **EX** ControllerComponent::Controller state-node chain (slot 0 FindState) - X1 (statemachine.cpp: dead code) — `SMQuery_t query = *reinterpret_cast<SMQuery_t*>(*reinte`
 
 #### `dx11/funcs/dx11_seam.cpp`

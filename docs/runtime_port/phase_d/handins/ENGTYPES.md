@@ -11,7 +11,7 @@ Taken from the `.d` dependency files of the perf and unit builds before the chan
 
 | header | TUs that pulled it in | via |
 |---|---|---|
-| common.h | 843 perf, 80 unit | runtime/types/math/Math.h and 8 other runtime headers (relative `../../../engine/types/common.h`), plus bare `"common.h"` in two code/Game/Game stubs |
+| common.h | 843 perf, 80 unit | runtime/types/math/Math.h and 8 other runtime headers (relative `../../../engine/types/common.h`), plus bare `"common.h"` in two src/game/Game stubs |
 | ui/Panels.h | 40 | `Dialog/ui_panels.h`, plus direct `"ui/Panels.h"` in spritecaptureui.cpp, townhallui.cpp |
 | ui/Dialogs.h | 13 | `Dialog/ui_dialogs.h`, plus direct includes in moddialog.cpp, saveloaddialog.cpp, standalone/modal_driver.cpp |
 | Component.h | 9 perf, 1 unit | only through the Fire / Disease / Tornado forwarders' bare `"Component.h"` |
@@ -23,7 +23,7 @@ Taken from the `.d` dependency files of the perf and unit builds before the chan
 | CitizenBehavior.h, EntityList.h | 0 | none |
 
 The brief's suspicion holds for two TUs only: the bare `"common.h"` in
-code/Game/Game/menudialogloopt_stubs.cpp and splash_loop_stubs.cpp resolved to
+src/game/Game/menudialogloopt_stubs.cpp and splash_loop_stubs.cpp resolved to
 engine/types/common.h. With `-Iengine/types` gone it would have silently resolved to the
 different runtime/types/common.h, so both now name the moved file. Every other bare include of
 a twin's basename resolves in its includer's own directory (checked file by file).
@@ -50,7 +50,7 @@ a twin's basename resolves in its includer's own directory (checked file by file
   struct with no reader. TornadoDescription.h carries the fields.
 - **RawMaterialDescription.h: deleted, its flag table moved.** The `RawMaterialFlags` bit
   namespace exists nowhere else. It was moved verbatim into
-  code/Game/Component/RawMaterialDescription.h above the class, with no reader. No layout
+  src/game/Component/RawMaterialDescription.h above the class, with no reader. No layout
   or static_assert changed.
 - **UpdateLoop.h, LoaderLoop.h, DialogLoaderLoopT.h, MainLoop.h: deleted.** Each held a
   global alias of the Engine:: class. The only user of the four aliases was
@@ -58,7 +58,7 @@ a twin's basename resolves in its includer's own directory (checked file by file
   with the aliases. The test keeps its GameUpdateLoop base-class check, now including
   Game/GameUpdateLoop.h directly. The test count is unchanged.
 - **GameUpdateLoop.h: deleted.** Forwarder to Game/GameUpdateLoop.h.
-- **ui/Dialogs.h, ui/Panels.h: moved.** `git mv` to code/Game/Dialog/Dialogs.h and
+- **ui/Dialogs.h, ui/Panels.h: moved.** `git mv` to src/game/Dialog/Dialogs.h and
   Panels.h, next to the classes they gather. No name collision. Seven includers now say
   `"Dialog/Dialogs.h"` / `"Dialog/Panels.h"`.
 

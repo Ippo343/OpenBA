@@ -9,7 +9,7 @@ Reverse engineer Banished (Shining Rock Software) and replace it with clean, rea
 that mirrors the game's logic and compiles to a replacement exe — like OpenRCT2, re3 and
 devilution. `reimpl-x64.exe` is fully standalone: it loads no retail binary.
 Runtime-x64.dll is ported (`runtime/`), VideoDX11-x64.dll is replaced (`dx11/`), game
-logic lives in `code/Game/`. There is no address registry: a call is a C++ call, and a
+logic lives in `src/game/`. There is no address registry: a call is a C++ call, and a
 function with no body yet is a `// PORT GAP 0x<addr> <name>` comment at its call site.
 
 ## Current work — read these, don't restate them here
@@ -37,8 +37,8 @@ tools/resave_gate/resave_gate.sh Gate   # serializer regression check (README al
 ## Reimplementation workflow (per function)
 1. **Decompile** in Ghidra: rename, annotate, document the struct layout (`ghidra` skill)
 2. **Type header**: binary-compatible class, `static_assert` on every offset
-   (`runtime/types/<ns>/` for engine classes, the module's header in `code/Game/`)
-3. **Write clean C++** in `code/Game/<Module>/` — the tree mirrors the original source layout;
+   (`runtime/types/<ns>/` for engine classes, the module's header in `src/game/`)
+3. **Write clean C++** in `src/game/<Module>/` — the tree mirrors the original source layout;
    declare it in the class's header (or the module's `exe_bodies.h`, with its retail address)
 4. **Call it by name** from its callers: include the declaring header, never a local `extern`.
    Replace the caller's `// PORT GAP` arm in a commit titled `behaviour:`

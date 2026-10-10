@@ -71,16 +71,16 @@ on the branch, same file list; the TOTAL row is the block's number, and no colum
 
 | dir | files | reinterp | cstyle_ptr | funct | static_void | static_uintptr | static_cross | const_cast | pun | accessor | **total** | total/reinterp | bridge |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| code/Game/Action | 40 | 2417 | 1025 | 0 | 23 | 7 | 0 | 3 | 0 | 198 | **3673** | 1.52 | 338 |
-| code/Game/Component | 222 | 8586 | 2141 | 0 | 91 | 31 | 0 | 19 | 3 | 244 | **11115** | 1.29 | 1394 |
-| code/Game/Dialog | 76 | 2884 | 5994 | 0 | 72 | 9 | 0 | 53 | 2 | 37 | **9051** | 3.14 | 2065 |
-| code/Game/Entity | 5 | 316 | 347 | 0 | 4 | 2 | 0 | 0 | 0 | 19 | **688** | 2.18 | 69 |
-| code/Game/Game | 73 | 3060 | 1393 | 0 | 96 | 1 | 0 | 47 | 10 | 161 | **4768** | 1.56 | 1010 |
-| code/Game/Goal | 7 | 413 | 75 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | **491** | 1.19 | 67 |
-| code/Game/Object | 2 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **10** | 1.00 | 0 |
-| code/Game/Player | 32 | 1482 | 737 | 1 | 25 | 0 | 0 | 2 | 4 | 1 | **2252** | 1.52 | 203 |
-| code/Game/Tutorial | 26 | 581 | 232 | 0 | 1 | 0 | 0 | 6 | 1 | 0 | **821** | 1.41 | 235 |
-| code/Game/Work | 53 | 2417 | 2289 | 0 | 37 | 3 | 0 | 0 | 1 | 0 | **4747** | 1.96 | 324 |
+| src/game/Action | 40 | 2417 | 1025 | 0 | 23 | 7 | 0 | 3 | 0 | 198 | **3673** | 1.52 | 338 |
+| src/game/Component | 222 | 8586 | 2141 | 0 | 91 | 31 | 0 | 19 | 3 | 244 | **11115** | 1.29 | 1394 |
+| src/game/Dialog | 76 | 2884 | 5994 | 0 | 72 | 9 | 0 | 53 | 2 | 37 | **9051** | 3.14 | 2065 |
+| src/game/Entity | 5 | 316 | 347 | 0 | 4 | 2 | 0 | 0 | 0 | 19 | **688** | 2.18 | 69 |
+| src/game/Game | 73 | 3060 | 1393 | 0 | 96 | 1 | 0 | 47 | 10 | 161 | **4768** | 1.56 | 1010 |
+| src/game/Goal | 7 | 413 | 75 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | **491** | 1.19 | 67 |
+| src/game/Object | 2 | 10 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **10** | 1.00 | 0 |
+| src/game/Player | 32 | 1482 | 737 | 1 | 25 | 0 | 0 | 2 | 4 | 1 | **2252** | 1.52 | 203 |
+| src/game/Tutorial | 26 | 581 | 232 | 0 | 1 | 0 | 0 | 6 | 1 | 0 | **821** | 1.41 | 235 |
+| src/game/Work | 53 | 2417 | 2289 | 0 | 37 | 3 | 0 | 0 | 1 | 0 | **4747** | 1.96 | 324 |
 | dx11 | 12 | 135 | 0 | 0 | 94 | 0 | 0 | 0 | 1 | 17 | **247** | 1.83 | 51 |
 | engine | 1 | 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **5** | 1.00 | 0 |
 | runtime/funcs | 1 | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 0 | 0 | **10** | — | 0 |
@@ -97,15 +97,15 @@ on the branch, same file list; the TOTAL row is the block's number, and no colum
 
 | dir | static_cast | arith | uintptr arith | hier (down/up) | hier ref | to void* | **from void*** | **void* chain** | **uintptr addr** | unknown | null |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| code/Game/Action | 633 | 448 | 69 | 49 | 0 | 37 | 23 | 0 | 7 | 0 | 0 |
-| code/Game/Component | 1964 | 1013 | 251 | 305 | 0 | 273 | 91 | 0 | 31 | 0 | 0 |
-| code/Game/Dialog | 459 | 122 | 21 | 120 | 0 | 114 | 72 | 0 | 9 | 0 | 1 |
-| code/Game/Entity | 49 | 31 | 8 | 2 | 0 | 2 | 4 | 0 | 2 | 0 | 0 |
-| code/Game/Game | 475 | 281 | 4 | 32 | 0 | 61 | 96 | 0 | 1 | 0 | 0 |
-| code/Game/Goal | 54 | 26 | 0 | 11 | 0 | 17 | 0 | 0 | 0 | 0 | 0 |
-| code/Game/Player | 273 | 215 | 11 | 18 | 0 | 4 | 25 | 0 | 0 | 0 | 0 |
-| code/Game/Tutorial | 167 | 54 | 11 | 39 | 0 | 62 | 1 | 0 | 0 | 0 | 0 |
-| code/Game/Work | 565 | 393 | 53 | 50 | 0 | 29 | 37 | 0 | 3 | 0 | 0 |
+| src/game/Action | 633 | 448 | 69 | 49 | 0 | 37 | 23 | 0 | 7 | 0 | 0 |
+| src/game/Component | 1964 | 1013 | 251 | 305 | 0 | 273 | 91 | 0 | 31 | 0 | 0 |
+| src/game/Dialog | 459 | 122 | 21 | 120 | 0 | 114 | 72 | 0 | 9 | 0 | 1 |
+| src/game/Entity | 49 | 31 | 8 | 2 | 0 | 2 | 4 | 0 | 2 | 0 | 0 |
+| src/game/Game | 475 | 281 | 4 | 32 | 0 | 61 | 96 | 0 | 1 | 0 | 0 |
+| src/game/Goal | 54 | 26 | 0 | 11 | 0 | 17 | 0 | 0 | 0 | 0 | 0 |
+| src/game/Player | 273 | 215 | 11 | 18 | 0 | 4 | 25 | 0 | 0 | 0 | 0 |
+| src/game/Tutorial | 167 | 54 | 11 | 39 | 0 | 62 | 1 | 0 | 0 | 0 | 0 |
+| src/game/Work | 565 | 393 | 53 | 50 | 0 | 29 | 37 | 0 | 3 | 0 | 0 |
 | dx11 | 259 | 151 | 3 | 1 | 0 | 7 | 94 | 0 | 0 | 3 | 0 |
 | runtime/funcs | 10 | 0 | 0 | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 0 |
 | runtime/src | 3117 | 1622 | 8 | 36 | 1 | 124 | 1314 | 2 | 5 | 3 | 0 |
@@ -122,36 +122,36 @@ them.) Stays: arith, uintptr arith, hier, hier ref, to void*. Goes: the three bo
 
 | file | total | reinterp | cstyle_ptr | static_void | accessor | pun | bridge |
 |---|--:|--:|--:|--:|--:|--:|--:|
-| `code/Game/Dialog/tradeui.cpp` | 959 | 246 | 701 | 0 | 8 | 0 | 215 |
-| `code/Game/Dialog/townhallui.cpp` | 838 | 228 | 601 | 0 | 3 | 0 | 187 |
-| `code/Game/Component/citizencomponent.cpp` | 706 | 654 | 49 | 2 | 0 | 1 | 60 |
-| `code/Game/Game/starttown.cpp` | 549 | 157 | 379 | 11 | 0 | 0 | 60 |
-| `code/Game/Dialog/optionsdialog.cpp` | 547 | 149 | 391 | 4 | 0 | 0 | 143 |
-| `code/Game/Dialog/toolbardialog.cpp` | 509 | 124 | 372 | 7 | 3 | 0 | 95 |
+| `src/game/Dialog/tradeui.cpp` | 959 | 246 | 701 | 0 | 8 | 0 | 215 |
+| `src/game/Dialog/townhallui.cpp` | 838 | 228 | 601 | 0 | 3 | 0 | 187 |
+| `src/game/Component/citizencomponent.cpp` | 706 | 654 | 49 | 2 | 0 | 1 | 60 |
+| `src/game/Game/starttown.cpp` | 549 | 157 | 379 | 11 | 0 | 0 | 60 |
+| `src/game/Dialog/optionsdialog.cpp` | 547 | 149 | 391 | 4 | 0 | 0 | 143 |
+| `src/game/Dialog/toolbardialog.cpp` | 509 | 124 | 372 | 7 | 3 | 0 | 95 |
 | `standalone/tool_harness.cpp` | 471 | 412 | 8 | 51 | 0 | 0 | 34 |
-| `code/Game/Dialog/debugui.cpp` | 409 | 76 | 328 | 1 | 0 | 0 | 60 |
-| `code/Game/Dialog/saveloaddialog.cpp` | 396 | 149 | 232 | 3 | 1 | 0 | 125 |
-| `code/Game/Work/marketwork.cpp` | 373 | 282 | 87 | 4 | 0 | 0 | 18 |
-| `code/Game/Entity/citizenbehavior.cpp` | 362 | 211 | 138 | 0 | 11 | 0 | 18 |
-| `code/Game/Goal/statvaluedispatch.cpp` | 352 | 315 | 37 | 0 | 0 | 0 | 20 |
-| `code/Game/Dialog/professionui.cpp` | 330 | 73 | 256 | 0 | 1 | 0 | 41 |
+| `src/game/Dialog/debugui.cpp` | 409 | 76 | 328 | 1 | 0 | 0 | 60 |
+| `src/game/Dialog/saveloaddialog.cpp` | 396 | 149 | 232 | 3 | 1 | 0 | 125 |
+| `src/game/Work/marketwork.cpp` | 373 | 282 | 87 | 4 | 0 | 0 | 18 |
+| `src/game/Entity/citizenbehavior.cpp` | 362 | 211 | 138 | 0 | 11 | 0 | 18 |
+| `src/game/Goal/statvaluedispatch.cpp` | 352 | 315 | 37 | 0 | 0 | 0 | 20 |
+| `src/game/Dialog/professionui.cpp` | 330 | 73 | 256 | 0 | 1 | 0 | 41 |
 | `runtime/src/collection/array.cpp` | 329 | 305 | 0 | 20 | 0 | 4 | 0 |
-| `code/Game/Action/action_pf_region.cpp` | 296 | 1 | 295 | 0 | 0 | 0 | 7 |
-| `code/Game/Game/gameupdateloop_load.cpp` | 294 | 95 | 176 | 14 | 1 | 0 | 41 |
-| `code/Game/Action/action_pf_astar.cpp` | 288 | 288 | 0 | 0 | 0 | 0 | 8 |
-| `code/Game/Player/keystone_a_removalcalcpath.cpp` | 278 | 263 | 13 | 2 | 0 | 0 | 14 |
-| `code/Game/Dialog/workplaceui.cpp` | 273 | 127 | 140 | 0 | 0 | 0 | 42 |
-| `code/Game/Game/gameupdateloop_serialize.cpp` | 271 | 148 | 116 | 6 | 0 | 1 | 93 |
-| `code/Game/Game/goals_serialize.cpp` | 266 | 263 | 0 | 2 | 0 | 0 | 33 |
-| `code/Game/Action/action_pf_avl.cpp` | 262 | 64 | 0 | 0 | 198 | 0 | 0 |
-| `code/Game/Action/action_pf_pools.cpp` | 260 | 260 | 0 | 0 | 0 | 0 | 0 |
+| `src/game/Action/action_pf_region.cpp` | 296 | 1 | 295 | 0 | 0 | 0 | 7 |
+| `src/game/Game/gameupdateloop_load.cpp` | 294 | 95 | 176 | 14 | 1 | 0 | 41 |
+| `src/game/Action/action_pf_astar.cpp` | 288 | 288 | 0 | 0 | 0 | 0 | 8 |
+| `src/game/Player/keystone_a_removalcalcpath.cpp` | 278 | 263 | 13 | 2 | 0 | 0 | 14 |
+| `src/game/Dialog/workplaceui.cpp` | 273 | 127 | 140 | 0 | 0 | 0 | 42 |
+| `src/game/Game/gameupdateloop_serialize.cpp` | 271 | 148 | 116 | 6 | 0 | 1 | 93 |
+| `src/game/Game/goals_serialize.cpp` | 266 | 263 | 0 | 2 | 0 | 0 | 33 |
+| `src/game/Action/action_pf_avl.cpp` | 262 | 64 | 0 | 0 | 198 | 0 | 0 |
+| `src/game/Action/action_pf_pools.cpp` | 260 | 260 | 0 | 0 | 0 | 0 | 0 |
 | `runtime/src/graphics/animationstate_transforms.cpp` | 255 | 224 | 0 | 31 | 0 | 0 | 18 |
-| `code/Game/Game/gameupdateloop.cpp` | 253 | 127 | 104 | 18 | 0 | 0 | 95 |
-| `code/Game/Work/consumeproduce.cpp` | 249 | 45 | 203 | 1 | 0 | 0 | 27 |
-| `code/Game/Dialog/eventnotifydialog.cpp` | 237 | 54 | 176 | 5 | 1 | 0 | 45 |
-| `code/Game/Component/herdcomponent.cpp` | 231 | 82 | 148 | 1 | 0 | 0 | 36 |
-| `code/Game/Dialog/entityui.cpp` | 223 | 26 | 197 | 0 | 0 | 0 | 21 |
-| `code/Game/Work/cleararea.cpp` | 223 | 52 | 171 | 0 | 0 | 0 | 11 |
+| `src/game/Game/gameupdateloop.cpp` | 253 | 127 | 104 | 18 | 0 | 0 | 95 |
+| `src/game/Work/consumeproduce.cpp` | 249 | 45 | 203 | 1 | 0 | 0 | 27 |
+| `src/game/Dialog/eventnotifydialog.cpp` | 237 | 54 | 176 | 5 | 1 | 0 | 45 |
+| `src/game/Component/herdcomponent.cpp` | 231 | 82 | 148 | 1 | 0 | 0 | 36 |
+| `src/game/Dialog/entityui.cpp` | 223 | 26 | 197 | 0 | 0 | 0 | 21 |
+| `src/game/Work/cleararea.cpp` | 223 | 52 | 171 | 0 | 0 | 0 | 11 |
 
 ### The compiler cross-check, in detail
 
@@ -244,18 +244,18 @@ where the invisible casts are.
 - Blocks by weight (disjoint files; the classes inside come from A/C):
   | candidate block | files | metric | first? |
   |---|--:|--:|---|
-  | Dialog panels (tradeui, townhallui, optionsdialog, toolbardialog, debugui, saveloaddialog, professionui, workplaceui, eventnotifydialog, entityui + the rest of `code/Game/Dialog`) | 76 | 9,051 (66% C-style) | after the UI element headers (`runtime/types/ui`) |
-  | `code/Game/Component` (citizencomponent 706 alone; state-machine families) | 222 | 11,115 | CitizenComponent header first (inventory D) |
-  | `code/Game/Game` (gameupdateloop_*, starttown, goals_serialize) | 73 | 4,768 | GameUpdateLoop layout first (D): `_singleton + 0x…` reads cross every module |
-  | `code/Game/Work` + `Entity` | 58 | 5,435 | |
-  | `code/Game/Action` (pathfinding pools/astar/avl: 198 accessor calls in `action_pf_avl.cpp`) | 40 | 3,673 | |
-  | `code/Game/Player` + `Tutorial` + `Goal` + `Object` | 67 | 3,574 | |
+  | Dialog panels (tradeui, townhallui, optionsdialog, toolbardialog, debugui, saveloaddialog, professionui, workplaceui, eventnotifydialog, entityui + the rest of `src/game/Dialog`) | 76 | 9,051 (66% C-style) | after the UI element headers (`runtime/types/ui`) |
+  | `src/game/Component` (citizencomponent 706 alone; state-machine families) | 222 | 11,115 | CitizenComponent header first (inventory D) |
+  | `src/game/Game` (gameupdateloop_*, starttown, goals_serialize) | 73 | 4,768 | GameUpdateLoop layout first (D): `_singleton + 0x…` reads cross every module |
+  | `src/game/Work` + `Entity` | 58 | 5,435 | |
+  | `src/game/Action` (pathfinding pools/astar/avl: 198 accessor calls in `action_pf_avl.cpp`) | 40 | 3,673 | |
+  | `src/game/Player` + `Tutorial` + `Goal` + `Object` | 67 | 3,574 | |
   | `runtime/src` (static_void 1,314: `void* self` bodies; `collection/array.cpp` 329) | 316 | 6,792 | per namespace, its `runtime/types/<ns>` header with it |
   | `standalone` harnesses (`tool_harness.cpp` 471) | 48 | 1,945 | last: they read game objects through the same offsets |
   | floor: `dx11` 247, allocator, serializer byte streams, `VSlot.h`, hw watch | — | E lists it | stays |
 - **Accessor helpers go with their last caller**: a file-local `At`/`Field`/`P64` dies in the block
   that owns its file; a header accessor (`ArrayAt`, `I32`, `U32`, `F32`, `SpriteWidth` in
-  `runtime/src/ui/widget_common.h`, `code/Game/Component/coll_bridge.h`) needs its own owner and
+  `runtime/src/ui/widget_common.h`, `src/game/Component/coll_bridge.h`) needs its own owner and
   goes last.
 - **Behaviour risk the metric exposes**: an integer-target C-style cast (`(int64_t)ptr`,
   `(uint32_t)(intptr_t)data` in `optionsdialog.cpp`) and a `memcpy` field copy both fix a WIDTH;

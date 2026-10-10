@@ -148,7 +148,7 @@
 //                           our shadow oracle can observe.
 //
 // There is no guard byte, no fill pattern and no leak list. Allocate returns
-// DIRTY memory (already noted in code/Game/Game/serialize_arrays.cpp:354).
+// DIRTY memory (already noted in src/game/Game/serialize_arrays.cpp:354).
 //
 // ---------------------------------------------------------------------------
 // PORTABILITY (PLAN.md §4.1)

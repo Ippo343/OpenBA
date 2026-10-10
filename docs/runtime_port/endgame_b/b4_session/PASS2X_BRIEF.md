@@ -62,8 +62,8 @@ kind you read; `known_port_issues` rows added; what you did not verify.
 ## Rounds 3 and 4: partitions (added by the coordinator)
 From round 3 the tree is cut by PARTITION, not by file list (`data/pass2x/round3.py` regenerates
 `assign/X3-<P>.lines.tsv`: every remaining cast with the reason tagged on its line):
-- **WORK**: `code/Game/Work/`, `code/Game/Action/`, `tests/unit/wrk_abi_test.cpp`
-- **COMP**: `code/Game/Component/`, `code/Game/Entity/` (its lines are the rows of `X3-GAME.lines.tsv` under those two directories)
+- **WORK**: `src/game/Work/`, `src/game/Action/`, `tests/unit/wrk_abi_test.cpp`
+- **COMP**: `src/game/Component/`, `src/game/Entity/` (its lines are the rows of `X3-GAME.lines.tsv` under those two directories)
 - **GAME**: the rest of `code/`, and `standalone/`
 - **RT**: `runtime/`, `engine/`, the other tests
 Cross-partition rule: an agent that retypes a declaration or member DEFINED in its partition may edit a

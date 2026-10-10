@@ -213,7 +213,7 @@ same convention as `UI_INVENTORY.md` §3.2):
 | Picking | 0 | 0 | 5 | 3 (`Game`) | 8 |
 | Application | 0 | 0 | 0 | 0 | 0 |
 
-`Picking`'s 8 hits (5 `standalone`, 3 `code/Game/Game`) with ZERO `engine_funcs.h` doors confirms
+`Picking`'s 8 hits (5 `standalone`, 3 `src/game/Game`) with ZERO `engine_funcs.h` doors confirms
 it is called almost entirely through a different binding (§3.4 below), not this one.
 
 ### 3.3 `RT_EXPORT_ONCE`/`RT_DATA_SLOT` (runtime-internal registration idioms, not a `code/Game`
@@ -239,16 +239,16 @@ against the 3,085 `ResolveAddr(Module::Exe, ...)` call sites tree-wide:
 |---|---|---|---|
 | Engine | 27 | 2 | `engine/funcs/engine_funcs.cpp` ×2 |
 | Save | 14 | 5 | `engine/funcs/engine_funcs.cpp` ×5 |
-| Achievement | 27 | 11 | `code/Game/Goal/{timegoalinstance,statgoal,timegoal}.cpp`, `code/Game/Game/gameupdateloop.cpp` ×3, `engine/funcs/engine_funcs.cpp` ×2, `standalone/address_registry.cpp` |
-| Audio | 18 | 3 | `code/Game/Tutorial/finishtutorialinstance.cpp`, `engine/funcs/engine_funcs.cpp` ×2 |
-| Input | 21 | 5 | `engine/funcs/engine_funcs.cpp` ×4, `code/Game/Player/pathtool.cpp` |
+| Achievement | 27 | 11 | `src/game/Goal/{timegoalinstance,statgoal,timegoal}.cpp`, `src/game/Game/gameupdateloop.cpp` ×3, `engine/funcs/engine_funcs.cpp` ×2, `standalone/address_registry.cpp` |
+| Audio | 18 | 3 | `src/game/Tutorial/finishtutorialinstance.cpp`, `engine/funcs/engine_funcs.cpp` ×2 |
+| Input | 21 | 5 | `engine/funcs/engine_funcs.cpp` ×4, `src/game/Player/pathtool.cpp` |
 | Pathfinding | 1 | 0 | — |
-| Picking | 8 | **8 (100%)** | `code/Game/Player/{bridgetool_calcpath,fencedtool_calcpath,pathtool}.cpp`, `code/Game/Game/mapquery.cpp`, `code/Game/Component/{quarrycomponent_deform,terraformcomponent,pickingcomponent}.cpp` |
+| Picking | 8 | **8 (100%)** | `src/game/Player/{bridgetool_calcpath,fencedtool_calcpath,pathtool}.cpp`, `src/game/Game/mapquery.cpp`, `src/game/Component/{quarrycomponent_deform,terraformcomponent,pickingcomponent}.cpp` |
 | Application | 0 | 0 | — |
 
 **`Picking` is called EXCLUSIVELY through this binding** — every one of its 8 dispatch slots that
-is called at all is called this way, concentrated in `code/Game/Player` (pathfinding/building
-tools) and `code/Game/Component` (terrain/quarry deformation). A step-7 caller batch for Picking
+is called at all is called this way, concentrated in `src/game/Player` (pathfinding/building
+tools) and `src/game/Component` (terrain/quarry deformation). A step-7 caller batch for Picking
 must grep `ResolveAddr(Module::Exe,` with hex literals in those two directories; a name-anchored
 sweep would find nothing (§3.2 already showed only 3 `code/Game` name-based hits).
 
@@ -261,9 +261,9 @@ Pathfinding 32, Picking 36, Application 0), then intersected against all 61 tree
 
 | namespace | hits | files |
 |---|---|---|
-| Engine | 3 | `code/Game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp`, `standalone/rt_data_mint.cpp` (last two both hit `0x1801fe7b8`) |
+| Engine | 3 | `src/game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp`, `standalone/rt_data_mint.cpp` (last two both hit `0x1801fe7b8`) |
 | Audio | 1 | `engine/funcs/engine_funcs.cpp` (`0x1801fe758`) |
-| Picking | 4 | `code/Game/Component/{citizenai_executor,floorcomponent,pickingcomponent}.cpp`, `floorcomponent.cpp` again at a second address |
+| Picking | 4 | `src/game/Component/{citizenai_executor,floorcomponent,pickingcomponent}.cpp`, `floorcomponent.cpp` again at a second address |
 | Save/Achievement/Input/Pathfinding/Application | 0 | — |
 
 Small in absolute terms (8 total) but real, and per `B36_RULES.md` this spelling is invisible to
@@ -273,10 +273,10 @@ every other sweep — a step-7 planner touching `Picking`/`Engine`/`Audio` calle
 ### 3.6 Hand-inlined `(*(void***)p)[N]` vtable-slot calls
 
 VERIFIED, scoped to the directories that plausibly consume these namespaces
-(`code/Game/{Goal,Player,Component,Game,Tutorial}`): only **2 occurrences**, both in
-`code/Game/Component` — a tiny hazard surface compared to UI's 417 in `code/Game/Dialog` alone.
+(`src/game/{Goal,Player,Component,Game,Tutorial}`): only **2 occurrences**, both in
+`src/game/Component` — a tiny hazard surface compared to UI's 417 in `src/game/Dialog` alone.
 **NOT VERIFIED** which vtable either targets, and this sweep does not cover every directory that
-might touch these namespaces (`code/Game/Dialog`, `code/Game/Entity`, `code/Game/Work` were not
+might touch these namespaces (`src/game/Dialog`, `src/game/Entity`, `src/game/Work` were not
 re-checked here) — treat as a lower bound, not a ceiling.
 
 ### 3.7 Unit tests touching these namespaces
@@ -297,7 +297,7 @@ Unlike UI's 22 INFERRED-count `DialogController` subclasses, these five are VERI
 each vtable's own banner comment (which cites disassembled addresses per slot, not just prose):
 
 - **`GameUpdateLoop`** — exe subclass of `Engine::UpdateLoop`, 0x160 bytes, vtable at
-  `0x14015e2f0`, 22 slots, built in `code/Game/Game/gameupdateloop.cpp` (comment: "Clean
+  `0x14015e2f0`, 22 slots, built in `src/game/Game/gameupdateloop.cpp` (comment: "Clean
   reimplementation of GameUpdateLoop vtable methods from Application-x64.exe").
 - **`MenuDialogLoopT` ("MenuDLT")** — exe subclass of `Engine::DialogLoopT`, 13-slot vtable at
   `0x14015ed00`, built in `standalone/menudialogloopt_stubs.cpp` (own banner: "the exe-internal
@@ -309,7 +309,7 @@ each vtable's own banner comment (which cites disassembled addresses per slot, n
 
 All five are `standalone/`-owned stub vtables (not `code/Game`-owned classes with real C++
 inheritance) except `GameUpdateLoop`, which has its own directory of files
-(`code/Game/Game/gameupdateloop*.cpp`, 4 files). **A step-7 base-class block for `UpdateLoop`/
+(`src/game/Game/gameupdateloop*.cpp`, 4 files). **A step-7 base-class block for `UpdateLoop`/
 `DialogLoopT`/`DialogLoaderLoopT`/`LoaderLoop` inherits this exact QUALIFIED-CALL hazard
 `B36_RULES.md` §2d already names for UI's dialog controllers**: a slot body in one of these five
 hand-built subclasses calling its own base's virtual must qualify
@@ -319,7 +319,7 @@ hand-built subclasses calling its own base's virtual must qualify
 
 `engine/types/AchievementGoals.h` (165 lines) declares `BuildingGoal`, `PopulationGoal`,
 `StatGoal`, `TimeGoal`, `FinishTutorialGoal`, `FinishTutorialInstance`, `TimeGoalInstance` — exe
-subclasses of `Achievement::Goal`/`GoalInstance`, each with its own `.cpp` in `code/Game/Goal/`
+subclasses of `Achievement::Goal`/`GoalInstance`, each with its own `.cpp` in `src/game/Goal/`
 (`buildinggoal.cpp`, `populationgoal.cpp`, `statgoal.cpp`, `timegoal.cpp`,
 `timegoalinstance.cpp`, plus shared `goal_exe_helpers.cpp`/`statvaluedispatch.cpp`). All six
 class-bearing files DO mention "vtable" (VERIFIED grep) but zero hand-inlined `(*(void***)p)[N]`
@@ -412,11 +412,11 @@ first (here, the exe-subclass-bearing ones), then disjoint leaf work fully paral
 | **0 — question pass (serial, one owner)** | resolve `Engine::MainLoop`'s polymorphism status (§1.3); retail-bytes read of all 14 mint vtables' slot lists/`_ParentTypeName`; enumerate `GameUpdateLoop`/`MenuDLT`/splash-loop/two-`LoaderLoop` exe subclasses fully (§4.1) and confirm the QUALIFIED-CALL hazard sites in each; decide `Application`'s ownership (still not a real class — is step 7 the one that makes it one, given the 4 dx11 rows waiting on it, §4.3); confirm `Goal::GetInstanceType`'s virtual retslot shape against a live disassembly read | this batch has had NO Q1-Q6-equivalent pass, same starting point B36 opened with for UI |
 | **1 — `Engine` (`MainLoop`, `UpdateLoop`, `Loader`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`) + `Application`, serial** | `runtime/types/engine/*.h`, `runtime/types/application/Application.h`, `runtime/src/engine/*`, the five exe-subclass files (§4.1), `runtime/src/application/*` (n/a — no such dir; `runtime/src/application` DOES exist, 8 files) | highest exe-subclass blast radius in this batch (5 hand-built vtables); `Application` becoming real unblocks the 4 dx11 import rows (§4.3); `singleton_ctors.cpp` cross-namespace hazard (§1.2) must be resolved here first since it also stamps Video/Audio/Input singletons |
 | **2 — `Save`** | `runtime/types/save/SaveLoad.h`, `runtime/src/save/*` (9 files) | ALREADY AT 100% called-coverage (§2) and ZERO exe-subclass/hidden-retslot/threading hazards found this pass — the cleanest, lowest-risk block in the batch; do it early to bank a win the way IO was step 5's model case |
-| **3 — `Achievement`** | `runtime/types/achievement/*.h`, `runtime/src/achievement/*` (11 files), the 7-class exe Goal family (`engine/types/AchievementGoals.h`, `code/Game/Goal/*`) | the ONE virtual hidden-retslot in this whole batch (§4.5) lives here (`Goal::GetInstanceType`) — needs the retslot-before-`this` shape from day one; `Achievement`/`GoalList`'s no-vtable-but-has-dtor shape (§1.3) needs settling before the class boundary is drawn |
+| **3 — `Achievement`** | `runtime/types/achievement/*.h`, `runtime/src/achievement/*` (11 files), the 7-class exe Goal family (`engine/types/AchievementGoals.h`, `src/game/Goal/*`) | the ONE virtual hidden-retslot in this whole batch (§4.5) lives here (`Goal::GetInstanceType`) — needs the retslot-before-`this` shape from day one; `Achievement`/`GoalList`'s no-vtable-but-has-dtor shape (§1.3) needs settling before the class boundary is drawn |
 | **4 — `Audio`** | `runtime/types/audio/Audio.h`, `runtime/src/audio/*` (15 files, incl. the header-free `SoundBuffer`/`SoundEffect`/`Stream`) | the SECOND thread (§4.4, `audio_stream_win.cpp`'s `_beginthreadex` worker) needs its own threading read before `Stream`'s class shape is finalized |
 | **5 — `Input`** | `runtime/types/input/Input.h`, `runtime/src/input/*` (9 files) | AT CEILING already (93.1%, §2), zero polymorphic classes (§1.3) — should be nearly mechanical once `Engine`'s cross-namespace `singleton_ctors.cpp` dependency (block 1) is settled |
 | **6 — `Pathfinding` + `Picking`** | `runtime/src/pathfinding/*` (2 files, no header dir), `runtime/types/picking/Scene.h`, `runtime/src/picking/*` (6 files) | smallest two namespaces by every measure; `Picking`'s callers are ENTIRELY exe-dispatch-slot (§3.4) and by-address-runtime-slot (§3.5) bound — a caller batch here must grep hex literals, not names, from the start; `Pathfinding`'s near-zero census activity (§2) makes it low-risk to bundle with Picking rather than stand alone |
-| **7 — Caller batches by directory, AFTER blocks 1-6** | `code/Game/{Goal,Player,Component,Game,Tutorial}` split by the binding-concentration findings in §3: `code/Game/Player`+`Component` for Picking's dispatch-slot calls, `code/Game/Game` for Engine/Save/Achievement's mixed bindings, `code/Game/Goal` for the Achievement exe subclasses, `code/Game/Tutorial` for Audio's one dispatch hit | mirrors the UI/B35 directory-partition approach; unlike UI, no single directory dominates here — the 166 `engine_funcs.h` calls and 8+8 dispatch-slot hits are each concentrated in DIFFERENT directories, so a single "biggest file" batch does not exist for this step |
+| **7 — Caller batches by directory, AFTER blocks 1-6** | `src/game/{Goal,Player,Component,Game,Tutorial}` split by the binding-concentration findings in §3: `src/game/Player`+`Component` for Picking's dispatch-slot calls, `src/game/Game` for Engine/Save/Achievement's mixed bindings, `src/game/Goal` for the Achievement exe subclasses, `src/game/Tutorial` for Audio's one dispatch hit | mirrors the UI/B35 directory-partition approach; unlike UI, no single directory dominates here — the 166 `engine_funcs.h` calls and 8+8 dispatch-slot hits are each concentrated in DIFFERENT directories, so a single "biggest file" batch does not exist for this step |
 
 Blocks 1-6 are NOT confirmed disjoint by file (block 0's job): `singleton_ctors.cpp` (Engine-filed,
 cross-namespace, §1.2) is the one file certain to need coordination between blocks 1, 4 and 5
@@ -501,7 +501,7 @@ python tools/dispatch_slot_map.py                                 # dumps the 83
 grep -rnoE 'ResolveAddr\(Module::Exe, *0x[0-9a-fA-F]+' code/Game engine standalone
 grep -rnoE 'RtAddr<[^>]*>\(0x[0-9a-fA-F]+' / 'ResolveAddr\(Module::Runtime, *0x[0-9a-fA-F]+' code/Game engine standalone
 # (both dispatch-slot and by-address sets intersected against the above via a Python dict-address match)
-grep -rEo '\(\*\(void\*\*\*\)[A-Za-z0-9_.>\-]+\)\[[0-9]+\]' code/Game/{Goal,Player,Component,Game,Tutorial}
+grep -rEo '\(\*\(void\*\*\*\)[A-Za-z0-9_.>\-]+\)\[[0-9]+\]' src/game/{Goal,Player,Component,Game,Tutorial}
 grep -rl "NS::" tests/unit --include=*.cpp --include=*.h
 
 # hidden retslots

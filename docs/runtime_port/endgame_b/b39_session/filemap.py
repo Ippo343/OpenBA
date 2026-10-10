@@ -2,7 +2,7 @@
 
 Run from the repo root:  python docs/runtime_port/endgame_b/b39_session/filemap.py [--check]
 It lists the git-tracked source files in scope (every *.cpp *.h *.hpp *.inc *.c under
-runtime/ standalone/ engine/ code/Game/ dx11/ tests/unit/, plus the tool / build files named in
+runtime/ standalone/ engine/ src/game/ dx11/ tests/unit/, plus the tool / build files named in
 COORD_FILES), assigns each to exactly ONE owner by the rules below (first match wins) and prints
 the per-owner lists as markdown. --check only verifies: 0 unassigned, 0 assigned twice.
 The rules ARE the file map; B39_FILEMAP.md section 1 is this script's output pasted verbatim.
@@ -13,7 +13,7 @@ the deleted mint paths) no longer exist; the script still runs, it just names th
 import subprocess, sys, re, collections, os
 
 EXTS = (".cpp", ".h", ".hpp", ".inc", ".c")
-SCOPE = ("runtime/", "standalone/", "engine/", "code/Game/", "dx11/", "tests/unit/")
+SCOPE = ("runtime/", "standalone/", "engine/", "src/game/", "dx11/", "tests/unit/")
 
 # ---- coordinator-owned (B39_FILEMAP section 2 says what a block may hand in for each) ----
 COORD_FILES = {
@@ -30,33 +30,33 @@ COORD_FILES = {
 # ---- the reflection fold (D6) ----
 RF_FILES = {
     "standalone/main.cpp", "standalone/factory_enum_stub.cpp", "standalone/dlgctrl_route.cpp",
-    "code/Game/Goal/statgoal.cpp", "code/Game/Game/game_main.cpp",
+    "src/game/Goal/statgoal.cpp", "src/game/Game/game_main.cpp",
 }
-RF_DIRS = ("code/Game/Object/",)
+RF_DIRS = ("src/game/Object/",)
 # ---- the closing owner's registrars (they empty out as the caller batches convert) ----
 CLOSE_RE = re.compile(r"^standalone/reg_[a-z0-9_]*typeids?\.cpp$|^standalone/reg_unreg_lane4\.cpp$")
 # ---- the exe-side construction block (D8): builders, copy sites, exe callers of Runtime doors ----
 EXE_FILES = {
-    "code/Game/Action/Action.h", "code/Game/Action/action_base_complete.cpp", "code/Game/Action/showtool.cpp",
-    "code/Game/Component/CitizenComponent.h", "code/Game/Component/clearareacomponent_states.cpp",
-    "code/Game/Component/component.cpp", "code/Game/Component/Component.h",
-    "code/Game/Component/modelcomponent.cpp", "code/Game/Component/ModelComponent.h",
-    "code/Game/Component/storagedisplaycomponent.cpp", "code/Game/Component/citizenai_actionctors.cpp",
-    "code/Game/Component/citizenai_handlers.cpp", "code/Game/Component/controller_state_table.h",
-    "code/Game/Dialog/edittool_select.cpp", "code/Game/Dialog/mainmenudialog.cpp", "code/Game/Dialog/mapui.cpp",
-    "code/Game/Dialog/moddialog.cpp", "code/Game/Dialog/newgamedialog.cpp", "code/Game/Dialog/noiseui.cpp",
-    "code/Game/Dialog/saveloaddialog.cpp", "code/Game/Dialog/thumb_vtables.cpp", "code/Game/Dialog/toolbardialog.cpp",
-    "code/Game/Game/game_leaf_helpers.cpp", "code/Game/Game/gameupdateloop.cpp", "code/Game/Game/keystone_a_gamedtor.cpp",
-    "code/Game/Game/menudialogloopt.cpp", "code/Game/Game/minimap_paint.cpp", "code/Game/Game/minimap_upload.cpp",
-    "code/Game/Game/pathfinder_seed.cpp", "code/Game/Game/serialize_image_upload.cpp",
-    "code/Game/Game/w2_takescreenshot.cpp", "code/Game/Game/gameupdateloop_serialize.cpp",
-    "code/Game/Game/GameUpdateLoop.h", "code/Game/Game/MenuDialogLoopT.h", "code/Game/Game/GameLoadDialogLoopT.h",
-    "code/Game/Game/GameLoaderLoop.h", "code/Game/Game/InnerLoaderLoop.h",
-    "code/Game/Player/fencedtool.cpp", "code/Game/Player/placementtool.cpp", "code/Game/Player/tool_base_render.cpp",
-    "code/Game/Tutorial/tutorial_next_scenario.cpp", "code/Game/Tutorial/tutorialui.cpp",
-    "code/Game/Work/consumeproduce.cpp", "code/Game/Work/work_act_clear.cpp", "code/Game/Work/work_act_hunt.cpp",
-    "code/Game/Work/work_act_path.cpp", "code/Game/Work/work_act_perform.cpp",
-    "code/Game/Work/work_base_actionctor.cpp", "code/Game/Work/work_base_reimpl.cpp",
+    "src/game/Action/Action.h", "src/game/Action/action_base_complete.cpp", "src/game/Action/showtool.cpp",
+    "src/game/Component/CitizenComponent.h", "src/game/Component/clearareacomponent_states.cpp",
+    "src/game/Component/component.cpp", "src/game/Component/Component.h",
+    "src/game/Component/modelcomponent.cpp", "src/game/Component/ModelComponent.h",
+    "src/game/Component/storagedisplaycomponent.cpp", "src/game/Component/citizenai_actionctors.cpp",
+    "src/game/Component/citizenai_handlers.cpp", "src/game/Component/controller_state_table.h",
+    "src/game/Dialog/edittool_select.cpp", "src/game/Dialog/mainmenudialog.cpp", "src/game/Dialog/mapui.cpp",
+    "src/game/Dialog/moddialog.cpp", "src/game/Dialog/newgamedialog.cpp", "src/game/Dialog/noiseui.cpp",
+    "src/game/Dialog/saveloaddialog.cpp", "src/game/Dialog/thumb_vtables.cpp", "src/game/Dialog/toolbardialog.cpp",
+    "src/game/Game/game_leaf_helpers.cpp", "src/game/Game/gameupdateloop.cpp", "src/game/Game/keystone_a_gamedtor.cpp",
+    "src/game/Game/menudialogloopt.cpp", "src/game/Game/minimap_paint.cpp", "src/game/Game/minimap_upload.cpp",
+    "src/game/Game/pathfinder_seed.cpp", "src/game/Game/serialize_image_upload.cpp",
+    "src/game/Game/w2_takescreenshot.cpp", "src/game/Game/gameupdateloop_serialize.cpp",
+    "src/game/Game/GameUpdateLoop.h", "src/game/Game/MenuDialogLoopT.h", "src/game/Game/GameLoadDialogLoopT.h",
+    "src/game/Game/GameLoaderLoop.h", "src/game/Game/InnerLoaderLoop.h",
+    "src/game/Player/fencedtool.cpp", "src/game/Player/placementtool.cpp", "src/game/Player/tool_base_render.cpp",
+    "src/game/Tutorial/tutorial_next_scenario.cpp", "src/game/Tutorial/tutorialui.cpp",
+    "src/game/Work/consumeproduce.cpp", "src/game/Work/work_act_clear.cpp", "src/game/Work/work_act_hunt.cpp",
+    "src/game/Work/work_act_path.cpp", "src/game/Work/work_act_perform.cpp",
+    "src/game/Work/work_base_actionctor.cpp", "src/game/Work/work_base_reimpl.cpp",
 }
 
 # ---- Runtime namespace blocks ----
@@ -136,7 +136,7 @@ def owner(path):
         return "EXE"
     if path.startswith("standalone/"):
         return "EXE"
-    if path.startswith("code/Game/"):
+    if path.startswith("src/game/"):
         return batch_owner(path)
     if path.startswith("tests/unit/"):
         name = path.split("/")[-1]

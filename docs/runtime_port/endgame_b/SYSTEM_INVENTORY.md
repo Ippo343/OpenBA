@@ -179,7 +179,7 @@ Source: `standalone/rt_data_mint_tables.inc:3711-3717`.
   `ResolveAddr(Module::Runtime, 0x180155f20)`, the persistence worker's dtor re-stamping the
   `Thread` base vptr on teardown. A name-only sweep misses it.
 - Called from `RtSystem_Thread_Ctor` (`thread_win.cpp:169+`), reached from three
-  constructing sites: `code/Game/Game/pathfinder_seed.cpp`,
+  constructing sites: `src/game/Game/pathfinder_seed.cpp`,
   `runtime/src/engine/singleton_ctors.cpp:448-449` (`Ctor_Persistence`, builds `IO::
   Persistence`'s embedded Thread base), `standalone/rt_data_mint.cpp:434-461`
   (`ConstructLoader`, builds the static `Engine::Loader`'s embedded Thread at cutover).
@@ -194,7 +194,7 @@ Source: `standalone/rt_data_mint_tables.inc:3711-3717`.
 - Every real constructing call site immediately **overwrites** the base stamp with its own
   derived vtable right after the base ctor returns (`singleton_ctors.cpp:450`,
   `runtime/src/audio/audio_stream_win.cpp:342` — confirmed the only copy of this file in the
-  tree, `code/Game/Audio/` does not exist — `Audio::Stream` is a `Thread` subclass
+  tree, `src/game/Audio/` does not exist — `Audio::Stream` is a `Thread` subclass
   embedded in `Audio::Device`'s singleton, per `singleton_ctors.cpp:691`
   `Ctor_AudioDevice` — `pathfinder_seed.cpp:148`, `rt_data_mint.cpp:461`).
 
@@ -251,12 +251,12 @@ forward is Thread's promotion question above, already route-scoped.
 | class | who constructs it | where | pattern |
 |---|---|---|---|
 | `MemoryAllocator` | not constructed by our code at all for the live singleton — `g_pMemAllocSingleton` is a **read**, `engine/funcs/engine_funcs.cpp:1368-1369`: `*reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fc718))`, i.e. it dereferences `?_singleton@MemoryAllocator@System@@` once at init. (Coordinator correction: the first draft called this "the DLL's own global". No DLL is loaded; 0x1801fc718 is OUR minted 8-byte storage cell — `standalone/rt_data_mint_tables.inc:4715` "singleton pointer" — and a `CUTOVER_REQUIRED` row, `cutover_manifest.inc:79`. Who WRITES that cell, i.e. who constructs the allocator, is therefore a question about our own boot code and is NOT answered here.) Refreshed identically in `standalone/main.cpp:722-723`'s self-test. Port-side `Construct`/`Destruct` exist (`allocator.cpp:641-661`, retail 0x1800c79a0/0x1800c7960) and `Startup`/`Shutdown` (`:619-634`, retail 0x1800c7620/0x1800c75b0), zeroing fields and calling `SingletonSlot()` — but these run when the port itself is exercised via its own registered addresses, not as "our" construction path for the live object. | `engine/funcs/engine_funcs.cpp` | singleton, read not built |
-| `Thread` | `RtSystem_Thread_Ctor` (`thread_win.cpp:169`) | 3 sites: `code/Game/Game/pathfinder_seed.cpp:142,147,149` (heap-embedded, inside a pathfinder Thread subclass), `runtime/src/engine/singleton_ctors.cpp:448-449` (`IO::Persistence`'s embedded base), `standalone/rt_data_mint.cpp:434-461` (`Engine::Loader`'s static, cutover-only) | real door; base vtable always immediately re-subclassed (§2) |
+| `Thread` | `RtSystem_Thread_Ctor` (`thread_win.cpp:169`) | 3 sites: `src/game/Game/pathfinder_seed.cpp:142,147,149` (heap-embedded, inside a pathfinder Thread subclass), `runtime/src/engine/singleton_ctors.cpp:448-449` (`IO::Persistence`'s embedded base), `standalone/rt_data_mint.cpp:434-461` (`Engine::Loader`'s static, cutover-only) | real door; base vtable always immediately re-subclassed (§2) |
 | `CriticalSection` | `RtSystem_CriticalSection_Ctor` (`thread_win.cpp:64-68`), thin wrap of `InitializeCriticalSection`/`SetCriticalSectionSpinCount(5000)` | embedded wherever needed — confirmed inside `pathfinder_seed.cpp`'s Thread subclass; **`IO::Persistence` and `Audio::Stream` bypass this ctor entirely** and call raw `InitializeCriticalSection` directly instead of going through the export (flagged as a surprise, §8) | per-object POD |
-| `Random` | `RtSystem_Random_Ctor` (time-seeded, `value_types.cpp:112`) / `RtSystem_Random_CtorSeed` (`:118`) | **per-object, not shared.** `Object::InternalFactory` carries its own `::Random _random` member at `+0x20` (`runtime/types/object/Internal.h:171,664`), constructed inline in `Ctor_InternalFactory` (`runtime/src/engine/singleton_ctors.cpp:352-361`) via `RT_EXPORT_ONCE("??0Random@System@@QEAA@XZ")` — deliberately ported through the door rather than re-transcribing the MT19937 recurrence a second time (desync risk, per the comment). A **second, independent** long-lived instance: `Graphics::Particle`'s static `?_rng@Particle@Graphics@@1VRandom@System@@A` @ 0x1801fe7f0, 2500 bytes, "SEEDED FROM time() at load by 0x180149650" (`standalone/rt_data_mint_tables.inc:4696`, resolved in `code/Game/Game/tornado.cpp:245` as a data symbol). **Everywhere else in `code/Game/`** Random is an opaque raw byte buffer (`uint8_t rng1[2520]` etc.), constructed per-call on the stack via `fn_Random_Default_Ctor` — dozens of independent ephemeral streams, e.g. `gameupdateloop_load.cpp:660-661`, `noiseui.cpp:211-212`. | 2 long-lived + many ephemeral, NOT one shared RNG |
-| `Time` | `fn_Time_Ctor_Float` (111 CALL via engine_funcs.h) + at least 21 additional bypass-cache CALL sites (§5.7) | pervasive across `code/Game/` | stack local, one per use |
+| `Random` | `RtSystem_Random_Ctor` (time-seeded, `value_types.cpp:112`) / `RtSystem_Random_CtorSeed` (`:118`) | **per-object, not shared.** `Object::InternalFactory` carries its own `::Random _random` member at `+0x20` (`runtime/types/object/Internal.h:171,664`), constructed inline in `Ctor_InternalFactory` (`runtime/src/engine/singleton_ctors.cpp:352-361`) via `RT_EXPORT_ONCE("??0Random@System@@QEAA@XZ")` — deliberately ported through the door rather than re-transcribing the MT19937 recurrence a second time (desync risk, per the comment). A **second, independent** long-lived instance: `Graphics::Particle`'s static `?_rng@Particle@Graphics@@1VRandom@System@@A` @ 0x1801fe7f0, 2500 bytes, "SEEDED FROM time() at load by 0x180149650" (`standalone/rt_data_mint_tables.inc:4696`, resolved in `src/game/Game/tornado.cpp:245` as a data symbol). **Everywhere else in `src/game/`** Random is an opaque raw byte buffer (`uint8_t rng1[2520]` etc.), constructed per-call on the stack via `fn_Random_Default_Ctor` — dozens of independent ephemeral streams, e.g. `gameupdateloop_load.cpp:660-661`, `noiseui.cpp:211-212`. | 2 long-lived + many ephemeral, NOT one shared RNG |
+| `Time` | `fn_Time_Ctor_Float` (111 CALL via engine_funcs.h) + at least 21 additional bypass-cache CALL sites (§5.7) | pervasive across `src/game/` | stack local, one per use |
 | `Timer` | no instance — stateless | `timer.cpp` | n/a |
-| `DateTime` | no explicit C++ construction anywhere — it's an opaque FILETIME, never given a named type; only produced as a return value by `FileSystem::GetFileTimeStamp` (`runtime/src/io/filesystem_timestamp_win.cpp`, IO-owned, not touched) and consumed by pointer at `code/Game/Dialog/saveloaddialog.cpp:322` | n/a | value passed by pointer, never named |
+| `DateTime` | no explicit C++ construction anywhere — it's an opaque FILETIME, never given a named type; only produced as a return value by `FileSystem::GetFileTimeStamp` (`runtime/src/io/filesystem_timestamp_win.cpp`, IO-owned, not touched) and consumed by pointer at `src/game/Dialog/saveloaddialog.cpp:322` | n/a | value passed by pointer, never named |
 | `Color` | no construction site found anywhere in `code/` or `runtime/` outside retail's exported (but never `RegisterRuntimeExport`-ed) ctors — a fact about the retail export table, not a live DLL: `Runtime-x64.dll` is never loaded (ENDGAME A.1); values are read/written as raw `uint32_t` fields embedded in other structs (`menuscene.cpp`'s ambient/sun/sky colors, `tornado.cpp`'s tint fields, `mapdescription.cpp`) | n/a | raw field, not a constructed object in-tree |
 | `Configuration` | `RtSystem_Configuration_Ctor` (`runtime/src/engine/engine_lifecycle.cpp:305`, retail 0x1800c51b0), called once from `RtEngine_Engine_Startup`; dtor at `engine_lifecycle.cpp:888` inside `Engine::Shutdown` | one construction per process | singleton, backed by the retail singleton address `?_singleton@Configuration@System@@` @ 0x1801fc6f8 — a `CUTOVER_REQUIRED` minted storage cell (`cutover_manifest.inc:77`, §2), not a live DLL global |
 | `Compression` | `CompressedStream::Create` (`runtime/src/io/compressed_stream_write.cpp:686-690`, IO-owned file — evidence only, not this step's to convert): allocates 8 bytes, calls `??0Compression@System@@QEAA@XZ` on it, stores the result at `self->compression` | one per `CompressedStream` | heap, one-per-owner, NOT a singleton |
@@ -334,24 +334,24 @@ section now reports as authoritative:
 
 | file | var | resolve line | call sites | count |
 |---|---|---|---|---|
-| `code/Game/Action/action_pf_astar.cpp` | `s_fn_MemAllocSA` | :126 | :827 | 1 |
-| `code/Game/Action/keystone_a_zone.cpp` | `s_fn_MemAllocSA` | :76 | :90 | 1 |
-| `code/Game/Work/tradework_serialize.cpp` | `s_memAlloc` | :52,54-55 | :85,112 | 2 |
-| `code/Game/Work/gatherrawmaterials.cpp` | `s_fn_MemAlloc` | :264-268 (IAT fallback 0x1401527e8) | :885 | 1 |
-| `code/Game/Player/tool_base_highlight.cpp` | `s_MemAlloc` | :146 | :225,267 | 2 |
-| `code/Game/Work/foresterwork.cpp` | `s_fn_MemAlloc` | :269-270 | :1167 | 1 |
-| `code/Game/Action/action_pf_geom.cpp` | `s_memAlloc` | :52-54 | :555 | 1 |
-| `code/Game/Work/pickup.cpp` | `s_x_memAlloc` | :370-372 | :413/415,553 | 2 |
-| `code/Game/Player/tool_base_highlight_tess.cpp` | `s_memAlloc` (+wrapper `MemAlloc()`) | :69-71 | **none** | 0 (resolved but dead) |
-| `code/Game/Component/keystone_a_restree.cpp` | `s_memAlloc` (+wrapper `MemAlloc()`) | :70,72-76 | :122,154 | 2 |
-| `code/Game/Component/wellcomponent.cpp` | `s_fn_MemAllocStatic` | :239-240 | :313 | 1 |
-| `code/Game/Player/tool_base_trade.cpp` | `s_memAlloc` | :54-56 | :353,383,404 | 3 |
+| `src/game/Action/action_pf_astar.cpp` | `s_fn_MemAllocSA` | :126 | :827 | 1 |
+| `src/game/Action/keystone_a_zone.cpp` | `s_fn_MemAllocSA` | :76 | :90 | 1 |
+| `src/game/Work/tradework_serialize.cpp` | `s_memAlloc` | :52,54-55 | :85,112 | 2 |
+| `src/game/Work/gatherrawmaterials.cpp` | `s_fn_MemAlloc` | :264-268 (IAT fallback 0x1401527e8) | :885 | 1 |
+| `src/game/Player/tool_base_highlight.cpp` | `s_MemAlloc` | :146 | :225,267 | 2 |
+| `src/game/Work/foresterwork.cpp` | `s_fn_MemAlloc` | :269-270 | :1167 | 1 |
+| `src/game/Action/action_pf_geom.cpp` | `s_memAlloc` | :52-54 | :555 | 1 |
+| `src/game/Work/pickup.cpp` | `s_x_memAlloc` | :370-372 | :413/415,553 | 2 |
+| `src/game/Player/tool_base_highlight_tess.cpp` | `s_memAlloc` (+wrapper `MemAlloc()`) | :69-71 | **none** | 0 (resolved but dead) |
+| `src/game/Component/keystone_a_restree.cpp` | `s_memAlloc` (+wrapper `MemAlloc()`) | :70,72-76 | :122,154 | 2 |
+| `src/game/Component/wellcomponent.cpp` | `s_fn_MemAllocStatic` | :239-240 | :313 | 1 |
+| `src/game/Player/tool_base_trade.cpp` | `s_memAlloc` | :54-56 | :353,383,404 | 3 |
 
 **12 files, 17 real call sites, 11 live + 1 dead resolve** (`tool_base_highlight_tess.cpp`
 resolves the export but never calls the cached pointer). Not a fourth independent surface —
 every one of these re-resolves the same static export (`0x1800c7a50`) `fn_MemAllocStatic`
 already reaches. One more wrinkle the per-line read caught that a bare grep cannot:
-`code/Game/Work/tradework.cpp:129` (`s_fn_MemAlloc = reinterpret_cast<TrW_MemAlloc_t>(
+`src/game/Work/tradework.cpp:129` (`s_fn_MemAlloc = reinterpret_cast<TrW_MemAlloc_t>(
 fn_MemAllocStatic);`) does not RE-RESOLVE anything — it aliases the already-resolved
 `fn_MemAllocStatic` pointer, so its 2 calls (`:313,725`) are the SAME pointer, not a 13th
 private cache, even though a name-only sweep would flag it as one.
@@ -422,7 +422,7 @@ it indirectly (checked: no).
 ### 5.1 `CriticalSection` / `Thread` — caller surface, complete
 
 **The seed 6-file list was both incomplete and had one phantom entry.**
-`code/Game/Game/tornado.cpp` has **zero** matches for `Thread@System@@`/
+`src/game/Game/tornado.cpp` has **zero** matches for `Thread@System@@`/
 `CriticalSection@System@@` today — a direct grep found nothing; drop it from any future
 list (the seed doc is stale on this one point, or was true in a prior revision).
 
@@ -431,10 +431,10 @@ Real caller surface, 9 files, all reached by mangled name, none via `engine_func
 
 | file | pointers cached | CALL sites |
 |---|---|---|
-| `code/Game/Action/action_pf_astar.cpp:97-125` | `s_fn_CSLock`, `s_fn_CSUnlock`, `s_fn_ThreadStart` | 7 (lines 826, 844, 846 representative) |
-| `code/Game/Action/keystone_a_zone.cpp:42-75` | same 3 | 6 |
-| `code/Game/Game/keystone_a_gamedtor.cpp:68-108` | `s_fn_CSLock/Unlock`, `s_fn_ThreadStart`, `s_fn_WaitFinish`, `s_fn_CSDtor`, `s_fn_ThreadDtor` | 7 (lines 386-401 representative) |
-| `code/Game/Game/pathfinder_seed.cpp:38-46,131-135` | `s_fn_ThreadCtor`, `s_fn_CSCtor`, shared `fn_CS_t` for Lock/Unlock | 4 |
+| `src/game/Action/action_pf_astar.cpp:97-125` | `s_fn_CSLock`, `s_fn_CSUnlock`, `s_fn_ThreadStart` | 7 (lines 826, 844, 846 representative) |
+| `src/game/Action/keystone_a_zone.cpp:42-75` | same 3 | 6 |
+| `src/game/Game/keystone_a_gamedtor.cpp:68-108` | `s_fn_CSLock/Unlock`, `s_fn_ThreadStart`, `s_fn_WaitFinish`, `s_fn_CSDtor`, `s_fn_ThreadDtor` | 7 (lines 386-401 representative) |
+| `src/game/Game/pathfinder_seed.cpp:38-46,131-135` | `s_fn_ThreadCtor`, `s_fn_CSCtor`, shared `fn_CS_t` for Lock/Unlock | 4 |
 | `runtime/src/engine/singleton_ctors.cpp:448` | direct `RT_EXPORT_ONCE`, no cache wrapper | 1 (`??0Thread@System@@QEAA@I@Z`, builds `IO::Persistence`'s embedded base) |
 | `runtime/src/audio/audio_stream_win.cpp:303-317,341,411` | `ThreadCtor`/`ThreadDtor` wrapping `RT_EXPORT_ONCE` | 2 (Ctor/Dtor of `Audio::Stream`, a Thread subclass) |
 | `runtime/src/engine/loops.cpp:1002,1121-1123,1135-1137,1188-1190` | 3 static `ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ")` sites | 3 (loader-teardown waits) |
@@ -497,7 +497,7 @@ all ~15 is extra scope.
 
 **Construction is NOT one shared RNG** — see §3. At least two long-lived independent
 streams (`InternalFactory::_random`, `Graphics::Particle::_rng`) plus many ephemeral
-per-call stack instances across `code/Game/`. **A naive "one shared `System::Random`
+per-call stack instances across `src/game/`. **A naive "one shared `System::Random`
 singleton" conversion would silently merge streams retail keeps separate and would break
 determinism of world-gen, weather, and per-entity behavior.**
 
@@ -508,8 +508,8 @@ RandFloat, RandTol, RandFloatTol, and others). No vtable (§2).
 
 Only 6 CALL sites total, all through `fn_System_Color_Serialize` — confirmed as its ONLY
 caller by grepping `Color@System@@QEAA` (every other hit is registration/doc/census, never
-a call site): `code/Game/Game/menuscene.cpp:521-524` (ambient/sun/sky, 3 sites),
-`code/Game/Game/tornado.cpp:550-551` (tint, 2 sites), `code/Game/Component/
+a call site): `src/game/Game/menuscene.cpp:521-524` (ambient/sun/sky, 3 sites),
+`src/game/Game/tornado.cpp:550-551` (tint, 2 sites), `src/game/Component/
 mapdescription.cpp:66` (1 site). No raw Color ctor call and no Color field construction
 exist in-tree — every use is a raw `uint32_t` field, touched only through `Serialize`.
 3 ctors + assign + 4 accessors are retail-exported but never registered (§6).
@@ -598,7 +598,7 @@ opaque 8-byte FILETIME, no relation to Timer/Time. 3 exports registered (`AsStri
 `DateAsString`, `TimeAsString`); 3 more retail exports (`AsFileTime`, `Serialize`,
 `IsValid`) exist only in `standalone/rt_export_addrs.inc`'s static address table —
 **unregistered/unimplemented anywhere in the tree**. The seed "1 caller" claim
-(`fn_DateTime_AsString`, `code/Game/Dialog/saveloaddialog.cpp:322`, re-verified by direct
+(`fn_DateTime_AsString`, `src/game/Dialog/saveloaddialog.cpp:322`, re-verified by direct
 read) is **technically correct for the `fn_DateTime_AsString` pointer** but misses a real
 DateTime **producer**: `runtime/src/io/filesystem_timestamp_win.cpp`'s
 `FileSystem::GetFileTimeStamp` (IO-owned, not touched) returns a `DateTime` by value,

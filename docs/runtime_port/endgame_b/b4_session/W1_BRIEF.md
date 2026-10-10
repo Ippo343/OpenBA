@@ -47,7 +47,7 @@ field has retail's type; a site whose result changes is a `behaviour:` commit.
 - B11 object comparison: identical / different, each difference explained.
 
 ## Shared C-body headers (added 2026-09-29)
-`code/Game/<Module>/exe_bodies.h` and a `*_funcs.h` shared by several families belong to no single
+`src/game/<Module>/exe_bodies.h` and a `*_funcs.h` shared by several families belong to no single
 block. A block edits ONLY the sections headed by its own defining files (`// ---- citizen*.cpp`):
 it deletes the declarations whose bodies became members with no outside caller and keeps the
 `B4 FORWARD` ones. No other line is touched, nothing is reordered or reformatted. The hand-in lists

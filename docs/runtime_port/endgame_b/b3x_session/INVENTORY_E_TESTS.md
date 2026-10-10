@@ -106,10 +106,10 @@ Per-file table (non-comment lines; `pmf(dd)` = PMF checks (of which `&X::Deletin
 
 | class | tests | lines | evidence |
 |---|---|---:|---|
-| `ControllerComponent::Controller` (9 pure slots, slot 0 `FindState`, "no dtor slot in 0x14015f070") | exe_class_abi_test.cpp:121-129 | 9 PMF + 1 trait (:76) | code/Game/Component/ControllerComponent.h:48-73 |
-| `StateMachineComponent::RootController` | vis_abi_test.cpp:288-296 | 9 PMF + 1 trait (:209) | code/Game/Component/StateMachineComponent.h:52-66 |
-| `ControllerLive::TableController<Tag>` (`StateController`) | mia:140, mib:172 | 2 traits | code/Game/Component/controller_state_table.h:330-333 |
-| `PathfinderThread` (Thread family, slot 0 `Run`) | loop_abi_test.cpp:347-348 | 2 PMF + 1 trait (:346) | code/Game/Game/PathfinderThread.h:25-40 |
+| `ControllerComponent::Controller` (9 pure slots, slot 0 `FindState`, "no dtor slot in 0x14015f070") | exe_class_abi_test.cpp:121-129 | 9 PMF + 1 trait (:76) | src/game/Component/ControllerComponent.h:48-73 |
+| `StateMachineComponent::RootController` | vis_abi_test.cpp:288-296 | 9 PMF + 1 trait (:209) | src/game/Component/StateMachineComponent.h:52-66 |
+| `ControllerLive::TableController<Tag>` (`StateController`) | mia:140, mib:172 | 2 traits | src/game/Component/controller_state_table.h:330-333 |
+| `PathfinderThread` (Thread family, slot 0 `Run`) | loop_abi_test.cpp:347-348 | 2 PMF + 1 trait (:346) | src/game/Game/PathfinderThread.h:25-40 |
 | `Engine::Loader` (Thread family) | engine_loop_abi_test.cpp:142-143 | 2 PMF + 1 trait | runtime/types/engine (retail `??_7Loader` [0] Run) |
 | `System::Thread` | b39_sys_thread_test.cpp:81,84; system_abi_test.cpp:199 | 2 PMF + 2 traits | runtime/types/system/Thread.h |
 | `IO::PersistenceWorker` (Thread family) | b39_io_classes_test.cpp | 2 PMF | |
@@ -209,7 +209,7 @@ length +1 and the patched index shifted; distinctness loops stay meaningful (D1 
 
 TypeInfo.h:303 and External.h:588 name this file "the regression test for the no-virtual-destructor rule". Its
 premise (hand-built/minted tables coexisting with compiler tables) is retired: B.3.9 left the mint with 2 storage
-rows, and the `tornado.cpp` copy site it cites (line 285) is gone (code/Game/Game/tornado.cpp:31 "Gone: the vtable
+rows, and the `tornado.cpp` copy site it cites (line 285) is gone (src/game/Game/tornado.cpp:31 "Gone: the vtable
 COPY site"). It is rewritten, not deleted: it becomes the test of the NEW rule.
 
 | test (line) | today | becomes |

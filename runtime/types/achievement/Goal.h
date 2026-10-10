@@ -26,7 +26,7 @@
 //
 // THE EXE SUBCLASSES ALL OF Goal/GoalInstance (BuildingGoal, PopulationGoal,
 // StatGoal, TimeGoal, FinishTutorialGoal; TimeGoalInstance,
-// FinishTutorialInstance — code/Game/Goal/, code/Game/Tutorial/) as real C++
+// FinishTutorialInstance — src/game/Goal/, src/game/Tutorial/) as real C++
 // subclasses whose constructors chain these bases' real constructors. Every
 // call from an exe slot body to a VIRTUAL of these bases is QUALIFIED
 // (`->Achievement::Goal::Serialize(stream)`), because an unqualified call

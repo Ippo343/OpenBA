@@ -10,7 +10,7 @@
 // The SIZE is confirmed three independent ways, none of which is this header:
 //   * `runtime/src/save/saveload_draw.cpp:451` allocates exactly 0x88 for one
 //     through `??2FrameCopyImageBuffer@Graphics@@SAPEAX_K@Z`;
-//   * `code/Game/Game/w2_takescreenshot.cpp:229` MemAllocs 0x88 for one,
+//   * `src/game/Game/w2_takescreenshot.cpp:229` MemAllocs 0x88 for one,
 //     transcribed from exe 0x140095da0;
 //   * the ctor (Runtime 0x1800a3d10) writes +0x68, +0x70, +0x78 and +0x80 and
 //     nothing past it.

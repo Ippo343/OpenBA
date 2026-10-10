@@ -17,7 +17,7 @@ you edit, and sweep your files for readers the inventory missed).
 
 ## Rules
 - Edit ONLY your block's files (B3R_RULES §4). Work ONLY in your worktree. The one exception is
-  appending a missing declaration to a `code/Game/<Module>/exe_bodies.h` or a `runtime/funcs` header
+  appending a missing declaration to a `src/game/<Module>/exe_bodies.h` or a `runtime/funcs` header
   (R5); list every such line in your hand-in.
 - Rows other blocks may still read STAY. In W1 you delete a registration line only when the inventory
   table says DEAD and your own code-line sweep of the WHOLE tree (not only your files) agrees.

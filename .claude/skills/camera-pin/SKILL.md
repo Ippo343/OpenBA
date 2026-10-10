@@ -17,7 +17,7 @@ measured noise-floor table in its README before quoting any of its six screens â
 three are verdict-bearing.
 
 ## Pinning
-`BANISHED_CAMERA_PIN=x,y[,dist]` (`code/Game/Game/camera_input.cpp`) pins the camera focus
+`BANISHED_CAMERA_PIN=x,y[,dist]` (`src/game/Game/camera_input.cpp`) pins the camera focus
 to a world position every frame, overriding pan/follow. Without it the autostart camera
 roams and lands differently every run. `BANISHED_CAMERA_PIN=town[,dist]` pins the town.
 

@@ -17,7 +17,7 @@ for l in open('docs/runtime_port/endgame_b/b4_session/LEFT_FREE.md', encoding='u
         reason[m.group(1)] = (m.group(3).strip(), m.group(4).strip())
 # class -> header
 classes = {}
-for h in glob.glob('code/Game/**/*.h', recursive=True) + glob.glob('runtime/types/**/*.h', recursive=True):
+for h in glob.glob('src/game/**/*.h', recursive=True) + glob.glob('runtime/types/**/*.h', recursive=True):
     txt = open(h, encoding='utf-8', errors='replace').read()
     for m in re.finditer(r'(?m)^\s*(?:class|struct)\s+([A-Za-z_]\w*)\s*(?:final\s*)?(?::|\{)', txt):
         classes.setdefault(m.group(1), h.replace('\\', '/'))

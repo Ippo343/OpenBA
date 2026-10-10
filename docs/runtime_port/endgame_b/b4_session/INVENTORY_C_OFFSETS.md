@@ -110,36 +110,36 @@ Top 30 classes by reads (distinct offsets: named / noassert / guess / inside+inp
 
 | class | reads | offs | nm | na | guess | in | und | bey | mods | header |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| GameUpdateLoop | 896 | 32 | 29 | 3 | 0 | 0 | 0 | 0 | 10 | code/Game/Game/GameUpdateLoop.h |
-| CitizenComponent | 562 | 57 | 3 | 0 | 48 | 6 | 0 | 0 | 8 | code/Game/Component/CitizenComponent.h |
-| ModelComponent | 224 | 26 | 6 | 0 | 1 | 19 | 0 | 0 | 8 | code/Game/Component/ModelComponent.h |
+| GameUpdateLoop | 896 | 32 | 29 | 3 | 0 | 0 | 0 | 0 | 10 | src/game/Game/GameUpdateLoop.h |
+| CitizenComponent | 562 | 57 | 3 | 0 | 48 | 6 | 0 | 0 | 8 | src/game/Component/CitizenComponent.h |
+| ModelComponent | 224 | 26 | 6 | 0 | 1 | 19 | 0 | 0 | 8 | src/game/Component/ModelComponent.h |
 | CitizenBehavior | 205 | 42 | 0 | 12 | 2 | 28 | 0 | 0 | 8 | engine/types/CitizenBehavior.h (POD only) |
-| TradeUI | 193 | 35 | 3 | 0 | 31 | 1 | 0 | 0 | 1 | code/Game/Dialog/TradeUI.h |
+| TradeUI | 193 | 35 | 3 | 0 | 31 | 1 | 0 | 0 | 1 | src/game/Dialog/TradeUI.h |
 | UserInterface | 181 | 42 | 22 | 12 | 1 | 7 | 0 | 0 | 3 | runtime/types/ui/UserInterface.h |
-| StorageComponent | 161 | 9 | 3 | 0 | 3 | 1 | 0 | 2 | 8 | code/Game/Component/StorageComponent.h |
-| CitizenAIComponent | 155 | 30 | 15 | 0 | 4 | 4 | 0 | 7 | 3 | code/Game/Component/CitizenAIComponent.h |
-| TownHallUI | 150 | 49 | 8 | 32 | 0 | 0 | 9 | 0 | 1 | code/Game/Dialog/TownHallUI.h |
-| BuildComponent | 122 | 14 | 6 | 0 | 4 | 0 | 4 | 0 | 6 | code/Game/Component/BuildComponent.h |
-| TradeWork | 122 | 41 | 3 | 0 | 3 | 0 | 0 | 35 | 3 | code/Game/Work/TradeWork.h |
-| WorkPlaceComponent | 120 | 10 | 5 | 0 | 3 | 0 | 2 | 0 | 6 | code/Game/Component/WorkPlaceComponent.h |
+| StorageComponent | 161 | 9 | 3 | 0 | 3 | 1 | 0 | 2 | 8 | src/game/Component/StorageComponent.h |
+| CitizenAIComponent | 155 | 30 | 15 | 0 | 4 | 4 | 0 | 7 | 3 | src/game/Component/CitizenAIComponent.h |
+| TownHallUI | 150 | 49 | 8 | 32 | 0 | 0 | 9 | 0 | 1 | src/game/Dialog/TownHallUI.h |
+| BuildComponent | 122 | 14 | 6 | 0 | 4 | 0 | 4 | 0 | 6 | src/game/Component/BuildComponent.h |
+| TradeWork | 122 | 41 | 3 | 0 | 3 | 0 | 0 | 35 | 3 | src/game/Work/TradeWork.h |
+| WorkPlaceComponent | 120 | 10 | 5 | 0 | 3 | 0 | 2 | 0 | 6 | src/game/Component/WorkPlaceComponent.h |
 | EntityList | 117 | 16 | 9 | 4 | 0 | 0 | 0 | 3 | 7 | engine/types/EntityList.h (POD only) |
-| EntityUI | 101 | 23 | 4 | 0 | 3 | 3 | 0 | 13 | 5 | code/Game/Dialog/EntityUI.h |
-| CharacterComponent | 95 | 19 | 2 | 0 | 14 | 0 | 0 | 3 | 3 | code/Game/Component/CharacterComponent.h |
-| SaveLoadDialog | 95 | 27 | 7 | 6 | 14 | 0 | 0 | 0 | 1 | code/Game/Dialog/SaveLoadDialog.h |
-| CitizenDescription | 92 | 36 | 1 | 0 | 33 | 2 | 0 | 0 | 5 | code/Game/Component/CitizenDescription.h |
-| AnimalComponent | 89 | 13 | 3 | 0 | 7 | 3 | 0 | 0 | 1 | code/Game/Component/AnimalComponent.h |
-| OrchardComponent | 77 | 7 | 4 | 0 | 3 | 0 | 0 | 0 | 3 | code/Game/Component/OrchardComponent.h |
+| EntityUI | 101 | 23 | 4 | 0 | 3 | 3 | 0 | 13 | 5 | src/game/Dialog/EntityUI.h |
+| CharacterComponent | 95 | 19 | 2 | 0 | 14 | 0 | 0 | 3 | 3 | src/game/Component/CharacterComponent.h |
+| SaveLoadDialog | 95 | 27 | 7 | 6 | 14 | 0 | 0 | 0 | 1 | src/game/Dialog/SaveLoadDialog.h |
+| CitizenDescription | 92 | 36 | 1 | 0 | 33 | 2 | 0 | 0 | 5 | src/game/Component/CitizenDescription.h |
+| AnimalComponent | 89 | 13 | 3 | 0 | 7 | 3 | 0 | 0 | 1 | src/game/Component/AnimalComponent.h |
+| OrchardComponent | 77 | 7 | 4 | 0 | 3 | 0 | 0 | 0 | 3 | src/game/Component/OrchardComponent.h |
 | Video::Configuration | 76 | 19 | 18 | 0 | 1 | 0 | 0 | 0 | 5 | runtime/types/video/Device.h |
-| ToolUI | 71 | 14 | 4 | 10 | 0 | 0 | 0 | 0 | 2 | code/Game/Dialog/ToolUI.h |
-| MoveTo | 70 | 19 | 3 | 0 | 8 | 8 | 0 | 0 | 1 | code/Game/Action/MoveTo.h |
-| TradeComponent | 69 | 21 | 5 | 0 | 9 | 2 | 0 | 5 | 3 | code/Game/Component/TradeComponent.h |
-| GrowthComponent | 67 | 9 | 5 | 0 | 4 | 0 | 0 | 0 | 1 | code/Game/Component/GrowthComponent.h |
-| ToolbarDialog | 65 | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 1 | code/Game/Dialog/ToolbarDialog.h |
+| ToolUI | 71 | 14 | 4 | 10 | 0 | 0 | 0 | 0 | 2 | src/game/Dialog/ToolUI.h |
+| MoveTo | 70 | 19 | 3 | 0 | 8 | 8 | 0 | 0 | 1 | src/game/Action/MoveTo.h |
+| TradeComponent | 69 | 21 | 5 | 0 | 9 | 2 | 0 | 5 | 3 | src/game/Component/TradeComponent.h |
+| GrowthComponent | 67 | 9 | 5 | 0 | 4 | 0 | 0 | 0 | 1 | src/game/Component/GrowthComponent.h |
+| ToolbarDialog | 65 | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 1 | src/game/Dialog/ToolbarDialog.h |
 | Video::Device | 62 | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 9 | runtime/types/video/Device.h |
-| TornadoComponent | 60 | 11 | 8 | 3 | 0 | 0 | 0 | 0 | 1 | code/Game/Component/TornadoComponent.h |
-| Profession | 59 | 6 | 5 | 0 | 1 | 0 | 0 | 0 | 5 | code/Game/Game/Profession.h |
-| MapComponent | 58 | 11 | 9 | 0 | 0 | 0 | 0 | 2 | 2 | code/Game/Component/MapComponent.h |
-| ParticleComponent | 57 | 10 | 3 | 0 | 5 | 0 | 0 | 2 | 2 | code/Game/Component/ParticleComponent.h |
+| TornadoComponent | 60 | 11 | 8 | 3 | 0 | 0 | 0 | 0 | 1 | src/game/Component/TornadoComponent.h |
+| Profession | 59 | 6 | 5 | 0 | 1 | 0 | 0 | 0 | 5 | src/game/Game/Profession.h |
+| MapComponent | 58 | 11 | 9 | 0 | 0 | 0 | 0 | 2 | 2 | src/game/Component/MapComponent.h |
+| ParticleComponent | 57 | 10 | 3 | 0 | 5 | 0 | 0 | 2 | 2 | src/game/Component/ParticleComponent.h |
 
 (`named` on a component often means the `Component` base fields `_entity` +0x10, `_description` +0x18,
 `_flags` +0x20; the class's own fields are the guess column.) 87 classes are read from 2+ modules, 39 from 3+.
@@ -214,7 +214,7 @@ marketwork.cpp 223 · debugui.cpp 212 · action_pf_astar.cpp 211 (0) · gameupda
    28 of CitizenBehavior's 42 read offsets fall in its `_pad` arrays.
 7. **Body names mislead** (known_port_issues 6 confirmed): `CitizenComp_StorageComponent_QueryCount` works on a
    StorageComponent; `ResidenceComponent_helper_5ec0` on a `{data, count, capacity}` array;
-   `TradeWork_impl_*` bodies in `code/Game/Game/geometry_serialize.cpp` read 35 offsets past TradeWork's 0x58
+   `TradeWork_impl_*` bodies in `src/game/Game/geometry_serialize.cpp` read 35 offsets past TradeWork's 0x58
    bytes; `MenuScene_TransformInit_Standalone(transformObj)` initialises a Transform. 305 rows are `beyond`.
 8. **Header types contradict the reads** on 650 rows by size (`WorkPlaceComponent+0x60 void*` read as `int`
    19×, `ModelComponent+0x148/+0x164/+0x28` byte storage read as `Transform`/`int16_t`/`Geometry`,

@@ -182,7 +182,7 @@ RE_REG_EXPORT_NONLITERAL = re.compile(
 #
 # BOTH SPELLINGS. `const char* const kX` and `constexpr const char* kX` are the
 # same idiom and the tree uses both -- runtime/types/ui/ElementDescription.h and
-# code/Game/Dialog/mod_dialog_vtables.cpp use the constexpr form. Matching only
+# src/game/Dialog/mod_dialog_vtables.cpp use the constexpr form. Matching only
 # the first meant a file could name a symbol once, correctly, and still be
 # invisible to this script.
 RE_NAME_CONST = re.compile(

@@ -4,7 +4,7 @@
 // ============================================================================
 //
 // These four are the wall cutover boot attempts 04, 05 and 06 all died on:
-// with Runtime-x64.dll absent, `code/Game/Game/game_main.cpp` resolves all four
+// with Runtime-x64.dll absent, `src/game/Game/game_main.cpp` resolves all four
 // to null and returns 1 or 2 out of `RunGameMain` before the engine ever
 // starts. Nothing else in Wave 9 can be measured past that point.
 //
@@ -122,7 +122,7 @@
 // found that gap: `System::Configuration` (0x1800c51b0) and
 // `Achievement::AchievementManager` (0x18009eb00). Both publish a singleton;
 // `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` has two LIVE readers
-// in our own tree (code/Game/Game/gameupdateloop_serialize.cpp:189 and
+// in our own tree (src/game/Game/gameupdateloop_serialize.cpp:189 and
 // eventlog_achievement.cpp), so at cutover the mint would have handed out
 // storage that nothing ever wrote and both readers would see null forever. They
 // are ported below, as #15 and #16 of lane X's list.
@@ -282,7 +282,7 @@ unsigned g_startupFailAt = 0;   // 0 == reached the end
 // ??0AchievementManager@Achievement@@QEAA@XZ               retail 0x18009eb00
 // ============================================================================
 // Lane X's #16, and the one that matters most of the two: two files under
-// code/Game/ read `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` at
+// src/game/ read `?_singleton@AchievementManager@Achievement@@0PEAV12@EA` at
 // runtime, so at cutover an unwritten mint row is a null in live game code.
 //
 // Eight qwords and a dword, then the singleton. Identical to the inlined block

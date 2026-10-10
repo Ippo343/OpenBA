@@ -42,7 +42,7 @@
 //
 // REGISTRATION: by NAME for all twenty, and additionally by ADDRESS for
 // GetNodeIndexFromName, whose one address-only call site is
-// `code/Game/Action/showtool.cpp:169`
+// `src/game/Action/showtool.cpp:169`
 // (`ResolveAddr(Module::Runtime, 0x1800fee90)`, a fallback taken because the
 // exe dispatch slot 0x140152970 is empty in standalone). Every other call site
 // in this lane's scope reaches its function through `ResolveExport(<name>)` —
@@ -327,7 +327,7 @@ namespace {
 // 6 lane G and are read here, not pinned here.
 //
 // PERF: this is called per model per frame from
-// code/Game/Component/naturalresourcecomponent.cpp and through dispatch slot
+// src/game/Component/naturalresourcecomponent.cpp and through dispatch slot
 // 0x1401514b0. The body below is four loads and a compare — the same work
 // retail does — and resolves nothing.
 //
@@ -790,7 +790,7 @@ Graphics::MeshInstance::~MeshInstance() {
 // ORACLE: FULL, through a scratch buffer. No side effects.
 // ============================================================================
 // B3R RT-VG: external linkage (declared in types/graphics/Mesh.h) for the
-// exe-side reader in code/Game/Player/tool_base_render.cpp.
+// exe-side reader in src/game/Player/tool_base_render.cpp.
 // B.4 wave Y: `self` is typed. B.4 S4 GFX2: `vec3` is retail's
 // `const Math::Vector3&` (as a pointer): its caller's ribbon endpoints
 // (tool_base_render.cpp) are Math::Vector3s now, held in Vector3Slots so no
@@ -1085,7 +1085,7 @@ Graphics::EdgeMeshInstance::EdgeMeshInstance(const EdgeMeshInstance& other)
 //
 // GetNodeIndexFromName is ALSO registered by ADDRESS. It is the one function in
 // this lane with a live `ResolveAddr(Module::Runtime, ...)` call site
-// (code/Game/Action/showtool.cpp:169); leaving it name-only would put the
+// (src/game/Action/showtool.cpp:169); leaving it name-only would put the
 // held-item bone lookup on the DLL while every other consumer used the port —
 // two implementations taking turns, which is the failure mode Wave 5 lane D
 // documented for Picking::Scene::AddMesh.

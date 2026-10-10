@@ -157,9 +157,9 @@ Row 104 made the one erased `~Array` core test `_data` before MemFree (array.cpp
 the Runtime's J1 bodies. But every `Collection::Array` in code/Game now runs that core, including the
 two members rows 470 and 91 retyped. Their comments still say retail's exe-inlined dtor's
 unconditional free is what runs:
-- `code/Game/Game/MapGenerator.h:79`: "unconditional MemFree, then the header zeroed".
-- `code/Game/Game/mapgenerator.cpp:73`: "ClearCallback is the unconditional MemFree".
-- `code/Game/Game/weather_particles.cpp:154` and `WeatherParticleGeometry.h:61-63`: "unguarded".
+- `src/game/Game/MapGenerator.h:79`: "unconditional MemFree, then the header zeroed".
+- `src/game/Game/mapgenerator.cpp:73`: "ClearCallback is the unconditional MemFree".
+- `src/game/Game/weather_particles.cpp:154` and `WeatherParticleGeometry.h:61-63`: "unguarded".
 
 The behaviour is value-identical, because MemFree(nullptr) is a no-op. Only the REDZONE instrument's
 null-free count differs. Fix: reword them, for example "the exe's inlined copy frees unconditionally;

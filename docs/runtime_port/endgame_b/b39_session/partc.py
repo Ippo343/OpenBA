@@ -3,7 +3,7 @@ plus the list the cutover really depends on: every place that still depends on a
 
 Run from the repo root:  python docs/runtime_port/endgame_b/b39_session/partc.py [--list PATTERN_NAME]
 Code lines only (comments stripped by codegrep.strip, strings kept); build*/ and obj/ excluded.
-Counts are per top-level area: code/Game/<Sub>, runtime/src/<ns>, runtime/types/<ns>, standalone, engine, dx11, tests.
+Counts are per top-level area: src/game/<Sub>, runtime/src/<ns>, runtime/types/<ns>, standalone, engine, dx11, tests.
 
 WHY SLOT INDICES: under GCC's Itanium ABI a `virtual ~T()` occupies TWO slots (complete + deleting), MSVC's one
 scalar/vector deleting dtor occupies ONE. Replacing slot 0's `DeletingDtor(unsigned)` with `virtual ~T()` shifts
@@ -20,7 +20,7 @@ EXTS = ('.cpp', '.h', '.inc', '.hpp')
 
 def area(rel):
     p = rel.split('/')
-    if p[0] == 'code' and len(p) > 2: return 'code/Game/' + p[2]
+    if p[0] == 'code' and len(p) > 2: return 'src/game/' + p[2]
     if p[0] == 'runtime' and len(p) > 2: return 'runtime/' + p[1] + '/' + (p[2] if len(p) > 3 else '')
     return p[0]
 

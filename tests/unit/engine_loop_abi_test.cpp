@@ -172,7 +172,7 @@ UNIT_TEST(engine_loop_class_pod_cross_asserts) {
 // The exe-side POD mirrors were retired in ENDGAME B.3.8 block LOOP (B8-4).
 UNIT_TEST(engine_exe_side_mirrors_match_the_classes) {
     // GameUpdateLoop is a real Engine::UpdateLoop subclass
-    // (code/Game/Game/GameUpdateLoop.h; tests/unit/loop_abi_test.cpp pins it).
+    // (src/game/Game/GameUpdateLoop.h; tests/unit/loop_abi_test.cpp pins it).
     CHECK((std::is_base_of<Engine::UpdateLoop, ::GameUpdateLoop>::value));
 }
 

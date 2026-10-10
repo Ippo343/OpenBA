@@ -69,7 +69,7 @@
 //                            (0x1800455d0) is `MOV [RCX+0x24],EDX; RET`. It is
 //                            also the value `?ShowDialog@UserInterface@UI@@`
 //                            RETURNS (0x1801202e5), and every MessageDialog
-//                            button writes it (code/Game/Dialog/messagedialog.cpp
+//                            button writes it (src/game/Dialog/messagedialog.cpp
 //                            Slot10..13 -> 1/0/2/3).
 //                            ctor zeroes it                             0x180114870
 //   0x28  _parent            ctor param 3, an InternalPtr<DialogInstance>

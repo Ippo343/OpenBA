@@ -22,7 +22,7 @@
 // save list differently from retail. This body is the MSVC one: median-of-3
 // pivot, explicit 62-deep lo/hi stacks, CUTOFF 8, recurse into the smaller
 // half, iterate on the larger -- the same shape as the inlined exe-side
-// instantiation in code/Game/Work/marketwork_bst_b680.cpp, with the width and
+// instantiation in src/game/Work/marketwork_bst_b680.cpp, with the width and
 // comparator left generic as the CRT has them.
 //
 // FAITHFULNESS BOUNDARY. The invalid-parameter arm (null base with num != 0,

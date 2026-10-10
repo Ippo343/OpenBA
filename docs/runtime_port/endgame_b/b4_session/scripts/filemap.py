@@ -19,10 +19,10 @@ TARGET = 1800
 
 # module directory -> block prefix
 MODULES = [
-    ('code/Game/Component', 'COMP'), ('code/Game/Dialog', 'DLG'), ('code/Game/Work', 'WORK'),
-    ('code/Game/Entity', 'WORK'), ('code/Game/Action', 'ACT'), ('code/Game/Game', 'GAME'),
-    ('code/Game/Player', 'PLAYER'), ('code/Game/Tutorial', 'TUT'), ('code/Game/Goal', 'TUT'),
-    ('code/Game/Object', 'TUT'),
+    ('src/game/Component', 'COMP'), ('src/game/Dialog', 'DLG'), ('src/game/Work', 'WORK'),
+    ('src/game/Entity', 'WORK'), ('src/game/Action', 'ACT'), ('src/game/Game', 'GAME'),
+    ('src/game/Player', 'PLAYER'), ('src/game/Tutorial', 'TUT'), ('src/game/Goal', 'TUT'),
+    ('src/game/Object', 'TUT'),
     ('runtime/src/ui', 'R-UI'), ('runtime/types/ui', 'R-UI'),
     ('runtime/src/graphics', 'R-GFX'), ('runtime/types/graphics', 'R-GFX'),
     ('runtime/src/video', 'R-VIDEO'), ('runtime/types/video', 'R-VIDEO'),

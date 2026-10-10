@@ -1,6 +1,6 @@
 # B.3 step 8 — block 0, agent 0A: INVENTORY_A (components, descriptions, Work, Action, Entity, Object)
 
-Read-only inventory, main @ 1d7866d4, 2026-09-26. Scope: `code/Game/{Component,Work,Action,Entity,Object}/`
+Read-only inventory, main @ 1d7866d4, 2026-09-26. Scope: `src/game/{Component,Work,Action,Entity,Object}/`
 and the `engine/types/*.h` PODs behind them. Conventions as `BLOCK0_BRIEF.md`: "slot N" = index N;
 own / base / stub / inert / null as defined there. Retail facts below were READ from
 `Application-x64.exe` (Ghidra `read_memory` / `get_xrefs_to` / `disassemble_function`, program passed

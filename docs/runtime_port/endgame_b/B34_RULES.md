@@ -347,7 +347,7 @@ four legacy caller idioms keep working, unchanged, for the whole step:
 |---|---|---|---|
 | `RtObject::SerializerLite` + `kEncSerialize{Bool,Uint,Int}` | `runtime/{src,types}/object` only | 16 hits, 5 files | `(*(void***)rw)[0x78\|0x98\|0xa0 / 8](rw, …)` |
 | `rt::io::rw_vtbl::k*` over a real `ReaderWriter*` | `runtime/src/**` | **54 files** | the same instruction, 26 named offsets |
-| `SerializerEncodingVCall(ser, off, field)` | `code/Game/**` | **37 sites, 22 files** | `ser+8` -> vtable -> `[off]`, i.e. the same again |
+| `SerializerEncodingVCall(ser, off, field)` | `src/game/**` | **37 sites, 22 files** | `ser+8` -> vtable -> `[off]`, i.e. the same again |
 | `fn_*` / `g_fn_*` resolved pointers | `code/`, `engine/`, `standalone/` | ~1,100 IO CALL sites | a resolved export, not a slot call |
 
 **The proof.** `tests/unit/io_vtable_abi_test.cpp`, nine tests, all passing. It establishes,
@@ -860,10 +860,10 @@ counts are the ones to size a batch with).
 
 | batch | scope | IO CALL sites |
 |---|---|---|
-| **A — Component** (run ALONE, FIRST) | `code/Game/Component/*.cpp` | ~1,196 total, of which ~380 are `Serializer`-family + all 35 `SerializerEncodingVCall` |
-| **B — Game** | `code/Game/Game/*.cpp` | ~580 |
-| **C — Dialog** | `code/Game/Dialog/*.cpp` — all of Persistence / FileSystem / Modification | ~369 |
-| **D — Action + Work** | `code/Game/{Action,Work}/*.cpp` | ~402 |
+| **A — Component** (run ALONE, FIRST) | `src/game/Component/*.cpp` | ~1,196 total, of which ~380 are `Serializer`-family + all 35 `SerializerEncodingVCall` |
+| **B — Game** | `src/game/Game/*.cpp` | ~580 |
+| **C — Dialog** | `src/game/Dialog/*.cpp` — all of Persistence / FileSystem / Modification | ~369 |
+| **D — Action + Work** | `src/game/{Action,Work}/*.cpp` | ~402 |
 | **E — Tutorial + Goal + Entity + Player** | those four directories | ~247 |
 | **F — engine + standalone** | `engine/funcs/`, `standalone/` | ~33 |
 
@@ -903,7 +903,7 @@ Two typedef'd pointers name the same retail dispatch slot, so two batches could 
 
 | slot | pointers | CALL | action |
 |---|---|---|---|
-| 0x140152ac8 | `g_fn_Serialize_Int` (316) **and** `fn_Ser_Slot_SerInt_AC8` (28) | 344 | convert the 28 `fn_Ser_Slot_SerInt_AC8` sites (mostly `code/Game/Component/tradecomponent_serialize.cpp`) to `g_fn_Serialize_Int`, then delete the `fn_Ser_SerInt_t` typedef, extern, initialiser and its guard conjunct in `code/Game/Game/gamegrid_serialize.cpp` |
+| 0x140152ac8 | `g_fn_Serialize_Int` (316) **and** `fn_Ser_Slot_SerInt_AC8` (28) | 344 | convert the 28 `fn_Ser_Slot_SerInt_AC8` sites (mostly `src/game/Component/tradecomponent_serialize.cpp`) to `g_fn_Serialize_Int`, then delete the `fn_Ser_SerInt_t` typedef, extern, initialiser and its guard conjunct in `src/game/Game/gamegrid_serialize.cpp` |
 | 0x140152a60 | `fn_Serializer_Serialize_Float` (138) **and** `fn_Ser_Slot_SerFloat_A60` (**0**) | 138 | `fn_Ser_Slot_SerFloat_A60` is already zero-CALL — delete it outright with the other zero-callers, (f) |
 
 This is a small, separately-gated commit that belongs to the owner, before batch A starts. It
@@ -989,7 +989,7 @@ thirteen have CALL = 0 and only DECL/guard occurrences:
 They die **with their typedefs, externs, definitions, initialisers, `_DEBUG` value prints and
 guard conjuncts**, by NAME and by retail ADDRESS (B33 §7). Three of them
 (`SerFloat_A60`, `SerUShortArr_488`, `SerByteArr_618`) appear only inside
-`code/Game/Game/gamegrid_serialize.cpp`'s big `bool ok = fn_A && fn_B && …` readiness chain —
+`src/game/Game/gamegrid_serialize.cpp`'s big `bool ok = fn_A && fn_B && …` readiness chain —
 deleting a conjunct from a multi-line expression is where B.3.3 learned that removing a
 statement inside a multi-line `#define` eats the previous line's `\`. Check the line after.
 `fn_MemZeroFill` has zero occurrences anywhere including guards.

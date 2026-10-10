@@ -45,7 +45,7 @@ def head():
 rowsA = []
 for rel, (src, code) in sorted(CM._CACHE.items()):
     base = rel.rsplit('/', 1)[-1]
-    if not (rel.startswith('code/Game/') and (base == 'exe_bodies.h' or base.endswith('_funcs.h'))):
+    if not (rel.startswith('src/game/') and (base == 'exe_bodies.h' or base.endswith('_funcs.h'))):
         continue
     code2 = re.sub(r'(?m)^\s*#.*$', '', code)
     srclines = src.split('\n')
@@ -89,7 +89,7 @@ for r in rowsA:
 # ---- section B
 vf = {}
 for rel, (src, code) in sorted(CM._CACHE.items()):
-    if not rel.startswith('code/Game/'):
+    if not rel.startswith('src/game/'):
         continue
     for m in RE_VOIDFIRST.finditer(code):
         n = m.group(1)
@@ -127,7 +127,7 @@ for n in sorted(vf):
     locs = vf[n]
     rel, line, sig = locs[0]
     extra = f' +{len(locs) - 1}' if len(locs) > 1 else ''
-    out.append(f'| `{n}` | {rel.replace("code/Game/", "")}:{line}{extra} | `{sig.replace("|", "/")}` | {"yes" if n in namesA else "no"} |')
+    out.append(f'| `{n}` | {rel.replace("src/game/", "")}:{line}{extra} | `{sig.replace("|", "/")}` | {"yes" if n in namesA else "no"} |')
 out.append('')
 out.append(secC.rstrip('\n'))
 out.append('')

@@ -52,7 +52,7 @@
 // -----------------------------------------
 // **FrameCopyImageBuffer (ctor, dtor, Create, Generate) -- all four, as one
 // block.** This class exists only to grab a screenshot
-// (code/Game/Game/w2_takescreenshot.cpp). Its ctor/Create/Generate allocate
+// (src/game/Game/w2_takescreenshot.cpp). Its ctor/Create/Generate allocate
 // and drive `Video::RenderBuffer` and `Video::ImageBuffer` objects through
 // VIRTUAL CALLS into vtables this lane does not own -- `Video::Device` /
 // `Video::Context` / `Video::RenderBuffer` are lanes A/B/C's scope this wave,
@@ -431,7 +431,7 @@ extern "C" void RtGraphics_AnimationManager_Dtor(Graphics::AnimationManager* sel
 //    (`external_class.cpp:152` beside `external.cpp`'s `RtObject_External_Dtor`).
 //
 //  * THE CONSTRUCTOR DOOR IS NOT A DELEGATION EITHER (B4b-2). It is called on
-//    raw memory by `code/Game/Component/animaudioevent.cpp:45`, which then
+//    raw memory by `src/game/Component/animaudioevent.cpp:45`, which then
 //    stamps its own subclass table; the class has no real constructor at all.
 //
 // ENDGAME B.3.9 block GFX: the last two bullets are HISTORY. Both doors are

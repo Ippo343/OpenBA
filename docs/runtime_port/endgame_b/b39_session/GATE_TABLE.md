@@ -9,10 +9,10 @@
 | b39-UIB (W1: 12 widget pairs concrete) | a1750148 | ok | 0 | 764 | 5683/0 · 5773/12 · 4758 | 5/5 | 122/104/43 | 106 | Mods exit 0; Quit / Options / Achievements exit 0; GoalDialog opens, crash log 0 | 0 |
 | b39-UIA (W1: 15 widget pairs concrete) | e564f680 | ok | 0 | 786 | 5683/0 · 5773/12 · 4767 | 5/5 | 92/104/43 | 76 | Mods exit 0; Quit / Options / Achievements exit 0; GoalDialog opens, crash log 0; tool placement / road / removal exit 0 | 0 |
 | b39-IO (W1: encodings, streams, PackageFile concrete; 3 titled behaviour commits) | d0acb883 | ok | 0 | 799 | 5683/0 · 5773/12 · 4758 | 5/5 | 78/104/43 | 72 | Mods exit 0; Quit / Options / Achievements exit 0; GoalDialog opens; in-game save COMPLETE, crash log 0 | 0 |
-| b39-C3 (caller batch: code/Game/Work type-id cells, ~100 sites) | 96cba89a | ok | 0 | 799 | 5683/0 · 5773/12 · 4763 | 5/5 | 78/104/43 | 72 | tool placement / road / removal exit 0 | 0 |
+| b39-C3 (caller batch: src/game/Work type-id cells, ~100 sites) | 96cba89a | ok | 0 | 799 | 5683/0 · 5773/12 · 4763 | 5/5 | 78/104/43 | 72 | tool placement / road / removal exit 0 | 0 |
 | b39-ENG (W1: Achievement x4, Audio, Collision2D, PointList concrete; 9 singletons class statics via redirect; 1 behaviour commit) | 9e3e765e | ok | 0 | 821 | 5683/0 · 5773/12 · 4766 | 5/5 | 68/104/43 | 63 | Mods exit 0; Quit / Options / Achievements exit 0; GoalDialog opens, crash log 0 | 0 |
-| b39-C2 (caller batch: code/Game/Component i-z type-id cells) | 3557ba2f | ok | 0 | 821 | 5683/0 · 5773/12 · 4787 | 5/5 | 68/104/43 | 63 | tool placement / road / removal exit 0 | 0 |
-| b39-C1 (caller batch: code/Game/Component a-h type-id cells) | a2abb993 | ok | 0 | 821 | 5683/0 · 5773/12 · 4766 | 5/5 | 68/104/43 | 63 | tool placement / road / removal exit 0 | 0 |
+| b39-C2 (caller batch: src/game/Component i-z type-id cells) | 3557ba2f | ok | 0 | 821 | 5683/0 · 5773/12 · 4787 | 5/5 | 68/104/43 | 63 | tool placement / road / removal exit 0 | 0 |
+| b39-C1 (caller batch: src/game/Component a-h type-id cells) | a2abb993 | ok | 0 | 821 | 5683/0 · 5773/12 · 4766 | 5/5 | 68/104/43 | 63 | tool placement / road / removal exit 0 | 0 |
 | b39-GFX (W1: 10 Graphics classes concrete, ~EdgeMeshInstance ported (behaviour), 5 storage cells retired) | 5ca67302 | ok | 0 | 832 | 5683/0 · 5773/12 · 4766 | 5/5 | 58/104/38 | 53 | tool placement / road / removal exit 0; forced device-lost in game (Present #40000): round trip COMPLETE, crash log 0 — see note | 0 |
 
 **Device-lost note (2026-09-27, coordinator; `devlost.sh`, `devlost_at.sh`).** Three behaviours of the forced
@@ -48,8 +48,8 @@ line, the registered count (311) and the resave (5/5) are unchanged. New baselin
 | b39-ENG2 to ed104779 (W2: four Engine loops, Audio::Stream, PathfinderThread on real ctors; Engine / Audio::Device singletons retired) | 0169cfa9 | ok | 0 | 904 | 5683/0 · 5773/12 · 4787 | 5/5 | 7/103/31 | 5 | — | 0 |
 | b39-ENG2 7800a669 ALONE (behaviour: Engine::Loader constructed by the class at static init, _loader a class static; the mint constructs nothing) | d260cac9 | ok | 0 | 905 | 5683/0 · 5773/12 · 4766 | 5/5 | 6/103/30 | 5 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; forced device-lost in game: round trip COMPLETE, crash log 0 | 0 |
 | b39-CG3 (g_TypeId_* / g_tid_* reads: Player / Tutorial / Entity / Component / Work / Action / Game) | 2472cb06 | ok | 0 | 905 | clean (5683 / 5773/12) | 5/5 | 6/103/30 | 5 | tools x3 exit 0 | 0 |
-| b39-CG1 (g_TypeId_* reads: code/Game/Dialog a-o, 338 sites) | ca6bfa7b | ok | 0 | 905 | clean | 5/5 | 6/103/30 | 5 | — | 0 |
-| b39-CG2 (g_TypeId_* reads: code/Game/Dialog p-z) | fa7beb85 | ok | 0 | 905 | clean | 5/5 | 6/103/30 | 5 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0 | 0 |
+| b39-CG1 (g_TypeId_* reads: src/game/Dialog a-o, 338 sites) | ca6bfa7b | ok | 0 | 905 | clean | 5/5 | 6/103/30 | 5 | — | 0 |
+| b39-CG2 (g_TypeId_* reads: src/game/Dialog p-z) | fa7beb85 | ok | 0 | 905 | clean | 5/5 | 6/103/30 | 5 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0 | 0 |
 | b39-RF ALONE (behaviour: exe type records are class statics built at static init; abstract bases have TypeId(); chain 414; order-free dump; boot check VerifyExeTypeInfos) | efc4fb72 | ok | 0 | 905 | 5683/0 · 5773/12 · 4766 | 5/5 | 6/103/30 | 5 | Mods, Quit / Options / Achievements exit 0; GoalDialog opens; tools x3 exit 0 | 0 after the re-cut below |
 
 **Typetable baseline RE-CUT (2026-09-27, with the RF merge efc4fb72), in writing.** The gate reported 1

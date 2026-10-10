@@ -8,7 +8,7 @@
 // -------------------------------
 // Block D2 declares nine real C++ classes over layouts the rest of the tree —
 // and `dx11/`, and `standalone/video_interface.cpp`, and
-// `code/Game/Dialog/optionsdialog.cpp` — still reach by RAW BYTE OFFSET:
+// `src/game/Dialog/optionsdialog.cpp` — still reach by RAW BYTE OFFSET:
 //
 //   Video::Device                      0x108, lock at +0x60, dllSlots at +0xb0,
 //                                      deviceData at +0x100

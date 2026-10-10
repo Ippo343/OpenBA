@@ -60,7 +60,7 @@ struct Options {
     int         modalDriverAnswer    = 0;      //   the answer it substitutes ("<answer>[,<ticks>]")
     int         modalDriverTicks     = 0;      //   nested ticks before answering; 0 = the site's default
     const char* modalDriverRaw       = nullptr;//   the raw value, for the [ModalDriver] banner
-    bool        modalAnswer          = false;  // BANISHED_MODAL_ANSWER — CLAUDE.md Mods route (code/Game/Dialog/*)
+    bool        modalAnswer          = false;  // BANISHED_MODAL_ANSWER — CLAUDE.md Mods route (src/game/Dialog/*)
     int         modalAnswerValue     = 0;
 
     // ── front end / save-load routes ─────────────────────────────────────────
@@ -90,7 +90,7 @@ struct Options {
     const char* pastureAutoType      = nullptr;// perf/README.md stress town — pick a herd type for every pasture
     const char* cropFieldForceStart  = nullptr;// perf/README.md — "2" = pick a crop AND post the plant command
     const char* orchardForceStart    = nullptr;// perf/README.md — pick a tree type for every orchard
-    bool        forceConstruct       = false;  // code/Game/Game/construction_force_harness.cpp [no tool reader]
+    bool        forceConstruct       = false;  // src/game/Game/construction_force_harness.cpp [no tool reader]
     bool        buildSyncLabor       = true;   //   default ON; only "=0" disables
 
     // ── perf: the stress town (standalone/stress_harness.cpp, perf/README.md) ─
@@ -146,18 +146,18 @@ struct Options {
     bool        unattendedBoot       = false;  // standalone/main.cpp — any of AUTOSTART/AUTOQUIT/AUTOLOAD/
                                                //   AUTOTUTORIAL/AUTOMENU_BUTTON/PAUSEMENU_BUTTON says nobody is watching
     bool        deferWindowShow      = true;   // standalone/boot_window.cpp — default ON, "0"/"false" shows the window early
-    bool        skipEngineLoader     = false;  // code/Game/Game/loader_loop_stubs.cpp [no tool reader]
-    bool        syncEngineLoader     = true;   // code/Game/Game/loader_loop_stubs.cpp — default ON, "0"/"f" goes async
+    bool        skipEngineLoader     = false;  // src/game/Game/loader_loop_stubs.cpp [no tool reader]
+    bool        syncEngineLoader     = true;   // src/game/Game/loader_loop_stubs.cpp — default ON, "0"/"f" goes async
     bool        noFolLock            = false;  // standalone/res_load_lock.cpp — kill switch for the resource-load lock
 
 
     // ── code/Game readers migrated off getenv (ENDGAME C.2/C.4 close) ────────
     // RAW values, parsed at the reader exactly as the getenv call used to be.
     // Every one is [no tool reader] unless the comment says otherwise.
-    const char* buildDemoForce       = nullptr;// BANISHED_BUILD_DEMO_FORCE — code/Game/Component/buildcomponent_state8.cpp
+    const char* buildDemoForce       = nullptr;// BANISHED_BUILD_DEMO_FORCE — src/game/Component/buildcomponent_state8.cpp
     const char* buildDemoFrames      = nullptr;// BANISHED_BUILD_DEMO_FRAMES — buildcomponent_state8.cpp, construction_force_harness.cpp
-    const char* buildDemoIndex       = nullptr;// BANISHED_BUILD_DEMO_INDEX — code/Game/Game/starttown.cpp
-    const char* buildDemoHouse       = nullptr;// BANISHED_BUILD_DEMO_HOUSE — code/Game/Game/starttown.cpp
+    const char* buildDemoIndex       = nullptr;// BANISHED_BUILD_DEMO_INDEX — src/game/Game/starttown.cpp
+    const char* buildDemoHouse       = nullptr;// BANISHED_BUILD_DEMO_HOUSE — src/game/Game/starttown.cpp
     const char* buildDemoForesterLodge = nullptr;// starttown.cpp ringPlace
     const char* buildDemoMarket      = nullptr;// starttown.cpp ringPlace
     const char* buildDemoSchoolHouse = nullptr;// starttown.cpp ringPlace
@@ -170,16 +170,16 @@ struct Options {
     const char* stressAllowPockets   = nullptr;// BANISHED_STRESS_ALLOW_POCKETS — starttown.cpp siting
     const char* stressKindMap        = nullptr;// BANISHED_STRESS_KINDMAP — starttown.cpp siting dump
     const char* forceWork            = nullptr;// BANISHED_FORCE_WORK — citizenaicomponent.cpp
-    const char* forceHarvest         = nullptr;// BANISHED_FORCE_HARVEST — code/Game/Work/foresterwork.cpp
+    const char* forceHarvest         = nullptr;// BANISHED_FORCE_HARVEST — src/game/Work/foresterwork.cpp
     const char* forceForesterWork    = nullptr;// BANISHED_FORCE_FORESTERWORK — forester_force_harness.cpp
     const char* forceSnow            = nullptr;// BANISHED_FORCE_SNOW — gameupdateloop.cpp
     const char* forceDeviceLost      = nullptr;// BANISHED_FORCE_DEVICE_LOST — dx11/src/contextdata.cpp
     const char* screenshotAt         = nullptr;// BANISHED_SCREENSHOT_AT — gameupdateloop.cpp
     const char* captureIngame        = nullptr;// BANISHED_CAPTURE_INGAME — gameupdateloop.cpp
     const char* achIgnoreMods        = nullptr;// BANISHED_ACH_IGNORE_MODS — gameupdateloop.cpp achievements
-    const char* fastTrig             = nullptr;// BANISHED_FAST_TRIG — code/Game/Component/character_trig.cpp
-    const char* treeGuards           = nullptr;// BANISHED_TREE_GUARDS — code/Game/Entity/entitylist.cpp
-    const char* treePrefetch         = nullptr;// BANISHED_TREE_PREFETCH — code/Game/Entity/entitylist.cpp
+    const char* fastTrig             = nullptr;// BANISHED_FAST_TRIG — src/game/Component/character_trig.cpp
+    const char* treeGuards           = nullptr;// BANISHED_TREE_GUARDS — src/game/Entity/entitylist.cpp
+    const char* treePrefetch         = nullptr;// BANISHED_TREE_PREFETCH — src/game/Entity/entitylist.cpp
 
     // ── diagnostic traces still read from code/Game ──────────────────────────
     const char* mapTrace             = nullptr;// BANISHED_MAP_TRACE — minimap / map UI / tool UI
@@ -188,7 +188,7 @@ struct Options {
     const char* cropDiseaseTrace     = nullptr;// BANISHED_CROPDISEASE_TRACE — diseasecomponent.cpp
     const char* tornadoTrace         = nullptr;// BANISHED_TORNADO_TRACE — tornadocomponent.cpp
     const char* serializeTrace       = nullptr;// BANISHED_SERIALIZE_TRACE — componententity.cpp
-    const char* selectDiag           = nullptr;// BANISHED_SELECT_DIAG — code/Game/Player/edittool.cpp
+    const char* selectDiag           = nullptr;// BANISHED_SELECT_DIAG — src/game/Player/edittool.cpp
 
     // ── diagnostics: allocator / memory ──────────────────────────────────────
     bool        allocStats           = false;  // standalone/alloc_stats.cpp [no tool reader]

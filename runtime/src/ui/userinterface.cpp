@@ -511,7 +511,7 @@ void UI::UserInterface::SetFullscreenFade(bool fadeIn, uint32_t color, bool imme
 // `Sprite` is passed by value, which for a class with a non-trivial copy
 // constructor means BY ADDRESS: RDX is a pointer to the caller's copy. That is
 // exactly how our tree already calls it — see the 16-byte `uint8_t sprite[16]`
-// that code/Game/Dialog/optionsdialog.cpp's ApplyKeyMapToUI_Impl builds.
+// that src/game/Dialog/optionsdialog.cpp's ApplyKeyMapToUI_Impl builds.
 void UI::UserInterface::SetFullscreenFadeSprite(const Sprite* sprite) {
     _fadeSpriteSheet = sprite->spriteSheet;   // +0xe0 <- +0x00 } one QWORD
     _fadeSpriteIndex = sprite->spriteIndex;   // +0xe8 <- +0x08 } one QWORD

@@ -1,4 +1,4 @@
-# A_citizen (code/Game/Component/citizen*) - blockers, 1,956 casts / 29 files
+# A_citizen (src/game/Component/citizen*) - blockers, 1,956 casts / 29 files
 
 Method: function-by-function ranges + line patterns (estimates; counts sum to the file totals). TSV = per (file, blocker).
 
@@ -7,27 +7,27 @@ LOCAL 640 | SIG on file-local helpers 539 | SIG declared in Component/exe_bodies
 POD:RtObject::Internal 61 | OTHER 86 | FIELD 41 | FWD 22 | SIG Serialize/slots 21 | ERASED 11 | FLOOR 9 | H5 2
 
 ## Blockers by casts (key, casts, files, header that changes, change)
-- `LOCAL:WorkScheduler` 220 (3f) -> code/Game/Game/WorkScheduler.h + WorkSchedulerNodes.h: node structs (Id 0x30, Count 0x28, Bucket 0x38) already declared; type the walkers
-- `LOCAL:GameUpdateLoop` 122 (20f) -> code/Game/Game/GameUpdateLoop.h: m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset r
-- `NOCLASS:WorkCandidateTree node (0x30)` 95 (1f) -> code/Game/Game/WorkSchedulerNodes.h (new struct): node {Work* +0, int cost +8, parent +0x10, left +0x18, right +0x20, s16 bal +0x28/ht +0x2A
-- `LOCAL:ModelComponent` 86 (12f) -> code/Game/Component/ModelComponent.h: transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transfo
-- `LOCAL:CitizenBehavior` 75 (2f) -> code/Game/Entity/CitizenBehavior.h: citizens(+0xA0)/count(+0xA8), field_0x20 residences, attendance already declared; type the
-- `NOCLASS:LeisureCandidateSet node (0x28)` 63 (1f) -> code/Game/Component/citizenai_leisure.cpp (new struct): 0x28 AVL-ish node via NodeAlloc, 3 pointers + int; layout to confirm vs WorkSchedulerCount
+- `LOCAL:WorkScheduler` 220 (3f) -> src/game/Game/WorkScheduler.h + WorkSchedulerNodes.h: node structs (Id 0x30, Count 0x28, Bucket 0x38) already declared; type the walkers
+- `LOCAL:GameUpdateLoop` 122 (20f) -> src/game/Game/GameUpdateLoop.h: m_game/m_citizenList/m_entityList/m_random etc already typed; replace +0xF0/+0xF8 offset r
+- `NOCLASS:WorkCandidateTree node (0x30)` 95 (1f) -> src/game/Game/WorkSchedulerNodes.h (new struct): node {Work* +0, int cost +8, parent +0x10, left +0x18, right +0x20, s16 bal +0x28/ht +0x2A
+- `LOCAL:ModelComponent` 86 (12f) -> src/game/Component/ModelComponent.h: transform(+0x148)/yaw(+0x168) declared; translation +0x158/15C/160 is inside Math::Transfo
+- `LOCAL:CitizenBehavior` 75 (2f) -> src/game/Entity/CitizenBehavior.h: citizens(+0xA0)/count(+0xA8), field_0x20 residences, attendance already declared; type the
+- `NOCLASS:LeisureCandidateSet node (0x28)` 63 (1f) -> src/game/Component/citizenai_leisure.cpp (new struct): 0x28 AVL-ish node via NodeAlloc, 3 pointers + int; layout to confirm vs WorkSchedulerCount
 - `POD:RtObject::Internal` 61 (10f) -> runtime/types (Object::InternalBasePtr ctor): InternalBasePtr(reinterpret_cast<RtObject::Internal*>(obj)) bridge; needs a typed ctor fro
-- `LOCAL:StorageComponent` 57 (3f) -> code/Game/Component/StorageComponent.h: storageSlots(+0x28)/slotCount(+0x30) declared; row stride 0x10 {data,count,cap} needs an I
-- `OTHER:IBP-held-as-int64` 54 (2f) -> code/Game/Component/citizenai_actionctors.cpp: InternalBasePtr locals kept as int64_t/uint64_t and passed as uint64_t* to Action ctors
-- `SIG:CitizenAI_sub_78c0` 52 (1f) -> code/Game/Component/exe_bodies.h: int64_t/void* param(s) declared here; retype to the class and update callers
+- `LOCAL:StorageComponent` 57 (3f) -> src/game/Component/StorageComponent.h: storageSlots(+0x28)/slotCount(+0x30) declared; row stride 0x10 {data,count,cap} needs an I
+- `OTHER:IBP-held-as-int64` 54 (2f) -> src/game/Component/citizenai_actionctors.cpp: InternalBasePtr locals kept as int64_t/uint64_t and passed as uint64_t* to Action ctors
+- `SIG:CitizenAI_sub_78c0` 52 (1f) -> src/game/Component/exe_bodies.h: int64_t/void* param(s) declared here; retype to the class and update callers
 - `SIG:CharacterComponent_MoveTick_1094c0` 41 (1f) -> (extern "C" with outside callers; no header): void*/int64_t param; callers in other modules declare local externs
-- `SIG:CitizenAIComponent::BuildCandidateStateList` 38 (1f) -> code/Game/Component/CitizenAIComponent.h: BuildCandidateStateList(int64_t* outList,...): the list is a raw Array
-- `NOCLASS:QuadtreeWalker records (0x24)` 37 (1f) -> code/Game/Component/exe_bodies.h / Map_RadiusQuery_92990: 0x2430 walker, 0xFF records of 0x24 {pos,ext,nodeId}; Map_RadiusQuery_92990 takes float* m
-- `SIG:PathGraph_ReassignWorkers` 33 (1f) -> code/Game/Component/exe_bodies.h: int64_t/void* param(s) declared here; retype to the class and update callers
-- `SIG:Entity_impl_ec70` 33 (1f) -> code/Game/Component/exe_bodies.h: int64_t/void* param(s) declared here; retype to the class and update callers
+- `SIG:CitizenAIComponent::BuildCandidateStateList` 38 (1f) -> src/game/Component/CitizenAIComponent.h: BuildCandidateStateList(int64_t* outList,...): the list is a raw Array
+- `NOCLASS:QuadtreeWalker records (0x24)` 37 (1f) -> src/game/Component/exe_bodies.h / Map_RadiusQuery_92990: 0x2430 walker, 0xFF records of 0x24 {pos,ext,nodeId}; Map_RadiusQuery_92990 takes float* m
+- `SIG:PathGraph_ReassignWorkers` 33 (1f) -> src/game/Component/exe_bodies.h: int64_t/void* param(s) declared here; retype to the class and update callers
+- `SIG:Entity_impl_ec70` 33 (1f) -> src/game/Component/exe_bodies.h: int64_t/void* param(s) declared here; retype to the class and update callers
 - `SIG:Entity_PlaceAtCell_7b20` 31 (1f) -> (file-local static / extern "C" in the .cpp): int64_t/void* param of an in-file helper; retype params
-- `OTHER:Time-local-held-as-int64` 30 (9f) -> code/Game/Component/*.cpp (locals): System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
-- `SIG:CitizenAI_ActionExecutor_c4c50` 29 (1f) -> code/Game/Component/exe_bodies.h: int64_t/void* param(s) declared here; retype to the class and update callers
+- `OTHER:Time-local-held-as-int64` 30 (9f) -> src/game/Component/*.cpp (locals): System::Time locals declared as int64_t/uint64_t, then cast for the Time ctor / arithmetic
+- `SIG:CitizenAI_ActionExecutor_c4c50` 29 (1f) -> src/game/Component/exe_bodies.h: int64_t/void* param(s) declared here; retype to the class and update callers
 - `SIG:State-callee-ints` 29 (2f) -> (file-local static / extern "C" in the .cpp): int64_t/void* param of an in-file helper; retype params
 - `SIG:CitizenAI_State_Leisure_sub_fd50` 29 (1f) -> (file-local static / extern "C" in the .cpp): int64_t/void* param of an in-file helper; retype params
-- `LOCAL:Map` 28 (2f) -> code/Game/Game/Map.h: Map::cells + MapCell(0x30) declared; +0x26/+0x29 flags fields exist in MapCell
+- `LOCAL:Map` 28 (2f) -> src/game/Game/Map.h: Map::cells + MapCell(0x30) declared; +0x26/+0x29 flags fields exist in MapCell
 - (blockers below 14 casts each: 78 keys, 379 casts; see TSV)
 
 ## Cross-module / shared blockers worth one agent each

@@ -26,7 +26,7 @@ ALIVE — NEVER TOUCH, their calls were left on purpose: every CONSTRUCTOR / DES
 its ~8 file-local aliases on slot 0x140152b00, fn_Random_Default_Ctor, Thread/CriticalSection ctor/dtor doors,
 WideString ctor/dtor where a site was not converted); every by-value String return door (DateTime::AsString,
 Configuration CurrentVersion / CurrentBuildId / GetVersionString, dx11 WideStringAsUTF8); `fn_Random_RandFloatTol`
-— an `extern "C"` SHIM FUNCTION (code/Game/Game/worldgen_f390_shims.cpp), not a pointer: its call sites and its
+— an `extern "C"` SHIM FUNCTION (src/game/Game/worldgen_f390_shims.cpp), not a pointer: its call sites and its
 body's `p ?` test stay; every allocator door (fn_MemAlloc, MemFree, s_fn_MemAllocSA, g_pMemAllocSingleton …) and a
 guard conjunct on one; `g_Timer_*` data reads (class statics, rule B4b-4); all ExternalPtr exe doors; any
 RegisterDispatchSlot / address_registry / reg_* registration row, RegisterRuntime* line, `.inc` file.

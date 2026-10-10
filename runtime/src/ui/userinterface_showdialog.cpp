@@ -14,8 +14,8 @@
 // ENUMERATION is wrong: there are FOUR call sites, not two, and the two UI1 did
 // not name are not bypassed at all --
 //
-//     code/Game/Dialog/optionsdialog.cpp:1646   (the input-bind capture dialog)
-//     code/Game/Dialog/optionsdialog.cpp:1759   (the binding-conflict confirm)
+//     src/game/Dialog/optionsdialog.cpp:1646   (the input-bind capture dialog)
+//     src/game/Dialog/optionsdialog.cpp:1759   (the binding-conflict confirm)
 //
 // both call `fn_UI_ShowDialog` unconditionally. And the two that ARE bypassed
 // are bypassed CONDITIONALLY: `moddialog.cpp:697` takes the bypass only when

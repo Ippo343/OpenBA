@@ -44,13 +44,13 @@ for r in rows:
         block = 'MISC'
     else:
         d = chdr.rsplit('/', 1)[0] if chdr else ''
-        if d == 'code/Game/Component':
+        if d == 'src/game/Component':
             block = 'COMP-A' if tbase in ('CitizenComponent', 'Component', 'CharacterComponent', 'CharacterGrid', 'CharacterDescription', 'ComponentDescription', 'CropFieldComponent', 'CropSlotArray', 'ConsumeProduceComponent', 'ClearAreaComponent', 'AmbientEmitterComponent', 'AmbientEnvironmentComponent', 'AutoPickupComponent') else 'COMP-B'
-        elif d == 'code/Game/Game':
+        elif d == 'src/game/Game':
             block = 'GAME'
-        elif d in ('code/Game/Entity', 'code/Game/Dialog', 'code/Game/Tutorial'):
+        elif d in ('src/game/Entity', 'src/game/Dialog', 'src/game/Tutorial'):
             block = 'ENT'
-        elif d in ('code/Game/Player', 'code/Game/Action', 'code/Game/Work', 'code/Game/Object'):
+        elif d in ('src/game/Player', 'src/game/Action', 'src/game/Work', 'src/game/Object'):
             block = 'MISC'
         elif d.startswith('runtime/'):
             block = 'RT'

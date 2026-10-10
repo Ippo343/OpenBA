@@ -7,11 +7,11 @@ X = sys.argv[1]
 
 
 def region(p):
-    if p.startswith('code/Game/Component/'):
+    if p.startswith('src/game/Component/'):
         return 'XA_component'
-    if p.startswith(('code/Game/Work/', 'code/Game/Action/', 'code/Game/Entity/')):
+    if p.startswith(('src/game/Work/', 'src/game/Action/', 'src/game/Entity/')):
         return 'XB_work_action_entity'
-    if p.startswith('code/Game/'):
+    if p.startswith('src/game/'):
         return 'XC_game_dialog_player_tut'
     if p.startswith(('runtime/', 'engine/')):
         return 'XD_runtime'

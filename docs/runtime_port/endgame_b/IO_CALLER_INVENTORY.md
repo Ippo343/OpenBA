@@ -49,25 +49,25 @@ whole `Serialize()` body covering multiple calls).
 | `fn_ExternalRefArray_Serialize` | 4 | 4 | 0 | `void(void*, int, void*, const char*)` | FUN_1400049c0 (line 3936) |
 | **Total** | **130** | **94** | **21** | | |
 
-Per-directory split of the 130 CALL sites (all in `code/Game/`, none in `standalone/` or
+Per-directory split of the 130 CALL sites (all in `src/game/`, none in `standalone/` or
 `engine/` bodies — only the 3 DECL lines each in `engine/funcs/`):
 
 | directory | CALL sites |
 |---|---|
-| `code/Game/Component` | 91 |
-| `code/Game/Work` | 15 |
-| `code/Game/Game` | 11 |
-| `code/Game/Action` | 9 |
-| `code/Game/Tutorial` | 2 |
-| `code/Game/Entity` | 2 |
+| `src/game/Component` | 91 |
+| `src/game/Work` | 15 |
+| `src/game/Game` | 11 |
+| `src/game/Action` | 9 |
+| `src/game/Tutorial` | 2 |
+| `src/game/Entity` | 2 |
 
 Representative sites:
 ```
-code/Game/Action/consumerawmaterial.cpp:134: fn_ExternalPtr_BuildSerialize(&legacyExtPtr, ser2);
-code/Game/Component/createroaddescription.cpp:44: fn_ExternalPtr_Serialize3(s + 0x28, serializer);      // ExternalPtr +0x28
-code/Game/Component/highlightdescription.cpp:96: fn_ExternalPtr_Serialize3(s + 0x30, ser);              // ref0 (+0x30)
-code/Game/Action/createnaturalresource.cpp:205: fn_InternalBasePtr_Serialize(s + 0x28, ser2);
-code/Game/Component/createbridgedescription.cpp:59: fn_ExternalRefArray_Serialize(serializer, 5, s + 0x38, nullptr); // ExtPtr[5] +0x38
+src/game/Action/consumerawmaterial.cpp:134: fn_ExternalPtr_BuildSerialize(&legacyExtPtr, ser2);
+src/game/Component/createroaddescription.cpp:44: fn_ExternalPtr_Serialize3(s + 0x28, serializer);      // ExternalPtr +0x28
+src/game/Component/highlightdescription.cpp:96: fn_ExternalPtr_Serialize3(s + 0x30, ser);              // ref0 (+0x30)
+src/game/Action/createnaturalresource.cpp:205: fn_InternalBasePtr_Serialize(s + 0x28, ser2);
+src/game/Component/createbridgedescription.cpp:59: fn_ExternalRefArray_Serialize(serializer, 5, s + 0x38, nullptr); // ExtPtr[5] +0x38
 ```
 
 Exe-address cross-reference: `fn_ExternalPtr_Serialize3` = last reader of `0x140007140`;
@@ -96,12 +96,12 @@ typedef comment block plus one address-of use in `SaveGameSettings`
 (`engine_funcs.h:3708-3729`'s doc comment references them by name but the actual 16-entry
 save/read loop calls through `g_pPersistenceSingleton` some other way not yet resolved to these
 two typedefs — worth the B34 owner's attention, they may be dead already). Directory split for
-the live ones: `code/Game/Dialog` (`optionsdialog.cpp` x3 WriteSettings/ReadSettings site),
-`code/Game/Dialog/scenariodialog.cpp` + `code/Game/Tutorial/tutorial_next_scenario.cpp`
+the live ones: `src/game/Dialog` (`optionsdialog.cpp` x3 WriteSettings/ReadSettings site),
+`src/game/Dialog/scenariodialog.cpp` + `src/game/Tutorial/tutorial_next_scenario.cpp`
 (GetSavePath, 1 each).
 ```
-code/Game/Dialog/scenariodialog.cpp:432: fn_Persistence_GetSavePath(persistence, &savePathBuf);
-code/Game/Dialog/optionsdialog.cpp:1149: fn_Persistence_WriteSettings(*g_pPersistenceSingleton);
+src/game/Dialog/scenariodialog.cpp:432: fn_Persistence_GetSavePath(persistence, &savePathBuf);
+src/game/Dialog/optionsdialog.cpp:1149: fn_Persistence_WriteSettings(*g_pPersistenceSingleton);
 ```
 Singleton: `extern void** g_pPersistenceSingleton;` (`engine_funcs.h:301`).
 
@@ -112,8 +112,8 @@ Singleton: `extern void** g_pPersistenceSingleton;` (`engine_funcs.h:301`).
 | `fn_FileSystem_GetDataDirectory` | 2 | 4 | `void*(void* self, void* retval)` — non-trivial `Filename` return |
 | `fn_FileSystem_GetSourceDirectory` | 1 | 0 | `void*(void* self, void* retval)` |
 
-Both in `code/Game/Dialog` (`scenariodialog.cpp`, `spritecaptureui.cpp`) and one in
-`code/Game/Tutorial/tutorial_next_scenario.cpp`. Two distinct singleton globals:
+Both in `src/game/Dialog` (`scenariodialog.cpp`, `spritecaptureui.cpp`) and one in
+`src/game/Tutorial/tutorial_next_scenario.cpp`. Two distinct singleton globals:
 `g_pFileSystemSingleton` (line 3540, "exref at 0x140151d18") and `g_pFileSystemSingleton2`
 (line 1285, "separate exref for GetDataDirectory calls") — **the class has two independently
 cached singleton pointers in our engine_funcs**, a fact the B34 owner needs when giving
@@ -135,7 +135,7 @@ cached singleton pointers in our engine_funcs**, a fact the B34 owner needs when
 | `fn_ModEntry_Dtor` | 0 | 0 (CACHED 1) | `void(void* self)` |
 | `fn_ModArrayCopy` | 0 | 0 (CACHED 1) | `void*(void* dest, const void* src)` |
 
-All 19 CALL sites are in `code/Game/Dialog` — `moddialog.cpp` (13), `moddetailsdialog.cpp` (5),
+All 19 CALL sites are in `src/game/Dialog` — `moddialog.cpp` (13), `moddetailsdialog.cpp` (5),
 `mod_dialog_vtables.cpp` (1). The four `fn_ModEntry_*`/`fn_ModArrayCopy` pointers are
 **zero-CALL** — each shows exactly one CACHED hit, which on inspection is the typedef comment
 plus the extern; no `code/`/`standalone/` file calls them by name today (the `Array<Mod>`
@@ -143,8 +143,8 @@ copy path they support may run through a different, uninventoried route — flag
 claim they're provably dead, since a caller that copies a Mod by value without a symbol match
 could be missed by a name-based lexer).
 ```
-code/Game/Dialog/moddialog.cpp:547: fn_Modification_Swap(modSingleton, index, index - 1);
-code/Game/Dialog/moddetailsdialog.cpp:158: void* mod = fn_Modification_GetMod(modification, modIndex);
+src/game/Dialog/moddialog.cpp:547: fn_Modification_Swap(modSingleton, index, index - 1);
+src/game/Dialog/moddetailsdialog.cpp:158: void* mod = fn_Modification_GetMod(modification, modIndex);
 ```
 Singleton: `g_ppModificationSingleton` (`engine_funcs.h:2423`, ".rdata at 0x1401519e8" — also
 registered as a dispatch/exe-addr row, see §6).
@@ -172,20 +172,20 @@ Ctor/Dtor/Int/Bool/GetVersion cluster, which travel together almost everywhere a
 
 | directory | Ctor/Dtor CALL | `g_fn_Serialize_Int` CALL | `fn_Serializer_Serialize_Float` CALL |
 |---|---|---|---|
-| `code/Game/Component` | 94 | 153 | 97 |
-| `code/Game/Action` | 32 | 19 | 0 |
-| `code/Game/Game` | 21 | 90 | 41 |
-| `code/Game/Tutorial` | 20 | 11 | 0 |
-| `code/Game/Dialog` | 6 | 8 | 0 |
-| `code/Game/Work` | 6 | 23 | 0 |
-| `code/Game/Goal` | 5 | 5 | 0 |
-| `code/Game/Entity` | 3 | 7 | 0 |
+| `src/game/Component` | 94 | 153 | 97 |
+| `src/game/Action` | 32 | 19 | 0 |
+| `src/game/Game` | 21 | 90 | 41 |
+| `src/game/Tutorial` | 20 | 11 | 0 |
+| `src/game/Dialog` | 6 | 8 | 0 |
+| `src/game/Work` | 6 | 23 | 0 |
+| `src/game/Goal` | 5 | 5 | 0 |
+| `src/game/Entity` | 3 | 7 | 0 |
 
 ```
-code/Game/Action/animatenaturalresource.cpp:125: g_fn_Serializer_Ctor(ser1, stream, 0);
-code/Game/Action/animatenaturalresource.cpp:127: g_fn_Serializer_Dtor(ser1);
-code/Game/Action/completeroad.cpp:92: g_fn_Serialize_Int(ser2, s + 0x20, nullptr);
-code/Game/Component/animaldescription.cpp:66: fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x28), nullptr);
+src/game/Action/animatenaturalresource.cpp:125: g_fn_Serializer_Ctor(ser1, stream, 0);
+src/game/Action/animatenaturalresource.cpp:127: g_fn_Serializer_Dtor(ser1);
+src/game/Action/completeroad.cpp:92: g_fn_Serialize_Int(ser2, s + 0x20, nullptr);
+src/game/Component/animaldescription.cpp:66: fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x28), nullptr);
 ```
 
 ### 2e. Per-class `Serialize` bodies that call through the serializer (not the 9 `ExternalPtr` pointers)
@@ -201,7 +201,7 @@ code/Game/Component/animaldescription.cpp:66: fn_Serializer_Serialize_Float(seri
 | `fn_Goal_BaseSerialize` | 3 | `Goal::Serialize` base |
 | `fn_GoalInstance_Persist` | 1 | `GoalInstance::Persist` |
 | `g_fn_Time_Serialize` | 32 | `System::Time::Serialize(Serializer&)` — listed again in §3 (it is genuinely both a Time member and a Serializer caller) |
-| `fn_BucketTreeSerialize` | 1 | `code/Game/Entity/entitylist.cpp:1386` |
+| `fn_BucketTreeSerialize` | 1 | `src/game/Entity/entitylist.cpp:1386` |
 | `fn_System_Color_Serialize` | 6 | `System::Color::Serialize` |
 | `fn_Struct60B_Serialize` | 0 (CACHED 1) | zero CALL today |
 | `fn_Array_Resize_Stride20/08/14` | 1 / 9 / 2 | array-of-fixed-stride resize helpers used ahead of a serialize loop |
@@ -210,9 +210,9 @@ code/Game/Component/animaldescription.cpp:66: fn_Serializer_Serialize_Float(seri
 | `fn_Array_Serialize_External_Particle` | 1 | |
 | `fn_TradeWork_impl_04d0` / `fn_TradeWork_impl_f1a0` | 0 / 0 (CACHED 1 each) | zero CALL — see the "Ser_Slot" cascade below, these are the trade-work dispatch cascade entry points that soft-fail on a miss (header comment at line 5060) |
 
-Nearly all of these are `code/Game/Component` or `code/Game/Game`, with `fn_Goal_BaseSerialize`
-in `code/Game/Goal` + `code/Game/Tutorial`, `fn_Work_SerializeBase`/`fn_BST_SerializeHelper` in
-`code/Game/Work/buildstructure.cpp` (same file, same body).
+Nearly all of these are `src/game/Component` or `src/game/Game`, with `fn_Goal_BaseSerialize`
+in `src/game/Goal` + `src/game/Tutorial`, `fn_Work_SerializeBase`/`fn_BST_SerializeHelper` in
+`src/game/Work/buildstructure.cpp` (same file, same body).
 
 ### 2f. `Ser_Slot_*` raw dispatch-slot idiom (session-8 promoted externs)
 
@@ -230,10 +230,10 @@ session 8 exercises heavily"):
 | `fn_Ser_Slot_SerSizedRaw_400` | 0x140152400 | 1 | 2 |
 | `fn_Ser_Slot_SerByteArr_618` | 0x140152618 | 0 | 1 |
 
-`fn_Ser_Slot_SerInt_AC8` (28 calls, mostly `code/Game/Component/tradecomponent_serialize.cpp`)
+`fn_Ser_Slot_SerInt_AC8` (28 calls, mostly `src/game/Component/tradecomponent_serialize.cpp`)
 is the live one; three of the seven (`SerFloat_A60`, `SerUShortArr_488`, `SerByteArr_618`) are
 **zero-CALL today** — each appears only in a guard conjunct
-(`code/Game/Game/gamegrid_serialize.cpp` builds a big `bool ok = fn_A && fn_B && fn_C && ...`
+(`src/game/Game/gamegrid_serialize.cpp` builds a big `bool ok = fn_A && fn_B && fn_C && ...`
 readiness check that mentions all seven, then only calls the ones the body actually needs).
 Note this slot address list overlaps §6's dispatch-slot table — 0x140152a60 is also
 `fn_Serializer_Serialize_Float`'s slot per §2d, i.e. **two different typedef'd pointers name
@@ -241,8 +241,8 @@ the same retail dispatch slot** (`fn_Serializer_Serialize_Float` and `fn_Ser_Slo
 — a duplication the B34 rule sheet should resolve to one name before conversion, or the
 resave-gate risk is registering the same slot twice under two members.
 ```
-code/Game/Component/tradecomponent_serialize.cpp:221: if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(ser, &count, nullptr);
-code/Game/Game/gamegrid_serialize.cpp:243: fn_Ser_Slot_SerByte_410(serializer, elem + 0x28, nullptr);
+src/game/Component/tradecomponent_serialize.cpp:221: if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(ser, &count, nullptr);
+src/game/Game/gamegrid_serialize.cpp:243: fn_Ser_Slot_SerByte_410(serializer, elem + 0x28, nullptr);
 ```
 
 ## 3. Every `System`-family pointer not already converted
@@ -259,7 +259,7 @@ pointers matched a `Class@System@@` owning-class mangled name or one of the exam
 | `fn_MemZeroFill` | 0 | 0 | 0 | **zero occurrences anywhere outside its own DECL** — dead on arrival |
 | `fn_Time_AsSeconds` | 47 | 17 | 17 | `System::Time::AsSeconds` |
 | `fn_Time_Ctor_Float` | 111 | 82 | 4 | `System::Time::Time(float)` |
-| `fn_DateTime_AsString` | 1 | 0 | 0 | `System::DateTime::AsString` — single site, `code/Game/Dialog/saveloaddialog.cpp:322` |
+| `fn_DateTime_AsString` | 1 | 0 | 0 | `System::DateTime::AsString` — single site, `src/game/Dialog/saveloaddialog.cpp:322` |
 | `fn_Configuration_GetVersionString` | 3 | 0 | 0 | `System::Configuration::GetVersionString` |
 | `fn_Configuration_CurrentVersion` | 1 | 1 | 0 | static |
 | `fn_Configuration_CurrentBuildId` | 1 | 1 | 0 | static |
@@ -277,22 +277,22 @@ cluster:
 
 | directory | MemAlloc | MemFreeStatic | Random (4 pointers summed) |
 |---|---|---|---|
-| `code/Game/Component` | 179 | 199 | 95 |
-| `code/Game/Dialog` | 126 | 106 | 8 |
-| `code/Game/Game` | 100 | 103 | 44 |
-| `code/Game/Work` | 25 | 90 | 6 |
-| `code/Game/Action` | 27 | 45 | 1 |
-| `code/Game/Tutorial` | 28 | 24 | 2 |
-| `code/Game/Player` | 17 | 21 | 1 |
-| `code/Game/Goal` | 8 | 9 | 0 |
-| `code/Game/Entity` | 5 | 8 | 0 |
+| `src/game/Component` | 179 | 199 | 95 |
+| `src/game/Dialog` | 126 | 106 | 8 |
+| `src/game/Game` | 100 | 103 | 44 |
+| `src/game/Work` | 25 | 90 | 6 |
+| `src/game/Action` | 27 | 45 | 1 |
+| `src/game/Tutorial` | 28 | 24 | 2 |
+| `src/game/Player` | 17 | 21 | 1 |
+| `src/game/Goal` | 8 | 9 | 0 |
+| `src/game/Entity` | 5 | 8 | 0 |
 | `engine` | 5 | 6 | 1 |
 | `standalone` | 4 | 5 | 1 |
 
 ```
-code/Game/Action/action_base_cnr.cpp:547: void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
-code/Game/Action/action_base_hunt.cpp:149: fn_MemFreeStatic(oldBase);
-code/Game/Component/animalcomponent.cpp:645: wanderDir = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, 4) : 1;
+src/game/Action/action_base_cnr.cpp:547: void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+src/game/Action/action_base_hunt.cpp:149: fn_MemFreeStatic(oldBase);
+src/game/Component/animalcomponent.cpp:645: wanderDir = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, 4) : 1;
 ```
 
 ### 3a. Not System, but same surface family — `Save::SaveLoad` (flagged, not in the 16 above)
@@ -314,9 +314,9 @@ here rather than silently dropped:
 | `fn_LoadScenarioFromSave` | 1 | 0 |
 | **Total** | **43** | **13** |
 
-Almost entirely `code/Game/Dialog` (`saveloaddialog.cpp`, `autosavedialog.cpp`,
+Almost entirely `src/game/Dialog` (`saveloaddialog.cpp`, `autosavedialog.cpp`,
 `dialog_exe_helpers.cpp`, `mainmenudialog.cpp`), with `standalone` touching
-`fn_SaveLoad_GetOperation`/`GetSaveInfo` (2/1) and `code/Game/Tutorial` touching 3 of them via
+`fn_SaveLoad_GetOperation`/`GetSaveInfo` (2/1) and `src/game/Tutorial` touching 3 of them via
 `tutorial_next_scenario.cpp`. Singleton: `g_pSaveLoadSingleton` (line 1095, "exref at
 0x140151610 (double-indirect)" — same slot address §6 lists under `reg_unreg_lane1.cpp:173`).
 
@@ -346,16 +346,16 @@ reads 38 lines, of which one is the inline DEFINITION at `engine/funcs/engine_fu
 37 call lines are `tradedescription.cpp` 5, `createbridgedescription.cpp` 5,
 `toolbar.cpp`/`terraformdescription`/`populationdescription`/`happinessdescription`/
 `fishingdescription`/`createplaceddescription`/`consumeproducedescription` 2 each, and 13
-files with 1 each), all `code/Game/Component/*description.cpp`
+files with 1 each), all `src/game/Component/*description.cpp`
 (20 files, mostly one call each; `createbridgedescription.cpp` and `tradedescription.cpp` have
-5 each) plus `code/Game/Game/toolbar.cpp` (2). Representative:
+5 each) plus `src/game/Game/toolbar.cpp` (2). Representative:
 ```
-code/Game/Component/createbridgedescription.cpp: SerializerEncodingVCall(serializer_24bytes, 0x98, &field);
+src/game/Component/createbridgedescription.cpp: SerializerEncodingVCall(serializer_24bytes, 0x98, &field);
 ```
 No `Ser_*`/`ENC_`/`WriteInt`/`ReadInt` macro family exists anywhere in `engine/funcs/`,
-`engine/types/`, or `code/Game/**/**serialize**` — the only two idioms on the exe side are (a)
+`engine/types/`, or `src/game/**/**serialize**` — the only two idioms on the exe side are (a)
 the flat `g_fn_Serialize_*`/`fn_Serializer_Serialize_*` typed dispatch pointers (§2d/§2f) and
-(b) this one `SerializerEncodingVCall` helper. `code/Game/Component/coll_bridge.h` was checked
+(b) this one `SerializerEncodingVCall` helper. `src/game/Component/coll_bridge.h` was checked
 and contains no serialize helpers (it's a collision-bridge header, unrelated despite the name
 similarity to "bridge" descriptions above).
 
@@ -365,15 +365,15 @@ ported `Serialize` body — 183 total):
 
 | directory | count |
 |---|---|
-| `code/Game/Component` | 129 |
-| `code/Game/Game` | 15 |
-| `code/Game/Tutorial` | 15 |
+| `src/game/Component` | 129 |
+| `src/game/Game` | 15 |
+| `src/game/Tutorial` | 15 |
 | `standalone` | 11 |
-| `code/Game/Dialog` | 8 |
-| `code/Game/Action` | 4 |
-| `code/Game/Work` | 1 |
+| `src/game/Dialog` | 8 |
+| `src/game/Action` | 4 |
+| `src/game/Work` | 1 |
 
-`code/Game/Component` alone is 70% of all Serialize bodies on the exe side — consistent with
+`src/game/Component` alone is 70% of all Serialize bodies on the exe side — consistent with
 §1-2's per-directory CALL splits, where Component also dominates every serializer pointer.
 
 ## 5. IAT-cached copies
@@ -393,10 +393,10 @@ members this task's keyword sweep didn't have a global name to search for:
 
 | local static | mangled export | files |
 |---|---|---|
-| `s_fn_ThreadCtor` / `s_fn_ThreadDtor` / `s_fn_ThreadStart` / `s_fn_WaitFinish` | `??0Thread@System@@`, `??1Thread@System@@`, `?Start@Thread@System@@`, `?WaitForFinish@Thread@System@@` | `code/Game/Action/action_pf_astar.cpp`, `code/Game/Action/keystone_a_zone.cpp` |
-| `s_fn_CSCtor` / `s_fn_CSDtor` / `s_fn_CSLock` / `s_fn_CSUnlock` | `??0CriticalSection@System@@`, `??1CriticalSection@System@@`, `?Lock@CriticalSection@System@@`, `?Unlock@CriticalSection@System@@` | `code/Game/Game/pathfinder_seed.cpp`, `code/Game/Game/tornado.cpp`, `code/Game/Game/keystone_a_gamedtor.cpp` |
-| `s_fn_randFloat` | `?RandFloat@Random@System@@` (a SECOND, independent resolution of the same export `fn_Random_RandFloat` already gets from `engine_funcs.h`) | `code/Game/Action/action_child_ctors2.cpp` |
-| `s_fn_MemAllocSA` / `s_fn_MemFree` (as `pf_fn_MemFree_t`) | `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (the STATIC form — distinct from both `fn_MemAlloc` and `fn_MemAllocStatic`, a **third** MemAlloc surface) | `code/Game/Action/action_pf_astar.cpp`, `code/Game/Action/keystone_a_zone.cpp`, `code/Game/Component/citizenai_leisure.cpp` |
+| `s_fn_ThreadCtor` / `s_fn_ThreadDtor` / `s_fn_ThreadStart` / `s_fn_WaitFinish` | `??0Thread@System@@`, `??1Thread@System@@`, `?Start@Thread@System@@`, `?WaitForFinish@Thread@System@@` | `src/game/Action/action_pf_astar.cpp`, `src/game/Action/keystone_a_zone.cpp` |
+| `s_fn_CSCtor` / `s_fn_CSDtor` / `s_fn_CSLock` / `s_fn_CSUnlock` | `??0CriticalSection@System@@`, `??1CriticalSection@System@@`, `?Lock@CriticalSection@System@@`, `?Unlock@CriticalSection@System@@` | `src/game/Game/pathfinder_seed.cpp`, `src/game/Game/tornado.cpp`, `src/game/Game/keystone_a_gamedtor.cpp` |
+| `s_fn_randFloat` | `?RandFloat@Random@System@@` (a SECOND, independent resolution of the same export `fn_Random_RandFloat` already gets from `engine_funcs.h`) | `src/game/Action/action_child_ctors2.cpp` |
+| `s_fn_MemAllocSA` / `s_fn_MemFree` (as `pf_fn_MemFree_t`) | `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (the STATIC form — distinct from both `fn_MemAlloc` and `fn_MemAllocStatic`, a **third** MemAlloc surface) | `src/game/Action/action_pf_astar.cpp`, `src/game/Action/keystone_a_zone.cpp`, `src/game/Component/citizenai_leisure.cpp` |
 
 Also: `standalone/loader_loop_stubs.cpp`, `standalone/reg_mint_promoted.cpp`,
 `standalone/rt_data_mint.cpp` reference `Thread@System@@`/`CriticalSection@System@@` in
@@ -454,15 +454,15 @@ header comments, unlike the `Serializer`/`Time` family above). Confirm with
 
 ## 7. Proposed batch split for the caller work (by directory, disjoint file sets)
 
-Ordered by CALL-count weight (`code/Game/Component` dominates every pointer family, so it is
+Ordered by CALL-count weight (`src/game/Component` dominates every pointer family, so it is
 its own batch rather than folded into a smaller one):
 
 | batch | scope | approx. CALL sites |
 |---|---|---|
-| **A — Component** | `code/Game/Component/*.cpp` (129 Serialize bodies, all of §2d/§2e/§2f's Component rows, all 39 `SerializerEncodingVCall` sites bar 2, most of `fn_MemAlloc`/`fn_MemFreeStatic`/`Random`) | ~1,196 |
-| **B — Game** | `code/Game/Game/*.cpp` (menuscene.cpp, geometry_serialize.cpp, gamegrid_serialize.cpp, serialize_struct60b_serialize.cpp carry the bulk of §2e/§2f's non-Component rows) | ~580 |
-| **C — Dialog** | `code/Game/Dialog/*.cpp` (all of §2a/§2b/§2c/§3a — Persistence, FileSystem, Modification, SaveLoad live almost entirely here) | ~369 |
-| **D — Action + Work** | `code/Game/Action/*.cpp` + `code/Game/Work/*.cpp` (heavy `g_fn_Serializer_Ctor/Dtor` pairing + `fn_MemFreeStatic`) | ~402 |
+| **A — Component** | `src/game/Component/*.cpp` (129 Serialize bodies, all of §2d/§2e/§2f's Component rows, all 39 `SerializerEncodingVCall` sites bar 2, most of `fn_MemAlloc`/`fn_MemFreeStatic`/`Random`) | ~1,196 |
+| **B — Game** | `src/game/Game/*.cpp` (menuscene.cpp, geometry_serialize.cpp, gamegrid_serialize.cpp, serialize_struct60b_serialize.cpp carry the bulk of §2e/§2f's non-Component rows) | ~580 |
+| **C — Dialog** | `src/game/Dialog/*.cpp` (all of §2a/§2b/§2c/§3a — Persistence, FileSystem, Modification, SaveLoad live almost entirely here) | ~369 |
+| **D — Action + Work** | `src/game/Action/*.cpp` + `src/game/Work/*.cpp` (heavy `g_fn_Serializer_Ctor/Dtor` pairing + `fn_MemFreeStatic`) | ~402 |
 | **E — Tutorial + Goal + Entity + Player** | remaining four directories, each individually small | ~247 |
 | **F — engine + standalone** | 33 sites total, mostly `fn_MemAlloc`/`fn_MemFreeStatic`/`Random`/`Time`/`SaveLoad` fallbacks and the boot-time resolution code itself | ~33 |
 
@@ -494,9 +494,9 @@ while the IO design question is still open.
    > caller batch A starts, as the owner's own separately-gated commit — this is the one piece
    > of caller work that must NOT wait for the `IO::Serializer` class.** 0x140152ac8: convert
    > the 28 `fn_Ser_Slot_SerInt_AC8` sites (mostly
-   > `code/Game/Component/tradecomponent_serialize.cpp`) to `g_fn_Serialize_Int`, then delete
+   > `src/game/Component/tradecomponent_serialize.cpp`) to `g_fn_Serialize_Int`, then delete
    > the `fn_Ser_SerInt_t` typedef, extern, initialiser and its guard conjunct in
-   > `code/Game/Game/gamegrid_serialize.cpp`. 0x140152a60: `fn_Ser_Slot_SerFloat_A60` is
+   > `src/game/Game/gamegrid_serialize.cpp`. 0x140152a60: `fn_Ser_Slot_SerFloat_A60` is
    > already **zero-CALL**, so it just dies with the other twelve zero-callers.
 4. **`fn_Persistence_SetBool`/`SetInt` and all four `fn_ModEntry_*`/`fn_ModArrayCopy` pointers
    are zero-CALL** despite living in the same header blocks as heavily-used siblings — likely
@@ -516,7 +516,7 @@ while the IO design question is still open.
    assumes `engine_funcs.h` is the complete caller list).
 7. **`Save::SaveLoad` is not `System` or `IO`** by namespace but is the save/load control
    surface most directly adjacent to IO's Persistence/FileSystem work (§3a) — 43 CALL sites,
-   concentrated in `code/Game/Dialog`, that the B34 rule sheet should explicitly scope in or
+   concentrated in `src/game/Dialog`, that the B34 rule sheet should explicitly scope in or
    out rather than leave ambiguous.
 8. **`fn_LoadScenarioFromSave`'s single caller passes `savedState`/`scenarioIdx` through to
    `GameUpdateLoop`/`GameLoadDialogLoopT`/`LoaderLoop`** (per its header comment) — it is a

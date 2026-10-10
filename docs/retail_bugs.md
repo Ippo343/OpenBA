@@ -61,6 +61,6 @@ past the 0x40-byte object. The rows it means to walk are ResidenceComponent's (c
 **Proof it is retail.** Read in Ghidra 2026-10-09 (B6 Block 0, then block UI): the finder's
 cell, its RegisterType and the factory size above.
 
-**The port deviates (B6 ruling, known_port_issues row 452).** `code/Game/Dialog/residenceui.cpp`
+**The port deviates (B6 ruling, known_port_issues row 452).** `src/game/Dialog/residenceui.cpp`
 reads the ResidenceComponent's families by name, with a `STANDALONE DEVIATION` comment.
 The faithful lever is the StorageComponent finder at that site.

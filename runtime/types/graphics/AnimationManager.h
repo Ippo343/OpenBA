@@ -242,7 +242,7 @@ namespace Graphics {
 // member-initialiser list covering every member would write them — the exact
 // class of divergence RULE B5-13 names for `Renderer` +0x3c/+0x4c. The
 // constructor also publishes `this` into the exported static `_singleton`, which
-// is a global side effect, and `code/Game/Game/gameupdateloop_load.cpp:333`
+// is a global side effect, and `src/game/Game/gameupdateloop_load.cpp:333`
 // calls it over raw `MemAlloc`'d memory. The doors in
 // `runtime/src/graphics/animation.cpp` stay free functions; both members are
 // declared here for the record and deliberately left undefined.

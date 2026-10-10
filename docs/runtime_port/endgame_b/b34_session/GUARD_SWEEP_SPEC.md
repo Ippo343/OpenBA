@@ -21,10 +21,10 @@ Four agents, by directory, each owning its own files:
 
 | agent | files | local-cache files | local-cache names |
 |---|---|---|---|
-| **A** | `code/Game/Component/` | 57 | 190 |
-| **B** | `code/Game/Game/` | 11 | 36 |
-| **C** | `code/Game/Action/` + `code/Game/Work/` | 31 | 112 |
-| **D** | `code/Game/{Tutorial,Goal,Entity,Player,Dialog,Object}/` and any other `code/Game` dir | 8 | 17 |
+| **A** | `src/game/Component/` | 57 | 190 |
+| **B** | `src/game/Game/` | 11 | 36 |
+| **C** | `src/game/Action/` + `src/game/Work/` | 31 | 112 |
+| **D** | `src/game/{Tutorial,Goal,Entity,Player,Dialog,Object}/` and any other `code/Game` dir | 8 | 17 |
 
 Each agent removes, **in its own files only**:
 - the file-local door caches (static pointer + its `typedef` + its resolver statement
@@ -133,12 +133,12 @@ The coordinator's rule: the pointer is unconditionally bound in the standalone
 DIFFERENT VALUE, not a no-op, and a reviewer must be able to see which constant
 stopped being reachable. The six, measured:
 
-- `code/Game/Game/gamegrid_serialize.cpp:235` fallback `4`
-- `code/Game/Game/gamegrid_serialize.cpp:301` fallback `4`
-- `code/Game/Game/goals_serialize.cpp:652` fallback `0`
-- `code/Game/Game/goals_serialize.cpp:684` fallback `0`
-- `code/Game/Work/work_base_reimpl.cpp:301` fallback `0`
-- `code/Game/Work/work_base_reimpl.cpp:306` fallback `0` (inside `if ((… ? … : 0) > 2)`)
+- `src/game/Game/gamegrid_serialize.cpp:235` fallback `4`
+- `src/game/Game/gamegrid_serialize.cpp:301` fallback `4`
+- `src/game/Game/goals_serialize.cpp:652` fallback `0`
+- `src/game/Game/goals_serialize.cpp:684` fallback `0`
+- `src/game/Work/work_base_reimpl.cpp:301` fallback `0`
+- `src/game/Work/work_base_reimpl.cpp:306` fallback `0` (inside `if ((… ? … : 0) > 2)`)
 
 ### 2.5 Readiness chains `ok = a && b && c;`
 ```cpp
@@ -158,7 +158,7 @@ Watch the line continuations: these chains span 2–4 lines.
 ```
 Keep the non-door conjuncts. An `else if` whose condition empties entirely becomes a
 plain `else` — do **not** delete the arm, its body is behaviour.
-`code/Game/Dialog/scenariodialog.cpp:406-407` is a different animal: a chain that
+`src/game/Dialog/scenariodialog.cpp:406-407` is a different animal: a chain that
 builds a diagnostic string naming the first missing primitive. Those arms describe a
 failure that can no longer happen; delete the two door arms and leave the rest of
 the chain intact.
@@ -175,11 +175,11 @@ it stays.
 Two readers in the "other" bucket are NOT guards and will break the build if you
 forget them:
 
-1. **`code/Game/Action/performwork.cpp:231-234`** — a `_DEBUG` name→pointer
+1. **`src/game/Action/performwork.cpp:231-234`** — a `_DEBUG` name→pointer
    diagnostic table, `{ "Serializer_Ctor", (const void*)g_fn_Serializer_Ctor }, …`,
    followed by `if (!d.p) fprintf(stderr, "[PerformWork] UNRESOLVED: %s\n", …)`.
    Delete the four door rows; keep the table and its other rows.
-2. **`code/Game/Action/consumerawmaterial.cpp:85`** — a conjunct that ends a
+2. **`src/game/Action/consumerawmaterial.cpp:85`** — a conjunct that ends a
    multi-line chain on its own line (`g_fn_Serializer_GetVersion;`). Deleting it
    leaves the previous line ending in `&&`. This is exactly the §2.2 trap.
 
@@ -234,7 +234,7 @@ a risky one.
    them are exe-phase work. `fn_ExternalPtr_Serialize3` is the last reader of exe
    `0x140007140` and explicitly STAYS.
    **The misnamed ones are the trap**: `s_fn_IBP_Serialize` in
-   `code/Game/Work/cleararea.cpp` and `code/Game/Component/ambientemittercomponent.cpp`
+   `src/game/Work/cleararea.cpp` and `src/game/Component/ambientemittercomponent.cpp`
    binds the ExternalPtr EXE doors `0x140002340` / `0x1400019a0`, not
    `InternalBasePtr::Serialize`. **A static's NAME and its COMMENT prove nothing** —
    `s_fn_Serialize_Char` binds the uchar door; `s_fn_SerSChar` in
@@ -247,12 +247,12 @@ a risky one.
    reassignment from an unrecognised source KILLS the binding. §5's scripts already
    do this — a naive closure reports 136 "door calls" on the same tree where the
    positional walk reports 5.
-4. **`code/Game/Work/work_base_walkpos.cpp:86`** — a record COUNT, not a stream.
+4. **`src/game/Work/work_base_walkpos.cpp:86`** — a record COUNT, not a stream.
 5. **`RtSystem_Time_Serialize`** (`+0x90` int64) — that is step 4b.
-6. **`code/Game/Work/plantarea.cpp` and `plantorchard.cpp`** — `b34-closing` is
+6. **`src/game/Work/plantarea.cpp` and `plantorchard.cpp`** — `b34-closing` is
    fixing the aliased bool-array door there in commit 3 (retail-backed). Leave both
    files alone entirely; their caches retire in that commit or after it.
-7. **`code/Game/Game/w2_takescreenshot.cpp`** — commit 4 takes it whole
+7. **`src/game/Game/w2_takescreenshot.cpp`** — commit 4 takes it whole
    (`GetSaveDirectory` + `Exists` + the `s_ok` chain). Leave it alone.
 8. **`dx11/src/buffers.cpp:271`** and the nineteen minted vtable rows / fourteen
    deleting-dtor registrations (B34_RULES §4.2: **none retires in this step**).

@@ -5,7 +5,7 @@ the table of cast causes), `.claude/rules/type-headers.md`, `CLAUDE.md` (hard ru
 
 ## What the step is
 The bodies are C-shaped: `void*` receivers, `reinterpret_cast<T*>(p + 0x…)` field reads, C functions
-declared in `code/Game/<Module>/exe_bodies.h` and `Rt<Ns>_<Class>_<Member>` bodies in `runtime/src`.
+declared in `src/game/<Module>/exe_bodies.h` and `Rt<Ns>_<Class>_<Member>` bodies in `runtime/src`.
 B.4 makes a function that retail compiled as a member a MEMBER of its class, its receiver `this`, a
 field read a read by NAME. Block 0 does NOT edit product code: each owner answers one question and
 writes ONE inventory file plus ONE machine-readable table. The coordinator writes the rule sheet

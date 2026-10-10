@@ -129,15 +129,15 @@ using SceneObjectId = uint32_t;
 // `RtGraphics::Scene`, a `0x78`-sized member, and the game loops block 0 named as
 // the suspects. Every site that owns a Scene owns it INDIRECTLY:
 //
-//   code/Game/Game/gameupdateloop_load.cpp:1090  MemAlloc(0x78) then the ctor
+//   src/game/Game/gameupdateloop_load.cpp:1090  MemAlloc(0x78) then the ctor
 //                                                door; the loop keeps a
 //                                                `void* m_graphicsScene` at
 //                                                GameUpdateLoop+0x60
 //                                                (engine/types/GameUpdateLoop.h:61)
-//   code/Game/Game/menudialogloopt.cpp:715       MemAlloc(0x78, 8) then the ctor
+//   src/game/Game/menudialogloopt.cpp:715       MemAlloc(0x78, 8) then the ctor
 //                                                door; held as `void* scene`
 //                                                (menudialogloopt_funcs.h:70)
-//   code/Game/Game/minimap_paint.cpp:250         `alignas(16) uint8_t scene[256]`
+//   src/game/Game/minimap_paint.cpp:250         `alignas(16) uint8_t scene[256]`
 //                                                — RAW STORAGE, not a typed
 //                                                member: no default constructor
 //                                                is required of `Scene` and no

@@ -3,9 +3,9 @@ its line, split into four regions (run from the repo root)."""
 import collections, re, sys
 D = 'docs/runtime_port/endgame_b/b4_session/data/pass2y/'
 def region(f):
-    if f.startswith(('code/Game/Component/', 'code/Game/Entity/', 'code/Game/Work/', 'code/Game/Action/')) or f.endswith('wrk_abi_test.cpp'):
+    if f.startswith(('src/game/Component/', 'src/game/Entity/', 'src/game/Work/', 'src/game/Action/')) or f.endswith('wrk_abi_test.cpp'):
         return 'CW'
-    if f.startswith(('code/Game/Dialog/', 'code/Game/Player/', 'standalone/')):
+    if f.startswith(('src/game/Dialog/', 'src/game/Player/', 'standalone/')):
         return 'GAMEB'
     if f.startswith('code/'):
         return 'GAMEA'

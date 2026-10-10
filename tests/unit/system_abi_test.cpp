@@ -10,7 +10,7 @@
 // live for every unconverted user, and while FOUR construction sites keep
 // stamping a hand-built or minted vtable over +0x00:
 //
-//   code/Game/Game/pathfinder_seed.cpp:142-148     exe table 0x14015ef18
+//   src/game/Game/pathfinder_seed.cpp:142-148     exe table 0x14015ef18
 //   runtime/src/engine/singleton_ctors.cpp:448-450 0x180155860 over +0x10
 //   standalone/rt_data_mint.cpp:434-461            ??_7Loader@Engine@@6B@
 //   runtime/src/audio/audio_stream_win.cpp:303-341 Audio::Stream's own

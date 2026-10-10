@@ -154,20 +154,20 @@ file (`defs.py`).
 | `runtime/src/achievement/rt_factories_achievement.cpp` | 26 | — | — | — | B3 |
 | `runtime/src/achievement/rt_factories_achievement.inc` | 127 | — | — | Ach[hex12 str10] | B3 |
 | `engine/types/AchievementGoals.h` | 165 | — | — | — | B3 |
-| `code/Game/Goal/buildinggoal.cpp` | 420 | — | — | ef{Ach6} | B3 |
-| `code/Game/Goal/buildinggoal_funcs.h` | 62 | — | — | — | B3 |
-| `code/Game/Goal/goal_exe_helpers.cpp` | 236 | — | — | Ach[rexp1] | B3 |
-| `code/Game/Goal/goal_exe_helpers.h` | 25 | — | — | — | B3 |
-| `code/Game/Goal/populationgoal.cpp` | 207 | — | — | ef{Ach6 Eng2} | B3 |
-| `code/Game/Goal/populationgoal_funcs.h` | 58 | — | — | — | B3 |
-| `code/Game/Goal/statgoal.cpp` | 496 | — | — | Ach[exeslot1 rexp2] | B3 |
-| `code/Game/Goal/statgoal_funcs.h` | 62 | — | — | — | B3 |
-| `code/Game/Goal/statvaluedispatch.cpp` | 1092 | — | — | — | B3 |
-| `code/Game/Goal/statvaluedispatch.h` | 13 | — | — | — | B3 |
-| `code/Game/Goal/timegoal.cpp` | 278 | — | — | Ach[exeslot1 rexp3] | B3 |
-| `code/Game/Goal/timegoal_funcs.h` | 57 | — | — | — | B3 |
-| `code/Game/Goal/timegoalinstance.cpp` | 296 | — | — | Ach[exeslot4 rexp1] | B3 |
-| `code/Game/Goal/timegoalinstance_funcs.h` | 38 | — | — | — | B3 |
+| `src/game/Goal/buildinggoal.cpp` | 420 | — | — | ef{Ach6} | B3 |
+| `src/game/Goal/buildinggoal_funcs.h` | 62 | — | — | — | B3 |
+| `src/game/Goal/goal_exe_helpers.cpp` | 236 | — | — | Ach[rexp1] | B3 |
+| `src/game/Goal/goal_exe_helpers.h` | 25 | — | — | — | B3 |
+| `src/game/Goal/populationgoal.cpp` | 207 | — | — | ef{Ach6 Eng2} | B3 |
+| `src/game/Goal/populationgoal_funcs.h` | 58 | — | — | — | B3 |
+| `src/game/Goal/statgoal.cpp` | 496 | — | — | Ach[exeslot1 rexp2] | B3 |
+| `src/game/Goal/statgoal_funcs.h` | 62 | — | — | — | B3 |
+| `src/game/Goal/statvaluedispatch.cpp` | 1092 | — | — | — | B3 |
+| `src/game/Goal/statvaluedispatch.h` | 13 | — | — | — | B3 |
+| `src/game/Goal/timegoal.cpp` | 278 | — | — | Ach[exeslot1 rexp3] | B3 |
+| `src/game/Goal/timegoal_funcs.h` | 57 | — | — | — | B3 |
+| `src/game/Goal/timegoalinstance.cpp` | 296 | — | — | Ach[exeslot4 rexp1] | B3 |
+| `src/game/Goal/timegoalinstance_funcs.h` | 38 | — | — | — | B3 |
 
 #### B4 Audio
 
@@ -227,70 +227,70 @@ file (`defs.py`).
 
 | File | Lines | Reg X/A | Bodies defined here (class n) | Caller / data sites | Owner |
 |---|---:|---|---|---|---|
-| `code/Game/Action/keystone_a_zone.cpp` | 333 | — | — | App[rexp1] ef{App2} | — |
-| `code/Game/Component/ambientemittercomponent.cpp` | 326 | — | — | ef{Aud6} | — |
-| `code/Game/Component/ambientenvironmentcomponent.cpp` | 442 | — | — | ef{Aud14} | — |
-| `code/Game/Component/citizen_assignworkplace.cpp` | 439 | — | — | Aud[exeslot5] | — |
-| `code/Game/Component/citizenai_executor.cpp` | 697 | — | — | Pck[exeslot1 rtaddr1] | — |
-| `code/Game/Component/firecomponent_ignite.cpp` | 630 | — | — | ef{Aud12} | — |
-| `code/Game/Component/floorcomponent.cpp` | 547 | — | — | Pck[rtaddr2] | — |
-| `code/Game/Component/particlecomponent.cpp` | 1040 | — | — | ef{Eng3} | — |
-| `code/Game/Component/pickingcomponent.cpp` | 399 | — | — | Pck[exeslot1 rtaddr1 rexp1] | — |
-| `code/Game/Component/quarrycomponent_deform.cpp` | 414 | — | — | Pck[exeslot2] | — |
-| `code/Game/Component/terraformcomponent.cpp` | 618 | — | — | Pck[exeslot2] | — |
-| `code/Game/Component/tornadocomponent.cpp` | 1123 | — | — | ef{Aud4} | — |
-| `code/Game/Dialog/achievementdialog.cpp` | 358 | — | — | ef{Ach8} | — |
-| `code/Game/Dialog/autosavedialog.cpp` | 288 | — | — | ef{Sav4} | — |
-| `code/Game/Dialog/debugui.cpp` | 1759 | — | — | ef{Aud2 Eng2} | — |
-| `code/Game/Dialog/dialog_exe_helpers.cpp` | 228 | — | — | Ach[rexp1] ef{Sav13 Ach5} | — |
-| `code/Game/Dialog/entityui.cpp` | 933 | — | — | ef{Inp4} | — |
-| `code/Game/Dialog/eventnotifydialog.cpp` | 1044 | — | — | ef{Aud1} | — |
-| `code/Game/Dialog/followdialog.cpp` | 470 | — | — | ef{Inp3} | — |
-| `code/Game/Dialog/goaldialog.cpp` | 282 | — | — | ef{Ach7} | — |
-| `code/Game/Dialog/hotkeytooltipui.cpp` | 147 | — | — | ef{Inp7} | — |
-| `code/Game/Dialog/mainmenudialog.cpp` | 1314 | — | — | ef{Sav2 Eng2 Aud6 App13} | — |
-| `code/Game/Dialog/mod_dialog_vtables.cpp` | 516 | — | — | ef{Sav2 Eng2} | — |
-| `code/Game/Dialog/moddialog.cpp` | 840 | — | — | ef{Sav2 Eng2} | — |
-| `code/Game/Dialog/newgamedialog.cpp` | 1176 | — | — | ef{Eng3} | — |
-| `code/Game/Dialog/optioninputbinddialog.cpp` | 415 | — | — | ef{Inp3} | — |
-| `code/Game/Dialog/optionsdialog.cpp` | 1819 | — | — | ef{Inp24 Aud14 Eng4} | — |
-| `code/Game/Dialog/saveloaddialog.cpp` | 1328 | — | — | ef{Sav33 Eng3} | — |
-| `code/Game/Dialog/scenariodialog.cpp` | 639 | — | — | ef{Ach3 Sav13} | — |
-| `code/Game/Dialog/spritecaptureui.cpp` | 233 | — | — | ef{Inp9} | — |
-| `code/Game/Dialog/toolui.cpp` | 669 | — | — | ef{Inp8} | — |
-| `code/Game/Dialog/ui_dialog_stub_factories.cpp` | 1723 | — | — | ef{Inp3} | — |
-| `code/Game/Game/camera_input.cpp` | 362 | — | — | ef{Inp23} | — |
-| `code/Game/Game/eventlog_achievement.cpp` | 100 | — | — | ef{Ach6} | — |
-| `code/Game/Game/game_main.cpp` | 911 | — | — | Eng[rtaddr3 rexp4] Ach[str1] Inp[str2] Aud[str1] App[str1] ef{Eng10 Aud2} | — |
-| `code/Game/Game/gameupdateloop.cpp` | 2833 | — | — | Ach[exeslot3 rexp5] Aud[rexp3] Sav[rexp1] Pck[rexp1] App[rexp1] Eng[rexp1] ef{Eng16 Ach9 Inp3 Sav3} | — |
-| `code/Game/Game/gameupdateloop_load.cpp` | 1739 | — | — | Ach[rexp5] Pck[rexp1] Sav[rexp2] ef{Aud6 Ach6} | — |
-| `code/Game/Game/gameupdateloop_serialize.cpp` | 1043 | — | — | Ach[rexp3] Aud[rexp1] Sav[rexp2] | — |
-| `code/Game/Game/inputbindings.cpp` | 234 | — | — | ef{Inp16} | — |
-| `code/Game/Game/keystone_a_gamedtor.cpp` | 453 | — | — | App[rexp1] Pck[rexp1] ef{App2} | — |
-| `code/Game/Game/mapquery.cpp` | 253 | — | — | Pck[exeslot1 rexp1] | — |
-| `code/Game/Game/menudialogloopt.cpp` | 1342 | — | — | Aud[rexp1] ef{Aud9} | — |
-| `code/Game/Game/scenario.cpp` | 315 | — | — | Ach[rtaddr4] | — |
-| `code/Game/Game/unreg_lane5_musicplayer.cpp` | 282 | — | — | Aud[rexp1] ef{Aud2} | — |
-| `code/Game/Game/w2_takescreenshot.cpp` | 313 | — | — | ef{Eng3} | — |
-| `code/Game/Game/worldsetup_reload.cpp` | 153 | — | — | ef{Eng9} | — |
-| `code/Game/Player/bridgetool_calcpath.cpp` | 487 | — | — | Pck[exeslot1] | — |
-| `code/Game/Player/dragtool.cpp` | 464 | — | — | ef{Inp11} | — |
-| `code/Game/Player/edittool.cpp` | 1123 | — | — | Pck[exeslot2 rexp2] Inp[exeslot1] ef{Inp5} | — |
-| `code/Game/Player/fencedtool.cpp` | 1066 | — | — | ef{Inp6} | — |
-| `code/Game/Player/fencedtool_calcpath.cpp` | 469 | — | — | Pck[exeslot1] | — |
-| `code/Game/Player/pathtool.cpp` | 523 | — | — | Pck[exeslot2] Inp[exeslot1] ef{Inp3} | — |
-| `code/Game/Player/pathtool_setselected.cpp` | 652 | — | — | App[rexp1] ef{App2} | — |
-| `code/Game/Player/placementtool.cpp` | 1485 | — | — | Inp[exeslot1] ef{Inp3} | — |
-| `code/Game/Player/roadtool.cpp` | 638 | — | — | ef{Inp3} | — |
-| `code/Game/Player/tool_activation_standalone.cpp` | 438 | — | — | ef{Inp5} | — |
-| `code/Game/Player/tool_base_drag.cpp` | 273 | — | — | ef{Aud6} | — |
-| `code/Game/Player/tool_base_ray.cpp` | 439 | — | — | ef{Inp6} | — |
-| `code/Game/Tutorial/finishtutorialgoal.cpp` | 223 | — | — | ef{Ach8} | — |
-| `code/Game/Tutorial/finishtutorialinstance.cpp` | 371 | — | — | Aud[exeslot1] Ach[rexp1] ef{Ach2} | — |
-| `code/Game/Tutorial/tutorial_next_scenario.cpp` | 343 | — | — | ef{Eng6 Sav14} | — |
-| `code/Game/Tutorial/tutorialimagehotkey.cpp` | 330 | — | — | ef{Inp7} | — |
-| `code/Game/Tutorial/tutorialimageinputkey.cpp` | 307 | — | — | ef{Inp7} | — |
-| `code/Game/Tutorial/tutorialui.cpp` | 166 | — | — | ef{Sav1 Eng2} | — |
+| `src/game/Action/keystone_a_zone.cpp` | 333 | — | — | App[rexp1] ef{App2} | — |
+| `src/game/Component/ambientemittercomponent.cpp` | 326 | — | — | ef{Aud6} | — |
+| `src/game/Component/ambientenvironmentcomponent.cpp` | 442 | — | — | ef{Aud14} | — |
+| `src/game/Component/citizen_assignworkplace.cpp` | 439 | — | — | Aud[exeslot5] | — |
+| `src/game/Component/citizenai_executor.cpp` | 697 | — | — | Pck[exeslot1 rtaddr1] | — |
+| `src/game/Component/firecomponent_ignite.cpp` | 630 | — | — | ef{Aud12} | — |
+| `src/game/Component/floorcomponent.cpp` | 547 | — | — | Pck[rtaddr2] | — |
+| `src/game/Component/particlecomponent.cpp` | 1040 | — | — | ef{Eng3} | — |
+| `src/game/Component/pickingcomponent.cpp` | 399 | — | — | Pck[exeslot1 rtaddr1 rexp1] | — |
+| `src/game/Component/quarrycomponent_deform.cpp` | 414 | — | — | Pck[exeslot2] | — |
+| `src/game/Component/terraformcomponent.cpp` | 618 | — | — | Pck[exeslot2] | — |
+| `src/game/Component/tornadocomponent.cpp` | 1123 | — | — | ef{Aud4} | — |
+| `src/game/Dialog/achievementdialog.cpp` | 358 | — | — | ef{Ach8} | — |
+| `src/game/Dialog/autosavedialog.cpp` | 288 | — | — | ef{Sav4} | — |
+| `src/game/Dialog/debugui.cpp` | 1759 | — | — | ef{Aud2 Eng2} | — |
+| `src/game/Dialog/dialog_exe_helpers.cpp` | 228 | — | — | Ach[rexp1] ef{Sav13 Ach5} | — |
+| `src/game/Dialog/entityui.cpp` | 933 | — | — | ef{Inp4} | — |
+| `src/game/Dialog/eventnotifydialog.cpp` | 1044 | — | — | ef{Aud1} | — |
+| `src/game/Dialog/followdialog.cpp` | 470 | — | — | ef{Inp3} | — |
+| `src/game/Dialog/goaldialog.cpp` | 282 | — | — | ef{Ach7} | — |
+| `src/game/Dialog/hotkeytooltipui.cpp` | 147 | — | — | ef{Inp7} | — |
+| `src/game/Dialog/mainmenudialog.cpp` | 1314 | — | — | ef{Sav2 Eng2 Aud6 App13} | — |
+| `src/game/Dialog/mod_dialog_vtables.cpp` | 516 | — | — | ef{Sav2 Eng2} | — |
+| `src/game/Dialog/moddialog.cpp` | 840 | — | — | ef{Sav2 Eng2} | — |
+| `src/game/Dialog/newgamedialog.cpp` | 1176 | — | — | ef{Eng3} | — |
+| `src/game/Dialog/optioninputbinddialog.cpp` | 415 | — | — | ef{Inp3} | — |
+| `src/game/Dialog/optionsdialog.cpp` | 1819 | — | — | ef{Inp24 Aud14 Eng4} | — |
+| `src/game/Dialog/saveloaddialog.cpp` | 1328 | — | — | ef{Sav33 Eng3} | — |
+| `src/game/Dialog/scenariodialog.cpp` | 639 | — | — | ef{Ach3 Sav13} | — |
+| `src/game/Dialog/spritecaptureui.cpp` | 233 | — | — | ef{Inp9} | — |
+| `src/game/Dialog/toolui.cpp` | 669 | — | — | ef{Inp8} | — |
+| `src/game/Dialog/ui_dialog_stub_factories.cpp` | 1723 | — | — | ef{Inp3} | — |
+| `src/game/Game/camera_input.cpp` | 362 | — | — | ef{Inp23} | — |
+| `src/game/Game/eventlog_achievement.cpp` | 100 | — | — | ef{Ach6} | — |
+| `src/game/Game/game_main.cpp` | 911 | — | — | Eng[rtaddr3 rexp4] Ach[str1] Inp[str2] Aud[str1] App[str1] ef{Eng10 Aud2} | — |
+| `src/game/Game/gameupdateloop.cpp` | 2833 | — | — | Ach[exeslot3 rexp5] Aud[rexp3] Sav[rexp1] Pck[rexp1] App[rexp1] Eng[rexp1] ef{Eng16 Ach9 Inp3 Sav3} | — |
+| `src/game/Game/gameupdateloop_load.cpp` | 1739 | — | — | Ach[rexp5] Pck[rexp1] Sav[rexp2] ef{Aud6 Ach6} | — |
+| `src/game/Game/gameupdateloop_serialize.cpp` | 1043 | — | — | Ach[rexp3] Aud[rexp1] Sav[rexp2] | — |
+| `src/game/Game/inputbindings.cpp` | 234 | — | — | ef{Inp16} | — |
+| `src/game/Game/keystone_a_gamedtor.cpp` | 453 | — | — | App[rexp1] Pck[rexp1] ef{App2} | — |
+| `src/game/Game/mapquery.cpp` | 253 | — | — | Pck[exeslot1 rexp1] | — |
+| `src/game/Game/menudialogloopt.cpp` | 1342 | — | — | Aud[rexp1] ef{Aud9} | — |
+| `src/game/Game/scenario.cpp` | 315 | — | — | Ach[rtaddr4] | — |
+| `src/game/Game/unreg_lane5_musicplayer.cpp` | 282 | — | — | Aud[rexp1] ef{Aud2} | — |
+| `src/game/Game/w2_takescreenshot.cpp` | 313 | — | — | ef{Eng3} | — |
+| `src/game/Game/worldsetup_reload.cpp` | 153 | — | — | ef{Eng9} | — |
+| `src/game/Player/bridgetool_calcpath.cpp` | 487 | — | — | Pck[exeslot1] | — |
+| `src/game/Player/dragtool.cpp` | 464 | — | — | ef{Inp11} | — |
+| `src/game/Player/edittool.cpp` | 1123 | — | — | Pck[exeslot2 rexp2] Inp[exeslot1] ef{Inp5} | — |
+| `src/game/Player/fencedtool.cpp` | 1066 | — | — | ef{Inp6} | — |
+| `src/game/Player/fencedtool_calcpath.cpp` | 469 | — | — | Pck[exeslot1] | — |
+| `src/game/Player/pathtool.cpp` | 523 | — | — | Pck[exeslot2] Inp[exeslot1] ef{Inp3} | — |
+| `src/game/Player/pathtool_setselected.cpp` | 652 | — | — | App[rexp1] ef{App2} | — |
+| `src/game/Player/placementtool.cpp` | 1485 | — | — | Inp[exeslot1] ef{Inp3} | — |
+| `src/game/Player/roadtool.cpp` | 638 | — | — | ef{Inp3} | — |
+| `src/game/Player/tool_activation_standalone.cpp` | 438 | — | — | ef{Inp5} | — |
+| `src/game/Player/tool_base_drag.cpp` | 273 | — | — | ef{Aud6} | — |
+| `src/game/Player/tool_base_ray.cpp` | 439 | — | — | ef{Inp6} | — |
+| `src/game/Tutorial/finishtutorialgoal.cpp` | 223 | — | — | ef{Ach8} | — |
+| `src/game/Tutorial/finishtutorialinstance.cpp` | 371 | — | — | Aud[exeslot1] Ach[rexp1] ef{Ach2} | — |
+| `src/game/Tutorial/tutorial_next_scenario.cpp` | 343 | — | — | ef{Eng6 Sav14} | — |
+| `src/game/Tutorial/tutorialimagehotkey.cpp` | 330 | — | — | ef{Inp7} | — |
+| `src/game/Tutorial/tutorialimageinputkey.cpp` | 307 | — | — | ef{Inp7} | — |
+| `src/game/Tutorial/tutorialui.cpp` | 166 | — | — | ef{Sav1 Eng2} | — |
 | `dx11/src/devicedata.cpp` | 2230 | — | — | App[str4] | — |
 | `engine/funcs/engine_funcs.cpp` | 3210 | — | — | Inp[exeslot4 rexp21] Aud[exeslot2 rtaddr1 rexp16] App[exeslot1 rexp3] Eng[exeslot2 rtaddr1 rexp15] Sav[exeslot5 rexp13] Ach[exeslot5 rexp15] | — |
 | `engine/funcs/engine_funcs.h` | 4954 | — | — | ef{Eng1 Aud1} | — |
@@ -486,7 +486,7 @@ calls" counted calls to 63 doors. Per-file `ef{}` counts are in §1.
 | Audio | 3: `engine_funcs.cpp:1708`, `audio_stream_win.cpp:296`, `mainloop_run.cpp:282` | 8 (**`citizen_assignworkplace.cpp:133-137` ×5**, `finishtutorialinstance.cpp`, engine_funcs ×2) | 28 in 7 | 13 | 14 |
 | Input | 3: **`ui/buttonelement.cpp:284`, `ui/checkelement.cpp:148`** (`RtAddr` onto `KeyMap` 0x1800a7a80), `input.cpp:559` | 8 (edittool, pathtool, placementtool, engine_funcs ×4, address_registry) | 22 in 2 | 12 | 9 |
 | Pathfinding | 0 | 0 | 0 | 0 | 2 |
-| Picking | 4: `citizenai_executor.cpp:372`, `floorcomponent.cpp:249,254`, `pickingcomponent.cpp:312` | 18 in 10 files (`code/Game/{Component,Player,Game}` + address_registry ×5) | 12 in 7 | 0 | 2 |
+| Picking | 4: `citizenai_executor.cpp:372`, `floorcomponent.cpp:249,254`, `pickingcomponent.cpp:312` | 18 in 10 files (`src/game/{Component,Player,Game}` + address_registry ×5) | 12 in 7 | 0 | 2 |
 | Application | 2: `mainloop_run.cpp:284`, `address_registry.cpp:1544` | 2 (engine_funcs, address_registry) | 9 in 6 | 6 | 8 |
 
 ### 3.6 Type-only dependents (a block's rename breaks them; they register nothing)
@@ -503,10 +503,10 @@ include edges:
 | `runtime/src/input/input_platform_shutdown_win.cpp` | B5 | `runtime/types/application/Application.h` (B1) — 1 `RtApplication::` use | sequence: B1 keeps the `RtApplication::Application` spelling (POD or alias) until B5 rebases on B1's merge |
 | `tests/unit/ui_userinterface_abi_test.cpp` | coordinator | `runtime/types/engine/UpdateLoop.h` (B1) — `RtEngine::DialogLoopT`/`DialogLoaderLoopT` ×6 at 98-103 | coordinator edits at B1's merge |
 | `standalone/mouse_inject.cpp` | caller round | `runtime/types/input/Input.h` (B5) — `RtInput::State`, `RtInput::kMouseOffset` ×5 at 355-357, 824 | untouched if `State` stays an `RtInput::` POD (it is embedded in `Device`, §4.3) |
-| `code/Game/Game/game_main.cpp` | caller round | `engine/types/UpdateLoop.h` (B1) | B1 keeps the mirror header compiling |
-| `code/Game/Game/gameupdateloop.cpp`, `gameupdateloop_load.cpp` | caller round | `engine/types/GameUpdateLoop.h` (B1) | same |
-| `code/Game/Game/dialogloaderloop.cpp` / `.h` | caller round | `engine/types/MainLoop.h`, `engine/types/DialogLoaderLoopT.h` (B1) | same |
-| `code/Game/Tutorial/finishtutorialgoal_funcs.h`, `finishtutorialinstance_funcs.h` | caller round | `engine/types/AchievementGoals.h` (B3) | B3 keeps the header compiling |
+| `src/game/Game/game_main.cpp` | caller round | `engine/types/UpdateLoop.h` (B1) | B1 keeps the mirror header compiling |
+| `src/game/Game/gameupdateloop.cpp`, `gameupdateloop_load.cpp` | caller round | `engine/types/GameUpdateLoop.h` (B1) | same |
+| `src/game/Game/dialogloaderloop.cpp` / `.h` | caller round | `engine/types/MainLoop.h`, `engine/types/DialogLoaderLoopT.h` (B1) | same |
+| `src/game/Tutorial/finishtutorialgoal_funcs.h`, `finishtutorialinstance_funcs.h` | caller round | `engine/types/AchievementGoals.h` (B3) | B3 keeps the header compiling |
 
 Plus two non-include type dependents found by `nsrefs.py`: `runtime/types/ui/UserInterface.h`
 (UI, step 6 closed) declares `friend struct RtEngine::DialogLoopT;` / `friend struct
@@ -554,7 +554,7 @@ same block (B3 reconciles). `SaveLoad.h` includes `../ui/Sprite.h` (`UI::Sprite`
 `engine/types/AchievementGoals.h` (7 exe Goal subclasses, `_goalBase[0x28]` opaque) mirror EXE
 classes, not runtime ones; they embed no `RtEngine`/`RtAchievement` POD. **`engine/types/
 PickingComponent.h` is not a Picking mirror at all** — it is the exe `PickingComponent : Component`
-(0x38) holding an `int32_t pickingId` handle; it belongs to the `code/Game/Component` caller batch,
+(0x38) holding an `int32_t pickingId` handle; it belongs to the `src/game/Component` caller batch,
 not to B6.
 
 ### 4.3 PODs embedded BY VALUE (the B6-4 check)
@@ -607,8 +607,8 @@ the lines before (96, 112-113), not the calls themselves.
 
 NEXT_SESSION §2c's six blocks are **confirmed**, with four amendments: B1 also owns
 `runtime/src/video/context_ctor.cpp` and the four `standalone/*_stubs.cpp` exe-loop vtable files
-(not `code/Game/Game/gameupdateloop.cpp`, which is a multi-namespace caller); B3 owns
-`code/Game/Goal/*` but not `code/Game/Tutorial/finishtutorial*`; `engine/types/PickingComponent.h`
+(not `src/game/Game/gameupdateloop.cpp`, which is a multi-namespace caller); B3 owns
+`src/game/Goal/*` but not `src/game/Tutorial/finishtutorial*`; `engine/types/PickingComponent.h`
 is not B6's. `blocks.py` asserts disjointness:
 
 ```
@@ -625,7 +625,7 @@ DISJOINTNESS: PASS (116 files in 6 blocks, 0 duplicates)
 |---|---|---|
 | **B1 Engine + Application** (serial; first) | `MainLoop`, `UpdateLoop`, `Loader`, `LoaderLoop`, `DialogLoopT`, `DialogLoaderLoopT`, `Engine`, `Application` | `runtime/types/engine/{Engine,MainLoop,UpdateLoop}.h`, `runtime/types/application/Application.h`; `runtime/src/engine/{closure_batch2b, engine, engine_lifecycle, engine_lifecycle_win, engine_platform, engine_platform_win, loops, mainloop_frame, mainloop_run, mainloop_video, rt_engine_port, singleton_ctors, singleton_ctors_win, updateloop_loadresources}.cpp` + `mainloop_internal.h`; `runtime/src/application/{application, application_accessors, application_lifecycle, application_thunks, application_win, message_callbacks, platform_startup_win, rt_application_port}.cpp`; `engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT,MainLoop,GameUpdateLoop}.h`; `standalone/{loader_loop_stubs, splash_loop_stubs, menudialogloopt_stubs, gameupdateloop_stubs}.cpp`; `runtime/src/video/context_ctor.cpp` |
 | **B2 Save** (parallel with B1) | `SaveLoad`, `SavedState`, `SaveInfo`, `ModInfo` | `runtime/types/save/SaveLoad.h`; `runtime/src/save/{closure_batch2b, rt_save_port, savedstate_setupload, saveload, saveload_draw, saveload_loadmeta, saveload_meta, saveload_saveinfo, saveload_update}.cpp` + `saveload_internal.h` |
-| **B3 Achievement** | `AchievementManager`, `Achievement`, `AchievementInstance`, `Goal`, `GoalInstance`, `GoalList` (+ the 7 exe Goal subclasses' header) | `runtime/types/achievement/{AchievementManager,Goal}.h`; `runtime/src/achievement/{achievement_manager, achievement_serialize, achievement_state, achievement_typeinfo_accessors, achievement_vtable, batchc_goallist_dtor, goal, goal_list, goal_serialize, rt_achievement_port, rt_factories_achievement}.cpp` + `rt_factories_achievement.inc`; `engine/types/AchievementGoals.h`; `code/Game/Goal/*` (14 files) |
+| **B3 Achievement** | `AchievementManager`, `Achievement`, `AchievementInstance`, `Goal`, `GoalInstance`, `GoalList` (+ the 7 exe Goal subclasses' header) | `runtime/types/achievement/{AchievementManager,Goal}.h`; `runtime/src/achievement/{achievement_manager, achievement_serialize, achievement_state, achievement_typeinfo_accessors, achievement_vtable, batchc_goallist_dtor, goal, goal_list, goal_serialize, rt_achievement_port, rt_factories_achievement}.cpp` + `rt_factories_achievement.inc`; `engine/types/AchievementGoals.h`; `src/game/Goal/*` (14 files) |
 | **B4 Audio** (after B1) | `Scene`, `Channel`, `EmitterInstance`, `EffectSlot`, `Configuration`, `Device`, `SoundBuffer`, `SoundEffect`, `Stream` | `runtime/types/audio/Audio.h`; `runtime/src/audio/{audio, audio_device, audio_effectslot_serialize, audio_platform_startup_win, audio_play_platform, audio_scene_update, audio_stream_play_win, audio_stream_win, audio_voice_callback_win, batchc_audio_leaves, rt_audio_port, rt_factories_audio, vtbatch7_soundbuffer_soundeffect, vtbatch7b_stream_run_win, wave29_lane_avbody}.cpp` + `rt_factories_audio.inc` |
 | **B5 Input** (after B1) | `KeyMap`, `Binding`, `BindingNode`, `Device`, `State`, `Configuration` | `runtime/types/input/Input.h`; `runtime/src/input/{input, input_config_startup, input_device_update, input_platform_shutdown_win, input_platform_startup_win, input_win, keymap_load, keymap_save, rt_input_port}.cpp` |
 | **B6 Pathfinding + Picking** | `PointList`, `IPathInfo`, `Pathfinding::Scene` (declarations only — no body exists); `Picking::Scene`, `PickingMesh`, `SubMesh`, `Entry`, `Cell`, `Link` | `runtime/types/picking/Scene.h`; `runtime/src/pathfinding/{pointlist, rt_factories_pathfinding}.cpp` + `.inc`; `runtime/src/picking/{closure_batch2b, pickingmesh, rt_factories_picking, rt_picking_port, scene, scene_grid}.cpp` + `scene_grid.h` + `rt_factories_picking.inc` |
@@ -670,7 +670,7 @@ real fragment files); here there is ONE fragment body.
   976-977 SoundBuffer/SoundEffect), deleting_dtor_leaves.cpp, class_operator_delete.cpp (7
   `??3` rows at 70-95), external_ptr_serialize.cpp (5 `_typeInfo` rows), internal_ptr_array_serialize.cpp (2)}`.
 - `engine/funcs/engine_funcs.{h,cpp}`; `tests/unit/*`; `runtime/types/ui/UserInterface.h`.
-- Caller rounds (not blocks): the 96 unowned files of §1 — `code/Game/{Game, Dialog, Component,
+- Caller rounds (not blocks): the 96 unowned files of §1 — `src/game/{Game, Dialog, Component,
   Player, Tutorial, Action}` (64 files), `runtime/src/ui/*` (10), `runtime/src/video/device_startup.cpp`,
   `dx11/src/devicedata.cpp` (the four Application import rows at 281-286), `standalone/{autostart,
   modal_driver, mouse_inject, saveload_harness}.cpp`.
@@ -753,7 +753,7 @@ python $SP/mktables.py    # the §1 tables
 grep -nE '"\?\?_7[A-Za-z]+@(Achievement|Engine|Application|[0-9])@' standalone/rt_data_mint_tables.inc
 grep -n 'GoalList' runtime/src/object/deleting_dtor*.cpp
 grep -nE 'Register|GoalList@' runtime/src/achievement/batchc_goallist_dtor.cpp
-grep -n '1801fe7b8' standalone/rt_data_mint.cpp code/Game/Game/game_main.cpp
+grep -n '1801fe7b8' standalone/rt_data_mint.cpp src/game/Game/game_main.cpp
 grep -rnE '^\s*namespace\s+(Engine|Save|Achievement|Audio|Input|Pathfinding|Picking|Application)\b' runtime standalone engine code dx11 tests
 grep -rnE '^\s*(struct|class)\s+(<the 49 class names>)\b[^;]*$' runtime standalone engine code dx11 tests
 md5sum runtime/src/{engine,save,picking}/closure_batch2b.cpp

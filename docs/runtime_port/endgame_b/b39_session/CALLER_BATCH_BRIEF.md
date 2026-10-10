@@ -2,7 +2,7 @@
 
 You convert every TYPE-ID CELL READ in your batch's files to the class's static `X::TypeId()`, on your own
 worktree branch. The coordinator merges and gates. Your prompt names the batch and the branch; your FILE SET
-is your batch's section of `B39_FILEMAP.md` §1 (C1 `code/Game/Component` a-h, C2 Component i-z, C3 `Work`,
+is your batch's section of `B39_FILEMAP.md` §1 (C1 `src/game/Component` a-h, C2 Component i-z, C3 `Work`,
 C4 `Action` + `Goal` + `Entity`, C5 `Dialog` + `Player` + `Tutorial` + `Game` — minus the EXE / RF files).
 You retire NO mint row and touch NO Runtime file.
 

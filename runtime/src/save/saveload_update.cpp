@@ -958,7 +958,7 @@ void Save::SaveLoad::UpdateSave() {
         // B3X W0: the call is BY NAME, `Engine::UpdateLoop::SaveRestore(bool,
         // Save::SavedState*)` (runtime/types/engine/UpdateLoop.h:338). The tree
         // declares the slot with two arguments and routes retail's fourth
-        // through `GameUpdateLoop::SaveRestoreOut` (code/Game/Game/
+        // through `GameUpdateLoop::SaveRestoreOut` (src/game/Game/
         // gameupdateloop.cpp: the slot-7 override passes nullptr itself; the
         // base body 0x180031750 is a bare RET), so the nullptr this site used to
         // put in R9 was read by no body and dropping it changes nothing.

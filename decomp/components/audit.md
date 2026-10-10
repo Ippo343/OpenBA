@@ -3,7 +3,7 @@
 Classifies every hooked vtable slot across all component reimpl files.
 
 **Legend:**
-- **CLEAN** = delegates to `code/Game/Component/` or has full inline reimpl (no trampoline)
+- **CLEAN** = delegates to `src/game/Component/` or has full inline reimpl (no trampoline)
 - **PASSTHROUGH** = calls `g_hook.trampoline` (needs conversion)
 - **NOT-HOOKED** = vtable slot too small or not represented
 
@@ -115,7 +115,7 @@ Classifies every hooked vtable slot across all component reimpl files.
 | StatusIcon | statusiconcomponent.cpp | 4 | 0 | 4 | ALL passthrough |
 | **MapComponent** | mapcomponent.cpp | 3 | **3** | 0 | **ALL CLEAN** |
 | **StateMachine** | statemachinecomponent.cpp | 7 | **7** | 0 | **ALL CLEAN** |
-| **UIComponent** | uicomponent.cpp | 2 | **2** | 0 | **ALL CLEAN** (code/Game/ has no-ops) |
+| **UIComponent** | uicomponent.cpp | 2 | **2** | 0 | **ALL CLEAN** (src/game/ has no-ops) |
 
 ---
 
@@ -127,4 +127,4 @@ Classifies every hooked vtable slot across all component reimpl files.
 
 **Grand total: ~61 passthrough slots to convert**
 
-Plus: all non-hooked vtable slots need code/Game/ implementations for standalone exe goal (even if they're no-ops or too-small-to-hook).
+Plus: all non-hooked vtable slots need src/game/ implementations for standalone exe goal (even if they're no-ops or too-small-to-hook).

@@ -162,7 +162,7 @@
 //
 // HELD BY VALUE: the exe keeps it on GameMain's stack and calls the imported
 // `??0Engine@0@QEAA@PEAX@Z`. ENDGAME B7 (CTOR, D5): the tree's GameMain
-// (code/Game/Game/game_main.cpp) holds a typed `Engine` local too; the ctor and
+// (src/game/Game/game_main.cpp) holds a typed `Engine` local too; the ctor and
 // dtor below are retail's (engine_lifecycle.cpp), and the `RtEngine_Engine_Ctor`
 // / `_Dtor` doors that built raw storage are deleted.
 //

@@ -134,7 +134,7 @@
 // OPENS none. Every callee is already satisfied:
 //   0x180102c90  MaterialInstance::Setup  — reached BY EXPORTED NAME
 //                (`?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z`),
-//                which code/Game/Player/tool_base_tilerender.cpp:100 already
+//                which src/game/Player/tool_base_tilerender.cpp:100 already
 //                opens, so the unsatisfied-EXPORT set does not grow either.
 //   0x180127d90 / 0x180126d10  sinf/cosf  — RtLibm, ported (lane L).
 //   0x1800783d0  Array<SpriteDraw>::SetSize(0) — ported (lane UIF), and this

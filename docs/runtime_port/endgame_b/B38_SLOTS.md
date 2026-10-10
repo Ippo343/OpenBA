@@ -1136,7 +1136,7 @@ function for). `size=?` with create 0x140003730 = abstract. There are 13 abstrac
 
 ## §5 — disagreements with the tree noticed while reading (addresses and `file:line`)
 
-1. **A live wrong stamp.** `code/Game/Action/createnaturalresource.cpp:155` and `code/Game/Action/createrawmaterial.cpp:226`
+1. **A live wrong stamp.** `src/game/Action/createnaturalresource.cpp:155` and `src/game/Action/createrawmaterial.cpp:226`
    stamp `ResolveAddr(Module::Exe, 0x14015f700)` as "the Action base vtable" in the scalar dtors. 0x14015f700 is slot 6 of the
    `ResidenceUI` table 0x14015f6d0. Retail stamps **0x14015faa0** (`Action`): `CreateNaturalResource_ScalarDtor` 0x140022240
    (store at 0x14002226e) and `CreateRawMaterial_ScalarDtor` 0x140022350 (0x14002237e).
@@ -1148,7 +1148,7 @@ function for). `size=?` with create 0x140003730 = abstract. There are 13 abstrac
 3. `engine/types/Component.h:26` has `ScalarDtor = 0x140162920 // vtable[0] base`, but 0x140162920 is the Component table itself
    (its slot 0 is 0x140031cc0). `Component.h:15-18` names slot 1 GetDescription, 2 Startup, 3 Shutdown and 4 Serialize; in retail
    slot 1 is TypeName, 2 is Type and 3 is the Persist override (Object::Internal layout).
-4. Comments in `code/Game/Work/{autopickupwork.cpp:89, harvestarea.cpp:213, harvestorchard.cpp:202, work_base_standalone.cpp:94}`
+4. Comments in `src/game/Work/{autopickupwork.cpp:89, harvestarea.cpp:213, harvestorchard.cpp:202, work_base_standalone.cpp:94}`
    call 0x140161300 / 0x140161380 "RTTI type descriptors". The exe has no RTTI: they are slot 12 of `FireWork` 0x1401612a0 and
    slot 12 of `FishingWork` 0x140161320. (The code in those files already uses the right tables.)
 5. Ghidra labels vs retail: `AttendanceComponent_Ctor` 0x140044510, `Action_Action_Ctor4` / `_Ctor7` (0x1400c70f0 / 0x1400c6970)

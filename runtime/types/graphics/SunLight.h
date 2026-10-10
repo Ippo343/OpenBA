@@ -10,8 +10,8 @@
 //   0x180108160  ??1SunLight@Graphics@@UEAA@XZ                        (dtor)
 //
 // SIZE. 0x108, from `MemAlloc(0x108, 8)` at the two exe call sites that build
-// one (code/Game/Game/menudialogloopt.cpp:733 and
-// code/Game/Game/gameupdateloop_load.cpp:1209). Consistent with the last field
+// one (src/game/Game/menudialogloopt.cpp:733 and
+// src/game/Game/gameupdateloop_load.cpp:1209). Consistent with the last field
 // the ctor writes, `+0x100`.
 //
 // THE INHERITANCE CHAIN, and why `Light` contributes no bytes. The ctor calls

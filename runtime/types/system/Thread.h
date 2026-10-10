@@ -35,7 +35,7 @@
 // Retail is ALWAYS subclassed: the base vtable's slot 0 is _purecall
 // (0x18007ec28) and only slot 1 (OnCompleted, 0x18000c590) has a real base
 // body (a bare RET). A derived class supplies its own vtable and stamps it
-// over this one right after the base ctor runs (see code/Game/Game/
+// over this one right after the base ctor runs (see src/game/Game/
 // pathfinder_seed.cpp and keystone_a_gamedtor.cpp for two such subclasses).
 //
 // Layout, from 0x1800ca4e0 (ctor), 0x1800ca590 (dtor), 0x1800ca610 (Start),
@@ -82,7 +82,7 @@
 // vtable a live object wears?" — answers YES at all four constructing sites,
 // and two of them are outside this step's file set entirely:
 //
-//   code/Game/Game/pathfinder_seed.cpp:142-148    stamps exe 0x14015ef18
+//   src/game/Game/pathfinder_seed.cpp:142-148    stamps exe 0x14015ef18
 //   runtime/src/engine/singleton_ctors.cpp:448-450 builds IO::Persistence's
 //                                                  embedded Thread at +0x10 and
 //                                                  stamps 0x180155860 over it

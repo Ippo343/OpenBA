@@ -54,7 +54,7 @@ now established twice (`RtObject::ExternalPtr<T>` + `Object::ExternalPtr<T>`;
 `RtObject::InternalBasePtr`/`InternalPtr` + `Object::InternalBasePtr`/`InternalPtr<T>`) —
 intentional, per B31_RULES step 1, not a layout bug. No duplicate `Object::Base`/`External`/
 `Internal`/`Factory`/`BaseTypeInfo` struct was found under `engine/types/` (`grep -rn
-"struct.*Base\b" engine/types` — 0 hits; `code/Game/Object/factory_registration.h:41-60`
+"struct.*Base\b" engine/types` — 0 hits; `src/game/Object/factory_registration.h:41-60`
 declares its own **parallel** `BaseTypeInfoStorage`/`FactoryRegistration` for the exe-side
 static-init list, which is a deliberate second representation — see §4).
 
@@ -175,7 +175,7 @@ is legible in the export table as one contiguous per-class block
    each name (`TypeNameCRC`, reflected CRC-32, poly `0xEDB88320`, over the UTF-16LE-widened
    name), inserts a `TypeNode` into the `Collection::Set<Pair<u32,TypeRecord>>` AVL tree at
    `Factory::root`, and on a second pass fills `TypeRecord::parent`/`children`.
-2. **Exe side** (`code/Game/Object/factory_registration.h`/`.cpp`, 247+189=436 lines): a
+2. **Exe side** (`src/game/Object/factory_registration.h`/`.cpp`, 247+189=436 lines): a
    PARALLEL, hand-written `FactoryRegistration` struct (`factory_registration.h:49-60`) that
    embeds its own `BaseTypeInfoStorage { uint8_t bytes[0x38] }` — a byte-array mirror of the
    SAME 0x38-byte layout `TypeInfo.h` already documents field-by-field, duplicated because
@@ -202,14 +202,14 @@ must read the other 83 rather than sweep them.
 
 **Distinct call shapes found, one example each**:
 - **Direct literal lookup**, no caching: `::Object::GetTypeIdByName("CharacterComponent")`
-  (`code/Game/Action/action_base_move.cpp:71`).
+  (`src/game/Action/action_base_move.cpp:71`).
 - **Cached function-local static** (the dominant idiom the header's own comment at
   `factory_registration.h:76-77` recommends — "caching the result in a function-local static
   after first hit"): `if (s_tidModelDesc == 0) s_tidModelDesc =
   ::Object::GetTypeIdByName("ModelDescription");` (`action_base_movedeps.cpp:129`).
 - **Indirect through `WriteComponentTypeId`** (the Description-vtable-slot-+0x40 contract,
   `factory_registration.h:101-114`): `::Object::WriteComponentTypeId(out,
-  "AbsorbResourceComponent")` (`code/Game/Component/absorbresourcedescription.cpp:91`), one
+  "AbsorbResourceComponent")` (`src/game/Component/absorbresourcedescription.cpp:91`), one
   per Description class that maps to a Component.
 - **`IsTypeDerivedFromByName`** (registry-based substitute for the engine's
   `IsDerivedFrom` when the question is about exe-side classes,
@@ -332,7 +332,7 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    NomadComponent. ENDGAME's
    "56 exe types carry a secondary vptr" figure (§0) is broader than just
    `ControllerComponent`; this pass confirms only the `ControllerComponent` family's count
-   (22) and its file set (`code/Game/Component/{controller_live_base,
+   (22) and its file set (`src/game/Component/{controller_live_base,
    controller_state_table, marketlocationcomponent_funcs, residencecomponent_funcs,
    statemachinecomponent_funcs, storagelocationcomponent_funcs,
    tradecomponent_funcs}.h`, 7 files) — the other ~34 types are UNKNOWN to this pass (not
@@ -341,9 +341,9 @@ class is real — the table is a stand-in vtable-slot-0 array, not a separate me
    is not one: in `runtime/src/audio/audio_stream_win.cpp` `ThreadBaseVtable()` is DEFINED at
    :303 and referenced only by a comment at :389 — the `!= ThreadBaseVtable()` self-check the
    comment explains no longer exists in the code, so the helper has **zero callers** and is
-   deletable. The full tree-wide sweep (`runtime/ code/Game/ standalone/ dx11/ engine/`) found
+   deletable. The full tree-wide sweep (`runtime/ src/game/ standalone/ dx11/ engine/`) found
    **four live identity reads and this one dead helper**; they are enumerated with their
-   decisions in `B33_RULES.md` §5: `code/Game/Game/tornado.cpp:627`,
+   decisions in `B33_RULES.md` §5: `src/game/Game/tornado.cpp:627`,
    `standalone/pausemenu_harness.cpp:237,:250`, `standalone/stress_harness.cpp:568-575`
    (vptr as a hash key, plus a hard-coded `vt[2]` read that must become `Type()`), and
    `runtime/src/io/file_stream.cpp:393`. The
@@ -427,7 +427,7 @@ COLLECTION_INVENTORY's "family-serial, caller-parallel" split:
   no single agent owns the whole table, the table is just where progress is visible).
 - Caller-side migration (the 106 `fn_Object*`/`fn_Base*`/... typedefs in `engine_funcs.h`,
   the 654 `GetTypeIdByName` call sites, the 194 `DeletePtr` call sites) — fully parallel by
-  `code/Game/<Module>` directory, same as COLLECTION_INVENTORY's "Step 2 callers" pattern,
+  `src/game/<Module>` directory, same as COLLECTION_INVENTORY's "Step 2 callers" pattern,
   and should NOT start until the core three classes and at least `External`/`Internal` have
   landed, since every caller-side change needs `X::TypeId()` (decision 4) to exist first.
 

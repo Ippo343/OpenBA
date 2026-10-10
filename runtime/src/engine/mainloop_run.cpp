@@ -9,7 +9,7 @@
 //   | ?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z| 0x1800dd070 | 4496 |
 //
 // `Run` is the single most consequential address door in the wave: it is THE
-// main loop, and `code/Game/Game/game_main.cpp:176` reaches it BY ADDRESS.
+// main loop, and `src/game/Game/game_main.cpp:176` reaches it BY ADDRESS.
 // An unregistered address door prints no [RtUnresolved] line and no
 // [RtResolve] MISS — at cutover it is simply a call through null with no
 // diagnosis, which is why this one survived nineteen boot attempts while the

@@ -15,7 +15,7 @@
 //
 //   1. `BaseTypeInfo` — one static object per registered class, chained
 //      through `_firstTypeInfo`. It is built by static initialisers (the DLL's
-//      own, and ours through code/Game/Object/factory_registration.cpp) BEFORE
+//      own, and ours through src/game/Object/factory_registration.cpp) BEFORE
 //      anything can look a type up. It carries the class's names and its two
 //      factory functions, and its `typeId` is 0xFFFFFFFF until Startup.
 //
@@ -633,7 +633,7 @@ uint32_t TypeNameCRC(const char* name);
 //
 // `X::TypeId()` returns `_typeInfo.typeId`, which is 0xFFFFFFFF until
 // `Factory::Startup` runs — B33_RULES §2.5: it is NOT self-initialising, and
-// the pre-Startup ordering traps in code/Game/Game/game_main.cpp depend on
+// the pre-Startup ordering traps in src/game/Game/game_main.cpp depend on
 // seeing the sentinel.
 //
 // USAGE (both halves are required, and DEFINE_TYPE goes in exactly one .cpp):

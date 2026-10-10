@@ -121,7 +121,7 @@
 //
 // AND IT CARRIES NO REFCOUNT SIDE EFFECT HERE. There is no increment on the way
 // in and no release on the way out — the exe's caller
-// (`code/Game/Game/gameupdateloop.cpp:2231`) passes `m_uiMaterial`, a
+// (`src/game/Game/gameupdateloop.cpp:2231`) passes `m_uiMaterial`, a
 // borrowed pointer it keeps owning, and retail treats it as borrowed for the
 // life of the MaterialInstance it stamps it into. A port that retained or
 // released it would be wrong in the direction that does not crash.

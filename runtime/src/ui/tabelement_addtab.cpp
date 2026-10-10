@@ -80,7 +80,7 @@
 // CALL: three data references (the export table and two RTTI/relocation slots)
 // plus the external entry point. The DLL never calls its own AddTab. The only
 // caller in the process is ours — `UIDesc_AddControllers_Impl`
-// (code/Game/Dialog/toolui.cpp:133), which runs while a dialog whose
+// (src/game/Dialog/toolui.cpp:133), which runs while a dialog whose
 // UIDescription carries tab entries is being built. So, unlike
 // `TabElement::UpdateContainers`, THIS PORT NEEDS NO DETOUR: there is no split
 // brain to close, because there is no second caller.

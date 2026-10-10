@@ -1,7 +1,7 @@
 # B.3 step 7 — exe-phase subclasses of Runtime `Engine::` / `Achievement::` / `Picking::` / `Audio::` / `Input::` / `Save::` classes
 
 Read-only enumeration, 2026-09-26, main @ 96b03474 (block 0, agent 0X). Every claim carries
-file:line. Model: `b36_session/EXE_SUBCLASSES.md`. Scope: `code/Game/**`, `standalone/**`,
+file:line. Model: `b36_session/EXE_SUBCLASSES.md`. Scope: `src/game/**`, `standalone/**`,
 `engine/**`; `runtime/` only for the retail slot lists. No source was edited, nothing was built
 or run. Retail slot contents come from `standalone/rt_data_mint_tables.inc` (the `kVSlots*`
 arrays, which are transcribed from the shipped DLL) joined to `standalone/rt_export_addrs.inc`.
@@ -73,7 +73,7 @@ value** on the stack (`EngineStorage engine;` game_main.cpp:442, ctor :446, dtor
 | 1 Startup | own / own | own 0x14009b930 / own | own 0x140098fa0 / own | **base** / stub (re-does `LoaderLoop::Startup` inline: `fn_Loader_Load` :144) | **base** / stub (:260) |
 | 2 Shutdown | own / own | own 0x14009b280 / own (truncated, §3C) | own `RET` / own | **base** / stub (re-does the base `WaitForSingleObject` :114-119) | **base** / stub |
 | 3 Update | own / own | own 0x14009b6e0 / own | own 0x140098da0 / own (does not chain base, §3C) | **base** / stub | **base** / stub |
-| 4 Draw | own / own | own 0x14009b440 / own | **base** / stub → `DialogLoaderLoopT_Draw_Impl` (code/Game/Game/dialogloaderloop.cpp:25, a port of the base body) | **base** / stub (print) | **base** / stub |
+| 4 Draw | own / own | own 0x14009b440 / own | **base** / stub → `DialogLoaderLoopT_Draw_Impl` (src/game/Game/dialogloaderloop.cpp:25, a port of the base body) | **base** / stub (print) | **base** / stub |
 | 5 DrawFailed | own `RET` / own no-op | **base** / stub (print) | **base** / stub | **base** / stub | **base** / stub |
 | 6 Load | own / own | own 0x14009a930 / own | **base** / stub that CALLS the base door (:549) | own 0x140001120 / own (skips PlacementTool) | **base** / stub |
 | 7 SaveRestore | own / own | **base** / stub | **base** / stub | **base** / stub | **base** / stub |
@@ -95,13 +95,13 @@ Retail table addresses and sizes from `engine/types/AchievementGoals.h`; tables 
 
 | Class | Table var | File:line | Slots | Retail vtable | Alloc | Base ctor | Dtor calls base? |
 |---|---|---|---|---|---|---|---|
-| BuildingGoal : Goal | `g_BuildingGoal_Vtable` | code/Game/Goal/buildinggoal.cpp:306, reg :320-323 | 11 | 0x140160300 (AchievementGoals.h:18) | 0x48 :327 | `fn_Goal_BaseCtor` :171, inside **slot 6** `BuildingGoal_Slot6` :162, which the factory :329/:334 also calls | yes `fn_Goal_BaseDtor` :71 |
-| PopulationGoal : Goal | `g_PopulationGoal_Vtable` | code/Game/Goal/populationgoal.cpp:175, reg :189-192 | 11 | 0x140160370 (:35) | 0x38 :196 | `fn_Goal_BaseCtor` :101 in slot 6 :92 | yes `fn_Goal_BaseDtor` :47 |
-| StatGoal : Goal | `g_StatGoal_Vtable` | code/Game/Goal/statgoal.cpp:413, reg :431-434 | 11 | 0x1401604c0 (:60) | sizeof(StatGoal)=0x80 statgoal.cpp:438 | file-local `s_fn_GoalCtor` :469 (bound :464, `??0Goal@Achievement@@QEAA@XZ`) in `StatGoal_Ctor_Impl` :458 | yes file-local `s_fn_GoalDtor` :360 (bound :355) |
-| TimeGoal : Goal | `g_TimeGoal_Vtable` | code/Game/Goal/timegoal.cpp:210, reg :225-229 | **12** | 0x140160540 (:107) | 0x38 :233 | `s_fn_GoalCtor` :262 (bound :257) | yes `s_fn_GoalDtor` :170 (bound :165) |
-| FinishTutorialGoal : Goal | `g_FinishTutorialGoal_Vtable` | code/Game/Tutorial/finishtutorialgoal.cpp:155, reg :170-172 | **12** | 0x140160420 (:125) | 0x38 :176 | `fn_Goal_BaseCtor` :105 in slot 6 :96 | yes `fn_Goal_BaseDtor` :48 |
-| TimeGoalInstance : GoalInstance | `g_TimeGoalInstance_Vtable` | code/Game/Goal/timegoalinstance.cpp:269, reg :279-281 | 7 | 0x140160598 (:156) | 0x28 :285 | `s_fn_GoalInstanceCtor` :228 (bound :223) | yes — slot 0 is `TimeGoal_Slot11` (timegoal.cpp:104), which calls `s_fn_GoalInstanceDtor` :134 (bound :129) |
-| FinishTutorialInstance : GoalInstance | `g_FinishTutorialInstance_Vtable` | code/Game/Tutorial/finishtutorialinstance.cpp:342, reg :352-354 | 7 | 0x140160478 (:141) | 0x28 :358 | `s_fn_GoalInstanceCtor` :306 (bound :301) | yes — slot 0 is `FinishTutorialGoal_Slot11` (finishtutorialgoal.cpp:198), `fn_GoalInstance_BaseDtor` :212 |
+| BuildingGoal : Goal | `g_BuildingGoal_Vtable` | src/game/Goal/buildinggoal.cpp:306, reg :320-323 | 11 | 0x140160300 (AchievementGoals.h:18) | 0x48 :327 | `fn_Goal_BaseCtor` :171, inside **slot 6** `BuildingGoal_Slot6` :162, which the factory :329/:334 also calls | yes `fn_Goal_BaseDtor` :71 |
+| PopulationGoal : Goal | `g_PopulationGoal_Vtable` | src/game/Goal/populationgoal.cpp:175, reg :189-192 | 11 | 0x140160370 (:35) | 0x38 :196 | `fn_Goal_BaseCtor` :101 in slot 6 :92 | yes `fn_Goal_BaseDtor` :47 |
+| StatGoal : Goal | `g_StatGoal_Vtable` | src/game/Goal/statgoal.cpp:413, reg :431-434 | 11 | 0x1401604c0 (:60) | sizeof(StatGoal)=0x80 statgoal.cpp:438 | file-local `s_fn_GoalCtor` :469 (bound :464, `??0Goal@Achievement@@QEAA@XZ`) in `StatGoal_Ctor_Impl` :458 | yes file-local `s_fn_GoalDtor` :360 (bound :355) |
+| TimeGoal : Goal | `g_TimeGoal_Vtable` | src/game/Goal/timegoal.cpp:210, reg :225-229 | **12** | 0x140160540 (:107) | 0x38 :233 | `s_fn_GoalCtor` :262 (bound :257) | yes `s_fn_GoalDtor` :170 (bound :165) |
+| FinishTutorialGoal : Goal | `g_FinishTutorialGoal_Vtable` | src/game/Tutorial/finishtutorialgoal.cpp:155, reg :170-172 | **12** | 0x140160420 (:125) | 0x38 :176 | `fn_Goal_BaseCtor` :105 in slot 6 :96 | yes `fn_Goal_BaseDtor` :48 |
+| TimeGoalInstance : GoalInstance | `g_TimeGoalInstance_Vtable` | src/game/Goal/timegoalinstance.cpp:269, reg :279-281 | 7 | 0x140160598 (:156) | 0x28 :285 | `s_fn_GoalInstanceCtor` :228 (bound :223) | yes — slot 0 is `TimeGoal_Slot11` (timegoal.cpp:104), which calls `s_fn_GoalInstanceDtor` :134 (bound :129) |
+| FinishTutorialInstance : GoalInstance | `g_FinishTutorialInstance_Vtable` | src/game/Tutorial/finishtutorialinstance.cpp:342, reg :352-354 | 7 | 0x140160478 (:141) | 0x28 :358 | `s_fn_GoalInstanceCtor` :306 (bound :301) | yes — slot 0 is `FinishTutorialGoal_Slot11` (finishtutorialgoal.cpp:198), `fn_GoalInstance_BaseDtor` :212 |
 
 Per slot (Goal tables): 0 own dtor; **1 null in all five** (`TypeName` — nothing fills it:
 `Goal_FillInheritedVtableSlots` fills only 4/7/9, goal_exe_helpers.cpp:226-228); 2 own `Type`;
@@ -119,8 +119,8 @@ it would jump to 0. Instance tables: 0 shared dtor, **1 null**, 2 own `Type`, 3 
 
 | Class | Table var | File:line | Slots | Retail vtable | Alloc | Base ctor | Dtor calls base? |
 |---|---|---|---|---|---|---|---|
-| **Scenario : Achievement::Achievement** (0x90; banner scenario.cpp:1-11) | `g_Scenario_Vtable` | code/Game/Game/scenario.cpp:277, reg :293-295 | **13** | 0x14015f020 (:6) | 0x90 :299 | file-local `s_fn_Achievement_Ctor` **by address** `ResolveAddr(Module::Runtime, 0x18009e240)` :74-75, called :219 inside slot 8 `Scenario_Init` | yes `s_fn_Achievement_Dtor` (0x18009e180, :76-77) at :112 |
-| exe AchievementInstance (retail 0x14015e350, 4 slots: own dtor 0x140019d90 + 3 base thunks) | **none** — standalone keeps the Runtime table | code/Game/Game/gameupdateloop_load.cpp:1626-1635 | — | 0x14015e350, **not registered** (`grep 0x14015e350` finds only :1633) | 0x28 :1624 | file-local `??0AchievementInstance` door :1626 (bound :88) | n/a — the object keeps `??_7AchievementInstance@Achievement@@6B@`, so the Runtime dtor runs (comment :1627-1632) |
+| **Scenario : Achievement::Achievement** (0x90; banner scenario.cpp:1-11) | `g_Scenario_Vtable` | src/game/Game/scenario.cpp:277, reg :293-295 | **13** | 0x14015f020 (:6) | 0x90 :299 | file-local `s_fn_Achievement_Ctor` **by address** `ResolveAddr(Module::Runtime, 0x18009e240)` :74-75, called :219 inside slot 8 `Scenario_Init` | yes `s_fn_Achievement_Dtor` (0x18009e180, :76-77) at :112 |
+| exe AchievementInstance (retail 0x14015e350, 4 slots: own dtor 0x140019d90 + 3 base thunks) | **none** — standalone keeps the Runtime table | src/game/Game/gameupdateloop_load.cpp:1626-1635 | — | 0x14015e350, **not registered** (`grep 0x14015e350` finds only :1633) | 0x28 :1624 | file-local `??0AchievementInstance` door :1626 (bound :88) | n/a — the object keeps `??_7AchievementInstance@Achievement@@6B@`, so the Runtime dtor runs (comment :1627-1632) |
 
 Scenario per slot (base = Achievement's 9): 0 own dtor; **1 null**; 2 own Type; 3 own
 GetFileVersion (chains base, §3); **4 null** (retail base `External::Compile`); 5 own Serialize
@@ -149,7 +149,7 @@ export raw become inherited slots. No tree code CALLS slot 9.
 | Holder | What | How | File:line |
 |---|---|---|---|
 | MenuDLT (+0xb30) | `Audio::Scene` **by value** | `fn_AudioScene_Ctor(self+0xb30)` | engine/funcs/engine_funcs.h:2610; never destroyed (menudialogloopt_stubs.cpp:237-245) |
-| exe `Game` object (+0x08) | `Picking::Scene` **by value** | `s_fn_Picking_Scene_Ctor(p + 8)` in `Reimpl_FUN_14009ee70` | code/Game/Game/gameupdateloop_load.cpp:639-641; dtor via `s_fn_SceneDtor` keystone_a_gamedtor.cpp:452 |
+| exe `Game` object (+0x08) | `Picking::Scene` **by value** | `s_fn_Picking_Scene_Ctor(p + 8)` in `Reimpl_FUN_14009ee70` | src/game/Game/gameupdateloop_load.cpp:639-641; dtor via `s_fn_SceneDtor` keystone_a_gamedtor.cpp:452 |
 | GameUpdateLoop (+0x70, +0x78, +0x140) | `Picking::Scene`, `Audio::Scene`, `Save::SaveLoad` by pointer (heap 0x60 / 0x38 / 0x90) | ctor doors | gameupdateloop_load.cpp:1111-1122, :1172-1176; dtors gameupdateloop.cpp:2610, :2617 |
 | MenuDLT (+0xb70) | `Save::SaveLoad` by pointer (heap 0x90) | file-local `??0SaveLoad` | menudialogloopt_stubs.cpp:258-267 |
 | GameUpdateLoop (+0x150) | `AchievementInstance` via `InternalBasePtr` | §1C | gameupdateloop_load.cpp:1622-1639 |
@@ -157,7 +157,7 @@ export raw become inherited slots. No tree code CALLS slot 9.
 | stack `EngineStorage` | `Engine::Engine` by value | §1A note | game_main.cpp:442, :446, :905 |
 | `Audio::Device` fields +0xa88/+0xa90 | `IXAudio2*` / mastering voice — read and COM-released **from exe code** | raw offsets | game_main.cpp:288-300 (proved by runtime/src/audio/audio_platform_startup_win.cpp:42-43) |
 
-`PickingComponent` (`engine/types/PickingComponent.h:22-33`, `code/Game/Component/
+`PickingComponent` (`engine/types/PickingComponent.h:22-33`, `src/game/Component/
 pickingcomponent.cpp`) is an exe **`Component`** subclass (header :6 "Parent: Component
 (direct)"), not a Picking subclass: it holds only an `int32_t pickingId` (+0x28) into
 `Picking::Scene`, reached by door (`s_fn_AddMesh` pickingcomponent.cpp:147/:215, `s_fn_RemoveMesh`
@@ -197,13 +197,13 @@ Twelve exe classes (eleven with a standalone table), fourteen tables counting bo
 | 4 | standalone/menudialogloopt_stubs.cpp:318 | 1 Startup | `DialogLoopT::Startup` (1) | `fn_DialogLoopT_Startup` |
 | 5 | standalone/menudialogloopt_stubs.cpp:551 | 3 Update | `DialogLoopT::Update` (3) | `fn_DialogLoopT_Update` |
 | 6 | standalone/menudialogloopt_stubs.cpp:669 | 6 Load | `DialogLoopT::Load` (6) | `fn_DialogLoopT_Load` |
-| 7 | code/Game/Game/gameupdateloop.cpp:2822 | 0 dtor | `~UpdateLoop` | file-local `fn_UpdateLoop_Dtor` (:2795, bound :2805) |
+| 7 | src/game/Game/gameupdateloop.cpp:2822 | 0 dtor | `~UpdateLoop` | file-local `fn_UpdateLoop_Dtor` (:2795, bound :2805) |
 | 8-12 | buildinggoal.cpp:71, populationgoal.cpp:47, statgoal.cpp:360, timegoal.cpp:170, finishtutorialgoal.cpp:48 | 0 dtor | `~Goal` | `fn_Goal_BaseDtor` ×3, file-local `s_fn_GoalDtor` ×2 |
 | 13-14 | timegoal.cpp:134 (in `TimeGoal_Slot11` = TimeGoalInstance slot 0), finishtutorialgoal.cpp:212 (in `FinishTutorialGoal_Slot11` = FinishTutorialInstance slot 0) | 0 dtor | `~GoalInstance` | `s_fn_GoalInstanceDtor`, `fn_GoalInstance_BaseDtor` |
 | 15-19 | buildinggoal.cpp:99, populationgoal.cpp:70, statgoal.cpp:88, timegoal.cpp:52, finishtutorialgoal.cpp:72 | 5 Serialize | `Goal::Serialize` (5) | `fn_Goal_BaseSerialize` ×3 (exe slot 0x140152840, engine_funcs.cpp:2826-2830), file-local `s_fn_GoalSerialize` ×2 (same slot, statgoal.cpp:66-67, timegoal.cpp:34-35) |
 | 20-21 | timegoalinstance.cpp:100, finishtutorialinstance.cpp:51 | 3 Persist | `GoalInstance::Persist` (3) | `s_fn_GoalInstancePersist` (slot 0x140152868 :58-59), `fn_GoalInstance_Persist` |
 | 22 | timegoalinstance.cpp:161 | 5 Update | `GoalInstance::Update` (5) | `s_fn_GoalInstanceUpdate` (slot 0x140152880 :67-68) |
-| 23 | code/Game/Game/scenario.cpp:112 | 0 dtor | `~Achievement` | `s_fn_Achievement_Dtor` (by address 0x18009e180) |
+| 23 | src/game/Game/scenario.cpp:112 | 0 dtor | `~Achievement` | `s_fn_Achievement_Dtor` (by address 0x18009e180) |
 | 24 | scenario.cpp:134 | 3 GetFileVersion | `Achievement::GetFileVersion` (3) | `s_fn_Achievement_GetFileVersion` (0x18009e170) |
 | 25 | scenario.cpp:153 | 5 Serialize | `Achievement::Serialize` (5) | `s_fn_Achievement_Serialize` (0x18009e070) |
 
@@ -215,7 +215,7 @@ reads, not `ResolveExport` names — a name-anchored sweep finds 5 of the 25.
 
 | File:line | Slot | What retail does that the stub does not |
 |---|---|---|
-| standalone/menudialogloopt_stubs.cpp:378-388 | 2 Shutdown | **carry-over 11.** Retail 0x14009b280 tears down menu scene / renderer / SaveLoad, then calls `DialogLoopT::Shutdown` (virtual slot 2), then `Audio::Scene::StopAll(self+0xb30)`. The stub runs only `MenuDialogLoopT_StopMusic` (:387 → code/Game/Game/menudialogloopt.cpp:1237-1244). |
+| standalone/menudialogloopt_stubs.cpp:378-388 | 2 Shutdown | **carry-over 11.** Retail 0x14009b280 tears down menu scene / renderer / SaveLoad, then calls `DialogLoopT::Shutdown` (virtual slot 2), then `Audio::Scene::StopAll(self+0xb30)`. The stub runs only `MenuDialogLoopT_StopMusic` (:387 → src/game/Game/menudialogloopt.cpp:1237-1244). |
 | menudialogloopt_stubs.cpp:237-245 | 0 dtor | `~DialogLoopT`, `~Audio::Scene`, `~UserInterface` skipped |
 | splash_loop_stubs.cpp:130-138 | 0 dtor | `~DialogLoaderLoopT` skipped |
 | splash_loop_stubs.cpp:254-496 | 3 Update | retail 0x140098da0 chains `DialogLoaderLoopT::Update`; the stub re-does it inline (`UI::UserInterface::Update` :295) |
@@ -259,7 +259,7 @@ Runtime — every base slot is a standalone stub (§1A).
 ```
 grep -rnE "0x140158870|0x1401588d0|0x140158800|0x14015ed00|0x14015e2f0|g_[A-Za-z]*Loop[A-Za-z]*_Vtable" code engine standalone
 grep -rn "MenuDialogLoopT_Ctor(" code engine standalone
-grep -nE "g_vt|Vtable|\[[0-9]+\] *=|RegisterExeAddr|fn_Goal_|fn_GoalInstance_|s_fn_Goal" code/Game/Goal/*.cpp code/Game/Tutorial/finishtutorial*.cpp
+grep -nE "g_vt|Vtable|\[[0-9]+\] *=|RegisterExeAddr|fn_Goal_|fn_GoalInstance_|s_fn_Goal" src/game/Goal/*.cpp src/game/Tutorial/finishtutorial*.cpp
 grep -rn "0x14015e350" code engine standalone
 sed -n 1545,1558p;2201,2232p;2501,2528p;2834,2848p;3735,3750p standalone/rt_data_mint_tables.inc
 python tools/dispatch_slot_map.py 0x140152840 0x140152868 0x140152878 0x140152880 0x140152850 0x140151c08

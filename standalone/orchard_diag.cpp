@@ -1,7 +1,7 @@
 // standalone/orchard_diag.cpp
 // Periodic OrchardComponent observability + PlantOrchard/HarvestOrchard work-class
 // counters, built for the OrchardComponent live-porting pass (see
-// code/Game/Component/orchardcomponent.cpp). Everything here is diagnostic-only:
+// src/game/Component/orchardcomponent.cpp). Everything here is diagnostic-only:
 // with BANISHED_ORCHARD_DIAG unset it does nothing and touches no game state.
 //
 // Env:
@@ -22,11 +22,11 @@
 //   OrchardComponent (engine/types/OrchardComponent.h):
 //     +0x50 slot array ptr, +0x58 slot count (int32), +0x60 tree-type ExternalPtr
 //     slot stride 0x28: +0x00 tileIdx, +0x04 state, +0x08 owned entity, +0x18 growth IBP
-//     (documented in code/Game/Component/orchardcomponent.cpp's OrchardComponent_GetGrowth)
-//   WorkPlaceComponent (engine/types/WorkPlaceComponent.h + code/Game/Component/workplacecomponent.cpp):
+//     (documented in src/game/Component/orchardcomponent.cpp's OrchardComponent_GetGrowth)
+//   WorkPlaceComponent (engine/types/WorkPlaceComponent.h + src/game/Component/workplacecomponent.cpp):
 //     +0x58 worker IBP array, +0x60 roster count (int32) — CONFIRMED live (workplacecomponent.cpp
 //     uses these throughout Attach/Detach/eviction).
-//   StateMachineComponent (code/Game/Component/statemachinecomponent.cpp, verified against that
+//   StateMachineComponent (src/game/Component/statemachinecomponent.cpp, verified against that
 //   file's own header comment + StateMachine_TickReimpl / the link loop at lines ~803-805):
 //     +0x28 root controller sub-object / chain root (vtable, then root+0x08=parent(zeroed),
 //           root+0x10=first-child == SM base+0x38)
@@ -40,7 +40,7 @@
 //   list, not a branching tree (confirmed by the link loop always appending at the current
 //   tail's +0x10 and advancing the tail). Walking from SM+0x38 via +0x10 and comparing node
 //   addresses to comp+0x28 is therefore an exact (not best-effort) linked-check.
-//   Max-worker cap: NOT on WorkPlaceComponent itself. code/Game/Work/plantorchard.cpp's
+//   Max-worker cap: NOT on WorkPlaceComponent itself. src/game/Work/plantorchard.cpp's
 //   Slot4 caches it at matDesc+0x30 (matDesc = FindComp_MatDesc(workplaceEntity), exe
 //   0x140003050) the first time it's needed (matDesc+0x30==0 check). That's a Work-side
 //   lazy cache, not a struct field we can trust to be populated before any planting has
@@ -97,7 +97,7 @@ void Init() {
 
 // ------------------------------------------------------------------
 // Work-class construction/execution counters (PlantOrchard / HarvestOrchard).
-// Incremented from code/Game/Work/plantorchard.cpp and harvestorchard.cpp via the
+// Incremented from src/game/Work/plantorchard.cpp and harvestorchard.cpp via the
 // extern "C" hooks below — a single call each, guarded by s_enabled internally so
 // the callers don't need their own env check.
 // ------------------------------------------------------------------
@@ -243,7 +243,7 @@ void DumpOrchards(int frameNum) {
 
         // Sibling WorkPlaceComponent on the same entity, via the owner-entity scan
         // (owner = comp+0x10, CheckPtr'd per the project's raw-owner-pointer convention —
-        // see e.g. code/Game/Work/cleararea.cpp:635, harvestorchard.cpp:713).
+        // see e.g. src/game/Work/cleararea.cpp:635, harvestorchard.cpp:713).
         ComponentEntity* owner = comp->_entity.Get();                // +0x10
         WorkPlaceComponent* wpc = nullptr;
         StateMachineComponent* smc = nullptr;
@@ -336,7 +336,7 @@ void DumpOrchards(int frameNum) {
                 nodeVtbl, nodeOwner);
 
         // StateMachineComponent — the go/no-go for whether that node ever ticks.
-        // Offsets verified against code/Game/Component/statemachinecomponent.cpp's own
+        // Offsets verified against src/game/Component/statemachinecomponent.cpp's own
         // header comment + its link loop (~lines 803-805) and StateMachine_TickReimpl.
         if (!smc) {
             fprintf(stderr, "[OrchardDiag]   hasStateMachine=NO (tidStateMachineComponent=%u) — "

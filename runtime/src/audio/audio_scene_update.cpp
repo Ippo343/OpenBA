@@ -52,7 +52,7 @@
 // ---------------------------------------------------------------------------
 // WHAT IS AND IS NOT VERIFIED  -- read this before quoting the attendance line
 // ---------------------------------------------------------------------------
-// There IS a live route: code/Game/Game/gameupdateloop.cpp:1780 calls this
+// There IS a live route: src/game/Game/gameupdateloop.cpp:1780 calls this
 // export every frame of an ordinary in-game run. So the ATTENDANCE counter
 // below is real evidence that the body RUNS. It is NOT evidence that the body
 // is CORRECT -- nothing compares its output to retail's, and nothing can.

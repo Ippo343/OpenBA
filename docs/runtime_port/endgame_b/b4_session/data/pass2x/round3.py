@@ -1,6 +1,6 @@
 """round3.py DETAIL — round 3 of wave X: three agents by PARTITION of the tree (run from the repo root).
 
-  X3-WORK  code/Game/Work/ + code/Game/Action/ + tests/unit/wrk_abi_test.cpp
+  X3-WORK  src/game/Work/ + src/game/Action/ + tests/unit/wrk_abi_test.cpp
   X3-GAME  the rest of code/ + standalone/
   X3-RT    runtime/ + engine/ + the rest of tests/
 Writes assign/X3-<p>.lines.tsv: every counted cast of the partition with the reason tagged on its line
@@ -14,7 +14,7 @@ D = 'docs/runtime_port/endgame_b/b4_session/data/pass2x/assign/'
 
 
 def part(f):
-    if f.startswith(('code/Game/Work/', 'code/Game/Action/')):
+    if f.startswith(('src/game/Work/', 'src/game/Action/')):
         return 'WORK'
     if f.startswith(('code/', 'standalone/')):
         return 'GAME'

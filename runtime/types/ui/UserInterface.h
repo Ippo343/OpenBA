@@ -20,7 +20,7 @@
 //         UI::UserInterface::UserInterface(that)
 //
 // which is the nested modal UI ShowDialog builds for itself. Our own tree
-// already independently reached the same pair — code/Game/Game/
+// already independently reached the same pair — src/game/Game/
 // gameupdateloop_load.cpp:1065 does `AllocSub(0x128, 4)` before calling the
 // ctor through `s_fn_UI_Ctor` — and the ctor's last store lands at +0x120..
 // +0x127, one qword short of 0x128.
@@ -93,7 +93,7 @@
 //                                      0x118) to SpriteContext::Begin
 //
 // INDEPENDENT CROSS-CHECK from the exe side, written months before this lane
-// existed: code/Game/Dialog/optionsdialog.cpp's `ApplyKeyMapToUI_Impl`
+// existed: src/game/Dialog/optionsdialog.cpp's `ApplyKeyMapToUI_Impl`
 // (exe 0x140099260) writes UI +0xA8/+0xB0/+0xB8/+0xC0/+0xC8 as five sound
 // effects and UI +0xDC as `settings[0] / 100.0f`. Those are sound slots 2..6
 // of the `_sounds[7]` array at +0x98 and the `_uiScale` field — both agree
@@ -234,7 +234,7 @@ static_assert(offsetof(Event, userData) == 0x28, "Event::userData @ +0x28");
 // `_fadeColor = 0xffffffff` and leaves 25 bytes unwritten, and it STAYS A DOOR
 // (`RtUi_UserInterface_Ctor`, userinterface.cpp — B4b-2: a C++ ctor would run a
 // second time over what the door seeded). It is constructed on the LOADER
-// thread (`code/Game/Game/gameupdateloop_load.cpp`, `s_fn_UI_Ctor`) and by
+// thread (`src/game/Game/gameupdateloop_load.cpp`, `s_fn_UI_Ctor`) and by
 // `ShowDialog` for its nested modal UI — both through the door.
 //
 // `??1UserInterface@UI@@QEAA@XZ` (0x180120b90) likewise STAYS A DOOR and is NOT

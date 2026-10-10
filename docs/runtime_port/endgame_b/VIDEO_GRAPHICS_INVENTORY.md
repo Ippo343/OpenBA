@@ -382,21 +382,21 @@ By directory (VERIFIED, `grep -c` per file, top 15):
 
 | file | ResolveExport(Video/Graphics) sites |
 |---|---|
-| `code/Game/Game/minimap_paint.cpp` | 13 |
-| `code/Game/Game/gameupdateloop.cpp` | 8 |
-| `code/Game/Player/tool_base_tilerender.cpp` | 5 |
-| `code/Game/Game/tornado.cpp` | 4 |
-| `code/Game/Game/serialize_heightmap_mesh.cpp` | 4 |
-| `code/Game/Action/action_base_complete.cpp` | 4 |
-| `code/Game/Game/weather_particle_draw.cpp` | 3 |
-| `code/Game/Game/w2_takescreenshot.cpp` | 3 |
-| `code/Game/Component/statusiconcomponent.cpp` | 3 |
-| `code/Game/Component/particlecomponent.cpp` | 3 |
-| `code/Game/Component/frustumoutlineelement.cpp` | 3 |
-| `code/Game/Game/weather_particles.cpp` | 2 |
-| `code/Game/Game/water_contour_mesh.cpp` | 2 |
-| `code/Game/Game/gameupdateloop_load.cpp` | 2 |
-| `code/Game/Component/animaudioevent.cpp` | 2 |
+| `src/game/Game/minimap_paint.cpp` | 13 |
+| `src/game/Game/gameupdateloop.cpp` | 8 |
+| `src/game/Player/tool_base_tilerender.cpp` | 5 |
+| `src/game/Game/tornado.cpp` | 4 |
+| `src/game/Game/serialize_heightmap_mesh.cpp` | 4 |
+| `src/game/Action/action_base_complete.cpp` | 4 |
+| `src/game/Game/weather_particle_draw.cpp` | 3 |
+| `src/game/Game/w2_takescreenshot.cpp` | 3 |
+| `src/game/Component/statusiconcomponent.cpp` | 3 |
+| `src/game/Component/particlecomponent.cpp` | 3 |
+| `src/game/Component/frustumoutlineelement.cpp` | 3 |
+| `src/game/Game/weather_particles.cpp` | 2 |
+| `src/game/Game/water_contour_mesh.cpp` | 2 |
+| `src/game/Game/gameupdateloop_load.cpp` | 2 |
+| `src/game/Component/animaudioevent.cpp` | 2 |
 
 28 files (VERIFIED, `grep -rl`) cache a Video/Graphics mangled export as an `s_fn_*`
 file-static — full list: `action_base_complete.cpp`, `action_base_movedeps.cpp`,
@@ -451,21 +451,21 @@ Combining §4.1 (engine_funcs) with §4.2's by-file ResolveExport counts (not
 individual-symbol counts — the per-symbol ResolveExport breakdown needs the
 comment-aware lexer `IO_CALLER_INVENTORY.md` used, NOT VERIFIED to that precision here):
 
-1. `code/Game/Game/minimap_paint.cpp` — 13 ResolveExport sites (file-level, mixed symbols)
+1. `src/game/Game/minimap_paint.cpp` — 13 ResolveExport sites (file-level, mixed symbols)
 2. `fn_Graphics_Scene_AddGlobalObject` — 12 calls
-3. `code/Game/Game/gameupdateloop.cpp` — 8 ResolveExport sites
+3. `src/game/Game/gameupdateloop.cpp` — 8 ResolveExport sites
 4. `fn_Graphics_Scene_AddObject` — 7 calls
-5. `code/Game/Player/tool_base_tilerender.cpp` — 5 ResolveExport sites
+5. `src/game/Player/tool_base_tilerender.cpp` — 5 ResolveExport sites
 6. `fn_Graphics_MeshInstance_SetMesh` — 4 calls
 7. `fn_Graphics_Camera_Ctor` — 4 calls
-8. `code/Game/Game/tornado.cpp` — 4 ResolveExport sites
-9. `code/Game/Game/serialize_heightmap_mesh.cpp` — 4 ResolveExport sites
-10. `code/Game/Action/action_base_complete.cpp` — 4 ResolveExport sites
+8. `src/game/Game/tornado.cpp` — 4 ResolveExport sites
+9. `src/game/Game/serialize_heightmap_mesh.cpp` — 4 ResolveExport sites
+10. `src/game/Action/action_base_complete.cpp` — 4 ResolveExport sites
 11. `fn_Graphics_SunLight_Set` — 3 calls
 12. `fn_Graphics_Scene_Ctor` — 3 calls
 13. `fn_Graphics_Scene_Clean` — 3 calls
 14. `fn_Graphics_Renderer_Ctor` — 3 calls
-15. `code/Game/Game/weather_particle_draw.cpp` — 3 ResolveExport sites
+15. `src/game/Game/weather_particle_draw.cpp` — 3 ResolveExport sites
 
 **This ranking mixes file-level and symbol-level counts because the precise per-symbol
 ResolveExport breakdown was not run this pass** (would need the same lexer
@@ -594,7 +594,7 @@ Runtime-side/dx11-side split cleanly, the same reason `B34_RULES.md` §3.2 moved
 | **4 — Graphics mesh/geometry/scene family** | `runtime/types/graphics/{Mesh.h,Geometry.h,Scene.h,Camera.h}`, `runtime/src/graphics/{mesh,meshinstance_draw,edgemesh_vtable,graphicsmesh_vtable,geometry(if separate file exists — NOT VERIFIED),scene,scene_grid,cull,sun_camera}.cpp` | the highest-caller-traffic group per §4.4 (`Scene`/`MeshInstance`/`Geometry`/`Camera` account for most of the top-15 doors) — do this after the small families prove the pattern, same "Component runs alone and first because it dominates every pointer family" logic `B34_RULES.md` §6.4 batch A used, inverted here (do it once patterns exist, not first, since it's also the riskiest for caller-count blast radius) |
 | **5 — Graphics material/animation/particle/light family** | `runtime/types/graphics/{Material.h,AnimationManager.h,AnimationState.h,Animation.h,Particle.h,SunLight.h}`, `runtime/src/graphics/{material,animation,animationstate,animationstate_transforms,sunlight,vtbatch7_animgroup_particlesystem,lights_vtable,imagebuffer_derived}.cpp` + the 11 `waveNN_lane_*.cpp` files (§1.3) | the scattered wave-lane files live here — this block absorbs the historical fragmentation; needs its own sub-mapping of which wave file owns which class member before it can be split further |
 | **6 — Renderer + `rt_factories_*`/`rt_*_port.cpp` (owner-retained)** | `runtime/src/graphics/{renderer.cpp,rt_factories_graphics.cpp+.inc,rt_graphics_port.cpp,batchc_gfx_leaves.cpp,closure_batch2b.cpp,graphics_typeinfo_accessors.cpp}`, `runtime/src/video/{rt_factories_video.cpp+.inc,rt_video_port.cpp,batchc_context_setlight.cpp,closure_batch2b.cpp}` | stays with whoever owns the whole step, same reason `B34_RULES.md` §6.3 kept `rt_io_port.cpp`/`rt_factories_io.cpp` with the IO owner — both agents in blocks 1-5 would otherwise touch these |
-| **7 — Caller batches, by directory, AFTER blocks 1-6** | `code/Game/Game/*` (minimap_paint.cpp, gameupdateloop*.cpp, tornado.cpp, weather_*.cpp, water_contour_mesh.cpp, serialize_heightmap_mesh.cpp — the top of §4.4's ranking) run first per the same "highest-traffic directory first" logic as `B34_RULES.md` §6.4 batch A; then `code/Game/Component/*`, `code/Game/Player/*`, `code/Game/Action/*`, `code/Game/Dialog/*` (moddialog.cpp) as smaller trailing batches | mirrors `IO_CALLER_INVENTORY.md` §7's directory-partition pattern; **unlike IO, Video/Graphics callers are dominated by `ResolveExport`-by-name (§4.2), not `engine_funcs.h` globals, so batch conversion is "give it a real member call" not "retype a global pointer" — a different mechanical shape per `B34_RULES.md` §6.5(a)'s distinction** |
+| **7 — Caller batches, by directory, AFTER blocks 1-6** | `src/game/Game/*` (minimap_paint.cpp, gameupdateloop*.cpp, tornado.cpp, weather_*.cpp, water_contour_mesh.cpp, serialize_heightmap_mesh.cpp — the top of §4.4's ranking) run first per the same "highest-traffic directory first" logic as `B34_RULES.md` §6.4 batch A; then `src/game/Component/*`, `src/game/Player/*`, `src/game/Action/*`, `src/game/Dialog/*` (moddialog.cpp) as smaller trailing batches | mirrors `IO_CALLER_INVENTORY.md` §7's directory-partition pattern; **unlike IO, Video/Graphics callers are dominated by `ResolveExport`-by-name (§4.2), not `engine_funcs.h` globals, so batch conversion is "give it a real member call" not "retype a global pointer" — a different mechanical shape per `B34_RULES.md` §6.5(a)'s distinction** |
 
 Blocks 1-6 are NOT confirmed disjoint by file the way `B34_RULES.md` §6.3 confirmed
 STREAMS/PACKAGE+FS — the wave-lane files in particular (block 5) may cut across class

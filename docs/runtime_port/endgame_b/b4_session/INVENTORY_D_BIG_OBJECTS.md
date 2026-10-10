@@ -41,7 +41,7 @@ Receivers (per file, brace-scoped):
 - aliases `T x = <casts>(receiver);` or `x = c ? receiver : 0;` (a call such as `TownMgr(gw)` is
   NOT an alias — that rule removed ≈115 false lines);
 - CitizenComponent: the first parameter (named `self`/`selfV`/`param_1`/`citizen`) of a definition
-  of `CitizenComponent_*`, `CitizenComp_*` in `code/Game/Component/citizen_*|citizencomponent*`,
+  of `CitizenComponent_*`, `CitizenComp_*` in `src/game/Component/citizen_*|citizencomponent*`,
   `this` of `CitizenComponent::` members, the `At(this, off)` helper; three bodies whose receiver
   is another class are excluded by hand (`NOT_CITIZEN_RECEIVER`, §5).
 - field aliases of GameUpdateLoop (`int* mapGrid = *(int**)(gw + 0xF8);`) and `*(T*)(*(X**)(gw +
@@ -171,7 +171,7 @@ Order (each header first, alone, W0 = declarations + `static_assert` only):
    B38 D1/D2 PORT GAP). IBP / ExternalPtr members have defaulted dtors: neutral.
    W1-CIT then owns the 9 files (354 lines) plus the citizen reads C lists elsewhere.
 2. **W0-SET / W0-CON** (small, parallel with 1): new `GameSettings` struct (16 fields, 0x34,
-   suggested header `code/Game/Game/GameConfiguration.h`) and `GameContainer` struct (26 fields,
+   suggested header `src/game/Game/GameConfiguration.h`) and `GameContainer` struct (26 fields,
    0xE0) in `game.h`; `g_gameSettings` / `g_gameContainer` become typed pointers. 2 headers +
    game_main.cpp / game.cpp. Readers (17 + 14 files) convert inside whichever W1 block owns them.
    Only the `(uint8_t)gs[6]`-style int reads (3 lines) need `bool` reads; value-identical.

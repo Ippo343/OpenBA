@@ -15,7 +15,7 @@
 //   Highwaymen wants 2,000 stone-paved road tiles, which is the same problem two
 //   orders of magnitude larger.
 //
-// The mechanism is the one code/Game/Game/starttown.cpp already uses for every
+// The mechanism is the one src/game/Game/starttown.cpp already uses for every
 // structure it places (its "instant-path FALLBACK"): a StateMachineComponent carries
 // its CURRENT state at +0x50 and its PENDING state at +0x52 (0xff = nothing pending),
 // and stamping pending = 2 makes the next tick enter the built state through the

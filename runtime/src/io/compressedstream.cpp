@@ -4,7 +4,7 @@
 //
 // The six IO stream-family exports our tree calls, all of them on
 // IO::CompressedMemoryStream and all of them from ONE caller,
-// code/Game/Game/gameupdateloop_serialize.cpp (GameUpdateLoop::SaveRestore,
+// src/game/Game/gameupdateloop_serialize.cpp (GameUpdateLoop::SaveRestore,
 // exe 0x1400959c0):
 //
 //   retail      profile     ordinal  export

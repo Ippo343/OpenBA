@@ -62,7 +62,7 @@ COMMITS, in this order (each behind the static gate; `git commit -F <file>`; tit
    now — the headline of step 8); `RegisterExeAddr` calls (functions / vtables / data) start vs now;
    `REGISTER_TYPE` vs `DEFINE_EXE_TYPE` counts; `GetTypeIdByName("…")` literal sites start vs now;
    delegating members left (the CALLER_SURFACE §6 definition) start vs now; unit tests 516 → now; the
-   class list from the `code/Game/**.h` headers cross-checked against `B38_SLOTS.md` (parent, slot count,
+   class list from the `src/game/**.h` headers cross-checked against `B38_SLOTS.md` (parent, slot count,
    sizeof — N of N agree, list any disagreement); PORT GAP / STANDALONE DEVIATION markers per directory
    (the honest ceiling); `engine/types` headers start vs now.
 5. **`B38_RULES.md` sections 9 (the blocks and batches as run — the coordinator's gate table is

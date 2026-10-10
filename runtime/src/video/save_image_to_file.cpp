@@ -5,7 +5,7 @@
 // ============================================================================
 //
 // Writes a 24-bit bottom-up BMP. The one caller is
-// `code/Game/Game/w2_takescreenshot.cpp:270`, the screenshot path.
+// `src/game/Game/w2_takescreenshot.cpp:270`, the screenshot path.
 //
 // ---------------------------------------------------------------------------
 // PORTING THIS DOES NOT CLOSE THE SCREENSHOT'S CUTOVER HOLE. Say it here so a
@@ -42,7 +42,7 @@
 // Re-checked before inheriting any of them
 // (`reference_holdback_blockers_are_stale_check_them_first.md`), and the note
 // **disagreed with itself inside one comment block**: its opening line says
-// *"One caller (code/Game/Game/w2_takescreenshot.cpp, the screenshot path)"*
+// *"One caller (src/game/Game/w2_takescreenshot.cpp, the screenshot path)"*
 // and its closing paragraph says *"w2_takescreenshot.cpp calls a different,
 // already-ported capture path — so leaving this on the DLL costs nothing."*
 // Both halves sat in the same comment for four waves. The call site settles it:

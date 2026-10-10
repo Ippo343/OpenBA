@@ -88,7 +88,7 @@ const Config& Cfg() {
 // Runtime 0x1800f8e80: inside side is n.p - d > 0), plus one trailing dword; 0x64 bytes.
 // Camera::GetFrustum copies 0x64 bytes; MulTransform3 with the camera-to-world Transform3
 // at camera+0x64 (48 bytes) gives world-space planes — the same math as
-// GeomDraw_CollectDraw (code/Game/Game/geometry_draw.cpp).
+// GeomDraw_CollectDraw (src/game/Game/geometry_draw.cpp).
 float    s_planes[6][4];
 bool     s_haveFrustum = false;
 unsigned s_frameSerial = 0;

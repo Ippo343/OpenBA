@@ -124,7 +124,7 @@ helper** (`SpriteContext::AddSprite` ×27, `Dialog::CreateElement` ×8,
 `UserInterface::Play` ×7, …) — a spelling the step-6 inventory did not grep.
 They are the step's largest carry-over (B36_RULES 12).
 
-### 3d. Hand-inlined `(*(void***)p)[N]` in `code/Game/Dialog`
+### 3d. Hand-inlined `(*(void***)p)[N]` in `src/game/Dialog`
 
 | unit | start of step | now |
 |---|---:|---:|

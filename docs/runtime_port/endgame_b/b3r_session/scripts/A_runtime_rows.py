@@ -1100,7 +1100,7 @@ def area(f):
     if parts[0] == 'runtime':
         return 'runtime/' + parts[1]
     if parts[0] == 'code' and len(parts) > 2:
-        return 'code/Game/' + parts[2] if parts[1] == 'Game' else 'code/' + parts[1]
+        return 'src/game/' + parts[2] if parts[1] == 'Game' else 'code/' + parts[1]
     return parts[0]
 
 

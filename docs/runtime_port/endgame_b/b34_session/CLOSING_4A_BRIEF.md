@@ -30,10 +30,10 @@ nothing (s_fn_Serialize_Char binds the uchar door; s_fn_SerSChar is commented uc
 s_fn_IBP_Serialize in cleararea.cpp / ambientemittercomponent.cpp binds ExternalPtr EXE doors 0x140002340 /
 0x1400019a0 — those stay).
 Known remaining door calls, to convert here with the branch they sit in handled honestly:
- - code/Game/Game/geometry_serialize.cpp:152/:167 (slot -> global fallback in CallSerializerCtor/Dtor);
- - code/Game/Component/highlightcomponent.cpp:98/99 (ctor/dtor chosen by ternary, else arm prints a desync warning);
- - code/Game/Component/citizendescription.cpp:127 (block-local float[] door with an else fallback);
- - code/Game/Dialog/mod_dialog_vtables.cpp:381-383 (fn_Modification_GetCount inside a printf argument — hoist the
+ - src/game/Game/geometry_serialize.cpp:152/:167 (slot -> global fallback in CallSerializerCtor/Dtor);
+ - src/game/Component/highlightcomponent.cpp:98/99 (ctor/dtor chosen by ternary, else arm prints a desync warning);
+ - src/game/Component/citizendescription.cpp:127 (block-local float[] door with an else fallback);
+ - src/game/Dialog/mod_dialog_vtables.cpp:381-383 (fn_Modification_GetCount inside a printf argument — hoist the
    call out of the printf into a local FIRST, then convert; the perf build strips printf arguments);
  - out-of-scope doors batch P left: game_settings_persist.cpp:53-59 (Persistence Get/Set statics),
    w2_takescreenshot.cpp:155-156 (?GetSaveDirectory@FileSystem — hidden-retslot by-value return; GetSaveDirectory
@@ -66,7 +66,7 @@ and STAYS (ExternalPtr doors are not this pass). Do this per directory if the di
 typedef, a resolver statement, or a comment about one of those.
 
 ## Commit 3 — two retail-backed behaviour fixes (own commit, small)
-code/Game/Component/ambientemitterdescription.cpp:57 and code/Game/Game/toolbardescription.cpp:156 (paths approximate
+src/game/Component/ambientemitterdescription.cpp:57 and src/game/Game/toolbardescription.cpp:156 (paths approximate
 — find them) read `*(int*)(*(void**)(serializer + 8) + 8)` = ReaderWriter::_allowCustomSerialize (always 0) as the
 "loading" flag, so `loading` is stuck TRUE even when saving. Retail reads the DIRECTION: AmbientEmitterDescription::
 Serialize 0x1400431f0 `MOV RAX,[RSP+0x28]; CMP dword [RAX+8],0`, ToolbarDescription::Serialize 0x14012dacd same —
@@ -88,10 +88,10 @@ save path: say in the commit what you expect the resave gate to show and why.
    keyword/callee tally in the message. If in doubt, leave them and say so.
  - Stale comments: runtime/types/ui/ElementDescription.h:48-49 (names deleted SerializerLite / RtObject::kEncSerialize*);
    runtime/types/io/FileSystem.h (a banner line still says ??1FileSystem is in iobase_vtables.cpp — it is in
-   filesystem_createfile_win.cpp); code/Game/Component/citizencomponent.cpp:43 (claims 0x140152a60 is RandFloat; it is
+   filesystem_createfile_win.cpp); src/game/Component/citizencomponent.cpp:43 (claims 0x140152a60 is RandFloat; it is
    Serializer::Serialize(float&)); gamegrid_serialize.cpp s_fn_SerSChar comment (says uchar 0x140152418, binds the
-   schar export); code/Game/Game/gameupdateloop_load.cpp loader-guard region ~894-924 and
-   code/Game/Game/menudialogloopt_funcs.h:157 still describe "our AsyncLoader worker": dispatcher (1) is GONE
+   schar export); src/game/Game/gameupdateloop_load.cpp loader-guard region ~894-924 and
+   src/game/Game/menudialogloopt_funcs.h:157 still describe "our AsyncLoader worker": dispatcher (1) is GONE
    (standalone/async_loader.* deleted in 96c17f47; Engine::Loader is the only dispatcher; the guard is now an
    assertion — a "[GUL::Load] redundant dispatch" line reappearing means a second dispatcher is back). COMMENTS ONLY
    in those two files. docs/runtime_port/endgame_b/B34_BRIEFS.md §D wrongly calls the block-0 exe an "unchanged

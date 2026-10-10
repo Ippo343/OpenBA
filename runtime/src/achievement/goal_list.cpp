@@ -9,7 +9,7 @@
 // One of the two BODY rows of the Wave 27 Achievement/Audio brief, and the one
 // the kickoff singled out for a specific trap. GREPPED BEFORE WRITTEN: the
 // mangled name and the address appear in this tree only as PROSE — Goal.h:161,
-// achievement_manager.cpp:211 and 657, code/Game/Game/gameupdateloop_load.cpp
+// achievement_manager.cpp:211 and 657, src/game/Game/gameupdateloop_load.cpp
 // :1660 — every one of them a comment saying "called, not reimplemented". No
 // body existed.
 //

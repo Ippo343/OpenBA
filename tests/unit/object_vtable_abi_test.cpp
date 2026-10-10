@@ -346,7 +346,7 @@ UNIT_TEST(real_class_virtual_call_lands_in_a_hand_built_table) {
 
 // A COPY of the compiler's table is as good as the compiler's table: copy the
 // live table (six entries: D1, D0 and retail slots 1-4), patch one slot, stamp
-// it back. (The runtime copy site this used to cite, code/Game/Game/tornado.cpp,
+// it back. (The runtime copy site this used to cite, src/game/Game/tornado.cpp,
 // is gone; the fact still holds.)
 UNIT_TEST(copied_compiler_vtable_is_interchangeable_slot_for_slot) {
     FakeExternal a;
@@ -413,7 +413,7 @@ public:
 static_assert(sizeof(FakeComponent) == 0x28, "Component is 0x28 (engine/types/Component.h)");
 
 // The controller/state-node interface reached through the SECOND vptr (EXEMPT:
-// no destructor slot). Slot names from code/Game/Component/controller_live_base.h.
+// no destructor slot). Slot names from src/game/Component/controller_live_base.h.
 class FakeControllerIface {
 public:
     virtual int  Step(int input)   { Note(this, 500 + input); return 0; }

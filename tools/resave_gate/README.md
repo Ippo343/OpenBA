@@ -41,7 +41,7 @@ the code (known_port_issues row 990). The route's loader line is no longer the o
 
 The DLL-absent exe loads the save unattended (`BANISHED_AUTOLOAD`), and in the
 LOAD-FROM-SAVE branch of `GameUpdateLoop::Load`, right after `SaveRestore(load)` and before
-the first sim tick, `GameUpdateLoop_SaveRoundtripCheck` (code/Game/Game/gameupdateloop_serialize.cpp)
+the first sim tick, `GameUpdateLoop_SaveRoundtripCheck` (src/game/Game/gameupdateloop_serialize.cpp)
 calls `SaveRestore(save)` into a fresh `SavedState`, decompresses both images through the
 same `CompressedMemoryStream` path the load uses, writes them next to the logs
 (`standalone_roundtrip_{loaded,resaved}.bin`, ~21 MB each) and prints one line:

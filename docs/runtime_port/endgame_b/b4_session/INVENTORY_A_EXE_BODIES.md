@@ -27,7 +27,7 @@ Owner A, read-only. Table: `data/A_exe_bodies.tsv` (879 rows). Script: `scripts/
 
 ## 2. How the table was built (re-run: `python docs/runtime_port/endgame_b/b4_session/scripts/A_exe_bodies.py`)
 
-- **Scope.** `code/Game/*/exe_bodies.h`, `code/Game/**/*_funcs.h`, `code/Game/Work/marketwork_bst_*.h`,
+- **Scope.** `src/game/*/exe_bodies.h`, `src/game/**/*_funcs.h`, `src/game/Work/marketwork_bst_*.h`,
   plus `EXTRA_HEADERS` (`ui_dialogs.h`, `ui_panels.h`, `dialog_exe_helpers.h`, `citizen_icon_helpers.h`,
   `goal_exe_helpers.h`, `statvaluedispatch.h`, `Game/game.h`, `controller_state_table.h`).
 - **Parsing.** Comments are stripped with `b4_session/codegrep.py strip`. A declaration is a

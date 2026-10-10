@@ -10,7 +10,7 @@
 // everything else is opaque padding.
 //
 // This is NOT the first documentation of this layout. Lane D's own
-// code/Game/Dialog/mod_dialog_vtables.cpp (2026-09-05, ModProbe_DumpFileSystem
+// src/game/Dialog/mod_dialog_vtables.cpp (2026-09-05, ModProbe_DumpFileSystem
 // / ModProbe_DumpPackageIndex) already recovered +0x08 dataDirectory, +0x18/
 // +0x19 the two Exists() gates, +0x20/+0x28 the packfile array+count, +0x30/
 // +0x38 a package-filename array+count (NOT read by anything in this file),

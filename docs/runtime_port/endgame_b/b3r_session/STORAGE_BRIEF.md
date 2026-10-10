@@ -48,16 +48,16 @@ a reader writes `*g_pGameWorldSingleton` to get the object. The cells are file-s
    readers are LEFT, listed with the reason.
 7. **`g_pMemAllocSingleton`** — `behaviour:` commit. Every reader reads
    `System::MemoryAllocator::_singleton` LIVE; the global, its initialiser in `EngineFuncsInit` and
-   the refresh in `standalone/main.cpp` (`RunFactorySelfTest`) and `code/Game/Game/game_main.cpp` are
+   the refresh in `standalone/main.cpp` (`RunFactorySelfTest`) and `src/game/Game/game_main.cpp` are
    deleted. The self-test itself stays. State in the commit which readers could run BEFORE the old
    refresh and therefore saw null where they now see the allocator.
 8. **The globals are deleted** from `engine/funcs/engine_funcs.{h,cpp}` with their initialisers and
    their dump lines, once their last reader is converted.
 
 ## Files
-Every file that reads one of the seven globals (`code/Game/**`, `standalone/**`, `engine/funcs/**`),
+Every file that reads one of the seven globals (`src/game/**`, `standalone/**`, `engine/funcs/**`),
 the headers of the owning classes, `standalone/address_registry.cpp` (the three cells and the KeyMap
-chain ONLY), `standalone/main.cpp` and `code/Game/Game/game_main.cpp` (the allocator refresh ONLY).
+chain ONLY), `standalone/main.cpp` and `src/game/Game/game_main.cpp` (the allocator refresh ONLY).
 
 ## Method
 Script it, one global at a time, one titled commit per global (`B3R STORAGE: …`), debug build after

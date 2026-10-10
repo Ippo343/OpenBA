@@ -11,7 +11,7 @@ other blocks may read stay registered: W2 deletes them.
 | an import slot `0x140151xxx / 0x140152xxx` | `data/B_exe_rows.tsv` column `runtime_symbol_if_slot`, then the Runtime symbol in `data/A_runtime_rows.tsv` |
 | a mangled name or a `0x18…` address | `data/A_runtime_rows.tsv` (`target`, `direct_replacement`), declarations in `P0c_declared.tsv` |
 | an `engine_funcs` global (`fn_*`, `g_p*`) | `data/E_engine_funcs.tsv`: `bound_to` is the key, `direct_replacement` the call. 19 globals are MISNAMED: trust the binding |
-| a `.rdata` constant | `code/Game/Game/exe_constants.h` (`kRdata_<addr>`) |
+| a `.rdata` constant | `src/game/Game/exe_constants.h` (`kRdata_<addr>`) |
 | `fn_IsDerivedFrom(p, id)` | `Object::IsDerivedFromNullSafe(p, id)` (`runtime/types/object/TypeInfo.h`) — NOT `p->IsDerivedFrom(id)` |
 
 The tables are maps. Before each edit, read the reader's BINDING in the code and the body's

@@ -142,7 +142,7 @@ def declarer(code, start):
 def game_headers():
     for rel, (src, code) in sorted(CM._CACHE.items()):
         base = rel.rsplit('/', 1)[-1]
-        if rel.startswith('code/Game/') and (base == 'exe_bodies.h' or base.endswith('_funcs.h')):
+        if rel.startswith('src/game/') and (base == 'exe_bodies.h' or base.endswith('_funcs.h')):
             yield rel, code
 
 
@@ -160,7 +160,7 @@ RE_VOIDFIRST = re.compile(r'(?<![\w.:>~])([A-Za-z_]\w*)\s*\(\s*(?:const\s+)?void
                           r'(?:const\s*)?(?:[A-Za-z_]\w*)?\s*[,)]')
 vfirst = set()
 for rel, (src, code) in CM._CACHE.items():
-    if rel.startswith('code/Game/'):
+    if rel.startswith('src/game/'):
         for m in RE_VOIDFIRST.finditer(code):
             n = m.group(1)
             if n not in KW and declarer(code, m.start(1)):
@@ -230,7 +230,7 @@ def fields(body):
 missing = 0
 classes_seen = 0
 for rel, (src, code) in CM._CACHE.items():
-    if not rel.endswith(('.h', '.hpp')) or not rel.startswith(('runtime/types/', 'engine/types/', 'code/Game/', 'dx11/types/')):
+    if not rel.endswith(('.h', '.hpp')) or not rel.startswith(('runtime/types/', 'engine/types/', 'src/game/', 'dx11/types/')):
         continue
     code = re.sub(r'(?m)^\s*#.*$', lambda m: ' ' * len(m.group(0)), code)
     for m in RE_CLASS.finditer(code):

@@ -269,7 +269,7 @@ bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
     ++g_calls;
 
     // ---- 0x1800a1aa0: the `configure == false` half ------------------------
-    // This is the call `code/Game/Game/game_main.cpp:240` already inlines. The
+    // This is the call `src/game/Game/game_main.cpp:240` already inlines. The
     // deref of `_videoConfiguration` is guarded HERE because retail guards it
     // here (`TEST RCX,RCX ; JZ`), not because we added a null check.
     if (!configure) {

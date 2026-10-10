@@ -80,7 +80,7 @@
 // HOW THE DISMISSAL IS DONE, AND WHY IT IS NOT AN INVENTION
 // ---------------------------------------------------------------------------
 // Every MessageDialog button in the ported exe does precisely this
-// (code/Game/Dialog/messagedialog.cpp, Slot10/11/12/13, retail 0x14006CFF0
+// (src/game/Dialog/messagedialog.cpp, Slot10/11/12/13, retail 0x14006CFF0
 // /0x14006D030/0x14006CFB0/0x14006CF70):
 //
 //     *(uint32_t*)(self + 0x24) = <result>;

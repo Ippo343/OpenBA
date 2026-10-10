@@ -9,7 +9,7 @@ Totals: **A = 102 declared names** (103 declarations) in `exe_bodies.h` / `*_fun
 One row per declaration: the name, where, the retail address on the line, and the ruling written on the line (a `B8: free in retail` ruling quotes what RCX is at a retail caller; a `B8: stays free` tag quotes the measurement -- a function-pointer site, a B11 DIFF, a port-only body with no retail symbol, a harness route). A row with no B8 tag carries its own comment.
 
 
-### code/Game/Action/exe_bodies.h (11)
+### src/game/Action/exe_bodies.h (11)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
@@ -23,21 +23,21 @@ One row per declaration: the name, where, the retail address on the line, and th
 | `Pf_TileShapeLut_ae180` | 118 | 0x1400ae180 | 0x1400ae180 // B8: free in retail -- RCX dead: at 0x1400ad355 the caller leaves a byte in CL (its stack argument 5) |
 | `EntityAnchorCell` | 142 | 0x140087fb0 | 0x140087fb0 // B8: free in retail -- RCX is the address of an InternalPtr slot (0x140111988 LEA RCX,[R11+0x10]), not an object |
 | `RemoveAnimalActions` | 149 | 0x1400bbea0 | 0x1400bbea0 // B8: free in retail -- action factory: RCX is a stack InternalPtr slot (0x1400c816b LEA RCX,[RBP-0x31]), not an object |
-| `Pf_RegionPairCache_Build` | 171 | 0x14009e8c0 | no retail address (the tail of 0x14009e8c0; caller code/Game/Game/region_seed.cpp) // B9: harness / port-only -- read: no retail symbol; 0x14009e8c0 builds the 0x38-byte cache in place (MemAlloc(0x38, 4), the field init, the 0x20000-entry ring resize 0x14001cc |
+| `Pf_RegionPairCache_Build` | 171 | 0x14009e8c0 | no retail address (the tail of 0x14009e8c0; caller src/game/Game/region_seed.cpp) // B9: harness / port-only -- read: no retail symbol; 0x14009e8c0 builds the 0x38-byte cache in place (MemAlloc(0x38, 4), the field init, the 0x20000-entry ring resize 0x14001cc |
 
-### code/Game/Component/decalcomponent_funcs.h (1)
+### src/game/Component/decalcomponent_funcs.h (1)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `DecalComponent_Serialize` | 9 | 0x14011b7d0 | 0x14011b7d0 B8: stays free -- read, not moved: retail's slot [4] Startup body, never installed (DecalComponent.h TREE DIVERGENCE: the tree's Startup is a different body); no caller; installing it is behaviour: -- Phase D SLOTS: installed as DecalComponent::Startup |
 
-### code/Game/Component/diseasecomponent_funcs.h (1)
+### src/game/Component/diseasecomponent_funcs.h (1)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `DiseaseComp_GrownIdentity` | 40 | 0x140048375 | B8: free in retail -- RCX is the out slot (0x140048375 LEA RCX,[RSP+0x40]), RDX the entity slot const Object::InternalPtr<ComponentEntity>* entitySlot); // 0x140047f80 |
 
-### code/Game/Component/exe_bodies.h (16)
+### src/game/Component/exe_bodies.h (16)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
@@ -58,44 +58,44 @@ One row per declaration: the name, where, the retail address on the line, and th
 | `FrustumOutline_ProjectCorners` | 148 | 0x14006c5b0 | 0x14006c5b0 // B8: free in retail -- RCX is the output corner array (0x14006bf31 LEA RCX,[RBP-0x39]) |
 | `Pasture_FillAllPastures` | 181 | 0x140060290 | 0x140060290 // B8: free in retail -- no parameters (0x140060e76, the debug menu, loads none) |
 
-### code/Game/Component/mapcomponent_funcs.h (1)
+### src/game/Component/mapcomponent_funcs.h (1)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `MapComponent_Draw` | 17 | 0x140124370 | 0x140124370 B8: stays free -- read, not moved: retail's slot [6] OnAdded body, never installed (the tree's MapComponent::OnAdded is a different body, mapcomponent.cpp); no caller; installing it is behaviour: -- Phase D SLOTS: installed as MapComponent::OnAdded |
 
-### code/Game/Component/pickingcomponent_funcs.h (1)
+### src/game/Component/pickingcomponent_funcs.h (1)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `PickingComponent_RegisterMeshForEntity` | 11 | 0x1400c48a0 | B9: harness / port-only -- read: no retail body; at both callers retail's EntityList::RegisterEntity (0x1400c48a0) broadcast runs PickingComponent::OnAdded (= RefreshMesh 0x140128f50) itself, so the explicit call right after RegisterEntity (tool_base_tile.cpp, |
 
-### code/Game/Component/rawmaterialcomponent_funcs.h (1)
+### src/game/Component/rawmaterialcomponent_funcs.h (1)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `RawMaterialComponent_Update` | 15 | 0x140129130 | 0x140129130 B8: stays free -- read, not moved: retail's slot [9] Update body, never installed (the tree's RawMaterialComponent::Update is the inert PORT GAP stub); no caller; installing it is behaviour: -- Phase D SLOTS: installed as RawMaterialComponent::Update |
 
-### code/Game/Component/spawncomponent_funcs.h (1)
+### src/game/Component/spawncomponent_funcs.h (1)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `SpawnComponent_ReportDoSpawnCensus` | 9 |  | B8: harness / port-only -- diagnostic print of the DoSpawn tallies, no retail counterpart |
 
-### code/Game/Component/tradecomponent_funcs.h (2)
+### src/game/Component/tradecomponent_funcs.h (2)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `TradeMerchantOrders_Destroy` | 15 | 0x14000ef10 | 0x14000ef10 // B9: stays free -- measured: 0x14000ef10 is Array<TradeMerchantOrder>'s element destroy (RCX the array, unread: ~Array 0x14000e730 MOV RBX,RCX / CALL; RDX the first element, R8D the count), the inlined ~TradeMerchantOrder over its goods ~Array wi |
 | `TradeResourceTree_NewNode` | 20 | 0x140059ede | B9: stays free -- no retail body: retail inlines `new Node(key, value, parent)` at every insert, placement-new null test included (0x140059ede MemAlloc(0x30, 8) / 0x140059ee7 TEST RAX,RAX, and 0x140059f53 / 0x140059f5c; the 0x14000ebe0 load insert); the spelli |
 
-### code/Game/Dialog/debugui_funcs.h (1)
+### src/game/Dialog/debugui_funcs.h (1)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `DebugUI_Slot9` | 9 | 0x14005fd20 | B9: harness / port-only -- read: case 329 calls 0x14005fd20 (the tornado spawn) without loading RCX (0x140060ea5; only case 327 does MOV RCX,RBX), and no DebugUI exists on the disaster route: retail makes one only through its type factory 0x140010ec0 (Register |
 
-### code/Game/Dialog/exe_bodies.h (3)
+### src/game/Dialog/exe_bodies.h (3)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
@@ -103,7 +103,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 | `TownHall_InventorySortAsc` | 89 | 0x140015200 | 0x140015200 // B8: free in retail -- sort helper: RCX the item array base, EDX the count (0x14007ca2d MOV RCX,R12) |
 | `TownHall_InventorySortDesc` | 90 | 0x140015500 | 0x140015500 // B8: free in retail -- sort helper: RCX the item array base, EDX the count (0x14007ca44, as Asc) |
 
-### code/Game/Game/exe_bodies.h (6)
+### src/game/Game/exe_bodies.h (6)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
@@ -114,7 +114,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 | `Reimpl_Array_Resize_Stride08` | 124 | 0x140001bb0 | 0x140001bb0 // B9: stays free -- erased core over holders that are not one Collection::Array: WorldGeometry::_batchMaterials (WorldGeometryArray), the +0x1E0 outlines and roadtool's +0x218 refs are RawArray-shaped headers, AmbientEmitterDescription::_emitters  |
 | `TownRegistry_RegisterWorkplace` | 143 | 0x14012f520 | B9: harness / port-only -- read: no retail body; retail registers a workplace from WorkPlaceComponent's OnCreate (0x14012f520 -> CitizenBehavior::RegisterWorkplace 0x1400895a0, the +0x10 entity copied to a stack local); this is the standalone's spawn-time wiri |
 
-### code/Game/Game/menudialogloopt_funcs.h (3)
+### src/game/Game/menudialogloopt_funcs.h (3)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
@@ -122,7 +122,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 | `TickChunk` | 89 | 0x14009a930 | port-only: the chunked PhaseB of Load 0x14009a930 (Game/menudialogloopt.cpp) |
 | `MenuDialogLoopT_TickAudio` | 150 |  | B8: free -- no retail symbol (the audio tick MenuDLT::Update inlines); first parameter the frame's System::Time, no object |
 
-### code/Game/Player/edittool_funcs.h (7)
+### src/game/Player/edittool_funcs.h (7)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
@@ -134,7 +134,7 @@ One row per declaration: the name, where, the retail address on the line, and th
 | `PlacementTool_Factory_SA` | 21 |  | B8: harness / port-only -- standalone driver entry, no retail symbol |
 | `RemovalTool_Factory_SA` | 23 |  | B8: harness / port-only -- standalone driver entry, no retail symbol |
 
-### code/Game/Player/exe_bodies.h (17)
+### src/game/Player/exe_bodies.h (17)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
@@ -156,13 +156,13 @@ One row per declaration: the name, where, the retail address on the line, and th
 | `Avl38SetRemove` | 121 | 0x140025740 | 0x140025740 // B8: stays free -- already typed (B.4 B13): a typed overload per node type over the one template core Avl38Remove<Node> (0x140025740) (tool_base_trade.cpp); nothing erased |
 | `Avl38SetFindRemove` | 123 | 0x14002c690 | 0x14002c690 // B8: stays free -- already typed (B.4 B13): a typed overload per node type over the one template core Avl38FindRemove<Node> (0x14002c690) (tool_base_trade.cpp); nothing erased |
 
-### code/Game/Tutorial/exe_bodies.h (1)
+### src/game/Tutorial/exe_bodies.h (1)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
 | `FindUIElementByPath_Impl` | 29 | 0x140152a90 | B8: stays free -- free in retail: RCX is the InternalPtr<UI::Element> return slot, constructed through the InternalBasePtr ctor (CALL [0x140152a90] at 0x1400e191c) const System::String* pathStr, UI::DialogInstance** outDialog); // 0x1400e1870 |
 
-### code/Game/Work/exe_bodies.h (30)
+### src/game/Work/exe_bodies.h (30)
 
 | name | line | retail | ruling / comment on the line |
 |---|---:|---|---|
@@ -256,5 +256,5 @@ Generated by `leftfree_c.py` (this directory) at main `cbb701d58`. Grouping is b
 
 | file:line | reason on the line |
 |---|---|
-| `code/Game/Player/tool_base_render.cpp:730` | FLOOR? vtable probe: ReportBadSelectionRef keeps the tool as an integer so GCC cannot devirtualise its Type() probe (EditTool is final); S4 ruling: no marker (FLOOR section 4 bars a marker on a this / self operand), the cast stays listed |
+| `src/game/Player/tool_base_render.cpp:730` | FLOOR? vtable probe: ReportBadSelectionRef keeps the tool as an integer so GCC cannot devirtualise its Type() probe (EditTool is final); S4 ruling: no marker (FLOOR section 4 bars a marker on a this / self operand), the cast stays listed |
 | `runtime/src/achievement/achievement_state.cpp:217` | audit WORK, left: retail's const CreateInstance stores `this` into the instance's non-const ExternalPtr<Achievement> (+0x20), which code/ readers (goaldialog, gameupdateloop) use non-const; a const pointee would change ExternalPtr<const T> across the readers;  |

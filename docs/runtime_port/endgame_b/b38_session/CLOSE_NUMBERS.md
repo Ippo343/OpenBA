@@ -144,7 +144,7 @@ definitions of converted classes in all.
 
 ## 9. The class list — from the headers, cross-checked against retail
 
-`classx.py` parses every `class X [final] : public P {` in `code/Game/**.h` and joins it to B38_RULES §1.3 (copied
+`classx.py` parses every `class X [final] : public P {` in `src/game/**.h` and joins it to B38_RULES §1.3 (copied
 from `B38_SLOTS.md`): parent (namespace-stripped, the `"public "` quirk dropped), `sizeof` (the header's
 `static_assert(sizeof(X) == …)`), and no `// [N]` slot comment at or past retail's slot count.
 
@@ -158,12 +158,12 @@ plus 12 unreflected ones — the five loops (`GameUpdateLoop`, `MenuDialogLoopT`
 
 | directory | `PORT GAP` start → now | `STANDALONE DEVIATION` start → now |
 |---|---:|---:|
-| `code/Game/Component` | 0 → **104** | 5 → 5 |
-| `code/Game/Dialog` | 0 → **30** | 1 → **40** |
-| `code/Game/Work` | 0 → 4 | 0 → 0 |
-| `code/Game/Game` | 0 → 2 | 0 → 0 |
-| `code/Game/Goal` | 0 → 0 | 1 → 1 |
-| `code/Game/Tutorial` | 0 → 0 | 3 → 3 |
+| `src/game/Component` | 0 → **104** | 5 → 5 |
+| `src/game/Dialog` | 0 → **30** | 1 → **40** |
+| `src/game/Work` | 0 → 4 | 0 → 0 |
+| `src/game/Game` | 0 → 2 | 0 → 0 |
+| `src/game/Goal` | 0 → 0 | 1 → 1 |
+| `src/game/Tutorial` | 0 → 0 | 3 → 3 |
 | `standalone` | 0 → 2 | 0 → 0 |
 | **total** | **0 → 142** | **10 → 49** |
 

@@ -2,7 +2,7 @@
 // tests/unit/mia_abi_test.cpp — ENDGAME B.3.8 block MI-A (B38_RULES.md B8-14)
 //
 // The ABI claims block MI-A makes for its town `ControllerComponent` leaves,
-// measured on the SHIPPED HEADERS (code/Game/Component/<Class>.h):
+// measured on the SHIPPED HEADERS (src/game/Component/<Class>.h):
 //
 // PART A — LAYOUT. sizeof / alignof against each retail create function's
 //   MemAlloc (B38_RULES §1.3), the controller member at retail's per-class

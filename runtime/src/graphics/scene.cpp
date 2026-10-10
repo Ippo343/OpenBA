@@ -38,7 +38,7 @@
 // registers, and the census still counts it).
 //
 // TWO OF THE TWENTY NAMES docs/runtime_port/wave6_lanes.txt handed this lane
-// ARE PHANTOMS, and both are live in `code/Game/`:
+// ARE PHANTOMS, and both are live in `src/game/`:
 //
 //     ?Attach@Geometry@Graphics@@QEAAXAEAV12@H@Z   NOT IN THE DLL
 //     ?Detach@Geometry@Graphics@@QEAAXAEAV12@@Z    NOT IN THE DLL
@@ -46,7 +46,7 @@
 // Both spell the Geometry argument as a REFERENCE (`AEAV12@`). There is no
 // reference overload: `Graphics::Geometry` exports exactly one Attach and one
 // Detach and both take a POINTER (`PEAV12@`). The only consumer of those two
-// names was code/Game/Action/action_base_complete.cpp, where `s_GeomAttach` and
+// names was src/game/Action/action_base_complete.cpp, where `s_GeomAttach` and
 // `s_GeomDetach` had therefore been NULL since the day they were written and the
 // `if (s_Geom*)` guards around them had never fired. That call site was
 // corrected in the tree on 2026-09-07 (it now reads `PEAV12@`), so this lane's
@@ -92,7 +92,7 @@
 //     and is why porting the ctor without a vtable of our own is the safe
 //     choice here (PLAN §4.3 risk 3).
 //   * Keeping the DLL vtable is also what keeps
-//     `StatusIconGeometry_BuildVtable` (code/Game/Component/
+//     `StatusIconGeometry_BuildVtable` (src/game/Component/
 //     statusicon_geometry.cpp:336) working: it builds its billboard vtable by
 //     COPYING slots out of whatever the Geometry ctor stamped. Stamping our own
 //     table would change every slot it copies.
@@ -106,7 +106,7 @@
 //     "ImageBuffer\0" string run — and that the overrun made the mint row
 //     permanently unsafe. Three measurements on THIS tip:
 //
-//       1. code/Game/Component/statusicon_geometry.cpp:341 reads `i < 9` today
+//       1. src/game/Component/statusicon_geometry.cpp:341 reads `i < 9` today
 //          and installs nullptr from 9 up. Wave 22 lane GEOM fixed the loop.
 //          THE OVERRUN DOES NOT EXIST ANY MORE.
 //       2. standalone/rt_data_mint_tables.inc:1568 carries the row at NINE
@@ -598,7 +598,7 @@ Graphics::Geometry::~Geometry() {
 //
 // `self` is the PARENT and the argument the child, which is the opposite of
 // what the name suggests and is worth stating: ActCt_HideTool
-// (code/Game/Action/action_base_complete.cpp:414) already calls it that way.
+// (src/game/Action/action_base_complete.cpp:414) already calls it that way.
 //
 // NOTE the mangling: `PEAV12@` (pointer), not the `AEAV12@` (reference) that
 // docs/runtime_port/wave6_lanes.txt lists. There is no reference overload.
@@ -1031,7 +1031,7 @@ namespace Graphics {
 //
 // `self` is the PARENT and the argument the child, which is the opposite of what
 // the name suggests and is worth stating: `ActCt_HideTool`
-// (code/Game/Action/action_base_complete.cpp:414) already calls it that way.
+// (src/game/Action/action_base_complete.cpp:414) already calls it that way.
 //
 // NOTE the mangling: `PEAV12@` (pointer), not the `AEAV12@` (reference)
 // docs/runtime_port/wave6_lanes.txt lists. There is no reference overload — the
@@ -1368,7 +1368,7 @@ void Scene::RemoveObject(ObjectId id) {
 // corrupt list.
 //
 // RULE B5-7: this member runs on the `Engine::Loader` thread
-// (code/Game/Game/gameupdateloop_load.cpp:1654) while the main thread is in
+// (src/game/Game/gameupdateloop_load.cpp:1654) while the main thread is in
 // `Draw`. The only lock it takes is the global `MemoryAllocator` critical section
 // that retail inlines here and that `LinkedList`'s node allocator reaches; nothing
 // is cached.

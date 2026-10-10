@@ -35,7 +35,7 @@ def declarer(code, start):
 rows = []
 for rel, (src, code) in sorted(CM._CACHE.items()):
     base = rel.rsplit('/', 1)[-1]
-    if not (rel.startswith('code/Game/') and (base == 'exe_bodies.h' or base.endswith('_funcs.h'))):
+    if not (rel.startswith('src/game/') and (base == 'exe_bodies.h' or base.endswith('_funcs.h'))):
         continue
     code2 = re.sub(r'(?m)^\s*#.*$', '', code)
     srclines = src.split('\n')

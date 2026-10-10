@@ -111,7 +111,7 @@ locally (the two LUTs 0x1401c22d0 / 0x1401c23d0), the fallback becomes the code 
 Every DIRECT body is declared in exactly one header, written from its DEFINITION (linkage included:
 321 of the registering files' prototypes are `extern "C"`), and the defining `.cpp` includes that
 header so the compiler checks the pair.
-- `code/Game` bodies: `code/Game/<Module>/exe_bodies.h`, grouped by defining file, the retail address
+- `code/Game` bodies: `src/game/<Module>/exe_bodies.h`, grouped by defining file, the retail address
   as a comment on each line. (These are the C bodies. Making them members is B.4's work; the header
   is where that work will find them.)
 - Runtime bodies with no declaration (51 C-door functions, the internal bodies): the existing
@@ -220,23 +220,23 @@ W0-SM), `address_registry.cpp` / `.h`, `standalone/main.cpp` (outside W0-SM), th
 ### W0 (prerequisites)
 | block | files | content |
 |---|---|---|
-| **W0-SM** mirror + mint (one owner, serial commits) | `standalone/resolve_standalone.cpp`, `rt_export_addrs.inc`, new `reg_rt_mirror16.cpp`, `rt_data_mint.*`, `rt_data_mint_tables.inc`, `tools/rt_mint_gen.py`, `tools/rt_mint_retired/`, `tools/addr_door_audit.py`, `tools/runtime_census.py`, `tools/cutover_closure/build_roots.py`, `runtime/funcs/rt_port.h`, `rt_resolve_cache.cpp`, `runtime/types/system/MemoryAllocator.h`, new `Debug.h`, `runtime/types/common.h`, `runtime/types/engine/Engine.h`, `runtime/src/system/allocator.cpp`, `allocator_win.cpp`, new `debug.cpp`, `runtime/src/engine/singleton_ctors.cpp`, `engine_lifecycle.cpp`, `runtime/src/video/enumerate_video_modes.cpp`, `standalone/alloc_cutover_arm.cpp`, `standalone/main.cpp`, `code/Game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp` (the singleton line only), `tests/unit/b39_obj_typeinfo_unique_test.cpp` | R6: MIRROR, M1, M2, M3 |
+| **W0-SM** mirror + mint (one owner, serial commits) | `standalone/resolve_standalone.cpp`, `rt_export_addrs.inc`, new `reg_rt_mirror16.cpp`, `rt_data_mint.*`, `rt_data_mint_tables.inc`, `tools/rt_mint_gen.py`, `tools/rt_mint_retired/`, `tools/addr_door_audit.py`, `tools/runtime_census.py`, `tools/cutover_closure/build_roots.py`, `runtime/funcs/rt_port.h`, `rt_resolve_cache.cpp`, `runtime/types/system/MemoryAllocator.h`, new `Debug.h`, `runtime/types/common.h`, `runtime/types/engine/Engine.h`, `runtime/src/system/allocator.cpp`, `allocator_win.cpp`, new `debug.cpp`, `runtime/src/engine/singleton_ctors.cpp`, `engine_lifecycle.cpp`, `runtime/src/video/enumerate_video_modes.cpp`, `standalone/alloc_cutover_arm.cpp`, `standalone/main.cpp`, `src/game/Game/game_main.cpp`, `engine/funcs/engine_funcs.cpp` (the singleton line only), `tests/unit/b39_obj_typeinfo_unique_test.cpp` | R6: MIRROR, M1, M2, M3 |
 | **W0-A0** one allocator API (after W0-SM merges) | `runtime/src/object/internal_class.cpp`, `root_operator_delete.cpp`, `class_operator_delete.cpp`, `runtime/src/ui/ui_operator_delete.cpp`, `runtime/src/collection/alloc_door.cpp`, `runtime/src/system/allocator.cpp`, `allocator_win.cpp`, `closure_batch2b.cpp`, `standalone/redzone_alloc.*`, `alloc_cutover_arm.cpp`, `alloc_stats.cpp`, `tests/unit/alloc_door_test.cpp`, `tests/unit/rt_port_stub.cpp` | R9 |
-| **W0-P0a** declarations | NEW `code/Game/{Action,Work}/exe_bodies.h` + one `#include` line in each defining `.cpp` there | R5 |
-| **W0-P0b** declarations | NEW `code/Game/Component/exe_bodies.h` + the include lines | R5 |
-| **W0-P0c** declarations | NEW `code/Game/{Game,Player,Dialog,Tutorial,Entity,Goal}/exe_bodies.h` + the include lines; `engine/funcs/engine_funcs.h` (move declarations and inline bodies out; it includes the new headers); the 11 `engine/types` headers with no includer (deleted); the Runtime declarations missing from `runtime/funcs/` and `runtime/types/`; `Object::IsDerivedFromNullSafe`; the `.rdata` `constexpr`s (R7) | R5, R7 |
+| **W0-P0a** declarations | NEW `src/game/{Action,Work}/exe_bodies.h` + one `#include` line in each defining `.cpp` there | R5 |
+| **W0-P0b** declarations | NEW `src/game/Component/exe_bodies.h` + the include lines | R5 |
+| **W0-P0c** declarations | NEW `src/game/{Game,Player,Dialog,Tutorial,Entity,Goal}/exe_bodies.h` + the include lines; `engine/funcs/engine_funcs.h` (move declarations and inline bodies out; it includes the new headers); the 11 `engine/types` headers with no includer (deleted); the Runtime declarations missing from `runtime/funcs/` and `runtime/types/`; `Object::IsDerivedFromNullSafe`; the `.rdata` `constexpr`s (R7) | R5, R7 |
 
 ### W1 (reader blocks; each also deletes the DEAD registration lines in its files)
 | block | files |
 |---|---|
-| **G-CompA** | `code/Game/Component/citizen*` |
-| **G-CompB** | `code/Game/Component/[a-f]*` except `citizen*` |
-| **G-CompC** | `code/Game/Component/[g-z]*` |
-| **G-Work** | `code/Game/Work/` |
-| **G-Action** | `code/Game/Action/` |
-| **G-Dialog** | `code/Game/Dialog/` |
-| **G-Game** | `code/Game/Game/`, `Entity/`, `Goal/`, and any other `code/Game` directory not named here |
-| **G-Player** | `code/Game/Player/`, `Tutorial/` |
+| **G-CompA** | `src/game/Component/citizen*` |
+| **G-CompB** | `src/game/Component/[a-f]*` except `citizen*` |
+| **G-CompC** | `src/game/Component/[g-z]*` |
+| **G-Work** | `src/game/Work/` |
+| **G-Action** | `src/game/Action/` |
+| **G-Dialog** | `src/game/Dialog/` |
+| **G-Game** | `src/game/Game/`, `Entity/`, `Goal/`, and any other `code/Game` directory not named here |
+| **G-Player** | `src/game/Player/`, `Tutorial/` |
 | **S-Harness** | `standalone/` except the coordinator's files, the `reg_*.cpp` files and W0's files |
 | **RT-UI** | `runtime/src/ui/` |
 | **RT-VG** | `runtime/src/video/`, `graphics/` |
@@ -298,7 +298,7 @@ Of the registry: NOTHING. No row, no resolver, no printer, no generated file.
   seam, armer, `[RtAlloc] ARMED`), `RtObjectExternalLoadInstallCounters()` (`[ExtLoad]`),
   `RtVideoDeviceStartupIdentity()`, `RtGraphicsWave29SlotsSummary()`; and `RuntimeDllNotMapped()`.
   These are initialisation, not registration.
-- `code/Game/<Module>/exe_bodies.h` and `code/Game/Game/exe_constants.h`: the C bodies' declarations
+- `src/game/<Module>/exe_bodies.h` and `src/game/Game/exe_constants.h`: the C bodies' declarations
   and the `.rdata` constants, each with its retail address. B.4 turns them into members.
 - 189 `// PORT GAP 0x…` markers: call sites of things with no body (or an unwired one). Behaviour is
   today's null arm.
@@ -323,7 +323,7 @@ Of the registry: NOTHING. No row, no resolver, no printer, no generated file.
 3. **2026-09-28, W0-SM — `Debug::_disableHandler`'s row left with the mint (M3), not in M2**: it was
    the mint's last row, and retiring it alone made the generator emit an empty array. The mint
    registered AFTER the `[RtPort]` count was printed, so M3 did not move that line.
-4. **2026-09-28 — `code/Game/Component` is FOUR reader blocks** (433 files with headers): G-CompA
+4. **2026-09-28 — `src/game/Component` is FOUR reader blocks** (433 files with headers): G-CompA
    `citizen*`, G-CompB `a`-`f` except `citizen*`, G-CompC `g`-`o`, G-CompD `p`-`z`, all
    case-insensitive. §4's three-way split is superseded.
 5. **2026-09-28 — a STORAGE block sits between W1 and the AUDIT.** R7's class statics do not exist

@@ -20,10 +20,10 @@ GLOBALS = ["g_fn_Serializer_Ctor", "g_fn_Serializer_Dtor", "g_fn_Serialize_Int",
            "fn_Modification_GetCount", "fn_Modification_GetMod"]
 
 def bucket(rel):
-    if rel.startswith("code/Game/Component/"): return "Component"
-    if rel.startswith("code/Game/Game/"): return "Game"
-    if rel.startswith("code/Game/Action/") or rel.startswith("code/Game/Work/"): return "Action+Work"
-    if rel.startswith("code/Game/"): return "rest(code/Game)"
+    if rel.startswith("src/game/Component/"): return "Component"
+    if rel.startswith("src/game/Game/"): return "Game"
+    if rel.startswith("src/game/Action/") or rel.startswith("src/game/Work/"): return "Action+Work"
+    if rel.startswith("src/game/"): return "rest(code/Game)"
     if rel.startswith("engine/"): return "engine"
     if rel.startswith("standalone/"): return "standalone"
     return "other"

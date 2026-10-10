@@ -215,7 +215,7 @@ LOG = [
      r"UNREG_CENSUS|UnregCensus|first=\(", "exe_addr", "keep_changed",
      "BANISHED_UNREG_CENSUS only (no gate route sets it). Parsed by tools/unreg_full.py and tools/unreg_loadpath.py. "
      "Useful while STUB rows exist; dies with ResolveAddr(Module::Exe) and SetUnregPhase (callers in "
-     "code/Game/Game/gameupdateloop*.cpp)"),
+     "src/game/Game/gameupdateloop*.cpp)"),
     ("[ExtLoad] calls=N openFileFail=N ...", r'"\[ExtLoad\] calls=', r"ExtLoad\\?\] calls=", "none", "invariant",
      "now: newgame calls=5683 openFileFail=0, tutorial calls=5773 openFileFail=12, loadgame calls=4758. NOT a "
      "registry line; gate.sh prints it and NEXT_SESSION §1 pins it. Stays an invariant through the teardown"),
@@ -484,12 +484,12 @@ ROUTE_OF_FLAG = {
 }
 HARNESS = [f for f in walk(["standalone"], (".cpp",))
            if not re.search(r"standalone/(reg_|address_registry|resolve_standalone|rt_data_mint|options)", f)]
-HARNESS += walk(["code/Game/Game"], (".cpp",))
+HARNESS += walk(["src/game/Game"], (".cpp",))
 NAMED = {"standalone/scene_watch.cpp", "standalone/hw_watch.cpp", "standalone/stall_debug.cpp",
          "standalone/entity_comp_validator.cpp", "standalone/sampler.cpp", "standalone/saveload_harness.cpp"}
 for f in HARNESS:
     is_h = ("harness" in f) or f in NAMED or f.startswith("standalone/")
-    if f.startswith("code/Game/Game") and "harness" not in f:
+    if f.startswith("src/game/Game") and "harness" not in f:
         continue
     t = code_of(f)
     c = OrderedDict((k, len(re.findall(rx, t, re.S))) for k, rx in HB.items())

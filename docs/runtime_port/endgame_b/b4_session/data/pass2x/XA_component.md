@@ -1,4 +1,4 @@
-# XA_component inventory (code/Game/Component, 632 casts, 586 lines, 117 files)
+# XA_component inventory (src/game/Component, 632 casts, 586 lines, 117 files)
 
 Classes (casts): SIG 419 (174 families), ERASED 86 (7), SLOT 28 (5), FIELD 39, H5 32, OTHER 11,
 LOCAL 5, H8 4, FLOOR 4, POD 3, CONST 1. Tables: XA_component.tsv (per cast line),

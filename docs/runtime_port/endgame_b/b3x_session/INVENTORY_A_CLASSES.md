@@ -84,7 +84,7 @@ IO::ReaderWriter and the 12 `Video::*Data` classes.
 - **Graphics::Geometry**: `StatusIconGeometry`, `TornadoInstance` (via `Graphics::ParticleInstance`),
   `WeatherParticleGeometry` and `WorldGeometry`.
 - **Engine::UpdateLoop**: `GameUpdateLoop`, `GameLoaderLoop`, `InnerLoaderLoop`, `GameLoadDialogLoopT` and
-  `MenuDialogLoopT`. Their DeletingDtor bodies are in `code/Game/Game/gameupdateloop.cpp` and `standalone/*_stubs.cpp`.
+  `MenuDialogLoopT`. Their DeletingDtor bodies are in `src/game/Game/gameupdateloop.cpp` and `standalone/*_stubs.cpp`.
 
 IO::Stream, IO::ReaderWriter and the `Video::*Data` roots have **no** code/Game subclasses.
 
@@ -112,7 +112,7 @@ STD bodies.
 
 | class | definition | body (comments stripped, strings blanked) |
 |---|---|---|
-| GameUpdateLoop | `code/Game/Game/gameupdateloop.cpp:2678` | `EnsureInit(); TRACE("", (void*)this, flags); this->~GameUpdateLoop(); if (flags & 1) { fn_MemFreeStatic(this); } TRACE(""); return this;` |
+| GameUpdateLoop | `src/game/Game/gameupdateloop.cpp:2678` | `EnsureInit(); TRACE("", (void*)this, flags); this->~GameUpdateLoop(); if (flags & 1) { fn_MemFreeStatic(this); } TRACE(""); return this;` |
 | GameLoaderLoop | `standalone/loader_loop_stubs.cpp:175` | `printf("", (void*)this, flags); this->~GameLoaderLoop(); if (flags & 1) { fn_MemFreeStatic(this); } return this;` |
 | InnerLoaderLoop | `standalone/loader_loop_stubs.cpp:123` | `printf("", (void*)this, flags); this->~InnerLoaderLoop(); if (flags & 1) { fn_MemFreeStatic(this); } return this;` |
 | GameLoadDialogLoopT | `standalone/splash_loop_stubs.cpp:162` | `printf("", (void*)this, flags); this->~GameLoadDialogLoopT(); if (flags & 1) { fn_MemFreeStatic(this); } return this;` |
@@ -292,9 +292,9 @@ declared virtual is not `DeletingDtor`. Product roots:
 
 | root | slot 0 | members (product) |
 |---|---|---|
-| `System::Thread` (`runtime/types/system/Thread.h:243`) | `Run` | `Engine::Loader` (`runtime/types/engine/UpdateLoop.h:395`), `Audio::Stream` (`runtime/types/audio/Stream.h:91`), `IO::PersistenceWorker` (`runtime/types/io/PersistenceWorker.h:51`), `PathfinderThread` (`code/Game/Game/PathfinderThread.h:25`) |
+| `System::Thread` (`runtime/types/system/Thread.h:243`) | `Run` | `Engine::Loader` (`runtime/types/engine/UpdateLoop.h:395`), `Audio::Stream` (`runtime/types/audio/Stream.h:91`), `IO::PersistenceWorker` (`runtime/types/io/PersistenceWorker.h:51`), `PathfinderThread` (`src/game/Game/PathfinderThread.h:25`) |
 | `IO::Encoding` (`runtime/types/io/Serializer.h:365`) | `IsBinary` | `IO::BinaryEncoding` :379, `IO::TextEncoding` :391, `IO::VisitorEncoding` :404 |
-| `ControllerComponent::Controller` (`code/Game/Component/ControllerComponent.h:48`) | `FindState` (9 pure slots) | `StateMachineComponent::RootController` (`StateMachineComponent.h:52`), `ControllerLive::TableController` (`controller_state_table.h:330`) |
+| `ControllerComponent::Controller` (`src/game/Component/ControllerComponent.h:48`) | `FindState` (9 pure slots) | `StateMachineComponent::RootController` (`StateMachineComponent.h:52`), `ControllerLive::TableController` (`controller_state_table.h:330`) |
 | `Audio::Device::PlatformChannel` (`runtime/types/audio/Device.h:109`) | `OnVoiceProcessingPassStart` | (the XAudio2 voice-callback interface) |
 | `Pathfinding::IPathInfo` (`runtime/types/pathfinding/IPathInfo.h:32`) | `Slot0` | 1 implementer |
 
@@ -305,7 +305,7 @@ several `RetslotProbe`s. `WithVirtualDtor` / `FakeWithVirtualDtor` / `FakeEmbedd
 **Differences from NEXT_SESSION §3a's assumed exempt list.** These are derived, not assumed:
 - **Two new product roots that §3a does not name:** `Audio::Device::PlatformChannel` and
   `Pathfinding::IPathInfo`.
-- **The "state-machine handler tables" are not C++ classes.** `code/Game/Game/statemachine.cpp:55` indexes
+- **The "state-machine handler tables" are not C++ classes.** `src/game/Game/statemachine.cpp:55` indexes
   `BehaviorNode::vtable` as raw `void**` (slot 0 = `CanProcess`). There is no polymorphic class to exempt;
   the file is a raw slot reader for INVENTORY B.
 - **"UI::Font's factory-flag slot" is `IO::Encoding::IsBinary`.** `runtime/src/ui/font.cpp:410` calls slot 0

@@ -95,7 +95,7 @@ The row classes this inventory touches (for inventory A's table):
 - **Current values come from the B3X close, not from HEAD.** HEAD is the close plus documentation commits, and the working tree showed only `rt_export_addrs.inc` modified, which the kit reverts, so no drift is expected. Still, a block-1 baseline run must re-read every number.
 - **Three `RegisterExeAddr` rows exist before `ResolveInit()`** (`[Resolve-Standalone] Address registry: 3 entries`). They are registered by something that runs before step 2 of `Init()`. I did not find which code registers them: no file-scope `static … = Register…(` initialiser matched.
 - **Harness regexes see the ten spellings of BLOCK0_BRIEF only.** A per-file wrapper with another name would read 0. I read the 15 files that have doors, plus `hw_watch`, `stall_debug`, `entity_comp_validator`, `sampler` and `saveload_harness` (0 doors), by grep context, not line by line. `engine_funcs` counts are identifier matches, so a local variable with the same name as an extern would count.
-- **Env-gated diagnostics inside `code/Game`** (for example the `gameupdateloop.cpp` FORCE_/TRACE blocks and `SetUnregPhase`) are counted by the `code/` inventories, not here. Only the two `code/Game/Game/*_harness.cpp` files are in this table.
+- **Env-gated diagnostics inside `code/Game`** (for example the `gameupdateloop.cpp` FORCE_/TRACE blocks and `SetUnregPhase`) are counted by the `code/` inventories, not here. Only the two `src/game/Game/*_harness.cpp` files are in this table.
 - **Tool `read_by` is a filename grep.** A tool invoked by a path held in a variable would be missed. The kit and the Makefile were also read by hand.
 
 ## 5. What surprised me
@@ -156,7 +156,7 @@ These lines are re-cut: `[RtPort] runtime registry: E exports, A addrs`; `[Addre
 | F-K (kit) | the 10 `b3r_session/*.sh` copies + `acceptance.sh` | 12 log-line rows | FIRST (6c.1) |
 | F-G (generator) | `tools/rt_mint_gen.py` | 2 | FIRST (6c.2) |
 | F-ALLOC | `runtime/src/collection/alloc_door.cpp`, `standalone/redzone_alloc.cpp`, `tests/unit/alloc_door_test.cpp`, and the new named hook cell (header in `runtime/types/collection/`) | 3 | before any block converts a `0x140152b6x` reader; titled commit, behaviour-neutral, check it with a `BANISHED_REDZONE` run |
-| F-SEAT | `standalone/reg_town_workplace_registry.cpp`, `code/Game/Game/town_workplace_registry.cpp` | 2 | separate TITLED commit: the `Opt().liveSeatShuffle` test moves to the call site; A/B default unchanged |
+| F-SEAT | `standalone/reg_town_workplace_registry.cpp`, `src/game/Game/town_workplace_registry.cpp` | 2 | separate TITLED commit: the `Opt().liveSeatShuffle` test moves to the call site; A/B default unchanged |
 | F-HARN-ROUTED | `standalone/{main,menudialogloopt_stubs,splash_loop_stubs,pausemenu_harness,tool_harness,stress_harness}.cpp` | 6 | gated by gate.sh + toolroutes + sa-stress; `main.cpp`'s crash-log cell reader goes WITH carry-over 1's storage block |
 | F-HARN-UNROUTED | the other 9 door files (`death`, `food_panel`, `food_workers`, `market_overstock`, `orchard_workers`, `pasture`, `trade_buy`, `dlgctrl_route`, `modal_driver`) + `scene_watch.cpp` (carry-over 4; edits `check_standing_notes.py` NOTES in the same commit) | 10 | compile-only; one smoke run each is advised, since no gate route reaches them |
 | F-ARRAY-TEST | `tests/unit/array_test.cpp` | 1 | must ride IN the block that owns `runtime/src/collection/array.cpp` (a test-local `ArraySpec` replaces `PkgResolver`) |

@@ -1,4 +1,4 @@
-# Wave Y inventory: GAMEA (`code/Game/Game/`, `Tutorial/`, `Goal/`, `Object/`)
+# Wave Y inventory: GAMEA (`src/game/Game/`, `Tutorial/`, `Goal/`, `Object/`)
 
 181 cast lines, 69 units (`GAMEA.tsv` per line, `GAMEA_units.tsv` per unit). Retail dtor orders were read
 from the disassembly (Application-x64.exe) for MenuDialogLoopT, TutorialStep, Map and MenuScene. The other

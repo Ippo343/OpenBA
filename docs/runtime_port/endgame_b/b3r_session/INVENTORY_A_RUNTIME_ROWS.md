@@ -113,17 +113,17 @@ directory is written.
   | runtime/src/graphics | 157 | 27 |
   | runtime/src/io | 157 | 32 |
   | runtime/src/engine | 76 | 8 |
-  | code/Game/Component | 72 | 44 |
+  | src/game/Component | 72 | 44 |
   | runtime/src/collection | 60 | 8 |
   | runtime/src/video | 57 | 15 |
-  | code/Game/Game | 52 | 12 |
+  | src/game/Game | 52 | 12 |
   | standalone | 52 | 11 |
   | engine (all `engine_funcs.cpp`) | 39 | 1 |
-  | code/Game/Work | 39 | 17 |
+  | src/game/Work | 39 | 17 |
   | runtime/src/save | 37 | 7 |
   | runtime/src/object | 34 | 15 |
   | dx11 | 29 | 6 |
-  | code/Game/Player | 28 | 9 |
+  | src/game/Player | 28 | 9 |
 
   The rest are 87 sites.
 - `*_PortInit` rows and registering functions, in call order:
@@ -225,7 +225,7 @@ directory is written.
    - All 34 row-naming constants in the header address namespaces (`runtime/types/engine/Engine.h`
      `EngineAddr`, `MainLoop.h` `MainLoopAddr`, `engine/types/Configuration.h`, `Modification.h`) have 0
      uses. Only the two device-slot offsets are read.
-   - `code/Game/Component/citizenai_executor.cpp:345-349` resolves 3 slots into statics that are never read.
+   - `src/game/Component/citizenai_executor.cpp:345-349` resolves 3 slots into statics that are never read.
 4. **26 mangled literals are not readers.** `RT_SER_SCALAR` / `RT_SER_ARRAY` (`io/serializer.cpp`) and
    `RT_PKG2_SCALAR_GETTER` (`io/package_file.cpp`) take the mangled name as a macro argument and discard it.
 5. **7 exe import slots are read by code/Game but filled by nothing,** so they resolve to 0 today (§6,

@@ -267,7 +267,7 @@ public:
     virtual void* CreateSystem() const = 0;                              // [8] INTRODUCED
 };
 
-// A minimal concrete `Particle` subclass — the shape `code/Game/Game/tornado.cpp`
+// A minimal concrete `Particle` subclass — the shape `src/game/Game/tornado.cpp`
 // has. It fills exactly the three slots retail leaves `_purecall` on `Particle`
 // (plus slot 0, per the deviation note), so slots 1/2/3/5 must still reach
 // `Particle`'s bodies and slot 4 must still reach `External`'s.

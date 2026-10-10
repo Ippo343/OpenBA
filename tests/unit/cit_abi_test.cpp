@@ -2,7 +2,7 @@
 // tests/unit/cit_abi_test.cpp — ENDGAME B.3.8 block CIT (B38_RULES.md B8-14)
 //
 // The ABI claims block CIT makes for its 19 `Component` leaves, measured on the
-// SHIPPED HEADERS (code/Game/Component/<Class>.h):
+// SHIPPED HEADERS (src/game/Component/<Class>.h):
 //
 // PART A — LAYOUT. sizeof / alignof against each retail create function's
 //   MemAlloc (B38_RULES §1.3), and the member offsets the ported bodies read raw.

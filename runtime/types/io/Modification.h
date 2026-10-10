@@ -302,7 +302,7 @@ static_assert(offsetof(ReloadEntry, _hole04) == 0x4, "ReloadEntry::_hole04");
 // `IO::Modification::Mod` is retail's nested struct — `?GetModification@` spells
 // it `UMod@12@`, `U` for struct, `12` for `Modification::IO`. It is NOT nested
 // here (it stays `RtIO::Mod`, the spelling its readers in runtime/engine,
-// runtime/save and code/Game/Dialog use), but it is the real class: String /
+// runtime/save and src/game/Dialog use), but it is the real class: String /
 // Filename / Array / Set members with retail's copy ctor, operator= and
 // destructor (see its banner above). `ModSetNode` stays the erased node of
 // the width-8 AVL core; `ModArrayOf<T>` stays the header of

@@ -1,4 +1,4 @@
-# E_game blockers (code/Game/Game + code/Game/Object): 931 casts, 71 files
+# E_game blockers (src/game/Game + src/game/Object): 931 casts, 71 files
 
 Counts are estimates split by line range (sum = 931). Rows: `E_game.tsv`.
 

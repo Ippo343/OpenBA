@@ -30,7 +30,7 @@ THE DEFECT THIS FINDS (closed 2026-09-04 in ParticleComponent, PC_SerSlot3):
   SAVE delta is the culprit.
 
   The rule this violates is already written down in the tree, above
-  code/Game/Component/uicomponent_serialize.cpp's Resolve():
+  src/game/Component/uicomponent_serialize.cpp's Resolve():
      "Resolved unconditionally at the top of every call -- this can be the very
       first call into the class on load-from-save, so lazy/cached resolution
       elsewhere is not safe."

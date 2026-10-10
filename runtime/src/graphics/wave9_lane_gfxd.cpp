@@ -102,7 +102,7 @@
 // ---------------------------------------------------------------------------
 // Nothing in our tree calls `Renderer::Reset` or `Renderer::AddScene` today —
 // the only live door on this class is `?Draw@Renderer@Graphics@@`
-// (code/Game/Game/gameupdateloop.cpp:627 and engine/funcs/engine_funcs.cpp:3599),
+// (src/game/Game/gameupdateloop.cpp:627 and engine/funcs/engine_funcs.cpp:3599),
 // and `Draw` is still the DLL's, so the DLL's own internal `CALL 0x180105110`
 // reaches the DLL's `Reset`, not ours. These registrations are therefore INERT
 // today and their `calls=` is 0 by construction, not by accident

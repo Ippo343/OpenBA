@@ -4,7 +4,7 @@
 // The ABI claims block VIS makes for its 20 presentation `Component` leaves,
 // the two embedded members (StateMachineComponent's root node, StatusIcon's
 // billboard Geometry) and the five UI/Graphics strays, measured on the SHIPPED
-// HEADERS (code/Game/Component/<Class>.h):
+// HEADERS (src/game/Component/<Class>.h):
 //
 // PART A — LAYOUT. sizeof / alignof against each retail create function's
 //   MemAlloc (B38_RULES §1.3), and the member offsets the ported bodies read raw.
