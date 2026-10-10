@@ -323,7 +323,7 @@ uint64_t CitizenAIComponent::State_Work() {
     InteractDescription* transformSub = (sub && Object::IsDerivedFromNullSafe(sub, s_tid_InteractDescription))
                                             ? static_cast<InteractDescription*>(sub) : nullptr;
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
-    uint8_t any = WorkImpl_WalkablePos_122be0(posComp, &transformSub->_useNodes, pos, walkOut, &bestCost);
+    uint8_t any = posComp->FindWalkablePos(&transformSub->_useNodes, pos, walkOut, &bestCost);
     if (posComp != nullptr) {
         // the use locations: InteractComponent::useLocations (data, _size)
         int count = posComp->useLocations._size;

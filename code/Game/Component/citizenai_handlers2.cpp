@@ -334,7 +334,7 @@ uint64_t CitizenAIComponent::State_FindWork() {
                       ? static_cast<InteractDescription*>(sub) : nullptr;
     uint8_t found = 0;
     // +0x28 is InteractDescription::_useNodes (0x28 when the description is not one)
-    found = WorkImpl_WalkablePos_122be0(posComp, &transform->_useNodes, pos, outVec, &bestCost);
+    found = posComp->FindWalkablePos(&transform->_useNodes, pos, outVec, &bestCost);
 
     // walk each use location (InteractComponent::useLocations (data, _size))
     int childCount = posComp->useLocations._size;

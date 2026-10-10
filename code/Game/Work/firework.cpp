@@ -169,8 +169,7 @@ int FireWork::Execute(CitizenComponent** citizenIBP, System::Time* time) {
     float bestPos[3] = {0.0f, 0.0f, 0.0f};
 
     // Check main entity path
-    bool pathFound = WorkImpl_WalkablePos_122be0(
-        posCompIBP, &posCompTyped->_useNodes,   // +0x28 (0x28 when the description is not one)
+    bool pathFound = posCompIBP->FindWalkablePos(&posCompTyped->_useNodes,   // +0x28 (0x28 when the description is not one)
         srcPos, bestPos, &bestDist);
 
     // Check child entities (the InteractComponent's use locations, +0x28 / +0x30)

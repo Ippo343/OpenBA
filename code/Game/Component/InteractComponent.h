@@ -43,6 +43,7 @@ public:
     void OnAdded() override;                                      // [6] 0x140123110
     int  NodeCount(int kind) const;                               // 0x140123070 nodes of `kind` here and in the parts
     Math::Vector3* NodePosition(Math::Vector3* out, int kind, int index, float* heading) const;   // 0x140122e20 the index-th node of `kind`, world space
+    bool FindWalkablePos(const InteractDescription::NodeArray* nodes, float* param_3, float* param_4, int* param_5);   // 0x140122be0
     uint8_t FindWalkablePosRecursive(int param_2, float* param_3, float* param_4, int* param_5);   // 0x140122b00
 
     // PUBLIC while the ported bodies read them (B38 decision 1). Types from Persist

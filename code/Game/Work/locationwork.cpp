@@ -133,8 +133,7 @@ int LocationWork::Execute(CitizenComponent** citizenIBP, System::Time* /*context
     float srcPosArr[3] = {srcX, srcY, srcZ};
 
     // Check main position (the component and the description's use nodes, +0x28)
-    uint8_t found = WorkImpl_WalkablePos_122be0(
-        interact, &interactDesc->_useNodes,
+    uint8_t found = interact->FindWalkablePos(&interactDesc->_useNodes,
         srcPosArr, bestPos, &bestDist);
 
     // Also check the parts' use locations

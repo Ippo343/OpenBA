@@ -313,7 +313,7 @@ int GatherRawMaterials::Execute(CitizenComponent** entityIBP, System::Time* cont
                 // to read MapDescription::TypeId()).
                 bool isDerivedPos = Object::IsDerivedFromNullSafe(posDescBase, InteractDescription::TypeId());
                 InteractDescription* posDesc = isDerivedPos ? static_cast<InteractDescription*>(posDescBase) : nullptr;
-                uint8_t found = posDesc ? WorkImpl_WalkablePos_122be0(posComp,
+                uint8_t found = posDesc ? posComp->FindWalkablePos(
                     &posDesc->_buildNodes, searchPos, targetPos, &bestDist) : 0;
 
                 if (posComp->useLocations._size > 0) {

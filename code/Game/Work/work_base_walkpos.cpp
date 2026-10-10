@@ -61,9 +61,9 @@ static inline int WalkClampCell(int v, int w) {
 // param_5 = best-distance out (int). An InteractComponent member (its header is
 // COMP's, so this stays free).
 // Returns true if *param_5 < 0xffff (a reachable node was found).
-bool WorkImpl_WalkablePos_122be0(InteractComponent* interact, const InteractDescription::NodeArray* nodes,
+bool InteractComponent::FindWalkablePos(const InteractDescription::NodeArray* nodes,
                                  float* param_3, float* param_4, int* param_5) {
-    ModelComponent* model = interact->_entity->FindComponent<ModelComponent>();   // 0x140003f60
+    ModelComponent* model = _entity->FindComponent<ModelComponent>();   // 0x140003f60
 
     Map* map = GameUpdateLoop::_singleton->m_game;
     int w = map->size;
@@ -119,8 +119,7 @@ uint8_t InteractComponent::FindWalkablePosRecursive(int param_2,
 
     // The three node arrays are consecutive (+0x28 / +0x38 / +0x48): retail indexes them.
     const InteractDescription::NodeArray* nodes = &build->_useNodes + param_2;
-    uint8_t result = WorkImpl_WalkablePos_122be0(
-        this, nodes, param_3, param_4, param_5) ? 1 : 0;
+    uint8_t result = FindWalkablePos(nodes, param_3, param_4, param_5) ? 1 : 0;
 
     int childCount = useLocations._size;
     Object::InternalPtr<InteractComponent>* childArr = useLocations._data;
