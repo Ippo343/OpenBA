@@ -1,8 +1,3 @@
-Merge d0-engtypes: Phase D.2 -- engine/types dissolved into code/Game (8 forwarders deleted, common.h -> runtime/types/global_types.h, ui/Dialogs.h / Panels.h -> code/Game/Dialog/, the four loop aliases gone); -Iengine/types out of the Makefile; B11 16944 functions IDENTICAL
-
-Also carries tools/restructure/plan_[1-4]_*.py (the four per-step move plans): the coordinator
-committed them while this merge was in progress, so they rode in on the merge commit and its
-message was amended to this one (the content is the branch tip fb5faef68 plus the four plans).
+Merge d4-settings: Phase D.4 SETTINGS-1 (settings file codec; platform settings API; GetSaveDirectory over Platform::DocumentsDir)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_018bmKFjkpAAgKGzQzkCozB6
