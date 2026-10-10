@@ -286,7 +286,7 @@ void HuntAnimal::Enter(ActionStack*, const System::Time*) {
     // The animal's WildAnimalComponent; start its herd's migration
     WildAnimalComponent* wild = queryResult->_entity->FindComponent<WildAnimalComponent>();   // 0x1400227e0
 
-    HerdStartMigration(wild->herd.Get());   // 0x140122340
+    wild->herd.Get()->StartMigration();   // 0x140122340
 
     // Clear the hunt component's progress and set hunt started flag
     _field20->huntProgress._ticks = 0;

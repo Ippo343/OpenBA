@@ -210,7 +210,6 @@ class CharacterGrid;          // Component/CharacterGrid.h
 class HerdComponent;          // Component/HerdComponent.h
 namespace Math { class Scalar; }
 void QueryNearestCharacter(const CharacterGrid* grid, CharacterComponent** best, const float* point, const Math::Scalar* radius, int typeId, CharacterComponent* const* exclude);  // 0x140092260
-void HerdStartMigration(HerdComponent* herd);  // 0x140122340
 
 // ---- action_pf_roots_road.cpp
 
