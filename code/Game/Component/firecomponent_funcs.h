@@ -16,7 +16,7 @@
 // FireComponent::Ignite / SpreadToNeighbors / Extinguish / MarkDanger are members
 // (FireComponent.h). B4 FORWARD: 1 outside caller file (Dialog/debugui.cpp).
 class FireComponent;
-extern "C" void FireComponent_Ignite_610(FireComponent* self);   // 0x140049610
+extern "C" void FireComponent_Ignite_610(FireComponent* self);   // 0x140049610 B8: stays free -- read, not moved: forwarder over FireComponent::Ignite with the tree's null test; Dialog/debugui.cpp passes an untested FindComponent<FireComponent> result, retail 0x140049610 derefs RCX unguarded (0x140049631-0x140049642; row 1108); the member call would drop the test
 // 0x14009fa80 is Map::StampDanger (Game/Map.h), defined in firecomponent_ignite.cpp.
 class AmbientEmitterComponent; class DestroyComponent;
 namespace System { class Time; }
