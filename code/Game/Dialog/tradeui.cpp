@@ -657,7 +657,7 @@ void TradeUI::RefreshBuyTable()
         _purchaseItems._capacity = 0;
     } else {
         // Populate purchase reserved entries via helper
-        TradeUI_GetBuyEntries_59670(trade, &_purchaseItems);
+        trade->GetBuyEntries(&_purchaseItems);
     }
 
     // Phase 7: Set order combo current item and enabled state

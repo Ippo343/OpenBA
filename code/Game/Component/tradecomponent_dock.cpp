@@ -270,7 +270,7 @@ void TradeComponent::BuildMerchantManifest() {
     TradeMerchantOrder& rec = merchantOrders._data[merchantIdx];
     bool fromOrder = false;
     if (rec.orderKind == 0 || rec.goods._size < 1) {
-        TradeUI_GetBuyEntries_59670(this, &goods);
+        GetBuyEntries(&goods);
     } else {
         fromOrder = true;
         const int32_t n = rec.goods._size;

@@ -103,7 +103,6 @@ extern "C" void TownHall_RemoveWorker(CitizenBehavior* town, const Profession* p
 
 // ---- tradeui_buyentries.cpp
 class TradeComponent;
-extern "C" void TradeUI_GetBuyEntries_59670(const TradeComponent* ts, void* outArray);  // 0x140059670 (the out array is two types by caller: TradeUI::_purchaseItems / tradecomponent_dock's goods list) B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x140059684-0x140059694 has none; row 1101); as a member it is `!this`, which -O2 deletes
 
 // ---- tradeui_checkout.cpp
 extern "C" void TradeDescription_ExtendMerchantStay(TradeComponent* trade);  // 0x14005a490 B8: stays free -- read, not moved: the body opens with the tree's null test on the TradeComponent (retail 0x14005a490..: [RCX+0x18] read first has none; row 1102); as a member it is `!this`, which -O2 deletes
