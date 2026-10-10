@@ -1,92 +1,22 @@
 // ============================================================================
-// src/platform/win/thread_win.cpp — System::CriticalSection / System::Thread
+// src/engine/system/thread.cpp — System::CriticalSection / System::Thread
 // ============================================================================
-// Win32 half of the platform seam (PLAN.md §4.1 decision 1): this file, and
-// only this file in the pair, may include <windows.h>. The type layouts live
-// in src/engine/system/Thread.h, which stays platform-neutral so a
-// `_posix` twin can implement the same offsets later.
+// Phase D.4 THREADS E.2: portable engine code. Until D.4 this was
+// src/platform/win/thread_win.cpp and called Win32 directly; every call is now the
+// matching Platform:: primitive (src/platform/common/platform_{sync,thread}.h), whose
+// Windows body is that same Win32 call with the same arguments
+// (src/platform/win/{sync,thread}_win.cpp). The type layouts live in
+// src/engine/system/Thread.h.
 //
-// SCOPE (Wave 2, lane D): the 8 exports System::CriticalSection and
-// System::Thread expose to our own call sites (pathfinder_seed.cpp,
-// keystone_a_gamedtor.cpp, action_pf_astar.cpp, keystone_a_zone.cpp):
-//   ??0CriticalSection@System@@QEAA@XZ    ??1CriticalSection@System@@QEAA@XZ
-//   ?Lock@CriticalSection@System@@QEAAXXZ ?Unlock@CriticalSection@System@@QEAAXXZ
-//   ??0Thread@System@@QEAA@I@Z            ??1Thread@System@@QEAA@XZ
-//   ?Start@Thread@System@@QEAAXXZ         ?WaitForFinish@Thread@System@@QEAAXXZ
-//
-// CORRECTNESS ARGUMENT (objects cross the DLL boundary both ways — see the
-// lane brief / PLAN.md §4.3 risk 3, vtable ownership):
-//
-//   CriticalSection has no vtable and wraps a real Win32 CRITICAL_SECTION with
-//   the exact same spin count (5000) retail uses. A CS our ctor initializes
-//   and the DLL's Lock()/Unlock() later touches (or vice versa) is the same
-//   object either way — EnterCriticalSection/LeaveCriticalSection only care
-//   about the bytes, not who wrote them.
-//
-//   Thread DOES have a vtable, but our ctor/dtor do not invent one: they read
-//   the real ??_7Thread@System@@6B@ vtable OUT OF THE LOADED DLL (it is a
-//   genuine PE export, confirmed via pefile — not just a Ghidra label) and
-//   stamp that same address, exactly like retail's own ctor/dtor do. A Thread
-//   object is never used un-subclassed in practice (slot 0 is _purecall), and
-//   every real subclass — ours included (pathfinder_seed.cpp,
-//   keystone_a_gamedtor.cpp) — re-stamps its OWN vtable over this one right
-//   after construction, exactly as retail's subclasses do. So whichever side
-//   constructs the base and whichever side subclasses it, the vtable pointer
-//   in play at any given moment is always either the real base vtable or a
-//   real derived vtable — never a fabricated one. Vtable ownership is a
-//   non-issue here specifically because we point at the DLL's own object
-//   instead of cloning it.
-//
-//   The worker thread's entry point WAS intentionally left as the DLL's own
-//   ?ThreadFunc@Thread@System@@CAIPEAX@Z, on the grounds that it was not one of
-//   the 8 exports in scope. **Wave 9 lane P ports it** (bottom of this file),
-//   and the ctor below now asks for it BY NAME through the port-aware resolver.
-//   The old reasoning stays true of the LAYOUT — it only touches +0x00 vtable,
-//   +0x08 runFlags, +0x10/0x18/0x20/0x28 handles, all of which this header
-//   reproduces exactly — which is what made it safe to port.
+// SCOPE: System::CriticalSection (ctor / dtor / Lock / Unlock) and System::Thread
+// (InitFields / ReleaseFields, the ctor / dtor bodies; Start, WaitForFinish,
+// OnCompleted, ThreadFunc). Retail addresses at each body.
 // ============================================================================
 
 #include "system/Thread.h"
 
-#include <cstdio>
-
-#include <windows.h>
-#include <process.h>   // _beginthreadex, the CRT routine 0x18007fbfc is a copy of
-
-// ============================================================================
-// ENDGAME B.3.4b — THE CLASSES ARE REAL; THE DOORS DELEGATE. READ THIS.
-// ============================================================================
-// `System::CriticalSection` and `System::Thread` are real C++ classes since
-// B.3.4b (src/engine/system/Thread.h). The PODs moved to `RtSystem` in the
-// same commit (rule B4b-1) and are what the ctor/dtor doors below still operate
-// on, deliberately:
-//
-//   * Lock / Unlock / Start / WaitForFinish / OnCompleted / ThreadFunc are
-//     MEMBERS now; their registered doors keep their addresses, their names and
-//     their signatures, and delegate in one line.
-//   * The four ctor/dtor doors stay FREE FUNCTIONS over the POD and are NOT
-//     converted — B34_RULES §4.3 and B34B_RULES rule B4b-2. For `Thread` that is
-//     because all four constructing sites stamp a vtable over +0x00 and two of
-//     them are outside this step's file set (singleton_ctors.cpp,
-//     rt_data_mint.cpp). For `CriticalSection` it is because two of its three
-//     embedders (IO::Persistence, Audio::Stream) call raw
-//     InitializeCriticalSection and never reach the door at all, so a real
-//     constructor would leave those two constructed a second, different way.
-//     They take the POD precisely so they can write `self->vtable` — the class
-//     has no such field, the compiler owns +0x00 there.
-//
-// ⚠ `RtSystem_Thread_OnCompleted` delegates with a QUALIFIED call. Slot 1 of the
-// MINTED table 0x180155f20 resolves back to that door, so an unqualified virtual
-// call inside it would recurse forever (B34_BRIEFS §A.1). Start/WaitForFinish
-// are non-virtual and need no qualification.
-//
-// The member BODIES are defined at the bottom of this file inside
-// `namespace System { ... }`, because C++ requires a member definition to sit in
-// a namespace enclosing the class (B34_BRIEFS §A.2). They are byte-for-byte the
-// bodies that used to live in the doors; nothing was reordered.
-// ============================================================================
-
-
+#include "platform_sync.h"
+#include "platform_thread.h"
 
 // ---- System::CriticalSection -----------------------------------------------
 
@@ -94,13 +24,13 @@
 // B6 row 50: the real constructor (the two old doors' bodies, unchanged; their
 // one caller, PathfinderThread, now constructs its +0x30 member).
 System::CriticalSection::CriticalSection() {
-    InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(_storage));  // CAST-OK: win32
-    SetCriticalSectionSpinCount(reinterpret_cast<LPCRITICAL_SECTION>(_storage), 5000);  // CAST-OK: win32
+    // InitializeCriticalSection(this); SetCriticalSectionSpinCount(this, 5000)
+    Platform::MutexInit(&_storage, 5000);
 }
 
 // 0x18000c5b0  ??1CriticalSection@System@@QEAA@XZ
 System::CriticalSection::~CriticalSection() {
-    DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(_storage));  // CAST-OK: win32
+    Platform::MutexDestroy(&_storage);   // DeleteCriticalSection
 }
 
 // ---- System::Thread ---------------------------------------------------------
@@ -132,10 +62,9 @@ System::CriticalSection::~CriticalSection() {
 // documents the RETAIL bytes; the member body carries the note about why its
 // two slot calls stay raw.
 //
-// NO NEW LANE-D ROWS. Its only callees are Win32: WaitForMultipleObjects
-// through the DLL's IAT slot 0x18014b358 and SetEvent through 0x18014b368. We
-// call kernel32 directly, which is the same function — the IAT slot is where
-// the DLL's loader wrote kernel32's address, not a Runtime internal.
+// Its only callees are Win32: WaitForMultipleObjects through the DLL's IAT slot
+// 0x18014b358 and SetEvent through 0x18014b368, spelled Platform::EventWaitAny /
+// Platform::EventSet here (Phase D.4), whose Windows bodies are those two calls.
 //
 // STRUCTURE, from the bytes:
 //
@@ -191,12 +120,12 @@ namespace System {
 
 // 0x18000c700  ?Lock@CriticalSection@System@@QEAAXXZ
 void CriticalSection::Lock() {
-    EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(_storage));  // CAST-OK: win32
+    Platform::MutexLock(&_storage);      // EnterCriticalSection
 }
 
 // 0x18000c6f0  ?Unlock@CriticalSection@System@@QEAAXXZ
 void CriticalSection::Unlock() {
-    LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(_storage));  // CAST-OK: win32
+    Platform::MutexUnlock(&_storage);    // LeaveCriticalSection
 }
 
 // 0x1800ca4e0  ??0Thread@System@@QEAA@I@Z -- the body MINUS the vptr store
@@ -212,38 +141,36 @@ void Thread::InitFields(unsigned int stackSize) {
     // hStop}, and those two handles (plus hFinished) are not created until
     // AFTER this call returns. Starting running immediately would have
     // ThreadFunc wait on uninitialized handles.
-    unsigned int threadId = 0;
-    uintptr_t h = _beginthreadex(nullptr, stackSize, &Thread::ThreadFunc, this,
-                                 CREATE_SUSPENDED, &threadId);
-    _hThread = reinterpret_cast<void*>(h);  // CAST-OK: win32
-    SetThreadPriority(_hThread, THREAD_PRIORITY_NORMAL);
+    // _beginthreadex(NULL, stackSize, ThreadFunc, this, CREATE_SUSPENDED, &id)
+    _hThread = Platform::ThreadCreateSuspended(&Thread::ThreadFunc, this, stackSize);
+    Platform::ThreadSetNormalPriority(_hThread);   // SetThreadPriority(NORMAL)
 
-    _hStart    = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    _hStop     = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    _hFinished = CreateEventW(nullptr, TRUE,  TRUE,  nullptr);
+    _hStart    = Platform::EventCreate(false, false);   // auto-reset, unsignalled
+    _hStop     = Platform::EventCreate(false, false);   // auto-reset, unsignalled
+    _hFinished = Platform::EventCreate(true,  true);    // MANUAL-reset, signalled
 
-    ResumeThread(_hThread);
+    Platform::ThreadResume(_hThread);
 }
 
 // 0x1800ca590  ??1Thread@System@@QEAA@XZ -- the body MINUS the vptr store.
 void Thread::ReleaseFields() {
-    SetEvent(_hStop);
-    WaitForSingleObject(_hThread, INFINITE);
-    CloseHandle(_hThread);
-    CloseHandle(_hStart);
-    CloseHandle(_hStop);
-    CloseHandle(_hFinished);
+    Platform::EventSet(_hStop);
+    Platform::ThreadJoin(_hThread);        // WaitForSingleObject(hThread, INFINITE)
+    Platform::ThreadClose(_hThread);       // CloseHandle x4
+    Platform::EventClose(_hStart);
+    Platform::EventClose(_hStop);
+    Platform::EventClose(_hFinished);
 }
 
 // 0x1800ca610  ?Start@Thread@System@@QEAAXXZ
 void Thread::Start() {
-    ResetEvent(_hFinished);
-    SetEvent(_hStart);
+    Platform::EventReset(_hFinished);
+    Platform::EventSet(_hStart);
 }
 
 // 0x1800ca5f0  ?WaitForFinish@Thread@System@@QEAAXXZ
 void Thread::WaitForFinish() {
-    WaitForSingleObject(_hFinished, INFINITE);
+    Platform::EventWait(_hFinished, Platform::kInfinite);
 }
 
 // 0x18000c590  ?OnCompleted@Thread@System@@UEAAXXZ  — slot 1
@@ -264,20 +191,20 @@ void Thread::OnCompleted() {
 unsigned int __stdcall Thread::ThreadFunc(void* param) {
     Thread* self = static_cast<Thread*>(param);  // CAST-OK: win32
 
-    HANDLE handles[2] = { self->_hStart,
-                          self->_hStop };
+    Platform::EventHandle handles[2] = { self->_hStart,
+                                         self->_hStop };
 
-    unsigned int r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+    unsigned int r = Platform::EventWaitAny(2, handles, Platform::kInfinite);
     while (r == 0) {
         self->_runFlags |= 1u;
         self->Run();           // slot 0 — the work
         self->OnCompleted();   // slot 1
 
-        HANDLE finished = self->_hFinished;
+        Platform::EventHandle finished = self->_hFinished;
         self->_runFlags &= ~1u;
-        SetEvent(finished);
+        Platform::EventSet(finished);
 
-        r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+        r = Platform::EventWaitAny(2, handles, Platform::kInfinite);
     }
     return (r == 1) ? 0u : 0xFFFFFFFFu;
 }

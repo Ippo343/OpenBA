@@ -120,6 +120,7 @@
 #include <windows.h>
 
 #include "io/Persistence.h"
+#include "platform_sync.h"   // Platform::EventReset / EventSet
 #include "io/PersistenceWorker.h"   // ENDGAME B.3.9 IO (W2)
 #include "io/FileStream.h"
 #include "system/Filename.h"
@@ -269,8 +270,8 @@ void AssignPendingFilename(IO::PersistenceWorker* w, const System::String* filen
 // events are System::Thread's `_hFinished` (worker+0x28, Persistence+0x38
 // doneEvent) and `_hStart` (worker+0x18, Persistence+0x28 workEvent).
 void SignalWorker(IO::PersistenceWorker* w) {
-    ::ResetEvent(w->_hFinished);    // [0x18014b198]
-    ::SetEvent(w->_hStart);         // tail JMP [0x18014b368]
+    Platform::EventReset(w->_hFinished);   // ResetEvent [0x18014b198]
+    Platform::EventSet(w->_hStart);        // tail JMP SetEvent [0x18014b368]
 }
 
 }  // namespace

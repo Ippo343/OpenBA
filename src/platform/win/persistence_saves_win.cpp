@@ -26,6 +26,7 @@
 #include <cstring>
 #include <utility>    // std::move -- the pointer steal out of a POD out-param
 #include "io/Persistence.h"
+#include "platform_sync.h"   // Platform::EventReset / EventSet
 #include "collection/Collection.h"   // ENDGAME B.3.2 step 2
 #include "system/string_internal.h"
 
@@ -99,8 +100,8 @@ bool Persistence::BeginGetSaveGameInfo(const System::String& name, int count) {
     _worker._status     = 0;
     _worker._blockCount = count;
 
-    ResetEvent(_worker._hFinished);                                  // doneEvent
-    SetEvent(_worker._hStart);                                       // workEvent
+    Platform::EventReset(_worker._hFinished);                        // doneEvent
+    Platform::EventSet(_worker._hStart);                             // workEvent
 
     // ~fnFile is retail's release.
     return true;
