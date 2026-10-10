@@ -67,7 +67,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "io/Stream.h"       // ENDGAME B.3.9 IO: IO::CompressedMemoryStream

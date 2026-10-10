@@ -172,6 +172,8 @@
 #include <cstddef>
 #include <type_traits>
 
+#include "platform_sync.h"   // Platform::LockStorage: the +0x640 lock bytes
+
 namespace rt {
 namespace system {
 
@@ -338,7 +340,7 @@ public:
     int64_t      allocatedBytes; // +0x630 GetAllocatedSize
     int32_t      allocCount;     // +0x638 live blocks
     int32_t      freeTagCount;   // +0x63c linked free blocks
-    uint8_t      lock[0x28];     // +0x640 CRITICAL_SECTION (x64 MSVC: 40 bytes)
+    Platform::LockStorage lock;  // +0x640 CRITICAL_SECTION (x64 MSVC: 40 bytes), built in place
     uint64_t     pageSize;       // +0x668 GetSystemInfo().dwPageSize
 };
 
@@ -418,11 +420,12 @@ struct RtSysMemPlatform {
     void     (*release)(void* addr);
     // GetSystemInfo().dwPageSize
     uint64_t (*pageSize)();
-    // InitializeCriticalSectionAndSpinCount(cs, 5000) / Enter / Leave / Delete
-    void     (*lockInit)(void* cs);
-    void     (*lockEnter)(void* cs);
-    void     (*lockLeave)(void* cs);
-    void     (*lockDelete)(void* cs);
+    // InitializeCriticalSection + SetCriticalSectionSpinCount(cs, 5000) / Enter /
+    // Leave / Delete, over the +0x640 bytes (Platform::Mutex*: no allocation)
+    void     (*lockInit)(Platform::LockStorage* cs);
+    void     (*lockEnter)(Platform::LockStorage* cs);
+    void     (*lockLeave)(Platform::LockStorage* cs);
+    void     (*lockDelete)(Platform::LockStorage* cs);
 };
 
 } // namespace system

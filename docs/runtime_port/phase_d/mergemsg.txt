@@ -1,3 +1,3 @@
-Merge d4-settings: Phase D.4 SETTINGS-1 (settings file codec; platform settings API; GetSaveDirectory over Platform::DocumentsDir)
+Merge d4-threads: Phase D.4 THREADS-1 (Platform:: sync / thread / time primitives; System::Thread and the 0x28 locks over them; the timer)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

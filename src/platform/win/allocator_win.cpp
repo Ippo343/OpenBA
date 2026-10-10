@@ -29,6 +29,7 @@
 #include <cstdint>
 
 #include "system/MemoryAllocator.h"
+#include "platform_sync.h"      // Platform::MutexInit: the +0x640 lock
 
 using rt::system::MemoryAllocator;
 using rt::system::RtSysMemPlatform;
@@ -37,11 +38,9 @@ using rt::system::RtSysMemPlatform;
 // go through it rather than calling VirtualAlloc twice from two files.
 extern RtSysMemPlatform g_plat;
 
-// static_assert the one Win32 fact the OBJECT LAYOUT depends on: the critical
-// section sits at +0x640 and _pageSize at +0x668, so it must be exactly 0x28.
-static_assert(sizeof(CRITICAL_SECTION) == 0x28,
-              "MemoryAllocator's layout puts _pageSize at +0x668, which requires "
-              "a 40-byte CRITICAL_SECTION at +0x640");
+// The one Win32 fact the OBJECT LAYOUT depends on (the critical section at +0x640
+// and _pageSize at +0x668, so exactly 0x28 bytes) is asserted where the lock is
+// built: src/platform/win/sync_win.cpp, sizeof(CRITICAL_SECTION) == LockStorage.
 
 namespace {
 
@@ -54,17 +53,14 @@ void     Release(void* a)                   { VirtualFree(a, 0, MEM_RELEASE); }
 uint64_t PageSize() { SYSTEM_INFO si; GetSystemInfo(&si); return si.dwPageSize; }
 
 // The ctor's own sequence: InitializeCriticalSection then a 5000 spin count.
-void LockInit(void* cs) {
-    InitializeCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs));  // CAST-OK: win32
-    SetCriticalSectionSpinCount(reinterpret_cast<LPCRITICAL_SECTION>(cs), 5000);  // CAST-OK: win32
-}
-void LockEnter(void* cs)  { EnterCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }  // CAST-OK: win32
-void LockLeave(void* cs)  { LeaveCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }  // CAST-OK: win32
-void LockDelete(void* cs) { DeleteCriticalSection(reinterpret_cast<LPCRITICAL_SECTION>(cs)); }  // CAST-OK: win32
+// Built in place in the +0x640 bytes: the allocator's lock never allocates.
+// Enter / Leave / Delete are the primitives themselves (EnterCriticalSection /
+// LeaveCriticalSection / DeleteCriticalSection), one call deep as before.
+void LockInit(Platform::LockStorage* cs) { Platform::MutexInit(cs, 5000); }
 
 const RtSysMemPlatform kWin32 = {
     &Reserve, &ReserveCommit, &Commit, &Decommit, &Release, &PageSize,
-    &LockInit, &LockEnter, &LockLeave, &LockDelete
+    &LockInit, &Platform::MutexLock, &Platform::MutexUnlock, &Platform::MutexDestroy
 };
 
 }  // namespace

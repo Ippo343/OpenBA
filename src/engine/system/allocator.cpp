@@ -612,9 +612,9 @@ void* MemoryAllocator::MemAlloc(uint64_t size, int align) {
     if (System::g_memoryAllocatorInstrument.memAlloc)                // STANDALONE DEVIATION
         return System::g_memoryAllocatorInstrument.memAlloc(size, align);
     MemoryAllocator* self = Get();
-    g_plat.lockEnter(self->lock);
+    g_plat.lockEnter(&self->lock);
     void* r = self->Allocate(size, align);
-    g_plat.lockLeave(self->lock);
+    g_plat.lockLeave(&self->lock);
     return r;
 }
 
@@ -625,9 +625,9 @@ void MemoryAllocator::MemFree(void* p) {
     }
     if (p == nullptr) return;
     MemoryAllocator* self = Get();
-    g_plat.lockEnter(self->lock);
+    g_plat.lockEnter(&self->lock);
     self->Free(p);
-    g_plat.lockLeave(self->lock);
+    g_plat.lockLeave(&self->lock);
 }
 
 // --- PointerOffset (0x180034e20) -------------------------------------------
@@ -661,7 +661,7 @@ void Construct(MemoryAllocator* self) {
     self->allocatedBytes = 0;
     self->allocCount = 0;
     self->freeTagCount = 0;
-    g_plat.lockInit(self->lock);
+    g_plat.lockInit(&self->lock);
     std::memset(self->freeLists, 0, sizeof(self->freeLists));
     MemoryAllocator::_singleton = self;
     self->pageSize = 0;                       // inlined PlatformConstruct
@@ -669,7 +669,7 @@ void Construct(MemoryAllocator* self) {
 
 void Destruct(MemoryAllocator* self) {
     MemoryAllocator::_singleton = nullptr;
-    g_plat.lockDelete(self->lock);
+    g_plat.lockDelete(&self->lock);
 }
 
 // --- The cutover armer's pair ---------------------------------------------

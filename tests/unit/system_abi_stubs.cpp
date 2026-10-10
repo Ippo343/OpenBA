@@ -14,8 +14,9 @@
 // GCC emits a class's vtable in the translation unit that defines its KEY
 // FUNCTION (the first non-inline, non-pure virtual), and for `System::Thread`
 // that is `OnCompleted` — whose real body lives in
-// `src/platform/win/thread_win.cpp`, a file that includes <windows.h> and
-// stands on the port registry, so it cannot link into a host test
+// `src/engine/system/thread.cpp` (Phase D.4: portable, over the Platform::
+// primitives). It is not linked here because its `InitFields` starts a real OS
+// thread, and these tests pin WHEN that body runs, not what it does
 // (tests/unit/README.md, B31_RULES rule 6).
 //
 // THE CLASS IS STILL THE REAL ONE. What is defined here is only the BODY of

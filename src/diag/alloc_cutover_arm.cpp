@@ -27,7 +27,7 @@
 // RtAllocInstrument_MemAlloc below).
 // ============================================================================
 
-#include <windows.h>
+#include "platform_sync.h"   // Platform::MutexLock / MutexUnlock on the +0x640 lock
 
 #include <cstdint>
 #include <cstdio>
@@ -46,30 +46,30 @@ extern "C" void AllocStats_RecordFree(void* p);
 
 namespace {
 
-inline LPCRITICAL_SECTION AllocCs(MemoryAllocator* self) {
-    return reinterpret_cast<LPCRITICAL_SECTION>(self->lock);  // CAST-OK: win32
+inline Platform::LockStorage* AllocCs(MemoryAllocator* self) {
+    return &self->lock;
 }
 
 // The composed body: lock, the teardown check, the RAW member Allocate (which
 // never consults the instrument seat), the stats record, unlock.
 void* ComposedAllocate(MemoryAllocator* self, uint64_t size, int align, void* caller) {
-    LPCRITICAL_SECTION cs = AllocCs(self);
-    EnterCriticalSection(cs);
+    Platform::LockStorage* cs = AllocCs(self);
+    Platform::MutexLock(cs);
     RedzoneAlloc_TeardownOp("teardown-alloc");
     void* r = self->Allocate(size, align);
     AllocStats_RecordAlloc(r, size, caller);
-    LeaveCriticalSection(cs);
+    Platform::MutexUnlock(cs);
     return r;
 }
 
 void SwapFree(MemoryAllocator* self, void* p) {
     if (!p) return;                       // retail's TEST RDX,RDX; JZ
-    LPCRITICAL_SECTION cs = AllocCs(self);
-    EnterCriticalSection(cs);
+    Platform::LockStorage* cs = AllocCs(self);
+    Platform::MutexLock(cs);
     RedzoneAlloc_TeardownOp("teardown-free");
     AllocStats_RecordFree(p);
     self->Free(p);                        // RAW member: never the instrument seat
-    LeaveCriticalSection(cs);
+    Platform::MutexUnlock(cs);
 }
 
 }  // namespace
