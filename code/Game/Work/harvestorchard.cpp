@@ -235,8 +235,7 @@ int HarvestOrchard::Execute(CitizenComponent** citizenIBP, System::Time* /*conte
 
                                 // The fruit's raw material (FruitDescription::_ref30)
                                 ComponentDescription* rawMatRef = descComp->_ref30;
-                                RawMaterialDescription* rawMatIBP = nullptr;
-                                rawMatIBP = rawMatRef->FindDescription<RawMaterialDescription>();   // 0x140006330
+                                rawMatRef->FindDescription<RawMaterialDescription>();   // 0x140006330 (its result is never read)
 
                                 // Arg 7 of the action ctor. Read from the FruitComponent
                                 // (RBP-0x39, the 0x14000a0b0 finder's out-param), NOT the
