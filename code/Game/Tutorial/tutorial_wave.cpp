@@ -138,22 +138,20 @@ void TutWave_SerializeDialogRef(UI::Dialog** field, IO::Serializer* serializer) 
 
 // ===========================================================================
 // 0x1401001F0 — the tutorial's insert into the PlayerToolManager's +0x50
-// tracked set (a PlayerToolManager member in retail; GAME-b's class, kept
-// free here).
+// tracked set (PlayerToolManager::TutorialTreeInsert).
 //
 // Upsert keyed by the tutorial's setup description. Existing node: active
 // byte at +0x10 = 1, dword +0x08 = value, dword +0x0C = 0x20. Absent: build
 // that same 0x18-byte record on the stack and hand it to the shared BST
 // inserter at 0x140014890 (Avl38SetInsert, Dialog/exe_bodies.h).
 // ===========================================================================
-void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, ComponentDescription* tutorialId,
+void PlayerToolManager::TutorialTreeInsert(ComponentDescription* tutorialId,
                                 void* /*param3*/, uint32_t value) {
-    if (!treeOwner) return;
     const void* key = tutorialId;
 
     // Walk. The node is PinnedToolNode (Game/PlayerToolManager.h), keyed by
     // address.
-    PinnedToolNode* node = treeOwner->field_0x50.root;
+    PinnedToolNode* node = field_0x50.root;
     while (node) {
         const void* nodeKey = node->key;
         if (key < nodeKey) { node = node->left; continue; }
@@ -171,7 +169,7 @@ void TutWave_TutorialTreeInsert(PlayerToolManager* treeOwner, ComponentDescripti
     rec.active = 1;
     for (int i = 0; i < 7; ++i) rec._pad11[i] = 0;
 
-    Avl38SetInsert(&treeOwner->field_0x50, rec);   // 0x140014890
+    Avl38SetInsert(&field_0x50, rec);   // 0x140014890
 }
 
 // ===========================================================================

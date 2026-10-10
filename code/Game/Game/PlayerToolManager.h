@@ -226,6 +226,7 @@ public:
     void CloseToolDialog();   // 0x1400ff980 (Player/tool_base_drag.cpp)
     void PlayTickSound();   // 0x1400ffbf0 (Player/tool_base_drag.cpp)
     UI::DialogInstance** OpenToolDialog(UI::DialogInstance** ret, ComponentDescription* description);   // 0x1400ff9e0 (Player/tool_base_toolui.cpp)
+    void TutorialTreeInsert(ComponentDescription* tutorialId, void*, uint32_t value);   // 0x1401001f0 (Tutorial/tutorial_wave.cpp)
 };
 
 static_assert(sizeof(PlayerToolManager) == 0xB0, "PlayerToolManager is 0xB0 (Load MemAlloc(0xb0, 4))");

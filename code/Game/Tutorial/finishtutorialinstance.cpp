@@ -144,12 +144,11 @@ void FinishTutorialInstance::Startup() {
 
     { if (s_logStartup.fetch_add(1) == 0) {
         std::fprintf(stderr, "[FinTutInst] Slot4 INIT self=%p tutInst=%p goalObj=%p ftGoal=%p "
-                             "tutDef=%p (goalTid=%u) treeInsert=%p\n",
+                             "tutDef=%p (goalTid=%u)\n",
                 static_cast<void*>(self), static_cast<void*>(tutInst),
                 static_cast<const void*>(goalObj), static_cast<const void*>(ftGoal),
                 tutInst ? static_cast<void*>(tutInst->tutorialDef) : nullptr,
-                FinishTutorialGoal::TypeId(),
-                (void*)&TutWave_TutorialTreeInsert);
+                FinishTutorialGoal::TypeId());
         std::fflush(stderr); } }
 
     // Step 7: Call FinishTutorialGoal_helper_01f0 (the PlayerToolManager tree insert)
@@ -172,7 +171,7 @@ void FinishTutorialInstance::Startup() {
             }
         }
 
-        TutWave_TutorialTreeInsert(treeRoot, tutorialId, p3, static_cast<uint32_t>(widthParam));   // 0x1401001f0
+        treeRoot->TutorialTreeInsert(tutorialId, p3, static_cast<uint32_t>(widthParam));   // 0x1401001f0
     }
 
     // Step 8: OR game world flags at +0xd0 with 0x5f0
