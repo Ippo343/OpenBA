@@ -175,7 +175,6 @@ void MenuDialogLoopT_TickAudio(const System::Time* time);
 //
 // No-op'd safely if the music External (self+0xb88) is null or PlayEffect isn't
 // resolved. Call on the main thread (Startup), after LoadMusic populated +0xb88.
-void MenuDialogLoopT_StartMusic(MenuDialogLoopT* self);  // B8: stays free -- not moved: the body returns on a null loop (retail inlines it in the slot, no test: row 1123); as a member GCC deletes a `this` test
 
 // MenuDialogLoopT_StopMusic — mirror the `Audio::Scene::StopAll(self+0xb30)` at
 // the tail of MenuDLT::Shutdown (exe 0x14009b280, call at 0x14009b41a). Stops the

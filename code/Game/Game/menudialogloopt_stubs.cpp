@@ -394,7 +394,7 @@ void MenuDialogLoopT::Startup() {
     // loop's Audio::Scene (self+0xb30) at the DialogInstance base (self+0xd0) and
     // plays Audio/Music/Menu.rsc (loaded into self+0xb88 by Load) on the
     // music channel. Per-frame Audio::Scene::Update (Update) advances it.
-    MenuDialogLoopT_StartMusic(this);
+    StartMusic();
 
     // Bind the UI hover/press/click sounds onto the embedded UserInterface
     // (self+0x40), mirroring OptionsDialog_helper_9260's sound block. Must run

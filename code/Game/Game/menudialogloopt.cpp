@@ -853,17 +853,16 @@ bool MenuDialogLoopT::LoadMusic() {
 //   Audio::Scene::PlayEffect(self+0xb30, *(self+0xb88), 2, &Time(0));
 // soundType/channel 2 is the music channel (same channel Pause toggles in
 // MenuDLT::Update).
-void MenuDialogLoopT_StartMusic(MenuDialogLoopT* self) {
-    if (!self) return;
+void MenuDialogLoopT::StartMusic() {
 
     // 1. Register the loop's embedded Audio::Scene (+0xb30) with the
     //    DialogInstance base at +0xd0 (where UI sound effects route). The
     //    original writes this even before PlayEffect.
-    Audio::Scene* audioScene = &self->_audioScene;   // the embedded Audio::Scene (+0xb30)
-    self->_ui._audioScene = audioScene;              // +0xd0 = UI (+0x40) + 0x90
+    Audio::Scene* audioScene = &_audioScene;   // the embedded Audio::Scene (+0xb30)
+    _ui._audioScene = audioScene;              // +0xd0 = UI (+0x40) + 0x90
 
     // 2. Play the looping menu music.
-    Audio::SoundEffect* music = self->_music;
+    Audio::SoundEffect* music = _music;
     if (!music) {
         printf("[MenuDLT::StartMusic] no music External at +0xb88 — silent menu\n");
         return;
